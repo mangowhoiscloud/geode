@@ -138,8 +138,10 @@ def cmd_skill_invoke(skill_registry: _Any, arg: str, *, agentic_ref: _Any = None
 
         _loop = get_current_loop()
         if _loop is not None:
+            from core.async_runtime import run_process_coroutine
+
             prompt = f"[skill:{name}] {rendered}"
-            result = _loop.run(prompt)
+            result = run_process_coroutine(_loop.arun(prompt))
             from core.ui.agentic_ui import render_status_line
 
             render_status_line()

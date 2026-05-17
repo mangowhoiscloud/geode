@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 import pytest
 from core.tools.policy import (
     OrgPolicy,
@@ -12,6 +15,10 @@ from core.tools.policy import (
     load_org_policy,
     load_profile_policy,
 )
+
+
+def _run_registry(registry: Any, name: str, **kwargs: Any) -> dict[str, Any]:
+    return asyncio.run(registry.aexecute(name, **kwargs))
 
 
 class TestToolPolicy:
@@ -200,7 +207,7 @@ class TestRegistryWithPolicy:
         chain.add_policy(ToolPolicy(name="block", mode="*", denied_tools={"blocked_tool"}))
 
         with pytest.raises(PermissionError, match="blocked by policy"):
-            reg.execute("blocked_tool", policy=chain, mode="full_pipeline")
+            _run_registry(reg, "blocked_tool", policy=chain, mode="full_pipeline")
 
 
 # ---------------------------------------------------------------------------

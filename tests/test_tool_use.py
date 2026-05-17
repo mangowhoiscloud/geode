@@ -6,10 +6,10 @@ for both ClaudeAdapter and OpenAIAdapter.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
 from core.llm.client import ToolCallRecord, ToolUseResult
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def _make_openai_text_response(text: str = "Final answer") -> MagicMock:
 
 
 class TestToolCallRecord:
-    def test_creation(self):
+    def test_creation(self) -> None:
         record = ToolCallRecord(
             tool_name="search",
             tool_input={"q": "test"},
@@ -111,7 +111,7 @@ class TestToolCallRecord:
 
 
 class TestToolUseResult:
-    def test_creation(self):
+    def test_creation(self) -> None:
         result = ToolUseResult(
             text="answer",
             tool_calls=[],
@@ -122,7 +122,7 @@ class TestToolUseResult:
         assert result.rounds == 1
         assert result.tool_calls == []
 
-    def test_with_tool_calls(self):
+    def test_with_tool_calls(self) -> None:
         record = ToolCallRecord("t", {}, {"r": 1}, 10.0)
         result = ToolUseResult(text="done", tool_calls=[record], usage=[], rounds=2)
         assert len(result.tool_calls) == 1
@@ -130,7 +130,7 @@ class TestToolUseResult:
 
 
 # ---------------------------------------------------------------------------
-# ClaudeAdapter.generate_with_tools tests
+# ClaudeAdapter.agenerate_with_tools tests
 # ---------------------------------------------------------------------------
 
 
@@ -142,8 +142,8 @@ class TestClaudeAdapterToolUse:
     model via GEODE_MODEL env var).
     """
 
-    @patch("core.llm.router.calls.tools.get_anthropic_client")
-    def test_no_tool_use(self, mock_get_client: MagicMock):
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_no_tool_use(self, mock_get_client: MagicMock) -> None:
         """When model doesn't request tools, returns text immediately."""
         mock_client = MagicMock()
         mock_client.messages.create.return_value = _make_anthropic_text_response("Hello")
@@ -152,12 +152,14 @@ class TestClaudeAdapterToolUse:
         from core.llm.router import ClaudeAdapter
 
         adapter = ClaudeAdapter()
-        result = adapter.generate_with_tools(
-            "system prompt",
-            "user prompt",
-            tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
-            tool_executor=lambda name, **kw: {"result": "ok"},
-            model="claude-opus-4-6",
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system prompt",
+                "user prompt",
+                tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
+                tool_executor=lambda name, **kw: {"result": "ok"},
+                model="claude-opus-4-6",
+            )
         )
 
         assert isinstance(result, ToolUseResult)
@@ -165,8 +167,32 @@ class TestClaudeAdapterToolUse:
         assert result.tool_calls == []
         assert result.rounds == 1
 
-    @patch("core.llm.router.calls.tools.get_anthropic_client")
-    def test_single_tool_call(self, mock_get_client: MagicMock):
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_agenerate_with_tools_no_tool_use(self, mock_get_client: MagicMock) -> None:
+        """Async provider boundary returns the same tool-use result shape."""
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = _make_anthropic_text_response("Hello")
+        mock_get_client.return_value = mock_client
+
+        from core.llm.router import ClaudeAdapter
+
+        adapter = ClaudeAdapter()
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system prompt",
+                "user prompt",
+                tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
+                tool_executor=lambda name, **kw: {"result": "ok"},
+                model="claude-opus-4-6",
+            )
+        )
+
+        assert isinstance(result, ToolUseResult)
+        assert result.text == "Hello"
+        assert result.rounds == 1
+
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_single_tool_call(self, mock_get_client: MagicMock) -> None:
         """Model calls one tool, then returns text."""
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = [
@@ -184,12 +210,14 @@ class TestClaudeAdapterToolUse:
             return {"data": "search result"}
 
         adapter = ClaudeAdapter()
-        result = adapter.generate_with_tools(
-            "system",
-            "user",
-            tools=[{"name": "search", "description": "search", "input_schema": {}}],
-            tool_executor=mock_executor,
-            model="claude-opus-4-6",
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system",
+                "user",
+                tools=[{"name": "search", "description": "search", "input_schema": {}}],
+                tool_executor=mock_executor,
+                model="claude-opus-4-6",
+            )
         )
 
         assert result.text == "Found it"
@@ -199,8 +227,46 @@ class TestClaudeAdapterToolUse:
         assert result.rounds == 2
         assert len(executor_calls) == 1
 
-    @patch("core.llm.router.calls.tools.get_anthropic_client")
-    def test_tool_executor_error(self, mock_get_client: MagicMock):
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_async_single_tool_call_awaits_executor(
+        self, mock_get_client: MagicMock
+    ) -> None:
+        """Async tool-use path awaits async executors directly."""
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            _make_anthropic_tool_use_response(tool_name="search", tool_input={"q": "test"}),
+            _make_anthropic_text_response("Found it"),
+        ]
+        mock_get_client.return_value = mock_client
+
+        from core.llm.router import ClaudeAdapter
+
+        executor_calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def mock_executor(name: str, **kwargs: Any) -> dict[str, Any]:
+            executor_calls.append((name, kwargs))
+            return {"data": "async search result"}
+
+        adapter = ClaudeAdapter()
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system",
+                "user",
+                tools=[{"name": "search", "description": "search", "input_schema": {}}],
+                tool_executor=mock_executor,
+                model="claude-opus-4-6",
+            )
+        )
+
+        assert result.text == "Found it"
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].tool_name == "search"
+        assert result.tool_calls[0].tool_result == {"data": "async search result"}
+        assert result.rounds == 2
+        assert len(executor_calls) == 1
+
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_tool_executor_error(self, mock_get_client: MagicMock) -> None:
         """Tool execution errors are captured, not raised."""
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = [
@@ -215,20 +281,22 @@ class TestClaudeAdapterToolUse:
             raise RuntimeError("Tool broke")
 
         adapter = ClaudeAdapter()
-        result = adapter.generate_with_tools(
-            "sys",
-            "usr",
-            tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
-            tool_executor=failing_executor,
-            model="claude-opus-4-6",
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "sys",
+                "usr",
+                tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
+                tool_executor=failing_executor,
+                model="claude-opus-4-6",
+            )
         )
 
         assert result.text == "Handled error"
         assert len(result.tool_calls) == 1
         assert "error" in result.tool_calls[0].tool_result
 
-    @patch("core.llm.router.calls.tools.get_anthropic_client")
-    def test_max_rounds_enforced(self, mock_get_client: MagicMock):
+    @patch("core.llm.router.calls.tools.get_async_anthropic_client")
+    def test_max_rounds_enforced(self, mock_get_client: MagicMock) -> None:
         """After max_tool_rounds, loop stops."""
         mock_client = MagicMock()
         # Always request tool use — on last round tool_choice=none forces text
@@ -240,13 +308,15 @@ class TestClaudeAdapterToolUse:
         from core.llm.router import ClaudeAdapter
 
         adapter = ClaudeAdapter()
-        result = adapter.generate_with_tools(
-            "sys",
-            "usr",
-            tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
-            tool_executor=lambda n, **kw: {"ok": True},
-            max_tool_rounds=3,
-            model="claude-opus-4-6",
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "sys",
+                "usr",
+                tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
+                tool_executor=lambda n, **kw: {"ok": True},
+                max_tool_rounds=3,
+                model="claude-opus-4-6",
+            )
         )
 
         assert result.text == "Forced end"
@@ -255,13 +325,13 @@ class TestClaudeAdapterToolUse:
 
 
 # ---------------------------------------------------------------------------
-# OpenAIAdapter.generate_with_tools tests
+# OpenAIAdapter.agenerate_with_tools tests
 # ---------------------------------------------------------------------------
 
 
 class TestOpenAIAdapterToolUse:
-    @patch("core.llm.providers.openai._get_openai_client")
-    def test_no_tool_use(self, mock_get_client: MagicMock):
+    @patch("core.llm.providers.openai._get_async_openai_client")
+    def test_no_tool_use(self, mock_get_client: MagicMock) -> None:
         """When model doesn't request tools, returns text immediately."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = _make_openai_text_response("Hello")
@@ -270,16 +340,18 @@ class TestOpenAIAdapterToolUse:
         from core.llm.providers.openai import OpenAIAdapter
 
         adapter = OpenAIAdapter()
-        result = adapter.generate_with_tools(
-            "system",
-            "user",
-            tools=[
-                {
-                    "type": "function",
-                    "function": {"name": "dummy", "description": "t", "parameters": {}},
-                }
-            ],
-            tool_executor=lambda name, **kw: {"result": "ok"},
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system",
+                "user",
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {"name": "dummy", "description": "t", "parameters": {}},
+                    }
+                ],
+                tool_executor=lambda name, **kw: {"result": "ok"},
+            )
         )
 
         assert isinstance(result, ToolUseResult)
@@ -287,8 +359,8 @@ class TestOpenAIAdapterToolUse:
         assert result.tool_calls == []
         assert result.rounds == 1
 
-    @patch("core.llm.providers.openai._get_openai_client")
-    def test_single_tool_call(self, mock_get_client: MagicMock):
+    @patch("core.llm.providers.openai._get_async_openai_client")
+    def test_single_tool_call(self, mock_get_client: MagicMock) -> None:
         """Model calls one tool, then returns text."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = [
@@ -306,16 +378,18 @@ class TestOpenAIAdapterToolUse:
             return {"data": "result"}
 
         adapter = OpenAIAdapter()
-        result = adapter.generate_with_tools(
-            "system",
-            "user",
-            tools=[
-                {
-                    "type": "function",
-                    "function": {"name": "search", "description": "s", "parameters": {}},
-                }
-            ],
-            tool_executor=mock_executor,
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system",
+                "user",
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {"name": "search", "description": "s", "parameters": {}},
+                    }
+                ],
+                tool_executor=mock_executor,
+            )
         )
 
         assert result.text == "Found it"
@@ -324,8 +398,54 @@ class TestOpenAIAdapterToolUse:
         assert result.rounds == 2
         assert len(executor_calls) == 1
 
-    @patch("core.llm.providers.openai._get_openai_client")
-    def test_tool_executor_error(self, mock_get_client: MagicMock):
+    @patch("core.llm.providers.openai._get_async_openai_client")
+    def test_async_single_tool_call_awaits_executor(
+        self, mock_get_client: MagicMock
+    ) -> None:
+        """Async OpenAI-compatible loop awaits async executors."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [
+            _make_openai_tool_call_response(func_name="search", func_args='{"q": "test"}'),
+            _make_openai_text_response("Found it"),
+        ]
+        mock_get_client.return_value = mock_client
+
+        from core.llm.providers.openai import OpenAIAdapter
+
+        executor_calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def mock_executor(name: str, **kwargs: Any) -> dict[str, Any]:
+            executor_calls.append((name, kwargs))
+            return {"data": "async result"}
+
+        adapter = OpenAIAdapter()
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "system",
+                "user",
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search",
+                            "description": "s",
+                            "parameters": {},
+                        },
+                    }
+                ],
+                tool_executor=mock_executor,
+            )
+        )
+
+        assert result.text == "Found it"
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].tool_name == "search"
+        assert result.tool_calls[0].tool_result == {"data": "async result"}
+        assert result.rounds == 2
+        assert len(executor_calls) == 1
+
+    @patch("core.llm.providers.openai._get_async_openai_client")
+    def test_tool_executor_error(self, mock_get_client: MagicMock) -> None:
         """Tool execution errors are captured, not raised."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = [
@@ -337,58 +457,23 @@ class TestOpenAIAdapterToolUse:
         from core.llm.providers.openai import OpenAIAdapter
 
         adapter = OpenAIAdapter()
-        result = adapter.generate_with_tools(
-            "sys",
-            "usr",
-            tools=[
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "dummy_tool",
-                        "description": "t",
-                        "parameters": {},
-                    },
-                }
-            ],
-            tool_executor=lambda n, **kw: (_ for _ in ()).throw(RuntimeError("broke")),
+        result = asyncio.run(
+            adapter.agenerate_with_tools(
+                "sys",
+                "usr",
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "dummy_tool",
+                            "description": "t",
+                            "parameters": {},
+                        },
+                    }
+                ],
+                tool_executor=lambda n, **kw: (_ for _ in ()).throw(RuntimeError("broke")),
+            )
         )
 
         assert result.text == "Handled"
         assert "error" in result.tool_calls[0].tool_result
-
-
-# ---------------------------------------------------------------------------
-# LLM port contextvar tests
-# ---------------------------------------------------------------------------
-
-
-class TestLLMToolContextVar:
-    def test_get_llm_tool_not_injected(self):
-        """get_llm_tool() raises when not injected."""
-        from core.llm.router import _llm_tool_ctx, get_llm_tool
-
-        _llm_tool_ctx.set(None)
-        with pytest.raises(RuntimeError, match="tool callable not injected"):
-            get_llm_tool()
-
-    def test_set_and_get_llm_tool(self):
-        """set_llm_callable with tool_fn makes it available via get_llm_tool."""
-        from core.llm.router import (
-            _llm_tool_ctx,
-            get_llm_tool,
-            set_llm_callable,
-        )
-
-        dummy_tool_fn = lambda *a, **kw: None  # noqa: E731
-
-        set_llm_callable(
-            lambda *a, **kw: {},
-            lambda *a, **kw: "",
-            tool_fn=dummy_tool_fn,
-        )
-
-        result = get_llm_tool()
-        assert result is dummy_tool_fn
-
-        # Cleanup
-        _llm_tool_ctx.set(None)

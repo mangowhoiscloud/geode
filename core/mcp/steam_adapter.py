@@ -7,6 +7,7 @@ Supports two connection modes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -38,16 +39,17 @@ class SteamMCPSignalAdapter:
         self._manager = manager
         self._server_name = server_name
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
-        if not self.is_available():
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
+        """Async Steam MCP signal fetch."""
+        if not await self.ais_available():
             return {}
         try:
             if self._manager is not None:
-                result = self._manager.call_tool(
+                result = await self._manager.acall_tool(
                     self._server_name, "get_game_info", {"query": ip_name}
                 )
             elif self._client is not None:
-                result = self._client.call_tool("get_game_info", {"query": ip_name})
+                result = await self._client.acall_tool("get_game_info", {"query": ip_name})
             else:
                 return {}
 
@@ -55,12 +57,7 @@ class SteamMCPSignalAdapter:
                 log.warning("Steam MCP returned error for %s: %s", ip_name, result["error"])
                 return {}
 
-            return {
-                "steam_players_current": result.get("player_count", 0),
-                "steam_review_score": result.get("review_score", 0),
-                "steam_review_count": result.get("review_count", 0),
-                "_enrichment_source": "steam_mcp",
-            }
+            return self._signals_from_result(result)
         except Exception as exc:
             log.warning("Steam MCP fetch failed for %s: %s", ip_name, exc)
             return {}
@@ -72,3 +69,15 @@ class SteamMCPSignalAdapter:
         if self._client is not None:
             return self._client.is_connected()
         return False
+
+    async def ais_available(self) -> bool:
+        """Async availability check for async signal callers."""
+        return await asyncio.to_thread(self.is_available)
+
+    def _signals_from_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "steam_players_current": result.get("player_count", 0),
+            "steam_review_score": result.get("review_score", 0),
+            "steam_review_count": result.get("review_count", 0),
+            "_enrichment_source": "steam_mcp",
+        }

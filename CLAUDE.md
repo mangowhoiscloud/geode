@@ -325,7 +325,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `geode-scoring` | score, psm, tier, rubric, formula | Scoring formulas, 14-axis rubric |
 | `geode-analysis` | analyst, evaluator, clean context | Analyst/Evaluator patterns, prompts |
 | `geode-verification` | guardrail, bias, cause, decision tree | G1-G4, BiasBuster, Decision Tree |
-| `geode-e2e` | e2e, live test, verification, langsmith, tracing | Live E2E patterns, LangSmith verification, quality checks |
+| `geode-e2e` | e2e, live test, verification, tracing | Live E2E patterns, native observability verification, quality checks |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
 | `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.context_manager import ContextWindowManager
+from core.agent.loop import _ContextExhaustedError
 
 
 class TestContextWindowManager:
@@ -88,8 +92,10 @@ class TestContextWindowManager:
             compact_keep_recent = 8
 
         mgr = self._make_mgr()
-        result = mgr._resolve_overflow_strategy(
-            FakeMetrics(), FakeSettings(), "claude-3", "anthropic"
+        result = asyncio.run(
+            mgr._resolve_overflow_strategy(
+                FakeMetrics(), FakeSettings(), "claude-3", "anthropic"
+            )
         )
         assert result["strategy"] == "none"
 
@@ -104,7 +110,9 @@ class TestContextWindowManager:
             compact_keep_recent = 8
 
         mgr = self._make_mgr()
-        result = mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "gpt-4o", "openai")
+        result = asyncio.run(
+            mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "gpt-4o", "openai")
+        )
         assert result["strategy"] == "compact"
 
     def test_resolve_strategy_prune_at_95(self) -> None:
@@ -118,5 +126,75 @@ class TestContextWindowManager:
             compact_keep_recent = 8
 
         mgr = self._make_mgr()
-        result = mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "gpt-4o", "openai")
+        result = asyncio.run(
+            mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "gpt-4o", "openai")
+        )
         assert result["strategy"] == "prune"
+
+    def test_check_context_overflow_awaits_compaction_inside_running_loop(self) -> None:
+        """Compaction should be awaited, not driven via run_until_complete."""
+        mgr = self._make_mgr()
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old reply"},
+        ]
+        compacted = [{"role": "user", "content": "compacted"}]
+
+        warning_metrics = SimpleNamespace(
+            estimated_tokens=170_000,
+            context_window=200_000,
+            usage_pct=85.0,
+            remaining_tokens=30_000,
+            is_warning=True,
+            is_critical=False,
+            is_ceiling_exceeded=False,
+        )
+        settings = MagicMock()
+        settings.compact_keep_recent = 8
+        settings.observation_mask_keep_rounds = 3
+        compact = AsyncMock(return_value=(compacted, True))
+
+        async def _run() -> None:
+            with (
+                patch("core.orchestration.context_monitor.check_context", return_value=warning_metrics),
+                patch("core.orchestration.context_monitor.mask_stale_observations", return_value=0),
+                patch("core.orchestration.compaction.compact_conversation", compact),
+                patch("core.config.settings", settings),
+            ):
+                await mgr.check_context_overflow("system", messages, "gpt-4o", "openai")
+
+        asyncio.run(_run())
+
+        compact.assert_awaited_once()
+        assert messages == compacted
+
+    def test_check_context_overflow_raises_context_exhausted(self) -> None:
+        """Unrecoverable critical context should propagate to AgenticLoop."""
+        mgr = self._make_mgr()
+        metrics = SimpleNamespace(
+            estimated_tokens=198_000,
+            context_window=200_000,
+            usage_pct=99.0,
+            remaining_tokens=2_000,
+            is_warning=True,
+            is_critical=True,
+            is_ceiling_exceeded=False,
+        )
+        settings = MagicMock()
+        settings.compact_keep_recent = 8
+
+        async def _run() -> None:
+            with (
+                patch("core.orchestration.context_monitor.check_context", return_value=metrics),
+                patch("core.orchestration.context_monitor.prune_oldest_messages", side_effect=lambda m, **kw: m),
+                patch("core.config.settings", settings),
+            ):
+                await mgr.check_context_overflow(
+                    "system", [{"role": "user", "content": "too much"}], "gpt-4o", "openai"
+                )
+
+        try:
+            asyncio.run(_run())
+        except _ContextExhaustedError:
+            return
+        raise AssertionError("expected _ContextExhaustedError")

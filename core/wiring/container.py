@@ -207,54 +207,6 @@ def build_default_lanes() -> LaneQueue:
 
 
 # ---------------------------------------------------------------------------
-# Tool executor factory
-# ---------------------------------------------------------------------------
-
-
-def make_tool_executor(
-    llm_adapter: LLMClientPort,
-    registry: ToolRegistry,
-    policy_chain: PolicyChain,
-) -> Any:
-    """Create a tool_fn callable that binds generate_with_tools to registry.
-
-    Returns a callable with the same signature as LLMToolCallable:
-        (system, user, *, tools, tool_executor, ...) -> ToolUseResult
-
-    If no explicit tool_executor is provided, falls back to registry.execute
-    with the default policy chain.
-    """
-
-    def _default_tool_executor(name: str, **kwargs: Any) -> dict[str, Any]:
-        return registry.execute(name, policy=policy_chain, **kwargs)
-
-    def _tool_fn(
-        system: str,
-        user: str,
-        *,
-        tools: list[dict[str, Any]],
-        tool_executor: Any = None,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-        max_tool_rounds: int = 5,
-    ) -> Any:
-        executor = tool_executor or _default_tool_executor
-        return llm_adapter.generate_with_tools(
-            system,
-            user,
-            tools=tools,
-            tool_executor=executor,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            max_tool_rounds=max_tool_rounds,
-        )
-
-    return _tool_fn
-
-
-# ---------------------------------------------------------------------------
 # Auth + LLM adapters
 # ---------------------------------------------------------------------------
 
@@ -391,12 +343,10 @@ def build_llm_adapters(
     if settings.openai_api_key:
         secondary_adapter = OpenAIAdapter()
 
-    tool_fn = make_tool_executor(llm_adapter, tool_registry, policy_chain)
     set_llm_callable(
         llm_adapter.generate_structured,
         llm_adapter.generate,
         parsed_fn=llm_adapter.generate_parsed,
-        tool_fn=tool_fn,
         secondary_json_fn=(secondary_adapter.generate_structured if secondary_adapter else None),
         secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
     )

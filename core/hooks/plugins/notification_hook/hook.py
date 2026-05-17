@@ -62,11 +62,11 @@ def _make_notification_handler(
 ) -> Any:
     """Create a hook handler that sends notifications for mapped events."""
 
-    def handler(event: HookEvent, data: dict[str, Any]) -> None:
+    async def handler(event: HookEvent, data: dict[str, Any]) -> None:
         from core.mcp.notification_port import get_notification
 
         adapter = get_notification()
-        if adapter is None or not adapter.is_available(channel):
+        if adapter is None or not await adapter.ais_available(channel):
             log.debug(
                 "Notification skipped for %s: no adapter for channel '%s'",
                 event.value,
@@ -77,7 +77,7 @@ def _make_notification_handler(
         severity = _SEVERITY_MAP.get(event, "info")
         message = _format_message(event, data)
 
-        result = adapter.send_message(channel, recipient, message, severity=severity)
+        result = await adapter.asend_message(channel, recipient, message, severity=severity)
         if not result.success:
             log.warning(
                 "Notification send failed for %s → %s: %s",
@@ -89,7 +89,7 @@ def _make_notification_handler(
     return handler
 
 
-def handle(event: HookEvent, data: dict[str, Any]) -> None:
+async def handle(event: HookEvent, data: dict[str, Any]) -> None:
     """Entry point for hook_discovery YAML plugin loader.
 
     Uses default channel/recipient from config. For custom channels,
@@ -111,12 +111,12 @@ def handle(event: HookEvent, data: dict[str, Any]) -> None:
         channel = "slack"
         recipient = "#geode-alerts"
 
-    if not adapter.is_available(channel):
+    if not await adapter.ais_available(channel):
         return
 
     severity = _SEVERITY_MAP.get(event, "info")
     message = _format_message(event, data)
-    adapter.send_message(channel, recipient, message, severity=severity)
+    await adapter.asend_message(channel, recipient, message, severity=severity)
 
 
 def register_notification_hooks(

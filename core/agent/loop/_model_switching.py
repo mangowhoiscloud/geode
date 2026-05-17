@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 
@@ -32,51 +32,38 @@ def _resolve_agentic_adapter(provider: str):  # type: ignore[no-untyped-def]
     return _loop_pkg.resolve_agentic_adapter(provider)
 
 
-def sync_model_from_settings(loop: AgenticLoop) -> bool:
-    """Check if settings.model diverged and apply the change safely.
+def _settings_model_target(loop: AgenticLoop) -> str | None:
+    """Return settings.model when drift should apply, otherwise None."""
+    if getattr(loop, "_disable_settings_drift", False):
+        return None
 
-    Called at the top of each agentic round — between LLM calls, never
-    mid-call.  This replaces the old pattern of calling update_model()
-    from inside a tool handler, which swapped the adapter while the
-    current round was still processing tool results.
+    from core.config import settings
 
-    v0.52.2 — refuse the drift if the target provider has no eligible
-    profile. Prior shape would silently overwrite the loop's chosen
-    model with a stale settings value pointing at an exhausted
-    provider (e.g. just-registered Codex Plus → drift back to GLM
-    without quota → 5×4=20 retry storm). Pattern from OpenClaw
-    ``evaluate_eligibility`` + ``_LAST_VERDICTS`` cached health view.
-
-    Returns True if the model was changed (caller should rebuild
-    system_prompt), False otherwise.
-
-    Callers may opt out of the drift sync entirely by constructing
-    :class:`AgenticLoop` with ``disable_settings_drift=True`` — the
-    petri_audit runner uses this so a user-selected ``--target`` is
-    not silently replaced by ``settings.model`` between rounds.
-    """
-    try:
-        if getattr(loop, "_disable_settings_drift", False):
-            return False
-
-        from core.config import settings
-
-        if settings.model == loop.model:
-            return False
-        if not loop._drift_target_is_healthy(settings.model):
-            log.warning(
-                "Model drift refused: target=%s has no eligible profile — "
-                "keeping loop=%s. Run `/login use <plan>` to enable target.",
-                settings.model,
-                loop.model,
-            )
-            return False
-        log.info(
-            "Model drift detected: loop=%s settings=%s — syncing",
-            loop.model,
+    if settings.model == loop.model:
+        return None
+    if not loop._drift_target_is_healthy(settings.model):
+        log.warning(
+            "Model drift refused: target=%s has no eligible profile — "
+            "keeping loop=%s. Run `/login use <plan>` to enable target.",
             settings.model,
+            loop.model,
         )
-        loop.update_model(settings.model)
+        return None
+    log.info(
+        "Model drift detected: loop=%s settings=%s — syncing",
+        loop.model,
+        settings.model,
+    )
+    return str(settings.model)
+
+
+async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:
+    """Async variant of ``sync_model_from_settings`` for the agent loop."""
+    try:
+        target = _settings_model_target(loop)
+        if target is None:
+            return False
+        await loop.update_model_async(target)
         return True
     except Exception:
         log.debug("Model drift check failed", exc_info=True)
@@ -107,28 +94,12 @@ def drift_target_is_healthy(loop: AgenticLoop, target_model: str) -> bool:
         return True
 
 
-def update_model(
+def _apply_model_update(
     loop: AgenticLoop,
     model: str,
     provider: str | None = None,
-    reason: str = "user_switch",
-) -> None:
-    """Update model and provider without reconstructing the loop.
-
-    Resolves a fresh adapter when the provider changes. Within the
-    same provider, the adapter is reused (it owns its own client).
-    Also syncs the SessionMeter so status lines show the correct model.
-
-    v0.52.5 — sets ``self._prompt_dirty = True`` whenever the model
-    changes so the run-loop rebuilds the system prompt before the
-    next LLM call. Without this, a sync that does not go through
-    ``_sync_model_from_settings()`` would leave the system prompt's
-    model card pinned to the previous model.
-
-    v0.90.0 — the only callers of ``update_model`` are now the
-    settings drift sync + the user-facing ``/model`` command;
-    auto-escalation paths were removed.
-    """
+) -> tuple[str, bool]:
+    """Apply model/provider mutation and return ``(old_model, changed)``."""
     old_model = loop.model
     new_provider = provider or _resolve_provider(model)
     if new_provider != loop._provider:
@@ -144,16 +115,41 @@ def update_model(
 
     update_session_model(model)
     log.info("AgenticLoop model updated: %s (provider=%s)", model, loop._provider)
+    return old_model, old_model != model
 
-    # Fire MODEL_SWITCHED hook + IPC event for observability
-    if old_model != model:
+
+def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: str) -> None:
+    if not loop.context.is_empty:
+        # v0.52.8 — strip stale "Understood. I am now <prev>" acks
+        # left by earlier model switches in the same session. Without
+        # this, the new model reads "I am gpt-5.4-mini" assistant
+        # messages and asserts the wrong identity (production
+        # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
+        loop._purge_stale_model_switch_acks()
+        loop.context.add_user_message(
+            f"[system] Model switched: {old_model} -> {model}. "
+            "You are now the new model. Do not reference the previous "
+            "model's responses as current state."
+        )
+        loop.context.add_assistant_message(f"Understood. I am now {model}.")
+
+
+async def update_model_async(
+    loop: AgenticLoop,
+    model: str,
+    provider: str | None = None,
+    reason: str = "user_switch",
+) -> None:
+    """Async model update path used from ``AgenticLoop.arun``."""
+    old_model, changed = _apply_model_update(loop, model, provider)
+    if changed:
         from core.ui.agentic_ui import emit_model_switched
 
         emit_model_switched(old_model, model, reason)
         if loop._hooks:
             from core.hooks import HookEvent
 
-            loop._hooks.trigger(
+            await loop._hooks.trigger_async(
                 HookEvent.MODEL_SWITCHED,
                 {
                     "from_model": old_model,
@@ -162,21 +158,7 @@ def update_model(
                 },
             )
 
-        # Inject model-switch breadcrumb so the new model knows the switch
-        # happened (Claude Code SDK pattern: createModelSwitchBreadcrumbs).
-        if not loop.context.is_empty:
-            # v0.52.8 — strip stale "Understood. I am now <prev>" acks
-            # left by earlier model switches in the same session. Without
-            # this, the new model reads "I am gpt-5.4-mini" assistant
-            # messages and asserts the wrong identity (production
-            # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
-            loop._purge_stale_model_switch_acks()
-            loop.context.add_user_message(
-                f"[system] Model switched: {old_model} -> {model}. "
-                "You are now the new model. Do not reference the previous "
-                "model's responses as current state."
-            )
-            loop.context.add_assistant_message(f"Understood. I am now {model}.")
+        _inject_model_switch_breadcrumb(loop, old_model, model)
 
     # Proactively adapt context for the new model's context window
     loop._adapt_context_for_model(model)

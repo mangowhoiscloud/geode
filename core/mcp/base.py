@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import signal
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -42,37 +42,12 @@ class MCPClientBase:
         log.info("MCP connect attempt: %s (stub)", self._server_url)
         return False
 
-    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Call a tool on the MCP server with timeout enforcement.
-
-        Raises:
-            ConnectionError: If not connected.
-            MCPTimeoutError: If call exceeds timeout_s.
-            NotImplementedError: Stub — MCP SDK not yet wired.
-        """
+    async def acall_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Call a tool on the MCP server through the async runtime path."""
         if not self._connected:
             raise ConnectionError(f"MCP server not connected: {self._server_url}")
-
-        def _timeout_handler(signum: int, frame: Any) -> None:
-            raise MCPTimeoutError(
-                f"MCP tool call '{tool_name}' timed out after {self._timeout_s}s "
-                f"(server: {self._server_url})"
-            )
-
-        # Set alarm for timeout (Unix only; on Windows, skip timeout enforcement)
-        old_handler = None
-        if hasattr(signal, "SIGALRM"):
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(int(self._timeout_s))
-
-        try:
-            # Stub: will use mcp SDK when available
-            raise NotImplementedError("MCP tool calling not yet implemented")
-        finally:
-            if hasattr(signal, "SIGALRM"):
-                signal.alarm(0)  # Cancel alarm
-                if old_handler is not None:
-                    signal.signal(signal.SIGALRM, old_handler)
+        await asyncio.sleep(0)
+        raise NotImplementedError("MCP async tool calling not yet implemented")
 
     def list_tools(self) -> list[dict[str, Any]]:
         """List available tools on the MCP server."""

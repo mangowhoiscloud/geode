@@ -55,7 +55,6 @@ from core.llm.adapters import LLMClientPort as LLMClientPort
 from core.llm.adapters import LLMJsonCallable as LLMJsonCallable
 from core.llm.adapters import LLMParsedCallable as LLMParsedCallable
 from core.llm.adapters import LLMTextCallable as LLMTextCallable
-from core.llm.adapters import LLMToolCallable as LLMToolCallable
 from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 
 # v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
@@ -91,9 +90,6 @@ from core.llm.providers.anthropic import (
 from core.llm.providers.anthropic import (
     get_async_anthropic_client as get_async_anthropic_client,
 )
-from core.llm.providers.anthropic import (
-    reset_clients as reset_clients,
-)
 from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING
 from core.llm.token_tracker import LLMUsage as LLMUsage
 from core.llm.token_tracker import LLMUsageAccumulator as LLMUsageAccumulator
@@ -110,9 +106,6 @@ from ._di import (
     _llm_parsed_ctx as _llm_parsed_ctx,
 )
 from ._di import (
-    _llm_tool_ctx as _llm_tool_ctx,
-)
-from ._di import (
     _secondary_llm_json_ctx as _secondary_llm_json_ctx,
 )
 from ._di import (
@@ -123,9 +116,6 @@ from ._di import (
 )
 from ._di import (
     get_llm_parsed as get_llm_parsed,
-)
-from ._di import (
-    get_llm_tool as get_llm_tool,
 )
 from ._di import (
     get_secondary_llm_json as get_secondary_llm_json,
@@ -164,10 +154,10 @@ from .calls import (
     call_llm_parsed as call_llm_parsed,
 )
 from .calls import (
-    call_llm_streaming as call_llm_streaming,
+    call_llm_streaming_async as call_llm_streaming_async,
 )
 from .calls import (
-    call_llm_with_tools as call_llm_with_tools,
+    call_llm_with_tools_async as call_llm_with_tools_async,
 )
 from .calls import (
     call_with_failover as call_with_failover,

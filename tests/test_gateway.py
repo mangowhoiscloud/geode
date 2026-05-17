@@ -225,7 +225,7 @@ class TestBasePoller:
             channel_name = "test"
             polled = False
 
-            def _poll_once(self):
+            async def _apoll_once(self):
                 self.polled = True
 
             def is_configured(self):
@@ -243,7 +243,7 @@ class TestBasePoller:
         class UnconfiguredPoller(BasePoller):
             channel_name = "test"
 
-            def _poll_once(self):
+            async def _apoll_once(self):
                 pass
 
             def is_configured(self):

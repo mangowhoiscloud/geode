@@ -6,10 +6,13 @@ IPCClient (client), including connection, prompt relay, and error handling.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -126,6 +129,133 @@ class TestCLIPoller:
         finally:
             poller.stop()
 
+    def test_async_prompt_runner_uses_arun_and_async_lanes(self) -> None:
+        """IPC daemon prompt execution should not use sync loop/lane boundaries."""
+        from core.server.ipc_server.poller import CLIPoller
+
+        mock_result = MagicMock()
+        mock_result.text = "async ok"
+        mock_result.rounds = 1
+        mock_result.tool_calls = []
+        mock_result.termination_reason = "natural"
+        mock_result.summary = ""
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(return_value=mock_result)
+        mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
+        mock_loop.model = "test-model"
+        mock_loop._quiet = True
+        mock_loop._op_logger = MagicMock(_quiet=True)
+
+        entered: list[tuple[str, list[str]]] = []
+
+        class AsyncLaneQueue:
+            def acquire_all(self, *_args: Any, **_kwargs: Any) -> Any:
+                raise AssertionError("sync lane acquire_all path used")
+
+            @asynccontextmanager
+            async def acquire_all_async(self, key: str, lanes: list[str]) -> Any:
+                entered.append((key, lanes))
+                yield
+
+        mock_services = MagicMock()
+        mock_services.lane_queue = AsyncLaneQueue()
+        poller = CLIPoller(mock_services, socket_path=_test_sock())
+
+        result = asyncio.run(
+            poller._run_prompt_streaming_async(
+                "hello",
+                mock_loop,
+                "cli-test",
+                None,
+            )
+        )
+
+        assert result["type"] == "result"
+        assert result["text"] == "async ok"
+        mock_loop.arun.assert_awaited_once_with("hello")
+        mock_loop.run.assert_not_called()
+        assert entered == [("cli:cli-test", ["session", "global"])]
+
+    def test_async_prompt_runner_isolates_ui_state_per_task(self) -> None:
+        """Concurrent async IPC prompts should keep console and writer bindings isolated."""
+        from core.server.ipc_server.poller import CLIPoller
+
+        class FakeClient:
+            def __init__(self, name: str) -> None:
+                self.name = name
+                self.messages: list[dict[str, Any]] = []
+
+            def get_capability(self) -> tuple[bool, int]:
+                return True, 80
+
+            async def drain_pending_sends(self) -> None:
+                return None
+
+            def sendall(self, payload: bytes) -> None:
+                for line in payload.decode("utf-8").splitlines():
+                    self.messages.append(json.loads(line))
+
+        def make_result(text: str) -> MagicMock:
+            result = MagicMock()
+            result.text = text
+            result.rounds = 1
+            result.tool_calls = []
+            result.termination_reason = "natural"
+            result.summary = ""
+            return result
+
+        console_bindings: list[tuple[str, str]] = []
+
+        async def run_case(name: str, client: FakeClient) -> dict[str, Any]:
+            from core.ui.agentic_ui import _ipc_writer_local
+            from core.ui.console import _ConsoleProxy
+
+            async def arun(prompt: str) -> MagicMock:
+                writer = getattr(_ipc_writer_local, "writer", None)
+                writer.send_event("probe", prompt=prompt, client=name)
+                console_at_runtime = getattr(_ConsoleProxy._local, "console", None)
+                console_bindings.append((name, console_at_runtime._file._client.name))
+                await asyncio.sleep(0)
+                writer_after = getattr(_ipc_writer_local, "writer", None)
+                assert writer_after is writer
+                console_after = getattr(_ConsoleProxy._local, "console", None)
+                assert console_after is console_at_runtime
+                return make_result(f"done:{name}:{prompt}")
+
+            loop = MagicMock()
+            loop.arun = AsyncMock(side_effect=arun)
+            loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
+            loop.model = f"model-{name}"
+            loop._quiet = True
+            loop._op_logger = MagicMock(_quiet=True)
+            poller = CLIPoller(MagicMock(lane_queue=None), socket_path=_test_sock())
+            return await poller._run_prompt_streaming_async(
+                f"prompt-{name}",
+                loop,
+                f"session-{name}",
+                client,  # type: ignore[arg-type]
+            )
+
+        client_a = FakeClient("a")
+        client_b = FakeClient("b")
+
+        async def run_both() -> tuple[dict[str, Any], dict[str, Any]]:
+            return await asyncio.gather(
+                run_case("a", client_a),
+                run_case("b", client_b),
+            )
+
+        result_a, result_b = asyncio.run(run_both())
+
+        assert result_a["text"] == "done:a:prompt-a"
+        assert result_b["text"] == "done:b:prompt-b"
+        assert any(m.get("type") == "probe" and m.get("client") == "a" for m in client_a.messages)
+        assert not any(m.get("client") == "b" for m in client_a.messages)
+        assert any(m.get("type") == "probe" and m.get("client") == "b" for m in client_b.messages)
+        assert not any(m.get("client") == "a" for m in client_b.messages)
+        assert sorted(console_bindings) == [("a", "a"), ("b", "b")]
+
 
 # ---------------------------------------------------------------------------
 # Integration: CLIPoller ↔ IPCClient
@@ -175,9 +305,11 @@ class TestCLIChannelIntegration:
         mock_result.summary = ""
 
         mock_loop = MagicMock()
-        mock_loop.run.return_value = mock_result
+        mock_loop.arun = AsyncMock(return_value=mock_result)
+        mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_loop.model = "test-model"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
+        mock_services.lane_queue = None
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
         poller.start()
@@ -192,13 +324,15 @@ class TestCLIChannelIntegration:
             assert "Berserk" in result["text"]
             assert result["rounds"] == 3
             assert result["tool_calls"] == []
+            mock_loop.arun.assert_awaited_once_with("analyze Berserk")
+            mock_loop.run.assert_not_called()
 
             client.close()
         finally:
             poller.stop()
 
     def test_send_prompt_error_handling(self) -> None:
-        """Server should return error when loop.run() raises."""
+        """Server should return error when loop.arun() raises."""
         from core.cli.ipc_client import IPCClient
         from core.server.ipc_server.poller import CLIPoller
 
@@ -206,8 +340,10 @@ class TestCLIChannelIntegration:
         mock_services = MagicMock()
 
         mock_loop = MagicMock()
-        mock_loop.run.side_effect = RuntimeError("API key missing")
+        mock_loop.arun = AsyncMock(side_effect=RuntimeError("API key missing"))
+        mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
+        mock_services.lane_queue = None
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
         poller.start()
@@ -220,6 +356,7 @@ class TestCLIChannelIntegration:
             result = client.send_prompt("do something")
             assert result["type"] == "error"
             assert "API key" in result["message"]
+            mock_loop.run.assert_not_called()
 
             client.close()
         finally:
@@ -246,6 +383,7 @@ class TestCLIChannelIntegration:
             result = client.send_prompt("")
             assert result["type"] == "error"
             assert "Empty" in result["message"]
+            mock_loop.arun.assert_not_called()
             mock_loop.run.assert_not_called()
 
             client.close()
@@ -267,8 +405,10 @@ class TestCLIChannelIntegration:
         mock_result.termination_reason = "natural"
 
         mock_loop = MagicMock()
-        mock_loop.run.return_value = mock_result
+        mock_loop.arun = AsyncMock(return_value=mock_result)
+        mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
+        mock_services.lane_queue = None
 
         poller = CLIPoller(mock_services, socket_path=sock_path)
         poller.start()
@@ -282,7 +422,8 @@ class TestCLIChannelIntegration:
             client.send_prompt("second")
             client.send_prompt("third")
 
-            assert mock_loop.run.call_count == 3
+            assert mock_loop.arun.await_count == 3
+            mock_loop.run.assert_not_called()
             # create_session called once (same session for all prompts)
             mock_services.create_session.assert_called_once()
 
@@ -489,14 +630,15 @@ class TestCLIChannelIntegration:
 
         captured: dict[str, Any] = {}
 
-        def capture_console(prompt: str) -> Any:
+        async def capture_console(prompt: str) -> Any:
             console_at_runtime = getattr(_ConsoleProxy._local, "console", None)
             captured["is_terminal"] = console_at_runtime.is_terminal if console_at_runtime else None
             captured["width"] = console_at_runtime.width if console_at_runtime else None
             return mock_result
 
         mock_loop = MagicMock()
-        mock_loop.run.side_effect = capture_console
+        mock_loop.arun = AsyncMock(side_effect=capture_console)
+        mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
         mock_loop.model = "test-model"
         mock_services.create_session.return_value = (MagicMock(), mock_loop)
         mock_services.lane_queue = None  # bypass lane queue

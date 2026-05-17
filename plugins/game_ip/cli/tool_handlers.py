@@ -13,6 +13,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from core.async_runtime import run_process_coroutine
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,11 @@ def _clarify(
 def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
     """Wrap delegated tool execution -- catch KeyError as clarification."""
     try:
-        result: dict[str, Any] = tool_class().execute(**kwargs)
+        tool = tool_class()
+        aexecute = getattr(tool, "aexecute", None)
+        if not callable(aexecute):
+            raise TypeError(f"{tool_class.__name__} must implement aexecute()")
+        result: dict[str, Any] = run_process_coroutine(aexecute(**kwargs))
         return result
     except (KeyError, TypeError) as exc:
         param = str(exc).strip("'\"")
@@ -244,12 +249,12 @@ def _build_analysis_handlers(
         }
 
     def handle_batch_analyze(**kwargs: Any) -> dict[str, Any]:
-        from plugins.game_ip.cli.batch import render_batch_table, run_batch
+        from plugins.game_ip.cli.batch import arun_batch, render_batch_table
 
         top = kwargs.get("top", 20)
         genre = kwargs.get("genre")
         dry_run = kwargs.get("dry_run", _force_dry())
-        batch_results = run_batch(top=top, genre=genre, dry_run=dry_run)
+        batch_results = run_process_coroutine(arun_batch(top=top, genre=genre, dry_run=dry_run))
         render_batch_table(batch_results)
         summary = []
         for br in batch_results:

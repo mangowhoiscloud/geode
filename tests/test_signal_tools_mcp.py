@@ -8,12 +8,13 @@ Verifies that each signal tool correctly:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.mcp.utils import parse_mcp_content as _parse_mcp_content
-from core.mcp.utils import try_mcp_signal as _try_mcp_signal
+from core.mcp.utils import try_mcp_signal_async as _try_mcp_signal_async
 from plugins.game_ip.tools.signal_tools import (
     GoogleTrendsTool,
     RedditSentimentTool,
@@ -22,7 +23,7 @@ from plugins.game_ip.tools.signal_tools import (
     YouTubeSearchTool,
 )
 
-# Patch target: lazy import inside _try_mcp_signal
+# Patch target: lazy import inside _try_mcp_signal_async
 _MCP_MANAGER_PATCH = "core.mcp.manager.get_mcp_manager"
 
 
@@ -83,11 +84,11 @@ class TestParseMCPContent:
 
 
 # ---------------------------------------------------------------------------
-# _try_mcp_signal
+# _try_mcp_signal_async
 # ---------------------------------------------------------------------------
 
 
-class TestTryMCPSignal:
+class TestTryMCPSignalAsync:
     def test_server_not_healthy(self):
         """Returns None when server is not in health check."""
         mock_manager = MagicMock()
@@ -97,35 +98,62 @@ class TestTryMCPSignal:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = _try_mcp_signal("steam", "get_game_info", {"query": "Test"})
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
         assert result is None
 
     def test_server_healthy_success(self):
         """Returns parsed result when MCP call succeeds."""
         mock_manager = MagicMock()
         mock_manager.check_health.return_value = {"steam": True}
-        mock_manager.call_tool.return_value = {
-            "content": [{"type": "text", "text": '{"player_count": 500}'}]
-        }
+        mock_manager.acall_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": '{"player_count": 500}'}]}
+        )
 
         with patch(
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = _try_mcp_signal("steam", "get_game_info", {"query": "Test"})
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
         assert result == {"player_count": 500}
+
+    def test_async_server_healthy_success_uses_acall_tool(self):
+        """Async helper should call MCP through acall_tool()."""
+        mock_manager = MagicMock()
+        mock_manager.check_health.return_value = {"steam": True}
+        mock_manager.acall_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": '{"player_count": 700}'}]}
+        )
+
+        with patch(
+            _MCP_MANAGER_PATCH,
+            return_value=mock_manager,
+        ):
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
+
+        assert result == {"player_count": 700}
+        mock_manager.acall_tool.assert_awaited_once_with(
+            "steam", "get_game_info", {"query": "Test"}
+        )
 
     def test_mcp_returns_error(self):
         """Returns None when MCP returns error dict."""
         mock_manager = MagicMock()
         mock_manager.check_health.return_value = {"steam": True}
-        mock_manager.call_tool.return_value = {"error": "tool not found"}
+        mock_manager.acall_tool = AsyncMock(return_value={"error": "tool not found"})
 
         with patch(
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = _try_mcp_signal("steam", "get_game_info", {"query": "Test"})
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
         assert result is None
 
     def test_manager_import_fails(self):
@@ -134,20 +162,24 @@ class TestTryMCPSignal:
             _MCP_MANAGER_PATCH,
             side_effect=ImportError("no module"),
         ):
-            result = _try_mcp_signal("steam", "get_game_info", {"query": "Test"})
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
         assert result is None
 
     def test_call_tool_exception(self):
-        """Returns None when call_tool raises."""
+        """Returns None when acall_tool raises."""
         mock_manager = MagicMock()
         mock_manager.check_health.return_value = {"steam": True}
-        mock_manager.call_tool.side_effect = ConnectionError("lost connection")
+        mock_manager.acall_tool = AsyncMock(side_effect=ConnectionError("lost connection"))
 
         with patch(
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = _try_mcp_signal("steam", "get_game_info", {"query": "Test"})
+            result = asyncio.run(
+                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
+            )
         assert result is None
 
 
@@ -163,8 +195,93 @@ def _make_mcp_manager(
     """Create a mock MCPServerManager that returns tool_result for one server."""
     manager = MagicMock()
     manager.check_health.return_value = {server_name: True}
-    manager.call_tool.return_value = tool_result
+    manager.acall_tool = AsyncMock(return_value=tool_result)
     return manager
+
+
+def _run_tool(tool: Any, **kwargs: Any) -> dict[str, Any]:
+    return asyncio.run(tool.aexecute(**kwargs))
+
+
+def _make_async_mcp_manager(
+    server_name: str,
+    tool_result: dict[str, Any],
+) -> MagicMock:
+    """Create a mock MCPServerManager with an async tool call path."""
+    manager = MagicMock()
+    manager.check_health.return_value = {server_name: True}
+    manager.acall_tool = AsyncMock(return_value=tool_result)
+    return manager
+
+
+@pytest.mark.parametrize(
+    "tool_cls,server_name,tool_name,kwargs,tool_result,expected_source",
+    [
+        (
+            YouTubeSearchTool,
+            "youtube",
+            "search_videos",
+            {"ip_name": "TestIP"},
+            {"content": [{"type": "text", "text": '{"total_views": 123, "video_count": 4}'}]},
+            "youtube_mcp_live",
+        ),
+        (
+            RedditSentimentTool,
+            "reddit",
+            "search_posts",
+            {"ip_name": "TestIP"},
+            {"content": [{"type": "text", "text": '{"subscribers": 12345}'}]},
+            "reddit_mcp_live",
+        ),
+        (
+            TwitchStatsTool,
+            "igdb",
+            "search_games",
+            {"ip_name": "TestIP"},
+            {"content": [{"type": "text", "text": '{"avg_concurrent_viewers": 42}'}]},
+            "igdb_mcp_live",
+        ),
+        (
+            SteamInfoTool,
+            "steam",
+            "get_game_info",
+            {"ip_name": "TestIP"},
+            {"player_count": 5000, "review_score": 92},
+            "steam_mcp_live",
+        ),
+        (
+            GoogleTrendsTool,
+            "google-trends",
+            "get_interest_over_time",
+            {"ip_name": "TestIP", "region": "KR"},
+            {"content": [{"type": "text", "text": '{"interest_index": 85}'}]},
+            "google_trends_mcp_live",
+        ),
+    ],
+)
+def test_signal_tools_aexecute_use_async_mcp_path(
+    tool_cls: type,
+    server_name: str,
+    tool_name: str,
+    kwargs: dict[str, Any],
+    tool_result: dict[str, Any],
+    expected_source: str,
+) -> None:
+    manager = _make_async_mcp_manager(server_name, tool_result)
+
+    with patch(
+        _MCP_MANAGER_PATCH,
+        return_value=manager,
+    ):
+        result = asyncio.run(tool_cls().aexecute(**kwargs))
+
+    data = result["result"]
+    assert data["source"] == expected_source
+    if tool_name == "get_interest_over_time":
+        expected_args = {"keyword": kwargs["ip_name"], "region": kwargs["region"]}
+    else:
+        expected_args = {"query": kwargs["ip_name"]}
+    manager.acall_tool.assert_awaited_once_with(server_name, tool_name, expected_args)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +307,7 @@ class TestYouTubeSearchToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = YouTubeSearchTool().execute(ip_name="TestIP")
+            result = _run_tool(YouTubeSearchTool(), ip_name="TestIP")
         data = result["result"]
         assert data["source"] == "youtube_mcp_live"
         assert data["total_views"] == 999000
@@ -205,7 +322,7 @@ class TestYouTubeSearchToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = YouTubeSearchTool().execute(ip_name="Berserk")
+            result = _run_tool(YouTubeSearchTool(), ip_name="Berserk")
         data = result["result"]
         assert data["source"] == "youtube_api_stub"
         assert data["total_views"] == 25_000_000
@@ -233,7 +350,7 @@ class TestRedditSentimentToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = RedditSentimentTool().execute(ip_name="TestIP")
+            result = _run_tool(RedditSentimentTool(), ip_name="TestIP")
         data = result["result"]
         assert data["source"] == "reddit_mcp_live"
         assert data["subreddit_subscribers"] == 120000
@@ -246,7 +363,7 @@ class TestRedditSentimentToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = RedditSentimentTool().execute(ip_name="Berserk")
+            result = _run_tool(RedditSentimentTool(), ip_name="Berserk")
         data = result["result"]
         assert data["source"] == "reddit_api_stub"
         assert data["subreddit_subscribers"] == 520_000
@@ -267,7 +384,7 @@ class TestSteamInfoToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = SteamInfoTool().execute(ip_name="TestIP")
+            result = _run_tool(SteamInfoTool(), ip_name="TestIP")
         data = result["result"]
         assert data["source"] == "steam_mcp_live"
         assert data["dau_peak"] == 5000
@@ -281,7 +398,7 @@ class TestSteamInfoToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = SteamInfoTool().execute(ip_name="Berserk")
+            result = _run_tool(SteamInfoTool(), ip_name="Berserk")
         data = result["result"]
         assert data["source"] == "steam_api_stub"
         assert data["metacritic_score"] == 58
@@ -309,7 +426,7 @@ class TestTwitchStatsToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = TwitchStatsTool().execute(ip_name="TestIP")
+            result = _run_tool(TwitchStatsTool(), ip_name="TestIP")
         data = result["result"]
         assert data["source"] == "igdb_mcp_live"
         assert data["avg_concurrent_viewers"] == 300
@@ -322,7 +439,7 @@ class TestTwitchStatsToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = TwitchStatsTool().execute(ip_name="Cowboy Bebop")
+            result = _run_tool(TwitchStatsTool(), ip_name="Cowboy Bebop")
         data = result["result"]
         assert data["source"] == "twitch_api_stub"
         assert data["avg_concurrent_viewers"] > 0
@@ -350,7 +467,7 @@ class TestGoogleTrendsToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = GoogleTrendsTool().execute(ip_name="TestIP")
+            result = _run_tool(GoogleTrendsTool(), ip_name="TestIP")
         data = result["result"]
         assert data["source"] == "google_trends_mcp_live"
         assert data["trends_index"] == 85
@@ -365,7 +482,7 @@ class TestGoogleTrendsToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = GoogleTrendsTool().execute(ip_name="Berserk")
+            result = _run_tool(GoogleTrendsTool(), ip_name="Berserk")
         data = result["result"]
         assert data["source"] == "google_trends_stub"
         assert data["trends_index"] == 78
@@ -379,7 +496,7 @@ class TestGoogleTrendsToolMCP:
             _MCP_MANAGER_PATCH,
             return_value=manager,
         ):
-            result = GoogleTrendsTool().execute(ip_name="TestIP", region="KR")
+            result = _run_tool(GoogleTrendsTool(), ip_name="TestIP", region="KR")
         data = result["result"]
         assert data["region"] == "KR"
         assert data["trend_direction"] == "stable"  # 45 <= 60
@@ -409,5 +526,5 @@ class TestMCPErrorHandling:
             _MCP_MANAGER_PATCH,
             side_effect=RuntimeError("MCP down"),
         ):
-            result = tool_cls().execute(ip_name=ip_name)
+            result = _run_tool(tool_cls(), ip_name=ip_name)
         assert result["result"]["source"] == expected_stub_source

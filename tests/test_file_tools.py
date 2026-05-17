@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -32,7 +33,7 @@ class TestGlobTool:
         (tmp_path / "sub" / "c.py").write_text("print(2)")
 
         tool = GlobTool()
-        result = tool.execute(pattern="**/*.py", path=str(tmp_path))
+        result = asyncio.run(tool.aexecute(pattern="**/*.py", path=str(tmp_path)))
         assert "result" in result
         files = result["result"]["files"]
         py_files = [f for f in files if f.endswith(".py")]
@@ -40,7 +41,7 @@ class TestGlobTool:
 
     def test_no_matches(self, tmp_path: Path):
         tool = GlobTool()
-        result = tool.execute(pattern="*.xyz", path=str(tmp_path))
+        result = asyncio.run(tool.aexecute(pattern="*.xyz", path=str(tmp_path)))
         assert result["result"]["total_matches"] == 0
 
     def test_allows_symlink_dir_inside(self, tmp_path: Path):
@@ -51,7 +52,7 @@ class TestGlobTool:
         link.symlink_to(real)
 
         tool = GlobTool()
-        result = tool.execute(pattern="*", path=str(link))
+        result = asyncio.run(tool.aexecute(pattern="*", path=str(link)))
         assert "result" in result
 
     def test_rejects_symlink_dir_outside(self, tmp_path: Path):
@@ -62,10 +63,16 @@ class TestGlobTool:
             link.symlink_to(external)
 
             tool = GlobTool()
-            result = tool.execute(pattern="*", path=str(link))
+            result = asyncio.run(tool.aexecute(pattern="*", path=str(link)))
             assert "error" in result
         finally:
             external.rmdir()
+
+    def test_aexecute_matches_execute(self, tmp_path: Path):
+        (tmp_path / "a.py").write_text("print(1)")
+        tool = GlobTool()
+        result = asyncio.run(tool.aexecute(pattern="*.py", path=str(tmp_path)))
+        assert result["result"]["total_matches"] == 1
 
 
 class TestGrepTool:
@@ -74,21 +81,21 @@ class TestGrepTool:
         (tmp_path / "b.py").write_text("x = 42\n")
 
         tool = GrepTool()
-        result = tool.execute(pattern="def hello", path=str(tmp_path))
+        result = asyncio.run(tool.aexecute(pattern="def hello", path=str(tmp_path)))
         assert result["result"]["total_files"] == 1
 
     def test_include_content(self, tmp_path: Path):
         (tmp_path / "f.txt").write_text("line1\nfoo bar\nline3\n")
 
         tool = GrepTool()
-        result = tool.execute(pattern="foo", path=str(tmp_path), include_content=True)
+        result = asyncio.run(tool.aexecute(pattern="foo", path=str(tmp_path), include_content=True))
         matches = result["result"]["results"][0]["matches"]
         assert matches[0]["line"] == 2
         assert "foo bar" in matches[0]["text"]
 
     def test_invalid_regex(self):
         tool = GrepTool()
-        result = tool.execute(pattern="[invalid")
+        result = asyncio.run(tool.aexecute(pattern="[invalid"))
         assert "error" in result
         assert result["error_type"] == "validation"
 
@@ -97,7 +104,13 @@ class TestGrepTool:
         (tmp_path / "b.txt").write_text("target")
 
         tool = GrepTool()
-        result = tool.execute(pattern="target", path=str(tmp_path), glob="*.py")
+        result = asyncio.run(tool.aexecute(pattern="target", path=str(tmp_path), glob="*.py"))
+        assert result["result"]["total_files"] == 1
+
+    def test_aexecute_matches_execute(self, tmp_path: Path):
+        (tmp_path / "a.txt").write_text("target")
+        tool = GrepTool()
+        result = asyncio.run(tool.aexecute(pattern="target", path=str(tmp_path)))
         assert result["result"]["total_files"] == 1
 
 
@@ -107,7 +120,7 @@ class TestEditFileTool:
         f.write_text("hello world")
 
         tool = EditFileTool()
-        result = tool.execute(file_path=str(f), old_string="hello", new_string="goodbye")
+        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="hello", new_string="goodbye"))
         assert result["result"]["success"]
         assert f.read_text() == "goodbye world"
 
@@ -116,7 +129,7 @@ class TestEditFileTool:
         f.write_text("hello")
 
         tool = EditFileTool()
-        result = tool.execute(file_path=str(f), old_string="xyz", new_string="abc")
+        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="xyz", new_string="abc"))
         assert "error" in result
 
     def test_ambiguous_match_rejected(self, tmp_path: Path):
@@ -124,7 +137,7 @@ class TestEditFileTool:
         f.write_text("aaa bbb aaa")
 
         tool = EditFileTool()
-        result = tool.execute(file_path=str(f), old_string="aaa", new_string="ccc")
+        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="aaa", new_string="ccc"))
         assert "error" in result
         assert result["context"]["occurrences"] == 2
 
@@ -133,12 +146,12 @@ class TestEditFileTool:
         f.write_text("aaa bbb aaa")
 
         tool = EditFileTool()
-        result = tool.execute(
+        result = asyncio.run(tool.aexecute(
             file_path=str(f),
             old_string="aaa",
             new_string="ccc",
             replace_all=True,
-        )
+        ))
         assert result["result"]["replacements"] == 2
         assert f.read_text() == "ccc bbb ccc"
 
@@ -149,7 +162,7 @@ class TestEditFileTool:
         link.symlink_to(real)
 
         tool = EditFileTool()
-        result = tool.execute(file_path=str(link), old_string="content", new_string="new")
+        result = asyncio.run(tool.aexecute(file_path=str(link), old_string="content", new_string="new"))
         assert "result" in result
         assert real.read_text() == "new"
 
@@ -161,7 +174,7 @@ class TestEditFileTool:
             link.symlink_to(external)
 
             tool = EditFileTool()
-            result = tool.execute(file_path=str(link), old_string="external", new_string="hacked")
+            result = asyncio.run(tool.aexecute(file_path=str(link), old_string="external", new_string="hacked"))
             assert "error" in result
             assert external.read_text() == "external"
         finally:
@@ -172,15 +185,25 @@ class TestEditFileTool:
         f.write_text("[user]\nname = test")
 
         tool = EditFileTool()
-        result = tool.execute(file_path=str(f), old_string="test", new_string="hacked")
+        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="test", new_string="hacked"))
         assert "error" in result
         assert "dangerous" in result["error"].lower()
 
     def test_rejects_shell_expansion(self):
         tool = EditFileTool()
-        result = tool.execute(file_path="$HOME/.bashrc", old_string="x", new_string="y")
+        result = asyncio.run(tool.aexecute(file_path="$HOME/.bashrc", old_string="x", new_string="y"))
         assert "error" in result
         assert "shell expansion" in result["error"].lower()
+
+    def test_aexecute_matches_execute(self, tmp_path: Path):
+        f = tmp_path / "test.txt"
+        f.write_text("hello")
+        tool = EditFileTool()
+        result = asyncio.run(
+            tool.aexecute(file_path=str(f), old_string="hello", new_string="async")
+        )
+        assert result["result"]["success"]
+        assert f.read_text() == "async"
 
 
 class TestWriteFileTool:
@@ -188,7 +211,7 @@ class TestWriteFileTool:
         f = tmp_path / "new.txt"
 
         tool = WriteFileTool()
-        result = tool.execute(file_path=str(f), content="hello world")
+        result = asyncio.run(tool.aexecute(file_path=str(f), content="hello world"))
         assert result["result"]["created"]
         assert f.read_text() == "hello world"
 
@@ -196,7 +219,7 @@ class TestWriteFileTool:
         f = tmp_path / "sub" / "deep" / "file.txt"
 
         tool = WriteFileTool()
-        result = tool.execute(file_path=str(f), content="nested")
+        result = asyncio.run(tool.aexecute(file_path=str(f), content="nested"))
         assert result["result"]["created"]
         assert f.read_text() == "nested"
 
@@ -205,7 +228,7 @@ class TestWriteFileTool:
         f.write_text("old content")
 
         tool = WriteFileTool()
-        result = tool.execute(file_path=str(f), content="new content")
+        result = asyncio.run(tool.aexecute(file_path=str(f), content="new content"))
         assert result["result"]["created"]
         assert f.read_text() == "new content"
 
@@ -216,7 +239,7 @@ class TestWriteFileTool:
         link.symlink_to(real)
 
         tool = WriteFileTool()
-        result = tool.execute(file_path=str(link), content="updated")
+        result = asyncio.run(tool.aexecute(file_path=str(link), content="updated"))
         assert "result" in result
         assert real.read_text() == "updated"
 
@@ -228,7 +251,7 @@ class TestWriteFileTool:
             link.symlink_to(external)
 
             tool = WriteFileTool()
-            result = tool.execute(file_path=str(link), content="hacked")
+            result = asyncio.run(tool.aexecute(file_path=str(link), content="hacked"))
             assert "error" in result
             assert external.read_text() == "original"
         finally:
@@ -236,6 +259,13 @@ class TestWriteFileTool:
 
     def test_rejects_glob_in_write_path(self, tmp_path: Path):
         tool = WriteFileTool()
-        result = tool.execute(file_path="src/*.py", content="x")
+        result = asyncio.run(tool.aexecute(file_path="src/*.py", content="x"))
         assert "error" in result
         assert "glob" in result["error"].lower()
+
+    def test_aexecute_matches_execute(self, tmp_path: Path):
+        f = tmp_path / "async.txt"
+        tool = WriteFileTool()
+        result = asyncio.run(tool.aexecute(file_path=str(f), content="hello"))
+        assert result["result"]["created"]
+        assert f.read_text() == "hello"

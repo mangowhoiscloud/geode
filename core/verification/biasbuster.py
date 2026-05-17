@@ -9,9 +9,9 @@ import numpy as np
 from pydantic import ValidationError
 
 from core.llm.prompts import BIASBUSTER_SYSTEM, BIASBUSTER_USER
-from core.llm.router import get_llm_json, get_llm_parsed, get_llm_tool
+from core.llm.router import call_llm_with_tools_async, get_llm_json, get_llm_parsed
 from core.state import AnalysisResult, BiasBusterResult, GeodeState
-from core.tools.registry import get_tool_executor
+from core.tools.registry import get_async_tool_executor
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _run_statistical_checks(analyses: list[AnalysisResult]) -> dict[str, float]:
     }
 
 
-def run_biasbuster(state: GeodeState) -> BiasBusterResult:
+async def run_biasbuster(state: GeodeState) -> BiasBusterResult:
     """Run BiasBuster 4-step verification."""
     try:
         analyses = state.get("analyses", [])
@@ -94,7 +94,9 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
         raw_tool_defs: Any = state.get("_tool_definitions", [])
         if raw_tool_defs and not low_variance_flag:
             try:
-                tool_fn = get_llm_tool()
+                tool_exec = get_async_tool_executor()
+                if tool_exec is None:
+                    raise RuntimeError("async tool executor not injected")
                 enhanced_system = (
                     BIASBUSTER_SYSTEM + "\n\n## Available Tools\n"
                     "You can query memory_search for past bias patterns."
@@ -105,8 +107,7 @@ def run_biasbuster(state: GeodeState) -> BiasBusterResult:
                     f"Analyst scores: {scores}. "
                     f"CV={stats['cv']:.3f}. JSON BiasBusterResult."
                 )
-                tool_exec: Any = get_tool_executor()
-                result = tool_fn(
+                result = await call_llm_with_tools_async(
                     enhanced_system,
                     brief_user,
                     tools=raw_tool_defs,

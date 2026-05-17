@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import asyncio
+from unittest.mock import AsyncMock, patch
 
 
 class TestSelectIps:
@@ -86,41 +87,41 @@ class TestRenderBatchTable:
 
 class TestRunBatch:
     def test_returns_list(self) -> None:
-        from plugins.game_ip.cli.batch import run_batch
+        from plugins.game_ip.cli.batch import arun_batch
 
-        with patch("plugins.game_ip.cli.batch.run_single_analysis") as mock:
+        with patch("plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock) as mock:
             mock.return_value = {"ip_name": "test", "tier": "A", "final_score": 80.0}
-            results = run_batch(ips=["cowboy bebop"], dry_run=True)
+            results = asyncio.run(arun_batch(ips=["cowboy bebop"], dry_run=True))
             assert isinstance(results, list)
 
     def test_empty_selection_returns_empty(self) -> None:
-        from plugins.game_ip.cli.batch import run_batch
+        from plugins.game_ip.cli.batch import arun_batch
 
-        results = run_batch(ips=["nonexistent_xyz"], dry_run=True)
+        results = asyncio.run(arun_batch(ips=["nonexistent_xyz"], dry_run=True))
         assert results == []
 
     def test_timeout_handling(self) -> None:
         """Per-IP timeout produces ERR result instead of crashing."""
-        from plugins.game_ip.cli.batch import run_batch
+        from plugins.game_ip.cli.batch import arun_batch
 
-        with patch("plugins.game_ip.cli.batch.run_single_analysis") as mock:
+        with patch("plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock) as mock:
             mock.return_value = {"ip_name": "test", "tier": "A", "final_score": 80.0}
-            results = run_batch(ips=["cowboy bebop"], dry_run=True)
+            results = asyncio.run(arun_batch(ips=["cowboy bebop"], dry_run=True))
             assert len(results) == 1
 
 
 class TestRunSingleAnalysis:
     def test_unknown_ip_returns_error(self) -> None:
-        from plugins.game_ip.cli.batch import _run_analysis_standalone
+        from plugins.game_ip.cli.batch import _arun_analysis_standalone
 
-        result = _run_analysis_standalone("zzz_nonexistent_ip_xyz")
+        result = asyncio.run(_arun_analysis_standalone("zzz_nonexistent_ip_xyz"))
         assert result["tier"] == "ERR"
         assert result["error"] is True
 
     def test_dry_run_returns_result(self) -> None:
-        from plugins.game_ip.cli.batch import _run_analysis_standalone
+        from plugins.game_ip.cli.batch import _arun_analysis_standalone
 
-        result = _run_analysis_standalone("cowboy bebop", dry_run=True)
+        result = asyncio.run(_arun_analysis_standalone("cowboy bebop", dry_run=True))
         assert "tier" in result
         assert "final_score" in result
         assert result["tier"] != "ERR"

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from core.tools.base import Tool
 from core.tools.registry import ToolRegistry
 from plugins.game_ip.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
@@ -28,19 +30,19 @@ class TestRunAnalystTool:
 
     def test_execute_berserk(self):
         tool = RunAnalystTool()
-        result = tool.execute(analyst_type="game_mechanics", ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(analyst_type="game_mechanics", ip_name="Berserk"))
         assert "result" in result
         assert result["result"]["analyst_type"] == "game_mechanics"
         assert result["result"]["score"] == 4.8
 
     def test_execute_cowboy_bebop(self):
         tool = RunAnalystTool()
-        result = tool.execute(analyst_type="growth_potential", ip_name="Cowboy Bebop")
+        result = asyncio.run(tool.aexecute(analyst_type="growth_potential", ip_name="Cowboy Bebop"))
         assert result["result"]["score"] == 4.5
 
     def test_execute_unknown_analyst_type(self):
         tool = RunAnalystTool()
-        result = tool.execute(analyst_type="invalid", ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(analyst_type="invalid", ip_name="Berserk"))
         assert "error" in result
 
 
@@ -54,28 +56,28 @@ class TestRunEvaluatorTool:
 
     def test_execute_quality_judge(self):
         tool = RunEvaluatorTool()
-        result = tool.execute(evaluator_type="quality_judge", ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(evaluator_type="quality_judge", ip_name="Berserk"))
         assert "result" in result
         assert result["result"]["evaluator_type"] == "quality_judge"
 
     def test_execute_hidden_value(self):
         tool = RunEvaluatorTool()
-        result = tool.execute(evaluator_type="hidden_value", ip_name="Cowboy Bebop")
+        result = asyncio.run(tool.aexecute(evaluator_type="hidden_value", ip_name="Cowboy Bebop"))
         assert "result" in result
 
     def test_execute_community_momentum(self):
         tool = RunEvaluatorTool()
-        result = tool.execute(evaluator_type="community_momentum", ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(evaluator_type="community_momentum", ip_name="Berserk"))
         assert "result" in result
 
     def test_execute_unknown_ip(self):
         tool = RunEvaluatorTool()
-        result = tool.execute(evaluator_type="quality_judge", ip_name="Unknown IP")
+        result = asyncio.run(tool.aexecute(evaluator_type="quality_judge", ip_name="Unknown IP"))
         assert "error" in result
 
     def test_execute_unknown_evaluator(self):
         tool = RunEvaluatorTool()
-        result = tool.execute(evaluator_type="invalid", ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(evaluator_type="invalid", ip_name="Berserk"))
         assert "error" in result
 
 
@@ -89,7 +91,7 @@ class TestPSMCalculateTool:
 
     def test_execute_berserk(self):
         tool = PSMCalculateTool()
-        result = tool.execute(ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(ip_name="Berserk"))
         assert "result" in result
         psm = result["result"]
         assert "att_pct" in psm
@@ -99,12 +101,12 @@ class TestPSMCalculateTool:
 
     def test_execute_cowboy_bebop(self):
         tool = PSMCalculateTool()
-        result = tool.execute(ip_name="Cowboy Bebop")
+        result = asyncio.run(tool.aexecute(ip_name="Cowboy Bebop"))
         assert result["result"]["psm_valid"] is True
 
     def test_execute_unknown_ip(self):
         tool = PSMCalculateTool()
-        result = tool.execute(ip_name="Unknown IP XYZ")
+        result = asyncio.run(tool.aexecute(ip_name="Unknown IP XYZ"))
         # Falls back to default values, not an error
         assert "result" in result
 

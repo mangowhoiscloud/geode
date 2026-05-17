@@ -10,6 +10,7 @@ from typing import Any
 
 from rich.console import Console
 
+from core.async_runtime import run_process_coroutine
 from core.hooks.system import HookEvent
 
 log = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ def _handle_memory_search(query: str, args: dict[str, Any]) -> None:
 
     search_tool = MemorySearchTool()
     tier = args.get("tier", "all")
-    search_result = search_tool.execute(query=query, tier=tier)
+    search_result = run_process_coroutine(search_tool.aexecute(query=query, tier=tier))
     matches = search_result.get("result", {}).get("matches", [])
     console.print()
     console.print(f"  [header]Memory Search: '{query}'[/header]")
@@ -150,10 +151,12 @@ def _handle_memory_save(key: str, content: str, fire_hook: Any) -> None:
     from core.tools.memory_tools import MemorySaveTool
 
     save_tool = MemorySaveTool()
-    save_result = save_tool.execute(
-        session_id=key,
-        data={"content": content},
-        persistent=True,
+    save_result = run_process_coroutine(
+        save_tool.aexecute(
+            session_id=key,
+            data={"content": content},
+            persistent=True,
+        )
     )
     saved = save_result.get("result", {}).get("saved", False)
     if saved:

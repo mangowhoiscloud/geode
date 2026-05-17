@@ -35,8 +35,7 @@ uv tool install -e .`}</pre>
             <pre>{`export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GLM_API_KEY=...           # optional, third fallback chain
-export LANGCHAIN_TRACING_V2=true # optional, opt-in tracing
-export LANGCHAIN_API_KEY=ls_...  # required if tracing enabled`}</pre>
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 # optional, with [obs] extra`}</pre>
 
             <h2>실행</h2>
             <pre>{`# Interactive REPL
@@ -102,8 +101,7 @@ uv tool install -e .`}</pre>
             <pre>{`export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 export GLM_API_KEY=...           # optional, third fallback chain
-export LANGCHAIN_TRACING_V2=true # optional, opt-in tracing
-export LANGCHAIN_API_KEY=ls_...  # required if tracing enabled`}</pre>
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 # optional, with [obs] extra`}</pre>
 
             <h2>Run</h2>
             <pre>{`# Interactive REPL

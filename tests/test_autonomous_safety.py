@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -84,7 +85,7 @@ class TestCostBudgetAutoStop:
                 {"core.llm.token_tracker": mock_module},
             ),
         ):
-            result = loop.run("test cost")
+            result = asyncio.run(loop.arun("test cost"))
 
         assert result.termination_reason == "cost_budget_exceeded"
         assert "1.00" in result.text
@@ -102,7 +103,7 @@ class TestCostBudgetAutoStop:
             patch.object(loop, "_call_llm", return_value=response),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("test no budget")
+            result = asyncio.run(loop.arun("test no budget"))
 
         assert result.termination_reason == "natural"
 
@@ -125,7 +126,7 @@ class TestCostBudgetAutoStop:
                 {"core.llm.token_tracker": MagicMock(get_tracker=lambda: mock_tracker)},
             ),
         ):
-            result = loop.run("test under budget")
+            result = asyncio.run(loop.arun("test under budget"))
 
         assert result.termination_reason == "natural"
 
@@ -246,7 +247,7 @@ class TestDiversityForcing:
             patch.object(loop, "_track_usage"),
             patch.object(loop._tool_processor, "process", return_value=[tool_result_item]),
         ):
-            result = loop.run("search something")
+            result = asyncio.run(loop.arun("search something"))
 
         # Verify diversity hint was injected (tracker was cleared)
         assert loop._consecutive_tool_tracker == []  # Cleared after hint

@@ -6,6 +6,7 @@ feedback loops, hook triggers, and tool execution.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock
 
 from core.auth.cooldown import CooldownTracker
@@ -19,6 +20,18 @@ from core.tools.policy import PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry
 from core.verification.cross_llm import run_dual_adapter_check
 from plugins.game_ip.tools.analysis import PSMCalculateTool, RunAnalystTool, RunEvaluatorTool
+
+
+def _run_registry(registry: ToolRegistry, name: str, **kwargs):
+    return asyncio.run(registry.aexecute(name, **kwargs))
+
+
+async def _collect_stream(graph, state):
+    return [event async for event in graph.astream(state)]
+
+
+def _stream_graph(graph, state):
+    return asyncio.run(_collect_stream(graph, state))
 
 
 class TestFullPipelineDryRun:
@@ -48,7 +61,7 @@ class TestFullPipelineDryRun:
         }
 
         final = {}
-        for event in graph.stream(state):
+        for event in _stream_graph(graph, state):
             for node_name, output in event.items():
                 if node_name != "__end__":
                     for k, v in output.items():
@@ -86,7 +99,7 @@ class TestFullPipelineDryRun:
             }
 
             final = {}
-            for event in graph.stream(state):
+            for event in _stream_graph(graph, state):
                 for node_name, output in event.items():
                     if node_name != "__end__":
                         for k, v in output.items():
@@ -116,7 +129,7 @@ class TestFeedbackLoopE2E:
         }
 
         nodes_visited = []
-        for event in graph.stream(state):
+        for event in _stream_graph(graph, state):
             nodes_visited.extend(event.keys())
 
         # Should not have "gather" node if confidence is high
@@ -137,7 +150,7 @@ class TestToolRegistryE2E:
         assert "psm_calculate" in registry
 
         # Execute tool
-        result = registry.execute("run_analyst", analyst_type="game_mechanics", ip_name="Berserk")
+        result = _run_registry(registry, "run_analyst", analyst_type="game_mechanics", ip_name="Berserk")
         assert "result" in result
 
         # Policy filtering

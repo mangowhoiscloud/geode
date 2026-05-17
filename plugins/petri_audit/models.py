@@ -203,13 +203,13 @@ def _claude_oauth_available() -> bool:
 
 
 def is_oauth_routed(inspect_id: str) -> bool:
-    """True when an ``inspect_ai`` model id is routed through Codex OAuth.
+    """True when an ``inspect_ai`` model id is routed through subscription OAuth.
 
     The cost estimator and audit-report renderer use this to zero out
-    the per-token cost line for judge / auditor calls that hit the
-    ChatGPT Plus subscription quota instead of the PAYG endpoint.
+    the per-token cost line for judge / auditor calls that hit ChatGPT
+    Plus or Claude subscription quota instead of the PAYG endpoint.
     """
-    return inspect_id.startswith("openai-codex/")
+    return inspect_id.startswith(("openai-codex/", "claude-code/"))
 
 
 def to_inspect_target(geode_id: str | None) -> str:

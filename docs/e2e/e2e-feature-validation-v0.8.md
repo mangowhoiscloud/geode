@@ -12,7 +12,7 @@ README.md + CHANGELOG.md 기반 기능별 E2E 검증 시나리오.
 | F3 | Plan/Delegate NL offline | **6/6 PASS** | 한/영 모두 정확 매핑 |
 | F4 | Tool 결과 JSON 직렬화 | **PASS** | dict, list, datetime 모두 valid JSON |
 | F5 | Snapshot _sanitize_state() | **PASS** | 6→3 keys (3 _-prefixed 필터링) |
-| F6 | Verification LangSmith tracing | **4/4 PASS** | guardrails, biasbuster, cross_llm, rights_risk |
+| F6 | Verification hook observability | **4/4 PASS** | guardrails, biasbuster, cross_llm, rights_risk |
 | F7 | Guardrails G1-G4 | **4/4 PASS** | Schema, Range, Grounding, Consistency |
 | F8 | BiasBuster | **PASS** | overall_pass=True, anchoring=False (dry-run) |
 | F9 | Cross-LLM Agreement | **PASS** | agreement=0.9612, passed=True |
@@ -41,7 +41,7 @@ README.md + CHANGELOG.md 기반 기능별 E2E 검증 시나리오.
 | F3 | Plan/Delegate NL offline 매핑 | CHANGELOG 0.8.0 Added | Python 직접 호출 |
 | F4 | Tool 결과 JSON 직렬화 (str→json.dumps) | CHANGELOG 0.8.0 Changed | Unit 검증 |
 | F5 | Snapshot _sanitize_state() 필터링 | CHANGELOG 0.8.0 Changed | Unit 검증 |
-| F6 | Verification LangSmith tracing 데코레이터 | CHANGELOG 0.8.0 Added | 데코레이터 존재 확인 |
+| F6 | Verification hook observability | CHANGELOG 0.8.0 Added | hook payload 확인 |
 | F7 | Guardrails G1-G4 정상 동작 | README Quality Evaluation | Pipeline state 검증 |
 | F8 | BiasBuster 6-bias 검출 | README Quality Evaluation | dry-run state 검증 |
 | F9 | Cross-LLM agreement 계산 | README Quality Evaluation | 수치 검증 |
@@ -128,15 +128,15 @@ README.md + CHANGELOG.md 기반 기능별 E2E 검증 시나리오.
 검증: 반환 dict에 _-prefixed 키 없음
 ```
 
-### F6: Verification LangSmith Tracing
+### F6: Verification Hook Observability
 
 ```
 검증 대상:
-  - run_guardrails: @_maybe_traceable 데코레이터 존재
-  - run_biasbuster: @_maybe_traceable 데코레이터 존재
-  - run_cross_llm_check: @_maybe_traceable 데코레이터 존재
-  - check_rights_risk: @_maybe_traceable 데코레이터 존재
-검증: hasattr(fn, "__wrapped__") 또는 소스코드에 데코레이터 존재 확인
+  - run_guardrails: VERIFICATION_PASS/FAIL hook emission
+  - run_biasbuster: BiasBuster result and hook-visible state changes
+  - run_cross_llm_check: agreement metrics returned to caller
+  - check_rights_risk: rights-risk result returned to caller
+검증: hook payload and returned result shape 확인
 ```
 
 ### F7: Guardrails G1-G4

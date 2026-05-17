@@ -82,7 +82,6 @@ from core.wiring.container import (
 from core.wiring.container import (
     build_default_registry as _build_default_registry,  # noqa: F401
 )
-from core.wiring.container import make_tool_executor as _make_tool_executor  # noqa: F401
 
 log = logging.getLogger(__name__)
 
@@ -161,7 +160,8 @@ class GeodeRuntime:
     Usage:
         runtime = GeodeRuntime.create("Berserk")
         graph = runtime.compile_graph()
-        result = graph.stream(state, config=runtime.thread_config)
+        async for event in graph.astream(state, config=runtime.thread_config):
+            ...
     """
 
     def __init__(
@@ -542,31 +542,31 @@ class GeodeRuntime:
         """Return tool definitions for injection into GeodeState.
 
         Nodes that support tool-augmented paths (Synthesizer, BiasBuster) read
-        ``_tool_definitions`` from state and ``get_tool_executor()`` from contextvar.
+        ``_tool_definitions`` from state and ``get_async_tool_executor()`` from contextvar.
         The executor callable is NOT stored in state (functions are not serializable
         by LangGraph's msgpack checkpointer).
 
         Returns empty dict if no tools are available (dry_run, etc).
-        Also injects tool executor into contextvar via ``set_tool_executor()``.
+        Also injects tool executor into contextvar via ``set_async_tool_executor()``.
         """
-        from core.tools.registry import set_tool_executor
+        from core.tools.registry import set_async_tool_executor
 
         available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
         if not available:
-            set_tool_executor(None)
+            set_async_tool_executor(None)
             return {}
         tool_defs = self.tool_registry.to_anthropic_tools_with_defer(
             policy=self.policy_chain,
             mode=mode,
         )
         if not tool_defs:
-            set_tool_executor(None)
+            set_async_tool_executor(None)
             return {}
 
-        def _executor(name: str, **kwargs: Any) -> dict[str, Any]:
-            return self.tool_registry.execute(name, policy=self.policy_chain, **kwargs)
+        async def _aexecutor(name: str, **kwargs: Any) -> dict[str, Any]:
+            return await self.tool_registry.aexecute(name, policy=self.policy_chain, **kwargs)
 
-        set_tool_executor(_executor)
+        set_async_tool_executor(_aexecutor)
         return {"_tool_definitions": tool_defs}
 
     def prune_logs(self) -> int:

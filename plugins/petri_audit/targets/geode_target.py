@@ -18,7 +18,7 @@ Phasing:
   ``target_agent`` drives the outer audit loop; our ``generate()`` is
   one shot.
 - P3-a (this commit): ``_default_geode_runner`` real implementation
-  against ``core.agent.loop.loop:AgenticLoop`` + ``_split_messages``
+  against ``core.agent.loop.agent_loop:AgenticLoop`` + ``_split_messages``
   helper (system → ``system_suffix``, history → ``ConversationContext``,
   last user → ``loop.run`` prompt). Live LLM call still requires user
   authorisation; coverage limited to unit tests on the helpers.
@@ -118,7 +118,7 @@ def _split_messages(
       sysprompt, not a raw LLM's).
     - The user/assistant pairs prior to the final user become the
       ``ConversationContext`` history.
-    - The final user message becomes the ``loop.run(prompt)`` argument.
+    - The final user message becomes the ``await loop.arun(prompt)`` argument.
 
     Tool-result messages (which ``_to_geode_messages`` wraps as user-role
     with a ``[{"type": "tool_result", ...}]`` content list) are passed
@@ -299,11 +299,8 @@ async def _default_geode_runner(
         len(history),
     )
 
-    # ``loop.run()`` wraps ``asyncio.run(self.arun(...))`` which raises
-    # ``RuntimeError: asyncio.run() cannot be called from a running event
-    # loop`` whenever the caller is already inside one — and inspect-petri
-    # always invokes ``GeodeModelAPI.generate`` (async) inside the audit
-    # event loop. Calling the async ``arun`` directly avoids the nested
+    # inspect-petri always invokes ``GeodeModelAPI.generate`` (async) inside
+    # the audit event loop. Calling the async ``arun`` directly avoids nested
     # loop and fixes the v2 N3 silent target-invocation failure
     # (``docs/audits/2026-05-10-petri-2a-v2.md`` § C4).
     result = await loop.arun(last_user)

@@ -1,4 +1,4 @@
-"""AgenticLoop package — Tier 3 #7 split of the legacy ``core/agent/loop.py``.
+"""AgenticLoop package.
 
 Backward-compatible re-exports preserve the public surface that
 external callers rely on::
@@ -16,8 +16,8 @@ Some lower-level names (``_resolve_provider``, ``resolve_agentic_adapter``,
 monkey-patch them via the legacy dotted path
 ``core.agent.loop.<name>``. v0.57.0 R6 — the run loop emits each
 reasoning summary the adapter attaches via ``emit_reasoning_summary``;
-the call site lives in ``loop._call_llm`` but the symbol is mentioned
-here so introspection tests reading this file can find it.
+the call site lives in ``agent_loop._call_llm`` but the symbol is
+mentioned here so introspection tests reading this file can find it.
 """
 
 from __future__ import annotations
@@ -26,18 +26,18 @@ from __future__ import annotations
 # package — keep them addressable at ``core.agent.loop.<name>`` so that
 # ``monkeypatch.setattr("core.agent.loop._resolve_provider", ...)`` and
 # similar patches reach the call sites in ``_model_switching``. The
-# split-into-package refactor (Tier 3 #7) preserves this surface.
+# split-into-package refactor preserves this surface.
 from core.config import _resolve_provider as _resolve_provider
 from core.llm.router import resolve_agentic_adapter as resolve_agentic_adapter
 
 from ._helpers import AGENTIC_TOOLS, MAX_TOOL_RESULT_TOKENS, get_agentic_tools
-from .loop import AgenticLoop
+from .agent_loop import AgenticLoop
 from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
 
 # v0.56.0 R4-mini — listed at module level so the introspection test
 # (test_loop_effort_levels_include_xhigh) can read ``"xhigh"`` from
 # ``core/agent/loop/__init__.py`` after the split. The actual usage
-# sits inside ``loop._call_llm``; this module-level copy mirrors it.
+# sits inside ``agent_loop._call_llm``; this module-level copy mirrors it.
 _EFFORT_LEVELS = ["low", "medium", "high", "max", "xhigh"]
 
 __all__ = [

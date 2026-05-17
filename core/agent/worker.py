@@ -23,6 +23,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from core.async_runtime import run_process_coroutine
 from core.paths import GLOBAL_WORKERS_DIR
 
 log = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         prompt += f"\n\nParameters: {json.dumps(request.args, ensure_ascii=False)}"
 
     # 8. Run
-    agentic_result = loop.run(prompt)
+    agentic_result = run_process_coroutine(loop.arun(prompt))
 
     elapsed_ms = (time.time() - started) * 1000
     text = agentic_result.text if agentic_result else ""

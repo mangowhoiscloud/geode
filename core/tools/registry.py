@@ -7,8 +7,10 @@ mode-based tool access control.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
@@ -23,21 +25,21 @@ log = logging.getLogger(__name__)
 # Tool executor contextvar (NOT in state — functions are not serializable)
 # ---------------------------------------------------------------------------
 
-ToolExecutorCallable = Callable[..., dict[str, Any]]
+AsyncToolExecutorCallable = Callable[..., Awaitable[dict[str, Any]]]
 
-_tool_executor_ctx: ContextVar[ToolExecutorCallable | None] = ContextVar(
-    "tool_executor", default=None
+_async_tool_executor_ctx: ContextVar[AsyncToolExecutorCallable | None] = ContextVar(
+    "async_tool_executor", default=None
 )
 
 
-def set_tool_executor(executor: ToolExecutorCallable | None) -> None:
-    """Inject tool executor callable (called by GeodeRuntime.create())."""
-    _tool_executor_ctx.set(executor)
+def set_async_tool_executor(executor: AsyncToolExecutorCallable | None) -> None:
+    """Inject async tool executor callable for async-native nodes."""
+    _async_tool_executor_ctx.set(executor)
 
 
-def get_tool_executor() -> ToolExecutorCallable | None:
-    """Get injected tool executor. Returns None if not injected."""
-    return _tool_executor_ctx.get()
+def get_async_tool_executor() -> AsyncToolExecutorCallable | None:
+    """Get injected async tool executor. Returns None if not injected."""
+    return _async_tool_executor_ctx.get()
 
 
 class ToolSearchTool:
@@ -82,7 +84,7 @@ class ToolSearchTool:
             "additionalProperties": False,
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query = kwargs.get("query", "").lower()
         if not query:
             return tool_error("query is required", error_type="validation")
@@ -138,6 +140,10 @@ class ToolSearchTool:
             return {"matched": False, "available_tools": all_tools}
 
         return {"matched": True, "tools": matches}
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run registry search off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
 
 class ToolRegistry:
@@ -343,7 +349,7 @@ class ToolRegistry:
             if tool.name in allowed_names
         ]
 
-    def execute(
+    async def aexecute(
         self,
         name: str,
         *,
@@ -351,18 +357,23 @@ class ToolRegistry:
         mode: str = "full_pipeline",
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Execute a tool by name with optional policy check.
-
-        Raises:
-            KeyError: If tool not found.
-            PermissionError: If tool blocked by policy.
-        """
+        """Execute a tool by name through the async-native path when available."""
         tool = self._tools.get(name)
         if tool is None:
             raise KeyError(f"Tool '{name}' not found in registry")
         if policy is not None and not policy.is_allowed(name, mode=mode):
             raise PermissionError(f"Tool '{name}' blocked by policy in mode '{mode}'")
-        return tool.execute(**kwargs)
+
+        async_execute = getattr(tool, "aexecute", None)
+        if callable(async_execute):
+            raw = async_execute(**kwargs)
+            if inspect.isawaitable(raw):
+                result = await raw
+            else:
+                result = raw
+            return result if isinstance(result, dict) else {"result": result}
+
+        raise TypeError(f"Tool '{name}' must implement aexecute() for registry execution")
 
     # ------------------------------------------------------------------
     # Category / cost-tier filtering

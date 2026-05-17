@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 

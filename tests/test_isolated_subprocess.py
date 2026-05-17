@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 
@@ -21,7 +22,7 @@ class TestSubprocessMode:
         runner = IsolatedRunner()
         req = WorkerRequest(task_id="route-001", description="hello")
         cfg = IsolationConfig(session_id="route-001", timeout_s=15, post_to_main=False)
-        result = runner.run(req, config=cfg)
+        result = asyncio.run(runner.arun(req, config=cfg))
         # Should get a result (success or error depending on env),
         # but it should NOT raise TypeError (wrong dispatch)
         assert isinstance(result, IsolationResult)
@@ -31,7 +32,7 @@ class TestSubprocessMode:
         """Plain callable should still use thread mode."""
         runner = IsolatedRunner()
         cfg = IsolationConfig(session_id="thread-001", timeout_s=5, post_to_main=False)
-        result = runner.run(lambda: "hello-thread", config=cfg)
+        result = asyncio.run(runner.arun(lambda: "hello-thread", config=cfg))
         assert result.success is True
         assert result.output == "hello-thread"
 
@@ -41,7 +42,7 @@ class TestSubprocessMode:
         # Use an extremely short timeout so even a fast-failing worker gets killed
         req = WorkerRequest(task_id="timeout-001", description="complex task")
         cfg = IsolationConfig(session_id="timeout-001", timeout_s=0.05, post_to_main=False)
-        result = runner.run(req, config=cfg)
+        result = asyncio.run(runner.arun(req, config=cfg))
         # Should fail with timeout (process killed before it finishes startup)
         assert result.success is False
         assert "Timeout" in (result.error or "") or "killed" in (result.error or "").lower()
@@ -98,7 +99,7 @@ class TestSubprocessMode:
         # Subprocess request should fail after 0.1s wait
         req = WorkerRequest(task_id="sem-001", description="blocked")
         cfg = IsolationConfig(session_id="sem-001", timeout_s=5, post_to_main=False)
-        result = runner.run(req, config=cfg)
+        result = asyncio.run(runner.arun(req, config=cfg))
         assert result.success is False
         assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
 
@@ -111,7 +112,7 @@ class TestSubprocessMode:
         runner = IsolatedRunner()
         req = WorkerRequest(task_id="dur-001", description="hello")
         cfg = IsolationConfig(session_id="dur-001", timeout_s=15, post_to_main=False)
-        result = runner.run(req, config=cfg)
+        result = asyncio.run(runner.arun(req, config=cfg))
         assert result.duration_ms > 0
         assert result.started_at > 0
 
@@ -122,6 +123,6 @@ class TestSubprocessMode:
         runner = IsolatedRunner()
         req = WorkerRequest(task_id="empty-001", description="hello")
         cfg = IsolationConfig(session_id="empty-001", timeout_s=15, post_to_main=False)
-        result = runner.run(req, config=cfg)
+        result = asyncio.run(runner.arun(req, config=cfg))
         # Result should be valid regardless
         assert isinstance(result, IsolationResult)

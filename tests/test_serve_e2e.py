@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 from dotenv import load_dotenv
 
 load_dotenv(str(Path.home() / ".geode" / ".env"), override=False)
+
+
+def _run_executor(executor: Any, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    return asyncio.run(executor.aexecute(tool_name, tool_input))
 
 
 class TestServeToolExecution:
@@ -60,7 +66,7 @@ class TestServeToolExecution:
             mcp_manager=boot.mcp_manager,
             hitl_level=0,
         )
-        result = executor.execute("web_fetch", {"url": "http://example.com", "max_chars": 100})
+        result = _run_executor(executor, "web_fetch", {"url": "http://example.com", "max_chars": 100})
         assert "error" not in result
 
     def test_daemon_thread_handlers(self) -> None:
@@ -110,7 +116,7 @@ class TestServeToolExecution:
                 mcp_manager=boot.mcp_manager,
                 hitl_level=0,
             )
-            r = executor.execute("web_fetch", {"url": "http://example.com", "max_chars": 100})
+            r = _run_executor(executor, "web_fetch", {"url": "http://example.com", "max_chars": 100})
             result["ok"] = "error" not in r
             result["registered"] = len(executor.registered_tools)
 

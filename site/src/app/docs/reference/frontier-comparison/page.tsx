@@ -193,7 +193,7 @@ export default function Page() {
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>주 채널</td><td><code>PROMPT_ASSEMBLED</code> 훅 payload</td><td>60자 preview 로그</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent('tengu_*')</code> 텔레메트리</td></tr>
-                <tr><td>외부 트레이싱</td><td>LangSmith opt-in</td><td>None</td><td>자체 JSONL</td><td>자체 텔레메트리</td></tr>
+                <tr><td>외부 트레이싱</td><td>OTLP optional</td><td>None</td><td>자체 JSONL</td><td>자체 텔레메트리</td></tr>
                 <tr><td>트레이스의 프롬프트 텍스트</td><td>해시만</td><td>세션 DB에 저장</td><td>기본은 해시</td><td>텔레메트리에 없음</td></tr>
               </tbody>
             </table>
@@ -408,7 +408,7 @@ export default function Page() {
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>Primary channel</td><td><code>PROMPT_ASSEMBLED</code> hook payload</td><td>60-char preview log</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent('tengu_*')</code> telemetry</td></tr>
-                <tr><td>External tracing</td><td>LangSmith opt-in</td><td>None</td><td>Self JSONL</td><td>Self telemetry</td></tr>
+                <tr><td>External tracing</td><td>Optional OTLP</td><td>None</td><td>Self JSONL</td><td>Self telemetry</td></tr>
                 <tr><td>Prompt text in trace</td><td>Hashes only</td><td>Stored in session DB</td><td>Hashes by default</td><td>Not in telemetry</td></tr>
               </tbody>
             </table>

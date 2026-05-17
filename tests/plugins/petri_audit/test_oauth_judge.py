@@ -92,13 +92,17 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
         assert to_inspect_model("o4-mini") == "openai/o4-mini"
 
 
-def test_to_inspect_model_claude_unaffected() -> None:
-    """Anthropic mapping is not touched by the OAuth re-route."""
+def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
+    """Claude mapping follows the subscription OAuth route when available."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with (
+        patch("plugins.petri_audit.models._codex_oauth_available", return_value=True),
+        patch("plugins.petri_audit.models._claude_oauth_available", return_value=True),
+    ):
         assert (
-            to_inspect_model("claude-haiku-4-5-20251001") == "anthropic/claude-haiku-4-5-20251001"
+            to_inspect_model("claude-haiku-4-5-20251001")
+            == "claude-code/claude-haiku-4-5-20251001"
         )
 
 
@@ -112,6 +116,7 @@ def test_is_oauth_routed_classifies_inspect_ids() -> None:
 
     assert is_oauth_routed("openai-codex/gpt-5.5") is True
     assert is_oauth_routed("openai-codex/gpt-5.3-codex") is True
+    assert is_oauth_routed("claude-code/claude-haiku-4-5-20251001") is True
     assert is_oauth_routed("openai/gpt-5.5") is False
     assert is_oauth_routed("anthropic/claude-haiku-4-5-20251001") is False
     assert is_oauth_routed("geode/claude-opus-4-7") is False
@@ -210,7 +215,10 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
     in the constructed command + the cost line drops below PAYG."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with (
+        patch("plugins.petri_audit.models._codex_oauth_available", return_value=True),
+        patch("plugins.petri_audit.models._claude_oauth_available", return_value=True),
+    ):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -221,8 +229,7 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
         )
     joined = " ".join(report.command)
     assert "judge=openai-codex/gpt-5.5" in joined
-    # Auditor stays Anthropic → no rewrite.
-    assert "auditor=anthropic/claude-sonnet-4-6" in joined
+    assert "auditor=claude-code/claude-sonnet-4-6" in joined
 
 
 def test_run_audit_no_oauth_flag_forces_per_token() -> None:

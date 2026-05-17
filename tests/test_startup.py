@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
@@ -507,7 +508,7 @@ class TestUpdateModel:
         assert loop.model == ANTHROPIC_PRIMARY
         assert loop._provider == "anthropic"
 
-        loop.update_model(GLM_PRIMARY)
+        asyncio.run(loop.update_model_async(GLM_PRIMARY))
         assert loop.model == GLM_PRIMARY
         assert loop._provider == "glm"
         assert loop._adapter.provider_name == "glm"  # adapter re-created
@@ -524,7 +525,7 @@ class TestUpdateModel:
         loop = AgenticLoop(ctx, executor)
         original_adapter = loop._adapter
 
-        loop.update_model("claude-sonnet-4-6")
+        asyncio.run(loop.update_model_async("claude-sonnet-4-6"))
         assert loop.model == "claude-sonnet-4-6"
         assert loop._provider == "anthropic"
         assert loop._adapter is original_adapter  # kept — same provider

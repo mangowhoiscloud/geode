@@ -1,8 +1,8 @@
 """OpenLLMetry OTel exporter — enable/disable/status surface.
 
 Wraps `traceloop-sdk` so GEODE can emit OTLP spans for every LLM call
-and tool invocation without re-introducing the LangSmith dependency that
-v0.89.0 retired (B2/M1 batches). All heavy imports are deferred to
+and tool invocation without re-introducing an external SaaS tracing
+dependency. All heavy imports are deferred to
 :func:`enable` so importing :mod:`core.observability` on a default
 ``uv sync`` (without the ``[obs]`` extra) costs essentially nothing.
 

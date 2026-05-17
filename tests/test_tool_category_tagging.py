@@ -62,6 +62,9 @@ class _TaggedTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         return {"result": "ok"}
 
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        return self.execute(**kwargs)
+
 
 class _UntaggedTool:
     """Minimal Tool WITHOUT category / cost_tier."""
@@ -83,6 +86,9 @@ class _UntaggedTool:
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         return {"result": "ok"}
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        return self.execute(**kwargs)
 
 
 # ===================================================================

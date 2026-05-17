@@ -8,6 +8,7 @@ moved to ``plugins/game_ip/tools/signal_tools.py``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -56,7 +57,7 @@ class WebSearchTool:
     def parameters(self) -> dict[str, Any]:
         return _WEB_SEARCH_PARAMETERS
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
 
@@ -73,6 +74,10 @@ class WebSearchTool:
             return result
 
         return self._stub_result(query, "all_providers_failed")
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run provider web-search clients off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
     def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
         try:

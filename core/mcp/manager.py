@@ -13,6 +13,7 @@ Lifecycle:
 
 from __future__ import annotations
 
+import asyncio
 import atexit
 import contextlib
 import json
@@ -469,11 +470,13 @@ class MCPServerManager:
         "puppeteer": "playwright (playwright__browser_navigate, etc.)",
     }
 
-    def call_tool(self, server_name: str, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-        """Call a tool on a specific MCP server."""
+    async def acall_tool(
+        self, server_name: str, tool_name: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Async tool call on a specific MCP server."""
         from core.tools.base import tool_error
 
-        client = self._get_client(server_name)
+        client = await asyncio.to_thread(self._get_client, server_name)
         if client is None:
             hint = self._FALLBACK_HINTS.get(server_name, "")
             return tool_error(
@@ -484,9 +487,9 @@ class MCPServerManager:
             )
 
         try:
-            return client.call_tool(tool_name, args)
+            return await client.acall_tool(tool_name, args)
         except Exception as exc:
-            log.error("MCP tool call failed: %s/%s: %s", server_name, tool_name, exc)
+            log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
             hint = self._FALLBACK_HINTS.get(server_name, "")
             is_timeout = "timeout" in str(exc).lower()
             return tool_error(

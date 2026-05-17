@@ -7,6 +7,7 @@ Snowflake Cortex stubs live in ``core/tools/data_tools.py``.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from plugins.game_ip.fixtures import FIXTURE_MAP, load_fixture
@@ -47,7 +48,7 @@ class QueryMonoLakeTool:
             "required": ["ip_name"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
         fields: list[str] = kwargs.get("fields", [])
 
@@ -75,3 +76,7 @@ class QueryMonoLakeTool:
             return {"result": filtered, "ip_name": ip_name}
 
         return {"result": result, "ip_name": ip_name}
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run fixture lookup off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)

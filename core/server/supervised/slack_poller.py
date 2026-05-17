@@ -48,7 +48,7 @@ class SlackPoller(BasePoller):
     def channel_name(self) -> str:
         return "slack"
 
-    def _poll_once(self) -> None:
+    async def _apoll_once(self) -> None:
         if not self._check_mcp_health():
             return
 
@@ -56,9 +56,9 @@ class SlackPoller(BasePoller):
         self._evict_stale_dedup()
 
         for binding in self._get_channel_bindings():
-            self._poll_channel(binding["channel_id"])
+            await self._poll_channel(binding["channel_id"])
 
-    def _poll_channel(self, channel_id: str) -> None:
+    async def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Slack channel for new messages.
 
         Deferred-ts pattern: timestamp is updated AFTER each message is
@@ -78,7 +78,7 @@ class SlackPoller(BasePoller):
             if oldest:
                 args["oldest"] = oldest
 
-            result = self._mcp.call_tool("slack", "slack_get_channel_history", args)
+            result = await self._mcp.acall_tool("slack", "slack_get_channel_history", args)
 
             # MCP returns {"content": [{"text": "{\"ok\":true,\"messages\":[...]}"}]}
             parsed = result
@@ -155,21 +155,25 @@ class SlackPoller(BasePoller):
 
                 is_mention = self._manager._is_mentioned(inbound)
                 if is_mention:
-                    self._add_reaction(channel_id, ts, "eyes")
+                    await self._add_reaction(channel_id, ts, "eyes")
 
                 try:
                     response = self._manager.route_message(inbound)
                     log.info("Processor returned: %s", (response or "")[:80])
                     if is_mention:
-                        self._add_reaction(channel_id, ts, "white_check_mark")
+                        await self._add_reaction(channel_id, ts, "white_check_mark")
 
                     if response:
-                        self._send_response(channel_id, response, thread_ts=inbound.thread_id or ts)
+                        await self._send_response(
+                            channel_id,
+                            response,
+                            thread_ts=inbound.thread_id or ts,
+                        )
                 except Exception as exc:
                     log.warning("Failed to process message ts=%s: %s", ts, exc)
                     # Error reaction: X emoji for visible failure feedback
                     if is_mention:
-                        self._add_reaction(channel_id, ts, "x")
+                        await self._add_reaction(channel_id, ts, "x")
                     break
 
                 # Advance ts + mark as seen (dedup) only after success
@@ -186,12 +190,12 @@ class SlackPoller(BasePoller):
         for k in stale:
             del self._seen_events[k]
 
-    def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
+    async def _add_reaction(self, channel_id: str, message_ts: str, emoji: str) -> None:
         """Add a reaction emoji to a message (best-effort, non-blocking)."""
         if self._mcp is None:
             return
         try:
-            self._mcp.call_tool(
+            await self._mcp.acall_tool(
                 "slack",
                 "slack_add_reaction",
                 {"channel_id": channel_id, "timestamp": message_ts, "reaction": emoji},
@@ -199,7 +203,7 @@ class SlackPoller(BasePoller):
         except Exception:
             log.debug("add_reaction failed for %s", channel_id)
 
-    def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
+    async def _send_response(self, channel_id: str, text: str, *, thread_ts: str = "") -> None:
         """Send response back to Slack via the same MCP connection used for polling."""
         if self._mcp is None:
             return
@@ -210,7 +214,7 @@ class SlackPoller(BasePoller):
             args: dict[str, Any] = {"channel_id": channel_id, "text": text}
             if thread_ts:
                 args["thread_ts"] = thread_ts
-            self._mcp.call_tool("slack", "slack_post_message", args)
+            await self._mcp.acall_tool("slack", "slack_post_message", args)
             log.info("Slack response sent to %s", channel_id)
         except Exception as exc:
             log.warning("Failed to send Slack response: %s", exc)

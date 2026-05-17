@@ -198,9 +198,9 @@ Phase-2a 결과 시각화 — `./logs/<timestamp>/*.eval` (inspect_ai 표준 log
 라이브러리 카탈로그. 본 PR 은 카탈로그 SOT 화만 — 실제 의존성 추가 / 툴
 등록은 P4 진입 시 별도 Socratic Gate 통과 후.
 
-### Observability — agentic 행동 instrumentation (LangSmith 대체)
+### Observability — agentic 행동 instrumentation (외부 tracing 대체)
 
-v0.89.0 에서 LangSmith 의존성을 제거하고 GEODE hook 58 events 자체
+v0.89.0 에서 외부 tracing 의존성을 제거하고 GEODE hook 58 events 자체
 RunLog 로 전환했음. 외부 instrumentation 을 다시 도입할 경우 OTel
 표준 + Apache-2.0 / MIT 만:
 
@@ -212,7 +212,7 @@ RunLog 로 전환했음. 외부 instrumentation 을 다시 도입할 경우 OTel
 | **Phoenix (Arize)** | **Elastic License 2.0** (특허/SaaS 재판매 제약) | Docker Hub | `openinference-instrumentation-anthropic` | OSS 지만 ELv2. self-host 는 OK, 라이선스 표기 필수 → **4순위** |
 
 **추천**: P4 진입 시 OpenLLMetry 1순위 — OTel 표준 만족 → GEODE 자체
-RunLog 와 충돌 없이 dual-export, LangSmith 같은 vendor lock-in 회피.
+RunLog 와 충돌 없이 dual-export, 외부 SaaS vendor lock-in 회피.
 
 ### Reasoning engineering — Petri smoke 결과 → GEODE prompt 자동 개선
 

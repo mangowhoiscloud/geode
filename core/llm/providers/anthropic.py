@@ -15,6 +15,7 @@ from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed
 from core.llm.fallback import (
     CircuitBreaker,
     retry_with_backoff_generic,
+    retry_with_backoff_generic_async,
 )
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
@@ -193,7 +194,7 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
         return _async_client
 
 
-def reset_clients() -> None:
+async def areset_clients() -> None:
     """Close and reset singleton clients. Used in tests and on API key change."""
     global _sync_client, _async_client
     with _sync_client_lock:
@@ -202,10 +203,11 @@ def reset_clients() -> None:
                 _sync_client.close()
             _sync_client = None
     with _async_client_lock:
-        if _async_client is not None:
-            # AsyncClient.close() is a coroutine but we're in sync context
-            # Just drop the reference — GC will clean up
-            _async_client = None
+        client = _async_client
+        _async_client = None
+    if client is not None:
+        with contextlib.suppress(Exception):
+            await client.close()
 
 
 def system_with_cache(system: str) -> list[TextBlockParam]:
@@ -337,6 +339,45 @@ def retry_with_backoff(
     _retryable_errors = sys.modules[__name__].RETRYABLE_ERRORS
 
     return retry_with_backoff_generic(
+        fn,
+        model=models_to_try[0],
+        fallback_models=models_to_try[1:],
+        circuit_breaker=_circuit_breaker,
+        retryable_errors=_retryable_errors,
+        bad_request_error=anthropic.BadRequestError,
+        billing_message=(
+            "Anthropic API credit balance too low. "
+            "Visit https://console.anthropic.com/settings/billing to add credits, "
+            "or use --dry-run mode."
+        ),
+        max_retries=_max_retries,
+        provider_label="LLM",
+    )
+
+
+async def retry_with_backoff_async(
+    fn: Any,
+    *,
+    model: str,
+    max_retries: int | None = None,
+) -> Any:
+    """Execute async fn with retry + exponential backoff + model fallback."""
+    import anthropic
+
+    from core.llm.fallback import MAX_RETRIES as _DEFAULT_MAX_RETRIES
+
+    _max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
+
+    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    models_to_try = [m for m in candidates if is_model_allowed(m)]
+    if not models_to_try:
+        raise RuntimeError(f"All models blocked by policy: {candidates}")
+
+    import sys
+
+    _retryable_errors = sys.modules[__name__].RETRYABLE_ERRORS
+
+    return await retry_with_backoff_generic_async(
         fn,
         model=models_to_try[0],
         fallback_models=models_to_try[1:],
@@ -735,7 +776,7 @@ class ClaudeAgenticAdapter:
         _circuit_breaker.record_success()
         return normalize_anthropic(response)
 
-    def reset_client(self) -> None:
+    async def areset_client(self) -> None:
         self._client = None
 
 

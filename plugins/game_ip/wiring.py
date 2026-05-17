@@ -53,13 +53,7 @@ def build_signal_adapter() -> None:
 
     composite = CompositeSignalAdapter(adapters)  # type: ignore[arg-type]
 
-    if composite.is_available():
-        log.info(
-            "Signal liveification enabled: %d MCP adapters wired",
-            len(adapters),
-        )
-    else:
-        log.debug("MCP servers configured but none available — fixture fallback active")
+    log.info("Signal liveification wired: %d MCP adapters", len(adapters))
 
     set_signal_adapter(composite)
 

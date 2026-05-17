@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from core.llm.agentic_response import AgenticResponse
@@ -74,7 +74,7 @@ class LLMClientPort(Protocol):
         temperature: float = 0.3,
     ) -> T2: ...
 
-    def generate_stream(
+    def agenerate_stream(
         self,
         system: str,
         user: str,
@@ -82,15 +82,15 @@ class LLMClientPort(Protocol):
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
-    ) -> Iterator[str]: ...
+    ) -> AsyncIterator[str]: ...
 
-    def generate_with_tools(
+    async def agenerate_with_tools(
         self,
         system: str,
         user: str,
         *,
         tools: list[dict[str, Any]],
-        tool_executor: Callable[..., dict[str, Any]],
+        tool_executor: Callable[..., Any],
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
@@ -146,23 +146,6 @@ class LLMParsedCallable(Protocol):
     ) -> T2: ...
 
 
-class LLMToolCallable(Protocol):
-    """Callable that runs a tool-use loop with an LLM."""
-
-    def __call__(
-        self,
-        system: str,
-        user: str,
-        *,
-        tools: list[dict[str, Any]],
-        tool_executor: Callable[..., dict[str, Any]],
-        model: str | None = ...,
-        max_tokens: int = ...,
-        temperature: float = ...,
-        max_tool_rounds: int = ...,
-    ) -> Any: ...
-
-
 # ---------------------------------------------------------------------------
 # AgenticLLMPort — Protocol interface for agentic loop LLM adapters
 # ---------------------------------------------------------------------------
@@ -197,7 +180,7 @@ class AgenticLLMPort(Protocol):
         effort: str = "high",
     ) -> AgenticResponse | None: ...
 
-    def reset_client(self) -> None: ...
+    async def areset_client(self) -> None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +361,7 @@ class ClaudeAdapter:
             temperature=temperature,
         )
 
-    def generate_stream(
+    async def agenerate_stream(
         self,
         system: str,
         user: str,
@@ -386,28 +369,34 @@ class ClaudeAdapter:
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
-    ) -> Iterator[str]:
-        from core.llm.router import call_llm_streaming
+    ) -> AsyncIterator[str]:
+        from core.llm.router import call_llm_streaming_async
 
-        return call_llm_streaming(
-            system, user, model=model, max_tokens=max_tokens, temperature=temperature
-        )
+        async for token in call_llm_streaming_async(
+            system,
+            user,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        ):
+            yield token
 
-    def generate_with_tools(
+    async def agenerate_with_tools(
         self,
         system: str,
         user: str,
         *,
         tools: list[dict[str, Any]],
-        tool_executor: Callable[..., dict[str, Any]],
+        tool_executor: Callable[..., Any],
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
         max_tool_rounds: int = 5,
     ) -> Any:
-        from core.llm.router import call_llm_with_tools
+        """Async boundary for provider tool-use calls."""
+        from core.llm.router import call_llm_with_tools_async
 
-        result = call_llm_with_tools(
+        result = await call_llm_with_tools_async(
             system,
             user,
             tools=tools,

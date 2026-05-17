@@ -86,13 +86,13 @@ export default function Page() {
               노드명, 역할 타입, base 와 assembled 해시, fragment 목록, 그리고
               조건부 필드인 <code>skill_hashes</code> 와{" "}
               <code>truncation_events</code>. 원본 프롬프트 텍스트는 payload 에
-              포함되지 않으므로 외부 관찰자(LangSmith, 커스텀 hook 핸들러) 는
+              포함되지 않으므로 hook 핸들러와 OTLP exporter 는
               이 채널을 통해 프롬프트 내용을 보지 못합니다.
             </p>
             <p>
-              LangSmith 통합은 <code>LANGCHAIN_TRACING_V2=true</code> + API key 로
-              opt-in 됩니다. 활성화 시 <code>core/llm/router.py</code> 의 5개 LLM
-              호출 지점이 <code>@maybe_traceable</code> 로 래핑됩니다.
+              관측성은 내장 hook, RunLog, usage JSONL 로 기본 기록됩니다.
+              외부 span 이 필요하면 <code>[obs]</code> extra 와 OTLP endpoint 로
+              OpenLLMetry exporter 를 활성화합니다.
             </p>
 
             <h2>이 설계의 이유</h2>
@@ -183,14 +183,14 @@ export default function Page() {
               node name, role type, base and assembled hashes, fragment list, and
               conditional fields like <code>skill_hashes</code> and{" "}
               <code>truncation_events</code>. The original prompt text is not in
-              the payload, so external observers (LangSmith, custom hook handlers)
+              the payload, so hook handlers and OTLP exporters
               do not see prompt content through this channel.
             </p>
             <p>
-              LangSmith integration is opt-in via <code>LANGCHAIN_TRACING_V2=true</code>{" "}
-              and an API key. When enabled, five LLM call sites in{" "}
-              <code>core/llm/router.py</code> are wrapped with{" "}
-              <code>@maybe_traceable</code>.
+              Observability is recorded by built-in hooks, RunLog, and usage
+              JSONL by default. External spans are available through the{" "}
+              <code>[obs]</code> extra and an OTLP endpoint via the OpenLLMetry
+              exporter.
             </p>
 
             <h2>Why this design</h2>

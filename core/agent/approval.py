@@ -10,8 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from core.agent.safety import (
     AUTO_APPROVED_MCP_SERVERS,
@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 
 _AUTO_APPROVE_THRESHOLD = 3
 _AUTO_DENY_THRESHOLD = 3
+_T = TypeVar("_T")
 
 
 def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
@@ -93,6 +94,22 @@ class ApprovalWorkflow:
         except Exception:
             log.debug("Hook fire failed for %s", event, exc_info=True)
 
+    async def _fire_hook_async(self, event: HookEvent, data: dict[str, Any]) -> None:
+        if self._hooks is None:
+            return
+        try:
+            await self._hooks.trigger_async(event, data)
+        except Exception:
+            log.debug("Async hook fire failed for %s", event, exc_info=True)
+
+    async def _with_approval_locks(self, body: Callable[[], Awaitable[_T]]) -> _T:
+        """Serialize async prompts with both async and legacy sync approval paths."""
+        await asyncio.to_thread(self._approval_lock.acquire)
+        try:
+            return await body()
+        finally:
+            self._approval_lock.release()
+
     # -----------------------------------------------------------------
     # Pattern learning
     # -----------------------------------------------------------------
@@ -144,6 +161,27 @@ class ApprovalWorkflow:
         if response in ("", "y", "yes"):
             return "y"
         return "n"
+
+    async def prompt_with_always_async(
+        self,
+        label: str,
+        detail: str,
+        *,
+        safety_level: str = "write",
+        tool_name: str = "",
+    ) -> str:
+        """Async wrapper for approval prompts.
+
+        Console input and IPC approval callbacks are blocking from the event
+        loop's perspective, so they run in a worker thread.
+        """
+        return await asyncio.to_thread(
+            self.prompt_with_always,
+            label,
+            detail,
+            safety_level=safety_level,
+            tool_name=tool_name,
+        )
 
     # -----------------------------------------------------------------
     # Safety gate orchestration
@@ -249,6 +287,96 @@ class ApprovalWorkflow:
 
         return None, approved
 
+    async def apply_safety_gates_async(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Async HITL gate path used by ToolExecutor.aexecute()."""
+        if tool_name in DANGEROUS_TOOLS:
+            return None, False
+
+        approved = False
+
+        if tool_name in WRITE_TOOLS:
+
+            async def write_gate() -> tuple[dict[str, Any] | None, bool]:
+                if (
+                    self._hitl_level == 0
+                    or "write" in self._always_approved_categories
+                    or tool_name in self._always_approved_tools
+                ):
+                    return None, True
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_REQUESTED,
+                    {"tool_name": tool_name, "safety_level": "write"},
+                )
+                if not await self.confirm_write_async(tool_name, tool_input):
+                    await self._fire_hook_async(
+                        HookEvent.TOOL_APPROVAL_DENIED,
+                        {
+                            "tool_name": tool_name,
+                            "safety_level": "write",
+                            "permission_level": "HITL",
+                            "decision": "denied",
+                            "latency_ms": 0.0,
+                        },
+                    )
+                    return _write_denial_with_fallback(tool_name), False
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_GRANTED,
+                    {
+                        "tool_name": tool_name,
+                        "safety_level": "write",
+                        "always": "write" in self._always_approved_categories,
+                    },
+                )
+                return None, True
+
+            gate_result, approved = await self._with_approval_locks(write_gate)
+            if gate_result is not None:
+                return gate_result, False
+
+        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
+
+            async def cost_gate() -> tuple[dict[str, Any] | None, bool]:
+                if (
+                    self._hitl_level == 0
+                    or "cost" in self._always_approved_categories
+                    or tool_name in self._always_approved_tools
+                ):
+                    return None, True
+                cost = EXPENSIVE_TOOLS[tool_name]
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_REQUESTED,
+                    {"tool_name": tool_name, "safety_level": "cost"},
+                )
+                if not await self.confirm_cost_async(tool_name, cost):
+                    await self._fire_hook_async(
+                        HookEvent.TOOL_APPROVAL_DENIED,
+                        {
+                            "tool_name": tool_name,
+                            "safety_level": "cost",
+                            "permission_level": "HITL",
+                            "decision": "denied",
+                            "latency_ms": 0.0,
+                        },
+                    )
+                    return {"error": "User denied expensive operation", "denied": True}, False
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_GRANTED,
+                    {
+                        "tool_name": tool_name,
+                        "safety_level": "cost",
+                        "always": "cost" in self._always_approved_categories,
+                    },
+                )
+                return None, True
+
+            gate_result, approved = await self._with_approval_locks(cost_gate)
+            if gate_result is not None:
+                return gate_result, False
+
+        return None, approved
+
     # -----------------------------------------------------------------
     # Confirmation prompts
     # -----------------------------------------------------------------
@@ -303,32 +431,90 @@ class ApprovalWorkflow:
         )
         return False
 
+    async def confirm_mcp_async(self, server: str, tool_name: str) -> bool:
+        """Async MCP tool confirmation with A=Always option."""
+
+        async def gate() -> bool:
+            if self._approval_callback is None:
+                from core.cli import _restore_terminal
+
+                _restore_terminal()
+                console.print()
+                console.print("  [warning]MCP tool requires approval[/warning]")
+                console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
+                console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
+                console.print()
+
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_REQUESTED,
+                {
+                    "tool_name": tool_name,
+                    "safety_level": "MCP",
+                    "args_preview": f"server={server}",
+                },
+            )
+
+            t0 = time.monotonic()
+            response = await self.prompt_with_always_async(
+                "Allow?", f"{server}/{tool_name}", safety_level="mcp", tool_name=tool_name
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            if response in ("a", "y"):
+                if response == "a":
+                    self._always_approved_categories.add(f"mcp:{server}")
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_GRANTED,
+                    {
+                        "tool_name": tool_name,
+                        "permission_level": "MCP",
+                        "decision": "approved",
+                        "latency_ms": latency_ms,
+                    },
+                )
+                return True
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_DENIED,
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "MCP",
+                    "decision": "denied",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return False
+
+        return await self._with_approval_locks(gate)
+
+    @staticmethod
+    def _write_summary(tool_name: str, tool_input: dict[str, Any]) -> str:
+        if tool_name == "memory_save":
+            return str(tool_input.get("content", tool_input.get("value", "")))[:80]
+        if tool_name == "note_save":
+            return str(tool_input.get("content", ""))[:80]
+        if tool_name == "set_api_key":
+            return f"provider={tool_input.get('provider', '?')}"
+        if tool_name == "manage_auth":
+            return f"action={tool_input.get('action', '?')}"
+        if tool_name == "manage_login":
+            return f"sub={tool_input.get('subcommand', 'status')}" + (
+                f" args={tool_input.get('args', '')[:60]}" if tool_input.get("args") else ""
+            )
+        if tool_name == "profile_update":
+            fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
+            return f"fields={','.join(fields)}" if fields else "profile update"
+        if tool_name == "profile_preference":
+            return f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
+        if tool_name == "profile_learn":
+            return str(tool_input.get("pattern", ""))[:80]
+        return ""
+
     def confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         """Prompt user for write operation confirmation."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
 
             _restore_terminal()
-            summary = ""
-            if tool_name == "memory_save":
-                summary = tool_input.get("content", tool_input.get("value", ""))[:80]
-            elif tool_name == "note_save":
-                summary = tool_input.get("content", "")[:80]
-            elif tool_name == "set_api_key":
-                summary = f"provider={tool_input.get('provider', '?')}"
-            elif tool_name == "manage_auth":
-                summary = f"action={tool_input.get('action', '?')}"
-            elif tool_name == "manage_login":
-                summary = f"sub={tool_input.get('subcommand', 'status')}" + (
-                    f" args={tool_input.get('args', '')[:60]}" if tool_input.get("args") else ""
-                )
-            elif tool_name == "profile_update":
-                fields = [k for k in ("role", "expertise", "name", "team") if tool_input.get(k)]
-                summary = f"fields={','.join(fields)}" if fields else "profile update"
-            elif tool_name == "profile_preference":
-                summary = f"{tool_input.get('key', '?')}={tool_input.get('value', '?')}"
-            elif tool_name == "profile_learn":
-                summary = tool_input.get("pattern", "")[:80]
+            summary = self._write_summary(tool_name, tool_input)
 
             console.print()
             console.print("  [warning]Write operation requires approval[/warning]")
@@ -379,6 +565,72 @@ class ApprovalWorkflow:
             )
             return True
         self._fire_hook(
+            HookEvent.TOOL_APPROVAL_DENIED,
+            {
+                "tool_name": tool_name,
+                "permission_level": "WRITE",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
+
+    async def confirm_write_async(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """Async write operation confirmation."""
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
+
+            _restore_terminal()
+            summary = self._write_summary(tool_name, tool_input)
+            console.print()
+            console.print("  [warning]Write operation requires approval[/warning]")
+            console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
+            if summary:
+                console.print(f"  [dim]Summary:[/dim] {summary}")
+            console.print()
+
+        if self.check_auto_deny(tool_name):
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_DENIED,
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "WRITE",
+                    "decision": "auto_denied",
+                    "latency_ms": 0.0,
+                },
+            )
+            return False
+
+        await self._fire_hook_async(
+            HookEvent.TOOL_APPROVAL_REQUESTED,
+            {
+                "tool_name": tool_name,
+                "safety_level": "WRITE",
+                "args_preview": str(tool_input)[:200],
+            },
+        )
+
+        t0 = time.monotonic()
+        response = await self.prompt_with_always_async(
+            "Allow?", tool_name, safety_level="write", tool_name=tool_name
+        )
+        latency_ms = (time.monotonic() - t0) * 1000
+        self.track_decision(tool_name, response)
+        if response in ("a", "y"):
+            if response == "a":
+                self._always_approved_categories.add("write")
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_GRANTED,
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "WRITE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                    "response_type": response,
+                },
+            )
+            return True
+        await self._fire_hook_async(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
                 "tool_name": tool_name,
@@ -458,6 +710,75 @@ class ApprovalWorkflow:
         )
         return False
 
+    async def confirm_cost_async(self, tool_name: str, estimated_cost: float) -> bool:
+        """Async cost confirmation with A=Always option."""
+        if self._approval_callback is None:
+            from core.cli import _restore_terminal
+
+            _restore_terminal()
+            console.print()
+            console.print("  [warning]$ Cost confirmation[/warning]")
+            console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
+            console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
+            if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
+                from core.config import ANTHROPIC_PRIMARY, get_node_model
+
+                primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
+                console.print(f"  [dim]Pipeline model:[/dim] {primary}")
+            console.print()
+
+        await self._fire_hook_async(
+            HookEvent.TOOL_APPROVAL_REQUESTED,
+            {
+                "tool_name": tool_name,
+                "safety_level": "EXPENSIVE",
+                "args_preview": f"estimated_cost=${estimated_cost:.2f}",
+            },
+        )
+
+        if self.check_auto_deny(tool_name):
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_DENIED,
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "EXPENSIVE",
+                    "decision": "auto_denied",
+                    "latency_ms": 0.0,
+                },
+            )
+            return False
+
+        t0 = time.monotonic()
+        response = await self.prompt_with_always_async(
+            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name
+        )
+        latency_ms = (time.monotonic() - t0) * 1000
+        self.track_decision(tool_name, response)
+        if response in ("a", "y"):
+            if response == "a":
+                self._always_approved_categories.add("cost")
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_GRANTED,
+                {
+                    "tool_name": tool_name,
+                    "permission_level": "EXPENSIVE",
+                    "decision": "approved",
+                    "latency_ms": latency_ms,
+                    "response_type": response,
+                },
+            )
+            return True
+        await self._fire_hook_async(
+            HookEvent.TOOL_APPROVAL_DENIED,
+            {
+                "tool_name": tool_name,
+                "permission_level": "EXPENSIVE",
+                "decision": "denied",
+                "latency_ms": latency_ms,
+            },
+        )
+        return False
+
     def request_bash_approval(self, command: str, reason: str) -> bool:
         """Prompt user for bash command approval with A=Always option."""
         if self._approval_callback is None:
@@ -522,6 +843,75 @@ class ApprovalWorkflow:
             },
         )
         return False
+
+    async def request_bash_approval_async(self, command: str, reason: str) -> bool:
+        """Async bash command approval with A=Always option."""
+
+        async def gate() -> bool:
+            if self._approval_callback is None:
+                from core.cli import _restore_terminal
+
+                _restore_terminal()
+                console.print()
+                console.print("  [warning]Bash command requires approval[/warning]")
+                console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
+                if reason:
+                    console.print(f"  [dim]Reason:[/dim]  {reason}")
+                console.print()
+
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_REQUESTED,
+                {
+                    "tool_name": "run_bash",
+                    "safety_level": "DANGEROUS",
+                    "args_preview": str(command)[:200],
+                },
+            )
+
+            if self.check_auto_deny("run_bash"):
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_DENIED,
+                    {
+                        "tool_name": "run_bash",
+                        "permission_level": "DANGEROUS",
+                        "decision": "auto_denied",
+                        "latency_ms": 0.0,
+                    },
+                )
+                return False
+
+            t0 = time.monotonic()
+            response = await self.prompt_with_always_async(
+                "Allow?", command, safety_level="dangerous", tool_name="run_bash"
+            )
+            latency_ms = (time.monotonic() - t0) * 1000
+            self.track_decision("run_bash", response)
+            if response in ("a", "y"):
+                if response == "a":
+                    self._always_approved_categories.add("bash")
+                await self._fire_hook_async(
+                    HookEvent.TOOL_APPROVAL_GRANTED,
+                    {
+                        "tool_name": "run_bash",
+                        "permission_level": "DANGEROUS",
+                        "decision": "approved",
+                        "latency_ms": latency_ms,
+                        "response_type": response,
+                    },
+                )
+                return True
+            await self._fire_hook_async(
+                HookEvent.TOOL_APPROVAL_DENIED,
+                {
+                    "tool_name": "run_bash",
+                    "permission_level": "DANGEROUS",
+                    "decision": "denied",
+                    "latency_ms": latency_ms,
+                },
+            )
+            return False
+
+        return await self._with_approval_locks(gate)
 
     # -----------------------------------------------------------------
     # MCP server approval cache

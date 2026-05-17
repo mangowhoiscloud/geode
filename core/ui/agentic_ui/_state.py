@@ -1,12 +1,12 @@
 """Session-level timing state and pipeline IP context.
 
-Module-level thread-local globals live here and are re-exported from the
+Module-level context-local globals live here and are re-exported from the
 package ``__init__.py``:
 
-- ``_ipc_writer_local`` — thread-local IPC writer for structured tool events.
-- ``_pipeline_ip_local`` — thread-local pipeline IP name for forward-compatible
+- ``_ipc_writer_local`` — task/thread-local IPC writer for structured tool events.
+- ``_pipeline_ip_local`` — task/thread-local pipeline IP name for forward-compatible
   event tagging.
-- ``_meter_local`` — thread-local ``SessionMeter`` instance per session.
+- ``_meter_local`` — task/thread-local ``SessionMeter`` instance per session.
 
 The package-level ``_turn_snapshot`` global lives in ``__init__.py`` so that
 test patches like ``mod._turn_snapshot = None`` flow through; ``summary.py``
@@ -15,20 +15,21 @@ reads/writes it through the package namespace.
 
 from __future__ import annotations
 
-import threading
 import time
 from dataclasses import dataclass, field
 
-# Thread-local IPC writer for structured tool events.
+from core.ui.context_local import ContextLocal
+
+# Task/thread-local IPC writer for structured tool events.
 # When set (by CLIPoller._run_prompt_streaming), OperationLogger sends
 # tool_start/tool_end events instead of console.print — enabling the
 # thin client to render per-tool spinners with in-place ✓ updates.
-_ipc_writer_local = threading.local()
+_ipc_writer_local = ContextLocal("geode_ipc_writer_local")
 
-# Thread-local pipeline IP name for forward-compatible event tagging.
+# Task/thread-local pipeline IP name for forward-compatible event tagging.
 # Set by _run_analysis() before pipeline execution; read by emit_pipeline_*
 # functions to tag events with the originating IP (for future parallel UI).
-_pipeline_ip_local = threading.local()
+_pipeline_ip_local = ContextLocal("geode_pipeline_ip_local")
 
 
 def set_pipeline_ip(ip_name: str) -> None:
@@ -92,7 +93,7 @@ class SessionMeter:
         return f"{m}m {sec}s"
 
 
-_meter_local = threading.local()
+_meter_local = ContextLocal("geode_session_meter_local")
 
 
 def init_session_meter(model: str = "") -> SessionMeter:

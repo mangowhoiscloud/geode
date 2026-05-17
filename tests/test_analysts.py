@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-from plugins.game_ip.nodes.analysts import ANALYST_TYPES, _build_analyst_prompt, _run_analyst
+import asyncio
+
+from plugins.game_ip.nodes.analysts import ANALYST_TYPES, _build_analyst_prompt
+from plugins.game_ip.nodes.analysts import _run_analyst as _arun_analyst
 from plugins.game_ip.nodes.analysts import get_dry_run_result as _dry_run_result
+
+
+def _run_analyst(*args, **kwargs):
+    return asyncio.run(_arun_analyst(*args, **kwargs))
 
 
 class TestAnalystTypes:

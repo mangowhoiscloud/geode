@@ -11,11 +11,13 @@ Sandbox hardening (v0.22.0):
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 import re
 import resource
-import subprocess  # nosec B404 — intentional: BashTool requires shell execution
+import signal
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +29,8 @@ log = logging.getLogger(__name__)
 _MAX_STDOUT = 10_000
 _MAX_STDERR = 5_000
 _DEFAULT_TIMEOUT = 30
+_MAX_TIMEOUT = 600
+_TERMINATE_GRACE_S = 2.0
 
 # --- Resource limits for child processes (sandbox hardening) ---
 _BASH_CPU_LIMIT_S = 30  # CPU time hard cap (seconds)
@@ -46,6 +50,12 @@ def _set_resource_limits() -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (_BASH_FSIZE_LIMIT_B, _BASH_FSIZE_LIMIT_B))
 
 
+def _prepare_child_process() -> None:
+    """Create a process group and apply resource limits before shell exec."""
+    os.setsid()
+    _set_resource_limits()
+
+
 @dataclass
 class BashResult:
     """Result of a shell command execution."""
@@ -56,6 +66,8 @@ class BashResult:
     blocked: bool = False
     needs_approval: bool = False
     denied: bool = False
+    timed_out: bool = False
+    interrupted: bool = False
     error: str = ""
     command: str = ""
 
@@ -96,36 +108,89 @@ class BashTool:
                 )
         return None
 
-    def execute(self, command: str, *, timeout: int = _DEFAULT_TIMEOUT) -> BashResult:
-        """Execute a shell command (caller must ensure approval)."""
-        # Final safety check
+    async def aexecute(
+        self,
+        command: str,
+        *,
+        timeout: int = _DEFAULT_TIMEOUT,
+        cancellation: asyncio.Event | None = None,
+    ) -> BashResult:
+        """Execute a shell command asynchronously (caller must ensure approval)."""
         blocked = self.validate(command)
         if blocked:
             return blocked
-
-        try:
-            result = subprocess.run(  # nosec B602 — HITL approval gate + blocked patterns
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=self._working_dir,
-                preexec_fn=_set_resource_limits if os.name != "nt" else None,
-            )
-
+        if cancellation is not None and cancellation.is_set():
             return BashResult(
-                stdout=result.stdout[:_MAX_STDOUT],
-                stderr=result.stderr[:_MAX_STDERR],
-                returncode=result.returncode,
+                interrupted=True,
+                error="Interrupted before execution",
+                returncode=-1,
                 command=command,
             )
 
-        except subprocess.TimeoutExpired:
+        timeout = max(1, min(int(timeout), _MAX_TIMEOUT))
+
+        process: asyncio.subprocess.Process | None = None
+        communicate_task: asyncio.Task[tuple[bytes, bytes]] | None = None
+        cancel_task: asyncio.Task[bool] | None = None
+        try:
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self._working_dir,
+                preexec_fn=_prepare_child_process if os.name != "nt" else None,
+            )
+            communicate_task = asyncio.create_task(process.communicate())
+            wait_tasks: set[asyncio.Task[Any]] = {communicate_task}
+            if cancellation is not None:
+                cancel_task = asyncio.create_task(cancellation.wait())
+                wait_tasks.add(cancel_task)
+
+            done, pending = await asyncio.wait(
+                wait_tasks,
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if communicate_task in done:
+                stdout_raw, stderr_raw = communicate_task.result()
+            elif cancel_task is not None and cancel_task in done:
+                await self._terminate_process_tree(process)
+                self._cancel_pending(communicate_task, *pending)
+                return BashResult(
+                    error="Interrupted",
+                    returncode=-1,
+                    interrupted=True,
+                    command=command,
+                )
+            else:
+                await self._terminate_process_tree(process)
+                self._cancel_pending(communicate_task, *pending)
+                log.warning("Command timed out after %ds: %s", timeout, command[:100])
+                return BashResult(
+                    error=f"Timeout after {timeout}s",
+                    returncode=-1,
+                    timed_out=True,
+                    command=command,
+                )
+
+            for task in pending:
+                task.cancel()
+            stdout = stdout_raw.decode("utf-8", errors="replace") if stdout_raw else ""
+            stderr = stderr_raw.decode("utf-8", errors="replace") if stderr_raw else ""
+            return BashResult(
+                stdout=stdout[:_MAX_STDOUT],
+                stderr=stderr[:_MAX_STDERR],
+                returncode=process.returncode or 0,
+                command=command,
+            )
+        except TimeoutError:
+            if process is not None:
+                await self._terminate_process_tree(process)
             log.warning("Command timed out after %ds: %s", timeout, command[:100])
             return BashResult(
                 error=f"Timeout after {timeout}s",
                 returncode=-1,
+                timed_out=True,
                 command=command,
             )
         except OSError as exc:
@@ -135,6 +200,37 @@ class BashTool:
                 returncode=-1,
                 command=command,
             )
+        finally:
+            if cancel_task is not None and not cancel_task.done():
+                cancel_task.cancel()
+
+    @staticmethod
+    def _cancel_pending(*tasks: asyncio.Task[Any]) -> None:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+    async def _terminate_process_tree(self, process: asyncio.subprocess.Process) -> None:
+        """Terminate the shell process group, then force kill if it lingers."""
+        if process.returncode is not None:
+            return
+        if os.name != "nt":
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGTERM)
+        else:
+            process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=_TERMINATE_GRACE_S)
+            return
+        except TimeoutError:
+            pass
+        if os.name != "nt":
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+        with contextlib.suppress(ProcessLookupError):
+            await process.wait()
 
     def to_tool_result(self, result: BashResult) -> dict[str, Any]:
         """Convert BashResult to a dict suitable for LLM tool_result.
@@ -148,6 +244,14 @@ class BashTool:
             return {"error": result.error, "blocked": True}
         if result.denied:
             return {"error": "User denied execution", "denied": True}
+        if result.interrupted:
+            return {"error": redact_secrets(result.error or "Interrupted"), "interrupted": True}
+        if result.timed_out:
+            return {
+                "error": redact_secrets(result.error or "Timed out"),
+                "returncode": result.returncode,
+                "timed_out": True,
+            }
         if result.error:
             return {"error": redact_secrets(result.error), "returncode": result.returncode}
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from core.tools.base import Tool
 from core.tools.data_tools import CortexAnalystTool, CortexSearchTool
 from core.tools.registry import ToolRegistry
@@ -23,7 +25,7 @@ class TestQueryMonoLakeTool:
 
     def test_execute_berserk_returns_data(self):
         tool = QueryMonoLakeTool()
-        result = tool.execute(ip_name="Berserk")
+        result = asyncio.run(tool.aexecute(ip_name="Berserk"))
         assert "result" in result
         data = result["result"]
         assert "ip_info" in data
@@ -32,7 +34,7 @@ class TestQueryMonoLakeTool:
 
     def test_execute_with_fields_filter(self):
         tool = QueryMonoLakeTool()
-        result = tool.execute(ip_name="Cowboy Bebop", fields=["ip_name", "dau_peak"])
+        result = asyncio.run(tool.aexecute(ip_name="Cowboy Bebop", fields=["ip_name", "dau_peak"]))
         assert "result" in result
         data = result["result"]
         assert "ip_name" in data
@@ -42,7 +44,7 @@ class TestQueryMonoLakeTool:
 
     def test_execute_unknown_ip(self):
         tool = QueryMonoLakeTool()
-        result = tool.execute(ip_name="Unknown IP XYZ")
+        result = asyncio.run(tool.aexecute(ip_name="Unknown IP XYZ"))
         assert "error" in result
         assert "available_ips" in result
 
@@ -56,7 +58,7 @@ class TestCortexAnalystTool:
 
     def test_execute_returns_stub(self):
         tool = CortexAnalystTool()
-        result = tool.execute(question="What is the top revenue IP?")
+        result = asyncio.run(tool.aexecute(question="What is the top revenue IP?"))
         assert "result" in result
         assert result["result"]["status"] == "stub"
         assert "rows" in result["result"]
@@ -71,7 +73,7 @@ class TestCortexSearchTool:
 
     def test_execute_returns_stub(self):
         tool = CortexSearchTool()
-        result = tool.execute(query="dark fantasy anime IPs", top_k=3)
+        result = asyncio.run(tool.aexecute(query="dark fantasy anime IPs", top_k=3))
         assert "result" in result
         assert result["result"]["status"] == "stub"
         assert "documents" in result["result"]

@@ -29,7 +29,7 @@ class CompositeNotificationAdapter:
             for ch in adapter.list_channels():
                 self._channel_map[ch] = adapter
 
-    def send_message(
+    async def asend_message(
         self,
         channel: str,
         recipient: str,
@@ -38,6 +38,7 @@ class CompositeNotificationAdapter:
         severity: str = "info",
         **kwargs: Any,
     ) -> NotificationResult:
+        """Async notification send through the channel-specific adapter."""
         adapter = self._channel_map.get(channel)
         if adapter is None:
             return NotificationResult(
@@ -45,23 +46,25 @@ class CompositeNotificationAdapter:
                 channel=channel,
                 error=f"No adapter registered for channel '{channel}'",
             )
-        if not adapter.is_available(channel):
+        if not await adapter.ais_available(channel):
             return NotificationResult(
                 success=False,
                 channel=channel,
                 error=f"Channel '{channel}' not available (MCP server down or key missing)",
             )
-        return adapter.send_message(channel, recipient, message, severity=severity, **kwargs)
+        return await adapter.asend_message(channel, recipient, message, severity=severity, **kwargs)
 
-    def is_available(self, channel: str | None = None) -> bool:
+    async def ais_available(self, channel: str | None = None) -> bool:
         if channel is not None:
             adapter = self._channel_map.get(channel)
-            return adapter is not None and adapter.is_available(channel)
-        return any(a.is_available() for a in self._adapters)
+            return adapter is not None and await adapter.ais_available(channel)
+        for adapter in self._adapters:
+            if await adapter.ais_available(None):
+                return True
+        return False
 
     def list_channels(self) -> list[str]:
         channels: list[str] = []
         for adapter in self._adapters:
-            if adapter.is_available():
-                channels.extend(adapter.list_channels())
+            channels.extend(adapter.list_channels())
         return channels

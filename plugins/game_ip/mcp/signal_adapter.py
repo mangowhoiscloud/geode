@@ -6,11 +6,12 @@ LiveSignalAdapter: Placeholder for YouTube/Reddit/Google Trends APIs.
 
 Usage:
     adapter = create_signal_adapter()  # auto-detects availability
-    signals = adapter.fetch_signals("Berserk")
+    signals = await adapter.afetch_signals("Berserk")
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -22,7 +23,7 @@ log = logging.getLogger(__name__)
 class FixtureSignalAdapter:
     """Signal adapter backed by JSON fixtures (always available)."""
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    def _fetch_signals_sync(self, ip_name: str) -> dict[str, Any]:
         try:
             fixture = load_fixture(ip_name)
             result: dict[str, Any] = fixture.get("signals", {})
@@ -31,7 +32,13 @@ class FixtureSignalAdapter:
             log.warning("Fixture signal load failed for %s: %s", ip_name, e)
             return {}
 
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._fetch_signals_sync, ip_name)
+
     def is_available(self) -> bool:
+        return True
+
+    async def ais_available(self) -> bool:
         return True
 
 
@@ -50,20 +57,23 @@ class LiveSignalAdapter:
         self._fixture_fallback = FixtureSignalAdapter()
         self._api_available: bool | None = None
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         # TODO: Replace with actual API calls when keys are configured
         # youtube = self._fetch_youtube(ip_name)
         # reddit = self._fetch_reddit(ip_name)
         # trends = self._fetch_google_trends(ip_name)
 
         # Fallback to fixture data with enrichment metadata
-        signals = self._fixture_fallback.fetch_signals(ip_name)
+        signals = await self._fixture_fallback.afetch_signals(ip_name)
         signals["_enrichment_source"] = "fixture_fallback"
         signals["_live_api_available"] = False
         return signals
 
     def is_available(self) -> bool:
         # Will check API key availability when implemented
+        return True
+
+    async def ais_available(self) -> bool:
         return True
 
 

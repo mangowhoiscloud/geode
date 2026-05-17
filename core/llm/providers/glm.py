@@ -25,6 +25,8 @@ GLM_FALLBACK_MODELS = GLM_FALLBACK_CHAIN
 
 _glm_client: Any = None  # openai.OpenAI | None — GLM via OpenAI-compatible API
 _glm_lock = threading.Lock()
+_async_glm_client: Any = None  # openai.AsyncOpenAI | None — GLM via OpenAI-compatible API
+_async_glm_lock = threading.Lock()
 
 # Circuit breaker for GLM API calls
 _glm_circuit_breaker = CircuitBreaker()
@@ -70,11 +72,29 @@ def _get_glm_client() -> Any:
     return _glm_client
 
 
+def _get_async_glm_client() -> Any:
+    """Lazy import and return cached async GLM client (OpenAI-compatible)."""
+    global _async_glm_client
+    if _async_glm_client is None:
+        with _async_glm_lock:
+            if _async_glm_client is None:
+                import openai
+
+                api_key, base_url = _resolve_glm_endpoint()
+                _async_glm_client = openai.AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                )
+    return _async_glm_client
+
+
 def reset_glm_client() -> None:
     """Reset cached GLM client (e.g. after /key glm changes)."""
-    global _glm_client
+    global _async_glm_client, _glm_client
     with _glm_lock:
         _glm_client = None
+    with _async_glm_lock:
+        _async_glm_client = None
 
 
 def get_circuit_breaker() -> CircuitBreaker:
@@ -86,7 +106,7 @@ def get_circuit_breaker() -> CircuitBreaker:
 # GlmAgenticAdapter — ZhipuAI GLM adapter for agentic loop
 # ---------------------------------------------------------------------------
 
-import asyncio  # noqa: E402
+import inspect  # noqa: E402
 
 from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
@@ -222,8 +242,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                     "type": _thinking_type,
                     "clear_thinking": False,
                 }
-            return await asyncio.to_thread(
-                client.chat.completions.create,
+            response = client.chat.completions.create(
                 model=m,
                 messages=oai_messages,
                 tools=oai_tools if oai_tools else None,
@@ -233,6 +252,9 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                 extra_body=local_extra or None,
                 timeout=120.0,
             )
+            if inspect.isawaitable(response):
+                return await response
+            return response
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

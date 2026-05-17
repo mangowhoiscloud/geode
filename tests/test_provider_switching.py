@@ -39,6 +39,7 @@ mocks for SDK clients and assert call args / endpoints.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
@@ -435,7 +436,7 @@ def test_update_model_swaps_adapter_on_provider_change(
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
     # Bind the real method against the stub.
-    stub.update_model = _loop_mod.AgenticLoop.update_model.__get__(stub)
+    stub.update_model_async = _loop_mod.AgenticLoop.update_model_async.__get__(stub)
     stub._adapt_context_for_model = MagicMock()
 
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "anthropic")
@@ -445,7 +446,7 @@ def test_update_model_swaps_adapter_on_provider_change(
     type(fake_claude).__name__ = "ClaudeAgenticAdapter"  # type: ignore[misc]
     monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", lambda p: fake_claude)
 
-    stub.update_model("claude-opus-4-7")
+    asyncio.run(stub.update_model_async("claude-opus-4-7"))
 
     assert stub._provider == "anthropic"
     assert stub._adapter is fake_claude
@@ -462,7 +463,7 @@ def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     Any caller that updates the model directly (user-initiated /model
     switch, drift sync) must trigger a system_prompt rebuild on the
     next round. Pre-fix the rebuild only happened when
-    ``_sync_model_from_settings()`` returned True, so direct
+    ``_sync_model_from_settings_async()`` returned True, so direct
     update_model() callers left the model card pinned to the previous
     model. v0.90.0 removed the auto-escalation path that originally
     motivated this guard, but the same invariant still protects the
@@ -480,13 +481,13 @@ def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
     stub._prompt_dirty = False
-    stub.update_model = _loop_mod.AgenticLoop.update_model.__get__(stub)
+    stub.update_model_async = _loop_mod.AgenticLoop.update_model_async.__get__(stub)
     stub._adapt_context_for_model = MagicMock()
 
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "openai")
     monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", lambda p: MagicMock())
 
-    stub.update_model("gpt-5.3-codex", reason="failure_escalation")
+    asyncio.run(stub.update_model_async("gpt-5.3-codex", reason="failure_escalation"))
 
     assert stub._prompt_dirty is True, (
         "update_model must set _prompt_dirty when model changes — "
@@ -515,7 +516,7 @@ def test_update_model_keeps_adapter_on_within_provider_switch(
     stub._tool_processor = MagicMock()
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
-    stub.update_model = _loop_mod.AgenticLoop.update_model.__get__(stub)
+    stub.update_model_async = _loop_mod.AgenticLoop.update_model_async.__get__(stub)
     stub._adapt_context_for_model = MagicMock()
 
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "openai-codex")
@@ -527,7 +528,7 @@ def test_update_model_keeps_adapter_on_within_provider_switch(
         lambda p: factory_calls.append(p) or MagicMock(),
     )
 
-    stub.update_model("gpt-5.4")
+    asyncio.run(stub.update_model_async("gpt-5.4"))
 
     assert stub.model == "gpt-5.4"
     assert stub._adapter is initial_adapter, "adapter rebuilt on within-provider switch"

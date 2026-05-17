@@ -70,7 +70,7 @@ class ChannelManager:
             poller.stop()
 
     def set_processor(self, processor: MessageProcessor) -> None:
-        """Set the message processor (typically AgenticLoop.run)."""
+        """Set the message processor for sync channel adapters."""
         self._processor = processor
 
     def add_binding(self, binding: ChannelBinding) -> None:

@@ -11,8 +11,8 @@ def _build_notification_handlers() -> dict[str, Any]:
 
     notification_tool = SendNotificationTool()
 
-    def handle_send_notification(**kwargs: Any) -> dict[str, Any]:
-        return notification_tool.execute(**kwargs)
+    async def handle_send_notification(**kwargs: Any) -> dict[str, Any]:
+        return await notification_tool.aexecute(**kwargs)
 
     return {
         "send_notification": handle_send_notification,

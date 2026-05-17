@@ -5,6 +5,7 @@ Tests unified deferred loading for native + MCP tools.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.tools.policy import PolicyChain, ToolPolicy
@@ -294,7 +295,7 @@ class TestToolSearchToolMCP:
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("steam_mcp", "Steam store lookup")])
 
-        result = search_tool.execute(query="steam")
+        result = asyncio.run(search_tool.aexecute(query="steam"))
         assert result["matched"] is True
         names = [t["name"] for t in result["tools"]]
         assert "steam_mcp" in names
@@ -305,7 +306,7 @@ class TestToolSearchToolMCP:
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("mcp_tool")])
 
-        result = search_tool.execute(query="analyze")
+        result = asyncio.run(search_tool.aexecute(query="analyze"))
         assert result["matched"] is True
         names = [t["name"] for t in result["tools"]]
         assert "analyze_ip" in names
@@ -316,7 +317,7 @@ class TestToolSearchToolMCP:
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("steam_mcp", "Steam MCP tool")])
 
-        result = search_tool.execute(query="steam")
+        result = asyncio.run(search_tool.aexecute(query="steam"))
         assert result["matched"] is True
         names = [t["name"] for t in result["tools"]]
         assert "steam_native" in names
@@ -328,7 +329,7 @@ class TestToolSearchToolMCP:
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("mcp_tool")])
 
-        result = search_tool.execute(query="zzz_nonexistent")
+        result = asyncio.run(search_tool.aexecute(query="zzz_nonexistent"))
         assert result["matched"] is False
         names = [t["name"] for t in result["available_tools"]]
         assert "native_tool" in names
@@ -340,7 +341,7 @@ class TestToolSearchToolMCP:
         reg.register(search_tool)  # type: ignore[arg-type]
         search_tool.set_mcp_tools([_make_mcp_tool("steam_mcp", "Steam store")])
 
-        result = search_tool.execute(query="steam")
+        result = asyncio.run(search_tool.aexecute(query="steam"))
         mcp_matches = [t for t in result["tools"] if t.get("source") == "mcp"]
         assert len(mcp_matches) == 1
 

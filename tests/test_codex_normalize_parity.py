@@ -103,24 +103,26 @@ def test_codex_agentic_call_returns_agentic_response(monkeypatch) -> None:
 
     fake_response = _build_fake_responses_api_response()
 
-    # Mock the streaming Responses API client. ``stream`` (the result of
-    # __enter__) must be both iterable (the loop iterates events) and
-    # carry get_final_response().
     class _FakeStream:
-        def __iter__(self):
-            return iter([])
+        async def __aenter__(self) -> _FakeStream:
+            return self
 
-        def get_final_response(self):
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def __aiter__(self) -> _FakeStream:
+            return self
+
+        async def __anext__(self) -> Any:
+            raise StopAsyncIteration
+
+        async def get_final_response(self) -> Any:
             return fake_response
 
-    fake_stream_inner = _FakeStream()
-    fake_stream_ctx = MagicMock()
-    fake_stream_ctx.__enter__ = MagicMock(return_value=fake_stream_inner)
-    fake_stream_ctx.__exit__ = MagicMock(return_value=False)
     fake_client = MagicMock()
-    fake_client.responses.stream = MagicMock(return_value=fake_stream_ctx)
+    fake_client.responses.stream = MagicMock(return_value=_FakeStream())
 
-    monkeypatch.setattr("core.llm.providers.codex._get_codex_client", lambda: fake_client)
+    monkeypatch.setattr("core.llm.providers.codex._get_async_codex_client", lambda: fake_client)
     monkeypatch.setattr(
         "core.llm.providers.codex._codex_circuit_breaker",
         MagicMock(

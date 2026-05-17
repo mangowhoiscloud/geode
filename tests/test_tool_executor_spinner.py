@@ -7,10 +7,19 @@ is denied or for safe/standard tools.
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from core.agent.tool_executor import ToolExecutor, _tool_spinner
+
+
+def _run_executor(
+    executor: ToolExecutor, tool_name: str, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    return asyncio.run(executor.aexecute(tool_name, tool_input))
+
 
 # ---------------------------------------------------------------------------
 # _tool_spinner context manager unit tests
@@ -76,7 +85,7 @@ class TestBashSpinner:
         mock_spinner.return_value.__exit__ = MagicMock(return_value=False)
 
         executor = ToolExecutor()
-        executor.execute("run_bash", {"command": "echo hello", "reason": "test"})
+        _run_executor(executor, "run_bash", {"command": "echo hello", "reason": "test"})
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
@@ -92,8 +101,8 @@ class TestBashSpinner:
         mock_console.input.return_value = "n"
         mock_approval_console.input.return_value = "n"
 
-        result = ToolExecutor().execute(
-            "run_bash", {"command": "npm install foo", "reason": "test"}
+        result = _run_executor(
+            ToolExecutor(), "run_bash", {"command": "npm install foo", "reason": "test"}
         )
 
         mock_spinner.assert_not_called()
@@ -125,7 +134,7 @@ class TestMcpSpinner:
         mcp.call_tool.return_value = {"result": "ok"}
 
         executor = ToolExecutor(mcp_manager=mcp)
-        executor.execute("mcp_tool_x", {"arg": "val"})
+        _run_executor(executor, "mcp_tool_x", {"arg": "val"})
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
@@ -145,7 +154,7 @@ class TestMcpSpinner:
         mcp = MagicMock()
         mcp.find_server_for_tool.return_value = "my-server"
 
-        result = ToolExecutor(mcp_manager=mcp).execute("mcp_tool_x", {"arg": "val"})
+        result = _run_executor(ToolExecutor(mcp_manager=mcp), "mcp_tool_x", {"arg": "val"})
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True
@@ -161,7 +170,7 @@ class TestMcpSpinner:
         mcp.call_tool.return_value = {"ok": True}
 
         executor = ToolExecutor(auto_approve=True, mcp_manager=mcp)
-        executor.execute("mcp_auto", {"x": 1})
+        _run_executor(executor, "mcp_auto", {"x": 1})
 
         # auto_approve skips HITL but still uses spinner
         mock_spinner.assert_called_once()
@@ -189,7 +198,7 @@ class TestWriteToolSpinner:
 
         handler = MagicMock(return_value={"saved": True})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
-        executor.execute("memory_save", {"content": "test data"})
+        _run_executor(executor, "memory_save", {"content": "test data"})
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
@@ -207,7 +216,7 @@ class TestWriteToolSpinner:
 
         handler = MagicMock(return_value={"saved": True})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
-        result = executor.execute("memory_save", {"content": "test data"})
+        result = _run_executor(executor, "memory_save", {"content": "test data"})
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True
@@ -236,7 +245,7 @@ class TestExpensiveToolSpinner:
 
         handler = MagicMock(return_value={"tier": "S", "score": 85.0})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler})
-        executor.execute("analyze_ip", {"ip_name": "Berserk"})
+        _run_executor(executor, "analyze_ip", {"ip_name": "Berserk"})
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
@@ -254,7 +263,7 @@ class TestExpensiveToolSpinner:
 
         handler = MagicMock(return_value={"tier": "S"})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler})
-        result = executor.execute("analyze_ip", {"ip_name": "Berserk"})
+        result = _run_executor(executor, "analyze_ip", {"ip_name": "Berserk"})
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True
@@ -265,7 +274,7 @@ class TestExpensiveToolSpinner:
         """When auto_approve is True, expensive tools skip HITL and spinner."""
         handler = MagicMock(return_value={"tier": "A"})
         executor = ToolExecutor(auto_approve=True, action_handlers={"analyze_ip": handler})
-        executor.execute("analyze_ip", {"ip_name": "Test"})
+        _run_executor(executor, "analyze_ip", {"ip_name": "Test"})
 
         # auto_approve skips the cost gate entirely, so approved_via_hitl stays False
         mock_spinner.assert_not_called()
@@ -285,7 +294,7 @@ class TestNoSpinnerForSafeTools:
         """Safe tools execute without any spinner."""
         handler = MagicMock(return_value={"ips": []})
         executor = ToolExecutor(action_handlers={"list_ips": handler})
-        executor.execute("list_ips", {})
+        _run_executor(executor, "list_ips", {})
 
         mock_spinner.assert_not_called()
         handler.assert_called_once()
@@ -295,7 +304,7 @@ class TestNoSpinnerForSafeTools:
         """Standard (non-gated) tools execute without spinner."""
         handler = MagicMock(return_value={"report": "done"})
         executor = ToolExecutor(action_handlers={"generate_report": handler})
-        executor.execute("generate_report", {"topic": "test"})
+        _run_executor(executor, "generate_report", {"topic": "test"})
 
         mock_spinner.assert_not_called()
         handler.assert_called_once()

@@ -5,8 +5,9 @@ Phase 5 validation: bidirectional sync between scheduler and calendar.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.mcp.calendar_port import CalendarEvent
@@ -40,16 +41,16 @@ def mock_scheduler() -> MagicMock:
 @pytest.fixture()
 def mock_calendar() -> MagicMock:
     calendar = MagicMock()
-    calendar.is_available.return_value = True
-    calendar.list_events.return_value = []
-    calendar.create_event.return_value = CalendarEvent(
+    calendar.ais_available = AsyncMock(return_value=True)
+    calendar.alist_events = AsyncMock(return_value=[])
+    calendar.acreate_event = AsyncMock(return_value=CalendarEvent(
         event_id="evt_new",
         title="[GEODE] daily-analysis",
         start=NOW + timedelta(hours=1),
         end=NOW + timedelta(hours=1, minutes=30),
         source="google",
         is_geode=True,
-    )
+    ))
     return calendar
 
 
@@ -78,23 +79,23 @@ class TestBridgeContextvar:
 
 class TestPushToCalendar:
     def test_push_creates_event(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
-        result = bridge.sync(direction="push")
+        result = asyncio.run(bridge.sync(direction="push"))
         assert result["pushed"] == 1
         assert result["errors"] == []
-        mock_calendar.create_event.assert_called_once()
-        call_args = mock_calendar.create_event.call_args
+        mock_calendar.acreate_event.assert_awaited_once()
+        call_args = mock_calendar.acreate_event.call_args
         assert call_args[0][0].startswith("[GEODE]")
 
     def test_push_skips_disabled_jobs(
         self, bridge: CalendarSchedulerBridge, mock_scheduler: MagicMock
     ):
         mock_scheduler.list_jobs.return_value[0].enabled = False
-        result = bridge.sync(direction="push")
+        result = asyncio.run(bridge.sync(direction="push"))
         assert result["pushed"] == 0
 
     def test_push_skips_duplicate(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
         # Calendar already has the event
-        mock_calendar.list_events.return_value = [
+        mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="existing",
                 title="[GEODE] daily-analysis",
@@ -103,14 +104,14 @@ class TestPushToCalendar:
                 is_geode=True,
             )
         ]
-        result = bridge.sync(direction="push")
+        result = asyncio.run(bridge.sync(direction="push"))
         assert result["pushed"] == 0
 
     def test_push_calendar_unavailable(self, mock_scheduler: MagicMock):
         cal = MagicMock()
-        cal.is_available.return_value = False
+        cal.ais_available = AsyncMock(return_value=False)
         bridge = CalendarSchedulerBridge(mock_scheduler, cal)
-        result = bridge.sync(direction="push")
+        result = asyncio.run(bridge.sync(direction="push"))
         assert result["pushed"] == 0
         assert len(result["errors"]) == 1
 
@@ -122,7 +123,7 @@ class TestPushToCalendar:
 
 class TestPullFromCalendar:
     def test_pull_creates_job(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
-        mock_calendar.list_events.return_value = [
+        mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="cal_1",
                 title="[GEODE] weekly-report",
@@ -131,11 +132,11 @@ class TestPullFromCalendar:
                 is_geode=True,
             )
         ]
-        result = bridge.sync(direction="pull")
+        result = asyncio.run(bridge.sync(direction="pull"))
         assert result["pulled"] == 1
 
     def test_pull_skips_non_geode(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
-        mock_calendar.list_events.return_value = [
+        mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="cal_2",
                 title="Personal Lunch",
@@ -144,13 +145,13 @@ class TestPullFromCalendar:
                 is_geode=False,
             )
         ]
-        result = bridge.sync(direction="pull")
+        result = asyncio.run(bridge.sync(direction="pull"))
         assert result["pulled"] == 0
 
     def test_pull_skips_existing_job(
         self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock, mock_scheduler: MagicMock
     ):
-        mock_calendar.list_events.return_value = [
+        mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="cal_3",
                 title="[GEODE] daily-analysis",  # Same name as existing job
@@ -159,14 +160,14 @@ class TestPullFromCalendar:
                 is_geode=True,
             )
         ]
-        result = bridge.sync(direction="pull")
+        result = asyncio.run(bridge.sync(direction="pull"))
         assert result["pulled"] == 0
 
     def test_pull_calendar_unavailable(self, mock_scheduler: MagicMock):
         cal = MagicMock()
-        cal.is_available.return_value = False
+        cal.ais_available = AsyncMock(return_value=False)
         bridge = CalendarSchedulerBridge(mock_scheduler, cal)
-        result = bridge.sync(direction="pull")
+        result = asyncio.run(bridge.sync(direction="pull"))
         assert result["pulled"] == 0
         assert len(result["errors"]) == 1
 
@@ -178,7 +179,7 @@ class TestPullFromCalendar:
 
 class TestBidirectionalSync:
     def test_sync_both(self, bridge: CalendarSchedulerBridge, mock_calendar: MagicMock):
-        mock_calendar.list_events.return_value = [
+        mock_calendar.alist_events.return_value = [
             CalendarEvent(
                 event_id="cal_4",
                 title="[GEODE] new-task",
@@ -187,6 +188,6 @@ class TestBidirectionalSync:
                 is_geode=True,
             )
         ]
-        result = bridge.sync(direction="both")
+        result = asyncio.run(bridge.sync(direction="both"))
         assert result["pushed"] >= 0
         assert result["pulled"] >= 0

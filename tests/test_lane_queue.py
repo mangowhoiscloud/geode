@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 
@@ -63,6 +64,17 @@ class TestLane:
         lane = Lane("test")
         d = lane.stats.to_dict()
         assert set(d.keys()) == {"acquired", "released", "timeouts"}
+
+    def test_acquire_async_and_release(self):
+        lane = Lane("test", max_concurrent=1)
+
+        async def scenario() -> None:
+            async with lane.acquire_async("job-async"):
+                assert lane.active_count == 1
+                assert not lane.try_acquire("job-sync")
+            assert lane.active_count == 0
+
+        asyncio.run(scenario())
 
 
 class TestLaneQueue:
@@ -209,6 +221,23 @@ class TestLaneQueue:
         assert status["session"]["max_sessions"] == 256
         assert status["global"]["max"] == 8
 
+    def test_acquire_all_async_session_and_global(self):
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=10))
+        q.add_lane("global", max_concurrent=1)
+
+        async def scenario() -> None:
+            async with q.acquire_all_async("cli:async", ["session", "global"]):
+                assert q.session_lane is not None and q.session_lane.active_count == 1
+                gl = q.get_lane("global")
+                assert gl is not None and gl.active_count == 1
+                assert not gl.try_acquire("blocked")
+            assert q.session_lane is not None and q.session_lane.active_count == 0
+            gl = q.get_lane("global")
+            assert gl is not None and gl.active_count == 0
+
+        asyncio.run(scenario())
+
 
 # ---------------------------------------------------------------------------
 # C4 Regression: acquire_all partial failure (v0.35.1 fix)
@@ -237,6 +266,28 @@ class TestAcquireAllPartialFailure:
         # Fast lane must be released (no leak)
         assert fast.active_count == 0
         slow._semaphore.release()
+
+    def test_acquire_all_async_partial_failure_releases_first(self) -> None:
+        q = LaneQueue()
+        q.add_lane("fast", max_concurrent=1, timeout_s=5.0)
+        q.add_lane("slow", max_concurrent=1, timeout_s=0.1)
+
+        slow = q.get_lane("slow")
+        assert slow is not None
+        slow._semaphore.acquire()
+        fast = q.get_lane("fast")
+        assert fast is not None
+
+        async def scenario() -> None:
+            with pytest.raises(TimeoutError, match="slow"):
+                async with q.acquire_all_async("job-async", ["fast", "slow"]):
+                    pass
+
+        try:
+            asyncio.run(scenario())
+            assert fast.active_count == 0
+        finally:
+            slow._semaphore.release()
 
 
 # ---------------------------------------------------------------------------
@@ -372,3 +423,14 @@ class TestSessionLane:
         assert not sl.try_acquire("z")
         assert sl.stats.timeouts == 1
         sl.manual_release("z")
+
+    def test_acquire_async_same_key_serializes(self) -> None:
+        sl = SessionLane()
+
+        async def scenario() -> None:
+            async with sl.acquire_async("key-A"):
+                assert sl.active_count == 1
+                assert not await sl.try_acquire_async("key-A")
+            assert sl.active_count == 0
+
+        asyncio.run(scenario())

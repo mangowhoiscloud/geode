@@ -76,14 +76,14 @@ def test_loop_has_no_escalation_methods() -> None:
 
 def test_model_switching_module_has_no_escalation_helpers() -> None:
     """The underlying module-level helpers were removed too — only the
-    user-initiated ``update_model`` / drift sync paths and the
+    user-initiated ``update_model_async`` / drift sync paths and the
     diagnostics-only ``fallback_chain_suggestions`` remain."""
     assert not hasattr(_switching_mod, "try_model_escalation")
     assert not hasattr(_switching_mod, "try_cross_provider_escalation")
     assert not hasattr(_switching_mod, "persist_escalated_model")
     # Sanity — the surviving helpers are still here.
-    assert hasattr(_switching_mod, "update_model")
-    assert hasattr(_switching_mod, "sync_model_from_settings")
+    assert hasattr(_switching_mod, "update_model_async")
+    assert hasattr(_switching_mod, "sync_model_from_settings_async")
     assert hasattr(_switching_mod, "fallback_chain_suggestions")
 
 

@@ -129,7 +129,7 @@ class ToolCallProcessor:
             }
         )
 
-    def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
+    async def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
         """Apply token guard, offload large results, and serialize for LLM."""
         # Token guard: truncate oversized results to prevent context explosion
         # For small-context models (e.g. GLM-5), apply model-aware limit
@@ -171,7 +171,7 @@ class ToolCallProcessor:
             if self._hooks:
                 from core.hooks import HookEvent
 
-                self._hooks.trigger(
+                await self._hooks.trigger_async(
                     HookEvent.TOOL_RESULT_OFFLOADED,
                     {
                         "ref_id": ref_id,
@@ -216,7 +216,7 @@ class ToolCallProcessor:
             visible = self._op_logger.log_tool_call(tool_name, tool_input)
 
             # Hook: TOOL_EXEC_START (interceptor — can block or modify input)
-            intercept = self._fire_interceptor(
+            intercept = await self._fire_interceptor(
                 HookEvent.TOOL_EXEC_STARTED, {"tool_name": tool_name, "tool_input": tool_input}
             )
             if intercept is not None and intercept.blocked:
@@ -224,7 +224,7 @@ class ToolCallProcessor:
                 result = {"error": intercept.reason, "blocked_by_hook": True}
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
                 self._record_tool_activity(tool_name, tool_input, result, visible)
-                return self._serialize_tool_result(result, block.id)
+                return await self._serialize_tool_result(result, block.id)
 
             # Apply input modifications from interceptor hook
             if intercept is not None:
@@ -232,9 +232,11 @@ class ToolCallProcessor:
                 if isinstance(modified_input, dict):
                     tool_input = modified_input
 
-            # Execute via ToolExecutor (sync handlers wrapped in to_thread)
+            # Execute via ToolExecutor async path. Legacy sync handlers are
+            # adapted inside the executor instead of wrapping the whole
+            # executor call in a worker thread.
             _t0 = time.monotonic()
-            result = await asyncio.to_thread(self._executor.execute, tool_name, tool_input)
+            result = await self._executor.aexecute(tool_name, tool_input)
             _elapsed_ms = (time.monotonic() - _t0) * 1000
 
             # Hook: TOOL_EXEC_END (feedback — fires for all completions)
@@ -246,7 +248,7 @@ class ToolCallProcessor:
                 "has_error": _has_error,
                 "result": result,
             }
-            post_results = self._fire_with_result(HookEvent.TOOL_EXEC_ENDED, _post_data)
+            post_results = await self._fire_with_result(HookEvent.TOOL_EXEC_ENDED, _post_data)
             # Apply result modifications from PostToolUse-style handlers
             for hr in post_results:
                 if hr.success and isinstance(hr.data, dict):
@@ -260,7 +262,7 @@ class ToolCallProcessor:
 
             # Hook: TOOL_EXEC_FAILED (observer — fires only on error)
             if _has_error:
-                self._fire_hook(
+                await self._fire_hook(
                     HookEvent.TOOL_EXEC_FAILED,
                     {
                         "tool_name": tool_name,
@@ -277,7 +279,7 @@ class ToolCallProcessor:
                 )
 
             # Hook: TOOL_RESULT_TRANSFORM (feedback — result rewriting, post-observation)
-            transform_results = self._fire_with_result(
+            transform_results = await self._fire_with_result(
                 HookEvent.TOOL_RESULT_TRANSFORM,
                 {
                     "tool_name": tool_name,
@@ -313,7 +315,7 @@ class ToolCallProcessor:
                 }
 
         self._record_tool_activity(tool_name, tool_input, result, visible)
-        return self._serialize_tool_result(result, block.id)
+        return await self._serialize_tool_result(result, block.id)
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
         """Execute tool blocks one by one (single-tool fast path)."""
@@ -444,10 +446,10 @@ class ToolCallProcessor:
     ) -> dict[str, Any]:
         """Attempt adaptive error recovery for a repeatedly failing tool.
 
-        Runs the recovery chain in a background thread (sync executor calls)
-        and emits hook events for observability.
+        Runs the recovery chain through the async executor path and emits hook
+        events for observability.
         """
-        self._fire_hook(
+        await self._fire_hook(
             HookEvent.TOOL_RECOVERY_ATTEMPTED,
             {
                 "tool_name": tool_name,
@@ -456,16 +458,11 @@ class ToolCallProcessor:
             },
         )
 
-        recovery_result = await asyncio.to_thread(
-            self._error_recovery.recover,
-            tool_name,
-            tool_input,
-            fail_count,
-        )
+        recovery_result = await self._error_recovery.arecover(tool_name, tool_input, fail_count)
 
         if recovery_result.recovered:
             self._consecutive_failures[tool_name] = 0
-            self._fire_hook(
+            await self._fire_hook(
                 HookEvent.TOOL_RECOVERY_SUCCEEDED,
                 {
                     "tool_name": tool_name,
@@ -481,7 +478,7 @@ class ToolCallProcessor:
             result["recovery_attempted"] = True
             return result
 
-        self._fire_hook(
+        await self._fire_hook(
             HookEvent.TOOL_RECOVERY_FAILED,
             {
                 "tool_name": tool_name,
@@ -496,16 +493,18 @@ class ToolCallProcessor:
         result["skipped"] = True
         return result
 
-    def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
+    async def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         """Emit a hook event if HookSystem is configured."""
         if self._hooks is None:
             return
         try:
-            self._hooks.trigger(event, data)
+            await self._hooks.trigger_async(event, data)
         except Exception:
             log.debug("Hook trigger failed for %s", event, exc_info=True)
 
-    def _fire_interceptor(self, event: HookEvent, data: dict[str, Any]) -> InterceptResult | None:
+    async def _fire_interceptor(
+        self, event: HookEvent, data: dict[str, Any]
+    ) -> InterceptResult | None:
         """Emit a hook event as interceptor (block/modify semantics).
 
         Returns InterceptResult if hooks are configured, None otherwise.
@@ -513,12 +512,12 @@ class ToolCallProcessor:
         if self._hooks is None:
             return None
         try:
-            return self._hooks.trigger_interceptor(event, data)
+            return await self._hooks.trigger_interceptor_async(event, data)
         except Exception:
             log.debug("Interceptor trigger failed for %s", event, exc_info=True)
             return None
 
-    def _fire_with_result(self, event: HookEvent, data: dict[str, Any]) -> list[HookResult]:
+    async def _fire_with_result(self, event: HookEvent, data: dict[str, Any]) -> list[HookResult]:
         """Emit a hook event capturing handler return values.
 
         Returns list of HookResult with handler-returned data.
@@ -526,7 +525,7 @@ class ToolCallProcessor:
         if self._hooks is None:
             return []
         try:
-            return self._hooks.trigger_with_result(event, data)
+            return await self._hooks.trigger_with_result_async(event, data)
         except Exception:
             log.debug("Hook trigger_with_result failed for %s", event, exc_info=True)
             return []

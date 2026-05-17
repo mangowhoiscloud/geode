@@ -42,7 +42,7 @@ class TelegramPoller(BasePoller):
     def channel_name(self) -> str:
         return "telegram"
 
-    def _poll_once(self) -> None:
+    async def _apoll_once(self) -> None:
         if not self._check_mcp_health():
             return
         # ``_check_mcp_health`` returned True ⇒ ``_mcp is not None``;
@@ -54,7 +54,7 @@ class TelegramPoller(BasePoller):
             if self._last_update_id:
                 args["offset"] = self._last_update_id + 1
 
-            result = self._mcp.call_tool("telegram", "get_updates", args)
+            result = await self._mcp.acall_tool("telegram", "get_updates", args)
             if "error" in result:
                 return
 
@@ -83,7 +83,7 @@ class TelegramPoller(BasePoller):
                 response = self._manager.route_message(inbound)
 
                 if response and self._notification:
-                    self._notification.send_message("telegram", chat_id, response)
+                    await self._notification.asend_message("telegram", chat_id, response)
 
         except Exception as exc:
             log.debug("Telegram poll error: %s", exc)

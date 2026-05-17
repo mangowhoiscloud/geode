@@ -22,9 +22,12 @@ Server → Client:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
+import queue
 import socket
 import threading
 from pathlib import Path
@@ -60,6 +63,119 @@ def _get_client_capability() -> tuple[bool, int]:
     return is_tty, width
 
 
+class _AsyncClientEndpoint:
+    """Thread-safe bridge around an asyncio StreamWriter.
+
+    The IPC reader and async prompt runner run on the CLIPoller event loop,
+    while approval callbacks may still run in worker threads. This bridge keeps
+    writes ordered and routes approval_response messages back to the blocking
+    approval prompt without letting worker threads read from the socket.
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, writer: asyncio.StreamWriter) -> None:
+        self._loop = loop
+        self._writer = writer
+        self._write_lock = asyncio.Lock()
+        self._pending_sends: set[asyncio.Task[None]] = set()
+        self._approval_responses: queue.Queue[str] = queue.Queue()
+        self._is_tty = True
+        self._width = 120
+
+    async def send_json_async(self, obj: dict[str, Any]) -> None:
+        payload = json.dumps(obj, ensure_ascii=False) + "\n"
+        async with self._write_lock:
+            self._writer.write(payload.encode("utf-8"))
+            await self._writer.drain()
+
+    def send_json_nowait(self, obj: dict[str, Any]) -> None:
+        """Schedule a write from the endpoint's own event-loop thread."""
+        task = self._loop.create_task(self.send_json_async(obj))
+        self._pending_sends.add(task)
+
+        def _discard(done: asyncio.Task[None]) -> None:
+            self._pending_sends.discard(done)
+            with contextlib.suppress(Exception):
+                done.result()
+
+        task.add_done_callback(_discard)
+
+    async def drain_pending_sends(self) -> None:
+        """Wait for stream/event writes scheduled by sync file-like writers."""
+        while self._pending_sends:
+            pending = list(self._pending_sends)
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    def send_json_threadsafe(self, obj: dict[str, Any], *, timeout_s: float = 5.0) -> None:
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if running_loop is self._loop:
+            self.send_json_nowait(obj)
+            return
+        future = asyncio.run_coroutine_threadsafe(self.send_json_async(obj), self._loop)
+        try:
+            future.result(timeout=timeout_s)
+        except Exception:
+            log.debug("Async IPC send failed", exc_info=True)
+
+    def feed_approval_response(self, decision: str) -> None:
+        self._approval_responses.put(decision)
+
+    def set_capability(self, *, is_tty: bool, width: int) -> None:
+        self._is_tty = is_tty
+        self._width = width if width > 0 else 120
+
+    def get_capability(self) -> tuple[bool, int]:
+        return self._is_tty, self._width
+
+    def request_approval(
+        self,
+        tool_name: str,
+        detail: str,
+        safety_level: str = "write",
+    ) -> str:
+        import time as _time
+
+        self.send_json_threadsafe(
+            {
+                "type": "approval_request",
+                "tool_name": tool_name,
+                "detail": detail,
+                "safety_level": safety_level,
+            },
+            timeout_s=10.0,
+        )
+        log.debug("HITL: sent approval_request tool=%s level=%s", tool_name, safety_level)
+        _t0 = _time.monotonic()
+        try:
+            decision = self._approval_responses.get(timeout=120.0)
+            log.info(
+                "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
+                tool_name,
+                decision,
+                _time.monotonic() - _t0,
+            )
+            return decision
+        except queue.Empty:
+            log.warning(
+                "HITL: approval TIMEOUT tool=%s elapsed=%.1fs",
+                tool_name,
+                _time.monotonic() - _t0,
+            )
+            return "n"
+
+    def close_threadsafe(self) -> None:
+        async def _close() -> None:
+            self._writer.close()
+            with contextlib.suppress(OSError):
+                await self._writer.wait_closed()
+
+        future = asyncio.run_coroutine_threadsafe(_close(), self._loop)
+        with contextlib.suppress(Exception):
+            future.result(timeout=2.0)
+
+
 class _StreamingWriter:
     """File-like object that relays console writes to a client socket.
 
@@ -73,7 +189,7 @@ class _StreamingWriter:
     - autoresearch P6 L1 capture (capture all stdout)
     """
 
-    def __init__(self, client: socket.socket) -> None:
+    def __init__(self, client: socket.socket | _AsyncClientEndpoint) -> None:
         self._client = client
 
     def write(self, text: str) -> int:
@@ -87,6 +203,9 @@ class _StreamingWriter:
         self._send_json({"type": event_type, **data})
 
     def _send_json(self, obj: dict[str, Any]) -> None:
+        if isinstance(self._client, _AsyncClientEndpoint):
+            self._client.send_json_threadsafe(obj)
+            return
         try:
             payload = json.dumps(obj, ensure_ascii=False) + "\n"
             self._client.sendall(payload.encode("utf-8"))
@@ -103,6 +222,9 @@ class _StreamingWriter:
 
         Returns 'y', 'n', or 'a' (always).
         """
+        if isinstance(self._client, _AsyncClientEndpoint):
+            return self._client.request_approval(tool_name, detail, safety_level)
+
         self._send_json(
             {
                 "type": "approval_request",
@@ -193,9 +315,13 @@ class CLIPoller:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
         self._server: socket.socket | None = None
+        self._async_server: asyncio.AbstractServer | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._stop_event = threading.Event()
+        self._ready_event = threading.Event()
+        self._startup_error: BaseException | None = None
         self._thread: threading.Thread | None = None
-        self._active_clients: set[socket.socket] = set()
+        self._active_clients: set[socket.socket | _AsyncClientEndpoint] = set()
         self._clients_lock = threading.Lock()
         self._scheduler_service = scheduler_service
 
@@ -216,20 +342,19 @@ class CLIPoller:
         if self._socket_path.exists():
             self._socket_path.unlink()
 
-        self._socket_path.parent.mkdir(parents=True, exist_ok=True)
-        self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._server.bind(str(self._socket_path))
-        os.chmod(str(self._socket_path), 0o600)  # User-only access
-        self._server.listen(5)  # backlog for concurrent CLI connections
-        self._server.settimeout(1.0)
-
         self._stop_event.clear()
+        self._ready_event.clear()
+        self._startup_error = None
         self._thread = threading.Thread(
-            target=self._accept_loop,
+            target=self._run_async_server,
             name="geode-cli-poller",
             daemon=True,
         )
         self._thread.start()
+        if not self._ready_event.wait(timeout=5.0):
+            raise RuntimeError(f"CLI channel failed to start on {self._socket_path}")
+        if self._startup_error is not None:
+            raise RuntimeError("CLI channel startup failed") from self._startup_error
         log.info("CLI channel listening on %s", self._socket_path)
 
     def stop_accepting(self) -> None:
@@ -239,31 +364,34 @@ class CLIPoller:
         exits. Active client handler threads continue running until their
         current request completes.
         """
-        import contextlib
-
         self._stop_event.set()
+        self._close_async_server()
         if self._server:
             with contextlib.suppress(OSError):
                 self._server.close()
             self._server = None
-        if self._thread:
+        if self._thread and not self._active_clients:
+            self._stop_async_loop()
             self._thread.join(timeout=5.0)
             self._thread = None
         log.info("CLI channel stopped accepting new connections")
 
     def stop(self) -> None:
         """Stop the socket server and clean up all clients."""
-        import contextlib
-
         self._stop_event.set()
+        self._close_async_server()
         with self._clients_lock:
             for client in list(self._active_clients):
-                with contextlib.suppress(OSError):
-                    client.close()
+                if isinstance(client, _AsyncClientEndpoint):
+                    client.close_threadsafe()
+                else:
+                    with contextlib.suppress(OSError):
+                        client.close()
             self._active_clients.clear()
         if self._server:
             with contextlib.suppress(OSError):
                 self._server.close()
+        self._stop_async_loop()
         if self._thread:
             self._thread.join(timeout=5.0)
             self._thread = None
@@ -271,6 +399,196 @@ class CLIPoller:
             with contextlib.suppress(OSError):
                 self._socket_path.unlink()
         log.info("CLI channel stopped")
+
+    def _run_async_server(self) -> None:
+        """Run the asyncio Unix socket server on the poller thread."""
+        try:
+            with asyncio.Runner() as runner:
+                self._loop = runner.get_loop()
+                runner.run(self._serve_async())
+        except BaseException as exc:
+            self._startup_error = exc
+            self._ready_event.set()
+            if not self._stop_event.is_set():
+                log.warning("CLI async server failed", exc_info=True)
+        finally:
+            self._loop = None
+
+    async def _serve_async(self) -> None:
+        await self._start_async_server()
+        while not self._stop_event.is_set():
+            await asyncio.sleep(0.1)
+        await self._close_async_server_async()
+
+    async def _start_async_server(self) -> None:
+        self._socket_path.parent.mkdir(parents=True, exist_ok=True)
+        self._async_server = await asyncio.start_unix_server(
+            self._handle_async_client,
+            path=str(self._socket_path),
+            backlog=5,
+        )
+        os.chmod(str(self._socket_path), 0o600)
+        self._ready_event.set()
+
+    async def _close_async_server_async(self) -> None:
+        if self._async_server is None:
+            return
+        self._async_server.close()
+        await self._async_server.wait_closed()
+        self._async_server = None
+
+    def _close_async_server(self) -> None:
+        loop = self._loop
+        if loop is None or not loop.is_running():
+            return
+        future = asyncio.run_coroutine_threadsafe(self._close_async_server_async(), loop)
+        with contextlib.suppress(Exception):
+            future.result(timeout=5.0)
+
+    def _stop_async_loop(self) -> None:
+        # The Runner-owned loop exits when _stop_event is set; keep this
+        # method for lifecycle call sites that only need to wake/observe stop.
+        return
+
+    async def _handle_async_client(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Handle a connected thin CLI client on the async IPC transport."""
+        loop = asyncio.get_running_loop()
+        endpoint = _AsyncClientEndpoint(loop, writer)
+        with self._clients_lock:
+            self._active_clients.add(endpoint)
+            active = len(self._active_clients)
+        log.info("CLI client connected (%d active)", active)
+        try:
+            await self._handle_client_async(reader, endpoint)
+        finally:
+            with self._clients_lock:
+                self._active_clients.discard(endpoint)
+                active = len(self._active_clients)
+            writer.close()
+            with contextlib.suppress(OSError):
+                await writer.wait_closed()
+            if self._stop_event.is_set() and active == 0:
+                self._stop_async_loop()
+            log.info("CLI client session ended (%d active)", active)
+
+    async def _handle_client_async(
+        self,
+        reader: asyncio.StreamReader,
+        endpoint: _AsyncClientEndpoint,
+    ) -> None:
+        """Async client read loop.
+
+        The thin client owns transport and rendering. The daemon owns shared
+        services, lane admission, approval relay, and async AgenticLoop
+        execution for each IPC session.
+        """
+        from core.agent.conversation import ConversationContext
+        from core.server.supervised.services import SessionMode
+
+        self._propagate_contextvars()
+
+        conversation = ConversationContext()
+        session_id = f"cli-{os.urandom(4).hex()}"
+
+        def _ipc_approval(tool_name: str, detail: str, safety_level: str) -> str:
+            return endpoint.request_approval(tool_name, detail, safety_level)
+
+        _executor, agent_loop = self._services.create_session(
+            SessionMode.IPC,
+            conversation=conversation,
+            propagate_context=True,
+            approval_callback=_ipc_approval,
+        )
+
+        await endpoint.send_json_async({"type": "session", "session_id": session_id})
+
+        while not self._stop_event.is_set():
+            try:
+                line = await reader.readline()
+                if not line:
+                    log.info("CLI client disconnected")
+                    break
+                msg = json.loads(line.decode("utf-8"))
+
+                if msg.get("type") == "approval_response":
+                    endpoint.feed_approval_response(str(msg.get("decision", "n")))
+                    continue
+
+                msg["_client"] = endpoint
+                response = await self._process_message_async(
+                    msg,
+                    agent_loop,
+                    conversation,
+                    session_id,
+                )
+                if response is None:
+                    await endpoint.send_json_async({"type": "exit_ack"})
+                    return
+                await endpoint.send_json_async(response)
+            except (ConnectionResetError, BrokenPipeError):
+                log.info("CLI client connection lost")
+                break
+            except json.JSONDecodeError:
+                await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
+            except Exception:
+                log.warning("CLI handler error", exc_info=True)
+                await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+
+    async def _process_message_async(
+        self,
+        msg: dict[str, Any],
+        loop: Any,
+        conversation: Any,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        msg_type = msg.get("type", "")
+
+        if msg_type == "prompt":
+            text = msg.get("text", "").strip()
+            if not text:
+                return {"type": "error", "message": "Empty prompt"}
+            try:
+                return await self._run_prompt_streaming_async(
+                    text,
+                    loop,
+                    session_id,
+                    msg.get("_client"),
+                )
+            except Exception as exc:
+                log.warning("CLI prompt execution error", exc_info=True)
+                return {"type": "error", "message": str(exc)}
+
+        if msg_type == "command":
+            return await asyncio.to_thread(self._handle_command_on_server, msg, loop)
+
+        if msg_type == "resume":
+            return await asyncio.to_thread(self._handle_resume, msg, loop, conversation)
+
+        if msg_type == "client_capability":
+            endpoint = msg.get("_client")
+            is_tty = bool(msg.get("is_tty", True))
+            width_raw = msg.get("width", 120)
+            try:
+                width = int(width_raw)
+            except (TypeError, ValueError):
+                width = 120
+            if isinstance(endpoint, _AsyncClientEndpoint):
+                endpoint.set_capability(is_tty=is_tty, width=width)
+            log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
+            return {"type": "ack"}
+
+        if msg_type == "exit":
+            return None
+
+        if msg_type == "approval_response":
+            log.debug("Dropping stale approval_response: %s", msg.get("decision"))
+            return {"type": "ack"}
+
+        return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
     def _accept_loop(self) -> None:
         """Accept loop — spawns a handler thread per client."""
@@ -436,49 +754,50 @@ class CLIPoller:
 
         return {"type": "error", "message": f"Unknown message type: {msg_type}"}
 
-    def _run_prompt_streaming(
+    async def _run_prompt_streaming_async(
         self,
         text: str,
         loop: Any,
         session_id: str,
-        client: socket.socket | None,
+        client: _AsyncClientEndpoint | None,
     ) -> dict[str, Any]:
-        """Run a prompt with real-time console streaming to the client.
+        """Run an IPC prompt on the async daemon path.
 
-        Installs a **thread-local** Rich Console whose ``file`` is the
-        client's ``_StreamingWriter``.  All ``console.print(...)`` calls
-        within this thread are routed to the session's socket — never to
-        the shared default Console — preventing cross-session output
-        contamination when multiple thin-CLI clients connect concurrently.
+        This is the canonical IPC role split: the daemon admits the request
+        through async lanes and awaits ``AgenticLoop.arun()``; the thin client
+        only renders stream/result events.
         """
-        from core.ui.agentic_ui import _ipc_writer_local
+        self._propagate_contextvars()
+        from core.ui.agentic_ui import _ipc_writer_local, init_session_meter
         from core.ui.console import (
             make_session_console,
             reset_thread_console,
             set_thread_console,
         )
 
-        # Enable agentic UI for this run (same as old REPL)
+        init_session_meter()
         old_quiet = getattr(loop, "_quiet", True)
         old_op_quiet = getattr(loop, "_op_logger", None)
         loop._quiet = False
         if old_op_quiet is not None:
             loop._op_logger._quiet = False
 
-        # Thread-local console: all console.print() in this thread → client socket
         writer = _StreamingWriter(client) if client else None
         if writer:
-            is_tty, width = _get_client_capability()
+            assert client is not None
+            is_tty, width = client.get_capability()
             set_thread_console(make_session_console(writer, force_terminal=is_tty, width=width))
             _ipc_writer_local.writer = writer
 
         try:
             lane_queue = self._services.lane_queue
             if lane_queue is not None:
-                with lane_queue.acquire_all(f"cli:{session_id}", ["session", "global"]):
-                    result = loop.run(text)
+                async with lane_queue.acquire_all_async(f"cli:{session_id}", ["session", "global"]):
+                    result = await loop.arun(text)
             else:
-                result = loop.run(text)
+                result = await loop.arun(text)
+            if client is not None:
+                await client.drain_pending_sends()
         finally:
             if writer:
                 reset_thread_console()
@@ -487,6 +806,20 @@ class CLIPoller:
             if old_op_quiet is not None:
                 loop._op_logger._quiet = old_quiet
 
+        return self._build_prompt_result(loop, result)
+
+    def _run_prompt_streaming(
+        self,
+        text: str,
+        loop: Any,
+        session_id: str,
+        client: socket.socket | _AsyncClientEndpoint | None,
+    ) -> dict[str, Any]:
+        """Legacy sync IPC prompt path removed; async server uses _run_prompt_streaming_async."""
+        raise RuntimeError("sync IPC prompt path removed; use _run_prompt_streaming_async")
+
+    def _build_prompt_result(self, loop: Any, result: Any) -> dict[str, Any]:
+        """Build final IPC result payload from an AgenticResult-like object."""
         # Build final result (tool_calls already rendered via streaming)
         tool_calls: list[dict[str, Any]] = []
         if result and result.tool_calls:
@@ -587,7 +920,9 @@ class CLIPoller:
 
             # Restore model if different
             if state.model and state.model != loop.model:
-                loop.update_model(state.model)
+                from core.async_runtime import run_process_coroutine
+
+                run_process_coroutine(loop.update_model_async(state.model))
 
             log.info(
                 "Session resumed: %s (round=%d, messages=%d)",
@@ -631,8 +966,11 @@ class CLIPoller:
             log.debug("ContextVar propagation skipped", exc_info=True)
 
     @staticmethod
-    def _send(client: socket.socket, data: dict[str, Any]) -> None:
+    def _send(client: socket.socket | _AsyncClientEndpoint, data: dict[str, Any]) -> None:
         """Send a JSON message to the client (line-delimited)."""
+        if isinstance(client, _AsyncClientEndpoint):
+            client.send_json_threadsafe(data)
+            return
         try:
             payload = json.dumps(data, ensure_ascii=False) + "\n"
             client.sendall(payload.encode("utf-8"))

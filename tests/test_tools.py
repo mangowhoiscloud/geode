@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+import threading
 from typing import Any
 
 import pytest
 from core.tools.base import Tool
-from core.tools.registry import ToolRegistry
+from core.tools.registry import ToolRegistry, get_async_tool_executor, set_async_tool_executor
+
+
+def _run_registry(registry: ToolRegistry, name: str, **kwargs: Any) -> dict[str, Any]:
+    return asyncio.run(registry.aexecute(name, **kwargs))
 
 
 class DummyTool:
@@ -33,6 +40,9 @@ class DummyTool:
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         return {"result": f"processed: {kwargs.get('input', '')}"}
 
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        return self.execute(**kwargs)
+
 
 class AnotherTool:
     """Second tool for multi-registration tests."""
@@ -51,6 +61,29 @@ class AnotherTool:
 
     def execute(self, **kwargs: Any) -> dict[str, Any]:
         return {"result": "done"}
+
+
+class AsyncPreferredTool:
+    """Tool with an async-native execution path."""
+
+    @property
+    def name(self) -> str:
+        return "async_preferred"
+
+    @property
+    def description(self) -> str:
+        return "Async preferred test tool."
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {}}
+
+    def execute(self, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("sync execute path used")
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        await asyncio.sleep(0)
+        return {"result": "async"}
 
 
 class TestToolProtocol:
@@ -119,13 +152,71 @@ class TestToolRegistry:
     def test_execute_by_name(self):
         registry = ToolRegistry()
         registry.register(DummyTool())
-        result = registry.execute("dummy_tool", input="test")
+        result = _run_registry(registry, "dummy_tool", input="test")
         assert result == {"result": "processed: test"}
+
+    def test_aexecute_prefers_async_tool_path(self):
+        registry = ToolRegistry()
+        registry.register(AsyncPreferredTool())
+        result = asyncio.run(registry.aexecute("async_preferred"))
+        assert result == {"result": "async"}
+
+    def test_aexecute_rejects_sync_only_tool(self):
+        class ThreadReportingTool(DummyTool):
+            async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+                raise AttributeError("sync-only")
+
+            def execute(self, **kwargs: Any) -> dict[str, Any]:
+                return {"thread": threading.get_ident()}
+
+        registry = ToolRegistry()
+        registry.register(ThreadReportingTool())
+        with pytest.raises(AttributeError, match="sync-only"):
+            asyncio.run(registry.aexecute("dummy_tool"))
 
     def test_execute_nonexistent_raises(self):
         registry = ToolRegistry()
         with pytest.raises(KeyError, match="not found"):
-            registry.execute("nonexistent")
+            _run_registry(registry, "nonexistent")
+
+    def test_aexecute_nonexistent_raises(self):
+        registry = ToolRegistry()
+        with pytest.raises(KeyError, match="not found"):
+            asyncio.run(registry.aexecute("nonexistent"))
+
+    def test_async_tool_executor_contextvar(self):
+        async def async_executor(name: str, **kwargs: Any) -> dict[str, Any]:
+            return {"name": name, "kwargs": kwargs}
+
+        set_async_tool_executor(async_executor)
+        injected = get_async_tool_executor()
+        assert injected is async_executor
+        assert asyncio.run(injected("dummy", value=1)) == {
+            "name": "dummy",
+            "kwargs": {"value": 1},
+        }
+        set_async_tool_executor(None)
+
+    def test_migrated_tool_handlers_do_not_call_sync_execute(self):
+        from core.cli.tool_handlers.calendar import _build_calendar_handlers
+        from core.cli.tool_handlers.notification import _build_notification_handlers
+        from core.runtime import GeodeRuntime
+        from core.wiring.container import build_llm_adapters
+
+        calendar_source = inspect.getsource(_build_calendar_handlers)
+        notification_source = inspect.getsource(_build_notification_handlers)
+        runtime_source = inspect.getsource(GeodeRuntime.get_tool_state_injection)
+        container_source = inspect.getsource(build_llm_adapters)
+
+        assert "list_tool.execute(" not in calendar_source
+        assert "create_tool.execute(" not in calendar_source
+        assert "notification_tool.execute(" not in notification_source
+        assert "tool_registry.execute(" not in runtime_source
+        assert "registry.execute(" not in container_source
+        assert "tool_fn" not in container_source
+        assert ".aexecute(" in calendar_source
+        assert ".aexecute(" in notification_source
+        assert ".aexecute(" in runtime_source
 
     def test_len(self):
         registry = ToolRegistry()

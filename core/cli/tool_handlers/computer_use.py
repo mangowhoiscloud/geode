@@ -20,8 +20,8 @@ def _build_computer_use_handler() -> dict[str, Any]:
 
     harness = ComputerUseHarness()
 
-    def handle_computer(**kwargs: Any) -> dict[str, Any]:
+    async def handle_computer(**kwargs: Any) -> dict[str, Any]:
         action = kwargs.get("action", "screenshot")
-        return harness.execute(action, **kwargs)
+        return await harness.aexecute(action, **kwargs)
 
     return {"computer": handle_computer}

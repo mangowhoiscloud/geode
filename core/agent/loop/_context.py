@@ -15,7 +15,7 @@ from core.agent.system_prompt import build_system_prompt as _build_system_prompt
 from core.llm.prompts import AGENTIC_SUFFIX
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 
@@ -44,16 +44,20 @@ def maybe_prune_messages(loop: AgenticLoop, messages: list[dict[str, Any]]) -> N
     loop._ctx_mgr.maybe_prune_messages(messages)
 
 
-def check_context_overflow(loop: AgenticLoop, system: str, messages: list[dict[str, Any]]) -> None:
+async def check_context_overflow(
+    loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
+) -> None:
     """Check context window usage. Delegates to ContextWindowManager."""
-    loop._ctx_mgr.check_context_overflow(system, messages, loop.model, loop._provider)
+    await loop._ctx_mgr.check_context_overflow(system, messages, loop.model, loop._provider)
 
 
-def aggressive_context_recovery(
+async def aggressive_context_recovery(
     loop: AgenticLoop, system: str, messages: list[dict[str, Any]]
 ) -> int:
     """Last-resort context recovery. Delegates to ContextWindowManager."""
-    return loop._ctx_mgr.aggressive_context_recovery(system, messages, loop.model, loop._provider)
+    return await loop._ctx_mgr.aggressive_context_recovery(
+        system, messages, loop.model, loop._provider
+    )
 
 
 def repair_messages(messages: list[dict[str, Any]]) -> None:

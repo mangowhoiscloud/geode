@@ -11,19 +11,19 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from core.config import get_node_model
 from core.domains.port import get_domain_or_none
 from core.llm.prompts import SYNTHESIZER_SYSTEM, SYNTHESIZER_TOOLS_SUFFIX, SYNTHESIZER_USER
-from core.llm.router import get_llm_json, get_llm_parsed, get_llm_tool
+from core.llm.router import call_llm_with_tools_async, get_llm_json, get_llm_parsed
 from core.state import (
     EvaluatorResult,
     GeodeState,
     SynthesisResult,
 )
-from core.tools.registry import get_tool_executor
+from core.tools.registry import get_async_tool_executor
 from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
@@ -310,11 +310,10 @@ def _build_llm_synthesis(
         )
 
 
-def _build_tool_augmented_synthesis(
+async def _build_tool_augmented_synthesis(
     state: GeodeState,
     cause: str,
     action: str,
-    tool_fn: Any,
 ) -> SynthesisResult | None:
     """Generate synthesis using tool-augmented LLM (OpenClaw pattern).
 
@@ -322,8 +321,9 @@ def _build_tool_augmented_synthesis(
     during narrative generation. The tool loop runs inside the adapter.
     Returns None if tool-use path fails (caller falls back to standard).
     """
-    tool_defs = state.get("_tool_definitions", [])
-    if not tool_defs:
+    tool_defs = cast(list[dict[str, Any]], state.get("_tool_definitions", []))
+    tool_executor = get_async_tool_executor()
+    if not tool_defs or tool_executor is None:
         return None
 
     evaluations = state.get("evaluations", {})
@@ -359,11 +359,11 @@ def _build_tool_augmented_synthesis(
     )
 
     try:
-        result = tool_fn(
+        result = await call_llm_with_tools_async(
             enhanced_system,
             user,
             tools=tool_defs,
-            tool_executor=get_tool_executor(),
+            tool_executor=tool_executor,
             max_tool_rounds=3,
             model=get_node_model("synthesizer"),
         )
@@ -380,7 +380,7 @@ def _build_tool_augmented_synthesis(
     return None
 
 
-def synthesizer_node(state: GeodeState) -> dict[str, Any]:
+async def synthesizer_node(state: GeodeState) -> dict[str, Any]:
     """Layer 5: Classify cause + generate narrative via LLM.
 
     Execution paths (priority order):
@@ -411,16 +411,12 @@ def synthesizer_node(state: GeodeState) -> dict[str, Any]:
             action_desc = action_descs.get(action, action)
             log.debug("Cause: %s -> Action: %s (%s)", cause, action, action_desc)
 
+        synthesis: SynthesisResult | None
         if state.get("dry_run"):
             synthesis = _build_dry_run_synthesis(state, cause, action, cause_desc)
         else:
             # Try tool-augmented path first (graceful degradation to standard)
-            synthesis = None
-            try:
-                tool_fn = get_llm_tool()
-                synthesis = _build_tool_augmented_synthesis(state, cause, action, tool_fn)
-            except RuntimeError:
-                pass  # tool callable not injected — skip to standard path
+            synthesis = await _build_tool_augmented_synthesis(state, cause, action)
 
             if synthesis is None:
                 synthesis = _build_llm_synthesis(state, cause, action)

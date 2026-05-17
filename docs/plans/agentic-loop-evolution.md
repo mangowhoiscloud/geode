@@ -112,7 +112,8 @@ Layer 3 — Cross-cutting Infra       (A6, A7, A9)
 #### A9. External Verifier Integration (deferred)
 - **What**: Define `VerifierResult { source, verdict, evidence }` interface; consume linter/CI/security-scanner output in the verify step.
 - **Why**: Devin Autofix closed-loop pattern.
-- **GEODE today**: LangSmith trace exists (observation only); no automated consumer.
+- **GEODE today**: hook events, RunLog, usage JSONL, and audit diagnostics exist;
+  verifier outputs still need a first-class automated consumer.
 - **Files**: `core/verification/external.py` (new) + arch doc.
 - **Estimated size**: ~150 LOC core + adapters.
 - **Measurable**: out-of-scope for v0.66 — track for v0.70+.

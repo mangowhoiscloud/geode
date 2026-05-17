@@ -7,6 +7,7 @@ Provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -31,7 +32,7 @@ class ReadDocumentTool:
     def description(self) -> str:
         return "Read a local file (markdown, text, JSON)."
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         file_path_str: str = kwargs["file_path"]
 
         # offset/limit with max_lines backward compat
@@ -125,3 +126,7 @@ class ReadDocumentTool:
                 "truncated": truncated,
             }
         }
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run local document reads off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)

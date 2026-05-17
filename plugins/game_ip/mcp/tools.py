@@ -45,7 +45,7 @@ def register_game_ip_mcp_tools(server: Any) -> None:
     mcp = cast("FastMCP", server)
 
     @mcp.tool(description=_TOOL_DESCRIPTIONS["analyze_ip"])
-    def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
+    async def analyze_ip(ip_name: str, dry_run: bool = False) -> dict[str, Any]:
         """Run GEODE analysis pipeline on an IP."""
         from plugins.game_ip.fixtures import FIXTURE_MAP
 
@@ -57,7 +57,7 @@ def register_game_ip_mcp_tools(server: Any) -> None:
             from core.runtime import GeodeRuntime
 
             runtime = GeodeRuntime.create(ip_name)
-            graph = runtime.compile_graph()
+            graph = runtime.compile_graph(enable_checkpoint=False)
 
             from core.config import settings
 
@@ -78,7 +78,10 @@ def register_game_ip_mcp_tools(server: Any) -> None:
                 tool_injection = runtime.get_tool_state_injection(mode="full_pipeline")
                 initial_state.update(tool_injection)
 
-            result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[call-overload]
+            try:
+                result = await graph.ainvoke(initial_state, config=cast(Any, runtime.thread_config))
+            finally:
+                runtime.shutdown()
 
             # Extract key results
             output: dict[str, Any] = {
@@ -106,16 +109,15 @@ def register_game_ip_mcp_tools(server: Any) -> None:
                 for a in analyses
             ]
 
-            runtime.shutdown()
             return output
         except Exception as exc:
             log.error("MCP analyze_ip failed: %s", exc)
             return {"error": str(exc)}
 
     @mcp.tool(description=_TOOL_DESCRIPTIONS["quick_score"])
-    def quick_score(ip_name: str) -> dict[str, Any]:
+    async def quick_score(ip_name: str) -> dict[str, Any]:
         """Run scoring-only mode for fast estimation."""
-        result: dict[str, Any] = analyze_ip(ip_name, dry_run=True)
+        result: dict[str, Any] = await analyze_ip(ip_name, dry_run=True)
         return result
 
     @mcp.tool(description=_TOOL_DESCRIPTIONS["get_ip_signals"])

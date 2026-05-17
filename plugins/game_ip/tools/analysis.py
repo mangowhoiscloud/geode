@@ -9,6 +9,7 @@ Layer 5 tools that enable agentic access to:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -50,7 +51,16 @@ def _compute_psm_from_fixture(ip_name: str) -> PSMResult:
     )
 
 
-class RunAnalystTool:
+class _AsyncExecuteMixin:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run fixture-backed analysis work off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
+
+class RunAnalystTool(_AsyncExecuteMixin):
     """Tool wrapper for running a single analyst."""
 
     @property
@@ -72,7 +82,7 @@ class RunAnalystTool:
         schema["properties"]["analyst_type"]["enum"] = ANALYST_TYPES
         return schema
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         analyst_type = kwargs["analyst_type"]
         ip_name = kwargs["ip_name"]
 
@@ -97,7 +107,7 @@ class RunAnalystTool:
         }
 
 
-class RunEvaluatorTool:
+class RunEvaluatorTool(_AsyncExecuteMixin):
     """Tool wrapper for running evaluators."""
 
     @property
@@ -115,7 +125,7 @@ class RunEvaluatorTool:
     def parameters(self) -> dict[str, Any]:
         return _TOOL_SCHEMAS["RunEvaluatorTool"]
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         evaluator_type = kwargs["evaluator_type"]
         ip_name = kwargs["ip_name"]
 
@@ -170,7 +180,7 @@ class RunEvaluatorTool:
         )
 
 
-class PSMCalculateTool:
+class PSMCalculateTool(_AsyncExecuteMixin):
     """Tool wrapper for PSM exposure lift calculation."""
 
     @property
@@ -188,7 +198,7 @@ class PSMCalculateTool:
     def parameters(self) -> dict[str, Any]:
         return _TOOL_SCHEMAS["PSMCalculateTool"]
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs["ip_name"]
         try:
             psm = _compute_psm_from_fixture(ip_name)
@@ -212,7 +222,7 @@ class PSMCalculateTool:
             )
 
 
-class ExplainScoreTool:
+class ExplainScoreTool(_AsyncExecuteMixin):
     """Tool that explains the scoring breakdown for an IP."""
 
     @property
@@ -230,7 +240,7 @@ class ExplainScoreTool:
     def parameters(self) -> dict[str, Any]:
         return _TOOL_SCHEMAS["ExplainScoreTool"]
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         ip_name = kwargs["ip_name"]
         try:
             data = load_fixture(ip_name)

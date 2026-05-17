@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from core.tools.computer_use import ComputerUseHarness
@@ -36,7 +37,7 @@ class TestCoordinateScaling:
 class TestExecuteDispatch:
     def test_unknown_action(self):
         h = ComputerUseHarness()
-        result = h.execute("nonexistent_action")
+        result = asyncio.run(h.aexecute("nonexistent_action"))
         assert "error" in result
         assert "Unknown" in result["error"]
         assert "supported_actions" in result
@@ -44,40 +45,40 @@ class TestExecuteDispatch:
     def test_screenshot_action(self):
         h = ComputerUseHarness()
         with patch.object(h, "screenshot", return_value="base64data"):
-            result = h.execute("screenshot")
+            result = asyncio.run(h.aexecute("screenshot"))
         assert result["result"] == "success"
         assert result["screenshot"] == "base64data"
 
     def test_click_action(self):
         h = ComputerUseHarness()
         with patch.object(h, "click", return_value="base64data"):
-            result = h.execute("click", x=100, y=200, button="left")
+            result = asyncio.run(h.aexecute("click", x=100, y=200, button="left"))
         assert result["result"] == "success"
 
     def test_type_action(self):
         h = ComputerUseHarness()
         with patch.object(h, "type_text", return_value="base64data"):
-            result = h.execute("type", text="hello world")
+            result = asyncio.run(h.aexecute("type", text="hello world"))
         assert result["result"] == "success"
 
     def test_key_action(self):
         h = ComputerUseHarness()
         with patch.object(h, "key", return_value="base64data"):
-            result = h.execute("key", keys="ctrl+c")
+            result = asyncio.run(h.aexecute("key", keys="ctrl+c"))
         assert result["result"] == "success"
 
     def test_scroll_action(self):
         h = ComputerUseHarness()
         with patch.object(h, "scroll", return_value="base64data"):
-            result = h.execute("scroll", x=0, y=0, direction="down")
+            result = asyncio.run(h.aexecute("scroll", x=0, y=0, direction="down"))
         assert result["result"] == "success"
 
     def test_anthropic_aliases(self):
         h = ComputerUseHarness()
         with patch.object(h, "click", return_value="base64data"):
-            r1 = h.execute("left_click", x=10, y=20)
-            r2 = h.execute("right_click", x=10, y=20)
-            r3 = h.execute("middle_click", x=10, y=20)
+            r1 = asyncio.run(h.aexecute("left_click", x=10, y=20))
+            r2 = asyncio.run(h.aexecute("right_click", x=10, y=20))
+            r3 = asyncio.run(h.aexecute("middle_click", x=10, y=20))
         assert r1["result"] == "success"
         assert r2["result"] == "success"
         assert r3["result"] == "success"
@@ -85,7 +86,7 @@ class TestExecuteDispatch:
     def test_error_handling(self):
         h = ComputerUseHarness()
         with patch.object(h, "screenshot", side_effect=RuntimeError("no display")):
-            result = h.execute("screenshot")
+            result = asyncio.run(h.aexecute("screenshot"))
         assert "error" in result
         assert "no display" in result["error"]
 

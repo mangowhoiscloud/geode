@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
-from core.graph import _make_hooked_node, build_graph
+import asyncio
+
+from core.graph import _make_hooked_node as _amake_hooked_node
+from core.graph import build_graph
 from core.hooks import HookEvent, HookSystem
 from core.state import GeodeState
+
+
+def _make_hooked_node(*args, **kwargs):
+    wrapped = _amake_hooked_node(*args, **kwargs)
+
+    def _sync_wrapped(state):
+        return asyncio.run(wrapped(state))
+
+    return _sync_wrapped
 
 
 class TestMakeHookedNode:

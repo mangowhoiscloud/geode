@@ -17,14 +17,14 @@ def _build_calendar_handlers() -> dict[str, Any]:
     create_tool = CalendarCreateEventTool()
     sync_tool = CalendarSyncSchedulerTool()
 
-    def handle_calendar_list_events(**kwargs: Any) -> dict[str, Any]:
-        return list_tool.execute(**kwargs)
+    async def handle_calendar_list_events(**kwargs: Any) -> dict[str, Any]:
+        return await list_tool.aexecute(**kwargs)
 
-    def handle_calendar_create_event(**kwargs: Any) -> dict[str, Any]:
-        return create_tool.execute(**kwargs)
+    async def handle_calendar_create_event(**kwargs: Any) -> dict[str, Any]:
+        return await create_tool.aexecute(**kwargs)
 
-    def handle_calendar_sync_scheduler(**kwargs: Any) -> dict[str, Any]:
-        return sync_tool.execute(**kwargs)
+    async def handle_calendar_sync_scheduler(**kwargs: Any) -> dict[str, Any]:
+        return await sync_tool.aexecute(**kwargs)
 
     return {
         "calendar_list_events": handle_calendar_list_events,

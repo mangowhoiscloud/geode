@@ -14,6 +14,7 @@ from typing import Any
 
 import typer
 
+from core.async_runtime import run_process_coroutine
 from core.cli.session_state import _scheduler_service_ctx, _set_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
@@ -163,7 +164,7 @@ def serve(
             propagate_context=True,
         )
         try:
-            result = loop.run(content)
+            result = run_process_coroutine(loop.arun(content))
 
             # --- Persist conversation for next turn ---
             if session_key:

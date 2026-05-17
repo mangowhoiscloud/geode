@@ -5,7 +5,8 @@ Phase 3 validation: event → notification routing.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 from core.hooks import HookEvent, HookSystem
 from core.hooks.plugins.notification_hook.hook import (
@@ -81,23 +82,27 @@ class TestNotificationHookRegistration:
         assert "subagent_failed" in registered
 
     def test_hooks_trigger_notification(self):
-        """Verify hooks call NotificationPort.send_message when triggered."""
+        """Verify hooks call NotificationPort.asend_message when triggered."""
         mock_adapter = MagicMock()
-        mock_adapter.is_available.return_value = True
-        mock_adapter.send_message.return_value = NotificationResult(success=True, channel="slack")
+        mock_adapter.ais_available = AsyncMock(return_value=True)
+        mock_adapter.asend_message = AsyncMock(
+            return_value=NotificationResult(success=True, channel="slack")
+        )
         set_notification(mock_adapter)
 
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="slack", recipient="#alerts")
 
         # Trigger PIPELINE_END
-        hooks.trigger(
-            HookEvent.PIPELINE_ENDED,
-            {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
+        asyncio.run(
+            hooks.trigger_async(
+                HookEvent.PIPELINE_ENDED,
+                {"ip_name": "Berserk", "tier": "S", "final_score": 81.3},
+            )
         )
 
-        mock_adapter.send_message.assert_called_once()
-        call_args = mock_adapter.send_message.call_args
+        mock_adapter.asend_message.assert_awaited_once()
+        call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "slack"
         assert call_args[0][1] == "#alerts"
         assert "Pipeline completed" in call_args[0][2]
@@ -112,28 +117,32 @@ class TestNotificationHookRegistration:
         register_notification_hooks(hooks, channel="slack", recipient="#test")
 
         # Should not raise
-        results = hooks.trigger(
-            HookEvent.PIPELINE_ENDED,
-            {"ip_name": "Test", "tier": "A", "final_score": 65.0},
+        results = asyncio.run(
+            hooks.trigger_async(
+                HookEvent.PIPELINE_ENDED,
+                {"ip_name": "Test", "tier": "A", "final_score": 65.0},
+            )
         )
         assert all(r.success for r in results)
 
     def test_hooks_handle_send_failure(self):
         """Hooks should not crash on notification send failure."""
         mock_adapter = MagicMock()
-        mock_adapter.is_available.return_value = True
-        mock_adapter.send_message.return_value = NotificationResult(
+        mock_adapter.ais_available = AsyncMock(return_value=True)
+        mock_adapter.asend_message = AsyncMock(return_value=NotificationResult(
             success=False, channel="slack", error="rate limited"
-        )
+        ))
         set_notification(mock_adapter)
 
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="slack", recipient="#alerts")
 
         # Should not raise even though send fails
-        results = hooks.trigger(
-            HookEvent.PIPELINE_ERROR,
-            {"ip_name": "Test", "error": "critical failure"},
+        results = asyncio.run(
+            hooks.trigger_async(
+                HookEvent.PIPELINE_ERROR,
+                {"ip_name": "Test", "error": "critical failure"},
+            )
         )
         assert all(r.success for r in results)
 
@@ -142,16 +151,18 @@ class TestNotificationHookRegistration:
     def test_custom_channel_and_recipient(self):
         """Can configure custom channel and recipient."""
         mock_adapter = MagicMock()
-        mock_adapter.is_available.return_value = True
-        mock_adapter.send_message.return_value = NotificationResult(success=True, channel="discord")
+        mock_adapter.ais_available = AsyncMock(return_value=True)
+        mock_adapter.asend_message = AsyncMock(
+            return_value=NotificationResult(success=True, channel="discord")
+        )
         set_notification(mock_adapter)
 
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="discord", recipient="123456")
 
-        hooks.trigger(HookEvent.DRIFT_DETECTED, {"metric": "psm_score"})
+        asyncio.run(hooks.trigger_async(HookEvent.DRIFT_DETECTED, {"metric": "psm_score"}))
 
-        call_args = mock_adapter.send_message.call_args
+        call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "discord"
         assert call_args[0][1] == "123456"
 

@@ -579,6 +579,7 @@ def test_run_audit_missing_inspect_cli_aborts(monkeypatch: pytest.MonkeyPatch) -
 def test_run_audit_user_declines(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("plugins.petri_audit.runner.shutil.which", lambda _: "/usr/bin/inspect")
     monkeypatch.setattr("core.ui.console.console.input", lambda _p: "n", raising=False)
+    monkeypatch.setattr("plugins.petri_audit.models._claude_oauth_available", lambda: False)
 
     with patch("plugins.petri_audit.runner.subprocess.run") as run_mock:
         report = run_audit(

@@ -1,11 +1,11 @@
-"""Rich Console — GEODE brand theme with thread-safe session isolation.
+"""Rich Console — GEODE brand theme with task/thread-safe session isolation.
 
-Each IPC handler thread gets its own Rich Console instance via
+Each IPC handler task/thread gets its own Rich Console instance via
 ``set_thread_console()``.  The module-level ``console`` is a lightweight
-proxy that delegates attribute access to the thread-local Console (or
-falls back to the process-wide default).  This prevents cross-session
-output contamination when multiple thin-CLI clients connect to
-``geode serve`` concurrently.
+proxy that delegates attribute access to the task/thread-local Console (or
+falls back to the process-wide default). This prevents cross-session output
+contamination when multiple thin-CLI clients connect to ``geode serve``
+concurrently.
 
 Brand colors (from axolotl mascot, toned-down for readability):
   Rose (#d4a0a0)     — axolotl body → brand identity (muted coral)
@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import shutil
 import sys
-import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from io import StringIO
@@ -27,6 +26,8 @@ from typing import Any
 
 from rich.console import Console
 from rich.theme import Theme
+
+from core.ui.context_local import ContextLocal
 
 # -- Brand palette (terminal-safe, toned-down) --
 _CORAL = "#d4a0a0"  # axolotl body (muted rose)
@@ -88,25 +89,25 @@ _default_console = Console(theme=GEODE_THEME, width=_get_terminal_width())
 
 
 class _ConsoleProxy:
-    """Thread-safe proxy delegating to per-thread Console instances.
+    """Task/thread-safe proxy delegating to session Console instances.
 
-    IPC handler threads call ``set_thread_console()`` to install a
+    IPC handlers call ``set_thread_console()`` to install a
     session-scoped Console whose ``file`` writes to the client's socket.
-    All other threads transparently fall back to ``_default_console``.
+    All other tasks/threads transparently fall back to ``_default_console``.
 
     Both ``__getattr__`` and ``__setattr__`` are forwarded, so existing
     code like ``console._file = buf`` in ``capture_output()`` safely
-    mutates the *thread-local* Console — never the shared default.
+    mutates the task/thread-local Console — never the shared default.
     """
 
-    _local = threading.local()
+    _local = ContextLocal("geode_console_local")
 
     def __init__(self, default: Console) -> None:
         # Bypass our __setattr__ to store the default on the instance.
         object.__setattr__(self, "_default", default)
 
     def _current(self) -> Console:
-        """Return thread-local Console, or fall back to default."""
+        """Return task/thread-local Console, or fall back to default."""
         local: Console | None = getattr(self._local, "console", None)
         if local is not None:
             return local
@@ -133,17 +134,17 @@ console: Any = _ConsoleProxy(_default_console)
 
 
 def set_thread_console(c: Console) -> None:
-    """Install a thread-local Console for the current thread.
+    """Install a task/thread-local Console for the current execution context.
 
-    Called by CLIPoller at the start of each IPC handler thread so that
-    all ``console.print(...)`` calls within that thread route to the
-    session's ``_StreamingWriter`` instead of the shared stdout.
+    Called by CLIPoller at the start of each IPC prompt so that all
+    ``console.print(...)`` calls in that task route to the session's
+    ``_StreamingWriter`` instead of the shared stdout.
     """
     _ConsoleProxy._local.console = c
 
 
 def reset_thread_console() -> None:
-    """Remove thread-local Console, reverting to the default."""
+    """Remove task/thread-local Console, reverting to the default."""
     _ConsoleProxy._local.__dict__.pop("console", None)
 
 
@@ -183,7 +184,7 @@ def capture_output() -> Generator[StringIO, None, None]:
     that Rich markup is rendered as ANSI escape codes — even when the
     process's stdout is not a TTY (e.g. ``geode serve`` with DEVNULL).
 
-    Thread-safe: operates on the thread-local Console (via the proxy),
+    Task/thread-safe: operates on the local Console (via the proxy),
     so concurrent IPC sessions don't interfere with each other.
 
     Usage::
@@ -217,7 +218,7 @@ def redirect_console(target: Any) -> Generator[None, None, None]:
     Like ``capture_output`` but writes to an arbitrary file-like object
     (e.g. ``_StreamingWriter``) instead of a ``StringIO`` buffer.
 
-    Thread-safe: operates on the thread-local Console (via the proxy).
+    Task/thread-safe: operates on the local Console (via the proxy).
     """
     from rich.color import ColorSystem
 

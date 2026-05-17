@@ -39,7 +39,7 @@ Sprint columns:
 | 02.4 | 02 Reference | `runtime/llm/prompt-system` | 프롬프트 시스템 / Prompt System | Reference | ✅ | ✅ | — | existing (Bi) |
 | 02.5 | 02 Reference | `runtime/llm/prompt-caching` | 프롬프트 캐싱 / Prompt Caching | Reference | ✅ | ✅ | done | existing |
 | 02.6 | 02 Reference | `runtime/llm/prompt-hashing` | 프롬프트 해싱 / Prompt Hashing | Reference | ✅ | ✅ | done | existing |
-| 02.7 | 02 Reference | `runtime/llm/langsmith` | LangSmith | Reference | ✅ | ✅ | done | existing |
+| 02.7 | 02 Reference | `runtime/llm/observability` | 관측성 / Observability | Reference | ✅ | ✅ | done | existing |
 | 02.8 | 02 Reference | `runtime/tools/protocol` | 도구 프로토콜 / Tool Protocol | Reference | ✅ | ✅ | done | existing |
 | 02.9 | 02 Reference | `runtime/tools/mcp` | MCP 서버 / MCP Servers | Reference | ✅ | ✅ | done | existing |
 | 02.10 | 02 Reference | `runtime/memory/5-tier` | 5계층 컨텍스트 / 5-Tier Context | Reference | ✅ | ✅ | done | existing |

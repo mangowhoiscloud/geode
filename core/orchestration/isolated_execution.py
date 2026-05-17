@@ -9,6 +9,7 @@ Inspired by OpenClaw's isolated session pattern, this module provides:
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
@@ -81,12 +82,12 @@ class IsolatedRunner:
 
         runner = IsolatedRunner(hooks=hook_system)
         config = IsolationConfig(timeout_s=60, post_mode=PostToMainMode.FULL)
-        result = runner.run(my_callable, args=("hello",), config=config)
+        result = await runner.arun(my_callable, args=("hello",), config=config)
 
         # Subprocess mode (pass WorkerRequest instead of callable)
         from core.agent.worker import WorkerRequest
         req = WorkerRequest(task_id="t-1", description="hello")
-        result = runner.run(req, config=config)
+        result = await runner.arun(req, config=config)
     """
 
     MAX_RESULTS_CACHE = 200  # Evict oldest results beyond this limit
@@ -127,7 +128,7 @@ class IsolatedRunner:
     # Public API
     # ------------------------------------------------------------------
 
-    def run(
+    async def arun(
         self,
         fn_or_request: Callable[..., Any] | Any,
         *,
@@ -135,12 +136,12 @@ class IsolatedRunner:
         kwargs: dict[str, Any] | None = None,
         config: IsolationConfig | None = None,
     ) -> IsolationResult:
-        """Run *fn_or_request* synchronously in an isolated context.
+        """Run *fn_or_request* asynchronously in an isolated context.
 
         Accepts either a callable (thread mode) or a WorkerRequest (subprocess mode).
         """
         cfg = self._resolve_config(config)
-        return self._dispatch(fn_or_request, args, kwargs or {}, cfg)
+        return await asyncio.to_thread(self._dispatch, fn_or_request, args, kwargs or {}, cfg)
 
     def run_async(
         self,

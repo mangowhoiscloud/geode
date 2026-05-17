@@ -6,7 +6,9 @@ tool_use API or autonomous agent patterns.
 
 from __future__ import annotations
 
+import asyncio
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
@@ -69,13 +71,36 @@ class Tool(Protocol):
         """JSON Schema for tool parameters."""
         ...
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
-        """Execute the tool with given parameters.
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Execute the tool asynchronously with given parameters.
 
         Returns:
             Result dict with at minimum a "result" key.
         """
         ...
+
+
+@dataclass(slots=True)
+class ToolContext:
+    """Runtime context passed to async-capable tools.
+
+    The first async migration slice does not require every tool handler to
+    consume this yet; it establishes the shared contract used by later IPC,
+    cancellation, and sub-agent work.
+    """
+
+    session_id: str = ""
+    cwd: Path = field(default_factory=Path.cwd)
+    permission_mode: str = ""
+    is_subagent: bool = False
+    cancellation: asyncio.Event | None = None
+    progress: Any | None = None
+
+
+@runtime_checkable
+class AsyncTool(Tool, Protocol):
+    """Backward-compatible alias for the async-native GEODE tool protocol."""
+
 
 
 # ---------------------------------------------------------------------------

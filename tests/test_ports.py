@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from typing import Any, TypeVar
+from collections.abc import AsyncIterator, Callable
+from typing import Any, TypeVar, cast
 
 from core.llm.router import LLMClientPort
 from pydantic import BaseModel
@@ -46,7 +46,7 @@ class MockLLM:
         import json
 
         self.calls.append((system, user))
-        return json.loads(self._response)
+        return cast(dict[str, Any], json.loads(self._response))
 
     def generate_parsed(
         self,
@@ -61,7 +61,7 @@ class MockLLM:
         self.calls.append((system, user))
         return output_model.model_validate({"result": self._response})
 
-    def generate_stream(
+    async def agenerate_stream(
         self,
         system: str,
         user: str,
@@ -69,11 +69,11 @@ class MockLLM:
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         self.calls.append((system, user))
         yield self._response
 
-    def generate_with_tools(
+    async def agenerate_with_tools(
         self,
         system: str,
         user: str,
@@ -90,24 +90,24 @@ class MockLLM:
 
 
 class TestLLMClientPort:
-    def test_mock_implements_protocol(self):
+    def test_mock_implements_protocol(self) -> None:
         """MockLLM satisfies LLMClientPort protocol (structural typing)."""
         mock: LLMClientPort = MockLLM()
         result = mock.generate("system", "user")
         assert isinstance(result, str)
 
-    def test_mock_json(self):
+    def test_mock_json(self) -> None:
         mock: LLMClientPort = MockLLM('{"score": 4.2}')
         data = mock.generate_structured("system", "user")
         assert data["score"] == 4.2
 
-    def test_call_tracking(self):
+    def test_call_tracking(self) -> None:
         mock = MockLLM()
         mock.generate("sys1", "usr1")
         mock.generate("sys2", "usr2")
         assert len(mock.calls) == 2
 
-    def test_isinstance_check(self):
+    def test_isinstance_check(self) -> None:
         """LLMClientPort is runtime_checkable."""
         mock = MockLLM()
         assert isinstance(mock, LLMClientPort)

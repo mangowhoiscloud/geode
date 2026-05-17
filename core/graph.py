@@ -28,11 +28,13 @@ Hook Integration (L4): NODE_ENTER/EXIT/ERROR events triggered at each node.
 
 from __future__ import annotations
 
+import asyncio
 import atexit
+import inspect
 import logging
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -164,16 +166,16 @@ def _make_degraded_result(node_name: str, exc: Exception, state: Any) -> dict[st
 
 
 def _make_hooked_node(
-    node_fn: Callable[[GeodeState], dict[str, Any]],
+    node_fn: Callable[[GeodeState], dict[str, Any] | Awaitable[dict[str, Any]]],
     node_name: str,
     hooks: HookSystem,
     bootstrap_mgr: BootstrapManager | None = None,
     prompt_assembler: PromptAssembler | None = None,
     node_scope_policy: NodeScopePolicy | None = None,
-) -> Callable[[GeodeState], dict[str, Any]]:
+) -> Callable[[GeodeState], Awaitable[dict[str, Any]]]:
     """Wrap a node function with hook triggers and prompt assembly."""
 
-    def _wrapped(state: GeodeState) -> dict[str, Any]:
+    async def _wrapped(state: GeodeState) -> dict[str, Any]:
         hook_data: dict[str, Any] = {"node": node_name, "ip_name": state.get("ip_name", "")}
 
         # Propagate Send API subtype so TaskGraphHookBridge can resolve task IDs
@@ -212,11 +214,11 @@ def _make_hooked_node(
                 effective_state = es_dict  # type: ignore[assignment]
 
         # NODE_ENTER
-        hooks.trigger(HookEvent.NODE_ENTERED, hook_data)
+        await hooks.trigger_async(HookEvent.NODE_ENTERED, hook_data)
 
         # PIPELINE_START (router is the first real node)
         if node_name == "router":
-            hooks.trigger(HookEvent.PIPELINE_STARTED, hook_data)
+            await hooks.trigger_async(HookEvent.PIPELINE_STARTED, hook_data)
 
         start_time = time.time()
 
@@ -246,7 +248,10 @@ def _make_hooked_node(
                         if isinstance(first_val, dict):
                             effective_state["evaluations"] = ensure_evaluator_results(raw_e)
 
-                result: dict[str, Any] = node_fn(effective_state)
+                raw_result = node_fn(effective_state)
+                result: dict[str, Any] = (
+                    await raw_result if inspect.isawaitable(raw_result) else raw_result
+                )
 
                 duration_ms = (time.time() - start_time) * 1000
                 hook_data["duration_ms"] = duration_ms
@@ -262,11 +267,11 @@ def _make_hooked_node(
                         hook_data["final_score"] = score
 
                 # NODE_EXIT
-                hooks.trigger(HookEvent.NODE_EXITED, hook_data)
+                await hooks.trigger_async(HookEvent.NODE_EXITED, hook_data)
 
                 # Node-specific completion events
                 if node_name in _NODE_COMPLETION_EVENTS:
-                    hooks.trigger(_NODE_COMPLETION_EVENTS[node_name], hook_data)
+                    await hooks.trigger_async(_NODE_COMPLETION_EVENTS[node_name], hook_data)
 
                 # Verification pass/fail
                 if node_name == "verification":
@@ -279,9 +284,9 @@ def _make_hooked_node(
                         and biasbuster.overall_pass
                     )
                     if all_ok:
-                        hooks.trigger(HookEvent.VERIFICATION_PASS, hook_data)
+                        await hooks.trigger_async(HookEvent.VERIFICATION_PASS, hook_data)
                     else:
-                        hooks.trigger(HookEvent.VERIFICATION_FAIL, hook_data)
+                        await hooks.trigger_async(HookEvent.VERIFICATION_FAIL, hook_data)
 
                 # PIPELINE_END (synthesizer is the last real node)
                 if node_name == "synthesizer":
@@ -297,7 +302,7 @@ def _make_hooked_node(
                     hook_data["final_score"] = effective_state.get("final_score", 0.0)
                     hook_data["tier"] = effective_state.get("tier", "")
                     hook_data["dry_run"] = effective_state.get("dry_run", False)
-                    hooks.trigger(HookEvent.PIPELINE_ENDED, hook_data)
+                    await hooks.trigger_async(HookEvent.PIPELINE_ENDED, hook_data)
 
                 return result
 
@@ -314,7 +319,7 @@ def _make_hooked_node(
                     hook_data["retry_reason"] = str(exc)
                     continue
                 hook_data["error"] = str(exc)
-                hooks.trigger(HookEvent.NODE_ERROR, hook_data)
+                await hooks.trigger_async(HookEvent.NODE_ERROR, hook_data)
 
                 # B1: degradable nodes return degraded results instead of crashing
                 if node_name in _DEGRADABLE_NODES:
@@ -324,7 +329,7 @@ def _make_hooked_node(
                     )
                     return _make_degraded_result(node_name, exc, effective_state)
 
-                hooks.trigger(HookEvent.PIPELINE_ERROR, hook_data)
+                await hooks.trigger_async(HookEvent.PIPELINE_ERROR, hook_data)
                 raise
 
     _wrapped.__name__ = f"hooked_{node_name}"
@@ -363,7 +368,7 @@ def _route_after_skip_check(state: GeodeState) -> str:
     return "verification"
 
 
-def _verification_node(state: GeodeState) -> dict[str, Any]:
+async def _verification_node(state: GeodeState) -> dict[str, Any]:
     """Run guardrails + biasbuster + rights risk check."""
     if state.get("skip_verification"):
         log.warning("Verification skipped — results unverified")
@@ -376,7 +381,7 @@ def _verification_node(state: GeodeState) -> dict[str, Any]:
     from core.config import settings
 
     guardrails = run_guardrails(state, signal_data=state.get("signals"))
-    biasbuster = run_biasbuster(state)
+    biasbuster = await run_biasbuster(state)
     cross_llm = run_cross_llm_check(state, agreement_threshold=settings.agreement_threshold)
 
     # Rights risk assessment (GAP-2)
@@ -484,7 +489,7 @@ def build_graph(
     from langgraph.graph._node import _Node as _LangGraphNode
 
     def _node(
-        fn: Callable[[GeodeState], dict[str, Any]],
+        fn: Callable[[GeodeState], dict[str, Any] | Awaitable[dict[str, Any]]],
         name: str,
     ) -> _LangGraphNode[GeodeState]:
         if hooks is not None:
@@ -738,9 +743,9 @@ def compile_graph(
         compile_kwargs["interrupt_before"] = interrupt_before
 
     # CLI integration note: the returned CompiledStateGraph supports
-    # .stream(state, config) for node-by-node progress reporting,
+    # .astream(state, config) for node-by-node progress reporting,
     # yielding intermediate state dicts after each node execution.
-    # Use graph.stream() in CLI/UI layers for real-time progress bars.
+    # Use graph.astream() in CLI/UI layers for real-time progress bars.
     return graph.compile(**compile_kwargs)
 
 
@@ -748,46 +753,31 @@ class PipelineTimeoutError(Exception):
     """B3: Pipeline execution exceeded configured timeout."""
 
 
-def invoke_with_timeout(
+async def ainvoke_with_timeout(
     graph: CompiledStateGraph[Any, None, Any, Any],
     state: dict[str, Any],
     config: Any | None = None,
     timeout_s: float = 0.0,
     hooks: HookSystem | None = None,
 ) -> Any:
-    """B3: Invoke graph with optional timeout guard.
+    """B3: Invoke graph asynchronously with optional timeout guard.
 
     Args:
         timeout_s: Max seconds (0 = use settings.pipeline_timeout_s, negative = no timeout).
     Returns:
         Final state dict. On timeout, raises PipelineTimeoutError.
     """
-    import concurrent.futures
-    import contextvars
-
     if timeout_s == 0.0:
         from core.config import settings
 
         timeout_s = settings.pipeline_timeout_s
     if timeout_s <= 0:
-        return graph.invoke(state, config=config)
+        return await graph.ainvoke(state, config=config)
 
-    # Snapshot ContextVars so the worker thread inherits memory/profile/domain
-    # adapters set during bootstrap. Python contextvars do not auto-propagate
-    # across threads — without this, graph nodes see None for all injected state.
-    ctx = contextvars.copy_context()
-
-    def _run() -> Any:
-        return graph.invoke(state, config=config)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(ctx.run, _run)
-        try:
-            return future.result(timeout=timeout_s)
-        except concurrent.futures.TimeoutError:
-            log.error("Pipeline timeout after %.0fs", timeout_s)
-            if hooks:
-                hooks.trigger(HookEvent.PIPELINE_TIMEOUT, {"timeout_s": timeout_s})
-            raise PipelineTimeoutError(
-                f"Pipeline execution exceeded {timeout_s}s timeout"
-            ) from None
+    try:
+        return await asyncio.wait_for(graph.ainvoke(state, config=config), timeout=timeout_s)
+    except TimeoutError:
+        log.error("Pipeline timeout after %.0fs", timeout_s)
+        if hooks:
+            await hooks.trigger_async(HookEvent.PIPELINE_TIMEOUT, {"timeout_s": timeout_s})
+        raise PipelineTimeoutError(f"Pipeline execution exceeded {timeout_s}s timeout") from None

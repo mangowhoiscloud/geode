@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
 from core.memory.project import ProjectMemory
 from core.wiring.automation import build_automation
+
+
+def _run_wrapped(wrapped, state):
+    return asyncio.run(wrapped(state))
 
 
 def _make_hooks_and_memory(
@@ -76,7 +81,7 @@ class TestEnrichedHookData:
         wrapped = _make_hooked_node(fake_synthesizer, "synthesizer", hooks)  # type: ignore[arg-type]
 
         # Execute with state containing final_score/tier (set by scoring node)
-        wrapped({"ip_name": "Ghost in the Shell", "final_score": 0.72, "tier": "A"})  # type: ignore[arg-type]
+        _run_wrapped(wrapped, {"ip_name": "Ghost in the Shell", "final_score": 0.72, "tier": "A"})  # type: ignore[arg-type]
 
         assert len(captured) == 1
         data = captured[0]

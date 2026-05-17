@@ -248,28 +248,27 @@ Expected:
 
 ---
 
-## 4. LangSmith Tracing (AgenticLoop)
+## 4. Native Observability (AgenticLoop)
 
-### 4-1. Without LANGSMITH_API_KEY (default)
+### 4-1. Default hook and usage paths
 
 ```
-Setup:  No LANGSMITH_API_KEY environment variable
+Setup:  no external OTLP endpoint configured
 Expected:
-  - _maybe_traceable returns identity decorator (no-op)
-  - AgenticLoop.run() works normally
-  - AgenticLoop._call_llm() works normally
-  - No LangSmith spans created
+  - AgenticLoop.arun() works normally
+  - LLM_CALL_* and TURN_COMPLETE hooks fire
+  - usage persists to ~/.geode/usage/YYYY-MM.jsonl
+  - no external spans are required
 ```
 
-### 4-2. With LANGSMITH_API_KEY
+### 4-2. With OTLP endpoint
 
 ```
-Setup:  LANGSMITH_API_KEY="ls-test-key", langsmith package installed
+Setup:  OTEL_EXPORTER_OTLP_ENDPOINT configured and [obs] extra installed
 Expected:
-  - _maybe_traceable returns @traceable decorator
-  - AgenticLoop.run() traced as "chain" type, name="AgenticLoop.run"
-  - AgenticLoop._call_llm() traced as "llm" type, name="AgenticLoop._call_llm"
-  - Spans visible in LangSmith dashboard
+  - OpenLLMetry exporter initialises
+  - hook/runlog/usage paths remain authoritative
+  - external spans are best-effort export only
 ```
 
 ### 4-3. Anthropic Client Caching
@@ -412,7 +411,7 @@ Expected:
 | 3-6 malformed | test_agentic_loop.py | TestSubAgentEdgeCases::test_malformed_json_output_fallback | PASS |
 | 3-7 timeout | test_agentic_loop.py | TestSubAgentEdgeCases::test_timeout_returns_failure | PASS |
 | 3-8 no handler | test_agentic_loop.py | TestSubAgentManager::test_delegate_no_handler | PASS |
-| 4-1 no langsmith | test_agentic_loop.py | TestAgenticLoopTracing::test_tracing_passthrough_without_langsmith | PASS |
+| 4-1 native observability | test_agentic_loop.py | TestAgenticLoopAsyncUsageHooks::test_arun_awaits_cost_limit_hook | PASS |
 | 4-3 client cache | test_agentic_loop.py | TestAgenticLoopEdgeCases::test_client_cached_across_rounds | PASS |
 | 5-1 pipeline | test_e2e.py | TestFullPipelineDryRun::test_dry_run_berserk | PASS |
 | 5-2 multi-IP | test_e2e.py | TestFullPipelineDryRun::test_dry_run_all_ips | PASS |

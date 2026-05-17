@@ -1,5 +1,6 @@
 """Tests for L4 HookSystem."""
 
+import asyncio
 import time
 
 from core.agent.context_manager import ContextWindowManager
@@ -113,7 +114,7 @@ class TestMemoryToolHooks:
         with patch("core.tools.memory_tools._project_memory_ctx") as ctx:
             ctx.get.return_value = mock_proj
             tool = RuleCreateTool()
-            tool.execute(name="test-rule", paths=["*.py"], content="rule body")
+            asyncio.run(tool.aexecute(name="test-rule", paths=["*.py"], content="rule body"))
 
         mock_hooks.trigger.assert_called_once()
         call_args = mock_hooks.trigger.call_args
@@ -281,6 +282,62 @@ class TestHookSystem:
         hooks.register(HookEvent.PIPELINE_STARTED, handler)
         hooks.trigger(HookEvent.PIPELINE_STARTED)  # No data arg
         assert received == [{}]
+
+
+class TestAsyncHookSystem:
+    def test_trigger_async_awaits_async_handler(self):
+        hooks = HookSystem()
+        calls: list[str] = []
+
+        async def async_handler(_event, data):
+            await asyncio.sleep(0)
+            calls.append(data["ip"])
+
+        hooks.register(HookEvent.PIPELINE_STARTED, async_handler, name="async_handler")
+
+        results = asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_STARTED, {"ip": "GEODE"}))
+
+        assert [r.success for r in results] == [True]
+        assert calls == ["GEODE"]
+
+    def test_trigger_with_result_async_captures_return(self):
+        hooks = HookSystem()
+
+        async def async_modifier(_event, _data):
+            await asyncio.sleep(0)
+            return {"updated_result": {"data": "async"}}
+
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, async_modifier, name="async_modifier")
+
+        results = asyncio.run(
+            hooks.trigger_with_result_async(
+                HookEvent.TOOL_EXEC_ENDED,
+                {"tool_name": "fetch", "tool_input": {}, "result": {"data": "raw"}},
+            )
+        )
+
+        assert len(results) == 1
+        assert results[0].success is True
+        assert results[0].data == {"updated_result": {"data": "async"}}
+
+    def test_trigger_interceptor_async_applies_modifications(self):
+        hooks = HookSystem()
+
+        async def async_interceptor(_event, _data):
+            await asyncio.sleep(0)
+            return {"modify": {"tool_input": {"limit": 3}}}
+
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, async_interceptor, name="async_interceptor")
+
+        result = asyncio.run(
+            hooks.trigger_interceptor_async(
+                HookEvent.TOOL_EXEC_STARTED,
+                {"tool_name": "list_ips", "tool_input": {"limit": 1}},
+            )
+        )
+
+        assert result.blocked is False
+        assert result.data["tool_input"] == {"limit": 3}
 
 
 class TestInterceptor:
@@ -559,8 +616,12 @@ class TestAggressiveRecoveryHook:
                 side_effect=lambda m, **kw: m[:3],
             ),
         ):
-            mgr.aggressive_context_recovery(
-                "system", [{"role": "user", "content": "hi"}] * 20, "gpt-4o", "openai"
+            import asyncio
+
+            asyncio.run(
+                mgr.aggressive_context_recovery(
+                    "system", [{"role": "user", "content": "hi"}] * 20, "gpt-4o", "openai"
+                )
             )
 
         # Verify hook was called

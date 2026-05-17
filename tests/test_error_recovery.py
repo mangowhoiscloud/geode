@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.agent.conversation import ConversationContext
@@ -24,6 +24,17 @@ from core.agent.error_recovery import (
 from core.agent.loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
 from core.hooks import HookEvent, HookSystem
+
+
+def _run_recovery(
+    strategy: ErrorRecoveryStrategy,
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    failure_count: int,
+) -> RecoveryResult:
+    return asyncio.run(strategy.arecover(tool_name, tool_input, failure_count))
+
 
 # ---------------------------------------------------------------------------
 # ErrorRecoveryStrategy unit tests
@@ -51,11 +62,29 @@ class TestErrorRecoveryStrategy:
 
     def test_retry_success(self, strategy: ErrorRecoveryStrategy) -> None:
         """1st failure → retry succeeds → recovery OK."""
-        result = strategy.recover("list_ips", {}, failure_count=1)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=1)
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.RETRY
         assert len(result.attempts) == 1
         assert result.attempts[0].success is True
+
+    def test_arecover_uses_async_executor_path(self) -> None:
+        """Async recovery dispatches through ToolExecutor.aexecute()."""
+
+        async def async_list_ips(**_kwargs: Any) -> dict[str, Any]:
+            return {"status": "ok", "ips": []}
+
+        executor = ToolExecutor(
+            action_handlers={"list_ips": async_list_ips},
+            auto_approve=True,
+        )
+        strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
+
+        assert not hasattr(executor, "execute")
+        result = asyncio.run(strategy.arecover("list_ips", {}, failure_count=1))
+
+        assert result.recovered is True
+        assert result.strategy_used == RecoveryStrategy.RETRY
 
     def test_retry_failure_then_alternative(self, executor: ToolExecutor) -> None:
         """retry fails → alternative tool (same category) succeeds."""
@@ -70,7 +99,7 @@ class TestErrorRecoveryStrategy:
         executor._handlers["list_ips"] = failing_list
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = strategy.recover("list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
         # retry fails (list_ips still broken), then alternative (search_ips) succeeds
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.ALTERNATIVE
@@ -85,7 +114,7 @@ class TestErrorRecoveryStrategy:
         # search_ips is 'discovery'/'free' — different category but cheaper
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = strategy.recover("analyze_ip", {"ip_name": "Berserk"}, failure_count=2)
+        result = _run_recovery(strategy, "analyze_ip", {"ip_name": "Berserk"}, failure_count=2)
         # Should try: retry (fail) → alternative (might find one or fail) → fallback/escalate
         assert len(result.attempts) >= 2
 
@@ -96,7 +125,7 @@ class TestErrorRecoveryStrategy:
             executor._handlers[name] = MagicMock(return_value={"error": "Everything is broken"})
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = strategy.recover("list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
         assert result.recovered is False
         assert "recovery_exhausted" in result.final_result or "escalated" in result.final_result
 
@@ -106,14 +135,14 @@ class TestErrorRecoveryStrategy:
             executor._handlers[name] = MagicMock(return_value={"error": "Broken"})
         strategy = ErrorRecoveryStrategy(executor, max_recovery_attempts=2, retry_base_delay=0.0)
 
-        result = strategy.recover("list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
         assert result.recovered is False
         assert len(result.attempts) <= 2
 
     def test_dangerous_tools_excluded(self, strategy: ErrorRecoveryStrategy) -> None:
         """DANGEROUS tools (run_bash) are not eligible for recovery."""
         assert not strategy.is_recoverable("run_bash")
-        result = strategy.recover("run_bash", {"command": "echo hi"}, failure_count=2)
+        result = _run_recovery(strategy, "run_bash", {"command": "echo hi"}, failure_count=2)
         assert result.recovered is False
         assert "recovery_skipped" in result.final_result
 
@@ -121,7 +150,7 @@ class TestErrorRecoveryStrategy:
         """WRITE tools (memory_save, note_save, etc.) are not eligible."""
         for tool in ("memory_save", "note_save", "set_api_key", "manage_auth"):
             assert not strategy.is_recoverable(tool)
-            result = strategy.recover(tool, {}, failure_count=2)
+            result = _run_recovery(strategy, tool, {}, failure_count=2)
             assert result.recovered is False
             assert "recovery_skipped" in result.final_result
 
@@ -321,7 +350,7 @@ class TestAgenticLoopRecovery:
 
         response = self._make_tool_response("run_bash", {"command": "echo hi", "reason": "test"})
 
-        with patch.object(executor, "_request_approval", return_value=False):
+        with patch.object(executor, "_request_approval_async", AsyncMock(return_value=False)):
             results = asyncio.run(loop._tool_processor.process(response))
 
         assert len(results) == 1
@@ -426,7 +455,7 @@ class TestRecoveryEdgeCases:
         """Recovery for a tool with no handler returns failure."""
         executor = ToolExecutor(auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        result = strategy.recover("nonexistent_tool", {}, failure_count=2)
+        result = _run_recovery(strategy, "nonexistent_tool", {}, failure_count=2)
         # retry will fail (no handler), and eventually exhausts
         assert result.recovered is False
 
@@ -435,7 +464,7 @@ class TestRecoveryEdgeCases:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, max_recovery_attempts=0, retry_base_delay=0.0)
-        result = strategy.recover("list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
         assert result.recovered is False
         assert len(result.attempts) == 0
 
@@ -449,7 +478,7 @@ class TestRecoveryEdgeCases:
 
         executor = ToolExecutor(action_handlers={"analyze_ip": capture_handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        strategy.recover("analyze_ip", {"ip_name": "Berserk", "dry_run": True}, failure_count=1)
+        _run_recovery(strategy, "analyze_ip", {"ip_name": "Berserk", "dry_run": True}, failure_count=1)
         assert captured_kwargs.get("ip_name") == "Berserk"
         assert captured_kwargs.get("dry_run") is True
 
@@ -466,5 +495,5 @@ class TestRecoveryEdgeCases:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"list_ips": handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        result = strategy.recover("list_ips", {}, failure_count=1)
+        result = _run_recovery(strategy, "list_ips", {}, failure_count=1)
         assert result.attempts[0].duration_ms >= 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from core.memory.session import InMemorySessionStore
@@ -34,7 +35,7 @@ class TestMemorySearchTool:
     def test_search_finds_matching_session(self):
         store = _make_store_with_data()
         tool = MemorySearchTool(session_store=store)
-        result = tool.execute(query="Berserk")
+        result = asyncio.run(tool.aexecute(query="Berserk"))
         matches = result["result"]["matches"]
         assert len(matches) >= 1
         assert matches[0]["session_id"] == "session-1"
@@ -42,14 +43,14 @@ class TestMemorySearchTool:
     def test_search_no_matches(self):
         store = _make_store_with_data()
         tool = MemorySearchTool(session_store=store)
-        result = tool.execute(query="nonexistent_ip_xyz")
+        result = asyncio.run(tool.aexecute(query="nonexistent_ip_xyz"))
         assert result["result"]["total_found"] == 0
 
     def test_search_respects_limit(self):
         store = _make_store_with_data()
         tool = MemorySearchTool(session_store=store)
         # Both sessions contain "pipeline"
-        result = tool.execute(query="pipeline", limit=1)
+        result = asyncio.run(tool.aexecute(query="pipeline", limit=1))
         assert result["result"]["total_found"] == 1
 
     def test_search_empty_store(self):
@@ -60,7 +61,7 @@ class TestMemorySearchTool:
         set_project_memory(None)
         _set_org(None)
         tool = MemorySearchTool(session_store=store)
-        result = tool.execute(query="anything")
+        result = asyncio.run(tool.aexecute(query="anything"))
         assert result["result"]["total_found"] == 0
 
 
@@ -74,14 +75,14 @@ class TestMemoryGetTool:
     def test_get_existing_session(self):
         store = _make_store_with_data()
         tool = MemoryGetTool(session_store=store)
-        result = tool.execute(session_id="session-1")
+        result = asyncio.run(tool.aexecute(session_id="session-1"))
         assert result["result"]["found"] is True
         assert result["result"]["data"]["ip_name"] == "Berserk"
 
     def test_get_nonexistent_session(self):
         store = _make_store_with_data()
         tool = MemoryGetTool(session_store=store)
-        result = tool.execute(session_id="session-99")
+        result = asyncio.run(tool.aexecute(session_id="session-99"))
         assert result["result"]["found"] is False
         assert result["result"]["data"] is None
 
@@ -96,7 +97,7 @@ class TestMemorySaveTool:
     def test_save_new_session(self):
         store = InMemorySessionStore()
         tool = MemorySaveTool(session_store=store)
-        result = tool.execute(session_id="new-session", data={"ip_name": "Test"})
+        result = asyncio.run(tool.aexecute(session_id="new-session", data={"ip_name": "Test"}))
         assert result["result"]["saved"] is True
         # Verify stored
         assert store.get("new-session") == {"ip_name": "Test"}
@@ -105,7 +106,7 @@ class TestMemorySaveTool:
         store = InMemorySessionStore()
         store.set("session-x", {"ip_name": "Berserk", "score": 80})
         tool = MemorySaveTool(session_store=store)
-        result = tool.execute(session_id="session-x", data={"tier": "S"}, merge=True)
+        result = asyncio.run(tool.aexecute(session_id="session-x", data={"tier": "S"}, merge=True))
         assert result["result"]["merged"] is True
         data = store.get("session-x")
         assert data is not None
@@ -116,7 +117,7 @@ class TestMemorySaveTool:
         store = InMemorySessionStore()
         store.set("session-x", {"ip_name": "Berserk", "score": 80})
         tool = MemorySaveTool(session_store=store)
-        result = tool.execute(session_id="session-x", data={"tier": "S"}, merge=False)
+        result = asyncio.run(tool.aexecute(session_id="session-x", data={"tier": "S"}, merge=False))
         assert result["result"]["merged"] is False
         data = store.get("session-x")
         assert data is not None
@@ -128,11 +129,11 @@ class TestMemorySaveTool:
         set_project_memory(None)
         store = InMemorySessionStore()
         tool = MemorySaveTool(session_store=store)
-        result = tool.execute(
+        result = asyncio.run(tool.aexecute(
             session_id="no-proj",
             data={"content": "test"},
             persistent=True,
-        )
+        ))
         assert result["result"]["saved"] is True
         assert result["result"]["persistent"] is True
         assert store.get("no-proj") == {"content": "test"}
@@ -146,11 +147,11 @@ class TestMemorySaveTool:
         try:
             store = InMemorySessionStore()
             tool = MemorySaveTool(session_store=store)
-            result = tool.execute(
+            result = asyncio.run(tool.aexecute(
                 session_id="persist-test",
                 data={"content": "persistent insight test"},
                 persistent=True,
-            )
+            ))
             assert result["result"]["saved"] is True
             assert result["result"]["persistent"] is True
             # Verify written to MEMORY.md
@@ -180,7 +181,7 @@ class TestRuleUpdateTool:
     def test_no_project_memory(self):
         set_project_memory(None)
         tool = RuleUpdateTool()
-        result = tool.execute(name="x", content="y")
+        result = asyncio.run(tool.aexecute(name="x", content="y"))
         assert result["result"]["updated"] is False
         assert "not available" in result["result"]["error"]
 
@@ -189,7 +190,7 @@ class TestRuleUpdateTool:
         set_project_memory(mem)
         try:
             tool = RuleUpdateTool()
-            result = tool.execute(name="test-rule", content="# Updated Content")
+            result = asyncio.run(tool.aexecute(name="test-rule", content="# Updated Content"))
             assert result["result"]["updated"] is True
             # Verify content updated
             rules = mem.load_rules("*")
@@ -207,7 +208,7 @@ class TestRuleUpdateTool:
         set_project_memory(mem)
         try:
             tool = RuleUpdateTool()
-            result = tool.execute(name="no-such-rule", content="x")
+            result = asyncio.run(tool.aexecute(name="no-such-rule", content="x"))
             assert result["result"]["updated"] is False
         finally:
             set_project_memory(None)
@@ -223,7 +224,7 @@ class TestRuleDeleteTool:
     def test_no_project_memory(self):
         set_project_memory(None)
         tool = RuleDeleteTool()
-        result = tool.execute(name="x")
+        result = asyncio.run(tool.aexecute(name="x"))
         assert result["result"]["deleted"] is False
         assert "not available" in result["result"]["error"]
 
@@ -232,7 +233,7 @@ class TestRuleDeleteTool:
         set_project_memory(mem)
         try:
             tool = RuleDeleteTool()
-            result = tool.execute(name="test-rule")
+            result = asyncio.run(tool.aexecute(name="test-rule"))
             assert result["result"]["deleted"] is True
             # Verify deleted
             rules = mem.list_rules()
@@ -249,7 +250,7 @@ class TestRuleDeleteTool:
         set_project_memory(mem)
         try:
             tool = RuleDeleteTool()
-            result = tool.execute(name="no-such-rule")
+            result = asyncio.run(tool.aexecute(name="no-such-rule"))
             assert result["result"]["deleted"] is False
         finally:
             set_project_memory(None)

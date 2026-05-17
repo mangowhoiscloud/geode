@@ -19,6 +19,7 @@ macOS notes:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import logging
@@ -245,7 +246,7 @@ class ComputerUseHarness:
 
     # -- Dispatch (provider-agnostic) --
 
-    def execute(self, action: str, **params: Any) -> dict[str, Any]:
+    def _execute_sync(self, action: str, **params: Any) -> dict[str, Any]:
         """Execute a computer-use action and return result with screenshot.
 
         This is the unified dispatch for both Anthropic and OpenAI actions.
@@ -304,6 +305,10 @@ class ComputerUseHarness:
                 "error": f"Action '{action}' failed: {exc}",
                 "action": action,
             }
+
+    async def aexecute(self, action: str, **params: Any) -> dict[str, Any]:
+        """Run local OS automation off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, action, **params)
 
     def _get_cursor_position(self) -> str:
         """Get current cursor position (in target space) + screenshot."""

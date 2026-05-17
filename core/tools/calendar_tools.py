@@ -56,11 +56,11 @@ class CalendarListEventsTool:
             "required": [],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         from core.mcp.calendar_port import get_calendar
 
         adapter = get_calendar()
-        if adapter is None or not adapter.is_available():
+        if adapter is None or not await adapter.ais_available():
             return {
                 "result": {
                     "events": [],
@@ -74,30 +74,14 @@ class CalendarListEventsTool:
         if end is None and start is not None:
             end = start + timedelta(days=7)
 
-        events = adapter.list_events(
+        events = await adapter.alist_events(
             start=start,
             end=end,
             calendar_name=kwargs.get("calendar_name"),
             max_results=kwargs.get("max_results", 20),
         )
 
-        return {
-            "result": {
-                "events": [
-                    {
-                        "title": e.title,
-                        "start": e.start.isoformat(),
-                        "end": e.end.isoformat(),
-                        "location": e.location,
-                        "source": e.source,
-                        "calendar": e.calendar_name,
-                        "is_geode": e.is_geode,
-                    }
-                    for e in events
-                ],
-                "count": len(events),
-            }
-        }
+        return _events_result(events)
 
 
 class CalendarCreateEventTool:
@@ -147,11 +131,11 @@ class CalendarCreateEventTool:
             "required": ["title", "start_datetime"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         from core.mcp.calendar_port import get_calendar
 
         adapter = get_calendar()
-        if adapter is None or not adapter.is_available():
+        if adapter is None or not await adapter.ais_available():
             return tool_error(
                 "No calendar adapter available.",
                 error_type="dependency",
@@ -173,7 +157,7 @@ class CalendarCreateEventTool:
             end = start + timedelta(hours=1)
 
         try:
-            event = adapter.create_event(
+            event = await adapter.acreate_event(
                 title,
                 start,
                 end,
@@ -181,17 +165,7 @@ class CalendarCreateEventTool:
                 location=kwargs.get("location", ""),
                 calendar_name=kwargs.get("calendar_name"),
             )
-            return {
-                "result": {
-                    "created": True,
-                    "event_id": event.event_id,
-                    "title": event.title,
-                    "start": event.start.isoformat(),
-                    "end": event.end.isoformat(),
-                    "source": event.source,
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                }
-            }
+            return _created_event_result(event)
         except Exception as exc:
             return tool_error(
                 f"Failed to create event: {exc}",
@@ -230,7 +204,7 @@ class CalendarSyncSchedulerTool:
             "required": [],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         from core.scheduler.calendar_bridge import get_calendar_bridge
 
         bridge = get_calendar_bridge()
@@ -244,7 +218,7 @@ class CalendarSyncSchedulerTool:
 
         direction: str = kwargs.get("direction", "both")
         try:
-            result = bridge.sync(direction=direction)
+            result = await bridge.sync(direction=direction)
             return {"result": result}
         except Exception as exc:
             return tool_error(
@@ -265,3 +239,37 @@ def _parse_datetime(value: str | None) -> datetime | None:
         return dt
     except (ValueError, TypeError):
         return None
+
+
+def _events_result(events: list[Any]) -> dict[str, Any]:
+    return {
+        "result": {
+            "events": [
+                {
+                    "title": e.title,
+                    "start": e.start.isoformat(),
+                    "end": e.end.isoformat(),
+                    "location": e.location,
+                    "source": e.source,
+                    "calendar": e.calendar_name,
+                    "is_geode": e.is_geode,
+                }
+                for e in events
+            ],
+            "count": len(events),
+        }
+    }
+
+
+def _created_event_result(event: Any) -> dict[str, Any]:
+    return {
+        "result": {
+            "created": True,
+            "event_id": event.event_id,
+            "title": event.title,
+            "start": event.start.isoformat(),
+            "end": event.end.isoformat(),
+            "source": event.source,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+    }

@@ -26,9 +26,9 @@ class NotificationResult:
 
 @runtime_checkable
 class NotificationPort(Protocol):
-    """Port for sending notifications to external messaging services."""
+    """Async-only port for sending notifications to external messaging services."""
 
-    def send_message(
+    async def asend_message(
         self,
         channel: str,
         recipient: str,
@@ -51,7 +51,7 @@ class NotificationPort(Protocol):
         """
         ...
 
-    def is_available(self, channel: str | None = None) -> bool:
+    async def ais_available(self, channel: str | None = None) -> bool:
         """Check if the notification service (or a specific channel) is reachable."""
         ...
 

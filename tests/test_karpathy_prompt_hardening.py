@@ -17,10 +17,11 @@ Covers 12 gaps from Karpathy P1/P4/P6/P7/P10 audit:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from core.hooks import HookEvent, HookSystem
 from core.llm.prompt_assembler import PromptAssembler
@@ -425,8 +426,12 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=over_result):
-            result = analyst_node(state)
+        with patch(
+            "plugins.game_ip.nodes.analysts._run_analyst",
+            new_callable=AsyncMock,
+            return_value=over_result,
+        ):
+            result = asyncio.run(analyst_node(state))
 
         analyses = result["analyses"]
         assert len(analyses) == 1
@@ -458,8 +463,12 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=under_result):
-            result = analyst_node(state)
+        with patch(
+            "plugins.game_ip.nodes.analysts._run_analyst",
+            new_callable=AsyncMock,
+            return_value=under_result,
+        ):
+            result = asyncio.run(analyst_node(state))
 
         analyses = result["analyses"]
         assert len(analyses) == 1
@@ -490,8 +499,12 @@ class TestAnalystConfidenceClamping:
             "errors": [],
         }
 
-        with patch("plugins.game_ip.nodes.analysts._run_analyst", return_value=normal_result):
-            result = analyst_node(state)
+        with patch(
+            "plugins.game_ip.nodes.analysts._run_analyst",
+            new_callable=AsyncMock,
+            return_value=normal_result,
+        ):
+            result = asyncio.run(analyst_node(state))
 
         assert result["analyses"][0].confidence == 85.0
 
