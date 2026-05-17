@@ -630,7 +630,7 @@ class CLIPoller:
         """Handle a connected CLI client session.
 
         Creates an IPC-mode session (DANGEROUS blocked, WRITE allowed)
-        gated by SessionLane + Global Lane via acquire_all().
+        gated by SessionLane + Global Lane via acquire_all_async().
         """
         from core.agent.conversation import ConversationContext
         from core.server.supervised.services import SessionMode

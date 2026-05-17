@@ -58,7 +58,6 @@ priority: 100
               <thead><tr><th>모듈</th><th>역할</th></tr></thead>
               <tbody>
                 <tr><td><code>analyst_reasoning.py</code></td><td>Analyst가 생성하는 reasoning trail의 schema.</td></tr>
-                <tr><td><code>biasbuster.py</code></td><td>BiasBuster 6 편향 검사 결과 schema.</td></tr>
                 <tr><td><code>cross_llm.py</code></td><td>Cross-LLM 교차 검증 출력.</td></tr>
                 <tr><td><code>decision_tree.py</code></td><td>6-cause 분류 결정 트리.</td></tr>
                 <tr><td><code>evaluators.py</code></td><td>3-evaluator 점수 통합.</td></tr>
@@ -134,7 +133,6 @@ priority: 100
               <thead><tr><th>Module</th><th>Role</th></tr></thead>
               <tbody>
                 <tr><td><code>analyst_reasoning.py</code></td><td>Schema for the reasoning trail an Analyst emits.</td></tr>
-                <tr><td><code>biasbuster.py</code></td><td>BiasBuster six-bias scan results schema.</td></tr>
                 <tr><td><code>cross_llm.py</code></td><td>Cross-LLM verification output.</td></tr>
                 <tr><td><code>decision_tree.py</code></td><td>6-cause classification decision tree.</td></tr>
                 <tr><td><code>evaluators.py</code></td><td>Three-evaluator score aggregation.</td></tr>

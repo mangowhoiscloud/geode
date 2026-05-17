@@ -88,7 +88,9 @@ Canonical flow:
 4. `ToolExecutor.aexecute()` runs async approval, async hooks, async tool
    dispatch, and async MCP/sub-agent calls.
 5. IPC, scheduler, and gateway sessions enqueue async lane tasks.
-6. Sync wrappers remain only for direct CLI compatibility and legacy tools.
+6. Process-edge sync bridges remain only where the host protocol is sync-only
+   (for example the stdlib webhook HTTP handler); runtime execution surfaces
+   stay async.
 
 ### Affected Files
 
@@ -97,7 +99,7 @@ Canonical flow:
 | `core/agent/loop/agent_loop.py` | Canonical AgenticLoop implementation; former `loop.py` implementation. |
 | `core/agent/loop/loop.py` | Backward-compatible import shim only. |
 | `core/tools/base.py` | Add async tool protocol and tool context. |
-| `core/agent/tool_executor/executor.py` | Add canonical `aexecute()` path; keep `execute()` as compatibility wrapper. |
+| `core/agent/tool_executor/executor.py` | Canonical `aexecute()` path; removed public `execute()` facade. |
 | `core/agent/tool_executor/processor.py` | Replace `to_thread(execute)` with `await aexecute()`. |
 | `core/agent/context_manager.py` | Make overflow check/recovery async; remove `run_until_complete()`. |
 | `core/agent/approval.py` | Add async approval APIs and shared sync/async approval serialization. |
@@ -157,8 +159,8 @@ Canonical flow:
   `LLMToolCallable`) after migrating tool-augmented nodes.
 - [x] Migrate CLI/delegated handler direct tool-object calls to `aexecute()`.
 - [x] Convert OpenAI/Anthropic/GLM async provider calls to native async SDK
-  clients before removing sync facades.
-- [ ] Remove legacy sync provider/tool facades after downstream callers migrate.
+  clients, then remove sync facades.
+- [x] Remove legacy sync provider/tool/lane facades after downstream callers migrate.
 - [x] Add broader source guards for non-IPC async services.
 
 ## Sync Tool/MCP Migration Matrix
@@ -168,24 +170,24 @@ Canonical flow:
 | Agent loop facade | `AgenticLoop.run()` previously wrapped `asyncio.run(arun())`. | Canonical API is `await AgenticLoop.arun()`. | P0 | Removed as a breaking-change debt payoff; source guards prevent production/internal reintroduction. |
 | Bash tool | Legacy `execute()` existed. | Native `BashTool.aexecute()` is used by `ToolExecutor.aexecute()`. | P0 | Done. |
 | MCP manager/client | `MCPServerManager.call_tool()` and stdio `call_tool()`. | `MCPServerManager.acall_tool()` and stdio `acall_tool()` exist. | P0 | Agent tool execution uses async MCP calls. |
-| MCP calendar adapters | `BaseCalendarAdapter.*` call `manager.call_tool()`. | `ais_available`, `alist_events`, `acreate_event`, `adelete_event`, `alist_calendars` call `manager.acall_tool()`. | P1 | First adapter slice migrated; sync API retained for compatibility. |
-| MCP notification adapters | `send_message()` calls `manager.call_tool()`. | `asend_message()` calls `manager.acall_tool()`. | P1 | First adapter slice migrated; sync API retained for compatibility. |
-| MCP signal helpers | `try_mcp_signal()` and `SteamMCPSignalAdapter.fetch_signals()` call sync MCP paths. | `try_mcp_signal_async()` and `SteamMCPSignalAdapter.afetch_signals()` call `acall_tool()`. `MCPClientBase.acall_tool()` provides a compatibility wrapper for legacy clients. | P1 | Helper/adapter slice migrated; plugin signal tools now expose `aexecute()` and use async MCP helper paths. |
-| Adaptive error recovery | Recovery retries previously ran `recover()` in `asyncio.to_thread()` and called `ToolExecutor.execute()`. | `ErrorRecoveryStrategy.arecover()` now awaits `ToolExecutor.aexecute()` for retry, alternative, and fallback strategies. | P1 | Canonical `ToolCallProcessor` recovery path migrated; sync `recover()` retained for compatibility tests/callers. |
+| MCP calendar adapters | `BaseCalendarAdapter.*` called `manager.call_tool()`. | `ais_available`, `alist_events`, `acreate_event`, `adelete_event`, `alist_calendars` call `manager.acall_tool()`. | P1 | Async MCP tool-call surface migrated; sync checks only cover health snapshots. |
+| MCP notification adapters | `send_message()` called `manager.call_tool()`. | `asend_message()` calls `manager.acall_tool()`. | P1 | Async send surface migrated; sync checks only cover health snapshots/channel listing. |
+| MCP signal helpers | Removed from GEODE core with the Game IP split. | External domain plugins must use async MCP helpers. | P1 | Closed in the Game IP externalisation slice. |
+| Adaptive error recovery | Recovery retries previously ran `recover()` in `asyncio.to_thread()` and called `ToolExecutor.execute()`. | `ErrorRecoveryStrategy.arecover()` now awaits `ToolExecutor.aexecute()` for retry, alternative, and fallback strategies. | P1 | Canonical `ToolCallProcessor` recovery path migrated; public sync `recover()` removed. |
 | Filesystem tools | `GlobTool`, `GrepTool`, `Read/Edit/Write` execute through sync file APIs. | Tool-local `aexecute()` quarantines scans/writes with explicit `asyncio.to_thread()`. | P1 | Migrated to explicit tool-local async wrappers. |
 | Web tools | `WebFetchTool`, `GeneralWebSearchTool`, `WebSearchTool`, jobs search are sync. | Tool-local `aexecute()` quarantines blocking HTTP/provider clients with explicit `asyncio.to_thread()`. | P1 | Migrated to explicit tool-local async wrappers; future improvement is native async HTTP/provider clients. |
 | Memory/profile tools | Memory, rule, note, profile tools call sync local stores. | Tool-local `aexecute()` quarantines local store/file IO with explicit `asyncio.to_thread()`. | P2 | Migrated to explicit tool-local async wrappers. |
 | Calendar tool objects | `CalendarListEventsTool`, `CalendarCreateEventTool`, scheduler sync tool call sync calendar port. | `aexecute()` now prefers async calendar port methods; scheduler sync bridge is quarantined with tool-local `asyncio.to_thread()`. | P2 | Migrated. |
 | Output/report tools | Report, JSON export, notification tool are sync. | `SendNotificationTool.aexecute()` prefers `asend_message`; report/export use tool-local async wrappers for CPU/file IO. | P2 | Migrated. |
 | Data/plugin tools | Cortex, MonoLake, analyst/evaluator, signal tools are sync. | Signal tools use async MCP helpers; remaining fixture/stub tools use tool-local async wrappers. | P2 | Migrated. |
-| `ToolRegistry.execute()` | Direct sync execution of registered `Tool` objects. | `ToolRegistry.aexecute()` prefers tool-local `aexecute()`; sync-only fallback remains deprecated for third-party compatibility. | P2 | Built-in tools migrated; sync fallback now emits `DeprecationWarning`. |
+| `ToolRegistry.execute()` | Direct sync execution of registered `Tool` objects. | `ToolRegistry.aexecute()` requires tool-local `aexecute()`. | P2 | Public sync facade and sync-only fallback removed. |
 | Runtime tool executor injection | Runtime/container default tool executors called `ToolRegistry.execute()` directly and exposed `get_tool_executor()`. | Runtime now injects only `get_async_tool_executor()`; sync executor contextvar was removed. | P1 | Direct runtime/container `registry.execute()` calls removed; tool-augmented nodes migrated to async executor injection. |
-| Provider tool-use contract | `generate_with_tools()` provider APIs accepted sync `tool_executor` callables. | `agenerate_with_tools()` and `call_llm_with_tools_async()` now run await-native provider loops and await async tool executors; OpenAI/Codex use `AsyncOpenAI`, Anthropic uses `AsyncAnthropic`, and GLM uses OpenAI-compatible `AsyncOpenAI(base_url=...)`. | P1 | Async provider internals migrated to native async SDK clients; sync `generate_with_tools()` remains only as compatibility surface pending downstream caller migration. |
+| Provider tool-use contract | `generate_with_tools()` provider APIs accepted sync `tool_executor` callables. | `agenerate_with_tools()` and `call_llm_with_tools_async()` now run await-native provider loops and await async tool executors; OpenAI/Codex use `AsyncOpenAI`, Anthropic uses `AsyncAnthropic`, and GLM uses OpenAI-compatible `AsyncOpenAI(base_url=...)`. | P1 | Public sync provider facades removed; tests and callers use `agenerate_with_tools()`. |
 | Container LLM tool injection | `make_tool_executor()` called `llm_adapter.generate_with_tools()` and used a sync registry fallback. | Sync injected callable now runs `llm_adapter.agenerate_with_tools()` at the sync node boundary and defaults to async registry execution. | P1 | Runtime injection no longer depends on provider sync internals. |
 | LLM tool callable contextvar | `set_llm_callable(tool_fn=...)`, `get_llm_tool()`, and `LLMToolCallable` exposed a sync tool-use callable. | Tool-augmented nodes call `call_llm_with_tools_async()` directly. | P1 | Removed. |
 | Tool-augmented plugin nodes | Analyst/evaluator/synthesizer/scoring/BiasBuster paths read sync `get_tool_executor()` or sync `get_llm_tool()`. | Nodes now call `call_llm_with_tools_async()` and `get_async_tool_executor()` from their sync node boundary. | P1 | Production node paths migrated. |
 | CLI/delegated tool handlers | Delegated, calendar, computer-use, memory, and signal fallback handlers called tool-object `execute()` directly. | Handlers now call tool-object `aexecute()` at CLI/node boundaries. | P2 | Production CLI handler slice migrated. |
-| Legacy lane facade | `LaneQueue.acquire_all()` sync context manager. | `LaneQueue.acquire_all_async()` exists. | P1 | IPC daemon migrated; remaining sync services classified as process-edge debt. |
+| Legacy lane facade | `LaneQueue.acquire_all()` sync context manager. | `LaneQueue.acquire_all_async()` is the only multi-lane admission API. | P1 | Sync facade removed; gateway pollers now await `ChannelManager.aroute_message()` and `acquire_all_async()`. |
 
 ## Verification
 
@@ -260,9 +262,10 @@ rg -n "TODO|FIXME|type: ignore|except Exception|Any" \
 
 Current classification:
 
-- Intentional compatibility: legacy sync tool and provider facades remain only
-  for external/direct sync callers; built-in canonical execution uses async
-  entrypoints.
+- Intentional process-edge bridges: stdlib/CLI host protocols that are
+  synchronous use `core.async_runtime.run_process_coroutine()` at their outer
+  boundary only. Tool, provider, MCP, gateway lane, and agent-loop execution
+  surfaces are async.
 - Fixed-now gaps: context overflow hooks and tool-result-offload hooks now use
   async hook APIs; approval serialization no longer stores an event-loop-bound
   `asyncio.Lock`; `AgenticLoop.arun()` now awaits user-input interception,
@@ -273,36 +276,37 @@ Current classification:
   CLI/worker/gateway/scheduler callers no longer call `AgenticLoop.run()`;
   MCP calendar/notification/signal helper layers now expose async alternatives;
   adaptive error recovery awaits `ErrorRecoveryStrategy.arecover()`; runtime
-  tool injection provides an async executor contextvar; plugin signal tools now
-  expose `aexecute()`; built-in file/web/document/jobs/memory/profile/data/
-  report/export/calendar-scheduler/computer-use tools now expose tool-local
-  `aexecute()`; `AgenticLoop.run()` has been removed.
-- Remaining debt: sync compatibility boundaries still exist for direct
-  `ToolExecutor.execute()`, `ToolRegistry.execute()`, preserved MCP sync APIs,
-  and public sync provider `generate_with_tools()` facades.
+  tool injection provides an async executor contextvar; built-in
+  file/web/document/jobs/memory/profile/data/report/export/calendar-scheduler/
+  computer-use tools now expose tool-local `aexecute()`; `AgenticLoop.run()`,
+  `ToolExecutor.execute()`, `ToolRegistry.execute()`, public provider
+  `generate_with_tools()`, public MCP `call_tool()`, and
+  `LaneQueue.acquire_all()` have been removed.
+- Remaining debt: no known canonical sync execution facade remains in
+  `core/agent`, `core/tools`, `core/llm`, `core/mcp`, or `core/orchestration`.
+  Remaining `asyncio.run()` / `run_process_coroutine()` calls are process-edge
+  CLI/test/webhook bridges.
 - Verification gap scan: executable `AgenticLoop.run(...)` hits are removed
   from the codebase. Remaining `run_until_complete()` / `asyncio.run()` hits
-  are process-lifecycle or explicit sync-boundary bridges. Remaining executable
-  `call_tool(...)` hits are preserved MCP sync APIs and direct sync service
-  boundaries.
+  are process-lifecycle or explicit sync-boundary bridges. Remaining
+  `call_tool` text hits are async `acall_tool` references or historical docs.
 
 ## Debt Ledger
 
-The remaining debt is deliberately kept at compatibility boundaries, not in the
+The sync public compatibility boundary has been paid down. The remaining
+boundary is process-edge only, not a reusable runtime facade and not in the
 canonical `AgenticLoop.arun()` path.
 
 | Debt | Why it exists | Risk | Next reduction |
 |------|---------------|------|----------------|
-| Legacy sync tool APIs remain | Direct CLI/tests and third-party callers still call `Tool.execute()`, `ToolExecutor.execute()`, and `ToolRegistry.execute()`. | Sync callers are supported only at process/direct-call edges. Async canonical path should not depend on them. | Keep source guards around canonical paths; remove public sync APIs in the next breaking pass after provider contracts migrate. |
-| Sync-only third-party tool fallback remains | External registered tools may not yet implement `aexecute()`. | Generic fallback isolates work in a thread but cannot provide cooperative cancellation inside tool bodies. | Built-ins now implement `aexecute()`; fallback emits `DeprecationWarning` to make remaining cases visible. |
-| `LaneQueue.acquire_all()` remains beside `acquire_all_async()` | Gateway and legacy callers still use the sync context manager. | Mixed APIs are safe because they share the same semaphore capacity, but code review must classify which boundary a caller belongs to. | Migrate async services to `acquire_all_async()`; leave `acquire_all()` for direct sync entrypoints only. |
-| Public sync provider facades remain | `ClaudeAdapter.generate_with_tools()` and `OpenAIAdapter.generate_with_tools()` are still exposed for direct sync callers and tests. | Canonical async paths no longer depend on sync provider internals, but the public API is still broader than the target contract. | Migrate/retire sync direct callers, then remove the sync `generate_with_tools()` methods in the breaking pass. |
+| Process-edge sync bridges remain | Typer commands, the stdlib webhook server, and tests may start async runtime work from a synchronous host. | Reentry bugs if these bridges leak back into reusable runtime modules. | Keep bridges in CLI/server edge modules and guard core runtime with source scans. |
+| Tool-local `asyncio.to_thread()` wrappers remain | Some local stores/filesystem and third-party clients are still sync libraries. | Cancellation cannot interrupt the underlying blocking library call mid-syscall. | Prefer native async clients only when the dependency already supports them and the call is user-visible. |
+| Sync unit-test fixtures remain | Several tests define legacy-shaped fake tools to assert async registry rejection or category metadata. | Low; fixture-only. | Keep source scans scoped to production paths and require new production tools to implement `aexecute()`. |
 
 ## Next Progress Attachment
 
-Next slice target: remove public sync provider/tool facades now that provider
-async internals use native async SDK clients, then continue shrinking legacy
-sync service callers.
+Next slice target: keep the async-only source guard in release validation and
+avoid reintroducing sync public facades while packaging work proceeds.
 
 Role split:
 
@@ -320,8 +324,8 @@ Completed in this slice:
    `LaneQueue.acquire_all_async()` and awaits `AgenticLoop.arun()`.
 2. Routed `_handle_client_async()` to that runner instead of
    `_run_prompt_streaming()` worker-thread execution.
-3. Preserved the existing sync `_run_prompt_streaming()` as a compatibility
-   fallback for legacy sync callers.
+3. Preserved sync host bridges only at process edges; daemon prompt execution
+   itself is async.
 4. Added regression tests proving IPC prompt execution does not call
    `AgenticLoop.run()` and does not use sync `LaneQueue.acquire_all()`.
 5. Moved console/session-meter/IPC-writer local state to contextvar-backed
@@ -329,12 +333,11 @@ Completed in this slice:
 
 Next implementation steps:
 
-1. Convert scheduler non-isolated REPL injection to call `await arun()` from the
-   direct REPL event loop once direct REPL mode has an explicit top-level async
-   runner.
-2. Remove public sync provider `generate_with_tools()` facades after direct
-   callers migrate to `agenerate_with_tools()`.
-3. Remove direct sync tool APIs after downstream callers migrate.
+1. Keep source guards for `AgenticLoop.run`, public provider
+   `generate_with_tools`, `ToolExecutor.execute`, `ToolRegistry.execute`,
+   public MCP `call_tool`, and `LaneQueue.acquire_all`.
+2. Treat any new sync bridge request as process-edge only and document the
+   owning host protocol.
 
 Full migration gate:
 

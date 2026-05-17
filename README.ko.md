@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.99.11 — Long-running Autonomous Execution Harness
+# GEODE v0.99.12 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -297,14 +297,14 @@ geode update
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
-| **5-layer 검증** | Guardrails G1-G4 (structural) + BiasBuster (cognitive) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal) + Calibration (Ground Truth, Swiss Cheese Layer 5) |
-| **도메인-specific DAG (교체 가능)** | 파이프라인 (리서치, 다축 평가, 합성) 은 `DomainPort` Protocol 로 plug-in. 레퍼런스 DAG 1개 동봉 — 어떤 탐색적 리서치 / 시그널 예측 도메인에도 교체해 사용 |
+| **코어 검증** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). 편향 / 캘리브레이션 계층은 도메인 플러그인이 추가 |
+| **도메인-specific DAG (교체 가능)** | 파이프라인 (리서치, 다축 평가, 합성) 은 `DomainPort` Protocol 로 plug-in. 도메인 DAG는 코어 밖에서 배포되어 탐색적 리서치 / 시그널 예측 플러그인이 독립적으로 진화 가능 |
 
 ---
 
 ## GEODE 비교
 
-각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.11**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.12**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
 
 <details>
 <summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>
@@ -353,7 +353,7 @@ geode update
 | 메모리 tier | ⚠️ 3 (user / project / local 세팅 머지) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
 | 권한 / 샌드박스 계층 | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3 단계 (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ 감사 표면) | ✅ Policy Chain + 도구 게이트 |
-| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **5-layer 검증** (G1-G4 + BiasBuster + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk + Calibration) |
+| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **코어 검증** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, 편향/캘리브레이션용 플러그인 확장점) |
 | Hook 이벤트 수 | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 이벤트 타입 · 다수 번들 핸들러 | ✅✅ **58 이벤트** (`docs/architecture/hook-system.md`) |
 
 </details>

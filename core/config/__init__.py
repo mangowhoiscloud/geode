@@ -207,32 +207,37 @@ def __getattr__(name: str) -> Any:
 # All code MUST reference these instead of hardcoding model strings.
 # ---------------------------------------------------------------------------
 
-# Anthropic models — verified 2026-04-26 against platform.claude.com.
-# v0.53.0 — chain depth reduced to 1 (primary → secondary only) per
-# fail-fast governance: deeper chains create cost surprise + unclear
-# user attribution. Quota exhaustion now surfaces a panel + stops loop.
-ANTHROPIC_PRIMARY = "claude-opus-4-7"
-ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
-ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
-ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
+# P2-B (2026-05-17) — model defaults + fallback chains migrated to
+# core/config/routing.toml + ~/.geode/routing.toml. The constants below
+# retain their public surface (every existing call site keeps working)
+# but their values now load from the manifest; users edit routing.toml
+# to override rather than monkeypatching this module.
+#
+# Anthropic / OpenAI / Codex / GLM defaults all come from
+# ``[model.defaults]`` and fallback chains from ``[model.fallbacks.<provider>]``.
+# Base URLs and any constants the manifest does not yet model stay hardcoded.
+from core.config.routing_manifest import (  # noqa: E402
+    load_routing_manifest as _load_routing_manifest,
+)
 
-# OpenAI models — verified 2026-04-26 against developers.openai.com.
-# v0.52.4 — gpt-5.5 promoted to primary (Codex's new default model).
-# v0.53.0 — chain depth reduced to 1 (primary → next).
-OPENAI_PRIMARY = "gpt-5.5"
-OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.4"]
+_routing = _load_routing_manifest()
+
+ANTHROPIC_PRIMARY: str = _routing.defaults.anthropic
+ANTHROPIC_SECONDARY: str = _routing.defaults.anthropic_secondary or ""
+ANTHROPIC_BUDGET: str = _routing.defaults.anthropic_budget or ""
+ANTHROPIC_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.anthropic)
+
+OPENAI_PRIMARY: str = _routing.defaults.openai
+OPENAI_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.openai)
 
 # OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API).
-# v0.52.4 — gpt-5.5 OAuth-only (developers.openai.com/codex/models).
-# v0.53.0 — chain depth reduced to 1.
-CODEX_PRIMARY = "gpt-5.5"
-CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.3-codex"]
+CODEX_PRIMARY: str = _routing.defaults.codex
+CODEX_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.codex)
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
-# ZhipuAI (GLM) models — OpenAI-compatible API, separate provider.
-# v0.53.0 — chain depth reduced to 1 (primary → secondary).
-GLM_PRIMARY = "glm-5.1"
-GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5"]
+# ZhipuAI (GLM) — OpenAI-compatible API, separate provider.
+GLM_PRIMARY: str = _routing.defaults.glm
+GLM_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.glm)
 # Coding Plan endpoint (subscription-billed). PAYG endpoint is api/paas/v4 — a
 # Coding Plan key called against PAYG path silently bypasses the subscription
 # quota and incurs metered billing instead.
@@ -240,55 +245,27 @@ GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 GLM_PAYG_BASE_URL = "https://api.z.ai/api/paas/v4"
 
 
-# v0.53.0 — models that are CODEX-ONLY per OpenAI's official Codex
-# models page (developers.openai.com/codex/models, verified 2026-04-27).
-# These can ONLY be called via chatgpt.com/backend-api/codex (OAuth);
-# no API-key path. Pre-fix _resolve_provider returned "openai" for
-# gpt-5.5 → static map misled router; resolve_routing's equivalence-
-# class scan corrected at runtime, but the user-visible mapping was
-# wrong. Listing here makes the OAuth-only constraint explicit.
-_CODEX_ONLY_MODELS: frozenset[str] = frozenset(
-    {
-        "gpt-5.5",
-        "gpt-5.5-pro",
-    }
-)
-
-
 def _resolve_provider(model: str) -> str:
-    """Resolve provider name from model ID.
+    """Resolve provider name from model ID via the routing manifest.
 
-    Prefix-based inference with broad model coverage:
-      claude-*                    → anthropic
-      glm-*                       → glm
-      gpt-5.5 / gpt-5.5-pro       → openai-codex (OAuth-only models)
-      *-codex / *-codex-max/mini  → openai-codex
-      gpt-* / o3-* / o4-*         → openai
-      gemini-*                    → google
-      deepseek-*                  → deepseek
-      llama-*                     → meta
-      qwen-*/qwen3*               → alibaba
-      (fallback)                  → openai
+    P2-D (2026-05-17): the legacy 11-branch if/elif chain (with its
+    sibling ``_CODEX_ONLY_MODELS`` frozenset) is replaced by a single
+    delegation to :func:`core.config.routing_manifest.resolve_provider`.
+    The manifest's ``[routing.prefixes]`` table, ``codex_only_models``
+    list, and ``codex_suffixes`` list together produce identical output
+    for every documented branch (parity verified in
+    ``tests/test_routing_manifest.py::test_resolve_provider_legacy_parity``).
+    Users now adjust provider routing by editing
+    ``core/config/routing.toml`` (or ``~/.geode/routing.toml``) instead
+    of patching code.
+
+    Public surface unchanged — every caller (``core.llm.router``,
+    ``core.auth.plan_registry``, monkeypatched test sites) keeps
+    working without modification.
     """
-    if model.startswith("claude-"):
-        return "anthropic"
-    if model.startswith("glm-"):
-        return "glm"
-    if model in _CODEX_ONLY_MODELS:
-        return "openai-codex"
-    if model.endswith("-codex") or model.endswith("-codex-max") or model.endswith("-codex-mini"):
-        return "openai-codex"
-    if model.startswith(("gpt-", "o3-", "o4-")):
-        return "openai"
-    if model.startswith("gemini-"):
-        return "google"
-    if model.startswith("deepseek-"):
-        return "deepseek"
-    if model.startswith("llama-"):
-        return "meta"
-    if model.startswith(("qwen-", "qwen3")):
-        return "alibaba"
-    return "openai"
+    from core.config.routing_manifest import resolve_provider as _manifest_resolve
+
+    return _manifest_resolve(model)
 
 
 # ---------------------------------------------------------------------------
@@ -382,26 +359,32 @@ def load_routing_config(path: Path | None = None) -> RoutingConfig:
         return _routing_config_cache
 
 
-# Pipeline nodes ALWAYS use these models regardless of user's REPL model.
-# When routing.toml has no per-node config, these defaults prevent
-# fallback to settings.model (the user's active REPL model like glm-5).
-_PIPELINE_NODE_DEFAULTS: dict[str, str] = {
-    "analyst": ANTHROPIC_PRIMARY,
-    "evaluator": ANTHROPIC_PRIMARY,
-    "scoring": ANTHROPIC_PRIMARY,
-    "synthesizer": ANTHROPIC_PRIMARY,
-}
-
-
 def get_node_model(node_name: str) -> str | None:
     """Return the model for a pipeline node, or None for default fallback.
 
-    Priority: routing.toml > _PIPELINE_NODE_DEFAULTS > None.
-    Pipeline nodes (analyst, evaluator, scoring, synthesizer) always return
-    a fixed model so they never inherit the user's REPL model.
+    Priority (post-P2-E):
+      1. Project routing.toml (``<project>/.geode/routing.toml`` —
+         legacy per-project override, loaded by :func:`load_routing_config`).
+      2. Global routing manifest (``core/config/routing.toml`` +
+         ``~/.geode/routing.toml`` user override, loaded by
+         :func:`core.config.routing_manifest.load_routing_manifest`).
+      3. ``None`` — caller falls back to ``settings.model``.
+
+    Pipeline nodes (analyst, evaluator, scoring, synthesizer) always
+    return a fixed model so they never inherit the user's REPL model.
+    The shipped manifest pins all four to the Anthropic primary; users
+    customise per-node by editing either routing.toml.
     """
     cfg = load_routing_config()
-    return cfg.nodes.get(node_name) or _PIPELINE_NODE_DEFAULTS.get(node_name)
+    if node_name in cfg.nodes:
+        return cfg.nodes[node_name]
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return None
+    return manifest.nodes.get(node_name)
 
 
 def reset_routing_cache() -> None:

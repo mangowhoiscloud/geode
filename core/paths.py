@@ -50,6 +50,19 @@ GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
 # constant is the default fallback.
 GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
+# P1-F (2026-05-17) — per-user Petri audit role × model × source override.
+# Read by ``plugins.petri_audit.user_overrides`` and merged into the
+# binding resolver. Kept as a separate TOML (rather than wedged into
+# ``config.toml``) so main GEODE config stays decoupled from Petri-only
+# concerns; the /petri command writes here.
+GLOBAL_PETRI_TOML = GEODE_HOME / "petri.toml"
+# P2-A (2026-05-17) — global user override for the routing manifest.
+# Loaded by ``core.config.routing_manifest.load_routing_manifest`` and
+# merged section-by-section over the shipped ``core/config/routing.toml``
+# default. Distinct from ``PROJECT_ROUTING_CONFIG`` (per-project node
+# routing legacy file); P2-B..E migrate the legacy consumers onto the
+# global manifest.
+GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
 # resolution; see `core/llm/skill_registry.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via

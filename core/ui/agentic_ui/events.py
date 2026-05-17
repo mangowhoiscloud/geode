@@ -542,7 +542,6 @@ def emit_pipeline_score(
 
 def emit_pipeline_verification(
     guardrails_pass: bool,
-    biasbuster_pass: bool,
     *,
     details: list[str] | None = None,
 ) -> None:
@@ -553,7 +552,6 @@ def emit_pipeline_verification(
     writer.send_event(
         "pipeline_verification",
         guardrails_pass=guardrails_pass,
-        biasbuster_pass=biasbuster_pass,
         details=details or [],
     )
 

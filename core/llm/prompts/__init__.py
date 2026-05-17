@@ -104,10 +104,6 @@ _synthesizer = _load_template("synthesizer")
 SYNTHESIZER_SYSTEM: str = _synthesizer["system"]
 SYNTHESIZER_USER: str = _synthesizer["user"]
 
-_biasbuster = _load_template("biasbuster")
-BIASBUSTER_SYSTEM: str = _biasbuster["system"]
-BIASBUSTER_USER: str = _biasbuster["user"]
-
 _commentary = _load_template("commentary")
 COMMENTARY_SYSTEM: str = _commentary["system"]
 COMMENTARY_USER: str = _commentary["user"]
@@ -130,15 +126,13 @@ SYNTHESIZER_TOOLS_SUFFIX: str = _tool_augmented["synthesizer_tools"]
 # ---------------------------------------------------------------------------
 
 PROMPT_VERSIONS: dict[str, str] = {
-    # Base templates (8)
+    # Base templates (6)
     "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
     "ANALYST_USER": _hash_prompt(ANALYST_USER),
     "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
     "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
     "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
     "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
-    "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
-    "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
     # Extended templates (9)
     "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
     "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
@@ -170,8 +164,6 @@ _PINNED_HASHES: dict[str, str] = {
     "ANALYST_SYSTEM": "b800a57a4599",
     "ANALYST_TOOLS_SUFFIX": "36055d5618f4",
     "ANALYST_USER": "63711de6c099",
-    "BIASBUSTER_SYSTEM": "07987c709fd9",
-    "BIASBUSTER_USER": "378be01a6310",
     "COMMENTARY_SYSTEM": "488d8916d958",
     "COMMENTARY_USER": "2024ac4eba69",
     "CROSS_LLM_DUAL_VERIFY": "602669128ae2",
@@ -198,15 +190,13 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
 
     drifted: list[str] = []
     current: dict[str, str] = {
-        # Base templates (8)
+        # Base templates (6)
         "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
         "ANALYST_USER": _hash_prompt(ANALYST_USER),
         "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
         "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
         "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
         "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
-        "BIASBUSTER_SYSTEM": _hash_prompt(BIASBUSTER_SYSTEM),
-        "BIASBUSTER_USER": _hash_prompt(BIASBUSTER_USER),
         # Extended templates (9)
         "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
         "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
@@ -242,8 +232,6 @@ __all__ = [
     "ANALYST_TOOLS_SUFFIX",
     "ANALYST_USER",
     "AXES_VERSIONS",
-    "BIASBUSTER_SYSTEM",
-    "BIASBUSTER_USER",
     "COMMENTARY_SYSTEM",
     "COMMENTARY_USER",
     "CROSS_LLM_DUAL_VERIFY",

@@ -207,7 +207,7 @@ export function GatewaySection() {
                   fontSize={8} fontFamily="ui-monospace, monospace"
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   transition={fadeTx}>
-                  {m.source} → {m.poller} → acquire_all(key) → AgenticLoop → Result
+                  {m.source} → {m.poller} → acquire_all_async(key) → AgenticLoop → Result
                 </motion.text>
               </AnimatePresence>
             </svg>

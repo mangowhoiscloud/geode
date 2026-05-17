@@ -1,0 +1,149 @@
+# GEODE model pricing + context window catalogue.
+#
+# Source of truth for per-token cost and context limits. P3-A (2026-05-17)
+# introduces this file + ``pricing_loader.py``; P3-B migrates
+# ``core.llm.token_tracker.MODEL_PRICING`` / ``MODEL_CONTEXT_WINDOW`` to
+# read from here. Until then this file is dormant.
+#
+# Quasi-static — refresh per quarter on pricing or model-list changes.
+# Schema layers:
+#   [pricing.<family>.<model>]  per-token pricing (per-million-token units)
+#   [context_windows]            model → int (tokens)
+#
+# Derive formulas applied by the loader (family-specific):
+#   anthropic: cache_write = input × 1.25, cache_read = input × 0.1,
+#              thinking = output
+#   openai:    cache_read = cached_per_mtok (explicit),
+#              thinking = output if reasoning, else 0
+
+# ── Anthropic (verified 2026-04-23) ───────────────────────────────────────
+# Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
+
+[pricing.anthropic."claude-opus-4-7"]
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+
+[pricing.anthropic."claude-opus-4-6"]
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+
+[pricing.anthropic."claude-opus-4-5"]
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+
+[pricing.anthropic."claude-opus-4-1"]
+input_per_mtok = 15.00
+output_per_mtok = 75.00
+
+[pricing.anthropic."claude-opus-4"]
+input_per_mtok = 15.00
+output_per_mtok = 75.00
+
+[pricing.anthropic."claude-sonnet-4-6"]
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+
+[pricing.anthropic."claude-sonnet-4-5-20250929"]
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+
+[pricing.anthropic."claude-sonnet-4"]
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+
+[pricing.anthropic."claude-haiku-4-5-20251001"]
+input_per_mtok = 1.00
+output_per_mtok = 5.00
+
+# ── OpenAI GPT-5 family (verified 2026-04-26) ─────────────────────────────
+# Source: developers.openai.com/api/docs/pricing/ + /codex/pricing.
+
+[pricing.openai."gpt-5.5"]
+input_per_mtok = 5.00
+output_per_mtok = 30.00
+cached_per_mtok = 0.50
+
+[pricing.openai."gpt-5.4"]
+input_per_mtok = 2.50
+output_per_mtok = 15.00
+cached_per_mtok = 0.25
+
+[pricing.openai."gpt-5.4-mini"]
+input_per_mtok = 0.75
+output_per_mtok = 4.50
+cached_per_mtok = 0.075
+
+[pricing.openai."gpt-5.3-codex"]
+input_per_mtok = 1.75
+output_per_mtok = 14.00
+cached_per_mtok = 0.175
+
+# ── OpenAI Reasoning (verified 2026-03-19) ────────────────────────────────
+
+[pricing.openai."o3"]
+input_per_mtok = 2.00
+output_per_mtok = 8.00
+reasoning = true
+
+[pricing.openai."o4-mini"]
+input_per_mtok = 1.10
+output_per_mtok = 4.40
+cached_per_mtok = 0.275
+reasoning = true
+
+# ── ZhipuAI GLM (verified 2026-04-26 against docs.z.ai/guides/overview/pricing)
+# v0.52.4 — refreshed pricing; pre-fix glm-5.1 / glm-5 were stale.
+# glm-4.7 retained because Coding Plan defaults still route Opus/Sonnet
+# env aliases to it (see docs.z.ai/devpack/overview).
+#
+# GLM uses the openai derive formula (cache_read = explicit cached, no
+# reasoning multiplier) by manifest convention.
+
+[pricing.openai."glm-5.1"]
+input_per_mtok = 1.40
+output_per_mtok = 4.40
+
+[pricing.openai."glm-5"]
+input_per_mtok = 1.00
+output_per_mtok = 3.20
+
+[pricing.openai."glm-5-turbo"]
+input_per_mtok = 1.20
+output_per_mtok = 4.00
+
+[pricing.openai."glm-4.7"]
+input_per_mtok = 0.60
+output_per_mtok = 2.20
+
+[pricing.openai."glm-4.7-flash"]
+input_per_mtok = 0.00
+output_per_mtok = 0.00  # free tier (limited-time)
+
+# ── Context windows (verified 2026-04-26 / GLM 2026-05-12 GAP-X1) ─────────
+# Anthropic: 1M tokens for opus-4-6/7 + sonnet-4-6; 200K for legacy.
+# OpenAI 5.x: 1.05M tokens for gpt-5.5/5.4/5.4-mini; 200K for 5.3-codex
+# + reasoning (o3/o4-mini). GLM: all share 202_752 (z.ai rounds to 200K
+# in marketing; precise value matters for the 200K guard's early-trip
+# margin).
+
+[context_windows]
+"claude-opus-4-7"            = 1000000
+"claude-opus-4-6"            = 1000000
+"claude-opus-4-5"            = 200000
+"claude-opus-4-1"            = 200000
+"claude-opus-4"              = 200000
+"claude-sonnet-4-6"          = 1000000
+"claude-sonnet-4-5-20250929" = 200000
+"claude-sonnet-4"            = 200000
+"claude-haiku-4-5-20251001"  = 200000
+"gpt-5.5"                    = 1050000
+"gpt-5.4"                    = 1050000
+"gpt-5.4-mini"               = 1050000
+"gpt-5.3-codex"              = 200000
+"o3"                         = 200000
+"o4-mini"                    = 200000
+"glm-5.1"                    = 202752
+"glm-5"                      = 202752
+"glm-5-turbo"                = 202752
+"glm-4.7"                    = 202752
+"glm-4.7-flash"              = 202752

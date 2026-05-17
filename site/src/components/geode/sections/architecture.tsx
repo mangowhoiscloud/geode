@@ -224,7 +224,7 @@ export function ArchitectureSection() {
               {/* Mode path indicator */}
               <text x={400} y={286} textAnchor="middle" fill={modeLabels[mode].color} fillOpacity={0.35}
                 fontSize={8} fontFamily="ui-monospace, monospace">
-                acquire_all(key, [&quot;session&quot;, &quot;global&quot;]) → create_session({mode.toUpperCase()})
+                acquire_all_async(key, [&quot;session&quot;, &quot;global&quot;]) → create_session({mode.toUpperCase()})
               </text>
             </svg>
           </div>

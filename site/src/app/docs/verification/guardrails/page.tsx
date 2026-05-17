@@ -57,9 +57,9 @@ output accepted`}</pre>
             <h2>가드레일이 다루지 않는 영역</h2>
             <p>
               가드레일은 출력의 <em>형상</em>과 <em>방어 가능성</em>을 검사합니다. 편향 검사는
-              다루지 않습니다. 그것은 <a href="/geode/docs/verification/biasbuster">BiasBuster</a>의
-              영역입니다. <code>cross_llm.md</code> 템플릿이 독립 재스코어링으로 제공하는
-              Cross-LLM 일관성도 가드레일이 검사하지 않습니다.
+              다루지 않습니다. 편향과 도메인별 캘리브레이션은 외부 도메인 플러그인의
+              책임입니다. <code>cross_llm.md</code> 템플릿이 독립 재스코어링으로 제공하는
+              Cross-LLM 일관성도 별도 검증 계층입니다.
             </p>
 
             <h2>원인 분류 (synthesizer 잠금)</h2>
@@ -119,9 +119,9 @@ output accepted`}</pre>
             <h2>What guardrails do not cover</h2>
             <p>
               Guardrails check the <em>shape</em> and <em>defensibility</em> of an
-              output. They do not check for bias — that is{" "}
-              <a href="/geode/docs/verification/biasbuster">BiasBuster</a> — and
-              they do not check the cross-LLM consistency that{" "}
+              output. They do not check for bias or domain-specific calibration;
+              those belong to external domain plugins. They also do not check
+              the cross-LLM consistency that{" "}
               <code>cross_llm.md</code> templates provide via independent
               re-scoring.
             </p>

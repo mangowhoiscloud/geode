@@ -682,8 +682,7 @@ class EventRenderer:
     def _handle_pipeline_verification(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
         g = "\033[32m\u2713\033[0m" if event.get("guardrails_pass") else "\033[31m\u2717\033[0m"
-        b = "\033[32m\u2713\033[0m" if event.get("biasbuster_pass") else "\033[31m\u2717\033[0m"
-        self._out.write(f"  \033[36;1m\u25b8 VERIFY\033[0m Guardrails {g} | BiasBuster {b}\n")
+        self._out.write(f"  \033[36;1m\u25b8 VERIFY\033[0m Guardrails {g}\n")
         details = event.get("details", [])
         for d in details[:3]:
             self._out.write(f"    \033[33m- {d}\033[0m\n")

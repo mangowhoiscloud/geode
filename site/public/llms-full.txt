@@ -1,6 +1,6 @@
 # GEODE
 
-GEODE v0.99.11. A self-hosting agent harness for autonomous execution.
+GEODE v0.99.12. A self-hosting agent harness for autonomous execution.
 스스로를 빌드하는 자율 에이전트 하네스.
 
 Last sync: 2026-05-17

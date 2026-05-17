@@ -524,7 +524,7 @@ class GeodeRuntime:
     def get_tool_state_injection(self, *, mode: str = "full_pipeline") -> dict[str, Any]:
         """Return tool definitions for injection into GeodeState.
 
-        Nodes that support tool-augmented paths (Synthesizer, BiasBuster) read
+        Nodes that support tool-augmented paths (for example, Synthesizer) read
         ``_tool_definitions`` from state and ``get_async_tool_executor()`` from contextvar.
         The executor callable is NOT stored in state (functions are not serializable
         by LangGraph's msgpack checkpointer).

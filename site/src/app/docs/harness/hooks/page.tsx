@@ -72,7 +72,7 @@ hooks.register(
             <h2>PROMPT_ASSEMBLED payload</h2>
             <p>유일한 prompt 관련 이벤트. payload 구성:</p>
             <ul>
-              <li><code>node</code>: &ldquo;analyst&rdquo;, &ldquo;evaluator&rdquo;, &ldquo;synthesizer&rdquo;, &ldquo;biasbuster&rdquo;, &ldquo;router&rdquo;</li>
+              <li><code>node</code>: &ldquo;analyst&rdquo;, &ldquo;evaluator&rdquo;, &ldquo;synthesizer&rdquo;, &ldquo;router&rdquo;</li>
               <li><code>role_type</code>: 예) &ldquo;game_mechanics&rdquo;, &ldquo;quality_judge&rdquo;</li>
               <li><code>base_template_hash</code>, <code>assembled_hash</code> (SHA-256[:12])</li>
               <li><code>fragment_count</code>, <code>total_chars</code>, <code>fragments_used</code></li>
@@ -145,7 +145,7 @@ hooks.register(
             <h2>PROMPT_ASSEMBLED payload</h2>
             <p>The single prompt-related event. Payload contains:</p>
             <ul>
-              <li><code>node</code>: &ldquo;analyst&rdquo;, &ldquo;evaluator&rdquo;, &ldquo;synthesizer&rdquo;, &ldquo;biasbuster&rdquo;, &ldquo;router&rdquo;</li>
+              <li><code>node</code>: &ldquo;analyst&rdquo;, &ldquo;evaluator&rdquo;, &ldquo;synthesizer&rdquo;, &ldquo;router&rdquo;</li>
               <li><code>role_type</code>: e.g. &ldquo;game_mechanics&rdquo;, &ldquo;quality_judge&rdquo;</li>
               <li><code>base_template_hash</code>, <code>assembled_hash</code> (SHA-256[:12])</li>
               <li><code>fragment_count</code>, <code>total_chars</code>, <code>fragments_used</code></li>

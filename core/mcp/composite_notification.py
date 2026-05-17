@@ -1,8 +1,4 @@
-"""Composite Notification Adapter — routes messages to channel-specific adapters.
-
-Same pattern as CompositeSignalAdapter: chains multiple NotificationPort
-implementations and dispatches based on the channel parameter.
-"""
+"""Composite Notification Adapter — routes messages to channel-specific adapters."""
 
 from __future__ import annotations
 

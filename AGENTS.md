@@ -16,7 +16,7 @@
 - **Language**: Python 3.12+, type-hinted, uv-managed.
 - **Layout**: two top-level packages.
   - `core/` — domain-agnostic runtime.
-  - `plugins/` — domain extensions (currently `game_ip`, `petri_audit`).
+  - `plugins/` — domain extensions (currently `petri_audit`; Game IP is externalized).
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
 
@@ -57,8 +57,8 @@ LLM router, providers, prompt assembly, hashing.
 - `providers/glm.py` — GLM 5.x family. Context window 202_752 (not 200_000).
   Thinking gate (`thinking.type="off"|"none"`).
 - `providers/codex.py` — OAuth + reasoning sidecar.
-- `prompts/__init__.py` — `_PINNED_HASHES` (20 entries). Karpathy P4 ratchet.
-- `prompts/*.md` — 17 base templates plus 3 axes datasets.
+- `prompts/__init__.py` — `_PINNED_HASHES` (18 entries). Karpathy P4 ratchet.
+- `prompts/*.md` — 6 base templates plus 9 extended templates and 3 axes datasets.
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),
@@ -145,12 +145,13 @@ panel voting.
 Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
 - `skill_registry.py` — 5-tier discovery (bundled → user → org → project → session).
-- `reports/` — report templates (analyst_reasoning, biasbuster, cross_llm,
+- `reports/` — report templates (analyst_reasoning, cross_llm,
   decision_tree, evaluators, psm).
 
 ### `core/verification/`
 
-Schema, Range, Grounding, Coherence guardrails (G1-G4) plus BiasBuster.
+Schema, Range, Grounding, Coherence guardrails (G1-G4). Domain-specific
+bias and calibration checks belong in external plugins.
 
 ### `core/scheduler/`, `core/orchestration/`
 
@@ -164,10 +165,11 @@ Typer commands and thin CLI surface. Slash commands.
 
 Slack / Discord / Telegram adapters. Lane queue concurrency.
 
-### `plugins/game_ip/`
+### Game IP plugin
 
-First domain plugin. 4 Analysts → 3 Evaluators → BiasBuster → Synthesizer.
-14-axis PSM scoring. Tier classification (S/A/B/C/D).
+Moved out of the GEODE core repository. Keep domain-specific analysts,
+evaluators, bias checks, calibration fixtures, scoring rubrics, and fixtures in
+the external plugin package.
 
 ### `plugins/petri_audit/`
 

@@ -78,6 +78,7 @@ from .login import (
 )
 from .mcp import _mcp_add, cmd_mcp
 from .model import _apply_model, _interactive_model_picker, cmd_model
+from .petri import cmd_petri
 from .session import cmd_apply, cmd_clear, cmd_compact, cmd_context, cmd_resume
 from .skills import _skills_add, cmd_skill_invoke, cmd_skills
 from .tasks import cmd_tasks
@@ -121,6 +122,7 @@ __all__ = [
     "cmd_login",
     "cmd_mcp",
     "cmd_model",
+    "cmd_petri",
     "cmd_resume",
     "cmd_schedule",
     "cmd_skill_invoke",

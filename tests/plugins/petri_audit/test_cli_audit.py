@@ -16,7 +16,9 @@ runner = CliRunner()
 
 
 def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("plugins.petri_audit.models._claude_oauth_available", lambda: True)
+    monkeypatch.setattr(
+        "plugins.petri_audit.adapters.claude_cli_backend.is_available", lambda: True
+    )
     result = runner.invoke(
         app,
         [

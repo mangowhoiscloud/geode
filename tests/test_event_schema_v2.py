@@ -196,11 +196,10 @@ class TestPipelineEmitters:
     def test_emit_pipeline_verification(self) -> None:
         from core.ui.agentic_ui import emit_pipeline_verification
 
-        emit_pipeline_verification(True, False)
+        emit_pipeline_verification(True)
         self.mock_writer.send_event.assert_called_once_with(
             "pipeline_verification",
             guardrails_pass=True,
-            biasbuster_pass=False,
             details=[],
         )
 
@@ -339,12 +338,9 @@ class TestEventRendererV2:
         assert "1.8" in out
 
     def test_pipeline_verification(self, renderer) -> None:
-        renderer.on_event(
-            {"type": "pipeline_verification", "guardrails_pass": True, "biasbuster_pass": False}
-        )
+        renderer.on_event({"type": "pipeline_verification", "guardrails_pass": True})
         out = renderer._out.getvalue()
         assert "\u2713" in out
-        assert "\u2717" in out
 
     def test_pipeline_verification_details(self, renderer) -> None:
         """G4: Guardrail failure details rendered in verification event."""
@@ -352,7 +348,6 @@ class TestEventRendererV2:
             {
                 "type": "pipeline_verification",
                 "guardrails_pass": False,
-                "biasbuster_pass": True,
                 "details": ["G2 FAIL: score out of range", "G3 FAIL: grounding < 0.5"],
             }
         )

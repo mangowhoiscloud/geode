@@ -1,0 +1,106 @@
+# GEODE routing manifest — declarative model / provider / credential routing.
+#
+# Shipped default that replaces hardcoded constants in core/config/__init__.py
+# (P2-A schema; P2-B..E migrate the call sites). Users override per-key by
+# editing ~/.geode/routing.toml — only declared keys are picked up, missing
+# keys fall back to this file.
+#
+# 5 sections (mirrors plugins/petri_audit/petri.plugin.toml 4-layer design):
+#
+#   [model.defaults]                     — provider → primary model id
+#   [model.fallbacks.<provider>]         — provider → fallback chain
+#   [routing.prefixes]                   — model-id prefix → provider
+#   [nodes]                              — pipeline node → model (analyst etc.)
+#   [credentials.patterns]               — API-key regex → provider
+#   [credentials.keychain]               — keychain service name per provider
+#
+# Loader: core.config.routing_manifest.load_routing_manifest() →
+# :class:`RoutingManifest` (pydantic).
+
+# ── Model defaults ──────────────────────────────────────────────────────────
+
+[model.defaults]
+anthropic = "claude-opus-4-7"
+anthropic_secondary = "claude-sonnet-4-6"
+anthropic_budget = "claude-haiku-4-5-20251001"
+openai = "gpt-5.5"
+codex = "gpt-5.5"
+glm = "glm-5.1"
+
+# ── Model fallback chains ──────────────────────────────────────────────────
+
+[model.fallbacks]
+anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]
+openai = ["gpt-5.5", "gpt-5.4"]
+codex = ["gpt-5.5", "gpt-5.3-codex"]
+glm = ["glm-5.1", "glm-5"]
+
+# ── Provider prefix routing ────────────────────────────────────────────────
+#
+# Order matters — first matching prefix wins. Provider-prefixed ids
+# (claude-/glm-) come before the broader gpt-/o3-/o4- families so the
+# more specific match runs first. Special members (codex-only models)
+# are listed in [routing.codex_only_models].
+
+[routing.prefixes]
+"claude-" = "anthropic"
+"glm-" = "glm"
+"gpt-" = "openai"
+"o3-" = "openai"
+"o3" = "openai"  # bare ``o3`` — P2-D parity with legacy family_of's special-case
+"o4-" = "openai"
+"o4-mini" = "openai"  # bare ``o4-mini`` — same special-case
+"gemini-" = "google"
+"deepseek-" = "deepseek"
+"llama-" = "meta"
+"qwen-" = "alibaba"
+"qwen3" = "alibaba"
+
+# Codex-only models — OAuth-only path (chatgpt.com/backend-api/codex). The
+# resolver checks this list before the prefix table so gpt-5.5 routes to
+# openai-codex rather than openai.
+[routing]
+codex_only_models = ["gpt-5.5", "gpt-5.5-pro"]
+# Suffix-based codex matches — *-codex, *-codex-max, *-codex-mini.
+codex_suffixes = ["-codex", "-codex-max", "-codex-mini"]
+# Fallback provider when no rule matches (preserves legacy "openai" default).
+fallback_provider = "openai"
+
+# ── Pipeline node defaults ─────────────────────────────────────────────────
+
+[nodes]
+analyst = "claude-opus-4-7"
+evaluator = "claude-opus-4-7"
+scoring = "claude-opus-4-7"
+synthesizer = "claude-opus-4-7"
+
+# ── Credential patterns ────────────────────────────────────────────────────
+#
+# Onboarding key wizard matches user input against these regexes to
+# auto-detect the provider. Pattern → provider map; first match wins.
+# Quantified patterns reject obvious typos (length ≥ 10) before they hit
+# the key store.
+
+[credentials.patterns]
+"^sk-ant-[A-Za-z0-9_-]{10,}$" = "anthropic"
+"^sk-proj-[A-Za-z0-9_-]{10,}$" = "openai"
+"^sk-[A-Za-z0-9_-]{10,}$" = "openai"
+
+# Provider → env var the API key is stored under. Onboarding upserts into
+# the env when a pattern matches. GLM keys are sniffed by a dedicated
+# helper (``core.utils.env_io.is_glm_key``) — the GLM mapping here is
+# the destination env var for that hit.
+
+[credentials.env_vars]
+anthropic = "ANTHROPIC_API_KEY"
+openai = "OPENAI_API_KEY"
+glm = "ZAI_API_KEY"
+
+# ── Keychain service names (per provider, per platform) ────────────────────
+#
+# Per-process override via env var GEODE_<PROVIDER>_KEYCHAIN_SERVICE (e.g.
+# GEODE_ANTHROPIC_KEYCHAIN_SERVICE=Claude\ Code-credentials).
+# macOS-only for now — Linux/Windows keychain backends added later.
+
+[credentials.keychain]
+anthropic = "Claude Code-credentials"

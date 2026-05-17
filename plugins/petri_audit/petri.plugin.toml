@@ -1,0 +1,112 @@
+# Petri audit plugin manifest — declarative role × source × adapter binding.
+#
+# Schema layers:
+#   1. [petri] — enabled roles (auditor / target / judge)
+#   2. [petri.role.<name>] — per-role default model + allowed model set + contract
+#   3. [petri.source.<family>] — per-family default credential source + allowed sources
+#   4. [petri.adapter.<family>.<source>] — concrete adapter binding (module, env vars,
+#      inspect_ai prefix, endpoint / binary)
+#
+# Loader: plugins.petri_audit.manifest.load_manifest() → PetriManifest (pydantic).
+#
+# Future expansion — config.toml [petri.<role>] overrides take precedence, e.g.
+# `[petri.auditor] model = "claude-opus-4-7" source = "claude-cli"` flips runtime
+# binding without touching this manifest (P1-E registry handles the merge).
+
+[petri]
+enabled_roles = ["auditor", "target", "judge"]
+
+# ── Roles ────────────────────────────────────────────────────────────────────
+
+[petri.role.auditor]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.5",
+    "gpt-5.4",
+]
+role_contract = "roles/auditor.md"
+
+[petri.role.target]
+# Target always routes through GeodeModelAPI (`geode/<model>`) regardless of
+# family — the audit evaluates GEODE-as-a-system. The user only pins the base
+# LLM GEODE uses internally.
+default_model = "claude-haiku-4-5"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "glm-4-6",
+]
+role_contract = "roles/target.md"
+
+[petri.role.judge]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.5",
+]
+role_contract = "roles/judge.md"
+
+# ── Sources (per family) ─────────────────────────────────────────────────────
+
+[petri.source.anthropic]
+# "auto" = consult settings.anthropic_credential_source, fall back to keychain
+# probe (see plugins.petri_audit.claude_code_provider.is_claude_oauth_available).
+# allowed[0] = priority for the auto resolver. OAuth first so the autoresearch
+# outer loop consumes the user's subscription quota when available; explicit
+# ANTHROPIC_API_KEY (api_key) still wins when set via settings or override.
+default = "auto"
+allowed = ["claude-cli", "api_key", "auto"]
+
+[petri.source.openai]
+# Same priority model as anthropic — OAuth (Codex / ChatGPT Plus quota) first.
+default = "auto"
+allowed = ["openai-codex", "api_key", "auto"]
+
+[petri.source.zhipuai]
+default = "api_key"
+allowed = ["api_key"]
+
+# ── Adapters (per family × source) ───────────────────────────────────────────
+
+[petri.adapter.anthropic.api_key]
+module = "plugins.petri_audit.adapters.http_anthropic"
+inspect_prefix = "anthropic"
+auth_env_vars = ["ANTHROPIC_API_KEY"]
+endpoint = "https://api.anthropic.com"
+
+[petri.adapter.anthropic.claude-cli]
+# OAuth via Claude CLI keychain entry — ClaudeMaxAPI subclass of stock
+# AnthropicAPI; calls land on api.anthropic.com with subscription quota.
+module = "plugins.petri_audit.adapters.claude_cli_backend"
+inspect_prefix = "claude-code"
+auth_env_vars = ["ANTHROPIC_OAUTH_TOKEN"]
+binary = "claude"
+
+[petri.adapter.openai.api_key]
+module = "plugins.petri_audit.adapters.http_openai"
+inspect_prefix = "openai"
+auth_env_vars = ["OPENAI_API_KEY"]
+endpoint = "https://api.openai.com"
+
+[petri.adapter.openai.openai-codex]
+# OAuth via Codex CLI — re-routes through OpenAICodexAPI (registered ModelAPI
+# `openai-codex`) so calls consume ChatGPT Plus quota instead of PAYG.
+module = "plugins.petri_audit.adapters.openai_codex_oauth"
+inspect_prefix = "openai-codex"
+auth_env_vars = ["OPENAI_OAUTH_TOKEN"]
+
+[petri.adapter.zhipuai.api_key]
+# GLM family routes through GeodeModelAPI (`geode/<model>`) because inspect_ai
+# has no native GLM provider.
+module = "plugins.petri_audit.adapters.http_zhipuai"
+inspect_prefix = "geode"
+auth_env_vars = ["ZHIPUAI_API_KEY"]
+endpoint = "https://open.bigmodel.cn"

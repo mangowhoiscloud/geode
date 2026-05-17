@@ -7,8 +7,8 @@ name: Install Smoke Test
 #   2. VERSION   — `geode version` matches pyproject.toml
 #   3. UPDATE    — `geode update --dry-run` resolves the source-checkout path
 #                  and `uv tool install -e . --force` remains idempotent
-#   4. UNINSTALL — `geode uninstall --dry-run` resolves lifecycle targets
-#                  and `uv tool uninstall geode` leaves no residue
+#   4. UNINSTALL — `geode uninstall --force` removes runtime files and the
+#                  installed uv tool without leaving a PATH-visible shim
 #
 # A failure here means the README setup steps no longer work on a clean
 # machine — block the merge and fix the install path before shipping.
@@ -62,10 +62,10 @@ jobs:
           uv tool install -e . --force
           geode version
 
-      - name: 4) UNINSTALL — uv tool uninstall geode
+      - name: 4) UNINSTALL — geode uninstall removes the installed CLI
         run: |
-          geode uninstall --dry-run
-          uv tool uninstall geode
+          geode uninstall --force
+          hash -r 2>/dev/null || true
           if command -v geode >/dev/null 2>&1; then
             echo "::error::geode binary still on PATH after uninstall: $(command -v geode)"
             exit 1

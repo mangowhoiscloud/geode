@@ -16,6 +16,7 @@ from core.cli.commands import (
     cmd_login,
     cmd_mcp,
     cmd_model,
+    cmd_petri,
     cmd_schedule,
     cmd_skills,
     cmd_trigger,
@@ -72,6 +73,8 @@ def _handle_command(
         cmd_model(args)
     elif action == "login":
         cmd_login(args)
+    elif action == "petri":
+        cmd_petri(args)
     elif action == "schedule":
         cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
     elif action == "trigger":

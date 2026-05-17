@@ -25,7 +25,7 @@ export default function Page() {
             <table>
               <thead><tr><th>패턴</th><th>Artifact (출시되는 OS)</th><th>Line (그것을 빌드하는 라인)</th></tr></thead>
               <tbody>
-                <tr><td>Hash ratchet</td><td>프롬프트 해시 20개 핀</td><td>CI 5단계 게이트</td></tr>
+                <tr><td>Hash ratchet</td><td>프롬프트 해시 18개 핀</td><td>CI 5단계 게이트</td></tr>
                 <tr><td>Layered memory</td><td>5계층 ContextAssembler</td><td>4계층 CLAUDE.md (managed → user → project → local)</td></tr>
                 <tr><td>Hooks</td><td>58 runtime 이벤트</td><td>41 scaffold skills</td></tr>
                 <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 22 규칙</td></tr>

@@ -34,21 +34,17 @@ __all__ = [
 ]
 
 
-def _codex_oauth_available() -> bool:
-    """Read the Codex OAuth availability flag via lazy import.
-
-    Indirected through ``plugins.petri_audit.codex_provider`` so the
-    underlying ``_resolve_codex_token`` import (which pulls in the
-    GEODE wiring container) stays optional — ``models.py`` is loaded
-    by ``runner.py`` on the bootstrap-free path and must not require
-    the full ``core.llm.providers.codex`` dependency graph.
-    """
-    try:
-        from plugins.petri_audit.codex_provider import is_codex_oauth_available
-
-        return bool(is_codex_oauth_available())
-    except Exception:
-        return False
+# P2-D (2026-05-17) — provider → family normalisation. ``family_of`` was
+# the second hardcoded routing table after ``core.config._resolve_provider``;
+# both now share ``core.config.routing_manifest``'s prefix table. ``family_of``
+# adds a thin provider → family translation so the M1 family-mismatch guard
+# in :mod:`plugins.petri_audit.optimize` stays conservative.
+_PROVIDER_TO_FAMILY: dict[str, str] = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "openai-codex": "openai",
+    "glm": "zhipuai",
+}
 
 
 def family_of(model_id: str) -> str:
@@ -56,29 +52,47 @@ def family_of(model_id: str) -> str:
 
     Used by :mod:`plugins.petri_audit.optimize` to enforce **M1 — Judge
     must not share a family with the generator** (mitigation against
-    in-context reward hacking + self-preference bias). See plan
-    § "D 단계 도입 전 위험 카탈로그" R1/R3.
+    in-context reward hacking + self-preference bias).
 
     Raw provider-prefixed ids ("anthropic/...", "openai-api/...") are
     parsed by stripping the trailing segment and re-classifying the
     bare model id; "geode/<base>" routes through us so the family is
     that of the base model.
+
+    P2-D: delegates to ``core.config.routing_manifest.resolve_provider``
+    + a small provider → family normalisation table. Providers without
+    a Petri family mapping (``google`` / ``deepseek`` / ``meta`` /
+    ``alibaba``) collapse to ``"unknown"``.
     """
     if not model_id:
         return "unknown"
     base = model_id.rsplit("/", 1)[-1]
-    if base.startswith("claude-"):
-        return "anthropic"
-    if base.startswith("gpt-") or base in ("o3", "o4-mini"):
-        return "openai"
-    if base.startswith("glm-"):
-        return "zhipuai"
-    # Provider prefix fallback for raw inspect_ai identifiers.
-    if model_id.startswith("anthropic/"):
-        return "anthropic"
-    if model_id.startswith("openai/") or model_id.startswith("openai-api/"):
-        return "openai"
-    return "unknown"
+    if not base:
+        return "unknown"
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return "unknown"
+    # Walk codex_only_models / codex_suffixes / prefixes explicitly. We
+    # deliberately do NOT fall through to the manifest's fallback_provider
+    # — legacy family_of returned "unknown" for ids that matched no rule,
+    # and the optimiser's M1 guard depends on that conservatism (an
+    # unrecognised judge model must not silently be classified as
+    # "openai" same-family with a gpt-* generator).
+    rules = manifest.routing
+    if base in rules.codex_only_models or any(base.endswith(s) for s in rules.codex_suffixes):
+        provider: str | None = "openai-codex"
+    else:
+        provider = None
+        for prefix, target in rules.prefixes.items():
+            if base.startswith(prefix):
+                provider = target
+                break
+    if provider is None:
+        return "unknown"
+    return _PROVIDER_TO_FAMILY.get(provider, "unknown")
 
 
 def same_family(model_a: str, model_b: str) -> bool:
@@ -131,75 +145,81 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
         raise AuditModelMappingError("Empty model id")
     if "/" in geode_id:
         return geode_id
-    if geode_id.startswith("claude-"):
-        # ``settings.anthropic_credential_source`` decides the prefix.
-        # ``oauth`` routes through ``claude-code/`` (subscription quota,
-        # zero per-token PAYG); ``api_key`` keeps the stock ``anthropic/``
-        # path. ``auto`` prefers OAuth when the keychain entry resolves.
-        # ``use_oauth`` (explicit caller override) wins over the setting
-        # so existing CLI flags keep working.
-        if use_oauth is True:
-            return f"claude-code/{geode_id}"
-        if use_oauth is False:
-            return f"anthropic/{geode_id}"
-        source = _credential_source("anthropic")
-        if source == "oauth":
-            return f"claude-code/{geode_id}"
-        if source == "api_key":
-            return f"anthropic/{geode_id}"
-        # auto / none → fall back to keychain detection
-        if source == "auto" and _claude_oauth_available():
-            return f"claude-code/{geode_id}"
-        return f"anthropic/{geode_id}"
-    if geode_id.startswith("gpt-") or geode_id in ("o3", "o4-mini"):
-        if geode_id.startswith("gpt-5"):
-            # OAuth re-routing on the OpenAI side. Caller's ``use_oauth``
-            # still wins; otherwise consult settings, falling back to
-            # auto-detect by Codex token presence.
-            if use_oauth is True:
-                return f"openai-codex/{geode_id}"
-            if use_oauth is False:
-                return f"openai/{geode_id}"
-            source = _credential_source("openai")
-            if source == "oauth":
-                return f"openai-codex/{geode_id}"
-            if source == "api_key":
-                return f"openai/{geode_id}"
-            if source == "auto" and _codex_oauth_available():
-                return f"openai-codex/{geode_id}"
-        return f"openai/{geode_id}"
-    if geode_id.startswith("glm-"):
-        return f"geode/{geode_id}"
-    raise AuditModelMappingError(
-        f"Unknown model id {geode_id!r}. Use a MODEL_PRICING key (claude-*, "
-        f"gpt-*, o3, o4-mini, glm-*) or a raw 'provider/model' string."
-    )
 
-
-def _credential_source(provider: str) -> str:
-    """Read ``settings.{provider}_credential_source`` lazily so this
-    module remains importable on the default ``uv sync`` (no
-    pydantic-settings import on cold-start)."""
-    try:
-        from core.config import settings
-
-        field = (
-            "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
+    family = family_of(geode_id)
+    if family == "unknown":
+        raise AuditModelMappingError(
+            f"Unknown model id {geode_id!r}. Use a MODEL_PRICING key (claude-*, "
+            f"gpt-*, o3, o4-mini, glm-*) or a raw 'provider/model' string."
         )
-        return str(getattr(settings, field, "auto"))
-    except Exception:
-        return "auto"
 
+    source_override = _source_from_use_oauth(geode_id, family, use_oauth)
 
-def _claude_oauth_available() -> bool:
-    """True when the Claude Code keychain entry resolves. Lazy import
-    matches the codex-side ``_codex_oauth_available`` helper."""
+    # Cap 'auto' cascade for ids the family's OAuth backend can't serve
+    # (e.g. o3 / o4-mini are not on the Codex catalogue) — force api_key
+    # so the 'auto' expansion never lands on the OAuth source for them.
+    if source_override is None and not _supports_oauth_for_family(geode_id, family):
+        source_override = "api_key"
+
+    # P1-G — credential_source layer handles settings → manifest default →
+    # 'auto' cascade. Lazy import keeps this module loadable on the
+    # bootstrap-free path (matches the existing _credential_source
+    # helper's contract).
+    from plugins.petri_audit.credential_source import (
+        CredentialResolutionError,
+        resolve_credential_source,
+    )
+    from plugins.petri_audit.manifest import load_manifest
+
     try:
-        from plugins.petri_audit.claude_code_provider import is_claude_oauth_available
+        source = resolve_credential_source(family, override=source_override)
+    except CredentialResolutionError:
+        # No credential resolves — legacy behaviour returned the api_key
+        # prefix anyway and let inspect_ai surface the env-var error at
+        # call time. Preserve that.
+        source = "api_key"
 
-        return is_claude_oauth_available()
-    except Exception:
-        return False
+    manifest = load_manifest()
+    try:
+        adapter = manifest.get_adapter(family, source)
+    except KeyError:
+        adapter = manifest.get_adapter(family, "api_key")
+    return f"{adapter.inspect_prefix}/{geode_id}"
+
+
+def _supports_oauth_for_family(model: str, family: str) -> bool:
+    """True when ``family`` has an OAuth path that serves this model id.
+
+    Mirrors the legacy if/elif chain's behaviour — only ``gpt-5.*`` ids
+    are eligible for the Codex backend on the OpenAI side; all claude-*
+    ids are eligible on the Anthropic side; GLM / zhipuai have no OAuth.
+    """
+    if family == "anthropic":
+        return model.startswith("claude-")
+    if family == "openai":
+        return model.startswith("gpt-5")
+    return False
+
+
+def _source_from_use_oauth(geode_id: str, family: str, use_oauth: bool | None) -> str | None:
+    """Translate the legacy ``use_oauth`` flag to a manifest source override.
+
+    ``None`` → no override (resolve_credential_source decides via its
+    own cascade). ``False`` → ``api_key`` (legacy "stay on PAYG"
+    semantics). ``True`` → the family's OAuth source key
+    (``claude-cli`` / ``openai-codex``), capped to ids the Codex
+    backend actually serves (``gpt-5.*``); other ids degrade to
+    ``api_key`` so ``o3`` / ``o4-mini`` retain their legacy routing.
+    """
+    if use_oauth is None:
+        return None
+    if use_oauth is False:
+        return "api_key"
+    if family == "anthropic" and geode_id.startswith("claude-"):
+        return "claude-cli"
+    if family == "openai" and geode_id.startswith("gpt-5"):
+        return "openai-codex"
+    return "api_key"
 
 
 def is_oauth_routed(inspect_id: str) -> bool:

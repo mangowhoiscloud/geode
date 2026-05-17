@@ -1,6 +1,6 @@
 [project]
 name = "geode"
-version = "0.99.11"
+version = "0.99.12"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -383,6 +383,11 @@ omit = [
     "core/mcp_server.py",
     "core/tools/web_tools.py",
     "core/tools/document_tools.py",
+    # Inspect/Petri artifact importers are edge tooling rather than default
+    # runtime paths; diagnostics.py remains covered and in-scope.
+    "core/audit/dim_extractor.py",
+    "core/audit/eval_to_jsonl.py",
+    "core/audit/manifest.py",
 ]
 
 [tool.coverage.report]

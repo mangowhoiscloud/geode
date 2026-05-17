@@ -125,140 +125,26 @@ class LLMUsageAccumulator:
 # ───────────────────────────────────────────────────────────────────────────
 
 
-@dataclass(frozen=True, slots=True)
-class ModelPrice:
-    """Per-token pricing for a single model.
+# P3-B (2026-05-17) — ``ModelPrice`` + pricing dict + context windows
+# now live in ``core/llm/model_pricing.toml`` + ``core.llm.pricing_loader``.
+# The legacy ``_ant`` / ``_oai`` helpers and inlined dict literals were
+# replaced by a single ``load_pricing_catalogue()`` call at import time.
+# Public surface unchanged — every consumer (``token_tracker.ModelPrice``,
+# ``MODEL_PRICING``, ``MODEL_CONTEXT_WINDOW``, monkeypatched test sites)
+# keeps working without modification because we re-export from here.
+from core.llm.pricing_loader import (  # noqa: E402
+    ModelPrice,
+    load_pricing_catalogue,
+)
 
-    Anthropic: cache_write = input × 1.25, cache_read = input × 0.1
-               thinking = output price (Extended Thinking billed as output)
-    OpenAI:    cache_read = provider-specific fixed price (no write cost)
-               thinking = output price (reasoning tokens billed as output)
-    """
-
-    input: float
-    output: float
-    cache_write: float = 0.0
-    cache_read: float = 0.0
-    thinking: float = 0.0
-
-
-def _ant(input_mtok: float, output_mtok: float) -> ModelPrice:
-    """Anthropic pricing with standard 5-min cache multipliers (1.25× / 0.1×).
-
-    Extended Thinking tokens are billed at the same rate as output tokens.
-    """
-    inp = input_mtok / 1_000_000
-    out = output_mtok / 1_000_000
-    return ModelPrice(
-        input=inp,
-        output=out,
-        cache_write=inp * 1.25,
-        cache_read=inp * 0.1,
-        thinking=out,
-    )
-
-
-def _oai(
-    input_mtok: float,
-    output_mtok: float,
-    cached_mtok: float = 0.0,
-    reasoning: bool = False,
-) -> ModelPrice:
-    """OpenAI pricing with optional cached-input price.
-
-    Reasoning models (o3, o4-mini): reasoning tokens billed as output tokens.
-    """
-    out = output_mtok / 1_000_000
-    return ModelPrice(
-        input=input_mtok / 1_000_000,
-        output=out,
-        cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
-        thinking=out if reasoning else 0.0,
-    )
-
-
-# fmt: off
-MODEL_PRICING: dict[str, ModelPrice] = {
-    # ── Anthropic (verified 2026-04-23) ────────────────────────────────
-    # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
-    "claude-opus-4-7":            _ant(5.00,  25.00),
-    "claude-opus-4-6":            _ant(5.00,  25.00),
-    "claude-opus-4-5":            _ant(5.00,  25.00),
-    "claude-opus-4-1":            _ant(15.00, 75.00),
-    "claude-opus-4":              _ant(15.00, 75.00),
-    "claude-sonnet-4-6":          _ant(3.00,  15.00),
-    "claude-sonnet-4-5-20250929": _ant(3.00,  15.00),
-    "claude-sonnet-4":            _ant(3.00,  15.00),
-    "claude-haiku-4-5-20251001":  _ant(1.00,   5.00),
-
-    # ── OpenAI GPT-5 family (verified 2026-04-26) ─────────────────────
-    # Source: developers.openai.com/api/docs/pricing/ + /codex/pricing
-    # v0.52.4 — gpt-5.5 added (Codex new default, OAuth-only per docs).
-    # Pre-5.3 IDs (gpt-5.1, gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.2 family
-    # except 5.2 itself) dropped per CLAUDE.md model-currency policy.
-    "gpt-5.5":      _oai(5.00, 30.00, cached_mtok=0.50),
-    "gpt-5.4":      _oai(2.50, 15.00, cached_mtok=0.25),
-    "gpt-5.4-mini": _oai(0.75,  4.50, cached_mtok=0.075),
-    "gpt-5.3-codex": _oai(1.75, 14.00, cached_mtok=0.175),
-
-    # ── OpenAI Reasoning (verified 2026-03-19) ─────────────────────────
-    "o3":       _oai(2.00,  8.00, reasoning=True),
-    "o4-mini":  _oai(1.10,  4.40, cached_mtok=0.275, reasoning=True),
-
-    # ── ZhipuAI GLM (verified 2026-04-26 against docs.z.ai/guides/overview/pricing)
-    # v0.52.4 — refreshed pricing; pre-fix glm-5.1/glm-5 were stale.
-    # glm-4.7 retained because Coding Plan defaults still route Opus/Sonnet
-    # env aliases to it (see docs.z.ai/devpack/overview).
-    "glm-5.1":         _oai(1.40,  4.40),
-    "glm-5":           _oai(1.00,  3.20),
-    "glm-5-turbo":     _oai(1.20,  4.00),
-    "glm-4.7":         _oai(0.60,  2.20),
-    "glm-4.7-flash":   _oai(0.00,  0.00),  # free tier (limited-time)
-}
-# fmt: on
+_catalogue = load_pricing_catalogue()
+MODEL_PRICING: dict[str, ModelPrice] = dict(_catalogue.pricing)
+MODEL_CONTEXT_WINDOW: dict[str, int] = dict(_catalogue.context_windows)
 
 
 # ───────────────────────────────────────────────────────────────────────────
 # TokenTracker — single record() replaces 3 scattered calls
 # ───────────────────────────────────────────────────────────────────────────
-
-
-# fmt: off
-MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    # Anthropic — verified 2026-04-26.
-    # v0.53.2 — claude-opus-4 / claude-opus-4-1 added to match
-    # MODEL_PRICING entries (D3: pre-fix lookup fell through to 200K
-    # default silently if the user picked one of these legacy models).
-    "claude-opus-4-7":            1_000_000,
-    "claude-opus-4-6":            1_000_000,
-    "claude-opus-4-5":              200_000,
-    "claude-opus-4-1":              200_000,
-    "claude-opus-4":                200_000,
-    "claude-sonnet-4-6":          1_000_000,
-    "claude-sonnet-4-5-20250929":   200_000,
-    "claude-sonnet-4":              200_000,
-    "claude-haiku-4-5-20251001":    200_000,
-    # OpenAI 5.3-5.5 generation — verified 2026-04-26
-    "gpt-5.5":                    1_050_000,
-    "gpt-5.4":                    1_050_000,
-    "gpt-5.4-mini":               1_050_000,
-    "gpt-5.3-codex":                200_000,
-    # OpenAI reasoning (kept — separate generation)
-    "o3":                           200_000,
-    "o4-mini":                      200_000,
-    # GLM — re-verified 2026-05-12 against z.ai docs + openrouter (GAP-X1).
-    # All five models share 202_752 tokens of context (z.ai marketing rounds
-    # to "200K"; the precise value matters for the 200K guard's early-trip
-    # margin).  Cloudflare / LM Studio mirrors expose smaller windows
-    # (131_072 / 128k) for their hosted variants — GEODE calls z.ai directly
-    # so the upstream limit applies.
-    "glm-5.1":                      202_752,
-    "glm-5":                        202_752,
-    "glm-5-turbo":                  202_752,
-    "glm-4.7":                      202_752,
-    "glm-4.7-flash":                202_752,
-}
-# fmt: on
 
 
 class UsageSnapshot(NamedTuple):

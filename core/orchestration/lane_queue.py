@@ -189,10 +189,10 @@ class Lane:
         with self._lock:
             return {k: now - v for k, v in self._active.items()}
 
-    # --- Internal: for LaneQueue.acquire_all() duck-typing ----
+    # --- Internal: for LaneQueue.acquire_all_async() duck-typing ----
 
     def _raw_acquire(self, key: str) -> bool:
-        """Acquire slot using lane's default timeout. For acquire_all()."""
+        """Acquire slot using lane's default timeout. For acquire_all_async()."""
         acquired = self._semaphore.acquire(timeout=self.timeout_s)
         if not acquired:
             self._stats.inc_timeouts()
@@ -203,7 +203,7 @@ class Lane:
         return True
 
     def _raw_release(self, key: str) -> None:
-        """Release slot. For acquire_all()."""
+        """Release slot. For acquire_all_async()."""
         self._semaphore.release()
         with self._lock:
             self._active.pop(key, None)
@@ -231,7 +231,7 @@ class SessionLane:
     serial.  Different keys → fully parallel.  Bounded by *max_sessions*
     to prevent unbounded memory growth (OpenClaw defect fix).
 
-    API matches :class:`Lane` for duck-typing in :meth:`LaneQueue.acquire_all`.
+    API matches :class:`Lane` for duck-typing in :meth:`LaneQueue.acquire_all_async`.
     """
 
     def __init__(
@@ -358,7 +358,7 @@ class SessionLane:
         with self._lock:
             return self._evict_idle_locked()
 
-    # --- Internal: for LaneQueue.acquire_all() duck-typing ---
+    # --- Internal: for LaneQueue.acquire_all_async() duck-typing ---
 
     def _raw_acquire(self, key: str) -> bool:
         entry = self._get_or_create(key)
@@ -421,7 +421,7 @@ class LaneQueue:
         queue.set_session_lane(SessionLane(max_sessions=256))
         queue.add_lane("global", max_concurrent=8)
 
-        with queue.acquire_all("gateway:slack:C123:U456", ["session", "global"]):
+        async with queue.acquire_all_async("gateway:slack:C123:U456", ["session", "global"]):
             # ... do work (session serialized + global gated) ...
     """
 
@@ -459,48 +459,6 @@ class LaneQueue:
             names.insert(0, "session")
         return names
 
-    @contextmanager
-    def acquire_all(
-        self,
-        key: str,
-        lane_names: list[str],
-    ) -> Generator[None, None, None]:
-        """Acquire slots in multiple lanes (in order). Releases all on exit.
-
-        Supports both :class:`Lane` and :class:`SessionLane` via duck-typed
-        ``_raw_acquire`` / ``_raw_release`` methods.
-
-        Args:
-            key: Work item identifier (session key).
-            lane_names: Lane names to acquire in order.
-                Use ``"session"`` for the SessionLane.
-        """
-        acquired: list[Lane | SessionLane] = []
-        try:
-            for name in lane_names:
-                if name == "session":
-                    if self._session_lane is None:
-                        continue  # no session lane registered, skip
-                    if not self._session_lane._raw_acquire(key):
-                        raise TimeoutError(f"SessionLane timeout for key '{key}'")
-                    acquired.append(self._session_lane)
-                else:
-                    lane = self._lanes.get(name)
-                    if lane is None:
-                        raise KeyError(f"Lane '{name}' not found")
-                    if not lane._raw_acquire(key):
-                        raise TimeoutError(
-                            f"Lane '{name}' timeout after {lane.timeout_s}s "
-                            f"(max_concurrent={lane.max_concurrent})"
-                        )
-                    acquired.append(lane)
-
-            yield
-
-        finally:
-            for item in reversed(acquired):
-                item._raw_release(key)
-
     @asynccontextmanager
     async def acquire_all_async(
         self,
@@ -510,8 +468,8 @@ class LaneQueue:
         """Async acquire for multiple lanes.
 
         This preserves the same ordering and partial-failure release semantics
-        as ``acquire_all()`` while keeping blocking semaphore waits off the
-        event loop.
+        as the former sync acquire-all contract while keeping blocking
+        semaphore waits off the event loop.
         """
         acquired: list[Lane | SessionLane] = []
         try:

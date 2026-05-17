@@ -10,7 +10,6 @@ into focused sub-modules in v0.71.0 while preserving every public symbol:
 - ``scoring``          — Subscores / synthesis / analyses formatters
 - ``evaluators``       — Evaluator field extraction + formatters
 - ``psm``              — PSM engine + scoring breakdown formatters
-- ``biasbuster``       — BiasBuster formatters
 - ``signals``          — External signals formatters
 - ``analyst_reasoning``— Analyst reasoning formatters (P0)
 - ``cross_llm``        — Cross-LLM agreement formatters (P0)

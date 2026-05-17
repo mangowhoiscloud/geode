@@ -52,6 +52,389 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.12] — 2026-05-17
+
+### Added
+
+- **Global CLI version option.** Added `geode --version` as a top-level eager
+  option so package managers and release smoke tests can verify the installed
+  executable without invoking the interactive CLI.
+
+- **전역 CLI version option 추가.** package manager 와 release smoke test 가
+  interactive CLI 를 띄우지 않고 설치된 실행 파일을 검증할 수 있도록
+  top-level eager option `geode --version` 을 추가했습니다.
+
+### Architecture
+
+- **Gateway lane async-only boundary.** Removed the public
+  `LaneQueue.acquire_all()` sync facade and moved gateway routing to
+  `ChannelManager.aroute_message()` plus `LaneQueue.acquire_all_async()`.
+  Slack, Discord, and Telegram pollers now await the async channel path, while
+  the stdlib webhook server keeps the only process-edge sync bridge.
+
+- **Gateway lane async-only 경계 정리.** public `LaneQueue.acquire_all()` sync
+  facade 를 제거하고 gateway routing 을 `ChannelManager.aroute_message()` 와
+  `LaneQueue.acquire_all_async()` 로 이동했습니다. Slack / Discord /
+  Telegram poller 는 async channel path 를 await 하며, stdlib webhook
+  server 만 process-edge sync bridge 를 유지합니다.
+
+- **MCP base client abstraction tightened.** `MCPClientBase.acall_tool()` is
+  now an abstract async contract instead of a runtime `NotImplementedError`
+  stub, so concrete MCP transports own their async call implementation.
+
+- **MCP base client 추상화 정리.** `MCPClientBase.acall_tool()` 을 runtime
+  `NotImplementedError` stub 대신 abstract async contract 로 바꿨습니다.
+  구체 MCP transport 가 async call 구현을 명시적으로 소유합니다.
+
+### Removed
+
+- **Game IP verification remnants removed from core.** `BiasBuster`,
+  calibration, signal MCP adapters, the BiasBuster prompt, report/UI
+  compatibility slots, and the old signal/language helper modules were
+  removed from GEODE core. Current core verification is G1-G4 +
+  Cross-LLM + Rights Risk; bias checks, golden-set calibration, and
+  domain-specific signal enrichment now belong to external domain
+  plugins.
+
+- **Game IP 검증 잔여물을 코어에서 제거.** `BiasBuster`,
+  calibration, signal MCP adapter, BiasBuster prompt, report/UI 호환
+  슬롯, 기존 signal/language helper 모듈을 GEODE core 에서 삭제했습니다.
+  현재 코어 검증은 G1-G4 + Cross-LLM + Rights Risk 로 정렬되며,
+  편향 검사, golden-set 캘리브레이션, 도메인별 signal enrichment 는
+  외부 도메인 플러그인이 소유합니다.
+
+### Changed
+
+- **`token_tracker.MODEL_PRICING` + `MODEL_CONTEXT_WINDOW` 가 manifest 로 lazy load (P3-B).**
+  `core/llm/token_tracker.py` 의 두 dict literal (17 model pricing + 20
+  context window) + `_ant`/`_oai` helper 제거. P3-A 의
+  `core/llm/pricing_loader.py` 가 `core/llm/model_pricing.toml` 로부터
+  생성한 `PricingCatalogue` 를 import 시점에 binding. `ModelPrice`
+  dataclass 정의를 pricing_loader 로 통합 — token_tracker 는 re-export
+  만 (모든 caller — runner, tests, monkeypatch 사이트 — 영향 0). **P3
+  (model pricing externalisation) 종결**.
+
+- **`token_tracker` pricing dicts now lazy-load from the manifest (P3-B).**
+  Removed the two inlined dict literals (`MODEL_PRICING`,
+  `MODEL_CONTEXT_WINDOW`) and the `_ant` / `_oai` derive helpers from
+  `core/llm/token_tracker.py`. They're now bound at import time from
+  the `PricingCatalogue` produced by P3-A's
+  `core/llm/pricing_loader.py` reading `model_pricing.toml`. The
+  `ModelPrice` dataclass moved to `pricing_loader`; `token_tracker`
+  re-exports it so every existing consumer keeps working unchanged.
+  **Closes the P3 pricing-externalisation initiative**.
+
+### Added
+
+- **Model pricing + context windows TOML (P3-A) — schema + loader.**
+  `core/llm/model_pricing.toml` 신설 (17 model pricing × 20 context
+  window entries) + `core/llm/pricing_loader.py` (lru_cache 기반).
+  Schema: `[pricing.<family>.<model>]` per-token base price (anthropic
+  derives cache_write/read/thinking; openai needs explicit cached +
+  reasoning flag) + `[context_windows]` model → int. `PricingCatalogue`
+  dataclass + `ModelPrice` NamedTuple (token_tracker's와 동일 shape) +
+  parity tests vs legacy `MODEL_PRICING` / `MODEL_CONTEXT_WINDOW` 모두
+  통과. **Dormant** — P3-B 가 token_tracker 의 dict 를 loader 호출로
+  교체.
+
+- **Model pricing + context windows TOML (P3-A) — schema + loader.**
+  New `core/llm/model_pricing.toml` (17 pricing + 20 context window
+  entries) and `core/llm/pricing_loader.py`. Schema uses
+  `[pricing.<family>.<model>]` with the base per-mtok pair; the loader
+  applies the family-specific derive formulas (anthropic's
+  cache_write/read/thinking multipliers; openai's explicit cached +
+  reasoning flag). Parity tests verify the loader's output matches the
+  legacy `MODEL_PRICING` / `MODEL_CONTEXT_WINDOW` dicts. **Dormant** —
+  P3-B will swap `token_tracker.py` over to the loader.
+
+### Changed
+
+- **Pipeline node defaults migrated to routing.toml `[nodes]` (P2-E).**
+  `core/config/__init__.py::_PIPELINE_NODE_DEFAULTS` dict (4 entry) 제거.
+  `get_node_model(node_name)` 가 project routing.toml → manifest
+  `[nodes]` 2-단계 cascade. routing_manifest 의 `RoutingManifest.nodes`
+  field 추가 (이전엔 loader 가 nodes 섹션 무시). **P2 (GEODE routing
+  externalisation) 종결** — `core/config/__init__.py` 의 hardcoded
+  routing 전부 manifest 로 위임.
+
+- **Pipeline node defaults migrated to routing.toml `[nodes]` (P2-E).**
+  Removed `_PIPELINE_NODE_DEFAULTS` (4 entries) from
+  `core/config/__init__.py`. `get_node_model` now cascades project
+  `.geode/routing.toml` → manifest `[nodes]`. Added the `nodes` field
+  to `RoutingManifest` (the loader previously dropped the section).
+  **Closes the P2 routing-externalisation initiative** — every
+  hardcoded routing table in `core/config/__init__.py` (defaults,
+  fallbacks, provider resolver, credential patterns, keychain, node
+  defaults) now lives in the manifest.
+
+- **`_resolve_provider` + `family_of` 통합 SOT (P2-D).**
+  GEODE 의 두 hardcoded routing table 을 manifest 의
+  `[routing.prefixes]` + `codex_only_models` + `codex_suffixes` 로
+  통합. `core/config/__init__.py::_resolve_provider` 의 11-branch
+  if/elif (+ `_CODEX_ONLY_MODELS` frozenset) 제거 — manifest 의
+  `resolve_provider` 한 줄 위임. `plugins/petri_audit/models.py::
+  family_of` 의 5-branch 도 manifest prefix table walk + provider→
+  family 매핑으로 전환. `o3` / `o4-mini` bare ids 는 manifest prefix
+  table 에 명시 추가하여 parity 보존 (legacy special case). family_of
+  은 manifest fallback_provider 까지 따라가지 않고 prefix 매칭 안 되면
+  `"unknown"` 반환 — M1 family-mismatch guard 의 conservatism 유지.
+
+- **`_resolve_provider` + `family_of` unified onto the manifest (P2-D).**
+  Both legacy provider-resolution tables (`core/config/__init__.py::
+  _resolve_provider` 11-branch + `_CODEX_ONLY_MODELS` frozenset; and
+  `plugins/petri_audit/models.py::family_of` 5-branch) now delegate to
+  `core/config/routing_manifest`'s `[routing.prefixes]` table +
+  codex_only_models / codex_suffixes. Bare `o3` / `o4-mini` were
+  added to the prefix table to preserve the legacy special-case.
+  `family_of` keeps its conservative "unknown" fallback (does not
+  follow the manifest's fallback_provider) so the M1 family-mismatch
+  guard in `plugins.petri_audit.optimize` cannot silently classify an
+  unrecognised judge model.
+
+- **Credential patterns + keychain service migrated to routing.toml (P2-C).**
+  `core/cli/onboarding.py` 의 `_KEY_PATTERNS` 상수 (3-tuple regex/provider/
+  env_var) 가 manifest 의 `[credentials.patterns]` + `[credentials.
+  env_vars]` 에서 lazy load. `plugins/petri_audit/claude_code_provider.py`
+  의 `KEYCHAIN_SERVICE` 상수도 `[credentials.keychain]` + env override
+  (`GEODE_ANTHROPIC_KEYCHAIN_SERVICE`) 기반으로 전환. routing_manifest
+  에 `CredentialEnvVars` pydantic 모델 추가 (provider → env var).
+  Fallback (manifest 미가용 시 legacy hardcode) 유지 — 사용자가 stale
+  .geode 디렉토리여도 onboarding 깨지지 않음.
+
+- **Credential patterns + keychain service migrated to routing.toml (P2-C).**
+  Moved the `_KEY_PATTERNS` table (regex / provider / env var triples)
+  from `core/cli/onboarding.py` into the routing manifest's
+  `[credentials.patterns]` + new `[credentials.env_vars]` sections.
+  Similarly relocated `KEYCHAIN_SERVICE` in
+  `plugins/petri_audit/claude_code_provider.py` to consult an env
+  override (`GEODE_ANTHROPIC_KEYCHAIN_SERVICE`) then the manifest's
+  `[credentials.keychain]`. Added `CredentialEnvVars` pydantic model.
+  Defensive fallbacks keep onboarding usable on a stale install.
+
+- **Model defaults + fallback chains migrated to routing.toml (P2-B).**
+  `core/config/__init__.py` 의 10 hardcoded 상수 (`ANTHROPIC_PRIMARY` /
+  `SECONDARY` / `BUDGET` / `FALLBACK_CHAIN` / `OPENAI_PRIMARY` /
+  `OPENAI_FALLBACK_CHAIN` / `CODEX_PRIMARY` / `CODEX_FALLBACK_CHAIN` /
+  `GLM_PRIMARY` / `GLM_FALLBACK_CHAIN`) 가 이제 P2-A 의
+  `core/config/routing.toml` 에서 lazy load. 공개 surface 그대로 — 모든
+  call site (system_prompt, approval, openai_adapter 등) 영향 0. 사용자가
+  값을 바꾸려면 `~/.geode/routing.toml` override 수정. `CODEX_BASE_URL`
+  / `GLM_BASE_URL` / `GLM_PAYG_BASE_URL` 등 endpoint 상수는 manifest 에
+  스키마가 없어 그대로 유지 — 후속에서 합칠 수도.
+
+- **Model defaults + fallback chains migrated to routing.toml (P2-B).**
+  The 10 hardcoded model constants in `core/config/__init__.py`
+  (`ANTHROPIC_PRIMARY` etc.) now load from P2-A's `core/config/
+  routing.toml`. Public surface unchanged — every call site keeps
+  working. Users override by editing `~/.geode/routing.toml`. Endpoint
+  URLs (`CODEX_BASE_URL` / `GLM_BASE_URL` / `GLM_PAYG_BASE_URL`) stay
+  hardcoded for now since the manifest does not yet schema them.
+
+### Added
+
+- **GEODE routing manifest (P2-A) — `routing.toml` schema + loader.**
+  `core/config/routing.toml` 신설 (shipped default) + `core/config/
+  routing_manifest.py` 신설 (pydantic schema + loader). 5 layer:
+  `[model.defaults]`, `[model.fallbacks]`, `[routing.prefixes]` +
+  `codex_only_models`/`codex_suffixes`/`fallback_provider`,
+  `[credentials.patterns]`, `[credentials.keychain]`. Petri 의 검증된
+  manifest 패턴 (P1-A) 차용. `~/.geode/routing.toml` user override 는
+  section-별 deep-merge — single-key override 가 다른 default 를 보존.
+  cross-layer 검증: fallback chain 의 첫 항목이 default 와 일치해야 함
+  (drift 방지). `resolve_provider(model)` 도 동봉 — legacy
+  `_resolve_provider` 의 14 branch 와 parity (test_routing_manifest 가
+  검증). **P2-A 는 dormant** — 호출 site 변경 0; 후속 P2-B~E 가 점진
+  migration.
+
+- **GEODE routing manifest (P2-A) — `routing.toml` schema + loader.**
+  New `core/config/routing.toml` (shipped default) + `core/config/
+  routing_manifest.py` (pydantic). 5-section schema (model defaults,
+  fallbacks, routing rules, credential patterns, credential keychain)
+  mirroring the Petri plugin's manifest pattern from P1-A. User override
+  at `~/.geode/routing.toml` deep-merges per section so a single-key
+  override leaves other defaults intact. Cross-layer validator ensures
+  every fallback chain's head matches the corresponding default
+  (prevents drift). Companion `resolve_provider(model)` reproduces the
+  legacy `_resolve_provider`'s 14 branches at parity (covered by
+  test_routing_manifest). **P2-A is dormant** — no call site rewired;
+  subsequent P2-B..E migrate the hardcoded constants.
+
+### Changed
+
+- **`to_inspect_model` 라우팅을 manifest-driven 으로 collapse (P1-G).**
+  `plugins/petri_audit/models.py::to_inspect_model` 의 4-단계 if/elif
+  chain (claude- / gpt- / glm-) 제거 — 이제 `family_of` →
+  `resolve_credential_source` → `manifest.get_adapter(family, source).
+  inspect_prefix` 의 manifest 조회 path 로 통합. dead helper 제거
+  (`_codex_oauth_available`, `_claude_oauth_available`,
+  `_credential_source`) — credential_source 모듈이 모두 흡수. credential
+  _source.py 의 `_settings_source` 가 legacy `settings.{family}_
+  credential_source = "oauth"` 값을 manifest source key (`claude-cli`
+  / `openai-codex`) 로 자동 매핑. `o3` / `o4-mini` 가 Codex backend
+  catalogue 에 없는 점은 `_supports_oauth_for_family` 가드로 보존.
+  P1 (Petri routing externalisation) 종결 — Petri 영역에 더 이상
+  family routing hardcode 없음.
+
+- **`to_inspect_model` routing collapsed onto the manifest (P1-G).**
+  Replaced the legacy 4-step if/elif chain in `plugins/petri_audit/
+  models.py::to_inspect_model` with a single path: `family_of` →
+  `resolve_credential_source` → `manifest.get_adapter(family, source).
+  inspect_prefix`. Removed the dead helpers
+  (`_codex_oauth_available`, `_claude_oauth_available`,
+  `_credential_source`) — the credential_source module absorbs their
+  duties. The `_settings_source` reader now translates the legacy
+  `settings.<family>_credential_source = "oauth"` value to the
+  manifest's OAuth source key (`claude-cli` / `openai-codex`) so
+  existing .env / config.toml files keep working. A new
+  `_supports_oauth_for_family` guard ensures `o3` / `o4-mini` (not on
+  the Codex catalogue) stay on the per-token path even under 'auto'
+  expansion. Closes the Petri half of the routing externalisation
+  initiative.
+
+### Added
+
+- **`/petri` 슬래시 명령 + 2-axis picker (P1-F).**
+  새 사용자-facing 명령 추가 — `/petri` (status table) / `/petri <role>`
+  (multi-step picker — model → source) / `/petri model <role> <name>`
+  / `/petri source <role> <src>` / `/petri reset [<role>]`. user override
+  는 `~/.geode/petri.toml` 에 영구화 (별도 파일 — config.toml 와 분리).
+  registry.get_binding 이 manifest default 와 caller override 사이
+  layer 로 user override 를 자동 적용. family 변경 시 (`/petri model
+  auditor gpt-5.5`) source 는 'auto' 로 리셋 (incompat 방지). non-TTY
+  fallback (`/petri <role>` in pipe) → status + usage hint. 신설 모듈:
+  `plugins/petri_audit/cli.py`, `plugins/petri_audit/user_overrides.py`,
+  `core/cli/commands/petri.py` (shim). `core/paths.py` 에
+  `GLOBAL_PETRI_TOML` 상수. show_help / COMMAND_MAP / dispatcher 등록.
+
+- **`/petri` slash command + 2-axis picker (P1-F).**
+  New user-facing command: `/petri` (status), `/petri <role>` (multi-step
+  picker), `/petri model <role> <name>`, `/petri source <role> <src>`,
+  `/petri reset [<role>]`. User overrides persist to `~/.geode/petri.
+  toml` (kept separate from main `config.toml`). The registry's
+  `get_binding` now reads this override layer between manifest defaults
+  and explicit caller arguments. Switching family via `/petri model
+  <role> ...` automatically clears an incompatible source. Non-TTY
+  fallback prints the status + usage hint instead of attempting the
+  picker. Added `plugins/petri_audit/{cli,user_overrides}.py`,
+  `core/cli/commands/petri.py`, `core/paths.py::GLOBAL_PETRI_TOML`, +
+  COMMAND_MAP / dispatcher / help wiring.
+
+- **Petri registry — role × model × source binding (P1-E).**
+  `plugins/petri_audit/registry.py` 신설 — manifest + credential_source
+  를 결합해 `PetriBinding(role, model, source, family, adapter_module,
+  inspect_prefix, inspect_id)` 을 노출. `get_binding(role, *, model=None,
+  source=None)` 가 manifest default + caller override + credential
+  resolve 를 한 곳에 묶음. target role 은 family 와 무관하게
+  `geode/<model>` prefix 로 routing — 기존 `to_inspect_target` 동작
+  보존. `infer_family(model)` 도 함께 — 기존 `models.family_of` 의 strict
+  버전 (unknown 시 raise). P1-F /petri picker + P1-G to_inspect_model
+  routing 갱신의 최종 진입점.
+
+- **Petri registry — role × model × source binding (P1-E).**
+  Added `plugins/petri_audit/registry.py`. `get_binding(role, *,
+  model=None, source=None)` combines the manifest defaults, caller
+  overrides, and credential resolution into a single frozen
+  `PetriBinding` dataclass (role, model, source, family,
+  adapter_module, inspect_prefix, inspect_id). The target role is
+  always routed through the `geode/` prefix regardless of the
+  underlying family adapter — preserves the legacy
+  `to_inspect_target` invariant. Companion `infer_family(model)` is a
+  strict variant of `models.family_of` (raises on unknown ids).
+  Final entry point for the upcoming `/petri` picker (P1-F) and the
+  `to_inspect_model` routing collapse (P1-G).
+
+- **Petri credential_source 모듈 (P1-D) — per-family resolve / list / suppress SOT.**
+  `plugins/petri_audit/credential_source.py` 신설 — Hermes
+  `agent/credential_sources.py` 패턴 정합. resolve_credential_source(
+  family, override=None) 가 manifest priority (override → settings →
+  manifest default → 'auto' expansion) 으로 concrete source 반환,
+  list_credential_sources(family) 가 /petri picker 용 entry list 노출,
+  suppress_credential_source(family, source) 가 process-수명 suppression
+  지원. manifest 의 `[petri.source.anthropic|openai].allowed` 순서를
+  OAuth 우선 (`["claude-cli", "api_key", "auto"]`, `["openai-codex",
+  "api_key", "auto"]`) 으로 재정렬 — autoresearch outer loop 의 subscription
+  quota 우선 소비. monkeypatch 기반 테스트 격리 + 후속 DI 리팩토 backlog
+  등록.
+
+- **Petri credential_source module (P1-D) — per-family SOT for resolve /
+  list / suppress.** Added `plugins/petri_audit/credential_source.py`
+  modelled on Hermes's `agent/credential_sources.py`. The resolver
+  priority is `override → settings → manifest default → 'auto'
+  expansion`, returning a concrete source key the adapter registry can
+  immediately load. `list_credential_sources` feeds the upcoming /petri
+  picker. `suppress_credential_source` lets the resolver drop an OAuth
+  source whose first call fails mid-run without restarting the
+  process. Manifest `allowed` order rebalanced to OAuth-first so the
+  autoresearch outer loop consumes subscription quota by default.
+  Test isolation via monkeypatch fixtures; class-based DI refactor
+  tracked as a follow-up backlog item.
+
+- **Petri adapter registry (P1-C) — manifest-driven lazy dispatch.**
+  `plugins/petri_audit/adapters/` 신설 — 5 adapter wrapper +
+  registry (`__init__.py`). 각 adapter (`http_anthropic`, `http_openai`,
+  `http_zhipuai`, `claude_cli_backend`, `openai_codex_oauth`) 는
+  uniform 인터페이스 — `INSPECT_PREFIX`, `register()`, `is_available()`,
+  optional `metadata()` — 노출. registry helper 는 `load_adapter_module()`,
+  `register_adapter()`, `is_adapter_available()`, `get_adapter_metadata()`.
+  OAuth 어댑터 (claude_cli_backend, openai_codex_oauth) 는 기존
+  `claude_code_provider.py` / `codex_provider.py` 의 thin re-export —
+  실제 코드 흡수는 P1-G 의 routing 갱신 시점에 결정. P1-E registry
+  + P1-F /petri picker 가 hardcoded if/elif chain 대신 manifest 의
+  `[petri.adapter.<family>.<source>]` 으로 dispatch 할 수 있는 기반.
+
+- **Petri adapter registry (P1-C) — manifest-driven lazy dispatch.**
+  Added `plugins/petri_audit/adapters/` — 5 adapter facades + a
+  registry (`__init__.py`). Each adapter exposes the uniform contract
+  `INSPECT_PREFIX` / `register()` / `is_available()` / optional
+  `metadata()`. The OAuth adapters (`claude_cli_backend`,
+  `openai_codex_oauth`) are thin re-exports of the existing
+  `claude_code_provider.py` and `codex_provider.py`; the call into
+  those legacy modules will collapse when P1-G migrates the
+  `to_inspect_model` routing onto the manifest. Foundation for the
+  upcoming P1-E (registry binding) + P1-F (/petri picker).
+
+- **Petri role contracts (P1-B) — auditor/target/judge MD + frontmatter parser.**
+  `plugins/petri_audit/roles/{auditor,target,judge}.md` 신설 — Crumb
+  `agents/coordinator.md` 의 YAML frontmatter + Goal/Contract/Constraints
+  패턴 차용. 각 contract 는 frontmatter (role / description /
+  default_model / default_source / inline_skills) + 본문 (Goal /
+  Contract / Constraints / References). `manifest.py` 에 `RoleContract`
+  pydantic 모델 + `parse_role_contract()` (lazy pyyaml import) +
+  `PetriManifest.get_role_contract()` 일치성 검증 (frontmatter.role ↔
+  manifest key, frontmatter.default_model ↔ manifest default_model
+  ∈ allowed_models). P1-F 의 /petri picker 가 description 을 표시할
+  단일 SOT.
+
+- **Petri role contracts (P1-B) — auditor/target/judge MD + frontmatter parser.**
+  Added `plugins/petri_audit/roles/{auditor,target,judge}.md` following
+  Crumb's `agents/coordinator.md` pattern (YAML frontmatter + Goal /
+  Contract / Constraints / References). `manifest.py` gains a
+  `RoleContract` pydantic model + `parse_role_contract()` (lazy pyyaml
+  import) + `PetriManifest.get_role_contract()` cross-checking
+  frontmatter against the manifest entry. Single SOT for the upcoming
+  `/petri` picker's description text.
+
+- **Petri audit manifest (P1-A) — `petri.plugin.toml` 선언적 schema.**
+  `plugins/petri_audit/petri.plugin.toml` 신설 + `manifest.py` pydantic
+  loader. 4-layer schema — `[petri]` enabled_roles, `[petri.role.<name>]`
+  default_model + allowed_models, `[petri.source.<family>]` default +
+  allowed credential sources, `[petri.adapter.<family>.<source>]`
+  module + inspect_prefix + auth_env_vars. cross-layer consistency
+  검증 (default ∈ allowed, adapter coverage). lru_cache 로 reload 안전.
+  OpenClaw plugin.json 패턴 차용 — Petri 의 role × source × model 결합
+  규칙을 코드 외부로 빼서 후속 PR (P1-B/C/D/E/F/G) 에서 hardcoded
+  if/elif chain 을 manifest 조회로 치환할 기반.
+
+- **Petri audit manifest (P1-A) — `petri.plugin.toml` declarative schema.**
+  New `plugins/petri_audit/petri.plugin.toml` + `manifest.py` pydantic
+  loader. 4-layer schema (`[petri]` enabled_roles, `[petri.role.<name>]`,
+  `[petri.source.<family>]`, `[petri.adapter.<family>.<source>]`) with
+  cross-layer consistency checks (default ∈ allowed, every non-auto
+  source has an adapter binding). `lru_cache`-backed reload-safe loader.
+  Adopts the OpenClaw `plugin.json` pattern so subsequent PRs
+  (P1-B..G) can replace hardcoded if/elif routing with manifest
+  lookups — first step of the Petri side of the routing externalisation
+  plan (Petri P1 → GEODE P2 routing.toml → P3 pricing externalisation).
 ### Added
 
 - **Homebrew formula renderer.** Added a release helper and formula template
@@ -62,7 +445,6 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   GEODE Homebrew formula 를 생성하는 release helper 와 template 을 추가.
   tap publish 는 계속 수동 단계로 유지하며, resource stanza 는 tap checkout
   에서 생성하고 audit 한 뒤 배포해야 합니다.
-
 
 ## [0.99.11] — 2026-05-17
 

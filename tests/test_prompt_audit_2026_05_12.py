@@ -142,7 +142,6 @@ def test_math_formatting_instruction_reaches_agentic_system_prompt(
     "name,expected_keys",
     [
         ("analyst", {"system", "user"}),
-        ("biasbuster", {"system", "user"}),
         ("commentary", {"system", "user"}),
         ("cross_llm", {"system", "rescore", "dual_verify"}),
         ("decomposer", {"system"}),
