@@ -52,6 +52,32 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.7] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — authorize host `claude.ai` + `login_method=claudeai` query.**
+  v0.99.6 의 `claude.com/cai/oauth/authorize` 가 server-side 로
+  `claude.ai/oauth/authorize` redirect 되었고 (사용자 browser URL 인용)
+  거기서도 "Invalid request format". claude.exe binary 의
+  `searchParams.append("login_method", $)` 분기에서 `$` 가
+  `"claudeai"` / `"console"` 중 하나로 값을 갖는데 우리가 빠뜨려
+  server 가 분기를 알지 못한 것이 root cause. v0.99.7: host 를 redirect
+  의 final destination `claude.ai` 로 직접, `login_method=claudeai`
+  query 추가, dump 의 `authorize_url_full` 도 같이 기록.
+
+- **`login_anthropic()` — switched authorize host to `claude.ai` and
+  added `login_method=claudeai` query.** v0.99.6's
+  `claude.com/cai/oauth/authorize` was server-side redirected to
+  `claude.ai/oauth/authorize` (confirmed from user's browser URL) and
+  still returned "Invalid request format". Claude Code's binary
+  appends a `login_method` query (`claudeai` for consumer flow,
+  `console` for developer); we now mirror it. The forensic dump also
+  records the full `authorize_url` so future investigation does not
+  depend on the user reading the URL out of the browser bar.
+
+
+
 ## [0.99.6] — 2026-05-17
 
 ### Fixed
