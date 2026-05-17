@@ -82,10 +82,8 @@ def family_of(model_id: str) -> str:
     # unrecognised judge model must not silently be classified as
     # "openai" same-family with a gpt-* generator).
     rules = manifest.routing
-    if base in rules.codex_only_models:
-        provider = "openai-codex"
-    elif any(base.endswith(s) for s in rules.codex_suffixes):
-        provider = "openai-codex"
+    if base in rules.codex_only_models or any(base.endswith(s) for s in rules.codex_suffixes):
+        provider: str | None = "openai-codex"
     else:
         provider = None
         for prefix, target in rules.prefixes.items():
