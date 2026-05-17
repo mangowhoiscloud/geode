@@ -1,0 +1,231 @@
+name: Release
+
+# Manual-only release pipeline. Normal pushes to main run CI and Pages, but do
+# not publish packages or GitHub releases. Publishing requires workflow_dispatch
+# plus the protected `release` environment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to release after local validation"
+        required: true
+        default: "main"
+      version:
+        description: "Expected GEODE version, e.g. 1.0.0"
+        required: true
+      publish_github_release:
+        description: "Create the GitHub release after validation"
+        type: boolean
+        default: false
+      publish_pypi:
+        description: "Upload dist artifacts to PyPI via Trusted Publishing"
+        type: boolean
+        default: false
+      publish_huggingface_artifacts:
+        description: "Upload dist artifacts to a Hugging Face dataset repo"
+        type: boolean
+        default: false
+      huggingface_repo_id:
+        description: "HF dataset repo id, e.g. mangowhoiscloud/geode-v1-artifacts"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate-build:
+    name: Validate and build release artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.rev.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - id: rev
+        name: Record release SHA
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release metadata
+        run: |
+          expected="${{ inputs.version }}"
+          actual=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "expected=$expected"
+          echo "actual=$actual"
+          test "$actual" = "$expected"
+          grep -q "^## \[$expected\]" CHANGELOG.md
+
+      - name: Sync dependencies
+        run: uv sync --extra audit
+
+      - name: Lint and hygiene
+        run: |
+          uv run ruff check core plugins tests autoresearch
+          uv run ruff format --check core plugins tests autoresearch
+          uv run deptry .
+
+      - name: Type check
+        run: uv run mypy core plugins
+
+      - name: Prompt integrity
+        run: |
+          uv run python - <<'PY'
+          from core.llm.prompts import verify_prompt_integrity
+
+          verify_prompt_integrity(raise_on_drift=True)
+          PY
+
+      - name: Test
+        run: uv run pytest -q
+
+      - name: Runtime E2E smoke
+        run: uv run geode analyze Berserk --dry-run
+
+      - name: Build package artifacts
+        run: uv build
+
+      - name: Validate package metadata
+        run: uv run twine check dist/*
+
+      - name: Package content gate — skills, prompts, tool schemas, audit assets
+        run: |
+          version="${{ inputs.version }}"
+          wheel="dist/geode-${version}-py3-none-any.whl"
+          sdist="dist/geode-${version}.tar.gz"
+
+          uv run python -m zipfile -l "$wheel" > /tmp/geode-wheel-files.txt
+          tar -tzf "$sdist" > /tmp/geode-sdist-files.txt
+
+          grep -q "core/skills/skills.py" /tmp/geode-wheel-files.txt
+          grep -q "core/skills/reports/templates/report.html" /tmp/geode-wheel-files.txt
+          grep -q "core/skills/reports/templates/report_summary.md" /tmp/geode-wheel-files.txt
+          grep -q "core/llm/prompts/router.md" /tmp/geode-wheel-files.txt
+          grep -q "core/tools/definitions.json" /tmp/geode-wheel-files.txt
+          grep -q "plugins/petri_audit/judge_dims/geode_5axes.yaml" /tmp/geode-wheel-files.txt
+          grep -q "plugins/petri_audit/seeds/research_fabrication_under_pressure.md" /tmp/geode-wheel-files.txt
+
+          grep -q "geode-${version}/core/skills/skills.py" /tmp/geode-sdist-files.txt
+          grep -q "geode-${version}/core/skills/reports/templates/report.html" /tmp/geode-sdist-files.txt
+          grep -q "geode-${version}/core/tools/definitions.json" /tmp/geode-sdist-files.txt
+
+      - name: Clean wheel install smoke
+        run: |
+          version="${{ inputs.version }}"
+          uv run python -m venv .release-venv
+          .release-venv/bin/python -m pip install --upgrade pip
+          .release-venv/bin/python -m pip install "dist/geode-${version}-py3-none-any.whl"
+          .release-venv/bin/geode version | grep "GEODE v${version}"
+
+      - name: Generate release notes and checksums
+        run: |
+          version="${{ inputs.version }}"
+          uv run python - "$version" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          raw = Path("CHANGELOG.md").read_text()
+          pattern = re.compile(
+              rf"^## \[{re.escape(version)}\].*?\n(?P<body>.*?)(?=^## \[)",
+              re.M | re.S,
+          )
+          match = pattern.search(raw)
+          if not match:
+              raise SystemExit(f"missing changelog entry for {version}")
+          Path("release-notes.md").write_text(match.group("body").strip() + "\n")
+          PY
+          uv run python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          lines = []
+          for path in sorted(Path("dist").iterdir()):
+              if path.is_file():
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  lines.append(f"{digest}  {path.as_posix()}")
+          Path("SHA256SUMS").write_text("\n".join(lines) + "\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: |
+            dist
+            release-notes.md
+            SHA256SUMS
+          if-no-files-found: error
+
+  publish-github-release:
+    name: Publish GitHub release
+    needs: validate-build
+    if: inputs.publish_github_release == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ inputs.version }}"
+          gh release create "v${version}" \
+            release-artifacts/dist/* \
+            release-artifacts/SHA256SUMS \
+            --target "${{ needs.validate-build.outputs.sha }}" \
+            --title "GEODE v${version}" \
+            --notes-file release-artifacts/release-notes.md
+
+  publish-pypi:
+    name: Publish PyPI
+    needs: validate-build
+    if: inputs.publish_pypi == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release-artifacts/dist
+
+  publish-huggingface-artifacts:
+    name: Publish Hugging Face artifacts
+    needs: validate-build
+    if: inputs.publish_huggingface_artifacts == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - name: Upload to Hugging Face dataset repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          repo="${{ inputs.huggingface_repo_id }}"
+          test -n "$repo"
+          python -m pip install --upgrade huggingface_hub
+          hf upload "$repo" release-artifacts/dist "/dist" \
+            --repo-type=dataset \
+            --commit-message="Upload GEODE v${{ inputs.version }} release artifacts"

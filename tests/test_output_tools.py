@@ -28,11 +28,13 @@ class TestGenerateReportTool:
 
     def test_execute_with_analysis_data(self):
         tool = GenerateReportTool()
-        result = asyncio.run(tool.aexecute(
-            ip_name="Cowboy Bebop",
-            analysis_data={"tier": "A", "final_score": 76.2, "subscores": {"quality": 82}},
-            format="json",
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                ip_name="Cowboy Bebop",
+                analysis_data={"tier": "A", "final_score": 76.2, "subscores": {"quality": 82}},
+                format="json",
+            )
+        )
         report = result["result"]
         assert report["format"] == "json"
         assert "76.2" in report["sections"]["executive_summary"]
@@ -54,11 +56,13 @@ class TestExportJsonTool:
     def test_execute_writes_file(self, tmp_path: Path):
         tool = ExportJsonTool()
         data = {"ip_name": "Berserk", "score": 82.2}
-        result = asyncio.run(tool.aexecute(
-            data=data,
-            filename="test_export.json",
-            output_dir=str(tmp_path),
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                data=data,
+                filename="test_export.json",
+                output_dir=str(tmp_path),
+            )
+        )
         assert result["result"]["exported"] is True
         path = Path(result["result"]["path"])
         assert path.exists()
@@ -69,11 +73,13 @@ class TestExportJsonTool:
     def test_execute_creates_parent_dirs(self, tmp_path: Path):
         tool = ExportJsonTool()
         nested = tmp_path / "deep" / "nested"
-        result = asyncio.run(tool.aexecute(
-            data={"test": True},
-            filename="deep_export.json",
-            output_dir=str(nested),
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                data={"test": True},
+                filename="deep_export.json",
+                output_dir=str(nested),
+            )
+        )
         assert result["result"]["exported"] is True
         assert Path(result["result"]["path"]).exists()
 
@@ -97,12 +103,14 @@ class TestSendNotificationTool:
 
         set_notification(None)
         tool = SendNotificationTool()
-        result = asyncio.run(tool.aexecute(
-            channel="slack",
-            message="Pipeline completed for Berserk",
-            severity="info",
-            recipient="#geode-alerts",
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                channel="slack",
+                message="Pipeline completed for Berserk",
+                severity="info",
+                recipient="#geode-alerts",
+            )
+        )
         data = result["result"]
         assert data["sent"] is False
         assert data["channel"] == "slack"
@@ -121,17 +129,19 @@ class TestSendNotificationTool:
 
         mock_adapter = MagicMock()
         mock_adapter.ais_available = AsyncMock(return_value=True)
-        mock_adapter.asend_message = AsyncMock(return_value=NotificationResult(
-            success=True, channel="slack", message_id="ts_123"
-        ))
+        mock_adapter.asend_message = AsyncMock(
+            return_value=NotificationResult(success=True, channel="slack", message_id="ts_123")
+        )
         set_notification(mock_adapter)
 
         tool = SendNotificationTool()
-        result = asyncio.run(tool.aexecute(
-            channel="slack",
-            message="Test message",
-            recipient="#general",
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                channel="slack",
+                message="Test message",
+                recipient="#general",
+            )
+        )
         assert result["result"]["sent"] is True
         assert result["result"]["message_id"] == "ts_123"
 

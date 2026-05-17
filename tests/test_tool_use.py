@@ -228,9 +228,7 @@ class TestClaudeAdapterToolUse:
         assert len(executor_calls) == 1
 
     @patch("core.llm.router.calls.tools.get_async_anthropic_client")
-    def test_async_single_tool_call_awaits_executor(
-        self, mock_get_client: MagicMock
-    ) -> None:
+    def test_async_single_tool_call_awaits_executor(self, mock_get_client: MagicMock) -> None:
         """Async tool-use path awaits async executors directly."""
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = [
@@ -399,9 +397,7 @@ class TestOpenAIAdapterToolUse:
         assert len(executor_calls) == 1
 
     @patch("core.llm.providers.openai._get_async_openai_client")
-    def test_async_single_tool_call_awaits_executor(
-        self, mock_get_client: MagicMock
-    ) -> None:
+    def test_async_single_tool_call_awaits_executor(self, mock_get_client: MagicMock) -> None:
         """Async OpenAI-compatible loop awaits async executors."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = [

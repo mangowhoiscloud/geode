@@ -150,7 +150,9 @@ class TestToolRegistryE2E:
         assert "psm_calculate" in registry
 
         # Execute tool
-        result = _run_registry(registry, "run_analyst", analyst_type="game_mechanics", ip_name="Berserk")
+        result = _run_registry(
+            registry, "run_analyst", analyst_type="game_mechanics", ip_name="Berserk"
+        )
         assert "result" in result
 
         # Policy filtering

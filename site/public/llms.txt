@@ -1,8 +1,8 @@
 # GEODE
 
-GEODE v0.95.0. A self-hosting agent harness for autonomous execution.
+GEODE v1.0.0. A self-hosting agent harness for autonomous execution.
 
-Last sync: 2026-05-15
+Last sync: 2026-05-17
 
 ## Top-level pages
 

@@ -201,10 +201,12 @@ class TestBashResourceLimits:
             tmp = f.name
         try:
             # Try to write 60MB — should fail with FSIZE limit
-            asyncio.run(bash.aexecute(
-                f"dd if=/dev/zero of={tmp} bs=1048576 count=60 2>&1",
-                timeout=10,
-            ))
+            asyncio.run(
+                bash.aexecute(
+                    f"dd if=/dev/zero of={tmp} bs=1048576 count=60 2>&1",
+                    timeout=10,
+                )
+            )
             # Either the file is capped at 50MB or dd reports an error
             if os.path.exists(tmp):
                 size = os.path.getsize(tmp)

@@ -344,7 +344,9 @@ class TestSubAgentLive:
     def test_6_2_delegate_batch_dry_run(self) -> None:
         """E2: delegate_task batch — 2 IP parallel."""
         loop, *_ = _make_loop(force_dry_run=True)
-        result = asyncio.run(loop.arun("Berserk이랑 Cowboy Bebop 동시에 분석해줘. 서브에이전트 병렬로 돌려."))
+        result = asyncio.run(
+            loop.arun("Berserk이랑 Cowboy Bebop 동시에 분석해줘. 서브에이전트 병렬로 돌려.")
+        )
 
         tool_names = [tc["tool"] for tc in result.tool_calls]
         has_delegate = "delegate_task" in tool_names
@@ -491,7 +493,8 @@ class TestSubAgentLive:
         """E7: ToolExecutor._execute_delegate returns result."""
         _, _, executor, _ = _make_loop(force_dry_run=True)
 
-        result = _run_executor(executor,
+        result = _run_executor(
+            executor,
             "delegate_task",
             {
                 "task_description": "Analyze Berserk",

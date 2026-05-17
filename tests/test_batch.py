@@ -89,7 +89,9 @@ class TestRunBatch:
     def test_returns_list(self) -> None:
         from plugins.game_ip.cli.batch import arun_batch
 
-        with patch("plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock) as mock:
+        with patch(
+            "plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock
+        ) as mock:
             mock.return_value = {"ip_name": "test", "tier": "A", "final_score": 80.0}
             results = asyncio.run(arun_batch(ips=["cowboy bebop"], dry_run=True))
             assert isinstance(results, list)
@@ -104,7 +106,9 @@ class TestRunBatch:
         """Per-IP timeout produces ERR result instead of crashing."""
         from plugins.game_ip.cli.batch import arun_batch
 
-        with patch("plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock) as mock:
+        with patch(
+            "plugins.game_ip.cli.batch.arun_single_analysis", new_callable=AsyncMock
+        ) as mock:
             mock.return_value = {"ip_name": "test", "tier": "A", "final_score": 80.0}
             results = asyncio.run(arun_batch(ips=["cowboy bebop"], dry_run=True))
             assert len(results) == 1

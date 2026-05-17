@@ -478,7 +478,9 @@ class TestRecoveryEdgeCases:
 
         executor = ToolExecutor(action_handlers={"analyze_ip": capture_handler}, auto_approve=True)
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
-        _run_recovery(strategy, "analyze_ip", {"ip_name": "Berserk", "dry_run": True}, failure_count=1)
+        _run_recovery(
+            strategy, "analyze_ip", {"ip_name": "Berserk", "dry_run": True}, failure_count=1
+        )
         assert captured_kwargs.get("ip_name") == "Berserk"
         assert captured_kwargs.get("dry_run") is True
 

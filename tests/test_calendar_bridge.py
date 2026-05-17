@@ -43,14 +43,16 @@ def mock_calendar() -> MagicMock:
     calendar = MagicMock()
     calendar.ais_available = AsyncMock(return_value=True)
     calendar.alist_events = AsyncMock(return_value=[])
-    calendar.acreate_event = AsyncMock(return_value=CalendarEvent(
-        event_id="evt_new",
-        title="[GEODE] daily-analysis",
-        start=NOW + timedelta(hours=1),
-        end=NOW + timedelta(hours=1, minutes=30),
-        source="google",
-        is_geode=True,
-    ))
+    calendar.acreate_event = AsyncMock(
+        return_value=CalendarEvent(
+            event_id="evt_new",
+            title="[GEODE] daily-analysis",
+            start=NOW + timedelta(hours=1),
+            end=NOW + timedelta(hours=1, minutes=30),
+            source="google",
+            is_geode=True,
+        )
+    )
     return calendar
 
 

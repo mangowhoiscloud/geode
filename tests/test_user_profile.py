@@ -266,7 +266,9 @@ class TestProfileLearnTool:
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         set_user_profile(profile)
         tool = ProfileLearnTool()
-        result = asyncio.run(tool.aexecute(pattern="User prefers dry-run first", category="workflow"))
+        result = asyncio.run(
+            tool.aexecute(pattern="User prefers dry-run first", category="workflow")
+        )
         assert result["result"]["saved"] is True
         assert result["result"]["category"] == "workflow"
 

@@ -129,11 +129,13 @@ class TestMemorySaveTool:
         set_project_memory(None)
         store = InMemorySessionStore()
         tool = MemorySaveTool(session_store=store)
-        result = asyncio.run(tool.aexecute(
-            session_id="no-proj",
-            data={"content": "test"},
-            persistent=True,
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                session_id="no-proj",
+                data={"content": "test"},
+                persistent=True,
+            )
+        )
         assert result["result"]["saved"] is True
         assert result["result"]["persistent"] is True
         assert store.get("no-proj") == {"content": "test"}
@@ -147,11 +149,13 @@ class TestMemorySaveTool:
         try:
             store = InMemorySessionStore()
             tool = MemorySaveTool(session_store=store)
-            result = asyncio.run(tool.aexecute(
-                session_id="persist-test",
-                data={"content": "persistent insight test"},
-                persistent=True,
-            ))
+            result = asyncio.run(
+                tool.aexecute(
+                    session_id="persist-test",
+                    data={"content": "persistent insight test"},
+                    persistent=True,
+                )
+            )
             assert result["result"]["saved"] is True
             assert result["result"]["persistent"] is True
             # Verify written to MEMORY.md

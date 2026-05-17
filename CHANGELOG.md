@@ -52,6 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-05-17
+
 ### Architecture
 
 - **Async-only graph/tool/MCP runtime slice.** LangGraph pipeline nodes now run
@@ -311,6 +313,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   ~3min → ~1min. Draft PRs no longer trigger CI thanks to the new
   `types: [..., ready_for_review]` filter. `pytest-xdist>=3.6.0` added
   to the dev dependency group.
+- **v1.0.0 packaging plan.** Added a release packaging plan grounded in
+  Homebrew's Python application guidance, Hermes Agent's Homebrew formula,
+  Hugging Face `ml-intern`, and OpenClaw's release validation/package
+  acceptance patterns. The plan separates PyPI/uv CLI packaging, GitHub
+  release assets, Homebrew, and Hugging Face artifact/demo surfaces.
+- **v1.0.0 패키징 계획.** Homebrew Python application 가이드, Hermes Agent
+  Homebrew formula, Hugging Face `ml-intern`, OpenClaw release validation /
+  package acceptance 패턴을 기준으로 release packaging 계획을 추가. PyPI/uv
+  CLI 패키징, GitHub release asset, Homebrew, Hugging Face artifact/demo
+  surface 를 분리해 정리.
 
 ## [0.99.3] — 2026-05-17
 
