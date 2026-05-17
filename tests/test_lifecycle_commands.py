@@ -383,6 +383,28 @@ class TestUninstall:
         ):
             do_uninstall(force=True)
 
+    def test_uninstalls_geode_agent_distribution(self, tmp_path: Path) -> None:
+        geode_bin = tmp_path / "bin" / "geode"
+        geode_bin.parent.mkdir()
+        geode_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+
+        with (
+            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
+            patch("core.cli.cmd_lifecycle.GEODE_HOME", tmp_path / "nope2"),
+            patch("core.cli.cmd_lifecycle.stop_serve"),
+            patch("core.cli.cmd_lifecycle.subprocess.run") as mock_run,
+            patch("shutil.which", return_value=str(geode_bin)),
+            patch("pathlib.Path.cwd", return_value=tmp_path),
+        ):
+            do_uninstall(force=True)
+
+        mock_run.assert_any_call(
+            ["uv", "tool", "uninstall", "geode-agent"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
 
 # ---------------------------------------------------------------------------
 # FindServePid

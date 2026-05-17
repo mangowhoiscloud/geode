@@ -54,6 +54,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Infrastructure
 
+- **PyPI distribution rename.** GEODE now publishes under the available PyPI
+  distribution name `geode-agent` while preserving the installed console
+  command `geode`. Release gates now derive wheel/sdist filenames from
+  `pyproject.toml` and reject symlink entries inside release artifacts.
+
+- **PyPI distribution 이름 변경.** GEODE 는 PyPI 에서 사용 가능한
+  distribution name `geode-agent` 로 배포하고, 설치 후 console command 는
+  계속 `geode` 로 유지합니다. release gate 는 이제 `pyproject.toml` 에서
+  wheel/sdist 파일명을 계산하고 release artifact 내부 symlink 를 거부합니다.
+
 - **GitHub Release publish job fix.** The release workflow now passes
   `--repo` to `gh release create`, so the publish job can create releases from
   downloaded artifacts without requiring a checked-out `.git` directory.

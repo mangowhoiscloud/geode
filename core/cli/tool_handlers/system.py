@@ -33,8 +33,7 @@ def _build_system_handlers(
         return {"status": "ok", "action": "help", "commands": commands}
 
     def handle_check_status(**_kwargs: Any) -> dict[str, Any]:
-        from importlib.metadata import version as _pkg_version
-
+        from core import __version__ as geode_version
         from core.config import settings
         from core.domains.port import get_domain_or_none
 
@@ -47,7 +46,6 @@ def _build_system_handlers(
             except Exception:
                 log.debug("Domain list_fixtures() failed", exc_info=True)
 
-        geode_version = _pkg_version("geode")
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
         mode = "full_llm" if (readiness and not readiness.force_dry_run) else "dry_run"

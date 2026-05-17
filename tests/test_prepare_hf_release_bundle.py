@@ -11,8 +11,8 @@ from scripts.prepare_hf_release_bundle import is_distribution_artifact, prepare_
 
 
 def test_distribution_artifact_filter(tmp_path: Path) -> None:
-    wheel = tmp_path / "geode-0.99.11-py3-none-any.whl"
-    sdist = tmp_path / "geode-0.99.11.tar.gz"
+    wheel = tmp_path / "geode_agent-0.99.11-py3-none-any.whl"
+    sdist = tmp_path / "geode_agent-0.99.11.tar.gz"
     dotfile = tmp_path / ".gitignore"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
@@ -26,8 +26,8 @@ def test_distribution_artifact_filter(tmp_path: Path) -> None:
 def test_prepare_bundle_creates_versioned_dataset_layout(tmp_path: Path) -> None:
     dist = tmp_path / "dist"
     dist.mkdir()
-    wheel = dist / "geode-0.99.11-py3-none-any.whl"
-    sdist = dist / "geode-0.99.11.tar.gz"
+    wheel = dist / "geode_agent-0.99.11-py3-none-any.whl"
+    sdist = dist / "geode_agent-0.99.11.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
     (dist / ".gitignore").write_text("*\n", encoding="utf-8")
@@ -82,8 +82,8 @@ def test_prepare_bundle_creates_versioned_dataset_layout(tmp_path: Path) -> None
 def test_prepare_bundle_rejects_mismatched_checksums(tmp_path: Path) -> None:
     dist = tmp_path / "dist"
     dist.mkdir()
-    wheel = dist / "geode-0.99.11-py3-none-any.whl"
-    sdist = dist / "geode-0.99.11.tar.gz"
+    wheel = dist / "geode_agent-0.99.11-py3-none-any.whl"
+    sdist = dist / "geode_agent-0.99.11.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
 
