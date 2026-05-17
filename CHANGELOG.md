@@ -54,6 +54,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Petri registry — role × model × source binding (P1-E).**
+  `plugins/petri_audit/registry.py` 신설 — manifest + credential_source
+  를 결합해 `PetriBinding(role, model, source, family, adapter_module,
+  inspect_prefix, inspect_id)` 을 노출. `get_binding(role, *, model=None,
+  source=None)` 가 manifest default + caller override + credential
+  resolve 를 한 곳에 묶음. target role 은 family 와 무관하게
+  `geode/<model>` prefix 로 routing — 기존 `to_inspect_target` 동작
+  보존. `infer_family(model)` 도 함께 — 기존 `models.family_of` 의 strict
+  버전 (unknown 시 raise). P1-F /petri picker + P1-G to_inspect_model
+  routing 갱신의 최종 진입점.
+
+- **Petri registry — role × model × source binding (P1-E).**
+  Added `plugins/petri_audit/registry.py`. `get_binding(role, *,
+  model=None, source=None)` combines the manifest defaults, caller
+  overrides, and credential resolution into a single frozen
+  `PetriBinding` dataclass (role, model, source, family,
+  adapter_module, inspect_prefix, inspect_id). The target role is
+  always routed through the `geode/` prefix regardless of the
+  underlying family adapter — preserves the legacy
+  `to_inspect_target` invariant. Companion `infer_family(model)` is a
+  strict variant of `models.family_of` (raises on unknown ids).
+  Final entry point for the upcoming `/petri` picker (P1-F) and the
+  `to_inspect_model` routing collapse (P1-G).
+
 - **Petri credential_source 모듈 (P1-D) — per-family resolve / list / suppress SOT.**
   `plugins/petri_audit/credential_source.py` 신설 — Hermes
   `agent/credential_sources.py` 패턴 정합. resolve_credential_source(
