@@ -18,9 +18,6 @@ uv run geode
 # 원샷 프롬프트
 uv run geode "summarize the latest AI research trends"
 
-# Domain Plugin: Game IP (dry-run, LLM 미사용)
-uv run geode analyze "Cowboy Bebop" --dry-run
-
 # Headless daemon (Slack/Discord/Telegram + scheduler)
 uv run geode serve
 ```
@@ -225,13 +222,6 @@ grep "Slack poller seeded" /tmp/geode-serve.log
 | `/tasks` | `/t` | 작업 목록 |
 | `/clear` | | 대화 초기화 |
 | `/compact` | | Context 압축 |
-| `/analyze <IP>` | `/a` | IP 분석 (Domain Plugin) |
-| `/run <IP>` | `/r` | LLM을 사용한 분석 |
-| `/search <query>` | `/s` | IP 검색 |
-| `/list` | | 사용 가능한 IP 목록 |
-| `/report <IP> [fmt]` | `/rpt` | 리포트 생성 (md/html/json) |
-| `/batch <IPs>` | `/b` | 배치 분석 |
-| `/compare <A> <B>` | | 두 IP 비교 |
 | `/quit` | `/q` | 종료 |
 
 ---
@@ -244,11 +234,6 @@ geode "prompt"                         # IPC 경유 원샷 프롬프트
 geode --continue                       # 마지막 세션 이어서
 geode --resume <session_id>            # 특정 세션 재개
 
-geode analyze "Berserk" --dry-run      # Domain Plugin 분석
-geode search "cyberpunk"               # IP 검색
-geode report "Berserk" -f html         # 리포트 생성
-geode batch --top 5                    # 배치 분석
-geode list                             # 사용 가능한 IP 목록
 geode version                          # 버전 정보
 geode init                             # .geode/ 구조 초기화
 geode history                          # 실행 이력 + 비용
@@ -287,5 +272,5 @@ geode serve [-p 3.0]                   # Headless daemon
 uv run pytest tests/ -m "not live" -q     # 3,422+ tests
 uv run ruff check core/ tests/            # Lint
 uv run mypy core/                         # Type check (190 modules)
-uv run geode analyze "Cowboy Bebop" --dry-run  # E2E 불변량: A (68.4)
+uv run geode version                      # CLI 스모크
 ```

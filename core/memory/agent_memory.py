@@ -28,8 +28,8 @@ class AgentMemoryStore:
 
     Usage::
 
-        store = AgentMemoryStore("task-analyze-berserk")
-        store.save("findings", "Berserk is S-tier")
+        store = AgentMemoryStore("task-review-docs")
+        store.save("findings", "Docs need release notes")
         findings = store.get("findings")
         store.clear()
 

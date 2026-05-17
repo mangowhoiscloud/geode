@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from abc import ABC, abstractmethod
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ class MCPTimeoutError(TimeoutError):
     """Raised when an MCP tool call exceeds the configured timeout."""
 
 
-class MCPClientBase:
+class MCPClientBase(ABC):
     """Base MCP client with connection management and tool calling.
 
     The timeout_s parameter enforces a maximum duration for tool calls
@@ -42,12 +42,10 @@ class MCPClientBase:
         log.info("MCP connect attempt: %s (stub)", self._server_url)
         return False
 
+    @abstractmethod
     async def acall_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server through the async runtime path."""
-        if not self._connected:
-            raise ConnectionError(f"MCP server not connected: {self._server_url}")
-        await asyncio.sleep(0)
-        raise NotImplementedError("MCP async tool calling not yet implemented")
+        ...
 
     def list_tools(self) -> list[dict[str, Any]]:
         """List available tools on the MCP server."""

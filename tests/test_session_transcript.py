@@ -20,10 +20,10 @@ class TestSessionTranscriptWrite:
 
     def test_session_lifecycle(self, tx: SessionTranscript) -> None:
         tx.record_session_start(model="claude-opus-4-6")
-        tx.record_user_message("analyze Berserk")
-        tx.record_tool_call("analyze_ip", {"ip_name": "Berserk"})
-        tx.record_tool_result("analyze_ip", "ok", "S-tier 81.3")
-        tx.record_assistant_message("Berserk is S-tier.")
+        tx.record_user_message("analyze Project Atlas")
+        tx.record_tool_call("analyze_subject", {"subject_id": "Project Atlas"})
+        tx.record_tool_result("analyze_subject", "ok", "S-tier 81.3")
+        tx.record_assistant_message("Project Atlas is S-tier.")
         tx.record_cost("claude-opus-4-6", 1200, 350, 0.015)
         tx.record_session_end(duration_s=20, total_cost=0.015, rounds=3)
 
@@ -58,16 +58,16 @@ class TestSessionTranscriptWrite:
 
     def test_subagent_events(self, tx: SessionTranscript) -> None:
         tx.record_subagent_start("task-1", "analyze")
-        tx.record_subagent_complete("task-1", "ok", "Berserk S-tier")
+        tx.record_subagent_complete("task-1", "ok", "Project Atlas S-tier")
         events = tx.read_events()
         assert events[0]["event"] == "subagent_start"
         assert events[1]["event"] == "subagent_complete"
 
     def test_vault_save_event(self, tx: SessionTranscript) -> None:
-        tx.record_vault_save("vault/reports/berserk.md", "report")
+        tx.record_vault_save("vault/reports/demo.md", "report")
         events = tx.read_events()
         assert events[0]["event"] == "vault_save"
-        assert events[0]["path"] == "vault/reports/berserk.md"
+        assert events[0]["path"] == "vault/reports/demo.md"
 
 
 class TestSessionTranscriptRead:

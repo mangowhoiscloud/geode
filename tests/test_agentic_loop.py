@@ -42,8 +42,8 @@ class TestToolExecutor:
 
     def test_execute_registered_handler(self) -> None:
         handler = MagicMock(return_value={"status": "ok"})
-        executor = ToolExecutor(action_handlers={"list_ips": handler})
-        result = _run_executor(executor, "list_ips", {})
+        executor = ToolExecutor(action_handlers={"list_subjects": handler})
+        result = _run_executor(executor, "list_subjects", {})
         handler.assert_called_once()
         assert result["status"] == "ok"
 
@@ -238,14 +238,14 @@ class TestToolExecutor:
 
         block = MagicMock()
         block.type = "tool_use"
-        block.name = "list_ips"
+        block.name = "list_subjects"
         block.input = {"limit": 2}
         block.id = "toolu_async"
         response = MagicMock(content=[block])
 
         results = asyncio.run(processor.process(response))
 
-        executor.aexecute.assert_awaited_once_with("list_ips", {"limit": 2})
+        executor.aexecute.assert_awaited_once_with("list_subjects", {"limit": 2})
         executor.execute.assert_not_called()
         assert results[0]["tool_use_id"] == "toolu_async"
         assert '"status": "ok"' in results[0]["content"]
@@ -279,14 +279,14 @@ class TestToolExecutor:
 
         block = MagicMock()
         block.type = "tool_use"
-        block.name = "list_ips"
+        block.name = "list_subjects"
         block.input = {"limit": 1}
         block.id = "toolu_hooks"
         response = MagicMock(content=[block])
 
         results = asyncio.run(processor.process(response))
 
-        executor.aexecute.assert_awaited_once_with("list_ips", {"limit": 3})
+        executor.aexecute.assert_awaited_once_with("list_subjects", {"limit": 3})
         assert '"status": "hooked"' in results[0]["content"]
 
     def test_serialize_offloaded_result_awaits_async_hook(self, tmp_path: Any) -> None:
@@ -384,7 +384,7 @@ class TestToolExecutor:
             {
                 "task_description": "Test task",
                 "task_type": "analyze",
-                "args": {"ip_name": "Berserk"},
+                "args": {"subject_id": "Project Atlas"},
             },
         )
         assert "error" in result
@@ -406,7 +406,7 @@ class TestAgenticLoop:
     @pytest.fixture
     def executor(self) -> ToolExecutor:
         handler = MagicMock(return_value={"status": "ok", "action": "list"})
-        return ToolExecutor(action_handlers={"list_ips": handler})
+        return ToolExecutor(action_handlers={"list_subjects": handler})
 
     def test_sync_run_facade_removed(
         self, context: ConversationContext, executor: ToolExecutor
@@ -462,16 +462,16 @@ class TestAgenticLoop:
 
         text_block = MagicMock()
         text_block.type = "text"
-        text_block.text = "Here are the available IPs."
+        text_block.text = "Here are the available subjects."
         mock_response.content = [text_block]
 
         with (
             patch.object(loop, "_call_llm", return_value=mock_response),
             patch.object(loop, "_track_usage"),
         ):
-            result = asyncio.run(loop.arun("list IPs"))
+            result = asyncio.run(loop.arun("list subjects"))
 
-        assert result.text == "Here are the available IPs."
+        assert result.text == "Here are the available subjects."
         assert result.rounds == 1
         assert result.error is None
         assert result.termination_reason == "natural"
@@ -555,7 +555,7 @@ class TestAgenticLoop:
         """Test tool_use → tool_result → text response flow."""
         loop = AgenticLoop(context, executor, quiet=True)
 
-        # Round 1: LLM calls list_ips tool
+        # Round 1: LLM calls list_subjects tool
         tool_response = MagicMock()
         tool_response.stop_reason = "tool_use"
         tool_response.usage = MagicMock()
@@ -564,7 +564,7 @@ class TestAgenticLoop:
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
-        tool_block.name = "list_ips"
+        tool_block.name = "list_subjects"
         tool_block.input = {}
         tool_block.id = "toolu_123"
         tool_response.content = [tool_block]
@@ -578,18 +578,18 @@ class TestAgenticLoop:
 
         text_block = MagicMock()
         text_block.type = "text"
-        text_block.text = "Here are 16 available IPs."
+        text_block.text = "Here are 16 available subjects."
         text_response.content = [text_block]
 
         with (
             patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
             patch.object(loop, "_track_usage"),
         ):
-            result = asyncio.run(loop.arun("IP 목록 보여줘"))
+            result = asyncio.run(loop.arun("subject 목록 보여줘"))
 
         assert result.rounds == 2
         assert len(result.tool_calls) == 1
-        assert result.tool_calls[0]["tool"] == "list_ips"
+        assert result.tool_calls[0]["tool"] == "list_subjects"
         assert result.error is None
         assert result.termination_reason == "natural"
 
@@ -606,7 +606,7 @@ class TestAgenticLoop:
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
-        tool_block.name = "list_ips"
+        tool_block.name = "list_subjects"
         tool_block.input = {}
         tool_block.id = "toolu_abc"
         tool_response.content = [tool_block]
@@ -690,7 +690,7 @@ class TestAgenticLoop:
                 resp.usage = MagicMock(input_tokens=100, output_tokens=50)
                 block = MagicMock()
                 block.type = "tool_use"
-                block.name = "list_ips"
+                block.name = "list_subjects"
                 block.input = {}
                 block.id = f"toolu_{round_idx}"
                 resp.content = [block]
@@ -981,7 +981,7 @@ class TestSubAgentManager:
 
         manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
         tasks = [
-            SubTask("t1", "Test task 1", "analyze", {"ip_name": "Test"}),
+            SubTask("t1", "Test task 1", "analyze", {"subject_id": "Test"}),
         ]
         results = manager.delegate(tasks)
 
@@ -1048,7 +1048,7 @@ class TestSubAgentOrchestration:
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
-        tasks = [SubTask("t1", "Test task", "analyze", {"ip_name": "Berserk"})]
+        tasks = [SubTask("t1", "Test task", "analyze", {"subject_id": "Project Atlas"})]
         results = manager.delegate(tasks)
 
         assert len(results) == 1
@@ -1170,7 +1170,9 @@ class TestAgenticLoopEdgeCases:
     def executor(self) -> ToolExecutor:
         handler_a = MagicMock(return_value={"status": "ok", "action": "list"})
         handler_b = MagicMock(return_value={"data": [1, 2, 3]})
-        return ToolExecutor(action_handlers={"list_ips": handler_a, "search_ips": handler_b})
+        return ToolExecutor(
+            action_handlers={"list_subjects": handler_a, "search_subjects": handler_b}
+        )
 
     def test_multiple_tool_calls_in_single_response(
         self, context: ConversationContext, executor: ToolExecutor
@@ -1185,13 +1187,13 @@ class TestAgenticLoopEdgeCases:
 
         tool_block_1 = MagicMock()
         tool_block_1.type = "tool_use"
-        tool_block_1.name = "list_ips"
+        tool_block_1.name = "list_subjects"
         tool_block_1.input = {}
         tool_block_1.id = "toolu_aaa"
 
         tool_block_2 = MagicMock()
         tool_block_2.type = "tool_use"
-        tool_block_2.name = "search_ips"
+        tool_block_2.name = "search_subjects"
         tool_block_2.input = {"query": "soulslike"}
         tool_block_2.id = "toolu_bbb"
 
@@ -1214,8 +1216,8 @@ class TestAgenticLoopEdgeCases:
 
         assert result.rounds == 2
         assert len(result.tool_calls) == 2
-        assert result.tool_calls[0]["tool"] == "list_ips"
-        assert result.tool_calls[1]["tool"] == "search_ips"
+        assert result.tool_calls[0]["tool"] == "list_subjects"
+        assert result.tool_calls[1]["tool"] == "search_subjects"
 
     def test_serialize_content_mixed(
         self, context: ConversationContext, executor: ToolExecutor
@@ -1230,7 +1232,7 @@ class TestAgenticLoopEdgeCases:
         tool_block = MagicMock()
         tool_block.type = "tool_use"
         tool_block.id = "toolu_xyz"
-        tool_block.name = "list_ips"
+        tool_block.name = "list_subjects"
         tool_block.input = {"filter": "active"}
 
         serialized = loop._serialize_content([text_block, tool_block])
@@ -1238,7 +1240,7 @@ class TestAgenticLoopEdgeCases:
         assert len(serialized) == 2
         assert serialized[0] == {"type": "text", "text": "Let me help."}
         assert serialized[1]["type"] == "tool_use"
-        assert serialized[1]["name"] == "list_ips"
+        assert serialized[1]["name"] == "list_subjects"
         assert serialized[1]["id"] == "toolu_xyz"
 
     def test_extract_text_empty_content(
@@ -1404,14 +1406,14 @@ class TestAgenticLoopToolCallRendering:
         """Tool calls should trigger render_tool_call."""
         ctx = ConversationContext()
         handler = MagicMock(return_value={"status": "ok", "tier": "S", "score": 81.3})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"analyze_subject": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor, quiet=True)
 
         # Build a response with tool_use
         tool_block = MagicMock()
         tool_block.type = "tool_use"
-        tool_block.name = "analyze_ip"
-        tool_block.input = {"ip_name": "Berserk"}
+        tool_block.name = "analyze_subject"
+        tool_block.input = {"subject_id": "Project Atlas"}
         tool_block.id = "tool_123"
 
         mock_response = MagicMock()
@@ -1423,19 +1425,19 @@ class TestAgenticLoopToolCallRendering:
             loop._tool_processor._op_logger, "log_tool_call", return_value=True
         ) as mock_log:
             asyncio.run(loop._tool_processor.process(mock_response))
-            mock_log.assert_called_once_with("analyze_ip", {"ip_name": "Berserk"})
+            mock_log.assert_called_once_with("analyze_subject", {"subject_id": "Project Atlas"})
 
     def test_tool_result_renders_dict(self) -> None:
         """Dict results should trigger render_tool_result."""
         ctx = ConversationContext()
         handler = MagicMock(return_value={"tier": "S", "score": 81.3})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler}, auto_approve=True)
+        executor = ToolExecutor(action_handlers={"analyze_subject": handler}, auto_approve=True)
         loop = AgenticLoop(ctx, executor, quiet=True)
 
         tool_block = MagicMock()
         tool_block.type = "tool_use"
-        tool_block.name = "analyze_ip"
-        tool_block.input = {"ip_name": "Berserk"}
+        tool_block.name = "analyze_subject"
+        tool_block.input = {"subject_id": "Project Atlas"}
         tool_block.id = "tool_123"
 
         mock_response = MagicMock()
@@ -1449,7 +1451,7 @@ class TestAgenticLoopToolCallRendering:
 
             asyncio.run(loop._tool_processor.process(mock_response))
             mock_log_result.assert_called_once_with(
-                "analyze_ip", {"tier": "S", "score": 81.3}, visible=True
+                "analyze_subject", {"tier": "S", "score": 81.3}, visible=True
             )
 
 
@@ -1620,8 +1622,8 @@ class TestSubAgentSessionIsolation:
         """Verify build_subagent_session_key produces correct format."""
         from core.memory.session_key import build_subagent_session_key
 
-        key = build_subagent_session_key("Berserk", "t1")
-        assert key == "ip:berserk:pipeline:subagent:t1"
+        key = build_subagent_session_key("demo", "t1")
+        assert key == "subject:demo:pipeline:subagent:t1"
 
     def test_subagent_context_threadlocal(self) -> None:
         """Verify thread-local context is set during handler execution and cleared after."""
@@ -1635,7 +1637,7 @@ class TestSubAgentSessionIsolation:
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10)
-        tasks = [SubTask("t1", "Test task", "analyze", {"ip_name": "Berserk"})]
+        tasks = [SubTask("t1", "Test task", "analyze", {"subject_id": "demo"})]
         manager.delegate(tasks)
 
         # Handler should have received (True, child_key)
@@ -1643,7 +1645,7 @@ class TestSubAgentSessionIsolation:
         is_sub, child_key = captured[0]
         assert is_sub is True
         assert "subagent" in child_key
-        assert "berserk" in child_key
+        assert "demo" in child_key
 
         # Main thread should get (False, "")
         main_is_sub, main_key = get_subagent_context()
@@ -1660,8 +1662,8 @@ class TestSubAgentSessionIsolation:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10)
         tasks = [
-            SubTask("t1", "Task 1", "analyze", {"ip_name": "Berserk"}),
-            SubTask("t2", "Task 2", "search", {"ip_name": "Cowboy Bebop"}),
+            SubTask("t1", "Task 1", "analyze", {"subject_id": "Project Atlas"}),
+            SubTask("t2", "Task 2", "search", {"subject_id": "Project Orion"}),
         ]
         manager.delegate(tasks)
 

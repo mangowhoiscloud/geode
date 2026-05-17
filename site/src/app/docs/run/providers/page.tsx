@@ -24,8 +24,43 @@ export default function Page() {
             </ul>
 
             <h2>폴백 체인</h2>
-            <p>키 조합에 따라 활성화되는 fallback chain은 <code>core/llm/providers/</code>의 라우터가 결정합니다.</p>
-            <p className="text-white/40"><em>TODO: chain 표. Source: wiki/concepts/geode-llm-models.md, wiki/concepts/geode-tool-routing.md</em></p>
+            <p>폴백 체인은 <code>core/config/routing.toml</code>의 shipped manifest와 <code>~/.geode/routing.toml</code> 사용자 override가 결정합니다.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>기본 모델</th>
+                  <th>Fallback</th>
+                  <th>인증</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Anthropic</td>
+                  <td><code>claude-opus-4-7</code></td>
+                  <td><code>claude-opus-4-7</code> → <code>claude-sonnet-4-6</code></td>
+                  <td><code>ANTHROPIC_API_KEY</code> 또는 Claude Code keychain</td>
+                </tr>
+                <tr>
+                  <td>OpenAI</td>
+                  <td><code>gpt-5.5</code></td>
+                  <td><code>gpt-5.5</code> → <code>gpt-5.4</code></td>
+                  <td><code>OPENAI_API_KEY</code></td>
+                </tr>
+                <tr>
+                  <td>Codex OAuth</td>
+                  <td><code>gpt-5.5</code></td>
+                  <td><code>gpt-5.5</code> → <code>gpt-5.3-codex</code></td>
+                  <td>ChatGPT/Codex OAuth session</td>
+                </tr>
+                <tr>
+                  <td>GLM</td>
+                  <td><code>glm-5.1</code></td>
+                  <td><code>glm-5.1</code> → <code>glm-5</code></td>
+                  <td><code>ZAI_API_KEY</code></td>
+                </tr>
+              </tbody>
+            </table>
 
             <h2>검증</h2>
             <pre>{`uv run geode "확인용 한 줄"`}</pre>
@@ -44,8 +79,43 @@ export default function Page() {
             </ul>
 
             <h2>Fallback chains</h2>
-            <p>The router in <code>core/llm/providers/</code> selects the chain based on which keys are present.</p>
-            <p className="text-white/40"><em>TODO: chain table. Source: wiki/concepts/geode-llm-models.md, wiki/concepts/geode-tool-routing.md.</em></p>
+            <p>Fallback chains are selected from the shipped <code>core/config/routing.toml</code> manifest plus your <code>~/.geode/routing.toml</code> overrides.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Default model</th>
+                  <th>Fallback</th>
+                  <th>Auth</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Anthropic</td>
+                  <td><code>claude-opus-4-7</code></td>
+                  <td><code>claude-opus-4-7</code> → <code>claude-sonnet-4-6</code></td>
+                  <td><code>ANTHROPIC_API_KEY</code> or Claude Code keychain</td>
+                </tr>
+                <tr>
+                  <td>OpenAI</td>
+                  <td><code>gpt-5.5</code></td>
+                  <td><code>gpt-5.5</code> → <code>gpt-5.4</code></td>
+                  <td><code>OPENAI_API_KEY</code></td>
+                </tr>
+                <tr>
+                  <td>Codex OAuth</td>
+                  <td><code>gpt-5.5</code></td>
+                  <td><code>gpt-5.5</code> → <code>gpt-5.3-codex</code></td>
+                  <td>ChatGPT/Codex OAuth session</td>
+                </tr>
+                <tr>
+                  <td>GLM</td>
+                  <td><code>glm-5.1</code></td>
+                  <td><code>glm-5.1</code> → <code>glm-5</code></td>
+                  <td><code>ZAI_API_KEY</code></td>
+                </tr>
+              </tbody>
+            </table>
 
             <h2>Verify</h2>
             <pre>{`uv run geode "hello"`}</pre>

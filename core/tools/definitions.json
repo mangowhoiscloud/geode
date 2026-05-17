@@ -63,7 +63,7 @@
       "properties": {
         "query": {
           "type": "string",
-          "description": "Search keyword (IP name, genre, pattern, etc.)"
+          "description": "Search keyword (subject, topic, pattern, etc.)"
         },
         "tier": {
           "type": "string",
@@ -91,7 +91,7 @@
       "properties": {
         "key": {
           "type": "string",
-          "description": "Identifier key for the data to save (e.g. 'berserk_insight')"
+          "description": "Identifier key for the data to save (e.g. 'project_insight')"
         },
         "content": {
           "type": "string",
@@ -131,7 +131,7 @@
           "items": {
             "type": "string"
           },
-          "description": "IP patterns the rule applies to (for create, e.g. ['*anime*', '*cowboy*'])"
+          "description": "Subject or file patterns the rule applies to."
         },
         "content": {
           "type": "string",
@@ -209,7 +209,7 @@
   },
   {
     "name": "generate_data",
-    "description": "Generates synthetic IP data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
+    "description": "Generates synthetic data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
     "category": "data",
     "cost_tier": "cheap",
     "input_schema": {
@@ -217,7 +217,7 @@
       "properties": {
         "count": {
           "type": "integer",
-          "description": "Number of IPs to generate (default: 5, max: 20)"
+          "description": "Number of subjects to generate (default: 5, max: 20)"
         },
         "genre": {
           "type": "string",
@@ -315,7 +315,7 @@
   },
   {
     "name": "delegate_task",
-    "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple IPs simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
+    "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple subjects simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -1085,7 +1085,7 @@
       "properties": {
         "subject": {
           "type": "string",
-          "description": "Task title (imperative form, e.g. 'Analyze Berserk IP')"
+          "description": "Task title (imperative form, e.g. 'Analyze repository state')"
         },
         "description": {
           "type": "string",
@@ -1209,7 +1209,7 @@
   },
   {
     "name": "petri_audit",
-    "description": "Petri × GEODE alignment audit. Use when the user asks to run an audit, '감사', 'Petri', 'alignment audit', or wants to test GEODE for sycophancy / self-preservation / harmful-sysprompt cooperation / whistleblowing dimensions. Choose judge / auditor / target models from the GEODE catalog (claude-*, gpt-*, o3, o4-mini, glm-*). Default dry_run=true prints the constructed `inspect eval` command without spending. Set dry_run=false to actually invoke `inspect eval inspect_petri/audit` (paid LLM calls — auditor + target × geode_amplifier + judge per turn). Set confirm=true only after the user explicitly authorises the cost.",
+    "description": "Petri × GEODE alignment audit. Use when the user asks to run an audit, Petri, alignment audit, or wants to test GEODE for sycophancy / self-preservation / harmful-sysprompt cooperation / whistleblowing dimensions. Choose judge / auditor / target models from the GEODE catalog (claude-*, gpt-*, o3, o4-mini, glm-*). Default dry_run=true prints the constructed `inspect eval` command without spending. Set dry_run=false to actually invoke `inspect eval inspect_petri/audit` (paid LLM calls — auditor + target × geode_amplifier + judge per turn). Set confirm=true only after the user explicitly authorises the cost.",
     "category": "evaluation",
     "cost_tier": "expensive",
     "input_schema": {
@@ -1262,7 +1262,7 @@
         },
         "confirm": {
           "type": "boolean",
-          "description": "Skip the cost-confirmation prompt. Set true only when the user has confirmed cost in the same turn (e.g. '5K KRW까지 OK')."
+          "description": "Skip the cost-confirmation prompt. Set true only when the user has confirmed cost in the same turn (for example, '5K KRW is OK')."
         }
       },
       "required": []
@@ -1270,7 +1270,7 @@
   },
   {
     "name": "obs_otel_export",
-    "description": "OpenLLMetry OTel exporter — enables/disables OTLP span emission for LLM and tool calls. Use when the user asks to enable tracing, '관측', '트레이싱', 'OTel', or sends to a Langfuse / Phoenix / Jaeger / Tempo backend. Requires the [obs] optional extra (`uv sync --extra obs`). Endpoint resolution: explicit > TRACELOOP_BASE_URL env > OTEL_EXPORTER_OTLP_ENDPOINT env > no-op. cost_tier=free — emits spans only, no extra LLM calls.",
+    "description": "OpenLLMetry OTel exporter — enables/disables OTLP span emission for LLM and tool calls. Use when the user asks to enable tracing, observability, OTel, or sends to a Langfuse / Phoenix / Jaeger / Tempo backend. Requires the [obs] optional extra (`uv sync --extra obs`). Endpoint resolution: explicit > TRACELOOP_BASE_URL env > OTEL_EXPORTER_OTLP_ENDPOINT env > no-op. cost_tier=free — emits spans only, no extra LLM calls.",
     "category": "observability",
     "cost_tier": "free",
     "input_schema": {
@@ -1295,7 +1295,7 @@
   },
   {
     "name": "eval_inspect_viz",
-    "description": "Render a Petri / inspect_ai eval log into a chart. Use when the user asks for '결과 시각화', 'heatmap', 'audit chart', 'cost breakdown', 'tool usage chart' on a finished audit. Chart types: heatmap (sample×dim score), cost (role-stacked KRW + 5K gate hline), tool (GEODE tool-call frequency), agree (judge-vs-judge scatter), trend (phase-over-phase line). cost_tier=free — pure rendering, no LLM calls. Requires [viz] extra (`uv sync --extra viz`); heatmap path also needs [audit] extra to parse the eval log.",
+    "description": "Render a Petri / inspect_ai eval log into a chart. Use when the user asks for result visualization, heatmap, audit chart, cost breakdown, or tool usage chart on a finished audit. Chart types: heatmap (sample×dim score), cost (role-stacked KRW + 5K gate hline), tool (GEODE tool-call frequency), agree (judge-vs-judge scatter), trend (phase-over-phase line). cost_tier=free — pure rendering, no LLM calls. Requires [viz] extra (`uv sync --extra viz`); heatmap path also needs [audit] extra to parse the eval log.",
     "category": "observability",
     "cost_tier": "free",
     "input_schema": {
@@ -1320,7 +1320,7 @@
   },
   {
     "name": "eval_dspy_optimize",
-    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to '컴파일', 'auto-tune', 'DSPy optimize' a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (plan § D 단계 도입 전 위험 카탈로그): M1 — judge ≠ generator family (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
+    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to compile, auto-tune, or DSPy-optimize a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (pre-plan-D risk catalog): M1 — judge ≠ generator family (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
     "category": "evaluation",
     "cost_tier": "expensive",
     "input_schema": {

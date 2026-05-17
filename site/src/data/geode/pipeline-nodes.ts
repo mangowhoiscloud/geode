@@ -1,7 +1,7 @@
 import { Node, Edge } from "@xyflow/react";
 
 // Pipeline node definitions for GEODE's LangGraph StateGraph
-// Topology: START → router → signals → analyst×4 (fan-out) → evaluators×3 → scoring → verification → synthesizer → END
+// Topology: START → router → gather → tools → scoring → verification → synthesize → END
 // Loopback: verification → gather → signals (if confidence < 0.7, max 5)
 
 export const pipelineNodes: Node[] = [
@@ -20,7 +20,7 @@ export const pipelineNodes: Node[] = [
     icon: "📊", label: "Market", description: "시장 규모·성장률", axis: "A-C", delay: 0.15,
   }},
   { id: "analyst-creative", type: "geodeAnalyst", position: { x: 440, y: 110 }, data: {
-    icon: "🎨", label: "Creative", description: "IP 창작 잠재력", axis: "D-F", delay: 0.2,
+    icon: "🎨", label: "Creative", description: "구조화 추론", axis: "D-F", delay: 0.2,
   }},
   { id: "analyst-audience", type: "geodeAnalyst", position: { x: 440, y: 200 }, data: {
     icon: "👥", label: "Audience", description: "팬덤·커뮤니티", axis: "G-I", delay: 0.25,
@@ -34,9 +34,8 @@ export const pipelineNodes: Node[] = [
     icon: "⚖️", label: "Eval ×3", description: "Cross-check", color: "amber", delay: 0.35,
   }},
 
-  // Scoring (PSM)
   { id: "scoring", type: "geodeStage", position: { x: 770, y: 168 }, data: {
-    icon: "🎯", label: "Scoring", description: "PSM composite", color: "emerald", delay: 0.4,
+    icon: "🎯", label: "Scoring", description: "Generic score", color: "emerald", delay: 0.4,
   }},
 
   // Verification (6-layer)

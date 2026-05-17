@@ -47,7 +47,7 @@ def _clean_announce_queue() -> Any:
 
 @pytest.fixture
 def parent_key() -> str:
-    return "ip:berserk:pipeline:parent"
+    return "subject:demo:pipeline:parent"
 
 
 @pytest.fixture
@@ -242,7 +242,7 @@ class TestSubAgentManagerAnnounce:
             hooks=hooks,
             parent_session_key=parent_key,
         )
-        tasks = [SubTask(task_id="t1", description="analyze berserk", task_type="analyze")]
+        tasks = [SubTask(task_id="t1", description="analyze demo", task_type="analyze")]
         mgr.delegate(tasks)
 
         # Results should be in announce queue
@@ -318,7 +318,7 @@ class TestHookDataSummary:
             name="test_capture",
         )
 
-        handler = MagicMock(return_value={"summary": "Berserk is S-tier", "tier": "S"})
+        handler = MagicMock(return_value={"summary": "Project Atlas is S-tier", "tier": "S"})
         mgr = SubAgentManager(
             runner,
             task_handler=handler,
@@ -331,7 +331,7 @@ class TestHookDataSummary:
 
         assert len(captured) == 1
         assert "summary" in captured[0]
-        assert "Berserk" in captured[0]["summary"] or captured[0]["summary"] != ""
+        assert "Project Atlas" in captured[0]["summary"] or captured[0]["summary"] != ""
 
 
 # ---------------------------------------------------------------------------
@@ -401,13 +401,13 @@ class TestAgenticLoopCheckAnnounced:
         assert count == 0
 
     def test_no_pending_returns_zero(self) -> None:
-        loop = self._make_loop(parent_key="ip:test:pipeline")
+        loop = self._make_loop(parent_key="subject:test:pipeline")
         messages: list[dict[str, Any]] = []
         count = loop._check_announced_results(messages)
         assert count == 0
 
     def test_injects_announced_results(self) -> None:
-        parent_key = "ip:test:pipeline"
+        parent_key = "subject:test:pipeline"
         loop = self._make_loop(parent_key=parent_key)
 
         # Enqueue an announced result
@@ -429,7 +429,7 @@ class TestAgenticLoopCheckAnnounced:
         assert loop.context.turn_count >= 1
 
     def test_injects_multiple_results(self) -> None:
-        parent_key = "ip:multi:pipeline"
+        parent_key = "subject:multi:pipeline"
         loop = self._make_loop(parent_key=parent_key)
 
         results = [
@@ -445,7 +445,7 @@ class TestAgenticLoopCheckAnnounced:
         assert len(messages) == 3
 
     def test_failed_result_includes_error(self) -> None:
-        parent_key = "ip:err:pipeline"
+        parent_key = "subject:err:pipeline"
         loop = self._make_loop(parent_key=parent_key)
 
         r = SubAgentResult(
@@ -468,7 +468,7 @@ class TestAgenticLoopCheckAnnounced:
 
     def test_drain_is_one_shot(self) -> None:
         """After _check_announced_results drains, second call returns 0."""
-        parent_key = "ip:oneshot:pipeline"
+        parent_key = "subject:oneshot:pipeline"
         loop = self._make_loop(parent_key=parent_key)
 
         r = SubAgentResult(task_id="t1", task_type="analyze", summary="done")
@@ -491,8 +491,8 @@ class TestAnnounceIntegration:
     """End-to-end integration: SubAgentManager delegates, announces, parent loop checks."""
 
     def test_full_flow(self) -> None:
-        parent_key = "ip:berserk:pipeline:parent"
-        handler = MagicMock(return_value={"summary": "Berserk S-tier 81.3", "tier": "S"})
+        parent_key = "subject:demo:pipeline:parent"
+        handler = MagicMock(return_value={"summary": "Project Atlas S-tier 81.3", "tier": "S"})
 
         mgr = SubAgentManager(
             IsolatedRunner(),
@@ -502,7 +502,9 @@ class TestAnnounceIntegration:
         )
 
         # 1. Delegate tasks
-        tasks = [SubTask(task_id="analyze-1", description="analyze Berserk", task_type="analyze")]
+        tasks = [
+            SubTask(task_id="analyze-1", description="analyze Project Atlas", task_type="analyze")
+        ]
         mgr.delegate(tasks)
 
         # 2. Parent loop checks for announced results
@@ -516,7 +518,7 @@ class TestAnnounceIntegration:
         assert count == 1
         assert len(messages) == 1
         assert "analyze-1" in messages[0]["content"]
-        assert "Berserk" in messages[0]["content"]
+        assert "Project Atlas" in messages[0]["content"]
 
         # 3. Conversation context also has the event
         assert loop.context.turn_count == 1

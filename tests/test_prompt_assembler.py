@@ -26,7 +26,7 @@ def base_system() -> str:
 
 @pytest.fixture()
 def base_user() -> str:
-    return "Analyze this IP: TestIP"
+    return "Analyze this subject: TestIP"
 
 
 @pytest.fixture()
@@ -193,7 +193,7 @@ class TestMemoryInjection:
     def test_memory_context_injection_llm_summary(self, base_system: str, base_user: str) -> None:
         """Memory context with _llm_summary is injected into system prompt."""
         state: dict[str, Any] = {
-            "memory_context": {"_llm_summary": "Berserk was S tier in previous analysis."}
+            "memory_context": {"_llm_summary": "Project Atlas was S tier in previous analysis."}
         }
         assembler = PromptAssembler()
         result = assembler.assemble(
@@ -205,7 +205,7 @@ class TestMemoryInjection:
         )
 
         assert "## Context from Memory" in result.system
-        assert "Berserk was S tier" in result.system
+        assert "Project Atlas was S tier" in result.system
         assert "memory-context" in result.fragments_used
 
     def test_memory_context_fallback(self, base_system: str, base_user: str) -> None:
@@ -213,9 +213,9 @@ class TestMemoryInjection:
         state: dict[str, Any] = {
             "memory_context": {
                 "_org_loaded": True,
-                "organization_strategy": "Focus on anime IPs",
+                "organization_strategy": "Focus on anime subjects",
                 "_project_loaded": True,
-                "project_goal": "Find undervalued fighting IPs",
+                "project_goal": "Find undervalued fighting subjects",
             }
         }
         assembler = PromptAssembler()
@@ -227,8 +227,8 @@ class TestMemoryInjection:
             role_type="game_mechanics",
         )
 
-        assert "Organization strategy: Focus on anime IPs" in result.system
-        assert "Project goal: Find undervalued fighting IPs" in result.system
+        assert "Organization strategy: Focus on anime subjects" in result.system
+        assert "Project goal: Find undervalued fighting subjects" in result.system
         assert "memory-context" in result.fragments_used
 
     def test_token_budget_memory_truncation(self, base_system: str, base_user: str) -> None:
@@ -256,7 +256,7 @@ class TestBootstrapInjection:
         """Extra instructions from bootstrap are injected."""
         state: dict[str, Any] = {
             "_extra_instructions": [
-                "Weight combat depth heavily for fighting IPs",
+                "Weight combat depth heavily for fighting subjects",
                 "Consider mobile market opportunity",
             ]
         }
@@ -270,7 +270,7 @@ class TestBootstrapInjection:
         )
 
         assert "## Additional Instructions" in result.system
-        assert "- Weight combat depth heavily for fighting IPs" in result.system
+        assert "- Weight combat depth heavily for fighting subjects" in result.system
         assert "- Consider mobile market opportunity" in result.system
         assert "bootstrap-extra:2" in result.fragments_used
 

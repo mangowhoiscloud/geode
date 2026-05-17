@@ -24,7 +24,7 @@ const personal: Entry[] = [
     titleKo: "GEODE",
     taglineKo: "자율 에이전트 기반 운영체제 구현",
     bodyKo:
-      "LLM 위에서 동작하는 자율 에이전트를 운영체제로 다룹니다. 동일한 4계층 하네스 위에서 두 도메인(Game IP 분석 플러그인, Java 1.8 → 22 마이그레이션 fork)을 검증했습니다. 64회 릴리스, 236 모듈, 4,380 테스트, 핀 고정 프롬프트 20개, 단독 개발. 안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 사례입니다.",
+      "LLM 위에서 동작하는 자율 에이전트를 운영체제로 다룹니다. 모델 라우팅·도구 실행·메모리·스케줄링·관측성을 하나의 런타임으로 묶었습니다. 64회 릴리스, 236 모듈, 4,380 테스트, 핀 고정 프롬프트 20개, 단독 개발. 안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 사례입니다.",
     chips: ["LangGraph", "Hook 58 events", "4-Layer", "Plugin namespace", "Cache control"],
     accent: "var(--acc-artifact)",
   },
@@ -50,22 +50,6 @@ const personal: Entry[] = [
 ];
 
 const freelance: Entry[] = [
-  {
-    id: "reode",
-    clickable: false,
-    range: "2026.03 → 2026.05 (@ pinxlab)",
-    status: "GEODE v0.12 fork · case study",
-    titleKo: "REODE",
-    taglineKo: "자율 코드 마이그레이션 에이전트",
-    bulletsKo: [
-      "GEODE v0.12에서 분기해 Java 1.8 → 22, Spring 4.3 → 6.1 마이그레이션을 자율 수행했습니다.",
-      "5,523 파일 엔터프라이즈 프로젝트에서 83 / 83 모듈 빌드를 통과시켰습니다.",
-      "에러 4분류 라우팅(CONFIG / CODE / BEHAVIOR / ENV)과 Architect / Editor 분리 구조 위에서 OpenRewrite 70 % + LLM 30 % 하이브리드로 동작합니다.",
-      "5시간 48분, 1,133턴 자율 수행, 누적 비용 $388에 마쳤습니다.",
-    ],
-    chips: ["Java 1.8 → 22", "Spring 4.3 → 6.1", "83 / 83 modules", "5h 48m · $388", "OpenRewrite + LLM"],
-    accent: "var(--acc-artifact)",
-  },
   {
     id: "kiki",
     clickable: false,

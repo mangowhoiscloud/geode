@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GEODE_CUMULATIVE_KO } from "@/data/geode/sot";
+import { GEODE_CUMULATIVE_EN, GEODE_CUMULATIVE_KO } from "@/data/geode/sot";
 
 /**
  * GEODE site landing — /geode/
@@ -15,22 +15,18 @@ import { GEODE_CUMULATIVE_KO } from "@/data/geode/sot";
 const primary = [
   {
     href: "/portfolio",
-    eyebrow: "포트폴리오",
-    eyebrowEn: "Portfolio",
-    title: "Why we built GEODE — a self-hosting agent harness.",
-    titleKo: "GEODE는 왜, 무엇인가. 스스로를 빌드하는 자율 에이전트 하네스.",
+    eyebrow: "Portfolio / 포트폴리오",
+    title: "GEODE를 왜 만들었나 — 스스로를 빌드하는 에이전트 하네스.",
     body:
-      "Karpathy의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답. 같은 하네스 위에서 두 도메인이 검증됐고, 그 하네스를 빌드하는 라인도 같은 규율을 씁니다.",
+      "Karpathy의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답입니다. Model routing, tool execution, memory, scheduling, observability를 하나의 autonomous execution harness로 묶었습니다.",
     accent: "var(--acc-artifact)",
   },
   {
     href: "/docs",
-    eyebrow: "공식 문서",
-    eyebrowEn: "Documentation",
-    title: "Reference for every layer, hook, and tool.",
-    titleKo: "4-계층 · 58 훅 · 57 도구 전수 참조.",
+    eyebrow: "Docs / 문서",
+    title: "모든 layer, hook, tool에 대한 reference.",
     body:
-      "코드베이스에서 추출된 사람이 큐레이팅한 내러티브. 아키텍처, 런타임, 하네스, 플러그인, 검증 — 현재 main 브랜치 기준.",
+      "코드베이스에서 생성·정리한 architecture, runtime, harness, plugin, verification 문서입니다. 현재 main branch 기준으로 동기화됩니다.",
     accent: "var(--acc-line)",
   },
 ];
@@ -38,13 +34,8 @@ const primary = [
 const secondary = [
   {
     href: "/about",
-    label: "About",
-    note: "Jihwan Ryu. 개인 작업과 프리랜서 작업 인덱스.",
-  },
-  {
-    href: "/works/reode",
-    label: "Works · REODE",
-    note: "GEODE v0.12 fork. 자율 코드 마이그레이션 사례.",
+    label: "About / 소개",
+    note: "류지환. 개인 작업과 프리랜서 프로젝트 인덱스.",
   },
 ];
 
@@ -63,11 +54,10 @@ export default function Home() {
           <p className="mt-4 font-display text-[clamp(1.1rem,2vw,1.4rem)] text-[var(--ink-1)] leading-snug">
             스스로를 빌드하는 자율 에이전트 하네스.
           </p>
-          <p className="mt-2 font-display text-[clamp(0.95rem,1.6vw,1.1rem)] text-[var(--ink-3)] leading-snug">
-            A self-hosting agent harness for autonomous execution.
-          </p>
           <p className="mt-6 font-mono text-[12px] text-[var(--ink-3)]">
             {GEODE_CUMULATIVE_KO}
+            <br />
+            {GEODE_CUMULATIVE_EN}
           </p>
         </header>
 
@@ -84,10 +74,10 @@ export default function Home() {
                   className="text-[10px] font-mono uppercase tracking-[0.22em] mb-2"
                   style={{ color: card.accent }}
                 >
-                  {card.eyebrow} · {card.eyebrowEn}
+                  {card.eyebrow}
                 </div>
                 <h2 className="font-display font-semibold text-[var(--ink-1)] text-xl md:text-2xl leading-snug group-hover:text-[var(--ink)] mb-2">
-                  {card.titleKo}
+                  {card.title}
                 </h2>
                 <p className="text-[14px] text-[var(--ink-2)] leading-relaxed">
                   {card.body}
@@ -100,7 +90,7 @@ export default function Home() {
         {/* Secondary: About + Works */}
         <section className="mb-20">
           <div className="text-[10px] font-mono uppercase tracking-[0.22em] text-[var(--ink-3)] mb-4">
-            그 외
+            More
           </div>
           <ul className="divide-y divide-[var(--rule)]">
             {secondary.map((row) => (

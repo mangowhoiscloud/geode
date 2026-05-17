@@ -21,8 +21,8 @@ const values = [
     id: "V2",
     title: "Verification Layer",
     titleKo: "검증 계층",
-    body: "G1-G4 + BiasBuster + Cross-LLM + Karpathy P4 hash ratchet.",
-    bodyKo: "G1-G4 + BiasBuster + Cross-LLM + Karpathy P4 해시 래칫.",
+    body: "G1-G4 + panel guard + Cross-LLM + Karpathy P4 hash ratchet.",
+    bodyKo: "G1-G4 + panel guard + Cross-LLM + Karpathy P4 해시 래칫.",
   },
   {
     id: "V3",

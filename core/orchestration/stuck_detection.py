@@ -24,10 +24,10 @@ class StuckDetector:
 
     Usage:
         detector = StuckDetector(timeout_s=7200)
-        detector.mark_running("ip:berserk:analysis")
+        detector.mark_running("subject:demo:analysis")
         # ... later, if still running after 2h ...
         stuck = detector.check_stuck()
-        # → ["ip:berserk:analysis"]
+        # → ["subject:demo:analysis"]
     """
 
     def __init__(
@@ -161,29 +161,29 @@ class StuckDetector:
 
         def _on_enter(_event: Any, data: dict[str, Any]) -> None:
             node = data.get("node", "")
-            ip = data.get("ip_name", "")
-            key = f"{ip}:{node}"
+            subject = data.get("subject_id", "")
+            key = f"{subject}:{node}"
             subtype = data.get("_analyst_type") or data.get("_evaluator_type")
             if subtype:
-                key = f"{ip}:{node}:{subtype}"
-            self.mark_running(key, metadata={"node": node, "ip_name": ip})
+                key = f"{subject}:{node}:{subtype}"
+            self.mark_running(key, metadata={"node": node, "subject_id": subject})
 
         def _on_exit(_event: Any, data: dict[str, Any]) -> None:
             node = data.get("node", "")
-            ip = data.get("ip_name", "")
-            key = f"{ip}:{node}"
+            subject = data.get("subject_id", "")
+            key = f"{subject}:{node}"
             subtype = data.get("_analyst_type") or data.get("_evaluator_type")
             if subtype:
-                key = f"{ip}:{node}:{subtype}"
+                key = f"{subject}:{node}:{subtype}"
             self.mark_completed(key)
 
         def _on_error(_event: Any, data: dict[str, Any]) -> None:
             node = data.get("node", "")
-            ip = data.get("ip_name", "")
-            key = f"{ip}:{node}"
+            subject = data.get("subject_id", "")
+            key = f"{subject}:{node}"
             subtype = data.get("_analyst_type") or data.get("_evaluator_type")
             if subtype:
-                key = f"{ip}:{node}:{subtype}"
+                key = f"{subject}:{node}:{subtype}"
             self.mark_completed(key)
 
         def _on_stuck_fire_hook(session_key: str) -> None:

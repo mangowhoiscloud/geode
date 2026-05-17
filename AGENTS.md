@@ -16,7 +16,7 @@
 - **Language**: Python 3.12+, type-hinted, uv-managed.
 - **Layout**: two top-level packages.
   - `core/` — domain-agnostic runtime.
-  - `plugins/` — domain extensions (currently `petri_audit`; Game IP is externalized).
+  - `plugins/` — domain extensions (currently `petri_audit`).
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
 
@@ -145,8 +145,8 @@ panel voting.
 Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
 - `skill_registry.py` — 5-tier discovery (bundled → user → org → project → session).
-- `reports/` — report templates (analyst_reasoning, cross_llm,
-  decision_tree, evaluators, psm).
+- `reports/` — report templates belong in external domain plugins, not GEODE
+  core.
 
 ### `core/verification/`
 
@@ -165,11 +165,11 @@ Typer commands and thin CLI surface. Slash commands.
 
 Slack / Discord / Telegram adapters. Lane queue concurrency.
 
-### Game IP plugin
+### External domain plugins
 
-Moved out of the GEODE core repository. Keep domain-specific analysts,
-evaluators, bias checks, calibration fixtures, scoring rubrics, and fixtures in
-the external plugin package.
+Keep domain-specific analysts, evaluators, bias checks, calibration fixtures,
+scoring rubrics, CLI commands, MCP resources, reports, and fixtures outside the
+GEODE core repository.
 
 ### `plugins/petri_audit/`
 

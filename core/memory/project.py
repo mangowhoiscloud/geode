@@ -10,7 +10,7 @@ Directory structure:
     ├── memory/
     │   └── PROJECT.md      # GEODE project memory (first 200 lines → system context)
     └── rules/              # Modular domain rules
-        ├── anime-ip.md     # Category-specific rules
+        ├── research-domain.md  # Category-specific rules
         └── ...
 """
 
@@ -68,7 +68,7 @@ def _is_valid_insight(insight: str) -> bool:
         return False
 
     if stripped.startswith("[unknown]"):
-        log.debug("Insight rejected (unknown IP): %s", stripped[:80])
+        log.debug("Insight rejected (unknown subject): %s", stripped[:80])
         return False
 
     for pattern in _REJECT_PATTERNS:
@@ -163,7 +163,7 @@ class ProjectMemory:
         Global rules are loaded first, project rules override by name.
 
         Args:
-            context: Context string to match against rule paths (e.g. "anime", "berserk").
+            context: Context string to match against rule paths (e.g. "research", "demo").
 
         Returns:
             List of dicts with 'name', 'paths', 'content' for each matching rule.
@@ -210,7 +210,7 @@ class ProjectMemory:
     def add_insight(self, insight: str) -> bool:
         """Add an insight to the '## 최근 인사이트' section of MEMORY.md.
 
-        - Dedup: same date + same IP substring → skip (return False)
+        - Dedup: same date + same subject substring -> skip (return False)
         - Newest-first: new entry prepended at top of section
         - Rotation: keeps only MAX_INSIGHTS entries, oldest dropped
 
@@ -264,8 +264,7 @@ class ProjectMemory:
         while existing_lines and existing_lines[-1].strip() == "":
             existing_lines.pop()
 
-        # Dedup: skip if same date + same IP substring already exists
-        # Extract IP token from insight, e.g. "[Berserk]" → "Berserk"
+        # Dedup: skip if same date + same subject substring already exists.
         ip_token = ""
         if insight.startswith("[") and "]" in insight:
             ip_token = insight[1 : insight.index("]")]
@@ -389,7 +388,7 @@ class ProjectMemory:
 
         Args:
             name: Rule name (used as filename, e.g. 'dark-fantasy').
-            paths: Glob patterns for IP matching (e.g. ['*berserk*', '*dark*']).
+            paths: Glob patterns for subject matching.
             content: Rule body in markdown.
 
         Returns True if created, False if already exists or write failed.
@@ -485,14 +484,14 @@ class ProjectMemory:
             )
         return rules
 
-    def get_context_for_ip(self, ip_name: str) -> dict[str, Any]:
-        """Get combined memory + rules context for a specific IP.
+    def get_context_for_subject(self, subject_id: str) -> dict[str, Any]:
+        """Get combined memory + rules context for a specific subject.
 
         Returns dict with 'memory' (str) and 'rules' (list) keys.
         """
         return {
             "memory": self.load_memory(),
-            "rules": self.load_rules(ip_name),
+            "rules": self.load_rules(subject_id),
         }
 
     def ensure_structure(self) -> bool:

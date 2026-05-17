@@ -70,7 +70,7 @@ class TestNormalizeAnthropic:
         tool_block = MagicMock()
         tool_block.type = "tool_use"
         tool_block.id = "tu_1"
-        tool_block.name = "search_ips"
+        tool_block.name = "search_subjects"
         tool_block.input = {"query": "dark"}
         resp = self._make_response(content=[tool_block], stop_reason="tool_use")
 
@@ -80,7 +80,7 @@ class TestNormalizeAnthropic:
         block = result.content[0]
         assert block.type == "tool_use"
         assert block.id == "tu_1"
-        assert block.name == "search_ips"
+        assert block.name == "search_subjects"
         assert block.input == {"query": "dark"}
 
     def test_mixed_content(self):
@@ -90,7 +90,7 @@ class TestNormalizeAnthropic:
         tool_block = MagicMock()
         tool_block.type = "tool_use"
         tool_block.id = "tu_2"
-        tool_block.name = "list_ips"
+        tool_block.name = "list_subjects"
         tool_block.input = {}
         resp = self._make_response(content=[text_block, tool_block], stop_reason="tool_use")
 
@@ -131,7 +131,7 @@ class TestNormalizeOpenAI:
     def test_tool_calls_response(self):
         tc = MagicMock()
         tc.id = "call_1"
-        tc.function.name = "list_ips"
+        tc.function.name = "list_subjects"
         tc.function.arguments = '{"limit": 5}'
         resp = self._make_response(
             content=None,
@@ -145,13 +145,13 @@ class TestNormalizeOpenAI:
         block = result.content[0]
         assert block.type == "tool_use"
         assert block.id == "call_1"
-        assert block.name == "list_ips"
+        assert block.name == "list_subjects"
         assert block.input == {"limit": 5}
 
     def test_text_plus_tool_calls(self):
         tc = MagicMock()
         tc.id = "call_2"
-        tc.function.name = "search_ips"
+        tc.function.name = "search_subjects"
         tc.function.arguments = '{"query": "mecha"}'
         resp = self._make_response(
             content="Let me search.",

@@ -49,13 +49,13 @@ class TestCmdResume:
         checkpoint: SessionCheckpoint,
     ) -> None:
         messages = [
-            {"role": "user", "content": "analyze Berserk"},
+            {"role": "user", "content": "analyze Project Atlas"},
             {"role": "assistant", "content": "Starting analysis..."},
         ]
         state = SessionState(
             session_id="test-1",
             model="claude-opus-4-6",
-            user_input="analyze Berserk",
+            user_input="analyze Project Atlas",
             messages=messages,
         )
         checkpoint.save(state)
@@ -64,7 +64,7 @@ class TestCmdResume:
         assert isinstance(result, SessionState)
         assert result.session_id == "test-1"
         assert len(result.messages) == 2
-        assert result.user_input == "analyze Berserk"
+        assert result.user_input == "analyze Project Atlas"
 
     def test_resume_nonexistent_returns_none(self) -> None:
         result = cmd_resume("nonexistent-id")
@@ -158,7 +158,7 @@ class TestSessionRestore:
     def test_messages_injected_into_conversation(self) -> None:
         """Simulates /resume wiring: messages injected into ConversationContext."""
         saved_messages = [
-            {"role": "user", "content": "analyze Berserk"},
+            {"role": "user", "content": "analyze Project Atlas"},
             {"role": "assistant", "content": [{"type": "text", "text": "Starting..."}]},
             {
                 "role": "user",
@@ -168,7 +168,7 @@ class TestSessionRestore:
         state = SessionState(
             session_id="s-resume1",
             messages=saved_messages,
-            user_input="analyze Berserk",
+            user_input="analyze Project Atlas",
         )
 
         # Simulate REPL wiring
@@ -177,7 +177,7 @@ class TestSessionRestore:
 
         assert len(conversation.messages) == 3
         assert conversation.messages[0]["role"] == "user"
-        assert conversation.messages[0]["content"] == "analyze Berserk"
+        assert conversation.messages[0]["content"] == "analyze Project Atlas"
 
     def test_restored_conversation_accepts_new_messages(self) -> None:
         """After restore, new messages can be added normally."""

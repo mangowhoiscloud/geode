@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.99.11 — Long-running Autonomous Execution Harness
+# GEODE v0.99.12 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -304,7 +304,7 @@ geode update
 
 ## GEODE 비교
 
-각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.11**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.12**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
 
 <details>
 <summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>
@@ -412,7 +412,7 @@ graph LR
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
-| **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 가 Port 통해 plug-in (cross-cutting). 레퍼런스 DAG 1개 동봉. 어떤 탐색적 리서치 / 시그널 예측 도메인이든 교체해 사용 | `core/domains/` |
+| **⊥ Domain** | `DomainPort` Protocol — 도메인-specific DAG 는 외부 패키지가 port 를 통해 plug-in. GEODE core 는 port/loader 만 제공하고, 도메인 DAG, CLI 명령, fixture, report 는 이 repo 밖에서 소유 | `core/domains/` |
 
 `.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
 

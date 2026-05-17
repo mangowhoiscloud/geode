@@ -224,7 +224,7 @@ export function ArchitectureSection() {
               {/* Mode path indicator */}
               <text x={400} y={286} textAnchor="middle" fill={modeLabels[mode].color} fillOpacity={0.35}
                 fontSize={8} fontFamily="ui-monospace, monospace">
-                acquire_all(key, [&quot;session&quot;, &quot;global&quot;]) → create_session({mode.toUpperCase()})
+                acquire_all_async(key, [&quot;session&quot;, &quot;global&quot;]) → create_session({mode.toUpperCase()})
               </text>
             </svg>
           </div>
@@ -266,7 +266,7 @@ export function ArchitectureSection() {
               <span className="text-[#C084FC] text-sm">⟂</span>
               <span className="text-xs text-[#9BB0CC]">
                 <span className="font-medium text-[#C084FC]/70">DomainPort</span>
-                {" "}{t(locale, "Protocol 직교. GameIP, REODE 교체 가능", "Orthogonal protocol. Swappable: GameIP, REODE")}
+                {" "}{t(locale, "Protocol 직교. 외부 도메인 교체 가능", "Orthogonal protocol. External domains are swappable")}
               </span>
             </div>
           </div>

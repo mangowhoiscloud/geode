@@ -20,8 +20,8 @@ class TestWorkerRequest:
         req = WorkerRequest(
             task_id="t-001",
             task_type="analyze",
-            description="Analyze Cowboy Bebop",
-            args={"ip_name": "Cowboy Bebop"},
+            description="Analyze Project Orion",
+            args={"subject_id": "Project Orion"},
             denied_tools=["delegate_task", "run_bash"],
             model="claude-opus-4-6",
             provider="anthropic",
@@ -31,7 +31,7 @@ class TestWorkerRequest:
         data = req.to_dict()
         restored = WorkerRequest.from_dict(data)
         assert restored.task_id == "t-001"
-        assert restored.description == "Analyze Cowboy Bebop"
+        assert restored.description == "Analyze Project Orion"
         assert "delegate_task" in restored.denied_tools
         assert restored.domain == "research"
 

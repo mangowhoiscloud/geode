@@ -18,7 +18,7 @@ import pytest
 
 # Unix domain socket paths must be < 104 chars on macOS.
 # pytest tmp_path is too long, so we use /tmp/ directly.
-_SOCK_PREFIX = Path("/tmp/geode-test-ipc")  # noqa: S108
+_SOCK_PREFIX = Path("/tmp/geode-test-subjectc")  # noqa: S108
 
 
 @pytest.fixture(autouse=True)
@@ -150,9 +150,6 @@ class TestCLIPoller:
         entered: list[tuple[str, list[str]]] = []
 
         class AsyncLaneQueue:
-            def acquire_all(self, *_args: Any, **_kwargs: Any) -> Any:
-                raise AssertionError("sync lane acquire_all path used")
-
             @asynccontextmanager
             async def acquire_all_async(self, key: str, lanes: list[str]) -> Any:
                 entered.append((key, lanes))
@@ -298,7 +295,7 @@ class TestCLIChannelIntegration:
         mock_services = MagicMock()
 
         mock_result = MagicMock()
-        mock_result.text = "Berserk scored S tier (81.2)"
+        mock_result.text = "Project Atlas scored S tier (81.2)"
         mock_result.rounds = 3
         mock_result.tool_calls = []
         mock_result.termination_reason = "natural"
@@ -319,12 +316,12 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            result = client.send_prompt("analyze Berserk")
+            result = client.send_prompt("analyze Project Atlas")
             assert result["type"] == "result"
-            assert "Berserk" in result["text"]
+            assert "Project Atlas" in result["text"]
             assert result["rounds"] == 3
             assert result["tool_calls"] == []
-            mock_loop.arun.assert_awaited_once_with("analyze Berserk")
+            mock_loop.arun.assert_awaited_once_with("analyze Project Atlas")
             mock_loop.run.assert_not_called()
 
             client.close()

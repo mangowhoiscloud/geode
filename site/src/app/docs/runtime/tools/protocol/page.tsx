@@ -43,7 +43,7 @@ export default function Page() {
             <table>
               <thead><tr><th>티어</th><th>개수</th><th>동작</th></tr></thead>
               <tbody>
-                <tr><td>상시 로드</td><td>6</td><td>모든 LLM 호출에서 전송. <code>list_ips</code>, <code>search_ips</code>, <code>analyze_ip</code>, <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code>.</td></tr>
+                <tr><td>상시 로드</td><td>6</td><td>모든 LLM 호출에서 전송. <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code> 등 코어 도구만 포함합니다.</td></tr>
                 <tr><td>지연 로드</td><td>55</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
               </tbody>
             </table>
@@ -81,7 +81,7 @@ export default function Page() {
             <ul>
               <li><strong>FileTools</strong>. Read, Write, Edit, Glob, Grep</li>
               <li><strong>MemoryTools</strong>. memory_search, memory_get, memory_save</li>
-              <li><strong>DataTools</strong>. query_monolake, IP 프로파일 조회</li>
+              <li><strong>DataTools</strong>. Cortex Analyst/Search 기반 데이터 조회</li>
               <li><strong>ComputerUse</strong>. 프로바이더 독립 데스크탑 자동화 (PyAutoGUI)</li>
               <li><strong>MCP</strong>. <code>core/mcp/</code> 서비스를 통해 노출 (서버 16개, 25K 가드)</li>
             </ul>
@@ -117,7 +117,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Tier</th><th>Count</th><th>Behaviour</th></tr></thead>
               <tbody>
-                <tr><td>Always-loaded</td><td>6</td><td>Sent on every LLM call: <code>list_ips</code>, <code>search_ips</code>, <code>analyze_ip</code>, <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code></td></tr>
+                <tr><td>Always-loaded</td><td>6</td><td>Sent on every LLM call: core tools such as <code>memory_search</code>, <code>show_help</code>, and <code>general_web_search</code>.</td></tr>
                 <tr><td>Deferred</td><td>55</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
               </tbody>
             </table>
@@ -156,7 +156,7 @@ export default function Page() {
             <ul>
               <li><strong>FileTools</strong> — Read, Write, Edit, Glob, Grep</li>
               <li><strong>MemoryTools</strong> — memory_search, memory_get, memory_save</li>
-              <li><strong>DataTools</strong> — query_monolake, IP profile lookup</li>
+              <li><strong>DataTools</strong> — Cortex Analyst/Search data retrieval</li>
               <li><strong>ComputerUse</strong> — provider-agnostic desktop automation (PyAutoGUI)</li>
               <li><strong>MCP</strong> — exposed via <code>core/mcp/</code> service (16 servers, 25K guard)</li>
             </ul>

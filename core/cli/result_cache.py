@@ -1,4 +1,4 @@
-"""Result cache -- multi-IP LRU cache with disk persistence.
+"""Result cache -- multi-subject LRU cache with disk persistence.
 
 Extracted from ``core/cli/__init__.py`` for architectural clarity.
 
@@ -50,8 +50,8 @@ class ResultCache:
         self._cache_dir = cache_dir or _RESULT_CACHE_DIR
         self._load_from_disk()
 
-    def get(self, ip_name: str) -> dict[str, Any] | None:
-        key = ip_name.lower()
+    def get(self, subject_id: str) -> dict[str, Any] | None:
+        key = subject_id.lower()
         if key not in self._cache:
             return None
         entry = self._cache[key]
@@ -66,10 +66,10 @@ class ResultCache:
     def put(self, result: dict[str, Any] | None) -> None:
         if result is None:
             return
-        ip_name = result.get("ip_name", "")
-        if not ip_name:
+        subject_id = result.get("subject_id", "")
+        if not subject_id:
             return
-        key = ip_name.lower()
+        key = subject_id.lower()
         # Add cache metadata
         result = dict(result)  # shallow copy to avoid mutating caller
         result["_cached_at"] = time.time()
@@ -138,8 +138,8 @@ class ResultCache:
                 if not self._is_hash_valid(data):
                     log.warning("Skipping corrupted cache file: %s (hash mismatch)", fpath.name)
                     continue
-                ip = data.get("ip_name", fpath.stem)
-                self._cache[ip.lower()] = data
+                subject = data.get("subject_id", fpath.stem)
+                self._cache[subject.lower()] = data
             except Exception:
                 log.debug("Failed to load result cache %s", fpath.name, exc_info=True)
         # Trim to max

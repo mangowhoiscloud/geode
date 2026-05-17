@@ -9,7 +9,6 @@ import { OsPrimitivesMapSection } from "@/components/geode/sections/os-primitive
 import { RecursionSection } from "@/components/geode/sections/recursion";
 import { ComputeAbiSection } from "@/components/geode/sections/compute-abi";
 import { RoutingIqSection } from "@/components/geode/sections/routing-iq";
-import { TwoAppsSection } from "@/components/geode/sections/two-apps";
 import { KanbanSection } from "@/components/geode/sections/kanban";
 import { ScaffoldSection } from "@/components/geode/sections/scaffold";
 import { LoopSection } from "@/components/geode/sections/loop";
@@ -24,8 +23,6 @@ import { AgentsTasksSection } from "@/components/geode/sections/agents-tasks";
 import { ToolUseSection } from "@/components/geode/sections/tool-use";
 import { ContextTiersSection } from "@/components/geode/sections/context-tiers";
 import { MultiLlmSection } from "@/components/geode/sections/multi-llm";
-import { DomainDagSection } from "@/components/geode/sections/domain-dag";
-import { ScoringSection } from "@/components/geode/sections/scoring";
 import { FeedbackSection } from "@/components/geode/sections/feedback";
 import { VerificationSection } from "@/components/geode/sections/verification";
 import { OrchestrationSection } from "@/components/geode/sections/orchestration";
@@ -51,7 +48,6 @@ export default function GeodePage() {
       <div id="compute-abi"><ComputeAbiSection /></div>
       <div id="routing-iq"><RoutingIqSection /></div>
       <Divider />
-      <div id="two-apps"><TwoAppsSection /></div>
       <Divider />
       <div id="scaffold"><ScaffoldSection /></div>
       <div id="kanban"><KanbanSection /></div>
@@ -72,9 +68,7 @@ export default function GeodePage() {
       <div id="context"><ContextTiersSection /></div>
       <div id="llm"><MultiLlmSection /></div>
       <Divider />
-      <div id="domain"><DomainDagSection /></div>
       <div id="orchestration"><OrchestrationSection /></div>
-      <div id="scoring"><ScoringSection /></div>
       <div id="feedback"><FeedbackSection /></div>
       <div id="automation"><AutomationSection /></div>
       <Divider />

@@ -13,12 +13,12 @@ class TestMonoLakeOrganizationMemory:
 
     def test_get_subject_context_missing_default(self):
         org = MonoLakeOrganizationMemory()
-        ctx = org.get_subject_context("Berserk")
+        ctx = org.get_subject_context("Project Atlas")
         assert ctx == {}
 
     def test_get_subject_context_case_insensitive(self):
         org = MonoLakeOrganizationMemory()
-        ctx = org.get_subject_context("berserk")
+        ctx = org.get_subject_context("demo")
         assert ctx == {}
 
     def test_get_subject_context_unknown(self):
@@ -34,8 +34,8 @@ class TestMonoLakeOrganizationMemory:
     def test_save_analysis_result(self):
         org = MonoLakeOrganizationMemory()
         result = {"tier": "S", "score": 82.2}
-        assert org.save_analysis_result("Berserk", result) is True
-        results = org.get_analysis_results("Berserk")
+        assert org.save_analysis_result("Project Atlas", result) is True
+        results = org.get_analysis_results("Project Atlas")
         assert len(results) == 1
         assert results[0]["tier"] == "S"
 

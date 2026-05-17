@@ -1,7 +1,7 @@
 """System prompt builder for AgenticLoop.
 
 Builds the base system prompt from the router.md template, enriched with
-domain plugin IP examples and project memory context.
+domain prefix content and project memory context.
 
 Memory hierarchy injected into the system prompt (G1-G3):
   G1: GEODE.md  — Agent identity (Core Principles + CANNOT + Defaults, ~20 lines)
@@ -66,11 +66,10 @@ def _persona_on() -> bool:
 def _generic_static_prefix() -> str:
     """Domain-less fallback prefix.
 
-    ``ROUTER_SYSTEM`` contains ``{ip_count}`` / ``{ip_examples}``
-    placeholders that only the game-IP domain knows how to fill in. When
-    no domain is loaded (or the active domain doesn't customize the
-    prompt), substitute neutral values so ``str.format`` doesn't raise
-    and the agent still receives the rest of the router template.
+    ``ROUTER_SYSTEM`` still exposes legacy placeholder names for prompt
+    compatibility. When no domain is loaded, substitute neutral values so
+    ``str.format`` doesn't raise and the agent still receives the rest of
+    the router template.
     """
     return _SYSTEM_PROMPT_TEMPLATE.format(ip_count=0, ip_examples="none loaded")
 
@@ -105,9 +104,8 @@ def build_system_prompt(model: str = "") -> str:
       — GEODE behaves as a thin wrapper around the base model. Audit-mode
       forces OFF regardless.
 
-    The domain-specific portion of the baseline (e.g. game-IP examples)
-    is delegated to ``DomainPort.compose_static_prefix`` so this module
-    stays plugin-free.
+    The domain-specific portion of the baseline is delegated to
+    ``DomainPort.compose_static_prefix`` so this module stays plugin-free.
     """
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.

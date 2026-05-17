@@ -8,10 +8,10 @@ from core.memory.session import InMemorySessionStore, SessionEntry
 class TestInMemorySessionStore:
     def test_set_and_get(self):
         store = InMemorySessionStore()
-        store.set("s1", {"ip_name": "Berserk", "mode": "full_pipeline"})
+        store.set("s1", {"subject_id": "Project Atlas", "mode": "full_pipeline"})
         data = store.get("s1")
         assert data is not None
-        assert data["ip_name"] == "Berserk"
+        assert data["subject_id"] == "Project Atlas"
 
     def test_get_missing_returns_none(self):
         store = InMemorySessionStore()

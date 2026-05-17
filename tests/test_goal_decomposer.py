@@ -26,26 +26,26 @@ class TestSubGoal:
     def test_basic_creation(self) -> None:
         goal = SubGoal(
             id="step_1",
-            description="Search for dark fantasy IPs",
-            tool_name="search_ips",
+            description="Search for dark fantasy subjects",
+            tool_name="search_subjects",
             tool_args={"query": "dark fantasy"},
         )
         assert goal.id == "step_1"
-        assert goal.tool_name == "search_ips"
+        assert goal.tool_name == "search_subjects"
         assert goal.depends_on == []
 
     def test_with_dependencies(self) -> None:
         goal = SubGoal(
             id="step_2",
             description="Analyze top result",
-            tool_name="analyze_ip",
-            tool_args={"ip_name": "Berserk"},
+            tool_name="analyze_subject",
+            tool_args={"subject_id": "Project Atlas"},
             depends_on=["step_1"],
         )
         assert goal.depends_on == ["step_1"]
 
     def test_empty_args(self) -> None:
-        goal = SubGoal(id="s1", description="List IPs", tool_name="list_ips")
+        goal = SubGoal(id="s1", description="List subjects", tool_name="list_subjects")
         assert goal.tool_args == {}
 
 
@@ -64,8 +64,8 @@ class TestDecompositionResult:
 
     def test_compound_result(self) -> None:
         goals = [
-            SubGoal(id="s1", description="Search", tool_name="search_ips"),
-            SubGoal(id="s2", description="Analyze", tool_name="analyze_ip", depends_on=["s1"]),
+            SubGoal(id="s1", description="Search", tool_name="search_subjects"),
+            SubGoal(id="s2", description="Analyze", tool_name="analyze_subject", depends_on=["s1"]),
         ]
         result = DecompositionResult(
             is_compound=True,
@@ -95,7 +95,7 @@ class TestHeuristics:
         assert _is_clearly_simple("도움말") is True
 
     def test_not_simple_long_input(self) -> None:
-        assert _is_clearly_simple("Berserk의 시장성을 종합적으로 평가해줘") is False
+        assert _is_clearly_simple("Project Atlas의 시장성을 종합적으로 평가해줘") is False
 
     def test_compound_korean_connectors(self) -> None:
         assert _has_compound_indicators("분석하고 비교해줘") is True
@@ -112,7 +112,7 @@ class TestHeuristics:
         assert _has_compound_indicators("end-to-end analysis") is True
 
     def test_no_compound_indicators(self) -> None:
-        assert _has_compound_indicators("Berserk 분석해줘") is False
+        assert _has_compound_indicators("Project Atlas 분석해줘") is False
         assert _has_compound_indicators("목록 보여줘") is False
         assert _has_compound_indicators("help") is False
 
@@ -142,7 +142,7 @@ class TestGoalDecomposer:
     def test_simple_passthrough_no_compound(self) -> None:
         """Single-intent requests without compound indicators pass through."""
         decomposer = GoalDecomposer()
-        result = decomposer.decompose("Berserk 분석해줘")
+        result = decomposer.decompose("Project Atlas 분석해줘")
         assert result is None
         assert decomposer.stats.simple_passthrough == 1
 
@@ -154,15 +154,15 @@ class TestGoalDecomposer:
             goals=[
                 SubGoal(
                     id="step_1",
-                    description="Analyze Berserk",
-                    tool_name="analyze_ip",
-                    tool_args={"ip_name": "Berserk"},
+                    description="Analyze Project Atlas",
+                    tool_name="analyze_subject",
+                    tool_args={"subject_id": "Project Atlas"},
                 ),
                 SubGoal(
                     id="step_2",
                     description="Generate report",
                     tool_name="generate_report",
-                    tool_args={"ip_name": "Berserk"},
+                    tool_args={"subject_id": "Project Atlas"},
                     depends_on=["step_1"],
                 ),
             ],
@@ -170,12 +170,12 @@ class TestGoalDecomposer:
         )
 
         decomposer = GoalDecomposer()
-        result = decomposer.decompose("Berserk 분석하고 리포트 만들어줘")
+        result = decomposer.decompose("Project Atlas 분석하고 리포트 만들어줘")
 
         assert result is not None
         assert result.is_compound is True
         assert len(result.goals) == 2
-        assert result.goals[0].tool_name == "analyze_ip"
+        assert result.goals[0].tool_name == "analyze_subject"
         assert result.goals[1].depends_on == ["step_1"]
         assert decomposer.stats.compound_detected == 1
 
@@ -212,7 +212,7 @@ class TestGoalDecomposer:
         mock_llm.return_value = DecompositionResult(
             is_compound=True,
             goals=[
-                SubGoal(id="s1", description="Analyze", tool_name="analyze_ip"),
+                SubGoal(id="s1", description="Analyze", tool_name="analyze_subject"),
             ],
         )
 
@@ -237,11 +237,11 @@ class TestBuildTaskGraph:
         result = DecompositionResult(
             is_compound=True,
             goals=[
-                SubGoal(id="s1", description="Search", tool_name="search_ips"),
+                SubGoal(id="s1", description="Search", tool_name="search_subjects"),
                 SubGoal(
                     id="s2",
                     description="Analyze",
-                    tool_name="analyze_ip",
+                    tool_name="analyze_subject",
                     depends_on=["s1"],
                 ),
                 SubGoal(
@@ -271,8 +271,8 @@ class TestBuildTaskGraph:
         result = DecompositionResult(
             is_compound=True,
             goals=[
-                SubGoal(id="s1", description="Analyze A", tool_name="analyze_ip"),
-                SubGoal(id="s2", description="Analyze B", tool_name="analyze_ip"),
+                SubGoal(id="s1", description="Analyze A", tool_name="analyze_subject"),
+                SubGoal(id="s2", description="Analyze B", tool_name="analyze_subject"),
                 SubGoal(
                     id="s3",
                     description="Compare",
@@ -299,9 +299,9 @@ class TestBuildTaskGraph:
             goals=[
                 SubGoal(
                     id="s1",
-                    description="Analyze Berserk",
-                    tool_name="analyze_ip",
-                    tool_args={"ip_name": "Berserk"},
+                    description="Analyze Project Atlas",
+                    tool_name="analyze_subject",
+                    tool_args={"subject_id": "Project Atlas"},
                 ),
             ],
         )
@@ -310,8 +310,8 @@ class TestBuildTaskGraph:
         task = graph.get_task("s1")
 
         assert task is not None
-        assert task.metadata["tool_name"] == "analyze_ip"
-        assert task.metadata["tool_args"] == {"ip_name": "Berserk"}
+        assert task.metadata["tool_name"] == "analyze_subject"
+        assert task.metadata["tool_args"] == {"subject_id": "Project Atlas"}
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class TestDecomposerStats:
         decomposer = GoalDecomposer()
         decomposer.decompose("/help")
         decomposer.decompose("목록")
-        decomposer.decompose("Berserk 분석해")
+        decomposer.decompose("Project Atlas 분석해")
 
         assert decomposer.stats.total_calls == 3
         assert decomposer.stats.simple_passthrough == 3
@@ -361,20 +361,20 @@ class TestToolSummary:
     def test_with_tools(self) -> None:
         tools: list[dict[str, Any]] = [
             {
-                "name": "analyze_ip",
-                "description": "Analyze a specific IP. More details here.",
+                "name": "analyze_subject",
+                "description": "Analyze a specific subject. More details here.",
                 "cost_tier": "expensive",
             },
             {
-                "name": "list_ips",
-                "description": "List all available IPs.",
+                "name": "list_subjects",
+                "description": "List all available subjects.",
                 "cost_tier": "free",
             },
         ]
         result = GoalDecomposer._build_tool_summary(tools)
-        assert "analyze_ip" in result
+        assert "analyze_subject" in result
         assert "[expensive]" in result
-        assert "list_ips" in result
+        assert "list_subjects" in result
         assert "[free]" in result
 
 
@@ -411,15 +411,15 @@ class TestAgenticLoopIntegration:
             goals=[
                 SubGoal(
                     id="step_1",
-                    description="Analyze Berserk",
-                    tool_name="analyze_ip",
-                    tool_args={"ip_name": "Berserk"},
+                    description="Analyze Project Atlas",
+                    tool_name="analyze_subject",
+                    tool_args={"subject_id": "Project Atlas"},
                 ),
                 SubGoal(
                     id="step_2",
                     description="Generate report",
                     tool_name="generate_report",
-                    tool_args={"ip_name": "Berserk"},
+                    tool_args={"subject_id": "Project Atlas"},
                     depends_on=["step_1"],
                 ),
             ],
@@ -434,13 +434,13 @@ class TestAgenticLoopIntegration:
         executor = ToolExecutor(auto_approve=True)
         loop = AgenticLoop(context, executor)
 
-        hint = loop._try_decompose("Berserk 분석하고 리포트 만들어줘")
+        hint = loop._try_decompose("Project Atlas 분석하고 리포트 만들어줘")
 
         assert hint is not None
         assert "Goal Decomposition Plan" in hint
         assert "step_1" in hint
         assert "step_2" in hint
-        assert "analyze_ip" in hint
+        assert "analyze_subject" in hint
         assert "generate_report" in hint
         assert "depends on: step_1" in hint
 
@@ -454,7 +454,7 @@ class TestAgenticLoopIntegration:
         executor = ToolExecutor(auto_approve=True)
         loop = AgenticLoop(context, executor)
 
-        hint = loop._try_decompose("Berserk 분석해줘")
+        hint = loop._try_decompose("Project Atlas 분석해줘")
         assert hint is None
 
 
@@ -472,11 +472,11 @@ class TestPartialFailure:
         result = DecompositionResult(
             is_compound=True,
             goals=[
-                SubGoal(id="s1", description="Search", tool_name="search_ips"),
+                SubGoal(id="s1", description="Search", tool_name="search_subjects"),
                 SubGoal(
                     id="s2",
                     description="Analyze",
-                    tool_name="analyze_ip",
+                    tool_name="analyze_subject",
                     depends_on=["s1"],
                 ),
                 SubGoal(
@@ -509,8 +509,8 @@ class TestPartialFailure:
         result = DecompositionResult(
             is_compound=True,
             goals=[
-                SubGoal(id="s1", description="Analyze A", tool_name="analyze_ip"),
-                SubGoal(id="s2", description="Analyze B", tool_name="analyze_ip"),
+                SubGoal(id="s1", description="Analyze A", tool_name="analyze_subject"),
+                SubGoal(id="s2", description="Analyze B", tool_name="analyze_subject"),
                 SubGoal(
                     id="s3",
                     description="Compare",

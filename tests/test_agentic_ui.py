@@ -49,21 +49,21 @@ class TestRenderToolCall:
 
     @patch("core.ui.agentic_ui.console")
     def test_string_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_call("analyze_ip", {"ip_name": "Berserk"})
+        render_tool_call("analyze_subject", {"subject_id": "Project Atlas"})
         printed = str(mock_console.print.call_args)
-        assert "analyze_ip" in printed
-        assert "Berserk" in printed
+        assert "analyze_subject" in printed
+        assert "Project Atlas" in printed
         assert "▸" in printed
 
     @patch("core.ui.agentic_ui.console")
     def test_bool_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_call("list_ips", {"verbose": True})
+        render_tool_call("list_subjects", {"verbose": True})
         printed = str(mock_console.print.call_args)
         assert "verbose=true" in printed
 
     @patch("core.ui.agentic_ui.console")
     def test_numeric_arg(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_call("search_ips", {"limit": 10})
+        render_tool_call("search_subjects", {"limit": 10})
         printed = str(mock_console.print.call_args)
         assert "limit=10" in printed
 
@@ -75,9 +75,9 @@ class TestRenderToolCall:
 
     @patch("core.ui.agentic_ui.console")
     def test_empty_args(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_call("list_ips", {})
+        render_tool_call("list_subjects", {})
         printed = str(mock_console.print.call_args)
-        assert "list_ips" in printed
+        assert "list_subjects" in printed
         assert "(" in printed
 
 
@@ -86,15 +86,15 @@ class TestRenderToolResult:
 
     @patch("core.ui.agentic_ui.console")
     def test_success_with_tier_score(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_result("analyze_ip", {"tier": "S", "score": 81.3})
+        render_tool_result("analyze_subject", {"tier": "S", "score": 81.3})
         printed = str(mock_console.print.call_args)
         assert "✓" in printed
-        assert "analyze_ip" in printed
+        assert "analyze_subject" in printed
         assert "S" in printed
 
     @patch("core.ui.agentic_ui.console")
     def test_success_with_count(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_result("list_ips", {"count": 5})
+        render_tool_result("list_subjects", {"count": 5})
         printed = str(mock_console.print.call_args)
         assert "5 items" in printed
 
@@ -106,14 +106,14 @@ class TestRenderToolResult:
 
     @patch("core.ui.agentic_ui.console")
     def test_error_result(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_result("analyze_ip", {"error": "Not found"})
+        render_tool_result("analyze_subject", {"error": "Not found"})
         printed = str(mock_console.print.call_args)
         assert "✗" in printed
         assert "Not found" in printed
 
     @patch("core.ui.agentic_ui.console")
     def test_empty_result_shows_ok(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_tool_result("list_ips", {})
+        render_tool_result("list_subjects", {})
         printed = str(mock_console.print.call_args)
         assert "ok" in printed
 
@@ -141,14 +141,14 @@ class TestRenderTokens:
 
 
 class TestRenderPlanSteps:
-    """Plan step rendering: ● Plan: ip_name."""
+    """Plan step rendering: ● Plan: subject_id."""
 
     @patch("core.ui.agentic_ui.console")
     def test_renders_steps(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_plan_steps("Berserk", ["Analyze", "Score", "Verify"])
+        render_plan_steps("Project Atlas", ["Analyze", "Score", "Verify"])
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
-        assert "Berserk" in combined
+        assert "Project Atlas" in combined
         assert "1." in combined
         assert "Analyze" in combined
         assert "3." in combined
@@ -159,7 +159,7 @@ class TestRenderSubagent:
 
     @patch("core.ui.agentic_ui.console")
     def test_dispatch(self, mock_console) -> None:  # type: ignore[no-untyped-def]
-        render_subagent_dispatch("task-1", "analyze", "Analyze Berserk IP")
+        render_subagent_dispatch("task-1", "analyze", "Analyze Project Atlas subject")
         printed = str(mock_console.print.call_args)
         assert "delegate_task" in printed
         assert "analyze" in printed
@@ -219,7 +219,7 @@ class TestOperationLogger:
     @patch("core.ui.agentic_ui.console")
     def test_below_threshold_visible(self, mock_console) -> None:  # type: ignore[no-untyped-def]
         logger = OperationLogger()
-        visible = logger.log_tool_call("analyze_ip", {"ip_name": "Berserk"})
+        visible = logger.log_tool_call("analyze_subject", {"subject_id": "Project Atlas"})
         assert visible is True
         assert mock_console.print.called
 
@@ -499,14 +499,14 @@ class TestToolTypeGrouping:
         """8 tool calls of mixed types produce compact aggregate summary."""
         logger = OperationLogger()
         logger.begin_round()
-        # 3 web_search + 2 memory_search + 2 bash + 1 analyze_ip = 8
+        # 3 web_search + 2 memory_search + 2 bash + 1 analyze_subject = 8
         for _ in range(3):
             logger.log_tool_call("web_search", {"query": "test"})
         for _ in range(2):
             logger.log_tool_call("memory_search", {"query": "test"})
         for _ in range(2):
             logger.log_tool_call("run_bash", {"command": "ls"})
-        logger.log_tool_call("analyze_ip", {"ip_name": "Berserk"})
+        logger.log_tool_call("analyze_subject", {"subject_id": "Project Atlas"})
 
         mock_console.print.reset_mock()
         logger.finalize()

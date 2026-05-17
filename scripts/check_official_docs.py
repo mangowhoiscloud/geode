@@ -70,8 +70,8 @@ def _project_version() -> str:
     return version
 
 
-def check_bilingual_release_surfaces() -> None:
-    """Ensure public Korean and English release surfaces point at this version."""
+def check_release_surfaces() -> None:
+    """Ensure public release surfaces point at this version."""
     version = _project_version()
     expected_heading = f"# GEODE v{version}"
 
@@ -89,8 +89,6 @@ def check_bilingual_release_surfaces() -> None:
     if not match:
         raise SystemExit(f"CHANGELOG.md is missing release section {version}")
     body = match.group("body")
-    if not re.search(r"[가-힣]", body):
-        raise SystemExit(f"CHANGELOG.md {version} section is missing Korean release notes")
     if not re.search(r"[A-Za-z]", body):
         raise SystemExit(f"CHANGELOG.md {version} section is missing English release notes")
 
@@ -105,8 +103,8 @@ def _command_env() -> dict[str, str]:
 
 def run_docs_gate(commands: Sequence[DocsCommand]) -> None:
     env = _command_env()
-    print("==> check bilingual release surfaces")
-    check_bilingual_release_surfaces()
+    print("==> check release surfaces")
+    check_release_surfaces()
     for command in commands:
         print(f"==> {command.label}")
         subprocess.run(command.argv, cwd=command.cwd, env=env, check=True)  # noqa: S603

@@ -55,7 +55,7 @@ def test_run_docs_gate_uses_repo_env(
     venv_bin = tmp_path / "bin"
     venv_bin.mkdir()
     monkeypatch.setattr(check_official_docs, "VENV_BIN", venv_bin)
-    monkeypatch.setattr(check_official_docs, "check_bilingual_release_surfaces", lambda: None)
+    monkeypatch.setattr(check_official_docs, "check_release_surfaces", lambda: None)
     monkeypatch.setenv("PATH", "/bin")
 
     def fake_run(
@@ -82,5 +82,5 @@ def test_run_docs_gate_uses_repo_env(
     assert calls[0][2]["PATH"].startswith(f"{venv_bin}:")
 
 
-def test_check_bilingual_release_surfaces_accepts_current_release() -> None:
-    check_official_docs.check_bilingual_release_surfaces()
+def test_check_release_surfaces_accepts_current_release() -> None:
+    check_official_docs.check_release_surfaces()

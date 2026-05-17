@@ -25,7 +25,7 @@ const dots = [
 const cards = [
   { color: "#E87080", headKo: "11건 → 0건", headEn: "11 → 0 defects", bodyKo: "globals race, semaphore leak, zombie thread, 이중 publish 등 전수 해소", bodyEn: "globals race, semaphore leak, zombie thread, double publish all resolved" },
   { color: "#4ECDC4", headKo: "3 bootstrap → 1 Runtime", headEn: "3 bootstrap → 1 Runtime", bodyKo: "GeodeRuntime.create_session(mode). ONE Hook, ONE MCP, ONE Skills", bodyEn: "GeodeRuntime.create_session(mode). ONE Hook, ONE MCP, ONE Skills" },
-  { color: "#F5C542", headKo: "4-lane → acquire_all()", headEn: "4-lane → acquire_all()", bodyKo: "SessionLane(per-key) + Lane(global, max=8). 단일 코드 패스", bodyEn: "SessionLane(per-key) + Lane(global, max=8). Single code path" },
+  { color: "#F5C542", headKo: "4-lane → acquire_all_async()", headEn: "4-lane → acquire_all_async()", bodyKo: "SessionLane(per-key) + Lane(global, max=8). async 단일 코드 패스", bodyEn: "SessionLane(per-key) + Lane(global, max=8). Single async code path" },
 ];
 
 /* SessionLane deep dive data */
@@ -37,7 +37,7 @@ const openclawFixes = [
 const usagePatterns = [
   { name: "Gateway (Slack)", nameEn: "Gateway (Slack)", key: "gateway:slack:C12345:U789:thread_A", descKo: "같은 쓰레드 = serial, 다른 쓰레드 = parallel", descEn: "Same thread = serial, different threads = parallel", color: "#4ECDC4" },
   { name: "Scheduler", nameEn: "Scheduler", key: "scheduler:weekly_scan", descKo: "non-blocking try_acquire. 실패 시 rollback", descEn: "Non-blocking try_acquire. Rollback on failure", color: "#F5C542" },
-  { name: "SubAgent", nameEn: "SubAgent", key: "ip:berserk:pipeline:subagent:reddit", descKo: "유니크 key → 항상 즉시 획득. global Lane이 병렬 제어", descEn: "Unique key = always immediate acquire. global Lane controls parallelism", color: "#C084FC" },
+  { name: "SubAgent", nameEn: "SubAgent", key: "subject:demo:pipeline:subagent:reddit", descKo: "유니크 key → 항상 즉시 획득. global Lane이 병렬 제어", descEn: "Unique key = always immediate acquire. global Lane controls parallelism", color: "#C084FC" },
 ];
 
 export function ConcurrencySection() {

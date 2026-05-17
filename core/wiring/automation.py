@@ -27,7 +27,7 @@ def build_automation(
     *,
     hooks: HookSystem,
     session_key: str,
-    ip_name: str,
+    subject_id: str,
     project_memory: ProjectMemory | None = None,
 ) -> dict[str, Any]:
     """Build L4.5 automation components and wire hook event handlers.
@@ -118,7 +118,7 @@ def build_automation(
         outcome_tracker=outcome_tracker,
         drift_detector=drift_detector,
         session_key=session_key,
-        subject_id=ip_name,
+        subject_id=subject_id,
         project_memory=project_memory,
     )
 
@@ -170,9 +170,7 @@ def wire_automation_hooks(
 ) -> None:
     """Wire L4.5 automation event handlers to the hook system.
 
-    ``subject_id`` is the domain-agnostic identifier for the analysis
-    target (formerly ``ip_name`` — renamed in step 3 of the
-    domain-free-core refactor for the multi-domain framing).
+    ``subject_id`` is the domain-agnostic identifier for the analysis target.
     """
 
     # Table-driven logger hooks
@@ -203,7 +201,7 @@ def wire_automation_hooks(
             snapshot_manager.capture(
                 session_key,
                 pipeline_state={"trigger": "drift_detected", "alerts": data},
-                context={"ip_name": subject_id},
+                context={"subject_id": subject_id},
             )
 
     hooks.register(
@@ -216,7 +214,7 @@ def wire_automation_hooks(
     # Wire TriggerManager -> pipeline integration
     trigger_manager.register_pipeline_trigger(
         trigger_id="drift-reanalysis",
-        ip_name=subject_id,
+        subject_id=subject_id,
         trigger_type=TriggerType.EVENT,
     )
     drift_trigger_handler = trigger_manager.make_event_handler("drift-reanalysis")
@@ -233,7 +231,7 @@ def wire_automation_hooks(
             snapshot_manager.capture(
                 session_key,
                 pipeline_state=data,
-                context={"ip_name": subject_id},
+                context={"subject_id": subject_id},
             )
 
     hooks.register(
@@ -266,7 +264,7 @@ def wire_automation_hooks(
                     )
                     hooks.trigger(
                         HookEvent.DRIFT_DETECTED,
-                        {"alerts": alerts, "ip_name": subject_id, "source": "scoring"},
+                        {"alerts": alerts, "subject_id": subject_id, "source": "scoring"},
                     )
             except Exception:
                 log.debug("Drift scan on SCORING_COMPLETE failed", exc_info=True)
@@ -282,18 +280,18 @@ def wire_automation_hooks(
     if outcome_tracker:
 
         def _on_pipeline_end_outcomes(event: HookEvent, data: dict[str, Any]) -> None:
-            target_ip = data.get("ip_name") or subject_id
-            if not target_ip:
+            target_subject = data.get("subject_id") or subject_id
+            if not target_subject:
                 return
             try:
                 from core.automation.outcome_tracking import TrackingPoint
 
                 for tp in TrackingPoint:
-                    outcome_tracker.schedule(ip_name=target_ip, tracking_point=tp)
+                    outcome_tracker.schedule(subject_id=target_subject, tracking_point=tp)
                 log.info(
                     "PIPELINE_END: scheduled %d outcome checkpoints for %s",
                     len(TrackingPoint),
-                    target_ip,
+                    target_subject,
                 )
             except Exception:
                 log.debug("Outcome scheduling on PIPELINE_END failed", exc_info=True)

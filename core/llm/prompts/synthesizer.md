@@ -33,7 +33,6 @@ Create the final synthesis for: {subject}
 - Tier: {tier} ({final_score:.1f} points)
 
 ## Key Metrics
-- PSM Exposure Lift: {att_pct:+.1f}% (Z={z_value:.2f}, Gamma={gamma:.1f})
 - Quality Score: {quality_score:.0f}/100
 - Community Momentum: {momentum_score:.0f}/100
 - Recovery Potential: {recovery_score:.0f}/100

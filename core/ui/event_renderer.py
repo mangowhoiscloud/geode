@@ -578,42 +578,34 @@ class EventRenderer:
 
     def _handle_pipeline_header(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
-        ip = str(event.get("ip_name", ""))
+        subject = str(event.get("subject_id", ""))
         mode = str(event.get("pipeline_mode", ""))
         model = str(event.get("model", ""))
         ver = str(event.get("version", ""))
         self._out.write(f"\n  \033[1;36mGEODE v{ver}\033[0m\n")
-        self._out.write(f"  Analyzing: \033[1m{ip}\033[0m\n")
+        self._out.write(f"  Subject: \033[1m{subject}\033[0m\n")
         self._out.write(f"  Pipeline: {mode} | Model: {model}\n\n")
         self._out.flush()
 
     def _handle_pipeline_gather(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
-        name = str(event.get("ip_name", ""))
-        year = event.get("release_year", "")
-        media = str(event.get("media_type", ""))
-        studio = str(event.get("studio", ""))
-        dau = int(event.get("dau", 0))
-        rev = int(event.get("revenue", 0))
+        name = str(event.get("subject_id", ""))
+        subject_type = str(event.get("subject_type", ""))
+        source = str(event.get("source", ""))
+        metrics = event.get("metrics", {})
+        signals = event.get("signals", {})
         self._out.write(f"  \033[36;1m\u25b8 GATHER\033[0m {name}")
-        if media or year:
-            self._out.write(f" ({media}, {year})")
-        if studio:
-            self._out.write(f" \u2014 {studio}")
+        if subject_type:
+            self._out.write(f" ({subject_type})")
+        if source:
+            self._out.write(f" \u2014 {source}")
         self._out.write("\n")
-        if dau or rev:
-            dau_s = f"{dau:,}" if dau else "n/a"
-            rev_s = f"${rev:,}" if rev else "n/a"
-            self._out.write(f"    \033[2mDAU={dau_s} | Revenue={rev_s}\033[0m\n")
-        yt = int(event.get("youtube_views", 0))
-        rd = int(event.get("reddit_subscribers", 0))
-        fa = float(event.get("fan_art_yoy_pct", 0))
-        if yt or rd:
-            yt_s = f"{yt // 1_000_000}M" if yt >= 1_000_000 else f"{yt:,}"
-            rd_s = f"{rd // 1000}K" if rd >= 1000 else f"{rd:,}"
-            self._out.write(
-                f"    \033[2mYouTube {yt_s} | Reddit {rd_s} | FanArt {fa:+.0f}%\033[0m\n"
-            )
+        if isinstance(metrics, dict) and metrics:
+            parts = [f"{k}={v}" for k, v in list(metrics.items())[:4]]
+            self._out.write(f"    \033[2m{' | '.join(parts)}\033[0m\n")
+        if isinstance(signals, dict) and signals:
+            parts = [f"{k}={v}" for k, v in list(signals.items())[:4]]
+            self._out.write(f"    \033[2mSignals: {' | '.join(parts)}\033[0m\n")
         self._out.flush()
 
     def _handle_pipeline_analysis(self, event: dict[str, Any]) -> None:
@@ -651,29 +643,12 @@ class EventRenderer:
     def _handle_pipeline_score(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
         score = float(event.get("final_score", 0))
-        tier = str(event.get("tier", "?"))
         conf = float(event.get("confidence", 0))
         subscores = event.get("subscores", {})
-        # Tier color
-        tier_color = {"S": "1;35", "A": "1;32", "B": "1;33", "C": "1;31"}.get(tier, "1")
-        self._out.write(
-            f"  \033[36;1m\u25b8 SCORE\033[0m \033[{tier_color}m{tier}\033[0m ({score:.1f}/100)"
-        )
+        self._out.write(f"  \033[36;1m\u25b8 SCORE\033[0m {score:.1f}/100")
         if conf > 0:
             self._out.write(f" \u00b7 confidence {conf:.1f}%")
         self._out.write("\n")
-        # PSM causal inference
-        att = float(event.get("att_pct", 0))
-        z = float(event.get("z_value", 0))
-        gamma = float(event.get("rosenbaum_gamma", 0))
-        if att or z:
-            z_ok = "\033[32m\u2713\033[0m" if z > 1.645 else "\033[31m\u2717\033[0m"
-            g_ok = "\033[32m\u2713\033[0m" if gamma <= 2.0 else "\033[31m\u2717\033[0m"
-            self._out.write(
-                f"    \033[2mPSM: ATT={att:+.1f}% | Z={z:.2f} ({z_ok}>1.645)"
-                f" | \u0393={gamma:.1f} ({g_ok}\u22642.0)\033[0m\n"
-            )
-        # Subscores
         if isinstance(subscores, dict) and subscores:
             parts = [f"{k}={v:.1f}" for k, v in subscores.items()]
             self._out.write(f"    \033[2m{' | '.join(parts)}\033[0m\n")

@@ -3,7 +3,7 @@
 Layer 4 orchestration component that creates an execution plan,
 presents it for user approval, and executes steps in dependency order.
 
-For complex multi-IP or full-pipeline requests, PlanMode:
+For complex multi-subject requests, PlanMode:
 1. Creates a plan with ordered steps and estimated time/cost
 2. Presents the plan for user review
 3. Executes approved steps via the TaskSystem
@@ -66,10 +66,10 @@ class PlanStep:
 
 @dataclass
 class AnalysisPlan:
-    """A complete execution plan for an IP analysis."""
+    """A complete execution plan for a subject."""
 
     plan_id: str
-    ip_name: str
+    subject_id: str
     steps: list[PlanStep]
     status: PlanStatus = PlanStatus.DRAFT
     created_at: float = field(default_factory=time.time)
@@ -139,39 +139,22 @@ class AnalysisPlan:
 # ---------------------------------------------------------------------------
 
 _FULL_PIPELINE_STEPS: list[tuple[str, str, str, float, list[str]]] = [
-    ("router_load", "Route + load IP data and signals", "router", 8.0, []),
-    ("signals_fetch", "Fetch market signals and trends", "signals", 6.0, ["router_load"]),
-    ("analyst_market", "Market analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
-    ("analyst_creative", "Creative quality analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
-    ("analyst_technical", "Technical depth analyst evaluation", "analyst", 12.0, ["signals_fetch"]),
+    ("scope", "Clarify objective and subject", "scope", 5.0, []),
+    ("context", "Gather relevant context", "context", 8.0, ["scope"]),
+    ("analysis", "Analyze available evidence", "analysis", 12.0, ["context"]),
     (
-        "analyst_community",
-        "Community momentum analyst evaluation",
-        "analyst",
-        12.0,
-        ["signals_fetch"],
+        "verification",
+        "Run generic guardrails and consistency checks",
+        "verification",
+        8.0,
+        ["analysis"],
     ),
-    (
-        "evaluators",
-        "Multi-axis evaluator scoring",
-        "evaluators",
-        10.0,
-        ["analyst_market", "analyst_creative", "analyst_technical", "analyst_community"],
-    ),
-    ("scoring", "Compute composite score and tier", "scoring", 5.0, ["evaluators"]),
-    ("verification", "Run guardrails and bias checks", "verification", 8.0, ["scoring"]),
-    (
-        "synthesis",
-        "Generate value narrative and action plan",
-        "synthesizer",
-        10.0,
-        ["verification"],
-    ),
+    ("synthesis", "Synthesize answer and next actions", "synthesizer", 10.0, ["verification"]),
 ]
 
 
-def _make_full_pipeline_plan(plan_id: str, ip_name: str) -> AnalysisPlan:
-    """Create a standard full pipeline plan."""
+def _make_full_pipeline_plan(plan_id: str, subject_id: str) -> AnalysisPlan:
+    """Create a standard generic pipeline plan."""
     steps = [
         PlanStep(
             step_id=sid,
@@ -184,33 +167,30 @@ def _make_full_pipeline_plan(plan_id: str, ip_name: str) -> AnalysisPlan:
     ]
     return AnalysisPlan(
         plan_id=plan_id,
-        ip_name=ip_name,
+        subject_id=subject_id,
         steps=steps,
-        total_estimated_cost=1.50,
+        total_estimated_cost=0.50,
     )
 
 
-def _make_prospect_plan(plan_id: str, ip_name: str) -> AnalysisPlan:
-    """Create a prospect (non-gamified IP) plan — skips PSM/signals."""
+def _make_prospect_plan(plan_id: str, subject_id: str) -> AnalysisPlan:
+    """Create a lightweight generic plan."""
     steps = [
-        PlanStep("router_load", "Route + load IP data", "router", 8.0),
-        PlanStep("analyst_creative", "Creative quality analysis", "analyst", 12.0, ["router_load"]),
-        PlanStep("analyst_market", "Market potential analysis", "analyst", 12.0, ["router_load"]),
+        PlanStep("scope", "Clarify objective and subject", "scope", 5.0),
+        PlanStep("analysis", "Analyze available evidence", "analysis", 12.0, ["scope"]),
         PlanStep(
-            "evaluators",
-            "Multi-axis evaluation",
-            "evaluators",
+            "synthesis",
+            "Synthesize answer and next actions",
+            "synthesizer",
             10.0,
-            ["analyst_creative", "analyst_market"],
+            ["analysis"],
         ),
-        PlanStep("scoring", "Compute prospect score", "scoring", 5.0, ["evaluators"]),
-        PlanStep("synthesis", "Generate prospect narrative", "synthesizer", 10.0, ["scoring"]),
     ]
     return AnalysisPlan(
         plan_id=plan_id,
-        ip_name=ip_name,
+        subject_id=subject_id,
         steps=steps,
-        total_estimated_cost=0.80,
+        total_estimated_cost=0.25,
     )
 
 
@@ -226,7 +206,7 @@ class PlanMode:
 
     Usage:
         plan_mode = PlanMode()
-        plan = plan_mode.create_plan("Berserk", template="full_pipeline")
+        plan = plan_mode.create_plan("subject", template="full_pipeline")
         summary = plan_mode.present_plan(plan)
         plan_mode.approve_plan(plan)
         results = plan_mode.execute_plan(plan)
@@ -243,7 +223,7 @@ class PlanMode:
 
     def create_plan(
         self,
-        ip_name: str,
+        subject_id: str,
         *,
         template: str = "full_pipeline",
         plan_id: str | None = None,
@@ -251,7 +231,7 @@ class PlanMode:
         """Create an analysis plan from a template.
 
         Args:
-            ip_name: Target subject name.
+            subject_id: Target subject name.
             template: Plan template name (full_pipeline, prospect).
             plan_id: Optional custom plan ID.
 
@@ -268,13 +248,13 @@ class PlanMode:
             self._counter += 1
             plan_id = f"plan-{self._counter:04d}"
 
-        plan: AnalysisPlan = factory(plan_id, ip_name)
+        plan: AnalysisPlan = factory(plan_id, subject_id)
         self._plans[plan.plan_id] = plan
         self._stats.created += 1
         log.info(
-            "Plan '%s' created for IP '%s' (%d steps, ~%.0fs, ~$%.2f)",
+            "Plan '%s' created for subject '%s' (%d steps, ~%.0fs, ~$%.2f)",
             plan.plan_id,
-            ip_name,
+            subject_id,
             plan.step_count,
             plan.total_estimated_time_s,
             plan.total_estimated_cost,
@@ -291,7 +271,7 @@ class PlanMode:
 
         summary: dict[str, Any] = {
             "plan_id": plan.plan_id,
-            "ip_name": plan.ip_name,
+            "subject_id": plan.subject_id,
             "status": plan.status.value,
             "step_count": plan.step_count,
             "total_estimated_time_s": plan.total_estimated_time_s,
@@ -342,7 +322,7 @@ class PlanMode:
                 raise ValueError(
                     f"Unknown template: '{template}'. Available: {list(_PLAN_TEMPLATES.keys())}"
                 )
-            rebuilt = factory(plan.plan_id, plan.ip_name)
+            rebuilt = factory(plan.plan_id, plan.subject_id)
             plan.steps = rebuilt.steps
             plan.total_estimated_cost = rebuilt.total_estimated_cost
             plan.metadata["template"] = template

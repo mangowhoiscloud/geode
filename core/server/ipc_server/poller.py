@@ -8,7 +8,7 @@ serialization ensures same-session ordering; different sessions run in parallel.
 Protocol: line-delimited JSON over Unix domain socket.
 
 Client → Server:
-    {"type": "prompt", "text": "analyze Berserk", "session_id": "..."}
+    {"type": "prompt", "text": "summarize this repository", "session_id": "..."}
     {"type": "command", "cmd": "/model", "args": "sonnet"}
     {"type": "exit"}
 
@@ -630,7 +630,7 @@ class CLIPoller:
         """Handle a connected CLI client session.
 
         Creates an IPC-mode session (DANGEROUS blocked, WRITE allowed)
-        gated by SessionLane + Global Lane via acquire_all().
+        gated by SessionLane + Global Lane via acquire_all_async().
         """
         from core.agent.conversation import ConversationContext
         from core.server.supervised.services import SessionMode

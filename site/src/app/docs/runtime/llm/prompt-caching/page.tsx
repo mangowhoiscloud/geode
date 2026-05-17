@@ -136,7 +136,7 @@ create_kwargs = {
             <p>
               캐시 키는 캐시된 블록의 바이트 단위 콘텐츠와 모델 ID입니다. STATIC
               섹션의 어떤 변경 (예. 업데이트된 <code>GEODE.md</code> 아이덴티티,
-              새 IP 예제 목록, router 템플릿 수정) 도 캐시를 무효화하며, 후속 턴이
+              새 도메인 예제 목록, router 템플릿 수정) 도 캐시를 무효화하며, 후속 턴이
               다시 캐시에 적중하기 전에 한 번의 전체 요청 비용을 지불해야 합니다.
             </p>
             <p>
@@ -266,7 +266,7 @@ create_kwargs = {
             <p>
               The cache key is the byte-for-byte content of the cached block plus
               the model ID. Any change to the static section — e.g. an updated{" "}
-              <code>GEODE.md</code> identity, a new IP example list, a router
+              <code>GEODE.md</code> identity, a new domain example list, a router
               template revision — invalidates the cache and pays one full request
               before subsequent turns hit again.
             </p>

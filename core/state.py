@@ -1,46 +1,16 @@
-"""GeodeState — LangGraph state definition.
+"""Generic GEODE workflow state types.
 
-Domain layer: pure data models with no infrastructure dependencies.
+Domain-specific state models live in external domain plugins. Core keeps only
+the small shared shape needed by generic orchestration, verification, and
+runtime plumbing.
 """
 
 from __future__ import annotations
 
 import operator
-from enum import StrEnum
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, TypedDict
 
-from pydantic import BaseModel, Field, model_validator
-
-
-class RightsStatus(StrEnum):
-    """IP rights clearance status."""
-
-    CLEAR = "clear"
-    NEGOTIABLE = "negotiable"
-    RESTRICTED = "restricted"
-    EXPIRED = "expired"
-    UNKNOWN = "unknown"
-
-
-class LicenseInfo(BaseModel):
-    """License details for an IP holder."""
-
-    holder: str
-    status: RightsStatus
-    expiry_year: int | None = None
-    territories: list[str] = Field(default_factory=list)
-    exclusivity: bool = False
-
-
-class RightsRiskResult(BaseModel):
-    """Result of IP rights/license risk assessment."""
-
-    status: RightsStatus
-    risk_score: int = Field(ge=0, le=100)
-    license_info: LicenseInfo
-    concerns: list[str] = Field(default_factory=list)
-    recommendation: str = ""
-
+from pydantic import BaseModel, Field
 
 _ITERATION_HISTORY_MAX = 10
 
@@ -48,217 +18,54 @@ _ITERATION_HISTORY_MAX = 10
 def _add_and_trim_history(
     left: list[dict[str, Any]], right: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """B7: reducer that appends then trims to last N entries."""
+    """Append iteration history and keep only the latest entries."""
     merged = left + right
     return merged[-_ITERATION_HISTORY_MAX:]
 
 
-# ---------------------------------------------------------------------------
-# Type aliases for Literal types (used by synthesizer.py etc.)
-# ---------------------------------------------------------------------------
-
-CauseLiteral = Literal[
-    "undermarketed",
-    "conversion_failure",
-    "monetization_misfit",
-    "niche_gem",
-    "timing_mismatch",
-    "discovery_failure",
-]
-
-ActionLiteral = Literal[
-    "marketing_boost",
-    "monetization_pivot",
-    "platform_expansion",
-    "timing_optimization",
-    "community_activation",
-]
-
-
-# ---------------------------------------------------------------------------
-# Pydantic models for structured LLM output
-# ---------------------------------------------------------------------------
-
-
-class AnalysisResult(BaseModel):
-    analyst_type: str
-    score: float = Field(ge=1, le=5)
-    key_finding: str
-    reasoning: str
-    evidence: list[str] = Field(default_factory=list)
-    confidence: float = Field(ge=0, le=100, default=80.0)
-    is_degraded: bool = False
-    model_provider: str | None = Field(
-        default=None,
-        description="LLM provider that produced this result",
-    )
-
-
-class EvaluatorResult(BaseModel):
-    evaluator_type: str
-    axes: dict[str, float]  # e.g. {"a_score": 4.2, "b_score": 3.8, ...}
-    composite_score: float = Field(ge=0, le=100)
-    rationale: str
-    is_degraded: bool = False
-
-    @model_validator(mode="after")
-    def validate_axes(self) -> EvaluatorResult:
-        """Validate that axes keys match evaluator_type and values are in [1.0, 5.0]."""
-        from core.llm.prompts.axes import get_valid_axes_map
-
-        valid_map = get_valid_axes_map()
-        expected_keys = valid_map.get(self.evaluator_type)
-        if not valid_map:
-            expected_keys = set(self.axes.keys())
-        if expected_keys is None:
-            raise ValueError(
-                f"Unknown evaluator_type: {self.evaluator_type}. "
-                f"Valid types: {list(valid_map.keys())}"
-            )
-
-        actual_keys = set(self.axes.keys())
-        if not actual_keys.issubset(expected_keys):
-            invalid_keys = actual_keys - expected_keys
-            raise ValueError(
-                f"Invalid axis keys for {self.evaluator_type}: {invalid_keys}. "
-                f"Expected subset of: {expected_keys}"
-            )
-
-        # Guard against empty axes — LLM may return {} which passes subset check
-        if not self.is_degraded and len(actual_keys) == 0:
-            raise ValueError(f"Empty axes for {self.evaluator_type}. Expected: {expected_keys}")
-
-        for key, value in self.axes.items():
-            if not (1.0 <= value <= 5.0):
-                raise ValueError(f"Axis '{key}' value {value} out of range [1.0, 5.0]")
-
-        return self
-
-
-class PSMResult(BaseModel):
-    att_pct: float  # e.g. +31.2
-    z_value: float
-    rosenbaum_gamma: float
-    max_smd: float
-    exposure_lift_score: float = Field(ge=0, le=100)
-    psm_valid: bool
-
-
-class SynthesisResult(BaseModel):
-    undervaluation_cause: str  # Was CauseLiteral — now str for domain-flexible values
-    action_type: str  # Was ActionLiteral — now str for domain-flexible values
-    value_narrative: str
-    target_segment: str
+def _merge_dicts(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """Merge two dicts for parallel graph reducers."""
+    return {**a, **b}
 
 
 class GuardrailResult(BaseModel):
+    """Generic verification guardrail result."""
+
     g1_schema: bool = True
     g2_range: bool = True
     g3_grounding: bool = True
     g4_consistency: bool = True
     all_passed: bool = True
     details: list[str] = Field(default_factory=list)
-    grounding_ratio: float = 0.0  # fraction of evidence grounded in signals [0.0, 1.0]
-
-
-# ---------------------------------------------------------------------------
-# LangGraph reducers
-# ---------------------------------------------------------------------------
-
-
-def _merge_dicts(a: dict, b: dict) -> dict:  # type: ignore[type-arg]
-    """Merge two dicts (LangGraph reducer for parallel Send results)."""
-    return {**a, **b}
-
-
-def ensure_analysis_results(raw: list[Any]) -> list[AnalysisResult]:
-    """Rehydrate analyses that may have been deserialized to dicts by LangGraph."""
-    out: list[AnalysisResult] = []
-    for item in raw:
-        if isinstance(item, AnalysisResult):
-            out.append(item)
-        elif isinstance(item, dict):
-            out.append(AnalysisResult(**item))
-    return out
-
-
-def ensure_evaluator_results(raw: dict[str, Any]) -> dict[str, EvaluatorResult]:
-    """Rehydrate evaluations that may have been deserialized to dicts by LangGraph."""
-    out: dict[str, EvaluatorResult] = {}
-    for key, item in raw.items():
-        if isinstance(item, EvaluatorResult):
-            out[key] = item
-        elif isinstance(item, dict):
-            out[key] = EvaluatorResult(**item)
-    return out
-
-
-# ---------------------------------------------------------------------------
-# LangGraph State
-# ---------------------------------------------------------------------------
+    grounding_ratio: float = 0.0
 
 
 class GeodeState(TypedDict, total=False):
-    # Input
-    ip_name: str
-    pipeline_mode: str  # full_pipeline, cortex_only, evaluation, scoring
-    ip_type: str  # "gamified" (default) or "prospect" (non-gamified IP)
-    session_id: str  # Hierarchical session key for 3-tier memory
-    output_language: str  # Language for LLM-generated text (e.g. "English", "Korean")
+    """Shared state fields owned by GEODE core.
 
-    # Layer 1: Data Loading (Router)
-    ip_info: dict[str, Any]
-    monolake: dict[str, Any]
-    memory_context: dict[str, Any]  # 3-tier merged context from ContextAssembler
+    External domain plugins may extend this TypedDict in their own package with
+    task-specific model fields.
+    """
 
-    # Layer 2: Signals
+    subject_id: str
+    session_id: str
+    output_language: str
+    memory_context: dict[str, Any]
+    inputs: dict[str, Any]
     signals: dict[str, Any]
-    signal_source: str  # "live", "fixture", "mixed", or "web_search"
-
-    # Layer 3: Analysts (accumulated via Send)
-    analyses: Annotated[list[AnalysisResult], operator.add]
-
-    # Layer 3: Evaluators (merged via _merge_dicts for parallel Send results)
-    evaluations: Annotated[dict[str, EvaluatorResult], _merge_dicts]
-
-    # Layer 4: Scoring
-    psm_result: PSMResult
-    subscores: dict[str, float]  # exposure_lift, quality, recovery, growth, momentum, developer
-    analyst_confidence: float
-    final_score: float
-    tier: str
-
-    # Layer 5: Synthesis
-    synthesis: SynthesisResult
-
-    # Verification
+    analyses: Annotated[list[dict[str, Any]], operator.add]
+    evaluations: Annotated[dict[str, dict[str, Any]], _merge_dicts]
+    result: dict[str, Any]
     guardrails: GuardrailResult
     cross_llm: dict[str, Any]
-    rights_risk: RightsRiskResult
-
-    # Meta
     dry_run: bool
     verbose: bool
     skip_verification: bool
     errors: Annotated[list[str], operator.add]
-
-    # Dynamic Graph — node skip/enrichment control
-    skip_nodes: list[str]  # Nodes to skip (recorded for audit trail)
-    skipped_nodes: Annotated[list[str], operator.add]  # Audit log of actually skipped nodes
-    enrichment_needed: bool  # Whether additional enrichment evaluator pass is needed
-
-    # Feedback Loop (L3)
-    iteration: int  # Current iteration count (starts at 1)
-    max_iterations: int  # Maximum allowed iterations before force-proceeding
-    iteration_history: Annotated[list[dict[str, Any]], _add_and_trim_history]  # B7: capped at 10
-
-    # Telemetry
-    run_id: str  # Unique pipeline execution ID
-
-    # Internal (Send API)
-    _analyst_type: str
-    _evaluator_type: str  # Which evaluator to run (for Send API)
-
-    # Internal (Ensemble config injection from L0)
-    _ensemble_mode: str  # "single" | "cross"
-    _secondary_analysts: str  # Comma-separated analyst types for secondary LLM
+    skip_nodes: list[str]
+    skipped_nodes: Annotated[list[str], operator.add]
+    enrichment_needed: bool
+    iteration: int
+    max_iterations: int
+    iteration_history: Annotated[list[dict[str, Any]], _add_and_trim_history]
+    run_id: str

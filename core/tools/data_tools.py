@@ -75,8 +75,8 @@ class CortexAnalystTool(_AsyncExecuteMixin):
 class CortexSearchTool(_AsyncExecuteMixin):
     """Placeholder tool for Cortex Search semantic retrieval.
 
-    In production, performs vector-based semantic search over
-    IP documents, reviews, and community content.
+    In production, performs vector-based semantic search over documents,
+    reviews, and community content.
     Demo returns a stub result.
     """
 
@@ -87,7 +87,7 @@ class CortexSearchTool(_AsyncExecuteMixin):
     @property
     def description(self) -> str:
         return (
-            "Semantic search across IP documents, reviews, and community content "
+            "Semantic search across documents, reviews, and community content "
             "using Cortex Search vector retrieval."
         )
 

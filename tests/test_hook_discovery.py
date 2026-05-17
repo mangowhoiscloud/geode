@@ -137,7 +137,7 @@ class TestYAMLDiscovery:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"ip": "test"})
+        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject": "test"})
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].handler_name == "fire-test"

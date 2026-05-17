@@ -10,7 +10,6 @@ const navItems = [
   { id: "architecture", label: "Arch" },
   { id: "hooks", label: "Runtime" },
   { id: "context", label: "Memory" },
-  { id: "domain", label: "Domain" },
   { id: "verify", label: "Verify" },
   { id: "timeline", label: "Timeline" },
 ];

@@ -134,7 +134,7 @@ class DomainPort(Protocol):
     # ``core/`` fall back to a no-op via ``getattr(domain, '<name>',
     # None)``.  The Protocol declares them with ``...`` bodies so type
     # checkers still enforce the signature when an implementation is
-    # provided; ``GameIPDomain`` implements all four.
+    # provided.
     #
     # Convention for callers in core/:
     #     fn = getattr(domain, "wire_context_assembler", None)
@@ -170,15 +170,15 @@ class DomainPort(Protocol):
 
         Optional: domains without prompt customization may omit. Default
         behavior at call sites: emit a generic GEODE prefix without
-        domain-specific substitutions (no ``{ip_examples}``).
+        domain-specific substitutions.
         """
         ...
 
     # --- CLI extension hooks (v2, optional, step 4) ---
     #
     # The three methods below were introduced in step 4 of the
-    # domain-free-core refactor to remove the IP-specific halves of
-    # ``core/cli/commands.py`` and ``core/cli/tool_handlers.py``. Like
+    # domain-free-core refactor to remove domain-specific command logic
+    # from ``core/cli/commands.py`` and ``core/cli/tool_handlers.py``. Like
     # the step-3 hooks they are *optional* — domains that do not extend
     # the slash-command surface or contribute pipeline-shaped tools may
     # leave them unimplemented and call sites in ``core/`` fall back to
@@ -211,7 +211,7 @@ class DomainPort(Protocol):
 
     # --- MCP server extension hook (v2, optional, step 6) ---
     #
-    # Introduced in step 6 to remove the IP-specific MCP tools from
+    # Introduced in step 6 to keep domain-specific MCP tools out of
     # ``core/mcp_server.py``.  Like the other v2 hooks it is *optional* —
     # domains without an MCP surface (or whose surface is exposed
     # differently) may leave it unimplemented, and the call site in

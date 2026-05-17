@@ -97,8 +97,8 @@ def build_default_policies() -> PolicyChain:
 def build_default_registry() -> ToolRegistry:
     """Build ToolRegistry with GEODE core tools registered.
 
-    Domain-specific tools, such as the former game IP analysis tools, are
-    expected to be provided by external plugin packages.
+    Domain-specific tools are expected to be provided by external plugin
+    packages.
     """
     registry = ToolRegistry()
     # Data (2)

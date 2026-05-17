@@ -59,7 +59,7 @@ const tiers = [
       { name: "journal/",       role: "log",   purpose: "runs/costs/errors.jsonl + learned.md. append-only, Hook settlement 대상", purposeEn: "runs/costs/errors.jsonl + learned.md. Append-only, Hook settlement target", color: "#34D399" },
       { name: "sessions/",      role: "state", purpose: "체크포인트 JSON(state/messages/tools) + sessions.db SQLite WAL. 20msg trim, 72h cleanup", purposeEn: "Checkpoint JSON (state/messages/tools) + sessions.db SQLite WAL. 20-msg trim, 72h cleanup", color: "#60A5FA" },
       { name: "snapshots/",     role: "state", purpose: "snap-{uuid}.json. point-in-time 캡처, max 30 recent + weekly 보존", purposeEn: "snap-{uuid}.json. Point-in-time capture, max 30 recent + weekly retention", color: "#F5C542" },
-      { name: "result_cache/",  role: "cache", purpose: "IP별 분석 결과. LRU 8건, TTL 24h, content hash 검증", purposeEn: "Per-IP analysis results. LRU 8 entries, TTL 24h, content hash verification", color: "#C084FC" },
+      { name: "result_cache/",  role: "cache", purpose: "subject별 분석 결과. LRU 8건, TTL 24h, content hash 검증", purposeEn: "Per-subject analysis results. LRU 8 entries, TTL 24h, content hash verification", color: "#C084FC" },
     ],
     dataFlow: "쓰기 대상. 파이프라인/루프 실행 결과가 여기에 축적",
     dataFlowEn: "Write target. Pipeline/loop execution results accumulate here",
@@ -73,9 +73,9 @@ const tiers = [
     descEn: "Project-local data. Version-controlled alongside the code repository. Contains project memory, rules, and skills to align agent behavior with project context. Session data migrated to Per-Project in v0.33.0.",
     dirs: [
       { name: "memory/",     role: "memory",     purpose: "PROJECT.md (200줄 context 로드) + 인사이트, 패턴 학습", purposeEn: "PROJECT.md (200-line context load) + insights, pattern learning", color: "#F4B8C8" },
-      { name: "rules/",      role: "rule",       purpose: "도메인 규칙. YAML frontmatter glob 매칭 (anime-ip, dark-fantasy 등)", purposeEn: "Domain rules. YAML frontmatter glob matching (anime-ip, dark-fantasy, etc.)", color: "#E87080" },
+      { name: "rules/",      role: "rule",       purpose: "도메인 규칙. YAML frontmatter glob 매칭 (generic-domain, detailed-research 등)", purposeEn: "Domain rules. YAML frontmatter glob matching (generic-domain, detailed-research, etc.)", color: "#E87080" },
       { name: "skills/",     role: "skill",      purpose: "프로젝트 전용 스킬. YAML frontmatter + trigger 패턴", purposeEn: "Project-specific skills. YAML frontmatter + trigger patterns", color: "#818CF8" },
-      { name: "reports/",    role: "report",     purpose: "생성된 분석 리포트. IP 평가 결과 아카이브", purposeEn: "Generated analysis reports. IP evaluation result archive", color: "#C084FC" },
+      { name: "reports/",    role: "report",     purpose: "생성된 분석 리포트. subject 평가 결과 아카이브", purposeEn: "Generated analysis reports. subject evaluation result archive", color: "#C084FC" },
       { name: "vault/",      role: "credential", purpose: "프로젝트 로컬 아티팩트. global vault override", purposeEn: "Project-local artifacts. Global vault override", color: "#E87080" },
       { name: "MEMORY.md",   role: "index",      purpose: "메모리 인덱스. 에이전트가 매 세션 로드하는 진입점", purposeEn: "Memory index. Entry point loaded by the agent each session", color: "#4ECDC4" },
       { name: "LEARNING.md", role: "memory",     purpose: "학습 로그. 교정 이력, 실수 패턴, 자동 축적", purposeEn: "Learning log. Correction history, error patterns, auto-accumulated", color: "#34D399" },
@@ -242,7 +242,7 @@ export function ContextTiersSection() {
               {[
                 { tier: "T0", name: "Identity", desc: "GEODE.md. 에이전트 미션, 핵심 원칙, 실행 모델 (Karpathy P7)", descEn: "GEODE.md. Agent mission, core principles, execution model (Karpathy P7)", color: "#F4B8C8" },
                 { tier: "T0.5", name: "User Profile", desc: "FileBasedUserProfile. 역할, 전문성, 자동 학습 패턴, 선호 설정", descEn: "FileBasedUserProfile. Role, expertise, auto-learned patterns, preferences", color: "#E87080" },
-                { tier: "T1", name: "Organization", desc: "MonoLake fixture JSON. IP 메타데이터, 시그널, PSM 공변량, 기대 결과", descEn: "MonoLake fixture JSON. IP metadata, signals, PSM covariates, expected results", color: "#818CF8" },
+                { tier: "T1", name: "Organization", desc: "MonoLake fixture JSON. subject 메타데이터, 시그널, composite scoring 공변량, 기대 결과", descEn: "MonoLake fixture JSON. subject metadata, signals, composite scoring covariates, expected results", color: "#818CF8" },
                 { tier: "T2", name: "Project", desc: "ProjectMemory. PROJECT.md(200줄) + .geode/rules/*.md 글로브 매칭", descEn: "ProjectMemory. PROJECT.md (200 lines) + .geode/rules/*.md glob matching", color: "#4ECDC4" },
                 { tier: "T3", name: "Session", desc: "InMemorySessionStore. TTL 3600s, 체크포인트 save/load, 세션 간 격리", descEn: "InMemorySessionStore. TTL 3600s, checkpoint save/load, inter-session isolation", color: "#F5C542" },
               ].map((m) => (

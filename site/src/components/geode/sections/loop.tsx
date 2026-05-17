@@ -19,7 +19,7 @@ const scenarios: { tab: string; lines: Line[] }[] = [
       { type: "dots", text: "" },
       { type: "dots", text: "  harness: GEODE", rich: <>{`  `}<span style={{opacity:0.35}}>harness:</span>{` `}<span style={{color:"#5f9ea0"}}>GEODE</span></> },
       { type: "dots", text: "  ✓ LLM Analysis  ✓ Project Memory  ✓ User Profile", rich: <>{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` LLM Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Project Memory  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` User Profile`}</> },
-      { type: "dots", text: "  ✓ Dry-Run Analysis  ✓ IP Search", rich: <>{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Dry-Run Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` IP Search`}</> },
+      { type: "dots", text: "  ✓ Dry-Run Analysis  ✓ Project Search", rich: <>{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Dry-Run Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Project Search`}</> },
       { type: "dots", text: "" },
       { type: "dots", text: "  /help for commands  ·  type naturally", rich: <span style={{opacity:0.35}}>{`  /help for commands  ·  type naturally`}</span> },
       { type: "dots", text: "" },
@@ -83,34 +83,6 @@ const scenarios: { tab: string; lines: Line[] }[] = [
       { type: "token", text: "  ⎿ ✢ claude-opus-4-7 · ↓6.8k ↑2.1k · $0.066 · 8.2s" },
     ],
   },
-  {
-    tab: "game-ip",
-    lines: [
-      { type: "prompt", text: '> Cowboy Bebop 분석해줘', input: true },
-      { type: "tool", text: '  ⎿ ▸ analyze_ip(ip_name="Cowboy Bebop")' },
-      { type: "phase", text: "  ▸ [GATHER] MonoLake → YouTube 12M | Reddit 180K" },
-      { type: "phase", text: "  ▸ [ANALYZE] 4 Analysts (Clean Context)" },
-      { type: "phase", text: "  ▸ [EVALUATE] 14-Axis Rubric" },
-      { type: "phase", text: "  ▸ [SCORE] PSM ATT=+31.2% Z=2.67 Γ=1.8" },
-      { type: "exec", text: "  ⎿ ✓ analyze_ip → A · 68.4" },
-      { type: "done", text: "  A | 68.4 pts | undermarketed — 마케팅 예산 증액 권장" },
-    ],
-  },
-  {
-    tab: "reode",
-    lines: [
-      { type: "prompt", text: "> Java 1.8 → 22 마이그레이션 시작해", input: true },
-      { type: "status", text: '  ● plan: "Java Migration" (6 phases)' },
-      { type: "phase", text: "    Assess → Plan → Transform → Validate → Fix → Measure" },
-      { type: "prompt", text: "  approve? [Y/n/A] > A", input: true },
-      { type: "tool", text: "  ⎿ ▸ delegate_task(5,523 files, 4-class error routing)" },
-      { type: "exec", text: "  ⎿ ▸ [1/1153] CONFIG: pom.xml java.version 1.8→22" },
-      { type: "exec", text: "  ⎿ ▸ [847/1153] CODE: javax.* → jakarta.* 자동 변환" },
-      { type: "exec", text: "  ⎿ ▸ [1153/1153] BEHAVIOR: 83/83 tests green" },
-      { type: "token", text: "  ⎿ ✢ claude-opus-4-7 · 1,133 turns · 5h 48m · $388" },
-      { type: "done", text: "  ✓ 5,523 files · 83/83 Tests · Build · Service E2E 성공" },
-    ],
-  },
 ];
 
 const colorMap: Record<string, string> = {
@@ -130,8 +102,6 @@ const tabLabels: Record<string, string> = {
   agentic: "Agentic",
   explore: "Explore",
   "plan-mode": "Plan",
-  "game-ip": "Game IP",
-  reode: "REODE",
 };
 
 /* ── Orbital Cycle ── */
@@ -418,7 +388,7 @@ const loopStats = [
   { value: "∞", label: "while True", sub: "" },
   { value: "8", label: "Safety Guards", sub: "convergence · time budget · stuck · HITL" },
   { value: "3", label: "Modes", sub: "IPC(thin CLI) · Daemon(Slack) · Scheduler" },
-  { value: "5", label: "Tool Routes", sub: "Bash · Tool · MCP · Skill · DAG" },
+  { value: "5", label: "Tool Routes", sub: "Bash · Tool · MCP · Skill · Task" },
 ];
 
 /* ── 5+3 Safety Guards ── */
@@ -485,9 +455,9 @@ export function LoopSection() {
             <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.01] px-4 py-2.5 flex items-center gap-5">
               <span className="text-[9px] font-mono font-bold text-[#E87080]/60 uppercase tracking-widest shrink-0">REC</span>
               {[
-                { value: "1,133", unit: "turns" },
-                { value: "5h 48m", unit: "dur" },
-                { value: "$388", unit: "cost" },
+                { value: "∞", unit: "loop" },
+                { value: "8", unit: "guards" },
+                { value: "5", unit: "routes" },
               ].map((m) => (
                 <div key={m.unit} className="text-center">
                   <div className="text-sm font-bold text-white/80">{m.value}</div>
@@ -495,8 +465,8 @@ export function LoopSection() {
                 </div>
               ))}
               <div className="flex-1 text-right">
-                <div className="text-[9px] font-mono text-white/30">REODE · Opus 4.6 · 5,523 files · Java 1.8→22 · Spring 4→6</div>
-                <div className="text-[8px] font-mono text-[#34D399]/50 mt-0.5">{t(locale, "83/83 Tests · Build · FE/BE E2E 성공 · 전 기능 보존 · 고객 만족", "83/83 Tests · Build · FE/BE E2E pass · All features preserved · Customer satisfied")}</div>
+                <div className="text-[9px] font-mono text-white/30">AgenticLoop · async tools · IPC/daemon/scheduler</div>
+                <div className="text-[8px] font-mono text-[#34D399]/50 mt-0.5">{t(locale, "긴 실행 세션 · 복구 가능 체크포인트 · 비용/컨텍스트 가드", "Long-running sessions · recoverable checkpoints · cost/context guards")}</div>
               </div>
             </div>
           </ScrollReveal>

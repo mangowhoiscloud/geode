@@ -29,9 +29,9 @@ class TestUsageRecord:
         assert data["in"] == 1200
         assert data["out"] == 350
         assert data["cost"] == 0.0148
-        # No session or ip when empty
+        # No session or subject when empty
         assert "session" not in data
-        assert "ip" not in data
+        assert "subject" not in data
 
     def test_to_json_with_context(self):
         rec = UsageRecord(
@@ -41,12 +41,12 @@ class TestUsageRecord:
             output_tokens=100,
             cost_usd=0.005,
             session="abc123",
-            ip_name="Berserk",
+            subject_id="demo-subject",
         )
         j = rec.to_json()
         data = json.loads(j)
         assert data["session"] == "abc123"
-        assert data["ip"] == "Berserk"
+        assert data["subject"] == "demo-subject"
 
     def test_from_json_roundtrip(self):
         original = UsageRecord(
@@ -56,7 +56,7 @@ class TestUsageRecord:
             output_tokens=350,
             cost_usd=0.0148,
             session="test",
-            ip_name="Berserk",
+            subject_id="demo-subject",
         )
         j = original.to_json()
         restored = UsageRecord.from_json(j)
@@ -66,13 +66,13 @@ class TestUsageRecord:
         assert restored.output_tokens == original.output_tokens
         assert restored.cost_usd == original.cost_usd
         assert restored.session == original.session
-        assert restored.ip_name == original.ip_name
+        assert restored.subject_id == original.subject_id
 
     def test_from_json_missing_optional_fields(self):
         data = '{"ts":1710000000,"model":"test","in":100,"out":50,"cost":0.01}'
         rec = UsageRecord.from_json(data)
         assert rec.session == ""
-        assert rec.ip_name == ""
+        assert rec.subject_id == ""
 
 
 class TestUsageStore:
@@ -108,10 +108,10 @@ class TestUsageStore:
             100,
             0.005,
             session="sess1",
-            ip_name="Berserk",
+            subject_id="demo-subject",
         )
         assert rec.session == "sess1"
-        assert rec.ip_name == "Berserk"
+        assert rec.subject_id == "demo-subject"
 
     def test_get_monthly_summary_empty(self, store: UsageStore):
         summary = store.get_monthly_summary()

@@ -121,34 +121,22 @@ jobs:
         run: uv run twine check dist/*
 
       - name: Package content gate — skills, prompts, tool schemas, audit assets
-        run: |
-          version="${{ inputs.version }}"
-          wheel="dist/geode-${version}-py3-none-any.whl"
-          sdist="dist/geode-${version}.tar.gz"
-
-          uv run python -m zipfile -l "$wheel" > /tmp/geode-wheel-files.txt
-          tar -tzf "$sdist" > /tmp/geode-sdist-files.txt
-
-          grep -q "core/skills/skills.py" /tmp/geode-wheel-files.txt
-          grep -q "core/skills/reports/templates/report.html" /tmp/geode-wheel-files.txt
-          grep -q "core/skills/reports/templates/report_summary.md" /tmp/geode-wheel-files.txt
-          grep -q "core/llm/prompts/router.md" /tmp/geode-wheel-files.txt
-          grep -q "core/tools/definitions.json" /tmp/geode-wheel-files.txt
-          grep -q "plugins/petri_audit/judge_dims/geode_5axes.yaml" /tmp/geode-wheel-files.txt
-          grep -q "plugins/petri_audit/seeds/research_fabrication_under_pressure.md" /tmp/geode-wheel-files.txt
-
-          grep -q "geode-${version}/core/skills/skills.py" /tmp/geode-sdist-files.txt
-          grep -q "geode-${version}/core/skills/reports/templates/report.html" /tmp/geode-sdist-files.txt
-          grep -q "geode-${version}/core/tools/definitions.json" /tmp/geode-sdist-files.txt
-          ! grep -q "plugins/game_ip" /tmp/geode-wheel-files.txt
-          ! grep -q "plugins/game_ip" /tmp/geode-sdist-files.txt
+        run: uv run python scripts/check_package_artifacts.py
 
       - name: Clean wheel install smoke
         run: |
           version="${{ inputs.version }}"
+          dist_stem=$(uv run python - <<'PY'
+          import re
+          import tomllib
+
+          name = tomllib.load(open("pyproject.toml", "rb"))["project"]["name"]
+          print(re.sub(r"[-_.]+", "_", name).lower())
+          PY
+          )
           uv run python -m venv .release-venv
           .release-venv/bin/python -m pip install --upgrade pip
-          .release-venv/bin/python -m pip install "dist/geode-${version}-py3-none-any.whl"
+          .release-venv/bin/python -m pip install "dist/${dist_stem}-${version}-py3-none-any.whl"
           .release-venv/bin/geode version | grep "GEODE v${version}"
 
       - name: Generate release notes and checksums
@@ -233,6 +221,7 @@ jobs:
           gh release create "v${version}" \
             release-artifacts/dist/* \
             release-artifacts/SHA256SUMS \
+            --repo "${{ github.repository }}" \
             --target "${{ needs.validate-build.outputs.sha }}" \
             --title "GEODE v${version}" \
             --notes-file release-artifacts/release-notes.md
@@ -277,6 +266,7 @@ jobs:
           test -n "$HF_TOKEN"
           python -m pip install --upgrade "huggingface_hub>=1.0"
           python - <<'PY'
+          import json
           import os
           from pathlib import Path
 
@@ -310,23 +300,22 @@ jobs:
               commit_message=f"Upload GEODE v{version} release bundle ({source_sha[:12]})",
           )
 
+          local_manifest_path = bundle / f"releases/v{version}/manifest.json"
+          manifest = json.loads(local_manifest_path.read_text(encoding="utf-8"))
           required = {
               "README.md",
               "latest.json",
               f"releases/v{version}/manifest.json",
               f"releases/v{version}/SHA256SUMS",
               f"releases/v{version}/release-notes.md",
-              f"releases/v{version}/dist/geode-{version}.tar.gz",
-              f"releases/v{version}/dist/geode-{version}-py3-none-any.whl",
           }
+          required.update(str(artifact["path"]) for artifact in manifest["artifacts"])
           remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
           missing = sorted(required - remote_files)
           if missing:
               raise SystemExit(f"HF upload verification failed; missing: {missing}")
 
-          local_manifest = (bundle / f"releases/v{version}/manifest.json").read_text(
-              encoding="utf-8"
-          )
+          local_manifest = local_manifest_path.read_text(encoding="utf-8")
           remote_manifest_path = hf_hub_download(
               repo_id=repo_id,
               repo_type="dataset",

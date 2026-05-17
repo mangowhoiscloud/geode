@@ -188,17 +188,17 @@ class TestVectorStoreContextVar:
 class TestRAGRouter:
     def test_classify_simple(self) -> None:
         router = RAGRouter()
-        assert router.classify("what is the score of Berserk") == "simple"
+        assert router.classify("what is the score of Project Atlas") == "simple"
         assert router.classify("how many copies sold") == "simple"
 
     def test_classify_complex(self) -> None:
         router = RAGRouter()
-        assert router.classify("compare Berserk and Cowboy Bebop across all axes") == "complex"
-        assert router.classify("common patterns between all analyzed IPs") == "complex"
+        assert router.classify("compare Project Atlas and Project Orion across all axes") == "complex"
+        assert router.classify("common patterns between all analyzed subjects") == "complex"
 
     def test_classify_focused(self) -> None:
         router = RAGRouter()
-        assert router.classify("franchise revival potential for dark fantasy IPs") == "focused"
+        assert router.classify("franchise revival potential for dark fantasy subjects") == "focused"
 
     def test_retrieve_simple_returns_empty(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -217,6 +217,6 @@ class TestRAGRouter:
         store = _make_store(tmp_path)
         store.add(["franchise revival analysis", "market expansion data", "cooking tips"])
         router = RAGRouter(vector_store=store, similarity_threshold=0.0)
-        results = router.retrieve("franchise revival potential for dark fantasy IPs", k=2)
+        results = router.retrieve("franchise revival potential for dark fantasy subjects", k=2)
         # With mock embeddings threshold=0, should return results
         assert len(results) <= 2

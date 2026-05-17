@@ -80,7 +80,7 @@ class TelegramPoller(BasePoller):
                     timestamp=float(message.get("date", time.time())),
                 )
 
-                response = self._manager.route_message(inbound)
+                response = await self._manager.aroute_message(inbound)
 
                 if response and self._notification:
                     await self._notification.asend_message("telegram", chat_id, response)

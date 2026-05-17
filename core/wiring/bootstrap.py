@@ -99,7 +99,7 @@ def _make_stuck_hook_handler(
     """Create hook handlers for stuck detection lifecycle."""
 
     def _track_lifecycle(event: HookEvent, data: dict[str, Any]) -> None:
-        session_key = data.get("ip_name", "")
+        session_key = data.get("subject_id", "")
         if event == HookEvent.PIPELINE_STARTED:
             detector.mark_running(session_key, metadata=data)
         elif event in (HookEvent.PIPELINE_ENDED, HookEvent.PIPELINE_ERROR):
@@ -412,7 +412,12 @@ def build_hooks(
         ),
         (_E.SUBAGENT_STARTED, "sa_started", "SubAgent started: %s (%s)", ["task_id", "task_type"]),
         (_E.LLM_CALL_STARTED, "llm_start", "LLM call: %s (%s)", ["model", "function"]),
-        (_E.VERIFICATION_FAIL, "verif_fail", "Verification failed: %s — %s", ["node", "ip_name"]),
+        (
+            _E.VERIFICATION_FAIL,
+            "verif_fail",
+            "Verification failed: %s — %s",
+            ["node", "subject_id"],
+        ),
         (_E.TOOL_RECOVERY_ATTEMPTED, "recovery_try", "Tool recovery attempted: %s", ["tool_name"]),
         (
             _E.TOOL_RECOVERY_FAILED,
@@ -691,7 +696,7 @@ def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
 def build_task_graph(
     *,
     hooks: HookSystem,
-    ip_name: str,
+    subject_id: str,
 ) -> tuple[TaskGraph, TaskGraphHookBridge]:
     """Build TaskGraph and wire the hook bridge for status tracking.
 
@@ -706,20 +711,20 @@ def build_task_graph(
     from core.orchestration.task_bridge import TaskGraphHookBridge
     from core.orchestration.task_system import TaskGraph
 
-    prefix = ip_name.lower().replace(" ", "_")
+    prefix = subject_id.lower().replace(" ", "_")
     domain = get_domain_or_none()
     builder = getattr(domain, "build_task_graph", None) if domain else None
 
     graph: TaskGraph | None = None
     if callable(builder):
         try:
-            graph = builder(None, ip_name)
+            graph = builder(None, subject_id)
         except Exception:
             log.debug("Domain build_task_graph failed; using empty TaskGraph", exc_info=True)
     if graph is None:
         graph = TaskGraph()
 
-    bridge = TaskGraphHookBridge(graph, ip_prefix=prefix)
+    bridge = TaskGraphHookBridge(graph, subject_prefix=prefix)
     bridge.register(hooks)
     return graph, bridge
 
