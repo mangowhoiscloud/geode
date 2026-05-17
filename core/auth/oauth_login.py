@@ -556,18 +556,28 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 # origin for consumer subscriptions. v0.99.6 switches the default to
 # CLAUDE_AI; future patch may add a ``/login source console`` toggle
 # for users whose access lives on ``platform.claude.com``.
-_ANTHROPIC_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
+# v0.99.7 — server redirects ``claude.com/cai/oauth/authorize`` →
+# ``claude.ai/oauth/authorize`` (cai path deprecated; user confirmed
+# from the actual browser URL). Short-circuit one HTTP hop by pointing
+# at the final URL directly.
+_ANTHROPIC_AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL not password
 # Mirrors Claude Code binary's ``HA()`` helper (``claude-code/${VERSION}``).
 # v0.99.5 added this header explicitly to keep our request fingerprint
 # aligned with the first-party CLI (Anthropic's 2026-04-04 third-party
 # OAuth block routes unknown UA traffic to ``extra_usage`` billing).
 _ANTHROPIC_USER_AGENT = "claude-cli/2.1.140"
-# The OAuth client `9d1c250a-...` is registered with this server-hosted
-# redirect URI only — loopback URIs (http://localhost:*) are rejected at
-# the authorize step. The /oauth/code/callback page renders the
-# authorization code so the user can copy & paste it back into the CLI.
-_ANTHROPIC_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
+# v0.99.7 update — Hermes Agent grounds the redirect URI at
+# ``console.anthropic.com/oauth/code/callback`` (see
+# ``hermes-agent/agent/anthropic_adapter.py:1043``, ``_OAUTH_REDIRECT_URI``).
+# That host differs from the Claude Code binary's ``K3q.MANUAL_REDIRECT_URL``
+# (``platform.claude.com/oauth/code/callback``). User's v0.99.5/0.99.6
+# attempts with the ``platform.claude.com`` redirect both returned
+# "Invalid request format" — Hermes's working pattern suggests the
+# OAuth client `9d1c250a-...` is registered against the console host,
+# and binary's K3q may be stale. The ``/oauth/code/callback`` page
+# still renders the code in ``<code>#<state>`` for manual paste.
+_ANTHROPIC_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 
 # Scope set mirrors Claude Code's hint string in the native binary:
 #   "user:profile user:inference user:sessions:claude_code user:mcp_servers"
@@ -651,24 +661,30 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
     verifier, challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(16)
     scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
+    # v0.99.7 — query parameters match Hermes Agent
+    # (``hermes-agent/hermes_cli/web_server.py:1755-1764``) 1:1. Note
+    # that ``login_method`` is **not** sent — the binary appends it
+    # conditionally (``if($) append("login_method", $)``) and Hermes,
+    # which works in production, omits it. Param order also mirrors
+    # Hermes's dict literal.
     auth_url = (
         _ANTHROPIC_AUTHORIZE_URL
         + "?"
         + urllib.parse.urlencode(
             {
                 "code": "true",
-                "response_type": "code",
                 "client_id": client_id,
+                "response_type": "code",
                 "redirect_uri": _ANTHROPIC_REDIRECT_URI,
                 "scope": scope,
-                "state": state,
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
+                "state": state,
             }
         )
     )
 
-    log.info("anthropic-oauth: opening browser (manual-paste flow)")
+    log.info("anthropic-oauth: opening browser (manual-paste flow): %s", auth_url)
     webbrowser.open(auth_url)
 
     # rich.Padding preserves the left indent when the terminal wraps a long
@@ -724,6 +740,8 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
                 "ts": ts,
                 "stage": stage,
                 "endpoint": _ANTHROPIC_TOKEN_URL,
+                "authorize_endpoint": _ANTHROPIC_AUTHORIZE_URL,
+                "authorize_url_full": auth_url,
                 "request": {
                     "client_id": client_id,
                     "redirect_uri": _ANTHROPIC_REDIRECT_URI,
