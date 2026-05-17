@@ -21,14 +21,14 @@ class CompositeSignalAdapter:
     def __init__(self, adapters: list[SignalEnrichmentPort]) -> None:
         self._adapters = adapters
 
-    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, subject: str) -> dict[str, Any]:
         merged: dict[str, Any] = {}
         sources: list[str] = []
         for adapter in self._adapters:
             if not await adapter.ais_available():
                 continue
             try:
-                signals = await adapter.afetch_signals(ip_name)
+                signals = await adapter.afetch_signals(subject)
                 if signals:
                     # Warn on key collisions (excluding metadata keys)
                     for key in signals:

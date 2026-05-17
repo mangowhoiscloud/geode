@@ -1,9 +1,6 @@
 """Generic web search tool — Anthropic / OpenAI / GLM 3-provider fallback.
 
-Domain-agnostic: any plugin can register this tool. Extracted from the
-former ``core/tools/signal_tools.py`` during the v0.66.2 step-5 split so
-the signal-tools module could be retired and the IP-specific scrapers
-moved to ``plugins/game_ip/tools/signal_tools.py``.
+Domain-agnostic: any plugin can register this tool.
 """
 
 from __future__ import annotations
@@ -22,7 +19,7 @@ _WEB_SEARCH_PARAMETERS: dict[str, Any] = {
     "properties": {
         "query": {
             "type": "string",
-            "description": "Search query (e.g., 'Berserk game adaptation news 2026').",
+            "description": "Search query (e.g., 'AI release notes 2026').",
         },
         "max_results": {
             "type": "integer",
@@ -48,9 +45,9 @@ class WebSearchTool:
     @property
     def description(self) -> str:
         return (
-            "Search the web for real-time information about an IP. "
-            "Useful for finding recent news, community discussions, "
-            "sales data, and market signals that may not be in fixtures."
+            "Search the web for real-time information. Useful for finding "
+            "recent news, community discussions, source material, and market "
+            "signals."
         )
 
     @property

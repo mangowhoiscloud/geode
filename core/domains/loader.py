@@ -14,7 +14,7 @@ at runtime when a plugin is imported, and consumers (CLI bootstrap, tests)
 can call ``load_domain_adapter(name)`` without first importing the plugin.
 
 Usage:
-    adapter = load_domain_adapter("game_ip")
+    adapter = load_domain_adapter("research")
     set_domain(adapter)
 """
 
@@ -36,7 +36,7 @@ def load_domain_adapter(name: str) -> DomainPort:
     """Load a domain adapter by name.
 
     Args:
-        name: Domain identifier (e.g. "game_ip").
+        name: Domain identifier (e.g. "research").
 
     Returns:
         Instantiated DomainPort implementation.

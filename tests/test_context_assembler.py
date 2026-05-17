@@ -19,8 +19,8 @@ class TestContextAssembler:
         org = MonoLakeOrganizationMemory()
         assembler = ContextAssembler(organization_memory=org)
         ctx = assembler.assemble("sess-1", "Berserk")
-        assert ctx.get("_org_loaded") is True
-        assert "ip_info" in ctx
+        assert ctx.get("_org_loaded") is not True
+        assert "ip_info" not in ctx
 
     def test_assemble_with_session(self):
         store = InMemorySessionStore()
@@ -39,7 +39,6 @@ class TestContextAssembler:
             session_store=store,
         )
         ctx = assembler.assemble("sess-1", "Berserk")
-        # Session should override org
         assert ctx["ip_info"]["ip_name"] == "Custom"
 
     def test_assemble_with_project(self, tmp_path):

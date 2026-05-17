@@ -50,7 +50,7 @@ class WorkerRequest:
     time_budget_s: float = 0.0  # 0 = inherit parent's budget
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
     effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh" (v0.56.0)
-    domain: str = ""  # Domain adapter name (e.g. "game_ip") or ""
+    domain: str = ""  # Optional external domain adapter name.
     isolation: str = ""  # Reserved for Phase 3: "worktree" etc.
 
     def to_dict(self) -> dict[str, Any]:
@@ -132,8 +132,8 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # 1. Domain context (optional)
     if request.domain:
         try:
+            from core.domains.loader import load_domain_adapter
             from core.domains.port import set_domain
-            from core.domains.registry import load_domain_adapter  # type: ignore[import-untyped]
 
             domain = load_domain_adapter(request.domain)
             set_domain(domain)

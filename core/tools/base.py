@@ -135,7 +135,7 @@ def tool_error(
         message: Human-readable error description.
         error_type: Machine-readable category (validation, not_found, ...).
         recoverable: Whether the LLM should retry or try alternatives.
-        hint: Actionable suggestion for the LLM (e.g. "use list_ips first").
+        hint: Actionable suggestion for the LLM (e.g. "use memory_search first").
         context: Extra key-value pairs (parameter name, value, etc.).
     """
     from core.auth.scrub import scrub_credentials

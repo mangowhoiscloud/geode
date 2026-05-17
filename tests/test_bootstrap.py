@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapContext, BootstrapManager
-
-
-def _run_wrapped(wrapped, state):
-    return asyncio.run(wrapped(state))
 
 
 class TestBootstrapContext:
@@ -308,108 +303,3 @@ class TestHookEventCount:
 
     def test_node_bootstrap_event_value(self) -> None:
         assert HookEvent.NODE_BOOTSTRAP.value == "node_bootstrap"
-
-
-class TestMakeHookedNodeWithBootstrap:
-    """Integration tests: _make_hooked_node with BootstrapManager."""
-
-    def test_skip_returns_empty_dict(self) -> None:
-        """When bootstrap sets skip=True, node returns {} without executing."""
-        from core.graph import _make_hooked_node
-
-        hooks = HookSystem()
-        mgr = BootstrapManager(hooks)
-        executed = []
-
-        def skip_all(event: HookEvent, data: dict[str, Any]) -> None:
-            data["bootstrap_context"].skip = True
-
-        hooks.register(HookEvent.NODE_BOOTSTRAP, skip_all)
-
-        def fake_node(state: dict[str, Any]) -> dict[str, Any]:
-            executed.append(True)
-            return {"result": "should not appear"}
-
-        wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        result = _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
-
-        assert result == {}
-        assert executed == []  # Node was NOT executed
-
-    def test_bootstrap_context_applied_to_state(self) -> None:
-        """BootstrapManager applies context before node execution."""
-        from core.graph import _make_hooked_node
-
-        hooks = HookSystem()
-        mgr = BootstrapManager(hooks)
-        captured_states: list[dict[str, Any]] = []
-
-        def add_instruction(event: HookEvent, data: dict[str, Any]) -> None:
-            data["bootstrap_context"].extra_instructions.append("RPG focus")
-
-        hooks.register(HookEvent.NODE_BOOTSTRAP, add_instruction)
-
-        def fake_node(state: dict[str, Any]) -> dict[str, Any]:
-            captured_states.append(dict(state))
-            return {"done": True}
-
-        wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
-
-        assert len(captured_states) == 1
-        assert captured_states[0]["_extra_instructions"] == ["RPG focus"]
-
-    def test_no_bootstrap_mgr_preserves_original_behavior(self) -> None:
-        """Without bootstrap_mgr, behavior is identical to before."""
-        from core.graph import _make_hooked_node
-
-        hooks = HookSystem()
-        events_fired: list[HookEvent] = []
-
-        def track_events(event: HookEvent, data: dict[str, Any]) -> None:
-            events_fired.append(event)
-
-        hooks.register(HookEvent.NODE_ENTERED, track_events)
-        hooks.register(HookEvent.NODE_EXITED, track_events)
-
-        def fake_node(state: dict[str, Any]) -> dict[str, Any]:
-            return {"value": 42}
-
-        # No bootstrap_mgr (default None)
-        wrapped = _make_hooked_node(fake_node, "router", hooks)  # type: ignore[arg-type]
-        result = _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
-
-        assert result == {"value": 42}
-        assert HookEvent.NODE_ENTERED in events_fired
-        assert HookEvent.NODE_EXITED in events_fired
-        # NODE_BOOTSTRAP should NOT fire
-        assert HookEvent.NODE_BOOTSTRAP not in events_fired
-
-    def test_bootstrap_fires_before_enter_in_hooked_node(self) -> None:
-        """In _make_hooked_node, NODE_BOOTSTRAP fires before NODE_ENTER."""
-        from core.graph import _make_hooked_node
-
-        hooks = HookSystem()
-        mgr = BootstrapManager(hooks)
-        event_order: list[str] = []
-
-        def on_bootstrap(event: HookEvent, data: dict[str, Any]) -> None:
-            event_order.append("bootstrap")
-
-        def on_enter(event: HookEvent, data: dict[str, Any]) -> None:
-            event_order.append("enter")
-
-        def on_exit(event: HookEvent, data: dict[str, Any]) -> None:
-            event_order.append("exit")
-
-        hooks.register(HookEvent.NODE_BOOTSTRAP, on_bootstrap)
-        hooks.register(HookEvent.NODE_ENTERED, on_enter)
-        hooks.register(HookEvent.NODE_EXITED, on_exit)
-
-        def fake_node(state: dict[str, Any]) -> dict[str, Any]:
-            return {"done": True}
-
-        wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
-
-        assert event_order == ["bootstrap", "enter", "exit"]

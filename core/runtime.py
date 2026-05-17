@@ -69,7 +69,7 @@ from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
 from core.orchestration.stuck_detection import StuckDetector
 from core.paths import GLOBAL_RUNS_DIR
-from core.tools.policy import NodeScopePolicy, PolicyChain
+from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
 from core.wiring.bootstrap import (  # noqa: F401  — backward compat
     _make_run_log_handler,
@@ -114,7 +114,7 @@ class RuntimeCoreConfig:
     lane_queue: LaneQueue
     project_memory: ProjectMemory
     session_key: str
-    ip_name: str
+    subject_id: str
     secondary_adapter: LLMClientPort | None = None
     profile_store: ProfileStore | None = None
     profile_rotator: ProfileRotator | None = None
@@ -186,7 +186,8 @@ class GeodeRuntime:
         self.lane_queue = core.lane_queue
         self.project_memory = core.project_memory
         self.session_key = core.session_key
-        self.ip_name = core.ip_name
+        self.subject_id = core.subject_id
+        self.ip_name = core.subject_id
         self.run_id = ""
         self.is_subagent: bool = False
         # Unified bootstrap resources
@@ -224,13 +225,13 @@ class GeodeRuntime:
         ip_name: str,
         *,
         phase: str = "analysis",
-        domain_name: str = "game_ip",
+        domain_name: str = "",
         enable_checkpoint: bool = True,
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
         stuck_timeout_s: float = DEFAULT_STUCK_TIMEOUT_S,
     ) -> GeodeRuntime:
-        """Factory method — create a fully wired runtime for an IP analysis.
+        """Factory method — create a fully wired runtime for a GEODE session.
 
         Staged initialization (Claude Code entrypoints/init.ts pattern):
         1. _build_core: domain, sessions, hooks, config, auth, LLM, lanes
@@ -241,9 +242,12 @@ class GeodeRuntime:
         from core.wiring import bootstrap
         from core.wiring import container as infra
 
-        # Stage 0: Domain + session identity
-        domain = load_domain_adapter(domain_name)
-        set_domain(domain)
+        # Stage 0: Optional domain + session identity.
+        # GEODE v1 no longer ships a built-in analysis domain. External
+        # domain packages may still self-register through core.domains.loader.
+        if domain_name:
+            domain = load_domain_adapter(domain_name)
+            set_domain(domain)
         session_key = build_session_key(ip_name, phase)
         run_id = uuid.uuid4().hex[:12]
 
@@ -291,7 +295,7 @@ class GeodeRuntime:
             lane_queue=core["lane_queue"],
             project_memory=memory["project_memory"],
             session_key=session_key,
-            ip_name=ip_name,
+            subject_id=ip_name,
             secondary_adapter=core["secondary_adapter"],
             profile_store=core["profile_store"],
             profile_rotator=core["profile_rotator"],
@@ -456,36 +460,15 @@ class GeodeRuntime:
         *,
         enable_checkpoint: bool = True,
     ) -> CompiledStateGraph[Any, None, Any, Any]:
-        """Compile the GEODE graph with hooks and checkpointing (default: enabled).
+        """Compile a domain-provided graph with hooks and checkpointing.
 
         Caches the compiled graph for reuse across multiple invocations.
         """
-        if self._compiled_graph is not None:
-            return self._compiled_graph
-
-        from core.config import settings
-        from core.graph import compile_graph
-
-        # Subagents use MemorySaver for thread safety (G7 fix)
-        if self.is_subagent:
-            checkpoint_db = None  # forces MemorySaver fallback
-        else:
-            checkpoint_db = self.checkpoint_db if enable_checkpoint else None
-        interrupt_list = [
-            n.strip() for n in settings.interrupt_nodes.split(",") if n.strip()
-        ] or None
-        compiled = compile_graph(
-            hooks=self.hooks,
-            checkpoint_db=checkpoint_db,
-            confidence_threshold=settings.confidence_threshold,
-            max_iterations=settings.max_iterations,
-            interrupt_before=interrupt_list,
-            memory_fallback=True,
-            prompt_assembler=self.prompt_assembler,
-            node_scope_policy=NodeScopePolicy(),
+        raise RuntimeError(
+            "GEODE core no longer ships a built-in analysis graph. "
+            "Install and select an external domain plugin that provides "
+            "a LangGraph pipeline before calling compile_graph()."
         )
-        self._compiled_graph = compiled
-        return compiled
 
     def store_session_data(self, data: dict[str, Any]) -> None:
         """Store data in the session store under the current session key."""

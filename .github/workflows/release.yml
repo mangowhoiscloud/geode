@@ -1,0 +1,340 @@
+name: Release
+
+# Manual-only release pipeline. Normal pushes to main run CI and Pages, but do
+# not publish packages or GitHub releases. Publishing requires workflow_dispatch
+# plus the protected `release` environment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to release after local validation"
+        required: true
+        default: "main"
+      version:
+        description: "Expected GEODE version, e.g. 0.99.11"
+        required: true
+      publish_github_release:
+        description: "Create the GitHub release after validation"
+        type: boolean
+        default: false
+      publish_pypi:
+        description: "Upload dist artifacts to PyPI via Trusted Publishing"
+        type: boolean
+        default: false
+      publish_huggingface_artifacts:
+        description: "Upload the versioned release bundle to a Hugging Face dataset repo"
+        type: boolean
+        default: false
+      huggingface_repo_id:
+        description: "HF dataset repo id, e.g. mangowhoiscloud/geode-release-artifacts"
+        required: false
+        default: "mangowhoiscloud/geode-release-artifacts"
+      huggingface_private:
+        description: "Create the HF dataset repo as private if it does not exist"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate-build:
+    name: Validate and build release artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.rev.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - id: rev
+        name: Record release SHA
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release metadata
+        run: |
+          expected="${{ inputs.version }}"
+          actual=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "expected=$expected"
+          echo "actual=$actual"
+          test "$actual" = "$expected"
+          grep -q "^## \[$expected\]" CHANGELOG.md
+
+      - name: Sync dependencies
+        run: uv sync --extra audit
+
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Lint and hygiene
+        run: |
+          uv run ruff check core plugins tests autoresearch scripts
+          uv run ruff format --check core plugins tests autoresearch scripts
+          uv run deptry .
+
+      - name: Type check
+        run: >
+          uv run mypy core plugins scripts
+          tests/test_prepare_hf_release_bundle.py
+          tests/test_check_official_docs.py
+
+      - name: Prompt integrity
+        run: |
+          uv run python - <<'PY'
+          from core.llm.prompts import verify_prompt_integrity
+
+          verify_prompt_integrity(raise_on_drift=True)
+          PY
+
+      - name: Official docs generation gate
+        run: uv run python scripts/check_official_docs.py
+
+      - name: Test
+        run: uv run pytest -q
+
+      - name: Runtime E2E smoke
+        run: |
+          uv run geode version
+          uv run geode doctor bootstrap
+
+      - name: Build package artifacts
+        run: uv build
+
+      - name: Validate package metadata
+        run: uv run twine check dist/*
+
+      - name: Package content gate — skills, prompts, tool schemas, audit assets
+        run: |
+          version="${{ inputs.version }}"
+          wheel="dist/geode-${version}-py3-none-any.whl"
+          sdist="dist/geode-${version}.tar.gz"
+
+          uv run python -m zipfile -l "$wheel" > /tmp/geode-wheel-files.txt
+          tar -tzf "$sdist" > /tmp/geode-sdist-files.txt
+
+          grep -q "core/skills/skills.py" /tmp/geode-wheel-files.txt
+          grep -q "core/skills/reports/templates/report.html" /tmp/geode-wheel-files.txt
+          grep -q "core/skills/reports/templates/report_summary.md" /tmp/geode-wheel-files.txt
+          grep -q "core/llm/prompts/router.md" /tmp/geode-wheel-files.txt
+          grep -q "core/tools/definitions.json" /tmp/geode-wheel-files.txt
+          grep -q "plugins/petri_audit/judge_dims/geode_5axes.yaml" /tmp/geode-wheel-files.txt
+          grep -q "plugins/petri_audit/seeds/research_fabrication_under_pressure.md" /tmp/geode-wheel-files.txt
+
+          grep -q "geode-${version}/core/skills/skills.py" /tmp/geode-sdist-files.txt
+          grep -q "geode-${version}/core/skills/reports/templates/report.html" /tmp/geode-sdist-files.txt
+          grep -q "geode-${version}/core/tools/definitions.json" /tmp/geode-sdist-files.txt
+          ! grep -q "plugins/game_ip" /tmp/geode-wheel-files.txt
+          ! grep -q "plugins/game_ip" /tmp/geode-sdist-files.txt
+
+      - name: Clean wheel install smoke
+        run: |
+          version="${{ inputs.version }}"
+          uv run python -m venv .release-venv
+          .release-venv/bin/python -m pip install --upgrade pip
+          .release-venv/bin/python -m pip install "dist/geode-${version}-py3-none-any.whl"
+          .release-venv/bin/geode version | grep "GEODE v${version}"
+
+      - name: Generate release notes and checksums
+        run: |
+          version="${{ inputs.version }}"
+          uv run python - "$version" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          raw = Path("CHANGELOG.md").read_text()
+          pattern = re.compile(
+              rf"^## \[{re.escape(version)}\].*?\n(?P<body>.*?)(?=^## \[)",
+              re.M | re.S,
+          )
+          match = pattern.search(raw)
+          if not match:
+              raise SystemExit(f"missing changelog entry for {version}")
+          Path("release-notes.md").write_text(match.group("body").strip() + "\n")
+          PY
+          uv run python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          from scripts.prepare_hf_release_bundle import is_distribution_artifact
+
+          lines = []
+          for path in sorted(Path("dist").iterdir()):
+              if is_distribution_artifact(path):
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  lines.append(f"{digest}  {path.as_posix()}")
+          Path("SHA256SUMS").write_text("\n".join(lines) + "\n")
+          PY
+
+      - name: Prepare Hugging Face release bundle
+        run: |
+          version="${{ inputs.version }}"
+          repo="${{ inputs.huggingface_repo_id }}"
+          test -n "$repo"
+          uv run python scripts/prepare_hf_release_bundle.py \
+            --version "$version" \
+            --repo-id "$repo" \
+            --dist-dir dist \
+            --release-notes release-notes.md \
+            --checksums SHA256SUMS \
+            --output-dir hf-release \
+            --source-sha "${{ steps.rev.outputs.sha }}"
+          test -f "hf-release/README.md"
+          test -f "hf-release/latest.json"
+          test -f "hf-release/releases/v${version}/manifest.json"
+          test -f "hf-release/releases/v${version}/SHA256SUMS"
+          test -f "hf-release/releases/v${version}/release-notes.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: |
+            dist
+            release-notes.md
+            SHA256SUMS
+            hf-release
+          if-no-files-found: error
+
+  publish-github-release:
+    name: Publish GitHub release
+    needs: validate-build
+    if: inputs.publish_github_release == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ inputs.version }}"
+          gh release create "v${version}" \
+            release-artifacts/dist/* \
+            release-artifacts/SHA256SUMS \
+            --target "${{ needs.validate-build.outputs.sha }}" \
+            --title "GEODE v${version}" \
+            --notes-file release-artifacts/release-notes.md
+
+  publish-pypi:
+    name: Publish PyPI
+    needs: validate-build
+    if: inputs.publish_pypi == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release-artifacts/dist
+
+  publish-huggingface-artifacts:
+    name: Publish Hugging Face artifacts
+    needs: validate-build
+    if: inputs.publish_huggingface_artifacts == true
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geode-${{ inputs.version }}-release-artifacts
+          path: release-artifacts
+
+      - name: Upload to Hugging Face dataset repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO_ID: ${{ inputs.huggingface_repo_id }}
+          HF_PRIVATE: ${{ inputs.huggingface_private }}
+          GEODE_VERSION: ${{ inputs.version }}
+          GEODE_SHA: ${{ needs.validate-build.outputs.sha }}
+        run: |
+          test -n "$HF_REPO_ID"
+          test -n "$HF_TOKEN"
+          python -m pip install --upgrade "huggingface_hub>=1.0"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from huggingface_hub import HfApi
+          from huggingface_hub import hf_hub_download
+
+          repo_id = os.environ["HF_REPO_ID"]
+          version = os.environ["GEODE_VERSION"]
+          source_sha = os.environ["GEODE_SHA"]
+          private = os.environ.get("HF_PRIVATE", "true").lower() == "true"
+          bundle = Path("release-artifacts/hf-release")
+          if not bundle.exists():
+              raise SystemExit(f"missing HF release bundle: {bundle}")
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          whoami = api.whoami()
+          username = whoami.get("name") or whoami.get("fullname") or "(unknown)"
+          print(f"Authenticated to Hugging Face as {username}")
+
+          api.create_repo(
+              repo_id=repo_id,
+              repo_type="dataset",
+              private=private,
+              exist_ok=True,
+          )
+          api.upload_folder(
+              repo_id=repo_id,
+              repo_type="dataset",
+              folder_path=str(bundle),
+              path_in_repo=".",
+              commit_message=f"Upload GEODE v{version} release bundle ({source_sha[:12]})",
+          )
+
+          required = {
+              "README.md",
+              "latest.json",
+              f"releases/v{version}/manifest.json",
+              f"releases/v{version}/SHA256SUMS",
+              f"releases/v{version}/release-notes.md",
+              f"releases/v{version}/dist/geode-{version}.tar.gz",
+              f"releases/v{version}/dist/geode-{version}-py3-none-any.whl",
+          }
+          remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+          missing = sorted(required - remote_files)
+          if missing:
+              raise SystemExit(f"HF upload verification failed; missing: {missing}")
+
+          local_manifest = (bundle / f"releases/v{version}/manifest.json").read_text(
+              encoding="utf-8"
+          )
+          remote_manifest_path = hf_hub_download(
+              repo_id=repo_id,
+              repo_type="dataset",
+              filename=f"releases/v{version}/manifest.json",
+              token=os.environ["HF_TOKEN"],
+          )
+          remote_manifest = Path(remote_manifest_path).read_text(encoding="utf-8")
+          if remote_manifest != local_manifest:
+              raise SystemExit("HF upload verification failed; remote manifest differs")
+          print(f"Uploaded GEODE v{version} release bundle to hf://datasets/{repo_id}")
+          PY

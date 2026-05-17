@@ -70,12 +70,6 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         description="Show interactive mode help",
         handler_path="core.cli.commands:show_help",
     ),
-    "/list": CommandSpec(
-        name="/list",
-        location=RunLocation.THIN,
-        description="List available IPs",
-        handler_path="plugins.game_ip.cli.commands:cmd_list",
-    ),
     "/login": CommandSpec(
         name="/login",
         location=RunLocation.THIN,

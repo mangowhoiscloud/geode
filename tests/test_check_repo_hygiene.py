@@ -71,3 +71,12 @@ def test_excluded_paths_ignored(tmp_path: Path) -> None:
     (git_dir / "broken").symlink_to("nonexistent")
     result = run_check(tmp_path)
     assert result.returncode == 0, result.stderr
+
+
+def test_release_venv_symlinks_ignored(tmp_path: Path) -> None:
+    release_bin = tmp_path / ".release-venv" / "bin"
+    release_bin.mkdir(parents=True)
+    (release_bin / "python3.12").symlink_to("/usr/bin/python3")
+
+    result = run_check(tmp_path)
+    assert result.returncode == 0, result.stderr

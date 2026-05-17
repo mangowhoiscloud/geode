@@ -1,4 +1,4 @@
-"""Calibration: Ground Truth comparison for GEODE evaluation pipeline.
+"""Calibration: Ground Truth comparison for domain evaluation pipelines.
 
 Compares pipeline output against expert-annotated Golden Set reference scores.
 Calculates per-axis agreement, tier match, cause classification match,
@@ -56,10 +56,9 @@ _EVALUATOR_AXIS_COUNTS: dict[str, int] = {
     "community_momentum": 3,
 }
 
-# Default golden set path
-_GOLDEN_SET_PATH = (
-    Path(__file__).parent.parent.parent / "plugins" / "game_ip" / "fixtures" / "_golden_set.json"
-)
+# GEODE core ships no domain golden set. Domain plugins should pass an
+# explicit path to ``load_golden_set``.
+_GOLDEN_SET_PATH: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +76,8 @@ def load_golden_set(path: Path | None = None) -> dict[str, Any]:
         FileNotFoundError: If golden set file does not exist.
     """
     gs_path = path or _GOLDEN_SET_PATH
+    if gs_path is None:
+        raise FileNotFoundError("Golden set path not configured; pass a domain fixture path")
     if not gs_path.exists():
         raise FileNotFoundError(f"Golden set not found: {gs_path}")
     return cast(dict[str, Any], json.loads(gs_path.read_text(encoding="utf-8")))
@@ -329,16 +330,16 @@ def run_calibration(
     states: list[GeodeState],
     golden_set_path: Path | None = None,
 ) -> CalibrationReport:
-    """Run calibration across multiple IP pipeline outputs.
+    """Run calibration across multiple pipeline outputs.
 
     Batch wrapper around run_calibration_check() for regression testing.
 
     Args:
-        states: List of pipeline states (one per IP).
+        states: List of pipeline states (one per subject).
         golden_set_path: Optional path to golden set JSON.
 
     Returns:
-        CalibrationReport with per-IP results and aggregate score.
+        CalibrationReport with per-subject results and aggregate score.
     """
     golden_set = load_golden_set(golden_set_path)
     results: list[CalibrationResult] = []

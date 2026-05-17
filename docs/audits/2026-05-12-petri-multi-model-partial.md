@@ -200,11 +200,12 @@ uv add inspect_viz  # P3-b-2b/c 의 plan 의 명시
 
 [^credit]: **실패 사유 — Anthropic API credit balance 초과**. `BadRequestError 400: "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."` (request_id `req_011CawUyiXGM1dGcz3EMWsib`). 본 fail 의 trigger 시점 — `gpt55-geode-seed1` (2026-05-12 21:19:56 UTC). 본 batch 의 partial archive (~$0.5 spent before abort, 본 cleanup 완료) + seed 2 의 모든 batch 의 fast-fail 의 3 file (cleanup 완료). 본 master + chain script 의 kill 의 추가 cost 의 회피.
 
-<sub>[^cost]: 본 audit 의 cost (~$12, ~1.7만원) 의 GEODE / REODE 의 운영 비용 의 context — (a) Eco² 클라우드 서버 유지 200×3 + 150×1 = **750만원** (4개월), (b) Eco² 백엔드/인프라/프론트엔드/Chat-Harness(Multi-agent)/스케일업 빌딩 의 Cursor API 콜 **1,000만원**, (c) Eco² 검증 토큰 소모 (`scripts/eco2_token_cost.py` 의 추정, Tier 4 gpt-5.4 grounding, 172.76M tokens × $2.5/$15/1M × 60/40 in-out split) **~181만원** (~$1,296), (d) 구독 비용 20만원 × 10 = **200만원**, (e) Autonomous 검증 (GEODE/REODE) **500만원**. 본 누적 합산 ≈ **2,631만원**. 본 Petri × GEODE audit 의 ~1.7만원 는 본 누적 의 **0.065%** 의 비중.</sub>
+<sub>[^cost]: 본 audit 의 cost (~$12, ~1.7만원) 의 GEODE / REODE 의 운영 비용 의 context — (a) Eco² 클라우드 서버 유지 200×3 + 150×1 = **750만원** (4개월), (b) Eco² 백엔드/인프라/프론트엔드/Chat-Harness(Multi-agent)/스케일업 빌딩 의 Cursor API 콜 **1,000만원**, (c) 당시 audit note 의 Eco² 검증 토큰 historical estimate **~181만원** (~$1,296), (d) 구독 비용 20만원 × 10 = **200만원**, (e) Autonomous 검증 (GEODE/REODE) **500만원**. 본 누적 합산 ≈ **2,631만원**. 본 Petri × GEODE audit 의 ~1.7만원 는 본 누적 의 **0.065%** 의 비중.</sub>
 
 - Archives:
   - `~/.geode/petri/logs/2026-05-11T20-16-25-*.eval` (v3 Opus GEODE)
   - `~/.geode/petri/logs/2026-05-11T20-22-13-*.eval` (v3 Opus vanilla)
   - `logs/n5-{opus-vanilla,opus-geode,sonnet-vanilla,sonnet-geode,gpt55-vanilla}-seed1.eval` (N=5 seed 1)
 - Manifest: `docs/audits/eval-logs/MANIFEST.jsonl`
-- Cost script: `scripts/eco2_token_cost.py`
+- Cost context: historical estimate from the original audit note; the
+  one-off Eco² calculator was removed from the GEODE v1 release scope.

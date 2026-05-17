@@ -89,7 +89,7 @@ def build_automation(
     )
     scheduler_service.load()
 
-    # Predefined automations are domain-specific templates (game_ip).
+    # Predefined automations are domain-specific templates.
     # They require a wired callback to be useful. Without callback/action,
     # they fire as empty jobs consuming resources.
     # Registration is skipped — users can enable predefined templates

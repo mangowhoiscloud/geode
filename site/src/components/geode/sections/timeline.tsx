@@ -139,15 +139,15 @@ const chapters: Chapter[] = [
     range: "v0.63.0 → v0.65.0",
     period: "2026-04-29 → 05-02",
     accent: "line",
-    titleKo: "Plugin Split + Messages Cache",
-    titleEn: "Plugin split + messages cache",
+    titleKo: "Plugin Boundary + Messages Cache",
+    titleEn: "Plugin boundary + messages cache",
     bodyKo:
-      "v0.63 Lifecycle command suite(`/stop` `/clean` `/uninstall` `/status`). v0.64에서 Game IP 도메인을 `plugins/game_ip/`으로 분리해 \"도메인은 플러그인\" 테제의 구조적 증거를 만들었습니다. v0.65에서 Anthropic messages cache_control breakpoint(Hermes system_and_3 parity)를 도입해 멀티턴 입력 토큰 비용을 크게 낮췄습니다.",
+      "v0.63 Lifecycle command suite(`/stop` `/clean` `/uninstall` `/status`). v0.64에서 도메인 플러그인 경계를 분리해 \"도메인은 플러그인\" 테제를 검증했습니다. v0.65에서 Anthropic messages cache_control breakpoint(Hermes system_and_3 parity)를 도입해 멀티턴 입력 토큰 비용을 크게 낮췄습니다.",
     bodyEn:
-      "v0.63 added a lifecycle command suite (`/stop` `/clean` `/uninstall` `/status`). v0.64 extracted the Game IP domain into `plugins/game_ip/`, structural evidence for the \"domain is a plugin\" thesis. v0.65 introduced Anthropic messages cache_control breakpoints (Hermes system_and_3 parity), cutting multi-turn input token cost.",
+      "v0.63 added a lifecycle command suite (`/stop` `/clean` `/uninstall` `/status`). v0.64 separated the domain plugin boundary, validating the \"domain is a plugin\" thesis. v0.65 introduced Anthropic messages cache_control breakpoints (Hermes system_and_3 parity), cutting multi-turn input token cost.",
     chips: [
       { v: "v0.63.0", ko: "Lifecycle commands", en: "Lifecycle commands" },
-      { v: "v0.64.0", ko: "plugins/game_ip 분리", en: "plugins/game_ip extracted" },
+      { v: "v0.64.0", ko: "도메인 플러그인 경계", en: "Domain plugin boundary" },
       { v: "v0.65.0", ko: "Messages cache_control", en: "Messages cache_control" },
     ],
   },

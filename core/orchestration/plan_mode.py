@@ -251,7 +251,7 @@ class PlanMode:
         """Create an analysis plan from a template.
 
         Args:
-            ip_name: Target IP name.
+            ip_name: Target subject name.
             template: Plan template name (full_pipeline, prospect).
             plan_id: Optional custom plan ID.
 

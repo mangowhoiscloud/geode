@@ -13,14 +13,16 @@ Usage:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 LEGACY_PATTERNS: list[tuple[str, str]] = [
-    (r"from core\.nodes\b", "core.domains.game_ip.nodes"),
-    (r"import core\.nodes\b", "core.domains.game_ip.nodes"),
-    (r"from core\.fixtures\b", "core.domains.game_ip.fixtures"),
-    (r"import core\.fixtures\b", "core.domains.game_ip.fixtures"),
+    (r"from core\.nodes\b", "external domain plugin nodes"),
+    (r"import core\.nodes\b", "external domain plugin nodes"),
+    (r"from core\.fixtures\b", "external domain plugin fixtures"),
+    (r"import core\.fixtures\b", "external domain plugin fixtures"),
     # v0.52 — directional flip: ui와 auth가 top-level로 승격되어 cli.ui /
     # gateway.auth 가 이제 legacy. 새 위치를 권장.
     (r"from core\.cli\.ui\b", "core.ui"),
@@ -105,21 +107,24 @@ def main() -> int:
         if idx + 1 < len(sys.argv):
             base = sys.argv[idx + 1]
 
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("git executable not found")
+
+    result = subprocess.run(  # noqa: S603 - fixed git command; only base ref is user-provided.
+        [git, "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD"],
         capture_output=True,
+        check=False,
         text=True,
     )
     changed = [
-        f
-        for f in result.stdout.strip().split("\n")
-        if f.endswith(".py") and f not in EXEMPT_FILES
+        f for f in result.stdout.strip().split("\n") if f.endswith(".py") and f not in EXEMPT_FILES
     ]
 
     violations: list[str] = []
     for filepath in changed:
         try:
-            content = open(filepath, encoding="utf-8").read()  # noqa: SIM115
+            content = Path(filepath).read_text(encoding="utf-8")
         except FileNotFoundError:
             continue
         for i, line in enumerate(content.split("\n"), 1):

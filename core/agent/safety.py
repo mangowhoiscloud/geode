@@ -10,9 +10,6 @@ from __future__ import annotations
 # Read-only tools — safe for sub-agent auto-approval
 SAFE_TOOLS: frozenset[str] = frozenset(
     {
-        "list_ips",
-        "search_ips",
-        "show_help",
         "check_status",
         "memory_search",
         "manage_rule",
@@ -59,9 +56,6 @@ WRITE_TOOLS: frozenset[str] = frozenset(
 
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {
-    "analyze_ip": 1.50,
-    "batch_analyze": 5.00,
-    "compare_ips": 3.00,
     # Petri audit — conservative ceiling. Real estimate is rendered by
     # ``plugins.petri_audit.runner.estimate_cost_usd`` and shown next to
     # the [Y/n] prompt; this number only needs to flip the gate on.

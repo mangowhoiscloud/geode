@@ -16,6 +16,7 @@ from core.cli.cmd_lifecycle import (
     _scan_file,
     do_clean,
     do_uninstall,
+    do_update,
     show_status,
     stop_serve,
 )
@@ -239,6 +240,81 @@ class TestClean:
             do_clean(scope="build", force=True)
 
         assert not mypy.exists()
+
+
+# ---------------------------------------------------------------------------
+# geode update
+# ---------------------------------------------------------------------------
+
+
+class TestUpdate:
+    @patch("core.cli.cmd_lifecycle._start_serve_background")
+    @patch("core.cli.cmd_lifecycle.stop_serve")
+    @patch("core.cli.cmd_lifecycle._run_update_step", return_value=True)
+    @patch("core.cli.ipc_client.is_serve_running", return_value=False)
+    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=False)
+    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    def test_runs_expected_steps(
+        self,
+        mock_root: MagicMock,
+        mock_dirty: MagicMock,
+        mock_running: MagicMock,
+        mock_step: MagicMock,
+        mock_stop: MagicMock,
+        mock_start: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_root.return_value = tmp_path
+
+        assert do_update(force=False, dry_run=False, restart=True)
+
+        commands = [call.args[1] for call in mock_step.call_args_list]
+        assert commands == [
+            ["git", "pull", "--ff-only"],
+            ["uv", "sync"],
+            ["uv", "tool", "install", "-e", ".", "--force"],
+            ["geode", "version"],
+        ]
+        mock_stop.assert_not_called()
+        mock_start.assert_not_called()
+
+    @patch("core.cli.cmd_lifecycle._run_update_step")
+    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=True)
+    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    def test_dirty_checkout_requires_force(
+        self,
+        mock_root: MagicMock,
+        mock_dirty: MagicMock,
+        mock_step: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_root.return_value = tmp_path
+
+        assert not do_update(force=False)
+        mock_step.assert_not_called()
+
+    @patch("core.cli.cmd_lifecycle._start_serve_background", return_value=True)
+    @patch("core.cli.cmd_lifecycle.stop_serve")
+    @patch("core.cli.cmd_lifecycle._run_update_step", return_value=True)
+    @patch("core.cli.ipc_client.is_serve_running", return_value=True)
+    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=False)
+    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    def test_restarts_serve_when_it_was_running(
+        self,
+        mock_root: MagicMock,
+        mock_dirty: MagicMock,
+        mock_running: MagicMock,
+        mock_step: MagicMock,
+        mock_stop: MagicMock,
+        mock_start: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        mock_root.return_value = tmp_path
+
+        assert do_update(restart=True)
+
+        mock_stop.assert_called_once_with(force=True, timeout=10)
+        mock_start.assert_called_once_with(dry_run=False)
 
 
 # ---------------------------------------------------------------------------

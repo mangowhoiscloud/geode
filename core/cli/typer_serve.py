@@ -328,7 +328,7 @@ def _build_runtime_for_serve() -> Any:
     try:
         from core.runtime import GeodeRuntime
 
-        runtime = GeodeRuntime.create("gateway", domain_name="game_ip")
+        runtime = GeodeRuntime.create("gateway")
         return runtime
     except Exception as exc:
         log.error("Failed to build runtime for serve: %s", exc, exc_info=True)

@@ -4,9 +4,7 @@ Layer 5 tools for data access:
 - CortexAnalystTool: Placeholder for Snowflake Cortex Analyst SQL
 - CortexSearchTool: Placeholder for Cortex Search semantic retrieval
 
-The fixture-backed ``QueryMonoLakeTool`` lives in
-``plugins/game_ip/tools/data_tools.py`` (game-IP-specific; reads from
-``plugins.game_ip.fixtures``).
+Domain-specific fixture/query tools live in external plugin packages.
 """
 
 from __future__ import annotations

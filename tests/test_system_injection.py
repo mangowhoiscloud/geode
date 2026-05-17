@@ -1,4 +1,4 @@
-"""Tests for core.agent.system_injection — sandwich-style context reinforcement.
+"""Tests for core.agent.system_injection — XML context reinforcement.
 
 Covers:
   1. build_system_reminder: content assembly, budget enforcement
@@ -8,6 +8,7 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 from core.agent.system_injection import (
@@ -76,11 +77,12 @@ class TestPrependSystemReminder:
 
     def test_prepends_to_empty_messages(self) -> None:
         """Injection into empty messages list."""
-        messages: list[dict] = []
+        messages: list[dict[str, Any]] = []
         result = prepend_system_reminder(messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
-        assert f"[{_REMINDER_TAG}]" in result[0]["content"]
+        assert f"<{_REMINDER_TAG}>" in result[0]["content"]
+        assert f"</{_REMINDER_TAG}>" in result[0]["content"]
 
     def test_prepends_before_user_message(self) -> None:
         """Reminder appears before the first user message."""
@@ -129,11 +131,11 @@ class TestIsSystemReminder:
     """Tests for _is_system_reminder()."""
 
     def test_detects_reminder(self) -> None:
-        msg = {"role": "user", "content": f"[{_REMINDER_TAG}]\nsome context\n[/{_REMINDER_TAG}]"}
+        msg = {"role": "user", "content": f"<{_REMINDER_TAG}>\nsome context\n</{_REMINDER_TAG}>"}
         assert _is_system_reminder(msg) is True
 
     def test_rejects_assistant(self) -> None:
-        msg = {"role": "assistant", "content": f"[{_REMINDER_TAG}]\nfoo"}
+        msg = {"role": "assistant", "content": f"<{_REMINDER_TAG}>\nfoo"}
         assert _is_system_reminder(msg) is False
 
     def test_rejects_normal_user(self) -> None:

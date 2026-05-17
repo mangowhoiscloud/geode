@@ -29,11 +29,11 @@ Usage::
 
     from core.ui.agentic_ui import render_tool_call, render_tool_result, render_tokens
 
-    render_tool_call("analyze_ip", {"ip_name": "Berserk"})
-    # ▸ analyze_ip(ip_name="Berserk")
+    render_tool_call("memory_search", {"query": "release notes"})
+    # ▸ memory_search(query="release notes")
 
-    render_tool_result("analyze_ip", {"tier": "S", "score": 81.3})
-    # ✓ analyze_ip → S (81.3)
+    render_tool_result("memory_search", {"count": 3})
+    # ✓ memory_search → 3 results
 
     render_tokens(model="claude-opus-4-6", input_tokens=1200, output_tokens=350, elapsed_s=2.1)
     # ✢ claude-opus-4-6 · ↓1.2k ↑350 · 2.1s

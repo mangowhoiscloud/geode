@@ -3,7 +3,6 @@
 Architecture (OpenClaw-inspired):
   /command  → commands.py (Binding Router: deterministic dispatch)
   free-text → agentic_loop.py (AgenticLoop: multi-turn tool_use loop)
-              → search.py (IP Search Engine: keyword matching)
 
 This module is the slim Typer entry point. Internal helpers and the
 heavyweight ``init``/``serve`` commands live in sibling modules
@@ -32,13 +31,6 @@ from core import __version__
 from core.cli.dispatcher import _handle_command as _handle_command
 from core.cli.interactive_loop import _drain_scheduler_queue as _drain_scheduler_queue
 from core.cli.interactive_loop import _render_ipc_response as _render_ipc_response
-from core.cli.pipeline_executor import _build_initial_state as _build_initial_state
-from core.cli.pipeline_executor import _execute_pipeline as _execute_pipeline
-from core.cli.pipeline_executor import _execute_pipeline_streaming as _execute_pipeline_streaming
-from core.cli.pipeline_executor import _render_result as _render_result
-from core.cli.pipeline_executor import _render_verification as _render_verification
-from core.cli.pipeline_executor import _resolve_ip_name as _resolve_ip_name
-from core.cli.pipeline_executor import _run_analysis as _run_analysis
 from core.cli.prompt_session import _build_prompt_session as _build_prompt_session
 from core.cli.prompt_session import _drain_stdin as _drain_stdin
 from core.cli.prompt_session import _force_select_event_loop as _force_select_event_loop
@@ -58,10 +50,8 @@ from core.cli.report_renderer import (
 from core.cli.report_renderer import (
     _state_to_report_dict as _state_to_report_dict,
 )
-from core.cli.search_render import _render_search_results as _render_search_results
 from core.cli.session_state import _get_last_result as _get_last_result
 from core.cli.session_state import _get_readiness as _get_readiness
-from core.cli.session_state import _get_search_engine as _get_search_engine
 from core.cli.session_state import _result_cache as _result_cache
 from core.cli.session_state import _ResultCache as _ResultCache
 from core.cli.session_state import _scheduler_service_ctx as _scheduler_service_ctx
@@ -72,14 +62,11 @@ from core.cli.tool_handlers import (
 )
 from core.cli.typer_commands import (
     about,
-    analyze,
-    batch,
     doctor,
     history,
-    list_ips,
-    report,
-    search,
     setup,
+    uninstall,
+    update,
     version,
 )
 from core.cli.typer_init import _ensure_gitignore_entry as _ensure_gitignore_entry
@@ -345,15 +332,12 @@ app.add_typer(skill_app, name="skill")
 # Functions live in sibling modules; we apply Typer decorators here so
 # the package ``__init__`` remains the canonical Typer entry point.
 
-app.command()(analyze)
-app.command()(report)
-app.command()(search)
 app.command()(version)
 app.command()(about)
 app.command()(setup)
 app.command()(doctor)
-app.command(name="list")(list_ips)
-app.command()(batch)
+app.command()(update)
+app.command()(uninstall)
 app.command()(init)
 app.command()(history)
 app.command()(serve)

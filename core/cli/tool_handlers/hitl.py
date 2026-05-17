@@ -18,69 +18,69 @@ def _build_hitl_handlers() -> dict[str, Any]:
     _result_feedback: dict[str, str] = {}
 
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
-        ip_name = kwargs.get("ip_name", "")
+        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
         rating = kwargs.get("rating", 0)
-        if not ip_name:
-            return _clarify("rate_result", ["ip_name"], "어떤 IP에 평점을 매길까요?")
+        if not subject:
+            return _clarify("rate_result", ["subject"], "어떤 대상에 평점을 매길까요?")
         if not (1 <= rating <= 5):
             return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
         comment = kwargs.get("comment", "")
-        _human_ratings[ip_name] = {
+        _human_ratings[subject] = {
             "rating": rating,
             "comment": comment,
         }
-        console.print(f"  [success]✓ Rating saved for {ip_name}: {rating}/5[/success]")
+        console.print(f"  [success]✓ Rating saved for {subject}: {rating}/5[/success]")
         log.info(
             "HITL rating: %s = %d/5",
-            ip_name,
+            subject,
             rating,
         )
         return {
             "status": "ok",
             "action": "rate_result",
-            "ip_name": ip_name,
+            "subject": subject,
             "rating": rating,
         }
 
     def handle_accept_result(**kwargs: Any) -> dict[str, Any]:
-        ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("accept_result", ["ip_name"], "어떤 IP 결과를 수락할까요?")
-        _result_feedback[ip_name] = "accepted"
-        console.print(f"  [success]✓ Result accepted: {ip_name}[/success]")
-        log.info("HITL accept: %s", ip_name)
+        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        if not subject:
+            return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
+        _result_feedback[subject] = "accepted"
+        console.print(f"  [success]✓ Result accepted: {subject}[/success]")
+        log.info("HITL accept: %s", subject)
         return {
             "status": "ok",
             "action": "accept_result",
-            "ip_name": ip_name,
+            "subject": subject,
         }
 
     def handle_reject_result(**kwargs: Any) -> dict[str, Any]:
-        ip_name = kwargs.get("ip_name", "")
-        if not ip_name:
-            return _clarify("reject_result", ["ip_name"], "어떤 IP 결과를 거부할까요?")
+        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        if not subject:
+            return _clarify("reject_result", ["subject"], "어떤 결과를 거부할까요?")
         reason = kwargs.get("reason", "")
-        _result_feedback[ip_name] = "rejected"
-        console.print(f"  [warning]✗ Result rejected: {ip_name}[/warning]")
+        _result_feedback[subject] = "rejected"
+        console.print(f"  [warning]✗ Result rejected: {subject}[/warning]")
         log.info(
             "HITL reject: %s (reason=%s)",
-            ip_name,
+            subject,
             reason or "(none)",
         )
         return {
             "status": "ok",
             "action": "reject_result",
-            "ip_name": ip_name,
+            "subject": subject,
             "reason": reason,
             "hint": ("Use rerun_node to re-execute specific pipeline steps."),
         }
 
     def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
         node_name = kwargs.get("node_name", "")
-        ip_name = kwargs.get("ip_name", "")
-        if not node_name or not ip_name:
-            missing = [k for k, v in {"node_name": node_name, "ip_name": ip_name}.items() if not v]
-            return _clarify("rerun_node", missing, "재실행할 노드와 IP를 알려주세요.")
+        subject = kwargs.get("subject") or kwargs.get("ip_name") or ""
+        if not node_name or not subject:
+            missing = [k for k, v in {"node_name": node_name, "subject": subject}.items() if not v]
+            return _clarify("rerun_node", missing, "재실행할 노드와 대상을 알려주세요.")
         # Allowlist supplied by the active domain (DomainPort v2). Empty
         # set ⇒ no rerunnable nodes for non-pipeline domains.
         from core.domains.port import get_domain_or_none
@@ -98,17 +98,17 @@ def _build_hitl_handlers() -> dict[str, Any]:
             return {
                 "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
             }
-        console.print(f"  [header]▸ Rerunning {node_name} for {ip_name}[/header]")
+        console.print(f"  [header]▸ Rerunning {node_name} for {subject}[/header]")
         log.info(
             "HITL rerun: %s for %s",
             node_name,
-            ip_name,
+            subject,
         )
         return {
             "status": "ok",
             "action": "rerun_node",
             "node_name": node_name,
-            "ip_name": ip_name,
+            "subject": subject,
             "hint": ("Node re-execution queued. Results will update in-place."),
         }
 

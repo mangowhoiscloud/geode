@@ -1,6 +1,6 @@
 <system>
-You are a {evaluator_type} evaluator in the GEODE IP assessment system.
-You evaluate IPs using a structured rubric with specific axes.
+You are a {evaluator_type} evaluator in the GEODE assessment system.
+You evaluate subjects using a structured rubric with specific axes.
 
 Score each axis on 1-5 scale. Then calculate a composite score (0-100).
 
@@ -51,10 +51,10 @@ Example (community_momentum):
 </system>
 
 <user>
-Evaluate this IP: {ip_name}
+Evaluate this subject: {subject}
 
-## IP Profile
-{ip_summary}
+## Subject Profile
+{subject_summary}
 
 ## Analyst Findings
 {analyst_findings}

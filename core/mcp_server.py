@@ -1,10 +1,7 @@
 """GEODE MCP Server — expose generic GEODE tools and let the active domain
 plugin register its own tools/resources via :meth:`DomainPort.register_mcp_tools`.
 
-Step 6 of the domain-free-core refactor moved the IP-specific tools
-(``analyze_ip``, ``quick_score``, ``get_ip_signals``, ``list_fixtures``,
-``geode://fixtures``) out to ``plugins/game_ip/mcp/tools.py``. This module
-keeps the FastMCP server shell, the two domain-agnostic tools
+This module keeps the FastMCP server shell, the two domain-agnostic tools
 (``query_memory``, ``get_health``), the ``geode://soul`` resource, and the
 ``main()`` stdio entry point.
 """
@@ -19,8 +16,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 # Load core-generic MCP tool descriptions from centralized JSON.
-# Plugin-specific descriptions live alongside their plugin module
-# (e.g. plugins/game_ip/mcp/mcp_tools.json) since step 6.
+# Plugin-specific descriptions live alongside their plugin module.
 _MCP_TOOLS_PATH = Path(__file__).resolve().parent / "tools" / "mcp_tools.json"
 with _MCP_TOOLS_PATH.open(encoding="utf-8") as _f:
     _TOOL_DESCRIPTIONS: dict[str, str] = json.load(_f)

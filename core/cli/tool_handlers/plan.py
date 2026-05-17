@@ -45,25 +45,18 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
         goal = kwargs.get("goal", "")
-        ip_name = kwargs.get("ip_name", "")
+        subject = kwargs.get("subject") or kwargs.get("ip_name", "")
         custom_steps = kwargs.get("steps", [])
         plan_summary: dict[str, Any] = {}
 
-        # IP 분석: 기존 파이프라인 템플릿 사용
-        if ip_name:
-            template = kwargs.get("template", "full_pipeline")
-            planner = PlanMode()
-            plan = planner.create_plan(ip_name, template=template)
-            plan_summary = planner.present_plan(plan)
-            plan_title = ip_name
-        elif goal:
-            # 범용 계획: LLM이 제공한 steps 또는 goal 기반 자동 생성
+        if goal or subject:
             import uuid
 
             from core.orchestration.plan_mode import AnalysisPlan, PlanStep
 
             template = "agentic"
             plan_id = f"plan_{uuid.uuid4().hex[:8]}"
+            plan_title = subject or goal
             if custom_steps:
                 steps = [
                     PlanStep(
@@ -78,15 +71,14 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 steps = [
                     PlanStep(
                         step_id="step_1",
-                        description=goal,
+                        description=goal or plan_title,
                         node_name="agentic",
                         estimated_time_s=30.0,
                     )
                 ]
-            plan = AnalysisPlan(plan_id=plan_id, ip_name=goal, steps=steps)
+            plan = AnalysisPlan(plan_id=plan_id, ip_name=plan_title, steps=steps)
             planner = PlanMode()
-            plan_summary = {"goal": goal, "steps": len(steps)}
-            plan_title = goal
+            plan_summary = {"goal": goal or plan_title, "steps": len(steps)}
         else:
             return _clarify("create_plan", ["goal"], "어떤 작업의 계획을 세울까요?")
 
@@ -109,7 +101,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         log.info(
             "Plan '%s' created for '%s' (%d steps)",
             plan.plan_id,
-            ip_name,
+            plan_title,
             plan.step_count,
         )
 
@@ -142,7 +134,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 "status": "ok",
                 "action": "plan",
                 "plan_id": plan.plan_id,
-                "ip_name": ip_name,
+                "subject": plan.ip_name,
                 "template": template,
                 "step_count": plan.step_count,
                 "steps": [s.description for s in plan.steps],
@@ -150,10 +142,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
                 "execution_mode": PlanExecutionMode.AUTO.value,
                 "auto_executed": True,
                 "execution_result": exec_result,
-                "hint": (
-                    f"Plan auto-executed. Call analyze_ip with "
-                    f"ip_name='{ip_name}' to run the full analysis."
-                ),
+                "hint": "Plan auto-executed.",
             }
 
         # MANUAL mode: persist plan and wait for user approval
@@ -167,7 +156,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "status": "ok",
             "action": "plan",
             "plan_id": plan.plan_id,
-            "ip_name": ip_name,
+            "subject": plan.ip_name,
             "template": template,
             "step_count": plan.step_count,
             "steps": [s.description for s in plan.steps],
@@ -202,7 +191,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "plan_id": plan.plan_id,
             "executed": True,
             "result": str(result)[:500],
-            "hint": (f"Plan approved. Call analyze_ip with ip_name='{ip}' to run the analysis."),
+            "hint": f"Plan approved for {ip}.",
         }
 
     def handle_reject_plan(**kwargs: Any) -> dict[str, Any]:

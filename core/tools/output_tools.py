@@ -40,7 +40,7 @@ def _save_to_vault(
 
 
 class GenerateReportTool:
-    """Tool for generating analysis reports.
+    """Tool for generating structured reports.
 
     Wraps ReportGenerator when available; returns a stub report
     structure in demo mode.
@@ -53,7 +53,7 @@ class GenerateReportTool:
     @property
     def description(self) -> str:
         return (
-            "Generate a structured analysis report for an IP evaluation. "
+            "Generate a structured analysis report for a subject evaluation. "
             "Includes executive summary, scores, and recommendations."
         )
 
@@ -62,9 +62,9 @@ class GenerateReportTool:
         return {
             "type": "object",
             "properties": {
-                "ip_name": {
+                "subject": {
                     "type": "string",
-                    "description": "IP name for the report.",
+                    "description": "Subject or title for the report.",
                 },
                 "analysis_data": {
                     "type": "object",
@@ -77,11 +77,11 @@ class GenerateReportTool:
                     "default": "markdown",
                 },
             },
-            "required": ["ip_name"],
+            "required": ["subject"],
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        ip_name: str = kwargs["ip_name"]
+        subject: str = kwargs.get("subject") or kwargs.get("ip_name") or "Untitled"
         analysis_data: dict[str, Any] = kwargs.get("analysis_data", {})
         fmt: str = kwargs.get("format", "markdown")
 
@@ -89,12 +89,13 @@ class GenerateReportTool:
         score = analysis_data.get("final_score", 0.0)
 
         report = {
-            "title": f"GEODE Analysis Report: {ip_name}",
+            "title": f"GEODE Analysis Report: {subject}",
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "format": fmt,
             "sections": {
                 "executive_summary": (
-                    f"IP '{ip_name}' evaluated as Tier {tier} with final score {score:.1f}/100."
+                    f"Subject '{subject}' evaluated as Tier {tier} "
+                    f"with final score {score:.1f}/100."
                 ),
                 "scores": analysis_data.get("subscores", {}),
                 "tier": tier,
@@ -105,7 +106,7 @@ class GenerateReportTool:
 
         # Auto-save to vault
         _save_to_vault(
-            f"analysis-{ip_name.lower().replace(' ', '-')}.json",
+            f"analysis-{subject.lower().replace(' ', '-')}.json",
             json.dumps(report, indent=2, ensure_ascii=False, default=str),
             category="research",
         )

@@ -81,7 +81,7 @@ def build_default_policies() -> PolicyChain:
         ToolPolicy(
             name="dry_run_block_llm",
             mode="dry_run",
-            denied_tools={"run_analyst", "run_evaluator", "send_notification"},
+            denied_tools={"send_notification"},
             priority=100,
         ),
         ToolPolicy(
@@ -95,45 +95,22 @@ def build_default_policies() -> PolicyChain:
 
 
 def build_default_registry() -> ToolRegistry:
-    """Build ToolRegistry with all 25 tools registered."""
+    """Build ToolRegistry with GEODE core tools registered.
+
+    Domain-specific tools, such as the former game IP analysis tools, are
+    expected to be provided by external plugin packages.
+    """
     registry = ToolRegistry()
-    # Analysis (4)
-    from plugins.game_ip.tools.analysis import (
-        ExplainScoreTool,
-        PSMCalculateTool,
-        RunAnalystTool,
-        RunEvaluatorTool,
-    )
-
-    registry.register(RunAnalystTool())
-    registry.register(RunEvaluatorTool())
-    registry.register(PSMCalculateTool())
-    registry.register(ExplainScoreTool())
-    # Data (3)
-    from plugins.game_ip.tools.data_tools import QueryMonoLakeTool
-
+    # Data (2)
     from core.tools.data_tools import CortexAnalystTool, CortexSearchTool
 
-    registry.register(QueryMonoLakeTool())
     registry.register(CortexAnalystTool())
     registry.register(CortexSearchTool())
-    # Signals (5 IP-specific + 2 generic — web_search, wanted_jobs_search)
-    from plugins.game_ip.tools.signal_tools import (
-        GoogleTrendsTool,
-        RedditSentimentTool,
-        SteamInfoTool,
-        TwitchStatsTool,
-        YouTubeSearchTool,
-    )
 
+    # Search (2)
     from core.tools.jobs import WantedJobsSearchTool
     from core.tools.web_search import WebSearchTool
 
-    registry.register(YouTubeSearchTool())
-    registry.register(RedditSentimentTool())
-    registry.register(TwitchStatsTool())
-    registry.register(SteamInfoTool())
-    registry.register(GoogleTrendsTool())
     registry.register(WebSearchTool())
     registry.register(WantedJobsSearchTool())
     # Memory (7)

@@ -41,8 +41,8 @@ export function TwoAppsSection() {
               )}
             </p>
             <div className="space-y-1.5 font-mono text-[12px] text-[var(--ink-2)] mb-4">
-              <div><span className="text-[var(--ink-3)]">location · </span>plugins/game_ip/</div>
-              <div><span className="text-[var(--ink-3)]">since · </span>v0.6.0 → v0.64.0 plugin split</div>
+              <div><span className="text-[var(--ink-3)]">location · </span>external domain package</div>
+              <div><span className="text-[var(--ink-3)]">status · </span>split from GEODE core in v0.99.11</div>
               <div><span className="text-[var(--ink-3)]">fixtures · </span>3 (Berserk / Cowboy Bebop / Ghost in the Shell)</div>
             </div>
             <div className="rounded border border-[var(--rule)] bg-[var(--code-bg)] p-3 font-mono text-[11.5px] space-y-1">

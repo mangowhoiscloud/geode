@@ -1,7 +1,7 @@
 """Signal & Search & Memory Ports — abstract interfaces for external data.
 
 Defines contracts for:
-- SignalEnrichmentPort: live signals (YouTube, Reddit, etc)
+- SignalEnrichmentPort: live domain signals
 - WebSearchPort: web search queries
 - KGMemoryPort: knowledge graph memory operations
 """
@@ -15,12 +15,11 @@ from typing import Any, Protocol, runtime_checkable
 class SignalEnrichmentPort(Protocol):
     """Async-only port for external signal enrichment."""
 
-    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
-        """Fetch enrichment signals for an IP.
+    async def afetch_signals(self, subject: str) -> dict[str, Any]:
+        """Fetch enrichment signals for a subject.
 
-        Returns dict with standard signal keys:
-            youtube_views, reddit_subscribers, fan_art_yoy_pct,
-            twitch_hours_monthly, google_trends_index, twitter_mentions
+        Signal keys are domain-defined; GEODE core treats the payload as
+        structured evidence without imposing a domain schema.
         """
         ...
 

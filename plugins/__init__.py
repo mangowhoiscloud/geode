@@ -1,14 +1,6 @@
-"""GEODE plugin namespace — domain-specific extensions outside the core scaffold.
+"""GEODE plugin namespace.
 
-Plugins live alongside `core/` rather than under it so the core scaffold
-(general-purpose autonomous agent runtime) can evolve independently from
-domain-specific code (game IP scoring, future research domains, etc.).
-
-Each plugin is registered through ``core.domains.loader._DOMAIN_REGISTRY``
-which maps a domain name to the importable adapter class.
-
-Current plugins:
-- ``plugins.game_ip`` — Game IP scoring domain (fixtures: Berserk, Cowboy
-  Bebop, Ghost in the Shell). Originally lived at ``core/domains/game_ip/``;
-  relocated in v0.64.0 per the plugin separation cycle.
+GEODE core ships only domain-neutral runtime code plus first-party auxiliary
+plugins such as Petri audit. Domain analysis plugins are distributed outside
+the core package and may self-register through ``core.domains.loader``.
 """

@@ -127,7 +127,7 @@ export default function Page() {
               </li>
               <li>
                 <strong>Cause-Action 결정 트리</strong>. 6 cause → 5 action이
-                <code>plugins/game_ip/nodes/synthesizer.py</code>에 있습니다. 도메인 플러그인 가능.
+                외부 도메인 플러그인에서 제공됩니다. 코어는 런타임 경계만 유지합니다.
               </li>
               <li>
                 <strong>Golden Set 기반 캘리브레이션</strong>.
@@ -339,8 +339,8 @@ export default function Page() {
               </li>
               <li>
                 <strong>Cause-Action decision tree</strong> — 6 causes →
-                5 actions in <code>plugins/game_ip/nodes/synthesizer.py</code>.
-                Domain-pluggable.
+                5 actions supplied by external domain plugins. Core keeps the
+                runtime boundary only.
               </li>
               <li>
                 <strong>Calibration via Golden Set</strong> —

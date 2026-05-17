@@ -141,12 +141,12 @@ class TestCategoryMembership:
 
     def test_discovery_tools(self) -> None:
         m = self._category_map()
-        for name in ("list_ips", "search_ips", "check_status", "show_help"):
+        for name in ("check_status", "show_help"):
             assert m.get(name) == "discovery", f"{name} should be discovery"
 
     def test_analysis_tools(self) -> None:
         m = self._category_map()
-        for name in ("analyze_ip", "compare_ips", "batch_analyze", "generate_report"):
+        for name in ("generate_report", "accept_result"):
             assert m.get(name) == "analysis", f"{name} should be analysis"
 
     def test_memory_tools(self) -> None:
@@ -188,8 +188,6 @@ class TestCostTierMembership:
     def test_free_tools(self) -> None:
         m = self._tier_map()
         for name in (
-            "list_ips",
-            "search_ips",
             "check_status",
             "show_help",
             "memory_search",
@@ -219,7 +217,7 @@ class TestCostTierMembership:
 
     def test_expensive_tools(self) -> None:
         m = self._tier_map()
-        for name in ("analyze_ip", "compare_ips", "batch_analyze", "generate_report"):
+        for name in ("petri_audit", "eval_dspy_optimize"):
             assert m.get(name) == "expensive", f"{name} should be expensive"
 
 

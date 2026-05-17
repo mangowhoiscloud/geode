@@ -24,12 +24,8 @@ from core.cli.commands import (
     show_help,
 )
 from core.cli.onboarding import render_readiness
-from core.cli.pipeline_executor import _run_analysis
-from core.cli.report_renderer import _generate_report, _parse_report_args
-from core.cli.search_render import _render_search_results
 from core.cli.session_state import (
     _get_readiness,
-    _get_search_engine,
     _scheduler_service_ctx,
 )
 from core.ui.console import console
@@ -45,8 +41,6 @@ def _handle_command(
     mcp_manager: Any = None,
 ) -> tuple[bool, bool, Any]:
     """Handle a slash command. Returns (should_break, new_verbose, resume_state)."""
-    from core.cli._helpers import parse_dry_run_flag
-
     action = resolve_action(cmd)
 
     if action == "quit":
@@ -62,37 +56,11 @@ def _handle_command(
         from core.cli.commands import cmd_cost
 
         cmd_cost(args)
-    elif action == "list":
-        from plugins.game_ip.cli.commands import cmd_list
-
-        cmd_list()
     elif action == "verbose":
         verbose = not verbose
         state = "[success]ON[/success]" if verbose else "[muted]OFF[/muted]"
         console.print(f"  Verbose: {state}")
         console.print()
-    elif action in ("analyze", "run"):
-        # Default: live LLM. Dry-run only when no API key or explicitly requested.
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        # Support "--dry-run" flag in slash command args
-        dry_flag, args = parse_dry_run_flag(args)
-        if dry_flag:
-            force_dry = True
-        if force_dry and readiness is not None and not readiness.force_dry_run:
-            console.print("  [info]Dry-run mode (explicitly requested)[/info]")
-        elif force_dry:
-            console.print("  [warning]API key not configured — forcing dry-run mode[/warning]")
-        if not args:
-            console.print(f"  [warning]Usage: /{action} <IP name>[/warning]")
-        else:
-            _run_analysis(args, dry_run=force_dry, verbose=verbose)
-    elif action == "search":
-        if not args:
-            console.print("  [warning]Usage: /search <query>[/warning]")
-        else:
-            results = _get_search_engine().search(args)
-            _render_search_results(args, results)
     elif action == "key":
         changed = cmd_key(args)
         if changed:
@@ -107,45 +75,6 @@ def _handle_command(
         cmd_login(args)
     elif action == "petri":
         cmd_petri(args)
-    elif action == "generate":
-        from plugins.game_ip.cli.commands import cmd_generate
-
-        cmd_generate(args)
-    elif action == "report":
-        if not args:
-            console.print(
-                "  [warning]Usage: /report <IP name>"
-                " [html|json|md] [summary|detailed|executive][/warning]"
-            )
-        else:
-            dry_flag, clean_args = parse_dry_run_flag(args)
-            report_args = _parse_report_args(clean_args.split())
-            readiness = _get_readiness()
-            report_dry = readiness.force_dry_run if readiness else True
-            if dry_flag:
-                report_dry = True
-            _generate_report(
-                report_args["ip_name"],
-                fmt=report_args["fmt"],
-                template=report_args["template"],
-                dry_run=report_dry,
-                verbose=verbose,
-                skill_registry=skill_registry,
-            )
-    elif action == "batch":
-        from plugins.game_ip.cli.commands import cmd_batch
-
-        readiness = _get_readiness()
-        force_dry = readiness.force_dry_run if readiness else True
-        dry_flag, args = parse_dry_run_flag(args)
-        if dry_flag:
-            force_dry = True
-        cmd_batch(
-            args,
-            run_fn=_run_analysis,
-            dry_run=force_dry,
-            verbose=verbose,
-        )
     elif action == "schedule":
         cmd_schedule(args, scheduler_service=_scheduler_service_ctx.get(None))
     elif action == "trigger":
@@ -171,7 +100,7 @@ def _handle_command(
 
         domain = get_domain_or_none()
         fixture_count = len(domain.list_fixtures()) if domain is not None else 0
-        console.print(f"  Fixtures: [bold]{fixture_count} IPs[/bold]")
+        console.print(f"  Domain fixtures: [bold]{fixture_count}[/bold]")
 
         # MCP status section
         _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}
@@ -194,24 +123,6 @@ def _handle_command(
             from core.cli.cmd_lifecycle import show_status
 
             show_status()
-    elif action == "compare":
-        parts = args.strip().split()
-        if len(parts) < 2:
-            console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
-        else:
-            dry_flag, _clean_compare = parse_dry_run_flag(args)
-            clean_parts = [p for p in parts if p not in ("--dry-run", "--dry_run")]
-            if len(clean_parts) < 2:
-                console.print("  [warning]Usage: /compare <IP_A> <IP_B>[/warning]")
-            else:
-                ip_a, ip_b = clean_parts[0], clean_parts[1]
-                console.print(f"\n  [header]Compare: {ip_a} vs {ip_b}[/header]\n")
-                readiness = _get_readiness()
-                force_dry = readiness.force_dry_run if readiness else True
-                if dry_flag:
-                    force_dry = True
-                _run_analysis(ip_a, dry_run=force_dry, verbose=verbose)
-                _run_analysis(ip_b, dry_run=force_dry, verbose=verbose)
     elif action == "mcp":
         cmd_mcp(args, mcp_manager=mcp_manager)
     elif action == "skills":

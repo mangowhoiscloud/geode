@@ -44,28 +44,19 @@ geode
 # One-shot natural language
 geode "summarize the latest AI research trends"
 
-# Game IP plugin (dry-run, no API calls — uses fixtures)
-geode analyze "Cowboy Bebop" --dry-run
-# → A (68.4) — undermarketed
-
-# Game IP plugin (full run, requires API keys)
-geode analyze "Berserk" --verbose
-
 # Daemon mode (long-running, IPC-served)
 geode serve`}</pre>
 
             <h2>방금 일어난 일</h2>
             <p>
-              <code>geode analyze ... --dry-run</code>을 실행하면 픽스처 세트에서
-              모킹된 LLM 응답으로 파이프라인이 모든 단계를 거칩니다.
+              <code>geode</code>를 실행하면 thin CLI가 serve daemon에 연결되고,
+              자연어 요청은 AgenticLoop를 통해 tool/MCP/skill 경로로 처리됩니다.
             </p>
             <ol>
-              <li><code>plugins/game_ip/fixtures/</code>에서 IP 프로필 로드</li>
-              <li>4개 Analyst를 병렬 실행 (game_mechanics, player_experience, growth_potential, discovery)</li>
-              <li>3개 Evaluator가 점수화 (quality_judge, hidden_value, community_momentum)</li>
-              <li>BiasBuster가 6종 편향 검사로 검증</li>
-              <li>Synthesizer가 원인 잠금형 권고안을 생성</li>
-              <li>PSM 점수 산정 (ATT, Z, Gamma)으로 최종 tier 산출</li>
+              <li>serve daemon 자동 기동 또는 기존 daemon 재사용</li>
+              <li>프로젝트/사용자 memory, MCP, skill registry 초기화</li>
+              <li>LLM provider routing과 tool registry 연결</li>
+              <li>대화 세션과 실행 로그를 지속 저장</li>
             </ol>
 
             <h2>다음 단계</h2>
@@ -73,7 +64,6 @@ geode serve`}</pre>
               <li><a href="/geode/docs/architecture/overview">4-계층 스택</a>. 코드베이스가 어떻게 구성되어 있는지 확인합니다.</li>
               <li><a href="/geode/docs/architecture/system-index">시스템 색인</a>. 모든 서브시스템과 파일 경로를 정리합니다.</li>
               <li><a href="/geode/docs/runtime/llm/prompt-system">프롬프트 시스템</a>. 프롬프트 어셈블리 파이프라인을 살펴봅니다.</li>
-              <li><a href="/geode/docs/plugins/game-ip">Game IP 플러그인</a>. analyze 명령이 실제로 무엇을 하는지 보여줍니다.</li>
             </ul>
           </>
         }
@@ -110,28 +100,20 @@ geode
 # One-shot natural language
 geode "summarize the latest AI research trends"
 
-# Game IP plugin (dry-run, no API calls — uses fixtures)
-geode analyze "Cowboy Bebop" --dry-run
-# → A (68.4) — undermarketed
-
-# Game IP plugin (full run, requires API keys)
-geode analyze "Berserk" --verbose
-
 # Daemon mode (long-running, IPC-served)
 geode serve`}</pre>
 
             <h2>What just happened</h2>
             <p>
-              On <code>geode analyze ... --dry-run</code> the pipeline went through
-              every stage with mocked LLM responses from the fixture set:
+              Running <code>geode</code> connects the thin CLI to the serve daemon,
+              then natural-language requests flow through AgenticLoop, tools,
+              MCP, and skills.
             </p>
             <ol>
-              <li>Load IP profile from <code>plugins/game_ip/fixtures/</code></li>
-              <li>4 Analysts run in parallel (game_mechanics, player_experience, growth_potential, discovery)</li>
-              <li>3 Evaluators score (quality_judge, hidden_value, community_momentum)</li>
-              <li>BiasBuster validates with 6 bias checks</li>
-              <li>Synthesizer produces the cause-locked recommendation</li>
-              <li>PSM scoring (ATT, Z, Gamma) projects the final tier</li>
+              <li>Auto-start or reuse the serve daemon</li>
+              <li>Initialize project/user memory, MCP, and the skill registry</li>
+              <li>Wire LLM provider routing and the tool registry</li>
+              <li>Persist conversation state and execution logs</li>
             </ol>
 
             <h2>Next</h2>
@@ -139,7 +121,6 @@ geode serve`}</pre>
               <li><a href="/geode/docs/architecture/overview">4-Layer Stack</a> — how the codebase is organized</li>
               <li><a href="/geode/docs/architecture/system-index">System Index</a> — every subsystem with file paths</li>
               <li><a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a> — the prompt assembly pipeline</li>
-              <li><a href="/geode/docs/plugins/game-ip">Game IP Plugin</a> — what the analyze command does</li>
             </ul>
           </>
         }

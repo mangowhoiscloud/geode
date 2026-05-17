@@ -48,10 +48,9 @@ class TestErrorRecoveryStrategy:
     def executor(self) -> ToolExecutor:
         """Executor with multiple handlers for testing alternatives."""
         handlers: dict[str, Any] = {
-            "list_ips": MagicMock(return_value={"status": "ok", "ips": []}),
-            "search_ips": MagicMock(return_value={"status": "ok", "results": []}),
-            "analyze_ip": MagicMock(return_value={"status": "ok", "tier": "S"}),
+            "check_status": MagicMock(return_value={"status": "ok"}),
             "show_help": MagicMock(return_value={"status": "ok"}),
+            "petri_audit": MagicMock(return_value={"status": "ok"}),
         }
         return ToolExecutor(action_handlers=handlers, auto_approve=True)
 
@@ -62,7 +61,7 @@ class TestErrorRecoveryStrategy:
 
     def test_retry_success(self, strategy: ErrorRecoveryStrategy) -> None:
         """1st failure → retry succeeds → recovery OK."""
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=1)
+        result = _run_recovery(strategy, "check_status", {}, failure_count=1)
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.RETRY
         assert len(result.attempts) == 1
@@ -71,50 +70,46 @@ class TestErrorRecoveryStrategy:
     def test_arecover_uses_async_executor_path(self) -> None:
         """Async recovery dispatches through ToolExecutor.aexecute()."""
 
-        async def async_list_ips(**_kwargs: Any) -> dict[str, Any]:
-            return {"status": "ok", "ips": []}
+        async def async_check_status(**_kwargs: Any) -> dict[str, Any]:
+            return {"status": "ok"}
 
         executor = ToolExecutor(
-            action_handlers={"list_ips": async_list_ips},
+            action_handlers={"check_status": async_check_status},
             auto_approve=True,
         )
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
         assert not hasattr(executor, "execute")
-        result = asyncio.run(strategy.arecover("list_ips", {}, failure_count=1))
+        result = asyncio.run(strategy.arecover("check_status", {}, failure_count=1))
 
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.RETRY
 
     def test_retry_failure_then_alternative(self, executor: ToolExecutor) -> None:
         """retry fails → alternative tool (same category) succeeds."""
-        # list_ips and search_ips are both 'discovery' category
+        # check_status and show_help are both discovery category
         call_count = 0
 
-        def failing_list(**kwargs: Any) -> dict[str, Any]:
+        def failing_status(**kwargs: Any) -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             return {"error": "Connection timeout"}
 
-        executor._handlers["list_ips"] = failing_list
+        executor._handlers["check_status"] = failing_status
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
-        # retry fails (list_ips still broken), then alternative (search_ips) succeeds
+        result = _run_recovery(strategy, "check_status", {}, failure_count=2)
+        # retry fails, then alternative (show_help) succeeds
         assert result.recovered is True
         assert result.strategy_used == RecoveryStrategy.ALTERNATIVE
         assert len(result.attempts) >= 2
 
     def test_no_alternative_then_fallback(self, executor: ToolExecutor) -> None:
         """No alternative in same category → try cheaper fallback."""
-        # analyze_ip is 'analysis' category, 'expensive' tier
-        # Make analyze_ip fail
-        executor._handlers["analyze_ip"] = MagicMock(return_value={"error": "API timeout"})
-        # compare_ips would be alternative but not registered
-        # search_ips is 'discovery'/'free' — different category but cheaper
+        executor._handlers["petri_audit"] = MagicMock(return_value={"error": "API timeout"})
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = _run_recovery(strategy, "analyze_ip", {"ip_name": "Berserk"}, failure_count=2)
+        result = _run_recovery(strategy, "petri_audit", {}, failure_count=2)
         # Should try: retry (fail) → alternative (might find one or fail) → fallback/escalate
         assert len(result.attempts) >= 2
 
@@ -125,7 +120,7 @@ class TestErrorRecoveryStrategy:
             executor._handlers[name] = MagicMock(return_value={"error": "Everything is broken"})
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
 
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "check_status", {}, failure_count=2)
         assert result.recovered is False
         assert "recovery_exhausted" in result.final_result or "escalated" in result.final_result
 
@@ -135,7 +130,7 @@ class TestErrorRecoveryStrategy:
             executor._handlers[name] = MagicMock(return_value={"error": "Broken"})
         strategy = ErrorRecoveryStrategy(executor, max_recovery_attempts=2, retry_base_delay=0.0)
 
-        result = _run_recovery(strategy, "list_ips", {}, failure_count=2)
+        result = _run_recovery(strategy, "check_status", {}, failure_count=2)
         assert result.recovered is False
         assert len(result.attempts) <= 2
 
@@ -162,16 +157,16 @@ class TestErrorRecoveryStrategy:
         assert "set_api_key" in _EXCLUDED_TOOLS
         assert "manage_auth" in _EXCLUDED_TOOLS
         # Safe tools should NOT be excluded
-        assert "list_ips" not in _EXCLUDED_TOOLS
+        assert "check_status" not in _EXCLUDED_TOOLS
 
     def test_first_failure_only_retries(self, strategy: ErrorRecoveryStrategy) -> None:
         """On first failure, only retry is attempted (no alternative/fallback)."""
-        strategies = strategy._select_strategies("list_ips", failure_count=1)
+        strategies = strategy._select_strategies("check_status", failure_count=1)
         assert strategies == [RecoveryStrategy.RETRY]
 
     def test_second_failure_enables_full_chain(self, strategy: ErrorRecoveryStrategy) -> None:
         """On 2+ failures, the full chain is enabled."""
-        strategies = strategy._select_strategies("list_ips", failure_count=2)
+        strategies = strategy._select_strategies("check_status", failure_count=2)
         assert RecoveryStrategy.RETRY in strategies
         assert RecoveryStrategy.ESCALATE in strategies
 
@@ -204,15 +199,14 @@ class TestErrorRecoveryStrategy:
         """Escalate strategy always returns failure (signals HITL needed)."""
         import time
 
-        attempt = strategy._try_escalate("list_ips", {}, time.monotonic())
+        attempt = strategy._try_escalate("check_status", {}, time.monotonic())
         assert attempt.success is False
         assert attempt.result.get("escalated") is True
 
     def test_alternative_finds_same_category_tool(self, strategy: ErrorRecoveryStrategy) -> None:
         """Alternative lookup finds tools in the same category."""
-        # list_ips and search_ips are both 'discovery' category
-        alt = strategy._find_alternative("list_ips")
-        assert alt == "search_ips"
+        alt = strategy._find_alternative("check_status")
+        assert alt == "show_help"
 
     def test_alternative_skips_excluded_tools(self, executor: ToolExecutor) -> None:
         """Alternative lookup skips DANGEROUS/WRITE tools."""
@@ -225,8 +219,7 @@ class TestErrorRecoveryStrategy:
 
     def test_fallback_finds_cheaper_tier(self, strategy: ErrorRecoveryStrategy) -> None:
         """Fallback finds a cheaper tool (lower cost_tier)."""
-        # analyze_ip is 'expensive', list_ips is 'free'
-        fallback = strategy._find_fallback("analyze_ip")
+        fallback = strategy._find_fallback("petri_audit")
         assert fallback is not None
         # The fallback should be a registered tool with lower cost tier
         tool_def = strategy._tool_lookup.get(fallback, {})
@@ -234,8 +227,7 @@ class TestErrorRecoveryStrategy:
 
     def test_fallback_returns_none_for_free_tools(self, strategy: ErrorRecoveryStrategy) -> None:
         """No fallback exists for tools already at 'free' tier."""
-        # list_ips is already 'free' — can't go cheaper
-        fallback = strategy._find_fallback("list_ips")
+        fallback = strategy._find_fallback("check_status")
         assert fallback is None
 
 

@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
-
+import pytest
 from core.hooks import HookEvent, HookSystem
 from core.memory.session import InMemorySessionStore
 from core.orchestration.hot_reload import ConfigWatcher
@@ -117,46 +114,30 @@ class TestRuntimeSessionStore:
 
 
 class TestRuntimePolicyChain:
-    def test_dry_run_blocks_llm_tools(self, tmp_path: Path):
+    def test_dry_run_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
 
         full_tools = runtime.get_available_tools(mode="full_pipeline")
         dry_tools = runtime.get_available_tools(mode="dry_run")
 
-        assert "run_analyst" in full_tools
-        assert "run_evaluator" in full_tools
-        assert "psm_calculate" in full_tools
-
-        assert "run_analyst" not in dry_tools
-        assert "run_evaluator" not in dry_tools
         assert "send_notification" not in dry_tools
-        assert "psm_calculate" in dry_tools
+        assert "send_notification" not in full_tools
 
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        # 25 total minus send_notification = 24
-        assert len(tools) == 24
+        assert len(tools) == 14
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 25
-        assert "run_analyst" in runtime.tool_registry
-        assert "run_evaluator" in runtime.tool_registry
-        assert "psm_calculate" in runtime.tool_registry
+        assert len(runtime.tool_registry) == 15
         # Data tools
-        assert "query_monolake" in runtime.tool_registry
         assert "cortex_analyst" in runtime.tool_registry
         assert "cortex_search" in runtime.tool_registry
-        # Signal tools (IP-specific + generic web + Korean jobs)
-        assert "youtube_search" in runtime.tool_registry
-        assert "reddit_sentiment" in runtime.tool_registry
-        assert "twitch_stats" in runtime.tool_registry
-        assert "steam_info" in runtime.tool_registry
-        assert "google_trends" in runtime.tool_registry
+        # Search tools
         assert "web_search" in runtime.tool_registry
         assert "wanted_jobs_search" in runtime.tool_registry
         # Memory tools
@@ -176,13 +157,13 @@ class TestRuntimeToolRegistry:
 class TestRuntimeCompileGraph:
     def test_compile_without_checkpoint(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        graph = runtime.compile_graph()
-        assert graph is not None
+        with pytest.raises(RuntimeError, match="no longer ships"):
+            runtime.compile_graph()
 
     def test_compile_with_checkpoint(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        graph = runtime.compile_graph(enable_checkpoint=True)
-        assert graph is not None
+        with pytest.raises(RuntimeError, match="no longer ships"):
+            runtime.compile_graph(enable_checkpoint=True)
 
 
 class TestRunLogPruning:
@@ -196,20 +177,13 @@ class TestRunLogPruning:
 class TestDefaultBuilders:
     def test_default_policies(self):
         chain = _build_default_policies()
-        # L1-2 wired: default ProfilePolicy adds no_dangerous (priority 10)
-        # + 2 mode-based policies = 3 total (may vary if user has config)
         assert len(chain.list_policies()) >= 2
-        # dry_run blocks
-        assert chain.is_allowed("psm_calculate", mode="dry_run") is True
-        assert chain.is_allowed("run_analyst", mode="dry_run") is False
         assert chain.is_allowed("send_notification", mode="dry_run") is False
-        # full_pipeline blocks notification only
-        assert chain.is_allowed("run_analyst", mode="full_pipeline") is True
         assert chain.is_allowed("send_notification", mode="full_pipeline") is False
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 25
+        assert len(registry) == 15
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)
@@ -341,7 +315,7 @@ class TestRuntimeTaskGraph:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         assert runtime.task_graph is not None
         assert isinstance(runtime.task_graph, TaskGraph)
-        assert runtime.task_graph.task_count == 13
+        assert runtime.task_graph.task_count == 0
 
     def test_task_bridge_created(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
@@ -352,20 +326,19 @@ class TestRuntimeTaskGraph:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         health = runtime.get_health()
         assert "task_graph" in health
-        assert health["task_graph"]["total"] == 13
-        assert health["task_graph"]["is_complete"] is False
+        assert health["task_graph"]["total"] == 0
+        assert health["task_graph"]["is_complete"] is True
 
     def test_get_task_status_summary(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         status = runtime.get_task_status()
-        assert status["total_tasks"] == 13
-        assert status["is_complete"] is False
+        assert status["total_tasks"] == 0
+        assert status["is_complete"] is True
 
     def test_get_task_status_single(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         status = runtime.get_task_status("berserk_router")
-        assert status["task_id"] == "berserk_router"
-        assert status["status"] == "pending"
+        assert "error" in status
 
     def test_get_task_status_missing(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
@@ -375,24 +348,13 @@ class TestRuntimeTaskGraph:
     def test_reset_task_graph(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         old_graph = runtime.task_graph
-        # Simulate some progress
-        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
-        assert runtime.task_graph.get_task("berserk_router").status.value == "running"
 
-        # Reset — old handlers should be unregistered
         runtime.reset_task_graph()
         assert runtime.task_graph is not old_graph
-        assert runtime.task_graph.get_task("berserk_router").status.value == "pending"
-        assert runtime.task_graph.task_count == 13
-
-        # Verify no duplicate handlers: trigger event → only new graph updates
-        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
-        assert runtime.task_graph.get_task("berserk_router").status.value == "running"
-        # Old graph should NOT have been updated again (it was already running)
-        assert old_graph.get_task("berserk_router").status.value == "running"
+        assert runtime.task_graph.task_count == 0
 
     def test_hook_events_update_task_graph(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "ip_name": "berserk"})
         runtime.hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "ip_name": "berserk"})
-        assert runtime.task_graph.get_task("berserk_router").status.value == "completed"
+        assert runtime.task_graph.task_count == 0

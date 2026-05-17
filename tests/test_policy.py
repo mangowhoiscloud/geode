@@ -224,7 +224,7 @@ class TestProfilePolicy:
         assert len(policies) == 1
         assert "no_dangerous" in policies[0].name
 
-    def test_no_expensive_blocks_analysis(self):
+    def test_no_expensive_blocks_expensive_core_tools(self):
         profile = ProfilePolicy(user_id="alice", allow_expensive=False)
         policies = profile.to_policies()
         names = [p.name for p in policies]
@@ -232,8 +232,8 @@ class TestProfilePolicy:
         chain = PolicyChain()
         for p in policies:
             chain.add_policy(p)
-        assert chain.is_allowed("analyze_ip", mode="any") is False
-        assert chain.is_allowed("list_ips", mode="any") is True
+        assert chain.is_allowed("petri_audit", mode="any") is False
+        assert chain.is_allowed("memory_search", mode="any") is True
 
     def test_no_write_blocks_memory(self):
         profile = ProfilePolicy(user_id="bob", allow_write=False)
@@ -261,15 +261,15 @@ class TestProfilePolicy:
     def test_custom_denied_tools(self):
         profile = ProfilePolicy(
             user_id="eve",
-            denied_tools={"send_notification", "batch_analyze"},
+            denied_tools={"send_notification", "custom_domain_tool"},
         )
         policies = profile.to_policies()
         chain = PolicyChain()
         for p in policies:
             chain.add_policy(p)
         assert chain.is_allowed("send_notification", mode="any") is False
-        assert chain.is_allowed("batch_analyze", mode="any") is False
-        assert chain.is_allowed("list_ips", mode="any") is True
+        assert chain.is_allowed("custom_domain_tool", mode="any") is False
+        assert chain.is_allowed("memory_search", mode="any") is True
 
     def test_load_profile_nonexistent_returns_default(self):
         profile = load_profile_policy("/nonexistent/dir")
@@ -310,16 +310,15 @@ class TestOrgPolicy:
         for p in policies:
             chain.add_policy(p)
         assert chain.is_allowed("run_bash", mode="any") is False
-        assert chain.is_allowed("list_ips", mode="any") is True
+        assert chain.is_allowed("memory_search", mode="any") is True
 
     def test_org_priority_higher_than_profile(self):
         """Org policies (priority=5) override profile (priority=10)."""
-        org = OrgPolicy(org_id="team", denied_tools={"analyze_ip"})
+        org = OrgPolicy(org_id="team", denied_tools={"petri_audit"})
         profile = ProfilePolicy(user_id="alice", allow_expensive=True)
 
         chain = build_6layer_chain(profile=profile, org=org)
-        # Org blocks analyze_ip even though profile allows it
-        assert chain.is_allowed("analyze_ip", mode="any") is False
+        assert chain.is_allowed("petri_audit", mode="any") is False
 
     def test_load_org_nonexistent_returns_default(self):
         org = load_org_policy("/nonexistent/config.toml")
@@ -349,8 +348,8 @@ class TestBuild6LayerChain:
     def test_with_profile_only(self):
         profile = ProfilePolicy(user_id="x", allow_expensive=False)
         chain = build_6layer_chain(profile=profile)
-        assert chain.is_allowed("analyze_ip", mode="any") is False
-        assert chain.is_allowed("list_ips", mode="any") is True
+        assert chain.is_allowed("petri_audit", mode="any") is False
+        assert chain.is_allowed("memory_search", mode="any") is True
 
     def test_with_mode_policies(self):
         mode_policies = [
@@ -379,10 +378,9 @@ class TestBuild6LayerChain:
         chain = build_6layer_chain(profile=profile, org=org, mode_policies=mode_policies)
         # Org blocks run_bash
         assert chain.is_allowed("run_bash", mode="any") is False
-        # Profile blocks analyze_ip
-        assert chain.is_allowed("analyze_ip", mode="any") is False
+        assert chain.is_allowed("petri_audit", mode="any") is False
         # Mode blocks send_notification in dry_run only
         assert chain.is_allowed("send_notification", mode="dry_run") is False
         assert chain.is_allowed("send_notification", mode="full_pipeline") is True
         # Other tools pass
-        assert chain.is_allowed("list_ips", mode="any") is True
+        assert chain.is_allowed("memory_search", mode="any") is True

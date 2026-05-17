@@ -1,9 +1,9 @@
-"""System injection — sandwich-style context reinforcement for multi-turn conversations.
+"""System injection — XML-tagged context reinforcement for multi-turn conversations.
 
 Inspired by Claude Code's ``prependUserContext()`` pattern (utils/api.ts:449-474),
 this module builds a system reminder that is prepended to the messages array
-before each LLM call. This creates a "sandwich" where the user's messages are
-wrapped between the system prompt (above) and the system reminder (inline).
+before each LLM call. This creates a reminder layer near the active user
+message while keeping the injected content explicitly XML-delimited.
 
 Why: In long multi-turn conversations, instructions in the system prompt drift
 out of the model's attention window. The system reminder reinforces critical
@@ -87,7 +87,7 @@ def prepend_system_reminder(
     round_idx: int = 0,
     extra_context: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Prepend a system reminder to the messages list (sandwich injection).
+    """Prepend a system reminder to the messages list.
 
     Creates a user message with the system reminder and inserts it at
     position 0 of the messages list. The messages list is modified
@@ -117,7 +117,7 @@ def prepend_system_reminder(
 
     reminder_message: dict[str, Any] = {
         "role": "user",
-        "content": f"[{_REMINDER_TAG}]\n{reminder}\n[/{_REMINDER_TAG}]",
+        "content": f"<{_REMINDER_TAG}>\n{reminder}\n</{_REMINDER_TAG}>",
     }
 
     # Replace stale reminder if present (idempotent injection)
@@ -135,5 +135,5 @@ def _is_system_reminder(message: dict[str, Any]) -> bool:
         return False
     content = message.get("content", "")
     if isinstance(content, str):
-        return content.startswith(f"[{_REMINDER_TAG}]")
+        return content.startswith(f"<{_REMINDER_TAG}>")
     return False

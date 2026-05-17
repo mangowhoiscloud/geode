@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess  # nosec B404 — skill dynamic context requires shell execution
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -158,7 +159,7 @@ class SkillRegistry:
         return matches
 
     def get_context_block(self, max_chars: int = 8000) -> str:
-        """Tier 1: Format skill metadata for system prompt.
+        """Tier 1: Format skill metadata for system prompt as XML.
 
         Only name + description (not body). Progressive Disclosure:
         body is loaded on-demand when skill is invoked.
@@ -166,21 +167,26 @@ class SkillRegistry:
         if not self._skills:
             return ""
 
-        lines: list[str] = []
+        lines: list[str] = ["<available_skills>"]
         total = 0
         for skill in sorted(self._skills.values(), key=lambda s: s.name):
-            line = f"- **{skill.name}**: {skill.description[:200]}"
+            attrs = [
+                f'name="{escape(skill.name, quote=True)}"',
+                f'user_invocable="{str(skill.user_invocable).lower()}"',
+            ]
             if skill.tools:
-                line += f" (tools: {', '.join(skill.tools)})"
+                attrs.append(f'tools="{escape(", ".join(skill.tools), quote=True)}"')
             if skill.context_fork:
-                line += " [fork]"
-            if not skill.user_invocable:
-                line += " [background]"
+                attrs.append('context="fork"')
+            desc = escape(skill.description[:200])
+            line = f"  <skill {' '.join(attrs)}>{desc}</skill>"
             if total + len(line) > max_chars:
-                lines.append(f"- ... and {len(self._skills) - len(lines)} more skills")
+                remaining = len(self._skills) - (len(lines) - 1)
+                lines.append(f'  <truncated remaining="{remaining}" />')
                 break
             lines.append(line)
             total += len(line)
+        lines.append("</available_skills>")
 
         return "\n".join(lines)
 
@@ -234,7 +240,7 @@ class SkillLoader:
         dirs: list[Path] = [
             _PACKAGE_ROOT
             / ".geode"
-            / "skills",  # 1. Bundled (package source tree)  # noqa: paths-literal
+            / "skills",  # 1. Bundled (package source tree)  # paths-literal-ok
             GLOBAL_SKILLS_DIR,  # 2. User global (~/.geode/skills)
             cwd / PROJECT_SKILLS_DIR,  # 3. Project local ({cwd}/.geode/skills)
         ]

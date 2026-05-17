@@ -16,11 +16,8 @@ log = logging.getLogger(__name__)
 def build_signal_adapter() -> None:
     """Wire the active domain's signal adapter, if it has one.
 
-    Step 3 (domain-free-core): the actual MCP/Steam wiring previously
-    inlined here was relocated to ``plugins/game_ip/wiring.py`` and is
-    now reachable via ``DomainPort.build_signal_adapter``. Domains with
-    no signal sources (most future domains) simply omit the method, in
-    which case this becomes a no-op.
+    Domains with no signal sources simply omit the method, in which case
+    this becomes a no-op.
     """
     from core.domains.port import get_domain_or_none
 

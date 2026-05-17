@@ -243,13 +243,13 @@ class TestExpensiveToolSpinner:
         mock_spinner.return_value.__enter__ = MagicMock(return_value=None)
         mock_spinner.return_value.__exit__ = MagicMock(return_value=False)
 
-        handler = MagicMock(return_value={"tier": "S", "score": 85.0})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
-        _run_executor(executor, "analyze_ip", {"ip_name": "Berserk"})
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"petri_audit": handler})
+        _run_executor(executor, "petri_audit", {})
 
         mock_spinner.assert_called_once()
         label = mock_spinner.call_args[0][0]
-        assert "analyze_ip" in label
+        assert "petri_audit" in label
 
     @patch("core.agent.tool_executor._tool_spinner")
     @patch("core.agent.approval.console")
@@ -261,9 +261,9 @@ class TestExpensiveToolSpinner:
         mock_console.input.return_value = "n"
         mock_approval_console.input.return_value = "n"
 
-        handler = MagicMock(return_value={"tier": "S"})
-        executor = ToolExecutor(action_handlers={"analyze_ip": handler})
-        result = _run_executor(executor, "analyze_ip", {"ip_name": "Berserk"})
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"petri_audit": handler})
+        result = _run_executor(executor, "petri_audit", {})
 
         mock_spinner.assert_not_called()
         assert result.get("denied") is True
@@ -272,9 +272,9 @@ class TestExpensiveToolSpinner:
     @patch("core.agent.tool_executor._tool_spinner")
     def test_expensive_no_spinner_when_auto_approved(self, mock_spinner: MagicMock) -> None:
         """When auto_approve is True, expensive tools skip HITL and spinner."""
-        handler = MagicMock(return_value={"tier": "A"})
-        executor = ToolExecutor(auto_approve=True, action_handlers={"analyze_ip": handler})
-        _run_executor(executor, "analyze_ip", {"ip_name": "Test"})
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(auto_approve=True, action_handlers={"petri_audit": handler})
+        _run_executor(executor, "petri_audit", {})
 
         # auto_approve skips the cost gate entirely, so approved_via_hitl stays False
         mock_spinner.assert_not_called()
@@ -292,9 +292,9 @@ class TestNoSpinnerForSafeTools:
     @patch("core.agent.tool_executor._tool_spinner")
     def test_safe_tool_no_spinner(self, mock_spinner: MagicMock) -> None:
         """Safe tools execute without any spinner."""
-        handler = MagicMock(return_value={"ips": []})
-        executor = ToolExecutor(action_handlers={"list_ips": handler})
-        _run_executor(executor, "list_ips", {})
+        handler = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"check_status": handler})
+        _run_executor(executor, "check_status", {})
 
         mock_spinner.assert_not_called()
         handler.assert_called_once()
