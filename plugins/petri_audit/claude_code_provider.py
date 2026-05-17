@@ -74,14 +74,43 @@ __all__ = [
     "resolve_claude_oauth_token",
 ]
 
-KEYCHAIN_SERVICE = "Claude Code-credentials"
+
+def _resolve_keychain_service() -> str:
+    """Resolve the macOS keychain entry name for Anthropic OAuth.
+
+    Priority — env var ``GEODE_ANTHROPIC_KEYCHAIN_SERVICE`` (per-process
+    override) → ``[credentials.keychain] anthropic`` in
+    ``core/config/routing.toml`` → legacy default ``"Claude Code-credentials"``.
+
+    P2-C (2026-05-17): migrated from a hardcoded module-level constant
+    so users can rebind the entry name (e.g. when running multiple
+    Claude accounts side-by-side) by editing ``~/.geode/routing.toml``.
+    """
+    import os
+
+    env = os.environ.get("GEODE_ANTHROPIC_KEYCHAIN_SERVICE")
+    if env:
+        return env
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return "Claude Code-credentials"
+    return manifest.credential_keychain.services.get("anthropic", "Claude Code-credentials")
+
+
+KEYCHAIN_SERVICE = _resolve_keychain_service()
 """macOS keychain entry written by ``claude /login``. Contains the
 JSON ``{"claudeAiOauth": {"accessToken": ..., "refreshToken": ...,
 "expiresAt": ..., "scopes": [...], "subscriptionType": ..., ...}}``
 blob — the same row the CLI itself reads on startup. The
 ``subscriptionType`` field carries whichever plan the user is logged
 into (e.g. ``pro``, ``max``); the picker UI surfaces that verbatim so
-this module does not need to know the enumeration ahead of time."""
+this module does not need to know the enumeration ahead of time.
+
+P2-C: now resolved at import time via :func:`_resolve_keychain_service`
+so the env override / manifest entry / legacy default cascade applies."""
 
 _token_lock = threading.Lock()
 _warned_once = False

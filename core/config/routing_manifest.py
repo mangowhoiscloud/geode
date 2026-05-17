@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field, model_validator
 __all__ = [
     "DEFAULT_MANIFEST_PATH",
     "USER_OVERRIDE_PATH",
+    "CredentialEnvVars",
     "CredentialKeychain",
     "CredentialPatterns",
     "ModelDefaults",
@@ -156,6 +157,17 @@ class CredentialKeychain(BaseModel):
     services: dict[str, str] = Field(default_factory=dict)
 
 
+class CredentialEnvVars(BaseModel):
+    """``[credentials.env_vars]`` — provider → env var name.
+
+    Onboarding upserts the matched key into this env var. Separate
+    section (rather than a 3-tuple per pattern) so the same env var
+    can serve multiple patterns for one provider without duplication.
+    """
+
+    env_vars: dict[str, str] = Field(default_factory=dict)
+
+
 # ── Top-level manifest ─────────────────────────────────────────────────────
 
 
@@ -167,6 +179,7 @@ class RoutingManifest(BaseModel):
     routing: RoutingRules
     credential_patterns: CredentialPatterns
     credential_keychain: CredentialKeychain
+    credential_env_vars: CredentialEnvVars = Field(default_factory=CredentialEnvVars)
 
     @model_validator(mode="after")
     def _consistency(self) -> RoutingManifest:
@@ -242,6 +255,7 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
 
     patterns = CredentialPatterns(patterns=credentials_section.get("patterns", {}))
     keychain = CredentialKeychain(services=credentials_section.get("keychain", {}))
+    env_vars = CredentialEnvVars(env_vars=credentials_section.get("env_vars", {}))
 
     return RoutingManifest(
         defaults=defaults,
@@ -249,6 +263,7 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
         routing=rules,
         credential_patterns=patterns,
         credential_keychain=keychain,
+        credential_env_vars=env_vars,
     )
 
 

@@ -94,7 +94,18 @@ def test_default_manifest_credentials_keychain():
 
 def test_default_manifest_credentials_patterns():
     manifest = load_routing_manifest()
-    assert manifest.credential_patterns.patterns.get("^sk-ant-") == "anthropic"
+    # P2-C: regexes carry length quantifiers — verify by prefix match.
+    keys = list(manifest.credential_patterns.patterns)
+    anthropic_key = next(k for k in keys if k.startswith("^sk-ant-"))
+    assert manifest.credential_patterns.patterns[anthropic_key] == "anthropic"
+
+
+def test_default_manifest_credentials_env_vars():
+    """P2-C — provider → env var mapping is loaded from the manifest."""
+    manifest = load_routing_manifest()
+    assert manifest.credential_env_vars.env_vars.get("anthropic") == "ANTHROPIC_API_KEY"
+    assert manifest.credential_env_vars.env_vars.get("openai") == "OPENAI_API_KEY"
+    assert manifest.credential_env_vars.env_vars.get("glm") == "ZAI_API_KEY"
 
 
 # ── resolve_provider — legacy parity ───────────────────────────────────────
