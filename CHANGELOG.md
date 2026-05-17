@@ -52,6 +52,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **Model defaults + fallback chains migrated to routing.toml (P2-B).**
+  `core/config/__init__.py` 의 10 hardcoded 상수 (`ANTHROPIC_PRIMARY` /
+  `SECONDARY` / `BUDGET` / `FALLBACK_CHAIN` / `OPENAI_PRIMARY` /
+  `OPENAI_FALLBACK_CHAIN` / `CODEX_PRIMARY` / `CODEX_FALLBACK_CHAIN` /
+  `GLM_PRIMARY` / `GLM_FALLBACK_CHAIN`) 가 이제 P2-A 의
+  `core/config/routing.toml` 에서 lazy load. 공개 surface 그대로 — 모든
+  call site (system_prompt, approval, openai_adapter 등) 영향 0. 사용자가
+  값을 바꾸려면 `~/.geode/routing.toml` override 수정. `CODEX_BASE_URL`
+  / `GLM_BASE_URL` / `GLM_PAYG_BASE_URL` 등 endpoint 상수는 manifest 에
+  스키마가 없어 그대로 유지 — 후속에서 합칠 수도.
+
+- **Model defaults + fallback chains migrated to routing.toml (P2-B).**
+  The 10 hardcoded model constants in `core/config/__init__.py`
+  (`ANTHROPIC_PRIMARY` etc.) now load from P2-A's `core/config/
+  routing.toml`. Public surface unchanged — every call site keeps
+  working. Users override by editing `~/.geode/routing.toml`. Endpoint
+  URLs (`CODEX_BASE_URL` / `GLM_BASE_URL` / `GLM_PAYG_BASE_URL`) stay
+  hardcoded for now since the manifest does not yet schema them.
+
 ### Added
 
 - **GEODE routing manifest (P2-A) — `routing.toml` schema + loader.**

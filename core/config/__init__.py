@@ -207,32 +207,37 @@ def __getattr__(name: str) -> Any:
 # All code MUST reference these instead of hardcoding model strings.
 # ---------------------------------------------------------------------------
 
-# Anthropic models — verified 2026-04-26 against platform.claude.com.
-# v0.53.0 — chain depth reduced to 1 (primary → secondary only) per
-# fail-fast governance: deeper chains create cost surprise + unclear
-# user attribution. Quota exhaustion now surfaces a panel + stops loop.
-ANTHROPIC_PRIMARY = "claude-opus-4-7"
-ANTHROPIC_SECONDARY = "claude-sonnet-4-6"
-ANTHROPIC_BUDGET = "claude-haiku-4-5-20251001"
-ANTHROPIC_FALLBACK_CHAIN: list[str] = [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY]
+# P2-B (2026-05-17) — model defaults + fallback chains migrated to
+# core/config/routing.toml + ~/.geode/routing.toml. The constants below
+# retain their public surface (every existing call site keeps working)
+# but their values now load from the manifest; users edit routing.toml
+# to override rather than monkeypatching this module.
+#
+# Anthropic / OpenAI / Codex / GLM defaults all come from
+# ``[model.defaults]`` and fallback chains from ``[model.fallbacks.<provider>]``.
+# Base URLs and any constants the manifest does not yet model stay hardcoded.
+from core.config.routing_manifest import (  # noqa: E402
+    load_routing_manifest as _load_routing_manifest,
+)
 
-# OpenAI models — verified 2026-04-26 against developers.openai.com.
-# v0.52.4 — gpt-5.5 promoted to primary (Codex's new default model).
-# v0.53.0 — chain depth reduced to 1 (primary → next).
-OPENAI_PRIMARY = "gpt-5.5"
-OPENAI_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.4"]
+_routing = _load_routing_manifest()
+
+ANTHROPIC_PRIMARY: str = _routing.defaults.anthropic
+ANTHROPIC_SECONDARY: str = _routing.defaults.anthropic_secondary or ""
+ANTHROPIC_BUDGET: str = _routing.defaults.anthropic_budget or ""
+ANTHROPIC_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.anthropic)
+
+OPENAI_PRIMARY: str = _routing.defaults.openai
+OPENAI_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.openai)
 
 # OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API).
-# v0.52.4 — gpt-5.5 OAuth-only (developers.openai.com/codex/models).
-# v0.53.0 — chain depth reduced to 1.
-CODEX_PRIMARY = "gpt-5.5"
-CODEX_FALLBACK_CHAIN: list[str] = ["gpt-5.5", "gpt-5.3-codex"]
+CODEX_PRIMARY: str = _routing.defaults.codex
+CODEX_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.codex)
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
-# ZhipuAI (GLM) models — OpenAI-compatible API, separate provider.
-# v0.53.0 — chain depth reduced to 1 (primary → secondary).
-GLM_PRIMARY = "glm-5.1"
-GLM_FALLBACK_CHAIN: list[str] = ["glm-5.1", "glm-5"]
+# ZhipuAI (GLM) — OpenAI-compatible API, separate provider.
+GLM_PRIMARY: str = _routing.defaults.glm
+GLM_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.glm)
 # Coding Plan endpoint (subscription-billed). PAYG endpoint is api/paas/v4 — a
 # Coding Plan key called against PAYG path silently bypasses the subscription
 # quota and incurs metered billing instead.
