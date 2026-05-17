@@ -1,0 +1,21 @@
+class Geode < Formula
+  include Language::Python::Virtualenv
+
+  desc "General-purpose autonomous execution agent harness"
+  homepage "https://github.com/mangowhoiscloud/geode"
+  url "{{SDIST_URL}}"
+  sha256 "{{SDIST_SHA256}}"
+  license "Apache-2.0"
+
+  depends_on "{{PYTHON_FORMULA}}"
+
+{{RESOURCE_STANZAS}}
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    assert_match "GEODE v{{VERSION}}", shell_output("#{bin}/geode version")
+  end
+end

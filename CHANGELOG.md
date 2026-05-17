@@ -384,6 +384,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   (P1-B..G) can replace hardcoded if/elif routing with manifest
   lookups — first step of the Petri side of the routing externalisation
   plan (Petri P1 → GEODE P2 routing.toml → P3 pricing externalisation).
+### Added
+
+- **Homebrew formula renderer.** Added a release helper and formula template
+  for producing a GEODE Homebrew formula from the final GitHub release sdist
+  URL and SHA-256. The script keeps tap publication manual: resources still
+  need to be generated and audited in the tap checkout before publishing.
+- **Homebrew formula 렌더러.** 최종 GitHub release sdist URL 과 SHA-256 으로
+  GEODE Homebrew formula 를 생성하는 release helper 와 template 을 추가.
+  tap publish 는 계속 수동 단계로 유지하며, resource stanza 는 tap checkout
+  에서 생성하고 audit 한 뒤 배포해야 합니다.
 
 ## [0.99.11] — 2026-05-17
 
