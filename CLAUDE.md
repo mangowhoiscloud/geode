@@ -8,11 +8,11 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.11
+- **Version**: 0.99.13
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 322 core + 17 plugins = 339
+- **Modules**: 299 core + 28 plugins = 327
 - **Tests**: 4897 (+24 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -48,7 +48,7 @@ Production code splits into two top-level Python packages:
 - `plugins/` — first-party auxiliary plugins.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
-Key entry points: `core/agent/loop/`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
+Key entry points: `core/agent/loop/`(AgenticLoop), `core/runtime.py`(bootstrap). Domain-specific pipelines live in external plugins via `core/domains/loader.py`.
 
 ## Development
 

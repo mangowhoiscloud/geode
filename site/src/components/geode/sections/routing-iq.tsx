@@ -17,7 +17,7 @@ const features = [
     body: "PROVIDER_EQUIVALENCE map declares sibling classes (openai ↔ openai-codex, glm ↔ glm-coding). PLAN_KIND_PRIORITY ranks SUBSCRIPTION → OAUTH_BORROWED → CLOUD → PAYG. resolve_routing() scans siblings, returns first available by priority.",
     bodyKo: "PROVIDER_EQUIVALENCE 맵이 sibling 클래스 (openai ↔ openai-codex, glm ↔ glm-coding) 을 선언. PLAN_KIND_PRIORITY 가 SUBSCRIPTION → OAUTH_BORROWED → CLOUD → PAYG 순서. resolve_routing() 이 sibling 을 스캔해 우선순위 순으로 첫 가용 프로파일 반환.",
     since: "v0.52.4",
-    file: "core/auth/plans.py + core/llm/registry.py",
+    file: "core/llm/routing/plans.py + core/llm/registry.py",
   },
   {
     title: "Credential breadcrumb",

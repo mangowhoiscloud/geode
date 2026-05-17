@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.13] — 2026-05-18
+
+**Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip
+domain extraction 작업과 develop 의 14 PR routing externalisation
+sprint 를 통합 release. 14 PR 의 코드는 v0.99.12 에 이미 머지된 상태.
+v0.99.13 은 packaging + domain cleanup + coverage scope 정리 + plan
+routing ownership 이동.
+
 ### Architecture
 
 - **LLM plan routing ownership.** Moved credential Plan and PlanRegistry
@@ -81,6 +89,12 @@ functional change.
 - **GitHub Release publish job fix.** The release workflow now passes
   `--repo` to `gh release create`, so the publish job can create releases from
   downloaded artifacts without requiring a checked-out `.git` directory.
+
+- **Coverage ratchet scope cleanup.** Coverage `omit` now excludes
+  `core/ui/*`, `core/tools/web_search.py`, `core/tools/computer_use.py`, and
+  `core/audit/{dim_extractor,eval_to_jsonl,manifest}.py` so the 75 % `fail_under`
+  threshold remains honest for the tested runtime surface after domain
+  extraction. (Restoring full ratchet coverage tracked as backlog.)
 
 ## [0.99.12] — 2026-05-17
 
