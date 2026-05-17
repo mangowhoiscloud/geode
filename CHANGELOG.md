@@ -54,6 +54,24 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Changed
 
+- **Pipeline node defaults migrated to routing.toml `[nodes]` (P2-E).**
+  `core/config/__init__.py::_PIPELINE_NODE_DEFAULTS` dict (4 entry) 제거.
+  `get_node_model(node_name)` 가 project routing.toml → manifest
+  `[nodes]` 2-단계 cascade. routing_manifest 의 `RoutingManifest.nodes`
+  field 추가 (이전엔 loader 가 nodes 섹션 무시). **P2 (GEODE routing
+  externalisation) 종결** — `core/config/__init__.py` 의 hardcoded
+  routing 전부 manifest 로 위임.
+
+- **Pipeline node defaults migrated to routing.toml `[nodes]` (P2-E).**
+  Removed `_PIPELINE_NODE_DEFAULTS` (4 entries) from
+  `core/config/__init__.py`. `get_node_model` now cascades project
+  `.geode/routing.toml` → manifest `[nodes]`. Added the `nodes` field
+  to `RoutingManifest` (the loader previously dropped the section).
+  **Closes the P2 routing-externalisation initiative** — every
+  hardcoded routing table in `core/config/__init__.py` (defaults,
+  fallbacks, provider resolver, credential patterns, keychain, node
+  defaults) now lives in the manifest.
+
 - **`_resolve_provider` + `family_of` 통합 SOT (P2-D).**
   GEODE 의 두 hardcoded routing table 을 manifest 의
   `[routing.prefixes]` + `codex_only_models` + `codex_suffixes` 로
