@@ -567,11 +567,17 @@ _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S10
 # aligned with the first-party CLI (Anthropic's 2026-04-04 third-party
 # OAuth block routes unknown UA traffic to ``extra_usage`` billing).
 _ANTHROPIC_USER_AGENT = "claude-cli/2.1.140"
-# The OAuth client `9d1c250a-...` is registered with this server-hosted
-# redirect URI only — loopback URIs (http://localhost:*) are rejected at
-# the authorize step. The /oauth/code/callback page renders the
-# authorization code so the user can copy & paste it back into the CLI.
-_ANTHROPIC_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback"
+# v0.99.7 update — Hermes Agent grounds the redirect URI at
+# ``console.anthropic.com/oauth/code/callback`` (see
+# ``hermes-agent/agent/anthropic_adapter.py:1043``, ``_OAUTH_REDIRECT_URI``).
+# That host differs from the Claude Code binary's ``K3q.MANUAL_REDIRECT_URL``
+# (``platform.claude.com/oauth/code/callback``). User's v0.99.5/0.99.6
+# attempts with the ``platform.claude.com`` redirect both returned
+# "Invalid request format" — Hermes's working pattern suggests the
+# OAuth client `9d1c250a-...` is registered against the console host,
+# and binary's K3q may be stale. The ``/oauth/code/callback`` page
+# still renders the code in ``<code>#<state>`` for manual paste.
+_ANTHROPIC_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 
 # Scope set mirrors Claude Code's hint string in the native binary:
 #   "user:profile user:inference user:sessions:claude_code user:mcp_servers"
@@ -655,25 +661,25 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
     verifier, challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(16)
     scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
-    # v0.99.7 — added ``login_method=claudeai`` from claude.exe binary's
-    # ``if($) append("login_method", $)`` site. The binary's ``$`` defaults
-    # to ``"claudeai"`` on the Claude.ai consumer path (vs ``"console"``
-    # for the Anthropic developer portal). Without this param the
-    # claude.ai server appears to return "Invalid request format".
+    # v0.99.7 — query parameters match Hermes Agent
+    # (``hermes-agent/hermes_cli/web_server.py:1755-1764``) 1:1. Note
+    # that ``login_method`` is **not** sent — the binary appends it
+    # conditionally (``if($) append("login_method", $)``) and Hermes,
+    # which works in production, omits it. Param order also mirrors
+    # Hermes's dict literal.
     auth_url = (
         _ANTHROPIC_AUTHORIZE_URL
         + "?"
         + urllib.parse.urlencode(
             {
                 "code": "true",
-                "response_type": "code",
                 "client_id": client_id,
+                "response_type": "code",
                 "redirect_uri": _ANTHROPIC_REDIRECT_URI,
                 "scope": scope,
-                "state": state,
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
-                "login_method": "claudeai",
+                "state": state,
             }
         )
     )
