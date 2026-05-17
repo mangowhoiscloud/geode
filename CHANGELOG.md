@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.13] — 2026-05-18
+
+**Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip
+domain extraction 작업과 develop 의 14 PR routing externalisation
+sprint 를 통합 release. 14 PR 의 코드는 v0.99.12 에 이미 머지된 상태.
+v0.99.13 은 packaging + domain cleanup + coverage scope 정리.
+
 ### Infrastructure
 
 - **PyPI distribution rename.** GEODE now publishes under the available PyPI
