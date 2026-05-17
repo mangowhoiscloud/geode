@@ -54,6 +54,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Added
 
+- **Petri adapter registry (P1-C) — manifest-driven lazy dispatch.**
+  `plugins/petri_audit/adapters/` 신설 — 5 adapter wrapper +
+  registry (`__init__.py`). 각 adapter (`http_anthropic`, `http_openai`,
+  `http_zhipuai`, `claude_cli_backend`, `openai_codex_oauth`) 는
+  uniform 인터페이스 — `INSPECT_PREFIX`, `register()`, `is_available()`,
+  optional `metadata()` — 노출. registry helper 는 `load_adapter_module()`,
+  `register_adapter()`, `is_adapter_available()`, `get_adapter_metadata()`.
+  OAuth 어댑터 (claude_cli_backend, openai_codex_oauth) 는 기존
+  `claude_code_provider.py` / `codex_provider.py` 의 thin re-export —
+  실제 코드 흡수는 P1-G 의 routing 갱신 시점에 결정. P1-E registry
+  + P1-F /petri picker 가 hardcoded if/elif chain 대신 manifest 의
+  `[petri.adapter.<family>.<source>]` 으로 dispatch 할 수 있는 기반.
+
+- **Petri adapter registry (P1-C) — manifest-driven lazy dispatch.**
+  Added `plugins/petri_audit/adapters/` — 5 adapter facades + a
+  registry (`__init__.py`). Each adapter exposes the uniform contract
+  `INSPECT_PREFIX` / `register()` / `is_available()` / optional
+  `metadata()`. The OAuth adapters (`claude_cli_backend`,
+  `openai_codex_oauth`) are thin re-exports of the existing
+  `claude_code_provider.py` and `codex_provider.py`; the call into
+  those legacy modules will collapse when P1-G migrates the
+  `to_inspect_model` routing onto the manifest. Foundation for the
+  upcoming P1-E (registry binding) + P1-F (/petri picker).
+
 - **Petri role contracts (P1-B) — auditor/target/judge MD + frontmatter parser.**
   `plugins/petri_audit/roles/{auditor,target,judge}.md` 신설 — Crumb
   `agents/coordinator.md` 의 YAML frontmatter + Goal/Contract/Constraints
