@@ -330,8 +330,8 @@ class TestToolExecutor:
         assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
 
     def test_safe_tools_classification(self) -> None:
-        assert "list_ips" in SAFE_TOOLS
-        assert "show_help" in SAFE_TOOLS
+        assert "memory_search" in SAFE_TOOLS
+        assert "check_status" in SAFE_TOOLS
         assert "run_bash" not in SAFE_TOOLS
 
     def test_dangerous_tools_classification(self) -> None:
@@ -720,8 +720,8 @@ class TestAgenticLoop:
     def test_agentic_tools_include_all(self) -> None:
         """Verify AGENTIC_TOOLS includes base tools + bash + delegate."""
         tool_names = {t["name"] for t in AGENTIC_TOOLS}
-        assert "list_ips" in tool_names
-        assert "analyze_ip" in tool_names
+        assert "memory_search" in tool_names
+        assert "check_status" in tool_names
         assert "run_bash" in tool_names
         assert "delegate_task" in tool_names
 
@@ -774,7 +774,7 @@ class TestAgenticLoop:
         """get_agentic_tools skips registry tools that already exist."""
         mock_registry = MagicMock()
         mock_registry.to_anthropic_tools.return_value = [
-            {"name": "list_ips", "description": "Duplicate", "input_schema": {}},
+            {"name": "memory_search", "description": "Duplicate", "input_schema": {}},
         ]
         tools = get_agentic_tools(mock_registry)
         assert len(tools) == len(AGENTIC_TOOLS)  # no extra
@@ -1382,8 +1382,7 @@ class TestPlanDelegateTools:
         schema = tool["input_schema"]
         assert "goal" in schema["properties"]
         assert "goal" in schema["required"]
-        # ip_name is optional (for IP pipeline template)
-        assert "ip_name" in schema["properties"]
+        assert "subject" in schema["properties"]
 
     def test_approve_plan_schema(self) -> None:
         tool = next(t for t in AGENTIC_TOOLS if t["name"] == "approve_plan")

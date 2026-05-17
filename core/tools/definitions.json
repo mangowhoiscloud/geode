@@ -1,83 +1,5 @@
 [
   {
-    "name": "list_ips",
-    "description": "Displays the list of available IPs. Use when the user asks what IPs are available.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "analyze_ip",
-    "description": "Analyzes a specific IP. Use when the user mentions an IP name or requests analysis. Also use this tool when the user inputs only an IP name. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), 'fixture로만' (Korean for fixture-only), you MUST set dry_run=true. When dry_run=false (live analysis), it makes ~8 LLM calls using claude-opus-4-6 + gpt-5.4, costing ~$0.15. Inform the user of the cost before execution.",
-    "category": "analysis",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_name": {
-          "type": "string",
-          "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')"
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
-        }
-      },
-      "required": [
-        "ip_name"
-      ]
-    }
-  },
-  {
-    "name": "search_ips",
-    "description": "Searches IPs by keyword or genre. Use when the user wants to find IPs by a specific genre or keyword.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Search keyword or genre (e.g. 'dark fantasy', '소울라이크')"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
-  {
-    "name": "compare_ips",
-    "description": "Performs a comparative analysis of two IPs. Use when the user wants to compare two IPs. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
-    "category": "analysis",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_a": {
-          "type": "string",
-          "description": "First IP name"
-        },
-        "ip_b": {
-          "type": "string",
-          "description": "Second IP name"
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
-        }
-      },
-      "required": [
-        "ip_a",
-        "ip_b"
-      ]
-    }
-  },
-  {
     "name": "show_help",
     "description": "Displays the list of slash commands. Use ONLY when the user explicitly requests a command list or help menu. Do NOT use for general questions (about analysis methods, roles, opinions, etc.) — respond with text directly in those cases.",
     "category": "discovery",
@@ -90,49 +12,15 @@
   },
   {
     "name": "generate_report",
-    "description": "Generates a report from IP analysis results. Use when the user requests a report or document generation. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
+    "description": "Generates a report from structured runtime results. Use when the user requests a report or document generation.",
     "category": "analysis",
-    "cost_tier": "expensive",
+    "cost_tier": "free",
     "input_schema": {
       "type": "object",
       "properties": {
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "IP name in English (e.g. 'Berserk', 'Ghost in the Shell')"
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
-        }
-      },
-      "required": [
-        "ip_name"
-      ]
-    }
-  },
-  {
-    "name": "batch_analyze",
-    "description": "Batch-analyzes multiple IPs simultaneously. Use when the user wants to analyze all or many IPs at once, or wants to see rankings. If the user specifies 'dry-run', '드라이런' (Korean for dry-run), 'LLM 없이' (Korean for without LLM), set dry_run=true.",
-    "category": "analysis",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "top": {
-          "type": "integer",
-          "description": "Maximum number of IPs to analyze (default: 20)"
-        },
-        "genre": {
-          "type": "string",
-          "description": "Genre filter (e.g. 'Dark Fantasy', 'Cyberpunk'). Omit for all."
-        },
-        "stream": {
-          "type": "boolean",
-          "description": "Whether to use streaming mode (default: false)"
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true when user says: dry-run, 드라이런, LLM 없이, LLM 호출 없이, fixture로만, without LLM, no-LLM, 간단히. Otherwise omit or set false."
+          "description": "Report subject or title"
         }
       },
       "required": []
@@ -484,7 +372,7 @@
   },
   {
     "name": "create_plan",
-    "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). For general requests, put the goal in the goal field; for IP analysis, use ip_name.",
+    "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). Put the user-facing objective in the goal field.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -492,7 +380,7 @@
       "properties": {
         "goal": {
           "type": "string",
-          "description": "Execution goal (e.g. 'Research AI trends and write a report', 'Analyze Berserk')"
+          "description": "Execution goal (e.g. 'Research AI trends and write a report')"
         },
         "steps": {
           "type": "array",
@@ -501,17 +389,16 @@
           },
           "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted."
         },
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "IP name for analysis (e.g. 'Berserk'). Uses pipeline template when set."
+          "description": "Optional subject label for the plan"
         },
         "template": {
           "type": "string",
           "enum": [
-            "full_pipeline",
-            "prospect"
+            "agentic"
           ],
-          "description": "IP analysis template. Only effective when ip_name is set."
+          "description": "Plan template. External domain packages may define additional templates."
         }
       },
       "required": [
@@ -534,90 +421,6 @@
       },
       "required": [
         "plan_id"
-      ]
-    }
-  },
-  {
-    "name": "youtube_search",
-    "description": "Searches YouTube for IP-related videos and engagement metrics (text results, not a browser). Use to check an IP's YouTube popularity. To visually browse YouTube, use playwright MCP (browser_navigate) instead.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_name": {
-          "type": "string",
-          "description": "IP name to search on YouTube"
-        },
-        "max_results": {
-          "type": "integer",
-          "description": "Maximum number of video results (default: 10)"
-        }
-      },
-      "required": [
-        "ip_name"
-      ]
-    }
-  },
-  {
-    "name": "reddit_sentiment",
-    "description": "Analyzes IP-related community sentiment on Reddit. Use to check community reactions to an IP on Reddit.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_name": {
-          "type": "string",
-          "description": "IP name to analyze on Reddit"
-        },
-        "subreddit": {
-          "type": "string",
-          "description": "Optional specific subreddit to target"
-        }
-      },
-      "required": [
-        "ip_name"
-      ]
-    }
-  },
-  {
-    "name": "steam_info",
-    "description": "Retrieves IP-related game information and reviews from the Steam store (text data). Use to check an IP's Steam data. For richer Steam queries, the steam MCP server may also be available.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_name": {
-          "type": "string",
-          "description": "IP or game name to look up on Steam"
-        }
-      },
-      "required": [
-        "ip_name"
-      ]
-    }
-  },
-  {
-    "name": "google_trends",
-    "description": "Retrieves search interest data for an IP from Google Trends. Use to check an IP's trend data.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "ip_name": {
-          "type": "string",
-          "description": "IP name to look up on Google Trends"
-        },
-        "region": {
-          "type": "string",
-          "description": "Geographic region (e.g., 'US', 'JP', 'global'). Default: global"
-        }
-      },
-      "required": [
-        "ip_name"
       ]
     }
   },
@@ -915,9 +718,9 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "IP name to rate"
+          "description": "Subject or result name to rate"
         },
         "rating": {
           "type": "integer",
@@ -929,7 +732,7 @@
         }
       },
       "required": [
-        "ip_name",
+        "subject",
         "rating"
       ]
     }
@@ -942,13 +745,13 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "IP name to accept"
+          "description": "Subject or result name to accept"
         }
       },
       "required": [
-        "ip_name"
+        "subject"
       ]
     }
   },
@@ -960,9 +763,9 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "IP name to reject"
+          "description": "Subject or result name to reject"
         },
         "reason": {
           "type": "string",
@@ -970,13 +773,13 @@
         }
       },
       "required": [
-        "ip_name"
+        "subject"
       ]
     }
   },
   {
     "name": "rerun_node",
-    "description": "Re-runs a specific pipeline node. Only scoring, verification, and synthesizer are supported.",
+    "description": "Re-runs a specific pipeline node when the active domain exposes rerunnable nodes.",
     "category": "analysis",
     "cost_tier": "expensive",
     "input_schema": {
@@ -991,14 +794,14 @@
           ],
           "description": "Name of the node to re-run"
         },
-        "ip_name": {
+        "subject": {
           "type": "string",
-          "description": "Target IP name"
+          "description": "Target subject name"
         }
       },
       "required": [
         "node_name",
-        "ip_name"
+        "subject"
       ]
     }
   },

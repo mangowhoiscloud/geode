@@ -70,12 +70,12 @@ class PolicyChain:
     Usage:
         chain = PolicyChain()
         chain.add_policy(ToolPolicy(
-            name="dry_run_block_llm",
+            name="dry_run_block_write",
             mode="dry_run",
-            denied_tools={"run_analyst", "run_evaluator"},
+            denied_tools={"send_notification"},
         ))
-        allowed = chain.filter_tools(["run_analyst", "psm_calculate"], mode="dry_run")
-        # → ["psm_calculate"]
+        allowed = chain.filter_tools(["memory_search", "send_notification"], mode="dry_run")
+        # -> ["memory_search"]
     """
 
     def __init__(self) -> None:
@@ -188,7 +188,7 @@ class ProfilePolicy:
                     name=f"profile:{self.user_id}:no_expensive",
                     mode="*",
                     priority=10,
-                    denied_tools={"analyze_ip", "batch_analyze", "compare_ips"},
+                    denied_tools={"petri_audit", "eval_dspy_optimize"},
                 )
             )
         if not self.allow_write:
@@ -366,10 +366,10 @@ def build_6layer_chain(
 
 # Default per-node tool allowlists.
 NODE_TOOL_ALLOWLISTS: dict[str, list[str]] = {
-    "analyst": ["memory_search", "memory_get", "query_monolake"],
-    "evaluator": ["memory_search", "memory_get", "steam_info", "reddit_sentiment", "web_search"],
-    "scoring": ["memory_search", "psm_calculate"],
-    "synthesizer": ["memory_search", "memory_get", "explain_score"],
+    "analyst": ["memory_search", "memory_get", "query_monolake", "web_search"],
+    "evaluator": ["memory_search", "memory_get", "web_search"],
+    "scoring": ["memory_search"],
+    "synthesizer": ["memory_search", "memory_get", "generate_report"],
     "verification": ["memory_search", "memory_get"],
 }
 
@@ -398,7 +398,7 @@ class NodeScopePolicy:
     ) -> list[str]:
         """Return only tools allowed for *node*.
 
-        Analyst subtypes like ``analyst_game_mechanics`` match the
+        Analyst subtypes like ``analyst_research`` match the
         ``analyst`` prefix.  If *node* is ``None`` or has no allowlist
         entry, all tools pass through unchanged.
         """

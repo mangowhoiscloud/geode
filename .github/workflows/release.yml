@@ -90,7 +90,9 @@ jobs:
         run: uv run pytest -q
 
       - name: Runtime E2E smoke
-        run: uv run geode analyze Berserk --dry-run
+        run: |
+          uv run geode version
+          uv run geode doctor bootstrap
 
       - name: Build package artifacts
         run: uv build
@@ -118,6 +120,8 @@ jobs:
           grep -q "geode-${version}/core/skills/skills.py" /tmp/geode-sdist-files.txt
           grep -q "geode-${version}/core/skills/reports/templates/report.html" /tmp/geode-sdist-files.txt
           grep -q "geode-${version}/core/tools/definitions.json" /tmp/geode-sdist-files.txt
+          ! grep -q "plugins/game_ip" /tmp/geode-wheel-files.txt
+          ! grep -q "plugins/game_ip" /tmp/geode-sdist-files.txt
 
       - name: Clean wheel install smoke
         run: |

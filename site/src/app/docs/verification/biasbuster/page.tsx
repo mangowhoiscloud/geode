@@ -53,9 +53,8 @@ export default function Page() {
 
             <h2>조정 가능 임계값</h2>
             <p>
-              수치 임계값 (CV &lt; 0.05, r &gt; 0.7)은 Game IP 플러그인의
-              <code>plugins/game_ip/config/evaluator_axes.yaml</code>에 있습니다. 다른 도메인은
-              자체적으로 정의합니다.
+              수치 임계값 (CV &lt; 0.05, r &gt; 0.7)은 각 외부 도메인 플러그인이
+              자체적으로 정의합니다. GEODE 코어는 BiasBuster 실행 경계만 제공합니다.
             </p>
           </>
         }
@@ -103,9 +102,9 @@ export default function Page() {
 
             <h2>Tunable thresholds</h2>
             <p>
-              Numeric thresholds (CV &lt; 0.05, r &gt; 0.7) live in{" "}
-              <code>plugins/game_ip/config/evaluator_axes.yaml</code> for the
-              Game IP plugin. Other domains define their own.
+              Numeric thresholds (CV &lt; 0.05, r &gt; 0.7) are defined by each
+              external domain plugin. GEODE core provides the BiasBuster
+              execution boundary.
             </p>
           </>
         }

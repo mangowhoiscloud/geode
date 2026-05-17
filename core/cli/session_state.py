@@ -14,14 +14,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from plugins.game_ip.cli.search import IPSearchEngine
-
     from core.wiring.startup import ReadinessReport
 
 log = logging.getLogger(__name__)
 
 # Thread-safe singletons for REPL session via contextvars
-_search_engine_ctx: ContextVar[Any] = ContextVar("search_engine", default=None)
 _readiness_ctx: ContextVar[Any] = ContextVar("readiness", default=None)
 _scheduler_service_ctx: ContextVar[Any] = ContextVar("scheduler_service", default=None)
 _user_task_graph_ctx: ContextVar[Any] = ContextVar("user_task_graph", default=None)
@@ -119,17 +116,6 @@ class _ResultCache:
 
 
 _result_cache = _ResultCache()
-
-
-def _get_search_engine() -> IPSearchEngine:
-    """Get or create the context-local IPSearchEngine."""
-    from plugins.game_ip.cli.search import IPSearchEngine as _IPSearchEngine
-
-    engine = _search_engine_ctx.get()
-    if engine is None:
-        engine = _IPSearchEngine()
-        _search_engine_ctx.set(engine)
-    return cast("IPSearchEngine", engine)
 
 
 def _get_readiness() -> ReadinessReport | None:

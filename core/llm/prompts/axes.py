@@ -1,10 +1,9 @@
-"""Structured scoring axes — domain-data sourced from active plugin.
+"""Structured scoring axes — domain-data sourced from active domain.
 
 For backwards compatibility, module-level constants ANALYST_SPECIFIC,
 EVALUATOR_AXES, PROSPECT_EVALUATOR_AXES, VALID_AXES_MAP, AXES_VERSIONS
-remain importable. They are populated at import time by reading from
-``plugins.game_ip.axes`` if installed, or set to empty defaults so that
-``core/`` can be imported in non-game_ip contexts (e.g. REODE forks).
+remain importable. GEODE core ships no built-in domain axes as of v1.0.0,
+so these constants default to empty mappings.
 
 For domain-aware lookups at runtime, prefer ``get_valid_axes_map()`` —
 it delegates to the active ``DomainPort`` and works for any domain.
@@ -17,40 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 from typing import Any
 
-log = logging.getLogger(__name__)
-
-ANALYST_SPECIFIC: dict[str, str]
-EVALUATOR_AXES: dict[str, dict[str, Any]]
-PROSPECT_EVALUATOR_AXES: dict[str, dict[str, Any]]
-VALID_AXES_MAP: dict[str, set[str]]
-
-try:
-    from plugins.game_ip.axes import (
-        ANALYST_SPECIFIC as _PLUGIN_ANALYST_SPECIFIC,
-    )
-    from plugins.game_ip.axes import (
-        EVALUATOR_AXES as _PLUGIN_EVALUATOR_AXES,
-    )
-    from plugins.game_ip.axes import (
-        PROSPECT_EVALUATOR_AXES as _PLUGIN_PROSPECT_EVALUATOR_AXES,
-    )
-    from plugins.game_ip.axes import (
-        VALID_AXES_MAP as _PLUGIN_VALID_AXES_MAP,
-    )
-
-    ANALYST_SPECIFIC = _PLUGIN_ANALYST_SPECIFIC
-    EVALUATOR_AXES = _PLUGIN_EVALUATOR_AXES
-    PROSPECT_EVALUATOR_AXES = _PLUGIN_PROSPECT_EVALUATOR_AXES
-    VALID_AXES_MAP = _PLUGIN_VALID_AXES_MAP
-except ImportError:
-    log.debug("game_ip plugin axes not present; axes constants set to empty defaults")
-    ANALYST_SPECIFIC = {}
-    EVALUATOR_AXES = {}
-    PROSPECT_EVALUATOR_AXES = {}
-    VALID_AXES_MAP = {}
+ANALYST_SPECIFIC: dict[str, str] = {}
+EVALUATOR_AXES: dict[str, dict[str, Any]] = {}
+PROSPECT_EVALUATOR_AXES: dict[str, dict[str, Any]] = {}
+VALID_AXES_MAP: dict[str, set[str]] = {}
 
 
 def get_valid_axes_map() -> dict[str, set[str]]:

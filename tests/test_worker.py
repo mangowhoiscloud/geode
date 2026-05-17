@@ -26,14 +26,14 @@ class TestWorkerRequest:
             model="claude-opus-4-6",
             provider="anthropic",
             timeout_s=120.0,
-            domain="game_ip",
+            domain="research",
         )
         data = req.to_dict()
         restored = WorkerRequest.from_dict(data)
         assert restored.task_id == "t-001"
         assert restored.description == "Analyze Cowboy Bebop"
         assert "delegate_task" in restored.denied_tools
-        assert restored.domain == "game_ip"
+        assert restored.domain == "research"
 
     def test_defaults(self) -> None:
         req = WorkerRequest.from_dict({"task_id": "t-002"})

@@ -72,6 +72,8 @@ workflow now checks that both wheel and sdist include:
 - prompt markdown under `core/llm/prompts/`
 - tool schema SOT `core/tools/definitions.json`
 - Petri audit judge dimensions and seed markdown files
+- no bundled `plugins/game_ip` files, because Game IP analysis is released
+  from a separate repository/package
 
 Future optional skill marketplace publishing should be a separate manual step,
 not bundled into a normal package push. The package gate should first prove the
@@ -95,7 +97,8 @@ Release gates:
 - `uv build`
 - install wheel into a clean venv
 - run `geode --version`
-- run `geode analyze Berserk --dry-run`
+- run `geode version`
+- run `geode doctor bootstrap`
 - run `twine check dist/*` before upload
 
 ### 2. GitHub Release Assets
@@ -165,7 +168,8 @@ Blocking:
 - `uv run mypy core plugins`
 - prompt integrity ratchet
 - `uv run pytest -q`
-- `uv run geode analyze Berserk --dry-run`
+- `uv run geode version`
+- `uv run geode doctor bootstrap`
 - `uv build`
 - clean-venv wheel install smoke
 - wheel/sdist content gate for skills, prompts, tool schemas, and audit assets

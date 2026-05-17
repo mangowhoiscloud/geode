@@ -54,6 +54,20 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [1.0.0] — 2026-05-17
 
+### Removed
+
+- **Bundled Game IP analysis plugin.** Removed `plugins/game_ip/`, the
+  `geode analyze` / `geode batch` / fixture-search CLI surface, and the
+  Game-IP-specific tests from GEODE core. Game IP analysis is now expected to
+  live in a separate repository/package with its own CLI, fixtures, E2E gates,
+  and release cadence. GEODE core keeps only the domain loader contract for
+  external domain packages.
+- **내장 Game IP 분석 플러그인 제거.** GEODE core 에서 `plugins/game_ip/`,
+  `geode analyze` / `geode batch` / fixture search CLI 표면, Game-IP 전용
+  테스트를 제거. Game IP 분석은 별도 repository/package 에서 CLI, fixture,
+  E2E gate, release cadence 를 독립적으로 소유. GEODE core 는 외부 도메인
+  패키지를 위한 domain loader 계약만 유지.
+
 ### Architecture
 
 - **Async-only graph/tool/MCP runtime slice.** LangGraph pipeline nodes now run

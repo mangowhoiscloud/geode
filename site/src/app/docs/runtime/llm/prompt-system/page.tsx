@@ -13,8 +13,7 @@ export default function Page() {
     >
       <h2>{<Bi ko="5계층" en="Five layers" />}</h2>
       <pre>{`1. Templates Layer       core/llm/prompts/*.md           — 17 base + extended sections
-2. Axes Layer            plugins/game_ip/config/         — 14 evaluation axes + 4 analyst directives
-                          evaluator_axes.yaml
+2. Axes Layer            external domain plugin          — optional evaluator axes
 3. Hash Versioning       core/llm/prompts/__init__.py    — SHA-256[:12] x 20 pinned entries
 4. Assembly              core/llm/prompt_assembler.py    — base + skill + memory + bootstrap
                                                           (6 phases, append-only by default)
@@ -29,7 +28,7 @@ export default function Page() {
               <code>evaluator.md</code>, <code>synthesizer.md</code>,{" "}
               <code>biasbuster.md</code>, <code>router.md</code>,{" "}
               <code>cross_llm.md</code>, <code>commentary.md</code> 등) 과 하나의
-              YAML 파일(<code>evaluator_axes.yaml</code>) 에 살고 있습니다.
+              외부 도메인 플러그인이 제공하는 axes 데이터에 살고 있습니다.
             </p>
             <p>
               import 시점에 <code>core/llm/prompts/__init__.py</code> 가 각 템플릿을

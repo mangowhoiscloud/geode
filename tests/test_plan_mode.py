@@ -372,7 +372,7 @@ class TestHandleCreatePlanAutoExecute:
         original = settings.plan_auto_execute
         try:
             settings.plan_auto_execute = False
-            result = handler(ip_name="Berserk", template="full_pipeline")
+            result = handler(subject="Berserk", template="agentic")
         finally:
             settings.plan_auto_execute = original
 
@@ -401,7 +401,7 @@ class TestHandleCreatePlanAutoExecute:
         assert result["execution_mode"] == "auto"
         assert "execution_result" in result
         exec_result = result["execution_result"]
-        assert exec_result["completed_steps"] == 10
+        assert exec_result["completed_steps"] == 1
 
     def test_auto_mode_caches_plan_for_audit(self) -> None:
         """v0.53.3 — B2 fix: AUTO-executed plans MUST be cached so the

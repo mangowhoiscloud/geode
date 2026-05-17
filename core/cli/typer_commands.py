@@ -14,66 +14,7 @@ from pathlib import Path
 import typer
 
 from core import __version__
-from core.async_runtime import run_process_coroutine
-from core.cli.pipeline_executor import _run_analysis
-from core.cli.report_renderer import _generate_report
-from core.cli.search_render import _render_search_results
-from core.cli.session_state import _get_search_engine
 from core.ui.console import console
-
-
-def analyze(
-    ip_name: str = typer.Argument(..., help="IP name to analyze (e.g. 'Cowboy Bebop')"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Run without LLM calls (fixture data only)"
-    ),
-    skip_verification: bool = typer.Option(
-        False, "--skip-verification", help="Skip guardrails and BiasBuster"
-    ),
-    pipeline: str = typer.Option("full_pipeline", "--pipeline", "-p", help="Pipeline mode"),
-    stream: bool = typer.Option(False, "--stream", help="Enable streaming output"),
-    domain: str = typer.Option("game_ip", "--domain", "-d", help="Domain adapter name"),
-) -> None:
-    """Analyze an IP for undervaluation potential."""
-    _run_analysis(
-        ip_name,
-        dry_run=dry_run,
-        verbose=verbose,
-        skip_verification=skip_verification,
-        stream=stream,
-        domain_name=domain,
-    )
-
-
-def report(
-    ip_name: str = typer.Argument(..., help="IP name to generate report for"),
-    fmt: str = typer.Option("md", "--format", "-f", help="Output format: md, html, json"),
-    template: str = typer.Option(
-        "summary", "--template", "-t", help="summary, detailed, executive"
-    ),
-    output: str = typer.Option(None, "--output", "-o", help="Save report to file"),
-    dry_run: bool = typer.Option(False, "--dry-run/--no-dry-run", help="Use fixture data (no LLM)"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-) -> None:
-    """Generate a report for an IP analysis."""
-    resolved_fmt = "markdown" if fmt == "md" else fmt
-    _generate_report(
-        ip_name,
-        fmt=resolved_fmt,
-        template=template,
-        output=output or None,
-        dry_run=dry_run,
-        verbose=verbose,
-    )
-
-
-def search(
-    query: str = typer.Argument(..., help="Search query (e.g. 'dark fantasy', '소울라이크')"),
-) -> None:
-    """Search IPs by keyword or genre."""
-    results = _get_search_engine().search(query)
-    _render_search_results(query, results)
 
 
 def version() -> None:
@@ -214,31 +155,6 @@ def doctor(
         console.print(format_doctor_report(slack_report))
     else:
         console.print(f"Unknown target: {target}. Available: bootstrap, slack")
-
-
-def list_ips() -> None:
-    """List available IP fixtures."""
-    from plugins.game_ip.fixtures import FIXTURE_MAP as _FIXTURE_MAP
-
-    console.print("[header]Available IPs:[/header]")
-    for name in _FIXTURE_MAP:
-        console.print(f"  - {name.title()}")
-
-
-def batch(
-    top: int = typer.Option(10, help="Number of IPs to analyze"),
-    genre: str = typer.Option(None, help="Filter by genre"),
-    concurrency: int = typer.Option(2, help="Parallel workers"),
-    dry_run: bool = typer.Option(False, "--dry-run/--live", help="Use dry-run mode"),
-) -> None:
-    """Run batch analysis on multiple IPs."""
-    from plugins.game_ip.cli.batch import arun_batch, render_batch_table
-
-    results = run_process_coroutine(
-        arun_batch(top=top, genre=genre, concurrency=concurrency, dry_run=dry_run)
-    )
-    if results:
-        render_batch_table(results)
 
 
 def history(

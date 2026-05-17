@@ -173,12 +173,11 @@ class TestCoreToolsAlwaysLoaded:
     """The 6 core tools are always loaded, never deferred."""
 
     CORE_TOOLS = [
-        "list_ips",
-        "search_ips",
-        "analyze_ip",
         "memory_search",
-        "show_help",
-        "general_web_search",
+        "memory_get",
+        "memory_save",
+        "web_search",
+        "wanted_jobs_search",
     ]
 
     def test_core_tools_never_deferred(self) -> None:
@@ -210,16 +209,15 @@ class TestCoreToolsAlwaysLoaded:
                 )
 
     def test_core_tools_count_in_result(self) -> None:
-        """All 6 core tools + tool_search + 8 deferred = 15 total."""
+        """All core tools + tool_search + 8 deferred are returned."""
         all_names = self.CORE_TOOLS + [f"extra_{i}" for i in range(8)]
         reg = _make_registry(*all_names)
         result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
 
-        # 1 (tool_search) + 6 (core) + 8 (deferred) = 15
-        assert len(result) == 15
+        assert len(result) == 1 + len(self.CORE_TOOLS) + 8
 
         core_in_result = [t for t in result if t["name"] in self.CORE_TOOLS]
-        assert len(core_in_result) == 6
+        assert len(core_in_result) == len(self.CORE_TOOLS)
 
 
 # ---------------------------------------------------------------------------
@@ -354,36 +352,11 @@ class TestToolSearchToolMCP:
 class TestCategoryDetection:
     """Category strings in tool_search description."""
 
-    def test_analysis_category(self) -> None:
-        reg = _make_registry(
-            "run_analyst",
-            "run_evaluator",
-            "psm_calculate",
-            *[f"extra{i}" for i in range(8)],
-        )
-        result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
-        desc = result[0]["description"]
-        assert "analysis" in desc
-
-    def test_signals_category(self) -> None:
-        reg = _make_registry(
-            "youtube_search",
-            "reddit_sentiment",
-            "twitch_stats",
-            "steam_info",
-            "google_trends",
-            *[f"extra{i}" for i in range(6)],
-        )
-        result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
-        desc = result[0]["description"]
-        assert "signals" in desc
-
     def test_data_category(self) -> None:
         reg = _make_registry(
-            "query_monolake",
             "cortex_analyst",
             "cortex_search",
-            *[f"extra{i}" for i in range(8)],
+            *[f"extra{i}" for i in range(9)],
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
         desc = result[0]["description"]
@@ -413,16 +386,14 @@ class TestCategoryDetection:
 
     def test_multiple_categories(self) -> None:
         reg = _make_registry(
-            "run_analyst",
-            "youtube_search",
             "memory_search",
-            "query_monolake",
+            "cortex_search",
             "generate_report",
-            *[f"extra{i}" for i in range(6)],
+            *[f"extra{i}" for i in range(8)],
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
         desc = result[0]["description"]
-        for cat in ("analysis", "signals", "memory", "data", "output", "other"):
+        for cat in ("memory", "data", "output", "other"):
             assert cat in desc
 
 

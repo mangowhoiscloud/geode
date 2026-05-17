@@ -19,6 +19,26 @@ from core.state import AnalysisResult, EvaluatorResult, PSMResult, SynthesisResu
 from core.ui.console import console
 
 
+def _score_style(score: float) -> str:
+    if score >= 80:
+        return "bold green"
+    if score >= 60:
+        return "yellow"
+    return "red"
+
+
+def _classify_tier(score: float) -> str:
+    if score >= 80:
+        return "S"
+    if score >= 65:
+        return "A"
+    if score >= 50:
+        return "B"
+    if score >= 35:
+        return "C"
+    return "D"
+
+
 def _is_ipc() -> bool:
     """Check if we're in IPC mode (thin client rendering)."""
     from core.ui.agentic_ui import _ipc_writer_local
@@ -136,8 +156,6 @@ def evaluator_panel(evaluations: dict[str, EvaluatorResult]) -> None:
     for key, ev in sorted(evaluations.items()):
         label = labels.get(key, key.replace("_", " ").title())
         score = ev.composite_score
-        from plugins.game_ip.scoring_constants import score_style as _score_style
-
         score_style = _score_style(score)
         rationale = ev.rationale.split(".")[0] + "." if ev.rationale else ""
         table.add_row(
@@ -155,11 +173,9 @@ def score_panel(
     subscores: dict[str, float],
     confidence: float = 0.0,
 ) -> None:
-    from plugins.game_ip.scoring_constants import classify_tier
-
     from core.ui.agentic_ui import emit_pipeline_score
 
-    tier = classify_tier(final_score)
+    tier = _classify_tier(final_score)
 
     if _is_ipc():
         emit_pipeline_score(final_score, subscores, confidence, tier, psm=psm)

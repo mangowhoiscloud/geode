@@ -17,10 +17,10 @@ import subprocess
 import sys
 
 LEGACY_PATTERNS: list[tuple[str, str]] = [
-    (r"from core\.nodes\b", "core.domains.game_ip.nodes"),
-    (r"import core\.nodes\b", "core.domains.game_ip.nodes"),
-    (r"from core\.fixtures\b", "core.domains.game_ip.fixtures"),
-    (r"import core\.fixtures\b", "core.domains.game_ip.fixtures"),
+    (r"from core\.nodes\b", "external domain plugin nodes"),
+    (r"import core\.nodes\b", "external domain plugin nodes"),
+    (r"from core\.fixtures\b", "external domain plugin fixtures"),
+    (r"import core\.fixtures\b", "external domain plugin fixtures"),
     # v0.52 — directional flip: ui와 auth가 top-level로 승격되어 cli.ui /
     # gateway.auth 가 이제 legacy. 새 위치를 권장.
     (r"from core\.cli\.ui\b", "core.ui"),

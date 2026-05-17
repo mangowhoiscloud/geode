@@ -293,18 +293,6 @@ max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.
 # docs/architecture/domain-free-core-audit.md; the ban message should be
 # scannable, not explanatory.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-# v0.66.0 step-2 file relocations. These paths don't exist on disk after the
-# move (no backwards-compat shim), so a stale reference would raise
-# ModuleNotFoundError at runtime. TID251 catches the same mistake at lint
-# time with a friendlier breadcrumb pointing at the new home.
-"core.cli.batch".msg = "Moved to plugins.game_ip.cli.batch (v0.66.0 step 2)."
-"core.cli.ip_names".msg = "Moved to plugins.game_ip.cli.ip_names (v0.66.0 step 2)."
-"core.cli.search".msg = "Moved to plugins.game_ip.cli.search (v0.66.0 step 2)."
-"core.mcp.signal_adapter".msg = "Moved to plugins.game_ip.mcp.signal_adapter (v0.66.0 step 2)."
-# v0.66.2 step-5 tools cluster split. analysis.py whole-file move;
-# signal_tools.py fully retired with symbols dispersed across three destinations.
-"core.tools.analysis".msg = "Moved to plugins.game_ip.tools.analysis (v0.66.2 step 5)."
-"core.tools.signal_tools".msg = "Moved: IP signals → plugins.game_ip.tools.signal_tools, MCP helpers → core.mcp.utils, WebSearchTool → core.tools.web_search (v0.66.2 step 5)."
 
 [tool.bandit]
 exclude_dirs = ["tests"]
@@ -328,12 +316,16 @@ known_first_party = ["core", "plugins"]
 #   langgraph-checkpoint{,-sqlite}: namespace packages (langgraph.checkpoint.*),
 #       deptry's ImportFinder can't link the namespace import back to the
 #       distribution name reliably.
+#   langgraph: kept as the graph runtime contract for external domain
+#       plugins. GEODE core no longer builds a bundled graph in v1, so
+#       only TYPE_CHECKING references remain locally.
 #   openai-agents: kept for Responses-API runtime path even when no static
 #       import exists in core/ today; removing it would break the optional
 #       agents harness when re-enabled. Re-evaluate if/when that surface
 #       is fully retired.
 #   Pillow: imported as `PIL` from core/tools/computer_use.py (desktop extra).
 DEP002 = [
+    "langgraph",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "openai-agents",
@@ -365,7 +357,7 @@ pyyaml = "yaml"
 
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
-skip = "*.lock,uv.lock,*.svg,*.json,plugins/game_ip/fixtures/*,plugins/game_ip/config/*,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
+skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
 ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit"
 check-filenames = ""
 check-hidden = ""
@@ -379,7 +371,7 @@ omit = [
     # Tier 3 #완성 (v0.77.0) — cli/__init__.py 가 sibling 파일로 분할되며,
     # 원본이 omit 대상이었으므로 sibling 파일들도 동일 처리.
     # 이들은 Typer 명령 + 인터랙티브 REPL 코드로 unit test가 아닌
-    # E2E (geode analyze) + integration 테스트에서 exercise됨.
+    # CLI smoke + integration 테스트에서 exercise됨.
     "core/cli/welcome.py",
     "core/cli/search_render.py",
     "core/cli/dispatcher.py",

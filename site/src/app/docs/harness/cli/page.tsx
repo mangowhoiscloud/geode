@@ -43,8 +43,6 @@ LLM provider`}</pre>
             <h2>최상위 명령</h2>
             <pre>{`geode                                      # interactive REPL
 geode "summarize the latest AI research"   # NL one-shot
-geode analyze "Cowboy Bebop" --dry-run     # game_ip plugin
-geode analyze "Berserk" --verbose          # full run with API
 geode serve                                # start daemon
 geode version                              # version
 geode skill list / skill view / skill manage`}</pre>
@@ -122,8 +120,6 @@ LLM provider`}</pre>
             <h2>Top-level commands</h2>
             <pre>{`geode                                      # interactive REPL
 geode "summarize the latest AI research"   # NL one-shot
-geode analyze "Cowboy Bebop" --dry-run     # game_ip plugin
-geode analyze "Berserk" --verbose          # full run with API
 geode serve                                # start daemon
 geode version                              # version
 geode skill list / skill view / skill manage`}</pre>

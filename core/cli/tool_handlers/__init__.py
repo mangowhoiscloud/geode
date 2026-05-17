@@ -149,6 +149,6 @@ def _build_tool_handlers(
     handlers.update(_build_audit_handlers())
     handlers.update(_build_observability_handlers())
     # Domain-supplied handlers (analysis + signals + generate_data for
-    # game_ip; empty for non-pipeline domains).
+    # empty for non-pipeline domains).
     install_domain_tool_handlers(handlers)
     return handlers

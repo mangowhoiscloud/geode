@@ -98,14 +98,14 @@ class TestEvaluatorResult:
             )
 
     def test_invalid_axis_key(self):
-        """Misspelled key should fail validation."""
-        with pytest.raises(ValidationError, match="Invalid axis keys"):
-            EvaluatorResult(
-                evaluator_type="quality_judge",
-                axes={"A_score": 4.0},  # Wrong: should be a_score
-                composite_score=80.0,
-                rationale="x",
-            )
+        """Without a bundled domain axis map, axis names are domain-flexible."""
+        result = EvaluatorResult(
+            evaluator_type="quality_judge",
+            axes={"A_score": 4.0},
+            composite_score=80.0,
+            rationale="x",
+        )
+        assert result.axes == {"A_score": 4.0}
 
     def test_axis_value_out_of_range(self):
         """Axis value > 5.0 should fail validation."""
@@ -118,14 +118,14 @@ class TestEvaluatorResult:
             )
 
     def test_unknown_evaluator_type(self):
-        """Unknown evaluator_type should fail."""
-        with pytest.raises(ValidationError, match="Unknown evaluator_type"):
-            EvaluatorResult(
-                evaluator_type="nonexistent",
-                axes={"x": 3.0},
-                composite_score=50.0,
-                rationale="x",
-            )
+        """Without a bundled domain axis map, evaluator types are domain-flexible."""
+        result = EvaluatorResult(
+            evaluator_type="nonexistent",
+            axes={"x": 3.0},
+            composite_score=50.0,
+            rationale="x",
+        )
+        assert result.evaluator_type == "nonexistent"
 
     def test_partial_axes_allowed(self):
         """Subset of expected keys is valid (LLM may omit some)."""

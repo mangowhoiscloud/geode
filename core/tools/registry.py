@@ -151,14 +151,14 @@ class ToolRegistry:
 
     Usage:
         registry = ToolRegistry()
-        registry.register(RunAnalystTool())
+        registry.register(MemorySearchTool())
         tools = registry.to_anthropic_tools()  # All tools
 
         # With policy filtering:
         from core.tools.policy import PolicyChain, ToolPolicy
         chain = PolicyChain()
-        chain.add_policy(ToolPolicy(name="block_llm", mode="dry_run",
-                                     denied_tools={"run_analyst"}))
+        chain.add_policy(ToolPolicy(name="block_notify", mode="dry_run",
+                                     denied_tools={"send_notification"}))
         tools = registry.to_anthropic_tools(policy=chain, mode="dry_run")
     """
 
@@ -214,12 +214,11 @@ class ToolRegistry:
     # These are the most frequently used tools that should be immediately available.
     ALWAYS_LOADED_TOOLS: frozenset[str] = frozenset(
         {
-            "list_ips",
-            "search_ips",
-            "analyze_ip",
             "memory_search",
-            "show_help",
-            "general_web_search",
+            "memory_get",
+            "memory_save",
+            "web_search",
+            "wanted_jobs_search",
         }
     )
 
@@ -270,18 +269,8 @@ class ToolRegistry:
         categories: set[str] = set()
         for tool in all_tools:
             name = tool.get("name", "")
-            if name in ("run_analyst", "run_evaluator", "psm_calculate"):
-                categories.add("analysis")
-            elif name in ("query_monolake", "cortex_analyst", "cortex_search"):
+            if name in ("query_monolake", "cortex_analyst", "cortex_search"):
                 categories.add("data")
-            elif name in (
-                "youtube_search",
-                "reddit_sentiment",
-                "twitch_stats",
-                "steam_info",
-                "google_trends",
-            ):
-                categories.add("signals")
             elif name in ("memory_search", "memory_get", "memory_save"):
                 categories.add("memory")
             elif name in ("generate_report", "export_json", "send_notification"):

@@ -190,9 +190,9 @@ def _generate_report(
     otherwise runs analysis first.  Always saves to ``.geode/reports/``
     and returns ``(file_path, content)``.
     """
-    # Deferred imports to avoid circular dependency with core.cli.__init__
-    # Import from core.cli (not pipeline_executor) so monkeypatching in tests works.
-    from core.cli import _result_cache, _run_analysis
+    # Deferred imports to avoid circular dependency with core.cli.__init__.
+    from core.cli import _result_cache
+    from core.cli.pipeline_executor import _run_analysis
 
     # Resolve format/template enums
     try:

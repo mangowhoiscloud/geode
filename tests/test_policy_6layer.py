@@ -35,7 +35,7 @@ class TestProfilePolicy:
         assert any("no_expensive" in n for n in names)
         # Check denied tools
         expensive_pol = next(pol for pol in policies if "no_expensive" in pol.name)
-        assert "analyze_ip" in expensive_pol.denied_tools
+        assert "petri_audit" in expensive_pol.denied_tools
 
     def test_deny_write(self):
         p = ProfilePolicy(user_id="test", allow_write=False)
@@ -213,14 +213,14 @@ class TestPolicyChainIntegration:
         assert "set_api_key" not in filtered
         assert "memory_search" in filtered
 
-    def test_profile_no_expensive_blocks_analyze(self):
-        """Profile with allow_expensive=False should block analyze_ip."""
+    def test_profile_no_expensive_blocks_expensive_tools(self):
+        """Profile with allow_expensive=False should block expensive core tools."""
         profile = ProfilePolicy(user_id="dev", allow_expensive=False)
         chain = build_6layer_chain(profile=profile)
-        tools = ["analyze_ip", "batch_analyze", "memory_search"]
+        tools = ["petri_audit", "eval_dspy_optimize", "memory_search"]
         filtered = chain.filter_tools(tools, mode="full_pipeline")
-        assert "analyze_ip" not in filtered
-        assert "batch_analyze" not in filtered
+        assert "petri_audit" not in filtered
+        assert "eval_dspy_optimize" not in filtered
         assert "memory_search" in filtered
 
     def test_org_overrides_profile(self):

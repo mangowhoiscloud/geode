@@ -12,7 +12,7 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 318 core + 45 plugins = 363
+- **Modules**: 322 core + 17 plugins = 339
 - **Tests**: 4897 (+24 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -30,11 +30,7 @@ uv run geode "summarize the latest AI research trends"
 uv run geode "compare React vs Vue for a new project"
 uv run geode "schedule daily standup reminder at 9am"
 
-# Game IP Domain Plugin (dry-run, no LLM) — plugin lives at plugins/game_ip/
-uv run geode analyze "Cowboy Bebop" --dry-run
-
-# Game IP Domain Plugin (full run, requires API keys)
-uv run geode analyze "Cowboy Bebop" --verbose
+# Domain analysis plugins are distributed separately from GEODE core.
 ```
 
 ## SOT (Source of Truth)
@@ -49,7 +45,7 @@ uv run geode analyze "Cowboy Bebop" --verbose
 
 Production code splits into two top-level Python packages:
 - `core/` — general-purpose autonomous agent runtime. 4-layer stack. Domain-agnostic.
-- `plugins/` — domain-specific extensions. v0.64.0 contains `plugins/game_ip/` (originally `core/domains/game_ip/`); future research/ops domains land here as separate sub-packages. Wired through `core/domains/loader.py` registry.
+- `plugins/` — first-party auxiliary plugins. Domain analysis plugins are distributed separately and can self-register through `core/domains/loader.py`.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
 Key entry points: `core/agent/loop/`(AgenticLoop), `core/graph.py`(StateGraph), `core/runtime.py`(bootstrap).
@@ -69,10 +65,8 @@ uv run mypy core/ plugins/
 
 ### Expected Test Results
 
-3700+ tests pass. 3 IP fixtures produce tier spread:
-- Berserk: **S** (81.2) — conversion_failure
-- Cowboy Bebop: **A** (68.4) — undermarketed
-- Ghost in the Shell: **B** (51.7) — discovery_failure
+Core tests pass without bundled domain fixtures. Domain packages own their own
+fixture/E2E gates.
 
 ## Implementation Workflow
 
@@ -216,7 +210,7 @@ uv run pytest tests/ -m "not live"            # Test: 3900+ pass
 uv run ruff check core/ tests/                      # Lint: 0 errors
 uv run mypy core/                                    # Type: 0 errors
 uv run pytest tests/ -m "not live"                   # Test: 3900+ pass
-uv run geode analyze "Cowboy Bebop" --dry-run        # E2E: A (68.4) unchanged
+uv run geode version                                 # CLI smoke
 ```
 
 **4c. Cleanliness — Dead code & regression audit**
@@ -313,7 +307,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 | Lint | `uv run ruff check core/ tests/ plugins/` | 0 errors |
 | Type | `uv run mypy core/ plugins/` | 0 errors |
 | Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
-| E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
+| CLI smoke | `uv run geode version` | version prints |
 
 ## Custom Skills (Scaffold)
 

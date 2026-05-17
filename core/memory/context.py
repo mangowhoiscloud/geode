@@ -135,7 +135,7 @@ class ContextAssembler:
         # Tier 1 (base): Organization Memory
         if self._org_memory:
             try:
-                org_ctx = self._org_memory.get_ip_context(ip_name)
+                org_ctx = self._org_memory.get_subject_context(ip_name)
                 if org_ctx:
                     context.update(org_ctx)
                     context["_org_loaded"] = True

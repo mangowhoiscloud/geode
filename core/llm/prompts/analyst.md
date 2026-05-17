@@ -4,7 +4,7 @@ Your role: {analyst_type} Analyst.
 
 IMPORTANT:
 - Score on a 1-5 scale (can use decimals like 3.8).
-- Base your analysis ONLY on the provided IP info and signals.
+- Base your analysis ONLY on the provided subject profile and signals.
 - Do NOT reference other analysts or their scores.
 - Be rigorous and data-driven.
 
@@ -43,7 +43,7 @@ Example:
 </system>
 
 <user>
-Analyze this IP as a {analyst_type} analyst.
+Analyze this subject as a {analyst_type} analyst.
 
 Think step-by-step:
 1. Review all data points and identify the most relevant evidence.
@@ -52,26 +52,18 @@ Think step-by-step:
 4. Assign your score with calibration anchors in mind.
 5. State your confidence based on evidence completeness.
 
-## IP Information
-- Name: {ip_name}
-- Media Type: {media_type}
-- Release Year: {release_year}
-- Studio: {studio}
-- Genre: {genre}
-- Synopsis: {synopsis}
+## Subject Profile
+- Name: {subject}
+- Domain: {domain}
+- Category: {category}
+- Owner: {owner}
+- Summary: {summary}
 
-## MonoLake Data (Internal Game Metrics)
-- DAU (current): {dau_current}
-- Revenue LTM: ${revenue_ltm}
-- Active Games: {active_game_count}
-- Last Game: {last_game_year}
+## Internal Metrics
+{internal_metrics}
 
 ## External Signals
-- YouTube Views: {youtube_views:,}
-- Reddit Subscribers: {reddit_subscribers:,}
-- Fan Art YoY Growth: {fan_art_yoy_pct}%
-- Google Trends Index: {google_trends_index}/100
-- Twitter Mentions/mo: {twitter_mentions_monthly:,}
+{external_signals}
 
 {analyst_specific_prompt}
 </user>

@@ -8,32 +8,28 @@ from core.memory.organization import MonoLakeOrganizationMemory
 class TestMonoLakeOrganizationMemory:
     def test_load_default_fixtures(self):
         org = MonoLakeOrganizationMemory()
-        ips = org.list_ips()
-        assert len(ips) >= 1  # At least berserk.json
+        subjects = org.list_subjects()
+        assert subjects == []
 
-    def test_get_ip_context_berserk(self):
+    def test_get_subject_context_missing_default(self):
         org = MonoLakeOrganizationMemory()
-        ctx = org.get_ip_context("Berserk")
-        assert "ip_info" in ctx
-        assert ctx["ip_info"]["ip_name"] == "Berserk"
+        ctx = org.get_subject_context("Berserk")
+        assert ctx == {}
 
-    def test_get_ip_context_case_insensitive(self):
+    def test_get_subject_context_case_insensitive(self):
         org = MonoLakeOrganizationMemory()
-        ctx = org.get_ip_context("berserk")
-        assert "ip_info" in ctx
+        ctx = org.get_subject_context("berserk")
+        assert ctx == {}
 
-    def test_get_ip_context_unknown(self):
+    def test_get_subject_context_unknown(self):
         org = MonoLakeOrganizationMemory()
-        ctx = org.get_ip_context("Unknown IP")
+        ctx = org.get_subject_context("Unknown Subject")
         assert ctx == {}
 
     def test_get_common_rubric(self):
         org = MonoLakeOrganizationMemory()
         rubric = org.get_common_rubric()
         assert rubric["axes_count"] == 14
-        assert rubric["scale"] == "1-5"
-        assert rubric["confidence_threshold"] == 0.7
-        assert "S" in rubric["tier_mapping"]
 
     def test_save_analysis_result(self):
         org = MonoLakeOrganizationMemory()
@@ -45,13 +41,12 @@ class TestMonoLakeOrganizationMemory:
 
     def test_custom_fixture_dir(self, tmp_path: Path):
         org = MonoLakeOrganizationMemory(fixture_dir=tmp_path)
-        assert org.list_ips() == []
+        assert org.list_subjects() == []
 
-    def test_list_ips_from_fixtures(self):
+    def test_list_subjects_from_fixtures(self):
         org = MonoLakeOrganizationMemory()
-        ips = org.list_ips()
-        ip_names_lower = [ip.lower() for ip in ips]
-        assert "berserk" in ip_names_lower
+        subjects = org.list_subjects()
+        assert subjects == []
 
 
 class TestSoulMd:

@@ -54,7 +54,7 @@ Output: tier (S/A/B/C/D) + score (0-100) + cause + recommendation`}</pre>
 
             <h2>Configuration SSOT</h2>
             <p>
-              <code>plugins/game_ip/config/evaluator_axes.yaml</code>은 다음 항목의 단일 진리원입니다.
+              외부 Game IP 패키지의 <code>config/evaluator_axes.yaml</code>은 다음 항목의 단일 진리원입니다.
             </p>
             <ul>
               <li><strong>4개 analyst 지시문</strong>. analyst 타입별 도메인 특화 포커스</li>
@@ -80,16 +80,13 @@ Output: tier (S/A/B/C/D) + score (0-100) + cause + recommendation`}</pre>
               <li><code>load_ip_profile(ip_name)</code>. 도메인 데이터 조회</li>
             </ul>
             <p>
-              <code>core/domains/loader.py</code>의 로더가 시작 시점에 <code>plugins/</code>
-              네임스페이스에서 플러그인을 발견합니다.
+              <code>core/domains/loader.py</code>의 로더는 외부 패키지가 self-register한
+              도메인을 사용할 수 있습니다.
             </p>
 
             <h2>CLI</h2>
-            <pre>{`# Dry-run (no LLM calls, returns fixture-based result)
-uv run geode analyze "Cowboy Bebop" --dry-run
-
-# Full run (requires API keys)
-uv run geode analyze "Berserk" --verbose`}</pre>
+            <pre>{`# External package CLI (example)
+uv run game-ip analyze "Cowboy Bebop" --dry-run`}</pre>
           </>
         }
         en={
@@ -134,7 +131,7 @@ Output: tier (S/A/B/C/D) + score (0-100) + cause + recommendation`}</pre>
 
             <h2>Configuration SSOT</h2>
             <p>
-              <code>plugins/game_ip/config/evaluator_axes.yaml</code> is the single
+              The external Game IP package&apos;s <code>config/evaluator_axes.yaml</code> is the single
               source of truth for:
             </p>
             <ul>
@@ -163,16 +160,13 @@ Output: tier (S/A/B/C/D) + score (0-100) + cause + recommendation`}</pre>
               <li><code>load_ip_profile(ip_name)</code> — domain data lookup</li>
             </ul>
             <p>
-              The loader at <code>core/domains/loader.py</code> discovers plugins
-              in the <code>plugins/</code> namespace at startup.
+              The loader at <code>core/domains/loader.py</code> can use domains
+              self-registered by external packages.
             </p>
 
             <h2>CLI</h2>
-            <pre>{`# Dry-run (no LLM calls, returns fixture-based result)
-uv run geode analyze "Cowboy Bebop" --dry-run
-
-# Full run (requires API keys)
-uv run geode analyze "Berserk" --verbose`}</pre>
+            <pre>{`# External package CLI (example)
+uv run game-ip analyze "Cowboy Bebop" --dry-run`}</pre>
           </>
         }
       />

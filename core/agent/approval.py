@@ -651,11 +651,6 @@ class ApprovalWorkflow:
             console.print("  [warning]$ Cost confirmation[/warning]")
             console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
-            if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
-                from core.config import ANTHROPIC_PRIMARY, get_node_model
-
-                primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
-                console.print(f"  [dim]Pipeline model:[/dim] {primary}")
             console.print()
 
         self._fire_hook(
@@ -720,11 +715,6 @@ class ApprovalWorkflow:
             console.print("  [warning]$ Cost confirmation[/warning]")
             console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
-            if tool_name in ("analyze_ip", "compare_ips", "batch_analyze"):
-                from core.config import ANTHROPIC_PRIMARY, get_node_model
-
-                primary = get_node_model("analyst") or ANTHROPIC_PRIMARY
-                console.print(f"  [dim]Pipeline model:[/dim] {primary}")
             console.print()
 
         await self._fire_hook_async(

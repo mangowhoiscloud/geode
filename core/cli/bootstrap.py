@@ -39,8 +39,7 @@ class GeodeBootstrap:
 
         Python ``contextvars`` do not automatically inherit across threads.
         Call this at the start of ``_gateway_processor`` or any function
-        running in a non-main thread so that tools like ``note_read``,
-        ``memory_search``, and ``analyze_ip`` work correctly.
+        running in a non-main thread so memory and tool context stay wired.
         """
         from core.memory.organization import MonoLakeOrganizationMemory
         from core.memory.project import ProjectMemory
@@ -53,19 +52,6 @@ class GeodeBootstrap:
             from core.cli import _set_readiness
 
             _set_readiness(self.readiness)
-
-        # Domain adapter (+ slash command registry extension)
-        try:
-            from core.cli.commands import install_domain_commands
-            from core.domains.loader import load_domain_adapter
-            from core.domains.port import get_domain_or_none, set_domain
-
-            set_domain(load_domain_adapter("game_ip"))
-            domain = get_domain_or_none()
-            if domain is not None:
-                install_domain_commands(domain)
-        except Exception:
-            log.debug("Domain propagation skipped", exc_info=True)
 
         # User profile (Tier 0.5)
         try:
@@ -117,34 +103,7 @@ def setup_contextvars(*, load_env: bool = False) -> None:
                 if val:  # non-empty only
                     os.environ[key] = val
 
-    # 1. Domain adapter
-    try:
-        from core.domains.loader import load_domain_adapter
-        from core.domains.port import set_domain
-
-        set_domain(load_domain_adapter("game_ip"))
-    except Exception:
-        log.debug("Domain adapter skipped", exc_info=True)
-
-    # 1.5 Domain-extension wiring (slash commands + tool handlers).
-    #     Step 4 (domain-free-core): replaces the IP-specific halves of
-    #     ``core/cli/commands.py`` and ``core/cli/tool_handlers.py`` with
-    #     a registry-extension pattern (DomainPort v2 ``register_*`` hooks).
-    try:
-        from core.cli.commands import install_domain_commands
-        from core.domains.port import get_domain_or_none
-
-        domain = get_domain_or_none()
-        if domain is not None:
-            install_domain_commands(domain)
-            # Tool handlers register lazily inside ``_build_tool_handlers``
-            # because they need the per-call readiness/mcp/skill_registry
-            # closure context. The ``install_domain_tool_handlers`` helper
-            # runs at handler-build time (see core/cli/tool_handlers.py).
-    except Exception:
-        log.debug("Domain command/handler registration skipped", exc_info=True)
-
-    # 2. Memory contextvars
+    # 1. Memory contextvars
     try:
         from core.memory.organization import MonoLakeOrganizationMemory
         from core.memory.project import ProjectMemory

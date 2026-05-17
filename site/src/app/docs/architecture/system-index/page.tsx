@@ -66,15 +66,15 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>플러그인 (1개)</h2>
+            <h2>번들 플러그인 (1개)</h2>
             <table>
               <thead><tr><th>플러그인</th><th>루트</th><th>모듈</th><th>주요 구성</th></tr></thead>
               <tbody>
                 <tr>
-                  <td><strong>game_ip</strong></td>
-                  <td><code>plugins/game_ip/</code></td>
-                  <td>13</td>
-                  <td>Analyst 4 + Evaluator 3 + Synthesizer + BiasBuster, 14-axis PSM 점수</td>
+                  <td><strong>petri_audit</strong></td>
+                  <td><code>plugins/petri_audit/</code></td>
+                  <td>17</td>
+                  <td>Petri × GEODE alignment audit runner, seed catalog, judge dimensions</td>
                 </tr>
               </tbody>
             </table>
@@ -82,11 +82,11 @@ export default function Page() {
             <h2>인벤토리 합계</h2>
             <table>
               <tbody>
-                <tr><th>Core 모듈</th><td>223</td></tr>
-                <tr><th>플러그인 모듈</th><td>13</td></tr>
-                <tr><th>테스트</th><td>~229 files (memory 83, llm 62, tools 59, hooks 31, agent 30)</td></tr>
+                <tr><th>Core 모듈</th><td>{GEODE_SOT.modules.core}</td></tr>
+                <tr><th>플러그인 모듈</th><td>{GEODE_SOT.modules.plugins}</td></tr>
+                <tr><th>테스트</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
                 <tr><th>훅 이벤트</th><td>58 (14 groups)</td></tr>
-                <tr><th>도구</th><td>61 (6 always-loaded + 55 deferred via <code>tool_search</code>)</td></tr>
+                <tr><th>도구</th><td>15 core tools + external domain tools via plugin registry</td></tr>
                 <tr><th>MCP 서버</th><td>16</td></tr>
                 <tr><th>슬래시 명령</th><td>15개 이상</td></tr>
                 <tr><th>핀된 프롬프트 템플릿</th><td>20 (17 .md + 3 axes)</td></tr>
@@ -147,15 +147,15 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>Plugins (1)</h2>
+            <h2>Bundled Plugins (1)</h2>
             <table>
               <thead><tr><th>Plugin</th><th>Root</th><th>Modules</th><th>Highlights</th></tr></thead>
               <tbody>
                 <tr>
-                  <td><strong>game_ip</strong></td>
-                  <td><code>plugins/game_ip/</code></td>
-                  <td>13</td>
-                  <td>4 Analysts + 3 Evaluators + Synthesizer + BiasBuster, 14-axis PSM scoring</td>
+                  <td><strong>petri_audit</strong></td>
+                  <td><code>plugins/petri_audit/</code></td>
+                  <td>17</td>
+                  <td>Petri × GEODE alignment audit runner, seed catalog, judge dimensions</td>
                 </tr>
               </tbody>
             </table>
@@ -163,11 +163,11 @@ export default function Page() {
             <h2>Inventory totals</h2>
             <table>
               <tbody>
-                <tr><th>Core modules</th><td>223</td></tr>
-                <tr><th>Plugin modules</th><td>13</td></tr>
-                <tr><th>Tests</th><td>~229 files (memory 83, llm 62, tools 59, hooks 31, agent 30)</td></tr>
+                <tr><th>Core modules</th><td>{GEODE_SOT.modules.core}</td></tr>
+                <tr><th>Plugin modules</th><td>{GEODE_SOT.modules.plugins}</td></tr>
+                <tr><th>Tests</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
                 <tr><th>Hook events</th><td>58 (14 groups)</td></tr>
-                <tr><th>Tools</th><td>61 (6 always-loaded + 55 deferred via <code>tool_search</code>)</td></tr>
+                <tr><th>Tools</th><td>15 core tools + external domain tools via plugin registry</td></tr>
                 <tr><th>MCP servers</th><td>16</td></tr>
                 <tr><th>Slash commands</th><td>15+</td></tr>
                 <tr><th>Prompt templates pinned</th><td>20 (17 .md + 3 axes)</td></tr>

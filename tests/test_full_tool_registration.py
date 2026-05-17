@@ -1,4 +1,4 @@
-"""Tests for full 25-tool registration and PolicyChain mode filtering."""
+"""Tests for core tool registration and PolicyChain mode filtering."""
 
 from __future__ import annotations
 
@@ -7,21 +7,10 @@ from pathlib import Path
 from core.runtime import GeodeRuntime, _build_default_policies, _build_default_registry
 
 ALL_TOOL_NAMES = {
-    # Analysis (4)
-    "run_analyst",
-    "run_evaluator",
-    "psm_calculate",
-    "explain_score",
-    # Data (3)
-    "query_monolake",
+    # Data (2)
     "cortex_analyst",
     "cortex_search",
-    # Signals (7)
-    "youtube_search",
-    "reddit_sentiment",
-    "twitch_stats",
-    "steam_info",
-    "google_trends",
+    # Search (2)
     "web_search",
     "wanted_jobs_search",
     # Memory (7)
@@ -42,11 +31,11 @@ ALL_TOOL_NAMES = {
 
 
 class TestFullToolRegistration:
-    """Verify all 25 tools are registered in the default registry."""
+    """Verify core tools are registered in the default registry."""
 
-    def test_registry_contains_25_tools(self) -> None:
+    def test_registry_contains_core_tools(self) -> None:
         registry = _build_default_registry()
-        assert len(registry) == 25
+        assert len(registry) == len(ALL_TOOL_NAMES)
 
     def test_all_tool_names_present(self) -> None:
         registry = _build_default_registry()
@@ -60,16 +49,11 @@ class TestFullToolRegistration:
 
     def test_runtime_registry_count(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
-        assert len(runtime.tool_registry) == 25
+        assert len(runtime.tool_registry) == len(ALL_TOOL_NAMES)
 
 
 class TestPolicyChainDryRun:
-    """dry_run mode blocks run_analyst, run_evaluator, send_notification."""
-
-    def test_dry_run_blocks_llm_tools(self) -> None:
-        chain = _build_default_policies()
-        assert chain.is_allowed("run_analyst", mode="dry_run") is False
-        assert chain.is_allowed("run_evaluator", mode="dry_run") is False
+    """dry_run mode blocks notifications."""
 
     def test_dry_run_blocks_notification(self) -> None:
         chain = _build_default_policies()
@@ -77,18 +61,7 @@ class TestPolicyChainDryRun:
 
     def test_dry_run_allows_data_tools(self) -> None:
         chain = _build_default_policies()
-        for tool in ("query_monolake", "cortex_analyst", "cortex_search"):
-            assert chain.is_allowed(tool, mode="dry_run") is True
-
-    def test_dry_run_allows_signal_tools(self) -> None:
-        chain = _build_default_policies()
-        for tool in (
-            "youtube_search",
-            "reddit_sentiment",
-            "twitch_stats",
-            "steam_info",
-            "google_trends",
-        ):
+        for tool in ("cortex_analyst", "cortex_search"):
             assert chain.is_allowed(tool, mode="dry_run") is True
 
     def test_dry_run_allows_memory_tools(self) -> None:
@@ -100,8 +73,7 @@ class TestPolicyChainDryRun:
         registry = _build_default_registry()
         chain = _build_default_policies()
         available = registry.list_tools(policy=chain, mode="dry_run")
-        # 25 total minus 3 blocked (run_analyst, run_evaluator, send_notification)
-        assert len(available) == 22
+        assert len(available) == len(ALL_TOOL_NAMES) - 1
 
 
 class TestPolicyChainFullPipeline:
@@ -111,17 +83,11 @@ class TestPolicyChainFullPipeline:
         chain = _build_default_policies()
         assert chain.is_allowed("send_notification", mode="full_pipeline") is False
 
-    def test_full_pipeline_allows_analysis_tools(self) -> None:
-        chain = _build_default_policies()
-        for tool in ("run_analyst", "run_evaluator", "psm_calculate"):
-            assert chain.is_allowed(tool, mode="full_pipeline") is True
-
     def test_full_pipeline_filter_count(self) -> None:
         registry = _build_default_registry()
         chain = _build_default_policies()
         available = registry.list_tools(policy=chain, mode="full_pipeline")
-        # 25 total minus 1 blocked (send_notification)
-        assert len(available) == 24
+        assert len(available) == len(ALL_TOOL_NAMES) - 1
 
     def test_full_pipeline_allows_memory_tools(self) -> None:
         chain = _build_default_policies()
@@ -135,25 +101,21 @@ class TestPolicyFilterIntegration:
     def test_runtime_dry_run_filtering(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         dry_tools = runtime.get_available_tools(mode="dry_run")
-        assert "run_analyst" not in dry_tools
-        assert "run_evaluator" not in dry_tools
         assert "send_notification" not in dry_tools
-        assert "psm_calculate" in dry_tools
         assert "memory_search" in dry_tools
-        assert "query_monolake" in dry_tools
+        assert "cortex_search" in dry_tools
 
     def test_runtime_full_pipeline_filtering(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         full_tools = runtime.get_available_tools(mode="full_pipeline")
-        assert "run_analyst" in full_tools
         assert "send_notification" not in full_tools
-        assert len(full_tools) == 24
+        assert len(full_tools) == len(ALL_TOOL_NAMES) - 1
 
     def test_unknown_mode_allows_all(self, tmp_path: Path) -> None:
         """Modes with no matching policies allow all tools."""
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="custom_mode")
-        assert len(tools) == 25
+        assert len(tools) == len(ALL_TOOL_NAMES)
 
     def test_anthropic_tool_defs_respect_policy(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Berserk", log_dir=tmp_path)
@@ -162,6 +124,5 @@ class TestPolicyFilterIntegration:
             mode="dry_run",
         )
         names = {d["name"] for d in defs}
-        assert "run_analyst" not in names
         assert "send_notification" not in names
         assert "memory_search" in names

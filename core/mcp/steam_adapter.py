@@ -39,27 +39,27 @@ class SteamMCPSignalAdapter:
         self._manager = manager
         self._server_name = server_name
 
-    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, subject: str) -> dict[str, Any]:
         """Async Steam MCP signal fetch."""
         if not await self.ais_available():
             return {}
         try:
             if self._manager is not None:
                 result = await self._manager.acall_tool(
-                    self._server_name, "get_game_info", {"query": ip_name}
+                    self._server_name, "get_game_info", {"query": subject}
                 )
             elif self._client is not None:
-                result = await self._client.acall_tool("get_game_info", {"query": ip_name})
+                result = await self._client.acall_tool("get_game_info", {"query": subject})
             else:
                 return {}
 
             if "error" in result:
-                log.warning("Steam MCP returned error for %s: %s", ip_name, result["error"])
+                log.warning("Steam MCP returned error for %s: %s", subject, result["error"])
                 return {}
 
             return self._signals_from_result(result)
         except Exception as exc:
-            log.warning("Steam MCP fetch failed for %s: %s", ip_name, exc)
+            log.warning("Steam MCP fetch failed for %s: %s", subject, exc)
             return {}
 
     def is_available(self) -> bool:

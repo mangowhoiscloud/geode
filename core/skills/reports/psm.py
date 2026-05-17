@@ -7,10 +7,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from plugins.game_ip.scoring_constants import (
-    CONFIDENCE_BASE_FACTOR,
-    CONFIDENCE_SCALE_FACTOR,
-    REPORT_WEIGHTS,
+CONFIDENCE_BASE_FACTOR = 0.70
+CONFIDENCE_SCALE_FACTOR = 0.30
+REPORT_WEIGHTS = (
+    ("psm", 0.25),
+    ("quality", 0.20),
+    ("recovery", 0.15),
+    ("growth", 0.15),
+    ("momentum", 0.15),
+    ("dev", 0.10),
 )
 
 # ---------------------------------------------------------------------------

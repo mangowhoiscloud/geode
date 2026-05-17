@@ -108,6 +108,8 @@ class EvaluatorResult(BaseModel):
 
         valid_map = get_valid_axes_map()
         expected_keys = valid_map.get(self.evaluator_type)
+        if not valid_map:
+            expected_keys = set(self.axes.keys())
         if expected_keys is None:
             raise ValueError(
                 f"Unknown evaluator_type: {self.evaluator_type}. "

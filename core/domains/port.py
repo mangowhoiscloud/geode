@@ -26,7 +26,7 @@ class DomainPort(Protocol):
 
     @property
     def name(self) -> str:
-        """Domain identifier, e.g. 'game_ip', 'research'."""
+        """Domain identifier, e.g. 'research'."""
         ...
 
     @property
@@ -128,8 +128,7 @@ class DomainPort(Protocol):
     #
     # The four methods below were introduced in step 3 of the
     # domain-free-core refactor to remove the last direct
-    # ``from plugins.game_ip...`` imports inside ``core/lifecycle/`` and
-    # ``core/agent/system_prompt.py``.  They are *optional*: domains
+    # plugin imports inside runtime wiring. They are *optional*: domains
     # that have no signal layer or no system-prompt customization may
     # leave the methods unimplemented, in which case call sites in
     # ``core/`` fall back to a no-op via ``getattr(domain, '<name>',

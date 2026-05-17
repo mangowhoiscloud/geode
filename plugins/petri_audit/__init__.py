@@ -6,9 +6,8 @@ skipped so plain ``import plugins.petri_audit`` keeps working on a
 default ``uv sync`` (no ``inspect_ai`` import on cold-start).
 
 Intentionally NOT registered with ``core.domains.loader``: petri_audit is
-an external evaluator harness, not a runtime domain like ``game_ip``.
-Skipping registration keeps the audit machinery out of the default
-``geode analyze`` flow.
+an external evaluator harness, not a runtime domain. Skipping registration
+keeps the audit machinery out of the default agent runtime.
 
 See ``docs/plans/eval-petri-integration.md`` for the phased rollout
 (P0 GAP audit, P1/P2-a/P2-b/P2-d skeleton, P3 first live audit).

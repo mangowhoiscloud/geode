@@ -175,11 +175,11 @@ class TestBootstrapThreadIntegration:
             boot.propagate_to_thread()
             # Verify handler dict is accessible and non-empty
             results["handler_count"] = len(boot.tool_handlers)
-            results["has_analyze"] = "analyze_ip" in boot.tool_handlers
+            results["has_memory_search"] = "memory_search" in boot.tool_handlers
 
         t = threading.Thread(target=worker)
         t.start()
         t.join(timeout=5)
 
         assert results.get("handler_count", 0) >= 40
-        assert results.get("has_analyze") is True
+        assert results.get("has_memory_search") is True

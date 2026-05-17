@@ -202,7 +202,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
         if tier in ("organization", "all") and len(matches) < limit:
             org = _org_memory_ctx.get()
             if org is not None:
-                ip_ctx = org.get_ip_context(query)
+                ip_ctx = org.get_subject_context(query)
                 if ip_ctx:
                     matches.append(
                         {

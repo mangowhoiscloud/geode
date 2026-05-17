@@ -696,7 +696,7 @@ def build_task_graph(
     """Build TaskGraph and wire the hook bridge for status tracking.
 
     Routes through ``DomainPort.build_task_graph`` so the topology is
-    domain-defined (game_ip currently maps the 7-node analyst pipeline).
+    domain-defined by an external plugin.
     Falls back to an empty TaskGraph if no domain is registered or the
     active domain doesn't implement the hook — the bridge stays wired
     so PIPELINE_END / STATUS hooks are still observed, just with no
