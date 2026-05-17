@@ -68,9 +68,7 @@ class SourceSpec(BaseModel):
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SourceSpec:
         if self.default not in self.allowed:
-            raise ValueError(
-                f"source default {self.default!r} not in allowed {self.allowed}"
-            )
+            raise ValueError(f"source default {self.default!r} not in allowed {self.allowed}")
         return self
 
 
@@ -107,8 +105,7 @@ class PetriManifest(BaseModel):
         # 1. role list <-> role spec coverage
         if set(self.enabled_roles) != set(self.roles):
             raise ValueError(
-                f"enabled_roles {self.enabled_roles} != role spec keys "
-                f"{sorted(self.roles)}"
+                f"enabled_roles {self.enabled_roles} != role spec keys {sorted(self.roles)}"
             )
         # 2. every (family, source) in source.allowed has an adapter
         #    (excluding the "auto" sentinel — resolved at binding time)
@@ -134,9 +131,7 @@ class PetriManifest(BaseModel):
 
     def get_source(self, family: str) -> SourceSpec:
         if family not in self.sources:
-            raise KeyError(
-                f"Unknown petri family {family!r}; known={sorted(self.sources)}"
-            )
+            raise KeyError(f"Unknown petri family {family!r}; known={sorted(self.sources)}")
         return self.sources[family]
 
     def get_adapter(self, family: str, source: str) -> AdapterSpec:
