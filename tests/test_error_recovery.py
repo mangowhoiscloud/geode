@@ -272,9 +272,13 @@ class TestAgenticLoopRecovery:
                 return {"error": "timeout"}
             return {"status": "ok", "subjects": []}
 
-        executor = ToolExecutor(action_handlers={"list_subjects": sometimes_fails}, auto_approve=True)
+        executor = ToolExecutor(
+            action_handlers={"list_subjects": sometimes_fails}, auto_approve=True
+        )
         loop = AgenticLoop(context, executor, hooks=hooks)
-        loop._tool_processor._consecutive_failures = {"list_subjects": 2}  # simulate 2 prior failures
+        loop._tool_processor._consecutive_failures = {
+            "list_subjects": 2
+        }  # simulate 2 prior failures
 
         response = self._make_tool_response("list_subjects", {})
         results = asyncio.run(loop._tool_processor.process(response))
@@ -468,10 +472,15 @@ class TestRecoveryEdgeCases:
             captured_kwargs.update(kwargs)
             return {"status": "ok"}
 
-        executor = ToolExecutor(action_handlers={"analyze_subject": capture_handler}, auto_approve=True)
+        executor = ToolExecutor(
+            action_handlers={"analyze_subject": capture_handler}, auto_approve=True
+        )
         strategy = ErrorRecoveryStrategy(executor, retry_base_delay=0.0)
         _run_recovery(
-            strategy, "analyze_subject", {"subject_id": "Project Atlas", "dry_run": True}, failure_count=1
+            strategy,
+            "analyze_subject",
+            {"subject_id": "Project Atlas", "dry_run": True},
+            failure_count=1,
         )
         assert captured_kwargs.get("subject_id") == "Project Atlas"
         assert captured_kwargs.get("dry_run") is True

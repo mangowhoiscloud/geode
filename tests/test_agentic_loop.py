@@ -1170,7 +1170,9 @@ class TestAgenticLoopEdgeCases:
     def executor(self) -> ToolExecutor:
         handler_a = MagicMock(return_value={"status": "ok", "action": "list"})
         handler_b = MagicMock(return_value={"data": [1, 2, 3]})
-        return ToolExecutor(action_handlers={"list_subjects": handler_a, "search_subjects": handler_b})
+        return ToolExecutor(
+            action_handlers={"list_subjects": handler_a, "search_subjects": handler_b}
+        )
 
     def test_multiple_tool_calls_in_single_response(
         self, context: ConversationContext, executor: ToolExecutor

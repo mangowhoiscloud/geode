@@ -244,7 +244,9 @@ class TestDispatch:
                 callback=lambda data: calls.append(data),
             )
         )
-        result = mgr.dispatch(TriggerType.MANUAL, {"subject": "Project Atlas"}, automation_id="auto-1")
+        result = mgr.dispatch(
+            TriggerType.MANUAL, {"subject": "Project Atlas"}, automation_id="auto-1"
+        )
         assert result.success is True
         assert len(calls) == 1
         assert calls[0]["_dispatch"]["trigger_type"] == "manual"

@@ -119,6 +119,5 @@ class MonoLakeOrganizationMemory:
     def list_subjects(self) -> list[str]:
         """List all known subject names from fixtures."""
         return [
-            self._cache[k].get("subject", {}).get("name") or k
-            for k in sorted(self._cache.keys())
+            self._cache[k].get("subject", {}).get("name") or k for k in sorted(self._cache.keys())
         ]

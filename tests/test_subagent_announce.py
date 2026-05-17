@@ -502,7 +502,9 @@ class TestAnnounceIntegration:
         )
 
         # 1. Delegate tasks
-        tasks = [SubTask(task_id="analyze-1", description="analyze Project Atlas", task_type="analyze")]
+        tasks = [
+            SubTask(task_id="analyze-1", description="analyze Project Atlas", task_type="analyze")
+        ]
         mgr.delegate(tasks)
 
         # 2. Parent loop checks for announced results

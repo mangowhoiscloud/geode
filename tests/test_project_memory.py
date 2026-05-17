@@ -292,7 +292,10 @@ class TestIsValidInsight:
         assert _is_valid_insight("**preference**: dark mode enabled") is True
 
     def test_valid_turn_with_tools(self):
-        assert _is_valid_insight("[turn] analyze subject → tools=[analyze_subject, web_search]") is True
+        assert (
+            _is_valid_insight("[turn] analyze subject → tools=[analyze_subject, web_search]")
+            is True
+        )
 
     def test_reject_empty(self):
         assert _is_valid_insight("") is False
@@ -353,7 +356,9 @@ class TestInsightQualityGateIntegration:
     def test_accept_valid_insight(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
         mem.ensure_structure()
-        assert mem.add_insight("[Project Atlas] tier=S, score=0.85, cause=conversion_failure") is True
+        assert (
+            mem.add_insight("[Project Atlas] tier=S, score=0.85, cause=conversion_failure") is True
+        )
 
 
 class TestPurgeBadInsights:
