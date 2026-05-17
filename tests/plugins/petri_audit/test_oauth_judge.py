@@ -36,7 +36,7 @@ def test_to_inspect_model_uses_oauth_when_token_present() -> None:
     """Auto-detect: token resolves → ``openai-codex/<model>``."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
         assert to_inspect_model("gpt-5.4-mini") == "openai-codex/gpt-5.4-mini"
         assert to_inspect_model("gpt-5.3-codex") == "openai-codex/gpt-5.3-codex"
@@ -46,7 +46,7 @@ def test_to_inspect_model_falls_back_to_per_token_without_token() -> None:
     """Auto-detect: no token → legacy ``openai/<model>``."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=False):
         assert to_inspect_model("gpt-5.5") == "openai/gpt-5.5"
         assert to_inspect_model("gpt-5.4-mini") == "openai/gpt-5.4-mini"
 
@@ -60,7 +60,7 @@ def test_to_inspect_model_use_oauth_true_forces_route() -> None:
     """
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=False):
         assert to_inspect_model("gpt-5.5", use_oauth=True) == "openai-codex/gpt-5.5"
 
 
@@ -68,7 +68,7 @@ def test_to_inspect_model_use_oauth_false_keeps_per_token() -> None:
     """``use_oauth=False`` keeps PAYG mapping even when a token exists."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         assert to_inspect_model("gpt-5.5", use_oauth=False) == "openai/gpt-5.5"
 
 
@@ -76,7 +76,7 @@ def test_to_inspect_model_raw_openai_passthrough_bypasses_oauth() -> None:
     """User-pinned raw ``openai/gpt-5.5`` stays PAYG even with token."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         assert to_inspect_model("openai/gpt-5.5") == "openai/gpt-5.5"
         # And the explicit OAuth-routed form is honoured.
         assert to_inspect_model("openai-codex/gpt-5.5") == "openai-codex/gpt-5.5"
@@ -87,7 +87,7 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
     they stay on per-token regardless of OAuth availability."""
     from plugins.petri_audit.models import to_inspect_model
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         assert to_inspect_model("o3") == "openai/o3"
         assert to_inspect_model("o4-mini") == "openai/o4-mini"
 
@@ -97,8 +97,8 @@ def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
     from plugins.petri_audit.models import to_inspect_model
 
     with (
-        patch("plugins.petri_audit.models._codex_oauth_available", return_value=True),
-        patch("plugins.petri_audit.models._claude_oauth_available", return_value=True),
+        patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True),
+        patch("plugins.petri_audit.adapters.claude_cli_backend.is_available", return_value=True),
     ):
         assert (
             to_inspect_model("claude-haiku-4-5-20251001") == "claude-code/claude-haiku-4-5-20251001"
@@ -215,8 +215,8 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
     from plugins.petri_audit.runner import run_audit
 
     with (
-        patch("plugins.petri_audit.models._codex_oauth_available", return_value=True),
-        patch("plugins.petri_audit.models._claude_oauth_available", return_value=True),
+        patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True),
+        patch("plugins.petri_audit.adapters.claude_cli_backend.is_available", return_value=True),
     ):
         report = run_audit(
             judge="gpt-5.5",
@@ -235,7 +235,7 @@ def test_run_audit_no_oauth_flag_forces_per_token() -> None:
     """Explicit ``--no-oauth`` keeps PAYG even when a token resolves."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -254,7 +254,7 @@ def test_run_audit_falls_back_when_no_token() -> None:
     """No OAuth token + auto-detect → legacy ``openai/`` path."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=False):
         report = run_audit(
             judge="gpt-5.5",
             auditor="claude-sonnet-4-6",
@@ -272,7 +272,7 @@ def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
     """User pinned ``openai/gpt-5.5`` → no rewrite (raw passthrough)."""
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
             judge="openai/gpt-5.5",
             auditor="claude-sonnet-4-6",

@@ -157,7 +157,7 @@ def test_format_bias_chip_shape() -> None:
 def test_run_audit_emits_bias_chip_for_same_provider_dry_run() -> None:
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=True):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
             judge="gpt-5.5",
             auditor="gpt-5.5",
@@ -177,7 +177,7 @@ def test_run_audit_emits_bias_chip_for_same_provider_dry_run() -> None:
 def test_run_audit_no_bias_chip_for_mixed_providers_dry_run() -> None:
     from plugins.petri_audit.runner import run_audit
 
-    with patch("plugins.petri_audit.models._codex_oauth_available", return_value=False):
+    with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=False):
         report = run_audit(
             judge="gpt-5.5",  # anthropic-rooted? no — openai. mix with anthropic auditor below
             auditor="claude-sonnet-4-6",
