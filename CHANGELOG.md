@@ -52,6 +52,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Added
+
+- **Petri audit manifest (P1-A) — `petri.plugin.toml` 선언적 schema.**
+  `plugins/petri_audit/petri.plugin.toml` 신설 + `manifest.py` pydantic
+  loader. 4-layer schema — `[petri]` enabled_roles, `[petri.role.<name>]`
+  default_model + allowed_models, `[petri.source.<family>]` default +
+  allowed credential sources, `[petri.adapter.<family>.<source>]`
+  module + inspect_prefix + auth_env_vars. cross-layer consistency
+  검증 (default ∈ allowed, adapter coverage). lru_cache 로 reload 안전.
+  OpenClaw plugin.json 패턴 차용 — Petri 의 role × source × model 결합
+  규칙을 코드 외부로 빼서 후속 PR (P1-B/C/D/E/F/G) 에서 hardcoded
+  if/elif chain 을 manifest 조회로 치환할 기반.
+
+- **Petri audit manifest (P1-A) — `petri.plugin.toml` declarative schema.**
+  New `plugins/petri_audit/petri.plugin.toml` + `manifest.py` pydantic
+  loader. 4-layer schema (`[petri]` enabled_roles, `[petri.role.<name>]`,
+  `[petri.source.<family>]`, `[petri.adapter.<family>.<source>]`) with
+  cross-layer consistency checks (default ∈ allowed, every non-auto
+  source has an adapter binding). `lru_cache`-backed reload-safe loader.
+  Adopts the OpenClaw `plugin.json` pattern so subsequent PRs
+  (P1-B..G) can replace hardcoded if/elif routing with manifest
+  lookups — first step of the Petri side of the routing externalisation
+  plan (Petri P1 → GEODE P2 routing.toml → P3 pricing externalisation).
+
 ## [0.99.10] — 2026-05-17
 
 ### Changed
