@@ -76,11 +76,23 @@ synthesizer = "claude-opus-4-7"
 #
 # Onboarding key wizard matches user input against these regexes to
 # auto-detect the provider. Pattern → provider map; first match wins.
+# Quantified patterns reject obvious typos (length ≥ 10) before they hit
+# the key store.
 
 [credentials.patterns]
-"^sk-ant-" = "anthropic"
-"^sk-proj-" = "openai"
-"^glm-" = "glm"
+"^sk-ant-[A-Za-z0-9_-]{10,}$" = "anthropic"
+"^sk-proj-[A-Za-z0-9_-]{10,}$" = "openai"
+"^sk-[A-Za-z0-9_-]{10,}$" = "openai"
+
+# Provider → env var the API key is stored under. Onboarding upserts into
+# the env when a pattern matches. GLM keys are sniffed by a dedicated
+# helper (``core.utils.env_io.is_glm_key``) — the GLM mapping here is
+# the destination env var for that hit.
+
+[credentials.env_vars]
+anthropic = "ANTHROPIC_API_KEY"
+openai = "OPENAI_API_KEY"
+glm = "ZAI_API_KEY"
 
 # ── Keychain service names (per provider, per platform) ────────────────────
 #

@@ -161,12 +161,39 @@ def _wizard_api_key_path() -> bool:
 # API Key Detection (natural language input guard)
 # ---------------------------------------------------------------------------
 
-# Patterns: sk-ant-* → anthropic, sk-proj-*/sk-* → openai, hex.hex → glm
-_KEY_PATTERNS: list[tuple[str, str, str]] = [
-    (r"^sk-ant-[A-Za-z0-9_-]{10,}$", "anthropic", "ANTHROPIC_API_KEY"),
-    (r"^sk-proj-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
-    (r"^sk-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
-]
+# P2-C (2026-05-17) — credential pattern + env var binding migrated to
+# core/config/routing.toml. The wizard now reads both axes from the
+# manifest so adding a new provider is a TOML edit, not a code change.
+
+
+def _key_patterns() -> list[tuple[str, str, str]]:
+    """Return ``[(regex, provider, env_var), ...]`` from the routing manifest.
+
+    Lazy — called from :func:`detect_api_key` so the heavy manifest load
+    only fires on the natural-language input path (not at module import).
+    Falls back to a built-in default if the manifest is unreachable so
+    onboarding never crashes on a stale install.
+    """
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return [
+            (r"^sk-ant-[A-Za-z0-9_-]{10,}$", "anthropic", "ANTHROPIC_API_KEY"),
+            (r"^sk-proj-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
+            (r"^sk-[A-Za-z0-9_-]{10,}$", "openai", "OPENAI_API_KEY"),
+        ]
+    env_vars = manifest.credential_env_vars.env_vars
+    out: list[tuple[str, str, str]] = []
+    for regex, provider in manifest.credential_patterns.patterns.items():
+        env_var = env_vars.get(provider)
+        if not env_var:
+            # Unknown provider — skip (manifest authors should add the env var
+            # mapping when introducing a new pattern).
+            continue
+        out.append((regex, provider, env_var))
+    return out
 
 
 def detect_api_key(text: str) -> tuple[str, str, str] | None:
@@ -181,13 +208,19 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
     if " " in stripped or "\n" in stripped:
         return None
 
-    for pattern, provider, env_var in _KEY_PATTERNS:
+    for pattern, provider, env_var in _key_patterns():
         if re.match(pattern, stripped):
             return provider, env_var, stripped
 
-    # GLM key: {id}.{secret} pattern — uses shared helper
+    # GLM key: {id}.{secret} pattern — uses shared helper.
     if is_glm_key(stripped):
-        return "glm", "ZAI_API_KEY", stripped
+        try:
+            from core.config.routing_manifest import load_routing_manifest
+
+            glm_env = load_routing_manifest().credential_env_vars.env_vars.get("glm", "ZAI_API_KEY")
+        except Exception:
+            glm_env = "ZAI_API_KEY"
+        return "glm", glm_env, stripped
 
     return None
 

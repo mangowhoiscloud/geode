@@ -54,6 +54,26 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Changed
 
+- **Credential patterns + keychain service migrated to routing.toml (P2-C).**
+  `core/cli/onboarding.py` 의 `_KEY_PATTERNS` 상수 (3-tuple regex/provider/
+  env_var) 가 manifest 의 `[credentials.patterns]` + `[credentials.
+  env_vars]` 에서 lazy load. `plugins/petri_audit/claude_code_provider.py`
+  의 `KEYCHAIN_SERVICE` 상수도 `[credentials.keychain]` + env override
+  (`GEODE_ANTHROPIC_KEYCHAIN_SERVICE`) 기반으로 전환. routing_manifest
+  에 `CredentialEnvVars` pydantic 모델 추가 (provider → env var).
+  Fallback (manifest 미가용 시 legacy hardcode) 유지 — 사용자가 stale
+  .geode 디렉토리여도 onboarding 깨지지 않음.
+
+- **Credential patterns + keychain service migrated to routing.toml (P2-C).**
+  Moved the `_KEY_PATTERNS` table (regex / provider / env var triples)
+  from `core/cli/onboarding.py` into the routing manifest's
+  `[credentials.patterns]` + new `[credentials.env_vars]` sections.
+  Similarly relocated `KEYCHAIN_SERVICE` in
+  `plugins/petri_audit/claude_code_provider.py` to consult an env
+  override (`GEODE_ANTHROPIC_KEYCHAIN_SERVICE`) then the manifest's
+  `[credentials.keychain]`. Added `CredentialEnvVars` pydantic model.
+  Defensive fallbacks keep onboarding usable on a stale install.
+
 - **Model defaults + fallback chains migrated to routing.toml (P2-B).**
   `core/config/__init__.py` 의 10 hardcoded 상수 (`ANTHROPIC_PRIMARY` /
   `SECONDARY` / `BUDGET` / `FALLBACK_CHAIN` / `OPENAI_PRIMARY` /
