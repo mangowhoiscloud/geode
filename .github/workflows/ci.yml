@@ -110,9 +110,14 @@ jobs:
       # covered — pushing total coverage below the 75% ratchet).
       - if: needs.changes.outputs.code == 'true'
         run: uv sync --extra audit
-      - name: Run tests with coverage (xdist parallel)
+      - name: Run tests with coverage (xdist parallel, loadfile)
         if: needs.changes.outputs.code == 'true'
-        run: uv run pytest -n auto --cov=core --cov-report=term-missing
+        # --dist=loadfile pins same-file tests to the same worker. Without
+        # it, xdist can split TestAutoLearnHandler.{test_saves_pattern_on_match,
+        # test_cooldown_prevents_rapid_fire} across workers — those two share
+        # module-level state (cooldown timestamp), producing a flaky
+        # FAILURE on develop→main PR #1220 (2026-05-17).
+        run: uv run pytest -n auto --dist=loadfile --cov=core --cov-report=term-missing
       - name: Ratchet — minimum test count
         if: needs.changes.outputs.code == 'true'
         run: |
