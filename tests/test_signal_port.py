@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.mcp.signal_port import SignalEnrichmentPort
@@ -11,13 +12,18 @@ from plugins.game_ip.mcp.signal_adapter import (
     LiveSignalAdapter,
     create_signal_adapter,
 )
-from plugins.game_ip.nodes.signals import set_signal_adapter, signals_node
+from plugins.game_ip.nodes.signals import set_signal_adapter
+from plugins.game_ip.nodes.signals import signals_node as _signals_node
+
+
+def signals_node(state: GeodeState) -> dict[str, Any]:
+    return asyncio.run(_signals_node(state))
 
 
 class TestSignalEnrichmentPort:
     def test_port_has_required_methods(self):
-        assert hasattr(SignalEnrichmentPort, "fetch_signals")
-        assert hasattr(SignalEnrichmentPort, "is_available")
+        assert hasattr(SignalEnrichmentPort, "afetch_signals")
+        assert hasattr(SignalEnrichmentPort, "ais_available")
 
     def test_fixture_adapter_satisfies_port(self):
         adapter = FixtureSignalAdapter()
@@ -31,12 +37,12 @@ class TestSignalEnrichmentPort:
 class TestFixtureSignalAdapter:
     def test_fetch_known_ip(self):
         adapter = FixtureSignalAdapter()
-        signals = adapter.fetch_signals("Berserk")
+        signals = asyncio.run(adapter.afetch_signals("Berserk"))
         assert "youtube_views" in signals
 
     def test_fetch_unknown_ip(self):
         adapter = FixtureSignalAdapter()
-        signals = adapter.fetch_signals("Nonexistent IP")
+        signals = asyncio.run(adapter.afetch_signals("Nonexistent IP"))
         assert signals == {}
 
     def test_is_available(self):
@@ -46,7 +52,7 @@ class TestFixtureSignalAdapter:
 class TestLiveSignalAdapter:
     def test_falls_back_to_fixture(self):
         adapter = LiveSignalAdapter()
-        signals = adapter.fetch_signals("Berserk")
+        signals = asyncio.run(adapter.afetch_signals("Berserk"))
         assert "youtube_views" in signals
         assert signals["_enrichment_source"] == "fixture_fallback"
 
@@ -63,10 +69,10 @@ class TestCreateSignalAdapter:
 class TestSignalsNodeWithAdapter:
     def test_uses_injected_adapter(self):
         class MockAdapter:
-            def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+            async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
                 return {"youtube_views": 999, "_source": "mock"}
 
-            def is_available(self) -> bool:
+            async def ais_available(self) -> bool:
                 return True
 
         set_signal_adapter(MockAdapter())
@@ -79,10 +85,10 @@ class TestSignalsNodeWithAdapter:
 
     def test_falls_back_on_adapter_failure(self):
         class FailingAdapter:
-            def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+            async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
                 raise ConnectionError("API down")
 
-            def is_available(self) -> bool:
+            async def ais_available(self) -> bool:
                 return True
 
         set_signal_adapter(FailingAdapter())
@@ -96,10 +102,10 @@ class TestSignalsNodeWithAdapter:
 
     def test_skips_unavailable_adapter(self):
         class UnavailableAdapter:
-            def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+            async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
                 return {"should_not": "appear"}
 
-            def is_available(self) -> bool:
+            async def ais_available(self) -> bool:
                 return False
 
         set_signal_adapter(UnavailableAdapter())

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -58,25 +59,61 @@ class TestBashToolValidation:
         assert result is None
 
     def test_execute_safe_command(self, bash: BashTool) -> None:
-        result = bash.execute("echo hello_test")
+        result = asyncio.run(bash.aexecute("echo hello_test"))
         assert result.returncode == 0
         assert "hello_test" in result.stdout
         assert not result.blocked
 
     def test_execute_blocked_command(self, bash: BashTool) -> None:
-        result = bash.execute("sudo rm -rf /")
+        result = asyncio.run(bash.aexecute("sudo rm -rf /"))
         assert result.blocked is True
         assert result.returncode == 0  # default, not executed
 
     def test_execute_with_timeout(self, bash: BashTool) -> None:
-        result = bash.execute("sleep 10", timeout=1)
+        result = asyncio.run(bash.aexecute("sleep 10", timeout=1))
         assert "Timeout" in result.error
         assert result.returncode == -1
+        assert result.timed_out is True
 
     def test_execute_with_working_dir(self, tmp_path: Any) -> None:
         bash = BashTool(working_dir=str(tmp_path))
-        result = bash.execute("pwd")
+        result = asyncio.run(bash.aexecute("pwd"))
         assert str(tmp_path) in result.stdout
+
+    def test_aexecute_safe_command(self, bash: BashTool) -> None:
+        result = asyncio.run(bash.aexecute("echo hello_async"))
+        assert result.returncode == 0
+        assert "hello_async" in result.stdout
+        assert not result.blocked
+
+    def test_aexecute_blocked_command(self, bash: BashTool) -> None:
+        result = asyncio.run(bash.aexecute("sudo rm -rf /"))
+        assert result.blocked is True
+        assert result.returncode == 0
+
+    def test_aexecute_with_timeout(self, bash: BashTool) -> None:
+        result = asyncio.run(bash.aexecute("sleep 10", timeout=1))
+        assert "Timeout" in result.error
+        assert result.returncode == -1
+        assert result.timed_out is True
+
+    def test_aexecute_honors_cancellation(self, bash: BashTool) -> None:
+        async def _run() -> BashResult:
+            cancellation = asyncio.Event()
+
+            async def _cancel() -> None:
+                await asyncio.sleep(0.1)
+                cancellation.set()
+
+            cancel_task = asyncio.create_task(_cancel())
+            try:
+                return await bash.aexecute("sleep 10", cancellation=cancellation)
+            finally:
+                cancel_task.cancel()
+
+        result = asyncio.run(_run())
+        assert result.interrupted is True
+        assert result.returncode == -1
 
     def test_to_tool_result_success(self, bash: BashTool) -> None:
         result = BashResult(stdout="hello", returncode=0, command="echo hello")
@@ -100,7 +137,7 @@ class TestBashOutputTruncation:
 
     def test_large_output_truncation(self) -> None:
         bash = BashTool()
-        result = bash.execute("python3 -c \"print('A' * 20000)\"")
+        result = asyncio.run(bash.aexecute("python3 -c \"print('A' * 20000)\""))
         assert result.blocked is False
         assert len(result.stdout) <= 10_000
 
@@ -128,6 +165,7 @@ class TestBashToolDefinition:
         schema = BASH_TOOL_DEFINITION["input_schema"]
         assert "command" in schema["properties"]
         assert "reason" in schema["properties"]
+        assert "timeout" in schema["properties"]
         assert "command" in schema["required"]
         assert "reason" in schema["required"]
 
@@ -163,10 +201,10 @@ class TestBashResourceLimits:
             tmp = f.name
         try:
             # Try to write 60MB — should fail with FSIZE limit
-            bash.execute(
+            asyncio.run(bash.aexecute(
                 f"dd if=/dev/zero of={tmp} bs=1048576 count=60 2>&1",
                 timeout=10,
-            )
+            ))
             # Either the file is capped at 50MB or dd reports an error
             if os.path.exists(tmp):
                 size = os.path.getsize(tmp)
@@ -178,6 +216,6 @@ class TestBashResourceLimits:
     def test_normal_command_unaffected(self) -> None:
         """Normal commands should work fine with resource limits."""
         bash = BashTool()
-        result = bash.execute("echo resource_limits_ok")
+        result = asyncio.run(bash.aexecute("echo resource_limits_ok"))
         assert result.returncode == 0
         assert "resource_limits_ok" in result.stdout

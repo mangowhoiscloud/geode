@@ -17,7 +17,7 @@ from core.state import (
     GeodeState,
     PSMResult,
 )
-from core.tools.registry import get_tool_executor
+from core.tools.registry import get_async_tool_executor
 
 from plugins.game_ip.fixtures import load_fixture
 
@@ -425,19 +425,21 @@ def _determine_tier(score: float) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _enrich_from_tools(ip_name: str, state: GeodeState) -> dict[str, Any]:
+async def _enrich_from_tools(ip_name: str, state: GeodeState) -> dict[str, Any]:
     """Optionally enrich scoring with tool data (memory_search, psm_calculate).
 
     Returns dict of extra context; empty dict if tools unavailable.
     """
     tool_defs: Any = state.get("_tool_definitions", [])
-    tool_executor = get_tool_executor()
+    tool_executor = get_async_tool_executor()
     if not tool_defs or tool_executor is None:
         return {}
     enrichment: dict[str, Any] = {}
     # Query past scores from memory for calibration reference
     try:
-        mem_result = tool_executor("memory_search", query=f"scoring {ip_name}", limit=3)
+        mem_result: dict[str, Any] = await tool_executor(
+            "memory_search", query=f"scoring {ip_name}", limit=3
+        )
         if mem_result and not mem_result.get("error"):
             enrichment["historical_scores"] = mem_result
     except Exception as exc:
@@ -445,7 +447,7 @@ def _enrich_from_tools(ip_name: str, state: GeodeState) -> dict[str, Any]:
     return enrichment
 
 
-def scoring_node(state: GeodeState) -> dict[str, Any]:
+async def scoring_node(state: GeodeState) -> dict[str, Any]:
     """Layer 4: Compute PSM + all subscores + final score + tier.
 
     Handles both standard (gamified, 14-axis) and prospect (9-axis) pipelines.
@@ -459,7 +461,7 @@ def scoring_node(state: GeodeState) -> dict[str, Any]:
 
         # Tool enrichment (Phase 2-C): query memory for historical context.
         # Result logged for observability; not yet integrated into formula.
-        _enrich_from_tools(ip_name, state)
+        await _enrich_from_tools(ip_name, state)
 
         # Prospect mode: simplified scoring using 9-axis prospect_judge
         if mode == "prospect":

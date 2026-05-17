@@ -5,6 +5,7 @@ Shared by all providers (Anthropic, OpenAI, GLM).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import threading
@@ -394,4 +395,171 @@ def retry_with_backoff_generic(
     circuit_breaker.record_failure()
     _notify_failure(_provider_for_rotator, last_error)
     log.error("All %s models and retries exhausted. Last error: %s", provider_label, last_error)
+    raise last_error
+
+
+async def retry_with_backoff_generic_async(
+    fn: Any,
+    *,
+    model: str,
+    fallback_models: list[str],
+    circuit_breaker: CircuitBreaker,
+    retryable_errors: tuple[type[Exception], ...],
+    bad_request_error: type[Exception] | None = None,
+    billing_message: str = "API billing/credit error.",
+    max_retries: int | None = None,
+    retry_base_delay: float | None = None,
+    retry_max_delay: float | None = None,
+    provider_label: str = "LLM",
+    on_retry: Any | None = None,
+) -> Any:
+    """Async retry with exponential backoff + model fallback + circuit breaker."""
+    if not circuit_breaker.can_execute():
+        raise RuntimeError(
+            f"Circuit breaker is open — {provider_label} API calls are temporarily blocked. "
+            "Too many consecutive failures detected."
+        )
+
+    models_to_try = [model] + [m for m in fallback_models if m != model]
+
+    from core.config import settings as _cfg
+
+    if max_retries is None:
+        max_retries = _cfg.llm_max_retries
+    if retry_base_delay is None:
+        retry_base_delay = _cfg.llm_retry_base_delay
+    if retry_max_delay is None:
+        retry_max_delay = _cfg.llm_retry_max_delay
+
+    if _cfg.llm_max_fallback_cost_ratio > 0 and len(models_to_try) > 1:
+        from core.llm.token_tracker import MODEL_PRICING
+
+        primary_price = MODEL_PRICING.get(model)
+        if primary_price and primary_price.input > 0:
+            filtered = [model]
+            for fb_model in models_to_try[1:]:
+                fb_price = MODEL_PRICING.get(fb_model)
+                if fb_price and fb_price.input > 0:
+                    ratio = fb_price.input / primary_price.input
+                    if ratio > _cfg.llm_max_fallback_cost_ratio:
+                        log.warning(
+                            "C2: fallback %s→%s cost ratio %.1fx exceeds limit %.1fx — skipping",
+                            model,
+                            fb_model,
+                            ratio,
+                            _cfg.llm_max_fallback_cost_ratio,
+                        )
+                        continue
+                filtered.append(fb_model)
+            models_to_try = filtered
+
+    last_error: Exception | None = None
+    t0_retry = time.monotonic()
+    _provider_for_rotator = _resolve_rotator_provider(provider_label)
+
+    for model_idx, current_model in enumerate(models_to_try):
+        for attempt in range(max_retries):
+            try:
+                result = await fn(model=current_model)
+                circuit_breaker.record_success()
+                _notify_success(_provider_for_rotator)
+                return result
+            except retryable_errors as exc:
+                from core.llm.errors import (
+                    BillingError,
+                    extract_billing_message,
+                    is_billing_fatal,
+                )
+
+                if is_billing_fatal(exc):
+                    msg = extract_billing_message(exc)
+                    log.error(
+                        "Billing-fatal error on %s (model=%s) — no retry: %s",
+                        provider_label,
+                        current_model,
+                        msg,
+                    )
+                    plan_meta = _resolve_plan_for_billing_error(current_model)
+                    raise BillingError(
+                        msg or billing_message,
+                        provider=plan_meta.get("provider", ""),
+                        plan_id=plan_meta.get("plan_id", ""),
+                        plan_display_name=plan_meta.get("plan_display_name", ""),
+                        upgrade_url=plan_meta.get("upgrade_url", ""),
+                    ) from exc
+                last_error = exc
+                delay = random.uniform(0, min(retry_base_delay * (2**attempt), retry_max_delay))
+                elapsed = time.monotonic() - t0_retry
+                log.warning(
+                    "%s async call failed (model=%s, attempt=%d/%d): %s. Retrying in %.1fs",
+                    provider_label,
+                    current_model,
+                    attempt + 1,
+                    max_retries,
+                    type(exc).__name__,
+                    delay,
+                )
+                if on_retry is not None:
+                    import contextlib
+
+                    with contextlib.suppress(Exception):
+                        on_retry(
+                            model=current_model,
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            delay_s=delay,
+                            elapsed_s=elapsed,
+                            error_type=type(exc).__name__,
+                        )
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                if bad_request_error is not None and isinstance(exc, bad_request_error):
+                    from core.llm.errors import is_request_fatal
+
+                    if is_request_fatal(exc):
+                        log.error(
+                            "Request-fatal 400 on %s (model=%s) — no retry: %s",
+                            provider_label,
+                            current_model,
+                            str(exc)[:200],
+                        )
+                        raise
+                    error_msg = str(exc)
+                    if "billing" in error_msg.lower() or "credit" in error_msg.lower():
+                        from core.llm.errors import BillingError
+
+                        raise BillingError(billing_message) from exc
+                    if any(
+                        k in error_msg.lower()
+                        for k in ("token", "context", "prompt exceeds", "max length")
+                    ):
+                        log.error(
+                            "Context overflow detected (model=%s): %s",
+                            current_model,
+                            error_msg,
+                        )
+                if _is_auth_error(exc) and attempt == 0:
+                    refreshed = _try_oauth_refresh(provider_label)
+                    if refreshed:
+                        log.info("OAuth token refreshed for %s, retrying", provider_label)
+                        continue
+                raise
+
+        if model_idx < len(models_to_try) - 1:
+            next_model = models_to_try[model_idx + 1]
+            log.warning(
+                "All async retries exhausted for model=%s. Falling back to %s",
+                current_model,
+                next_model,
+            )
+
+    if last_error is None:
+        raise RuntimeError("All retries exhausted with no error recorded")
+    circuit_breaker.record_failure()
+    _notify_failure(_provider_for_rotator, last_error)
+    log.error(
+        "All %s models and async retries exhausted. Last error: %s",
+        provider_label,
+        last_error,
+    )
     raise last_error

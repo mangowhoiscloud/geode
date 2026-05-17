@@ -10,7 +10,9 @@ Scenarios mapped from docs/e2e/e2e-orchestration-scenarios.md §1, §4, §5, §6
 
 from __future__ import annotations
 
+import asyncio
 import os
+from typing import Any
 
 import pytest
 
@@ -25,6 +27,10 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _run_executor(executor: Any, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    return asyncio.run(executor.aexecute(tool_name, tool_input))
 
 
 def _make_loop(
@@ -82,7 +88,7 @@ class TestAgenticLoopLive:
     def test_1_1_text_only(self) -> None:
         """1-1. Single intent (text-only response) — no tool use."""
         loop, *_ = _make_loop()
-        result = loop.run("안녕하세요")
+        result = asyncio.run(loop.arun("안녕하세요"))
         assert result.text, "LLM should produce text"
         assert result.rounds >= 1
         assert result.tool_calls == []
@@ -91,7 +97,7 @@ class TestAgenticLoopLive:
     def test_1_2_single_tool(self) -> None:
         """1-2. Single intent → single tool (list_ips)."""
         loop, *_ = _make_loop()
-        result = loop.run("IP 목록 보여줘")
+        result = asyncio.run(loop.arun("IP 목록 보여줘"))
         assert result.error is None
         assert result.rounds >= 1
         tool_names = [tc["tool"] for tc in result.tool_calls]
@@ -101,7 +107,7 @@ class TestAgenticLoopLive:
     def test_1_3_sequential_tools(self) -> None:
         """1-3. Multi-intent → sequential tool calls."""
         loop, *_ = _make_loop(max_rounds=7)
-        result = loop.run("Berserk 분석하고 Cowboy Bebop이랑 비교해줘")
+        result = asyncio.run(loop.arun("Berserk 분석하고 Cowboy Bebop이랑 비교해줘"))
         assert result.error is None
         tool_names = [tc["tool"] for tc in result.tool_calls]
         assert "analyze_ip" in tool_names, f"Expected analyze_ip, got {tool_names}"
@@ -110,7 +116,7 @@ class TestAgenticLoopLive:
     def test_1_4_multi_tool_single_response(self) -> None:
         """1-4. Multi-tool in single response (2 searches)."""
         loop, *_ = _make_loop()
-        result = loop.run("Berserk이랑 Cowboy Bebop 둘 다 검색해줘")
+        result = asyncio.run(loop.arun("Berserk이랑 Cowboy Bebop 둘 다 검색해줘"))
         assert result.error is None
         assert len(result.tool_calls) >= 1
         assert result.text
@@ -118,7 +124,7 @@ class TestAgenticLoopLive:
     def test_1_5_max_rounds_guardrail(self) -> None:
         """1-5. Max rounds guardrail — forced text on last round."""
         loop, *_ = _make_loop(max_rounds=2)
-        result = loop.run("Berserk 분석하고 비교하고 리포트 만들어줘")
+        result = asyncio.run(loop.arun("Berserk 분석하고 비교하고 리포트 만들어줘"))
         assert result.rounds <= 2
         # With forced text on last round, should terminate gracefully
         assert result.termination_reason in ("natural", "forced_text", "max_rounds")
@@ -126,7 +132,7 @@ class TestAgenticLoopLive:
     def test_1_8_natural_termination(self) -> None:
         """1-8. Simple intent terminates naturally within 3 rounds."""
         loop, *_ = _make_loop()
-        result = loop.run("IP 목록 보여줘")
+        result = asyncio.run(loop.arun("IP 목록 보여줘"))
         assert result.rounds <= 3, f"Expected ≤3 rounds, got {result.rounds}"
         assert result.termination_reason == "natural"
         assert result.error is None
@@ -134,11 +140,11 @@ class TestAgenticLoopLive:
     def test_1_7_multi_turn_context(self) -> None:
         """1-7. Multi-turn context preservation across turns."""
         loop, context, *_ = _make_loop()
-        r1 = loop.run("Berserk 분석해")
+        r1 = asyncio.run(loop.arun("Berserk 분석해"))
         assert r1.error is None
         assert context.turn_count >= 1
 
-        r2 = loop.run("점수가 왜 높아?")
+        r2 = asyncio.run(loop.arun("점수가 왜 높아?"))
         assert r2.error is None
         assert r2.text
         assert context.turn_count >= 2
@@ -152,8 +158,8 @@ class TestAgenticLoopLive:
 class TestTracingInfrastructureLive:
     """Scenario 4-2: verify the local token accumulator records LLM usage.
 
-    LangSmith was removed in v0.89.0; observability now flows through the
-    hook system (LLM_CALL_START/END events) and the local
+    External SaaS tracing was removed in v0.89.0; observability now flows
+    through the hook system (LLM_CALL_START/END events) and the local
     ``LLMUsageAccumulator``.  This test verifies that pipeline runs still
     populate the accumulator end-to-end.
     """
@@ -168,7 +174,7 @@ class TestTracingInfrastructureLive:
         reset_usage_accumulator()
 
         loop, *_ = _make_loop()
-        result = loop.run("IP 목록 보여줘")
+        result = asyncio.run(loop.arun("IP 목록 보여줘"))
         assert result.error is None
 
         # Verify local token accumulator recorded usage
@@ -321,7 +327,7 @@ class TestSubAgentLive:
     def test_6_1_delegate_single_dry_run(self) -> None:
         """E1: delegate_task single — Berserk dry-run."""
         loop, *_ = _make_loop(force_dry_run=True)
-        result = loop.run("Berserk를 서브에이전트로 분석해줘")
+        result = asyncio.run(loop.arun("Berserk를 서브에이전트로 분석해줘"))
 
         tool_names = [tc["tool"] for tc in result.tool_calls]
         assert "delegate_task" in tool_names, f"E1: delegate_task 미호출. 호출: {tool_names}"
@@ -338,7 +344,7 @@ class TestSubAgentLive:
     def test_6_2_delegate_batch_dry_run(self) -> None:
         """E2: delegate_task batch — 2 IP parallel."""
         loop, *_ = _make_loop(force_dry_run=True)
-        result = loop.run("Berserk이랑 Cowboy Bebop 동시에 분석해줘. 서브에이전트 병렬로 돌려.")
+        result = asyncio.run(loop.arun("Berserk이랑 Cowboy Bebop 동시에 분석해줘. 서브에이전트 병렬로 돌려."))
 
         tool_names = [tc["tool"] for tc in result.tool_calls]
         has_delegate = "delegate_task" in tool_names
@@ -464,7 +470,7 @@ class TestSubAgentLive:
     def test_6_6_existing_analysis_no_regression(self) -> None:
         """E6: analyze_ip still works (non-regression)."""
         loop, *_ = _make_loop(force_dry_run=True)
-        result = loop.run("Berserk 분석해줘")
+        result = asyncio.run(loop.arun("Berserk 분석해줘"))
 
         tool_names = [tc["tool"] for tc in result.tool_calls]
         assert "analyze_ip" in tool_names, f"E6: analyze_ip 미호출. 호출: {tool_names}"
@@ -485,7 +491,7 @@ class TestSubAgentLive:
         """E7: ToolExecutor._execute_delegate returns result."""
         _, _, executor, _ = _make_loop(force_dry_run=True)
 
-        result = executor.execute(
+        result = _run_executor(executor,
             "delegate_task",
             {
                 "task_description": "Analyze Berserk",

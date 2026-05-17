@@ -10,6 +10,7 @@ All paths are validated through ``core.tools.sandbox.validate_path()``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -55,7 +56,7 @@ class GlobTool:
             "required": ["pattern"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
         pattern: str = kwargs["pattern"]
@@ -100,6 +101,10 @@ class GlobTool:
                 "truncated": len(matches) > max_glob,
             }
         }
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run glob scanning off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
 
 class GrepTool:
@@ -148,7 +153,7 @@ class GrepTool:
             "required": ["pattern"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
         pattern_str: str = kwargs["pattern"]
@@ -232,6 +237,10 @@ class GrepTool:
             }
         }
 
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run grep scanning off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
 
 class EditFileTool:
     """Edit a file by exact string replacement."""
@@ -276,7 +285,7 @@ class EditFileTool:
             "required": ["file_path", "old_string", "new_string"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
         path_str: str = kwargs["file_path"]
@@ -337,6 +346,10 @@ class EditFileTool:
             }
         }
 
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run file edits off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
 
 class WriteFileTool:
     """Create a new file or overwrite an existing file."""
@@ -373,7 +386,7 @@ class WriteFileTool:
             "required": ["file_path", "content"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
         path_str: str = kwargs["file_path"]
@@ -397,3 +410,7 @@ class WriteFileTool:
                 "created": True,
             }
         }
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run file writes off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)

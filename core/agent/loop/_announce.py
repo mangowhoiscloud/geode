@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from core.agent.sub_agent import SubAgentResult, drain_announced_results
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 

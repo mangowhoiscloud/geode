@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from core.config import OPENAI_PRIMARY
@@ -54,8 +55,8 @@ class TestOpenAIAdapterInterface:
         result = adapter.generate_structured("system", "user")
         assert result == {"key": "value"}
 
-    @patch("core.llm.providers.openai._get_openai_client")
-    def test_generate_stream(self, mock_client_fn):
+    @patch("core.llm.providers.openai._get_async_openai_client")
+    def test_agenerate_stream(self, mock_client_fn):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
 
@@ -66,8 +67,16 @@ class TestOpenAIAdapterInterface:
         chunk2 = MagicMock()
         chunk2.choices = [MagicMock()]
         chunk2.choices[0].delta.content = " World"
-        mock_client.chat.completions.create.return_value = iter([chunk1, chunk2])
 
-        adapter = OpenAIAdapter()
-        result = list(adapter.generate_stream("system", "user"))
+        async def _stream():
+            for chunk in [chunk1, chunk2]:
+                yield chunk
+
+        async def _collect():
+            adapter = OpenAIAdapter()
+            return [token async for token in adapter.agenerate_stream("system", "user")]
+
+        mock_client.chat.completions.create.return_value = _stream()
+
+        result = asyncio.run(_collect())
         assert result == ["Hello", " World"]

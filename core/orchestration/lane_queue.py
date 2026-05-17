@@ -12,11 +12,12 @@ OpenClaw defect fixes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -102,6 +103,25 @@ class Lane:
             self._semaphore.release()
             log.debug("Lane '%s' released by %s", self.name, key)
 
+    @asynccontextmanager
+    async def acquire_async(self, key: str) -> AsyncGenerator[None, None]:
+        """Async acquire that shares capacity with the sync lane.
+
+        The underlying semaphore is the same one used by sync callers. The
+        potentially blocking acquire runs in a worker thread so async loop
+        tasks do not block while waiting for lane capacity.
+        """
+        acquired = await asyncio.to_thread(self._raw_acquire, key)
+        if not acquired:
+            raise TimeoutError(
+                f"Lane '{self.name}' timeout after {self.timeout_s}s "
+                f"(max_concurrent={self.max_concurrent})"
+            )
+        try:
+            yield
+        finally:
+            self._raw_release(key)
+
     def acquire_timeout(self, key: str, timeout_s: float) -> bool:
         """Blocking acquire with explicit timeout (for IsolatedRunner).
 
@@ -147,6 +167,10 @@ class Lane:
         )
         return True
 
+    async def try_acquire_async(self, key: str) -> bool:
+        """Async non-blocking acquire sharing the sync lane semaphore."""
+        return await asyncio.to_thread(self.try_acquire, key)
+
     def manual_release(self, key: str) -> None:
         """Release a slot acquired via :meth:`try_acquire`."""
         with self._lock:
@@ -154,6 +178,10 @@ class Lane:
         self._stats.inc_released()
         self._semaphore.release()
         log.debug("Lane '%s' manual_release by %s", self.name, key)
+
+    async def manual_release_async(self, key: str) -> None:
+        """Async release counterpart for try_acquire_async()."""
+        await asyncio.to_thread(self.manual_release, key)
 
     def get_active(self) -> dict[str, float]:
         """Get active work items with elapsed time."""
@@ -256,6 +284,17 @@ class SessionLane:
             entry.semaphore.release()
             self._stats.inc_released()
 
+    @asynccontextmanager
+    async def acquire_async(self, key: str) -> AsyncGenerator[None, None]:
+        """Async per-key acquire sharing state with sync SessionLane callers."""
+        acquired = await asyncio.to_thread(self._raw_acquire, key)
+        if not acquired:
+            raise TimeoutError(f"SessionLane timeout for key '{key}' after {self.timeout_s}s")
+        try:
+            yield
+        finally:
+            self._raw_release(key)
+
     # --- Non-blocking (matches Lane.try_acquire) ---
 
     def try_acquire(self, key: str) -> bool:
@@ -269,6 +308,10 @@ class SessionLane:
         entry.last_used = time.time()
         self._stats.inc_acquired()
         return True
+
+    async def try_acquire_async(self, key: str) -> bool:
+        """Async non-blocking acquire for per-session keys."""
+        return await asyncio.to_thread(self.try_acquire, key)
 
     # --- Blocking with timeout (matches Lane.acquire_timeout) ---
 
@@ -295,6 +338,10 @@ class SessionLane:
             entry.last_used = time.time()
             entry.semaphore.release()
             self._stats.inc_released()
+
+    async def manual_release_async(self, key: str) -> None:
+        """Async release counterpart for try_acquire_async()."""
+        await asyncio.to_thread(self.manual_release, key)
 
     # --- Observability ---
 
@@ -442,6 +489,44 @@ class LaneQueue:
                     if lane is None:
                         raise KeyError(f"Lane '{name}' not found")
                     if not lane._raw_acquire(key):
+                        raise TimeoutError(
+                            f"Lane '{name}' timeout after {lane.timeout_s}s "
+                            f"(max_concurrent={lane.max_concurrent})"
+                        )
+                    acquired.append(lane)
+
+            yield
+
+        finally:
+            for item in reversed(acquired):
+                item._raw_release(key)
+
+    @asynccontextmanager
+    async def acquire_all_async(
+        self,
+        key: str,
+        lane_names: list[str],
+    ) -> AsyncGenerator[None, None]:
+        """Async acquire for multiple lanes.
+
+        This preserves the same ordering and partial-failure release semantics
+        as ``acquire_all()`` while keeping blocking semaphore waits off the
+        event loop.
+        """
+        acquired: list[Lane | SessionLane] = []
+        try:
+            for name in lane_names:
+                if name == "session":
+                    if self._session_lane is None:
+                        continue
+                    if not await asyncio.to_thread(self._session_lane._raw_acquire, key):
+                        raise TimeoutError(f"SessionLane timeout for key '{key}'")
+                    acquired.append(self._session_lane)
+                else:
+                    lane = self._lanes.get(name)
+                    if lane is None:
+                        raise KeyError(f"Lane '{name}' not found")
+                    if not await asyncio.to_thread(lane._raw_acquire, key):
                         raise TimeoutError(
                             f"Lane '{name}' timeout after {lane.timeout_s}s "
                             f"(max_concurrent={lane.max_concurrent})"

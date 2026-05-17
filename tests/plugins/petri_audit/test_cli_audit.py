@@ -15,7 +15,8 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
-def test_typer_audit_dry_run_prints_command() -> None:
+def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("plugins.petri_audit.models._claude_oauth_available", lambda: True)
     result = runner.invoke(
         app,
         [
@@ -38,7 +39,7 @@ def test_typer_audit_dry_run_prints_command() -> None:
     assert result.exit_code == 0, result.output
     assert "Petri audit" in result.output
     assert "inspect eval inspect_petri/audit" in result.output
-    assert "judge=anthropic/claude-haiku-4-5-20251001" in result.output
+    assert "judge=claude-code/claude-haiku-4-5-20251001" in result.output
     assert "target=geode/claude-opus-4-7" in result.output
     assert "seed_instructions=tags:sycophancy" in result.output
     assert "dry-run" in result.output.lower()

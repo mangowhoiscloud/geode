@@ -6,6 +6,7 @@ MCP call orchestration, error handling, availability checks, and result parsing.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -59,7 +60,7 @@ class BaseNotificationAdapter:
         self._manager = manager
         self._server_name = server_name or self._default_server
 
-    def send_message(
+    async def asend_message(
         self,
         channel: str,
         recipient: str,
@@ -68,8 +69,9 @@ class BaseNotificationAdapter:
         severity: str = "info",
         **kwargs: Any,
     ) -> NotificationResult:
+        """Async MCP-backed message send."""
         ch = self._channel_name
-        if not self.is_available():
+        if not await self.ais_available(channel):
             return NotificationResult(
                 success=False, channel=ch, error=f"{ch.title()} MCP server not available"
             )
@@ -80,7 +82,7 @@ class BaseNotificationAdapter:
                 if key in kwargs:
                     args[key] = kwargs[key]
 
-            raw = self._manager.call_tool(
+            raw = await self._manager.acall_tool(
                 self._server_name,
                 self._tool_name,
                 args,
@@ -104,6 +106,10 @@ class BaseNotificationAdapter:
             return False
         health = self._manager.check_health()
         return health.get(self._server_name, False)
+
+    async def ais_available(self, channel: str | None = None) -> bool:
+        """Async availability check for async service callers."""
+        return await asyncio.to_thread(self.is_available, channel)
 
     def list_channels(self) -> list[str]:
         return [self._channel_name]

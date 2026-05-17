@@ -12,6 +12,7 @@ Layer 5 tools for memory access:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextvars import ContextVar
 from typing import Any
@@ -80,7 +81,16 @@ def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePor
     return InMemorySessionStore()
 
 
-class MemorySearchTool:
+class _AsyncExecuteMixin:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run sync local-store work off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
+
+class MemorySearchTool(_AsyncExecuteMixin):
     """Tool for searching across memory tiers.
 
     Searches session, project (MEMORY.md + rules), and organization tiers.
@@ -124,7 +134,7 @@ class MemorySearchTool:
             "required": ["query"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         tier: str = kwargs.get("tier", "all")
         limit: int = kwargs.get("limit", 10)
@@ -213,7 +223,7 @@ class MemorySearchTool:
         }
 
 
-class MemoryGetTool:
+class MemoryGetTool(_AsyncExecuteMixin):
     """Tool for retrieving a specific memory entry by session ID."""
 
     def __init__(self, session_store: SessionStorePort | None = None) -> None:
@@ -240,7 +250,7 @@ class MemoryGetTool:
             "required": ["session_id"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         session_id: str = kwargs["session_id"]
 
         store = _get_session_store(self._store)
@@ -264,7 +274,7 @@ class MemoryGetTool:
         }
 
 
-class MemorySaveTool:
+class MemorySaveTool(_AsyncExecuteMixin):
     """Tool for saving data to session memory."""
 
     def __init__(self, session_store: SessionStorePort | None = None) -> None:
@@ -311,7 +321,7 @@ class MemorySaveTool:
             "required": ["session_id", "data"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         session_id: str = kwargs["session_id"]
         data: dict[str, Any] = kwargs["data"]
         merge: bool = kwargs.get("merge", True)
@@ -349,7 +359,7 @@ class MemorySaveTool:
         }
 
 
-class RuleCreateTool:
+class RuleCreateTool(_AsyncExecuteMixin):
     """Tool for creating analysis rules from learned patterns.
 
     Enables the agent to autonomously create .geode/rules/*.md files
@@ -390,7 +400,7 @@ class RuleCreateTool:
             "required": ["name", "paths", "content"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         rule_name: str = kwargs["name"]
         paths: list[str] = kwargs["paths"]
         content: str = kwargs["content"]
@@ -411,7 +421,7 @@ class RuleCreateTool:
         }
 
 
-class RuleUpdateTool:
+class RuleUpdateTool(_AsyncExecuteMixin):
     """Tool for updating existing analysis rules."""
 
     @property
@@ -442,7 +452,7 @@ class RuleUpdateTool:
             "required": ["name", "content"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         rule_name: str = kwargs["name"]
         content: str = kwargs["content"]
 
@@ -461,7 +471,7 @@ class RuleUpdateTool:
         }
 
 
-class RuleDeleteTool:
+class RuleDeleteTool(_AsyncExecuteMixin):
     """Tool for deleting analysis rules."""
 
     @property
@@ -485,7 +495,7 @@ class RuleDeleteTool:
             "required": ["name"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         rule_name: str = kwargs["name"]
 
         proj = _project_memory_ctx.get()
@@ -503,7 +513,7 @@ class RuleDeleteTool:
         }
 
 
-class RuleListTool:
+class RuleListTool(_AsyncExecuteMixin):
     """Tool for listing active analysis rules."""
 
     @property
@@ -524,7 +534,7 @@ class RuleListTool:
             "required": [],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         proj = _project_memory_ctx.get()
         if proj is None:
             return {"result": {"rules": [], "error": "Project memory not available"}}
@@ -538,7 +548,7 @@ class RuleListTool:
         }
 
 
-class NoteSaveTool:
+class NoteSaveTool(_AsyncExecuteMixin):
     """Save a user note to project memory (## User Notes section)."""
 
     @property
@@ -552,7 +562,7 @@ class NoteSaveTool:
             "Use when user says 'remember this', 'save this', '이거 기억해'."
         )
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         key: str = kwargs["key"]
         content: str = kwargs["content"]
 
@@ -575,7 +585,7 @@ class NoteSaveTool:
         }
 
 
-class NoteReadTool:
+class NoteReadTool(_AsyncExecuteMixin):
     """Read user notes from project memory."""
 
     @property
@@ -589,7 +599,7 @@ class NoteReadTool:
             "Use when user asks about something they previously saved."
         )
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs.get("query", "")
 
         proj = _project_memory_ctx.get()

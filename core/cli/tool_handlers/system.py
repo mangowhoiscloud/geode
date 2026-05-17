@@ -99,7 +99,7 @@ def _build_system_handlers(
         from core.config import settings
 
         model_hint = kwargs.get("model_hint", "")
-        # Only update settings — do NOT call loop.update_model() here.
+        # Only update settings — do NOT call loop.update_model_async() here.
         # The AgenticLoop checks for model drift at the start of each round
         # and applies the change safely between LLM calls (not mid-call).
         cmd_model(model_hint)

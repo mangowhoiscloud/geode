@@ -11,10 +11,20 @@ The fixture-backed ``QueryMonoLakeTool`` lives in
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 
-class CortexAnalystTool:
+class _AsyncExecuteMixin:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run sync data client work off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
+
+class CortexAnalystTool(_AsyncExecuteMixin):
     """Placeholder tool for Snowflake Cortex Analyst SQL queries.
 
     In production, translates natural-language questions into
@@ -51,7 +61,7 @@ class CortexAnalystTool:
             "required": ["question"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         question: str = kwargs["question"]
         database: str = kwargs.get("database", "GEODE_DB")
         return {
@@ -64,7 +74,7 @@ class CortexAnalystTool:
         }
 
 
-class CortexSearchTool:
+class CortexSearchTool(_AsyncExecuteMixin):
     """Placeholder tool for Cortex Search semantic retrieval.
 
     In production, performs vector-based semantic search over
@@ -105,7 +115,7 @@ class CortexSearchTool:
             "required": ["query"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         top_k: int = kwargs.get("top_k", 5)
         return {

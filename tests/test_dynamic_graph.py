@@ -1,5 +1,7 @@
 """Tests for Dynamic Graph — node skip/enrichment based on state."""
 
+import asyncio
+
 from core.graph import (
     _route_after_skip_check,
     _skip_check_node,
@@ -7,6 +9,11 @@ from core.graph import (
     compile_graph,
 )
 from core.state import GeodeState
+
+
+def _ainvoke(compiled, state):
+    return asyncio.run(compiled.ainvoke(state))
+
 
 # ---------------------------------------------------------------------------
 # Unit tests: skip_check node
@@ -71,7 +78,7 @@ class TestDryRunSkip:
     def test_dry_run_skips_verification(self):
         """dry_run pipeline should skip verification and record it."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -96,7 +103,7 @@ class TestDryRunSkip:
     def test_dry_run_berserk_still_s_tier(self):
         """Berserk dry_run should still produce S-tier with skip."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -115,7 +122,7 @@ class TestDryRunSkip:
     def test_dry_run_ghost_in_shell_still_b_tier(self):
         """Ghost in the Shell dry_run should still produce discovery_failure."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Ghost in the Shell",
                 "pipeline_mode": "full_pipeline",
@@ -142,7 +149,7 @@ class TestExplicitSkipNodes:
     def test_caller_skip_verification(self):
         """Caller can pre-set skip_nodes to bypass verification."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -162,7 +169,7 @@ class TestExplicitSkipNodes:
         compiled = compile_graph()
         # Non-dry-run with empty skip_nodes — verification should run
         # We still use dry_run for the LLM calls but set skip_nodes explicitly empty
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -190,7 +197,7 @@ class TestEnrichmentNeeded:
     def test_cowboy_bebop_mid_range_enrichment(self):
         """Cowboy Bebop (A-tier ~68) is in mid-range → enrichment_needed=True."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -208,7 +215,7 @@ class TestEnrichmentNeeded:
     def test_ghost_in_shell_mid_range_enrichment(self):
         """Ghost in the Shell (B-tier ~51) is in mid-range → enrichment_needed=True."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Ghost in the Shell",
                 "pipeline_mode": "full_pipeline",
@@ -225,7 +232,7 @@ class TestEnrichmentNeeded:
     def test_berserk_s_tier_no_enrichment(self):
         """Berserk (S-tier ~81) is above mid-range → no enrichment_needed."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -276,7 +283,7 @@ class TestAuditTrail:
     def test_skipped_nodes_recorded(self):
         """skipped_nodes should list all actually skipped nodes."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -311,7 +318,7 @@ class TestFixturePreservation:
 
     def test_berserk_s_tier_preserved(self):
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -332,7 +339,7 @@ class TestFixturePreservation:
 
     def test_cowboy_bebop_a_tier_preserved(self):
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -359,7 +366,7 @@ class TestFixturePreservation:
 
     def test_ghost_in_shell_b_tier_preserved(self):
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Ghost in the Shell",
                 "pipeline_mode": "full_pipeline",

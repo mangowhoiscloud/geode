@@ -413,6 +413,10 @@
         "reason": {
           "type": "string",
           "description": "Why this command is needed"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Timeout in seconds. Default 30, maximum 600."
         }
       },
       "required": [

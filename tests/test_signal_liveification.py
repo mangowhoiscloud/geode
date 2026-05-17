@@ -9,12 +9,18 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.mcp.composite_signal import CompositeSignalAdapter
 from core.mcp.steam_adapter import SteamMCPSignalAdapter
 from core.state import GeodeState
-from plugins.game_ip.nodes.signals import set_signal_adapter, signals_node
+from plugins.game_ip.nodes.signals import set_signal_adapter
+from plugins.game_ip.nodes.signals import signals_node as _signals_node
+
+
+def signals_node(state: GeodeState) -> dict[str, Any]:
+    return asyncio.run(_signals_node(state))
 
 # ---------------------------------------------------------------------------
 # Mock MCP adapters
@@ -33,12 +39,15 @@ class MockSteamAdapter:
             "_enrichment_source": "steam_mcp",
         }
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         if not self._available:
             return {}
         return dict(self._signals)
 
     def is_available(self) -> bool:
+        return self._available
+
+    async def ais_available(self) -> bool:
         return self._available
 
 
@@ -54,7 +63,7 @@ class MockRedditAdapter:
             "_enrichment_source": "reddit_mcp",
         }
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         if not self._available:
             return {}
         return dict(self._signals)
@@ -62,24 +71,33 @@ class MockRedditAdapter:
     def is_available(self) -> bool:
         return self._available
 
+    async def ais_available(self) -> bool:
+        return self._available
+
 
 class MockFailingAdapter:
     """Adapter that raises on fetch but reports available."""
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         raise ConnectionError("MCP server unreachable")
 
     def is_available(self) -> bool:
+        return True
+
+    async def ais_available(self) -> bool:
         return True
 
 
 class MockEmptyAdapter:
     """Adapter that is available but returns empty signals."""
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         return {}
 
     def is_available(self) -> bool:
+        return True
+
+    async def ais_available(self) -> bool:
         return True
 
 
@@ -262,7 +280,7 @@ class TestSignalSourceTracking:
 class TestCompositeSignalAdapter:
     def test_merges_multiple_sources(self):
         composite = CompositeSignalAdapter([MockSteamAdapter(), MockRedditAdapter()])  # type: ignore[list-item]
-        signals = composite.fetch_signals("TestIP")
+        signals = asyncio.run(composite.afetch_signals("TestIP"))
         assert "steam_players_current" in signals
         assert "reddit_subscribers" in signals
         assert "_enrichment_sources" in signals
@@ -272,7 +290,7 @@ class TestCompositeSignalAdapter:
         composite = CompositeSignalAdapter(
             [MockSteamAdapter(available=False), MockRedditAdapter()]  # type: ignore[list-item]
         )
-        signals = composite.fetch_signals("TestIP")
+        signals = asyncio.run(composite.afetch_signals("TestIP"))
         assert "steam_players_current" not in signals
         assert "reddit_subscribers" in signals
         assert len(signals["_enrichment_sources"]) == 1
@@ -282,14 +300,14 @@ class TestCompositeSignalAdapter:
         composite = CompositeSignalAdapter(
             [MockSteamAdapter(available=False), MockRedditAdapter(available=True)]  # type: ignore[list-item]
         )
-        assert composite.is_available() is True
+        assert asyncio.run(composite.ais_available()) is True
 
     def test_is_available_none(self):
         """is_available() returns False if no adapters are available."""
         composite = CompositeSignalAdapter(
             [MockSteamAdapter(available=False), MockRedditAdapter(available=False)]  # type: ignore[list-item]
         )
-        assert composite.is_available() is False
+        assert asyncio.run(composite.ais_available()) is False
 
 
 # ---------------------------------------------------------------------------
@@ -305,12 +323,14 @@ class TestSteamMCPSignalAdapterManager:
             def check_health(self) -> dict[str, bool]:
                 return {"steam": False}
 
-            def call_tool(self, server: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+            async def acall_tool(
+                self, server: str, tool: str, args: dict[str, Any]
+            ) -> dict[str, Any]:
                 raise AssertionError("Should not be called")
 
         adapter = SteamMCPSignalAdapter(manager=FakeManager(), server_name="steam")  # type: ignore[arg-type]
         assert adapter.is_available() is False
-        assert adapter.fetch_signals("Test") == {}
+        assert asyncio.run(adapter.afetch_signals("Test")) == {}
 
     def test_manager_mode_available(self):
         """When manager is healthy, calls tool and returns signals."""
@@ -319,13 +339,32 @@ class TestSteamMCPSignalAdapterManager:
             def check_health(self) -> dict[str, bool]:
                 return {"steam": True}
 
-            def call_tool(self, server: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+            async def acall_tool(
+                self, server: str, tool: str, args: dict[str, Any]
+            ) -> dict[str, Any]:
                 return {"player_count": 100, "review_score": 90, "review_count": 50}
 
         adapter = SteamMCPSignalAdapter(manager=FakeManager(), server_name="steam")  # type: ignore[arg-type]
         assert adapter.is_available() is True
-        signals = adapter.fetch_signals("Test")
+        signals = asyncio.run(adapter.afetch_signals("Test"))
         assert signals["steam_players_current"] == 100
+        assert signals["_enrichment_source"] == "steam_mcp"
+
+    def test_manager_mode_async_available(self):
+        """Async fetch should use manager.acall_tool()."""
+
+        class FakeManager:
+            def check_health(self) -> dict[str, bool]:
+                return {"steam": True}
+
+            async def acall_tool(
+                self, server: str, tool: str, args: dict[str, Any]
+            ) -> dict[str, Any]:
+                return {"player_count": 120, "review_score": 91, "review_count": 55}
+
+        adapter = SteamMCPSignalAdapter(manager=FakeManager(), server_name="steam")  # type: ignore[arg-type]
+        signals = asyncio.run(adapter.afetch_signals("Test"))
+        assert signals["steam_players_current"] == 120
         assert signals["_enrichment_source"] == "steam_mcp"
 
     def test_manager_mode_error_result(self):
@@ -335,8 +374,10 @@ class TestSteamMCPSignalAdapterManager:
             def check_health(self) -> dict[str, bool]:
                 return {"steam": True}
 
-            def call_tool(self, server: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+            async def acall_tool(
+                self, server: str, tool: str, args: dict[str, Any]
+            ) -> dict[str, Any]:
                 return {"error": "Server not responding"}
 
         adapter = SteamMCPSignalAdapter(manager=FakeManager(), server_name="steam")  # type: ignore[arg-type]
-        assert adapter.fetch_signals("Test") == {}
+        assert asyncio.run(adapter.afetch_signals("Test")) == {}

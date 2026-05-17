@@ -12,6 +12,7 @@ to preserve the existing HITL safety gates.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -156,22 +157,13 @@ class ErrorRecoveryStrategy:
         """
         return tool_name not in _EXCLUDED_TOOLS
 
-    def recover(
+    async def arecover(
         self,
         tool_name: str,
         tool_input: dict[str, Any],
         failure_count: int,
     ) -> RecoveryResult:
-        """Execute recovery chain for a failed tool.
-
-        Args:
-            tool_name: The tool that failed.
-            tool_input: Original tool input parameters.
-            failure_count: How many times this tool has failed consecutively.
-
-        Returns:
-            RecoveryResult with success/failure and all attempts.
-        """
+        """Execute the recovery chain through the async tool executor path."""
         if not self.is_recoverable(tool_name):
             return RecoveryResult(
                 recovered=False,
@@ -191,7 +183,7 @@ class ErrorRecoveryStrategy:
             if len(attempts) >= self._max_recovery_attempts:
                 break
 
-            attempt = self._execute_strategy(strategy, tool_name, tool_input)
+            attempt = await self._aexecute_strategy(strategy, tool_name, tool_input)
             attempts.append(attempt)
 
             if attempt.success:
@@ -202,7 +194,6 @@ class ErrorRecoveryStrategy:
                     strategy_used=strategy,
                 )
 
-        # All strategies exhausted
         return RecoveryResult(
             recovered=False,
             final_result={
@@ -240,40 +231,40 @@ class ErrorRecoveryStrategy:
 
         return strategies
 
-    def _execute_strategy(
+    async def _aexecute_strategy(
         self,
         strategy: RecoveryStrategy,
         tool_name: str,
         tool_input: dict[str, Any],
     ) -> RecoveryAttempt:
-        """Execute a single recovery strategy."""
+        """Execute a single recovery strategy through async tool dispatch."""
         start = time.monotonic()
 
         if strategy == RecoveryStrategy.RETRY:
-            return self._try_retry(tool_name, tool_input, start)
+            return await self._atry_retry(tool_name, tool_input, start)
         if strategy == RecoveryStrategy.ALTERNATIVE:
-            return self._try_alternative(tool_name, tool_input, start)
+            return await self._atry_alternative(tool_name, tool_input, start)
         if strategy == RecoveryStrategy.FALLBACK:
-            return self._try_fallback(tool_name, tool_input, start)
-        # ESCALATE
+            return await self._atry_fallback(tool_name, tool_input, start)
         return self._try_escalate(tool_name, tool_input, start)
 
-    def _try_retry(
+    async def _atry_retry(
         self,
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
     ) -> RecoveryAttempt:
-        """Retry the same tool once with a brief delay."""
+        """Retry the same tool once with an async delay."""
         delay = self._retry_base_delay
         log.info(
             "Recovery[retry]: retrying '%s' after %.1fs delay",
             tool_name,
             delay,
         )
-        time.sleep(delay)
+        if delay > 0:
+            await asyncio.sleep(delay)
 
-        result = self._executor.execute(tool_name, tool_input)
+        result = await self._executor.aexecute(tool_name, tool_input)
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 
@@ -285,13 +276,13 @@ class ErrorRecoveryStrategy:
             duration_ms=elapsed,
         )
 
-    def _try_alternative(
+    async def _atry_alternative(
         self,
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
     ) -> RecoveryAttempt:
-        """Try a different tool from the same category."""
+        """Try a different tool from the same category via async dispatch."""
         alt_name = self._find_alternative(tool_name)
         if alt_name is None:
             return RecoveryAttempt(
@@ -307,7 +298,7 @@ class ErrorRecoveryStrategy:
             alt_name,
             tool_name,
         )
-        result = self._executor.execute(alt_name, tool_input)
+        result = await self._executor.aexecute(alt_name, tool_input)
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 
@@ -319,13 +310,13 @@ class ErrorRecoveryStrategy:
             duration_ms=elapsed,
         )
 
-    def _try_fallback(
+    async def _atry_fallback(
         self,
         tool_name: str,
         tool_input: dict[str, Any],
         start: float,
     ) -> RecoveryAttempt:
-        """Try a cheaper tool from any category."""
+        """Try a cheaper tool from any category via async dispatch."""
         fallback_name = self._find_fallback(tool_name)
         if fallback_name is None:
             return RecoveryAttempt(
@@ -341,7 +332,7 @@ class ErrorRecoveryStrategy:
             fallback_name,
             tool_name,
         )
-        result = self._executor.execute(fallback_name, tool_input)
+        result = await self._executor.aexecute(fallback_name, tool_input)
         elapsed = (time.monotonic() - start) * 1000
         success = not (isinstance(result, dict) and result.get("error"))
 

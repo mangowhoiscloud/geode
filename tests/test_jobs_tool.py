@@ -6,6 +6,7 @@ since it costs nothing and the API may evolve.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import patch
 
@@ -45,7 +46,7 @@ class TestSchema:
 
 class TestExecute:
     def test_empty_query_rejected(self) -> None:
-        result = WantedJobsSearchTool().execute(query="   ")
+        result = asyncio.run(WantedJobsSearchTool().aexecute(query="   "))
         assert "error" in result
         assert result["error_type"] == "validation"
 
@@ -72,7 +73,7 @@ class TestExecute:
         with patch.object(
             httpx.Client, "get", return_value=_mock_response(json_data=wanted_payload)
         ):
-            result = WantedJobsSearchTool().execute(query="AI Engineer")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="AI Engineer"))
 
         assert "result" in result
         inner = result["result"]
@@ -85,6 +86,23 @@ class TestExecute:
         assert inner["jobs"][0]["url"] == "https://www.wanted.co.kr/wd/12345"
         assert inner["jobs"][1]["position"] == "LLM Platform Engineer"
 
+    def test_aexecute_happy_path_shape(self) -> None:
+        payload = {
+            "data": [
+                {
+                    "id": 12345,
+                    "position": "AI Engineer",
+                    "company": {"name": "Krafton"},
+                    "address": {"full_location": "Seoul, South Korea"},
+                }
+            ]
+        }
+        with patch.object(httpx.Client, "get", return_value=_mock_response(json_data=payload)):
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="AI Engineer"))
+
+        assert result["result"]["total_returned"] == 1
+        assert result["result"]["jobs"][0]["job_id"] == 12345
+
     def test_missing_company_or_address_tolerated(self) -> None:
         """Partial Wanted response shouldn't hard-fail — emit best-effort entries."""
         payload = {
@@ -94,7 +112,7 @@ class TestExecute:
             ]
         }
         with patch.object(httpx.Client, "get", return_value=_mock_response(json_data=payload)):
-            result = WantedJobsSearchTool().execute(query="ML")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="ML"))
 
         jobs = result["result"]["jobs"]
         assert len(jobs) == 2
@@ -106,12 +124,12 @@ class TestExecute:
         """Wanted has sometimes nested under ``jobs`` instead of ``data``."""
         payload = {"jobs": [{"id": 99, "position": "X", "company": "Co"}]}
         with patch.object(httpx.Client, "get", return_value=_mock_response(json_data=payload)):
-            result = WantedJobsSearchTool().execute(query="X")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="X"))
         assert result["result"]["total_returned"] == 1
 
     def test_non_200_returns_tool_error(self) -> None:
         with patch.object(httpx.Client, "get", return_value=_mock_response(status_code=429)):
-            result = WantedJobsSearchTool().execute(query="X")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="X"))
         assert "error" in result
         assert "429" in result["error"]
         assert result["error_type"] == "dependency"
@@ -122,12 +140,12 @@ class TestExecute:
             "get",
             side_effect=httpx.TimeoutException("read timeout"),
         ):
-            result = WantedJobsSearchTool().execute(query="X")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="X"))
         assert result["error_type"] == "timeout"
 
     def test_non_json_body_returns_tool_error(self) -> None:
         with patch.object(httpx.Client, "get", return_value=_mock_response(raise_json=True)):
-            result = WantedJobsSearchTool().execute(query="X")
+            result = asyncio.run(WantedJobsSearchTool().aexecute(query="X"))
         assert "error" in result
         assert result["error_type"] == "dependency"
 
@@ -140,7 +158,7 @@ class TestExecute:
             return _mock_response(json_data={"data": []})
 
         with patch.object(httpx.Client, "get", _capture):
-            WantedJobsSearchTool().execute(query="X", limit=500)
+            asyncio.run(WantedJobsSearchTool().aexecute(query="X", limit=500))
 
         assert int(captured["params"]["limit"]) == 50
 
@@ -152,7 +170,7 @@ class TestExecute:
             return _mock_response(json_data={"data": []})
 
         with patch.object(httpx.Client, "get", _capture):
-            WantedJobsSearchTool().execute(query="AI Engineer", years=3)
+            asyncio.run(WantedJobsSearchTool().aexecute(query="AI Engineer", years=3))
 
         assert captured["params"]["country"] == "kr"
         assert captured["params"]["years"] == "3"

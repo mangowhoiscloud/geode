@@ -2,17 +2,35 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
+import threading
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from core.agent.bash_tool import BashResult, BashTool
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.agent.sub_agent import SubAgentManager, SubTask
-from core.agent.tool_executor import DANGEROUS_TOOLS, SAFE_TOOLS, WRITE_TOOLS, ToolExecutor
+from core.agent.tool_executor import (
+    DANGEROUS_TOOLS,
+    SAFE_TOOLS,
+    WRITE_TOOLS,
+    ToolCallProcessor,
+    ToolExecutor,
+)
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
+from core.tools.base import ToolContext
+
+
+def _run_executor(
+    executor: ToolExecutor, tool_name: str, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    return asyncio.run(executor.aexecute(tool_name, tool_input))
+
 
 # ---------------------------------------------------------------------------
 # ToolExecutor tests
@@ -25,60 +43,289 @@ class TestToolExecutor:
     def test_execute_registered_handler(self) -> None:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"list_ips": handler})
-        result = executor.execute("list_ips", {})
+        result = _run_executor(executor, "list_ips", {})
         handler.assert_called_once()
         assert result["status"] == "ok"
 
     def test_execute_unknown_tool(self) -> None:
         executor = ToolExecutor()
-        result = executor.execute("nonexistent_tool", {})
+        result = _run_executor(executor, "nonexistent_tool", {})
         assert "error" in result
         assert "Unknown tool" in result["error"]
 
     def test_execute_handler_exception(self) -> None:
         handler = MagicMock(side_effect=ValueError("test error"))
         executor = ToolExecutor(action_handlers={"broken": handler})
-        result = executor.execute("broken", {})
+        result = _run_executor(executor, "broken", {})
         assert "error" in result
         assert "test error" in result["error"]
 
     def test_bash_blocked_command(self) -> None:
         executor = ToolExecutor(auto_approve=True)
-        result = executor.execute("run_bash", {"command": "sudo rm -rf /", "reason": "test"})
+        result = _run_executor(executor, "run_bash", {"command": "sudo rm -rf /", "reason": "test"})
         assert result.get("blocked") is True
 
     def test_bash_unsafe_requires_approval(self) -> None:
         """Non-safe bash commands require approval, even with auto_approve=True."""
         executor = ToolExecutor(auto_approve=True)
-        with patch.object(executor, "_request_approval", return_value=True) as mock_approve:
-            result = executor.execute(
+        with patch.object(
+            executor, "_request_approval_async", AsyncMock(return_value=True)
+        ) as mock_approve:
+            result = _run_executor(executor,
                 "run_bash", {"command": "npm install foo", "reason": "testing"}
             )
-            mock_approve.assert_called_once()
+            mock_approve.assert_awaited_once()
             assert "error" not in result or "denied" not in result
 
     def test_bash_safe_skips_approval(self) -> None:
         """Safe read-only bash commands skip HITL approval."""
         executor = ToolExecutor(auto_approve=True)
-        with patch.object(executor, "_request_approval") as mock_approve:
-            executor.execute("run_bash", {"command": "echo test_123", "reason": "testing"})
-            mock_approve.assert_not_called()
+        with patch.object(executor, "_request_approval_async", AsyncMock()) as mock_approve:
+            _run_executor(executor, "run_bash", {"command": "echo test_123", "reason": "testing"})
+            mock_approve.assert_not_awaited()
 
     def test_bash_denied_by_user(self) -> None:
         """Non-safe bash commands denied by user return error."""
         executor = ToolExecutor(auto_approve=True)
-        with patch.object(executor, "_request_approval", return_value=False):
-            result = executor.execute("run_bash", {"command": "npm install bar", "reason": "test"})
+        with patch.object(executor, "_request_approval_async", AsyncMock(return_value=False)):
+            result = _run_executor(executor, "run_bash", {"command": "npm install bar", "reason": "test"})
             assert result.get("denied") is True
 
     def test_bash_empty_command(self) -> None:
         executor = ToolExecutor(auto_approve=True)
-        result = executor.execute("run_bash", {"command": "", "reason": "test"})
+        result = _run_executor(executor, "run_bash", {"command": "", "reason": "test"})
         assert "error" in result
 
     def test_registered_tools_property(self) -> None:
         executor = ToolExecutor(action_handlers={"a": MagicMock(), "b": MagicMock()})
         assert sorted(executor.registered_tools) == ["a", "b"]
+
+    def test_aexecute_awaits_async_handler_on_event_loop(self) -> None:
+        """Async-native handlers run on the event loop, not via the sync wrapper."""
+        main_thread = threading.get_ident()
+
+        async def handler() -> dict[str, Any]:
+            return {"status": "ok", "thread": threading.get_ident()}
+
+        executor = ToolExecutor(action_handlers={"async_tool": handler})
+        result = asyncio.run(executor.aexecute("async_tool", {}))
+
+        assert result == {"status": "ok", "thread": main_thread}
+
+    def test_aexecute_adapts_sync_handler_in_worker_thread(self) -> None:
+        """Legacy sync handlers are quarantined behind the executor adapter."""
+        main_thread = threading.get_ident()
+
+        def handler() -> dict[str, Any]:
+            return {"status": "ok", "thread": threading.get_ident()}
+
+        executor = ToolExecutor(action_handlers={"sync_tool": handler})
+        result = asyncio.run(executor.aexecute("sync_tool", {}))
+
+        assert result["status"] == "ok"
+        assert result["thread"] != main_thread
+
+    def test_aexecute_write_approval_uses_async_path(self) -> None:
+        """Async safety gates should offload approval prompts and await async hooks."""
+        main_thread = threading.get_ident()
+        callback_thread = 0
+        hook_events: list[HookEvent] = []
+
+        def approval_callback(_tool: str, _detail: str, _level: str) -> str:
+            nonlocal callback_thread
+            callback_thread = threading.get_ident()
+            return "y"
+
+        async def record_hook(event: HookEvent, _data: dict[str, Any]) -> None:
+            await asyncio.sleep(0)
+            hook_events.append(event)
+
+        hooks = HookSystem()
+        hooks.register(HookEvent.TOOL_APPROVAL_REQUESTED, record_hook, name="requested")
+        hooks.register(HookEvent.TOOL_APPROVAL_GRANTED, record_hook, name="granted")
+
+        executor = ToolExecutor(
+            action_handlers={"memory_save": MagicMock(return_value={"status": "ok"})},
+            approval_callback=approval_callback,
+            hooks=hooks,
+        )
+        result = asyncio.run(executor.aexecute("memory_save", {"content": "data"}))
+
+        assert result["status"] == "ok"
+        assert callback_thread != main_thread
+        assert HookEvent.TOOL_APPROVAL_REQUESTED in hook_events
+        assert HookEvent.TOOL_APPROVAL_GRANTED in hook_events
+
+    def test_aexecute_bash_approval_uses_async_method(self) -> None:
+        """Dangerous tools should not route through the sync approval method in aexecute()."""
+        executor = ToolExecutor(auto_approve=True)
+        with patch.object(
+            executor, "_request_approval_async", AsyncMock(return_value=False)
+        ) as mock_approve:
+            result = asyncio.run(
+                executor.aexecute("run_bash", {"command": "npm install foo", "reason": "test"})
+            )
+
+        mock_approve.assert_awaited_once()
+        assert result.get("denied") is True
+
+    def test_aexecute_bash_uses_async_bash_tool(self) -> None:
+        """Approved bash execution should use BashTool.aexecute() in the async path."""
+        bash = MagicMock(spec=BashTool)
+        bash.validate.return_value = None
+        bash.aexecute = AsyncMock(return_value=BashResult(stdout="ok\n", returncode=0))
+        bash.execute = MagicMock(side_effect=AssertionError("sync bash path used"))
+        bash.to_tool_result.side_effect = lambda result: {"stdout": result.stdout}
+
+        executor = ToolExecutor(bash_tool=bash, hitl_level=0)
+        result = asyncio.run(executor.aexecute("run_bash", {"command": "echo ok", "reason": ""}))
+
+        bash.aexecute.assert_awaited_once_with("echo ok", timeout=30, cancellation=None)
+        bash.execute.assert_not_called()
+        assert result["stdout"] == "ok\n"
+
+    def test_aexecute_bash_passes_cancellation_context(self) -> None:
+        """Bash receives ToolContext cancellation for in-flight interruption."""
+        cancellation = asyncio.Event()
+        bash = MagicMock(spec=BashTool)
+        bash.validate.return_value = None
+        bash.aexecute = AsyncMock(return_value=BashResult(stdout="ok\n", returncode=0))
+        bash.to_tool_result.side_effect = lambda result: {"stdout": result.stdout}
+
+        executor = ToolExecutor(bash_tool=bash, hitl_level=0)
+        result = asyncio.run(
+            executor.aexecute(
+                "run_bash",
+                {"command": "echo ok", "reason": "", "timeout": 7},
+                context=ToolContext(cancellation=cancellation),
+            )
+        )
+
+        bash.aexecute.assert_awaited_once_with("echo ok", timeout=7, cancellation=cancellation)
+        assert result["stdout"] == "ok\n"
+
+    def test_aexecute_mcp_uses_async_manager_call(self) -> None:
+        """MCP execution should prefer manager.acall_tool() in the async path."""
+        mcp = MagicMock()
+        mcp.find_server_for_tool.return_value = "srv"
+        mcp.is_mcp_approved = MagicMock(return_value=True)
+        mcp.acall_tool = AsyncMock(return_value={"result": "ok"})
+        mcp.call_tool = MagicMock(side_effect=AssertionError("sync MCP path used"))
+
+        executor = ToolExecutor(mcp_manager=mcp, auto_approve=True)
+        result = asyncio.run(executor.aexecute("mcp_tool", {"x": 1}))
+
+        mcp.acall_tool.assert_awaited_once_with("srv", "mcp_tool", {"x": 1})
+        mcp.call_tool.assert_not_called()
+        assert result == {"result": "ok"}
+
+    def test_process_uses_executor_aexecute(self) -> None:
+        """ToolCallProcessor should not wrap the whole sync executor in to_thread."""
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value={"status": "ok"})
+        executor.execute = MagicMock(side_effect=AssertionError("sync executor path used"))
+
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        error_recovery = MagicMock()
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=error_recovery,
+        )
+
+        block = MagicMock()
+        block.type = "tool_use"
+        block.name = "list_ips"
+        block.input = {"limit": 2}
+        block.id = "toolu_async"
+        response = MagicMock(content=[block])
+
+        results = asyncio.run(processor.process(response))
+
+        executor.aexecute.assert_awaited_once_with("list_ips", {"limit": 2})
+        executor.execute.assert_not_called()
+        assert results[0]["tool_use_id"] == "toolu_async"
+        assert '"status": "ok"' in results[0]["content"]
+
+    def test_process_awaits_async_hooks(self) -> None:
+        """ToolCallProcessor should await async hook interceptors and result hooks."""
+        executor = MagicMock(spec=ToolExecutor)
+        executor.aexecute = AsyncMock(return_value={"status": "raw"})
+
+        op_logger = MagicMock()
+        op_logger.log_tool_call.return_value = True
+        hooks = HookSystem()
+
+        async def rewrite_input(_event: HookEvent, _data: dict[str, Any]) -> dict[str, Any]:
+            await asyncio.sleep(0)
+            return {"modify": {"tool_input": {"limit": 3}}}
+
+        async def rewrite_result(_event: HookEvent, _data: dict[str, Any]) -> dict[str, Any]:
+            await asyncio.sleep(0)
+            return {"updated_result": {"status": "hooked"}}
+
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, rewrite_input, name="rewrite_input")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, rewrite_result, name="rewrite_result")
+
+        processor = ToolCallProcessor(
+            executor=executor,
+            op_logger=op_logger,
+            error_recovery=MagicMock(),
+            hooks=hooks,
+        )
+
+        block = MagicMock()
+        block.type = "tool_use"
+        block.name = "list_ips"
+        block.input = {"limit": 1}
+        block.id = "toolu_hooks"
+        response = MagicMock(content=[block])
+
+        results = asyncio.run(processor.process(response))
+
+        executor.aexecute.assert_awaited_once_with("list_ips", {"limit": 3})
+        assert '"status": "hooked"' in results[0]["content"]
+
+    def test_serialize_offloaded_result_awaits_async_hook(self, tmp_path: Any) -> None:
+        """Tool result offload observability should support async hooks."""
+        from core.orchestration.tool_offload import (
+            ToolResultOffloadStore,
+            get_offload_store,
+            set_offload_store,
+        )
+
+        hook_calls: list[dict[str, Any]] = []
+        hooks = HookSystem()
+
+        async def record_offload(_event: HookEvent, data: dict[str, Any]) -> None:
+            await asyncio.sleep(0)
+            hook_calls.append(data)
+
+        hooks.register(HookEvent.TOOL_RESULT_OFFLOADED, record_offload, name="record_offload")
+        processor = ToolCallProcessor(
+            executor=MagicMock(spec=ToolExecutor),
+            op_logger=MagicMock(),
+            error_recovery=MagicMock(),
+            hooks=hooks,
+        )
+        prev = get_offload_store()
+        try:
+            set_offload_store(
+                ToolResultOffloadStore(
+                    session_id="offload-test",
+                    threshold=1,
+                    base_dir=tmp_path / "offload",
+                )
+            )
+            result = asyncio.run(
+                processor._serialize_tool_result({"data": "x" * 1000}, "toolu_offload")
+            )
+        finally:
+            set_offload_store(prev)
+
+        assert result["tool_use_id"] == "toolu_offload"
+        assert hook_calls and hook_calls[0]["ref_id"] == "toolu_offload"
 
     def test_safe_tools_classification(self) -> None:
         assert "list_ips" in SAFE_TOOLS
@@ -98,9 +345,11 @@ class TestToolExecutor:
         """Write tools require user confirmation when not auto-approved."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler})
-        with patch.object(executor, "_confirm_write", return_value=False) as mock:
-            result = executor.execute("memory_save", {"content": "test"})
-            mock.assert_called_once()
+        with patch.object(
+            executor._approval, "confirm_write_async", AsyncMock(return_value=False)
+        ) as mock:
+            result = _run_executor(executor, "memory_save", {"content": "test"})
+            mock.assert_awaited_once()
             assert result.get("denied") is True
             handler.assert_not_called()
 
@@ -108,9 +357,11 @@ class TestToolExecutor:
         """Write tools always require confirmation, even with auto_approve=True."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
-        with patch.object(executor, "_confirm_write", return_value=True) as mock:
-            result = executor.execute("memory_save", {"content": "test"})
-            mock.assert_called_once()
+        with patch.object(
+            executor._approval, "confirm_write_async", AsyncMock(return_value=True)
+        ) as mock:
+            result = _run_executor(executor, "memory_save", {"content": "test"})
+            mock.assert_awaited_once()
             assert result["status"] == "ok"
             handler.assert_called_once()
 
@@ -118,14 +369,16 @@ class TestToolExecutor:
         """Write tools denied by user even when auto_approve=True."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
-        with patch.object(executor, "_confirm_write", return_value=False):
-            result = executor.execute("memory_save", {"content": "test"})
+        with patch.object(
+            executor._approval, "confirm_write_async", AsyncMock(return_value=False)
+        ):
+            result = _run_executor(executor, "memory_save", {"content": "test"})
             assert result.get("denied") is True
             handler.assert_not_called()
 
     def test_delegate_task_no_manager(self) -> None:
         executor = ToolExecutor(auto_approve=True)
-        result = executor.execute(
+        result = _run_executor(executor,
             "delegate_task",
             {
                 "task_description": "Test task",
@@ -154,6 +407,45 @@ class TestAgenticLoop:
         handler = MagicMock(return_value={"status": "ok", "action": "list"})
         return ToolExecutor(action_handlers={"list_ips": handler})
 
+    def test_sync_run_facade_removed(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """The breaking async migration removes the sync run facade."""
+        loop = AgenticLoop(context, executor, quiet=True)
+
+        assert not hasattr(loop, "run")
+
+    def test_internal_sync_entrypoints_bridge_to_arun_not_run(self) -> None:
+        """Production entrypoints should not route through AgenticLoop.run()."""
+        from core.agent.worker import _run_agentic
+        from core.cli.bootstrap import _build_agentic_stack_minimal
+        from core.cli.commands.skills import cmd_skill_invoke
+        from core.cli.scheduler_drain import drain_scheduler_queue
+        from core.cli.typer_serve import serve
+        from core.server.ipc_server.poller import CLIPoller
+
+        forbidden = {
+            "_build_agentic_stack_minimal": (
+                inspect.getsource(_build_agentic_stack_minimal),
+                ["return loop.run("],
+            ),
+            "drain_scheduler_queue": (
+                inspect.getsource(drain_scheduler_queue),
+                ["_loop.run(", "main_loop.run("],
+            ),
+            "serve": (inspect.getsource(serve), ["result = loop.run("]),
+            "cmd_skill_invoke": (inspect.getsource(cmd_skill_invoke), ["_loop.run("]),
+            "_run_agentic": (inspect.getsource(_run_agentic), ["loop.run("]),
+            "_run_prompt_streaming": (
+                inspect.getsource(CLIPoller._run_prompt_streaming),
+                ["loop.run("],
+            ),
+        }
+
+        for name, (source, patterns) in forbidden.items():
+            for pattern in patterns:
+                assert pattern not in source, f"{name} still uses sync AgenticLoop.run()"
+
     def test_run_text_only_response(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
@@ -176,12 +468,87 @@ class TestAgenticLoop:
             patch.object(loop, "_call_llm", return_value=mock_response),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("list IPs")
+            result = asyncio.run(loop.arun("list IPs"))
 
         assert result.text == "Here are the available IPs."
         assert result.rounds == 1
         assert result.error is None
         assert result.termination_reason == "natural"
+
+    def test_arun_awaits_async_lifecycle_hooks(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Async loop path awaits start/end/finalization lifecycle hooks."""
+        hooks = HookSystem()
+        observed: list[tuple[HookEvent, dict[str, Any]]] = []
+
+        async def record(event: HookEvent, data: dict[str, Any]) -> None:
+            await asyncio.sleep(0)
+            observed.append((event, dict(data)))
+
+        for event in (
+            HookEvent.SESSION_STARTED,
+            HookEvent.SESSION_ENDED,
+            HookEvent.TURN_COMPLETED,
+            HookEvent.REASONING_METRICS,
+        ):
+            hooks.register(event, record, name=f"record_{event.value}")
+
+        loop = AgenticLoop(context, executor, hooks=hooks, quiet=True)
+        mock_response = MagicMock()
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage = MagicMock()
+        mock_response.usage.input_tokens = 100
+        mock_response.usage.output_tokens = 50
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "Lifecycle complete."
+        mock_response.content = [text_block]
+
+        with (
+            patch.object(loop, "_call_llm", return_value=mock_response),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = asyncio.run(loop.arun("hello"))
+
+        assert result.text == "Lifecycle complete."
+        assert [event for event, _ in observed] == [
+            HookEvent.SESSION_STARTED,
+            HookEvent.SESSION_ENDED,
+            HookEvent.TURN_COMPLETED,
+            HookEvent.REASONING_METRICS,
+        ]
+        assert observed[0][1]["session_id"] == loop._session_id
+        assert observed[1][1]["termination_reason"] == "natural"
+        assert observed[2][1]["text"] == "Lifecycle complete."
+        assert observed[3][1]["total_rounds"] == 1
+
+    def test_arun_awaits_async_user_input_interceptor(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Async user input interceptors can block before the first LLM call."""
+        hooks = HookSystem()
+
+        async def block_input(_event: HookEvent, _data: dict[str, Any]) -> dict[str, Any]:
+            await asyncio.sleep(0)
+            return {"block": True, "reason": "blocked async"}
+
+        hooks.register(HookEvent.USER_INPUT_RECEIVED, block_input, name="block_input")
+        loop = AgenticLoop(
+            context,
+            executor,
+            hooks=hooks,
+            quiet=True,
+            enable_goal_decomposition=False,
+        )
+
+        with patch.object(loop, "_call_llm", new=AsyncMock()) as mock_call:
+            result = asyncio.run(loop.arun("blocked"))
+
+        mock_call.assert_not_called()
+        assert result.text == "blocked async"
+        assert result.rounds == 0
+        assert result.termination_reason == "input_blocked"
 
     def test_run_with_tool_use(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test tool_use → tool_result → text response flow."""
@@ -217,7 +584,7 @@ class TestAgenticLoop:
             patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("IP 목록 보여줘")
+            result = asyncio.run(loop.arun("IP 목록 보여줘"))
 
         assert result.rounds == 2
         assert len(result.tool_calls) == 1
@@ -247,7 +614,7 @@ class TestAgenticLoop:
             patch.object(loop, "_call_llm", return_value=tool_response),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("infinite loop test")
+            result = asyncio.run(loop.arun("infinite loop test"))
 
         assert result.error == "max_rounds"
         assert result.rounds == 2
@@ -267,10 +634,10 @@ class TestAgenticLoop:
 
         with (
             patch.object(loop, "_call_llm", return_value=None),
-            patch.object(loop, "_aggressive_context_recovery", return_value=0),
+            patch.object(loop, "_aggressive_context_recovery", new=AsyncMock(return_value=0)),
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
         ):
-            result = loop.run("test")
+            result = asyncio.run(loop.arun("test"))
 
         assert result.error == "model_action_required"
         assert result.termination_reason == "model_action_required"
@@ -295,7 +662,7 @@ class TestAgenticLoop:
             patch.object(loop, "_call_llm", return_value=mock_response),
             patch.object(loop, "_track_usage"),
         ):
-            loop.run("first message")
+            asyncio.run(loop.arun("first message"))
 
         assert context.turn_count >= 1
 
@@ -341,7 +708,7 @@ class TestAgenticLoop:
             patch.object(loop, "_call_llm", side_effect=mock_call_llm),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("test forced text")
+            result = asyncio.run(loop.arun("test forced text"))
 
         assert result.rounds == 3
         assert result.termination_reason == "forced_text"
@@ -453,6 +820,42 @@ class TestAgenticLoop:
         assert acc.total_output_tokens == 200
         assert len(acc.calls) == 1
 
+    def test_track_usage_async_awaits_cost_hooks(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Async usage tracking should emit cost hooks through the async hook path."""
+        from core.config import settings
+        from core.llm.token_tracker import reset_tracker
+
+        reset_tracker()
+        monkeypatch.setattr(settings, "cost_limit_usd", 0.000001, raising=False)
+        hooks = HookSystem()
+        observed: list[tuple[HookEvent, dict[str, Any]]] = []
+
+        async def record(event: HookEvent, data: dict[str, Any]) -> None:
+            await asyncio.sleep(0)
+            observed.append((event, dict(data)))
+
+        hooks.register(HookEvent.COST_LIMIT_EXCEEDED, record, name="cost_limit")
+        loop = AgenticLoop(context, executor, hooks=hooks, quiet=True)
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(
+            input_tokens=500_000,
+            output_tokens=200_000,
+            thinking_tokens=0,
+            cache_creation_tokens=0,
+            cache_read_tokens=0,
+        )
+
+        asyncio.run(loop._track_usage_async(mock_response))
+
+        assert observed
+        assert observed[0][0] == HookEvent.COST_LIMIT_EXCEEDED
+        assert observed[0][1]["limit_usd"] == 0.000001
+
     def test_track_usage_no_usage(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
@@ -528,6 +931,27 @@ class TestAgenticLoop:
         assert any("Failed to track usage" in r.message for r in caplog.records), (
             "track_usage must log at WARNING when it swallows a record() failure"
         )
+
+    def test_update_model_async_awaits_model_switched_hook(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """Async model switching should use async hook emission."""
+        hooks = HookSystem()
+        observed: list[dict[str, Any]] = []
+
+        async def record(_event: HookEvent, data: dict[str, Any]) -> None:
+            await asyncio.sleep(0)
+            observed.append(dict(data))
+
+        hooks.register(HookEvent.MODEL_SWITCHED, record, name="model_switch")
+        loop = AgenticLoop(context, executor, hooks=hooks, quiet=True)
+
+        asyncio.run(loop.update_model_async("test-async-model", provider=loop._provider))
+
+        assert len(observed) == 1
+        assert observed[0]["from_model"] != "test-async-model"
+        assert observed[0]["to_model"] == "test-async-model"
+        assert observed[0]["reason"] == "user_switch"
 
 
 # ---------------------------------------------------------------------------
@@ -785,7 +1209,7 @@ class TestAgenticLoopEdgeCases:
             patch.object(loop, "_call_llm", side_effect=[tool_response, text_response]),
             patch.object(loop, "_track_usage"),
         ):
-            result = loop.run("list and search")
+            result = asyncio.run(loop.arun("list and search"))
 
         assert result.rounds == 2
         assert len(result.tool_calls) == 2

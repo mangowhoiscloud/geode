@@ -13,9 +13,9 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class SignalEnrichmentPort(Protocol):
-    """Port for external signal enrichment."""
+    """Async-only port for external signal enrichment."""
 
-    def fetch_signals(self, ip_name: str) -> dict[str, Any]:
+    async def afetch_signals(self, ip_name: str) -> dict[str, Any]:
         """Fetch enrichment signals for an IP.
 
         Returns dict with standard signal keys:
@@ -24,7 +24,7 @@ class SignalEnrichmentPort(Protocol):
         """
         ...
 
-    def is_available(self) -> bool:
+    async def ais_available(self) -> bool:
         """Check if the enrichment service is reachable."""
         ...
 

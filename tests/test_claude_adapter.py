@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import patch
 
 from core.llm.router import ClaudeAdapter, LLMClientPort
@@ -39,9 +40,16 @@ class TestClaudeAdapter:
         result = adapter.generate_structured("system", "user")
         assert result == {"score": 4.2}
 
-    @patch("core.llm.router.call_llm_streaming")
-    def test_generate_stream_delegates(self, mock_call):
-        mock_call.return_value = iter(["hello", " ", "world"])
-        adapter = ClaudeAdapter()
-        tokens = list(adapter.generate_stream("system", "user"))
+    @patch("core.llm.router.call_llm_streaming_async")
+    def test_agenerate_stream_delegates(self, mock_call):
+        async def _stream():
+            for token in ["hello", " ", "world"]:
+                yield token
+
+        async def _collect():
+            adapter = ClaudeAdapter()
+            return [token async for token in adapter.agenerate_stream("system", "user")]
+
+        mock_call.return_value = _stream()
+        tokens = asyncio.run(_collect())
         assert tokens == ["hello", " ", "world"]

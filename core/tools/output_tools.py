@@ -10,6 +10,7 @@ All artifact-producing tools auto-save to Vault (.geode/vault/).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -79,7 +80,7 @@ class GenerateReportTool:
             "required": ["ip_name"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         ip_name: str = kwargs["ip_name"]
         analysis_data: dict[str, Any] = kwargs.get("analysis_data", {})
         fmt: str = kwargs.get("format", "markdown")
@@ -110,6 +111,10 @@ class GenerateReportTool:
         )
 
         return {"result": report}
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run report generation and vault writes off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
 
 class ExportJsonTool:
@@ -147,7 +152,7 @@ class ExportJsonTool:
             "required": ["data"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         data: dict[str, Any] = kwargs["data"]
         filename: str = kwargs.get(
             "filename",
@@ -177,6 +182,10 @@ class ExportJsonTool:
                 "error": f"Failed to export JSON: {e}",
                 "exported": False,
             }
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run JSON export and vault writes off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
 
 class SendNotificationTool:
@@ -225,7 +234,7 @@ class SendNotificationTool:
             "required": ["channel", "message"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         from core.mcp.notification_port import get_notification
 
         channel: str = kwargs["channel"]
@@ -234,30 +243,47 @@ class SendNotificationTool:
         recipient: str = kwargs.get("recipient", "default")
 
         adapter = get_notification()
-        if adapter is not None and adapter.is_available(channel):
-            result = adapter.send_message(channel, recipient, message, severity=severity)
-            return {
-                "result": {
-                    "sent": result.success,
-                    "channel": result.channel,
-                    "severity": severity,
-                    "recipient": recipient,
-                    "message_id": result.message_id,
-                    "message_preview": message[:100],
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "error": result.error,
-                }
-            }
+        if adapter is not None and await adapter.ais_available(channel):
+            result = await adapter.asend_message(channel, recipient, message, severity=severity)
+            return _notification_result(result, severity, recipient, message)
 
-        # Fallback: stub response when no adapter is available
-        return {
-            "result": {
-                "sent": False,
-                "channel": channel,
-                "severity": severity,
-                "recipient": recipient,
-                "message_preview": message[:100],
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "note": f"No {channel} adapter available — notification not delivered.",
-            }
+        return _notification_unavailable_result(channel, severity, recipient, message)
+
+
+def _notification_result(
+    result: Any,
+    severity: str,
+    recipient: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "result": {
+            "sent": result.success,
+            "channel": result.channel,
+            "severity": severity,
+            "recipient": recipient,
+            "message_id": result.message_id,
+            "message_preview": message[:100],
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "error": result.error,
         }
+    }
+
+
+def _notification_unavailable_result(
+    channel: str,
+    severity: str,
+    recipient: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "result": {
+            "sent": False,
+            "channel": channel,
+            "severity": severity,
+            "recipient": recipient,
+            "message_preview": message[:100],
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "note": f"No {channel} adapter available — notification not delivered.",
+        }
+    }

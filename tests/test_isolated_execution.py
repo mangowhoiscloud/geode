@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from typing import Any
@@ -61,7 +62,7 @@ class TestIsolationConfig:
     def test_auto_generated_session_id(self) -> None:
         """When session_id is empty, runner should auto-generate one."""
         runner = IsolatedRunner()
-        result = runner.run(lambda: "ok")
+        result = asyncio.run(runner.arun(lambda: "ok"))
         assert result.session_id != ""
         assert len(result.session_id) == 12
 
@@ -112,7 +113,7 @@ class TestIsolationResult:
 class TestIsolatedRunnerSync:
     def test_success(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(lambda: "hello world")
+        result = asyncio.run(runner.arun(lambda: "hello world"))
         assert result.success is True
         assert result.output == "hello world"
         assert result.error is None
@@ -120,7 +121,7 @@ class TestIsolatedRunnerSync:
 
     def test_exception_captured(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(_exploding)
+        result = asyncio.run(runner.arun(_exploding))
         assert result.success is False
         assert result.error == "boom"
         assert result.output == ""
@@ -128,57 +129,57 @@ class TestIsolatedRunnerSync:
     def test_timeout_enforced(self) -> None:
         runner = IsolatedRunner()
         cfg = IsolationConfig(timeout_s=0.1)
-        result = runner.run(_slow_fn, args=(5.0,), config=cfg)
+        result = asyncio.run(runner.arun(_slow_fn, args=(5.0,), config=cfg))
         assert result.success is False
         assert result.error is not None
         assert "Timeout" in result.error
 
     def test_callable_with_args(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(_greet, args=("World",))
+        result = asyncio.run(runner.arun(_greet, args=("World",)))
         assert result.success is True
         assert result.output == "Hello, World!"
 
     def test_callable_with_kwargs(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(_greet, args=("World",), kwargs={"greeting": "Hi"})
+        result = asyncio.run(runner.arun(_greet, args=("World",), kwargs={"greeting": "Hi"}))
         assert result.success is True
         assert result.output == "Hi, World!"
 
     def test_callable_returns_none(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(lambda: None)
+        result = asyncio.run(runner.arun(lambda: None))
         assert result.success is True
         assert result.output == ""
 
     def test_callable_returns_int(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(lambda: 42)
+        result = asyncio.run(runner.arun(lambda: 42))
         assert result.success is True
         assert result.output == "42"
 
     def test_empty_callable_output(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(lambda: "")
+        result = asyncio.run(runner.arun(lambda: ""))
         assert result.success is True
         assert result.output == ""
 
     def test_custom_session_id_preserved(self) -> None:
         runner = IsolatedRunner()
         cfg = IsolationConfig(session_id="my-custom-id")
-        result = runner.run(lambda: "ok", config=cfg)
+        result = asyncio.run(runner.arun(lambda: "ok", config=cfg))
         assert result.session_id == "my-custom-id"
 
     def test_metadata_preserved(self) -> None:
         runner = IsolatedRunner()
         cfg = IsolationConfig(metadata={"ip": "Naruto", "tier": 1})
-        result = runner.run(lambda: "ok", config=cfg)
+        result = asyncio.run(runner.arun(lambda: "ok", config=cfg))
         assert result.metadata == {"ip": "Naruto", "tier": 1}
 
     def test_timestamps(self) -> None:
         runner = IsolatedRunner()
         before = time.time()
-        result = runner.run(lambda: "fast")
+        result = asyncio.run(runner.arun(lambda: "fast"))
         after = time.time()
         assert result.started_at >= before
         assert result.completed_at <= after
@@ -201,7 +202,7 @@ class TestPostToMain:
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.SUMMARY, prefix="TestRun")
-        result = runner.run(lambda: "some output", config=cfg)
+        result = asyncio.run(runner.arun(lambda: "some output", config=cfg))
 
         assert len(captured) == 1
         data = captured[0]
@@ -222,7 +223,7 @@ class TestPostToMain:
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.FULL)
-        runner.run(lambda: "full output text", config=cfg)
+        asyncio.run(runner.arun(lambda: "full output text", config=cfg))
 
         assert len(captured) == 1
         assert captured[0]["mode"] == "full"
@@ -238,7 +239,7 @@ class TestPostToMain:
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_mode=PostToMainMode.FULL, max_chars=100)
-        runner.run(_large_output, args=(500,), config=cfg)
+        asyncio.run(runner.arun(_large_output, args=(500,), config=cfg))
 
         msg = captured[0]["message"]
         assert len(msg) <= 100
@@ -254,14 +255,14 @@ class TestPostToMain:
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(post_to_main=False)
-        runner.run(lambda: "no posting", config=cfg)
+        asyncio.run(runner.arun(lambda: "no posting", config=cfg))
 
         assert len(captured) == 0
 
     def test_no_hooks_runs_fine(self) -> None:
         """Runner with no hooks should still execute and return results."""
         runner = IsolatedRunner(hooks=None)
-        result = runner.run(lambda: "ok")
+        result = asyncio.run(runner.arun(lambda: "ok"))
         assert result.success is True
         assert result.output == "ok"
 
@@ -275,7 +276,7 @@ class TestPostToMain:
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
         cfg = IsolationConfig(prefix="AnalysisTask")
-        runner.run(lambda: "ok", config=cfg)
+        asyncio.run(runner.arun(lambda: "ok", config=cfg))
 
         assert captured[0]["prefix"] == "AnalysisTask"
 
@@ -288,7 +289,7 @@ class TestPostToMain:
 
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
-        runner.run(lambda: "ok")
+        asyncio.run(runner.arun(lambda: "ok"))
 
         assert "duration_ms" in captured[0]
         assert captured[0]["duration_ms"] >= 0
@@ -302,7 +303,7 @@ class TestPostToMain:
 
         hooks.register(HookEvent.SUBAGENT_COMPLETED, handler, name="capture")
         runner = IsolatedRunner(hooks=hooks)
-        runner.run(_exploding)
+        asyncio.run(runner.arun(_exploding))
 
         assert len(captured) == 1
         assert captured[0]["success"] is False
@@ -489,7 +490,7 @@ class TestIsolatedRunnerAsync:
         orig = runner.SLOT_WAIT_S
         runner.SLOT_WAIT_S = 0.1
         try:
-            result = runner.run(lambda: "over-limit")
+            result = asyncio.run(runner.arun(lambda: "over-limit"))
             assert result.success is False
             assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
         finally:
@@ -571,7 +572,7 @@ class TestEdgeCases:
 
     def test_run_with_default_config(self) -> None:
         runner = IsolatedRunner()
-        result = runner.run(lambda: "default config")
+        result = asyncio.run(runner.arun(lambda: "default config"))
         assert result.success is True
 
     def test_hook_handler_error_doesnt_crash_runner(self) -> None:
@@ -585,7 +586,7 @@ class TestEdgeCases:
         runner = IsolatedRunner(hooks=hooks)
 
         # Should not raise
-        result = runner.run(lambda: "ok")
+        result = asyncio.run(runner.arun(lambda: "ok"))
         assert result.success is True
 
 
@@ -604,10 +605,10 @@ class TestSlotLeakRegression:
         lane = Lane("global", max_concurrent=5, timeout_s=30.0)
         runner = IsolatedRunner(lane=lane)
 
-        result = runner.run(
+        result = asyncio.run(runner.arun(
             lambda: time.sleep(5.0),
             config=IsolationConfig(timeout_s=0.1),
-        )
+        ))
 
         assert not result.success
         # Lane should have 0 active (slot released)
@@ -620,7 +621,7 @@ class TestSlotLeakRegression:
         lane = Lane("global", max_concurrent=5, timeout_s=30.0)
         runner = IsolatedRunner(lane=lane)
 
-        result = runner.run(lambda: "fast")
+        result = asyncio.run(runner.arun(lambda: "fast"))
 
         assert result.success
         assert lane.active_count == 0

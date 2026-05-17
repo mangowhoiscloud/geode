@@ -22,7 +22,7 @@ This plan integrates Petri (Anthropic alignment auditing tool, currently maintai
 |---|----------|--------|
 | Q1 | Does it already exist in code? | No. GAP Audit confirmed: `inspect-ai`/`inspect_petri` absent from `pyproject.toml`; no `core/eval/`, no `plugins/petri_audit/`; no Petri-related identifiers (`TargetContext`, `audit_judge`) anywhere. Existing `tests/_live_audit_runner.py` is GEODE's E2E runner, unrelated to Petri. |
 | Q2 | What breaks if we don't do this? | (a) Path B (own evaluator) has no design input. (b) Production agent ships alignment-blind — when GEODE gains broader tool access (hooks, scheduler, gateway), no regression test catches drift on `unprompted_initiative` / `unprompted_self_preservation` / `cooperation_with_harmful_sysprompt` / `unprompted_whistleblowing`. |
-| Q3 | How do we measure the effect? | Three metrics. (1) Petri's 38 judge dimensions, focused on the 4 target axes above. (2) Per-run cost (KRW), enforced gate at < 5,000 KRW (Phase P2) and < 30,000 KRW (Phase P3). (3) Trace integrity — confirm GEODE's hook-based RunLog (introduced v0.89.0 after LangSmith removal) captures Petri-driven invocations correctly. |
+| Q3 | How do we measure the effect? | Three metrics. (1) Petri's 38 judge dimensions, focused on the 4 target axes above. (2) Per-run cost (KRW), enforced gate at < 5,000 KRW (Phase P2) and < 30,000 KRW (Phase P3). (3) Trace integrity — confirm GEODE's hook-based RunLog (introduced v0.89.0 after external tracing removal) captures Petri-driven invocations correctly. |
 | Q4 | What is the simplest implementation? | Inspect AI Custom Target (`execute(state, context: TargetContext)`) calling `AgenticLoop` directly. No HTTP wrapper. `target_tools="none"` so Petri does not simulate tools — GEODE's real tool loop runs. Optional extra dependency (`uv sync --extra audit`) keeps cold-start untouched. |
 | Q5 | Is this pattern in 3+ frontier systems? | Yes. (1) Petri itself (Anthropic Alignment Science). (2) Inspect AI framework (UK AISI) — same `Task` + `Solver` + `Scorer` pattern. (3) OpenAI Evals — separated grader from target model. The 3-role separation (auditor/target/judge) is established cross-vendor. |
 
@@ -49,7 +49,7 @@ Key design constraints from current GEODE state (v0.89.3):
 
 - **Cold-start protection**: v0.89.1–v0.89.3 reduced cold-start by 46% / 20% / 53% via lazy imports. `inspect-ai` is heavy (~200ms+ import). Mitigation: `[project.optional-dependencies] audit = [...]` + lazy import inside `plugins/petri_audit/` — never imported in default cold path.
 - **Type strictness**: B2 batches (v0.88.3–v0.88.5) removed mypy ignores. New code must be `mypy core/ plugins/` clean with zero new ignores.
-- **Trace integration**: Post-LangSmith removal, observability is hook-based. Petri runs should emit through the same hook system, not a separate trace channel.
+- **Trace integration**: Observability is hook-based after the external tracing dependency was removed. Petri runs should emit through the same hook system, not a separate trace channel.
 - **Petri version**: `main` branch (3.0) — `v3.0.4` Custom Target API + `v3.0.6` `cache` parameter are required. The 2.0 stable tag (release `v2.0.0`, 2026-01-22) lacks the Custom Target ergonomics. Pin by commit SHA at install time.
 
 ### Affected Files
@@ -162,4 +162,4 @@ inspect eval inspect_petri/audit \
 - Frontier precedent: Anthropic Petri (own), UK AISI Inspect AI (target framework), OpenAI Evals (separation pattern).
 - GEODE entry point: `core/agent/loop/loop.py:57` (`AgenticLoop`)
 - GEODE plugin reference: `plugins/game_ip/`
-- GEODE post-LangSmith trace path (v0.89.0): hook system + RunLog
+- GEODE vendor-free trace path (v0.89.0): hook system + RunLog

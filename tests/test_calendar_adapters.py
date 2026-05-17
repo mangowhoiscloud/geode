@@ -5,8 +5,9 @@ Phase 4 validation: CalendarPort implementations + CalendarTools.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
@@ -30,6 +31,7 @@ NOW = datetime(2026, 3, 18, 14, 0, 0, tzinfo=UTC)
 def mock_manager() -> MagicMock:
     mgr = MagicMock()
     mgr.check_health.return_value = {"google-calendar": True, "caldav": True}
+    mgr.acall_tool = AsyncMock()
     return mgr
 
 
@@ -81,7 +83,7 @@ class TestGoogleCalendarAdapter:
     def test_list_events_success(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {
+        mock_manager.acall_tool.return_value = {
             "items": [
                 {
                     "id": "evt_1",
@@ -93,33 +95,57 @@ class TestGoogleCalendarAdapter:
                 }
             ]
         }
-        events = google_adapter.list_events(start=NOW, end=NOW + timedelta(days=1))
+        events = asyncio.run(
+            google_adapter.alist_events(start=NOW, end=NOW + timedelta(days=1))
+        )
         assert len(events) == 1
         assert events[0].title == "Team Standup"
         assert events[0].source == "google"
 
+    def test_alist_events_uses_async_mcp_call(
+        self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
+    ):
+        mock_manager.acall_tool.return_value = {
+            "items": [
+                {
+                    "id": "evt_async",
+                    "summary": "Async Standup",
+                    "start": {"dateTime": "2026-03-18T09:00:00+00:00"},
+                    "end": {"dateTime": "2026-03-18T09:30:00+00:00"},
+                }
+            ]
+        }
+
+        events = asyncio.run(google_adapter.alist_events(start=NOW, end=NOW + timedelta(days=1)))
+
+        assert len(events) == 1
+        assert events[0].title == "Async Standup"
+        mock_manager.acall_tool.assert_awaited_once()
+
     def test_list_events_empty(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"items": []}
-        events = google_adapter.list_events()
+        mock_manager.acall_tool.return_value = {"items": []}
+        events = asyncio.run(google_adapter.alist_events())
         assert events == []
 
     def test_list_events_error(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"error": "unauthorized"}
-        events = google_adapter.list_events()
+        mock_manager.acall_tool.return_value = {"error": "unauthorized"}
+        events = asyncio.run(google_adapter.alist_events())
         assert events == []
 
     def test_create_event_success(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"id": "new_evt_1"}
+        mock_manager.acall_tool.return_value = {"id": "new_evt_1"}
         start = NOW + timedelta(days=1)
         end = start + timedelta(hours=1)
 
-        event = google_adapter.create_event("Meeting", start, end, description="Test")
+        event = asyncio.run(
+            google_adapter.acreate_event("Meeting", start, end, description="Test")
+        )
         assert event.event_id == "new_evt_1"
         assert event.title == "Meeting"
         assert event.source == "google"
@@ -127,19 +153,21 @@ class TestGoogleCalendarAdapter:
     def test_create_event_error(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"error": "quota exceeded"}
+        mock_manager.acall_tool.return_value = {"error": "quota exceeded"}
         with pytest.raises(RuntimeError, match="quota exceeded"):
-            google_adapter.create_event("Meeting", NOW, NOW + timedelta(hours=1))
+            asyncio.run(
+                google_adapter.acreate_event("Meeting", NOW, NOW + timedelta(hours=1))
+            )
 
     def test_delete_event(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
-        mock_manager.call_tool.return_value = {"status": "deleted"}
-        assert google_adapter.delete_event("evt_1") is True
+        mock_manager.acall_tool.return_value = {"status": "deleted"}
+        assert asyncio.run(google_adapter.adelete_event("evt_1")) is True
 
     def test_delete_event_error(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"error": "not found"}
-        assert google_adapter.delete_event("nonexistent") is False
+        mock_manager.acall_tool.return_value = {"error": "not found"}
+        assert asyncio.run(google_adapter.adelete_event("nonexistent")) is False
 
     def test_is_available(self, google_adapter: GoogleCalendarAdapter):
         assert google_adapter.is_available()
@@ -148,11 +176,13 @@ class TestGoogleCalendarAdapter:
         mock_manager.check_health.return_value = {"google-calendar": False}
         adapter = GoogleCalendarAdapter(manager=mock_manager)
         assert not adapter.is_available()
-        assert adapter.list_events() == []
+        assert asyncio.run(adapter.alist_events()) == []
 
     def test_geode_prefix(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
-        mock_manager.call_tool.return_value = {"id": "g_1"}
-        event = google_adapter.create_event("[GEODE] Analysis", NOW, NOW + timedelta(hours=1))
+        mock_manager.acall_tool.return_value = {"id": "g_1"}
+        event = asyncio.run(
+            google_adapter.acreate_event("[GEODE] Analysis", NOW, NOW + timedelta(hours=1))
+        )
         assert event.is_geode
 
 
@@ -165,7 +195,7 @@ class TestAppleCalendarAdapter:
     def test_list_events_success(
         self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {
+        mock_manager.acall_tool.return_value = {
             "events": [
                 {
                     "uid": "cal_1",
@@ -175,7 +205,7 @@ class TestAppleCalendarAdapter:
                 }
             ]
         }
-        events = apple_adapter.list_events()
+        events = asyncio.run(apple_adapter.alist_events())
         assert len(events) == 1
         assert events[0].title == "Lunch"
         assert events[0].source == "apple"
@@ -183,8 +213,8 @@ class TestAppleCalendarAdapter:
     def test_create_event_success(
         self, apple_adapter: AppleCalendarAdapter, mock_manager: MagicMock
     ):
-        mock_manager.call_tool.return_value = {"uid": "new_cal_1"}
-        event = apple_adapter.create_event("Meeting", NOW, NOW + timedelta(hours=1))
+        mock_manager.acall_tool.return_value = {"uid": "new_cal_1"}
+        event = asyncio.run(apple_adapter.acreate_event("Meeting", NOW, NOW + timedelta(hours=1)))
         assert event.event_id == "new_cal_1"
         assert event.source == "apple"
 
@@ -192,7 +222,7 @@ class TestAppleCalendarAdapter:
         mock_manager.check_health.return_value = {"caldav": False}
         adapter = AppleCalendarAdapter(manager=mock_manager)
         with pytest.raises(RuntimeError, match="not available"):
-            adapter.create_event("Meeting", NOW, NOW + timedelta(hours=1))
+            asyncio.run(adapter.acreate_event("Meeting", NOW, NOW + timedelta(hours=1)))
 
     def test_is_available(self, apple_adapter: AppleCalendarAdapter):
         assert apple_adapter.is_available()
@@ -205,7 +235,7 @@ class TestAppleCalendarAdapter:
 
 class TestCompositeCalendarAdapter:
     def test_merge_events(self, mock_manager: MagicMock):
-        mock_manager.call_tool.side_effect = [
+        mock_manager.acall_tool.side_effect = [
             # Google events
             {
                 "items": [
@@ -233,32 +263,32 @@ class TestCompositeCalendarAdapter:
         apple = AppleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google, apple])
 
-        events = composite.list_events()
+        events = asyncio.run(composite.alist_events())
         assert len(events) == 2
         # Should be sorted by start time
         assert events[0].title == "Google Meeting"
         assert events[1].title == "Apple Lunch"
 
     def test_create_event_first_available(self, mock_manager: MagicMock):
-        mock_manager.call_tool.return_value = {"id": "g_new"}
+        mock_manager.acall_tool.return_value = {"id": "g_new"}
         google = GoogleCalendarAdapter(manager=mock_manager)
         apple = AppleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google, apple])
 
-        event = composite.create_event("Test", NOW, NOW + timedelta(hours=1))
+        event = asyncio.run(composite.acreate_event("Test", NOW, NOW + timedelta(hours=1)))
         assert event.source == "google"
 
     def test_no_adapters_available(self, mock_manager: MagicMock):
         mock_manager.check_health.return_value = {}
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
-        assert not composite.is_available()
+        assert not asyncio.run(composite.ais_available())
 
     def test_list_sources(self, mock_manager: MagicMock):
         google = GoogleCalendarAdapter(manager=mock_manager)
         apple = AppleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google, apple])
-        sources = composite.list_sources()
+        sources = asyncio.run(composite.alist_sources())
         assert "GoogleCalendarAdapter" in sources
         assert "AppleCalendarAdapter" in sources
 
@@ -277,12 +307,12 @@ class TestCalendarListEventsTool:
     def test_execute_no_adapter(self):
         set_calendar(None)
         tool = CalendarListEventsTool()
-        result = tool.execute()
+        result = asyncio.run(tool.aexecute())
         assert result["result"]["count"] == 0
         assert "note" in result["result"]
 
     def test_execute_with_adapter(self, mock_manager: MagicMock):
-        mock_manager.call_tool.return_value = {
+        mock_manager.acall_tool.return_value = {
             "items": [
                 {
                     "id": "e1",
@@ -297,9 +327,32 @@ class TestCalendarListEventsTool:
         set_calendar(composite)
 
         tool = CalendarListEventsTool()
-        result = tool.execute()
+        result = asyncio.run(tool.aexecute())
         assert result["result"]["count"] == 1
         assert result["result"]["events"][0]["title"] == "Test"
+
+        set_calendar(None)
+
+    def test_aexecute_with_adapter_uses_async_calendar_path(self, mock_manager: MagicMock):
+        mock_manager.acall_tool.return_value = {
+            "items": [
+                {
+                    "id": "e1",
+                    "summary": "Async Test",
+                    "start": {"dateTime": "2026-03-18T10:00:00+00:00"},
+                    "end": {"dateTime": "2026-03-18T11:00:00+00:00"},
+                }
+            ]
+        }
+        google = GoogleCalendarAdapter(manager=mock_manager)
+        composite = CompositeCalendarAdapter([google])
+        set_calendar(composite)
+
+        tool = CalendarListEventsTool()
+        result = asyncio.run(tool.aexecute())
+        assert result["result"]["count"] == 1
+        assert result["result"]["events"][0]["title"] == "Async Test"
+        mock_manager.acall_tool.assert_awaited_once()
 
         set_calendar(None)
 
@@ -312,7 +365,9 @@ class TestCalendarCreateEventTool:
     def test_execute_no_adapter(self):
         set_calendar(None)
         tool = CalendarCreateEventTool()
-        result = tool.execute(title="Test", start_datetime="2026-03-19T14:00:00")
+        result = asyncio.run(
+            tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00")
+        )
         assert "error" in result
 
     def test_execute_invalid_datetime(self, mock_manager: MagicMock):
@@ -321,7 +376,32 @@ class TestCalendarCreateEventTool:
         set_calendar(composite)
 
         tool = CalendarCreateEventTool()
-        result = tool.execute(title="Test", start_datetime="not-a-date")
+        result = asyncio.run(tool.aexecute(title="Test", start_datetime="not-a-date"))
         assert "error" in result
 
         set_calendar(None)
+
+    def test_aexecute_create_with_adapter_uses_async_calendar_path(
+        self, mock_manager: MagicMock
+    ):
+        mock_manager.acall_tool.return_value = {"id": "async_new"}
+        google = GoogleCalendarAdapter(manager=mock_manager)
+        composite = CompositeCalendarAdapter([google])
+        set_calendar(composite)
+
+        tool = CalendarCreateEventTool()
+        result = asyncio.run(
+            tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00")
+        )
+        assert result["result"]["created"] is True
+        assert result["result"]["event_id"] == "async_new"
+        mock_manager.acall_tool.assert_awaited_once()
+
+        set_calendar(None)
+
+    def test_cli_handlers_are_async_for_calendar_tools(self):
+        from core.cli.tool_handlers.calendar import _build_calendar_handlers
+
+        handlers = _build_calendar_handlers()
+        assert asyncio.iscoroutinefunction(handlers["calendar_list_events"])
+        assert asyncio.iscoroutinefunction(handlers["calendar_create_event"])

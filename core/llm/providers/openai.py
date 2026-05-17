@@ -5,18 +5,21 @@ Merged from core.infrastructure.adapters.llm.openai_adapter.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 import re
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import (
     CircuitBreaker,
     retry_with_backoff_generic,
+    retry_with_backoff_generic_async,
 )
 from core.llm.token_tracker import LLMUsage, get_tracker
 
@@ -46,6 +49,8 @@ OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
+_async_openai_client: Any = None  # openai.AsyncOpenAI | None — lazy import
+_async_openai_lock = threading.Lock()
 
 # Circuit breaker for OpenAI API calls
 _openai_circuit_breaker = CircuitBreaker()
@@ -71,11 +76,25 @@ def _get_openai_client() -> Any:
     return _openai_client
 
 
+def _get_async_openai_client() -> Any:
+    """Lazy import and return cached async OpenAI client (thread-safe)."""
+    global _async_openai_client
+    if _async_openai_client is None:
+        with _async_openai_lock:
+            if _async_openai_client is None:
+                import openai
+
+                _async_openai_client = openai.AsyncOpenAI(api_key=_resolve_openai_key())
+    return _async_openai_client
+
+
 def reset_openai_client() -> None:
     """Reset cached OpenAI client (e.g. after /key openai changes)."""
-    global _openai_client
+    global _async_openai_client, _openai_client
     with _openai_lock:
         _openai_client = None
+    with _async_openai_lock:
+        _async_openai_client = None
 
 
 def _get_retryable_errors() -> tuple[type[Exception], ...]:
@@ -115,6 +134,22 @@ def _build_prompt_cache_key(system: str, tools: list[dict[str, Any]]) -> str:
     h.update(b"\x00")
     h.update(_json.dumps(tools, sort_keys=True, default=str).encode("utf-8"))
     return h.hexdigest()[:32]
+
+
+async def _run_tool_executor_async(
+    tool_executor: Callable[..., Any],
+    tool_name: str,
+    tool_input: dict[str, Any],
+) -> dict[str, Any]:
+    """Run sync or async tool executors without blocking the event loop."""
+    if inspect.iscoroutinefunction(tool_executor):
+        raw = await tool_executor(tool_name, **tool_input)
+    else:
+        raw = await asyncio.to_thread(tool_executor, tool_name, **tool_input)
+
+    if inspect.isawaitable(raw):
+        raw = await raw
+    return raw if isinstance(raw, dict) else {"result": raw}
 
 
 class OpenAIAdapter:
@@ -231,7 +266,7 @@ class OpenAIAdapter:
         result: T = self._retry_with_backoff(_do_call, model=target)
         return result
 
-    def generate_stream(
+    async def agenerate_stream(
         self,
         system: str,
         user: str,
@@ -239,11 +274,11 @@ class OpenAIAdapter:
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
-    ) -> Iterator[str]:
-        client = _get_openai_client()
+    ) -> AsyncIterator[str]:
+        client = _get_async_openai_client()
         target_model = model or self._default_model
 
-        def _do_stream(*, model: str) -> Iterator[str]:
+        async def _do_stream(*, model: str) -> Any:
             response = client.chat.completions.create(
                 model=model,
                 max_completion_tokens=max_tokens,
@@ -256,34 +291,35 @@ class OpenAIAdapter:
                 stream_options={"include_usage": True},
                 timeout=120.0,
             )
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-                # Final chunk carries usage when stream_options includes usage
-                if hasattr(chunk, "usage") and chunk.usage is not None:
-                    in_tok = chunk.usage.prompt_tokens or 0
-                    out_tok = chunk.usage.completion_tokens or 0
-                    get_tracker().record(model, in_tok, out_tok)
+            if inspect.isawaitable(response):
+                return await response
+            return response
 
-        result: Iterator[str] = self._retry_with_backoff(_do_stream, model=target_model)
-        return result
+        stream = await self._aretry_with_backoff(_do_stream, model=target_model)
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+            if hasattr(chunk, "usage") and chunk.usage is not None:
+                in_tok = chunk.usage.prompt_tokens or 0
+                out_tok = chunk.usage.completion_tokens or 0
+                get_tracker().record(target_model, in_tok, out_tok)
 
-    def generate_with_tools(
+    async def agenerate_with_tools(
         self,
         system: str,
         user: str,
         *,
         tools: list[dict[str, Any]],
-        tool_executor: Callable[..., dict[str, Any]],
+        tool_executor: Callable[..., Any],
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
         max_tool_rounds: int = 5,
     ) -> Any:
-        """OpenAI tool-use loop. Mirrors ClaudeAdapter pattern."""
+        """OpenAI-compatible async tool-use loop."""
         from core.llm.router import ToolCallRecord, ToolUseResult
 
-        client = _get_openai_client()
+        client = _get_async_openai_client()
         target = model or self._default_model
 
         all_tool_calls: list[ToolCallRecord] = []
@@ -297,8 +333,8 @@ class OpenAIAdapter:
             is_last_round = round_idx == max_tool_rounds - 1
             tool_choice = "none" if is_last_round else "auto"
 
-            def _do_call(*, model: str, _tc: str = tool_choice) -> Any:
-                return client.chat.completions.create(
+            async def _do_call(*, model: str, _tc: str = tool_choice) -> Any:
+                response = client.chat.completions.create(
                     model=model,
                     max_completion_tokens=max_tokens,
                     temperature=temperature,
@@ -307,10 +343,12 @@ class OpenAIAdapter:
                     tool_choice=_tc,
                     timeout=120.0,
                 )
+                if inspect.isawaitable(response):
+                    return await response
+                return response
 
-            response = self._retry_with_backoff(_do_call, model=target)
+            response = await self._aretry_with_backoff(_do_call, model=target)
 
-            # Track usage
             if response.usage:
                 in_tok = response.usage.prompt_tokens
                 out_tok = response.usage.completion_tokens or 0
@@ -319,7 +357,6 @@ class OpenAIAdapter:
 
             choice = response.choices[0]
 
-            # No tool calls -> return text
             if choice.finish_reason != "tool_calls" or not choice.message.tool_calls:
                 return ToolUseResult(
                     text=choice.message.content or "",
@@ -328,8 +365,7 @@ class OpenAIAdapter:
                     rounds=round_idx + 1,
                 )
 
-            # Process tool calls
-            messages.append(choice.message)  # assistant message with tool_calls
+            messages.append(choice.message)
             for tc in choice.message.tool_calls:
                 func_name = tc.function.name
                 try:
@@ -339,7 +375,7 @@ class OpenAIAdapter:
 
                 t0 = time.time()
                 try:
-                    result = tool_executor(func_name, **func_args)
+                    result = await _run_tool_executor_async(tool_executor, func_name, func_args)
                 except Exception as exc:
                     log.warning("Tool '%s' execution failed: %s", func_name, exc)
                     result = {"error": str(exc)}
@@ -388,14 +424,27 @@ class OpenAIAdapter:
             provider_label="OpenAI",
         )
 
+    async def _aretry_with_backoff(self, fn: Any, *, model: str) -> Any:
+        """Async retry with exponential backoff + model fallback + circuit breaker."""
+        import openai
+
+        return await retry_with_backoff_generic_async(
+            fn,
+            model=model,
+            fallback_models=list(OPENAI_FALLBACK_MODELS),
+            circuit_breaker=_openai_circuit_breaker,
+            retryable_errors=_get_retryable_errors(),
+            bad_request_error=openai.BadRequestError,
+            billing_message=(
+                "OpenAI API billing/credit error. Check your OpenAI account billing settings."
+            ),
+            provider_label="OpenAI",
+        )
+
 
 # ---------------------------------------------------------------------------
 # OpenAIAgenticAdapter — OpenAI-compatible LLM adapter for agentic loop
 # ---------------------------------------------------------------------------
-
-# asyncio (~13 ms cumulative including email.message) deferred to function
-# scope; the single ``await asyncio.to_thread(...)`` lives inside an
-# async method so a function-local import has no cost.
 
 # v0.88.2 — httpx (~92 ms cumulative importtime) deferred to function
 # scope.  The single usage in ``_get_client`` already runs inside a
@@ -471,7 +520,7 @@ class OpenAIAgenticAdapter:
         return settings.openai_api_key, None
 
     def _ensure_client(self, model: str) -> Any:
-        """Lazy-create or re-create client if base_url changed."""
+        """Lazy-create async OpenAI-compatible client if base_url changed."""
         from core.llm.providers.anthropic import _build_httpx_limits, _build_httpx_timeout
 
         api_key, base_url = self._resolve_config(model)
@@ -484,7 +533,7 @@ class OpenAIAgenticAdapter:
                     import httpx
                     import openai as _openai
 
-                    http_client = httpx.Client(
+                    http_client = httpx.AsyncClient(
                         limits=_build_httpx_limits(),
                         timeout=_build_httpx_timeout(),
                     )
@@ -495,7 +544,7 @@ class OpenAIAgenticAdapter:
                     }
                     if base_url:
                         kwargs["base_url"] = base_url
-                    self._client = _openai.OpenAI(**kwargs)
+                    self._client = _openai.AsyncOpenAI(**kwargs)
         return self._client
 
     async def agentic_call(
@@ -589,9 +638,10 @@ class OpenAIAgenticAdapter:
                 oai_effort = _EFFORT_MAP.get(effort, "medium")
                 create_kwargs["reasoning"] = {"effort": oai_effort, "summary": "auto"}
                 create_kwargs["include"] = ["reasoning.encrypted_content"]
-            import asyncio
-
-            return await asyncio.to_thread(client.responses.create, **create_kwargs)
+            response = client.responses.create(**create_kwargs)
+            if inspect.isawaitable(response):
+                return await response
+            return response
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)
@@ -628,14 +678,18 @@ class OpenAIAgenticAdapter:
 
         return normalize_openai_responses(response)
 
-    def reset_client(self) -> None:
+    async def areset_client(self) -> None:
         with self._client_lock:
-            if self._client is not None:
-                try:
-                    self._client.close()
-                except Exception:
-                    log.debug("Error closing %s httpx client", self.provider_name, exc_info=True)
+            client = self._client
             self._client = None
+        if client is None:
+            return
+        try:
+            result = client.close()
+            if inspect.isawaitable(result):
+                await cast(Coroutine[Any, Any, Any], result)
+        except Exception:
+            log.debug("Error closing %s httpx client", self.provider_name, exc_info=True)
 
 
 # ---------------------------------------------------------------------------

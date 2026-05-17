@@ -33,7 +33,7 @@ do it. Cross-cutting changes require reading all related modules.
 
 The agentic loop. `while(tool_use)` primitive that drives every turn.
 
-- `loop.py` — `AgenticLoop`. 50-round limit, 5 termination paths
+- `loop/agent_loop.py` — `AgenticLoop`. 50-round limit, 5 termination paths
   (`model_action_required`, `user_clarification_needed`, etc.).
   Auto-escalation was removed in v0.90.0. The model itself emits the
   termination signal.
@@ -199,7 +199,7 @@ These are absolute. They live in `CLAUDE.md` under "CANNOT". Highlights:
 |---|---|
 | What does a tool do? | `core/tools/definitions.json` and the category module |
 | What models can I use? | `core/llm/providers/<provider>.py` |
-| Why a layer? | `core/agent/loop.py` plus `docs/architecture/` |
+| Why a layer? | `core/agent/loop/agent_loop.py` plus `docs/architecture/` |
 | How are hooks wired? | `core/hooks/system.py` plus `core/runtime/bootstrap.py` |
 | How is cost tracked? | `~/.geode/usage/*.jsonl` plus `core/audit/diagnostics.py` |
 | Petri audit run? | `plugins/petri_audit/cli_audit.py` |

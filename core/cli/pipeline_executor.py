@@ -14,6 +14,7 @@ from typing import Any
 
 from plugins.game_ip.scoring_constants import score_style
 
+from core.async_runtime import run_process_coroutine
 from core.runtime import GeodeRuntime
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
 from core.ui.console import console
@@ -29,6 +30,14 @@ from core.ui.panels import (
 )
 
 log = logging.getLogger(__name__)
+
+
+async def _collect_graph_events(
+    graph: Any,
+    input_state: GeodeState | None,
+    config: Any,
+) -> list[Any]:
+    return [event async for event in graph.astream(input_state, config=config)]
 
 # ---------------------------------------------------------------------------
 # Step labels for pipeline progress display
@@ -189,7 +198,7 @@ def _execute_pipeline(
     runtime: GeodeRuntime,
 ) -> dict[str, Any] | None:
     """Execute the GEODE pipeline with step-by-step progress."""
-    graph = runtime.compile_graph()
+    graph = runtime.compile_graph(enable_checkpoint=False)
 
     # Store initial state in session
     runtime.store_session_data(dict(initial_state))
@@ -220,7 +229,9 @@ def _execute_pipeline(
     with _status_ctx as status:
         try:
             while True:
-                for event in graph.stream(input_state, config=config):  # type: ignore[call-overload]
+                for event in run_process_coroutine(
+                    _collect_graph_events(graph, input_state, config)
+                ):
                     for node_name, output in event.items():
                         if node_name == "__end__":
                             continue
@@ -321,7 +332,7 @@ def _execute_pipeline_streaming(
     runtime: GeodeRuntime,
 ) -> dict[str, Any] | None:
     """Execute the pipeline with streaming output -- display results as they arrive."""
-    graph = runtime.compile_graph()
+    graph = runtime.compile_graph(enable_checkpoint=False)
     runtime.store_session_data(dict(initial_state))
 
     final_state: dict[str, Any] = dict(initial_state)
@@ -334,7 +345,9 @@ def _execute_pipeline_streaming(
 
     try:
         while True:
-            for event in graph.stream(input_state, config=config):  # type: ignore[call-overload]
+            for event in run_process_coroutine(
+                _collect_graph_events(graph, input_state, config)
+            ):
                 for node_name, output in event.items():
                     if node_name == "__end__":
                         continue

@@ -28,7 +28,7 @@ class CalendarSchedulerBridge:
         self._scheduler = scheduler
         self._calendar = calendar
 
-    def sync(self, *, direction: str = "both") -> dict[str, Any]:
+    async def sync(self, *, direction: str = "both") -> dict[str, Any]:
         """Run sync in specified direction.
 
         Args:
@@ -40,23 +40,23 @@ class CalendarSchedulerBridge:
         result: dict[str, Any] = {"pushed": 0, "pulled": 0, "errors": []}
 
         if direction in ("push", "both"):
-            pushed, errors = self._push_to_calendar()
+            pushed, errors = await self._push_to_calendar()
             result["pushed"] = pushed
             result["errors"].extend(errors)
 
         if direction in ("pull", "both"):
-            pulled, errors = self._pull_from_calendar()
+            pulled, errors = await self._pull_from_calendar()
             result["pulled"] = pulled
             result["errors"].extend(errors)
 
         return result
 
-    def _push_to_calendar(self) -> tuple[int, list[str]]:
+    async def _push_to_calendar(self) -> tuple[int, list[str]]:
         """Push scheduler jobs as [GEODE]-prefixed calendar events."""
         pushed = 0
         errors: list[str] = []
 
-        if not self._calendar.is_available():
+        if not await self._calendar.ais_available():
             return 0, ["Calendar adapter not available"]
 
         try:
@@ -67,7 +67,7 @@ class CalendarSchedulerBridge:
         # Get existing GEODE events to avoid duplicates
         existing_titles: set[str] = set()
         try:
-            events = self._calendar.list_events(
+            events = await self._calendar.alist_events(
                 start=datetime.now(UTC),
                 end=datetime.now(UTC) + timedelta(days=30),
                 max_results=100,
@@ -92,7 +92,7 @@ class CalendarSchedulerBridge:
             end = start + timedelta(minutes=30)
 
             try:
-                self._calendar.create_event(
+                await self._calendar.acreate_event(
                     title,
                     start,
                     end,
@@ -106,16 +106,16 @@ class CalendarSchedulerBridge:
 
         return pushed, errors
 
-    def _pull_from_calendar(self) -> tuple[int, list[str]]:
+    async def _pull_from_calendar(self) -> tuple[int, list[str]]:
         """Pull [GEODE]-prefixed calendar events as scheduler jobs."""
         pulled = 0
         errors: list[str] = []
 
-        if not self._calendar.is_available():
+        if not await self._calendar.ais_available():
             return 0, ["Calendar adapter not available"]
 
         try:
-            events = self._calendar.list_events(
+            events = await self._calendar.alist_events(
                 start=datetime.now(UTC),
                 end=datetime.now(UTC) + timedelta(days=30),
                 max_results=100,

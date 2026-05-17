@@ -9,6 +9,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from core.memory.user_profile import MAX_LEARNED_PATTERNS, FileBasedUserProfile
@@ -209,7 +210,7 @@ class TestProfileShowTool:
 
         set_user_profile(None)
         tool = ProfileShowTool()
-        result = tool.execute()
+        result = asyncio.run(tool.aexecute())
         assert "error" in result
 
     def test_show_with_profile(self, tmp_path):
@@ -219,7 +220,7 @@ class TestProfileShowTool:
         profile.ensure_structure()
         set_user_profile(profile)
         tool = ProfileShowTool()
-        result = tool.execute()
+        result = asyncio.run(tool.aexecute())
         assert "result" in result
         assert result["result"]["exists"] is True
 
@@ -231,7 +232,7 @@ class TestProfileUpdateTool:
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         set_user_profile(profile)
         tool = ProfileUpdateTool()
-        result = tool.execute(role="Data Scientist", expertise="Statistics")
+        result = asyncio.run(tool.aexecute(role="Data Scientist", expertise="Statistics"))
         assert result["result"]["updated"] is True
 
         # Verify persistence
@@ -248,12 +249,12 @@ class TestProfilePreferenceTool:
         tool = ProfilePreferenceTool()
 
         # Set
-        result = tool.execute(key="language", value="ko")
+        result = asyncio.run(tool.aexecute(key="language", value="ko"))
         assert result["result"]["action"] == "set"
         assert result["result"]["success"] is True
 
         # Get
-        result = tool.execute(key="language")
+        result = asyncio.run(tool.aexecute(key="language"))
         assert result["result"]["action"] == "get"
         assert result["result"]["value"] == "ko"
 
@@ -265,7 +266,7 @@ class TestProfileLearnTool:
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         set_user_profile(profile)
         tool = ProfileLearnTool()
-        result = tool.execute(pattern="User prefers dry-run first", category="workflow")
+        result = asyncio.run(tool.aexecute(pattern="User prefers dry-run first", category="workflow"))
         assert result["result"]["saved"] is True
         assert result["result"]["category"] == "workflow"
 
@@ -275,8 +276,8 @@ class TestProfileLearnTool:
         profile = FileBasedUserProfile(global_dir=tmp_path / "profile")
         set_user_profile(profile)
         tool = ProfileLearnTool()
-        tool.execute(pattern="Same pattern")
-        result = tool.execute(pattern="Same pattern")
+        asyncio.run(tool.aexecute(pattern="Same pattern"))
+        result = asyncio.run(tool.aexecute(pattern="Same pattern"))
         assert result["result"]["saved"] is False
         assert result["result"]["deduplicated"] is True
 
@@ -373,7 +374,7 @@ class TestProfileShowToolWithCareer:
         profile.ensure_structure()
         set_user_profile(profile)
         tool = ProfileShowTool()
-        result = tool.execute()
+        result = asyncio.run(tool.aexecute())
         assert "career" in result["result"]
         assert result["result"]["career"]["identity"]["title"] == "ML Engineer"
 

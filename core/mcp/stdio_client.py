@@ -8,11 +8,13 @@ Implements the MCP stdio transport:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
 import os
 import subprocess  # nosec B404 — intentional: MCP server launch from trusted config
+import threading
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class StdioMCPClient:
         self._tools: list[dict[str, Any]] = []
         self._request_id = 0
         self._pid: int | None = None
+        self._request_lock = threading.Lock()
 
     @property
     def pid(self) -> int | None:
@@ -126,17 +129,15 @@ class StdioMCPClient:
         """Return cached tool definitions."""
         return list(self._tools)
 
-    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def acall_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""
         if not self.is_connected():
             raise ConnectionError(f"MCP server not connected: {self._command}")
 
-        result = self._send_request(
+        result = await asyncio.to_thread(
+            self._send_request,
             "tools/call",
-            {
-                "name": tool_name,
-                "arguments": arguments,
-            },
+            {"name": tool_name, "arguments": arguments},
         )
 
         if result is None:
@@ -183,51 +184,52 @@ class StdioMCPClient:
 
     def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """Send a JSON-RPC request and wait for response with timeout."""
-        if self._process is None or self._process.stdin is None or self._process.stdout is None:
-            return None
+        with self._request_lock:
+            if self._process is None or self._process.stdin is None or self._process.stdout is None:
+                return None
 
-        request = {
-            "jsonrpc": "2.0",
-            "id": self._next_id(),
-            "method": method,
-            "params": params,
-        }
+            request = {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": method,
+                "params": params,
+            }
 
-        try:
-            message = json.dumps(request) + "\n"
-            self._process.stdin.write(message.encode("utf-8"))
-            self._process.stdin.flush()
-
-            # Read response with timeout (select-based, fallback to blocking)
             try:
-                import select
+                message = json.dumps(request) + "\n"
+                self._process.stdin.write(message.encode("utf-8"))
+                self._process.stdin.flush()
 
-                ready, _, _ = select.select(
-                    [self._process.stdout],
-                    [],
-                    [],
-                    self._timeout_s,
-                )
-                if not ready:
-                    log.warning("MCP timeout waiting for %s response", method)
+                # Read response with timeout (select-based, fallback to blocking)
+                try:
+                    import select
+
+                    ready, _, _ = select.select(
+                        [self._process.stdout],
+                        [],
+                        [],
+                        self._timeout_s,
+                    )
+                    if not ready:
+                        log.warning("MCP timeout waiting for %s response", method)
+                        return None
+                except (TypeError, ValueError):
+                    pass  # mock/non-real fd — fall through to blocking read
+
+                line = self._process.stdout.readline()
+                if not line:
                     return None
-            except (TypeError, ValueError):
-                pass  # mock/non-real fd — fall through to blocking read
 
-            line = self._process.stdout.readline()
-            if not line:
+                response = json.loads(line.decode("utf-8"))
+                if "error" in response:
+                    log.warning("MCP error: %s", response["error"])
+                    return None
+
+                result: dict[str, Any] | None = response.get("result")
+                return result
+            except (json.JSONDecodeError, OSError, BrokenPipeError) as exc:
+                log.warning("MCP communication error: %s", exc)
                 return None
-
-            response = json.loads(line.decode("utf-8"))
-            if "error" in response:
-                log.warning("MCP error: %s", response["error"])
-                return None
-
-            result: dict[str, Any] | None = response.get("result")
-            return result
-        except (json.JSONDecodeError, OSError, BrokenPipeError) as exc:
-            log.warning("MCP communication error: %s", exc)
-            return None
 
     def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""

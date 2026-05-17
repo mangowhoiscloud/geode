@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 class BasePoller(ABC):
     """Abstract daemon-thread poller for external messaging channels.
 
-    Subclasses implement _poll_once() to fetch new messages from
+    Subclasses implement _apoll_once() to fetch new messages from
     their channel and route them through the ChannelManager.
 
     Subclasses MAY define:
@@ -50,7 +51,7 @@ class BasePoller(ABC):
         ...
 
     @abstractmethod
-    def _poll_once(self) -> None:
+    async def _apoll_once(self) -> None:
         """Fetch new messages and route them via self._manager."""
         ...
 
@@ -90,7 +91,7 @@ class BasePoller(ABC):
 
         self._stop_event.clear()
         self._thread = threading.Thread(
-            target=self._run_loop,
+            target=self._run_loop_thread,
             name=f"geode-{self.channel_name}-poller",
             daemon=True,
         )
@@ -109,11 +110,16 @@ class BasePoller(ABC):
             self._thread = None
         log.info("Gateway poller stopped: %s", self.channel_name)
 
-    def _run_loop(self) -> None:
-        """Main polling loop (runs in daemon thread)."""
+    def _run_loop_thread(self) -> None:
+        """Thread entrypoint for the async polling loop."""
+        with asyncio.Runner() as runner:
+            runner.run(self._run_loop_async())
+
+    async def _run_loop_async(self) -> None:
+        """Main polling loop (runs in daemon thread event loop)."""
         while not self._stop_event.is_set():
             try:
-                self._poll_once()
+                await self._apoll_once()
             except Exception as exc:
                 log.warning("Poller %s error: %s", self.channel_name, exc)
-            self._stop_event.wait(self._poll_interval)
+            await asyncio.sleep(self._poll_interval)

@@ -75,10 +75,7 @@ def build_notification_adapter() -> None:
         TelegramNotificationAdapter(manager=manager),
     ]
     composite = CompositeNotificationAdapter(adapters)  # type: ignore[arg-type]
-    if composite.is_available():
-        log.info("Notification adapter enabled: channels=%s", composite.list_channels())
-    else:
-        log.debug("No messaging MCP servers available — stub notification mode")
+    log.info("Notification adapter wired: channels=%s", composite.list_channels())
     set_notification(composite)
 
 
@@ -102,10 +99,7 @@ def build_calendar_adapter() -> None:
         AppleCalendarAdapter(manager=manager),
     ]
     composite = CompositeCalendarAdapter(adapters)  # type: ignore[arg-type]
-    if composite.is_available():
-        log.info("Calendar adapter enabled: sources=%s", composite.list_sources())
-    else:
-        log.debug("No calendar MCP servers available — calendar tools disabled")
+    log.info("Calendar adapter wired; availability will be checked at call time")
     set_calendar(composite)
 
 
@@ -287,7 +281,7 @@ def build_plugins() -> None:
         from core.scheduler.calendar_bridge import set_calendar_bridge
 
         cal = get_calendar()
-        if cal is None or not cal.is_available():
+        if cal is None:
             set_calendar_bridge(None)
         else:
             log.debug("Calendar adapter available — bridge will wire in REPL")

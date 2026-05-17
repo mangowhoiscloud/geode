@@ -1,5 +1,7 @@
 """Tests for L3 Feedback Loop (VERIFY->GATHER loopback) and Confidence Threshold."""
 
+import asyncio
+
 from core.graph import (
     CONFIDENCE_THRESHOLD,
     DEFAULT_MAX_ITERATIONS,
@@ -7,6 +9,10 @@ from core.graph import (
     build_graph,
     compile_graph,
 )
+
+
+def _ainvoke(compiled, state):
+    return asyncio.run(compiled.ainvoke(state))
 
 
 def _should_continue(state: dict) -> str:
@@ -109,7 +115,7 @@ class TestGraphWithFeedbackLoop:
     def test_dry_run_still_works_cowboy_bebop(self):
         """Existing dry-run still passes with feedback loop in place."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -128,7 +134,7 @@ class TestGraphWithFeedbackLoop:
 
     def test_dry_run_berserk_with_feedback_fields(self):
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",

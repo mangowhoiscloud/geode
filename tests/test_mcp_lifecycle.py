@@ -12,9 +12,10 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import signal
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.hooks import HookEvent
 from core.mcp.manager import MCPServerManager
@@ -385,13 +386,47 @@ class TestMCPManagerConnectAll:
         assert call_count == 3
 
 
+class TestMCPAsyncCalls:
+    """Test async MCP dispatch wrappers."""
+
+    def test_stdio_client_acall_tool_sends_request(self) -> None:
+        client = StdioMCPClient(command="mock")
+        client._connected = True
+        client._process = MagicMock()
+        client._process.poll.return_value = None
+        with patch.object(client, "_send_request", return_value={"ok": True}) as mock_call:
+            result = asyncio.run(client.acall_tool("navigate", {"url": "https://example.com"}))
+
+        mock_call.assert_called_once_with(
+            "tools/call",
+            {"name": "navigate", "arguments": {"url": "https://example.com"}},
+        )
+        assert result == {"ok": True}
+
+    def test_manager_acall_tool_uses_client_async_path(self) -> None:
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.acall_tool = AsyncMock(return_value={"result": "ok"})
+
+        async def scenario() -> dict[str, Any]:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                return await mgr.acall_tool("playwriter", "navigate", {"url": "x"})
+
+        result = asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_awaited_once_with("navigate", {"url": "x"})
+        assert result == {"result": "ok"}
+
+
 class TestMCPFallbackHints:
     """Verify MCP fallback hints in error messages."""
 
     def test_unavailable_server_with_hint(self) -> None:
         """playwriter unavailable → error includes playwright fallback hint."""
         mgr = MCPServerManager()
-        result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
+        result = asyncio.run(
+            mgr.acall_tool("playwriter", "navigate", {"url": "https://example.com"})
+        )
         assert "error" in result
         # Hint is in dedicated field (LLM-friendly structured error)
         assert "playwright" in result.get("hint", "")
@@ -399,7 +434,7 @@ class TestMCPFallbackHints:
     def test_unavailable_server_without_hint(self) -> None:
         """Unknown server unavailable → no fallback hint."""
         mgr = MCPServerManager()
-        result = mgr.call_tool("unknown_server", "some_tool", {})
+        result = asyncio.run(mgr.acall_tool("unknown_server", "some_tool", {}))
         assert "error" in result
         # No fallback server → hint should not mention fallback
         assert "instead" not in result.get("hint", "").lower() or "playwright" not in result.get(
@@ -410,10 +445,12 @@ class TestMCPFallbackHints:
         """playwriter call fails → error includes playwright fallback hint."""
         mgr = MCPServerManager()
         mock_client = MagicMock()
-        mock_client.call_tool.side_effect = ConnectionError("extension not running")
+        mock_client.acall_tool = AsyncMock(side_effect=ConnectionError("extension not running"))
 
         with patch.object(mgr, "_get_client", return_value=mock_client):
-            result = mgr.call_tool("playwriter", "navigate", {"url": "https://example.com"})
+            result = asyncio.run(
+                mgr.acall_tool("playwriter", "navigate", {"url": "https://example.com"})
+            )
         assert "error" in result
         # Hint is in dedicated field (LLM-friendly structured error)
         assert "playwright" in result.get("hint", "")

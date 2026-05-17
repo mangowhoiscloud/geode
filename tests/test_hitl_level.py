@@ -13,9 +13,18 @@ Feature 2: HITL level (0/1/2)
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.agent.tool_executor import ToolExecutor
+
+
+def _run_executor(
+    executor: ToolExecutor, tool_name: str, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    return asyncio.run(executor.aexecute(tool_name, tool_input))
+
 
 # ---------------------------------------------------------------------------
 # Feature 1: Session-level tool approval (A=Always)
@@ -82,7 +91,7 @@ class TestAlwaysApproval:
         """When user responds 'a' to bash approval, 'bash' category is added."""
         executor = ToolExecutor()
         with patch.object(executor._approval, "prompt_with_always", return_value="a"):
-            approved = executor._request_approval("npm install foo", "test")
+            approved = executor._approval.request_bash_approval("npm install foo", "test")
         assert approved is True
         assert "bash" in executor._always_approved_categories
 
@@ -92,7 +101,7 @@ class TestAlwaysApproval:
         executor._always_approved_categories.add("bash")
         # Non-safe bash command should be auto-approved
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            executor.execute("run_bash", {"command": "npm install foo", "reason": "test"})
+            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
             mock_prompt.assert_not_called()
 
     def test_write_always_adds_category(self) -> None:
@@ -102,7 +111,7 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._confirm_write("memory_save", {"content": "test"})
+            approved = executor._approval.confirm_write("memory_save", {"content": "test"})
         assert approved is True
         assert "write" in executor._always_approved_categories
 
@@ -112,7 +121,7 @@ class TestAlwaysApproval:
         executor = ToolExecutor(action_handlers={"memory_save": handler})
         executor._always_approved_categories.add("write")
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = executor.execute("memory_save", {"content": "data"})
+            result = _run_executor(executor, "memory_save", {"content": "data"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -123,7 +132,7 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._confirm_cost("analyze_ip", 1.50)
+            approved = executor._approval.confirm_cost("analyze_ip", 1.50)
         assert approved is True
         assert "cost" in executor._always_approved_categories
 
@@ -133,7 +142,7 @@ class TestAlwaysApproval:
         executor = ToolExecutor(action_handlers={"analyze_ip": handler})
         executor._always_approved_categories.add("cost")
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = executor.execute("analyze_ip", {"ip_name": "test"})
+            result = _run_executor(executor, "analyze_ip", {"ip_name": "test"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -144,7 +153,7 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._confirm_mcp("custom-server", "some_tool")
+            approved = executor._approval.confirm_mcp("custom-server", "some_tool")
         assert approved is True
         assert "mcp:custom-server" in executor._always_approved_categories
 
@@ -165,14 +174,14 @@ class TestHITLLevel:
         """hitl_level=0 auto-approves all bash commands."""
         executor = ToolExecutor(hitl_level=0)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            executor.execute("run_bash", {"command": "npm install foo", "reason": "test"})
+            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
             mock_prompt.assert_not_called()
 
     def test_hitl_level_1_skips_bash_approval(self) -> None:
         """hitl_level=1 auto-approves bash commands."""
         executor = ToolExecutor(hitl_level=1)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            executor.execute("run_bash", {"command": "npm install foo", "reason": "test"})
+            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
             mock_prompt.assert_not_called()
 
     def test_hitl_level_2_requires_bash_approval(self) -> None:
@@ -182,7 +191,7 @@ class TestHITLLevel:
             patch.object(executor._approval, "prompt_with_always", return_value="y") as mock_prompt,
             patch("core.agent.approval.console"),
         ):
-            executor.execute("run_bash", {"command": "npm install foo", "reason": "test"})
+            _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "test"})
             mock_prompt.assert_called_once()
 
     def test_hitl_level_0_skips_write_approval(self) -> None:
@@ -190,7 +199,7 @@ class TestHITLLevel:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, hitl_level=0)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = executor.execute("memory_save", {"content": "data"})
+            result = _run_executor(executor, "memory_save", {"content": "data"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -202,7 +211,7 @@ class TestHITLLevel:
             patch.object(executor._approval, "prompt_with_always", return_value="y"),
             patch("core.agent.approval.console"),
         ):
-            executor.execute("memory_save", {"content": "data"})
+            _run_executor(executor, "memory_save", {"content": "data"})
             # Write tools at hitl_level=1 should still prompt (write-only)
 
     def test_hitl_level_0_skips_cost_approval(self) -> None:
@@ -210,7 +219,7 @@ class TestHITLLevel:
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"analyze_ip": handler}, hitl_level=0)
         with patch.object(executor._approval, "prompt_with_always") as mock_prompt:
-            result = executor.execute("analyze_ip", {"ip_name": "test"})
+            result = _run_executor(executor, "analyze_ip", {"ip_name": "test"})
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
@@ -218,22 +227,22 @@ class TestHITLLevel:
         """hitl_level=0 auto-approves MCP tools."""
         mock_mcp = MagicMock()
         mock_mcp.find_server_for_tool.return_value = "custom-server"
-        mock_mcp.call_tool.return_value = {"result": "ok"}
+        mock_mcp.acall_tool = AsyncMock(return_value={"result": "ok"})
         executor = ToolExecutor(mcp_manager=mock_mcp, hitl_level=0)
-        with patch.object(executor._approval, "confirm_mcp") as mock_confirm:
-            result = executor.execute("unknown_mcp_tool", {"arg": "value"})
-            mock_confirm.assert_not_called()
+        with patch.object(executor._approval, "confirm_mcp_async", AsyncMock()) as mock_confirm:
+            result = _run_executor(executor, "unknown_mcp_tool", {"arg": "value"})
+            mock_confirm.assert_not_awaited()
         assert result["result"] == "ok"
 
     def test_hitl_level_1_skips_mcp_approval(self) -> None:
         """hitl_level=1 auto-approves MCP tools."""
         mock_mcp = MagicMock()
         mock_mcp.find_server_for_tool.return_value = "custom-server"
-        mock_mcp.call_tool.return_value = {"result": "ok"}
+        mock_mcp.acall_tool = AsyncMock(return_value={"result": "ok"})
         executor = ToolExecutor(mcp_manager=mock_mcp, hitl_level=1)
-        with patch.object(executor._approval, "confirm_mcp") as mock_confirm:
-            result = executor.execute("unknown_mcp_tool", {"arg": "value"})
-            mock_confirm.assert_not_called()
+        with patch.object(executor._approval, "confirm_mcp_async", AsyncMock()) as mock_confirm:
+            result = _run_executor(executor, "unknown_mcp_tool", {"arg": "value"})
+            mock_confirm.assert_not_awaited()
         assert result["result"] == "ok"
 
     def test_hitl_level_from_config(self) -> None:

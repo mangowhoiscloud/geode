@@ -20,6 +20,7 @@ source when one source becomes hostile.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -100,7 +101,7 @@ class WantedJobsSearchTool:
     def parameters(self) -> dict[str, Any]:
         return _WANTED_PARAMETERS
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.tools.base import tool_error
 
         query: str = str(kwargs.get("query") or "").strip()
@@ -177,6 +178,10 @@ class WantedJobsSearchTool:
         return {
             "result": _shape_response(payload, query=query, limit=limit, offset=offset, years=years)
         }
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run the blocking Wanted HTTP client off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
 
 def _shape_response(

@@ -1,7 +1,13 @@
 """Tests for graph construction and dry-run execution."""
 
+import asyncio
+
 from core.graph import build_graph, compile_graph
 from plugins.game_ip.nodes.synthesizer import CAUSE_TO_ACTION, _classify_cause
+
+
+def _ainvoke(compiled, state):
+    return asyncio.run(compiled.ainvoke(state))
 
 
 class TestGraphBuild:
@@ -16,7 +22,7 @@ class TestGraphBuild:
     def test_dry_run_cowboy_bebop(self):
         """Full pipeline dry-run: Cowboy Bebop → Tier A, undermarketed."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -44,7 +50,7 @@ class TestGraphBuild:
     def test_dry_run_berserk(self):
         """Full pipeline dry-run: Berserk → S-tier, conversion_failure."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -66,7 +72,7 @@ class TestGraphBuild:
     def test_dry_run_ghost_in_shell(self):
         """Full pipeline dry-run: Ghost in the Shell → discovery_failure."""
         compiled = compile_graph()
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Ghost in the Shell",
                 "pipeline_mode": "full_pipeline",

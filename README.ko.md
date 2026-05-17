@@ -371,7 +371,7 @@ uv tool install -e . --force
 | 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 (v0.130+) | ✅✅ 4 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ `DomainPort` Protocol + 플러그인 로더 |
 | Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry` (14 skills · bundled/global/project 스코프) |
 | **교체 가능한 도메인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ✅✅ `DomainPort` Protocol — 파이프라인이 first-class 확장 지점 |
-| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ Run Log + Petri eval 통합 (v0.90+, LangSmith 대체) |
+| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 (v0.90+) |
 | Cross-LLM 검증 | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 평가자 간 일치도 게이트 |
 
 </details>

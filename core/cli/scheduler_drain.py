@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from core.agent.conversation import ConversationContext
+from core.async_runtime import run_process_coroutine
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ def drain_scheduler_queue(
                         _cb: Any = _cap_cb,
                     ) -> str:
                         try:
-                            r = _loop.run(_p)
+                            r = run_process_coroutine(_loop.arun(_p))
                             if _cb:
                                 _cb(r, job_id=_jid)
                             return r.text if r and r.text else ""
@@ -131,7 +132,7 @@ def drain_scheduler_queue(
                 if on_main_run:
                     on_main_run(job_id)
                 try:
-                    main_loop.run(prompt)
+                    run_process_coroutine(main_loop.arun(prompt))
                 except Exception:
                     log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
     except _q.Empty:

@@ -9,6 +9,7 @@ Tools for viewing, updating, and learning from user interactions:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextvars import ContextVar
 from typing import Any
@@ -34,7 +35,16 @@ def get_user_profile() -> FileBasedUserProfile | None:
     return _user_profile_ctx.get()
 
 
-class ProfileShowTool:
+class _AsyncExecuteMixin:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run sync profile file IO off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
+
+class ProfileShowTool(_AsyncExecuteMixin):
     """Display current user profile."""
 
     @property
@@ -56,7 +66,7 @@ class ProfileShowTool:
             "required": [],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
             return tool_error(
@@ -84,7 +94,7 @@ class ProfileShowTool:
         return {"result": result}
 
 
-class ProfileUpdateTool:
+class ProfileUpdateTool(_AsyncExecuteMixin):
     """Update user profile fields."""
 
     @property
@@ -127,7 +137,7 @@ class ProfileUpdateTool:
             "required": [],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
             return tool_error(
@@ -152,7 +162,7 @@ class ProfileUpdateTool:
         }
 
 
-class ProfilePreferenceTool:
+class ProfilePreferenceTool(_AsyncExecuteMixin):
     """Get or set a specific preference."""
 
     @property
@@ -183,7 +193,7 @@ class ProfilePreferenceTool:
             "required": ["key"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
             return tool_error(
@@ -217,7 +227,7 @@ class ProfilePreferenceTool:
             }
 
 
-class ProfileLearnTool:
+class ProfileLearnTool(_AsyncExecuteMixin):
     """Save a learned pattern from interaction."""
 
     @property
@@ -250,7 +260,7 @@ class ProfileLearnTool:
             "required": ["pattern"],
         }
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         profile = _user_profile_ctx.get()
         if profile is None:
             return tool_error(

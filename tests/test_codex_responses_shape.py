@@ -73,25 +73,38 @@ def _capture_codex_kwargs(
     """Run agentic_call with mocked SDK + capture the stream() kwargs."""
     captured: dict[str, Any] = {}
 
-    fake_stream_ctx = MagicMock()
-    fake_stream_ctx.__enter__ = MagicMock(return_value=iter([]))
-    fake_stream_ctx.__exit__ = MagicMock(return_value=False)
-    fake_stream_ctx.get_final_response = MagicMock(return_value=MagicMock())
-
     fake_client = MagicMock()
 
-    def _fake_stream(**kwargs: Any) -> MagicMock:
+    class _FakeStream:
+        async def __aenter__(self) -> _FakeStream:
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def __aiter__(self) -> _FakeStream:
+            return self
+
+        async def __anext__(self) -> Any:
+            raise StopAsyncIteration
+
+        async def get_final_response(self) -> MagicMock:
+            response = MagicMock()
+            response.output = []
+            response.model = "test"
+            response.usage = MagicMock()
+            response.usage.input_tokens = 1
+            response.usage.output_tokens = 1
+            response.usage.output_tokens_details = MagicMock(reasoning_tokens=0)
+            return response
+
+    def _fake_stream(**kwargs: Any) -> _FakeStream:
         captured.update(kwargs)
-        # Build a fresh context each call so iteration / __exit__ work.
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=iter([]))
-        ctx.__exit__ = MagicMock(return_value=False)
-        ctx.get_final_response = MagicMock(return_value=MagicMock())
-        return ctx
+        return _FakeStream()
 
     fake_client.responses.stream = _fake_stream
 
-    monkeypatch.setattr("core.llm.providers.codex._get_codex_client", lambda: fake_client)
+    monkeypatch.setattr("core.llm.providers.codex._get_async_codex_client", lambda: fake_client)
     # Bypass circuit breaker for the test.
     monkeypatch.setattr(
         "core.llm.providers.codex._codex_circuit_breaker",

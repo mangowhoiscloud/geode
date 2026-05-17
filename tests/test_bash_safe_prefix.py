@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from core.agent.safety import is_bash_command_read_only
 
 
@@ -148,6 +150,6 @@ class TestReadDocumentSymlink:
         link.symlink_to(real_file)
 
         tool = ReadDocumentTool()
-        result = tool.execute(file_path=str(link))
+        result = asyncio.run(tool.aexecute(file_path=str(link)))
         assert "error" in result
         assert result.get("error_type") == "permission"

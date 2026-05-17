@@ -10,6 +10,7 @@ No LLM API calls — all tests use dry-run fixtures.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.agent.sub_agent import SubAgentManager, SubTask
@@ -18,6 +19,15 @@ from core.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.orchestration.task_system import Task, TaskGraph, TaskStatus
 from core.state import GeodeState
+
+
+async def _collect_stream(graph, state):
+    return [event async for event in graph.astream(state)]
+
+
+def _stream_graph(graph, state):
+    return asyncio.run(_collect_stream(graph, state))
+
 
 # ---------------------------------------------------------------------------
 # Doc 3 §3: LangGraph Pipeline + HookSystem Event Flow
@@ -52,7 +62,7 @@ class TestPipelineHookEventFlow:
         }
 
         final: dict[str, Any] = {}
-        for event in graph.stream(state):
+        for event in _stream_graph(graph, state):
             for node_name, output in event.items():
                 if node_name != "__end__":
                     for k, v in output.items():
@@ -117,7 +127,7 @@ class TestPipelineHookEventFlow:
             "max_iterations": 3,
         }
 
-        for _ in graph.stream(state):
+        for _ in _stream_graph(graph, state):
             pass
 
         # Every entered node should also exit
@@ -341,7 +351,7 @@ class TestEndToEndExecutionFlow:
         }
 
         final: dict[str, Any] = {}
-        for event in graph.stream(state):
+        for event in _stream_graph(graph, state):
             for node_name, output in event.items():
                 if node_name != "__end__":
                     for k, v in output.items():
@@ -384,7 +394,7 @@ class TestEndToEndExecutionFlow:
             "max_iterations": 3,
         }
 
-        for _ in graph.stream(state):
+        for _ in _stream_graph(graph, state):
             pass
 
         # 4 analyst types: game_mechanics, player_experience, growth_potential, discovery

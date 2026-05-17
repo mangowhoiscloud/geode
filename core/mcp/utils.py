@@ -9,6 +9,7 @@ without copying the helpers.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -47,25 +48,21 @@ def parse_mcp_content(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def try_mcp_signal(
+async def try_mcp_signal_async(
     server_name: str,
     tool_name: str,
     args: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Try calling an MCP tool. Return parsed result dict or ``None`` on failure.
-
-    Lazily imports ``MCPServerManager`` to avoid circular imports. Never
-    raises — all errors are caught and logged at debug level.
-    """
+    """Async MCP signal helper using ``MCPServerManager.acall_tool``."""
     try:
         from core.mcp.manager import get_mcp_manager
 
         manager = get_mcp_manager()
-        health = manager.check_health()
+        health = await asyncio.to_thread(manager.check_health)
         if not health.get(server_name, False):
             return None
 
-        result = manager.call_tool(server_name, tool_name, args)
+        result = await manager.acall_tool(server_name, tool_name, args)
         if "error" in result:
             log.debug(
                 "MCP signal %s/%s error: %s",

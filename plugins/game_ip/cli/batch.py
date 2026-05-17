@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import statistics
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
+from typing import Any, cast
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -63,7 +63,7 @@ def select_ips(
     return candidates[:top]
 
 
-def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str, Any]:
+async def _arun_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str, Any]:
     """Run analysis pipeline for a single IP (no circular import to core.cli).
 
     This is thread-safe: each call creates its own GeodeRuntime.
@@ -83,7 +83,7 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str
 
     # Each thread gets its own runtime (thread-safe isolation)
     runtime = GeodeRuntime.create(ip_name)
-    graph = runtime.compile_graph()
+    graph = runtime.compile_graph(enable_checkpoint=False)
 
     initial_state: dict[str, Any] = {
         "ip_name": ip_name,
@@ -103,7 +103,7 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str
         initial_state.update(tool_injection)
 
     try:
-        result = graph.invoke(initial_state, config=runtime.thread_config)  # type: ignore[call-overload]
+        result = await graph.ainvoke(initial_state, config=cast(Any, runtime.thread_config))
     finally:
         runtime.shutdown()
 
@@ -121,14 +121,14 @@ def _run_analysis_standalone(ip_name: str, *, dry_run: bool = False) -> dict[str
     return output
 
 
-def run_single_analysis(
+async def arun_single_analysis(
     ip_name: str,
     *,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Run analysis on a single IP and return summary dict."""
     try:
-        return _run_analysis_standalone(ip_name, dry_run=dry_run)
+        return await _arun_analysis_standalone(ip_name, dry_run=dry_run)
     except Exception as exc:
         log.error("Batch analysis failed for %s: %s", ip_name, exc)
         return {
@@ -140,7 +140,7 @@ def run_single_analysis(
         }
 
 
-def run_batch(
+async def arun_batch(
     *,
     top: int = 20,
     genre: str | None = None,
@@ -157,6 +157,34 @@ def run_batch(
     console.print(f"\n[bold]Batch Analysis: {len(selected)} IPs[/bold]")
 
     results: list[dict[str, Any]] = []
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _run_one(ip: str) -> tuple[str, dict[str, Any]]:
+        async with semaphore:
+            try:
+                result = await asyncio.wait_for(
+                    arun_single_analysis(ip, dry_run=dry_run),
+                    timeout=_IP_TIMEOUT_S,
+                )
+            except TimeoutError:
+                log.warning("IP '%s' timed out after %ds", ip, _IP_TIMEOUT_S)
+                result = {
+                    "ip_name": ip,
+                    "tier": "ERR",
+                    "final_score": 0.0,
+                    "cause": f"Timeout after {_IP_TIMEOUT_S}s",
+                    "error": True,
+                }
+            except Exception as exc:
+                log.error("IP '%s' failed: %s", ip, exc)
+                result = {
+                    "ip_name": ip,
+                    "tier": "ERR",
+                    "final_score": 0.0,
+                    "cause": str(exc),
+                    "error": True,
+                }
+            return ip, result
 
     with Progress(
         SpinnerColumn(),
@@ -168,36 +196,15 @@ def run_batch(
             total=len(selected),
         )
 
-        with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            futures = {pool.submit(run_single_analysis, ip, dry_run=dry_run): ip for ip in selected}
-            for future in as_completed(futures):
-                ip = futures[future]
-                try:
-                    result = future.result(timeout=_IP_TIMEOUT_S)
-                except TimeoutError:
-                    log.warning("IP '%s' timed out after %ds", ip, _IP_TIMEOUT_S)
-                    result = {
-                        "ip_name": ip,
-                        "tier": "ERR",
-                        "final_score": 0.0,
-                        "cause": f"Timeout after {_IP_TIMEOUT_S}s",
-                        "error": True,
-                    }
-                except Exception as exc:
-                    log.error("IP '%s' failed: %s", ip, exc)
-                    result = {
-                        "ip_name": ip,
-                        "tier": "ERR",
-                        "final_score": 0.0,
-                        "cause": str(exc),
-                        "error": True,
-                    }
-                results.append(result)
-                progress.advance(task)
-                progress.update(
-                    task,
-                    description=f"Completed: {ip} -> {result.get('tier', '?')}",
-                )
+        tasks = [asyncio.create_task(_run_one(ip)) for ip in selected]
+        for completed in asyncio.as_completed(tasks):
+            ip, result = await completed
+            results.append(result)
+            progress.advance(task)
+            progress.update(
+                task,
+                description=f"Completed: {ip} -> {result.get('tier', '?')}",
+            )
 
     # Sort by score descending
     results.sort(key=lambda r: r.get("final_score", 0), reverse=True)

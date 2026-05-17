@@ -299,8 +299,8 @@ class TestApplyModel:
         try:
             target = next(p for p in MODEL_PROFILES if p.id == OPENAI_PRIMARY)  # GPT-5.4
             _apply_model(target)
-            # _apply_model no longer calls loop.update_model() directly —
-            # AgenticLoop._sync_model_from_settings() handles it at round start.
+            # _apply_model no longer calls loop.update_model_async() directly —
+            # AgenticLoop._sync_model_from_settings_async() handles it at round start.
             mock_loop.update_model.assert_not_called()
             assert settings.model == target.id
         finally:

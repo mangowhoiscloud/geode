@@ -11,6 +11,7 @@ T6: Pure text (no tool results) → pruning only
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -190,7 +191,7 @@ class TestUpdateModelIntegration:
         before = check_context(ctx.messages, "glm-5").estimated_tokens
 
         with patch("core.ui.agentic_ui.update_session_model"):
-            loop.update_model("glm-5", "zhipuai")
+            asyncio.run(loop.update_model_async("glm-5", "glm"))
 
         after = check_context(ctx.messages, "glm-5").estimated_tokens
         assert after < before
@@ -200,7 +201,7 @@ class TestUpdateModelIntegration:
 
         loop = _make_loop(ctx, model="claude-opus-4-6")
         with patch("core.ui.agentic_ui.update_session_model"):
-            loop.update_model("glm-5", "zhipuai")
+            asyncio.run(loop.update_model_async("glm-5", "zhipuai"))
         # No crash
 
     def test_sync_model_from_settings_detects_drift(self):
@@ -215,7 +216,7 @@ class TestUpdateModelIntegration:
         try:
             settings.model = "glm-5"
             with patch("core.ui.agentic_ui.update_session_model"):
-                loop._sync_model_from_settings()
+                asyncio.run(loop._sync_model_from_settings_async())
             assert loop.model == "glm-5"
         finally:
             settings.model = old
@@ -230,8 +231,8 @@ class TestUpdateModelIntegration:
         old = settings.model
         try:
             settings.model = "claude-opus-4-6"
-            with patch.object(loop, "update_model") as mock_update:
-                loop._sync_model_from_settings()
+            with patch.object(loop, "update_model_async") as mock_update:
+                asyncio.run(loop._sync_model_from_settings_async())
                 mock_update.assert_not_called()
         finally:
             settings.model = old

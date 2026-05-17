@@ -31,6 +31,8 @@ CODEX_FALLBACK_MODELS = CODEX_FALLBACK_CHAIN
 
 _codex_client: Any = None
 _codex_lock = threading.Lock()
+_async_codex_client: Any = None
+_async_codex_lock = threading.Lock()
 _codex_circuit_breaker = CircuitBreaker()
 
 
@@ -129,11 +131,41 @@ def _get_codex_client() -> Any:
     return _codex_client
 
 
+def _get_async_codex_client() -> Any:
+    """Lazy import and return cached async Codex client (thread-safe)."""
+    global _async_codex_client
+    if _async_codex_client is None:
+        with _async_codex_lock:
+            if _async_codex_client is None:
+                import openai
+
+                token = _resolve_codex_token()
+                if not token:
+                    log.warning("Codex OAuth token not available")
+                    return None
+
+                account_id = _extract_account_id(token)
+                headers: dict[str, str] = {
+                    "originator": "codex_cli_rs",
+                }
+                if account_id:
+                    headers["ChatGPT-Account-ID"] = account_id
+
+                _async_codex_client = openai.AsyncOpenAI(
+                    api_key=token,
+                    base_url=CODEX_BASE_URL,
+                    default_headers=headers,
+                )
+    return _async_codex_client
+
+
 def reset_codex_client() -> None:
     """Reset cached client (e.g. after token refresh)."""
-    global _codex_client
+    global _async_codex_client, _codex_client
     with _codex_lock:
         _codex_client = None
+    with _async_codex_lock:
+        _async_codex_client = None
 
 
 def get_circuit_breaker() -> CircuitBreaker:
@@ -144,8 +176,6 @@ def get_circuit_breaker() -> CircuitBreaker:
 # ---------------------------------------------------------------------------
 # CodexAgenticAdapter — Responses API streaming adapter
 # ---------------------------------------------------------------------------
-
-import asyncio  # noqa: E402
 
 from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
@@ -199,7 +229,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         effort: str = "high",
     ) -> Any | None:
         """Codex agentic call via Responses API streaming."""
-        client = _get_codex_client()
+        client = _get_async_codex_client()
         if client is None:
             self.last_error = ValueError("Codex OAuth token not configured")
             log.warning("No Codex OAuth token for agentic loop")
@@ -280,70 +310,53 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         is_reasoning = _is_codex_reasoning_model(model)
 
         async def _do_call(m: str) -> Any:
-            def _sync_call() -> Any:
-                # v0.52.6 hotfix — chatgpt.com/backend-api/codex/responses
-                # rejects ``max_output_tokens`` with 400 ("Unsupported
-                # parameter"). The Plus subscription manages output limits
-                # server-side; client cap is forbidden. PAYG
-                # ``OpenAIAgenticAdapter`` still sends it for api.openai.com.
-                kwargs: dict[str, Any] = {
-                    "model": m,
-                    "instructions": system or "You are a helpful assistant.",
-                    "input": resp_input or [{"role": "user", "content": "hello"}],
-                    "store": False,
-                }
-                # v0.52.7 — function-calling parity with Hermes / Codex Rust.
-                # Pre-fix ``tools`` was dropped silently → Codex agentic loop
-                # had no way to invoke any tool, breaking the entire native
-                # tool dispatch path on Plus subscriptions.
-                if oai_tools:
-                    kwargs["tools"] = oai_tools
-                    kwargs["tool_choice"] = tc_val or "auto"
-                    # Hermes default; Codex Rust forwards prompt setting.
-                    kwargs["parallel_tool_calls"] = True
-                # v0.52.7 — encrypted reasoning passthrough. Without
-                # ``include`` + ``reasoning`` the gpt-5.x-codex models lose
-                # their reasoning state across turns (Codex backend strips
-                # the encrypted block from non-include responses).
-                if is_reasoning:
-                    kwargs["include"] = ["reasoning.encrypted_content"]
-                    kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
-                    # gpt-5.x-codex omits temperature per Hermes
-                    # ``_fixed_temperature_for_model``.
-                else:
-                    kwargs["temperature"] = temperature
-                # v0.53.3 — Codex Rust pattern: accumulate output items
-                # from ``response.output_item.done`` events as they arrive.
-                # The Codex Plus backend (chatgpt.com/backend-api/codex)
-                # omits the ``output`` field from its
-                # ``response.completed`` event payload (verified against
-                # codex-rs ``ResponseCompleted`` struct in
-                # ``codex-api/src/sse/responses.rs:120-128`` which has no
-                # ``output`` field at all). The OpenAI Python SDK's
-                # ``stream.get_final_response()`` therefore returns
-                # ``response.output == []`` even though the model
-                # generated visible text (proven by ``usage.output_tokens
-                # > usage.output_tokens_details.reasoning_tokens``).
-                # We mirror the Rust client: trust ``output_item.done``
-                # events for the conversation items and use
-                # ``get_final_response()`` only as a shell for usage /
-                # status / response_id.
-                with client.responses.stream(**kwargs) as stream:
-                    accumulated_items: list[Any] = []
-                    for event in stream:
-                        if getattr(event, "type", "") == "response.output_item.done":
-                            item = getattr(event, "item", None)
-                            if item is not None:
-                                accumulated_items.append(item)
-                    final = stream.get_final_response()
-                    # Always overwrite — never trust SDK's reconstructed
-                    # output for Codex Plus (it's structurally empty per
-                    # the backend's SSE contract).
-                    if accumulated_items:
-                        final.output = accumulated_items
-                    return final
-
-            return await asyncio.to_thread(_sync_call)
+            # v0.52.6 hotfix — chatgpt.com/backend-api/codex/responses
+            # rejects ``max_output_tokens`` with 400 ("Unsupported
+            # parameter"). The Plus subscription manages output limits
+            # server-side; client cap is forbidden. PAYG
+            # ``OpenAIAgenticAdapter`` still sends it for api.openai.com.
+            kwargs: dict[str, Any] = {
+                "model": m,
+                "instructions": system or "You are a helpful assistant.",
+                "input": resp_input or [{"role": "user", "content": "hello"}],
+                "store": False,
+            }
+            # v0.52.7 — function-calling parity with Hermes / Codex Rust.
+            # Pre-fix ``tools`` was dropped silently → Codex agentic loop
+            # had no way to invoke any tool, breaking the entire native
+            # tool dispatch path on Plus subscriptions.
+            if oai_tools:
+                kwargs["tools"] = oai_tools
+                kwargs["tool_choice"] = tc_val or "auto"
+                # Hermes default; Codex Rust forwards prompt setting.
+                kwargs["parallel_tool_calls"] = True
+            # v0.52.7 — encrypted reasoning passthrough. Without
+            # ``include`` + ``reasoning`` the gpt-5.x-codex models lose
+            # their reasoning state across turns (Codex backend strips
+            # the encrypted block from non-include responses).
+            if is_reasoning:
+                kwargs["include"] = ["reasoning.encrypted_content"]
+                kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
+                # gpt-5.x-codex omits temperature per Hermes
+                # ``_fixed_temperature_for_model``.
+            else:
+                kwargs["temperature"] = temperature
+            # v0.53.3 — Codex Rust pattern: accumulate output items from
+            # ``response.output_item.done`` events as they arrive.
+            async with client.responses.stream(**kwargs) as stream:
+                accumulated_items: list[Any] = []
+                async for event in stream:
+                    if getattr(event, "type", "") == "response.output_item.done":
+                        item = getattr(event, "item", None)
+                        if item is not None:
+                            accumulated_items.append(item)
+                final = await stream.get_final_response()
+                # Always overwrite — never trust SDK's reconstructed output
+                # for Codex Plus (it's structurally empty per the backend's
+                # SSE contract).
+                if accumulated_items:
+                    final.output = accumulated_items
+                return final
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

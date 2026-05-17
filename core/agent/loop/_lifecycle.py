@@ -17,7 +17,7 @@ from core.llm.errors import BillingError
 from .models import AgenticResult
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 
@@ -87,13 +87,13 @@ def record_transcript_end(loop: AgenticLoop, result: Any) -> None:
         log.debug("Transcript end recording failed", exc_info=True)
 
 
-def finalize_and_return(
+def _prepare_final_result(
     loop: AgenticLoop,
     result: AgenticResult,
     user_input: str,
     round_idx: int,
-) -> AgenticResult:
-    """Log result, record transcript end, save checkpoint, and return (DRY)."""
+) -> None:
+    """Apply shared finalization side effects before hook emission."""
     log.info(
         "AgenticLoop: reason=%s rounds=%d/%d tools=%d",
         result.termination_reason,
@@ -136,33 +136,75 @@ def finalize_and_return(
 
     loop._record_transcript_end(result)
     loop._save_checkpoint(user_input, round_idx=round_idx)
+
+
+def _final_hook_payloads(
+    loop: AgenticLoop,
+    result: AgenticResult,
+    user_input: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Build final lifecycle hook payloads once for sync and async callers."""
+    session_ended = {
+        "model": loop.model,
+        "provider": loop._provider,
+        "session_id": loop._session_id,
+        "termination_reason": result.termination_reason,
+        "rounds": result.rounds,
+        "tool_count": len(result.tool_calls),
+        "error": result.error,
+    }
+    turn_completed = {
+        "user_input": user_input,
+        "text": result.text[:500] if result.text else "",
+        "rounds": result.rounds,
+        "tool_calls": [tc.get("name", "") for tc in result.tool_calls],
+        "termination_reason": result.termination_reason,
+    }
+    return session_ended, turn_completed, result.reasoning_metrics or {}
+
+
+def finalize_and_return(
+    loop: AgenticLoop,
+    result: AgenticResult,
+    user_input: str,
+    round_idx: int,
+) -> AgenticResult:
+    """Log result, record transcript end, save checkpoint, and return (DRY)."""
+    _prepare_final_result(loop, result, user_input, round_idx)
     if loop._hooks:
+        session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
+            loop, result, user_input
+        )
         loop._hooks.trigger(
             HookEvent.SESSION_ENDED,
-            {
-                "model": loop.model,
-                "provider": loop._provider,
-                "session_id": loop._session_id,
-                "termination_reason": result.termination_reason,
-                "rounds": result.rounds,
-                "tool_count": len(result.tool_calls),
-                "error": result.error,
-            },
+            session_ended,
         )
         loop._hooks.trigger(
             HookEvent.TURN_COMPLETED,
-            {
-                "user_input": user_input,
-                "text": result.text[:500] if result.text else "",
-                "rounds": result.rounds,
-                "tool_calls": [tc.get("name", "") for tc in result.tool_calls],
-                "termination_reason": result.termination_reason,
-            },
+            turn_completed,
         )
         loop._hooks.trigger(
             HookEvent.REASONING_METRICS,
-            result.reasoning_metrics,
+            reasoning_metrics,
         )
+    return result
+
+
+async def finalize_and_return_async(
+    loop: AgenticLoop,
+    result: AgenticResult,
+    user_input: str,
+    round_idx: int,
+) -> AgenticResult:
+    """Async finalizer for ``AgenticLoop.arun`` hook emission."""
+    _prepare_final_result(loop, result, user_input, round_idx)
+    if loop._hooks:
+        session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
+            loop, result, user_input
+        )
+        await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
+        await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
+        await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
     return result
 
 

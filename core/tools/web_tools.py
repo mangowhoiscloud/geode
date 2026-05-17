@@ -7,6 +7,7 @@ Provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from typing import Any
@@ -25,7 +26,7 @@ class WebFetchTool:
     def description(self) -> str:
         return "Fetch and extract text content from a URL."
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         url: str = kwargs["url"]
         max_chars: int = min(kwargs.get("max_chars", 8000), 10000)
 
@@ -83,6 +84,10 @@ class WebFetchTool:
                 context={"url": url},
             )
 
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run blocking HTTP fetch off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
+
     @staticmethod
     def _html_to_text(html: str) -> str:
         """Convert HTML to Markdown, preserving structure.
@@ -136,7 +141,7 @@ class GeneralWebSearchTool:
             f"Today is {today.isoformat()} (year {today.year})."
         )
 
-    def execute(self, **kwargs: Any) -> dict[str, Any]:
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
 
@@ -164,6 +169,10 @@ class GeneralWebSearchTool:
             hint="Retry or rephrase the query.",
             context={"query": query},
         )
+
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
+        """Run provider web-search clients off the event loop."""
+        return await asyncio.to_thread(self._execute_sync, **kwargs)
 
     def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
         """Anthropic native web search via Messages API."""

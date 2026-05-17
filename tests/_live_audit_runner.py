@@ -7,6 +7,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -61,7 +62,7 @@ def run_case(expected_tool: str, prompt: str) -> dict:
     ctx = ConversationContext()
     executor = ToolExecutor(action_handlers=_handlers, auto_approve=True)
     loop = AgenticLoop(ctx, executor, max_rounds=4)
-    r = loop.run(prompt)
+    r = asyncio.run(loop.arun(prompt))
 
     called = [tc["tool"] for tc in r.tool_calls]
     errors = [

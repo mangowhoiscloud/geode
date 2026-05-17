@@ -10,6 +10,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, TypeVar
 
 import pytest
@@ -23,8 +24,10 @@ from core.state import AnalysisResult, GeodeState
 from plugins.game_ip.nodes.analysts import (
     _DEFAULT_PRIMARY_ANALYSTS,
     _DEFAULT_SECONDARY_ANALYSTS,
-    _run_analyst,
     _should_use_secondary,
+)
+from plugins.game_ip.nodes.analysts import (
+    _run_analyst as _arun_analyst,
 )
 from pydantic import BaseModel
 
@@ -33,6 +36,10 @@ _PRIMARY_ANALYSTS = set(_DEFAULT_PRIMARY_ANALYSTS.split(","))
 _SECONDARY_ANALYSTS = set(_DEFAULT_SECONDARY_ANALYSTS.split(","))
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def _run_analyst(*args, **kwargs):
+    return asyncio.run(_arun_analyst(*args, **kwargs))
 
 
 # ---------------------------------------------------------------------------

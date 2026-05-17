@@ -74,7 +74,7 @@ class ContextWindowManager:
         messages.extend([first, bridge, *recent])
         log.debug("Pruned messages: kept first + bridge + %d recent", len(recent))
 
-    def check_context_overflow(
+    async def check_context_overflow(
         self,
         system: str,
         messages: list[dict[str, Any]],
@@ -112,13 +112,15 @@ class ContextWindowManager:
                     metrics.context_window,
                 )
                 if self._hooks:
-                    self._hooks.trigger(
+                    await self._hooks.trigger_async(
                         HookEvent.CONTEXT_CRITICAL,
                         {"metrics": dataclasses.asdict(metrics), "model": model},
                     )
 
-                strategy = self._resolve_overflow_strategy(metrics, settings, model, provider)
-                self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+                strategy = await self._resolve_overflow_strategy(
+                    metrics, settings, model, provider
+                )
+                await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
                 # Re-check: if still critical after pruning, context is exhausted
                 post = check_context(messages, model, system_prompt=system)
@@ -143,9 +145,13 @@ class ContextWindowManager:
                     )
 
                 # Step 2: compact or summarize
-                strategy = self._resolve_overflow_strategy(metrics, settings, model, provider)
+                strategy = await self._resolve_overflow_strategy(
+                    metrics, settings, model, provider
+                )
                 if strategy.get("strategy") == "compact":
-                    self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+                    await self._apply_overflow_strategy(
+                        strategy, messages, settings, model, provider
+                    )
                 else:
                     from core.orchestration.context_monitor import summarize_tool_results
 
@@ -185,12 +191,18 @@ class ContextWindowManager:
                 if post.is_ceiling_exceeded:
                     # Phase 2: compact conversation
                     strategy = {"strategy": "compact", "keep_recent": settings.compact_keep_recent}
-                    self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+                    await self._apply_overflow_strategy(
+                        strategy, messages, settings, model, provider
+                    )
 
-        except Exception:
+        except Exception as exc:
+            from core.agent.loop import _ContextExhaustedError
+
+            if isinstance(exc, _ContextExhaustedError):
+                raise
             log.debug("Context monitor check failed", exc_info=True)
 
-    def _apply_overflow_strategy(
+    async def _apply_overflow_strategy(
         self,
         strategy: dict[str, Any],
         messages: list[dict[str, Any]],
@@ -205,18 +217,14 @@ class ContextWindowManager:
         keep_recent = strategy.get("keep_recent", settings.compact_keep_recent)
 
         if action == "compact":
-            import asyncio
-
             from core.orchestration.compaction import compact_conversation
 
             try:
-                new_msgs, did_compact = asyncio.get_event_loop().run_until_complete(
-                    compact_conversation(
-                        messages,
-                        provider=provider,
-                        model=model,
-                        keep_recent=keep_recent,
-                    )
+                new_msgs, did_compact = await compact_conversation(
+                    messages,
+                    provider=provider,
+                    model=model,
+                    keep_recent=keep_recent,
                 )
                 if did_compact:
                     original_count = len(messages)
@@ -251,7 +259,7 @@ class ContextWindowManager:
                     new_count=len(pruned),
                 )
 
-    def aggressive_context_recovery(
+    async def aggressive_context_recovery(
         self,
         system: str,
         messages: list[dict[str, Any]],
@@ -290,7 +298,7 @@ class ContextWindowManager:
                 return original_count - len(messages) + summarized
 
             # Phase 2: delegate to CONTEXT_OVERFLOW_ACTION hook for strategy
-            strategy = self._resolve_overflow_strategy(post, settings, model, provider)
+            strategy = await self._resolve_overflow_strategy(post, settings, model, provider)
 
             # Override keep_recent aggressively (halved, min 3)
             aggressive_keep = max(3, settings.compact_keep_recent // 2)
@@ -300,7 +308,7 @@ class ContextWindowManager:
             if strategy.get("strategy") == "none":
                 strategy["strategy"] = "prune"
 
-            self._apply_overflow_strategy(strategy, messages, settings, model, provider)
+            await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
             # Final check
             post2 = check_context(messages, model, system_prompt=system)
@@ -329,12 +337,12 @@ class ContextWindowManager:
         except Exception:
             log.debug("Context event notification failed", exc_info=True)
 
-    def _resolve_overflow_strategy(
+    async def _resolve_overflow_strategy(
         self, metrics: Any, settings: Any, model: str, provider: str
     ) -> dict[str, Any]:
         """Ask CONTEXT_OVERFLOW_ACTION hook for compression strategy, with fallback."""
         if self._hooks:
-            results = self._hooks.trigger_with_result(
+            results = await self._hooks.trigger_with_result_async(
                 HookEvent.CONTEXT_OVERFLOW_ACTION,
                 {
                     "metrics": dataclasses.asdict(metrics),

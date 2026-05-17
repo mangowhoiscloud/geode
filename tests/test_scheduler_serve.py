@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import queue
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.cli import _drain_scheduler_queue
@@ -29,7 +29,7 @@ def action_queue() -> queue.Queue:
 def mock_services() -> MagicMock:
     svc = MagicMock()
     mock_loop = MagicMock()
-    mock_loop.run.return_value = MagicMock(text="result")
+    mock_loop.arun = AsyncMock(return_value=MagicMock(text="result"))
     svc.create_session.return_value = (MagicMock(), mock_loop)
     return svc
 
@@ -129,7 +129,7 @@ class TestDrainSchedulerQueue:
         # Should still dispatch via runner (not main_loop)
         mock_runner.run_async.assert_called_once()
 
-    def test_non_isolated_uses_main_loop(
+    def test_non_isolated_uses_main_loop_arun(
         self,
         action_queue: queue.Queue,
         mock_services: MagicMock,
@@ -137,9 +137,10 @@ class TestDrainSchedulerQueue:
         session_lane: SessionLane,
         global_lane: Lane,
     ) -> None:
-        """Non-isolated job in REPL mode should use main_loop.run()."""
+        """Non-isolated job in REPL mode should use main_loop.arun()."""
         action_queue.put(("job-3", "check status", False))
         main_loop = MagicMock()
+        main_loop.arun = AsyncMock(return_value=MagicMock(text="result"))
         main_runs: list[str] = []
 
         count = _drain_scheduler_queue(
@@ -155,8 +156,8 @@ class TestDrainSchedulerQueue:
 
         assert count == 1
         mock_runner.run_async.assert_not_called()
-        main_loop.run.assert_called_once()
-        assert "[scheduled-job:job-3]" in main_loop.run.call_args[0][0]
+        main_loop.arun.assert_awaited_once()
+        assert "[scheduled-job:job-3]" in main_loop.arun.call_args[0][0]
         assert main_runs == ["job-3"]
 
     def test_global_full_skips_job(
@@ -270,7 +271,7 @@ class TestDrainErrorPaths:
         assert session_lane.active_count == 0
         assert global_lane.active_count == 0
 
-    def test_main_loop_exception_continues_drain(
+    def test_main_loop_arun_exception_continues_drain(
         self,
         action_queue: queue.Queue,
         mock_services: MagicMock,
@@ -278,9 +279,9 @@ class TestDrainErrorPaths:
         session_lane: SessionLane,
         global_lane: Lane,
     ) -> None:
-        """main_loop.run() exception should not kill the drain loop."""
+        """main_loop.arun() exception should not kill the drain loop."""
         failing_loop = MagicMock()
-        failing_loop.run.side_effect = RuntimeError("loop crashed")
+        failing_loop.arun = AsyncMock(side_effect=RuntimeError("loop crashed"))
         action_queue.put(("j1", "first", False))
         action_queue.put(("j2", "second", False))
 
@@ -295,7 +296,7 @@ class TestDrainErrorPaths:
         )
 
         assert count == 2
-        assert failing_loop.run.call_count == 2
+        assert failing_loop.arun.await_count == 2
 
 
 # ---------------------------------------------------------------------------

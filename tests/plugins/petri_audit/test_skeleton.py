@@ -144,14 +144,12 @@ def test_geode_model_api_routes_default_sentinel_to_none() -> None:
 
 
 def test_default_runner_uses_async_arun_not_sync_run() -> None:
-    """N3 regression guard — must not call sync ``loop.run`` inside async runner.
+    """N3 regression guard — must not recreate sync ``loop.run`` in async runner.
 
     inspect-petri invokes ``GeodeModelAPI.generate`` (async) inside its
-    own audit event loop. ``AgenticLoop.run`` is a sync wrapper that
-    calls ``asyncio.run(self.arun(...))``, which raises
-    ``RuntimeError: asyncio.run() cannot be called from a running event
-    loop``. v2 (#988/#989) silently failed every target invocation
-    because of this — see docs/audits/2026-05-10-petri-2a-v2.md § C4.
+    own audit event loop, so the runner must stay on ``await loop.arun``.
+    v2 (#988/#989) silently failed every target invocation because of a
+    sync bridge here — see docs/audits/2026-05-10-petri-2a-v2.md § C4.
 
     This test inspects the source so a future refactor doesn't
     accidentally regress.
@@ -170,8 +168,7 @@ def test_default_runner_uses_async_arun_not_sync_run() -> None:
     )
     assert "= loop.run(" not in code_only and "  loop.run(" not in code_only, (
         "_default_geode_runner must NOT call sync `loop.run(...)` — "
-        "that path triggers asyncio.run() inside an already-running "
-        "event loop."
+        "the sync facade has been removed in the async runtime."
     )
 
 
@@ -187,15 +184,15 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     unit test should attempt. The wiring chain we lock in:
 
         _default_geode_runner
-          └── AgenticLoop.arun (loop.py:761 self._track_usage(response))
-                └── _response.track_usage (loop.py:1176)
+          └── AgenticLoop.arun (agent_loop.py await self._track_usage_async(response))
+                └── _response.track_usage_async / _record_usage
                       └── get_tracker().record (token_tracker.py:260)
                             └── _persist_usage (token_tracker.py:358)
                                   └── usage_store.record (~/.geode/usage/)
 
     Each link below is verified by source-inspect so a future refactor
-    that breaks the chain (e.g. dropping ``_track_usage`` from the
-    successful-LLM-call branch in loop.py) fires a clear test failure.
+    that breaks the chain (e.g. dropping ``_track_usage_async`` from the
+    successful-LLM-call branch in agent_loop.py) fires a clear test failure.
     """
     import inspect
 
@@ -209,20 +206,20 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     assert "AgenticLoop(" in runner_src
     assert "await loop.arun(" in runner_src
 
-    # Link 2: AgenticLoop.arun → self._track_usage(response)
+    # Link 2: AgenticLoop.arun → await self._track_usage_async(response)
     arun_src = inspect.getsource(loop_mod.AgenticLoop.arun)
-    assert "_track_usage(response)" in arun_src, (
-        "AgenticLoop.arun must call self._track_usage(response) on a "
+    assert "await self._track_usage_async(response)" in arun_src, (
+        "AgenticLoop.arun must await self._track_usage_async(response) on a "
         "successful LLM response. Without it the petri audit's target "
         "calls bypass the tracker."
     )
 
-    # Link 3: _track_usage → _response.track_usage
-    inner_src = inspect.getsource(loop_mod.AgenticLoop._track_usage)
-    assert "_response.track_usage" in inner_src
+    # Link 3: _track_usage_async → _response.track_usage_async
+    inner_src = inspect.getsource(loop_mod.AgenticLoop._track_usage_async)
+    assert "_response.track_usage_async" in inner_src
 
-    # Link 4: _response.track_usage → tracker.record
-    track_src = inspect.getsource(_response.track_usage)
+    # Link 4: _response._record_usage → tracker.record
+    track_src = inspect.getsource(_response._record_usage)
     assert "tracker = get_tracker()" in track_src
     assert "tracker.record(" in track_src
 

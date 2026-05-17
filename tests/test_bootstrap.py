@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapContext, BootstrapManager
+
+
+def _run_wrapped(wrapped, state):
+    return asyncio.run(wrapped(state))
 
 
 class TestBootstrapContext:
@@ -326,7 +331,7 @@ class TestMakeHookedNodeWithBootstrap:
             return {"result": "should not appear"}
 
         wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        result = wrapped({"ip_name": "Berserk"})  # type: ignore[arg-type]
+        result = _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
 
         assert result == {}
         assert executed == []  # Node was NOT executed
@@ -349,7 +354,7 @@ class TestMakeHookedNodeWithBootstrap:
             return {"done": True}
 
         wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        wrapped({"ip_name": "Berserk"})  # type: ignore[arg-type]
+        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
 
         assert len(captured_states) == 1
         assert captured_states[0]["_extra_instructions"] == ["RPG focus"]
@@ -372,7 +377,7 @@ class TestMakeHookedNodeWithBootstrap:
 
         # No bootstrap_mgr (default None)
         wrapped = _make_hooked_node(fake_node, "router", hooks)  # type: ignore[arg-type]
-        result = wrapped({"ip_name": "Berserk"})  # type: ignore[arg-type]
+        result = _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
 
         assert result == {"value": 42}
         assert HookEvent.NODE_ENTERED in events_fired
@@ -405,6 +410,6 @@ class TestMakeHookedNodeWithBootstrap:
             return {"done": True}
 
         wrapped = _make_hooked_node(fake_node, "router", hooks, mgr)  # type: ignore[arg-type]
-        wrapped({"ip_name": "Berserk"})  # type: ignore[arg-type]
+        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[arg-type]
 
         assert event_order == ["bootstrap", "enter", "exit"]

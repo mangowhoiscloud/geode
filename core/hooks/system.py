@@ -12,12 +12,14 @@ Supports three trigger modes:
 
 from __future__ import annotations
 
+import asyncio
 import concurrent.futures
 import dataclasses
+import inspect
 import logging
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -170,11 +172,12 @@ class InterceptResult:
     data: dict[str, Any] = field(default_factory=dict)
 
 
-# Type alias for hook handlers.
-# Return type is dict|None: most handlers return None (fire-and-forget),
+HookReturn = dict[str, Any] | None
+# Type alias for hook handlers. Most handlers return None (fire-and-forget),
 # but feedback-style hooks (e.g. CONTEXT_OVERFLOW_ACTION) return a dict
-# that trigger_with_result() captures in HookResult.data.
-HookHandler = Callable[[HookEvent, dict[str, Any]], dict[str, Any] | None]
+# that trigger_with_result() captures in HookResult.data. Async handlers are
+# supported by the trigger_*_async APIs.
+HookHandler = Callable[[HookEvent, dict[str, Any]], HookReturn | Awaitable[HookReturn]]
 
 
 @dataclass
@@ -264,7 +267,38 @@ class HookSystem:
 
         for hook in hooks:
             try:
-                hook.handler(event, data)
+                self._call_handler(hook, event, data)
+                results.append(HookResult(success=True, event=event, handler_name=hook.name))
+            except Exception as exc:
+                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=str(exc),
+                    )
+                )
+
+        return results
+
+    async def trigger_async(
+        self, event: HookEvent, data: dict[str, Any] | None = None
+    ) -> list[HookResult]:
+        """Async variant of trigger().
+
+        Awaitable handlers are awaited in priority order. Sync handlers run
+        inline to preserve hook data mutation semantics.
+        """
+        data = data or {}
+        results: list[HookResult] = []
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
+
+        for hook in hooks:
+            try:
+                await self._call_handler_async(hook, event, data)
                 results.append(HookResult(success=True, event=event, handler_name=hook.name))
             except Exception as exc:
                 log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
@@ -296,7 +330,42 @@ class HookSystem:
 
         for hook in hooks:
             try:
-                ret = hook.handler(event, data)
+                ret = self._call_handler(hook, event, data)
+                result_data = ret if isinstance(ret, dict) else {}
+                results.append(
+                    HookResult(
+                        success=True,
+                        event=event,
+                        handler_name=hook.name,
+                        data=result_data,
+                    )
+                )
+            except Exception as exc:
+                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=str(exc),
+                    )
+                )
+
+        return results
+
+    async def trigger_with_result_async(
+        self, event: HookEvent, data: dict[str, Any] | None = None
+    ) -> list[HookResult]:
+        """Async variant of trigger_with_result()."""
+        data = data or {}
+        results: list[HookResult] = []
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
+
+        for hook in hooks:
+            try:
+                ret = await self._call_handler_async(hook, event, data)
                 result_data = ret if isinstance(ret, dict) else {}
                 results.append(
                     HookResult(
@@ -361,6 +430,33 @@ class HookSystem:
 
         return InterceptResult(blocked=False, data=data)
 
+    async def trigger_interceptor_async(
+        self, event: HookEvent, data: dict[str, Any] | None = None, *, timeout_s: float = 0
+    ) -> InterceptResult:
+        """Async variant of trigger_interceptor()."""
+        data = dict(data) if data else {}
+        with self._lock:
+            hooks = list(self._hooks.get(event, []))
+        hooks = self._filter_by_matcher(hooks, event, data)
+
+        for hook in hooks:
+            try:
+                ret = await self._call_handler_async(hook, event, data, timeout_s=timeout_s)
+                if isinstance(ret, dict):
+                    if ret.get("block"):
+                        return InterceptResult(
+                            blocked=True,
+                            reason=ret.get("reason", f"Blocked by {hook.name}"),
+                            data=data,
+                        )
+                    modifications = ret.get("modify")
+                    if isinstance(modifications, dict):
+                        data.update(modifications)
+            except Exception as exc:
+                log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
+
+        return InterceptResult(blocked=False, data=data)
+
     # -- Internal helpers ------------------------------------------------------
 
     @staticmethod
@@ -406,12 +502,13 @@ class HookSystem:
         On timeout, logs a warning and returns None (non-blocking skip).
         """
         if timeout_s <= 0:
-            return hook.handler(event, data)
+            return HookSystem._resolve_sync_return(hook.handler(event, data), hook, event)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(hook.handler, event, data)
             try:
-                return future.result(timeout=timeout_s)
+                ret = future.result(timeout=timeout_s)
+                return HookSystem._resolve_sync_return(ret, hook, event)
             except concurrent.futures.TimeoutError:
                 log.warning(
                     "Hook '%s' timed out on %s (%.1fs limit)",
@@ -420,6 +517,58 @@ class HookSystem:
                     timeout_s,
                 )
                 return None
+
+    @staticmethod
+    async def _call_handler_async(
+        hook: _RegisteredHook,
+        event: HookEvent,
+        data: dict[str, Any],
+        *,
+        timeout_s: float = 0,
+    ) -> dict[str, Any] | None:
+        """Call a hook handler from async code with optional timeout."""
+
+        async def invoke() -> dict[str, Any] | None:
+            ret = hook.handler(event, data)
+            if inspect.isawaitable(ret):
+                return await ret
+            return ret
+
+        if timeout_s <= 0:
+            return await invoke()
+
+        try:
+            return await asyncio.wait_for(invoke(), timeout_s)
+        except TimeoutError:
+            log.warning(
+                "Hook '%s' timed out on %s (%.1fs limit)",
+                hook.name,
+                event.value,
+                timeout_s,
+            )
+            return None
+
+    @staticmethod
+    def _resolve_sync_return(
+        ret: HookReturn | Awaitable[HookReturn],
+        hook: _RegisteredHook,
+        event: HookEvent,
+    ) -> dict[str, Any] | None:
+        """Resolve sync API return values without running async handlers."""
+        if not inspect.isawaitable(ret):
+            return ret
+
+        if inspect.iscoroutine(ret):
+            ret.close()
+        raise RuntimeError(
+            f"Async hook '{hook.name}' returned an awaitable on {event.value}; "
+            "use trigger_async/trigger_with_result_async/trigger_interceptor_async"
+        )
+
+    @staticmethod
+    async def _await_awaitable(ret: Awaitable[HookReturn]) -> dict[str, Any] | None:
+        """Coroutine wrapper for sync APIs that need to run an awaitable handler."""
+        return await ret
 
     def list_hooks(self, event: HookEvent | None = None) -> dict[str, list[str]]:
         """List registered hook names, optionally filtered by event."""

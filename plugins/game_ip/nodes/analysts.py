@@ -14,14 +14,14 @@ from core.config import get_node_model
 from core.domains.port import get_domain_or_none
 from core.llm.prompts import ANALYST_SPECIFIC, ANALYST_SYSTEM, ANALYST_TOOLS_SUFFIX, ANALYST_USER
 from core.llm.router import (
-    call_llm_with_tools,
+    call_llm_with_tools_async,
     get_llm_json,
     get_llm_parsed,
     get_secondary_llm_json,
     get_secondary_llm_parsed,
 )
 from core.state import AnalysisResult, GeodeState
-from core.tools.registry import get_tool_executor
+from core.tools.registry import get_async_tool_executor
 from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ def _should_use_secondary(
     return analyst_type in set(secondary_analysts.split(","))
 
 
-def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
+async def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     """Run a single analyst via Claude API with structured output."""
     system, user = _build_analyst_prompt(analyst_type, state)
     if state.get("verbose"):
@@ -128,11 +128,11 @@ def _run_analyst(analyst_type: str, state: GeodeState) -> AnalysisResult:
     # Tool-augmented path: if _tool_definitions available, analyst can query
     # memory/monolake for historical context before generating analysis.
     tool_defs: Any = state.get("_tool_definitions", [])
-    tool_executor = get_tool_executor()
+    tool_executor = get_async_tool_executor()
     if tool_defs and tool_executor is not None:
         try:
             enhanced_system = system + "\n\n" + ANALYST_TOOLS_SUFFIX
-            tool_result = call_llm_with_tools(
+            tool_result = await call_llm_with_tools_async(
                 enhanced_system,
                 user,
                 tools=tool_defs,
@@ -411,11 +411,11 @@ def get_dry_run_result(analyst_type: str, ip_name: str = "") -> AnalysisResult:
     return mock.get(analyst_type, mock["game_mechanics"])
 
 
-def analyst_node(state: GeodeState) -> dict[str, Any]:
+async def analyst_node(state: GeodeState) -> dict[str, Any]:
     """Run a single analyst. Called via Send API for parallel execution."""
     try:
         analyst_type = state.get("_analyst_type", "narrative")
-        result = _run_analyst(analyst_type, state)
+        result = await _run_analyst(analyst_type, state)
         # Defensive confidence clamp [0, 100] (Karpathy P1 #4)
         if result.confidence < 0.0 or result.confidence > 100.0:
             log.warning(

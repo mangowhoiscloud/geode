@@ -181,8 +181,8 @@ forbidden_modules = ["core.cli", "core.server"]
 # transcript, redaction, ip_names, bash_tool, commands) 를 import. v0.53 에서
 # server/runtime_state/ 또는 utils/ 로 이동 예정.
 ignore_imports = [
-    # Tier 3 #7 — loop.py was split into core/agent/loop/ package
-    "core.agent.loop.loop -> core.cli.commands",
+    # AgenticLoop implementation lives in core/agent/loop/agent_loop.py.
+    "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.agent.worker -> core.cli.tool_handlers",
 ]
@@ -202,8 +202,8 @@ ignore_imports = [
     "core.server.supervised.services -> core.cli.tool_handlers",
     "core.server.supervised.services -> core.cli.bootstrap",
     "core.agent.worker -> core.cli.tool_handlers",
-    # Tier 3 #7 — loop.py was split into core/agent/loop/ package
-    "core.agent.loop.loop -> core.cli.commands",
+    # AgenticLoop implementation lives in core/agent/loop/agent_loop.py.
+    "core.agent.loop.agent_loop -> core.cli.commands",
     "core.agent.approval -> core.cli",
     "core.server.ipc_server.poller -> core.cli",
     "core.server.ipc_server.poller -> core.cli.session_state",

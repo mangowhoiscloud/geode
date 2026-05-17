@@ -110,10 +110,10 @@ from core.llm.router import (
     call_llm_parsed as call_llm_parsed,
 )
 from core.llm.router import (
-    call_llm_streaming as call_llm_streaming,
+    call_llm_streaming_async as call_llm_streaming_async,
 )
 from core.llm.router import (
-    call_llm_with_tools as call_llm_with_tools,
+    call_llm_with_tools_async as call_llm_with_tools_async,
 )
 from core.llm.router import (
     call_with_failover as call_with_failover,
@@ -126,9 +126,6 @@ from core.llm.router import (
 )
 from core.llm.router import (
     get_usage_accumulator as get_usage_accumulator,
-)
-from core.llm.router import (
-    reset_clients as reset_clients,
 )
 from core.llm.router import (
     reset_usage_accumulator as reset_usage_accumulator,

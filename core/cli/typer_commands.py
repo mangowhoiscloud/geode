@@ -14,6 +14,7 @@ from pathlib import Path
 import typer
 
 from core import __version__
+from core.async_runtime import run_process_coroutine
 from core.cli.pipeline_executor import _run_analysis
 from core.cli.report_renderer import _generate_report
 from core.cli.search_render import _render_search_results
@@ -231,9 +232,11 @@ def batch(
     dry_run: bool = typer.Option(False, "--dry-run/--live", help="Use dry-run mode"),
 ) -> None:
     """Run batch analysis on multiple IPs."""
-    from plugins.game_ip.cli.batch import render_batch_table, run_batch
+    from plugins.game_ip.cli.batch import arun_batch, render_batch_table
 
-    results = run_batch(top=top, genre=genre, concurrency=concurrency, dry_run=dry_run)
+    results = run_process_coroutine(
+        arun_batch(top=top, genre=genre, concurrency=concurrency, dry_run=dry_run)
+    )
     if results:
         render_batch_table(results)
 

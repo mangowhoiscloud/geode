@@ -17,9 +17,9 @@ from core.llm.prompts import (
     EVALUATOR_USER,
     PROSPECT_EVALUATOR_AXES,
 )
-from core.llm.router import call_llm_with_tools, get_llm_json, get_llm_parsed
+from core.llm.router import call_llm_with_tools_async, get_llm_json, get_llm_parsed
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
-from core.tools.registry import get_tool_executor
+from core.tools.registry import get_async_tool_executor
 from pydantic import BaseModel, Field, ValidationError
 
 log = logging.getLogger(__name__)
@@ -221,7 +221,7 @@ def _build_evaluator_prompt(evaluator_type: str, state: GeodeState) -> tuple[str
     return base_system, base_user
 
 
-def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
+async def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
     if state.get("dry_run"):
         return _dry_run_result(evaluator_type, state.get("ip_name", ""))
 
@@ -231,7 +231,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
 
     # Tool-augmented path: evaluator can query memory/steam/reddit data
     tool_defs: Any = state.get("_tool_definitions", [])
-    tool_executor = get_tool_executor()
+    tool_executor = get_async_tool_executor()
     if tool_defs and tool_executor is not None:
         try:
             enhanced_system = (
@@ -240,7 +240,7 @@ def _run_evaluator(evaluator_type: str, state: GeodeState) -> EvaluatorResult:
                 "memory_get), Steam data (steam_info), and community sentiment "
                 "(reddit_sentiment). Use them to ground your evaluation."
             )
-            tool_result = call_llm_with_tools(
+            tool_result = await call_llm_with_tools_async(
                 enhanced_system,
                 user,
                 tools=tool_defs,
@@ -555,11 +555,11 @@ def _dry_run_result(evaluator_type: str, ip_name: str = "") -> EvaluatorResult:
 # ---------------------------------------------------------------------------
 
 
-def evaluator_node(state: GeodeState) -> dict[str, Any]:
+async def evaluator_node(state: GeodeState) -> dict[str, Any]:
     """Run a single evaluator. Called via Send API for parallel execution."""
     try:
         evaluator_type = state.get("_evaluator_type", "quality_judge")
-        result = _run_evaluator(evaluator_type, state)
+        result = await _run_evaluator(evaluator_type, state)
         return {"evaluations": {evaluator_type: result}}
     except Exception as exc:
         log.error("Node evaluator (%s) failed: %s", state.get("_evaluator_type", "?"), exc)

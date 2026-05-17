@@ -32,9 +32,9 @@ class CalendarEvent:
 
 @runtime_checkable
 class CalendarPort(Protocol):
-    """Port for calendar operations (read/write events)."""
+    """Async-only port for calendar operations (read/write events)."""
 
-    def list_events(
+    async def alist_events(
         self,
         *,
         start: datetime | None = None,
@@ -55,7 +55,7 @@ class CalendarPort(Protocol):
         """
         ...
 
-    def create_event(
+    async def acreate_event(
         self,
         title: str,
         start: datetime,
@@ -80,15 +80,15 @@ class CalendarPort(Protocol):
         """
         ...
 
-    def delete_event(self, event_id: str) -> bool:
+    async def adelete_event(self, event_id: str) -> bool:
         """Delete an event by ID. Returns True if deleted."""
         ...
 
-    def is_available(self) -> bool:
+    async def ais_available(self) -> bool:
         """Check if the calendar service is reachable."""
         ...
 
-    def list_calendars(self) -> list[str]:
+    async def alist_calendars(self) -> list[str]:
         """Return available calendar names."""
         ...
 

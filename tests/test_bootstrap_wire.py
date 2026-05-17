@@ -5,6 +5,7 @@ Tests the full chain: BootstrapManager -> state -> PromptAssembler -> final prom
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,11 @@ import pytest
 from core.hooks import HookEvent, HookSystem
 from core.llm.prompt_assembler import PromptAssembler
 from core.llm.skill_registry import SkillRegistry
+
+
+def _run_wrapped(wrapped, state):
+    return asyncio.run(wrapped(state))
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -280,7 +286,7 @@ class TestHookedNodeAssemblerInjection:
             bootstrap_mgr=None,
             prompt_assembler=assembler,
         )
-        wrapped({"ip_name": "Berserk"})  # type: ignore[typeddict-item]
+        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[typeddict-item]
 
         assert len(captured_state) == 1
         assert captured_state[0].get("_prompt_assembler") is assembler
@@ -301,7 +307,7 @@ class TestHookedNodeAssemblerInjection:
             bootstrap_mgr=None,
             prompt_assembler=None,
         )
-        wrapped({"ip_name": "Berserk"})  # type: ignore[typeddict-item]
+        _run_wrapped(wrapped, {"ip_name": "Berserk"})  # type: ignore[typeddict-item]
 
         assert len(captured_state) == 1
         assert "_prompt_assembler" not in captured_state[0]

@@ -76,7 +76,7 @@ class HookPlugin(Protocol):
     @property
     def metadata(self) -> HookPluginMetadata: ...
 
-    def handle(self, event: HookEvent, data: dict[str, Any]) -> None: ...
+    def handle(self, event: HookEvent, data: dict[str, Any]) -> Any: ...
 
 
 # ---------------------------------------------------------------------------
@@ -126,8 +126,8 @@ class _YAMLPlugin:
     def metadata(self) -> HookPluginMetadata:
         return self._metadata
 
-    def handle(self, event: HookEvent, data: dict[str, Any]) -> None:
-        self._handler_fn(event, data)
+    def handle(self, event: HookEvent, data: dict[str, Any]) -> Any:
+        return self._handler_fn(event, data)
 
 
 def _load_yaml_plugin(plugin_dir: Path) -> _YAMLPlugin | None:

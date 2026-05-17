@@ -9,10 +9,16 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock
 
 from core.state import AnalysisResult
 from plugins.game_ip.nodes.scoring import _calc_analyst_confidence
+
+
+def _ainvoke(compiled, state):
+    return asyncio.run(compiled.ainvoke(state))
+
 
 # ---------------------------------------------------------------------------
 # Phase 1-A: Confidence Calculation Bug Fix
@@ -376,7 +382,7 @@ class TestGraphWithNodeScopePolicy:
 
         policy = NodeScopePolicy()
         compiled = compile_graph(node_scope_policy=policy)
-        result = compiled.invoke(
+        result = _ainvoke(compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",

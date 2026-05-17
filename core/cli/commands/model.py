@@ -90,9 +90,9 @@ def _apply_model(selected: ModelProfile, *, effort: str | None = None) -> None:
         _pkg._upsert_env("GEODE_AGENTIC_EFFORT", effort)
         upsert_config_toml("agentic", "effort", effort)
 
-    # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings()
+    # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings_async()
     # checks settings.model at the start of each round and applies
-    # the change safely between LLM calls. Direct loop.update_model()
+    # the change safely between LLM calls. Direct loop.update_model_async()
     # during tool execution caused adapter swap mid-call → crash.
 
     if not same_model and effort is not None:

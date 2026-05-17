@@ -2,17 +2,30 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
 from unittest.mock import patch
 
 from core.llm.client import ToolCallRecord, ToolUseResult
 from core.state import AnalysisResult, EvaluatorResult, GeodeState
-from core.tools.registry import set_tool_executor
-from plugins.game_ip.nodes.synthesizer import _build_tool_augmented_synthesis, synthesizer_node
+from core.tools.registry import set_async_tool_executor
+from plugins.game_ip.nodes.synthesizer import (
+    _build_tool_augmented_synthesis as _abuild_tool_augmented_synthesis,
+)
+from plugins.game_ip.nodes.synthesizer import synthesizer_node as _synthesizer_node
+
+
+def _build_tool_augmented_synthesis(*args, **kwargs):
+    return asyncio.run(_abuild_tool_augmented_synthesis(*args, **kwargs))
+
+
+def synthesizer_node(state: GeodeState) -> dict[str, Any]:
+    return asyncio.run(_synthesizer_node(state))
 
 
 def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeState:
     """Build a minimal GeodeState for synthesizer testing."""
-    state: GeodeState = {  # type: ignore[typeddict-item]
+    state: GeodeState = {
         "ip_name": "Berserk",
         "pipeline_mode": "full",
         "dry_run": dry_run,
@@ -47,27 +60,24 @@ def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeStat
         "final_score": 72.0,
     }
     if with_tools:
-        state["_tool_definitions"] = [  # type: ignore[typeddict-item]
+        state["_tool_definitions"] = [  # type: ignore[typeddict-unknown-key]
             {"name": "memory_search", "description": "Search memory", "input_schema": {}}
         ]
         # Executor injected via contextvar, NOT in state (msgpack can't serialize functions)
-        set_tool_executor(lambda name, **kw: {"result": "mock"})
+        async def _mock_executor(name: str, **kw: Any) -> dict[str, Any]:
+            return {"result": "mock", "tool": name}
+
+        set_async_tool_executor(_mock_executor)
     return state
 
 
 class TestToolAugmentedSynthesis:
-    def test_returns_none_without_tool_defs(self):
+    def test_returns_none_without_tool_defs(self) -> None:
         state = _make_state()
-        tool_fn = lambda: None  # noqa: E731
-        result = _build_tool_augmented_synthesis(
-            state,
-            "undermarketed",
-            "marketing_boost",
-            tool_fn,
-        )
+        result = _build_tool_augmented_synthesis(state, "undermarketed", "marketing_boost")
         assert result is None
 
-    def test_returns_synthesis_on_success(self):
+    def test_returns_synthesis_on_success(self) -> None:
         state = _make_state(with_tools=True)
 
         mock_result = ToolUseResult(
@@ -84,47 +94,39 @@ class TestToolAugmentedSynthesis:
             rounds=2,
         )
 
-        def mock_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5, model=None):
+        async def mock_tool_fn(*args: object, **kwargs: object) -> ToolUseResult:
             return mock_result
 
-        result = _build_tool_augmented_synthesis(
-            state, "undermarketed", "marketing_boost", mock_tool_fn
-        )
+        with patch("plugins.game_ip.nodes.synthesizer.call_llm_with_tools_async", mock_tool_fn):
+            result = _build_tool_augmented_synthesis(state, "undermarketed", "marketing_boost")
         assert result is not None
         assert result.undervaluation_cause == "undermarketed"
         assert "Berserk" in result.value_narrative
 
-    def test_returns_none_on_failure(self):
+    def test_returns_none_on_failure(self) -> None:
         state = _make_state(with_tools=True)
 
-        def failing_tool_fn(system, user, *, tools, tool_executor, max_tool_rounds=5, model=None):
+        async def failing_tool_fn(*args: object, **kwargs: object) -> ToolUseResult:
             raise RuntimeError("API error")
 
-        result = _build_tool_augmented_synthesis(
-            state, "undermarketed", "marketing_boost", failing_tool_fn
-        )
+        with patch("plugins.game_ip.nodes.synthesizer.call_llm_with_tools_async", failing_tool_fn):
+            result = _build_tool_augmented_synthesis(state, "undermarketed", "marketing_boost")
         assert result is None
 
 
 class TestSynthesizerNodeToolPath:
-    def test_dry_run_skips_tools(self):
+    def test_dry_run_skips_tools(self) -> None:
         state = _make_state(dry_run=True, with_tools=True)
         result = synthesizer_node(state)
         assert "synthesis" in result
         assert result["synthesis"].undervaluation_cause == "undermarketed"
 
-    def test_no_tool_callable_falls_back(self):
-        """When get_llm_tool() raises RuntimeError, falls back to standard path."""
+    def test_no_async_tool_executor_falls_back(self) -> None:
+        """When async tool executor is absent, falls back to standard path."""
         state = _make_state(with_tools=True)
+        set_async_tool_executor(None)
 
-        # Mock both get_llm_tool (raises) and standard path
-        with (
-            patch(
-                "plugins.game_ip.nodes.synthesizer.get_llm_tool",
-                side_effect=RuntimeError("not injected"),
-            ),
-            patch("plugins.game_ip.nodes.synthesizer._build_llm_synthesis") as mock_std,
-        ):
+        with patch("plugins.game_ip.nodes.synthesizer._build_llm_synthesis") as mock_std:
             from core.state import SynthesisResult
 
             mock_std.return_value = SynthesisResult(

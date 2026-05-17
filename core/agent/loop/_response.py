@@ -16,7 +16,7 @@ from core.hooks import HookEvent
 from ._helpers import get_agentic_tools
 
 if TYPE_CHECKING:
-    from .loop import AgenticLoop
+    from .agent_loop import AgenticLoop
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,66 @@ def serialize_content(loop: AgenticLoop, content: list[Any]) -> list[dict[str, A
     return serialized
 
 
+def _record_usage(loop: AgenticLoop, response: Any) -> Any | None:
+    """Record token usage and return the tracker for cost-budget hooks."""
+    if not response or not getattr(response, "usage", None):
+        return None
+    from core.llm.token_tracker import get_tracker
+    from core.ui.agentic_ui import render_tokens
+
+    in_tok = int(getattr(response.usage, "input_tokens", 0) or 0)
+    out_tok = int(getattr(response.usage, "output_tokens", 0) or 0)
+    think_tok = int(getattr(response.usage, "thinking_tokens", 0) or 0)
+    cache_create = int(getattr(response.usage, "cache_creation_tokens", 0) or 0)
+    cache_read = int(getattr(response.usage, "cache_read_tokens", 0) or 0)
+    tracker = get_tracker()
+    usage = tracker.record(
+        loop.model,
+        in_tok,
+        out_tok,
+        cache_creation_tokens=cache_create,
+        cache_read_tokens=cache_read,
+        thinking_tokens=think_tok,
+    )
+    if not loop._quiet:
+        render_tokens(loop.model, in_tok, out_tok, cost_usd=usage.cost_usd)
+    log.info(
+        "LLM call: model=%s in=%d out=%d think=%d cache_w=%d cache_r=%d cost=$%.4f",
+        loop.model,
+        in_tok,
+        out_tok,
+        think_tok,
+        cache_create,
+        cache_read,
+        usage.cost_usd,
+    )
+    return tracker
+
+
+def _cost_hook_payload(loop: AgenticLoop, tracker: Any) -> tuple[HookEvent, dict[str, Any]] | None:
+    if not loop._hooks:
+        return None
+
+    from core.config import settings
+
+    cost_limit = getattr(settings, "cost_limit_usd", 0.0)
+    if cost_limit <= 0:
+        return None
+    total_cost = tracker.accumulator.total_cost_usd
+    pct = total_cost / cost_limit
+    if pct >= 1.0:
+        return (
+            HookEvent.COST_LIMIT_EXCEEDED,
+            {"total_cost_usd": total_cost, "limit_usd": cost_limit},
+        )
+    if pct >= 0.8:
+        return (
+            HookEvent.COST_WARNING,
+            {"total_cost_usd": total_cost, "limit_usd": cost_limit, "pct": pct},
+        )
+    return None
+
+
 def track_usage(loop: AgenticLoop, response: Any) -> None:
     """Track token usage for cost monitoring.
 
@@ -84,57 +144,32 @@ def track_usage(loop: AgenticLoop, response: Any) -> None:
        it warning-level surfaces future regressions without breaking
        the loop.
     """
-    if not response or not getattr(response, "usage", None):
-        return
     try:
-        from core.llm.token_tracker import get_tracker
-        from core.ui.agentic_ui import render_tokens
-
-        in_tok = int(getattr(response.usage, "input_tokens", 0) or 0)
-        out_tok = int(getattr(response.usage, "output_tokens", 0) or 0)
-        think_tok = int(getattr(response.usage, "thinking_tokens", 0) or 0)
-        cache_create = int(getattr(response.usage, "cache_creation_tokens", 0) or 0)
-        cache_read = int(getattr(response.usage, "cache_read_tokens", 0) or 0)
-        tracker = get_tracker()
-        usage = tracker.record(
-            loop.model,
-            in_tok,
-            out_tok,
-            cache_creation_tokens=cache_create,
-            cache_read_tokens=cache_read,
-            thinking_tokens=think_tok,
-        )
-        if not loop._quiet:
-            render_tokens(loop.model, in_tok, out_tok, cost_usd=usage.cost_usd)
-        log.info(
-            "LLM call: model=%s in=%d out=%d think=%d cache_w=%d cache_r=%d cost=$%.4f",
-            loop.model,
-            in_tok,
-            out_tok,
-            think_tok,
-            cache_create,
-            cache_read,
-            usage.cost_usd,
-        )
+        tracker = _record_usage(loop, response)
+        if tracker is None:
+            return
 
         # Hook: COST_WARNING / COST_LIMIT_EXCEEDED
-        if loop._hooks:
-            from core.config import settings
+        hook_payload = _cost_hook_payload(loop, tracker)
+        if hook_payload is not None:
+            event, data = hook_payload
+            assert loop._hooks is not None
+            loop._hooks.trigger(event, data)
+    except Exception:
+        log.warning("Failed to track usage", exc_info=True)
 
-            cost_limit = getattr(settings, "cost_limit_usd", 0.0)
-            if cost_limit > 0:
-                total_cost = tracker.accumulator.total_cost_usd
-                pct = total_cost / cost_limit
-                if pct >= 1.0:
-                    loop._hooks.trigger(
-                        HookEvent.COST_LIMIT_EXCEEDED,
-                        {"total_cost_usd": total_cost, "limit_usd": cost_limit},
-                    )
-                elif pct >= 0.8:
-                    loop._hooks.trigger(
-                        HookEvent.COST_WARNING,
-                        {"total_cost_usd": total_cost, "limit_usd": cost_limit, "pct": pct},
-                    )
+
+async def track_usage_async(loop: AgenticLoop, response: Any) -> None:
+    """Async usage tracking path for ``AgenticLoop.arun``."""
+    try:
+        tracker = _record_usage(loop, response)
+        if tracker is None:
+            return
+        hook_payload = _cost_hook_payload(loop, tracker)
+        if hook_payload is not None:
+            event, data = hook_payload
+            assert loop._hooks is not None
+            await loop._hooks.trigger_async(event, data)
     except Exception:
         log.warning("Failed to track usage", exc_info=True)
 

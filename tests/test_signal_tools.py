@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from core.tools.base import Tool
 from core.tools.registry import ToolRegistry
 from plugins.game_ip.tools.signal_tools import (
@@ -13,6 +16,10 @@ from plugins.game_ip.tools.signal_tools import (
 )
 
 
+def _run_tool(tool: Any, **kwargs: Any) -> dict[str, Any]:
+    return asyncio.run(tool.aexecute(**kwargs))
+
+
 class TestYouTubeSearchTool:
     def test_satisfies_protocol(self):
         assert isinstance(YouTubeSearchTool(), Tool)
@@ -22,7 +29,7 @@ class TestYouTubeSearchTool:
 
     def test_execute_known_ip(self):
         tool = YouTubeSearchTool()
-        result = tool.execute(ip_name="Berserk")
+        result = _run_tool(tool, ip_name="Berserk")
         data = result["result"]
         assert data["ip_name"] == "Berserk"
         assert data["total_views"] == 25_000_000
@@ -31,7 +38,7 @@ class TestYouTubeSearchTool:
 
     def test_execute_unknown_ip(self):
         tool = YouTubeSearchTool()
-        result = tool.execute(ip_name="Unknown IP")
+        result = _run_tool(tool, ip_name="Unknown IP")
         data = result["result"]
         assert data["total_views"] == 0
         assert data["video_count"] == 0
@@ -46,14 +53,14 @@ class TestRedditSentimentTool:
 
     def test_execute_known_ip(self):
         tool = RedditSentimentTool()
-        result = tool.execute(ip_name="Berserk")
+        result = _run_tool(tool, ip_name="Berserk")
         data = result["result"]
         assert data["subreddit_subscribers"] == 520_000
         assert data["posts_per_week"] > 0
 
     def test_execute_unknown_ip_zero_subs(self):
         tool = RedditSentimentTool()
-        result = tool.execute(ip_name="Unknown")
+        result = _run_tool(tool, ip_name="Unknown")
         assert result["result"]["subreddit_subscribers"] == 0
 
 
@@ -66,7 +73,7 @@ class TestTwitchStatsTool:
 
     def test_execute_known_ip(self):
         tool = TwitchStatsTool()
-        result = tool.execute(ip_name="Cowboy Bebop")
+        result = _run_tool(tool, ip_name="Cowboy Bebop")
         data = result["result"]
         assert data["ip_name"] == "Cowboy Bebop"
         assert data["avg_concurrent_viewers"] > 0
@@ -82,14 +89,14 @@ class TestSteamInfoTool:
 
     def test_execute_berserk(self):
         tool = SteamInfoTool()
-        result = tool.execute(ip_name="Berserk")
+        result = _run_tool(tool, ip_name="Berserk")
         data = result["result"]
         assert data["metacritic_score"] == 58
         assert data["platform"] == "ps4_pc"
 
     def test_execute_unknown_ip_returns_defaults(self):
         tool = SteamInfoTool()
-        result = tool.execute(ip_name="Unknown")
+        result = _run_tool(tool, ip_name="Unknown")
         data = result["result"]
         assert data["metacritic_score"] == 0
         assert data["platform"] == "none"
@@ -104,14 +111,14 @@ class TestGoogleTrendsTool:
 
     def test_execute_berserk_rising(self):
         tool = GoogleTrendsTool()
-        result = tool.execute(ip_name="Berserk")
+        result = _run_tool(tool, ip_name="Berserk")
         data = result["result"]
         assert data["trends_index"] == 78
         assert data["trend_direction"] == "rising"
 
     def test_execute_ghost_stable(self):
         tool = GoogleTrendsTool()
-        result = tool.execute(ip_name="Ghost in the Shell")
+        result = _run_tool(tool, ip_name="Ghost in the Shell")
         data = result["result"]
         assert data["trends_index"] == 55
         assert data["trend_direction"] == "stable"

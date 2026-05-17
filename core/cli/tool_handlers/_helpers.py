@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.async_runtime import run_process_coroutine
+
 log = logging.getLogger(__name__)
 
 
@@ -27,7 +29,11 @@ def _clarify(
 def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
     """Wrap delegated tool execution -- catch KeyError as clarification."""
     try:
-        result: dict[str, Any] = tool_class().execute(**kwargs)
+        tool = tool_class()
+        aexecute = getattr(tool, "aexecute", None)
+        if not callable(aexecute):
+            raise TypeError(f"{tool_class.__name__} must implement aexecute()")
+        result: dict[str, Any] = run_process_coroutine(aexecute(**kwargs))
         return result
     except (KeyError, TypeError) as exc:
         param = str(exc).strip("'\"")

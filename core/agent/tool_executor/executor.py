@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import time
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookSystem
+    from core.tools.base import ToolContext
 
-from core.agent.approval import _write_denial_with_fallback
 from core.agent.bash_tool import BashTool
-from core.agent.safety import (
-    DANGEROUS_TOOLS,
-    EXPENSIVE_TOOLS,
-    WRITE_TOOLS,
-)
+from core.agent.safety import DANGEROUS_TOOLS
 from core.hooks.system import HookEvent
 
 log = logging.getLogger(__name__)
+
+ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]] | Any]
 
 
 def _tool_spinner(label: str) -> Any:
@@ -49,7 +49,7 @@ class ToolExecutor:
     def __init__(
         self,
         *,
-        action_handlers: dict[str, Callable[..., dict[str, Any]]] | None = None,
+        action_handlers: dict[str, ToolHandler] | None = None,
         bash_tool: BashTool | None = None,
         auto_approve: bool = False,
         sub_agent_manager: SubAgentManager | None = None,
@@ -58,7 +58,7 @@ class ToolExecutor:
         hooks: HookSystem | None = None,
         approval_callback: Callable[[str, str, str], str] | None = None,
     ) -> None:
-        self._handlers: dict[str, Callable[..., dict[str, Any]]] = action_handlers or {}
+        self._handlers: dict[str, ToolHandler] = action_handlers or {}
         self._bash = bash_tool or BashTool()
         self._auto_approve = auto_approve  # for testing only
         self._sub_agent_manager = sub_agent_manager
@@ -90,115 +90,9 @@ class ToolExecutor:
         """Delegates to ApprovalWorkflow."""
         self._approval.track_decision(tool_name, decision)
 
-    def _check_auto_deny(self, tool_name: str) -> bool:
-        """Delegates to ApprovalWorkflow."""
-        return self._approval.check_auto_deny(tool_name)
-
-    def _prompt_with_always(
-        self,
-        label: str,
-        detail: str,
-        *,
-        safety_level: str = "write",
-        tool_name: str = "",
-    ) -> str:
-        """Delegates to ApprovalWorkflow."""
-        return self._approval.prompt_with_always(
-            label, detail, safety_level=safety_level, tool_name=tool_name
-        )
-
-    def register(self, tool_name: str, handler: Callable[..., dict[str, Any]]) -> None:
+    def register(self, tool_name: str, handler: ToolHandler) -> None:
         """Register a tool handler."""
         self._handlers[tool_name] = handler
-
-    def _apply_safety_gates(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, bool]:
-        """Check HITL gates. Returns (rejection_result, approved_via_hitl).
-
-        Delegates to ApprovalWorkflow but routes through self._confirm_*
-        methods so that test patches on ToolExecutor instances still work.
-        """
-        if tool_name in DANGEROUS_TOOLS:
-            return self._execute_dangerous(tool_name, tool_input), False
-
-        approved = False
-
-        # Write tools
-        if tool_name in WRITE_TOOLS:
-            if self._approval._hitl_level == 0 or self._approval.is_bash_auto_approved(""):
-                # Simplified: check if write is auto-approved
-                pass
-            if (
-                self._approval._hitl_level == 0
-                or "write" in self._approval._always_approved_categories
-                or tool_name in self._approval._always_approved_tools
-            ):
-                approved = True
-            else:
-                self._fire_hook(
-                    HookEvent.TOOL_APPROVAL_REQUESTED,
-                    {"tool_name": tool_name, "safety_level": "write"},
-                )
-                if not self._confirm_write(tool_name, tool_input):
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_DENIED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "write",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
-                        },
-                    )
-                    return _write_denial_with_fallback(tool_name), False
-                self._fire_hook(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "write",
-                        "always": "write" in self._approval._always_approved_categories,
-                    },
-                )
-                approved = True
-
-        # Expensive tools
-        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            if (
-                self._approval._hitl_level == 0
-                or "cost" in self._approval._always_approved_categories
-                or tool_name in self._approval._always_approved_tools
-            ):
-                approved = True
-            else:
-                cost = EXPENSIVE_TOOLS[tool_name]
-                self._fire_hook(
-                    HookEvent.TOOL_APPROVAL_REQUESTED,
-                    {"tool_name": tool_name, "safety_level": "cost"},
-                )
-                if not self._confirm_cost(tool_name, cost):
-                    self._fire_hook(
-                        HookEvent.TOOL_APPROVAL_DENIED,
-                        {
-                            "tool_name": tool_name,
-                            "safety_level": "cost",
-                            "permission_level": "HITL",
-                            "decision": "denied",
-                            "latency_ms": 0.0,
-                        },
-                    )
-                    return {"error": "User denied expensive operation", "denied": True}, False
-                self._fire_hook(
-                    HookEvent.TOOL_APPROVAL_GRANTED,
-                    {
-                        "tool_name": tool_name,
-                        "safety_level": "cost",
-                        "always": "cost" in self._approval._always_approved_categories,
-                    },
-                )
-                approved = True
-
-        return None, approved
 
     # Delegation methods — route to ApprovalWorkflow, patchable by tests
     def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
@@ -206,12 +100,6 @@ class ToolExecutor:
 
     def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
         return self._approval.confirm_cost(tool_name, estimated_cost)
-
-    def _confirm_mcp(self, server: str, tool_name: str) -> bool:
-        return self._approval.confirm_mcp(server, tool_name)
-
-    def _request_approval(self, command: str, reason: str) -> bool:
-        return self._approval.request_bash_approval(command, reason)
 
     # Proxy properties for backward compat (tests access these directly)
     @property
@@ -226,50 +114,103 @@ class ToolExecutor:
     def _mcp_approved_servers(self) -> set[str]:
         return self._approval._mcp_approved_servers
 
-    def execute(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """Execute a tool call, applying HITL gate if needed."""
-        log.debug("ToolExecutor: %s(%s)", tool_name, tool_input)
+    async def aexecute(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Execute a tool call through the async runtime path.
 
-        # Safety gates (HITL approval for dangerous/write/expensive tools)
-        gate_result, approved_via_hitl = self._apply_safety_gates(tool_name, tool_input)
+        Async-native handlers are awaited directly. Legacy sync handlers are
+        isolated behind ``asyncio.to_thread`` so the agent loop no longer wraps
+        the entire executor in a thread.
+        """
+        log.debug("ToolExecutor.async: %s(%s)", tool_name, tool_input)
+
+        if context and context.cancellation and context.cancellation.is_set():
+            return {"error": "Tool execution cancelled before start", "cancelled": True}
+
+        if tool_name in DANGEROUS_TOOLS:
+            return await self._execute_dangerous_async(tool_name, tool_input, context=context)
+
+        gate_result, approved_via_hitl = await self._apply_safety_gates_async(
+            tool_name, tool_input
+        )
         if gate_result is not None:
             return gate_result
 
-        # Sub-agent delegation
         if tool_name == "delegate_task":
-            return self._execute_delegate(tool_input)
+            return await asyncio.to_thread(self._execute_delegate, tool_input)
 
-        # Resolve handler (registered or MCP fallback)
         handler = self._handlers.get(tool_name)
         if handler is None:
             if self._mcp_manager is not None:
-                server = self._mcp_manager.find_server_for_tool(tool_name)
+                server = await asyncio.to_thread(self._mcp_manager.find_server_for_tool, tool_name)
                 if server is not None:
-                    return self._execute_mcp(server, tool_name, tool_input)
+                    return await self._execute_mcp_async(server, tool_name, tool_input)
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 
-        # Execute handler
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
-                    raw: Any = handler(**tool_input)
+                    raw = await self._call_handler_async(handler, tool_input)
             else:
-                raw = handler(**tool_input)
-            if raw is None:
-                return {
-                    "error": f"Tool '{tool_name}' returned None instead of a dict. "
-                    "This is likely a bug in the tool handler implementation.",
-                    "status": "failure",
-                }
-            if not isinstance(raw, dict):
-                return {"result": raw}
-            return raw
+                raw = await self._call_handler_async(handler, tool_input)
+            return self._normalize_raw_result(tool_name, raw)
         except Exception as exc:
-            log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
-            from core.tools.base import classify_tool_exception
+            return self._classify_execution_exception(tool_name, exc)
 
-            return classify_tool_exception(exc, tool_name=tool_name)
+    async def _apply_safety_gates_async(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        return await self._approval.apply_safety_gates_async(tool_name, tool_input)
+
+    async def _call_handler_async(
+        self, handler: ToolHandler, tool_input: dict[str, Any]
+    ) -> Any:
+        if self._is_async_handler(handler):
+            raw = handler(**tool_input)
+            return await cast(Awaitable[Any], raw)
+        return await asyncio.to_thread(handler, **tool_input)
+
+    @staticmethod
+    def _is_async_handler(handler: ToolHandler) -> bool:
+        if inspect.iscoroutinefunction(handler):
+            return True
+        return callable(handler) and inspect.iscoroutinefunction(type(handler).__call__)
+
+    @staticmethod
+    def _normalize_raw_result(tool_name: str, raw: Any) -> dict[str, Any]:
+        if inspect.isawaitable(raw):
+            close = getattr(raw, "close", None)
+            if callable(close):
+                close()
+            return {
+                "error": (
+                    f"Tool '{tool_name}' returned an awaitable from the sync execute() path. "
+                    "Use ToolExecutor.aexecute() for async handlers."
+                ),
+                "status": "failure",
+            }
+        if raw is None:
+            return {
+                "error": f"Tool '{tool_name}' returned None instead of a dict. "
+                "This is likely a bug in the tool handler implementation.",
+                "status": "failure",
+            }
+        if not isinstance(raw, dict):
+            return {"result": raw}
+        return raw
+
+    @staticmethod
+    def _classify_execution_exception(tool_name: str, exc: Exception) -> dict[str, Any]:
+        log.error("Tool %s failed: %s", tool_name, exc, exc_info=True)
+        from core.tools.base import classify_tool_exception
+
+        return classify_tool_exception(exc, tool_name=tool_name)
 
     def _execute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Delegate task(s) to sub-agent. Supports single and batch."""
@@ -342,66 +283,81 @@ class ToolExecutor:
             "summary": f"{succeeded}/{len(results)} tasks completed. [{', '.join(summary_parts)}]",
         }
 
-    def _execute_dangerous(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """Execute a dangerous tool with user approval."""
+    async def _execute_dangerous_async(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Async dangerous tool execution with async approval."""
         if tool_name == "run_bash":
-            return self._execute_bash(tool_input)
+            return await self._execute_bash_async(tool_input, context=context)
 
         return {"error": f"Dangerous tool not implemented: {tool_name}"}
 
-    def _execute_bash(self, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """Execute bash command with HITL approval.
+    async def _request_approval_async(self, command: str, reason: str) -> bool:
+        return await self._approval.request_bash_approval_async(command, reason)
 
-        DANGEROUS tools always require user approval — auto_approve is
-        ignored for this category to prevent sub-agent bypass.
-
-        HITL level gating:
-        - hitl_level 0: skip all approval (autonomous)
-        - hitl_level 1: skip bash approval (write-only gate)
-        - hitl_level 2: full approval (default)
-        """
+    async def _execute_bash_async(
+        self,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Async bash execution with nonblocking approval prompt and subprocess call."""
         command = tool_input.get("command", "")
         reason = tool_input.get("reason", "")
+        timeout = int(tool_input.get("timeout") or 30)
 
         if not command:
             return {"error": "No command provided"}
 
-        # Check blocked patterns first
         blocked = self._bash.validate(command)
         if blocked:
             return self._bash.to_tool_result(blocked)
 
-        # Approval gate: safe commands auto-pass, others go through HITL
         if not self._approval.is_bash_auto_approved(command):
-            approved = self._request_approval(command, reason)
+            approved = await self._request_approval_async(command, reason)
             if not approved:
                 return {"error": "User denied execution", "denied": True}
 
         with _tool_spinner(f"Running: {command}"):
-            result = self._bash.execute(command)
+            result = await self._bash.aexecute(
+                command,
+                timeout=timeout,
+                cancellation=context.cancellation if context else None,
+            )
         return self._bash.to_tool_result(result)
 
-    def _execute_mcp(
+    async def _execute_mcp_async(
         self, server: str, tool_name: str, tool_input: dict[str, Any]
     ) -> dict[str, Any]:
-        """Execute an MCP tool with safety logging.
-
-        MCP tools from external servers are logged and routed through the
-        manager.  Previously these bypassed all safety checks.
-        """
+        """Async MCP tool execution with async server approval."""
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
-        # MCP tools are external — confirm once per server per session.
         if not self._auto_approve and not self._approval.is_mcp_approved(server):
-            if not self._confirm_mcp(server, tool_name):
+            if not await self._approval.confirm_mcp_async(server, tool_name):
                 return {"error": "User denied MCP tool execution", "denied": True}
             self._approval.mark_mcp_approved(server)
 
-        assert self._mcp_manager is not None  # guaranteed by caller
+        assert self._mcp_manager is not None
         with _tool_spinner(f"Calling {server}/{tool_name}..."):
-            result: dict[str, Any] = self._mcp_manager.call_tool(server, tool_name, tool_input)
+            acall_tool = getattr(self._mcp_manager, "acall_tool", None)
+            if callable(acall_tool):
+                maybe_result = acall_tool(server, tool_name, tool_input)
+                if inspect.isawaitable(maybe_result):
+                    result_raw = await maybe_result
+                else:
+                    result_raw = maybe_result
+            else:
+                result_raw = await asyncio.to_thread(
+                    self._mcp_manager.call_tool, server, tool_name, tool_input
+                )
+        result: dict[str, Any] = (
+            dict(result_raw) if isinstance(result_raw, dict) else {"result": result_raw}
+        )
 
-        # Sandbox hardening: redact secrets from MCP tool results
         from core.utils.redaction import redact_secrets
 
         for key in ("stdout", "stderr", "output", "content", "text", "result"):

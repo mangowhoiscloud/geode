@@ -44,7 +44,7 @@ def get_signal_adapter() -> SignalEnrichmentPort | None:
     return _signal_adapter_ctx.get()
 
 
-def _fetch_web_signals(ip_name: str) -> dict[str, Any]:
+async def _fetch_web_signals(ip_name: str) -> dict[str, Any]:
     """Last-resort: web search for signal data on unknown IPs.
 
     Uses Anthropic native web_search to collect public data, then returns
@@ -61,7 +61,7 @@ def _fetch_web_signals(ip_name: str) -> dict[str, Any]:
     web_results: list[str] = []
     for query in queries:
         try:
-            result = search.execute(query=query, max_results=3)
+            result = await search.aexecute(query=query, max_results=3)
             text = result.get("result", {}).get("search_results", "")
             if text:
                 web_results.append(text)
@@ -91,7 +91,7 @@ def _count_data_keys(signals: dict[str, Any]) -> int:
     return sum(1 for k in signals if not k.startswith("_"))
 
 
-def signals_node(state: GeodeState) -> dict[str, Any]:
+async def signals_node(state: GeodeState) -> dict[str, Any]:
     """Load external signals — MCP live → fixture fallback → mixed → web search.
 
     Returns both ``signals`` and ``signal_source`` for provenance tracking.
@@ -102,9 +102,9 @@ def signals_node(state: GeodeState) -> dict[str, Any]:
 
         # 1. Try injected MCP adapter first (CompositeSignalAdapter in production)
         adapter = get_signal_adapter()
-        if adapter is not None and adapter.is_available():
+        if adapter is not None and await adapter.ais_available():
             try:
-                live_signals = adapter.fetch_signals(ip_name)
+                live_signals = await adapter.afetch_signals(ip_name)
                 if live_signals and _count_data_keys(live_signals) >= _MIN_LIVE_SIGNAL_KEYS:
                     log.info(
                         "Live signals collected for '%s': %d keys from %s",
@@ -151,7 +151,7 @@ def signals_node(state: GeodeState) -> dict[str, Any]:
 
         # 5. Web search fallback (unknown IPs)
         log.info("No fixture for '%s' — fetching signals via web search", ip_name)
-        web_signals = _fetch_web_signals(ip_name)
+        web_signals = await _fetch_web_signals(ip_name)
         if web_signals:
             return {
                 "signals": web_signals,

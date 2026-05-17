@@ -180,14 +180,14 @@ class TestSubAgentReasoningWiring:
     """
 
     def test_loop_receives_reasoning_kwargs(self, monkeypatch, tmp_path) -> None:
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         captured: dict = {}
 
         def _fake_loop(*args, **kwargs):
             captured.update(kwargs)
             mock_loop = MagicMock()
-            mock_loop.run.return_value = MagicMock(text="ok", tool_calls=[], rounds=1)
+            mock_loop.arun = AsyncMock(return_value=MagicMock(text="ok", tool_calls=[], rounds=1))
             return mock_loop
 
         # Stub out everything _run_agentic touches except the bit we test.

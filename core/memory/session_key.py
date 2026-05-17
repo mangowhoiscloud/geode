@@ -76,7 +76,7 @@ def build_subagent_thread_config(
     """Build a LangGraph thread config for a sub-agent execution.
 
     Returns:
-        Dict suitable for ``graph.invoke(state, config=...)``.
+        Dict suitable for ``await graph.ainvoke(state, config=...)``.
     """
     thread_id = build_subagent_session_key(ip_name, task_id, phase)
     return {
@@ -158,11 +158,11 @@ def build_thread_config(ip_name: str, phase: str, sub_context: str | None = None
     """Build a LangGraph thread config with hierarchical session key.
 
     Returns:
-        Dict suitable for `graph.invoke(state, config=...)`.
+        Dict suitable for `await graph.ainvoke(state, config=...)`.
 
     Example:
         config = build_thread_config("Berserk", ANALYSIS)
-        result = compiled_graph.invoke(state, config=config)
+        result = await compiled_graph.ainvoke(state, config=config)
     """
     thread_id = build_session_key(ip_name, phase, sub_context)
     return {

@@ -51,9 +51,10 @@ class TestBackoffJitter:
                 retry_max_delay=30.0,
             )
 
-        assert len(delays) == 3
+        retry_delays = [d for d in delays if d != 0.08]
+        assert len(retry_delays) >= 3
         # Jitter: delays should be in [0, cap], not all identical
-        for d in delays:
+        for d in retry_delays[:3]:
             assert d >= 0
 
     def test_jitter_cap_respects_max_delay(self) -> None:

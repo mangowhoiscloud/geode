@@ -42,14 +42,14 @@ class DiscordPoller(BasePoller):
     def channel_name(self) -> str:
         return "discord"
 
-    def _poll_once(self) -> None:
+    async def _apoll_once(self) -> None:
         if not self._check_mcp_health():
             return
 
         for binding in self._get_channel_bindings():
-            self._poll_channel(binding["channel_id"])
+            await self._poll_channel(binding["channel_id"])
 
-    def _poll_channel(self, channel_id: str) -> None:
+    async def _poll_channel(self, channel_id: str) -> None:
         """Poll a single Discord channel for new messages."""
         # ``_poll_once`` (caller) gates this method behind
         # ``_check_mcp_health`` which already guarantees ``_mcp is not None``.
@@ -61,7 +61,7 @@ class DiscordPoller(BasePoller):
             if after:
                 args["after"] = after
 
-            result = self._mcp.call_tool("discord", "get_messages", args)
+            result = await self._mcp.acall_tool("discord", "get_messages", args)
             if "error" in result:
                 return
 
@@ -87,7 +87,7 @@ class DiscordPoller(BasePoller):
                 response = self._manager.route_message(inbound)
 
                 if response and self._notification:
-                    self._notification.send_message("discord", channel_id, response)
+                    await self._notification.asend_message("discord", channel_id, response)
 
         except Exception as exc:
             log.debug("Discord poll error for %s: %s", channel_id, exc)

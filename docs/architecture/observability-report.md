@@ -11,11 +11,11 @@
 |---|--------|------|---------|-------------|
 | 1 | HookSystem | `hooks/system.py` | Memory (thread-safe) | 46 event types |
 | 2 | SessionMetrics | `orchestration/metrics.py` | Memory | LLM_CALL_END, TOOL_RECOVERY_* |
-| 3 | TokenTracker | `llm/token_tracker.py` | Memory + `~/.geode/usage/YYYY-MM.jsonl` + LangSmith | LLM_CALL_END |
+| 3 | TokenTracker | `llm/token_tracker.py` | Memory + `~/.geode/usage/YYYY-MM.jsonl` | LLM_CALL_END |
 | 4 | Termination Tracking | `agent/agentic_loop.py:156` | AgenticResult | SESSION_END, TURN_COMPLETE |
 | 5 | RunLog | `orchestration/run_log.py` | `~/.geode/runs/{key}.jsonl` | NODE_* |
 | 6 | SessionTranscript | `cli/transcript.py` | `~/.geode/journal/transcripts/{project}/{session}.jsonl` | — |
-| 7 | LangSmith | `llm/token_tracker.py:321` | run_tree.extra["metrics"] | LLM_CALL_END |
+| 7 | OpenLLMetry OTel exporter | `observability/otel_export.py` | OTLP endpoint (optional `[obs]`) | LLM_CALL_END / tool spans |
 | 8 | StuckDetection | `orchestration/stuck_detection.py` | Memory + monitor thread | NODE_ENTER/EXIT/ERROR |
 | 9 | ContextMonitor | `orchestration/context_monitor.py` | Memory | CONTEXT_CRITICAL, CONTEXT_OVERFLOW_ACTION |
 | 10 | ErrorRecovery | `agent/error_recovery.py` | Memory (RecoveryResult) | TOOL_RECOVERY_* |
@@ -118,7 +118,8 @@ llm/token_tracker.py → ContextVar singleton
 
 **Persistence:**
 - `~/.geode/usage/YYYY-MM.jsonl` — monthly JSONL via UsageStore
-- LangSmith `run_tree.extra["metrics"]` — if env vars set
+- Hook lifecycle emission — cost and token deltas flow through
+  `LLM_CALL_END`, `COST_WARNING`, and `COST_LIMIT_EXCEEDED`.
 
 **Pricing:** 8 Anthropic + 5 OpenAI + 4 ZhipuAI models with cache pricing.
 
