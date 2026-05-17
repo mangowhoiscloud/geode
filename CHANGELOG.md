@@ -52,6 +52,15 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.100.0] — 2026-05-17
+
+**Routing externalisation sprint** — 14 PR cycle (Petri P1 + GEODE P2 +
+Pricing P3). 모든 hardcoded routing 매핑 (model defaults, fallbacks,
+provider resolver, credential patterns, keychain, pipeline node
+defaults, pricing, context windows) 을 TOML manifest 위임. 사용자가
+`~/.geode/{petri,routing}.toml` + `core/llm/model_pricing.toml` 편집
+만으로 model / provider / credential / pricing 토글 가능.
+
 ### Changed
 
 - **`token_tracker.MODEL_PRICING` + `MODEL_CONTEXT_WINDOW` 가 manifest 로 lazy load (P3-B).**
