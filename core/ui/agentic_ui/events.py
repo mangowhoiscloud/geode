@@ -298,21 +298,31 @@ def emit_oauth_login_started(provider: str, verification_uri: str, user_code: st
             user_code=user_code,
         )
         return
+    # rich.Padding preserves the left indent when the terminal wraps a long
+    # line. Hard-coded ``"  "`` / ``"     "`` prefixes only paint the first
+    # wrapped line; wrap continuations jag back to column 0.
+    from rich.padding import Padding as _Padding
+
+    _l1 = (0, 0, 0, 2)  # primary indent (numbered step, status line)
+    _l2 = (0, 0, 0, 5)  # nested indent (URL/code under a step)
+
     _pkg.console.print()
-    _pkg.console.print(f"  [header]{provider} OAuth Login[/header]")
+    _pkg.console.print(_Padding(f"[header]{provider} OAuth Login[/header]", _l1))
     _pkg.console.print()
-    _pkg.console.print("  1. Open this URL in your browser:")
-    _pkg.console.print(f"     [link]{verification_uri}[/link]")
+    _pkg.console.print(_Padding("1. Open this URL in your browser:", _l1))
+    _pkg.console.print(_Padding(f"[link]{verification_uri}[/link]", _l2))
     _pkg.console.print()
-    _pkg.console.print("  2. Enter this code:")
-    _pkg.console.print(f"     [bold yellow]{user_code}[/bold yellow]")
+    _pkg.console.print(_Padding("2. Enter this code:", _l1))
+    _pkg.console.print(_Padding(f"[bold yellow]{user_code}[/bold yellow]", _l2))
     _pkg.console.print()
     if verification_uri:
-        _pkg.console.print("  [muted]Press \\[Enter] to open the URL in your browser.[/muted]")
+        _pkg.console.print(
+            _Padding("[muted]Press \\[Enter] to open the URL in your browser.[/muted]", _l1)
+        )
         from core.ui.oauth_browser import start_oauth_browser_watcher
 
         start_oauth_browser_watcher(verification_uri)
-    _pkg.console.print("  [muted]Waiting for sign-in... (Ctrl+C to cancel)[/muted]")
+    _pkg.console.print(_Padding("[muted]Waiting for sign-in... (Ctrl+C to cancel)[/muted]", _l1))
     _pkg.console.print()
 
 
@@ -349,14 +359,18 @@ def emit_oauth_login_success(
             stored_at=stored_at,
         )
         return
+    from rich.padding import Padding as _Padding
+
+    _l1 = (0, 0, 0, 2)
+    _l2 = (0, 0, 0, 4)
     _pkg.console.print()
-    _pkg.console.print(f"  [success]✓ {provider} login successful[/success]")
+    _pkg.console.print(_Padding(f"[success]✓ {provider} login successful[/success]", _l1))
     if email or account_id:
-        _pkg.console.print(f"  [muted]  Account:[/muted] {email or account_id}")
+        _pkg.console.print(_Padding(f"[muted]Account:[/muted] {email or account_id}", _l2))
     if plan_type:
-        _pkg.console.print(f"  [muted]  Plan:[/muted] {plan_type}")
+        _pkg.console.print(_Padding(f"[muted]Plan:[/muted] {plan_type}", _l2))
     if stored_at:
-        _pkg.console.print(f"  [muted]  Stored:[/muted] {stored_at}")
+        _pkg.console.print(_Padding(f"[muted]Stored:[/muted] {stored_at}", _l2))
     _pkg.console.print()
 
 
@@ -372,8 +386,12 @@ def emit_oauth_login_failed(provider: str, reason: str) -> None:
             reason=reason,
         )
         return
+    from rich.padding import Padding as _Padding
+
     _pkg.console.print()
-    _pkg.console.print(f"  [error]✗ {provider} login failed:[/error] {reason}")
+    _pkg.console.print(
+        _Padding(f"[error]✗ {provider} login failed:[/error] {reason}", (0, 0, 0, 2))
+    )
     _pkg.console.print()
 
 
