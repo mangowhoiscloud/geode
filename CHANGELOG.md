@@ -52,6 +52,23 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Removed
+
+- **Game IP verification remnants removed from core.** `BiasBuster`,
+  calibration, signal MCP adapters, the BiasBuster prompt, report/UI
+  compatibility slots, and the old signal/language helper modules were
+  removed from GEODE core. Current core verification is G1-G4 +
+  Cross-LLM + Rights Risk; bias checks, golden-set calibration, and
+  domain-specific signal enrichment now belong to external domain
+  plugins.
+
+- **Game IP 검증 잔여물을 코어에서 제거.** `BiasBuster`,
+  calibration, signal MCP adapter, BiasBuster prompt, report/UI 호환
+  슬롯, 기존 signal/language helper 모듈을 GEODE core 에서 삭제했습니다.
+  현재 코어 검증은 G1-G4 + Cross-LLM + Rights Risk 로 정렬되며,
+  편향 검사, golden-set 캘리브레이션, 도메인별 signal enrichment 는
+  외부 도메인 플러그인이 소유합니다.
+
 ### Changed
 
 - **`token_tracker.MODEL_PRICING` + `MODEL_CONTEXT_WINDOW` 가 manifest 로 lazy load (P3-B).**

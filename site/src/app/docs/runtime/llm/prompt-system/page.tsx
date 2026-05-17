@@ -8,13 +8,13 @@ export default function Page() {
       slug="runtime/llm/prompt-system"
       title="Prompt System"
       titleKo="프롬프트 시스템"
-      summary="GEODE's prompt subsystem: 5 layers, 17 templates, 3 axes datasets, 20 pinned hashes, ephemeral cache, append-only assembler. Since v0.93, 16 boundary markers across 9 files use XML envelopes."
-      summaryKo="GEODE 프롬프트 서브시스템: 5계층, 17개 템플릿, 3개 axes 데이터, 20개 pin 해시, ephemeral 캐시, append-only 어셈블러. v0.93부터 9개 파일의 16개 경계 마커가 XML 래퍼로 전환됨."
+      summary="GEODE's prompt subsystem: 5 layers, 8 markdown prompt files, 3 axes datasets, 18 pinned hashes, ephemeral cache, append-only assembler. Since v0.93, boundary markers use XML envelopes."
+      summaryKo="GEODE 프롬프트 서브시스템: 5계층, 8개 마크다운 프롬프트 파일, 3개 axes 데이터, 18개 pin 해시, ephemeral 캐시, append-only 어셈블러. v0.93부터 경계 마커가 XML 래퍼로 전환됨."
     >
       <h2>{<Bi ko="5계층" en="Five layers" />}</h2>
-      <pre>{`1. Templates Layer       core/llm/prompts/*.md           — 17 base + extended sections
+      <pre>{`1. Templates Layer       core/llm/prompts/*.md           — 8 markdown files
 2. Axes Layer            external domain plugin          — optional evaluator axes
-3. Hash Versioning       core/llm/prompts/__init__.py    — SHA-256[:12] x 20 pinned entries
+3. Hash Versioning       core/llm/prompts/__init__.py    — SHA-256[:12] x 18 pinned entries
 4. Assembly              core/llm/prompt_assembler.py    — base + skill + memory + bootstrap
                                                           (6 phases, append-only by default)
 5. Skill Injection       core/skills/skill_registry.py   — frontmatter + body, 5-tier discovery`}</pre>
@@ -26,8 +26,8 @@ export default function Page() {
             <p>
               프롬프트 텍스트는 마크다운 파일(<code>analyst.md</code>,{" "}
               <code>evaluator.md</code>, <code>synthesizer.md</code>,{" "}
-              <code>biasbuster.md</code>, <code>router.md</code>,{" "}
-              <code>cross_llm.md</code>, <code>commentary.md</code> 등) 과 하나의
+              <code>router.md</code>, <code>cross_llm.md</code>,{" "}
+              <code>commentary.md</code> 등) 과 하나의
               외부 도메인 플러그인이 제공하는 axes 데이터에 살고 있습니다.
             </p>
             <p>
@@ -39,7 +39,7 @@ export default function Page() {
 
             <h2>드리프트 감지</h2>
             <p>
-              병렬 딕셔너리 <code>_PINNED_HASHES</code> 는 20개 항목 각각의 기대 해시를
+              병렬 딕셔너리 <code>_PINNED_HASHES</code> 는 18개 항목 각각의 기대 해시를
               유지합니다. <code>verify_prompt_integrity()</code> 가 라이브 해시와 핀
               해시를 비교해 드리프트 리스트를 반환합니다. CI 는 이 함수를{" "}
               <code>raise_on_drift=True</code> 로 호출하므로 어떤 불일치도 빌드를 깨뜨립니다.
@@ -121,8 +121,8 @@ export default function Page() {
             <p>
               Prompt text lives in markdown files (<code>analyst.md</code>,{" "}
               <code>evaluator.md</code>, <code>synthesizer.md</code>,{" "}
-              <code>biasbuster.md</code>, <code>router.md</code>,{" "}
-              <code>cross_llm.md</code>, <code>commentary.md</code>, etc.) and one
+              <code>router.md</code>, <code>cross_llm.md</code>,{" "}
+              <code>commentary.md</code>, etc.) and one
               YAML file (<code>evaluator_axes.yaml</code>) that holds the structured
               evaluation rubrics.
             </p>
@@ -136,7 +136,7 @@ export default function Page() {
             <h2>Drift detection</h2>
             <p>
               A parallel dictionary, <code>_PINNED_HASHES</code>, holds the expected
-              hash for each of the 20 entries. The function{" "}
+              hash for each of the 18 entries. The function{" "}
               <code>verify_prompt_integrity()</code> compares live hashes against
               pinned hashes and returns a list of drifts. CI calls this with{" "}
               <code>raise_on_drift=True</code>, breaking the build on any mismatch.

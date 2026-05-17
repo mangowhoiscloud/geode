@@ -8,8 +8,8 @@ export default function Page() {
       slug="plugins/game-ip"
       title="Game IP Plugin"
       titleKo="Game IP 플러그인"
-      summary="Closed-domain plugin for evaluating Game/IP market potential. 4 Analysts + 3 Evaluators + Synthesizer + BiasBuster, 14-axis PSM scoring."
-      summaryKo="Game/IP 시장 잠재력을 평가하는 폐쇄형 도메인 플러그인. Analyst 4 + Evaluator 3 + Synthesizer + BiasBuster, 14-axis PSM 스코어링."
+      summary="External closed-domain plugin pattern for evaluating Game/IP market potential. 4 Analysts + 3 Evaluators + verification + Synthesizer, 14-axis PSM scoring."
+      summaryKo="Game/IP 시장 잠재력을 평가하는 외부 폐쇄형 도메인 플러그인 패턴. Analyst 4 + Evaluator 3 + 검증 + Synthesizer, 14-axis PSM 스코어링."
     >
       <Bi
         ko={
@@ -33,8 +33,8 @@ Evaluator × 3 (parallel)
    community_momentum → 3 axes
    │
    ▼
-BiasBuster (6 bias checks)
-   confirmation, recency, anchoring, position, verbosity, self-enhancement
+Domain verification
+   plugin-owned bias checks, golden-set calibration, rights constraints
    │
    ▼
 Synthesizer (cause-locked narrative)
@@ -110,8 +110,8 @@ Evaluator × 3 (parallel)
    community_momentum → 3 axes
    │
    ▼
-BiasBuster (6 bias checks)
-   confirmation, recency, anchoring, position, verbosity, self-enhancement
+Domain verification
+   plugin-owned bias checks, golden-set calibration, rights constraints
    │
    ▼
 Synthesizer (cause-locked narrative)

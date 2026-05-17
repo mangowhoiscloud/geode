@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .analyst_reasoning import _format_analyst_reasoning_html, _format_analyst_reasoning_md
-from .biasbuster import _format_biasbuster_html, _format_biasbuster_md
 from .cross_llm import _format_cross_llm_html, _format_cross_llm_md
 from .decision_tree import _format_decision_tree_html, _format_decision_tree_md
 from .evaluators import _format_evaluators_html, _format_evaluators_md
@@ -82,7 +81,6 @@ class ReportGenerator:
             "evaluations": result.get("evaluations", {}),
             "psm_result": result.get("psm_result", {}),
             "guardrails": result.get("guardrails", {}),
-            "biasbuster": result.get("biasbuster", {}),
             "signals": result.get("signals", {}),
             "analyst_confidence": result.get("analyst_confidence", 0.0),
             "cross_llm": result.get("cross_llm", {}),
@@ -108,7 +106,6 @@ class ReportGenerator:
             output["evaluations"] = common["evaluations"]
             output["psm_result"] = common["psm_result"]
             output["guardrails"] = common["guardrails"]
-            output["biasbuster"] = common["biasbuster"]
             output["signals"] = common["signals"]
             output["analyst_confidence"] = common["analyst_confidence"]
             output["cross_llm"] = common["cross_llm"]
@@ -131,7 +128,6 @@ class ReportGenerator:
         evaluators_section = ""
         psm_section = ""
         scoring_breakdown_section = ""
-        biasbuster_section = ""
         cross_llm_section = ""
         rights_risk_section = ""
         decision_tree_section = ""
@@ -152,7 +148,6 @@ class ReportGenerator:
             )
             decision_tree_section = _format_decision_tree_html(synthesis, common["evaluations"])
             details_section = self._format_details_html(result)
-            biasbuster_section = _format_biasbuster_html(common["biasbuster"])
             cross_llm_section = _format_cross_llm_html(common["cross_llm"])
             rights_risk_section = _format_rights_risk_html(common["rights_risk"])
             signals_section = _format_signals_html(common["signals"])
@@ -180,7 +175,6 @@ class ReportGenerator:
             scoring_breakdown_section=scoring_breakdown_section,
             decision_tree_section=decision_tree_section,
             details_section=details_section,
-            biasbuster_section=biasbuster_section,
             cross_llm_section=cross_llm_section,
             rights_risk_section=rights_risk_section,
             signals_section=signals_section,
@@ -198,7 +192,6 @@ class ReportGenerator:
         evaluators_section = ""
         psm_section = ""
         scoring_breakdown_section = ""
-        biasbuster_section = ""
         cross_llm_section = ""
         rights_risk_section = ""
         decision_tree_section = ""
@@ -219,7 +212,6 @@ class ReportGenerator:
             )
             decision_tree_section = _format_decision_tree_md(synthesis, common["evaluations"])
             details_section = self._format_details_md(result)
-            biasbuster_section = _format_biasbuster_md(common["biasbuster"])
             cross_llm_section = _format_cross_llm_md(common["cross_llm"])
             rights_risk_section = _format_rights_risk_md(common["rights_risk"])
             signals_section = _format_signals_md(common["signals"])
@@ -240,7 +232,6 @@ class ReportGenerator:
             scoring_breakdown_section=scoring_breakdown_section,
             decision_tree_section=decision_tree_section,
             details_section=details_section,
-            biasbuster_section=biasbuster_section,
             cross_llm_section=cross_llm_section,
             rights_risk_section=rights_risk_section,
             signals_section=signals_section,

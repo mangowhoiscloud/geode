@@ -67,9 +67,10 @@ def _state_to_report_dict(state: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("evaluations", {})
     out.setdefault("psm_result", {})
     out.setdefault("guardrails", {})
-    out.setdefault("biasbuster", {})
     out.setdefault("signals", {})
     out.setdefault("analyst_confidence", 0.0)
+    out.setdefault("cross_llm", {})
+    out.setdefault("rights_risk", {})
     return out
 
 

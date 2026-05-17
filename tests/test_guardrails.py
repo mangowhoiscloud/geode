@@ -1,4 +1,4 @@
-"""Tests for guardrails G1-G4 and BiasBuster."""
+"""Tests for guardrails G1-G4."""
 
 from __future__ import annotations
 

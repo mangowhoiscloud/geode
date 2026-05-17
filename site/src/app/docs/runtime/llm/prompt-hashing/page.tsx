@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/prompt-hashing"
       title="Prompt Hashing"
       titleKo="프롬프트 해싱"
-      summary="A SHA-256 hash ratchet (Karpathy P4) that breaks CI on unintended prompt drift. 20 templates pinned, re-pin workflow documented."
-      summaryKo="의도치 않은 prompt drift 발생 시 CI를 중단시키는 SHA-256 해시 잠금장치 (Karpathy P4). 20개 템플릿이 핀으로 고정되고, 재핀(re-pin) 절차가 문서화되어 있습니다."
+      summary="A SHA-256 hash ratchet (Karpathy P4) that breaks CI on unintended prompt drift. 18 templates pinned, re-pin workflow documented."
+      summaryKo="의도치 않은 prompt drift 발생 시 CI를 중단시키는 SHA-256 해시 잠금장치 (Karpathy P4). 18개 템플릿이 핀으로 고정되고, 재핀(re-pin) 절차가 문서화되어 있습니다."
     >
       <Bi
         ko={
@@ -25,7 +25,7 @@ def _hash_axes(data) -> str:
         json.dumps(data, sort_keys=True).encode()
     ).hexdigest()[:12]`}</pre>
             <p>
-              12자리 hex = 48비트. 20개 prompt라는 닫힌 집합에서 충돌 확률은
+              12자리 hex = 48비트. 18개 prompt라는 닫힌 집합에서 충돌 확률은
               무시할 수 있습니다. 목표는 탐지이지 암호학적 보안이 아닙니다.
             </p>
             <p>
@@ -33,31 +33,29 @@ def _hash_axes(data) -> str:
               결정적이도록 <code>sort_keys=True</code>를 사용합니다.
             </p>
 
-            <h2>20개의 고정 엔트리</h2>
+            <h2>18개의 고정 엔트리</h2>
             <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
 
-  AGENTIC_SUFFIX             79cef71335e8
-  ANALYST_SPECIFIC           5a696a2d5ebb
-  ANALYST_SYSTEM             8a325a63b397
-  ANALYST_TOOLS_SUFFIX       2961fb31d96f
-  ANALYST_USER               e59d00faadd5
-  BIASBUSTER_SYSTEM          07987c709fd9
-  BIASBUSTER_USER            378be01a6310
+  AGENTIC_SUFFIX             5630f3a61683
+  ANALYST_SPECIFIC           44136fa355b3
+  ANALYST_SYSTEM             b800a57a4599
+  ANALYST_TOOLS_SUFFIX       36055d5618f4
+  ANALYST_USER               63711de6c099
   COMMENTARY_SYSTEM          488d8916d958
   COMMENTARY_USER            2024ac4eba69
   CROSS_LLM_DUAL_VERIFY      602669128ae2
   CROSS_LLM_RESCORE          163b08e97d66
   CROSS_LLM_SYSTEM           bf303f600fce
-  EVALUATOR_AXES             0d82eb1aa5b4
-  EVALUATOR_SYSTEM           e891c0ce27d4
-  EVALUATOR_USER             f6d7f955338d
-  PROSPECT_EVALUATOR_AXES    a9954477497b
-  ROUTER_SYSTEM              a03eef47a293
-  SYNTHESIZER_SYSTEM         e01544c0c8d2
-  SYNTHESIZER_TOOLS_SUFFIX   c6c65e47e191
-  SYNTHESIZER_USER           30d99edc79a5`}</pre>
+  EVALUATOR_AXES             44136fa355b3
+  EVALUATOR_SYSTEM           93ecabb14a72
+  EVALUATOR_USER             ad832adfadf0
+  PROSPECT_EVALUATOR_AXES    44136fa355b3
+  ROUTER_SYSTEM              c4220baeb6c0
+  SYNTHESIZER_SYSTEM         1cbe199613a1
+  SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
+  SYNTHESIZER_USER           e0bb4afab940`}</pre>
             <p>
-              두 dict 모두 정확히 20개 key를 가지며, key set이 동일합니다.
+              두 dict 모두 정확히 18개 key를 가지며, key set이 동일합니다.
             </p>
 
             <h2>verify_prompt_integrity</h2>
@@ -144,7 +142,7 @@ def _hash_axes(data) -> str:
     ).hexdigest()[:12]`}</pre>
             <p>
               Twelve hex characters = 48 bits. Collision probability is negligible
-              for the closed set of 20 prompts; the goal is detection, not
+              for the closed set of 18 prompts; the goal is detection, not
               cryptographic security.
             </p>
             <p>
@@ -153,31 +151,29 @@ def _hash_axes(data) -> str:
               dict orderings.
             </p>
 
-            <h2>The 20 pinned entries</h2>
+            <h2>The 18 pinned entries</h2>
             <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
 
-  AGENTIC_SUFFIX             79cef71335e8
-  ANALYST_SPECIFIC           5a696a2d5ebb
-  ANALYST_SYSTEM             8a325a63b397
-  ANALYST_TOOLS_SUFFIX       2961fb31d96f
-  ANALYST_USER               e59d00faadd5
-  BIASBUSTER_SYSTEM          07987c709fd9
-  BIASBUSTER_USER            378be01a6310
+  AGENTIC_SUFFIX             5630f3a61683
+  ANALYST_SPECIFIC           44136fa355b3
+  ANALYST_SYSTEM             b800a57a4599
+  ANALYST_TOOLS_SUFFIX       36055d5618f4
+  ANALYST_USER               63711de6c099
   COMMENTARY_SYSTEM          488d8916d958
   COMMENTARY_USER            2024ac4eba69
   CROSS_LLM_DUAL_VERIFY      602669128ae2
   CROSS_LLM_RESCORE          163b08e97d66
   CROSS_LLM_SYSTEM           bf303f600fce
-  EVALUATOR_AXES             0d82eb1aa5b4
-  EVALUATOR_SYSTEM           e891c0ce27d4
-  EVALUATOR_USER             f6d7f955338d
-  PROSPECT_EVALUATOR_AXES    a9954477497b
-  ROUTER_SYSTEM              a03eef47a293
-  SYNTHESIZER_SYSTEM         e01544c0c8d2
-  SYNTHESIZER_TOOLS_SUFFIX   c6c65e47e191
-  SYNTHESIZER_USER           30d99edc79a5`}</pre>
+  EVALUATOR_AXES             44136fa355b3
+  EVALUATOR_SYSTEM           93ecabb14a72
+  EVALUATOR_USER             ad832adfadf0
+  PROSPECT_EVALUATOR_AXES    44136fa355b3
+  ROUTER_SYSTEM              c4220baeb6c0
+  SYNTHESIZER_SYSTEM         1cbe199613a1
+  SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
+  SYNTHESIZER_USER           e0bb4afab940`}</pre>
             <p>
-              Both dictionaries have exactly 20 keys; their key sets are equal.
+              Both dictionaries have exactly 18 keys; their key sets are equal.
             </p>
 
             <h2>verify_prompt_integrity</h2>

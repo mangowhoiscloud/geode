@@ -106,19 +106,19 @@ export const geodeCategories: CategoryData[] = [
   {
     id: "verification",
     icon: "🛡️",
-    title: "3-Layer Verification",
+    title: "Core Verification",
     postsCount: 3,
-    statusKo: "Guardrails → BiasBuster → Cross-LLM 3단계",
-    statusEn: "Guardrails → BiasBuster → Cross-LLM 3-layer",
-    techBadges: ["G1-G4", "BiasBuster 4-Step", "Cross-LLM α≥0.80", "Decision Tree"],
+    statusKo: "Guardrails → Cross-LLM → Rights Risk",
+    statusEn: "Guardrails → Cross-LLM → Rights Risk",
+    techBadges: ["G1-G4", "Cross-LLM α≥0.80", "Rights Risk", "Plugin Extension"],
     descriptionKo:
-      "3단계 검증: Layer 1 Per-Agent Guardrail(G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Layer 2 BiasBuster 4-Step(RECOGNIZE→EXPLAIN→ALTER→EVALUATE, CV 기반 앵커링 감지), Layer 3 Cross-LLM + Human 교차 검증(Krippendorff's α≥0.80 목표). Decision Tree는 D-E-F 축 코드 기반 원인 분류(LLM 미사용).",
+      "코어 검증: Per-Agent Guardrail(G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Cross-LLM 교차 검증(Krippendorff's α≥0.80 목표), Rights Risk 평가. 편향 검사와 golden-set 캘리브레이션은 외부 도메인 플러그인이 소유합니다.",
     descriptionEn:
-      "3-layer verification: Layer 1 Per-Agent Guardrail (G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Layer 2 BiasBuster 4-Step (RECOGNIZE→EXPLAIN→ALTER→EVALUATE, CV-based anchoring detection), Layer 3 Cross-LLM + Human cross-validation (Krippendorff's α≥0.80 target). Decision Tree classifies causes via D-E-F axes code-only (no LLM).",
+      "Core verification: Per-Agent Guardrail (G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Cross-LLM cross-validation (Krippendorff's α≥0.80 target), and Rights Risk assessment. Bias checks and golden-set calibration are owned by external domain plugins.",
     achievements: [
       { icon: "🚧", titleKo: "G1-G4 Per-Agent Guardrail Schema·Range·Grounding·Consistency", titleEn: "G1-G4 Per-Agent Guardrail Schema·Range·Grounding·Consistency", modalId: "modal-geode-guardrails" },
-      { icon: "⚖️", titleKo: "BiasBuster 4-Step RECOGNIZE→EXPLAIN→ALTER→EVALUATE", titleEn: "BiasBuster 4-Step RECOGNIZE→EXPLAIN→ALTER→EVALUATE", modalId: "modal-geode-biasbuster" },
-      { icon: "🌳", titleKo: "Decision Tree D-E-F 축 코드 분류 6종 원인 + 액션 매핑", titleEn: "Decision Tree D-E-F axis code classification 6 causes + action mapping", modalId: "modal-geode-decision-tree" },
+      { icon: "🔁", titleKo: "Cross-LLM 독립 재스코어링 + 일치도 게이트", titleEn: "Cross-LLM independent re-scoring + agreement gate", modalId: "modal-geode-cross-llm" },
+      { icon: "⚖️", titleKo: "Rights Risk 평가 + 도메인 검증 플러그인 확장점", titleEn: "Rights Risk assessment + domain verification plugin extension point", modalId: "modal-geode-rights-risk" },
     ],
     blogLink: "",
     color: "#FBBF24",

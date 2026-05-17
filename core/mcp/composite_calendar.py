@@ -1,8 +1,4 @@
-"""Composite Calendar Adapter — merges events from multiple calendar sources.
-
-Same pattern as CompositeSignalAdapter: chains multiple CalendarPort
-implementations and merges results.
-"""
+"""Composite Calendar Adapter — merges events from multiple calendar sources."""
 
 from __future__ import annotations
 

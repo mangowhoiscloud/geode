@@ -50,7 +50,7 @@ export default function Page() {
                   <td>chat routing</td>
                   <td>open-domain</td>
                   <td>ML loop</td>
-                  <td>game IP (현재), DomainPort 통해 일반화 가능</td>
+                  <td>domain-neutral core, DomainPort 통해 외부 플러그인 연결</td>
                 </tr>
                 <tr>
                   <td>주요 기본 단위</td>
@@ -77,7 +77,7 @@ export default function Page() {
                   <td>policy chain</td>
                   <td>—</td>
                   <td>ratchet</td>
-                  <td><strong>G1-G4 + BiasBuster + Cross-LLM</strong></td>
+                  <td><strong>G1-G4 + Cross-LLM + Rights Risk</strong></td>
                 </tr>
                 <tr>
                   <td>자동화 트리거</td>
@@ -121,17 +121,17 @@ export default function Page() {
             <h3>GEODE만이 가진 것</h3>
             <ul>
               <li>
-                <strong>BiasBuster</strong>. confirmation, recency, anchoring, position, verbosity,
-                self-enhancement 편향 검출이 <code>core/verification/biasbuster.py</code>에 있습니다.
-                통계 fast path (CV 기반)와 LLM 폴백.
+                <strong>도메인 검증 분리</strong>. 편향 검출과 golden-set 캘리브레이션은
+                외부 도메인 플러그인이 소유합니다. GEODE 코어는 G1-G4, Cross-LLM,
+                Rights Risk와 런타임 경계만 유지합니다.
               </li>
               <li>
                 <strong>Cause-Action 결정 트리</strong>. 6 cause → 5 action이
                 외부 도메인 플러그인에서 제공됩니다. 코어는 런타임 경계만 유지합니다.
               </li>
               <li>
-                <strong>Golden Set 기반 캘리브레이션</strong>.
-                <code>core/verification/calibration.py</code>, 픽스처 비교 PASS 임계값 80.0.
+                <strong>플러그인 독립 캘리브레이션</strong>. Golden Set, fixture 비교,
+                PASS 임계값은 플러그인 패키지에서 버전 관리됩니다.
               </li>
               <li>
                 <strong>Equivalence-class 폴백</strong>. 프로바이더 변형 (예)
@@ -172,7 +172,7 @@ export default function Page() {
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>알고리즘</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (전체)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code> × 20</td><td>None</td><td>탐지만</td><td>None (attribution만)</td></tr>
+                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code> × 18</td><td>None</td><td>탐지만</td><td>None (attribution만)</td></tr>
                 <tr><td>정규화</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
               </tbody>
             </table>
@@ -261,7 +261,7 @@ export default function Page() {
                   <td>chat routing</td>
                   <td>open-domain</td>
                   <td>ML loop</td>
-                  <td>game IP (today), generalisable via DomainPort</td>
+                  <td>domain-neutral core, external plugins via DomainPort</td>
                 </tr>
                 <tr>
                   <td>Main primitive</td>
@@ -288,7 +288,7 @@ export default function Page() {
                   <td>policy chain</td>
                   <td>—</td>
                   <td>ratchet</td>
-                  <td><strong>G1-G4 + BiasBuster + Cross-LLM</strong></td>
+                  <td><strong>G1-G4 + Cross-LLM + Rights Risk</strong></td>
                 </tr>
                 <tr>
                   <td>Automation trigger</td>
@@ -332,10 +332,10 @@ export default function Page() {
             <h3>What GEODE has that none of the others do</h3>
             <ul>
               <li>
-                <strong>BiasBuster</strong> — confirmation / recency / anchoring /
-                position / verbosity / self-enhancement bias detection in{" "}
-                <code>core/verification/biasbuster.py</code>. Statistical fast path
-                (CV-based) plus LLM fallback.
+                <strong>Domain verification separation</strong> — bias detection
+                and golden-set calibration are owned by external domain plugins.
+                GEODE core keeps G1-G4, Cross-LLM, Rights Risk, and the runtime
+                boundary.
               </li>
               <li>
                 <strong>Cause-Action decision tree</strong> — 6 causes →
@@ -343,9 +343,9 @@ export default function Page() {
                 runtime boundary only.
               </li>
               <li>
-                <strong>Calibration via Golden Set</strong> —
-                <code>core/verification/calibration.py</code>, fixture comparison
-                PASS threshold 80.0.
+                <strong>Plugin-owned calibration</strong> — Golden Sets, fixture
+                comparisons, and PASS thresholds are versioned with the plugin
+                package.
               </li>
               <li>
                 <strong>Equivalence-class fallback</strong> — provider variants
@@ -387,7 +387,7 @@ export default function Page() {
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>Algorithm</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (full)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>Pin / CI gate</td><td><strong>Yes</strong> — <code>_PINNED_HASHES</code> × 20</td><td>None</td><td>Detection only</td><td>None (attribution only)</td></tr>
+                <tr><td>Pin / CI gate</td><td><strong>Yes</strong> — <code>_PINNED_HASHES</code> × 18</td><td>None</td><td>Detection only</td><td>None (attribution only)</td></tr>
                 <tr><td>Normalization</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
               </tbody>
             </table>

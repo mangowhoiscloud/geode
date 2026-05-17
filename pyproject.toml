@@ -383,22 +383,11 @@ omit = [
     "core/mcp_server.py",
     "core/tools/web_tools.py",
     "core/tools/document_tools.py",
-    # Domain-verification remnants are not exercised by the default GEODE
-    # runtime after the bundled game_ip plugin moved out of this repo.
-    # Keep fail_under at 75 and track these as explicit follow-up scope.
-    "core/verification/biasbuster.py",
-    "core/verification/calibration.py",
-    "core/utils/language.py",
     # Inspect/Petri artifact importers are edge tooling rather than default
     # runtime paths; diagnostics.py remains covered and in-scope.
     "core/audit/dim_extractor.py",
     "core/audit/eval_to_jsonl.py",
     "core/audit/manifest.py",
-    # Signal/Steam MCP adapters were tied to the removed game_ip plugin and are
-    # not part of the default runtime coverage contract.
-    "core/mcp/composite_signal.py",
-    "core/mcp/signal_port.py",
-    "core/mcp/steam_adapter.py",
 ]
 
 [tool.coverage.report]

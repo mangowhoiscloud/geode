@@ -100,16 +100,6 @@ _SAMPLE_RESULT: dict[str, Any] = {
         "grounding_ratio": 0.85,
         "details": ["Schema OK", "Range OK"],
     },
-    "biasbuster": {
-        "overall_pass": True,
-        "confirmation_bias": False,
-        "recency_bias": False,
-        "anchoring_bias": False,
-        "position_bias": False,
-        "verbosity_bias": False,
-        "self_enhancement_bias": False,
-        "explanation": "No significant bias detected across all dimensions.",
-    },
     "signals": {
         "youtube_views": 25000000,
         "reddit_subscribers": 520000,
@@ -228,16 +218,6 @@ class TestMarkdownReport:
         assert "Weighted" in report
         assert "Confidence Multiplier" in report
 
-    def test_detailed_includes_biasbuster(self, generator: ReportGenerator):
-        report = generator.generate(
-            _SAMPLE_RESULT,
-            fmt=ReportFormat.MARKDOWN,
-            template=ReportTemplate.DETAILED,
-        )
-        assert "BiasBuster" in report
-        assert "Confirmation" in report
-        assert "no bias detected" in report.lower() or "PASS" in report
-
     def test_detailed_includes_signals(self, generator: ReportGenerator):
         report = generator.generate(
             _SAMPLE_RESULT,
@@ -296,7 +276,6 @@ class TestJsonReport:
         assert "evaluations" in data
         assert "psm_result" in data
         assert "guardrails" in data
-        assert "biasbuster" in data
         assert "signals" in data
         assert "analyst_confidence" in data
 
@@ -361,15 +340,6 @@ class TestHtmlReport:
         )
         assert "Scoring Breakdown" in report
         assert "Weighted Sum" in report
-
-    def test_detailed_html_has_biasbuster(self, generator: ReportGenerator):
-        report = generator.generate(
-            _SAMPLE_RESULT,
-            fmt=ReportFormat.HTML,
-            template=ReportTemplate.DETAILED,
-        )
-        assert "BiasBuster" in report
-        assert "NO BIAS DETECTED" in report
 
     def test_detailed_html_has_signals(self, generator: ReportGenerator):
         report = generator.generate(

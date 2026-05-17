@@ -54,7 +54,7 @@ class SkillDefinition:
     """Parsed skill ``.md`` file."""
 
     name: str
-    node: str  # "analyst", "evaluator", "synthesizer", "biasbuster"
+    node: str  # "analyst", "evaluator", "synthesizer", "router"
     type: str  # "game_mechanics", "quality_judge", etc. ("*" = all types)
     priority: int  # lower = higher priority (injected first)
     version: str

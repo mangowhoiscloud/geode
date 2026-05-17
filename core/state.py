@@ -161,73 +161,6 @@ class GuardrailResult(BaseModel):
     grounding_ratio: float = 0.0  # fraction of evidence grounded in signals [0.0, 1.0]
 
 
-class BiasBusterResult(BaseModel):
-    confirmation_bias: bool = False
-    recency_bias: bool = False
-    anchoring_bias: bool = False
-    position_bias: bool = False
-    verbosity_bias: bool = False
-    self_enhancement_bias: bool = False
-    overall_pass: bool = True
-    explanation: str = ""
-
-
-class AxisCalibration(BaseModel):
-    """Per-axis calibration result against Golden Set reference range."""
-
-    axis: str
-    actual: float
-    ref_low: float
-    ref_high: float
-    in_range: bool
-    deviation: float = Field(
-        ge=0, description="Distance from nearest range boundary (0 if in range)"
-    )
-
-
-class EvaluatorCalibration(BaseModel):
-    """Per-evaluator calibration result."""
-
-    evaluator_type: str
-    axes: list[AxisCalibration] = Field(default_factory=list)
-    axes_in_range_pct: float = Field(
-        ge=0, le=100, description="Percentage of axes within reference range"
-    )
-    mean_deviation: float = Field(ge=0, description="Mean deviation from range boundaries")
-
-
-class CalibrationResult(BaseModel):
-    """Ground Truth calibration result for a single IP.
-
-    Compares pipeline output against expert-annotated Golden Set.
-    Components: tier match (20%), cause match (20%), score range (20%), axes accuracy (40%).
-    """
-
-    ip_name: str
-    tier_match: bool
-    tier_actual: str
-    tier_expected: str
-    cause_match: bool
-    cause_actual: str
-    cause_expected: str
-    final_score_in_range: bool
-    final_score_actual: float
-    final_score_range: list[float] = Field(min_length=2, max_length=2)
-    evaluator_results: list[EvaluatorCalibration] = Field(default_factory=list)
-    overall_score: float = Field(ge=0, le=100, default=0.0)
-    passed: bool = False
-    details: list[str] = Field(default_factory=list)
-
-
-class CalibrationReport(BaseModel):
-    """Aggregate calibration report across all Golden Set IPs."""
-
-    results: list[CalibrationResult] = Field(default_factory=list)
-    overall_score: float = Field(ge=0, le=100, default=0.0)
-    passed: bool = False
-    summary: str = ""
-
-
 # ---------------------------------------------------------------------------
 # LangGraph reducers
 # ---------------------------------------------------------------------------
@@ -300,10 +233,8 @@ class GeodeState(TypedDict, total=False):
 
     # Verification
     guardrails: GuardrailResult
-    biasbuster: BiasBusterResult
     cross_llm: dict[str, Any]
     rights_risk: RightsRiskResult
-    calibration: CalibrationResult
 
     # Meta
     dry_run: bool

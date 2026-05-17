@@ -209,19 +209,17 @@ def score_panel(
 
 def verify_panel(
     guardrails_pass: bool,
-    biasbuster_pass: bool,
     *,
     details: list[str] | None = None,
 ) -> None:
     from core.ui.agentic_ui import emit_pipeline_verification
 
     if _is_ipc():
-        emit_pipeline_verification(guardrails_pass, biasbuster_pass, details=details)
+        emit_pipeline_verification(guardrails_pass, details=details)
         return
 
     g_mark = "[success]\u2713[/success]" if guardrails_pass else "[error]\u2717[/error]"
-    b_mark = "[success]\u2713[/success]" if biasbuster_pass else "[error]\u2717[/error]"
-    console.print(f"[step]\u25b8 [VERIFY][/step] Guardrails G1-G4 {g_mark} | BiasBuster {b_mark}")
+    console.print(f"[step]\u25b8 [VERIFY][/step] Guardrails G1-G4 {g_mark}")
     console.print()
 
 
