@@ -71,8 +71,8 @@ class TestToolExecutor:
         with patch.object(
             executor, "_request_approval_async", AsyncMock(return_value=True)
         ) as mock_approve:
-            result = _run_executor(executor,
-                "run_bash", {"command": "npm install foo", "reason": "testing"}
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install foo", "reason": "testing"}
             )
             mock_approve.assert_awaited_once()
             assert "error" not in result or "denied" not in result
@@ -88,7 +88,9 @@ class TestToolExecutor:
         """Non-safe bash commands denied by user return error."""
         executor = ToolExecutor(auto_approve=True)
         with patch.object(executor, "_request_approval_async", AsyncMock(return_value=False)):
-            result = _run_executor(executor, "run_bash", {"command": "npm install bar", "reason": "test"})
+            result = _run_executor(
+                executor, "run_bash", {"command": "npm install bar", "reason": "test"}
+            )
             assert result.get("denied") is True
 
     def test_bash_empty_command(self) -> None:
@@ -369,16 +371,15 @@ class TestToolExecutor:
         """Write tools denied by user even when auto_approve=True."""
         handler = MagicMock(return_value={"status": "ok"})
         executor = ToolExecutor(action_handlers={"memory_save": handler}, auto_approve=True)
-        with patch.object(
-            executor._approval, "confirm_write_async", AsyncMock(return_value=False)
-        ):
+        with patch.object(executor._approval, "confirm_write_async", AsyncMock(return_value=False)):
             result = _run_executor(executor, "memory_save", {"content": "test"})
             assert result.get("denied") is True
             handler.assert_not_called()
 
     def test_delegate_task_no_manager(self) -> None:
         executor = ToolExecutor(auto_approve=True)
-        result = _run_executor(executor,
+        result = _run_executor(
+            executor,
             "delegate_task",
             {
                 "task_description": "Test task",

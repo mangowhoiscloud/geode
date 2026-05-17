@@ -382,7 +382,8 @@ class TestGraphWithNodeScopePolicy:
 
         policy = NodeScopePolicy()
         compiled = compile_graph(node_scope_policy=policy)
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -391,7 +392,7 @@ class TestGraphWithNodeScopePolicy:
                 "skip_verification": False,
                 "analyses": [],
                 "errors": [],
-            }
+            },
         )
         assert result["tier"] in ("S", "A", "B", "C")
         assert len(result["analyses"]) == 4

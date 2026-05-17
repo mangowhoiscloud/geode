@@ -98,9 +98,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
         assert result is None
 
     def test_server_healthy_success(self):
@@ -115,9 +113,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
         assert result == {"player_count": 500}
 
     def test_async_server_healthy_success_uses_acall_tool(self):
@@ -132,9 +128,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
 
         assert result == {"player_count": 700}
         mock_manager.acall_tool.assert_awaited_once_with(
@@ -151,9 +145,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
         assert result is None
 
     def test_manager_import_fails(self):
@@ -162,9 +154,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             side_effect=ImportError("no module"),
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
         assert result is None
 
     def test_call_tool_exception(self):
@@ -177,9 +167,7 @@ class TestTryMCPSignalAsync:
             _MCP_MANAGER_PATCH,
             return_value=mock_manager,
         ):
-            result = asyncio.run(
-                _try_mcp_signal_async("steam", "get_game_info", {"query": "Test"})
-            )
+            result = asyncio.run(_try_mcp_signal_async("steam", "get_game_info", {"query": "Test"}))
         assert result is None
 
 

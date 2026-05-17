@@ -66,7 +66,9 @@ class TestServeToolExecution:
             mcp_manager=boot.mcp_manager,
             hitl_level=0,
         )
-        result = _run_executor(executor, "web_fetch", {"url": "http://example.com", "max_chars": 100})
+        result = _run_executor(
+            executor, "web_fetch", {"url": "http://example.com", "max_chars": 100}
+        )
         assert "error" not in result
 
     def test_daemon_thread_handlers(self) -> None:
@@ -116,7 +118,9 @@ class TestServeToolExecution:
                 mcp_manager=boot.mcp_manager,
                 hitl_level=0,
             )
-            r = _run_executor(executor, "web_fetch", {"url": "http://example.com", "max_chars": 100})
+            r = _run_executor(
+                executor, "web_fetch", {"url": "http://example.com", "max_chars": 100}
+            )
             result["ok"] = "error" not in r
             result["registered"] = len(executor.registered_tools)
 

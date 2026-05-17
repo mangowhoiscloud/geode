@@ -117,9 +117,7 @@ class ContextWindowManager:
                         {"metrics": dataclasses.asdict(metrics), "model": model},
                     )
 
-                strategy = await self._resolve_overflow_strategy(
-                    metrics, settings, model, provider
-                )
+                strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
                 await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
                 # Re-check: if still critical after pruning, context is exhausted
@@ -145,9 +143,7 @@ class ContextWindowManager:
                     )
 
                 # Step 2: compact or summarize
-                strategy = await self._resolve_overflow_strategy(
-                    metrics, settings, model, provider
-                )
+                strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
                 if strategy.get("strategy") == "compact":
                     await self._apply_overflow_strategy(
                         strategy, messages, settings, model, provider

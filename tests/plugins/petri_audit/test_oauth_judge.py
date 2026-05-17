@@ -101,8 +101,7 @@ def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
         patch("plugins.petri_audit.models._claude_oauth_available", return_value=True),
     ):
         assert (
-            to_inspect_model("claude-haiku-4-5-20251001")
-            == "claude-code/claude-haiku-4-5-20251001"
+            to_inspect_model("claude-haiku-4-5-20251001") == "claude-code/claude-haiku-4-5-20251001"
         )
 
 

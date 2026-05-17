@@ -126,9 +126,7 @@ class TestSlackNotificationAdapter:
         self, slack_adapter: SlackNotificationAdapter, mock_manager: MagicMock
     ):
         mock_manager.acall_tool.return_value = {"error": "channel_not_found"}
-        result = asyncio.run(
-            slack_adapter.asend_message("slack", "#nonexistent", "Hello!")
-        )
+        result = asyncio.run(slack_adapter.asend_message("slack", "#nonexistent", "Hello!"))
         assert not result.success
         assert "channel_not_found" in result.error
 
@@ -167,9 +165,7 @@ class TestDiscordNotificationAdapter:
         self, discord_adapter: DiscordNotificationAdapter, mock_manager: MagicMock
     ):
         mock_manager.acall_tool.return_value = {"id": "msg_123"}
-        result = asyncio.run(
-            discord_adapter.asend_message("discord", "123456", "Hello Discord!")
-        )
+        result = asyncio.run(discord_adapter.asend_message("discord", "123456", "Hello Discord!"))
         assert result.success
         assert result.channel == "discord"
         mock_manager.acall_tool.assert_awaited_once_with(

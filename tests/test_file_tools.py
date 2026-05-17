@@ -120,7 +120,9 @@ class TestEditFileTool:
         f.write_text("hello world")
 
         tool = EditFileTool()
-        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="hello", new_string="goodbye"))
+        result = asyncio.run(
+            tool.aexecute(file_path=str(f), old_string="hello", new_string="goodbye")
+        )
         assert result["result"]["success"]
         assert f.read_text() == "goodbye world"
 
@@ -146,12 +148,14 @@ class TestEditFileTool:
         f.write_text("aaa bbb aaa")
 
         tool = EditFileTool()
-        result = asyncio.run(tool.aexecute(
-            file_path=str(f),
-            old_string="aaa",
-            new_string="ccc",
-            replace_all=True,
-        ))
+        result = asyncio.run(
+            tool.aexecute(
+                file_path=str(f),
+                old_string="aaa",
+                new_string="ccc",
+                replace_all=True,
+            )
+        )
         assert result["result"]["replacements"] == 2
         assert f.read_text() == "ccc bbb ccc"
 
@@ -162,7 +166,9 @@ class TestEditFileTool:
         link.symlink_to(real)
 
         tool = EditFileTool()
-        result = asyncio.run(tool.aexecute(file_path=str(link), old_string="content", new_string="new"))
+        result = asyncio.run(
+            tool.aexecute(file_path=str(link), old_string="content", new_string="new")
+        )
         assert "result" in result
         assert real.read_text() == "new"
 
@@ -174,7 +180,9 @@ class TestEditFileTool:
             link.symlink_to(external)
 
             tool = EditFileTool()
-            result = asyncio.run(tool.aexecute(file_path=str(link), old_string="external", new_string="hacked"))
+            result = asyncio.run(
+                tool.aexecute(file_path=str(link), old_string="external", new_string="hacked")
+            )
             assert "error" in result
             assert external.read_text() == "external"
         finally:
@@ -185,13 +193,17 @@ class TestEditFileTool:
         f.write_text("[user]\nname = test")
 
         tool = EditFileTool()
-        result = asyncio.run(tool.aexecute(file_path=str(f), old_string="test", new_string="hacked"))
+        result = asyncio.run(
+            tool.aexecute(file_path=str(f), old_string="test", new_string="hacked")
+        )
         assert "error" in result
         assert "dangerous" in result["error"].lower()
 
     def test_rejects_shell_expansion(self):
         tool = EditFileTool()
-        result = asyncio.run(tool.aexecute(file_path="$HOME/.bashrc", old_string="x", new_string="y"))
+        result = asyncio.run(
+            tool.aexecute(file_path="$HOME/.bashrc", old_string="x", new_string="y")
+        )
         assert "error" in result
         assert "shell expansion" in result["error"].lower()
 

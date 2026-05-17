@@ -22,6 +22,7 @@ from plugins.game_ip.nodes.signals import signals_node as _signals_node
 def signals_node(state: GeodeState) -> dict[str, Any]:
     return asyncio.run(_signals_node(state))
 
+
 # ---------------------------------------------------------------------------
 # Mock MCP adapters
 # ---------------------------------------------------------------------------

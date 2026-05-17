@@ -39,6 +39,7 @@ async def _collect_graph_events(
 ) -> list[Any]:
     return [event async for event in graph.astream(input_state, config=config)]
 
+
 # ---------------------------------------------------------------------------
 # Step labels for pipeline progress display
 # ---------------------------------------------------------------------------
@@ -345,9 +346,7 @@ def _execute_pipeline_streaming(
 
     try:
         while True:
-            for event in run_process_coroutine(
-                _collect_graph_events(graph, input_state, config)
-            ):
+            for event in run_process_coroutine(_collect_graph_events(graph, input_state, config)):
                 for node_name, output in event.items():
                     if node_name == "__end__":
                         continue

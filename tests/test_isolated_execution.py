@@ -605,10 +605,12 @@ class TestSlotLeakRegression:
         lane = Lane("global", max_concurrent=5, timeout_s=30.0)
         runner = IsolatedRunner(lane=lane)
 
-        result = asyncio.run(runner.arun(
-            lambda: time.sleep(5.0),
-            config=IsolationConfig(timeout_s=0.1),
-        ))
+        result = asyncio.run(
+            runner.arun(
+                lambda: time.sleep(5.0),
+                config=IsolationConfig(timeout_s=0.1),
+            )
+        )
 
         assert not result.success
         # Lane should have 0 active (slot released)
