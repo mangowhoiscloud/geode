@@ -226,3 +226,59 @@ def test_pipeline_acquires_lane_when_registered() -> None:
     seed_lane = queue.get_lane("seed-pipeline")
     assert seed_lane is not None
     assert seed_lane.active_count == 0
+
+
+class _RecordingHookSystem:
+    """Capture trigger() calls so tests can assert emit counts."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[object, dict[str, object]]] = []
+
+    def trigger(self, event: object, data: dict[str, object] | None = None) -> list[object]:
+        self.events.append((event, data or {}))
+        return []
+
+
+def test_budget_path_emits_single_failed_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression — BudgetExceededError must NOT double-emit SUBAGENT_FAILED."""
+    from core.hooks import HookEvent
+
+    registry = PipelineRegistry()
+    registry.register(_BudgetRecordingAgent("generator", raise_budget=True))
+    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_BudgetRecordingAgent(r))
+    state = PipelineState(run_id="t-budget-emit", target_dim="x", gen_tag="gen2")
+    hooks = _RecordingHookSystem()
+    Pipeline(state, registry, hooks=hooks).run()  # type: ignore[arg-type]
+    failed = [e for e, _ in hooks.events if e == HookEvent.SUBAGENT_FAILED]
+    # generator is the only role that fails; expect exactly 1 SUBAGENT_FAILED
+    assert len(failed) == 1, (
+        f"expected single SUBAGENT_FAILED on budget path, got {len(failed)}"
+    )
+
+
+def test_budget_soft_warn_emits_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first crossing of soft_usd must fire SUBAGENT_BUDGET_WARNING."""
+    from core.hooks import HookEvent
+
+    def _stub_calc(model: str, *, input_tokens: int, output_tokens: int) -> float:
+        return (input_tokens + output_tokens) * 0.01
+
+    monkeypatch.setattr("core.llm.token_tracker.calculate_cost", _stub_calc)
+
+    registry = PipelineRegistry()
+    # Generator burns 0.50 (= soft cap), triggers the soft-warn callback
+    registry.register(_BudgetRecordingAgent("generator", record_input=25, record_output=25))
+    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_BudgetRecordingAgent(r))
+    state = PipelineState(run_id="t-soft", target_dim="x", gen_tag="gen2")
+    hooks = _RecordingHookSystem()
+    Pipeline(
+        state,
+        registry,
+        hooks=hooks,  # type: ignore[arg-type]
+        budget_soft_usd=0.50,
+        budget_hard_usd=10.0,
+    ).run()
+    warns = [e for e, _ in hooks.events if e == HookEvent.SUBAGENT_BUDGET_WARNING]
+    assert len(warns) == 1, f"expected one SUBAGENT_BUDGET_WARNING, got {len(warns)}"

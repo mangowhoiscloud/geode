@@ -72,6 +72,8 @@ class HookEvent(Enum):
     SUBAGENT_STARTED = "subagent_started"
     SUBAGENT_COMPLETED = "subagent_completed"
     SUBAGENT_FAILED = "subagent_failed"
+    # Sub-agent budget soft cap crossed (BudgetGuard, ADR-001 S1)
+    SUBAGENT_BUDGET_WARNING = "subagent_budget_warning"
 
     # Tool error recovery (triggered by ToolCallProcessor auto-recovery)
     TOOL_RECOVERY_ATTEMPTED = "tool_recovery_attempted"

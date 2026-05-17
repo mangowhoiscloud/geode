@@ -240,10 +240,21 @@ class Pipeline:
 
         self._emit_hook(HookEvent.SUBAGENT_STARTED, role)
         started = time.time()
+
+        def _on_soft_warn(budget: Any) -> None:
+            self._emit_hook(
+                HookEvent.SUBAGENT_BUDGET_WARNING,
+                role,
+                usd_spent=budget.usd_spent,
+                soft_usd=budget.soft_usd,
+                hard_usd=budget.hard_usd,
+            )
+
         guard = BudgetGuard(
             agent_id=f"{self.state.run_id}/{role}",
             soft_usd=self._budget_soft_usd,
             hard_usd=self._budget_hard_usd,
+            on_soft_warn=_on_soft_warn,
         )
         previous_guard = self.state.budget_guard
         self.state.budget_guard = guard
