@@ -556,7 +556,11 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 # origin for consumer subscriptions. v0.99.6 switches the default to
 # CLAUDE_AI; future patch may add a ``/login source console`` toggle
 # for users whose access lives on ``platform.claude.com``.
-_ANTHROPIC_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
+# v0.99.7 — server redirects ``claude.com/cai/oauth/authorize`` →
+# ``claude.ai/oauth/authorize`` (cai path deprecated; user confirmed
+# from the actual browser URL). Short-circuit one HTTP hop by pointing
+# at the final URL directly.
+_ANTHROPIC_AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL not password
 # Mirrors Claude Code binary's ``HA()`` helper (``claude-code/${VERSION}``).
 # v0.99.5 added this header explicitly to keep our request fingerprint
@@ -651,6 +655,11 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
     verifier, challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(16)
     scope = " ".join(_ANTHROPIC_DEFAULT_SCOPES)
+    # v0.99.7 — added ``login_method=claudeai`` from claude.exe binary's
+    # ``if($) append("login_method", $)`` site. The binary's ``$`` defaults
+    # to ``"claudeai"`` on the Claude.ai consumer path (vs ``"console"``
+    # for the Anthropic developer portal). Without this param the
+    # claude.ai server appears to return "Invalid request format".
     auth_url = (
         _ANTHROPIC_AUTHORIZE_URL
         + "?"
@@ -664,11 +673,12 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
                 "state": state,
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
+                "login_method": "claudeai",
             }
         )
     )
 
-    log.info("anthropic-oauth: opening browser (manual-paste flow)")
+    log.info("anthropic-oauth: opening browser (manual-paste flow): %s", auth_url)
     webbrowser.open(auth_url)
 
     # rich.Padding preserves the left indent when the terminal wraps a long
@@ -724,6 +734,8 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
                 "ts": ts,
                 "stage": stage,
                 "endpoint": _ANTHROPIC_TOKEN_URL,
+                "authorize_endpoint": _ANTHROPIC_AUTHORIZE_URL,
+                "authorize_url_full": auth_url,
                 "request": {
                     "client_id": client_id,
                     "redirect_uri": _ANTHROPIC_REDIRECT_URI,
