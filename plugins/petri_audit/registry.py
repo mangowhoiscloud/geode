@@ -1,0 +1,150 @@
+"""Petri role × model × source binding resolver.
+
+Top layer of the manifest stack — combines :mod:`plugins.petri_audit.manifest`
+(role / source / adapter declarations) with :mod:`plugins.petri_audit.
+credential_source` (per-family resolve / suppress) into a single
+:class:`PetriBinding` that callers (/petri picker, to_inspect_model
+router, runner) consume.
+
+Layers below:
+
+- :class:`PetriBinding` — frozen dataclass: (role, model, source, family,
+  adapter_module, inspect_prefix, inspect_id).
+- :func:`get_binding` — manifest defaults + caller overrides + credential
+  resolution. Cheap; no caching (each call re-checks suppressions).
+- :func:`infer_family` — model prefix → family (claude- / gpt- / glm-).
+
+Target role specialisation: when ``role == "target"``, the inspect id is
+``geode/<model>`` regardless of the family adapter's prefix — the audit
+always routes the target through ``GeodeModelAPI`` so the full GEODE
+stack is what gets evaluated. See ``plugins.petri_audit.targets.
+geode_target`` for the inspect_ai registration.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from plugins.petri_audit.credential_source import resolve_credential_source
+from plugins.petri_audit.manifest import load_manifest
+
+__all__ = [
+    "FamilyInferenceError",
+    "PetriBinding",
+    "get_binding",
+    "infer_family",
+]
+
+
+_TARGET_INSPECT_PREFIX = "geode"
+
+
+class FamilyInferenceError(ValueError):
+    """Raised when a model id does not match any known family prefix."""
+
+
+@dataclass(frozen=True)
+class PetriBinding:
+    """Resolved (role, model, source) → adapter binding.
+
+    Fields:
+
+    - ``role``: 'auditor' | 'target' | 'judge' (from manifest enabled_roles)
+    - ``model``: concrete model id (e.g. 'claude-sonnet-4-6')
+    - ``source``: concrete credential source (never 'auto') — e.g.
+      'api_key' / 'claude-cli' / 'openai-codex'
+    - ``family``: inferred from model prefix — 'anthropic' / 'openai' /
+      'zhipuai'
+    - ``adapter_module``: dotted import path to the adapter module
+    - ``inspect_prefix``: prefix used by inspect_ai (e.g. 'anthropic',
+      'claude-code', 'openai-codex', 'geode'). For the target role this
+      is always 'geode' regardless of family.
+    - ``inspect_id``: ``f"{inspect_prefix}/{model}"`` — ready to pass to
+      inspect_ai's ``--model`` / ``--model-role`` flags.
+    """
+
+    role: str
+    model: str
+    source: str
+    family: str
+    adapter_module: str
+    inspect_prefix: str
+    inspect_id: str
+
+
+def infer_family(model: str) -> str:
+    """Return the family for a model id.
+
+    Mirrors :func:`plugins.petri_audit.models.family_of` but raises on
+    unknown ids (the legacy helper returned 'unknown'). The strict
+    behaviour keeps :func:`get_binding` from silently producing a
+    nonsensical inspect id. P1-G consolidates these two helpers.
+    """
+    if not model:
+        raise FamilyInferenceError(f"empty model id {model!r}")
+    base = model.rsplit("/", 1)[-1]  # accept 'anthropic/claude-...' too
+    if base.startswith("claude-"):
+        return "anthropic"
+    if base.startswith("gpt-") or base in ("o3", "o4-mini"):
+        return "openai"
+    if base.startswith("glm-"):
+        return "zhipuai"
+    # Provider-prefixed fallthrough — same logic as family_of's tail.
+    if model.startswith("anthropic/"):
+        return "anthropic"
+    if model.startswith("openai/") or model.startswith("openai-api/"):
+        return "openai"
+    raise FamilyInferenceError(
+        f"cannot infer family for model {model!r}; expected "
+        f"claude-/gpt-/glm- or provider-prefixed id"
+    )
+
+
+def get_binding(
+    role: str,
+    *,
+    model: str | None = None,
+    source: str | None = None,
+) -> PetriBinding:
+    """Resolve the effective binding for a Petri role.
+
+    Resolution order:
+
+    1. ``model`` argument (caller override) — must be in the role's
+       ``allowed_models``; otherwise raises :class:`ValueError`.
+    2. Manifest ``[petri.role.<role>].default_model``.
+
+    Source resolution delegates to :func:`plugins.petri_audit.
+    credential_source.resolve_credential_source` (which itself respects
+    override → settings → manifest default → 'auto' expansion). The
+    ``source`` argument here is passed through as the override.
+    """
+    manifest = load_manifest()
+    role_spec = manifest.get_role(role)
+
+    chosen_model = model or role_spec.default_model
+    if chosen_model not in role_spec.allowed_models:
+        raise ValueError(
+            f"role={role}: model {chosen_model!r} not in allowed_models {role_spec.allowed_models}"
+        )
+
+    family = infer_family(chosen_model)
+    resolved_source = resolve_credential_source(family, override=source)
+    adapter_spec = manifest.get_adapter(family, resolved_source)
+
+    # Target role is always routed through GeodeModelAPI — the audit
+    # evaluates the full GEODE stack, not the bare LLM. Family adapter
+    # is still recorded so the picker can show the underlying source,
+    # but the inspect id uses the 'geode' prefix.
+    inspect_prefix = _TARGET_INSPECT_PREFIX if role == "target" else adapter_spec.inspect_prefix
+    inspect_id = f"{inspect_prefix}/{chosen_model}"
+
+    return PetriBinding(
+        role=role,
+        model=chosen_model,
+        source=resolved_source,
+        family=family,
+        adapter_module=adapter_spec.module,
+        inspect_prefix=inspect_prefix,
+        inspect_id=inspect_id,
+    )
