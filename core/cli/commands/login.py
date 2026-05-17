@@ -686,33 +686,28 @@ def _login_oauth_anthropic() -> None:
     """
     from core.cli import commands as _pkg
 
-    _pkg.console.print()
-    _pkg.console.print("  [bold]Anthropic provider — select credential source:[/bold]")
-    _pkg.console.print()
-    _pkg.console.print("    [bold cyan]1)[/bold cyan] API key      (Anthropic Console PAYG)")
-    _pkg.console.print(
-        "    [bold cyan]2)[/bold cyan] claude CLI   (subprocess — uses Claude subscription)"
+    sources: list[tuple[str, str]] = [
+        ("api_key", "API key      (Anthropic Console PAYG)"),
+        ("claude_cli", "claude CLI   (subprocess — uses Claude subscription)"),
+    ]
+    menu = TerminalMenu(
+        [label for _, label in sources],
+        title=(
+            "\n  Anthropic provider — credential source?  (↑↓ select, Enter confirm, q cancel)\n"
+        ),
+        menu_cursor="  > ",
+        menu_cursor_style=("fg_cyan", "bold"),
     )
-    _pkg.console.print("    [muted]q)[/muted]  skip")
-    _pkg.console.print()
-
-    try:
-        # allow-direct-io: thin handler
-        choice = input("  Choice [1-2/q]: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
+    idx = menu.show()
+    if idx is None:
+        _pkg.console.print("  [muted]Cancelled[/muted]\n")
         return
 
-    if choice in ("", "q", "quit", "exit", "skip"):
-        _pkg.console.print("  [muted]Skipped.[/muted]\n")
-        return
-
-    if choice in ("1", "api", "api-key", "key"):
+    source_id = sources[idx][0]
+    if source_id == "api_key":
         _login_anthropic_api_key()
-    elif choice in ("2", "claude", "claude-cli", "cli"):
+    elif source_id == "claude_cli":
         _login_anthropic_via_claude_cli()
-    else:
-        _pkg.console.print(f"  [warning]Unknown choice: {choice!r}[/warning]\n")
 
 
 def _login_anthropic_api_key() -> None:
