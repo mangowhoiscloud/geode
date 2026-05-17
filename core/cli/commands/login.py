@@ -667,56 +667,41 @@ def _login_source(args: str) -> None:
 
 
 def _login_oauth_anthropic() -> None:
-    """Anthropic credential setup — picker between API key and claude CLI.
+    """Anthropic credential setup — API key (PAYG) only on the production path.
 
-    v0.99.9 dropped the owned-PKCE flow (six attempts v0.99.0–0.99.8 all
-    returned ``Invalid request format`` from Anthropic's authorize step;
-    the public OAuth client ``9d1c250a-…`` is registered to first-party
-    Claude Code only, server-side third-party traffic block since
-    2026-04-04). Two supported paths now:
+    v0.99.10 limits ``/login anthropic`` to the Anthropic Console PAYG
+    API key path (Tier 0). Earlier iterations (v0.99.0..v0.99.9) tried
+    an owned PKCE flow and a claude-CLI subprocess delegate; both routed
+    through the first-party OAuth client ``9d1c250a-…`` which Anthropic's
+    2026-04-04 third-party block rejects (or, in the subprocess case,
+    spawned a full Claude Code REPL the user got stuck inside).
 
-      1. **API key** — Anthropic Console PAYG (``sk-ant-api…``). Tier 0,
-         clean ToS, billed separately from a Claude subscription.
-
-      2. **claude CLI subprocess** — paperclip ACP-style delegation.
-         ``claude /login`` runs in the user's TTY, drives OAuth via the
-         first-party CLI, and persists to the system keychain. GEODE then
-         imports the resulting token. Tier 2, reuses the Claude Pro/Max
-         subscription quota.
+    The Claude subscription path now lives **only** in
+    ``plugins/petri_audit/claude_code_provider.py``: it reads claude's
+    keychain in-process (PR #1202) and is consumed solely by Petri
+    audit/judge runs. Production GEODE chat/agent stays on a clean
+    ``sk-ant-api…`` PAYG key.
     """
     from core.cli import commands as _pkg
 
-    sources: list[tuple[str, str]] = [
-        ("api_key", "API key      (Anthropic Console PAYG)"),
-        ("claude_cli", "claude CLI   (subprocess — uses Claude subscription)"),
-    ]
-    menu = TerminalMenu(
-        [label for _, label in sources],
-        title=(
-            "\n  Anthropic provider — credential source?  (↑↓ select, Enter confirm, q cancel)\n"
-        ),
-        menu_cursor="  > ",
-        menu_cursor_style=("fg_cyan", "bold"),
+    _pkg.console.print()
+    _pkg.console.print("  [bold]Anthropic Console PAYG (API key)[/bold]")
+    _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
+    _pkg.console.print(
+        "  [muted]Claude subscription path is reserved for Petri audit; "
+        "see plugins/petri_audit/claude_code_provider.py.[/muted]"
     )
-    idx = menu.show()
-    if idx is None:
-        _pkg.console.print("  [muted]Cancelled[/muted]\n")
-        return
-
-    source_id = sources[idx][0]
-    if source_id == "api_key":
-        _login_anthropic_api_key()
-    elif source_id == "claude_cli":
-        _login_anthropic_via_claude_cli()
+    _pkg.console.print()
+    _login_anthropic_api_key()
 
 
 def _login_anthropic_api_key() -> None:
-    """Branch 1 — Anthropic Console PAYG API key.
+    """Prompt for an Anthropic API key and persist it to ``auth.toml``.
 
-    Prompts for ``sk-ant-…`` and persists to ``~/.geode/auth.toml`` under
-    ``[providers.anthropic]`` as a Plan + Profile pair, mirroring the
-    OpenAI Codex device-code flow's storage shape. The key is treated
-    as a single-Tier-0 credential — no refresh logic, no expiry.
+    Tier 0 (PAYG) — ``sk-ant-api…`` saved under the
+    ``anthropic-payg-geode`` plan + profile. No refresh logic, no
+    expiry; the key is treated as a single long-lived credential
+    identical in shape to ``ANTHROPIC_API_KEY`` env loading.
     """
     import getpass
     from datetime import UTC, datetime
@@ -726,11 +711,6 @@ def _login_anthropic_api_key() -> None:
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
-
-    _pkg.console.print()
-    _pkg.console.print("  [bold]Anthropic Console PAYG[/bold]")
-    _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
-    _pkg.console.print()
 
     try:
         # allow-direct-io: thin handler — getpass hides typed input from screen.
@@ -777,107 +757,6 @@ def _login_anthropic_api_key() -> None:
 
     _pkg.console.print()
     _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
-    _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
-
-
-def _login_anthropic_via_claude_cli() -> None:
-    """Branch 2 — claude CLI subprocess (paperclip ACP-style delegation).
-
-    Spawns ``claude /login`` in the user's TTY; the first-party CLI drives
-    its own OAuth flow (browser → claude.ai consent → keychain persist).
-    On exit we re-read the keychain via :mod:`plugins.petri_audit.claude_code_provider`
-    and mirror the token into ``~/.geode/auth.toml`` so GEODE picks it up
-    without going through claude CLI on every call.
-    """
-    import shutil
-    import subprocess
-    from datetime import UTC, datetime
-
-    from core.auth.plan_registry import get_plan_registry
-    from core.auth.plans import Plan, PlanKind
-    from core.auth.profiles import AuthProfile, CredentialType
-    from core.cli import commands as _pkg
-    from core.wiring.container import ensure_profile_store
-
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
-        _pkg.console.print()
-        _pkg.console.print("  [warning]`claude` CLI not found in PATH.[/warning]")
-        _pkg.console.print("  [muted]Install: npm install -g @anthropic-ai/claude-code[/muted]\n")
-        return
-
-    _pkg.console.print()
-    _pkg.console.print(f"  [muted]Found claude CLI: {claude_bin}[/muted]")
-    _pkg.console.print("  [bold]Spawning `claude /login`[/bold] — browser will open via the CLI.")
-    _pkg.console.print("  [muted]Finish OAuth in your browser, then return here.[/muted]\n")
-
-    try:
-        proc = subprocess.run(  # noqa: S603 — explicit binary from shutil.which
-            [claude_bin, "/login"],
-            check=False,
-            timeout=600,
-        )
-    except (KeyboardInterrupt, subprocess.TimeoutExpired):
-        _pkg.console.print("  [muted]Cancelled.[/muted]\n")
-        return
-
-    if proc.returncode != 0:
-        _pkg.console.print(
-            f"  [warning]claude /login exited with code {proc.returncode}.[/warning]\n"
-        )
-        return
-
-    try:
-        from plugins.petri_audit.claude_code_provider import (
-            get_claude_oauth_metadata,
-            resolve_claude_oauth_token,
-        )
-    except ImportError:
-        _pkg.console.print(
-            "  [warning]Cannot read claude keychain — `plugins.petri_audit` missing.[/warning]\n"
-        )
-        return
-
-    token = resolve_claude_oauth_token()
-    if not token:
-        _pkg.console.print("  [warning]claude /login completed but keychain is empty.[/warning]\n")
-        return
-
-    meta = get_claude_oauth_metadata() or {}
-    expires_at = float(meta.get("expires_at", 0) or 0)
-
-    plan_id = "anthropic-claude-cli"
-    registry = get_plan_registry()
-    plan = registry.get(plan_id) or Plan(
-        id=plan_id,
-        provider="anthropic",
-        kind=PlanKind.OAUTH_BORROWED,
-        display_name="Anthropic (Claude CLI subprocess)",
-        base_url="https://api.anthropic.com",
-        auth_type="oauth_external",
-    )
-    registry.add(plan)
-
-    profile = AuthProfile(
-        name=f"{plan_id}:user",
-        provider="anthropic",
-        credential_type=CredentialType.OAUTH,
-        key=token,
-        plan_id=plan.id,
-        expires_at=expires_at,
-        managed_by="claude-cli",
-        metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
-    )
-    ensure_profile_store().add(profile)
-    try:
-        from core.auth.auth_toml import save_auth_toml
-
-        save_auth_toml()
-    except Exception:
-        log.debug("auth.toml persist after anthropic login failed", exc_info=True)
-
-    _pkg.console.print()
-    _pkg.console.print("  [success]✓ Imported from claude CLI keychain.[/success]")
     _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
 
 
