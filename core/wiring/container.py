@@ -34,6 +34,7 @@ def __getattr__(name: str) -> Any:
 # ---------------------------------------------------------------------------
 DEFAULT_GLOBAL_CONCURRENCY = 8
 DEFAULT_GATEWAY_CONCURRENCY = 4
+DEFAULT_SEED_PIPELINE_CONCURRENCY = 16
 
 # Module-level accessors set by build_auth().
 # Both runtime LLM dispatch and the CLI (`/login`) read from the
@@ -179,6 +180,11 @@ def build_default_lanes() -> LaneQueue:
     )
     queue.add_lane("gateway", max_concurrent=gw_max, timeout_s=30.0)
     queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
+    queue.add_lane(
+        "seed-pipeline",
+        max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
+        timeout_s=300.0,
+    )
     return queue
 
 

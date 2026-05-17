@@ -9,7 +9,9 @@ from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 
 class TestHookEvent:
     def test_all_events_exist(self):
-        assert len(HookEvent) == 58  # +2: TOOL_EXEC_FAILED, TOOL_RESULT_TRANSFORM
+        assert (
+            len(HookEvent) == 59
+        )  # +3: TOOL_EXEC_FAILED, TOOL_RESULT_TRANSFORM, SUBAGENT_BUDGET_WARNING
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"

@@ -1,0 +1,352 @@
+"""Pipeline orchestrator — 7-phase generate-debate-evolve loop.
+
+Maps ADR-001 의 7-phase topology (Generation → Proximity → Reflection
+→ Pilot → Ranking → Evolution → Meta-review) onto a sequential phase
+dispatcher backed by :class:`PipelineRegistry`. Each phase is a method
+that reads :class:`PipelineState`, looks up the role's agent from the
+registry, invokes :meth:`BaseSeedAgent.execute`, and merges the
+result's ``output`` dict back into state.
+
+Why a flat orchestrator, not LangGraph
+======================================
+
+GEODE has no LangGraph in core. The ``SubAgentManager`` +
+``IsolatedRunner`` + ``HookSystem`` already provide the supervisor
++ workers + observability pattern (depth=1 enforced — sub-agents
+cannot recurse, so the parent ``AgenticLoop`` IS the StateGraph).
+Each phase runs in the parent loop; within a phase, the role can
+fan out via ``delegate(tasks=[…])``.
+
+Phases as methods
+=================
+
+The pipeline owns the phase sequence; the roles own the work. This
+keeps the phase-order policy (and the bootstrap rule — first
+generation runs with ``baseline=None``) at one place. The roles can
+be swapped or omitted at runtime (e.g. a smoke-test run skips Pilot)
+via the registry.
+
+S1 skeleton scope
+=================
+
+This module ships the orchestrator class + state dataclass + registry
++ phase methods. The phase methods raise :class:`RuntimeError` with a
+descriptive message when the role has no registered agent — this is
+NOT a stub: the dispatch logic, hook events, state merging, and
+budget plumbing are all functional. Concrete agents land in S2-S8 and
+register themselves; once registered the phase calls succeed.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from core.agent.sub_agent_budget import (
+    DEFAULT_HARD_USD,
+    DEFAULT_SOFT_USD,
+    BudgetExceededError,
+    BudgetGuard,
+)
+from core.hooks import HookEvent, HookSystem
+
+from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
+
+if TYPE_CHECKING:
+    from core.orchestration.lane_queue import LaneQueue
+
+log = logging.getLogger(__name__)
+
+__all__ = [
+    "Pipeline",
+    "PipelineRegistry",
+    "PipelineState",
+]
+
+
+_PHASE_ORDER: tuple[str, ...] = (
+    "generator",
+    "proximity",
+    "critic",
+    "pilot",
+    "ranker",
+    "evolver",
+    "meta_reviewer",
+)
+
+
+@dataclass
+class PipelineState:
+    """In-flight pipeline state shared across the 7 phases.
+
+    Mutated by each phase's :meth:`BaseSeedAgent.execute` return
+    payload. Persisted at run end to
+    ``~/.geode/seed-pipeline/<run_id>/state.json`` (S8 wires the
+    offload via ``note_save``).
+    """
+
+    run_id: str
+    target_dim: str
+    gen_tag: str
+    candidates_requested: int = 15
+    pool_path_in: Path | None = None
+    pool_path_out: Path | None = None
+    run_dir: Path | None = None
+    # populated by phases
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    reflections: dict[str, dict[str, Any]] = field(default_factory=dict)
+    pilot_scores: dict[str, dict[str, Any]] = field(default_factory=dict)
+    elo_ratings: dict[str, float] = field(default_factory=dict)
+    survivors: list[str] = field(default_factory=list)
+    meta_review: dict[str, Any] = field(default_factory=dict)
+    # cost rollup
+    usd_spent: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    # baseline (None on first generation — bootstrap)
+    baseline_means: dict[str, float] | None = None
+    baseline_stderr: dict[str, float] | None = None
+    # current phase's budget guard (set by Pipeline._run_phase, read by
+    # the concrete agent's LLM call sites in S2-S8 to call record_usage).
+    budget_guard: BudgetGuard | None = None
+
+    def merge(self, role: str, output: dict[str, Any]) -> None:
+        """Merge a phase agent's ``output`` payload into state.
+
+        Known keys are mapped onto the corresponding state field;
+        unknown keys are ignored with a warning so the schema cannot
+        silently drift.
+        """
+        known = {
+            "candidates",
+            "reflections",
+            "pilot_scores",
+            "elo_ratings",
+            "survivors",
+            "meta_review",
+        }
+        unknown = set(output) - known
+        if unknown:
+            log.warning(
+                "seed-pipeline role=%r returned unknown output keys: %s",
+                role,
+                sorted(unknown),
+            )
+        for key in known & set(output):
+            cur = getattr(self, key)
+            new = output[key]
+            if isinstance(cur, list):
+                cur.extend(new)
+            elif isinstance(cur, dict):
+                cur.update(new)
+            else:
+                setattr(self, key, new)
+
+
+class PipelineRegistry:
+    """Role-name → ``BaseSeedAgent`` lookup, populated at startup.
+
+    S2-S8 each register their role's concrete agent; the Pipeline
+    constructor accepts the populated registry. Tests construct a
+    registry with mock agents directly.
+    """
+
+    def __init__(self) -> None:
+        self._agents: dict[str, BaseSeedAgent] = {}
+
+    def register(self, agent: BaseSeedAgent) -> None:
+        if agent.role in self._agents:
+            log.warning("re-registering seed-pipeline role=%r", agent.role)
+        self._agents[agent.role] = agent
+
+    def get(self, role: str) -> BaseSeedAgent | None:
+        return self._agents.get(role)
+
+    def list_roles(self) -> list[str]:
+        return list(self._agents.keys())
+
+    def has(self, role: str) -> bool:
+        return role in self._agents
+
+
+class Pipeline:
+    """Orchestrate the 7-phase generate-debate-evolve loop.
+
+    Constructed once per ``geode audit-seeds generate`` invocation.
+    :meth:`run` walks ``_PHASE_ORDER`` and emits per-phase hook events.
+    """
+
+    def __init__(
+        self,
+        state: PipelineState,
+        registry: PipelineRegistry,
+        *,
+        hooks: HookSystem | None = None,
+        lane_queue: LaneQueue | None = None,
+        on_phase_error: Any | None = None,
+        budget_soft_usd: float = DEFAULT_SOFT_USD,
+        budget_hard_usd: float = DEFAULT_HARD_USD,
+    ) -> None:
+        self.state = state
+        self.registry = registry
+        self._hooks = hooks
+        self._lane_queue = lane_queue
+        self._on_phase_error = on_phase_error
+        self._budget_soft_usd = budget_soft_usd
+        self._budget_hard_usd = budget_hard_usd
+
+    def run(self) -> PipelineState:
+        """Walk all 7 phases in order. Returns the final state."""
+        log.info(
+            "seed-pipeline run started: run_id=%s target=%s gen=%s",
+            self.state.run_id,
+            self.state.target_dim,
+            self.state.gen_tag,
+        )
+        for phase in _PHASE_ORDER:
+            self._run_phase(phase)
+        log.info(
+            "seed-pipeline run finished: run_id=%s survivors=%d usd=%.4f",
+            self.state.run_id,
+            len(self.state.survivors),
+            self.state.usd_spent,
+        )
+        return self.state
+
+    def _run_phase(self, role: str) -> SeedAgentResult:
+        """Look up the role's agent, invoke it, merge the result.
+
+        Wraps the execute call in:
+        - a fresh ``BudgetGuard`` (per-phase soft/hard cap) attached to
+          ``state.budget_guard`` so the agent's LLM call sites (S2+)
+          can call ``guard.record_usage`` and trip the cap.
+        - an optional ``seed-pipeline`` lane acquisition (when a
+          ``LaneQueue`` was passed). For sequential phases the lane is
+          effectively a no-op; for phases that fan out via
+          ``delegate(tasks=[…])`` in S2+ the lane gates concurrency at
+          16 (see ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` in
+          ``core/wiring/container.py``).
+        """
+        agent = self.registry.get(role)
+        if agent is None:
+            raise RuntimeError(
+                f"seed-pipeline phase {role!r} has no registered agent — "
+                f"expected one of {_PHASE_ORDER}. Did the S2-S8 PR for "
+                f"{role} land?"
+            )
+
+        self._emit_hook(HookEvent.SUBAGENT_STARTED, role)
+        started = time.time()
+
+        def _on_soft_warn(budget: Any) -> None:
+            self._emit_hook(
+                HookEvent.SUBAGENT_BUDGET_WARNING,
+                role,
+                usd_spent=budget.usd_spent,
+                soft_usd=budget.soft_usd,
+                hard_usd=budget.hard_usd,
+            )
+
+        guard = BudgetGuard(
+            agent_id=f"{self.state.run_id}/{role}",
+            soft_usd=self._budget_soft_usd,
+            hard_usd=self._budget_hard_usd,
+            on_soft_warn=_on_soft_warn,
+        )
+        previous_guard = self.state.budget_guard
+        self.state.budget_guard = guard
+
+        try:
+            with self._acquire_lane(role):
+                try:
+                    result = agent.execute(self.state)
+                except BudgetExceededError as budget_exc:
+                    duration = (time.time() - started) * 1000
+                    log.warning(
+                        "seed-pipeline phase %s hit hard budget cap: %s",
+                        role,
+                        budget_exc,
+                    )
+                    # SUBAGENT_FAILED is emitted once below on the
+                    # !result.success branch — do not emit here.
+                    result = SeedAgentResult(
+                        role=role,
+                        status="error",
+                        duration_ms=duration,
+                        error_category="budget",
+                        error_message=str(budget_exc),
+                    )
+                except Exception as exc:
+                    duration = (time.time() - started) * 1000
+                    log.exception("seed-pipeline phase %s raised", role)
+                    # Hard exception path bypasses the common emit below
+                    # (we re-raise), so we DO emit failure here.
+                    self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
+                    if self._on_phase_error is not None:
+                        self._on_phase_error(role, exc)
+                    raise
+                else:
+                    duration = (time.time() - started) * 1000
+                    if result.duration_ms == 0.0:
+                        result.duration_ms = duration
+        finally:
+            self.state.budget_guard = previous_guard
+
+        # If the agent did not propagate cost on its SeedAgentResult,
+        # pull from the guard (authoritative — guard intercepts the
+        # actual LLM calls). Concrete S2-S8 agents wire their LLM call
+        # sites to guard.record_usage and copy the guard's totals onto
+        # their result before returning.
+        if result.usd_spent == 0.0 and guard.budget.usd_spent > 0:
+            result.usd_spent = guard.budget.usd_spent
+            result.prompt_tokens = guard.budget.prompt_tokens
+            result.completion_tokens = guard.budget.completion_tokens
+
+        # Roll up the result's reported cost into state. Result.* is the
+        # single source for state aggregation so tests can stub agents
+        # without going through the guard.
+        self.state.usd_spent += result.usd_spent
+        self.state.prompt_tokens += result.prompt_tokens
+        self.state.completion_tokens += result.completion_tokens
+
+        if result.success:
+            self.state.merge(role, result.output)
+            self._emit_hook(HookEvent.SUBAGENT_COMPLETED, role)
+        else:
+            self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=result.error_message)
+        return result
+
+    def _acquire_lane(self, role: str) -> Any:
+        """Return a context manager that acquires the ``seed-pipeline`` lane.
+
+        When no ``LaneQueue`` was supplied (test path) or the lane is not
+        registered, returns a no-op context manager. The actual semaphore
+        gating only takes effect when the agent fans out via
+        ``SubAgentManager.delegate(tasks=[…])`` in S2+.
+        """
+        from contextlib import nullcontext
+
+        if self._lane_queue is None:
+            return nullcontext()
+        lane = self._lane_queue.get_lane("seed-pipeline")
+        if lane is None:
+            return nullcontext()
+        return lane.acquire(f"seed-pipeline/{self.state.run_id}/{role}")
+
+    def _emit_hook(self, event: HookEvent, role: str, **extra: Any) -> None:
+        if self._hooks is None:
+            return
+        payload: dict[str, Any] = {
+            "subject": f"seed-pipeline/{self.state.run_id}/{role}",
+            "subject_id": self.state.run_id,
+            "role": role,
+            "target_dim": self.state.target_dim,
+            **extra,
+        }
+        try:
+            self._hooks.trigger(event, payload)
+        except Exception:
+            log.warning("seed-pipeline hook trigger failed: %s", event, exc_info=True)
