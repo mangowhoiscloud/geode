@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from core.agent.sub_agent_budget import BudgetExceededError
+from core.orchestration.lane_queue import LaneQueue
 from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
 from plugins.seed_pipeline.orchestrator import (
     Pipeline,
@@ -105,3 +107,122 @@ def test_registry_list_roles() -> None:
     assert roles == sorted(
         ["generator", "proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"]
     )
+
+
+class _BudgetRecordingAgent(BaseSeedAgent):
+    """Agent that exercises the BudgetGuard attached to state."""
+
+    def __init__(
+        self,
+        role: str,
+        *,
+        record_input: int = 0,
+        record_output: int = 0,
+        raise_budget: bool = False,
+    ) -> None:
+        super().__init__(role=role, model="stub-model")
+        self.record_input = record_input
+        self.record_output = record_output
+        self.raise_budget = raise_budget
+
+    def execute(self, state: PipelineState) -> SeedAgentResult:
+        if state.budget_guard is None:
+            return SeedAgentResult(role=self.role, status="error", error_message="no guard")
+        if self.record_input or self.record_output:
+            try:
+                state.budget_guard.record_usage(
+                    model="claude-sonnet-4-6",
+                    prompt_tokens=self.record_input,
+                    completion_tokens=self.record_output,
+                )
+            except BudgetExceededError:
+                # Re-raise so orchestrator's BudgetExceededError handler runs
+                raise
+        if self.raise_budget:
+            raise BudgetExceededError(
+                usd_spent=99.0, hard_usd=1.0, agent_id="stub"
+            )
+        return SeedAgentResult(role=self.role, output={})
+
+
+def test_pipeline_attaches_budget_guard_to_state() -> None:
+    seen_guards: list[object] = []
+
+    class _Probe(BaseSeedAgent):
+        def execute(self, state: PipelineState) -> SeedAgentResult:
+            seen_guards.append(state.budget_guard)
+            return SeedAgentResult(role=self.role)
+
+    registry = PipelineRegistry()
+    for r in ("generator", "proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_Probe(role=r, model="x"))
+    state = PipelineState(run_id="t-guard", target_dim="x", gen_tag="gen2")
+    assert state.budget_guard is None
+    Pipeline(state, registry).run()
+    # Each of 7 phases should have attached a non-None guard during execute
+    assert len(seen_guards) == 7
+    assert all(g is not None for g in seen_guards)
+    # And restored to None after run completes
+    assert state.budget_guard is None
+
+
+def test_pipeline_translates_budget_exceeded_to_seed_result() -> None:
+    """A BudgetExceededError inside a phase must NOT propagate."""
+    registry = PipelineRegistry()
+    registry.register(_BudgetRecordingAgent("generator", raise_budget=True))
+    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_BudgetRecordingAgent(r))
+    state = PipelineState(run_id="t-budget", target_dim="x", gen_tag="gen2")
+    # Should not raise — budget error becomes status="error" SeedAgentResult
+    Pipeline(state, registry).run()
+
+
+def test_pipeline_rolls_up_guard_cost_when_result_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _stub_calc(model: str, *, input_tokens: int, output_tokens: int) -> float:
+        return (input_tokens + output_tokens) * 0.0001
+
+    monkeypatch.setattr("core.llm.token_tracker.calculate_cost", _stub_calc)
+
+    registry = PipelineRegistry()
+    # Generator records 100 tokens via the guard; result.usd_spent left at 0
+    registry.register(
+        _BudgetRecordingAgent("generator", record_input=100, record_output=50)
+    )
+    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_BudgetRecordingAgent(r))
+    state = PipelineState(run_id="t-cost", target_dim="x", gen_tag="gen2")
+    Pipeline(
+        state,
+        registry,
+        budget_soft_usd=1.0,
+        budget_hard_usd=10.0,
+    ).run()
+    # Guard rollup must surface on state (only generator recorded)
+    assert state.prompt_tokens == 100
+    assert state.completion_tokens == 50
+    assert state.usd_spent == pytest.approx(0.0150, abs=1e-6)
+
+
+def test_pipeline_accepts_lane_queue_without_lane_registered() -> None:
+    """No-op when the LaneQueue exists but has no seed-pipeline lane."""
+    registry, _ = _make_registry_with_all_stubs()
+    state = PipelineState(run_id="t-lane", target_dim="x", gen_tag="gen2")
+    queue = LaneQueue()  # no lanes registered
+    Pipeline(state, registry, lane_queue=queue).run()
+
+
+def test_pipeline_acquires_lane_when_registered() -> None:
+    """When the seed-pipeline lane is on the queue, execute is gated through it."""
+    registry, _ = _make_registry_with_all_stubs()
+    state = PipelineState(run_id="t-lane", target_dim="x", gen_tag="gen2")
+    queue = LaneQueue()
+    queue.add_lane("seed-pipeline", max_concurrent=4, timeout_s=5.0)
+    Pipeline(state, registry, lane_queue=queue).run()
+    # No assertion target beyond completion — the lane.acquire would block
+    # if the slot wasn't released, so reaching here proves acquire/release
+    # symmetry across all 7 phases.
+    seed_lane = queue.get_lane("seed-pipeline")
+    assert seed_lane is not None
+    assert seed_lane.active_count == 0

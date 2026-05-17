@@ -1,48 +1,45 @@
-"""Verify the new ``seed-pipeline`` Lane is wired in ``core.wiring.container``."""
+"""Verify the new ``seed-pipeline`` Lane is wired in ``core.wiring.container``.
+
+The first two tests call the **real** ``build_default_lanes`` (the source of
+truth) so the test will drift-detect any future regression in container
+wiring. The third checks the constant directly.
+"""
 
 from __future__ import annotations
 
-from core.orchestration.lane_queue import LaneQueue, SessionLane
-from core.wiring.container import (
-    DEFAULT_GATEWAY_CONCURRENCY,
-    DEFAULT_GLOBAL_CONCURRENCY,
-    DEFAULT_SEED_PIPELINE_CONCURRENCY,
-)
+import pytest
+from core.wiring.container import DEFAULT_SEED_PIPELINE_CONCURRENCY, build_default_lanes
 
 
-def _build_queue_under_test() -> LaneQueue:
-    """Reproduce the in-test slice of ``_build_lane_queue`` from container.
+@pytest.fixture
+def real_queue(monkeypatch: pytest.MonkeyPatch) -> object:
+    """Call the production ``build_default_lanes`` with a benign settings stub.
 
-    The real ``_build_lane_queue`` reads ``settings.gateway_max_concurrent``;
-    we mirror only the Lane creation lines so the test stays free of the
-    container's broader dependencies.
+    ``build_default_lanes`` reads ``settings.gateway_max_concurrent`` from
+    ``core.config``; we monkeypatch that single attribute so the test
+    doesn't depend on user env or config TOMLs.
     """
-    queue = LaneQueue()
-    queue.set_session_lane(SessionLane(max_sessions=256, timeout_s=300.0))
-    queue.add_lane("gateway", max_concurrent=DEFAULT_GATEWAY_CONCURRENCY, timeout_s=30.0)
-    queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
-    queue.add_lane(
-        "seed-pipeline",
-        max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
-        timeout_s=300.0,
-    )
-    return queue
+    from core import config as _config
+
+    class _StubSettings:
+        gateway_max_concurrent = 0  # → falls back to DEFAULT_GATEWAY_CONCURRENCY
+
+    monkeypatch.setattr(_config, "settings", _StubSettings(), raising=False)
+    return build_default_lanes()
 
 
 def test_seed_pipeline_lane_max_concurrent_is_16() -> None:
     assert DEFAULT_SEED_PIPELINE_CONCURRENCY == 16
 
 
-def test_seed_pipeline_lane_is_registered() -> None:
-    queue = _build_queue_under_test()
-    lane = queue.get_lane("seed-pipeline")
+def test_seed_pipeline_lane_is_registered_by_real_builder(real_queue: object) -> None:
+    lane = real_queue.get_lane("seed-pipeline")  # type: ignore[attr-defined]
     assert lane is not None
     assert lane.max_concurrent == DEFAULT_SEED_PIPELINE_CONCURRENCY
 
 
-def test_seed_pipeline_lane_sibling_to_global_and_gateway() -> None:
-    queue = _build_queue_under_test()
-    names = queue.list_lanes()
+def test_seed_pipeline_lane_sibling_to_global_and_gateway(real_queue: object) -> None:
+    names = real_queue.list_lanes()  # type: ignore[attr-defined]
     assert "global" in names
     assert "gateway" in names
     assert "seed-pipeline" in names

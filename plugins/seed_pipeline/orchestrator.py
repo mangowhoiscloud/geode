@@ -43,11 +43,20 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from core.agent.sub_agent_budget import (
+    DEFAULT_HARD_USD,
+    DEFAULT_SOFT_USD,
+    BudgetExceededError,
+    BudgetGuard,
+)
 from core.hooks import HookEvent, HookSystem
 
 from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
+
+if TYPE_CHECKING:
+    from core.orchestration.lane_queue import LaneQueue
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +109,9 @@ class PipelineState:
     # baseline (None on first generation — bootstrap)
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
+    # current phase's budget guard (set by Pipeline._run_phase, read by
+    # the concrete agent's LLM call sites in S2-S8 to call record_usage).
+    budget_guard: BudgetGuard | None = None
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -173,12 +185,18 @@ class Pipeline:
         registry: PipelineRegistry,
         *,
         hooks: HookSystem | None = None,
+        lane_queue: LaneQueue | None = None,
         on_phase_error: Any | None = None,
+        budget_soft_usd: float = DEFAULT_SOFT_USD,
+        budget_hard_usd: float = DEFAULT_HARD_USD,
     ) -> None:
         self.state = state
         self.registry = registry
         self._hooks = hooks
+        self._lane_queue = lane_queue
         self._on_phase_error = on_phase_error
+        self._budget_soft_usd = budget_soft_usd
+        self._budget_hard_usd = budget_hard_usd
 
     def run(self) -> PipelineState:
         """Walk all 7 phases in order. Returns the final state."""
@@ -199,7 +217,19 @@ class Pipeline:
         return self.state
 
     def _run_phase(self, role: str) -> SeedAgentResult:
-        """Look up the role's agent, invoke it, merge the result."""
+        """Look up the role's agent, invoke it, merge the result.
+
+        Wraps the execute call in:
+        - a fresh ``BudgetGuard`` (per-phase soft/hard cap) attached to
+          ``state.budget_guard`` so the agent's LLM call sites (S2+)
+          can call ``guard.record_usage`` and trip the cap.
+        - an optional ``seed-pipeline`` lane acquisition (when a
+          ``LaneQueue`` was passed). For sequential phases the lane is
+          effectively a no-op; for phases that fan out via
+          ``delegate(tasks=[…])`` in S2+ the lane gates concurrency at
+          16 (see ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` in
+          ``core/wiring/container.py``).
+        """
         agent = self.registry.get(role)
         if agent is None:
             raise RuntimeError(
@@ -210,28 +240,62 @@ class Pipeline:
 
         self._emit_hook(HookEvent.SUBAGENT_STARTED, role)
         started = time.time()
-        try:
-            result = agent.execute(self.state)
-        except Exception as exc:
-            duration = (time.time() - started) * 1000
-            log.exception("seed-pipeline phase %s raised", role)
-            self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
-            result = SeedAgentResult(
-                role=role,
-                status="error",
-                duration_ms=duration,
-                error_category=type(exc).__name__,
-                error_message=str(exc),
-            )
-            if self._on_phase_error is not None:
-                self._on_phase_error(role, exc)
-            raise
-        else:
-            duration = (time.time() - started) * 1000
-            if result.duration_ms == 0.0:
-                result.duration_ms = duration
+        guard = BudgetGuard(
+            agent_id=f"{self.state.run_id}/{role}",
+            soft_usd=self._budget_soft_usd,
+            hard_usd=self._budget_hard_usd,
+        )
+        previous_guard = self.state.budget_guard
+        self.state.budget_guard = guard
 
-        # Cost rollup
+        try:
+            with self._acquire_lane(role):
+                try:
+                    result = agent.execute(self.state)
+                except BudgetExceededError as budget_exc:
+                    duration = (time.time() - started) * 1000
+                    log.warning(
+                        "seed-pipeline phase %s hit hard budget cap: %s",
+                        role,
+                        budget_exc,
+                    )
+                    self._emit_hook(
+                        HookEvent.SUBAGENT_FAILED, role, error=str(budget_exc)
+                    )
+                    result = SeedAgentResult(
+                        role=role,
+                        status="error",
+                        duration_ms=duration,
+                        error_category="budget",
+                        error_message=str(budget_exc),
+                    )
+                except Exception as exc:
+                    duration = (time.time() - started) * 1000
+                    log.exception("seed-pipeline phase %s raised", role)
+                    self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
+                    if self._on_phase_error is not None:
+                        self._on_phase_error(role, exc)
+                    raise
+                else:
+                    duration = (time.time() - started) * 1000
+                    if result.duration_ms == 0.0:
+                        result.duration_ms = duration
+        finally:
+            self.state.budget_guard = previous_guard
+
+        # If the agent did not propagate cost on its SeedAgentResult,
+        # pull from the guard (authoritative — guard intercepts the
+        # actual LLM calls). Concrete S2-S8 agents wire their LLM call
+        # sites to guard.record_usage and copy the guard's totals onto
+        # their result before returning.
+        if result.usd_spent == 0.0 and guard.budget.usd_spent > 0:
+            result.usd_spent = guard.budget.usd_spent
+            result.prompt_tokens = guard.budget.prompt_tokens
+            result.completion_tokens = guard.budget.completion_tokens
+
+        # Roll up the result's reported cost into state. Result.* is the
+        # single source for state aggregation so tests can stub agents
+        # without going through the guard.
         self.state.usd_spent += result.usd_spent
         self.state.prompt_tokens += result.prompt_tokens
         self.state.completion_tokens += result.completion_tokens
@@ -242,6 +306,23 @@ class Pipeline:
         else:
             self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=result.error_message)
         return result
+
+    def _acquire_lane(self, role: str) -> Any:
+        """Return a context manager that acquires the ``seed-pipeline`` lane.
+
+        When no ``LaneQueue`` was supplied (test path) or the lane is not
+        registered, returns a no-op context manager. The actual semaphore
+        gating only takes effect when the agent fans out via
+        ``SubAgentManager.delegate(tasks=[…])`` in S2+.
+        """
+        from contextlib import nullcontext
+
+        if self._lane_queue is None:
+            return nullcontext()
+        lane = self._lane_queue.get_lane("seed-pipeline")
+        if lane is None:
+            return nullcontext()
+        return lane.acquire(f"seed-pipeline/{self.state.run_id}/{role}")
 
     def _emit_hook(self, event: HookEvent, role: str, **extra: Any) -> None:
         if self._hooks is None:
