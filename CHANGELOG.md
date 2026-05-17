@@ -52,6 +52,36 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.5] — 2026-05-17
+
+### Observability
+
+- **`login_anthropic()` — per-stage forensic dump + `User-Agent` 정렬.**
+  v0.99.4 dump 가 `status_code != 200` 분기에만 있어서 token exchange
+  도달 못 한 경우 (paste/parse/state/httpx exception) 진단 신호 0.
+  v0.99.5 는 6 stage 모두 dump 작성: `paste-cancelled`, `paste-empty`,
+  `parse-no-code`, `state-mismatch`, `token-exchange-attempt`,
+  `httpx-exception`, `response-200`, `response-non-200`. filename
+  `anthropic-oauth-<unix_ts>-<stage>.json`. 200 응답도 access_token/
+  refresh_token 마스킹 후 별도 dump — success path 도 사후 검증 가능.
+  `User-Agent: claude-cli/2.1.140` 헤더 추가 (binary `HA()` 와 정합) —
+  Anthropic 의 2026-04-04 third-party app 차단 정책의 fingerprint
+  risk 회피. 정책 차단이 root cause 라면 dump 의 response_body 에
+  명시적 `error_description` 으로 확정 가능.
+
+- **`login_anthropic()` — per-stage forensic dumps + `User-Agent` alignment.**
+  v0.99.4's dump only fired on `status_code != 200`, so failures that
+  never reached the token exchange (paste/parse/state/httpx exception)
+  left no signal. v0.99.5 writes a dump at every reachable step
+  (`paste-cancelled`, `paste-empty`, `parse-no-code`, `state-mismatch`,
+  `token-exchange-attempt`, `httpx-exception`, `response-200`,
+  `response-non-200`). Filenames now carry the stage suffix
+  (`anthropic-oauth-<unix_ts>-<stage>.json`). Successful 200 responses
+  also dump with `access_token`/`refresh_token` masked so the success
+  path is forensically auditable. Added `User-Agent: claude-cli/2.1.140`
+  to mirror Claude Code's `HA()` helper and reduce the third-party-app
+  fingerprint risk under Anthropic's 2026-04-04 policy.
+
 ## [0.99.4] — 2026-05-17
 
 ### Observability
