@@ -12,12 +12,12 @@ from core.auth.auth_toml import (
     migrate_env_to_toml,
     save_auth_toml,
 )
-from core.auth.plan_registry import (
+from core.auth.profiles import AuthProfile, CredentialType
+from core.llm.routing.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
-from core.auth.plans import GLM_CODING_TIERS
-from core.auth.profiles import AuthProfile, CredentialType
+from core.llm.routing.plans import GLM_CODING_TIERS
 
 
 def _fresh_path() -> Path:

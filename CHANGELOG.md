@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Architecture
+
+- **LLM plan routing ownership.** Moved credential Plan and PlanRegistry
+  primitives from `core/auth` to `core/llm/routing`, keeping OAuth acquisition
+  under `core/auth` and preserving the LLM-facing `manage_login` tool surface.
+
 ### Infrastructure
 
 - **PyPI distribution rename.** GEODE now publishes under the available PyPI
