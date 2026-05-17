@@ -52,6 +52,16 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **GitHub Release publish job fix.** The release workflow now passes
+  `--repo` to `gh release create`, so the publish job can create releases from
+  downloaded artifacts without requiring a checked-out `.git` directory.
+
+- **GitHub Release publish job 수정.** release workflow 가 `gh release create`
+  호출에 `--repo` 를 명시해, publish job 이 `.git` checkout 없이 내려받은
+  artifact 만으로 GitHub Release 를 생성할 수 있게 했습니다.
+
 ## [0.99.12] — 2026-05-17
 
 ### Added
