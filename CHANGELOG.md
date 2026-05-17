@@ -52,6 +52,38 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **`to_inspect_model` 라우팅을 manifest-driven 으로 collapse (P1-G).**
+  `plugins/petri_audit/models.py::to_inspect_model` 의 4-단계 if/elif
+  chain (claude- / gpt- / glm-) 제거 — 이제 `family_of` →
+  `resolve_credential_source` → `manifest.get_adapter(family, source).
+  inspect_prefix` 의 manifest 조회 path 로 통합. dead helper 제거
+  (`_codex_oauth_available`, `_claude_oauth_available`,
+  `_credential_source`) — credential_source 모듈이 모두 흡수. credential
+  _source.py 의 `_settings_source` 가 legacy `settings.{family}_
+  credential_source = "oauth"` 값을 manifest source key (`claude-cli`
+  / `openai-codex`) 로 자동 매핑. `o3` / `o4-mini` 가 Codex backend
+  catalogue 에 없는 점은 `_supports_oauth_for_family` 가드로 보존.
+  P1 (Petri routing externalisation) 종결 — Petri 영역에 더 이상
+  family routing hardcode 없음.
+
+- **`to_inspect_model` routing collapsed onto the manifest (P1-G).**
+  Replaced the legacy 4-step if/elif chain in `plugins/petri_audit/
+  models.py::to_inspect_model` with a single path: `family_of` →
+  `resolve_credential_source` → `manifest.get_adapter(family, source).
+  inspect_prefix`. Removed the dead helpers
+  (`_codex_oauth_available`, `_claude_oauth_available`,
+  `_credential_source`) — the credential_source module absorbs their
+  duties. The `_settings_source` reader now translates the legacy
+  `settings.<family>_credential_source = "oauth"` value to the
+  manifest's OAuth source key (`claude-cli` / `openai-codex`) so
+  existing .env / config.toml files keep working. A new
+  `_supports_oauth_for_family` guard ensures `o3` / `o4-mini` (not on
+  the Codex catalogue) stay on the per-token path even under 'auto'
+  expansion. Closes the Petri half of the routing externalisation
+  initiative.
+
 ### Added
 
 - **`/petri` 슬래시 명령 + 2-axis picker (P1-F).**

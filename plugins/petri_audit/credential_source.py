@@ -168,6 +168,12 @@ def _settings_source(family: str) -> str | None:
     Defensive against ``core.config`` import failure (e.g. test
     environments with a stubbed settings module) so this module never
     crashes the picker on a recoverable problem.
+
+    Legacy alias: settings historically used the value ``"oauth"`` to
+    mean "use the family's OAuth path". The manifest spells the OAuth
+    source as ``claude-cli`` / ``openai-codex`` per family. We map
+    here so existing .env / config.toml files keep working without
+    rewrites.
     """
     try:
         from core.config import settings
@@ -175,9 +181,17 @@ def _settings_source(family: str) -> str | None:
         return None
     field = f"{family}_credential_source"
     value = getattr(settings, field, None)
-    if isinstance(value, str) and value and value != AUTO_SOURCE:
-        return value
-    return None
+    if not isinstance(value, str) or not value or value == AUTO_SOURCE:
+        return None
+    if value == "oauth":
+        return _LEGACY_OAUTH_ALIAS.get(family, value)
+    return value
+
+
+_LEGACY_OAUTH_ALIAS = {
+    "anthropic": "claude-cli",
+    "openai": "openai-codex",
+}
 
 
 def suppress_credential_source(family: str, source: str) -> None:
