@@ -52,6 +52,31 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.10] — 2026-05-17
+
+### Changed
+
+- **`/login anthropic` 단순화 — API key only (production), Petri 만 claude keychain delegate.**
+  v0.99.9 의 picker 2 옵션 중 claude CLI subprocess 는 사용자 보고에서
+  Claude Code REPL 이 GEODE 위에 노출되는 UX 부조화 + 그 path 가 결국
+  Anthropic third-party block 정책 risk 영역. production GEODE chat/
+  agent/analyze 는 Tier 0 (`sk-ant-api…`) 만 사용, claude
+  subscription delegate 는 `plugins/petri_audit/claude_code_provider.py`
+  (PR #1202) 의 audit/judge 영역에 격리. `/login anthropic` 은 picker
+  제거 후 직접 API key prompt 로 단순화. `_login_anthropic_via_claude_cli`
+  helper 제거.
+
+- **`/login anthropic` simplified to API key only.** v0.99.9 's
+  claude-CLI subprocess option exposed the Claude Code REPL inside the
+  GEODE TTY (user-reported UX break) and carried Anthropic's
+  third-party-block policy risk. Production GEODE now uses Tier 0
+  (`sk-ant-api…`) exclusively; the claude-subscription delegate stays
+  inside `plugins/petri_audit/claude_code_provider.py` for audit/judge
+  runs only. Picker dropped, _login_anthropic_via_claude_cli helper
+  removed.
+
+
+
 ## [0.99.9] — 2026-05-17
 
 ### Changed
