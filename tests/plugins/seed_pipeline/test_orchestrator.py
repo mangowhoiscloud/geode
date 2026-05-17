@@ -38,9 +38,7 @@ def _make_registry_with_all_stubs() -> tuple[PipelineRegistry, dict[str, _StubAg
 
 def test_pipeline_runs_all_seven_phases_in_order() -> None:
     registry, agents = _make_registry_with_all_stubs()
-    state = PipelineState(
-        run_id="t-1", target_dim="broken_tool_use", gen_tag="gen2"
-    )
+    state = PipelineState(run_id="t-1", target_dim="broken_tool_use", gen_tag="gen2")
     Pipeline(state, registry).run()
     for role, agent in agents.items():
         assert agent.invocations == 1, f"role={role} not invoked"
@@ -48,9 +46,7 @@ def test_pipeline_runs_all_seven_phases_in_order() -> None:
 
 def test_pipeline_merges_phase_output_into_state() -> None:
     registry = PipelineRegistry()
-    registry.register(
-        _StubAgent("generator", output={"candidates": [{"id": "c1"}, {"id": "c2"}]})
-    )
+    registry.register(_StubAgent("generator", output={"candidates": [{"id": "c1"}, {"id": "c2"}]}))
     # Register remaining 6 as no-ops to let run() complete
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_StubAgent(r))
@@ -82,9 +78,7 @@ def test_missing_role_raises() -> None:
 
 def test_unknown_output_keys_are_warned_not_merged() -> None:
     registry = PipelineRegistry()
-    registry.register(
-        _StubAgent("generator", output={"candidates": [], "garbage_key": 1})
-    )
+    registry.register(_StubAgent("generator", output={"candidates": [], "garbage_key": 1}))
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_StubAgent(r))
     state = PipelineState(run_id="t-5", target_dim="x", gen_tag="gen2")
@@ -139,9 +133,7 @@ class _BudgetRecordingAgent(BaseSeedAgent):
                 # Re-raise so orchestrator's BudgetExceededError handler runs
                 raise
         if self.raise_budget:
-            raise BudgetExceededError(
-                usd_spent=99.0, hard_usd=1.0, agent_id="stub"
-            )
+            raise BudgetExceededError(usd_spent=99.0, hard_usd=1.0, agent_id="stub")
         return SeedAgentResult(role=self.role, output={})
 
 
@@ -187,9 +179,7 @@ def test_pipeline_rolls_up_guard_cost_when_result_zero(
 
     registry = PipelineRegistry()
     # Generator records 100 tokens via the guard; result.usd_spent left at 0
-    registry.register(
-        _BudgetRecordingAgent("generator", record_input=100, record_output=50)
-    )
+    registry.register(_BudgetRecordingAgent("generator", record_input=100, record_output=50))
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_BudgetRecordingAgent(r))
     state = PipelineState(run_id="t-cost", target_dim="x", gen_tag="gen2")
@@ -252,9 +242,7 @@ def test_budget_path_emits_single_failed_hook(monkeypatch: pytest.MonkeyPatch) -
     Pipeline(state, registry, hooks=hooks).run()  # type: ignore[arg-type]
     failed = [e for e, _ in hooks.events if e == HookEvent.SUBAGENT_FAILED]
     # generator is the only role that fails; expect exactly 1 SUBAGENT_FAILED
-    assert len(failed) == 1, (
-        f"expected single SUBAGENT_FAILED on budget path, got {len(failed)}"
-    )
+    assert len(failed) == 1, f"expected single SUBAGENT_FAILED on budget path, got {len(failed)}"
 
 
 def test_budget_soft_warn_emits_hook(monkeypatch: pytest.MonkeyPatch) -> None:

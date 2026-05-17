@@ -77,8 +77,7 @@ class BudgetExceededError(RuntimeError):
         self.hard_usd = hard_usd
         self.agent_id = agent_id
         super().__init__(
-            f"sub-agent {agent_id!r} exceeded hard budget: "
-            f"${usd_spent:.4f} > ${hard_usd:.2f}"
+            f"sub-agent {agent_id!r} exceeded hard budget: ${usd_spent:.4f} > ${hard_usd:.2f}"
         )
 
 
@@ -140,9 +139,7 @@ class BudgetGuard:
         on_soft_warn: Any | None = None,
     ) -> None:
         if soft_usd > hard_usd:
-            raise ValueError(
-                f"soft_usd ({soft_usd}) must be <= hard_usd ({hard_usd})"
-            )
+            raise ValueError(f"soft_usd ({soft_usd}) must be <= hard_usd ({hard_usd})")
         self._budget = SubAgentBudget(
             agent_id=agent_id,
             soft_usd=soft_usd,
@@ -180,9 +177,7 @@ class BudgetGuard:
             self._budget.completion_tokens += completion_tokens
             self._budget.usd_spent += incremental
             usd_after = self._budget.usd_spent
-            soft_crossed_now = (
-                not self._budget.soft_warned and usd_after >= self._budget.soft_usd
-            )
+            soft_crossed_now = not self._budget.soft_warned and usd_after >= self._budget.soft_usd
             if soft_crossed_now:
                 self._budget.soft_warned = True
         if soft_crossed_now and self._on_soft_warn is not None:
