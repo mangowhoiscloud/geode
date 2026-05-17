@@ -7,11 +7,18 @@ Loads ``core/config/routing.toml`` (shipped default) merged with
 pattern (data → cross-layer consistency → cached load → typed
 accessors).
 
-P2-A scope: schema + loader only. Subsequent PRs (P2-B..E) migrate the
-hardcoded constants in :mod:`core.config.__init__` (``ANTHROPIC_PRIMARY``
-et al., ``_resolve_provider``, ``_PIPELINE_NODE_DEFAULTS``, onboarding
-regexes) onto this loader. Until then this module is dormant — no
-existing call site is rewired by P2-A.
+Migration history:
+
+- P2-A (2026-05-17): schema + loader (dormant).
+- P2-B: ``ANTHROPIC_PRIMARY`` / ``OPENAI_PRIMARY`` etc. constants now
+  load from ``[model.defaults]`` + ``[model.fallbacks.<provider>]``.
+- P2-C: ``onboarding._KEY_PATTERNS`` + ``claude_code_provider.
+  KEYCHAIN_SERVICE`` route through ``[credentials.*]``.
+- P2-D: ``core.config._resolve_provider`` + ``petri.models.family_of``
+  delegate to ``[routing.prefixes]`` + ``codex_only_models`` +
+  ``codex_suffixes``.
+- P2-E (this PR): ``get_node_model`` reads ``[nodes]`` after the
+  project-scoped ``.geode/routing.toml`` check.
 
 Sections (mirroring TOML structure):
 
@@ -180,6 +187,10 @@ class RoutingManifest(BaseModel):
     credential_patterns: CredentialPatterns
     credential_keychain: CredentialKeychain
     credential_env_vars: CredentialEnvVars = Field(default_factory=CredentialEnvVars)
+    # P2-E (2026-05-17) — pipeline node → model overrides. Consumed by
+    # ``core.config.get_node_model`` after the project-scoped
+    # ``.geode/routing.toml`` check, before falling back to None.
+    nodes: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _consistency(self) -> RoutingManifest:
@@ -236,7 +247,7 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
     """
     model_section = data.get("model", {})
     routing_section = data.get("routing", {})
-    nodes_section = data.get("nodes", {})  # noqa: F841 — P2-E consumes
+    nodes_section = data.get("nodes", {})
     credentials_section = data.get("credentials", {})
 
     defaults = ModelDefaults(**model_section.get("defaults", {}))
@@ -264,6 +275,7 @@ def _parse_manifest(data: dict[str, Any]) -> RoutingManifest:
         credential_patterns=patterns,
         credential_keychain=keychain,
         credential_env_vars=env_vars,
+        nodes=dict(nodes_section) if isinstance(nodes_section, dict) else {},
     )
 
 

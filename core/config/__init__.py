@@ -359,26 +359,32 @@ def load_routing_config(path: Path | None = None) -> RoutingConfig:
         return _routing_config_cache
 
 
-# Pipeline nodes ALWAYS use these models regardless of user's REPL model.
-# When routing.toml has no per-node config, these defaults prevent
-# fallback to settings.model (the user's active REPL model like glm-5).
-_PIPELINE_NODE_DEFAULTS: dict[str, str] = {
-    "analyst": ANTHROPIC_PRIMARY,
-    "evaluator": ANTHROPIC_PRIMARY,
-    "scoring": ANTHROPIC_PRIMARY,
-    "synthesizer": ANTHROPIC_PRIMARY,
-}
-
-
 def get_node_model(node_name: str) -> str | None:
     """Return the model for a pipeline node, or None for default fallback.
 
-    Priority: routing.toml > _PIPELINE_NODE_DEFAULTS > None.
-    Pipeline nodes (analyst, evaluator, scoring, synthesizer) always return
-    a fixed model so they never inherit the user's REPL model.
+    Priority (post-P2-E):
+      1. Project routing.toml (``<project>/.geode/routing.toml`` —
+         legacy per-project override, loaded by :func:`load_routing_config`).
+      2. Global routing manifest (``core/config/routing.toml`` +
+         ``~/.geode/routing.toml`` user override, loaded by
+         :func:`core.config.routing_manifest.load_routing_manifest`).
+      3. ``None`` — caller falls back to ``settings.model``.
+
+    Pipeline nodes (analyst, evaluator, scoring, synthesizer) always
+    return a fixed model so they never inherit the user's REPL model.
+    The shipped manifest pins all four to the Anthropic primary; users
+    customise per-node by editing either routing.toml.
     """
     cfg = load_routing_config()
-    return cfg.nodes.get(node_name) or _PIPELINE_NODE_DEFAULTS.get(node_name)
+    if node_name in cfg.nodes:
+        return cfg.nodes[node_name]
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return None
+    return manifest.nodes.get(node_name)
 
 
 def reset_routing_cache() -> None:

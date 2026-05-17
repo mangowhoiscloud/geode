@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 from core.config import (
-    _PIPELINE_NODE_DEFAULTS,
     ANTHROPIC_PRIMARY,
     RoutingConfig,
     get_node_model,
@@ -121,19 +120,25 @@ class TestGetNodeModel:
         assert get_node_model("evaluator") == ANTHROPIC_PRIMARY
 
     def test_pipeline_node_defaults_cover_all_nodes(self) -> None:
-        """Verify _PIPELINE_NODE_DEFAULTS covers analyst/evaluator/scoring/synthesizer."""
+        """P2-E: manifest [nodes] covers analyst/evaluator/scoring/synthesizer."""
+        from core.config.routing_manifest import load_routing_manifest
+
         expected_nodes = {"analyst", "evaluator", "scoring", "synthesizer"}
-        assert set(_PIPELINE_NODE_DEFAULTS.keys()) == expected_nodes
-        # All defaults must be ANTHROPIC_PRIMARY
-        for node, model in _PIPELINE_NODE_DEFAULTS.items():
-            assert model == ANTHROPIC_PRIMARY, f"{node} default should be {ANTHROPIC_PRIMARY}"
+        manifest_nodes = load_routing_manifest().nodes
+        assert expected_nodes <= set(manifest_nodes), (
+            f"manifest [nodes] missing: {expected_nodes - set(manifest_nodes)}"
+        )
+        for node in expected_nodes:
+            assert manifest_nodes[node] == ANTHROPIC_PRIMARY, (
+                f"{node} default should be {ANTHROPIC_PRIMARY}"
+            )
 
     def test_routing_toml_overrides_pipeline_defaults(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """routing.toml takes priority over _PIPELINE_NODE_DEFAULTS."""
+        """Project routing.toml takes priority over manifest [nodes]."""
         import core.config as cfg
 
         toml_file = tmp_path / "routing.toml"
