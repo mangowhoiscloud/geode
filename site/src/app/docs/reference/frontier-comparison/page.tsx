@@ -136,12 +136,12 @@ export default function Page() {
               <li>
                 <strong>Equivalence-class 폴백</strong>. 프로바이더 변형 (예)
                 <code>openai-codex</code> ↔ <code>openai</code> PAYG)이 구독 우선순위 순서대로
-                자동 시도됩니다. <code>core/auth/plan_registry.py:resolve_routing</code> 경유.
+                자동 시도됩니다. <code>core/llm/routing/plan_registry.py:resolve_routing</code> 경유.
               </li>
               <li>
                 <strong>ChatGPT Plus JWT 검증</strong>. auth claim <code>chatgpt_plan_type</code>이
                 OAuth 시점에 추출되어 Plan 레코드에 임베드됩니다
-                (<code>core/auth/oauth_login.py:331</code>). 엔타이틀먼트 확인에 별도 API 호출이
+                (<code>core/auth/oauth_login.py</code>). 엔타이틀먼트 확인에 별도 API 호출이
                 필요 없습니다.
               </li>
             </ul>
@@ -351,12 +351,12 @@ export default function Page() {
                 <strong>Equivalence-class fallback</strong> — provider variants
                 (e.g. <code>openai-codex</code> ↔ <code>openai</code> PAYG) auto-tried
                 in subscription-priority order via{" "}
-                <code>core/auth/plan_registry.py:resolve_routing</code>.
+                <code>core/llm/routing/plan_registry.py:resolve_routing</code>.
               </li>
               <li>
                 <strong>ChatGPT Plus JWT verification</strong> — auth claim{" "}
                 <code>chatgpt_plan_type</code> extracted at OAuth time and embedded in
-                the Plan record (<code>core/auth/oauth_login.py:331</code>); no
+                the Plan record (<code>core/auth/oauth_login.py</code>); no
                 separate API call needed for entitlement check.
               </li>
             </ul>
