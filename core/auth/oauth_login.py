@@ -521,15 +521,20 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 # user pastes it back into the CLI). See
 # ``docs/architecture/provider-login.md`` for the full architecture.
 #
-# Endpoints reverse-engineered from the Claude Code native binary's
-# ``K3q`` prod env object (strings(8) on 2026-05-17):
-#   authorize:   https://platform.claude.com/oauth/authorize
-#   token:       https://platform.claude.com/v1/oauth/token
-#   redirect:    https://platform.claude.com/oauth/code/callback
-#   beta header: anthropic-beta: oauth-2025-04-20
-# Note — ``api.anthropic.com/v1/oauth/token`` (initial guess in v0.99.0/0.99.1)
-# is NOT the token endpoint; that host serves the inference API only. The
-# OAuth audience lives on ``platform.claude.com``.
+# Endpoints + body shape reverse-engineered from the Claude Code native
+# binary (claude.exe strings on 2026-05-17, prod env object ``K3q`` plus
+# the ``h6.post(TOKEN_URL, ...)`` call site):
+#   authorize:    https://platform.claude.com/oauth/authorize
+#   token:        https://platform.claude.com/v1/oauth/token
+#   redirect:     https://platform.claude.com/oauth/code/callback
+#   Content-Type: application/json (body = JSON object, NOT form-urlencoded)
+#   no anthropic-beta header on the token endpoint
+# Note — ``api.anthropic.com/v1/oauth/token`` (v0.99.0/0.99.1) is NOT the
+# token endpoint; that host serves the inference API only. The OAuth
+# audience lives on ``platform.claude.com``. Public docs + community
+# gists incorrectly suggested form-urlencoded + an anthropic-beta header
+# (v0.99.2 followed that lead and still got ``invalid_request``). The
+# binary is the ground truth.
 #
 # Policy notice — ToS Tier 3 (impersonation): the flow reuses Claude
 # Code's public OAuth client_id (PKCE — no secret). Anthropic does not
@@ -541,7 +546,6 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 
 _ANTHROPIC_AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL not password
-_ANTHROPIC_OAUTH_BETA_HEADER = "oauth-2025-04-20"
 # The OAuth client `9d1c250a-...` is registered with this server-hosted
 # redirect URI only — loopback URIs (http://localhost:*) are rejected at
 # the authorize step. The /oauth/code/callback page renders the
@@ -682,13 +686,17 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
         raise RuntimeError("Anthropic OAuth state mismatch — possible CSRF, aborting")
 
     try:
-        # 60s — Anthropic's platform.claude.com/v1/oauth/token has been reported to
-        # respond in 40-60s under load (community gist 3c9c7ff). Claude Code's
-        # hardcoded 15s timeout has been a known failure source; we relax it.
+        # Body shape + headers reverse-engineered from Claude Code's native
+        # binary (claude.exe `h6.post(TOKEN_URL, z, {headers:{"Content-Type":
+        # "application/json"}, timeout:30000})`). Earlier guesses based on
+        # public docs / community gists pointed at form-urlencoded + an
+        # ``anthropic-beta`` header on the token endpoint; the binary
+        # disproves both — JSON only, no beta header. 30s is the upstream
+        # timeout; we keep 60s as headroom for slow-network cases.
         with httpx.Client(timeout=httpx.Timeout(60.0)) as client:
             resp = client.post(
                 _ANTHROPIC_TOKEN_URL,
-                data={
+                json={
                     "grant_type": "authorization_code",
                     "code": auth_code,
                     "redirect_uri": _ANTHROPIC_REDIRECT_URI,
@@ -696,10 +704,7 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
                     "code_verifier": verifier,
                     "state": state,
                 },
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "anthropic-beta": _ANTHROPIC_OAUTH_BETA_HEADER,
-                },
+                headers={"Content-Type": "application/json"},
             )
     except Exception as exc:
         raise RuntimeError(f"Anthropic token exchange failed: {exc}") from exc
