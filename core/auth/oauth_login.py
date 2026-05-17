@@ -546,6 +546,11 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 
 _ANTHROPIC_AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL not password
+# Mirrors Claude Code binary's ``HA()`` helper (``claude-code/${VERSION}``).
+# v0.99.5 added this header explicitly to keep our request fingerprint
+# aligned with the first-party CLI (Anthropic's 2026-04-04 third-party
+# OAuth block routes unknown UA traffic to ``extra_usage`` billing).
+_ANTHROPIC_USER_AGENT = "claude-cli/2.1.140"
 # The OAuth client `9d1c250a-...` is registered with this server-hosted
 # redirect URI only — loopback URIs (http://localhost:*) are rejected at
 # the authorize step. The /oauth/code/callback page renders the
@@ -654,19 +659,72 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
     log.info("anthropic-oauth: opening browser (manual-paste flow)")
     webbrowser.open(auth_url)
 
+    # rich.Padding preserves the left indent when the terminal wraps a long
+    # line (e.g. the auth_url at ~250 chars). Hard-coded ``"  "`` prefixes
+    # only apply to the first wrapped line and produce a column-0 jag on
+    # the rest. ``(top, right, bottom, left) = (0, 0, 0, 2)`` mirrors the
+    # 2-space indent the rest of the OAuth UX uses.
+    from rich.padding import Padding as _Padding
+
+    _indent = (0, 0, 0, 2)
     _pkg.console.print()
     _pkg.console.print(
-        "  [bold]A browser window has been opened to authorize with Anthropic.[/bold]"
+        _Padding(
+            "[bold]A browser window has been opened to authorize with Anthropic.[/bold]",
+            _indent,
+        )
     )
-    _pkg.console.print(f"  [muted]If it didn't open, visit:[/muted] {auth_url}")
+    _pkg.console.print(_Padding(f"[muted]If it didn't open, visit:[/muted] {auth_url}", _indent))
     _pkg.console.print()
     _pkg.console.print(
-        "  After approving, copy the code shown on the callback page and paste it below."
+        _Padding(
+            "After approving, copy the code shown on the callback page and paste it below.",
+            _indent,
+        )
     )
     _pkg.console.print(
-        "  [muted]Accepted formats: 'code#state', the full callback URL, or just the code.[/muted]"
+        _Padding(
+            "[muted]Accepted formats: 'code#state', the full callback URL, "
+            "or just the code.[/muted]",
+            _indent,
+        )
     )
     _pkg.console.print()
+
+    def _dump(stage: str, payload: dict[str, Any]) -> None:
+        """Write per-stage forensic dump to ``~/.geode/diagnostics/``.
+
+        Called on every reachable step so that *any* premature exit leaves
+        a trail. Filename pattern ``anthropic-oauth-<unix_ts>-<stage>.json``
+        groups multiple stages from one attempt by their shared timestamp
+        prefix. Sensitive values (verifier, full code, access_token) are
+        masked to prefix only.
+        """
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+
+            dump_dir = _Path.home() / ".geode" / "diagnostics"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            ts = int(time.time())
+            dump_path = dump_dir / f"anthropic-oauth-{ts}-{stage}.json"
+            full_payload = {
+                "ts": ts,
+                "stage": stage,
+                "endpoint": _ANTHROPIC_TOKEN_URL,
+                "request": {
+                    "client_id": client_id,
+                    "redirect_uri": _ANTHROPIC_REDIRECT_URI,
+                    "scope": scope,
+                    "verifier_prefix": verifier[:8] + "...",
+                    "state_prefix": state[:6] + "...",
+                },
+                **payload,
+            }
+            dump_path.write_text(_json.dumps(full_payload, indent=2), encoding="utf-8")
+            log.warning("anthropic-oauth[%s]: dump → %s", stage, dump_path)
+        except Exception:
+            log.debug("anthropic-oauth[%s]: dump write failed", stage, exc_info=True)
 
     try:
         # /login is a THIN-handler command (see core.cli.routing — RunLocation.THIN),
@@ -674,79 +732,95 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
         # terminal. Daemon never reaches this code path.
         raw = input("  Paste authorization code: ").strip()  # allow-direct-io: thin handler
     except (EOFError, KeyboardInterrupt) as exc:
+        _dump("paste-cancelled", {"error_class": exc.__class__.__name__})
         raise RuntimeError("Anthropic OAuth cancelled — no code provided") from exc
 
     if not raw:
+        _dump("paste-empty", {"raw_length": 0})
         raise RuntimeError("Anthropic OAuth: empty code")
 
     auth_code, returned_state = _parse_pasted_code(raw)
     if not auth_code:
+        _dump(
+            "parse-no-code",
+            {
+                "raw_length": len(raw),
+                "raw_prefix": raw[:24] + "...",
+                "returned_state_prefix": returned_state[:6] + "..." if returned_state else "",
+            },
+        )
         raise RuntimeError("Anthropic OAuth: could not parse code from pasted value")
     if returned_state and returned_state != state:
+        _dump(
+            "state-mismatch",
+            {
+                "expected_state_prefix": state[:6] + "...",
+                "returned_state_prefix": returned_state[:6] + "...",
+            },
+        )
         raise RuntimeError("Anthropic OAuth state mismatch — possible CSRF, aborting")
 
+    # Body shape + headers reverse-engineered from Claude Code's native
+    # binary (claude.exe `h6.post(TOKEN_URL, z, {headers:{"Content-Type":
+    # "application/json"}, timeout:30000})`). v0.99.5 adds an explicit
+    # User-Agent (``claude-cli/<version>``) to mirror the binary's
+    # ``HA()`` helper and reduce third-party-app fingerprint risk per
+    # the 2026-04-04 Anthropic policy change.
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": _ANTHROPIC_USER_AGENT,
+    }
+    body = {
+        "grant_type": "authorization_code",
+        "code": auth_code,
+        "redirect_uri": _ANTHROPIC_REDIRECT_URI,
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "state": state,
+    }
+    _dump(
+        "token-exchange-attempt",
+        {
+            "request_headers": headers,
+            "request_body_keys": sorted(body.keys()),
+            "code_prefix": auth_code[:8] + "...",
+        },
+    )
+
     try:
-        # Body shape + headers reverse-engineered from Claude Code's native
-        # binary (claude.exe `h6.post(TOKEN_URL, z, {headers:{"Content-Type":
-        # "application/json"}, timeout:30000})`). Earlier guesses based on
-        # public docs / community gists pointed at form-urlencoded + an
-        # ``anthropic-beta`` header on the token endpoint; the binary
-        # disproves both — JSON only, no beta header. 30s is the upstream
-        # timeout; we keep 60s as headroom for slow-network cases.
         with httpx.Client(timeout=httpx.Timeout(60.0)) as client:
-            resp = client.post(
-                _ANTHROPIC_TOKEN_URL,
-                json={
-                    "grant_type": "authorization_code",
-                    "code": auth_code,
-                    "redirect_uri": _ANTHROPIC_REDIRECT_URI,
-                    "client_id": client_id,
-                    "code_verifier": verifier,
-                    "state": state,
-                },
-                headers={"Content-Type": "application/json"},
-            )
+            resp = client.post(_ANTHROPIC_TOKEN_URL, json=body, headers=headers)
     except Exception as exc:
+        _dump("httpx-exception", {"error_class": exc.__class__.__name__, "error_message": str(exc)})
         raise RuntimeError(f"Anthropic token exchange failed: {exc}") from exc
 
+    # Always dump the response — success (200) or failure — so the user
+    # has a single forensic artifact per attempt. Access token, refresh
+    # token, and other sensitive fields are masked.
+    response_body_for_dump: Any = resp.text
+    try:
+        parsed = resp.json() if resp.text else {}
+        if isinstance(parsed, dict):
+            response_body_for_dump = {
+                k: (
+                    v[:8] + "..."
+                    if isinstance(v, str) and k in {"access_token", "refresh_token", "id_token"}
+                    else v
+                )
+                for k, v in parsed.items()
+            }
+    except Exception:
+        log.debug("anthropic-oauth: response body parse for dump skipped", exc_info=True)
+    _dump(
+        "response-200" if resp.status_code == 200 else "response-non-200",
+        {
+            "status_code": resp.status_code,
+            "response_headers": dict(resp.headers),
+            "response_body": response_body_for_dump,
+        },
+    )
+
     if resp.status_code != 200:
-        # Persist a forensic dump so root-cause analysis does not depend on
-        # the user re-running the flow under ``script``. Tokens are not
-        # part of the request, the response body on a 4xx is the OAuth
-        # error_description we need, and the only sensitive value in
-        # the request body (``code_verifier``) is masked to its prefix.
-        try:
-            import json as _json
-            from pathlib import Path as _Path
-
-            dump_dir = _Path.home() / ".geode" / "diagnostics"
-            dump_dir.mkdir(parents=True, exist_ok=True)
-            dump_path = dump_dir / f"anthropic-oauth-{int(time.time())}.json"
-            dump_path.write_text(
-                _json.dumps(
-                    {
-                        "ts": int(time.time()),
-                        "endpoint": _ANTHROPIC_TOKEN_URL,
-                        "status_code": resp.status_code,
-                        "response_body": resp.text,
-                        "response_headers": dict(resp.headers),
-                        "request": {
-                            "client_id": client_id,
-                            "redirect_uri": _ANTHROPIC_REDIRECT_URI,
-                            "scope": scope,
-                            "code_prefix": auth_code[:8] + "...",
-                            "verifier_prefix": verifier[:8] + "...",
-                            "state_prefix": state[:6] + "...",
-                        },
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            log.warning("anthropic-oauth: failure dumped → %s", dump_path)
-        except Exception:
-            log.debug("anthropic-oauth: failure dump write failed", exc_info=True)
-
         body_preview = resp.text[:500] if resp.text else "(empty)"
         raise RuntimeError(f"Anthropic token exchange returned {resp.status_code}: {body_preview}")
 
