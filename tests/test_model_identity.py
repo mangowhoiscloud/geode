@@ -40,9 +40,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 import core.agent.loop as _loop_mod
+import pytest
 from core.agent.system_prompt import _build_model_card
 
 
