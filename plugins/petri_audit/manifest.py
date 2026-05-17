@@ -30,9 +30,11 @@ __all__ = [
     "DEFAULT_MANIFEST_PATH",
     "AdapterSpec",
     "PetriManifest",
+    "RoleContract",
     "RoleSpec",
     "SourceSpec",
     "load_manifest",
+    "parse_role_contract",
 ]
 
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "petri.plugin.toml"
@@ -147,6 +149,81 @@ class PetriManifest(BaseModel):
                 f"known sources for this family={sorted(family_adapters)}"
             )
         return family_adapters[source]
+
+    def get_role_contract(self, role: str, *, base_dir: Path | None = None) -> RoleContract:
+        """Parse and validate the role contract MD for ``role``.
+
+        ``base_dir`` defaults to the directory holding the manifest TOML;
+        relative ``role_contract`` paths in the manifest resolve against it.
+        Raises ``ValueError`` on frontmatter / manifest mismatch.
+        """
+        spec = self.get_role(role)
+        if not spec.role_contract:
+            raise ValueError(f"role {role!r} has no role_contract path in manifest")
+        base = base_dir or DEFAULT_MANIFEST_PATH.parent
+        contract_path = (base / spec.role_contract).resolve()
+        contract = parse_role_contract(contract_path)
+        if contract.role != role:
+            raise ValueError(
+                f"{contract_path}: frontmatter role={contract.role!r} != manifest key {role!r}"
+            )
+        if contract.default_model != spec.default_model:
+            raise ValueError(
+                f"{contract_path}: frontmatter default_model="
+                f"{contract.default_model!r} != manifest default_model="
+                f"{spec.default_model!r}"
+            )
+        if contract.default_model not in spec.allowed_models:
+            raise ValueError(
+                f"{contract_path}: default_model={contract.default_model!r} "
+                f"not in manifest allowed_models {spec.allowed_models}"
+            )
+        return contract
+
+
+class RoleContract(BaseModel):
+    """Parsed YAML frontmatter from a `roles/<role>.md` contract file.
+
+    The contract MD is human-readable documentation + machine-readable
+    metadata; runtime authority remains with the manifest. This schema
+    enforces frontmatter shape so a malformed contract is caught at
+    load time, not when /petri picker reads ``description``.
+    """
+
+    role: str
+    description: str
+    default_model: str
+    default_source: str
+    inline_skills: list[str] = Field(default_factory=list)
+
+
+def parse_role_contract(path: Path) -> RoleContract:
+    """Parse a role contract MD's YAML frontmatter.
+
+    Expected layout::
+
+        ---
+        role: ...
+        description: ...
+        ---
+
+        # Body (markdown — ignored by this parser)
+
+    Raises :class:`ValueError` when the file is missing a frontmatter
+    block, the YAML is not a mapping, or required fields are absent.
+    """
+    import yaml  # lazy — only role contract loading triggers it
+
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise ValueError(f"{path}: missing YAML frontmatter (file must start with '---')")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError(f"{path}: malformed frontmatter — expected '---\\n...\\n---\\n' block")
+    data = yaml.safe_load(parts[1])
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: frontmatter is not a YAML mapping (got {type(data).__name__})")
+    return RoleContract(**data)
 
 
 def _parse_manifest_dict(data: dict[str, Any]) -> PetriManifest:
