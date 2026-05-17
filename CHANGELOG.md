@@ -52,6 +52,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **CI Phase 1 — path-filter + pytest-xdist + draft skip.** Hermes 와
+  OpenClaw frontier 패턴 차용 (frontier survey 2026-05-17). `dorny/paths-filter@v3`
+  로 변경된 경로를 검출하여 docs-only/blog-only PR 은 lint/type/test/security
+  step 을 즉시 short-circuit (job 자체는 success 마킹되도록 step-level `if:`
+  사용 — branch protection required-status-check 호환). 코드 변경 PR 은
+  `pytest -n auto` 로 xdist 병렬 실행 (~3분 → ~1분 예상). `types:
+  [opened, reopened, synchronize, ready_for_review]` 로 draft PR 은 trigger
+  자체 차단. `pytest-xdist>=3.6.0` 을 `[dependency-groups.dev]` 에 추가.
+
+- **CI Phase 1 — path-filter + pytest-xdist + draft skip.** Adopted
+  patterns from Hermes and OpenClaw frontier survey (2026-05-17).
+  `dorny/paths-filter@v3` detects changed paths; docs-only / blog-only
+  PRs short-circuit the lint/type/test/security steps via step-level
+  `if:` (jobs still report success so branch-protection required-status
+  checks pass). Code-touching PRs run `pytest -n auto` (xdist) — expect
+  ~3min → ~1min. Draft PRs no longer trigger CI thanks to the new
+  `types: [..., ready_for_review]` filter. `pytest-xdist>=3.6.0` added
+  to the dev dependency group.
+
 ## [0.99.2] — 2026-05-17
 
 ### Fixed
