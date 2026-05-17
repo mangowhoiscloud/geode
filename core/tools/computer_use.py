@@ -94,7 +94,7 @@ class ComputerUseHarness:
     def screenshot(self) -> str:
         """Capture screen and return as base64 JPEG (scaled to target size)."""
         pag = self._ensure_pyautogui()
-        from PIL import Image
+        from PIL import Image  # type: ignore[import-not-found]
 
         img = pag.screenshot()
         self._screen_width, self._screen_height = img.size
