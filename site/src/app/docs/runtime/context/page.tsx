@@ -141,7 +141,7 @@ class AssembledPrompt:
             <table>
               <thead><tr><th>Tier</th><th>Name</th><th>Location</th><th>Role</th></tr></thead>
               <tbody>
-                <tr><td><strong>0</strong></td><td>Agent Identity</td><td><code>GEODE.md</code></td><td>Identity, constraints, domain rules. Always at the top of the prompt.</td></tr>
+                <tr><td><strong>0</strong></td><td>Agent Identity</td><td><code>GEODE.md</code></td><td>Identity and constraints. Always at the top of the prompt.</td></tr>
                 <tr><td><strong>1</strong></td><td>User Profile</td><td><code>~/.geode/profile.md</code></td><td>User role, expertise, learned patterns. Updated by bidirectional learning.</td></tr>
                 <tr><td><strong>2</strong></td><td>Organization</td><td><code>~/.geode/org/</code></td><td>Cross-project shared data. Several projects can read.</td></tr>
                 <tr><td><strong>3</strong></td><td>Project</td><td><code>./.geode/memory/PROJECT.md</code></td><td>50 insights for the current project. LRU rotation.</td></tr>

@@ -1,7 +1,7 @@
 """Organization Memory — shared project/org context.
 
 Implements OrganizationMemoryPort using optional JSON fixtures loaded from disk.
-GEODE core no longer ships a built-in domain fixture set.
+GEODE core no longer ships a built-in fixture set.
 
 Architecture-v6 §3 Layer 2: Organization Memory tier.
 """
@@ -22,7 +22,7 @@ DEFAULT_SOUL_PATH = Path(__file__).parent.parent.parent / "GEODE.md"
 class MonoLakeOrganizationMemory:
     """Organization-level shared memory backed by optional JSON fixtures.
 
-    External domain plugins may pass their own fixture directory.
+    External packages may pass their own fixture directory.
 
     Usage:
         org = MonoLakeOrganizationMemory()

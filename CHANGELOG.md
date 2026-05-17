@@ -61,6 +61,13 @@ routing ownership 이동.
   primitives from `core/auth` to `core/llm/routing`, keeping OAuth acquisition
   under `core/auth` and preserving the LLM-facing `manage_login` tool surface.
 
+- **DomainPort boundary removal.** Removed the residual `core/domains`
+  package, DomainPort runtime hooks, `GeodeRuntime.create(domain_name=...)`,
+  sub-agent domain propagation, domain MCP registration, domain slash/tool
+  extension helpers, and DomainPort prompt breadcrumbs. GEODE core is now a
+  general-purpose agent runtime; specialized pipelines live outside the public
+  compatibility boundary instead of registering through a core domain port.
+
 ### Infrastructure
 
 - **PyPI distribution rename.** GEODE now publishes under the available PyPI
@@ -68,10 +75,9 @@ routing ownership 이동.
   command `geode`. Release gates now derive wheel/sdist filenames from
   `pyproject.toml` and reject symlink entries inside release artifacts.
 
-- **Domain packaging surface cleanup.** Removed stale public setup/README
-  references that implied the old bundled Game IP domain still ships in GEODE
-  core. Current docs now describe `core/domains` as the external domain
-  extension port/loader only.
+- **Domain packaging surface cleanup.** Removed stale public setup/README/site
+  references that implied the old bundled Game IP domain or DomainPort boundary
+  still ships in GEODE core.
 
 - **Domain remnant removal.** Removed the legacy core graph, report renderer,
   rights-risk verifier, report skill package, UI panels, search renderer, and

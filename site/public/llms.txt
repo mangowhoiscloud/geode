@@ -48,7 +48,6 @@ Last sync: 2026-05-17
 - Petri Run  https://mangowhoiscloud.github.io/geode/docs/petri/run  — geode audit (primary) or inspect eval (raw). Choose model roles, dim set, seeds, and turn budget.
 - Petri Judge Dimensions  https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions  — What each dimension scores. How to read the heatmap. Default geode_5axes (17) vs full (38).
 - Petri Bundle Viewer  https://mangowhoiscloud.github.io/geode/docs/petri/bundle  — Live inspect_ai transcript viewer for the latest GEODE audit run.
-- Domain Plugins  https://mangowhoiscloud.github.io/geode/docs/runtime/domains  — DomainPort protocol. plugin loader. Add a domain in 30 lines.
 - Long-running Safety  https://mangowhoiscloud.github.io/geode/docs/ops/long-running  — Token guards, context overflow, sliding window. Graceful drain.
 - Cost Monitoring  https://mangowhoiscloud.github.io/geode/docs/ops/cost  — Per-session and per-day budgets. Usage ledger schema. When to switch models.
 - OAuth Token Rotation  https://mangowhoiscloud.github.io/geode/docs/ops/oauth  — Anthropic ToS, Codex flow, refresh policy.

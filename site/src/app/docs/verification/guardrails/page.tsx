@@ -119,8 +119,8 @@ output accepted`}</pre>
             <h2>What guardrails do not cover</h2>
             <p>
               Guardrails check the <em>shape</em> and <em>defensibility</em> of an
-              output. They do not check for bias or domain-specific calibration;
-              those belong to external domain plugins. They also do not check
+              output. They do not check for bias or specialized calibration;
+              those belong to external packages. They also do not check
               the cross-LLM consistency that{" "}
               <code>cross_llm.md</code> templates provide via independent
               re-scoring.

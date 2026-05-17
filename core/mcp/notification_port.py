@@ -3,7 +3,7 @@
 Defines the contract for sending notifications to external messaging
 services (Slack, Discord, Telegram, email, webhook).
 
-Injection via contextvars follows the same pattern as DomainPort.
+Injection is managed via contextvars.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class NotificationPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# contextvars injection (same pattern as DomainPort)
+# contextvars injection
 # ---------------------------------------------------------------------------
 
 _notification_ctx: ContextVar[NotificationPort | None] = ContextVar(

@@ -2,15 +2,14 @@
 
 Hosts the ``ModelProfile`` dataclass + ``MODEL_PROFILES`` table, the
 ``COMMAND_MAP`` slash → action lookup, the conversation ContextVar, the
-generic help renderer, ``install_domain_commands``, ``resolve_action``,
-and the small ``_get_profile_store`` accessor. Extracted from the
+generic help renderer, ``resolve_action``, and the small
+``_get_profile_store`` accessor. Extracted from the
 monolithic ``core/cli/commands.py`` (Tier 3 #9) — every function body is
 preserved byte-identical from the legacy module.
 """
 
 from __future__ import annotations
 
-import logging
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any as _Any
@@ -24,8 +23,6 @@ from core.config import (
     OPENAI_PRIMARY,
 )
 from core.ui.console import console
-
-log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model Registry (OpenClaw Auth Profile Rotation pattern)
@@ -126,24 +123,8 @@ COMMAND_MAP: dict[str, str] = {
 }
 
 
-def install_domain_commands(domain: _Any) -> None:
-    """Merge a domain's slash commands into the generic ``COMMAND_MAP``.
-
-    Domains implement ``DomainPort.register_slash_commands(command_map)``
-    (v2, optional). When absent, this is a no-op.
-    """
-    register = getattr(domain, "register_slash_commands", None)
-    if callable(register):
-        register(COMMAND_MAP)
-
-
 def show_help() -> None:
-    """Show interactive mode help.
-
-    Renders the generic command list, then asks the active domain (if
-    any) to append its own slash-command help fragment via the optional
-    ``DomainPort.render_help_fragment()`` hook.
-    """
+    """Show interactive mode help."""
     console.print()
     console.print("  [header]Commands[/header]")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
@@ -173,17 +154,6 @@ def show_help() -> None:
     console.print("  [label]/help[/label]               — Show this help")
     console.print("  [label]/quit[/label]               — Exit GEODE")
 
-    # Domain-specific help fragment appended below.
-    try:
-        from core.domains.port import get_domain_or_none
-
-        domain = get_domain_or_none()
-        if domain is not None:
-            render_fragment = getattr(domain, "render_help_fragment", None)
-            if callable(render_fragment):
-                render_fragment()
-    except Exception:
-        log.debug("Domain help fragment skipped", exc_info=True)
     console.print()
     console.print("  [muted]Or just type naturally to interact with the agent.[/muted]")
     console.print()

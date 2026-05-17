@@ -62,7 +62,6 @@ export default function Page() {
                 <tr><td>automation</td><td><code>core/automation/</code></td><td>8</td><td><code>model_registry.py</code></td></tr>
                 <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td>17</td><td><code>graph.py</code></td></tr>
                 <tr><td>auth</td><td><code>core/auth/</code></td><td>14</td><td>OAuth profile rotator</td></tr>
-                <tr><td>domains</td><td><code>core/domains/</code></td><td>3</td><td><code>port.py:18 DomainPort</code></td></tr>
               </tbody>
             </table>
 
@@ -86,7 +85,7 @@ export default function Page() {
                 <tr><th>플러그인 모듈</th><td>{GEODE_SOT.modules.plugins}</td></tr>
                 <tr><th>테스트</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
                 <tr><th>훅 이벤트</th><td>58 (14 groups)</td></tr>
-                <tr><th>도구</th><td>15 core tools + external domain tools via plugin registry</td></tr>
+                <tr><th>도구</th><td>61 registered tools with deferred loading</td></tr>
                 <tr><th>MCP 서버</th><td>16</td></tr>
                 <tr><th>슬래시 명령</th><td>15개 이상</td></tr>
                 <tr><th>핀된 프롬프트 템플릿</th><td>20 (17 .md + 3 axes)</td></tr>
@@ -143,7 +142,6 @@ export default function Page() {
                 <tr><td>automation</td><td><code>core/automation/</code></td><td>8</td><td><code>model_registry.py</code></td></tr>
                 <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td>17</td><td><code>graph.py</code></td></tr>
                 <tr><td>auth</td><td><code>core/auth/</code></td><td>14</td><td>OAuth profile rotator</td></tr>
-                <tr><td>domains</td><td><code>core/domains/</code></td><td>3</td><td><code>port.py:18 DomainPort</code></td></tr>
               </tbody>
             </table>
 
@@ -167,7 +165,7 @@ export default function Page() {
                 <tr><th>Plugin modules</th><td>{GEODE_SOT.modules.plugins}</td></tr>
                 <tr><th>Tests</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
                 <tr><th>Hook events</th><td>58 (14 groups)</td></tr>
-                <tr><th>Tools</th><td>15 core tools + external domain tools via plugin registry</td></tr>
+                <tr><th>Tools</th><td>61 registered tools with deferred loading</td></tr>
                 <tr><th>MCP servers</th><td>16</td></tr>
                 <tr><th>Slash commands</th><td>15+</td></tr>
                 <tr><th>Prompt templates pinned</th><td>20 (17 .md + 3 axes)</td></tr>

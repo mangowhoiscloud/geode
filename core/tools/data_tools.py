@@ -1,10 +1,10 @@
-"""Data Retrieval Tools — domain-agnostic Snowflake stubs.
+"""Data Retrieval Tools — generic Snowflake stubs.
 
 Layer 5 tools for data access:
 - CortexAnalystTool: Placeholder for Snowflake Cortex Analyst SQL
 - CortexSearchTool: Placeholder for Cortex Search semantic retrieval
 
-Domain-specific fixture/query tools live in external plugin packages.
+Specialized fixture/query tools live in external packages.
 """
 
 from __future__ import annotations

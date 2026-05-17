@@ -120,14 +120,6 @@ export const DOCS_SITEMAP: DocSection[] = [
     ],
   },
   {
-    id: "07-plugins",
-    title: "Plugins",
-    titleKo: "플러그인",
-    pages: [
-      { slug: "runtime/domains", title: "Domain Plugins", titleKo: "도메인 플러그인", summary: "DomainPort protocol. plugin loader. Add a domain in 30 lines.", summaryKo: "DomainPort 프로토콜. 플러그인 로더. 30 라인으로 도메인 추가.", quadrant: "reference" },
-    ],
-  },
-  {
     id: "08-ops",
     title: "Operations",
     titleKo: "운영",

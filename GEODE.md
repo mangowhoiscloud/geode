@@ -7,12 +7,11 @@
 ## Identity
 
 GEODE is a general-purpose autonomous execution agent built on a `while(tool_use)` loop.
-It understands user requests in natural language, selects and invokes the appropriate tool from 56 available,
+It understands user requests in natural language, selects and invokes the appropriate tool from 61 available,
 observes the result, and decides the next action. This loop continues until the task is complete.
 
-It specializes in exploratory tasks (research, web investigation, document analysis, multi-axis evaluation).
-Domain knowledge is separated into plugins behind the `DomainPort` Protocol,
-and the harness itself is domain-agnostic.
+It specializes in exploratory tasks: research, web investigation, document
+analysis, automation, scheduling, and multi-step tool work.
 
 ## Core Principles
 
@@ -27,20 +26,17 @@ and the harness itself is domain-agnostic.
 - Never makes judgments without evidence (G3 Grounding violation)
 - Never finalizes a single LLM output as the definitive result (cross-validation required)
 - Never delivers results with Confidence < 0.7 to the user (loopback)
-- Never performs domain-specific analysis without a plugin (uses general-purpose tools only)
 - Never calls `general_web_search` or `read_web_page` 3+ times directly in a single turn — delegate to sub-agents via `delegate_task` instead (context explosion prevention)
 
 ## Architecture
 
-4-Layer Stack (Model → Runtime → Harness → Agent) + orthogonal Domain.
+4-Layer Stack (Model → Runtime → Harness → Agent).
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(48 events)
-RUNTIME:  ToolRegistry(56), MCP Registry(API), Skills, Memory(4-Tier), Reports
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58 events)
+RUNTIME:  ToolRegistry(61), MCP Registry(API), Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
-─────────────────────────────────────────────────────────────────
-⊥ DOMAIN: DomainPort Protocol, external domains (cross-cutting, bind to Runtime + Harness via Port)
 ```
 
 ### Sub-Agent System
@@ -53,25 +49,6 @@ Controls: max_depth=1 (explicit depth guard + denied_tools), max_total=15, timeo
 - Sub-agents inherit parent memory snapshots as read-only
 - Sub-agent writes go to a task_id-scoped buffer (direct modification of shared memory is prohibited)
 - Parent merges only the summary after task completion — two agents never write to shared memory simultaneously
-
-### Domain Plugin System
-
-Domain-specific analysis pipelines can be swapped as plugins via the `DomainPort` Protocol.
-
-```
-DomainPort (Protocol)
-  ├── Identity: name, version, description
-  ├── Analyst Config: get_analyst_types(), get_analyst_specific()
-  ├── Evaluator Config: get_evaluator_types(), get_evaluator_axes(), get_valid_axes_map()
-  ├── Scoring: get_scoring_weights(), get_tier_thresholds(), get_confidence_multiplier_params()
-  ├── Classification: get_cause_values(), get_cause_to_action()
-  └── Fixtures: list_fixtures(), get_fixture_path()
-```
-
-- **ContextVar Injection**: `set_domain()` / `get_domain()` — `contextvars`-based DI
-- **Domain Loader**: `load_domain_adapter(name)` — dynamic import + registry
-- **Default Domain**: none bundled. External domain packages self-register through
-  `register_domain(...)`.
 
 ### Gateway Runtime (Thin-Only Architecture)
 
@@ -91,12 +68,13 @@ geode (thin CLI) ──── Unix socket IPC ────→ geode serve (unifi
 
 ### Gateway Thread Propagation
 
-`geode serve` Gateway poller runs in a daemon thread that does not inherit `set_domain()` context.
-Call `boot.propagate_to_thread()` at each Gateway handler entry to re-inject.
+`geode serve` Gateway poller runs in a daemon thread and does not inherit
+ContextVars automatically. Call `boot.propagate_to_thread()` at each Gateway
+handler entry to re-inject readiness, memory, and profile context.
 
 ## Tool Routing
 
-All free-text input goes directly to AgenticLoop. 56 tool definitions + autonomous selection via tool_use.
+All free-text input goes directly to AgenticLoop. 61 tool definitions + autonomous selection via tool_use.
 
 **Tool Permission Levels** (spanning PolicyChain 6 layers):
 - **STANDARD**: Read/analysis tools — eligible for Sub-Agent auto_approve
@@ -121,12 +99,6 @@ All free-text input goes directly to AgenticLoop. 56 tool definitions + autonomo
 - **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
 - **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
 
-## Domain Plugins
-
-GEODE core ships the `DomainPort` contract and loader only. Domain-specific
-DAGs, scoring rubrics, fixtures, CLI commands, MCP resources, and reports live
-in external plugin packages.
-
 ## Conventions
 
 - **Structured Output**: Anthropic `messages.parse()` with typed Pydantic models
@@ -135,8 +107,7 @@ in external plugin packages.
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: list reducers use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 48 lifecycle events. Cross-cutting; accessible from all layers.
-- **Domain Plugin**: `DomainPort` Protocol — per-domain pipeline swappable.
+- **Hook-driven**: `core.hooks` — 58 lifecycle events. Cross-cutting; accessible from all layers.
 - **LLM-consumed content in English**: All files injected into LLM context must be written in English.
 
 ## Failure Modes

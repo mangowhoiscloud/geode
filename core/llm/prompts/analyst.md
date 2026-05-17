@@ -54,7 +54,7 @@ Think step-by-step:
 
 ## Subject Profile
 - Name: {subject}
-- Domain: {domain}
+- Area: {domain}
 - Category: {category}
 - Owner: {owner}
 - Summary: {summary}

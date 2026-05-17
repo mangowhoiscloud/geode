@@ -413,19 +413,6 @@ def test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage(
     assert out.usage.input_tokens_cache_write is None
 
 
-def test_petri_audit_does_not_register_domain() -> None:
-    """petri_audit is an external evaluator, not a GEODE domain.
-
-    Importing ``plugins.petri_audit`` must not call ``register_domain``,
-    so the audit plugin stays out of the default ``geode analyze`` flow.
-    """
-    from core.domains.loader import list_domains
-
-    import plugins.petri_audit  # noqa: F401
-
-    assert "petri_audit" not in list_domains()
-
-
 # ---------------------------------------------------------------------------
 # Message conversion (duck typed, no [audit] extra)
 # ---------------------------------------------------------------------------

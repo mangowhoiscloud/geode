@@ -498,14 +498,12 @@ class SubAgentManager:
     def _build_worker_request(self, task: SubTask) -> WorkerRequest:
         """Build a WorkerRequest for subprocess execution (Phase 2).
 
-        The subprocess inherits API keys via env vars. Domain context,
-        model config, and denied tools are passed explicitly.
+        The subprocess inherits API keys via env vars. Model config and
+        denied tools are passed explicitly.
         """
         from core.config import Settings, _resolve_provider
-        from core.domains.port import get_domain_or_none
 
         settings = Settings()
-        domain = get_domain_or_none()
         denied = list(self._denied_tools | {"delegate_task"})
 
         # Adaptive effort based on task difficulty hint
@@ -525,7 +523,6 @@ class SubAgentManager:
             time_budget_s=self._time_budget_s,
             thinking_budget=settings.agentic_thinking_budget,
             effort=task_effort,
-            domain=domain.name if domain else "",
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

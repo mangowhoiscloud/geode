@@ -1,12 +1,12 @@
 """System prompt builder for AgenticLoop.
 
 Builds the base system prompt from the router.md template, enriched with
-domain prefix content and project memory context.
+project memory context.
 
 Memory hierarchy injected into the system prompt (G1-G3):
   G1: GEODE.md  — Agent identity (Core Principles + CANNOT + Defaults, ~20 lines)
   G2: .geode/MEMORY.md — Project meta-index (architecture, pipelines, key files)
-  G3: .geode/LEARNING.md — Agent learning (patterns, corrections, domain knowledge)
+  G3: .geode/LEARNING.md — Agent learning (patterns, corrections, preferences)
   G4: .geode/memory/PROJECT.md — Runtime insights + rules
 
 Extracted from ``nl_router.py`` so that the AgenticLoop can use the system
@@ -64,13 +64,7 @@ def _persona_on() -> bool:
 
 
 def _generic_static_prefix() -> str:
-    """Domain-less fallback prefix.
-
-    ``ROUTER_SYSTEM`` still exposes legacy placeholder names for prompt
-    compatibility. When no domain is loaded, substitute neutral values so
-    ``str.format`` doesn't raise and the agent still receives the rest of
-    the router template.
-    """
+    """Render the domain-neutral router prefix."""
     return _SYSTEM_PROMPT_TEMPLATE.format(ip_count=0, ip_examples="none loaded")
 
 
@@ -80,7 +74,7 @@ def build_system_prompt(model: str = "") -> str:
     Layer composition (XML-tag-delimited per the 2026-05-12 prompt audit):
 
       <static_context> ──── stable across turns → cache hit
-        <agent_baseline>   (always present — domain prefix + base capabilities)
+        <agent_baseline>   (always present — base capabilities)
         <agent_identity>   (G10: opt-in via GEODE_PERSONA=on)
       </static_context>
       <dynamic_context>    ──── changes per turn → no cache
@@ -104,8 +98,8 @@ def build_system_prompt(model: str = "") -> str:
       — GEODE behaves as a thin wrapper around the base model. Audit-mode
       forces OFF regardless.
 
-    The domain-specific portion of the baseline is delegated to
-    ``DomainPort.compose_static_prefix`` so this module stays plugin-free.
+    The baseline is intentionally domain-neutral. Specialized pipelines live
+    outside the core runtime.
     """
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
@@ -117,21 +111,7 @@ def build_system_prompt(model: str = "") -> str:
         parts.append(_build_date_context())
         return PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
 
-    from core.domains.port import get_domain_or_none
-
-    domain = get_domain_or_none()
-    composer = getattr(domain, "compose_static_prefix", None) if domain else None
-    baseline = ""
-    if callable(composer):
-        try:
-            baseline = composer(model)
-        except Exception:
-            log.debug("Domain compose_static_prefix failed; using generic baseline", exc_info=True)
-            baseline = ""
-    if not baseline:
-        baseline = _generic_static_prefix()
-
-    static = with_math_output_formatting(baseline)
+    static = with_math_output_formatting(_generic_static_prefix())
 
     # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
     # GEODE behaves as a thin wrapper around the base model).

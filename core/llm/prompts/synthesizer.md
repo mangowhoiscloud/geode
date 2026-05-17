@@ -49,5 +49,5 @@ Create the final synthesis for: {subject}
 Generate a narrative that:
 1. Connects the data points to explain WHY this subject is classified this way
 2. Identifies the specific target segment most likely to benefit
-3. Is actionable for the domain owner or strategy team
+3. Is actionable for the owner or strategy team
 </user>

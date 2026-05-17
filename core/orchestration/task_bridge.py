@@ -1,8 +1,8 @@
 """TaskGraph hook bridge.
 
 The bridge observes generic node lifecycle hooks and updates matching
-``TaskGraph`` tasks. Domain plugins that need richer node-to-task mapping should
-provide their own bridge or task graph.
+``TaskGraph`` tasks. External packages that need richer node-to-task mapping
+should provide their own bridge or task graph.
 """
 
 from __future__ import annotations

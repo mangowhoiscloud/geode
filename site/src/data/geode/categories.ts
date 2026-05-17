@@ -114,11 +114,11 @@ export const geodeCategories: CategoryData[] = [
     descriptionKo:
       "코어 검증: Per-Agent Guardrail(G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Cross-LLM 교차 검증(Krippendorff's α≥0.80 목표), Rights Risk 평가. 편향 검사와 golden-set 캘리브레이션은 외부 도메인 플러그인이 소유합니다.",
     descriptionEn:
-      "Core verification: Per-Agent Guardrail (G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Cross-LLM cross-validation (Krippendorff's α≥0.80 target), and Rights Risk assessment. Bias checks and golden-set calibration are owned by external domain plugins.",
+      "Core verification: Per-Agent Guardrail (G1 Schema, G2 Range, G3 Grounding, G4 Consistency), Cross-LLM cross-validation (Krippendorff's α≥0.80 target), and Rights Risk assessment. Bias checks and golden-set calibration are owned by external packages.",
     achievements: [
       { icon: "🚧", titleKo: "G1-G4 Per-Agent Guardrail Schema·Range·Grounding·Consistency", titleEn: "G1-G4 Per-Agent Guardrail Schema·Range·Grounding·Consistency", modalId: "modal-geode-guardrails" },
       { icon: "🔁", titleKo: "Cross-LLM 독립 재스코어링 + 일치도 게이트", titleEn: "Cross-LLM independent re-scoring + agreement gate", modalId: "modal-geode-cross-llm" },
-      { icon: "⚖️", titleKo: "Rights Risk 평가 + 도메인 검증 플러그인 확장점", titleEn: "Rights Risk assessment + domain verification plugin extension point", modalId: "modal-geode-rights-risk" },
+      { icon: "⚖️", titleKo: "Rights Risk 평가 + 외부 검증 패키지", titleEn: "Rights Risk assessment + external verification packages", modalId: "modal-geode-rights-risk" },
     ],
     blogLink: "",
     color: "#FBBF24",

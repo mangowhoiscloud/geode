@@ -266,7 +266,7 @@ create_kwargs = {
             <p>
               The cache key is the byte-for-byte content of the cached block plus
               the model ID. Any change to the static section — e.g. an updated{" "}
-              <code>GEODE.md</code> identity, a new domain example list, a router
+              <code>GEODE.md</code> identity, a router
               template revision — invalidates the cache and pays one full request
               before subsequent turns hit again.
             </p>

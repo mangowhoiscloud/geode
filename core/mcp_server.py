@@ -1,5 +1,4 @@
-"""GEODE MCP Server — expose generic GEODE tools and let the active domain
-plugin register its own tools/resources via :meth:`DomainPort.register_mcp_tools`.
+"""GEODE MCP Server — expose generic GEODE tools.
 
 This module keeps the FastMCP server shell, the two domain-agnostic tools
 (``query_memory``, ``get_health``), the ``geode://soul`` resource, and the
@@ -13,8 +12,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger(__name__)
-
 # Load core-generic MCP tool descriptions from centralized JSON.
 # Plugin-specific descriptions live alongside their plugin module.
 _MCP_TOOLS_PATH = Path(__file__).resolve().parent / "tools" / "mcp_tools.json"
@@ -26,9 +23,7 @@ def create_mcp_server() -> Any:
     """Create and configure the GEODE MCP server.
 
     Returns a FastMCP Server instance with the generic core tools/resources
-    registered. The active domain plugin (if any) gets a chance to register
-    its own tools/resources via ``domain.register_mcp_tools(server)`` before
-    the server is returned.
+    registered.
 
     Requires the ``mcp`` package to be installed.
     """
@@ -75,21 +70,6 @@ def create_mcp_server() -> Any:
         if DEFAULT_SOUL_PATH.exists():
             return DEFAULT_SOUL_PATH.read_text(encoding="utf-8")
         return ""
-
-    # Domain-plugin extension point — let the active domain (if any)
-    # register its own MCP tools/resources on the server. Failures are
-    # logged at debug level so a broken plugin doesn't take the server
-    # down (the generic tools above stay functional regardless).
-    from core.domains.port import get_domain_or_none
-
-    domain = get_domain_or_none()
-    if domain is not None:
-        register = getattr(domain, "register_mcp_tools", None)
-        if callable(register):
-            try:
-                register(mcp)
-            except Exception:
-                log.debug("Domain MCP tool registration skipped", exc_info=True)
 
     return mcp
 

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from core.async_runtime import run_process_coroutine
-
-log = logging.getLogger(__name__)
 
 
 def _clarify(
@@ -42,22 +39,3 @@ def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
             [param],
             f"'{param}' 값을 알려주세요.",
         )
-
-
-def install_domain_tool_handlers(handlers: dict[str, Any]) -> None:
-    """Merge the active domain's tool handlers into ``handlers``.
-
-    Domains implement ``DomainPort.register_tool_handlers(handlers)`` (v2,
-    optional). When absent or no domain is registered, this is a no-op.
-    """
-    try:
-        from core.domains.port import get_domain_or_none
-
-        domain = get_domain_or_none()
-        if domain is None:
-            return
-        register = getattr(domain, "register_tool_handlers", None)
-        if callable(register):
-            register(handlers)
-    except Exception:
-        log.debug("Domain tool-handler registration skipped", exc_info=True)

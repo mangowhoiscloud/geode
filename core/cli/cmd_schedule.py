@@ -109,9 +109,9 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
                 console.print()
                 console.print("  [muted]No scheduled jobs.[/muted]")
 
-        # Predefined templates (domain-specific, reference only)
+        # Predefined templates (package-specific, reference only)
         console.print()
-        console.print("  [header]Templates[/header] [muted](domain reference, not active)[/muted]")
+        console.print("  [header]Templates[/header] [muted](reference only, not active)[/muted]")
         for tmpl in PREDEFINED_AUTOMATIONS:
             console.print(f"  [muted]  {tmpl.id:<30} {tmpl.schedule:<16} {tmpl.name}[/muted]")
 
