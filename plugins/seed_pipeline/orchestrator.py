@@ -259,9 +259,8 @@ class Pipeline:
                         role,
                         budget_exc,
                     )
-                    self._emit_hook(
-                        HookEvent.SUBAGENT_FAILED, role, error=str(budget_exc)
-                    )
+                    # SUBAGENT_FAILED is emitted once below on the
+                    # !result.success branch — do not emit here.
                     result = SeedAgentResult(
                         role=role,
                         status="error",
@@ -272,6 +271,8 @@ class Pipeline:
                 except Exception as exc:
                     duration = (time.time() - started) * 1000
                     log.exception("seed-pipeline phase %s raised", role)
+                    # Hard exception path bypasses the common emit below
+                    # (we re-raise), so we DO emit failure here.
                     self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
                     if self._on_phase_error is not None:
                         self._on_phase_error(role, exc)
