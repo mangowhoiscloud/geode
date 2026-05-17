@@ -52,6 +52,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.4] — 2026-05-17
+
+### Observability
+
+- **`login_anthropic()` — token exchange 실패 시 forensic dump 추가.**
+  v0.99.3 에서도 사용자 시도 결과 `invalid_request` 지속. `script` 캡처 없이
+  사후 root cause 분석을 가능하게 하려면 영구 dump 필요.
+  `~/.geode/diagnostics/anthropic-oauth-<unix_ts>.json` 으로 (a) endpoint,
+  (b) status_code, (c) response body 전체, (d) response headers, (e) 우리가
+  보낸 request 의 client_id / redirect_uri / scope / code 접두 8자 /
+  verifier 접두 8자 / state 접두 6자 기록. `code_verifier` 같은 민감 값은
+  접두만 — 응답 body 의 `error_description` 이 root cause 진단의 핵심.
+  콘솔 `body_preview` 도 300 → 500 자로 확대.
+
+- **`login_anthropic()` — added forensic dump on token exchange failure.**
+  v0.99.3 still surfaced `invalid_request` and the user could not capture
+  the response via `script`. The flow now persists
+  `~/.geode/diagnostics/anthropic-oauth-<unix_ts>.json` containing (a)
+  endpoint, (b) status_code, (c) full response body, (d) response headers,
+  and (e) sanitized request metadata (client_id, redirect_uri, scope,
+  truncated code/verifier/state prefixes). Console preview also widens
+  from 300 → 500 chars.
+
+## [Unreleased — async-only refactor, awaiting next release stamp]
 ### Architecture
 
 - **Async-only graph/tool/MCP runtime slice.** LangGraph pipeline nodes now run

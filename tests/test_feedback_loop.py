@@ -115,7 +115,8 @@ class TestGraphWithFeedbackLoop:
     def test_dry_run_still_works_cowboy_bebop(self):
         """Existing dry-run still passes with feedback loop in place."""
         compiled = compile_graph()
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -127,14 +128,15 @@ class TestGraphWithFeedbackLoop:
                 "errors": [],
                 "iteration": 1,
                 "max_iterations": 3,
-            }
+            },
         )
         assert result["tier"] == "A"
         assert result["synthesis"].undervaluation_cause == "undermarketed"
 
     def test_dry_run_berserk_with_feedback_fields(self):
         compiled = compile_graph()
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -146,7 +148,7 @@ class TestGraphWithFeedbackLoop:
                 "errors": [],
                 "iteration": 1,
                 "max_iterations": 3,
-            }
+            },
         )
         assert result["tier"] == "S"
         assert result["synthesis"].undervaluation_cause == "conversion_failure"

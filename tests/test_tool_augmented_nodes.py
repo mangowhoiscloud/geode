@@ -63,6 +63,7 @@ def _make_state(*, dry_run: bool = False, with_tools: bool = False) -> GeodeStat
         state["_tool_definitions"] = [  # type: ignore[typeddict-unknown-key]
             {"name": "memory_search", "description": "Search memory", "input_schema": {}}
         ]
+
         # Executor injected via contextvar, NOT in state (msgpack can't serialize functions)
         async def _mock_executor(name: str, **kw: Any) -> dict[str, Any]:
             return {"result": "mock", "tool": name}

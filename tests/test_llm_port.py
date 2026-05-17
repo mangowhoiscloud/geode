@@ -117,6 +117,7 @@ class TestLLMClientPort:
 
     def test_agenerate_stream(self) -> None:
         client = MockLLMClient("hello world")
+
         async def _collect() -> list[str]:
             return [token async for token in client.agenerate_stream("system", "user")]
 

@@ -576,9 +576,7 @@ class AgenticLoop:
                     # Context overflow from 400 → attempt recovery + retry
                     if _et == "context_overflow":
                         log.warning("Context overflow detected from 400 — attempting recovery")
-                        recovered = await self._aggressive_context_recovery(
-                            system_prompt, messages
-                        )
+                        recovered = await self._aggressive_context_recovery(system_prompt, messages)
                         if recovered:
                             self._notify_context_event(
                                 "prune",
@@ -1043,9 +1041,7 @@ class AgenticLoop:
         """Delegates to :func:`_context.maybe_prune_messages`."""
         return _context.maybe_prune_messages(self, messages)
 
-    async def _check_context_overflow(
-        self, system: str, messages: list[dict[str, Any]]
-    ) -> None:
+    async def _check_context_overflow(self, system: str, messages: list[dict[str, Any]]) -> None:
         """Delegates to :func:`_context.check_context_overflow`."""
         return await _context.check_context_overflow(self, system, messages)
 

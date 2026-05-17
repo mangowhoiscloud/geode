@@ -36,9 +36,8 @@ def test_sync_calls_health_check_before_update() -> None:
     """Source-level: the drift branch must call ``_drift_target_is_healthy``
     before ``self.update_model`` so an unhealthy drift target cannot
     silently overwrite the loop's choice."""
-    src = (
-        inspect.getsource(_model_switching._settings_model_target)
-        + inspect.getsource(_model_switching.sync_model_from_settings_async)
+    src = inspect.getsource(_model_switching._settings_model_target) + inspect.getsource(
+        _model_switching.sync_model_from_settings_async
     )
     health_pos = src.find("_drift_target_is_healthy")
     update_pos = src.find("update_model_async")

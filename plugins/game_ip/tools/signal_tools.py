@@ -79,9 +79,7 @@ def _reddit_result(ip_name: str, mcp: dict[str, Any]) -> dict[str, Any]:
     return {
         "result": {
             "ip_name": ip_name,
-            "subreddit_subscribers": mcp.get(
-                "subscribers", mcp.get("subreddit_subscribers", 0)
-            ),
+            "subreddit_subscribers": mcp.get("subscribers", mcp.get("subreddit_subscribers", 0)),
             "posts_per_week": mcp.get("posts_per_week", 0),
             "avg_sentiment": mcp.get("avg_sentiment", 0.0),
             "top_topics": mcp.get("top_topics", []),

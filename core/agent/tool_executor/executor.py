@@ -135,9 +135,7 @@ class ToolExecutor:
         if tool_name in DANGEROUS_TOOLS:
             return await self._execute_dangerous_async(tool_name, tool_input, context=context)
 
-        gate_result, approved_via_hitl = await self._apply_safety_gates_async(
-            tool_name, tool_input
-        )
+        gate_result, approved_via_hitl = await self._apply_safety_gates_async(tool_name, tool_input)
         if gate_result is not None:
             return gate_result
 
@@ -168,9 +166,7 @@ class ToolExecutor:
     ) -> tuple[dict[str, Any] | None, bool]:
         return await self._approval.apply_safety_gates_async(tool_name, tool_input)
 
-    async def _call_handler_async(
-        self, handler: ToolHandler, tool_input: dict[str, Any]
-    ) -> Any:
+    async def _call_handler_async(self, handler: ToolHandler, tool_input: dict[str, Any]) -> Any:
         if self._is_async_handler(handler):
             raw = handler(**tool_input)
             return await cast(Awaitable[Any], raw)

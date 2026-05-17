@@ -93,9 +93,7 @@ class TestContextWindowManager:
 
         mgr = self._make_mgr()
         result = asyncio.run(
-            mgr._resolve_overflow_strategy(
-                FakeMetrics(), FakeSettings(), "claude-3", "anthropic"
-            )
+            mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "claude-3", "anthropic")
         )
         assert result["strategy"] == "none"
 
@@ -156,7 +154,9 @@ class TestContextWindowManager:
 
         async def _run() -> None:
             with (
-                patch("core.orchestration.context_monitor.check_context", return_value=warning_metrics),
+                patch(
+                    "core.orchestration.context_monitor.check_context", return_value=warning_metrics
+                ),
                 patch("core.orchestration.context_monitor.mask_stale_observations", return_value=0),
                 patch("core.orchestration.compaction.compact_conversation", compact),
                 patch("core.config.settings", settings),
@@ -186,7 +186,10 @@ class TestContextWindowManager:
         async def _run() -> None:
             with (
                 patch("core.orchestration.context_monitor.check_context", return_value=metrics),
-                patch("core.orchestration.context_monitor.prune_oldest_messages", side_effect=lambda m, **kw: m),
+                patch(
+                    "core.orchestration.context_monitor.prune_oldest_messages",
+                    side_effect=lambda m, **kw: m,
+                ),
                 patch("core.config.settings", settings),
             ):
                 await mgr.check_context_overflow(

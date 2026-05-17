@@ -129,9 +129,9 @@ class TestNotificationHookRegistration:
         """Hooks should not crash on notification send failure."""
         mock_adapter = MagicMock()
         mock_adapter.ais_available = AsyncMock(return_value=True)
-        mock_adapter.asend_message = AsyncMock(return_value=NotificationResult(
-            success=False, channel="slack", error="rate limited"
-        ))
+        mock_adapter.asend_message = AsyncMock(
+            return_value=NotificationResult(success=False, channel="slack", error="rate limited")
+        )
         set_notification(mock_adapter)
 
         hooks = HookSystem()

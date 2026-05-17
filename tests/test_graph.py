@@ -22,7 +22,8 @@ class TestGraphBuild:
     def test_dry_run_cowboy_bebop(self):
         """Full pipeline dry-run: Cowboy Bebop → Tier A, undermarketed."""
         compiled = compile_graph()
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Cowboy Bebop",
                 "pipeline_mode": "full_pipeline",
@@ -31,7 +32,7 @@ class TestGraphBuild:
                 "skip_verification": False,
                 "analyses": [],
                 "errors": [],
-            }
+            },
         )
 
         assert result["ip_info"]["ip_name"] == "Cowboy Bebop"
@@ -50,7 +51,8 @@ class TestGraphBuild:
     def test_dry_run_berserk(self):
         """Full pipeline dry-run: Berserk → S-tier, conversion_failure."""
         compiled = compile_graph()
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Berserk",
                 "pipeline_mode": "full_pipeline",
@@ -59,7 +61,7 @@ class TestGraphBuild:
                 "skip_verification": False,
                 "analyses": [],
                 "errors": [],
-            }
+            },
         )
 
         assert result["ip_info"]["ip_name"] == "Berserk"
@@ -72,7 +74,8 @@ class TestGraphBuild:
     def test_dry_run_ghost_in_shell(self):
         """Full pipeline dry-run: Ghost in the Shell → discovery_failure."""
         compiled = compile_graph()
-        result = _ainvoke(compiled,
+        result = _ainvoke(
+            compiled,
             {
                 "ip_name": "Ghost in the Shell",
                 "pipeline_mode": "full_pipeline",
@@ -81,7 +84,7 @@ class TestGraphBuild:
                 "skip_verification": False,
                 "analyses": [],
                 "errors": [],
-            }
+            },
         )
 
         assert result["ip_info"]["ip_name"] == "Ghost in the Shell"

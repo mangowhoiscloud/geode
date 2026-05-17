@@ -95,9 +95,7 @@ class TestGoogleCalendarAdapter:
                 }
             ]
         }
-        events = asyncio.run(
-            google_adapter.alist_events(start=NOW, end=NOW + timedelta(days=1))
-        )
+        events = asyncio.run(google_adapter.alist_events(start=NOW, end=NOW + timedelta(days=1)))
         assert len(events) == 1
         assert events[0].title == "Team Standup"
         assert events[0].source == "google"
@@ -143,9 +141,7 @@ class TestGoogleCalendarAdapter:
         start = NOW + timedelta(days=1)
         end = start + timedelta(hours=1)
 
-        event = asyncio.run(
-            google_adapter.acreate_event("Meeting", start, end, description="Test")
-        )
+        event = asyncio.run(google_adapter.acreate_event("Meeting", start, end, description="Test"))
         assert event.event_id == "new_evt_1"
         assert event.title == "Meeting"
         assert event.source == "google"
@@ -155,9 +151,7 @@ class TestGoogleCalendarAdapter:
     ):
         mock_manager.acall_tool.return_value = {"error": "quota exceeded"}
         with pytest.raises(RuntimeError, match="quota exceeded"):
-            asyncio.run(
-                google_adapter.acreate_event("Meeting", NOW, NOW + timedelta(hours=1))
-            )
+            asyncio.run(google_adapter.acreate_event("Meeting", NOW, NOW + timedelta(hours=1)))
 
     def test_delete_event(self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock):
         mock_manager.acall_tool.return_value = {"status": "deleted"}
@@ -365,9 +359,7 @@ class TestCalendarCreateEventTool:
     def test_execute_no_adapter(self):
         set_calendar(None)
         tool = CalendarCreateEventTool()
-        result = asyncio.run(
-            tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00")
-        )
+        result = asyncio.run(tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00"))
         assert "error" in result
 
     def test_execute_invalid_datetime(self, mock_manager: MagicMock):
@@ -381,18 +373,14 @@ class TestCalendarCreateEventTool:
 
         set_calendar(None)
 
-    def test_aexecute_create_with_adapter_uses_async_calendar_path(
-        self, mock_manager: MagicMock
-    ):
+    def test_aexecute_create_with_adapter_uses_async_calendar_path(self, mock_manager: MagicMock):
         mock_manager.acall_tool.return_value = {"id": "async_new"}
         google = GoogleCalendarAdapter(manager=mock_manager)
         composite = CompositeCalendarAdapter([google])
         set_calendar(composite)
 
         tool = CalendarCreateEventTool()
-        result = asyncio.run(
-            tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00")
-        )
+        result = asyncio.run(tool.aexecute(title="Test", start_datetime="2026-03-19T14:00:00"))
         assert result["result"]["created"] is True
         assert result["result"]["event_id"] == "async_new"
         mock_manager.acall_tool.assert_awaited_once()

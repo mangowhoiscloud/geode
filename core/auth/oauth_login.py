@@ -710,7 +710,44 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
         raise RuntimeError(f"Anthropic token exchange failed: {exc}") from exc
 
     if resp.status_code != 200:
-        body_preview = resp.text[:300] if resp.text else "(empty)"
+        # Persist a forensic dump so root-cause analysis does not depend on
+        # the user re-running the flow under ``script``. Tokens are not
+        # part of the request, the response body on a 4xx is the OAuth
+        # error_description we need, and the only sensitive value in
+        # the request body (``code_verifier``) is masked to its prefix.
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+
+            dump_dir = _Path.home() / ".geode" / "diagnostics"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            dump_path = dump_dir / f"anthropic-oauth-{int(time.time())}.json"
+            dump_path.write_text(
+                _json.dumps(
+                    {
+                        "ts": int(time.time()),
+                        "endpoint": _ANTHROPIC_TOKEN_URL,
+                        "status_code": resp.status_code,
+                        "response_body": resp.text,
+                        "response_headers": dict(resp.headers),
+                        "request": {
+                            "client_id": client_id,
+                            "redirect_uri": _ANTHROPIC_REDIRECT_URI,
+                            "scope": scope,
+                            "code_prefix": auth_code[:8] + "...",
+                            "verifier_prefix": verifier[:8] + "...",
+                            "state_prefix": state[:6] + "...",
+                        },
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            log.warning("anthropic-oauth: failure dumped → %s", dump_path)
+        except Exception:
+            log.debug("anthropic-oauth: failure dump write failed", exc_info=True)
+
+        body_preview = resp.text[:500] if resp.text else "(empty)"
         raise RuntimeError(f"Anthropic token exchange returned {resp.status_code}: {body_preview}")
 
     return dict(resp.json())
