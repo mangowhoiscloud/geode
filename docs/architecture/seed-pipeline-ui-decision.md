@@ -101,19 +101,23 @@ voters = [
 required_diversity_families = 2
 ```
 
-source / adapter binding — Petri 의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` 를 그대로 재사용. credential_source resolver 도 `plugins.petri_audit.credential_source` 를 직 호출. 즉 **3-judge panel 의 provider diversity = role 의 default_model 의 family 분포** 로 표현 (Plan ID 가 아닌 model name 기반).
+source / adapter binding — Petri 의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` 를 그대로 재사용. credential_source resolver 도 `plugins.petri_audit.credential_source` 를 직 호출. 즉 **provider diversity = `[seed_pipeline.judge_panel].voters` 의 `family` field 분포** 로 표현.
 
 manifest schema + loader — `plugins/seed_pipeline/manifest.py` (Petri 의 `plugins/petri_audit/manifest.py` 패턴 재사용, pydantic + drift validator + lazy yaml import + Petri manifest 의 source/adapter import).
 
 ### Default 3-judge panel composition (settled decision)
 
-`judge_a` + `judge_b` + `judge_c` 의 `default_model` 조합:
+`[seed_pipeline.judge_panel].voters` 의 3-element default (위 TOML 의 voters list 와 동일):
 
-- `claude-sonnet-4-6` (anthropic family, claude-cli source)
-- `gpt-5.5` (openai family, codex-cli source)
-- `claude-haiku-4-5` (anthropic family, anthropic-payg source)
+| Voter | family | source | model | Plan ID (예) |
+|---|---|---|---|---|
+| voter[0] | anthropic | claude-cli | claude-sonnet-4-6 | claude-max-`<user>` |
+| voter[1] | openai | openai-codex | gpt-5.5 | chatgpt-plus-`<user>` |
+| voter[2] | anthropic | api_key | claude-haiku-4-5 | anthropic-payg-geode |
 
-→ 2 family (anthropic + openai), 3 plan, 3 model. diversity validator 통과.
+→ 2 family (anthropic + openai), 3 source, 3 model. diversity validator (`required_diversity_families = 2`) 통과.
+
+Source value 는 Petri 의 `[petri.source.<family>].allowed` 와 1:1 (anthropic 의 `claude-cli` / `api_key` / `auto`, openai 의 `openai-codex` / `api_key` / `auto`). Plan ID 는 user 환경 의 plan_registry 에서 동적 lookup.
 
 ### text_embed provider (settled decision)
 
