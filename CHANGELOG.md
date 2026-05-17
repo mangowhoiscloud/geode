@@ -52,6 +52,62 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.9] — 2026-05-17
+
+### Changed
+
+- **`/login anthropic` — picker 분기 (API key | claude CLI subprocess).**
+  v0.99.0..v0.99.8 의 owned-PKCE flow 6회 시도가 모두 Anthropic 의
+  "Invalid request format" server 거절. public OAuth client
+  `9d1c250a-…` 는 first-party Claude Code 전용으로 등록되어 있고
+  2026-04-04 third-party block 정책으로 외부 origin 차단. owned path
+  포기 + 두 가지 대안:
+
+    1. **API key (Anthropic Console PAYG, Tier 0)** — `sk-ant-…` 직접
+       입력 → `~/.geode/auth.toml` 의 `anthropic-payg-geode` Plan +
+       Profile 로 저장.
+    2. **claude CLI subprocess (Tier 2, paperclip ACP 패턴)** —
+       `claude /login` 을 사용자 TTY 에 spawn → first-party CLI 가 직접
+       OAuth → keychain 저장 → GEODE 가 keychain 에서 read 후 `auth.toml`
+       의 `anthropic-claude-cli` Plan 으로 mirror.
+
+  picker UX: `/login anthropic` 입력 시 multi-choice prompt
+  (`1) API key  2) claude CLI  q) skip`).
+
+- **`/login anthropic` — picker between API key and claude CLI
+  subprocess.** Six iterations of an owned PKCE flow (v0.99.0–v0.99.8)
+  all hit Anthropic's "Invalid request format" at the authorize step;
+  the public OAuth client `9d1c250a-…` is registered first-party
+  only and Anthropic's 2026-04-04 policy blocks third-party origins.
+  The owned path is dropped. Two replacements:
+
+    1. API key (Anthropic Console PAYG) — paste `sk-ant-…`,
+       persisted under `anthropic-payg-geode` in `auth.toml`.
+    2. claude CLI subprocess (paperclip ACP-style) — spawn
+       `claude /login` in the user's TTY; the first-party CLI handles
+       OAuth and writes the token to the keychain, which GEODE then
+       imports into `auth.toml` (`anthropic-claude-cli` plan).
+
+### Removed
+
+- **Owned-PKCE Anthropic OAuth flow (v0.99.0..v0.99.8).** Removed
+  `login_anthropic`, `_run_anthropic_pkce_flow`,
+  `_parse_pasted_code`, `_generate_pkce_pair`, the 8-stage forensic
+  dump helper, and the constants `_ANTHROPIC_AUTHORIZE_URL`,
+  `_ANTHROPIC_TOKEN_URL`, `_ANTHROPIC_REDIRECT_URI`,
+  `_ANTHROPIC_USER_AGENT`, `_ANTHROPIC_DEFAULT_SCOPES`,
+  `_ANTHROPIC_CLIENT_ID_CANDIDATES`. 438-line block from
+  `core/auth/oauth_login.py`. `read_geode_anthropic_credentials`
+  preserved for downstream resolvers.
+
+- **Owned-PKCE Anthropic OAuth flow removed.** ~438 lines + helpers
+  excised from `core/auth/oauth_login.py`. Only
+  `read_geode_anthropic_credentials` survives for callers that still
+  read `auth.toml` for an OAuth token (now populated only by the
+  claude CLI branch).
+
+
+
 ## [0.99.8] — 2026-05-17
 
 ### Fixed
