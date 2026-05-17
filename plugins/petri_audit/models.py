@@ -34,34 +34,65 @@ __all__ = [
 ]
 
 
+# P2-D (2026-05-17) — provider → family normalisation. ``family_of`` was
+# the second hardcoded routing table after ``core.config._resolve_provider``;
+# both now share ``core.config.routing_manifest``'s prefix table. ``family_of``
+# adds a thin provider → family translation so the M1 family-mismatch guard
+# in :mod:`plugins.petri_audit.optimize` stays conservative.
+_PROVIDER_TO_FAMILY: dict[str, str] = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "openai-codex": "openai",
+    "glm": "zhipuai",
+}
+
+
 def family_of(model_id: str) -> str:
     """Return the LLM family ('anthropic' / 'openai' / 'zhipuai' / 'unknown').
 
     Used by :mod:`plugins.petri_audit.optimize` to enforce **M1 — Judge
     must not share a family with the generator** (mitigation against
-    in-context reward hacking + self-preference bias). See plan
-    § "D 단계 도입 전 위험 카탈로그" R1/R3.
+    in-context reward hacking + self-preference bias).
 
     Raw provider-prefixed ids ("anthropic/...", "openai-api/...") are
     parsed by stripping the trailing segment and re-classifying the
     bare model id; "geode/<base>" routes through us so the family is
     that of the base model.
+
+    P2-D: delegates to ``core.config.routing_manifest.resolve_provider``
+    + a small provider → family normalisation table. Providers without
+    a Petri family mapping (``google`` / ``deepseek`` / ``meta`` /
+    ``alibaba``) collapse to ``"unknown"``.
     """
     if not model_id:
         return "unknown"
     base = model_id.rsplit("/", 1)[-1]
-    if base.startswith("claude-"):
-        return "anthropic"
-    if base.startswith("gpt-") or base in ("o3", "o4-mini"):
-        return "openai"
-    if base.startswith("glm-"):
-        return "zhipuai"
-    # Provider prefix fallback for raw inspect_ai identifiers.
-    if model_id.startswith("anthropic/"):
-        return "anthropic"
-    if model_id.startswith("openai/") or model_id.startswith("openai-api/"):
-        return "openai"
-    return "unknown"
+    if not base:
+        return "unknown"
+    try:
+        from core.config.routing_manifest import load_routing_manifest
+
+        manifest = load_routing_manifest()
+    except Exception:
+        return "unknown"
+    # Walk codex_only_models / codex_suffixes / prefixes explicitly. We
+    # deliberately do NOT fall through to the manifest's fallback_provider
+    # — legacy family_of returned "unknown" for ids that matched no rule,
+    # and the optimiser's M1 guard depends on that conservatism (an
+    # unrecognised judge model must not silently be classified as
+    # "openai" same-family with a gpt-* generator).
+    rules = manifest.routing
+    if base in rules.codex_only_models or any(base.endswith(s) for s in rules.codex_suffixes):
+        provider: str | None = "openai-codex"
+    else:
+        provider = None
+        for prefix, target in rules.prefixes.items():
+            if base.startswith(prefix):
+                provider = target
+                break
+    if provider is None:
+        return "unknown"
+    return _PROVIDER_TO_FAMILY.get(provider, "unknown")
 
 
 def same_family(model_a: str, model_b: str) -> bool:

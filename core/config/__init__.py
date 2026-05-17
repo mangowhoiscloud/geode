@@ -245,55 +245,27 @@ GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 GLM_PAYG_BASE_URL = "https://api.z.ai/api/paas/v4"
 
 
-# v0.53.0 — models that are CODEX-ONLY per OpenAI's official Codex
-# models page (developers.openai.com/codex/models, verified 2026-04-27).
-# These can ONLY be called via chatgpt.com/backend-api/codex (OAuth);
-# no API-key path. Pre-fix _resolve_provider returned "openai" for
-# gpt-5.5 → static map misled router; resolve_routing's equivalence-
-# class scan corrected at runtime, but the user-visible mapping was
-# wrong. Listing here makes the OAuth-only constraint explicit.
-_CODEX_ONLY_MODELS: frozenset[str] = frozenset(
-    {
-        "gpt-5.5",
-        "gpt-5.5-pro",
-    }
-)
-
-
 def _resolve_provider(model: str) -> str:
-    """Resolve provider name from model ID.
+    """Resolve provider name from model ID via the routing manifest.
 
-    Prefix-based inference with broad model coverage:
-      claude-*                    → anthropic
-      glm-*                       → glm
-      gpt-5.5 / gpt-5.5-pro       → openai-codex (OAuth-only models)
-      *-codex / *-codex-max/mini  → openai-codex
-      gpt-* / o3-* / o4-*         → openai
-      gemini-*                    → google
-      deepseek-*                  → deepseek
-      llama-*                     → meta
-      qwen-*/qwen3*               → alibaba
-      (fallback)                  → openai
+    P2-D (2026-05-17): the legacy 11-branch if/elif chain (with its
+    sibling ``_CODEX_ONLY_MODELS`` frozenset) is replaced by a single
+    delegation to :func:`core.config.routing_manifest.resolve_provider`.
+    The manifest's ``[routing.prefixes]`` table, ``codex_only_models``
+    list, and ``codex_suffixes`` list together produce identical output
+    for every documented branch (parity verified in
+    ``tests/test_routing_manifest.py::test_resolve_provider_legacy_parity``).
+    Users now adjust provider routing by editing
+    ``core/config/routing.toml`` (or ``~/.geode/routing.toml``) instead
+    of patching code.
+
+    Public surface unchanged — every caller (``core.llm.router``,
+    ``core.auth.plan_registry``, monkeypatched test sites) keeps
+    working without modification.
     """
-    if model.startswith("claude-"):
-        return "anthropic"
-    if model.startswith("glm-"):
-        return "glm"
-    if model in _CODEX_ONLY_MODELS:
-        return "openai-codex"
-    if model.endswith("-codex") or model.endswith("-codex-max") or model.endswith("-codex-mini"):
-        return "openai-codex"
-    if model.startswith(("gpt-", "o3-", "o4-")):
-        return "openai"
-    if model.startswith("gemini-"):
-        return "google"
-    if model.startswith("deepseek-"):
-        return "deepseek"
-    if model.startswith("llama-"):
-        return "meta"
-    if model.startswith(("qwen-", "qwen3")):
-        return "alibaba"
-    return "openai"
+    from core.config.routing_manifest import resolve_provider as _manifest_resolve
+
+    return _manifest_resolve(model)
 
 
 # ---------------------------------------------------------------------------
