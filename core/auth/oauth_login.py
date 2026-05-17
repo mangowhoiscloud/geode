@@ -579,15 +579,19 @@ _ANTHROPIC_USER_AGENT = "claude-cli/2.1.140"
 # still renders the code in ``<code>#<state>`` for manual paste.
 _ANTHROPIC_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 
-# Scope set mirrors Claude Code's hint string in the native binary:
-#   "user:profile user:inference user:sessions:claude_code user:mcp_servers"
-# Anthropic rejects authorize requests asking for scopes outside the
-# set registered for the client, so we send the full superset.
+# v0.99.8 — scope set matched 1:1 with Hermes Agent's working
+# ``_OAUTH_SCOPES = "org:create_api_key user:profile user:inference"``
+# (``hermes-agent/agent/anthropic_adapter.py:1044``). Claude Code's
+# binary hint string also lists ``user:sessions:claude_code`` and
+# ``user:mcp_servers``; those appear to be hint-only (advertised in
+# helper text, not actually registered on the public OAuth client),
+# because requesting them produced "Invalid request format" on the
+# Claude.ai authorize step (user reports for v0.99.5–v0.99.7). Hermes
+# 's narrower set is the one production OAuth client accepts.
 _ANTHROPIC_DEFAULT_SCOPES = (
-    "user:inference",
+    "org:create_api_key",
     "user:profile",
-    "user:sessions:claude_code",
-    "user:mcp_servers",
+    "user:inference",
 )
 
 # Claude Code's public OAuth client_id candidates, reverse-engineered from
