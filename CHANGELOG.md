@@ -54,6 +54,30 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ### Changed
 
+- **`_resolve_provider` + `family_of` 통합 SOT (P2-D).**
+  GEODE 의 두 hardcoded routing table 을 manifest 의
+  `[routing.prefixes]` + `codex_only_models` + `codex_suffixes` 로
+  통합. `core/config/__init__.py::_resolve_provider` 의 11-branch
+  if/elif (+ `_CODEX_ONLY_MODELS` frozenset) 제거 — manifest 의
+  `resolve_provider` 한 줄 위임. `plugins/petri_audit/models.py::
+  family_of` 의 5-branch 도 manifest prefix table walk + provider→
+  family 매핑으로 전환. `o3` / `o4-mini` bare ids 는 manifest prefix
+  table 에 명시 추가하여 parity 보존 (legacy special case). family_of
+  은 manifest fallback_provider 까지 따라가지 않고 prefix 매칭 안 되면
+  `"unknown"` 반환 — M1 family-mismatch guard 의 conservatism 유지.
+
+- **`_resolve_provider` + `family_of` unified onto the manifest (P2-D).**
+  Both legacy provider-resolution tables (`core/config/__init__.py::
+  _resolve_provider` 11-branch + `_CODEX_ONLY_MODELS` frozenset; and
+  `plugins/petri_audit/models.py::family_of` 5-branch) now delegate to
+  `core/config/routing_manifest`'s `[routing.prefixes]` table +
+  codex_only_models / codex_suffixes. Bare `o3` / `o4-mini` were
+  added to the prefix table to preserve the legacy special-case.
+  `family_of` keeps its conservative "unknown" fallback (does not
+  follow the manifest's fallback_provider) so the M1 family-mismatch
+  guard in `plugins.petri_audit.optimize` cannot silently classify an
+  unrecognised judge model.
+
 - **Credential patterns + keychain service migrated to routing.toml (P2-C).**
   `core/cli/onboarding.py` 의 `_KEY_PATTERNS` 상수 (3-tuple regex/provider/
   env_var) 가 manifest 의 `[credentials.patterns]` + `[credentials.
