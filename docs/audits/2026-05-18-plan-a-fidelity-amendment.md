@@ -1,4 +1,4 @@
-# CLAUDE.md fidelity amendment — Plan A seed-pipeline sprint 한정
+# Fidelity amendment — Plan A seed-pipeline sprint 한정 (CLAUDE.md + Claude Code system-prompt 일부)
 
 **Date**: 2026-05-18
 **Scope**: Seed Pipeline sprint S1-S12 (16 PR)
@@ -14,12 +14,21 @@ CLAUDE.md 의 simplicity / minimum-viable 제약을 그대로 적용하면 6 age
 
 ## 해제 대상 (sprint 한정)
 
-| CLAUDE.md 위치 | 원문 | 본 sprint 적용 |
+### CLAUDE.md 규칙
+
+| 위치 | 원문 | 본 sprint 적용 |
 |---|---|---|
-| `### 2. Plan + Socratic Gate` Q4 | "What is the simplest implementation? (P10 Simplicity Selection) Adopt minimum changes only" | **Skip Q4**. 6-agent topology 의 paper-defined contract 가 task scope. Q1-Q3 + Q5 만 적용. |
-| 시스템 프롬프트 "Don't add features, refactor, or introduce abstractions beyond what the task requires" | 엄격 | 본 sprint 의 task = ADR-001 의 6 agent + Elo tournament + 3-judge panel + manifest + picker + cost preview + pre-flight. 본 ADR 범위 전부가 task. |
-| 시스템 프롬프트 "Three similar lines is better than premature abstraction" | 엄격 | `BaseSeedAgent` 추상화 (`plugins/seed_pipeline/agents/base.py`) 허용. paper 의 6-way symmetry from arXiv:2502.18864 Figure 1. premature 아닌 structural. |
-| 시스템 프롬프트 "Don't design for hypothetical future requirements" | 엄격 | seed pool naming `seeds_gen<N>` monotonic 은 hypothetical future 아닌 paper 의 cumulative-generation 패턴 직접 구현. |
+| `CLAUDE.md:170` `### 2. Plan + Socratic Gate` Q4 | "What is the simplest implementation? (P10 Simplicity Selection) Adopt minimum changes only" | **Skip Q4**. 6-agent topology 의 paper-defined contract 가 task scope. Q1-Q3 + Q5 만 적용. |
+
+### Claude Code system-prompt 규칙 (CLAUDE.md 외 source)
+
+본 sprint 의 Code agent 의 system prompt 는 본 amendment 의 해제를 인식하고 다음 행동을 정상으로 판정.
+
+| 시스템 prompt 원문 | 본 sprint 적용 |
+|---|---|
+| "Don't add features, refactor, or introduce abstractions beyond what the task requires" | 본 sprint 의 task = ADR-001 의 6 agent + Elo tournament + 3-judge panel + manifest + picker + cost preview + pre-flight. 본 ADR 범위 전부가 task. |
+| "Three similar lines is better than premature abstraction" | `BaseSeedAgent` 추상화 (`plugins/seed_pipeline/agents/base.py`) 허용. paper 의 6-way symmetry from arXiv:2502.18864 Figure 1. premature 아닌 structural. |
+| "Don't design for hypothetical future requirements" | seed pool naming `seeds_gen<N>` monotonic 은 hypothetical future 아닌 paper 의 cumulative-generation 패턴 직접 구현. |
 
 ## 강화 대상 (sprint 한정 + 영구)
 
@@ -74,5 +83,4 @@ CLAUDE.md 의 simplicity / minimum-viable 제약을 그대로 적용하면 6 age
 - ADR-003 `docs/architecture/seed-pipeline-ui-decision.md`
 - Plan `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
 - AI co-scientist paper — arXiv:2502.18864 (6-agent contract)
-- `[[feedback_codex_mcp_verification]]` — per-task Codex MCP 룰
-- `[[feedback_post_implementation_verification]]` — 4-dim 검증 룰
+- `.geode/skills/codex-mcp-verify/SKILL.md` — per-task Codex MCP skill

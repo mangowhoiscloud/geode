@@ -23,33 +23,101 @@ Petri 는 4-path 모두 받침 (P1-C 5-adapter split). seed-pipeline (ADR-001) �
 
 **6-role × 4-path manifest + TUI picker + cost preview + ToS notice + pre-flight + slash command**.
 
-### 1. Manifest pattern (P1-A 차용)
+### 1. Manifest pattern (Petri P1-A 4-layer 차용)
+
+Petri 의 `plugins/petri_audit/petri.plugin.toml` 의 schema (`[petri]` / `[petri.role.*]` / `[petri.source.*]` / `[petri.adapter.*]`) 를 그대로 차용. seed-pipeline 은 **source / adapter layer 를 재정의하지 않고 Petri 의 것을 참조** — 같은 4-path 를 같은 adapter 로 호출. role layer 만 신규.
 
 `plugins/seed_pipeline/seed_pipeline.plugin.toml`:
 
 ```toml
+# Schema layers:
+#   1. [seed_pipeline] — enabled roles
+#   2. [seed_pipeline.role.<name>] — per-role default_model + allowed_models +
+#      role_contract (Petri's [petri.role.*] schema 와 1:1)
+#   3. source / adapter — reuse Petri's [petri.source.*] + [petri.adapter.*]
+#      (seed_pipeline.manifest.py 의 loader 가 petri.plugin.toml 의 해당
+#      섹션을 read-only 로 import)
+
+[seed_pipeline]
+enabled_roles = [
+    "generator", "critic", "proximity", "pilot",
+    "judge_a", "judge_b", "judge_c", "evolver", "meta_reviewer",
+]
+
 [seed_pipeline.role.generator]
-default_family = "anthropic"
-default_source = "claude-cli"
-allowed_families = ["anthropic", "openai"]
-allowed_sources = ["claude-cli", "codex-cli", "openai-payg", "anthropic-payg"]
-preferred_kind = "SUBSCRIPTION"
-fallback_kind = "PAYG"
+default_model = "claude-sonnet-4-6"
+allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6", "gpt-5.5"]
+role_contract = "roles/generator.md"
 
 [seed_pipeline.role.critic]
-# ... 같은 schema
+default_model = "claude-sonnet-4-6"
+allowed_models = ["claude-sonnet-4-6", "claude-haiku-4-5", "gpt-5.5"]
+role_contract = "roles/critic.md"
 
-[seed_pipeline.role.judge_panel]
-required_diversity_families = 2          # 최소 2 family
-default_panel = [
-    "anthropic.claude-cli",
-    "openai.codex-cli",
-    "anthropic.anthropic-payg",
-]
-allowed_combinations = "any-2-families"
+[seed_pipeline.role.proximity]
+# Embedding-based, not LLM-completion. text_embed tool 호출.
+default_model = "text-embedding-3-small"
+allowed_models = ["text-embedding-3-small"]
+role_contract = "roles/proximity.md"
+
+[seed_pipeline.role.pilot]
+default_model = "claude-haiku-4-5"
+allowed_models = ["claude-haiku-4-5", "gpt-5.4-mini"]
+role_contract = "roles/pilot.md"
+
+[seed_pipeline.role.judge_a]
+default_model = "claude-sonnet-4-6"
+allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
+role_contract = "roles/judge.md"
+
+[seed_pipeline.role.judge_b]
+default_model = "gpt-5.5"
+allowed_models = ["gpt-5.5", "gpt-5.4"]
+role_contract = "roles/judge.md"
+
+[seed_pipeline.role.judge_c]
+default_model = "claude-haiku-4-5"
+allowed_models = ["claude-haiku-4-5", "gpt-5.4-mini"]
+role_contract = "roles/judge.md"
+
+[seed_pipeline.role.evolver]
+default_model = "claude-sonnet-4-6"
+allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
+role_contract = "roles/evolver.md"
+
+[seed_pipeline.role.meta_reviewer]
+default_model = "claude-opus-4-7"
+allowed_models = ["claude-opus-4-7", "claude-sonnet-4-6"]
+role_contract = "roles/meta_reviewer.md"
+
+# 3-judge panel diversity validator — manifest loader 가 enabled_roles 의
+# judge_a/b/c 의 default_model 가 최소 2 family 인지 검사. 위반 시 reject.
+[seed_pipeline.judge_panel]
+required_diversity_families = 2
 ```
 
-manifest schema + loader — `plugins/seed_pipeline/manifest.py` (Petri 의 `plugins/petri_audit/manifest.py` 패턴 재사용, pydantic + drift validator + lazy yaml import).
+source / adapter binding — Petri 의 `[petri.source.anthropic]` / `[petri.source.openai]` / `[petri.adapter.*]` 를 그대로 재사용. credential_source resolver 도 `plugins.petri_audit.credential_source` 를 직 호출. 즉 **3-judge panel 의 provider diversity = role 의 default_model 의 family 분포** 로 표현 (Plan ID 가 아닌 model name 기반).
+
+manifest schema + loader — `plugins/seed_pipeline/manifest.py` (Petri 의 `plugins/petri_audit/manifest.py` 패턴 재사용, pydantic + drift validator + lazy yaml import + Petri manifest 의 source/adapter import).
+
+### Default 3-judge panel composition (settled decision)
+
+`judge_a` + `judge_b` + `judge_c` 의 `default_model` 조합:
+
+- `claude-sonnet-4-6` (anthropic family, claude-cli source)
+- `gpt-5.5` (openai family, codex-cli source)
+- `claude-haiku-4-5` (anthropic family, anthropic-payg source)
+
+→ 2 family (anthropic + openai), 3 plan, 3 model. diversity validator 통과.
+
+### text_embed provider (settled decision)
+
+신규 tool `core/tools/text_embed.py` (S4) 가 기본 사용할 provider:
+
+- **OpenAI `text-embedding-3-small`** ($0.02 / 1M tok), 1536-dim.
+- 다른 provider (Voyage, Cohere) 후순위 — 본 ADR 의 결정은 OpenAI 단일.
+- routing.toml 의 `[embedding]` section 으로 user override 가능 (별도 sub-PR 의 enhancement).
+- credential — OpenAI PAYG (sk-…) 만 사용. ChatGPT Plus OAuth 는 embeddings API 미지원.
 
 ### 2. 6-agent × 4-path picker (TUI)
 

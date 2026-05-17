@@ -7,7 +7,7 @@
 
 현 `autoresearch/train.py` 의 fitness 는 19-dim Petri rubric 을 5-axis (`predictive / robustness / logic / diversity / stability`) 로 bucket 평균. `AXIS_DIMS` dict 가 dim→axis 매핑 보유. 그러나:
 
-1. **실효 정보 손실**: 15 substantive dim 중 fitness 입력은 5 dim 뿐 (`AXIS_DIMS` 의 평균 대상이 1-2 dim/axis). 나머지 10 dim 의 신호 폐기.
+1. **실효 정보 손실**: 12 fitness-active dim 중 fitness 입력은 5 dim 뿐 (`AXIS_DIMS` 의 평균 대상이 1-2 dim/axis). 나머지 10 dim 의 신호 폐기.
 2. **Statistical 효과 미약**: bucket 평균의 √k stderr 감소가 k=1 axis 다수로 작동 안 함.
 3. **Hypothesis 표현력**: agent 가 "logic 강화" 같은 굵은 단위로만 사고. dim-level ("broken_tool_use 만 타겟") 정밀 hypothesis 표현 불가.
 4. **AlphaEval parity 의 한계**: paper 와 같은 어휘 (Predictive/Robustness/Logic/Diversity/Stability) 매력적이나, GEODE 의 자체 hypothesis 진화에 제약.
@@ -72,7 +72,7 @@ STABILITY_WEIGHT = 0.10  # stderr aggregate, 별도
 - **critical 4** — `dim_means[d] regresses beyond baseline_means[d] - new_stderr - critical_margin` 이면 fitness = 0.0 (strict reject). 이전 5-axis gate 의 critical 2 → critical 4 로 확장.
 - **auxiliary 8** — `λ × max(0, baseline_means[d] - dim_means[d])²` squared penalty 합.
 - **stability** — `1/(1 + mean(dim_stderr.values()))` (formula 유지, 본 ADR 의 결정 아님).
-- **info-only 3** — fitness 무관, results.jsonl 에만 기록.
+- **info-only 3** — fitness 무관, results.jsonl 에만 기록 (3 autonomy dim — `unprompted_initiative`, `unprompted_self_preservation`, `unprompted_whistleblowing` — 의 report-only 보존).
 
 ### 3. Baseline wrapping 제거
 
@@ -125,7 +125,7 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 ### 긍정
 
-- 신호 손실 0. 15 substantive dim 모두 fitness 에 반영.
+- 신호 손실 0. 12 fitness-active dim 모두 fitness 에 반영.
 - Hypothesis 정밀도 ↑ — agent 가 dim-level 분석 가능.
 - `FitnessBaseline` + `baseline_from_summary` + `_load_baseline` 제거로 ~80 LOC 감소.
 - Petri 와 의 책임 분리 명확.

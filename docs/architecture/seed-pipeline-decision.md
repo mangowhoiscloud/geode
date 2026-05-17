@@ -17,6 +17,16 @@ AI co-scientist paper 의 6-agent topology (Generation / Reflection / Ranking / 
 
 **Full-fidelity**: 6 agent 모두 실제 구현 (Meta-review stub 금지). Elo tournament + 3-judge panel + provider diversity 강제. CLAUDE.md 의 Socratic Q4 simplicity 제약은 본 sprint 한정 해제 (별도 fidelity amendment doc 참조).
 
+### Operational defaults (settled, 본 ADR 의 binding)
+
+| Item | Default | 사유 |
+|---|---|---|
+| Token budget guard | soft warning at $0.50 / sub-agent (cumulative), hard kill at $2.00 | 무인 진화 시 runaway 회피. config 가능 (`SEED_PIPELINE_BUDGET_SOFT_USD` / `_HARD_USD` env). |
+| Pipeline run budget cap | soft $0.30 / gen, hard $1.00 / gen | tournament 60 match × 3 judge × ~$0.02 = ~$3.6 의 worst-case 제어. config 가능. |
+| Concurrency Lane | `seed-pipeline` Lane, `max_concurrent=16` (기본 `global` Lane 의 max=8 별도) | 15-20 candidate parallel + tournament match 의 wall-time 감소 |
+| Sub-agent recursion depth | `max_depth=1` (현 SubAgentManager 기본) | parent AgenticLoop central supervisor. 6-phase 모두 표현 가능 |
+| Bootstrap (첫 generation) | `baseline=None` → cross-axis gate 비활성, simple weighted sum 반환 | baseline 측정 자체가 첫 gen 의 결과. ADR-002 §5 참조 |
+
 ## Decision Drivers
 
 - **No external dep**: GEODE 본체에 LangGraph 없음. seed-pipeline 만 LangGraph 추가 시 본체 분리 어색. self-host SubAgentManager 가 이미 6-phase 의 90% 받침.
