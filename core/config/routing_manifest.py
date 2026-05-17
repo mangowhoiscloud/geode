@@ -55,20 +55,9 @@ __all__ = [
 
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "routing.toml"
 
-
-def _user_override_path() -> Path:
-    """Resolve the user override path lazily — uses ``core.paths`` if it
-    imports cleanly (production), else falls back to ``~/.geode/routing.toml``
-    so unit tests that monkeypatch ``HOME`` see the right file."""
-    try:
-        from core.paths import GEODE_HOME
-    except Exception:
-        return Path.home() / ".geode" / "routing.toml"
-    return GEODE_HOME / "routing.toml"
-
-
-USER_OVERRIDE_PATH = _user_override_path()
-
+# Re-export from `core.paths` (SoT) so the routing manifest's user
+# override path stays aligned with every other ``~/.geode/`` file.
+from core.paths import GLOBAL_ROUTING_TOML as USER_OVERRIDE_PATH  # noqa: E402
 
 # ── Layer 1: model defaults ────────────────────────────────────────────────
 
