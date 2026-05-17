@@ -544,7 +544,19 @@ def read_geode_openai_credentials() -> dict[str, Any] | None:
 # :mod:`plugins.petri_audit.claude_code_provider` once the resulting
 # token is consumed.
 
-_ANTHROPIC_AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize"
+# Claude Code branches the authorize host on the user's account type:
+#   ``O ? CLAUDE_AI_AUTHORIZE_URL : CONSOLE_AUTHORIZE_URL``
+# where ``O`` is the ``loginMethod`` boolean. Console URL serves Anthropic
+# developer/team accounts on ``platform.claude.com``; the Claude.ai URL
+# serves Claude Pro / Max consumer subscriptions on ``claude.com``.
+#
+# v0.99.0..0.99.5 used CONSOLE only — Claude.ai Max users received the
+# server-side error "Invalid Request Format" because the public OAuth
+# client (``9d1c250a-...``) is registered against the ``claude.com``
+# origin for consumer subscriptions. v0.99.6 switches the default to
+# CLAUDE_AI; future patch may add a ``/login source console`` toggle
+# for users whose access lives on ``platform.claude.com``.
+_ANTHROPIC_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize"
 _ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"  # noqa: S105 — URL not password
 # Mirrors Claude Code binary's ``HA()`` helper (``claude-code/${VERSION}``).
 # v0.99.5 added this header explicitly to keep our request fingerprint
