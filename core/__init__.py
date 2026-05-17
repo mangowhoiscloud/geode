@@ -21,7 +21,7 @@ def _resolve_version() -> str:
     from importlib.metadata import version as _pkg_version
 
     try:
-        return _pkg_version("geode")
+        return _pkg_version("geode-agent")
     except PackageNotFoundError:
         # Fallback: read from pyproject.toml directly (dev / non-installed env)
         from pathlib import Path as _Path

@@ -8,7 +8,8 @@ name: Install Smoke Test
 #   3. UPDATE    — `geode update --dry-run` resolves the source-checkout path
 #                  and `uv tool install -e . --force` remains idempotent
 #   4. UNINSTALL — `geode uninstall --force` removes runtime files and the
-#                  installed uv tool without leaving a PATH-visible shim
+#                  installed `geode-agent` uv tool without leaving a
+#                  PATH-visible `geode` shim
 #
 # A failure here means the README setup steps no longer work on a clean
 # machine — block the merge and fix the install path before shipping.
@@ -70,8 +71,8 @@ jobs:
             echo "::error::geode binary still on PATH after uninstall: $(command -v geode)"
             exit 1
           fi
-          if uv tool list | grep -q '^geode\b'; then
-            echo "::error::uv tool list still contains geode after uninstall"
+          if uv tool list | grep -q '^geode-agent\b'; then
+            echo "::error::uv tool list still contains geode-agent after uninstall"
             uv tool list
             exit 1
           fi
