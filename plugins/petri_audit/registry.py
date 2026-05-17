@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 from plugins.petri_audit.credential_source import resolve_credential_source
 from plugins.petri_audit.manifest import load_manifest
+from plugins.petri_audit.user_overrides import read_role_override
 
 __all__ = [
     "FamilyInferenceError",
@@ -108,28 +109,35 @@ def get_binding(
 ) -> PetriBinding:
     """Resolve the effective binding for a Petri role.
 
-    Resolution order:
+    Resolution order (per axis):
 
-    1. ``model`` argument (caller override) — must be in the role's
-       ``allowed_models``; otherwise raises :class:`ValueError`.
-    2. Manifest ``[petri.role.<role>].default_model``.
+    1. ``model`` / ``source`` argument (caller override) — wins outright.
+    2. ``~/.geode/petri.toml`` ``[petri.<role>]`` (per-user override
+       written by the ``/petri`` slash command).
+    3. Manifest default for the model axis; the credential_source
+       cascade (settings → manifest default → 'auto' expansion) for the
+       source axis.
 
-    Source resolution delegates to :func:`plugins.petri_audit.
-    credential_source.resolve_credential_source` (which itself respects
-    override → settings → manifest default → 'auto' expansion). The
-    ``source`` argument here is passed through as the override.
+    Model overrides validate against the role's ``allowed_models`` —
+    :class:`ValueError` if not allowed. Source overrides flow through
+    :func:`plugins.petri_audit.credential_source.resolve_credential_source`
+    so suppressions still apply even when petri.toml pins a source.
     """
     manifest = load_manifest()
     role_spec = manifest.get_role(role)
 
-    chosen_model = model or role_spec.default_model
+    user_override = read_role_override(role)
+    chosen_model = model or user_override.get("model") or role_spec.default_model
     if chosen_model not in role_spec.allowed_models:
         raise ValueError(
             f"role={role}: model {chosen_model!r} not in allowed_models {role_spec.allowed_models}"
         )
 
     family = infer_family(chosen_model)
-    resolved_source = resolve_credential_source(family, override=source)
+    # Source priority — caller arg → petri.toml → resolve_credential_source
+    # cascade ('auto' expansion happens inside).
+    source_override = source or user_override.get("source")
+    resolved_source = resolve_credential_source(family, override=source_override)
     adapter_spec = manifest.get_adapter(family, resolved_source)
 
     # Target role is always routed through GeodeModelAPI — the audit

@@ -122,6 +122,7 @@ COMMAND_MAP: dict[str, str] = {
     "/task": "tasks",
     "/t": "tasks",
     "/audit": "audit",
+    "/petri": "petri",
 }
 
 
@@ -152,6 +153,7 @@ def show_help() -> None:
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
+    console.print("  [label]/petri[/label]              — Show & switch Petri role × model × source")
     console.print("  [label]/login source[/label] <p> <t> — Pick credential source per provider")
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
