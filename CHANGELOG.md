@@ -52,6 +52,31 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+## [0.99.3] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — token exchange body 형식 JSON 복귀 + `anthropic-beta`
+  헤더 제거.** v0.99.2 가 `application/x-www-form-urlencoded` 로 변경하고
+  `anthropic-beta: oauth-2025-04-20` 를 추가했으나 사용자 시도 결과 여전히
+  `invalid_request`. ../openclaw + ../claude-code 그라운딩 + Claude Code
+  native binary 의 `h6.post(TOKEN_URL, z, {headers:{"Content-Type":
+  "application/json"}, timeout:30000})` 호출 자체를 추출하여 ground truth
+  확인:  Content-Type 은 JSON, beta 헤더는 token endpoint 에 보내지 않음.
+  v0.99.0/0.99.1 의 JSON 패턴 자체는 맞았으나 host (`api.anthropic.com`)
+  가 틀렸던 것 — v0.99.2 가 host fix 와 함께 Content-Type 까지 의심해서
+  잘못된 방향으로 바꾼 셈. 공식 docs / community gist 의 "form-urlencoded"
+  정보가 정확하지 않다는 결론.
+
+- **`login_anthropic()` — reverted token exchange body to JSON + dropped
+  `anthropic-beta` header.** Even after the v0.99.2 host fix the user
+  still saw `invalid_request`. Grounding against the openclaw + claude-code
+  source trees plus extracting the actual `h6.post` call site from
+  claude.exe (`{"Content-Type":"application/json"}`, no beta header)
+  confirmed the binary is the ground truth: JSON-only on the token
+  endpoint, no anthropic-beta. Public docs and community gists are
+  incorrect on this point.
+
 ### Infrastructure
 
 - **CI Phase 1 — path-filter + pytest-xdist + draft skip.** Hermes 와
