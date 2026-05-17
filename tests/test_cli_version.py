@@ -12,4 +12,3 @@ def test_global_version_option() -> None:
 
     assert result.exit_code == 0
     assert f"GEODE v{__version__}" in result.output
-
