@@ -52,6 +52,27 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
+### Changed
+
+- **`token_tracker.MODEL_PRICING` + `MODEL_CONTEXT_WINDOW` 가 manifest 로 lazy load (P3-B).**
+  `core/llm/token_tracker.py` 의 두 dict literal (17 model pricing + 20
+  context window) + `_ant`/`_oai` helper 제거. P3-A 의
+  `core/llm/pricing_loader.py` 가 `core/llm/model_pricing.toml` 로부터
+  생성한 `PricingCatalogue` 를 import 시점에 binding. `ModelPrice`
+  dataclass 정의를 pricing_loader 로 통합 — token_tracker 는 re-export
+  만 (모든 caller — runner, tests, monkeypatch 사이트 — 영향 0). **P3
+  (model pricing externalisation) 종결**.
+
+- **`token_tracker` pricing dicts now lazy-load from the manifest (P3-B).**
+  Removed the two inlined dict literals (`MODEL_PRICING`,
+  `MODEL_CONTEXT_WINDOW`) and the `_ant` / `_oai` derive helpers from
+  `core/llm/token_tracker.py`. They're now bound at import time from
+  the `PricingCatalogue` produced by P3-A's
+  `core/llm/pricing_loader.py` reading `model_pricing.toml`. The
+  `ModelPrice` dataclass moved to `pricing_loader`; `token_tracker`
+  re-exports it so every existing consumer keeps working unchanged.
+  **Closes the P3 pricing-externalisation initiative**.
+
 ### Added
 
 - **Model pricing + context windows TOML (P3-A) — schema + loader.**

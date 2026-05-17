@@ -31,7 +31,7 @@ import tomllib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 __all__ = [
     "DEFAULT_PRICING_PATH",
@@ -44,12 +44,14 @@ __all__ = [
 DEFAULT_PRICING_PATH = Path(__file__).parent / "model_pricing.toml"
 
 
-class ModelPrice(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class ModelPrice:
     """Per-token pricing for a single model.
 
-    Mirrors :class:`core.llm.token_tracker.ModelPrice` so P3-B can
-    drop-in replace the legacy ``MODEL_PRICING`` dict without
-    changing any consumer.
+    P3-B (2026-05-17): canonical definition lives here.
+    ``core.llm.token_tracker`` re-exports the class so every existing
+    consumer (`token_tracker.ModelPrice`, `plugins.petri_audit.runner`,
+    tests that monkeypatch the pricing dict) keeps working unchanged.
     """
 
     input: float
