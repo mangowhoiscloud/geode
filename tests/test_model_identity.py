@@ -1,5 +1,15 @@
 """v0.52.8 — model identity must not leak across `/model` switches.
 
+v0.99.5 (2026-05-17) — added autouse fixture to clear
+``_build_model_card`` ``@lru_cache(maxsize=8)`` before each test. After
+the async-only refactor (main 2026-05-17 db2a2bf3), some other test in
+the same xdist `loadfile` worker can trigger ``_build_model_card`` 's
+exception path (``return ""`` at the bottom of the ``try``) when a
+``core.config`` lazy import is mocked or fails; that empty result lands
+in the lru_cache and a later run of ``test_model_card_for_anthropic_model``
+hits the cached ``""``. Clearing the cache per test isolates the unit
+behavior under test from any cross-test cache pollution.
+
 Production incident 2026-04-27: User issued ``/model gpt-5.5`` and the
 LLM (running on gpt-5.5, daemon log confirmed) responded
 "현재 사용 중인 모델은 gpt-5.4-mini" (claimed to be the previous model).
@@ -31,7 +41,22 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import core.agent.loop as _loop_mod
+import pytest
 from core.agent.system_prompt import _build_model_card
+
+
+@pytest.fixture(autouse=True)
+def _clear_model_card_cache() -> Any:
+    """Isolate ``_build_model_card`` 's ``@lru_cache`` between tests.
+
+    See module docstring for the cross-test cache pollution this guards
+    against. Clear on both setup and teardown so neighbours can't poison
+    each other regardless of test order.
+    """
+    _build_model_card.cache_clear()
+    yield
+    _build_model_card.cache_clear()
+
 
 # ---------------------------------------------------------------------------
 # Contract 1 — model card asserts identity strongly

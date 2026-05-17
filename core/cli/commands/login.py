@@ -667,65 +667,97 @@ def _login_source(args: str) -> None:
 
 
 def _login_oauth_anthropic() -> None:
-    """Drive Anthropic's PKCE OAuth flow natively — no ``claude`` CLI
-    subprocess, no macOS-only keychain dependency.
+    """Anthropic credential setup — API key (PAYG) only on the production path.
 
-    PR C3 (2026-05-17) replaced the prior ``claude /login`` subprocess
-    handoff with a GEODE-owned PKCE flow (loopback callback + token
-    exchange). The flow is implemented in
-    :func:`core.auth.oauth_login.login_anthropic`; this wrapper persists
-    the resulting credential into the ``ProfileStore`` so other parts of
-    the system (``/login status``, audit routing) pick it up
-    immediately. Cross-platform: works on macOS, Linux, Windows.
+    v0.99.10 limits ``/login anthropic`` to the Anthropic Console PAYG
+    API key path (Tier 0). Earlier iterations (v0.99.0..v0.99.9) tried
+    an owned PKCE flow and a claude-CLI subprocess delegate; both routed
+    through the first-party OAuth client ``9d1c250a-…`` which Anthropic's
+    2026-04-04 third-party block rejects (or, in the subprocess case,
+    spawned a full Claude Code REPL the user got stuck inside).
+
+    The Claude subscription path now lives **only** in
+    ``plugins/petri_audit/claude_code_provider.py``: it reads claude's
+    keychain in-process (PR #1202) and is consumed solely by Petri
+    audit/judge runs. Production GEODE chat/agent stays on a clean
+    ``sk-ant-api…`` PAYG key.
     """
+    from core.cli import commands as _pkg
+
+    _pkg.console.print()
+    _pkg.console.print("  [bold]Anthropic Console PAYG (API key)[/bold]")
+    _pkg.console.print("  [muted]Get a key at: https://console.anthropic.com/keys[/muted]")
+    _pkg.console.print(
+        "  [muted]Claude subscription path is reserved for Petri audit; "
+        "see plugins/petri_audit/claude_code_provider.py.[/muted]"
+    )
+    _pkg.console.print()
+    _login_anthropic_api_key()
+
+
+def _login_anthropic_api_key() -> None:
+    """Prompt for an Anthropic API key and persist it to ``auth.toml``.
+
+    Tier 0 (PAYG) — ``sk-ant-api…`` saved under the
+    ``anthropic-payg-geode`` plan + profile. No refresh logic, no
+    expiry; the key is treated as a single long-lived credential
+    identical in shape to ``ANTHROPIC_API_KEY`` env loading.
+    """
+    import getpass
+    from datetime import UTC, datetime
+
+    from core.auth.plan_registry import get_plan_registry
+    from core.auth.plans import Plan, PlanKind
     from core.auth.profiles import AuthProfile, CredentialType
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
 
     try:
-        from core.auth.oauth_login import login_anthropic
-    except ImportError as exc:
-        _pkg.console.print(
-            f"  [warning]Anthropic OAuth unavailable — `{exc.name}` missing.[/warning]\n"
-            "  [muted]Set ANTHROPIC_API_KEY env to use the PAYG path.[/muted]\n"
-        )
-        return
-
-    _pkg.console.print()
-    try:
-        creds = login_anthropic()
-    except KeyboardInterrupt:
+        # allow-direct-io: thin handler — getpass hides typed input from screen.
+        api_key = getpass.getpass("  Paste sk-ant-… key (hidden): ").strip()
+    except (EOFError, KeyboardInterrupt):
         _pkg.console.print("  [muted]Cancelled.[/muted]\n")
         return
-    except RuntimeError as exc:
-        _pkg.console.print(
-            f"  [red]Anthropic OAuth login failed: {exc}[/red]\n"
-            "  [muted]Fallback: set ANTHROPIC_API_KEY env to keep going on the PAYG path.[/muted]\n"
-        )
-        return
 
-    if not creds:
-        _pkg.console.print("  [muted]Anthropic OAuth aborted.[/muted]\n")
+    if not api_key:
+        _pkg.console.print("  [warning]Empty key — aborted.[/warning]\n")
         return
+    if not api_key.startswith("sk-ant-"):
+        _pkg.console.print("  [warning]Key does not look like sk-ant-… — saving anyway.[/warning]")
 
-    access_token = creds.get("access_token", "")
-    expires_at = float(creds.get("expires_at", 0) or 0)
-    scopes = creds.get("scopes") or []
-    profile = AuthProfile(
-        name="anthropic:oauth",
+    plan_id = "anthropic-payg-geode"
+    registry = get_plan_registry()
+    plan = registry.get(plan_id) or Plan(
+        id=plan_id,
         provider="anthropic",
-        credential_type=CredentialType.OAUTH,
-        key=access_token,
-        expires_at=expires_at,
-        managed_by="geode-pkce",
+        kind=PlanKind.PAYG,
+        display_name="Anthropic (PAYG)",
+        base_url="https://api.anthropic.com",
+        auth_type="x-api-key",
+    )
+    registry.add(plan)
+
+    profile = AuthProfile(
+        name=f"{plan_id}:user",
+        provider="anthropic",
+        credential_type=CredentialType.API_KEY,
+        key=api_key,
+        plan_id=plan.id,
+        expires_at=0.0,
+        managed_by="geode-api-key",
+        metadata={"last_refresh": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
     )
     ensure_profile_store().add(profile)
+    try:
+        from core.auth.auth_toml import save_auth_toml
 
-    scope_summary = ", ".join(scopes) if scopes else "(no scopes returned)"
-    _pkg.console.print(
-        "  [success]Anthropic OAuth registered.[/success]  "
-        f"[muted]Scopes: {scope_summary} · Provider: anthropic[/muted]\n"
-    )
+        save_auth_toml()
+    except Exception:
+        log.debug("auth.toml persist after anthropic login failed", exc_info=True)
+
+    _pkg.console.print()
+    _pkg.console.print("  [success]✓ Anthropic API key saved.[/success]")
+    _pkg.console.print("  [muted]Stored: ~/.geode/auth.toml[/muted]\n")
 
 
 def _login_set_key(rest: str) -> None:

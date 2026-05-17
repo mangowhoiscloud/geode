@@ -52,7 +52,8 @@ renders as a single column with a `KR`-only or `EN`-only chip.
 
 ## [Unreleased]
 
-## [1.0.0] — 2026-05-17
+
+## [0.99.11] — 2026-05-17
 
 ### Removed
 
@@ -337,6 +338,473 @@ renders as a single column with a `KR`-only or `EN`-only chip.
   package acceptance 패턴을 기준으로 release packaging 계획을 추가. PyPI/uv
   CLI 패키징, GitHub release asset, Homebrew, Hugging Face artifact/demo
   surface 를 분리해 정리.
+
+## [0.99.10] — 2026-05-17
+
+### Changed
+
+- **`/login anthropic` 단순화 — API key only (production), Petri 만 claude keychain delegate.**
+  v0.99.9 의 picker 2 옵션 중 claude CLI subprocess 는 사용자 보고에서
+  Claude Code REPL 이 GEODE 위에 노출되는 UX 부조화 + 그 path 가 결국
+  Anthropic third-party block 정책 risk 영역. production GEODE chat/
+  agent/analyze 는 Tier 0 (`sk-ant-api…`) 만 사용, claude
+  subscription delegate 는 `plugins/petri_audit/claude_code_provider.py`
+  (PR #1202) 의 audit/judge 영역에 격리. `/login anthropic` 은 picker
+  제거 후 직접 API key prompt 로 단순화. `_login_anthropic_via_claude_cli`
+  helper 제거.
+
+- **`/login anthropic` simplified to API key only.** v0.99.9 's
+  claude-CLI subprocess option exposed the Claude Code REPL inside the
+  GEODE TTY (user-reported UX break) and carried Anthropic's
+  third-party-block policy risk. Production GEODE now uses Tier 0
+  (`sk-ant-api…`) exclusively; the claude-subscription delegate stays
+  inside `plugins/petri_audit/claude_code_provider.py` for audit/judge
+  runs only. Picker dropped, _login_anthropic_via_claude_cli helper
+  removed.
+
+
+
+## [0.99.9] — 2026-05-17
+
+### Changed
+
+- **`/login anthropic` — picker 분기 (API key | claude CLI subprocess).**
+  v0.99.0..v0.99.8 의 owned-PKCE flow 6회 시도가 모두 Anthropic 의
+  "Invalid request format" server 거절. public OAuth client
+  `9d1c250a-…` 는 first-party Claude Code 전용으로 등록되어 있고
+  2026-04-04 third-party block 정책으로 외부 origin 차단. owned path
+  포기 + 두 가지 대안:
+
+    1. **API key (Anthropic Console PAYG, Tier 0)** — `sk-ant-…` 직접
+       입력 → `~/.geode/auth.toml` 의 `anthropic-payg-geode` Plan +
+       Profile 로 저장.
+    2. **claude CLI subprocess (Tier 2, paperclip ACP 패턴)** —
+       `claude /login` 을 사용자 TTY 에 spawn → first-party CLI 가 직접
+       OAuth → keychain 저장 → GEODE 가 keychain 에서 read 후 `auth.toml`
+       의 `anthropic-claude-cli` Plan 으로 mirror.
+
+  picker UX: `/login anthropic` 입력 시 multi-choice prompt
+  (`1) API key  2) claude CLI  q) skip`).
+
+- **`/login anthropic` — picker between API key and claude CLI
+  subprocess.** Six iterations of an owned PKCE flow (v0.99.0–v0.99.8)
+  all hit Anthropic's "Invalid request format" at the authorize step;
+  the public OAuth client `9d1c250a-…` is registered first-party
+  only and Anthropic's 2026-04-04 policy blocks third-party origins.
+  The owned path is dropped. Two replacements:
+
+    1. API key (Anthropic Console PAYG) — paste `sk-ant-…`,
+       persisted under `anthropic-payg-geode` in `auth.toml`.
+    2. claude CLI subprocess (paperclip ACP-style) — spawn
+       `claude /login` in the user's TTY; the first-party CLI handles
+       OAuth and writes the token to the keychain, which GEODE then
+       imports into `auth.toml` (`anthropic-claude-cli` plan).
+
+### Removed
+
+- **Owned-PKCE Anthropic OAuth flow (v0.99.0..v0.99.8).** Removed
+  `login_anthropic`, `_run_anthropic_pkce_flow`,
+  `_parse_pasted_code`, `_generate_pkce_pair`, the 8-stage forensic
+  dump helper, and the constants `_ANTHROPIC_AUTHORIZE_URL`,
+  `_ANTHROPIC_TOKEN_URL`, `_ANTHROPIC_REDIRECT_URI`,
+  `_ANTHROPIC_USER_AGENT`, `_ANTHROPIC_DEFAULT_SCOPES`,
+  `_ANTHROPIC_CLIENT_ID_CANDIDATES`. 438-line block from
+  `core/auth/oauth_login.py`. `read_geode_anthropic_credentials`
+  preserved for downstream resolvers.
+
+- **Owned-PKCE Anthropic OAuth flow removed.** ~438 lines + helpers
+  excised from `core/auth/oauth_login.py`. Only
+  `read_geode_anthropic_credentials` survives for callers that still
+  read `auth.toml` for an OAuth token (now populated only by the
+  claude CLI branch).
+
+
+
+## [0.99.8] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — scope set 을 Hermes 와 1:1 일치 (`org:create_api_key user:profile user:inference`).**
+  v0.99.7 의 `claude.ai/oauth/authorize` + `console.anthropic.com`
+  redirect_uri 조합이 production-tested Hermes 패턴과 정합인데도
+  사용자 시도 결과 또 "Invalid request format". dump 의
+  `authorize_url_full` 비교 결과 single 차이 = scope. 우리가 binary
+  의 hint string (`user:sessions:claude_code`, `user:mcp_servers`)
+  포함시켜 unregistered scope 거절. Hermes 의 narrower set 으로 좁힘
+  (`hermes-agent/agent/anthropic_adapter.py:1044`).
+
+- **`login_anthropic()` — narrowed scope set to Hermes parity.**
+  v0.99.7's authorize + redirect URI parity with Hermes still produced
+  "Invalid request format". Diffing dump's `authorize_url_full`
+  against Hermes's URL revealed the single remaining mismatch: scope.
+  Claude Code's binary advertises `user:sessions:claude_code` and
+  `user:mcp_servers` in a hint string, but the OAuth client only
+  accepts the smaller set Hermes ships. Now sending
+  `org:create_api_key user:profile user:inference` exactly.
+
+
+
+## [0.99.7] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — authorize host `claude.ai` + `login_method=claudeai` query.**
+  v0.99.6 의 `claude.com/cai/oauth/authorize` 가 server-side 로
+  `claude.ai/oauth/authorize` redirect 되었고 (사용자 browser URL 인용)
+  거기서도 "Invalid request format". claude.exe binary 의
+  `searchParams.append("login_method", $)` 분기에서 `$` 가
+  `"claudeai"` / `"console"` 중 하나로 값을 갖는데 우리가 빠뜨려
+  server 가 분기를 알지 못한 것이 root cause. v0.99.7: host 를 redirect
+  의 final destination `claude.ai` 로 직접, `login_method=claudeai`
+  query 추가, dump 의 `authorize_url_full` 도 같이 기록.
+
+- **`login_anthropic()` — switched authorize host to `claude.ai` and
+  added `login_method=claudeai` query.** v0.99.6's
+  `claude.com/cai/oauth/authorize` was server-side redirected to
+  `claude.ai/oauth/authorize` (confirmed from user's browser URL) and
+  still returned "Invalid request format". Claude Code's binary
+  appends a `login_method` query (`claudeai` for consumer flow,
+  `console` for developer); we now mirror it. The forensic dump also
+  records the full `authorize_url` so future investigation does not
+  depend on the user reading the URL out of the browser bar.
+
+
+
+## [0.99.6] — 2026-05-17
+
+### Fixed
+
+- **`login_anthropic()` — authorize URL host 변경 (`platform.claude.com` → `claude.com/cai`).**
+  v0.99.5 forensic dump 가 token exchange 단계 dump 0건 — 사용자 보고 결과
+  authorize 단계에서 "Invalid Request Format" 거절. Claude Code binary 의
+  authorize URL 생성 코드 `O ? CLAUDE_AI_AUTHORIZE_URL : CONSOLE_AUTHORIZE_URL`
+  분기에서 우리가 항상 CONSOLE URL 사용한 것이 root cause. Claude Max
+  (consumer) 사용자는 `claude.com/cai/oauth/authorize` 가 정답.
+  token endpoint (`platform.claude.com/v1/oauth/token`) 는 그대로 유지.
+
+- **`login_anthropic()` — switched authorize host from `platform.claude.com`
+  to `claude.com/cai` for Claude.ai consumer accounts.** v0.99.5 forensic
+  dumps showed no `response-*` stages — server-side authorize page
+  rejected the request with "Invalid Request Format" before any callback.
+  Claude Code's binary picks one of two authorize hosts via
+  `loginMethod`; we now mirror the Claude Pro / Max consumer branch
+  by default (`claude.com/cai/oauth/authorize`). Token endpoint
+  unchanged.
+
+
+
+## [0.99.5] — 2026-05-17
+
+### Observability
+
+- **`login_anthropic()` — per-stage forensic dump + `User-Agent` 정렬.**
+  v0.99.4 dump 가 `status_code != 200` 분기에만 있어서 token exchange
+  도달 못 한 경우 (paste/parse/state/httpx exception) 진단 신호 0.
+  v0.99.5 는 6 stage 모두 dump 작성: `paste-cancelled`, `paste-empty`,
+  `parse-no-code`, `state-mismatch`, `token-exchange-attempt`,
+  `httpx-exception`, `response-200`, `response-non-200`. filename
+  `anthropic-oauth-<unix_ts>-<stage>.json`. 200 응답도 access_token/
+  refresh_token 마스킹 후 별도 dump — success path 도 사후 검증 가능.
+  `User-Agent: claude-cli/2.1.140` 헤더 추가 (binary `HA()` 와 정합) —
+  Anthropic 의 2026-04-04 third-party app 차단 정책의 fingerprint
+  risk 회피. 정책 차단이 root cause 라면 dump 의 response_body 에
+  명시적 `error_description` 으로 확정 가능.
+
+- **`login_anthropic()` — per-stage forensic dumps + `User-Agent` alignment.**
+  v0.99.4's dump only fired on `status_code != 200`, so failures that
+  never reached the token exchange (paste/parse/state/httpx exception)
+  left no signal. v0.99.5 writes a dump at every reachable step
+  (`paste-cancelled`, `paste-empty`, `parse-no-code`, `state-mismatch`,
+  `token-exchange-attempt`, `httpx-exception`, `response-200`,
+  `response-non-200`). Filenames now carry the stage suffix
+  (`anthropic-oauth-<unix_ts>-<stage>.json`). Successful 200 responses
+  also dump with `access_token`/`refresh_token` masked so the success
+  path is forensically auditable. Added `User-Agent: claude-cli/2.1.140`
+  to mirror Claude Code's `HA()` helper and reduce the third-party-app
+  fingerprint risk under Anthropic's 2026-04-04 policy.
+
+## [0.99.4] — 2026-05-17
+
+### Observability
+
+- **`login_anthropic()` — token exchange 실패 시 forensic dump 추가.**
+  v0.99.3 에서도 사용자 시도 결과 `invalid_request` 지속. `script` 캡처 없이
+  사후 root cause 분석을 가능하게 하려면 영구 dump 필요.
+  `~/.geode/diagnostics/anthropic-oauth-<unix_ts>.json` 으로 (a) endpoint,
+  (b) status_code, (c) response body 전체, (d) response headers, (e) 우리가
+  보낸 request 의 client_id / redirect_uri / scope / code 접두 8자 /
+  verifier 접두 8자 / state 접두 6자 기록. `code_verifier` 같은 민감 값은
+  접두만 — 응답 body 의 `error_description` 이 root cause 진단의 핵심.
+  콘솔 `body_preview` 도 300 → 500 자로 확대.
+
+- **`login_anthropic()` — added forensic dump on token exchange failure.**
+  v0.99.3 still surfaced `invalid_request` and the user could not capture
+  the response via `script`. The flow now persists
+  `~/.geode/diagnostics/anthropic-oauth-<unix_ts>.json` containing (a)
+  endpoint, (b) status_code, (c) full response body, (d) response headers,
+  and (e) sanitized request metadata (client_id, redirect_uri, scope,
+  truncated code/verifier/state prefixes). Console preview also widens
+  from 300 → 500 chars.
+
+### Architecture
+
+- **Async-only graph/tool/MCP runtime slice.** LangGraph pipeline nodes now run
+  through async wrappers and CLI/MCP/batch callers use `ainvoke()`/`astream()`;
+  direct production `asyncio.run()`, `run_until_complete()`, `graph.invoke()`,
+  and `graph.stream()` bridges were removed from `core/` and `plugins/`.
+  Process-edge coroutine execution is centralized in `core.async_runtime`.
+- **Async-only graph/tool/MCP runtime 구간 전환.** LangGraph pipeline node 는
+  async wrapper 로 실행되고 CLI/MCP/batch caller 는 `ainvoke()`/`astream()`을
+  사용. production `core/`, `plugins/` 경로의 직접 `asyncio.run()`,
+  `run_until_complete()`, `graph.invoke()`, `graph.stream()` bridge 를 제거하고
+  process-edge coroutine 실행은 `core.async_runtime` 으로 일원화.
+- **Async-only public execution boundary.** Removed residual public sync
+  facades for tool execution, bash execution, isolated execution,
+  agent-loop model switching, LLM streaming, and provider client reset:
+  callers now use `aexecute()`, `arun()`, `update_model_async()`,
+  `agenerate_stream()`, and `areset_client()` contracts.
+- **Async-only public 실행 경계 정리.** tool 실행, bash 실행, isolated
+  execution, agent-loop model switch, LLM streaming, provider client reset 에
+  남아 있던 public sync facade 를 제거. 호출자는 `aexecute()`, `arun()`,
+  `update_model_async()`, `agenerate_stream()`, `areset_client()` 계약만 사용.
+- **Bash async execution boundary aligned with Claude Code.** `run_bash` now
+  exposes a `timeout` parameter, forwards `ToolContext.cancellation` into
+  `BashTool.aexecute()`, and terminates the shell process group on timeout or
+  cancellation before returning structured `timed_out` / `interrupted` results.
+- **Bash async 실행 경계 Claude Code 정렬.** `run_bash` 가 `timeout` 파라미터를
+  노출하고 `ToolContext.cancellation` 을 `BashTool.aexecute()` 로 전달. timeout
+  또는 cancellation 시 shell process group 을 정리한 뒤 `timed_out` /
+  `interrupted` 결과를 반환.
+- **AgenticLoop canonical file rename + async migration plan.** `core/agent/loop/loop.py`
+  is now a compatibility shim, while the implementation lives in
+  `core/agent/loop/agent_loop.py`. This prepares the runtime for a staged
+  full-async migration across loop, tools, approval, hooks, IPC, lanes, and
+  MCP while preserving existing `core.agent.loop.loop` imports. Planning SOT:
+  `docs/plans/2026-05-16-async-tool-loop-migration.md`.
+- **AgenticLoop canonical 파일명 정리 + async 전환 계획.**
+  `core/agent/loop/loop.py` 는 compatibility shim 으로 남기고 실제 구현을
+  `core/agent/loop/agent_loop.py` 로 이동. 기존 `core.agent.loop.loop`
+  import 는 유지하면서 loop / tool / approval / hook / IPC / lane / MCP
+  전면 async 전환을 단계적으로 진행할 수 있게 준비. 계획 SOT:
+  `docs/plans/2026-05-16-async-tool-loop-migration.md`.
+- **Async tool execution contract, first slice.** Added `AsyncTool`,
+  `ToolContext`, and `ToolExecutor.aexecute()`. `ToolCallProcessor` now awaits
+  `aexecute()` directly; async-native handlers run on the event loop, while
+  legacy sync handlers are isolated behind the executor's adapter.
+- **Async tool execution contract 1차 도입.** `AsyncTool`, `ToolContext`,
+  `ToolExecutor.aexecute()` 를 추가. `ToolCallProcessor` 는 이제
+  `aexecute()` 를 직접 await 하며, async-native handler 는 이벤트 루프에서
+  실행되고 기존 sync handler 만 executor adapter 뒤로 격리.
+- **Async context overflow handling.** `ContextWindowManager.check_context_overflow()`
+  and `aggressive_context_recovery()` are now async, and the agent loop awaits
+  them before LLM calls and retry recovery. Client compaction now awaits
+  `compact_conversation()` directly instead of calling `run_until_complete()`,
+  and unrecoverable `_ContextExhaustedError` propagates to the loop termination
+  path.
+- **Context overflow 처리 async화.** `ContextWindowManager.check_context_overflow()`
+  와 `aggressive_context_recovery()` 를 async 로 전환하고, AgenticLoop 가
+  LLM 호출 전과 retry recovery 에서 이를 await. client compaction 은 더
+  이상 `run_until_complete()` 를 호출하지 않고 `compact_conversation()` 을
+  직접 await 하며, 복구 불가한 `_ContextExhaustedError` 는 loop termination
+  path 로 전파.
+- **Async hook trigger path.** `HookSystem` now exposes async trigger,
+  feedback, and interceptor APIs while keeping the existing sync APIs.
+  `ToolCallProcessor` awaits those async hook paths, so tool input
+  interception and result rewriting can run as native async work inside the
+  agent loop.
+- **Hook trigger 경로 async화.** 기존 sync API 는 유지하면서 `HookSystem` 에
+  async trigger / feedback / interceptor API 를 추가. `ToolCallProcessor`
+  는 이제 해당 async hook 경로를 await 하므로 tool input interception 과
+  result rewriting 이 agent loop 내부에서 native async 작업으로 실행 가능.
+- **Async HITL approval path.** `ApprovalWorkflow` now has async approval
+  APIs for write, cost, bash, and MCP prompts. `ToolExecutor.aexecute()` uses
+  those APIs instead of wrapping the whole safety gate in a worker thread, while
+  blocking prompt callbacks and shell/MCP execution remain isolated with
+  `asyncio.to_thread()`.
+- **HITL approval 경로 async화.** `ApprovalWorkflow` 에 write / cost / bash /
+  MCP prompt 용 async API 를 추가. `ToolExecutor.aexecute()` 는 이제 safety
+  gate 전체를 thread 로 감싸지 않고 해당 async API 를 사용하며, blocking
+  prompt callback 과 shell/MCP 실행만 `asyncio.to_thread()` 로 격리.
+- **Async IPC server transport.** `CLIPoller` now listens with
+  `asyncio.start_unix_server()` while preserving the existing thin-client
+  protocol and public `start()` / `stop()` lifecycle. Approval responses are
+  routed through a thread-safe async endpoint queue.
+- **IPC server transport async화.** `CLIPoller` 가 기존 thin-client protocol 과
+  `start()` / `stop()` lifecycle 은 유지하면서 `asyncio.start_unix_server()`
+  로 listen. approval response 는 async endpoint queue 로 안전하게 전달.
+- **Async lane queue APIs.** `Lane`, `SessionLane`, and `LaneQueue` now expose
+  async acquire helpers that share the same underlying capacity as sync callers
+  while moving blocking waits off the event loop. Partial-failure release
+  semantics match the existing sync `acquire_all()` contract.
+- **Lane queue API async화.** `Lane`, `SessionLane`, `LaneQueue` 에 async
+  acquire helper 를 추가. sync caller 와 같은 capacity 를 공유하면서 blocking
+  wait 는 event loop 밖으로 격리하며, partial failure 시 release semantics 는
+  기존 sync `acquire_all()` contract 와 동일하게 유지.
+- **Async bash and MCP execution paths.** `BashTool` now has native async
+  subprocess execution and `ToolExecutor.aexecute()` uses it for `run_bash`.
+  MCP manager/client now expose `acall_tool()` and serialize shared stdio
+  JSON-RPC requests with a request lock so async tool calls do not block the
+  agent loop or corrupt the stream.
+- **Bash / MCP execution 경로 async화.** `BashTool` 에 native async subprocess
+  실행을 추가하고 `ToolExecutor.aexecute()` 의 `run_bash` 경로가 이를 사용.
+  MCP manager/client 는 `acall_tool()` 을 제공하며 shared stdio JSON-RPC
+  request 를 lock 으로 직렬화해 async tool call 이 agent loop 를 막거나
+  stream 을 깨뜨리지 않게 정리.
+- **Async AgenticLoop lifecycle hooks.** `AgenticLoop.arun()` now awaits
+  async user-input interception, session start, LLM failure/retry hooks, and
+  final session/turn/reasoning hook emission. Sync finalization remains for
+  compatibility, with shared final-result preparation to avoid divergent
+  lifecycle behavior.
+- **AgenticLoop lifecycle hook async화.** `AgenticLoop.arun()` 이 이제
+  user-input interception, session start, LLM failure/retry hook, 최종
+  session/turn/reasoning hook emission 을 await. sync finalization 은
+  compatibility 용으로 유지하되, final-result preparation 을 공유해 lifecycle
+  동작이 갈라지지 않도록 정리.
+- **Async AgenticLoop observability hooks.** Usage tracking now has an async
+  path so `AgenticLoop.arun()` awaits cost warning/limit hooks. Settings-drift
+  model switches also use an async update path in `arun()`, while the public
+  sync `update_model()` remains available for compatibility callers.
+- **AgenticLoop observability hook async화.** usage tracking 에 async 경로를
+  추가해 `AgenticLoop.arun()` 이 cost warning/limit hook 을 await. settings
+  drift 로 발생하는 model switch 도 `arun()` 안에서는 async update path 를
+  사용하며, public sync `update_model()` 은 compatibility caller 를 위해 유지.
+- **IPC prompt role split.** The thin client now remains transport/rendering
+  only, while the daemon admits prompt work through `LaneQueue.acquire_all_async()`
+  and awaits `AgenticLoop.arun()`. The legacy sync prompt runner remains as a
+  compatibility fallback, but IPC daemon prompt execution no longer calls
+  `AgenticLoop.run()` or sync `LaneQueue.acquire_all()`.
+- **IPC prompt 역할 분리.** thin client 는 transport/rendering 역할만 유지하고,
+  daemon 이 `LaneQueue.acquire_all_async()` 로 prompt work 를 admission 한 뒤
+  `AgenticLoop.arun()` 을 await. legacy sync prompt runner 는 compatibility
+  fallback 으로 남기지만, IPC daemon prompt 실행은 더 이상
+  `AgenticLoop.run()` 이나 sync `LaneQueue.acquire_all()` 을 호출하지 않음.
+- **Context-local IPC UI state.** Console routing, IPC writer binding, pipeline
+  IP context, and session meters now use contextvar-backed local storage while
+  preserving the existing `threading.local`-style attribute API. This lets
+  concurrent async IPC prompts keep stream events and session meters isolated
+  without serializing the prompt body behind a UI lock.
+- **IPC UI state context-local 전환.** console routing, IPC writer binding,
+  pipeline IP context, session meter 를 기존 `threading.local` 스타일 attribute
+  API 는 유지한 채 contextvar-backed local storage 로 전환. 동시 async IPC
+  prompt 가 UI lock 없이도 stream event 와 session meter 를 서로 격리.
+- **Async migration quality gate.** Added an explicit verification pass for
+  code-quality gaps, missing async hand-offs, and duplication-prone sync
+  bridges. The pass fixed context overflow/offload hook calls to use async hook
+  APIs and removed an event-loop-bound approval lock from the long-lived
+  approval workflow.
+- **Async migration 품질 게이트 추가.** code-quality gap / 누락된 async hand-off /
+  중복 위험 sync bridge 를 확인하는 검증 절차를 계획 문서에 추가. 해당
+  검증으로 context overflow/offload hook 호출을 async hook API 로 정리하고,
+  장수명 approval workflow 에 저장되던 event-loop-bound approval lock 을 제거.
+- **AgenticLoop sync facade removal.** `AgenticLoop.run()` has been removed
+  as part of the breaking async migration. Production internal CLI, gateway,
+  scheduler, worker, skill, and legacy IPC prompt paths bridge directly to
+  `AgenticLoop.arun()`, and source guards prevent reintroducing the sync
+  facade.
+- **AgenticLoop sync facade 제거.** breaking async migration 의 일부로
+  `AgenticLoop.run()` 을 제거. production 내부 CLI / gateway / scheduler /
+  worker / skill / legacy IPC prompt 경로는 직접 `AgenticLoop.arun()` 으로
+  bridge 하며, source guard 로 sync facade 재도입을 차단.
+- **Async MCP adapter helper slice.** Calendar, notification, and signal MCP
+  helper layers now route through `MCPServerManager.acall_tool()` or client
+  `acall_tool()`. Public MCP `call_tool()` facades were removed from manager
+  and client surfaces.
+- **MCP adapter helper 1차 async화.** Calendar / notification / signal MCP
+  helper 계층에 `MCPServerManager.acall_tool()` 또는 client `acall_tool()`
+  경로를 적용. manager / client 표면의 public MCP `call_tool()` facade 는
+  제거.
+- **Async tool-object dispatch slice.** `ToolRegistry.aexecute()` now prefers
+  tool-local `aexecute()` implementations and rejects sync-only registry
+  execution. Calendar list/create and notification CLI handlers now call
+  async tool-object paths so their MCP-backed adapters avoid sync `call_tool()`
+  in the canonical async runtime.
+- **Tool object dispatch 1차 async화.** `ToolRegistry.aexecute()` 가 tool-local
+  `aexecute()` 를 필수 경로로 사용하고 sync-only registry 실행은 거부.
+  Calendar list/create 와 notification CLI handler 는 이제 async tool-object
+  경로를 호출해 canonical async runtime 에서 MCP-backed adapter 의 sync
+  `call_tool()` 을 우회.
+- **Async debt reduction slice.** Adaptive error recovery now awaits
+  `ErrorRecoveryStrategy.arecover()` and retries through `ToolExecutor.aexecute()`.
+  Runtime/container tool injection no longer calls `ToolRegistry.execute()`
+  directly; async-native nodes can read `get_async_tool_executor()`. Plugin
+  signal tools now provide `aexecute()` methods backed by
+  `try_mcp_signal_async()`.
+- **Async 부채 축소 1차.** adaptive error recovery 가
+  `ErrorRecoveryStrategy.arecover()` 를 await 하고 retry 를
+  `ToolExecutor.aexecute()` 경로로 실행. Runtime/container 의 tool injection
+  은 더 이상 `ToolRegistry.execute()` 를 직접 호출하지 않으며, async-native
+  node 는 `get_async_tool_executor()` 를 사용할 수 있음. Plugin signal tool 은
+  `try_mcp_signal_async()` 기반 `aexecute()` 를 제공.
+- **Built-in tool async surface completion.** Built-in file, document, web,
+  jobs, memory, profile, data, report/export, calendar-scheduler, computer-use,
+  and game-IP fixture/analysis tools now expose tool-local `aexecute()` methods.
+  `ToolRegistry.aexecute()` no longer falls back to sync-only tool execution.
+- **Built-in tool async surface 정리.** file / document / web / jobs / memory /
+  profile / data / report-export / calendar-scheduler / computer-use /
+  game-IP fixture-analysis tool 에 tool-local `aexecute()` 를 추가.
+  `ToolRegistry.aexecute()` 의 sync-only tool fallback 은 제거.
+- **Async provider tool-use boundary.** `LLMClientPort` now includes
+  `agenerate_with_tools()`, and the router exposes `call_llm_with_tools_async()`.
+  The first implementation isolates the existing provider tool-use loops behind
+  an async boundary, preparing the next pass for await-native provider-internal
+  tool dispatch.
+- **Provider tool-use async boundary 추가.** `LLMClientPort` 에
+  `agenerate_with_tools()` 를 추가하고 router 에
+  `call_llm_with_tools_async()` 를 노출. 1차 구현은 기존 provider tool-use
+  loop 를 async boundary 뒤로 격리하며, 다음 단계의 provider 내부
+  await-native tool dispatch 전환을 준비.
+- **Provider tool-use internals async migration.** `call_llm_with_tools_async()`
+  and `OpenAIAdapter.agenerate_with_tools()` now run await-native tool-use
+  loops. OpenAI and Codex now use `AsyncOpenAI`, Anthropic uses
+  `AsyncAnthropic`, and GLM uses the OpenAI-compatible
+  `AsyncOpenAI(base_url=...)` path, while async tool executors are awaited
+  directly. Container-injected sync tool-callable paths now bridge to
+  `agenerate_with_tools()` instead of provider sync internals.
+- **Provider tool-use 내부 async 전환.** `call_llm_with_tools_async()` 와
+  `OpenAIAdapter.agenerate_with_tools()` 가 이제 await-native tool-use loop
+  로 동작. OpenAI 와 Codex 는 `AsyncOpenAI`, Anthropic 은
+  `AsyncAnthropic`, GLM 은 OpenAI-compatible `AsyncOpenAI(base_url=...)`
+  경로를 사용하고 async tool executor 는 직접 await. Container 에 주입되는
+  sync tool-callable 경계도 provider sync 내부 구현 대신
+  `agenerate_with_tools()` 로 bridge.
+- **Async tool executor injection only.** Runtime tool state injection no
+  longer publishes `get_tool_executor()` / `set_tool_executor()`. Tool-augmented
+  analyst, evaluator, synthesizer, scoring, and BiasBuster paths now use
+  `get_async_tool_executor()` plus `call_llm_with_tools_async()`. CLI/delegated
+  handlers also invoke tool-object `aexecute()` instead of direct `execute()`.
+- **Async tool executor 주입 전용화.** Runtime tool state injection 이 더 이상
+  `get_tool_executor()` / `set_tool_executor()` 를 노출하지 않음. Analyst /
+  evaluator / synthesizer / scoring / BiasBuster 의 tool-augmented path 는
+  `get_async_tool_executor()` 와 `call_llm_with_tools_async()` 를 사용.
+  CLI/delegated handler 도 tool-object `execute()` 직접 호출 대신
+  `aexecute()` 를 호출.
+- **Sync LLM tool callable removal.** Removed `LLMToolCallable`,
+  `get_llm_tool()`, `_llm_tool_ctx`, and `set_llm_callable(tool_fn=...)` after
+  moving tool-augmented nodes to direct async provider calls.
+- **Sync LLM tool callable 제거.** Tool-augmented node 를 직접 async provider
+  호출로 옮긴 뒤 `LLMToolCallable`, `get_llm_tool()`, `_llm_tool_ctx`,
+  `set_llm_callable(tool_fn=...)` 를 제거.
+
+### Infrastructure
+
+- **CI Phase 1 — path-filter + pytest-xdist + draft skip.** Hermes 와
+  OpenClaw frontier 패턴 차용 (frontier survey 2026-05-17). `dorny/paths-filter@v3`
+  로 변경된 경로를 검출하여 docs-only/blog-only PR 은 lint/type/test/security
+  step 을 즉시 short-circuit (job 자체는 success 마킹되도록 step-level `if:`
+  사용 — branch protection required-status-check 호환). 코드 변경 PR 은
+  `pytest -n auto` 로 xdist 병렬 실행 (~3분 → ~1분 예상). `types:
+  [opened, reopened, synchronize, ready_for_review]` 로 draft PR 은 trigger
+  자체 차단. `pytest-xdist>=3.6.0` 을 `[dependency-groups.dev]` 에 추가.
+
+- **CI Phase 1 — path-filter + pytest-xdist + draft skip.** Adopted
+  patterns from Hermes and OpenClaw frontier survey (2026-05-17).
+  `dorny/paths-filter@v3` detects changed paths; docs-only / blog-only
+  PRs short-circuit the lint/type/test/security steps via step-level
+  `if:` (jobs still report success so branch-protection required-status
+  checks pass). Code-touching PRs run `pytest -n auto` (xdist) — expect
+  ~3min → ~1min. Draft PRs no longer trigger CI thanks to the new
+  `types: [..., ready_for_review]` filter. `pytest-xdist>=3.6.0` added
+  to the dev dependency group.
 
 ## [0.99.3] — 2026-05-17
 

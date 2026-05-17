@@ -1,7 +1,7 @@
 """Domain pipeline compatibility boundary.
 
-GEODE v1.0.0 no longer ships the Game IP analysis pipeline in core. The
-former ``geode analyze`` execution path now belongs in an external domain
+GEODE no longer ships the Game IP analysis pipeline in core. The former
+``geode analyze`` execution path now belongs in an external domain
 plugin/repository.
 """
 
