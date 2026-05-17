@@ -791,7 +791,7 @@ def _run_anthropic_pkce_flow(client_id: str) -> dict[str, Any]:
                 )
                 for k, v in parsed.items()
             }
-    except Exception:  # noqa: S110 — best-effort masking for forensic dump
+    except Exception:
         log.debug("anthropic-oauth: response body parse for dump skipped", exc_info=True)
     _dump(
         "response-200" if resp.status_code == 200 else "response-non-200",
