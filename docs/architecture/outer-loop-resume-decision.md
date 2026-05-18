@@ -99,6 +99,49 @@ On resume:
 2. If active source changed (e.g., claude-cli → claude-cli on a different account), record it in the checkpoint with a `credential_rolled_over_at` marker so the journal carries the boundary.
 3. If the user explicitly requested `fallback_to_payg=true` on the resume invocation that was `false` on the original, the runtime emits a `credential_policy_change` event into the journal before continuing.
 
+### Within-source account rotation (paperclip / crumb pattern)
+
+A separate dimension from the cross-source PAYG ramp blocked by PR-β1: **multiple accounts inside the same `family.source`** (e.g., two Claude Code OAuth accounts the operator has both stored). The 2026-05-19 user directive — "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로 롤아웃" — refers to this case. paperclip / crumb (cf. `docs/audits/2026-05-18-i2-paperclip-review.md`, external repo `~/workspace/crumb/`) achieve it via `claude -p` subprocess picking up `~/.claude/credentials` automatically + symlink swap or env var for account selection. The pattern is **non-interactive subprocess + locally-recorded credential**.
+
+GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (AuthProfile / ProfileStore / EligibilityResult), `core/auth/rotation.py` (`ProfileRotator.resolve(provider)` returning best-eligible, `mark_failure` → cooldown, managed-token auto-refresh ≤120 s pre-expiry), `core/auth/credential_breadcrumb.py` (LLM-readable hint per ProfileRejectReason — Claude Code `createModelSwitchBreadcrumbs` parity). Outer-loop currently uses none of it; `plugins/petri_audit/credential_source.py` only does process-local `suppress_credential_source(family, source)` (no profile dimension).
+
+**Decision** (Phase ζ extension):
+
+1. **Wire `ProfileRotator` into the outer-loop credential path.**
+   `resolve_credential_source(family, ..., fallback_to_payg)` returns the source key (e.g. `claude-cli`); a new layer `resolve_outer_loop_binding(family) → (source, profile)` adds the second dimension. autoresearch / seed-pipeline pass `profile.name` through every LLM call so failures route into `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set.
+
+2. **Rotation is operator-driven, never automatic.** When strict-mode trips abort (PR-β1's `CredentialResolutionError(subscription_only=True)`), the FE banner (PR-γ1) checks whether ProfileRotator has another eligible profile for the same family. If yes, the abort dialog shows a 2-axis picker (next sub-section). If no, the dialog shows the existing "add a profile / wait for reset / opt-in PAYG" options.
+
+3. **Rollout boundary writes to journal.** The new active `(source, profile)` is captured in the checkpoint and a `credential_rolled_over` event is appended to `~/.geode/outer-loop/<session>/journal.jsonl` (P1c). Idempotency keys per LLM call (PR-ζ4) already include `agent_role`, so a swapped account picks up the same cache entries when applicable.
+
+### Account picker UX (2-axis, GEODE slash-command parity)
+
+Per 2026-05-19 user directive — "자연어 뿐 아니라 UI/UX 로도 선택/입력 가능 (GEODE 슬래시 명령어 구조 참고). provider 변경은 좌우, 계정 선택은 위아래" — the picker is a 2D interactive selector mirroring the existing `pick_model_and_effort` pattern in `core/cli/effort_picker.py` (Claude Code `ModelPicker.tsx` parity):
+
+```
+┌─ Subscription quota exhausted — claude-cli (anthropic:work) ─────────┐
+│                                                                       │
+│  ◀ anthropic    openai     zhipuai ▶          (←/→ change provider)  │
+│                                                                       │
+│  Profiles for anthropic:                                              │
+│    anthropic:work                              [exhausted]            │
+│  ▶ anthropic:personal     OAuth · 0% used      [eligible]    ↑↓      │
+│    anthropic:org-shared   OAuth · 12% used     [eligible]             │
+│    anthropic:api-key      api_key · PAYG       [blocked by strict]    │
+│    + Add new profile…                                                 │
+│                                                                       │
+│  [Enter] swap & resume     [n] add new     [w] wait for reset         │
+│  [p] opt-in PAYG fallback (this run only)    [Esc] keep aborted       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+Entry points (both required per directive):
+
+1. **Slash command**: `/login` already exists for account add/remove (`core/cli/commands/login.py`). Extend with `/login picker` or trigger via `/account` alias to open the 2-axis picker directly. Auto-triggered when banner is red (aborted state).
+2. **Natural language**: agent loop recognises phrases like "swap account", "use my other Claude account", "rollout to next profile" and invokes the same picker programmatically.
+
+Implementation reuses `pick_model_and_effort`'s raw-tty 2-axis input loop. Per directive: **provider = ←→, account = ↑↓**. The action row (`[Enter] / [n] / [w] / [p] / [Esc]`) makes the policy boundary explicit — there is no automatic rotation; every swap is a user keystroke.
+
 ## Non-Decisions (explicitly rejected)
 
 | Alternative | Why rejected |
@@ -130,13 +173,15 @@ On resume:
 
 ## Implementation plan
 
-Lives as Phase ζ in `docs/plans/2026-05-19-outer-loop-config-consolidation.md`. 6 PRs (~1500 LOC + 1 backfill):
+Lives as Phase ζ in `docs/plans/2026-05-19-outer-loop-config-consolidation.md`. **8 PRs** (~2100 LOC + 1 backfill) — expanded from 6 after the 2026-05-19 paperclip/crumb directive:
 
-- **PR-ζ1**: extend `SessionCheckpoint` schema for outer-loop fields (active_sources, completed_units, next_unit, fallback_to_payg). Tests round-trip.
+- **PR-ζ1**: extend `SessionCheckpoint` schema for outer-loop fields (active_sources, completed_units, next_unit, fallback_to_payg, active_profile). Tests round-trip.
 - **PR-ζ2**: `_load_state()` companion for `plugins/seed_pipeline/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
 - **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `autoresearch/train.py`.
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/outer-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
+- **PR-ζ5.5** (NEW): wire `ProfileRotator` into the outer-loop credential path. `resolve_outer_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-pipeline pass `profile.name` through LLM call metadata so cooldowns track per-account.
+- **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (add new profile via `claude /login` subprocess delegate) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
 - **PR-ζ6**: docs + sample resume run-book (`docs/audits/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 
 ## Reference
