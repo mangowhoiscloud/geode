@@ -49,6 +49,22 @@ functional change.
 
 ### Added
 
+- **Evolution agent (S7).** New `plugins/seed_pipeline/agents/evolver.py`
+  fans out one sub-agent per Ranker survivor; each reads the Critic's
+  `rewrite_section` hint + the per-candidate `weaknesses` + Pilot
+  `dim_means` and rewrites ONLY the flagged section, preserving
+  frontmatter + target_dim + ±20% token budget per the
+  seed_evolver AgentDef contract. Emits rows to
+  `state.evolved_candidates` (schema mirrors `state.candidates` plus
+  `parent_id`, `rewrite_section`, `notes` provenance). Verdict
+  whitelist `{ok, evolution_skipped, failed}` — only `ok` rows
+  survive; skipped/failed leaves the original candidate in place.
+  Adds `evolved_candidates` to `PipelineState` + merge known set.
+  Uses the shared `parse_structured_output` helper (S6 lift); pins
+  `parent_id` from task args so a wrong LLM echo cannot route the
+  evolved seed under another parent. 16 unit tests covering reverse-
+  order pairing, mixed verdicts, default rewrite_section fallback,
+  evolved-row schema parity with candidates.
 - **Cost preview + pre-flight check (S6.5).** New
   `plugins/seed_pipeline/cost_preview.py` estimates per-role +
   aggregate USD spend for one full pipeline run using
