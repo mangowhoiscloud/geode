@@ -88,9 +88,21 @@ Sprint columns:
 
 | Status | Count |
 |---|---:|
-| ✅ Bilingual production | 49 |
+| ✅ Bilingual production | 58 |
 | 🔴 outstanding | 0 |
-| **Total** | **49** |
+| **Total** | **58** |
+
+### 2026-05-19 Phase 1-3 갱신
+
+- **Phase 1**: SOT 재동기화 (v0.99.13 → v0.99.16, 329 → 352 modules, 4897 → 4910 tests). 하드코딩 서브시스템 카운트 + sitemap summary 정정. G4 명칭 Coherence → Consistency.
+- **Phase 2**: 12 페이지 신설.
+    - 05 Capabilities (4): `capabilities/outer-loop`, `capabilities/seed-pipeline`, `capabilities/autoresearch`, `capabilities/co-scientist`.
+    - 03 Runtime (1): `runtime/ui/cli-latex`.
+    - 04 Harness (1): `harness/serve-gateway`.
+    - 06 Verification (3): `verification/biasbuster`, `verification/cross-llm`, `verification/cause-decision-tree`.
+    - 08 Operations (2): `ops/release-pypi-lifecycle`, `ops/backlog-dispose`.
+    - 99 References (1): `reference/petri-bundle-isolation`.
+- **Phase 3**: orphan 페이지 `runtime/memory/5-tier` 재등록. 실제 중복 slug 0건 (이전 audit 의 placement cross-reference 를 dup 로 오인했음).
 
 ### 후속 sprint 변경
 

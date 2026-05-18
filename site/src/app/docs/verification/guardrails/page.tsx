@@ -8,8 +8,8 @@ export default function Page() {
       slug="verification/guardrails"
       title="Guardrails G1-G4"
       titleKo="가드레일 G1-G4"
-      summary="Four progressive checks on LLM output. Schema, Range, Grounding, Coherence. Fail-fast, ladder-shaped."
-      summaryKo="LLM 출력에 대한 4단계 점진적 검사. Schema, Range, Grounding, Coherence. fail-fast, 사다리 구조."
+      summary="Four progressive checks on LLM output. Schema, Range, Grounding, Consistency. Fail-fast, ladder-shaped."
+      summaryKo="LLM 출력에 대한 4단계 점진적 검사. Schema, Range, Grounding, Consistency. fail-fast, 사다리 구조."
     >
       <Bi
         ko={
@@ -21,7 +21,7 @@ G2 Range       — are numeric scores in [1,5], probabilities in [0,1]?
    ↓ pass
 G3 Grounding   — is each finding backed by evidence in the input?
    ↓ pass
-G4 Coherence   — do the findings imply the score?
+G4 Consistency — do the findings imply the score?
    ↓ pass
 output accepted`}</pre>
             <p>
@@ -81,7 +81,7 @@ G2 Range       — are numeric scores in [1,5], probabilities in [0,1]?
    ↓ pass
 G3 Grounding   — is each finding backed by evidence in the input?
    ↓ pass
-G4 Coherence   — do the findings imply the score?
+G4 Consistency — do the findings imply the score?
    ↓ pass
 output accepted`}</pre>
             <p>
