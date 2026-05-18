@@ -215,6 +215,9 @@ def build_hooks(
                 "journal_pipeline_end": [HookEvent.PIPELINE_ENDED],
                 "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
+                # P1c — close defect #18 (STARTED + FAILED had no consumer).
+                "journal_subagent_started": [HookEvent.SUBAGENT_STARTED],
+                "journal_subagent_failed": [HookEvent.SUBAGENT_FAILED],
             }
             for evt in target_events.get(handler_name, []):
                 hooks.register(evt, handler_fn, name=handler_name, priority=60)

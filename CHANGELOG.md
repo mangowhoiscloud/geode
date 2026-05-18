@@ -49,6 +49,31 @@ functional change.
 
 ### Added
 
+- **P1c — structured session journal + SUBAGENT_STARTED/FAILED hook
+  coverage.** Closes 2026-05-19 outer-loop wiring plan Phase B defects
+  #18 + #19. New `core/observability/session_journal.py` exposes
+  `SessionJournal` (a thin JSONL-appender keyed on session_id +
+  gen_tag + component) plus a ContextVar (`current_session_journal()`
+  / `session_journal_scope(j)`) so hook handlers can discover the
+  active journal without explicit dependency injection. Path defaults
+  to `~/.geode/outer-loop/<session_id>/journal.jsonl` (complements
+  the P1a run-level `sessions.jsonl` index). I/O failures are logged
+  and swallowed — observability must not break the run it observes.
+  `core/memory/journal_hooks.py` adds `_on_subagent_started` /
+  `_on_subagent_failed` handlers that forward to the active session
+  journal (no-op when none is bound); `core/wiring/bootstrap.py`
+  registers the two new handlers for `HookEvent.SUBAGENT_STARTED`
+  and `HookEvent.SUBAGENT_FAILED`, closing the gap where those
+  events were emitted but had no consumer.
+  `plugins/seed_pipeline/cli.py` wraps `pipeline.run()` in a
+  `session_journal_scope` and emits `pipeline_started` /
+  `pipeline_finished` events; `autoresearch/train.py` emits an
+  `audit_finished` event at the end of `main()`. 12 new unit tests
+  cover schema round-trip, multi-append, parent-dir mkdir, OSError
+  isolation, ContextVar scope binding + exception unwinding,
+  default-path fallback, hook routing to active journal, hook no-op
+  without active journal, and bootstrap registration.
+
 - **P1a — generation linkage (session_id + gen_tag + sessions.jsonl
   index).** Closes 2026-05-19 outer-loop wiring plan Phase B defects
   #2 + #3 + #7 + #11. `autoresearch/train.py` adds

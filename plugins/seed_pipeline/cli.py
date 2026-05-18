@@ -194,6 +194,7 @@ def _dispatch_pipeline(
     """
     from core.paths import GEODE_HOME
 
+    from core.observability import SessionJournal, session_journal_scope
     from plugins.seed_pipeline.orchestrator import (
         Pipeline,
         PipelineRegistry,
@@ -220,7 +221,30 @@ def _dispatch_pipeline(
     out.write(f"seed-pipeline: starting run {run_id!r}\n")
     out.write(f"seed-pipeline: run_dir={run_dir}\n")
     out.flush()
-    pipeline.run()
+    # P1c — bind a SessionJournal so hook-routed subagent events land in
+    # ``~/.geode/outer-loop/<session_id>/journal.jsonl`` (default path),
+    # keeping the cross-loop journal location uniform with the
+    # autoresearch driver. The seed-pipeline ``<run_dir>`` keeps the
+    # state.json + survivors.json + elo_log.tsv (per-run artifacts);
+    # observability events live one level up under outer-loop/.
+    journal = SessionJournal(
+        session_id=run_id,
+        gen_tag=gen_tag,
+        component="seed-pipeline",
+    )
+    journal.append("pipeline_started", payload={"target_dim": target_dim})
+    with session_journal_scope(journal):
+        pipeline.run()
+    journal.append(
+        "pipeline_finished",
+        payload={
+            "survivors": len(state.survivors),
+            "usd_spent": round(state.usd_spent, 6),
+            "pool_path_out": (
+                str(state.pool_path_out) if state.pool_path_out is not None else None
+            ),
+        },
+    )
     survivors_line = (
         f"seed-pipeline: survivors.json at {state.pool_path_out}\n"
         if state.pool_path_out is not None
@@ -229,7 +253,8 @@ def _dispatch_pipeline(
     out.write(
         f"seed-pipeline: run {run_id!r} finished; "
         f"survivors={len(state.survivors)} usd={state.usd_spent:.4f}\n"
-        f"seed-pipeline: state.json at {run_dir / 'state.json'}\n" + survivors_line
+        f"seed-pipeline: state.json at {run_dir / 'state.json'}\n"
+        f"seed-pipeline: journal at {journal.path}\n" + survivors_line
     )
 
 

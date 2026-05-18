@@ -123,7 +123,10 @@ class TestJournalHooks:
 
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
-        assert len(handlers) == 3
+        # P1c — STARTED + FAILED handlers added (5 = pipeline_end +
+        # pipeline_error + subagent_completed + subagent_started +
+        # subagent_failed).
+        assert len(handlers) == 5
 
         # Simulate PIPELINE_END
         end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")

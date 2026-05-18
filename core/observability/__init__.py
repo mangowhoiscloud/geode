@@ -19,10 +19,20 @@ from core.observability.otel_export import (
     enable,
     status,
 )
+from core.observability.session_journal import (
+    SessionJournal,
+    current_session_journal,
+    session_journal_scope,
+    set_current_session_journal,
+)
 
 __all__ = [
     "OtelExportError",
+    "SessionJournal",
+    "current_session_journal",
     "disable",
     "enable",
+    "session_journal_scope",
+    "set_current_session_journal",
     "status",
 ]
