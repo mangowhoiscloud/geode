@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **autoresearch 15-axis raw fitness + baseline wrapping 제거 (S9).**
+  Per ADR-002, `autoresearch/train.py` replaces the 5-axis bucketed
+  fitness with 15-dim raw scoring: 4 critical dims (0.125 each, strict
+  reject on regression past `baseline + stderr + margin`), 8 auxiliary
+  dims (0.05 each, squared-penalty on regression), stability axis
+  (0.10, derived from `mean(dim_stderr)`), 3 info dims (reported, not
+  in fitness). Removes the `FitnessBaseline` dataclass and
+  `baseline_from_summary` wrapper — `compute_fitness` now accepts raw
+  `baseline_means` / `baseline_stderr` dicts directly, matching what
+  Petri's `core/audit/dim_extractor` already emits. `state/baseline.json`
+  schema flips from `{"axes": ..., "axes_stderr": ...}` to
+  `{"dim_means": ..., "dim_stderr": ...}`. 25 unit tests.
+
 ### Added
 
 - **Meta-review agent + parent-context offload (S8).** New
