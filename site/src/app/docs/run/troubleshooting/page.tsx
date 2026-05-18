@@ -21,17 +21,17 @@ export default function Page() {
               <thead><tr><th>증상</th><th>1차 확인</th></tr></thead>
               <tbody>
                 <tr><td>"키가 없어요" 에러</td><td><code>echo $ANTHROPIC_API_KEY</code>와 <code>~/.geode/config.toml</code></td></tr>
-                <tr><td>"context overflow" 종료</td><td><a href="/docs/ops/long-running">장기 실행 안전</a> 가이드</td></tr>
+                <tr><td>"context overflow" 종료</td><td><a href="/geode/docs/ops/long-running">장기 실행 안전</a> 가이드</td></tr>
                 <tr><td>"MCP server timeout"</td><td><code>geode /status</code>로 MCP 헬스 확인</td></tr>
-                <tr><td>토큰 비용 초과</td><td><a href="/docs/ops/cost">비용 모니터링</a> + <code>geode /model</code>로 다운그레이드</td></tr>
-                <tr><td>OAuth 토큰 만료</td><td><a href="/docs/ops/oauth">OAuth 토큰 회전</a></td></tr>
+                <tr><td>토큰 비용 초과</td><td><a href="/geode/docs/ops/cost">비용 모니터링</a> + <code>geode /model</code>로 다운그레이드</td></tr>
+                <tr><td>OAuth 토큰 만료</td><td><a href="/geode/docs/ops/oauth">OAuth 토큰 회전</a></td></tr>
               </tbody>
             </table>
 
             <h2>로그 위치</h2>
             <ul>
               <li>Runlog: <code>~/.geode/runlog/</code> (run 단위 trace)</li>
-              <li>Hooks: <a href="/docs/harness/hooks">Hook System</a> events</li>
+              <li>Hooks: <a href="/geode/docs/harness/hooks">Hook System</a> events</li>
               <li>Serve: <code>~/.geode/serve.log</code></li>
             </ul>
 
@@ -48,17 +48,17 @@ export default function Page() {
               <thead><tr><th>Symptom</th><th>First look</th></tr></thead>
               <tbody>
                 <tr><td>"missing key" error</td><td><code>echo $ANTHROPIC_API_KEY</code> and <code>~/.geode/config.toml</code></td></tr>
-                <tr><td>"context overflow" termination</td><td><a href="/docs/ops/long-running">Long-running Safety</a></td></tr>
+                <tr><td>"context overflow" termination</td><td><a href="/geode/docs/ops/long-running">Long-running Safety</a></td></tr>
                 <tr><td>"MCP server timeout"</td><td><code>geode /status</code> for MCP health</td></tr>
-                <tr><td>Token cost overrun</td><td><a href="/docs/ops/cost">Cost Monitoring</a> + <code>geode /model</code> to downgrade</td></tr>
-                <tr><td>OAuth token expired</td><td><a href="/docs/ops/oauth">OAuth Token Rotation</a></td></tr>
+                <tr><td>Token cost overrun</td><td><a href="/geode/docs/ops/cost">Cost Monitoring</a> + <code>geode /model</code> to downgrade</td></tr>
+                <tr><td>OAuth token expired</td><td><a href="/geode/docs/ops/oauth">OAuth Token Rotation</a></td></tr>
               </tbody>
             </table>
 
             <h2>Where logs live</h2>
             <ul>
               <li>Runlog: <code>~/.geode/runlog/</code> (per-run traces)</li>
-              <li>Hooks: <a href="/docs/harness/hooks">Hook System</a> events</li>
+              <li>Hooks: <a href="/geode/docs/harness/hooks">Hook System</a> events</li>
               <li>Serve: <code>~/.geode/serve.log</code></li>
             </ul>
 

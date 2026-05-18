@@ -101,7 +101,7 @@ class AssembledPrompt:
               <li><strong>GLM, Codex</strong>. 프로바이더 관리.</li>
             </ul>
             <p>
-              자세히: <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
+              자세히: <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
             </p>
 
             <h2>다른 시스템 비교</h2>
@@ -117,10 +117,10 @@ class AssembledPrompt:
 
             <h2>관련 문서</h2>
             <ul>
-              <li>cache 메커니즘: <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a></li>
-              <li>해시 ratchet: <a href="/docs/runtime/llm/prompt-hashing">Prompt Hashing</a></li>
-              <li>system prompt 변형: <a href="/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a></li>
-              <li>장기 실행 가드: <a href="/docs/ops/long-running">Long-running Safety</a></li>
+              <li>cache 메커니즘: <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a></li>
+              <li>해시 ratchet: <a href="/geode/docs/runtime/llm/prompt-hashing">Prompt Hashing</a></li>
+              <li>system prompt 변형: <a href="/geode/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a></li>
+              <li>장기 실행 가드: <a href="/geode/docs/ops/long-running">Long-running Safety</a></li>
               <li>외부 사료: <code>mango-wiki/.../concepts/geode-memory-system.md</code>, <code>geode-prompt-assembly.md</code>, <code>geode-context-guard.md</code>, <code>geode-context-overflow-prevention.md</code></li>
             </ul>
           </>
@@ -222,7 +222,7 @@ class AssembledPrompt:
               <li><strong>GLM, Codex</strong>: provider-managed.</li>
             </ul>
             <p>
-              Details: <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
+              Details: <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
             </p>
 
             <h2>Comparison with other systems</h2>
@@ -238,10 +238,10 @@ class AssembledPrompt:
 
             <h2>Related</h2>
             <ul>
-              <li>Cache mechanism: <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a></li>
-              <li>Hash ratchet: <a href="/docs/runtime/llm/prompt-hashing">Prompt Hashing</a></li>
-              <li>System prompt variants: <a href="/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a></li>
-              <li>Long-running guards: <a href="/docs/ops/long-running">Long-running Safety</a></li>
+              <li>Cache mechanism: <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a></li>
+              <li>Hash ratchet: <a href="/geode/docs/runtime/llm/prompt-hashing">Prompt Hashing</a></li>
+              <li>System prompt variants: <a href="/geode/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a></li>
+              <li>Long-running guards: <a href="/geode/docs/ops/long-running">Long-running Safety</a></li>
               <li>External sources: <code>mango-wiki/.../concepts/geode-memory-system.md</code>, <code>geode-prompt-assembly.md</code>, <code>geode-context-guard.md</code>, <code>geode-context-overflow-prevention.md</code></li>
             </ul>
           </>

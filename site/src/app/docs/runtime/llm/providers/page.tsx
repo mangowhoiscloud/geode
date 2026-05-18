@@ -58,7 +58,7 @@ GLM_FALLBACK_CHAIN       = ["glm-5.1", "glm-5", "glm-5-turbo",
 
             <h2>캐싱</h2>
             <ul>
-              <li><strong>Anthropic</strong>. system 블록에 `cache_control: ephemeral` (<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>를 통한 STATIC/DYNAMIC 분할) 과 최근 3개 non-system 메시지에 대한 <code>apply_messages_cache_control()</code> (PR #864). <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a> 참조.</li>
+              <li><strong>Anthropic</strong>. system 블록에 `cache_control: ephemeral` (<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>를 통한 STATIC/DYNAMIC 분할) 과 최근 3개 non-system 메시지에 대한 <code>apply_messages_cache_control()</code> (PR #864). <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a> 참조.</li>
               <li><strong>OpenAI</strong>. 서버 측 자동 prompt 캐싱 (GEODE wiring 불필요).</li>
               <li><strong>GLM / Codex</strong>. 프로바이더 관리.</li>
             </ul>
@@ -136,7 +136,7 @@ GLM_FALLBACK_CHAIN       = ["glm-5.1", "glm-5", "glm-5-turbo",
 
             <h2>Caching</h2>
             <ul>
-              <li><strong>Anthropic</strong> — `cache_control: ephemeral` on system block (STATIC/DYNAMIC split via <code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>) plus <code>apply_messages_cache_control()</code> on the last 3 non-system messages (PR #864). See <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a>.</li>
+              <li><strong>Anthropic</strong> — `cache_control: ephemeral` on system block (STATIC/DYNAMIC split via <code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>) plus <code>apply_messages_cache_control()</code> on the last 3 non-system messages (PR #864). See <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.</li>
               <li><strong>OpenAI</strong> — server-side automatic prompt caching (no GEODE wiring required).</li>
               <li><strong>GLM / Codex</strong> — provider-managed.</li>
             </ul>

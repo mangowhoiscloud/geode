@@ -21,7 +21,7 @@ export default function Page() {
               <li>실시간: <code>LLM_CALL_END</code> hook (per-call 토큰·달러).</li>
               <li>누적 (런타임): <code>geode /status</code> (현재 세션 + 일일).</li>
               <li>append-only ledger: <code>~/.geode/usage/&lt;date&gt;.jsonl</code> (v0.66+ 도입).</li>
-              <li>per-call assertion: <code>core.audit.diagnostics.CallDiagnostic</code> (v0.92+, <a href="/docs/verification/observability">Observability</a> 참조).</li>
+              <li>per-call assertion: <code>core.audit.diagnostics.CallDiagnostic</code> (v0.92+, <a href="/geode/docs/verification/observability">Observability</a> 참조).</li>
             </ul>
 
             <h2>Usage ledger 스키마</h2>
@@ -84,7 +84,7 @@ jq -s 'group_by(.model) | map({model: .[0].model, total: (map(.input_tokens + .o
 # 캐시 hit 호출만
 jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/$(date +%F).jsonl`}</pre>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/docs/verification/observability">Observability</a>, <a href="/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
+            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
           </>
         }
         en={
@@ -96,7 +96,7 @@ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/$(date +%F).jsonl`}</pre>
               <li>Real-time: <code>LLM_CALL_END</code> hook (per-call tokens and dollars).</li>
               <li>Cumulative (runtime): <code>geode /status</code> (current session + day).</li>
               <li>Append-only ledger: <code>~/.geode/usage/&lt;date&gt;.jsonl</code> (introduced in v0.66).</li>
-              <li>Per-call assertion: <code>core.audit.diagnostics.CallDiagnostic</code> (v0.92+, see <a href="/docs/verification/observability">Observability</a>).</li>
+              <li>Per-call assertion: <code>core.audit.diagnostics.CallDiagnostic</code> (v0.92+, see <a href="/geode/docs/verification/observability">Observability</a>).</li>
             </ul>
 
             <h2>Usage ledger schema</h2>
@@ -161,7 +161,7 @@ jq -s 'group_by(.model) | map({model: .[0].model, total: (map(.input_tokens + .o
 # Cache-hit calls only
 jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/$(date +%F).jsonl`}</pre>
 
-            <p className="text-white/40 text-sm"><em>See:</em> <a href="/docs/verification/observability">Observability</a>, <a href="/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
+            <p className="text-white/40 text-sm"><em>See:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
           </>
         }
       />

@@ -42,14 +42,14 @@ export default function Page() {
 
             <h2>Bundle을 새로 만들려면</h2>
             <p>
-              <a href="/docs/petri/run">감사 실행</a> 가이드에 따라 audit를 돌린 뒤 결과 디렉토리를
+              <a href="/geode/docs/petri/run">감사 실행</a> 가이드에 따라 audit를 돌린 뒤 결과 디렉토리를
               <code>site/public/petri-bundle/</code>에 publish 합니다. Pages workflow가 path-filter <code>site/**</code>를
               잡고 자동 deploy합니다.
             </p>
 
             <h2>점수 해석</h2>
             <p>
-              차원별 의미와 0-3 점수 스케일은 <a href="/docs/petri/judge-dimensions">38 Judge 차원</a> 페이지를 참조하세요.
+              차원별 의미와 0-3 점수 스케일은 <a href="/geode/docs/petri/judge-dimensions">38 Judge 차원</a> 페이지를 참조하세요.
             </p>
 
             <p className="text-white/40 text-sm">
@@ -86,14 +86,14 @@ export default function Page() {
 
             <h2>Publishing a new bundle</h2>
             <p>
-              Follow the <a href="/docs/petri/run">Run an Audit</a> guide, then drop the result directory at
+              Follow the <a href="/geode/docs/petri/run">Run an Audit</a> guide, then drop the result directory at
               <code>site/public/petri-bundle/</code>. The Pages workflow path-filter <code>site/**</code>
               will deploy automatically.
             </p>
 
             <h2>Score interpretation</h2>
             <p>
-              For dimension meanings and the 0-3 score scale, see <a href="/docs/petri/judge-dimensions">38 Judge Dimensions</a>.
+              For dimension meanings and the 0-3 score scale, see <a href="/geode/docs/petri/judge-dimensions">38 Judge Dimensions</a>.
             </p>
 
             <p className="text-white/40 text-sm">

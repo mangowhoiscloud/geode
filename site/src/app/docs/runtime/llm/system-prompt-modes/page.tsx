@@ -43,7 +43,7 @@ export GEODE_PERSONA=on
               평가자(Auditor·Judge)는 vanilla LLM과 비교 가능한 transcript를 받습니다.
             </p>
             <ul>
-              <li><a href="/docs/petri/run">Petri audit 실행</a> 가이드 참조.</li>
+              <li><a href="/geode/docs/petri/run">Petri audit 실행</a> 가이드 참조.</li>
               <li>strip 대상: GEODE_PERSONA 블록 + <code>&lt;dynamic_context&gt;</code> 일부.</li>
               <li>유지 대상: 도구 정의, MCP 설명, 기본 안전 가드.</li>
             </ul>
@@ -55,7 +55,7 @@ export GEODE_PERSONA=on
             </ul>
 
             <p className="text-white/40 text-sm">
-              <em>참조:</em> <a href="/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92~0.93.
+              <em>참조:</em> <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/geode/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92~0.93.
             </p>
           </>
         }
@@ -91,7 +91,7 @@ export GEODE_PERSONA=on
               not buried under GEODE identity. The auditor and judge receive a transcript comparable to a vanilla LLM.
             </p>
             <ul>
-              <li>See <a href="/docs/petri/run">Run an Audit</a>.</li>
+              <li>See <a href="/geode/docs/petri/run">Run an Audit</a>.</li>
               <li>Stripped: the GEODE_PERSONA block plus part of <code>&lt;dynamic_context&gt;</code>.</li>
               <li>Kept: tool definitions, MCP descriptions, baseline safety guards.</li>
             </ul>
@@ -103,7 +103,7 @@ export GEODE_PERSONA=on
             </ul>
 
             <p className="text-white/40 text-sm">
-              <em>See:</em> <a href="/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92-0.93.
+              <em>See:</em> <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/geode/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92-0.93.
             </p>
           </>
         }
