@@ -77,7 +77,45 @@ functional change.
   archives must lower the floor in the same change (Karpathy P4 explicit-
   action ratchet), preventing silent deletions during unrelated refactors.
 
+## [0.99.15] — 2026-05-19
+
+### Added
+
+- **ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
+  (2026-05-19).** New `docs/architecture/outer-loop-resume-decision.md`
+  documents the design for resume-after-subscription-exhaustion: layer
+  on top of existing `SessionCheckpoint` (C3 production-ready resume
+  infra), borrow LangGraph `thread_id`-keyed checkpoint pattern +
+  Inspect_ai stable sample-ID idempotency + Stripe Idempotency-Key
+  replay semantics. Auto-rotation explicitly rejected (Hermes bug
+  tracker documents fragility). User-driven credential boundary
+  matches the Codex `forced_login_method` banner pattern already
+  adopted in PR-β1. Reference findings: co-scientist paper claims
+  "easy restarts in case of any failure" in 1 sentence but neither
+  paper nor Swarms reference impl provides usable mechanism (impl
+  README TODO marks save-state broken). Plan
+  `docs/plans/2026-05-19-outer-loop-config-consolidation.md` extended
+  with Phase ζ (6 new PRs, ~1300 LOC) — `SessionCheckpoint` schema
+  extension + seed-pipeline `_load_state` + autoresearch
+  `_load_pending_audit` + idempotency-key cache + credential-rollover
+  detection + runbook. Phase C gen-0 smoke remains gated on the
+  expanded Phase α-ζ.
+
 ### Fixed
+
+- **CLI LaTeX single-letter uppercase subscript fallback.** `P_T`,
+  `A_B`, `R_T` 처럼 base 가 단일 대문자 Latin 변수이고 payload 도 대문자
+  Latin 인 delimiter-less script 는 Unicode subscript codepoint 가 없을 때
+  bracket fallback 으로 `P[T]` / `A[B]` / `R[T]` 로 표시합니다.
+  `IBM_T` 같은 acronym base, `snake_case`, `alpha_beta`, Markdown code/path
+  guard, 그리고 `P_t` / `x^T` 의 기존 Unicode script 경로는 유지됩니다.
+- **CLI LaTeX single-letter uppercase subscript fallback.** Delimiter-less
+  scripts whose base is one uppercase Latin variable and whose payload is
+  uppercase Latin now use the existing bracket fallback when Unicode lacks the
+  script codepoint, so `P_T`, `A_B`, and `R_T` render as `P[T]`, `A[B]`, and
+  `R[T]`. Acronym bases such as `IBM_T`, plain identifiers such as
+  `snake_case` and `alpha_beta`, Markdown code/path guards, and existing
+  Unicode script paths such as `P_t` and `x^T` remain unchanged.
 
 - **Agentic tool executor wiring.** Restored `generate_report` and `export_json`
   in the AgenticLoop `ToolExecutor` handler map, added the missing generic

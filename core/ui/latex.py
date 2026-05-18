@@ -349,7 +349,10 @@ def _unsupported_script_presentation(
     has_partial_mapping = any(ch is not None for ch in mapped)
     if has_partial_mapping and mapped.count(None) > len(mapped) // 2:
         return None
-    if not has_partial_mapping and not _script_base_looks_math(text, match.start()):
+    if not has_partial_mapping and not (
+        _script_base_looks_math(text, match.start())
+        or _has_single_uppercase_latin_base_script(text, match.start(), token)
+    ):
         return None
 
     # Unicode has no uppercase Latin subscript alphabet. Bracketing preserves
@@ -373,6 +376,20 @@ def _script_base_looks_math(text: str, marker_start: int) -> bool:
     while left > 0 and text[left - 1].isalpha():
         left -= 1
     return text[left:marker_start] in _GREEK_WORD_BASES
+
+
+def _has_single_uppercase_latin_base_script(text: str, marker_start: int, token: str) -> bool:
+    """True for unsupported uppercase scripts on a one-letter Latin variable."""
+    if marker_start <= 0:
+        return False
+    prev = text[marker_start - 1]
+    if not ("A" <= prev <= "Z"):
+        return False
+    if not token or not all("A" <= ch <= "Z" for ch in token):
+        return False
+    # Relax only for single-letter variables like P_T; multi-letter acronym
+    # bases such as IBM_T remain raw prose/identifier text.
+    return marker_start == 1 or not text[marker_start - 2].isalnum()
 
 
 def _render_tier1(src: str) -> str:
