@@ -390,8 +390,58 @@ def test_pick_bindings_role_binding_immutable() -> None:
 def test_pick_bindings_unknown_model_prefix_logs_and_defaults() -> None:
     """A user override with an unrecognised model prefix falls back to anthropic
     family (warning logged) rather than crashing the picker.
+
+    Note: with the override-model allowlist (enforced in pick_bindings),
+    the override is rejected at the model-validation step BEFORE family
+    inference runs, so the binding lands on the default model's family
+    (anthropic for generator's default ``claude-sonnet-4-6``).
     """
     manifest = _make_manifest()
     overrides = {"generator": {"model": "mystery-x9"}}
     result = pick_bindings(manifest=manifest, overrides=overrides, auto_probe=False)
     assert result.bindings["generator"].family == "anthropic"
+
+
+def test_pick_bindings_rejects_override_model_outside_allowlist() -> None:
+    """Override model not in spec.allowed_models is dropped, default used."""
+    manifest = _make_manifest()
+    # claude-haiku-4-5 is NOT in generator.allowed_models for this test fixture.
+    overrides = {"generator": {"model": "claude-haiku-4-5"}}
+    result = pick_bindings(manifest=manifest, overrides=overrides, auto_probe=False)
+    assert result.bindings["generator"].model == "claude-sonnet-4-6"  # default
+
+
+def test_pick_bindings_rejects_override_source_outside_petri_allowed() -> None:
+    """Override source not in petri.source.<family>.allowed falls back to auto-resolve."""
+    manifest = _make_manifest()
+    overrides = {"generator": {"source": "bogus-source"}}
+    with patch("plugins.seed_pipeline.picker._probe_oauth", return_value=False):
+        result = pick_bindings(manifest=manifest, overrides=overrides)
+    # bogus-source rejected → falls back to PAYG api_key
+    assert result.bindings["generator"].source == "api_key"
+
+
+def test_pick_bindings_enforce_diversity_default_passes_with_valid_manifest() -> None:
+    """Default enforce_diversity=True passes for the shipped 2-family panel."""
+    manifest = _make_manifest()
+    # Should not raise.
+    pick_bindings(manifest=manifest, overrides={}, auto_probe=False)
+
+
+def test_pick_bindings_enforce_diversity_off_allows_collapsed_panel() -> None:
+    """enforce_diversity=False lets tests construct deliberately-bad panels."""
+    # Override the manifest in-flight with a single-family panel via mocking
+    # `validate_runtime_diversity` would error if enforce_diversity stayed True.
+    manifest = _make_manifest()
+    # Replace voters with a 1-family panel (this is normally rejected at
+    # manifest load by JudgePanelSpec, but we patch the manifest itself).
+    object.__setattr__(
+        manifest.judge_panel,
+        "voters",
+        [VoterSpec(model="claude-sonnet-4-6", family="anthropic", source="claude-cli")],
+    )
+    # With enforce_diversity=False the picker returns without raising.
+    result = pick_bindings(
+        manifest=manifest, overrides={}, auto_probe=False, enforce_diversity=False
+    )
+    assert result.diversity_families == 1

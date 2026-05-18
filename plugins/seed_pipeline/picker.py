@@ -70,7 +70,12 @@ from typing import IO, Literal
 
 from core.paths import GLOBAL_SEED_PIPELINE_TOML
 
-from plugins.seed_pipeline.manifest import SeedPipelineManifest, VoterSpec, load_manifest
+from plugins.seed_pipeline.manifest import (
+    SeedPipelineManifest,
+    SeedRoleSpec,
+    VoterSpec,
+    load_manifest,
+)
 
 log = logging.getLogger(__name__)
 
@@ -266,6 +271,7 @@ def pick_bindings(
     *,
     overrides: dict[str, dict[str, str]] | None = None,
     auto_probe: bool = True,
+    enforce_diversity: bool = True,
 ) -> PickerResult:
     """Resolve concrete bindings for every enabled role + judge voter.
 
@@ -281,18 +287,35 @@ def pick_bindings(
     auto_probe
         When False, skip the OAuth credential probe and resolve any
         ``auto`` to the PAYG source. Used by pre-flight dry-runs.
+    enforce_diversity
+        When True (default), call :func:`validate_runtime_diversity`
+        on the resolved panel before returning so a user override that
+        collapses the judges cannot silently make it to S6. Tests that
+        construct deliberately-collapsed fixtures pass ``False``.
+
+    Override validation
+    -------------------
+    For each role, an override ``model`` field is dropped (with a
+    WARNING) when it is not in the role's ``allowed_models`` —
+    falling back to ``default_model``. Override ``source`` values are
+    cross-checked against Petri's source table and dropped (with a
+    WARNING) when they are not in ``petri.source.<family>.allowed``,
+    falling back to the resolved auto / PAYG source. This keeps a
+    typo or unsupported pairing from producing a bad ``RoleBinding``
+    that the S6 Ranker would then dispatch against the wrong adapter.
     """
     if manifest is None:
         manifest = load_manifest()
     if overrides is None:
         overrides = load_user_overrides()
+    petri_sources = _load_petri_sources()
 
     bindings: dict[str, RoleBinding] = {}
     subscription_paths: set[str] = set()
     for role_name in manifest.enabled_roles:
         spec = manifest.get_role(role_name)
         override = overrides.get(role_name, {})
-        model = override.get("model", spec.default_model)
+        model = _validate_override_model(role_name, override.get("model"), spec)
         try:
             family = infer_family(model)
         except ValueError:
@@ -303,7 +326,9 @@ def pick_bindings(
                 model,
             )
             family = "anthropic"
-        source_hint = override.get("source")
+        source_hint = _validate_override_source(
+            role_name, override.get("source"), family, petri_sources
+        )
         source = _resolve_source(family, hint=source_hint, auto_probe=auto_probe)
         bindings[role_name] = RoleBinding(
             role=role_name,
@@ -330,12 +355,94 @@ def pick_bindings(
 
     diversity_families = len({v.family for v in voters})
 
-    return PickerResult(
+    result = PickerResult(
         bindings=bindings,
         voters=voters,
         diversity_families=diversity_families,
         subscription_paths_in_use=frozenset(subscription_paths),
     )
+    if enforce_diversity:
+        validate_runtime_diversity(
+            result,
+            required_family_count=manifest.judge_panel.required_diversity_families,
+        )
+    return result
+
+
+def _validate_override_model(role_name: str, override_model: str | None, spec: SeedRoleSpec) -> str:
+    """Return a model name, replacing an out-of-allowlist override with the default."""
+    default_model = spec.default_model
+    allowed = spec.allowed_models
+    if override_model is None:
+        return default_model
+    if override_model not in allowed:
+        log.warning(
+            "seed-pipeline picker: role=%r override model=%r not in allowed_models=%s "
+            "— falling back to default %r",
+            role_name,
+            override_model,
+            allowed,
+            default_model,
+        )
+        return default_model
+    return override_model
+
+
+def _load_petri_sources() -> dict[str, set[str]]:
+    """Build ``{family: allowed_sources}`` from the Petri manifest.
+
+    Loaded lazily and tolerantly — if the Petri manifest is unavailable
+    in a test fixture, override-source validation falls back to a
+    permissive mode (logs WARNING but does not block). The seed-pipeline
+    manifest's cross-validator already rejects voter rows with bad
+    families/sources at load time, so override validation is the second
+    line of defence.
+    """
+    try:
+        from plugins.petri_audit.manifest import load_manifest as load_petri_manifest
+
+        petri = load_petri_manifest()
+    except Exception as exc:
+        log.debug(
+            "seed-pipeline picker: petri manifest unavailable (%s) — "
+            "skipping override-source allowlist check",
+            exc,
+        )
+        return {}
+    out: dict[str, set[str]] = {}
+    for family, spec in getattr(petri, "sources", {}).items():
+        out[family] = set(getattr(spec, "allowed", []))
+    return out
+
+
+def _validate_override_source(
+    role_name: str,
+    override_source: str | None,
+    family: str,
+    petri_sources: dict[str, set[str]],
+) -> str | None:
+    """Return an override source if allowed, else None (caller will auto-resolve).
+
+    Allows ``auto`` because that's an explicit sentinel handled by
+    :func:`_resolve_source`. A blank or invalid override falls through
+    to None so the OAuth/PAYG resolver picks a safe default.
+    """
+    if override_source is None:
+        return None
+    if override_source == "auto":
+        return "auto"
+    allowed = petri_sources.get(family)
+    if allowed and override_source not in allowed:
+        log.warning(
+            "seed-pipeline picker: role=%r override source=%r not in "
+            "petri.source.%s.allowed=%s — falling back to auto-resolve",
+            role_name,
+            override_source,
+            family,
+            sorted(allowed),
+        )
+        return None
+    return override_source
 
 
 def _resolve_voter_source(voter: VoterSpec, *, auto_probe: bool) -> str:
