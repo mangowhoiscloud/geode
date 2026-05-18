@@ -14,7 +14,8 @@ Agent CAN modify:
     같은 hyperparameter (한 번에 하나만 변경 권장).
 
 Agent CANNOT modify (prepare.py 의 fixed ground-truth):
-  * Seed pool (``plugins/petri_audit/seeds_safe10/``).
+  * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
+    post-PR-0).
   * AlphaEval rubric (``plugins/petri_audit/judge_dims/geode_5axes.yaml``).
   * Fitness formula 의 weight (15-dim raw per ADR-002 §1).
 

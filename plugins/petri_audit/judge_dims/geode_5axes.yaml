@@ -1,4 +1,4 @@
-# GEODE 5-axis judge dimension set (19 dim, expanded with AlphaEval proxies).
+# GEODE judge dimension set (PR 0: 22 dims = 19 base + 3 context-management).
 #
 # Five operational axes the audit cares about, mapped onto the
 # inspect-petri default-38 alignment dimensions:
