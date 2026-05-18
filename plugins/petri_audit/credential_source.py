@@ -34,6 +34,7 @@ Priority for the ``auto`` sentinel:
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
@@ -43,11 +44,15 @@ from plugins.petri_audit.adapters import (
 )
 from plugins.petri_audit.manifest import AUTO_SOURCE, load_manifest
 
+log = logging.getLogger(__name__)
+
 __all__ = [
+    "PAYG_SOURCE",
     "CredentialResolutionError",
     "clear_suppressions",
     "is_suppressed",
     "list_credential_sources",
+    "outer_loop_fallback_policy",
     "resolve_credential_source",
     "suppress_credential_source",
 ]
@@ -57,22 +62,60 @@ _lock = threading.Lock()
 _suppressed: set[tuple[str, str]] = set()
 
 
+PAYG_SOURCE = "api_key"
+"""The conventional name for any pay-as-you-go credential source.
+
+Every family in the Petri manifest has ``api_key`` as its PAYG entry
+(``anthropic.api_key``, ``openai.api_key``, ``zhipuai.api_key``).
+``resolve_credential_source(fallback_to_payg=False)`` filters this
+source out so a subscription run never silently bills the user's API
+key after OAuth quota exhaustion. See
+``docs/plans/2026-05-19-outer-loop-config-consolidation.md`` Phase β.
+"""
+
+
 class CredentialResolutionError(RuntimeError):
     """Raised when no credential source resolves for a family.
 
-    Carries ``family`` and the ``allowed`` set so callers (e.g. the
-    /petri picker) can render an actionable error instead of a bare
-    traceback.
+    Carries ``family``, the ``allowed`` set, and an optional
+    ``subscription_only`` flag so callers (e.g. the /petri picker, the
+    FE banner) can render an actionable error instead of a bare
+    traceback. The default message is Stripe-style (cause + remedy +
+    docs) and mentions ``[outer_loop] fallback_to_payg = true`` as the
+    explicit opt-in.
     """
 
-    def __init__(self, family: str, allowed: list[str]):
+    def __init__(
+        self,
+        family: str,
+        allowed: list[str],
+        *,
+        subscription_only: bool = False,
+    ):
         self.family = family
         self.allowed = allowed
-        super().__init__(
-            f"family={family}: no credential source available "
-            f"(allowed={allowed}); set an env var from the picker or "
-            f"adjust settings.{family}_credential_source"
-        )
+        self.subscription_only = subscription_only
+        if subscription_only:
+            super().__init__(
+                f"family={family}: no subscription credential source available "
+                f"(allowed={allowed}, PAYG fallback blocked by [outer_loop] "
+                f"fallback_to_payg=false).\n"
+                f"\n"
+                f"To continue NOW, do one of:\n"
+                f"  1. Wait until the subscription quota resets.\n"
+                f"  2. Enable PAYG fallback (will incur cost):\n"
+                f"     ~/.geode/config.toml:\n"
+                f"       [outer_loop]\n"
+                f"       fallback_to_payg = true\n"
+                f"  3. Pin a different source in [outer_loop.petri.<role>] "
+                f'with source = "api_key".\n'
+            )
+        else:
+            super().__init__(
+                f"family={family}: no credential source available "
+                f"(allowed={allowed}); set an env var from the picker or "
+                f"adjust settings.{family}_credential_source"
+            )
 
 
 def list_credential_sources(family: str) -> list[dict[str, Any]]:
@@ -123,10 +166,37 @@ def list_credential_sources(family: str) -> list[dict[str, Any]]:
     return out
 
 
+def outer_loop_fallback_policy() -> bool:
+    """Read the ``[outer_loop] fallback_to_payg`` flag from config.toml.
+
+    Default ``True`` preserves pre-2026-05-19 behaviour. Production
+    Petri call sites (``registry.get_binding`` / ``models.to_inspect_model``)
+    invoke this helper to thread the flag into
+    :func:`resolve_credential_source` without each call site needing
+    to import ``core.config.outer_loop`` directly.
+
+    Lazy import so this module stays usable in test contexts that
+    stub ``core.config``.
+    """
+    try:
+        from core.config.outer_loop import load_outer_loop_config
+    except ImportError:
+        return True
+    try:
+        return load_outer_loop_config().fallback_to_payg
+    except Exception:
+        log.warning(
+            "outer-loop config load failed; defaulting to fallback_to_payg=True",
+            exc_info=True,
+        )
+        return True
+
+
 def resolve_credential_source(
     family: str,
     *,
     override: str | None = None,
+    fallback_to_payg: bool = True,
 ) -> str:
     """Resolve the effective concrete source for ``family``.
 
@@ -134,6 +204,19 @@ def resolve_credential_source(
     concrete adapter key it can pass to
     :func:`plugins.petri_audit.adapters.load_adapter_module`. Raises
     :class:`CredentialResolutionError` when no concrete source resolves.
+
+    Args:
+        family: family name (anthropic / openai / zhipuai).
+        override: explicit source request; bypasses both auto resolution
+            and the ``fallback_to_payg`` filter (the caller is taking
+            responsibility for the choice).
+        fallback_to_payg: when ``False``, the ``api_key`` source is
+            filtered out of auto expansion so subscription-only runs
+            cannot silently fall through to PAYG. The first OAuth-like
+            source's availability is now load-bearing; if it fails, a
+            ``CredentialResolutionError(subscription_only=True)`` is
+            raised with an actionable message. Default ``True`` keeps
+            the pre-2026-05-19 behaviour for back-compat callers.
 
     See module docstring for the full priority order.
     """
@@ -145,6 +228,15 @@ def resolve_credential_source(
     if candidate != AUTO_SOURCE:
         if candidate not in spec.allowed:
             raise CredentialResolutionError(family, spec.allowed)
+        # Strict mode also blocks a PAYG-default manifest entry (e.g.
+        # zhipuai whose manifest default is ``api_key``). Explicit
+        # ``override`` is unaffected — caller takes responsibility.
+        if not fallback_to_payg and override is None and candidate == PAYG_SOURCE:
+            raise CredentialResolutionError(
+                family,
+                spec.allowed,
+                subscription_only=True,
+            )
         if not is_suppressed(family, candidate):
             return candidate
         # Suppressed concrete request → fall through to auto expansion.
@@ -154,11 +246,17 @@ def resolve_credential_source(
     for source in spec.allowed:
         if source == AUTO_SOURCE:
             continue
+        if not fallback_to_payg and source == PAYG_SOURCE:
+            continue
         if is_suppressed(family, source):
             continue
         if is_adapter_available(family, source):
             return source
-    raise CredentialResolutionError(family, spec.allowed)
+    raise CredentialResolutionError(
+        family,
+        spec.allowed,
+        subscription_only=not fallback_to_payg,
+    )
 
 
 def _settings_source(family: str) -> str | None:

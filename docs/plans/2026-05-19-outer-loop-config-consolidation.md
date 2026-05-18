@@ -125,7 +125,7 @@ Phase ζ — checkpoint + resume on credential rollout
 | PR | Title | Defects / scope | LOC | Files (예상) | Blocking |
 |---|---|---|---|---|---|
 | **PR-α1** ✅ | feat(config): outer_loop schema + loader (pydantic) | 신규 | ~360 | `core/config/outer_loop.py` (NEW), `tests/test_outer_loop_config.py` (NEW, 16 tests) | — |
-| **PR-β1** | feat(petri): subscription-only guard + abort path | 사용자 directive | ~150 | `plugins/petri_audit/petri.plugin.toml` (allowed 단일화), `plugins/petri_audit/credential_source.py` (fallback flag 점검), abort msg formatter, tests | PR-α1 |
+| **PR-β1** ✅ | feat(petri): subscription-only guard + abort path | 사용자 directive | ~170 | `plugins/petri_audit/credential_source.py` (PAYG_SOURCE 상수 + fallback_to_payg kwarg + subscription_only error flag + actionable msg), 7 new tests | PR-α1 |
 | **PR-γ1** | feat(cli): 3-tier quota banner + abort dialog | UX | ~200 | `core/cli/quota_banner.py` (NEW), `core/cli/repl.py` integration, abort dialog template, tests | PR-β1 |
 | **PR-δ1** | refactor(autoresearch): consume outer_loop config | migration | ~150 | `autoresearch/train.py` (module 상수 → config lazy load with default fallback), tests, program.md doc sync | PR-α1 |
 | **PR-δ2** | refactor(seed-pipeline+petri): consume outer_loop config | migration | ~200 | `plugins/seed_pipeline/{cli.py, picker.py}`, `plugins/petri_audit/user_overrides.py` (deprecate `~/.geode/petri.toml`, redirect to outer_loop), migration helper, tests | PR-α1 + PR-δ1 |

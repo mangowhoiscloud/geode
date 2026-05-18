@@ -167,12 +167,19 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
     # helper's contract).
     from plugins.petri_audit.credential_source import (
         CredentialResolutionError,
+        outer_loop_fallback_policy,
         resolve_credential_source,
     )
     from plugins.petri_audit.manifest import load_manifest
 
     try:
-        source = resolve_credential_source(family, override=source_override)
+        # PR-β1 — strict subscription mode propagates here too. Default
+        # True keeps pre-2026-05-19 behaviour when [outer_loop] is unset.
+        source = resolve_credential_source(
+            family,
+            override=source_override,
+            fallback_to_payg=outer_loop_fallback_policy(),
+        )
     except CredentialResolutionError:
         # No credential resolves — legacy behaviour returned the api_key
         # prefix anyway and let inspect_ai surface the env-var error at
