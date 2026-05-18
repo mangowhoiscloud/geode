@@ -89,6 +89,49 @@ def test_seed_select_points_at_hierarchical_tree() -> None:
     assert SEED_SELECT == "plugins/petri_audit/seeds"
 
 
+# ---------------------------------------------------------------------------
+# P0b — env-driven seed-select override (defect #1 from 2026-05-19 plan)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_seed_select_returns_default_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset AUTORESEARCH_SEED_SELECT falls back to the hierarchical default."""
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
+
+
+def test_resolve_seed_select_honors_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A populated env var redirects seed-select to the seed-pipeline survivors."""
+    override = str(tmp_path / "survivors.json")
+    monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
+    assert auto_train._resolve_seed_select() == override
+
+
+def test_resolve_seed_select_treats_whitespace_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whitespace-only env value is treated as unset to avoid breaking argv."""
+    monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "   ")
+    assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
+
+
+def test_build_audit_command_uses_resolved_seed_select(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """_build_audit_command picks up the env override at call-time."""
+    override = str(tmp_path / "survivors.json")
+    monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
+    argv = auto_train._build_audit_command()
+    idx = argv.index("--seed-select")
+    assert argv[idx + 1] == override
+
+
 def test_real_mode_invokes_subprocess_with_override_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

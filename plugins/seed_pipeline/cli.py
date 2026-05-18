@@ -221,10 +221,15 @@ def _dispatch_pipeline(
     out.write(f"seed-pipeline: run_dir={run_dir}\n")
     out.flush()
     pipeline.run()
+    survivors_line = (
+        f"seed-pipeline: survivors.json at {state.pool_path_out}\n"
+        if state.pool_path_out is not None
+        else "seed-pipeline: survivors.json not written (run_dir unset)\n"
+    )
     out.write(
         f"seed-pipeline: run {run_id!r} finished; "
         f"survivors={len(state.survivors)} usd={state.usd_spent:.4f}\n"
-        f"seed-pipeline: state.json at {run_dir / 'state.json'}\n"
+        f"seed-pipeline: state.json at {run_dir / 'state.json'}\n" + survivors_line
     )
 
 

@@ -229,6 +229,11 @@ class Pipeline:
         )
         for phase in _PHASE_ORDER:
             self._run_phase(phase)
+        # P0b — cross-loop handoff runs FIRST so ``state.pool_path_out``
+        # is stamped before ``_persist_state`` snapshots state.json.
+        # Otherwise the offload would freeze a stale ``null`` for
+        # the pool_path_out field.
+        self._persist_survivors()
         # S8 parent-context offload — persist the final state.json so a
         # follow-up CLI invocation (S11) can resume the meta-review +
         # survivor pool without re-reading every candidate body.
@@ -240,6 +245,95 @@ class Pipeline:
             self.state.usd_spent,
         )
         return self.state
+
+    def _persist_survivors(self) -> None:
+        """Cross-loop handoff: emit ``survivors.json`` + ``survivors/`` dir.
+
+        P0b — defect #13 from 2026-05-19 outer-loop wiring plan. Writes
+        two artifacts under ``<run_dir>``:
+
+        1. ``survivors.json`` — metadata view for downstream queries
+           (Elo rating, pilot score per survivor)::
+
+               {
+                 "gen_tag": "...",
+                 "target_dim": "...",
+                 "run_id": "...",
+                 "survivors": [
+                   {"id": "...", "path": "<candidate.md path>",
+                    "elo_rating": 1612.4, "pilot": {...} | null}
+                 ]
+               }
+
+        2. ``survivors/`` — directory of symlinks to each survivor's
+           candidate body file. This is what
+           ``inspect-petri`` 's flat-glob ``--seed-select`` consumer
+           expects (``flatten_for_inspect_petri`` passes a directory of
+           ``*.md`` through unchanged). ``state.pool_path_out`` is
+           stamped to this directory so a parent driver can set
+           ``AUTORESEARCH_SEED_SELECT=<pool_path_out>`` and the next
+           audit will pick up the winners.
+
+        Skipped when ``state.run_dir`` is unset (test fixtures often
+        omit it). I/O failures log a WARNING but do not raise — the
+        in-memory ``state.survivors`` stays authoritative.
+        """
+        if self.state.run_dir is None:
+            return
+        candidates_by_id = {c["id"]: c for c in self.state.candidates}
+        rows: list[dict[str, Any]] = []
+        for cid in self.state.survivors:
+            cand = candidates_by_id.get(cid, {})
+            rows.append(
+                {
+                    "id": cid,
+                    "path": cand.get("path"),
+                    "elo_rating": self.state.elo_ratings.get(cid),
+                    "pilot": self.state.pilot_scores.get(cid),
+                }
+            )
+        payload = {
+            "gen_tag": self.state.gen_tag,
+            "target_dim": self.state.target_dim,
+            "run_id": self.state.run_id,
+            "survivors": rows,
+        }
+        try:
+            self.state.run_dir.mkdir(parents=True, exist_ok=True)
+            survivors_json = self.state.run_dir / "survivors.json"
+            survivors_json.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            survivors_dir = self.state.run_dir / "survivors"
+            survivors_dir.mkdir(parents=True, exist_ok=True)
+            # Clear stale entries from a previous run so the symlink set
+            # is exactly the current survivors.
+            for entry in survivors_dir.iterdir():
+                if entry.is_symlink() or entry.is_file():
+                    entry.unlink()
+            for row in rows:
+                src_str = row.get("path")
+                if not src_str:
+                    continue
+                src = Path(src_str)
+                if not src.is_file():
+                    continue
+                dst = survivors_dir / src.name
+                dst.symlink_to(src.resolve())
+            self.state.pool_path_out = survivors_dir
+            log.info(
+                "seed-pipeline cross-loop handoff: %d survivors → %s (metadata at %s)",
+                len(rows),
+                survivors_dir,
+                survivors_json,
+            )
+        except OSError as exc:
+            log.warning(
+                "seed-pipeline survivors export failed at %s: %s",
+                self.state.run_dir,
+                exc,
+            )
 
     def _persist_state(self) -> None:
         """Write a JSON snapshot of state to ``<run_dir>/state.json``.
