@@ -81,8 +81,27 @@ cp .env.example .env       # project-local keys (비어있지 않은 값만 over
 ### 3. Global CLI 설치
 
 ```bash
-uv tool install -e . --force
+uv tool install geode-agent
 geode version   # 어디서든 실행 가능
+```
+
+`geode-agent` 는 PyPI 배포명이고, 설치되는 실행 명령은 `geode` 입니다.
+현재 릴리즈가 아직 PyPI 에 공개되지 않았거나 GEODE 자체를 개발한다면 소스
+체크아웃으로 설치합니다.
+
+```bash
+uv sync
+uv tool install -e . --force
+geode version
+```
+
+업데이트와 삭제 경로는 설치 방식에 따라 다릅니다.
+
+```bash
+uv tool upgrade geode-agent   # PyPI 설치
+geode update                  # 소스 체크아웃 설치
+geode uninstall               # 런타임 데이터 + 설치된 CLI 제거
+uv tool uninstall geode-agent # CLI만 제거
 ```
 
 ---

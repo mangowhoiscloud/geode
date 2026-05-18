@@ -56,7 +56,12 @@ def _check_geode_on_path() -> CheckResult:
         name="`geode` on PATH",
         ok=ok,
         detail=geode_bin or "not found",
-        fix="" if ok else "Run `uv tool install -e . --force` from the geode/ directory",
+        fix=(
+            ""
+            if ok
+            else "Run `uv tool install geode-agent` for PyPI, or "
+            "`uv tool install -e . --force` from a source checkout"
+        ),
     )
 
 

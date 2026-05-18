@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agentic tool executor wiring.** Restored `generate_report` and `export_json`
+  in the AgenticLoop `ToolExecutor` handler map, added the missing generic
+  `generate_data` implementation, and added a regression check that every
+  LLM-exposed base tool has either a handler or an explicit executor path.
+
 ### Added
 
 - **Plan — Outer-Loop Config Consolidation + Subscription Guard + FE

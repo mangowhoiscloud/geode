@@ -12,9 +12,11 @@ Handler groups:
                            manage_auth, manage_login, doctor_slack
 - :mod:`execution`      — schedule_job, trigger_event
 - :mod:`delegated`      — registry-based wrappers for web/file/note/profile tools
+- :mod:`data`           — generate_data
 - :mod:`mcp`            — install_mcp_server
 - :mod:`context`        — manage_context (status/compact/clear)
 - :mod:`task`           — task_create/update/get/list/stop
+- :mod:`output`         — generate_report, export_json
 - :mod:`notification`   — send_notification
 - :mod:`calendar`       — calendar_list/create_event, calendar_sync_scheduler
 - :mod:`offload`        — recall_tool_result
@@ -40,6 +42,7 @@ from core.cli.tool_handlers.audit import _build_audit_handlers
 from core.cli.tool_handlers.calendar import _build_calendar_handlers
 from core.cli.tool_handlers.computer_use import _build_computer_use_handler
 from core.cli.tool_handlers.context import _build_context_handlers
+from core.cli.tool_handlers.data import _build_data_handlers
 from core.cli.tool_handlers.delegated import (
     _DELEGATED_TOOLS,
     _build_delegated_handlers,
@@ -52,6 +55,7 @@ from core.cli.tool_handlers.memory import _build_memory_handlers
 from core.cli.tool_handlers.notification import _build_notification_handlers
 from core.cli.tool_handlers.observability import _build_observability_handlers
 from core.cli.tool_handlers.offload import _build_offload_handlers
+from core.cli.tool_handlers.output import _build_output_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
 from core.cli.tool_handlers.system import _build_system_handlers
 from core.cli.tool_handlers.task import _build_task_handlers
@@ -63,6 +67,7 @@ __all__ = [
     "_build_calendar_handlers",
     "_build_computer_use_handler",
     "_build_context_handlers",
+    "_build_data_handlers",
     "_build_delegated_handlers",
     "_build_execution_handlers",
     "_build_hitl_handlers",
@@ -71,6 +76,7 @@ __all__ = [
     "_build_notification_handlers",
     "_build_observability_handlers",
     "_build_offload_handlers",
+    "_build_output_handlers",
     "_build_plan_handlers",
     "_build_system_handlers",
     "_build_task_handlers",
@@ -135,7 +141,9 @@ def _build_tool_handlers(
     handlers.update(_build_hitl_handlers())
     handlers.update(_build_system_handlers(readiness, force_dry, mcp_manager))
     handlers.update(_build_execution_handlers())
+    handlers.update(_build_data_handlers())
     handlers.update(_build_delegated_handlers())
+    handlers.update(_build_output_handlers())
     handlers.update(_build_notification_handlers())
     handlers.update(_build_calendar_handlers())
     handlers.update(_build_mcp_handler(mcp_manager))

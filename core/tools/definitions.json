@@ -21,9 +21,48 @@
         "subject": {
           "type": "string",
           "description": "Report subject or title"
+        },
+        "analysis_data": {
+          "type": "object",
+          "description": "Structured analysis results to include in the report"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json",
+            "html"
+          ],
+          "description": "Output format for the report. Defaults to markdown."
         }
       },
       "required": []
+    }
+  },
+  {
+    "name": "export_json",
+    "description": "Exports structured data as a JSON artifact. Use when the user asks to save results, export structured output, or create a machine-readable artifact.",
+    "category": "analysis",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Data to export as JSON"
+        },
+        "filename": {
+          "type": "string",
+          "description": "Output filename. Defaults to a timestamped GEODE export name."
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Output directory path. Defaults to the current directory."
+        }
+      },
+      "required": [
+        "data"
+      ]
     }
   },
   {

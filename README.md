@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/61%20tools-MCP%20native-1e293b?style=flat-square" alt="61 Tools">
+  <img src="https://img.shields.io/badge/53%20agentic%20tools-MCP%20native-1e293b?style=flat-square" alt="53 Agentic Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -70,7 +70,16 @@ If any of these fail, see [Troubleshooting](#troubleshooting) below.
 | Git | [git-scm.com](https://git-scm.com/) | `git --version` |
 | uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
 
-### Step 1 — Get the code
+### Step 1 — Install GEODE
+
+GEODE's PyPI distribution is **`geode-agent`**. It installs the **`geode`** command.
+
+```bash
+uv tool install geode-agent
+geode version
+```
+
+If the current release has not been published to PyPI yet, or you are developing GEODE itself, install from source instead:
 
 ```bash
 git clone https://github.com/mangowhoiscloud/geode.git
@@ -172,7 +181,8 @@ If you see this, you're done. If you see an error, run `geode doctor` for a diag
 ```bash
 geode about           # version, model, registered auth, paths, daemon status
 geode doctor          # 7-check bootstrap diagnosis with fix hints
-geode update          # pull source, sync deps, refresh the installed CLI
+uv tool upgrade geode-agent  # update a PyPI-installed CLI
+geode update          # update a source checkout and refresh its editable CLI
 geode uninstall       # remove runtime data and the installed CLI
 geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ```
@@ -180,6 +190,13 @@ geode setup --reset   # wipe ~/.geode/.env and re-run the wizard
 ---
 
 ### Updating
+
+For a PyPI install, update the CLI package with uv:
+
+```bash
+uv tool upgrade geode-agent
+geode version
+```
 
 For a source checkout install, let GEODE run the same update sequence it uses in smoke tests:
 
@@ -199,12 +216,17 @@ geode update --dry-run
 
 ### Uninstalling
 
-Removes GEODE runtime data and the installed CLI. Preview first if you want to see exactly what
-would be removed:
+`geode uninstall` removes GEODE runtime data, stops the daemon, and removes the `geode-agent` uv tool install. Preview first if you want to see exactly what would be removed:
 
 ```bash
 geode uninstall --dry-run
 geode uninstall
+```
+
+If you only want to remove the PyPI-installed CLI and keep runtime data under `~/.geode/`, use uv directly:
+
+```bash
+uv tool uninstall geode-agent
 ```
 
 Useful partial removal modes:
@@ -219,7 +241,7 @@ Verify removal:
 
 ```bash
 which geode               # should print nothing
-uv tool list | grep geode # should print nothing
+uv tool list | grep geode # should not list geode-agent
 pgrep -f "geode serve"    # should print nothing
 ```
 
@@ -256,7 +278,7 @@ The install script writes uv to `~/.local/bin`. Either restart your terminal, or
 <details>
 <summary><strong>"command not found: geode"</strong> — the global install hasn't run.</summary>
 
-Run `uv tool install -e . --force` from the `geode/` directory. This puts the `geode` command in `~/.local/bin/`. If that directory isn't on your PATH, add `export PATH="$HOME/.local/bin:$PATH"` to your shell config.
+For a PyPI install, run `uv tool install geode-agent`. For a source checkout, run `uv tool install -e . --force` from the `geode/` directory. Both paths put the `geode` command in `~/.local/bin/`. If that directory isn't on your PATH, add `export PATH="$HOME/.local/bin:$PATH"` to your shell config.
 </details>
 
 <details>
@@ -287,8 +309,8 @@ Check `geode model` — some models are better at tool use than others. Default 
 <summary><strong>How do I update?</strong></summary>
 
 ```bash
-cd geode
-geode update
+uv tool upgrade geode-agent   # PyPI install
+geode update                  # source checkout
 ```
 </details>
 
@@ -299,7 +321,7 @@ geode update
 | Feature | What it does |
 |---------|-------------|
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches — all instances of the same loop |
-| **61 tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **53 agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
@@ -392,14 +414,14 @@ Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via 
 GEODE has two control layers:
 
 - **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
-- **GEODE Runtime (agent)** — `while(tool_use)` loop + 61 tools + 14 runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+- **GEODE Runtime (agent)** — `while(tool_use)` loop + 53 agentic tools + native ToolRegistry + runtime Skills + 58 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 5-Tier Memory.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Tools(61), MCP catalog<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Agentic tools(53), MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
@@ -412,7 +434,7 @@ graph LR
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
 | **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | ToolRegistry(61), MCP Catalog (200 via Anthropic registry, 5 locally configured by default), Skills(14), Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Runtime** | Agentic tools(53), native ToolRegistry(16), MCP Catalog (200 via Anthropic registry plus project-configured servers), runtime Skills, Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 
 `.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
@@ -431,7 +453,7 @@ Tier 3    Session         In-memory — conversation, tool results, plans
 ├── memory/             # T2: Project Memory (LRU rotate)
 ├── rules/              # Auto-generated project rules
 ├── vault/              # Permanent artifacts (reports, research)
-├── skills/             # 15 runtime skills (3-tier visibility)
+├── skills/             # project runtime skills (5-tier discovery)
 ├── plans.json          # Disk-persistent PlanStore (v0.53.3)
 └── result_cache/       # Pipeline LRU (SHA-256, 24h TTL)
 ```
