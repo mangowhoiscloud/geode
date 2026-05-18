@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **P1b — autoresearch outer-loop sys prompt unified to English + 20-dim
+  tiered schema rewrite.** Closes 2026-05-19 outer-loop wiring plan
+  Phase B defects #6 + #10. `autoresearch/program.md` — full rewrite:
+  every Korean-mixed passage is now English, stale schema references
+  are corrected (`seeds_safe10/` → `seeds/` hierarchical, "19 dim" → 20
+  dim universe with the 17 weighted + 3 info split called out
+  explicitly, "5-axis (predictive/robustness/logic/diversity/stability)"
+  → critical-5 / auxiliary-12 / info-3 tiered structure). The P0a
+  `--promote` / `--no-promote` flags and the auto-promote rule are
+  documented in a dedicated section, and the P0b
+  `AUTORESEARCH_SEED_SELECT` cross-loop handoff is referenced. Same
+  unification applied to `autoresearch/README.md` and the
+  `autoresearch/train.py` module docstring + multiple inline
+  docstrings (the "15-dim" / "4 critical + 8 auxiliary" residue from
+  pre-PR-0 was also corrected) + `__init__.py` so every surface the
+  outer-loop agent reads in-scope is monolingual and consistent.
+  Self-contradiction between line :22 ("19 dim") and line :112
+  ("dim_count: 15") is resolved: the 20-dim universe (5+12+3) and the
+  17-dim weighted aggregate (critical + auxiliary) plus the
+  synthetic stability axis are now distinguished throughout.
+
 ### Added
 
 - **P0b — seed-pipeline ↔ autoresearch cross-loop handoff.** Closes
