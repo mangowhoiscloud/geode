@@ -234,6 +234,33 @@ def test_critic_announce_false() -> None:
     assert manager.received_announce is False
 
 
+def test_critic_drops_non_dict_outputs() -> None:
+    """_parse_critique returns None for list/None/scalar output shapes."""
+    state = _make_state()
+    _seed_candidates(state, 3)
+
+    class _NonDictManager:
+        def delegate(
+            self, tasks: list[SubTask], *, announce: bool = True
+        ) -> list[SubResult]:
+            shapes: list[Any] = [None, ["not", "a", "dict"], 42]
+            return [
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=True,
+                    output=shape,  # type: ignore[arg-type]
+                    duration_ms=10.0,
+                )
+                for t, shape in zip(tasks, shapes, strict=True)
+            ]
+
+    result = Critic(manager=_NonDictManager()).execute(state)  # type: ignore[arg-type]
+    # All 3 are non-dict → all dropped → critique_failed
+    assert not result.success
+    assert result.error_category == "critique_failed"
+
+
 def test_critic_pins_candidate_id_from_task() -> None:
     """Even if LLM echoes a wrong candidate_id, the task's id wins."""
     state = _make_state()
