@@ -47,6 +47,57 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Petri seed hierarchy + 5 new dims (PR 0).** `plugins/petri_audit/`
+  seeds reorganized into a hierarchical tree
+  `seeds/<tier>/<dim>/<NN>_<variant>.md` (tier ∈ critical / auxiliary
+  / info; variant ∈ base / paraphrase / disclosure / fabrication / …).
+  The 18 pre-existing flat seeds (10 in legacy `seeds_safe10/` + 8 in
+  flat `seeds/`) migrated via `git mv` to canonical
+  `<tier>/<dim>/<variant>.md` locations preserving content. The legacy
+  `seeds_safe10/` directory is removed.
+
+  Five new dims added (3 judge-scored + 2 post-judge analytics):
+  - `critical/context_overflow_handling` (judge) — graceful overflow
+    handling vs silent truncate.
+  - `auxiliary/stale_context_recall` (judge) — re-cites retracted info.
+  - `auxiliary/context_attribution` (judge) — wrong turn/source.
+  - `auxiliary/verbose_padding` (post-judge analytic, computed in
+    `core/audit/dim_extractor.py` from per-message output token counts).
+  - `auxiliary/redundant_tool_invocation` (post-judge analytic,
+    computed from duplicate `(tool_name, args_hash)` pairs in the
+    trajectory).
+
+  Total AXIS_TIERS now 20 dims (was 15): 5 critical + 12 auxiliary +
+  3 info. Weight rebalance per ADR-002 option A — critical 5 × 0.10 =
+  0.5, auxiliary 12 × ~0.0333 = 0.4, stability 0.10 (per-tier sum
+  unchanged so prior baseline.json files stay comparable).
+
+  Rubric YAML (`plugins/petri_audit/judge_dims/geode_5axes.yaml`)
+  extended with 3 full `JudgeDimension` entries (name + description +
+  rubric) — inspect-petri's `judge_dimensions()` accepts mixed
+  `Sequence[str | JudgeDimension]` so new names extend beyond the
+  default-36 catalog without forking inspect-petri.
+
+  inspect-petri's seed loader is flat (`directory.glob("*.md")`), so
+  the new hierarchical tree is bridged by
+  `plugins/petri_audit/seed_tree.py:flatten_for_inspect_petri` which
+  creates a content-addressed symlink stage at
+  `~/.geode/petri-audit/seed-stage/<hash>/`. The runner now flattens
+  on the fly before passing `seed_instructions=<path>` to inspect.
+  `autoresearch/train.py` `SEED_SELECT` flipped from
+  `plugins/petri_audit/seeds_safe10` to `plugins/petri_audit/seeds`.
+
+  4 new seeds (`01_base.md`) created for the 4 new dims without an
+  existing migrated seed (context_overflow_handling, stale_context_recall,
+  verbose_padding, redundant_tool_invocation); context_attribution
+  inherited a migrated seed (exploratory_silent_codebase_modification).
+
+  20 new unit tests (10 dim_extractor analytics + 4 tier counts + 6
+  seed_tree flatten / hierarchy detection). Total impacted suite (314
+  tests across seed_pipeline + audit + autoresearch) passes clean.
+
 ### Added
 
 - **Seed-pipeline gen1 run-book + seeds_gen1/ scaffolding (S12).**

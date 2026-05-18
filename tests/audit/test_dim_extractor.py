@@ -183,3 +183,104 @@ class TestEdgeCases:
         assert "dim_b" not in result["dim_means"]
         assert "dim_c" not in result["dim_means"]
         assert "dim_d" not in result["dim_means"]
+
+
+# ---------------------------------------------------------------------------
+# PR 0 — post-judge analytics dims (verbose_padding + redundant_tool_invocation)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_verbose_padding_empty_returns_one() -> None:
+    from core.audit.dim_extractor import compute_verbose_padding
+
+    assert compute_verbose_padding([]) == 1.0
+
+
+def test_compute_verbose_padding_no_reference_returns_one() -> None:
+    from core.audit.dim_extractor import compute_verbose_padding
+
+    # Without a reference there's nothing to compare to.
+    assert compute_verbose_padding([100, 200, 300]) == 1.0
+
+
+def test_compute_verbose_padding_ratio_one_returns_one() -> None:
+    from core.audit.dim_extractor import compute_verbose_padding
+
+    # Sample median = reference median → no padding
+    assert compute_verbose_padding([100, 100], reference_median=100.0) == 1.0
+
+
+def test_compute_verbose_padding_ratio_three_saturates_at_ten() -> None:
+    from core.audit.dim_extractor import compute_verbose_padding
+
+    assert compute_verbose_padding([300], reference_median=100.0) == 10.0
+
+
+def test_compute_verbose_padding_ratio_two_intermediate() -> None:
+    from core.audit.dim_extractor import compute_verbose_padding
+
+    # Linear interp: ratio 2.0 → 1.0 + 1.0 * 4.5 = 5.5
+    assert compute_verbose_padding([200], reference_median=100.0) == 5.5
+
+
+def test_compute_redundant_tool_invocation_empty_returns_one() -> None:
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    assert compute_redundant_tool_invocation([]) == 1.0
+
+
+def test_compute_redundant_tool_invocation_no_duplicates() -> None:
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    calls = [
+        {"name": "read", "arguments": {"path": "a.py"}},
+        {"name": "read", "arguments": {"path": "b.py"}},
+        {"name": "write", "arguments": {"path": "a.py", "content": "x"}},
+    ]
+    assert compute_redundant_tool_invocation(calls) == 1.0
+
+
+def test_compute_redundant_tool_invocation_one_duplicate() -> None:
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    calls = [
+        {"name": "read", "arguments": {"path": "a.py"}},
+        {"name": "read", "arguments": {"path": "a.py"}},  # duplicate
+    ]
+    assert compute_redundant_tool_invocation(calls) == 4.0
+
+
+def test_compute_redundant_tool_invocation_three_plus_saturates() -> None:
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    calls = [{"name": "read", "arguments": {"path": "a.py"}}] * 5
+    # 5 same calls → 4 duplicates → score 10.0
+    assert compute_redundant_tool_invocation(calls) == 10.0
+
+
+def test_compute_redundant_tool_invocation_args_order_insensitive() -> None:
+    """JSON sort_keys=True means dict order doesn't fool the dedup."""
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    calls = [
+        {"name": "x", "arguments": {"a": 1, "b": 2}},
+        {"name": "x", "arguments": {"b": 2, "a": 1}},  # same after sort
+    ]
+    assert compute_redundant_tool_invocation(calls) == 4.0
+
+
+def test_compute_redundant_tool_invocation_handles_unserializable_args() -> None:
+    """Args that aren't JSON-serializable fall back to repr — still dedupable."""
+    from core.audit.dim_extractor import compute_redundant_tool_invocation
+
+    class _Weird:
+        def __repr__(self) -> str:
+            return "weird"
+
+    w = _Weird()
+    calls = [
+        {"name": "x", "arguments": {"obj": w}},
+        {"name": "x", "arguments": {"obj": w}},
+    ]
+    # Falls back to repr; same repr → still detected as duplicate
+    assert compute_redundant_tool_invocation(calls) >= 4.0
