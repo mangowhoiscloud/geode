@@ -46,12 +46,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.agent.sub_agent_budget import (
-    DEFAULT_HARD_USD,
-    DEFAULT_SOFT_USD,
-    BudgetExceededError,
-    BudgetGuard,
-)
 from core.hooks import HookEvent, HookSystem
 
 from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
@@ -71,7 +65,7 @@ __all__ = [
 def _state_to_json(state: PipelineState) -> str:
     """Serialize PipelineState fields safe for JSON persistence.
 
-    Skips runtime-only fields (``budget_guard``, ``run_dir`` path
+    Skips runtime-only fields (``run_dir`` path
     object). Path-typed fields are coerced to strings so the JSON is
     portable across machines (re-hydration converts back).
     """
@@ -142,9 +136,6 @@ class PipelineState:
     # baseline (None on first generation — bootstrap)
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
-    # current phase's budget guard (set by Pipeline._run_phase, read by
-    # the concrete agent's LLM call sites in S2-S8 to call record_usage).
-    budget_guard: BudgetGuard | None = None
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -221,16 +212,12 @@ class Pipeline:
         hooks: HookSystem | None = None,
         lane_queue: LaneQueue | None = None,
         on_phase_error: Any | None = None,
-        budget_soft_usd: float = DEFAULT_SOFT_USD,
-        budget_hard_usd: float = DEFAULT_HARD_USD,
     ) -> None:
         self.state = state
         self.registry = registry
         self._hooks = hooks
         self._lane_queue = lane_queue
         self._on_phase_error = on_phase_error
-        self._budget_soft_usd = budget_soft_usd
-        self._budget_hard_usd = budget_hard_usd
 
     def run(self) -> PipelineState:
         """Walk all 7 phases in order. Returns the final state."""
@@ -290,16 +277,19 @@ class Pipeline:
     def _run_phase(self, role: str) -> SeedAgentResult:
         """Look up the role's agent, invoke it, merge the result.
 
-        Wraps the execute call in:
-        - a fresh ``BudgetGuard`` (per-phase soft/hard cap) attached to
-          ``state.budget_guard`` so the agent's LLM call sites (S2+)
-          can call ``guard.record_usage`` and trip the cap.
-        - an optional ``seed-pipeline`` lane acquisition (when a
-          ``LaneQueue`` was passed). For sequential phases the lane is
-          effectively a no-op; for phases that fan out via
-          ``delegate(tasks=[…])`` in S2+ the lane gates concurrency at
-          16 (see ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` in
-          ``core/wiring/container.py``).
+        Wraps the execute call in an optional ``seed-pipeline`` lane
+        acquisition (when a ``LaneQueue`` was passed). For sequential
+        phases the lane is effectively a no-op; for phases that fan
+        out via ``delegate(tasks=[…])`` in S2+ the lane gates
+        concurrency at 16 (see ``DEFAULT_SEED_PIPELINE_CONCURRENCY``
+        in ``core/wiring/container.py``).
+
+        Cost rollup is purely informational — the agent (or its test
+        stub) sets ``result.usd_spent`` / ``prompt_tokens`` /
+        ``completion_tokens`` directly and the orchestrator sums them
+        into ``state.*``. The pre-PR-1 BudgetGuard hard-cap layer was
+        removed (2026-05-18); operators control spend via the
+        pre-run cost preview + human gate at the CLI surface.
         """
         agent = self.registry.get(role)
         if agent is None:
@@ -312,92 +302,26 @@ class Pipeline:
         self._emit_hook(HookEvent.SUBAGENT_STARTED, role)
         started = time.time()
 
-        def _on_soft_warn(budget: Any) -> None:
-            self._emit_hook(
-                HookEvent.SUBAGENT_BUDGET_WARNING,
-                role,
-                usd_spent=budget.usd_spent,
-                soft_usd=budget.soft_usd,
-                hard_usd=budget.hard_usd,
-            )
-
-        guard = BudgetGuard(
-            agent_id=f"{self.state.run_id}/{role}",
-            soft_usd=self._budget_soft_usd,
-            hard_usd=self._budget_hard_usd,
-            on_soft_warn=_on_soft_warn,
-        )
-        previous_guard = self.state.budget_guard
-        self.state.budget_guard = guard
-
         result: SeedAgentResult | None = None
-        try:
-            with self._acquire_lane(role):
-                try:
-                    result = agent.execute(self.state)
-                except BudgetExceededError as budget_exc:
-                    duration = (time.time() - started) * 1000
-                    log.warning(
-                        "seed-pipeline phase %s hit hard budget cap: %s",
-                        role,
-                        budget_exc,
-                    )
-                    # SUBAGENT_FAILED is emitted once below on the
-                    # !result.success branch — do not emit here.
-                    result = SeedAgentResult(
-                        role=role,
-                        status="error",
-                        duration_ms=duration,
-                        error_category="budget",
-                        error_message=str(budget_exc),
-                    )
-                except Exception as exc:
-                    duration = (time.time() - started) * 1000
-                    log.exception("seed-pipeline phase %s raised", role)
-                    # Hard exception path bypasses the common emit below
-                    # (we re-raise), so we DO emit failure here.
-                    self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
-                    if self._on_phase_error is not None:
-                        self._on_phase_error(role, exc)
-                    raise
-                else:
-                    duration = (time.time() - started) * 1000
-                    if result.duration_ms == 0.0:
-                        result.duration_ms = duration
-        finally:
-            self.state.budget_guard = previous_guard
-            # S2-fix (2026-05-18) — guard authoritative rollup, runs on EVERY
-            # path (success / BudgetExceeded result / re-raised exception).
-            # Pre-fix the rollup ran only on the success / BudgetExceeded
-            # paths because it was AFTER the try/finally, and a generic
-            # Exception re-raise skipped past it. Any guard.record_usage()
-            # calls made before a crash were silently dropped from
-            # state.usd_spent / .prompt_tokens / .completion_tokens.
-            #
-            # The guard is the single source of truth for cost when LLM
-            # call sites use it. For test-stub agents that bypass the guard
-            # entirely (set result.* directly), the post-finally block
-            # below credits result.* instead. Never both — exactly one of
-            # (guard, result) accounts for state.
-            guard_used = guard.budget.usd_spent > 0 or guard.budget.prompt_tokens > 0
-            if guard_used:
-                self.state.usd_spent += guard.budget.usd_spent
-                self.state.prompt_tokens += guard.budget.prompt_tokens
-                self.state.completion_tokens += guard.budget.completion_tokens
+        with self._acquire_lane(role):
+            try:
+                result = agent.execute(self.state)
+            except Exception as exc:
+                duration = (time.time() - started) * 1000
+                log.exception("seed-pipeline phase %s raised", role)
+                self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
+                if self._on_phase_error is not None:
+                    self._on_phase_error(role, exc)
+                raise
+            else:
+                duration = (time.time() - started) * 1000
+                if result.duration_ms == 0.0:
+                    result.duration_ms = duration
 
-        # Mirror guard usage onto result for observability (does NOT add
-        # to state again — the finally block already credited).
-        if guard.budget.usd_spent > 0 and result.usd_spent == 0.0:
-            result.usd_spent = guard.budget.usd_spent
-            result.prompt_tokens = guard.budget.prompt_tokens
-            result.completion_tokens = guard.budget.completion_tokens
-
-        # Stub-agent path — result.* was set directly without going through
-        # the guard. Credit state from result here (guard rollup above was
-        # a no-op since guard.usd_spent == 0).
-        if not guard_used and (
-            result.usd_spent > 0 or result.prompt_tokens > 0 or result.completion_tokens > 0
-        ):
+        # Cost rollup from the agent's result. Agents (or their test
+        # stubs) set result.* directly; the orchestrator sums into
+        # state.* for the run-level total.
+        if result.usd_spent > 0 or result.prompt_tokens > 0 or result.completion_tokens > 0:
             self.state.usd_spent += result.usd_spent
             self.state.prompt_tokens += result.prompt_tokens
             self.state.completion_tokens += result.completion_tokens

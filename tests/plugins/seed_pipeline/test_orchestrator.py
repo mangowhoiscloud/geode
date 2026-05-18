@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from core.agent.sub_agent_budget import BudgetExceededError
 from core.orchestration.lane_queue import LaneQueue
 from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
 from plugins.seed_pipeline.orchestrator import (
@@ -103,96 +102,51 @@ def test_registry_list_roles() -> None:
     )
 
 
-class _BudgetRecordingAgent(BaseSeedAgent):
-    """Agent that exercises the BudgetGuard attached to state."""
+class _CostReportingAgent(BaseSeedAgent):
+    """Stub agent that sets cost on its SeedAgentResult directly.
+
+    PR 1 (2026-05-18) — replaces the pre-removal _BudgetRecordingAgent
+    that exercised the BudgetGuard attached to state. Cost is now
+    rolled up from result.* (the orchestrator's only cost surface),
+    no guard / hard-cap layer.
+    """
 
     def __init__(
         self,
         role: str,
         *,
-        record_input: int = 0,
-        record_output: int = 0,
-        raise_budget: bool = False,
+        usd: float = 0.0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
     ) -> None:
         super().__init__(role=role, model="stub-model")
-        self.record_input = record_input
-        self.record_output = record_output
-        self.raise_budget = raise_budget
+        self.usd = usd
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
 
     def execute(self, state: PipelineState) -> SeedAgentResult:
-        if state.budget_guard is None:
-            return SeedAgentResult(role=self.role, status="error", error_message="no guard")
-        if self.record_input or self.record_output:
-            try:
-                state.budget_guard.record_usage(
-                    model="claude-sonnet-4-6",
-                    prompt_tokens=self.record_input,
-                    completion_tokens=self.record_output,
-                )
-            except BudgetExceededError:
-                # Re-raise so orchestrator's BudgetExceededError handler runs
-                raise
-        if self.raise_budget:
-            raise BudgetExceededError(usd_spent=99.0, hard_usd=1.0, agent_id="stub")
-        return SeedAgentResult(role=self.role, output={})
+        return SeedAgentResult(
+            role=self.role,
+            output={},
+            usd_spent=self.usd,
+            prompt_tokens=self.prompt_tokens,
+            completion_tokens=self.completion_tokens,
+        )
 
 
-def test_pipeline_attaches_budget_guard_to_state() -> None:
-    seen_guards: list[object] = []
-
-    class _Probe(BaseSeedAgent):
-        def execute(self, state: PipelineState) -> SeedAgentResult:
-            seen_guards.append(state.budget_guard)
-            return SeedAgentResult(role=self.role)
-
+def test_pipeline_rolls_up_result_cost_into_state() -> None:
+    """Cost on result.* should sum into state.* across all phases."""
     registry = PipelineRegistry()
-    for r in ("generator", "proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        registry.register(_Probe(role=r, model="x"))
-    state = PipelineState(run_id="t-guard", target_dim="x", gen_tag="gen2")
-    assert state.budget_guard is None
-    Pipeline(state, registry).run()
-    # Each of 7 phases should have attached a non-None guard during execute
-    assert len(seen_guards) == 7
-    assert all(g is not None for g in seen_guards)
-    # And restored to None after run completes
-    assert state.budget_guard is None
-
-
-def test_pipeline_translates_budget_exceeded_to_seed_result() -> None:
-    """A BudgetExceededError inside a phase must NOT propagate."""
-    registry = PipelineRegistry()
-    registry.register(_BudgetRecordingAgent("generator", raise_budget=True))
+    registry.register(
+        _CostReportingAgent("generator", usd=0.05, prompt_tokens=100, completion_tokens=50)
+    )
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        registry.register(_BudgetRecordingAgent(r))
-    state = PipelineState(run_id="t-budget", target_dim="x", gen_tag="gen2")
-    # Should not raise — budget error becomes status="error" SeedAgentResult
-    Pipeline(state, registry).run()
-
-
-def test_pipeline_rolls_up_guard_cost_when_result_zero(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _stub_calc(model: str, *, input_tokens: int, output_tokens: int) -> float:
-        return (input_tokens + output_tokens) * 0.0001
-
-    monkeypatch.setattr("core.llm.token_tracker.calculate_cost", _stub_calc)
-
-    registry = PipelineRegistry()
-    # Generator records 100 tokens via the guard; result.usd_spent left at 0
-    registry.register(_BudgetRecordingAgent("generator", record_input=100, record_output=50))
-    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        registry.register(_BudgetRecordingAgent(r))
+        registry.register(_CostReportingAgent(r))
     state = PipelineState(run_id="t-cost", target_dim="x", gen_tag="gen2")
-    Pipeline(
-        state,
-        registry,
-        budget_soft_usd=1.0,
-        budget_hard_usd=10.0,
-    ).run()
-    # Guard rollup must surface on state (only generator recorded)
+    Pipeline(state, registry).run()
     assert state.prompt_tokens == 100
     assert state.completion_tokens == 50
-    assert state.usd_spent == pytest.approx(0.0150, abs=1e-6)
+    assert state.usd_spent == pytest.approx(0.05, abs=1e-6)
 
 
 def test_pipeline_accepts_lane_queue_without_lane_registered() -> None:
@@ -227,46 +181,3 @@ class _RecordingHookSystem:
     def trigger(self, event: object, data: dict[str, object] | None = None) -> list[object]:
         self.events.append((event, data or {}))
         return []
-
-
-def test_budget_path_emits_single_failed_hook(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Regression — BudgetExceededError must NOT double-emit SUBAGENT_FAILED."""
-    from core.hooks import HookEvent
-
-    registry = PipelineRegistry()
-    registry.register(_BudgetRecordingAgent("generator", raise_budget=True))
-    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        registry.register(_BudgetRecordingAgent(r))
-    state = PipelineState(run_id="t-budget-emit", target_dim="x", gen_tag="gen2")
-    hooks = _RecordingHookSystem()
-    Pipeline(state, registry, hooks=hooks).run()  # type: ignore[arg-type]
-    failed = [e for e, _ in hooks.events if e == HookEvent.SUBAGENT_FAILED]
-    # generator is the only role that fails; expect exactly 1 SUBAGENT_FAILED
-    assert len(failed) == 1, f"expected single SUBAGENT_FAILED on budget path, got {len(failed)}"
-
-
-def test_budget_soft_warn_emits_hook(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The first crossing of soft_usd must fire SUBAGENT_BUDGET_WARNING."""
-    from core.hooks import HookEvent
-
-    def _stub_calc(model: str, *, input_tokens: int, output_tokens: int) -> float:
-        return (input_tokens + output_tokens) * 0.01
-
-    monkeypatch.setattr("core.llm.token_tracker.calculate_cost", _stub_calc)
-
-    registry = PipelineRegistry()
-    # Generator burns 0.50 (= soft cap), triggers the soft-warn callback
-    registry.register(_BudgetRecordingAgent("generator", record_input=25, record_output=25))
-    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        registry.register(_BudgetRecordingAgent(r))
-    state = PipelineState(run_id="t-soft", target_dim="x", gen_tag="gen2")
-    hooks = _RecordingHookSystem()
-    Pipeline(
-        state,
-        registry,
-        hooks=hooks,  # type: ignore[arg-type]
-        budget_soft_usd=0.50,
-        budget_hard_usd=10.0,
-    ).run()
-    warns = [e for e, _ in hooks.events if e == HookEvent.SUBAGENT_BUDGET_WARNING]
-    assert len(warns) == 1, f"expected one SUBAGENT_BUDGET_WARNING, got {len(warns)}"

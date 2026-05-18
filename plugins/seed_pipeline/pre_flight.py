@@ -1,19 +1,18 @@
-"""Seed-pipeline pre-flight check — validate auth + budget before a run.
+"""Seed-pipeline pre-flight check — validate auth + diversity before a run.
 
-Runs BEFORE the first LLM call so a misconfigured auth path or an
-absurd budget cap surfaces as a clear error instead of mid-run cost
-overrun or quorum collapse.
+Runs BEFORE the first LLM call so a misconfigured auth path or a
+collapsed judge panel surfaces as a clear error instead of mid-run
+quorum failure.
 
-Three categories of check:
+Two categories of check (PR 1 dropped the prior budget-sanity check —
+spend is now controlled by the pre-run cost preview + human gate at
+the CLI surface, not by hard caps in the orchestrator):
 
 1. **Auth probe**: for each :class:`RoleBinding` / :class:`VoterBinding`,
    verify the resolved source's credential is reachable. ``claude-cli``
    / ``openai-codex`` use the per-family OAuth helpers; ``api_key``
    reads :data:`core.config.settings` env-resolved keys.
-2. **Budget sanity**: reject obviously-wrong (soft > hard, negative, or
-   absurdly high) caps so the supervisor doesn't accidentally
-   un-budget a fan-out.
-3. **Panel diversity**: piggyback on
+2. **Panel diversity**: piggyback on
    :func:`plugins.seed_pipeline.picker.validate_runtime_diversity` so
    the pre-flight gate fails fast if a user override collapsed the
    judge panel.
@@ -34,23 +33,16 @@ from plugins.seed_pipeline.picker import PickerResult, validate_runtime_diversit
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "MAX_BUDGET_USD",
-    "MIN_BUDGET_USD",
     "PreFlightIssue",
     "PreFlightReport",
     "Severity",
     "check_auth",
-    "check_budget",
     "check_diversity",
     "run_pre_flight",
 ]
 
 
 Severity = Literal["info", "warning", "error"]
-
-
-MIN_BUDGET_USD: float = 0.01
-MAX_BUDGET_USD: float = 100.00
 
 
 @dataclass(frozen=True)
@@ -168,55 +160,6 @@ def _fix_for(family: str, source: str) -> str:
     return f"Resolve the {family}.{source} binding via ~/.geode/seed-pipeline.toml."
 
 
-def check_budget(*, soft_usd: float, hard_usd: float) -> list[PreFlightIssue]:
-    """Sanity-check soft / hard budget caps."""
-    issues: list[PreFlightIssue] = []
-    if soft_usd <= 0 or hard_usd <= 0:
-        issues.append(
-            PreFlightIssue(
-                severity="error",
-                code="budget.non_positive",
-                message=f"Budget cap must be positive (soft={soft_usd}, hard={hard_usd}).",
-                fix="Set positive USD values via SEED_PIPELINE_BUDGET_{SOFT,HARD}_USD env vars.",
-            )
-        )
-        return issues
-    if soft_usd > hard_usd:
-        issues.append(
-            PreFlightIssue(
-                severity="error",
-                code="budget.soft_above_hard",
-                message=f"soft_usd ({soft_usd}) > hard_usd ({hard_usd}).",
-                fix="Set soft below hard — soft warns, hard aborts the run.",
-            )
-        )
-    if hard_usd > MAX_BUDGET_USD:
-        issues.append(
-            PreFlightIssue(
-                severity="warning",
-                code="budget.absurd_high",
-                message=(
-                    f"hard_usd ({hard_usd}) exceeds {MAX_BUDGET_USD} — this is "
-                    "a single-run cap, intentional?"
-                ),
-                fix="Lower SEED_PIPELINE_BUDGET_HARD_USD or confirm via explicit override.",
-            )
-        )
-    if soft_usd < MIN_BUDGET_USD:
-        issues.append(
-            PreFlightIssue(
-                severity="warning",
-                code="budget.absurd_low",
-                message=(
-                    f"soft_usd ({soft_usd}) is below ${MIN_BUDGET_USD:.2f} — most runs "
-                    "will trip the soft warning immediately."
-                ),
-                fix="Raise SEED_PIPELINE_BUDGET_SOFT_USD to a realistic per-phase floor.",
-            )
-        )
-    return issues
-
-
 def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
     """Re-run the runtime diversity gate at pre-flight."""
     try:
@@ -236,21 +179,16 @@ def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
     return []
 
 
-def run_pre_flight(
-    picker_result: PickerResult,
-    *,
-    soft_usd: float,
-    hard_usd: float,
-) -> PreFlightReport:
-    """Run all 3 categories and bundle into one report.
+def run_pre_flight(picker_result: PickerResult) -> PreFlightReport:
+    """Run the auth + diversity checks and bundle into one report.
 
     The caller (CLI / supervisor) checks ``report.has_errors`` to
-    decide whether to abort the run.
+    decide whether to abort the run. The pre-PR-1 budget cap check
+    was removed (2026-05-18) — operators rely on the pre-run cost
+    preview + human gate for spend control.
     """
     report = PreFlightReport()
     for issue in check_diversity(picker_result):
-        report.add(issue)
-    for issue in check_budget(soft_usd=soft_usd, hard_usd=hard_usd):
         report.add(issue)
     for issue in check_auth(picker_result):
         report.add(issue)

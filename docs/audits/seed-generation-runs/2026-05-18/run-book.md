@@ -16,9 +16,12 @@ actual run waits on the two prerequisites.
 
 | Item | Tracked as | Status |
 |------|-----------|--------|
-| BudgetGuard worker-side propagation | task #73 (S6.5-wire) | Pending |
 | PipelineRegistry agent-factory wiring | S11-wire (implicit) | Pending |
 | Anthropic credit availability | external | Constrained per Session 60-62 |
+
+> Note: the prior **BudgetGuard worker-side propagation** entry was
+> removed in PR 1 (2026-05-18). The hard-cap budget layer is gone;
+> spend control is now the pre-run cost preview + human gate.
 
 ## Procedure (when prerequisites are green)
 

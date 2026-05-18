@@ -35,9 +35,6 @@ Wiring history
 - **S2-wire (RESOLVED)**: ``SubAgentManager._build_worker_request``
   resolves ``SubTask.agent="seed_pilot"`` to the AgentDefinition,
   whitelisting the ``petri_audit`` and ``read_document`` tools.
-- **S6.5-wire (PENDING, task #73)**: per-phase BudgetGuard real-time
-  enforcement at the worker-subprocess LLM call sites — until then,
-  the cap is checked post-hoc in the orchestrator's rollup.
 """
 
 from __future__ import annotations

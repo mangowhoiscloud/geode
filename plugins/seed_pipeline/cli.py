@@ -85,16 +85,6 @@ def audit_seeds_generate(
         "-n",
         help="Target N for the generator phase (default 15).",
     ),
-    soft_usd: float = typer.Option(
-        2.00,
-        "--soft-usd",
-        help="Soft budget cap per phase (warning at threshold).",
-    ),
-    hard_usd: float = typer.Option(
-        10.00,
-        "--hard-usd",
-        help="Hard budget cap per phase (abort at threshold).",
-    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -115,8 +105,6 @@ def audit_seeds_generate(
         target_dim=target_dim,
         gen_tag=gen_tag,
         candidates=candidates,
-        soft_usd=soft_usd,
-        hard_usd=hard_usd,
         yes=yes,
         quiet=quiet,
     )
@@ -128,8 +116,6 @@ def run_audit_seeds(
     target_dim: str,
     gen_tag: str = "gen1",
     candidates: int = 15,
-    soft_usd: float = 2.00,
-    hard_usd: float = 10.00,
     yes: bool = False,
     quiet: bool = False,
     stdout: IO[str] | None = None,
@@ -153,7 +139,7 @@ def run_audit_seeds(
     cost = estimate_cost(picker_result, candidate_count=candidates)
     out.write(format_cost_summary(cost) + "\n")
 
-    report = run_pre_flight(picker_result, soft_usd=soft_usd, hard_usd=hard_usd)
+    report = run_pre_flight(picker_result)
     out.write(render_pre_flight_report(report) + "\n")
     if report.has_errors:
         err.write("seed-pipeline: pre-flight failed; aborting.\n")
@@ -173,8 +159,6 @@ def run_audit_seeds(
             target_dim=target_dim,
             gen_tag=gen_tag,
             candidates_requested=candidates,
-            soft_usd=soft_usd,
-            hard_usd=hard_usd,
             out=out,
             err=err,
         )
@@ -198,8 +182,6 @@ def _dispatch_pipeline(
     target_dim: str,
     gen_tag: str,
     candidates_requested: int,
-    soft_usd: float,
-    hard_usd: float,
     out: IO[str],
     err: IO[str],
 ) -> None:
@@ -234,12 +216,7 @@ def _dispatch_pipeline(
     # — the Pipeline.run() will raise a RuntimeError with an actionable
     # "no registered agent" message that the operator can map back to
     # the unwired phase.
-    pipeline = Pipeline(
-        state=state,
-        registry=registry,
-        budget_soft_usd=soft_usd,
-        budget_hard_usd=hard_usd,
-    )
+    pipeline = Pipeline(state=state, registry=registry)
     out.write(f"seed-pipeline: starting run {run_id!r}\n")
     out.write(f"seed-pipeline: run_dir={run_dir}\n")
     out.flush()

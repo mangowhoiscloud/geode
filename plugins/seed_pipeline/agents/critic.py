@@ -38,8 +38,6 @@ Wiring history
 - **S2-wire (RESOLVED)**: ``SubAgentManager._build_worker_request``
   resolves ``SubTask.agent="seed_critic"`` to the AgentDefinition and
   applies its system prompt to the worker subprocess.
-- **S6.5-wire (PENDING, task #73)**: per-phase BudgetGuard real-time
-  enforcement at LLM call sites.
 """
 
 from __future__ import annotations

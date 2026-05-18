@@ -104,8 +104,13 @@ def test_persist_state_path_fields_coerced_to_strings(tmp_path: Path) -> None:
     assert isinstance(blob["run_dir"], str)
 
 
-def test_persist_state_skips_budget_guard(tmp_path: Path) -> None:
-    """Runtime-only fields (budget_guard) are not persisted."""
+def test_persist_state_excludes_runtime_only_fields(tmp_path: Path) -> None:
+    """Runtime-only fields (e.g. former budget_guard) are not persisted.
+
+    PR 1 removed BudgetGuard; this test still pins the rule that the
+    JSON offload only carries serializable data, not runtime-attached
+    helper objects.
+    """
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
     pipeline.run()

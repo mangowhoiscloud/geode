@@ -435,8 +435,8 @@ class TestRecoveryHookEvents:
         assert received[0]["tool_name"] == "list_subjects"
 
     def test_total_hook_event_count(self) -> None:
-        """Verify total hook event count after H6 orphan pruning + SUBAGENT_BUDGET_WARNING (seed-pipeline S1)."""
-        assert len(HookEvent) == 59
+        """Verify total hook event count after H6 orphan pruning."""
+        assert len(HookEvent) == 58
 
 
 # ---------------------------------------------------------------------------

@@ -26,13 +26,14 @@ the file to compute embeddings, Reflection (S3) critiques it, Pilot (S5)
 runs it through the Petri inner-loop subset. The candidate id is also
 the basename of the seed file, so disk layout matches state shape 1:1.
 
-Budget accounting:
-====================
+Cost accounting:
+================
 
-Per-phase ``BudgetGuard`` is attached to ``state.budget_guard`` by the
-orchestrator. Generator's own ``execute`` is short (build tasks, call
-``delegate``, parse results) so the dominant cost is per-sub-agent
-LLM work, not Generator orchestration.
+Per-phase cost is rolled up from ``SeedAgentResult.usd_spent`` /
+``prompt_tokens`` / ``completion_tokens`` by the orchestrator.
+Generator's own ``execute`` is short (build tasks, call ``delegate``,
+parse results) so the dominant cost is per-sub-agent LLM work, not
+Generator orchestration.
 
 Wiring history
 ==============
@@ -43,12 +44,6 @@ Wiring history
   ``WorkerRequest`` new fields, and the worker applies them as
   ``AgenticLoop(system_prompt_override=…)``. The whitelist filter
   (``filter_handlers``) removes non-allowed tools.
-- **S6.5-wire (PENDING, task #73)**: BudgetGuard real-time enforcement
-  inside the worker subprocess. Per-phase rollup is already wired (the
-  orchestrator credits ``guard.record_usage`` totals into ``state.usd_spent``
-  on every path including exceptions, as of S2-fix), but mid-flight cap
-  enforcement at LLM call sites requires worker-layer wiring scheduled
-  for S6.5.
 """
 
 from __future__ import annotations
