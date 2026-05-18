@@ -22,6 +22,13 @@ SOT:
 from __future__ import annotations
 
 from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_pipeline.manifest import (
+    JudgePanelSpec,
+    SeedPipelineManifest,
+    SeedRoleSpec,
+    VoterSpec,
+    load_manifest,
+)
 from plugins.seed_pipeline.orchestrator import (
     Pipeline,
     PipelineRegistry,
@@ -30,8 +37,13 @@ from plugins.seed_pipeline.orchestrator import (
 
 __all__ = [
     "BaseSeedAgent",
+    "JudgePanelSpec",
     "Pipeline",
     "PipelineRegistry",
     "PipelineState",
     "SeedAgentResult",
+    "SeedPipelineManifest",
+    "SeedRoleSpec",
+    "VoterSpec",
+    "load_manifest",
 ]

@@ -79,6 +79,17 @@ functional change.
   → `error_category="generation_failed"`. `announce=False` so sub-spawns
   don't double-fire the parent loop's announce queue.
 
+- **Seed pipeline manifest schema + cross-manifest validator (S2.5).**
+  `plugins/seed_pipeline/{seed_pipeline.plugin.toml, manifest.py}` per
+  ADR-003 — 7-role + 3-voter judge panel declarative binding. Reuses
+  Petri's `[petri.source.*]` / `[petri.adapter.*]` layers via
+  cross-manifest validation: voter (family, source) pairs are validated
+  against `petri.source.<family>.allowed` at load time so a typo'd
+  source (`claude_cli` vs `claude-cli`) fails immediately. Pydantic
+  schema enforces default∈allowed, voters≥2, family diversity, and
+  rejects `source="auto"` for judge bindings. 15 unit test + bundled
+  TOML. P-checklist: P4 (package-relative manifest path) + P7
+  (cross-manifest contract validation at load time).
 - **`seed-pipeline-cycle` skill (cycle scaffold).** Session 63 의 6-PR 검증
   사이클을 `.geode/skills/seed-pipeline-cycle/SKILL.md` 로 codify. 6 phase
   (Allocation / Implement + P1-P7 checklist / Verify + Codex MCP audit /
