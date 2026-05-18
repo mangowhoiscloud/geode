@@ -328,6 +328,7 @@ def test_strict_mode_blocks_payg_default_for_zhipuai(monkeypatch):
     )
 
 
+@pytest.mark.policy_real
 def test_outer_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
     """outer_loop_fallback_policy() defaults True when [outer_loop] absent.
 
@@ -345,6 +346,7 @@ def test_outer_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
     assert cs.outer_loop_fallback_policy() is False
 
 
+@pytest.mark.policy_real
 def test_outer_loop_fallback_policy_reads_user_config(monkeypatch):
     """When config sets fallback_to_payg=True, helper returns True."""
     from core.config.outer_loop import OuterLoopConfig
@@ -356,6 +358,7 @@ def test_outer_loop_fallback_policy_reads_user_config(monkeypatch):
     assert cs.outer_loop_fallback_policy() is True
 
 
+@pytest.mark.policy_real
 def test_outer_loop_fallback_policy_safe_on_import_error(monkeypatch):
     """If core.config.outer_loop is unavailable, helper returns True
     (back-compat preservation)."""
@@ -372,6 +375,7 @@ def test_outer_loop_fallback_policy_safe_on_import_error(monkeypatch):
     assert cs.outer_loop_fallback_policy() is True
 
 
+@pytest.mark.policy_real
 def test_outer_loop_fallback_policy_safe_on_load_failure(monkeypatch):
     """If load_outer_loop_config raises (corrupt TOML, etc.), helper
     returns True and logs a warning rather than breaking the run."""
