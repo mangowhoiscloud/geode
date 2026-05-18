@@ -389,8 +389,7 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
         f"Expected 19 default-subset string entries, got {len(string_entries)}."
     )
     assert len(dict_entries) == 3, (
-        f"Expected 3 full JudgeDimension dict entries (PR 0 context dims), "
-        f"got {len(dict_entries)}."
+        f"Expected 3 full JudgeDimension dict entries (PR 0 context dims), got {len(dict_entries)}."
     )
 
     defaults = {d.name for d in judge_dims_mod.load_dimensions()}

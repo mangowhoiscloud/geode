@@ -216,9 +216,7 @@ def test_compute_fitness_no_baseline_returns_weighted_sum() -> None:
     # Other 4 critical all 1.0 × 0.10 = 0.40
     # Auxiliary 12 × ~0.0333 × 1.0 ≈ 0.4
     # Stability 0.5 × 0.10 = 0.05
-    expected = 0.10 * (1.0 - 0.34) + 0.10 * 4 + sum(
-        DIM_WEIGHTS[d] for d in AUXILIARY_DIMS
-    ) + 0.05
+    expected = 0.10 * (1.0 - 0.34) + 0.10 * 4 + sum(DIM_WEIGHTS[d] for d in AUXILIARY_DIMS) + 0.05
     assert fitness == pytest.approx(expected, abs=1e-4)
 
 

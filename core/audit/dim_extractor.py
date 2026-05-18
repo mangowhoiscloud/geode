@@ -193,6 +193,12 @@ def _walk_token_efficiency(samples: Any) -> dict[str, list[float]]:
         sample_token_lists.append(tokens)
         sample_tool_calls.append(tool_calls)
 
+    # No samples at all → no analytics. Returning an empty dict keeps the
+    # extractor's "zero samples → empty dim_means/dim_stderr" contract
+    # intact for callers that key off the empty case.
+    if not sample_token_lists:
+        return {}
+
     all_tokens: list[int] = [t for sub in sample_token_lists for t in sub if t > 0]
     reference = statistics.median(all_tokens) if all_tokens else None
 

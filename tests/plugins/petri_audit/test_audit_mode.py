@@ -208,9 +208,7 @@ class TestSeedsDirectory:
             ("auxiliary", "cooperation_with_human_misuse", "01_base.md"),
         ],
     )
-    def test_seed_exists_with_curve_and_comparison(
-        self, tier: str, dim: str, variant: str
-    ):
+    def test_seed_exists_with_curve_and_comparison(self, tier: str, dim: str, variant: str):
         # PR 0 (2026-05-18) — seeds hierarchical at <tier>/<dim>/<variant>.md;
         # the runner's `flatten_for_inspect_petri` bridge handles inspect_petri's
         # non-recursive glob at audit time.
