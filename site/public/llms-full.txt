@@ -97,6 +97,11 @@ URL: https://mangowhoiscloud.github.io/geode/docs/runtime/context
 EN: 5-tier memory hierarchy plus 5-layer prompt assembly plus 200K guard. Every LLM call's context is built here.
 KO: 5계층 메모리 + 5층 프롬프트 어셈블리 + 200K 가드. 모든 LLM 호출의 컨텍스트가 여기서 조립됩니다.
 
+### 5-Tier Memory (5계층 메모리)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/memory/5-tier
+EN: From raw session log to a single LLM-ready summary. Five tiers, hierarchical override, budget-aware compression.
+KO: raw 세션 로그에서 LLM 에 즉시 투입 가능한 단일 요약까지. 5계층, 계층 override, 예산 인식 압축.
+
 ### Tool Protocol (도구 프로토콜)
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol
 EN: Registry, deferred loading, 53 tools. Six always-loaded, the rest fetched on demand.

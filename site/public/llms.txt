@@ -31,6 +31,7 @@ Last sync: 2026-05-18
 - Prompt Hashing  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing  — Karpathy P4 ratchet. 20 pinned hashes. Build break on drift.
 - System Prompt Modes  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/system-prompt-modes  — GEODE_PERSONA opt-in plus audit-mode strip. The two ways the system prompt can be reshaped.
 - Context System  https://mangowhoiscloud.github.io/geode/docs/runtime/context  — 5-tier memory hierarchy plus 5-layer prompt assembly plus 200K guard. Every LLM call's context is built here.
+- 5-Tier Memory  https://mangowhoiscloud.github.io/geode/docs/runtime/memory/5-tier  — From raw session log to a single LLM-ready summary. Five tiers, hierarchical override, budget-aware compression.
 - Tool Protocol  https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol  — Registry, deferred loading, 53 tools. Six always-loaded, the rest fetched on demand.
 - MCP Servers  https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp  — Servers, 25K result guard, HTML to Markdown fallback.
 - CLI LaTeX Rendering  https://mangowhoiscloud.github.io/geode/docs/runtime/ui/cli-latex  — Five-tier LaTeX rendering stack in the terminal. Detection, Unicode flatten, 2D pretty print, image fallback, ASCII guard.
