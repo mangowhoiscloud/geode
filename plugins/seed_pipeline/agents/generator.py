@@ -30,12 +30,33 @@ Budget accounting:
 ====================
 
 Per-phase ``BudgetGuard`` is attached to ``state.budget_guard`` by the
-orchestrator. Each sub-agent's LLM call site (the inherited
-``AgenticLoop``) is responsible for calling ``guard.record_usage``
-after each completion so the cumulative cost rolls back up into the
-pipeline budget. Generator's own ``execute`` is short — it builds
-tasks, calls ``delegate``, and parses results — so the dominant cost
-is the per-sub-agent LLM work, not Generator orchestration.
+orchestrator. Generator's own ``execute`` is short (build tasks, call
+``delegate``, parse results) so the dominant cost is per-sub-agent
+LLM work, not Generator orchestration.
+
+Known wiring gaps (tracked outside S2):
+----------------------------------------
+
+1. **AgentDefinition dispatch** (task #S2-wire). ``SubAgentManager.delegate``
+   sets ``SubTask.agent="seed_generator"``, but the production code path
+   ``_build_worker_request`` does not yet call ``_resolve_agent`` to
+   apply the AgentDefinition's ``system_prompt`` / ``tools`` /
+   ``model``. Without that wiring the sub-agent runs with GEODE's
+   default system prompt rather than the ``.claude/agents/seed_generator.md``
+   contract. The seed-pipeline plugin is correct at the orchestration
+   layer; the worker-layer fix is a separate PR.
+
+2. **BudgetGuard real-time enforcement** (task #S6.5-wire). The
+   orchestrator's per-phase BudgetGuard is attached to
+   ``state.budget_guard`` but not propagated into the subprocess
+   worker. Sub-agent LLM call sites do not yet call
+   ``guard.record_usage`` mid-flight, so a runaway sub-agent can
+   exceed the soft cap within one phase. Per-phase rollup (after
+   ``delegate`` returns) still works for accounting, but hard
+   enforcement requires worker-layer wiring (S6.5).
+
+Both gaps are intentional — wire-ups land in dedicated PRs to keep
+S2's surface focused on the Generation phase contract.
 """
 
 from __future__ import annotations
