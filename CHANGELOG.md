@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-δ1 — autoresearch consumes `[outer_loop.autoresearch]` config.**
+  Closes 2026-05-19 outer-loop config consolidation plan Phase δ.
+  `autoresearch/train.py` adds `_get_autoresearch_config()` — lazily
+  loads `OuterLoopConfig.autoresearch` (PR-α1) and falls back to a
+  `SimpleNamespace` mirroring the module constants on `ImportError` /
+  load failure so the module stays importable in test contexts that
+  stub `core.config`. Call sites swap module-constant reads for
+  `cfg.X` reads: `_build_audit_command` (target / judge / seed_limit /
+  dim_set / max_turns / use_oauth), `_resolve_seed_select`
+  (config.seed_select as second precedence after env override),
+  `run_audit` (timeout calc), and `print_summary` (output values).
+  Module constants stay literal so the outer-loop agent's grep-based
+  workflow per `program.md` keeps working — they are now the **final
+  fallback** in the 3-tier precedence (env → config → module
+  constant). No-op behaviour change at the default level (verified by
+  `test_get_autoresearch_config_defaults_match_module_constants`).
+  5 new unit tests cover helper shape / defaults parity / argv
+  flow-through / env-vs-config precedence / config-vs-module
+  fallback.
+
 ### Added
 
 - **PR-γ1 — 3-tier subscription quota banner + abort dialog.** Closes
