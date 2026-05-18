@@ -101,6 +101,7 @@ class PipelineState:
     pilot_scores: dict[str, dict[str, Any]] = field(default_factory=dict)
     elo_ratings: dict[str, float] = field(default_factory=dict)
     survivors: list[str] = field(default_factory=list)
+    evolved_candidates: list[dict[str, Any]] = field(default_factory=list)
     meta_review: dict[str, Any] = field(default_factory=dict)
     # cost rollup
     usd_spent: float = 0.0
@@ -126,6 +127,7 @@ class PipelineState:
             "pilot_scores",
             "elo_ratings",
             "survivors",
+            "evolved_candidates",
             "meta_review",
         }
         unknown = set(output) - known
