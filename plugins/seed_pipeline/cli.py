@@ -31,7 +31,6 @@ P-checklist application:
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import shlex
 import sys
@@ -242,11 +241,13 @@ def _dispatch_pipeline(
         budget_hard_usd=hard_usd,
     )
     out.write(f"seed-pipeline: starting run {run_id!r}\n")
+    out.write(f"seed-pipeline: run_dir={run_dir}\n")
     out.flush()
     pipeline.run()
     out.write(
         f"seed-pipeline: run {run_id!r} finished; "
         f"survivors={len(state.survivors)} usd={state.usd_spent:.4f}\n"
+        f"seed-pipeline: state.json at {run_dir / 'state.json'}\n"
     )
 
 
@@ -284,50 +285,30 @@ def cmd_audit_seeds_slash(args: str) -> int:
     except ValueError as exc:
         sys.stderr.write(f"/audit-seeds: argument parse error — {exc}\n")
         return 2
-    target_dim, gen_tag, candidates, yes, quiet = _parse_slash_args(argv)
-    if target_dim is None:
-        sys.stderr.write("/audit-seeds: --target-dim is required\n")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="/audit-seeds",
+        add_help=False,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--target-dim", "-d", required=True)
+    parser.add_argument("--gen-tag", "-g", default="gen1")
+    parser.add_argument("--candidates", "-n", type=int, default=15)
+    parser.add_argument("--yes", "-y", action="store_true")
+    parser.add_argument("--quiet", "-q", action="store_true")
+    try:
+        ns = parser.parse_args(argv)
+    except SystemExit:
+        # argparse calls sys.exit on error; turn that into a clean exit 2.
+        return 2
+    except argparse.ArgumentError as exc:
+        sys.stderr.write(f"/audit-seeds: {exc}\n")
         return 2
     return run_audit_seeds(
-        target_dim=target_dim,
-        gen_tag=gen_tag,
-        candidates=candidates,
-        yes=yes,
-        quiet=quiet,
+        target_dim=ns.target_dim,
+        gen_tag=ns.gen_tag,
+        candidates=ns.candidates,
+        yes=ns.yes,
+        quiet=ns.quiet,
     )
-
-
-def _parse_slash_args(
-    argv: list[str],
-) -> tuple[str | None, str, int, bool, bool]:
-    """Minimal slash arg parser — picks out --target-dim / --gen-tag /
-    --candidates / --yes / --quiet. Unknown flags are ignored (forward-
-    compat with future options).
-    """
-    target_dim: str | None = None
-    gen_tag = "gen1"
-    candidates = 15
-    yes = False
-    quiet = False
-    i = 0
-    while i < len(argv):
-        token = argv[i]
-        if token in {"--target-dim", "-d"} and i + 1 < len(argv):
-            target_dim = argv[i + 1]
-            i += 2
-        elif token in {"--gen-tag", "-g"} and i + 1 < len(argv):
-            gen_tag = argv[i + 1]
-            i += 2
-        elif token in {"--candidates", "-n"} and i + 1 < len(argv):
-            with contextlib.suppress(ValueError):
-                candidates = int(argv[i + 1])
-            i += 2
-        elif token in {"--yes", "-y"}:
-            yes = True
-            i += 1
-        elif token in {"--quiet", "-q"}:
-            quiet = True
-            i += 1
-        else:
-            i += 1
-    return target_dim, gen_tag, candidates, yes, quiet

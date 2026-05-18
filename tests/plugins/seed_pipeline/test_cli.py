@@ -266,15 +266,16 @@ def test_cmd_audit_seeds_slash_parses_candidates_count() -> None:
     assert mock_dispatch.call_args.kwargs["candidates_requested"] == 5
 
 
-def test_cmd_audit_seeds_slash_ignores_unknown_flags() -> None:
-    """Unknown flag doesn't abort — forward-compat."""
-    with (
-        patch("plugins.seed_pipeline.cli.pick_bindings", return_value=_good_picker()),
-        patch("plugins.seed_pipeline.cli.run_pre_flight", return_value=PreFlightReport()),
-        patch("plugins.seed_pipeline.cli._dispatch_pipeline"),
-    ):
-        code = cmd_audit_seeds_slash("--target-dim x --future-flag y --yes")
-    assert code == 0
+def test_cmd_audit_seeds_slash_rejects_unknown_flag() -> None:
+    """Unknown flag → exit 2 (strict argparse, no silent typo)."""
+    code = cmd_audit_seeds_slash("--target-dim x --future-flag y --yes")
+    assert code == 2
+
+
+def test_cmd_audit_seeds_slash_rejects_invalid_candidates_int() -> None:
+    """`--candidates not-a-number` → exit 2."""
+    code = cmd_audit_seeds_slash("--target-dim x --candidates banana --yes")
+    assert code == 2
 
 
 def test_audit_seeds_app_help_smoke() -> None:
