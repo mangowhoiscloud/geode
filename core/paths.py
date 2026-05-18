@@ -63,6 +63,12 @@ GLOBAL_PETRI_TOML = GEODE_HOME / "petri.toml"
 # routing legacy file); P2-B..E migrate the legacy consumers onto the
 # global manifest.
 GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
+# P5 (Session 63, S5.5) — per-user seed-pipeline role × source override.
+# Read by ``plugins.seed_pipeline.picker.load_user_overrides`` and merged
+# into the picker's per-role binding resolver. Distinct from
+# ``GLOBAL_PETRI_TOML`` because seed-pipeline owns its own 7-role × judge-
+# panel binding model (see ADR-003 §"override surface").
+GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed-pipeline.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
 # resolution; see `core/llm/skill_registry.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via

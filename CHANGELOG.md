@@ -49,6 +49,20 @@ functional change.
 
 ### Added
 
+- **Seed-pipeline picker + ToS notice + runtime diversity validator (S5.5).**
+  `plugins/seed_pipeline/picker.py` resolves each of the 7 roles' concrete
+  `(model, family, source)` binding by walking the manifest's
+  `default_model`, inferring the provider family via prefix table, and
+  resolving `auto` sources by probing the per-family OAuth helper
+  (`is_claude_oauth_available` / `is_codex_oauth_available`). User
+  overrides live at `~/.geode/seed-pipeline.toml` (per-role
+  `source` / `model` lines) and win over the auto-resolve. The picker
+  surfaces a one-time ToS notice when any role/voter lands on a
+  subscription source (`claude-cli` / `openai-codex`) and validates
+  runtime diversity (≥ 2 distinct `(family, source)` panel paths after
+  override merge). Adds `GLOBAL_SEED_PIPELINE_TOML` to `core/paths.py`.
+  31 unit tests covering OAuth-available, PAYG-fallback, override
+  merge, ToS idempotency, runtime diversity collapse paths.
 - **Pilot agent (S5).** `plugins/seed_pipeline/agents/pilot.py` fans
   out one sub-agent per surviving candidate (post-Proximity), each
   invoking the `petri_audit` tool (1 seed × 2 model × 1 paraphrase per
