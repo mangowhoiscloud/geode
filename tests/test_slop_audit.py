@@ -11,13 +11,14 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _load_slop_audit_module():
+def _load_slop_audit_module() -> ModuleType:
     """Load scripts/slop_audit.py without putting scripts/ on sys.path."""
     path = REPO_ROOT / "scripts" / "slop_audit.py"
     spec = importlib.util.spec_from_file_location("_slop_audit_for_tests", path)
@@ -29,11 +30,11 @@ def _load_slop_audit_module():
 
 
 @pytest.fixture(scope="module")
-def slop_audit():
+def slop_audit() -> ModuleType:
     return _load_slop_audit_module()
 
 
-def test_run_all_lenses_returns_six_results(slop_audit) -> None:  # type: ignore[no-untyped-def]
+def test_run_all_lenses_returns_six_results(slop_audit: ModuleType) -> None:
     results = slop_audit.run_all_lenses()
     names = [r.name for r in results]
     assert names == [
@@ -46,7 +47,7 @@ def test_run_all_lenses_returns_six_results(slop_audit) -> None:  # type: ignore
     ]
 
 
-def test_stale_references_zero(slop_audit) -> None:  # type: ignore[no-untyped-def]
+def test_stale_references_zero(slop_audit: ModuleType) -> None:
     """The stale-reference lens must be zero on develop after PR 3.
 
     PR 0 / PR 1 documentation refers to BudgetGuard / FitnessBaseline /
@@ -59,7 +60,7 @@ def test_stale_references_zero(slop_audit) -> None:  # type: ignore[no-untyped-d
     )
 
 
-def test_unused_imports_below_threshold(slop_audit) -> None:  # type: ignore[no-untyped-def]
+def test_unused_imports_below_threshold(slop_audit: ModuleType) -> None:
     """Unused imports must stay under a coarse threshold.
 
     Threshold is intentionally loose — the audit fires per-PR via
@@ -70,7 +71,7 @@ def test_unused_imports_below_threshold(slop_audit) -> None:  # type: ignore[no-
     assert result.count <= 50, f"unused_imports count {result.count} exceeds soft threshold 50"
 
 
-def test_format_report_renders_table(slop_audit) -> None:  # type: ignore[no-untyped-def]
+def test_format_report_renders_table(slop_audit: ModuleType) -> None:
     results = slop_audit.run_all_lenses()
     report = slop_audit.format_report(results, header="test run")
     assert "| Lens | Count | Severity |" in report
@@ -86,7 +87,7 @@ def test_format_report_renders_table(slop_audit) -> None:  # type: ignore[no-unt
         assert name in report
 
 
-def test_baseline_load_round_trip(tmp_path, slop_audit) -> None:  # type: ignore[no-untyped-def]
+def test_baseline_load_round_trip(tmp_path: Path, slop_audit: ModuleType) -> None:
     """`load_baseline` reads a generated report back into a count dict."""
     results = slop_audit.run_all_lenses()
     report = slop_audit.format_report(results, header="round trip")
@@ -104,7 +105,9 @@ def test_baseline_file_committed() -> None:
     assert path.is_file(), f"missing baseline file at {path}"
 
 
-def test_slop_keep_marker_works(slop_audit, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_slop_keep_marker_works(
+    slop_audit: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A line with ``# slop:keep`` and a stale ref is ignored."""
     tmp_root = tmp_path / "fake_repo"
     (tmp_root / "core").mkdir(parents=True)
