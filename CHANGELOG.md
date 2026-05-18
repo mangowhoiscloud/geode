@@ -49,6 +49,19 @@ functional change.
 
 ### Added
 
+- **Pilot agent (S5).** `plugins/seed_pipeline/agents/pilot.py` fans
+  out one sub-agent per surviving candidate (post-Proximity), each
+  invoking the `petri_audit` tool (1 seed × 2 model × 1 paraphrase per
+  `.claude/agents/seed_pilot.md`) to produce a 15-dim
+  `{dim_means, dim_stderr, status}` aggregate. Merges per-candidate
+  results into `state.pilot_scores` keyed by candidate id. Pairs
+  results by `task_id` dict lookup (S2-fix pattern), pins
+  `candidate_id` from the task (never trusts the LLM echo), validates
+  `_REQUIRED_PILOT_FIELDS` + dim-dict shape + status whitelist
+  (`ok` / `timeout` / `low_engagement`). All-fail →
+  `error_category="pilot_failed"`. 14 unit tests covering reverse-
+  order completion pairing, partial-output rejection, non-dict dim
+  shapes, invalid status, JSON-as-text fallback.
 - **Seed pipeline orchestrator skeleton (S1).** New `plugins/seed_pipeline/`
   sibling plugin scaffolds the co-scientist (arXiv:2502.18864) port —
   `Pipeline` class, 7-phase walker (generator → proximity → critic → pilot
