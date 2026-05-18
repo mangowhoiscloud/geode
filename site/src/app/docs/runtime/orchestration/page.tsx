@@ -81,7 +81,7 @@ Output`}</pre>
 
             <h2>Files</h2>
             <ul>
-              <li><code>core/orchestration/</code> — 17 modules</li>
+              <li><code>core/orchestration/</code>. 16 modules</li>
               <li><code>core/graph.py</code> — top-level StateGraph builder entry</li>
               <li><code>core/state.py</code> — <code>GeodeState</code> TypedDict (the state shape every node receives)</li>
             </ul>

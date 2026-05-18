@@ -8,8 +8,8 @@ export default function Page() {
       slug="harness/cli"
       title="CLI & Slash Commands"
       titleKo="CLI와 슬래시 명령"
-      summary="Thin client → IPC → serve daemon. 30 modules, 15+ slash commands. Auto-starts the daemon on first call."
-      summaryKo="Thin 클라이언트에서 IPC를 거쳐 serve 데몬으로. 30개 모듈, 15개 이상의 슬래시 명령. 첫 호출 시 데몬을 자동 기동합니다."
+      summary="Thin client → IPC → serve daemon. 57 modules, 28 slash commands. Auto-starts the daemon on first call."
+      summaryKo="Thin 클라이언트에서 IPC를 거쳐 serve 데몬으로. 57개 모듈, 28개 슬래시 명령. 첫 호출 시 데몬을 자동 기동합니다."
     >
       <Bi
         ko={
@@ -18,7 +18,7 @@ export default function Page() {
             <pre>{`User
   │
   ▼
-geode CLI  (thin client, ~30 modules)
+geode CLI  (thin client, ~57 modules)
   │
   │  IPC (unix socket / stdio)
   ▼
@@ -95,7 +95,7 @@ geode skill list / skill view / skill manage`}</pre>
             <pre>{`User
   │
   ▼
-geode CLI  (thin client, ~30 modules)
+geode CLI  (thin client, ~57 modules)
   │
   │  IPC (unix socket / stdio)
   ▼

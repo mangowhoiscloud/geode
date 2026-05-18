@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/auth"
       title="Auth & OAuth"
       titleKo="인증과 OAuth"
-      summary="14 modules in core/auth/ — profile rotator, OAuth flows, credential resolution. Anthropic OAuth disabled per ToS; OpenAI Codex Plus active."
-      summaryKo="core/auth/의 14개 모듈. 프로파일 로테이터, OAuth 플로우, 자격 증명 해석. Anthropic OAuth는 ToS에 따라 비활성. OpenAI Codex Plus는 활성."
+      summary="11 modules in core/auth/ — profile rotator, OAuth flows, credential resolution. Anthropic OAuth disabled per ToS; OpenAI Codex Plus active."
+      summaryKo="core/auth/의 11개 모듈. 프로파일 로테이터, OAuth 플로우, 자격 증명 해석. Anthropic OAuth는 ToS에 따라 비활성. OpenAI Codex Plus는 활성."
     >
       <Bi
         ko={
@@ -47,7 +47,7 @@ def resolve_provider_key(provider: str, fallback: str | None = None) -> str:
 
             <h2>파일</h2>
             <ul>
-              <li><code>core/auth/</code>. 14개 모듈.</li>
+              <li><code>core/auth/</code>. 11개 모듈.</li>
               <li><code>core/llm/credentials.py</code>. 프로바이더 키 해석.</li>
               <li><code>core/cli/auth_commands.py</code>. login/logout/status 슬래시 명령.</li>
             </ul>
@@ -96,7 +96,7 @@ def resolve_provider_key(provider: str, fallback: str | None = None) -> str:
 
             <h2>Files</h2>
             <ul>
-              <li><code>core/auth/</code> — 14 modules</li>
+              <li><code>core/auth/</code>. 11 modules</li>
               <li><code>core/llm/credentials.py</code> — provider key resolution</li>
               <li><code>core/cli/auth_commands.py</code> — login/logout/status slash commands</li>
             </ul>

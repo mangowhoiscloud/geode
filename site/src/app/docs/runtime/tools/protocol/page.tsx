@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/tools/protocol"
       title="Tool Protocol"
       titleKo="도구 프로토콜"
-      summary="Tool protocol, registry, deferred loading. 61 tools (6 always-loaded + 55 deferred), single JSON SOT at core/tools/definitions.json."
-      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 61개 도구 (상시 로드 6개 + 지연 로드 55개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
+      summary="Tool protocol, registry, deferred loading. 53 tools (6 always-loaded + 47 deferred), single JSON SOT at core/tools/definitions.json."
+      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 53개 도구 (상시 로드 6개 + 지연 로드 47개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
     >
       <Bi
         ko={
@@ -111,7 +111,7 @@ export default function Page() {
 
             <h2>Deferred loading</h2>
             <p>
-              With 61 tools, sending all definitions on every LLM call would burn
+              With 53 tools, sending all definitions on every LLM call would burn
               ~10K tokens of input per turn. GEODE splits the catalog:
             </p>
             <table>
