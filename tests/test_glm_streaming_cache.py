@@ -1,4 +1,4 @@
-"""GLM agentic_call streams Chat Completions and sends prompt_cache_key."""
+"""GLM agentic_call streams documented Chat Completions request fields."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 from core.llm.agentic_response import AgenticResponse
 from core.llm.providers.glm import GlmAgenticAdapter
-from core.llm.providers.openai import _build_prompt_cache_key, _tools_to_chat_completions
 
 
 def _chunk(
@@ -49,7 +48,7 @@ class _Client:
         self.chat = SimpleNamespace(completions=_Completions(sink, responses))
 
 
-def test_glm_agentic_call_streams_and_sends_prompt_cache_key(
+def test_glm_agentic_call_streams_without_unsupported_cache_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[dict[str, Any]] = []
@@ -79,52 +78,43 @@ def test_glm_agentic_call_streams_and_sends_prompt_cache_key(
 
     assert isinstance(result, AgenticResponse)
     assert captured[0]["stream"] is True
-    assert captured[0]["stream_options"] == {"include_usage": True}
-    assert captured[0]["prompt_cache_key"] == _build_prompt_cache_key(
-        "system",
-        [
-            *_tools_to_chat_completions(tools),
-            {"type": "web_search", "web_search": {"enable": True}},
-        ],
-    )
+    assert "prompt_cache_key" not in captured[0]
+    assert "stream_options" not in captured[0]
     assert result.content[0].text == "hello"
     assert result.reasoning_summaries == ["think done"]
     assert result.usage.input_tokens == 20
     assert result.usage.cache_read_tokens == 11
 
 
-def test_glm_prompt_cache_key_rejection_retries_once_then_disables(
+def test_glm_auto_cache_usage_normalizes_without_prompt_cache_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[dict[str, Any]] = []
-    usage = SimpleNamespace(prompt_tokens=3, completion_tokens=1)
-    client = _Client(
-        captured,
-        [
-            RuntimeError("Unsupported parameter: prompt_cache_key"),
-            _stream(usage),
-            _stream(usage),
-        ],
+    usage = SimpleNamespace(
+        prompt_tokens=31,
+        completion_tokens=7,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=19),
     )
+    client = _Client(captured, [_stream(usage)])
     adapter = GlmAgenticAdapter()
     monkeypatch.setattr(adapter, "_ensure_client", lambda model: client)
 
-    kwargs = {
-        "model": "glm-5.1",
-        "system": "system",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [],
-        "tool_choice": "auto",
-        "max_tokens": 64,
-        "temperature": 0.1,
-        "effort": "high",
-    }
+    result = asyncio.run(
+        adapter.agentic_call(
+            model="glm-5.1",
+            system="system",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            tool_choice="auto",
+            max_tokens=64,
+            temperature=0.1,
+            effort="high",
+        )
+    )
 
-    first = asyncio.run(adapter.agentic_call(**kwargs))
-    second = asyncio.run(adapter.agentic_call(**kwargs))
-
-    assert isinstance(first, AgenticResponse)
-    assert isinstance(second, AgenticResponse)
-    assert "prompt_cache_key" in captured[0]
-    assert "prompt_cache_key" not in captured[1]
-    assert "prompt_cache_key" not in captured[2]
+    assert isinstance(result, AgenticResponse)
+    assert len(captured) == 1
+    assert "prompt_cache_key" not in captured[0]
+    assert result.usage.input_tokens == 31
+    assert result.usage.output_tokens == 7
+    assert result.usage.cache_read_tokens == 19

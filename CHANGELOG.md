@@ -47,8 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **GLM documented request shape for Z.AI Chat Completions.** Removed the
+  speculative `prompt_cache_key` send-and-retry path added as a defensive PR
+  #1316 measure after grounding showed Z.AI Chat Completions has no such
+  request parameter and performs context caching automatically. Fresh GLM
+  sessions now make one clean streaming call instead of paying one rejected
+  call plus retry.
+- **GLM Z.AI Chat Completions request shape 정정.** PR #1316 의 방어적
+  `prompt_cache_key` send-and-retry 경로를 제거했습니다. 재검증 결과 Z.AI
+  Chat Completions 에는 해당 request parameter 가 없고 context caching 은
+  서버에서 자동 수행됩니다. 이제 새 GLM 세션은 reject 1회 + retry 1회 대신
+  정상 streaming call 1회만 수행합니다.
+
 ### Removed
 
+- **GLM unsupported cache and stream request knobs.** Dropped
+  `prompt_cache_key`, the session-scoped unsupported-parameter fallback branch,
+  and undocumented `stream_options` from the GLM adapter. Cache-read telemetry
+  still comes from Z.AI's documented
+  `usage.prompt_tokens_details.cached_tokens` response field.
+- **GLM 미지원 cache/stream request knob 제거.** GLM adapter 에서
+  `prompt_cache_key`, 세션 단위 unsupported-parameter fallback branch, 문서화되지
+  않은 `stream_options` 를 삭제했습니다. Cache-read telemetry 는 계속 Z.AI 가
+  문서화한 `usage.prompt_tokens_details.cached_tokens` 응답 필드에서 읽습니다.
 - **Cross-provider failover settings and dispatch paths.** Removed
   `_cross_provider_dispatch`, the text/parsed router wrapper calls, the async
   tools cross-provider loop, and `llm_cross_provider_failover` /
