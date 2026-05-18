@@ -49,6 +49,23 @@ functional change.
 
 ### Added
 
+- **P0a — autoresearch auto-promote + baseline write.** Closes 2026-05-19
+  outer-loop wiring plan Phase A defects #4 + #9. New `_write_baseline()`
+  helper persists the current audit's dim aggregates to
+  `autoresearch/state/baseline.json` (schema matches `_load_baseline()`
+  — `dim_means` + `dim_stderr` only). New `_should_promote()` rule:
+  (1) bootstrap when no prior baseline; (2) reject critical-axis
+  regression by reusing `compute_fitness`'s strict-reject gate;
+  (3) require raw-fitness gain > `max(prior_stderr, 0.05)`. New
+  `--promote` (force-write, manual override) and `--no-promote`
+  (observe-only) flags, mutually exclusive. `train.py main()` calls
+  `_should_promote()` after the fitness summary and writes
+  baseline.json when the rule passes. Dry-run short-circuits to
+  `false (dry-run)` so synthetic data never freezes into a baseline.
+  7 unit tests covering round-trip schema, parent-dir mkdir, bootstrap,
+  critical regression, insignificant gain, significant improvement,
+  and the floor-protection fallback.
+
 - **Plan — Outer-Loop Wiring Sprint (2026-05-19).** New
   `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` codifies the
   7-PR + 1 data-run + 1 audit-pass plan that closes the 20-defect

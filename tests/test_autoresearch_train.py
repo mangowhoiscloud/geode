@@ -29,7 +29,9 @@ from autoresearch.train import (
     STABILITY_WEIGHT,
     WRAPPER_OVERRIDE_HOOK_READY,
     _build_audit_command,
+    _should_promote,
     _stability_score,
+    _write_baseline,
     compute_dim_scores,
     compute_fitness,
     run_audit,
@@ -556,3 +558,111 @@ def test_results_jsonl_round_trip() -> None:
         "baseline_active",
     ):
         assert key in obj
+
+
+# ---------------------------------------------------------------------------
+# P0a — auto-promote + baseline write (defects #4, #9 from 2026-05-19 plan)
+# ---------------------------------------------------------------------------
+
+
+def test_write_baseline_round_trip_matches_load_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_write_baseline`` output must be readable by ``_load_baseline``."""
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
+    dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
+    _write_baseline(dim_means, dim_stderr)
+    loaded_means, loaded_stderr = auto_train._load_baseline()
+    assert loaded_means == dim_means
+    assert loaded_stderr == dim_stderr
+
+
+def test_write_baseline_creates_parent_dirs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_write_baseline`` mkdirs nested missing directories."""
+    target = tmp_path / "nested" / "deeper" / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", target)
+    _write_baseline({"broken_tool_use": 3.4}, {"broken_tool_use": 0.4})
+    assert target.is_file()
+
+
+def test_should_promote_bootstraps_when_no_prior_baseline() -> None:
+    """First valid run with no baseline.json → always promote."""
+    ok, reason = _should_promote(
+        {"broken_tool_use": 3.4},
+        {"broken_tool_use": 0.4},
+        baseline_means=None,
+        baseline_stderr=None,
+    )
+    assert ok is True
+    assert "bootstrap" in reason
+
+
+def test_should_promote_rejects_critical_regression() -> None:
+    """If gated fitness collapses to 0.0, promote returns False."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.1)
+    # Mark every critical dim sharply worse — gate triggers strict reject.
+    regressed = dict.fromkeys(CRITICAL_DIMS, 9.0)
+    ok, reason = _should_promote(
+        regressed,
+        dict.fromkeys(CRITICAL_DIMS, 0.1),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+    )
+    assert ok is False
+    assert "critical-axis regression" in reason
+
+
+def test_should_promote_rejects_insignificant_fitness_gain() -> None:
+    """Fitness improvement ≤ margin → reject."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 0.2)
+    # Identical means → zero gain, definitely below margin.
+    ok, reason = _should_promote(
+        dict(baseline_means),
+        dict(baseline_stderr),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+    )
+    assert ok is False
+    assert "fitness gain" in reason
+    assert "margin" in reason
+
+
+def test_should_promote_accepts_significant_improvement() -> None:
+    """Fitness gain exceeds margin → promote."""
+    # Worse means (Petri scale: higher = worse violation), so improvement
+    # = lower mean. Baseline at 5.0, current at 2.0 → big drop on dim_score.
+    baseline_means = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 5.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 0.05)
+    current_means = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 2.0)
+    current_stderr = dict.fromkeys(CRITICAL_DIMS + AUXILIARY_DIMS, 0.05)
+    ok, reason = _should_promote(
+        current_means,
+        current_stderr,
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+    )
+    assert ok is True
+    assert "fitness" in reason
+
+
+def test_should_promote_floor_protects_against_zero_stderr() -> None:
+    """``fitness_margin_floor`` kicks in when baseline_stderr is empty."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr: dict[str, float] = {}  # empty → margin would be 0
+    # Tiny gain that would pass with margin=0 but fails with floor=0.05.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.99)
+    ok, reason = _should_promote(
+        current_means,
+        {},
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+    )
+    assert ok is False
+    assert "margin 0.05" in reason

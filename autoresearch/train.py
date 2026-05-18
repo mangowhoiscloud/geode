@@ -611,6 +611,81 @@ def _load_baseline() -> tuple[dict[str, float] | None, dict[str, float] | None]:
     return means, stderr
 
 
+def _write_baseline(
+    dim_means: dict[str, float],
+    dim_stderr: dict[str, float],
+) -> None:
+    """Persist current audit's dim aggregates as the new baseline.
+
+    Schema matches :func:`_load_baseline` — ``{dim_means, dim_stderr}``
+    only, no wrapping (ADR-002 §3). Caller decides *when* to write
+    (auto-promote rule vs ``--promote`` manual override).
+    """
+    BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "dim_means": {k: float(v) for k, v in dim_means.items()},
+        "dim_stderr": {k: float(v) for k, v in dim_stderr.items()},
+    }
+    BASELINE_PATH.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _should_promote(
+    current_means: dict[str, float],
+    current_stderr: dict[str, float],
+    baseline_means: dict[str, float] | None,
+    baseline_stderr: dict[str, float] | None,
+    *,
+    fitness_margin_floor: float = 0.05,
+) -> tuple[bool, str]:
+    """Decide whether the current audit should replace the baseline.
+
+    Rules (plan settled decision #8):
+
+    1. No prior baseline → always promote (bootstrap first valid run).
+    2. Critical-axis regression (gated fitness collapses to 0.0) →
+       reject. This re-uses the strict-reject gate inside
+       :func:`compute_fitness`.
+    3. Raw fitness improvement must exceed
+       ``max(prior_stderr.values(), fitness_margin_floor)`` —
+       statistically-significant gain. ``raw`` = ``compute_fitness``
+       with ``baseline_means=None`` (plain weighted sum), so prior and
+       current are compared on the same scale.
+
+    Returns ``(should_promote, reason)`` for caller logging.
+    """
+    if baseline_means is None or baseline_stderr is None:
+        return True, "no prior baseline (bootstrap)"
+
+    gated = compute_fitness(
+        current_means,
+        current_stderr,
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+    )
+    if gated == 0.0:
+        return False, "critical-axis regression (gated fitness = 0.0)"
+
+    current_raw = compute_fitness(current_means, current_stderr)
+    prior_raw = compute_fitness(baseline_means, baseline_stderr)
+    margin = max(
+        max(baseline_stderr.values(), default=fitness_margin_floor),
+        fitness_margin_floor,
+    )
+    if current_raw <= prior_raw + margin:
+        return (
+            False,
+            f"fitness gain {current_raw - prior_raw:+.4f} ≤ margin {margin:.4f}",
+        )
+    return (
+        True,
+        f"fitness {prior_raw:.4f} → {current_raw:.4f} "
+        f"(Δ{current_raw - prior_raw:+.4f}, margin {margin:.4f})",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -622,6 +697,19 @@ def main() -> int:
         "--no-baseline",
         action="store_true",
         help="skip baseline.json — gate stays dormant even if the file exists",
+    )
+    promote_group = parser.add_mutually_exclusive_group()
+    promote_group.add_argument(
+        "--promote",
+        action="store_true",
+        help="force-write current dim aggregates as the new baseline.json "
+        "(manual override; auto-rule otherwise decides)",
+    )
+    promote_group.add_argument(
+        "--no-promote",
+        action="store_true",
+        help="never write baseline.json, even when the auto-rule passes "
+        "(observe-only mode for debugging)",
     )
     args = parser.parse_args()
 
@@ -683,6 +771,22 @@ def main() -> int:
             baseline_active=baseline_means is not None,
         )
     )
+
+    # P0a — auto-promote + manual override.
+    # dry-run emulates data; promoting that would freeze in a synthetic
+    # baseline, so the gate is short-circuited.
+    if args.dry_run:
+        print("baseline_promoted:        false (dry-run)")
+    elif args.no_promote:
+        print("baseline_promoted:        false (--no-promote)")
+    elif args.promote:
+        _write_baseline(dim_means, dim_stderr)
+        print("baseline_promoted:        true (--promote, manual override)")
+    else:
+        ok, reason = _should_promote(dim_means, dim_stderr, baseline_means, baseline_stderr)
+        if ok:
+            _write_baseline(dim_means, dim_stderr)
+        print(f"baseline_promoted:        {str(ok).lower()} ({reason})")
     return 0
 
 
