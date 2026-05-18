@@ -283,6 +283,37 @@ dormant (first run / fresh branch).
 # ---------------------------------------------------------------------------
 
 
+def _emit_journal(
+    session_id: str,
+    gen_tag: str,
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, object] | None = None,
+) -> None:
+    """Emit one SessionJournal event for this audit run.
+
+    P0b — autoresearch event coverage (docs/audits/2026-05-19-
+    self-improving-loop-observability-gap.md §4). Centralises the
+    SessionJournal lazy-import + payload SoT contract (P0a §6: journal
+    events MUST NOT duplicate sessions.jsonl canonical fields). No-op
+    when ``session_id`` / ``gen_tag`` are empty (run_audit called from
+    tests without them) or when ``core.observability`` is unavailable
+    in the import context.
+    """
+    if not session_id or not gen_tag:
+        return
+    try:
+        from core.observability import SessionJournal
+    except ImportError:
+        return
+    SessionJournal(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        component="autoresearch",
+    ).append(event, level=level, payload=payload or {})
+
+
 def _build_audit_command() -> list[str]:
     """Construct the ``geode audit`` subprocess argv.
 
@@ -328,6 +359,9 @@ def _dump_wrapper_override() -> Path:
 
 def run_audit(
     dry_run: bool,
+    *,
+    session_id: str = "",
+    gen_tag: str = "",
 ) -> tuple[dict[str, float], dict[str, float], float, float]:
     """Invoke a single audit. Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
 
@@ -335,10 +369,22 @@ def run_audit(
     of dim means so the loop scaffolding can be smoke-tested without touching
     LLM quota / API credits. dry-run returns an empty ``dim_stderr`` so the
     stability axis falls back to the placeholder constant.
+
+    ``session_id`` / ``gen_tag`` are forwarded for SessionJournal emission
+    (P0b — wrapper_override_dumped / subprocess_started / subprocess_finished
+    / subprocess_timeout events). Both default to empty so unit tests that
+    call ``run_audit(dry_run=...)`` directly stay unchanged — emission is
+    skipped when either is empty.
     """
     started = time.time()
     AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)
     override_path = _dump_wrapper_override()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "wrapper_override_dumped",
+        payload={"path": str(override_path)},
+    )
 
     if dry_run:
         dim_means = {
@@ -361,18 +407,46 @@ def run_audit(
     argv = _build_audit_command()
     env = os.environ.copy()
     env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
+    timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
+
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "subprocess_started",
+        payload={"argv_len": len(argv), "timeout_sec": timeout_sec},
+    )
 
     audit_started = time.time()
-    proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
-        argv,
-        env=env,
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=_get_autoresearch_config().budget_minutes * 60 + 120,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
+            argv,
+            env=env,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "subprocess_timeout",
+            level="error",
+            payload={"timeout_sec": timeout_sec},
+        )
+        raise
     audit_seconds = time.time() - audit_started
+
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "subprocess_finished",
+        payload={
+            "exit_code": proc.returncode,
+            "audit_seconds": round(audit_seconds, 3),
+        },
+    )
 
     log_text = proc.stdout + "\n--- stderr ---\n" + proc.stderr
     RUN_LOG.write_text(log_text, encoding="utf-8")
@@ -886,20 +960,80 @@ def main() -> int:
 
     session_id = _resolve_session_id()
     started_at = time.time()
+    # P0b — compute gen_tag up-front so journal events emitted during
+    # run_audit (subprocess lifecycle) can carry the same session_id +
+    # gen_tag pair as the eventual sessions.jsonl row.
+    commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
+    gen_tag = _resolve_gen_tag(commit)
+
+    cfg = _get_autoresearch_config()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "audit_started",
+        payload={"dry_run": args.dry_run},
+    )
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "config_snapshot",
+        payload={
+            "target_model": cfg.target_model,
+            "judge_model": cfg.judge_model,
+            "budget_minutes": cfg.budget_minutes,
+            "seed_limit": cfg.seed_limit,
+            "dim_set": cfg.dim_set,
+            "max_turns": cfg.max_turns,
+            "use_oauth": cfg.use_oauth,
+        },
+    )
 
     try:
-        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(dry_run=args.dry_run)
+        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(
+            dry_run=args.dry_run,
+            session_id=session_id,
+            gen_tag=gen_tag,
+        )
     except Exception as exc:
+        # P0b — audit_failed marker for stream consumers. The specific
+        # cause (subprocess_timeout / RuntimeError) has its own event
+        # emitted from inside run_audit when applicable.
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "audit_failed",
+            level="error",
+            payload={"error": str(exc)[:200]},
+        )
         print(f"audit failed: {exc}", file=sys.stderr)
         return 1
 
     baseline_means, baseline_stderr = (None, None) if args.no_baseline else _load_baseline()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "baseline_decision",
+        payload={
+            "baseline_present": baseline_means is not None,
+            "baseline_active": baseline_means is not None and not args.no_baseline,
+            "no_baseline_flag": args.no_baseline,
+        },
+    )
     dim_scores = compute_dim_scores(dim_means, dim_stderr)
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
         baseline_means=baseline_means,
         baseline_stderr=baseline_stderr,
+    )
+    # P0b — per-dim score breakdown lives in the journal (event-scoped).
+    # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
+    # breakdown is not in sessions.jsonl so it belongs here, not duplicated.
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "per_dim_scores",
+        payload={"dim_scores": {k: round(v, 4) for k, v in dim_scores.items()}},
     )
     print_summary(
         dim_means,
@@ -918,8 +1052,6 @@ def main() -> int:
     # directly because the verdict / description are decided by the
     # operator AFTER reading the print_summary; emitting at this stage
     # would freeze in a default. Operators tee the line manually.
-    commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
-    gen_tag = _resolve_gen_tag(commit)
     description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
     verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
     print(f"session_id:               {session_id}")
@@ -992,21 +1124,13 @@ def main() -> int:
     # here causes drift between the two sinks (P0a dedup,
     # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §6).
     # Consumers join via session_id + gen_tag.
-    try:
-        from core.observability import SessionJournal
-
-        SessionJournal(
-            session_id=session_id,
-            gen_tag=gen_tag,
-            component="autoresearch",
-        ).append(
-            "audit_finished",
-            level="info" if fitness > 0.0 else "warn",
-            payload={"dry_run": args.dry_run},
-        )
-    except ImportError:
-        # core.observability is optional; surface only when present.
-        pass
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "audit_finished",
+        level="info" if fitness > 0.0 else "warn",
+        payload={"dry_run": args.dry_run},
+    )
     return 0
 
 

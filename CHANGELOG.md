@@ -49,6 +49,34 @@ functional change.
 
 ### Changed
 
+- **P0b — autoresearch SessionJournal event coverage.** Per the 2026-05-19
+  observability audit §4, the autoresearch run was emitting only one
+  journal event (`audit_finished`) — every other lifecycle transition was
+  silently swallowed. Added 8 events covering the documented gaps:
+  `audit_started` (run entry), `config_snapshot` (which
+  `[self_improving_loop.autoresearch]` values resolved), `wrapper_override_dumped`
+  (override path), `subprocess_started` / `subprocess_finished` /
+  `subprocess_timeout` (real-mode lifecycle, the latter at `level=error`),
+  `audit_failed` (catch-all on main exception),
+  `baseline_decision` (was a baseline present + did it activate),
+  `per_dim_scores` (per-dim breakdown — aggregate `fitness` stays in
+  sessions.jsonl per P0a §6). Introduces `_emit_journal` helper at module
+  scope so the ImportError-safe boilerplate is no longer duplicated 8×.
+  `gen_tag` computation lifted to the top of `main()` so subprocess
+  events emitted during `run_audit` share the same `session_id +
+  gen_tag` pair as the eventual sessions.jsonl row. Six new tests guard
+  the contract: emit helper happy path / level=error / empty-id no-op,
+  `run_audit(dry_run=True)` integration, a main()-drive test asserting
+  the exact 6-event dry-run sequence + payload keys, a SoT regression
+  guard that asserts no journal payload contains any sessions.jsonl
+  canonical field (fitness/verdict/promoted/commit/survivors/usd_spent/
+  pool_path_out), and a subprocess timeout integration test that mocks
+  `subprocess.run` to raise `TimeoutExpired` and asserts the right
+  events fire at the right levels in the right order. Verification was
+  cross-LLM (Codex MCP read-only review) per
+  `feedback_codex_mcp_verification` — initial MEDIUM finding ("hand-emit
+  literals can't catch regressions at the real emit sites") addressed
+  in the same change.
 - **P0a — dedup `audit_finished` / `pipeline_finished` journal payloads
   against `sessions.jsonl` SoT.** Per the 2026-05-19 observability audit
   §6, the journal event payloads were duplicating run-level canonical
