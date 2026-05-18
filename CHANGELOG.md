@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Plan — Outer-Loop Config Consolidation + Subscription Guard + FE
+  Warning UX (2026-05-19).** New
+  `docs/plans/2026-05-19-outer-loop-config-consolidation.md` codifies
+  the 5-PR + 1-backfill plan that closes three problems found while
+  preparing for Phase C gen-0 smoke: (1) outer-loop settings scattered
+  across 8 surfaces (module constants + 2 TOMLs + env vars + manifest
+  + auth.toml + codex auth.json + Petri user_overrides + auth_coverage
+  fixture) → single `~/.geode/config.toml` `[outer_loop.*]` section;
+  (2) Petri credential_source silently falls back from OAuth
+  subscription to PAYG api_key on quota exhaust → strict mode default
+  + `fallback_to_payg = true` opt-in (Codex `forced_login_method`
+  pattern); (3) operator has no FE warning when subscription
+  approaches/hits exhaustion → prompt_toolkit `bottom_toolbar` 3-tier
+  banner (green/yellow/red) + abort dialog (issue #277 background-
+  thread refresh pattern). Predecessor: the outer-loop wiring sprint
+  Phase A+B is complete; Phase C smoke is gated on this plan's 5 PRs.
+  Reference report (2026-05-19): Hermes auxiliary roles + Codex
+  forced_login_method + gh auth status precedence + prompt_toolkit
+  bottom_toolbar.
+
 ## [0.99.14] — 2026-05-19
 
 ### Changed
