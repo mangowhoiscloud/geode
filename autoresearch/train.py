@@ -97,7 +97,7 @@ SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"
 """Default seed pool — hierarchical tree (post-PR-0). P0b adds the
 ``AUTORESEARCH_SEED_SELECT`` env override consumed by
-:func:`_resolve_seed_select` so the seed-pipeline cross-loop handoff
+:func:`_resolve_seed_select` so the seed-generation cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
 literal default so existing tests and self-improving-loop agents can grep it."""
 DIM_SET_NAME = "5axes"
@@ -263,7 +263,7 @@ BASELINE_PATH = STATE_DIR / "baseline.json"
 SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"
 SESSIONS_INDEX_PATH = SELF_IMPROVING_LOOP_HOME / "sessions.jsonl"
 """P1a — shared self-improving-loop session registry. One JSON record per run
-from any self-improving-loop driver (autoresearch / seed-pipeline) so external
+from any self-improving-loop driver (autoresearch / seed-generation) so external
 tools can join across the two loops via ``session_id`` + ``gen_tag``."""
 """Per-branch baseline written by the self-improving-loop agent after a promote.
 

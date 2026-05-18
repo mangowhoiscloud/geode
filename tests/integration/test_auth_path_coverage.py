@@ -1,10 +1,10 @@
 """Integration test — 4-path × 4-component auth coverage matrix.
 
 Walks every (component, family, source) cell in
-``plugins.seed_pipeline.auth_coverage.AUTH_COVERAGE_MATRIX`` and
+``plugins.seed_generation.auth_coverage.AUTH_COVERAGE_MATRIX`` and
 verifies the routing surface is actually wired:
 
-- **seed_pipeline** — `pick_bindings()` with a user override forces the
+- **seed_generation** — `pick_bindings()` with a user override forces the
   cell's source; the resolved `RoleBinding` must reflect it.
 - **petri_audit** — the manifest's `[petri.source.<family>].allowed`
   list contains the cell's source.
@@ -15,14 +15,14 @@ verifies the routing surface is actually wired:
   has the env field for the cell's family + source.
 
 Also exercises the **TEST_SETUP_PROFILE** the user pinned on
-2026-05-18 (seed_pipeline + autoresearch + geode_main → openai.openai-codex,
+2026-05-18 (seed_generation + autoresearch + geode_main → openai.openai-codex,
 petri_audit → anthropic.claude-cli).
 """
 
 from __future__ import annotations
 
 import pytest
-from plugins.seed_pipeline.auth_coverage import (
+from plugins.seed_generation.auth_coverage import (
     AUTH_COVERAGE_MATRIX,
     TEST_SETUP_PROFILE,
     AuthCell,
@@ -51,7 +51,7 @@ def test_matrix_covers_all_four_paths_per_component() -> None:
     for cell in AUTH_COVERAGE_MATRIX:
         by_component.setdefault(cell.component, set()).add((cell.path.family, cell.path.source))
     assert set(by_component) == {
-        "seed_pipeline",
+        "seed_generation",
         "petri_audit",
         "autoresearch",
         "geode_main",
@@ -75,26 +75,26 @@ def _cells_for(component: str) -> list[AuthCell]:
     return [c for c in AUTH_COVERAGE_MATRIX if c.component == component]
 
 
-@pytest.mark.parametrize("cell", _cells_for("seed_pipeline"))
-def test_seed_pipeline_routes_to_cell(cell: AuthCell) -> None:
+@pytest.mark.parametrize("cell", _cells_for("seed_generation"))
+def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
     """`pick_bindings()` honours a user override pinning the cell's source.
 
     Constructs a minimal in-memory manifest + override and verifies the
     resolved RoleBinding for the cell's family lands on the requested
     source.
     """
-    from plugins.seed_pipeline.manifest import (
+    from plugins.seed_generation.manifest import (
         JudgePanelSpec,
-        SeedPipelineManifest,
+        SeedGenerationManifest,
         SeedRoleSpec,
         VoterSpec,
     )
-    from plugins.seed_pipeline.picker import pick_bindings
+    from plugins.seed_generation.picker import pick_bindings
 
     # Pick a model whose family matches the cell.
     model = "claude-sonnet-4-6" if cell.path.family == "anthropic" else "gpt-5.5"
     role_name = "generator"
-    manifest = SeedPipelineManifest(
+    manifest = SeedGenerationManifest(
         enabled_roles=[role_name],
         roles={role_name: SeedRoleSpec(default_model=model, allowed_models=[model])},
         judge_panel=JudgePanelSpec(
@@ -183,7 +183,7 @@ def test_geode_main_has_credential_field_for_cell(cell: AuthCell) -> None:
 
 def test_test_setup_profile_has_all_four_components() -> None:
     assert set(TEST_SETUP_PROFILE) == {
-        "seed_pipeline",
+        "seed_generation",
         "petri_audit",
         "autoresearch",
         "geode_main",
@@ -192,7 +192,7 @@ def test_test_setup_profile_has_all_four_components() -> None:
 
 def test_test_setup_profile_targets() -> None:
     """The 2026-05-18 user directive pinned the profile."""
-    assert str(TEST_SETUP_PROFILE["seed_pipeline"]) == "openai.openai-codex"
+    assert str(TEST_SETUP_PROFILE["seed_generation"]) == "openai.openai-codex"
     assert str(TEST_SETUP_PROFILE["petri_audit"]) == "anthropic.claude-cli"
     assert str(TEST_SETUP_PROFILE["autoresearch"]) == "openai.openai-codex"
     assert str(TEST_SETUP_PROFILE["geode_main"]) == "openai.openai-codex"
@@ -216,7 +216,7 @@ def test_test_setup_profile_cells_are_supported() -> None:
 
 def test_auth_status_table_renders_all_four_components() -> None:
     out = auth_status_table()
-    for component in ("seed_pipeline", "petri_audit", "autoresearch", "geode_main"):
+    for component in ("seed_generation", "petri_audit", "autoresearch", "geode_main"):
         assert component in out
     # Each row must show 4 path columns
     assert "anth.cli" in out

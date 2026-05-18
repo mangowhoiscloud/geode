@@ -218,7 +218,7 @@ def test_resolve_seed_select_honors_env_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A populated env var redirects seed-select to the seed-pipeline survivors."""
+    """A populated env var redirects seed-select to the seed-generation survivors."""
     override = str(tmp_path / "survivors.json")
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
     assert auto_train._resolve_seed_select() == override
@@ -872,8 +872,8 @@ def test_resolve_session_id_generates_when_env_unset(
 
 def test_resolve_gen_tag_honors_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """AUTORESEARCH_GEN_TAG override wins over the default ``autoresearch-<commit>``."""
-    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "seed-pipeline-gen1")
-    assert _resolve_gen_tag("a1b2c3d") == "seed-pipeline-gen1"
+    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "seed-generation-gen1")
+    assert _resolve_gen_tag("a1b2c3d") == "seed-generation-gen1"
 
 
 def test_resolve_gen_tag_default_includes_commit(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -4,11 +4,11 @@
 **Status**: Approved (sequencing confirmed 2026-05-19)
 **Owner**: mangowhoiscloud
 **Driving audit**: Session 63 self-improving-loop topology audit (직전 대화 2026-05-19, 20 verified defects)
-**Predecessor sprints**: `2026-05-18-seed-pipeline-sprint-plan.md` (16-PR S0-S12 sprint, S12 execution 만 deferred)
+**Predecessor sprints**: `2026-05-18-seed-generation-sprint-plan.md` (16-PR S0-S12 sprint, S12 execution 만 deferred)
 
 ## Goal
 
-Session 63 의 seed-pipeline / autoresearch / Petri 16-PR sprint 가 S12 실행만 남기고 closure 된 상태에서, self-improving-loop 가 진짜 self-improving 으로 set-and-forget 굴러가도록 만드는 마지막 10% wiring 을 완성. 20 verified defect 중 17 개를 7 PR + 1 data run + 1 timeboxed 2nd audit 으로 처리.
+Session 63 의 seed-generation / autoresearch / Petri 16-PR sprint 가 S12 실행만 남기고 closure 된 상태에서, self-improving-loop 가 진짜 self-improving 으로 set-and-forget 굴러가도록 만드는 마지막 10% wiring 을 완성. 20 verified defect 중 17 개를 7 PR + 1 data run + 1 timeboxed 2nd audit 으로 처리.
 
 ## Driving audit — 20 defects (severity / layer)
 
@@ -16,9 +16,9 @@ audit SoT 는 직전 대화 2026-05-19 (verified against `origin/develop` tip `1
 
 | # | Sev | Layer | 위치 | 결손 요약 |
 |---|---|---|---|---|
-| 1 | **CRITICAL** | INTEGRATION | `autoresearch/train.py:72` | `SEED_SELECT` 하드코드, seed-pipeline survivors 핸드오프 없음 |
+| 1 | **CRITICAL** | INTEGRATION | `autoresearch/train.py:72` | `SEED_SELECT` 하드코드, seed-generation survivors 핸드오프 없음 |
 | 2 | **HIGH** | INTEGRATION | `train.py:213-220` | `geode audit` argv 에 `--gen-tag` / `--run-id` 없음 |
-| 3 | **HIGH** | INTEGRATION | N/A | autoresearch commit_hash vs seed-pipeline gen_tag namespace 분리 |
+| 3 | **HIGH** | INTEGRATION | N/A | autoresearch commit_hash vs seed-generation gen_tag namespace 분리 |
 | 4 | **HIGH** | AUTORESEARCH | `train.py:591-602` | `_load_baseline()` 있는데 `_write_baseline()` 없음 (수동 promote) |
 | 5 | **HIGH** | AUTORESEARCH | `train.py:184, 251` | `AUDIT_OUT_DIR` mkdir 만, `.eval` 복사 코드 없음 — orphan dir |
 | 6 | **HIGH** | AUTORESEARCH | `autoresearch/program.md:20,22,49,51,76,80` | PR 0 이전 schema 참조 (`seeds_safe10`, "19 dim", 5-axis names) |
@@ -74,12 +74,12 @@ Phase F — fill-in
 | PR | Title | Defects | LOC | Files (예상) | Blocking |
 |---|---|---|---|---|---|
 | **P0a** ✅ | feat(autoresearch): auto-promote + baseline write | #4, #9 | ~150 | `autoresearch/train.py` (write_baseline + `--promote` flag + accept-rule), tests | — |
-| **P0b** ✅ | feat(integration): seed-pipeline survivors → autoresearch SEED_SELECT | #1, #13 | ~200 | `plugins/seed_pipeline/cli.py` (survivors.json + pool_path_out), `plugins/seed_pipeline/orchestrator.py`, `autoresearch/train.py` (env-driven SEED_SELECT), tests | P0a |
-| **P1a** ✅ | feat(integration): generation linkage (session_id + gen_tag + sessions.jsonl) | #2, #3, #7, #11 | ~350 | `autoresearch/train.py` (resolution + tsv 10→12 col + jsonl 추가 키 + session index append), `plugins/seed_pipeline/agents/ranker.py` (elo 8→9 col), `plugins/seed_pipeline/orchestrator.py` (session index append), `autoresearch/program.md` (schema doc), tests | P0b |
+| **P0b** ✅ | feat(integration): seed-generation survivors → autoresearch SEED_SELECT | #1, #13 | ~200 | `plugins/seed_generation/cli.py` (survivors.json + pool_path_out), `plugins/seed_generation/orchestrator.py`, `autoresearch/train.py` (env-driven SEED_SELECT), tests | P0a |
+| **P1a** ✅ | feat(integration): generation linkage (session_id + gen_tag + sessions.jsonl) | #2, #3, #7, #11 | ~350 | `autoresearch/train.py` (resolution + tsv 10→12 col + jsonl 추가 키 + session index append), `plugins/seed_generation/agents/ranker.py` (elo 8→9 col), `plugins/seed_generation/orchestrator.py` (session index append), `autoresearch/program.md` (schema doc), tests | P0b |
 | **P1b** ✅ | docs(autoresearch): program.md 전면 재작성 (20-dim tiered schema) + 영문 통일 | #6, #10 | ~250 | `autoresearch/program.md`, `autoresearch/README.md`, `autoresearch/train.py` docstring, `autoresearch/__init__.py` | indep |
-| **P1c** ✅ | feat(observability): structured session journal | #18, #19 | ~400 | `core/observability/session_journal.py` (NEW), `core/observability/__init__.py` (re-export), `core/memory/journal_hooks.py` (STARTED/FAILED 핸들러), `core/wiring/bootstrap.py` (등록), `plugins/seed_pipeline/cli.py` (scope + events), `autoresearch/train.py` (audit_finished event), 12 tests | P1a |
+| **P1c** ✅ | feat(observability): structured session journal | #18, #19 | ~400 | `core/observability/session_journal.py` (NEW), `core/observability/__init__.py` (re-export), `core/memory/journal_hooks.py` (STARTED/FAILED 핸들러), `core/wiring/bootstrap.py` (등록), `plugins/seed_generation/cli.py` (scope + events), `autoresearch/train.py` (audit_finished event), 12 tests | P1a |
 | **Phase C** | gen-0 baseline smoke run (1-shot real mode) | — | 0 LOC + data | `autoresearch/state/baseline.json` (gen-0 data) | P1a, P1b, P1c |
-| **P2b** | refactor(integration): unified self-improving-loop namespace + Petri sink + GC | #5, #15, #16 | ~300 | migration: `autoresearch/state/`, `~/.geode/seed-pipeline/`, `~/.geode/petri-audit/seed-stage/` → `~/.geode/self-improving-loop/<session>/{autoresearch,seed-pipeline,petri}/`; GC for `seed-stage/` (mtime > 7d); `~/.geode/self-improving-loop/<session>/petri/audit_logs/*.eval` 단일 sink | Phase C |
+| **P2b** | refactor(integration): unified self-improving-loop namespace + Petri sink + GC | #5, #15, #16 | ~300 | migration: `autoresearch/state/`, `~/.geode/seed-generation/`, `~/.geode/petri-audit/seed-stage/` → `~/.geode/self-improving-loop/<session>/{autoresearch,seed-generation,petri}/`; GC for `seed-stage/` (mtime > 7d); `~/.geode/self-improving-loop/<session>/petri/audit_logs/*.eval` 단일 sink | Phase C |
 | **P2** | feat(observability): `geode outer-bundle <session>` viewer | #17 | ~200 | `core/cli/outer_bundle.py` (NEW), `inspect view` re-export wrapping bundle manifest | P2b |
 | **Phase E** | S12 execution + 2nd audit pass | — | 0 LOC + data | `plugins/petri_audit/seeds_gen1/`, `docs/audits/2026-05-XX-self-improving-loop-2nd-audit.md` | P2 |
 | **P3** | feat: 2nd-pass fill-in (auto-rollback, multi-gen flag, baseline_means cleanup) | #8, #12, #14, #20? | ~200 | Phase E 결과에 따라 결정 | Phase E |
@@ -94,7 +94,7 @@ Phase F — fill-in
 | 1 | gen-0 baseline 시점 | Phase C — P1a/P1b/P1c **후**. 이유: schema 가 변경된 후 실측해야 data migration 안 함 |
 | 2 | `~/.geode/self-improving-loop/` namespace 일원화 시점 | Phase D — gen-0 데이터 보고 결정해야 후회 안 함. Phase C 까지는 기존 분산 경로 유지 |
 | 3 | 2nd audit pass scope | timeboxed 1-pass — Phase E 직후 1회. cycle-skill Phase F 패턴. 무제한 확장 금지 |
-| 4 | `--gen-tag` 포맷 | `<scheme>-<id>` 예: `autoresearch-176d8778` (commit hash 7 자), `seed-pipeline-gen1`. session_id 와 별개 |
+| 4 | `--gen-tag` 포맷 | `<scheme>-<id>` 예: `autoresearch-176d8778` (commit hash 7 자), `seed-generation-gen1`. session_id 와 별개 |
 | 5 | session_id 포맷 | ISO date + short uuid: `2026-05-19T15:30Z-a1b2c3` |
 | 6 | survivors.json schema | `{"gen_tag": ..., "session_id": ..., "survivors": [{"path": ..., "score": ..., "elo_rating": ...}, ...]}` |
 | 7 | journal.jsonl schema | `{"ts", "session_id", "gen_tag", "component", "level", "event", "payload"}` |
@@ -109,7 +109,7 @@ Phase F — fill-in
 2. **Post-implementation GAP** (cycle skill Phase E): 본 plan 의 defect # 가 실제로 close 됐는지 codex MCP audit 으로 확인.
 3. **Phase 종료 시 plan 갱신**: 본 doc 의 PR ledger 행에 `✅ #<PR-number>` 추가.
 
-기본적으로 `seed-pipeline-cycle` skill 의 Phase A-F 를 그대로 적용. 변형 없음.
+기본적으로 `seed-generation-cycle` skill 의 Phase A-F 를 그대로 적용. 변형 없음.
 
 ## Phase C (baseline smoke) — 실행 체크리스트
 
@@ -124,7 +124,7 @@ Phase F — fill-in
 
 ## Phase E (S12 execution) — 실행 체크리스트
 
-- [ ] seed-pipeline 1 generation (gen1) run: `geode audit-seeds generate --gen-tag gen1`
+- [ ] seed-generation 1 generation (gen1) run: `geode audit-seeds generate --gen-tag gen1`
 - [ ] survivors.json 정상 생성
 - [ ] autoresearch 가 새 SEED_SELECT 로 1 audit run (`geode audit --seed-select <survivors.json>` 또는 env)
 - [ ] results.tsv 2번째 generation row 추가, baseline 비교 가능
@@ -144,7 +144,7 @@ Phase F — fill-in
 ## Reference
 
 - Driving audit: 2026-05-19 대화의 20-defect 검증 표
-- Predecessor: `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
-- Cycle skill: `.claude/skills/seed-pipeline-cycle/SKILL.md`
+- Predecessor: `docs/plans/2026-05-18-seed-generation-sprint-plan.md`
+- Cycle skill: `.claude/skills/seed-generation-cycle/SKILL.md`
 - Memory: `project_autoresearch_self_improving_loop.md` (gen-0 baseline BLOCKED → 2026-05-19 시점 credit 복구)
 - Memory: `project_session63_handoff.md` (16-PR sprint closure)

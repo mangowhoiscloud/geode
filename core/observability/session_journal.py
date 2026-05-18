@@ -1,7 +1,7 @@
 """Structured per-session journal — P1c self-improving-loop wiring plan.
 
 The session journal is a JSONL artifact that captures discrete events
-from one self-improving-loop run (autoresearch or seed-pipeline). It complements
+from one self-improving-loop run (autoresearch or seed-generation). It complements
 the run-level ``~/.geode/self-improving-loop/sessions.jsonl`` index (P1a) which
 holds exactly one row per run: this module captures the *event stream*
 within that run.
@@ -65,7 +65,7 @@ class SessionJournal:
     """Per-run JSONL event log.
 
     Constructed once at the start of an self-improving-loop run (autoresearch or
-    seed-pipeline) and passed through to callers that emit structured
+    seed-generation) and passed through to callers that emit structured
     events. Use :meth:`append` for individual events;
     :func:`session_journal_scope` for ContextVar-bound activation so
     hook handlers can discover the journal automatically.

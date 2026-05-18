@@ -2,7 +2,7 @@
 
 Reads ``~/.geode/config.toml`` ``[self_improving_loop.*]`` sections into a typed
 pydantic v2 model. The loader is the SoT consumed by autoresearch /
-seed-pipeline / petri_audit / geode_main wherever self-improving-loop runtime
+seed-generation / petri_audit / geode_main wherever self-improving-loop runtime
 decisions are made.
 
 Why a separate module from :mod:`core.config`
@@ -14,7 +14,7 @@ is consumed by hundreds of call sites. Adding self-improving-loop fields there
 would inflate every cold-start invocation that just wants a single
 constant.
 
-Outer-loop config is opt-in — only autoresearch / seed-pipeline /
+Outer-loop config is opt-in — only autoresearch / seed-generation /
 petri callers load it, and the cost is paid lazily inside their
 ``run`` entrypoints. The two configs share the same file
 (``~/.geode/config.toml``) but live in disjoint sections so they
@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "AutoresearchConfig",
     "PetriRoleConfig",
-    "SeedPipelineConfig",
+    "SeedGenerationConfig",
     "SelfImprovingLoopBindings",
     "SelfImprovingLoopConfig",
     "Source",
@@ -99,10 +99,10 @@ class AutoresearchConfig(BaseModel):
     fallback_to_payg: bool | None = None
 
 
-class SeedPipelineConfig(BaseModel):
-    """seed-pipeline runtime knobs.
+class SeedGenerationConfig(BaseModel):
+    """seed-generation runtime knobs.
 
-    Per-role bindings live under ``[self_improving_loop.seed_pipeline.role.<X>]``
+    Per-role bindings live under ``[self_improving_loop.seed_generation.role.<X>]``
     and are loaded into :attr:`roles`.
     """
 
@@ -142,7 +142,7 @@ class SelfImprovingLoopConfig(BaseModel):
     petri: dict[str, PetriRoleConfig] = Field(default_factory=dict)
     """Map of role name → PetriRoleConfig. Expected keys: auditor /
     target / judge."""
-    seed_pipeline: SeedPipelineConfig = Field(default_factory=SeedPipelineConfig)
+    seed_generation: SeedGenerationConfig = Field(default_factory=SeedGenerationConfig)
 
     @model_validator(mode="after")
     def _abort_above_warn(self) -> SelfImprovingLoopConfig:

@@ -12,7 +12,7 @@
 3. **Hypothesis 표현력**: agent 가 "logic 강화" 같은 굵은 단위로만 사고. dim-level ("broken_tool_use 만 타겟") 정밀 hypothesis 표현 불가.
 4. **AlphaEval parity 의 한계**: paper 와 같은 어휘 (Predictive/Robustness/Logic/Diversity/Stability) 매력적이나, GEODE 의 자체 hypothesis 진화에 제약.
 
-동시에 **co-scientist seed pipeline (ADR-001) 이 seed pool N 을 10→30+ 확장**. single-dim stderr 가 √N 으로 감소하여 bucket 평균 trick 의 필요성 소거. **N 확장 + axis decompression 은 같은 방향의 두 결정**.
+동시에 **co-scientist seed generation (ADR-001) 이 seed pool N 을 10→30+ 확장**. single-dim stderr 가 √N 으로 감소하여 bucket 평균 trick 의 필요성 소거. **N 확장 + axis decompression 은 같은 방향의 두 결정**.
 
 추가로 — Petri (`core/audit/dim_extractor.py`) 가 이미 raw `{dim_means, dim_stderr}` emit. autoresearch 의 `FitnessBaseline` dataclass + `baseline_from_summary` 가 Petri 의 raw dict 위에 한 겹 더 wrapping. **역할 중복**.
 
@@ -109,7 +109,7 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 ## Decision Drivers
 
-- **N 확장 + axis decompression 의 동시성**: ADR-001 의 seed pipeline 이 N 늘리므로 single-dim stderr 신뢰도 회복 — bucket 평균 trick 불필요.
+- **N 확장 + axis decompression 의 동시성**: ADR-001 의 seed generation 이 N 늘리므로 single-dim stderr 신뢰도 회복 — bucket 평균 trick 불필요.
 - **Hypothesis 표현력**: dim-level 정밀 hypothesis 가 5-axis bucket 표현보다 풍부. agent 가 "broken_tool_use Δ-0.3" 같은 구체적 회귀 식별 가능.
 - **역할 중복 제거**: Petri 가 raw 신호 owner. autoresearch 의 dataclass wrapper 는 두 번째 표현.
 - **AlphaEval parity 포기 합리화**: paper 의 5-axis 어휘 매력보다 GEODE 자체 hypothesis 진화 자유가 우선.
@@ -160,7 +160,7 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 ## References
 
-- ADR-001 (Seed Pipeline) — seed N 확장 정당화
+- ADR-001 (Seed Generation) — seed N 확장 정당화
 - `autoresearch/train.py:240-540` — 변경 대상 영역
 - `autoresearch/program.md` — self-improving-loop SOT
 - `core/audit/dim_extractor.py` — raw 신호 emit (변경 없음)

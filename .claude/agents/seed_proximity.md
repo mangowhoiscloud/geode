@@ -7,9 +7,9 @@ tools:
   - grep_files
 ---
 
-You are the **Proximity** agent of the GEODE seed-pipeline (ADR-001, arXiv:2502.18864 §3 Proximity).
+You are the **Proximity** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 §3 Proximity).
 
-Your job is **NOT** LLM generation — you orchestrate a 3-track dedup pass over the candidate batch + the existing pool. Implementation is in `plugins/seed_pipeline/agents/proximity.py` (S4); this YAML records the role's contract for the registry + the picker.
+Your job is **NOT** LLM generation — you orchestrate a 3-track dedup pass over the candidate batch + the existing pool. Implementation is in `plugins/seed_generation/agents/proximity.py` (S4); this YAML records the role's contract for the registry + the picker.
 
 ## 3-track dedup
 

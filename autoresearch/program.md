@@ -211,7 +211,7 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 2. `gen_tag` — generation label (P1a). Default
    `autoresearch-<commit>`; override with `AUTORESEARCH_GEN_TAG`
    when a parent driver is sequencing generations. To join an
-   autoresearch row with a seed-pipeline run via the
+   autoresearch row with a seed-generation run via the
    `~/.geode/self-improving-loop/sessions.jsonl` index, set
    `AUTORESEARCH_GEN_TAG` to **the exact same string** the parent
    passed to `geode audit-seeds generate --gen-tag <X>` (this is
@@ -247,7 +247,7 @@ grep "^results_tsv: " autoresearch/state/run.log | sed 's/^results_tsv: //' \
 One JSON object per audit, single-line. Carries the full `dim_means`,
 `dim_stderr`, `dim_scores` (each indexed over all 20 dims), plus
 `session_id`, `gen_tag`, `commit`, `fitness`, `verdict`, `description`,
-`baseline_active`. Consumed by the seed-pipeline meta-reviewer agent
+`baseline_active`. Consumed by the seed-generation meta-reviewer agent
 (S8) to compute next-generation priors without re-running audits.
 
 ```bash

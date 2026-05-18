@@ -72,11 +72,11 @@ source = "openai-codex"
 model  = "claude-opus-4-7"
 source = "claude-cli"
 
-[self_improving_loop.seed_pipeline]
+[self_improving_loop.seed_generation]
 candidates_default = 15
 default_gen_tag    = "gen1"
 # 7 role × source binding 도 명시 가능
-# [self_improving_loop.seed_pipeline.roles.generator]
+# [self_improving_loop.seed_generation.roles.generator]
 # model = "gpt-5.5"
 # source = "openai-codex"
 ```
@@ -89,7 +89,7 @@ default_gen_tag    = "gen1"
 폐기:
 - `~/.geode/petri.toml` (`GEODE_PETRI_TOML`) — `[self_improving_loop.petri.<role>]` 로 흡수
 - `autoresearch/train.py` 의 module 상수 — config loader 의 default fallback 으로만 유지 (lazy)
-- `plugins/seed_pipeline/auth_coverage.py` 의 `TEST_SETUP_PROFILE` — `[self_improving_loop.test_profile]` section 또는 test fixture 로 이전
+- `plugins/seed_generation/auth_coverage.py` 의 `TEST_SETUP_PROFILE` — `[self_improving_loop.test_profile]` section 또는 test fixture 로 이전
 
 ## PR ledger (5 PR + 1 backfill)
 
@@ -103,9 +103,9 @@ Phase β — subscription guard (urgent: 돈 새는 위험 직접 차단)
 Phase γ — FE warning UX
   PR-γ1 — bottom_toolbar 3-tier banner + abort dialog   (~200 LOC)
                                   ↓
-Phase δ — caller migration (autoresearch/train.py + seed-pipeline)
+Phase δ — caller migration (autoresearch/train.py + seed-generation)
   PR-δ1 — autoresearch loader integration                (~150 LOC)
-  PR-δ2 — seed-pipeline + petri user_overrides 흡수    (~200 LOC)
+  PR-δ2 — seed-generation + petri user_overrides 흡수    (~200 LOC)
                                   ↓
 Phase ε — backfill (필요 시)
   PR-ε1 — 잔존 결손 / 2nd audit pass / docs sync       (~100 LOC)
@@ -113,7 +113,7 @@ Phase ε — backfill (필요 시)
 Phase ζ — checkpoint + resume on credential rollout
   (ADR: docs/architecture/self-improving-loop-resume-decision.md)
   PR-ζ1 — SessionCheckpoint schema 확장 (self-improving-loop 필드)  (~200 LOC)
-  PR-ζ2 — seed-pipeline _load_state() + `audit-seeds resume`  (~300 LOC)
+  PR-ζ2 — seed-generation _load_state() + `audit-seeds resume`  (~300 LOC)
   PR-ζ3 — autoresearch _load_pending_audit() + --resume flag (~200 LOC)
   PR-ζ4 — idempotency-key + 로컬 response cache (~/.geode/self-improving-loop/<s>/idempotency.db)  (~350 LOC)
   PR-ζ5 — credential-rollover detection + journal event (~150 LOC)
@@ -130,14 +130,14 @@ Phase ζ — checkpoint + resume on credential rollout
 | **PR-β1** ✅ | feat(petri): subscription-only guard + abort path | 사용자 directive | ~170 | `plugins/petri_audit/credential_source.py` (PAYG_SOURCE 상수 + fallback_to_payg kwarg + subscription_only error flag + actionable msg), 7 new tests | PR-α1 |
 | **PR-γ1** ✅ | feat(cli): 3-tier quota banner + abort dialog | UX | ~520 | `core/cli/quota_banner.py` (NEW: QuotaState + SubscriptionQuotaBanner + QuotaBannerRefresher + AbortDialog + singleton accessor + render_abort_message), `core/cli/prompt_session.py` integration (bottom_toolbar bind), 23 tests | PR-α1 |
 | **PR-δ1** ✅ | refactor(autoresearch): consume self_improving_loop config | migration | ~180 | `autoresearch/train.py` (`_get_autoresearch_config` 헬퍼 + 4 call sites 마이그), 5 new tests | PR-α1 |
-| **PR-δ2** ✅ | refactor(seed-pipeline+petri): consume self_improving_loop config | migration | ~290 | `plugins/seed_pipeline/cli.py` (typer + slash sentinel + `_get_seed_pipeline_config`), `plugins/petri_audit/user_overrides.py` (self_improving_loop precedence + `_read_role_from_self_improving_loop` + `migration_plan_from_petri_toml`), 9 new tests + GEODE_CONFIG_TOML isolation in test_petri_cli / test_registry / test_user_overrides | PR-α1 + PR-δ1 |
+| **PR-δ2** ✅ | refactor(seed-generation+petri): consume self_improving_loop config | migration | ~290 | `plugins/seed_generation/cli.py` (typer + slash sentinel + `_get_seed_generation_config`), `plugins/petri_audit/user_overrides.py` (self_improving_loop precedence + `_read_role_from_self_improving_loop` + `migration_plan_from_petri_toml`), 9 new tests + GEODE_CONFIG_TOML isolation in test_petri_cli / test_registry / test_user_overrides | PR-α1 + PR-δ1 |
 | **PR-ε1** | docs + backfill | post-merge audit | ~100 | sync `program.md` / `README` / CLAUDE.md, sample config.toml fixture | Phase β+γ+δ |
 | **PR-ζ1** | feat(checkpoint): SessionCheckpoint self-improving-loop schema 확장 | ADR settled | ~200 | `core/runtime_state/session_checkpoint.py` 확장 (active_sources / completed_units / next_unit / fallback_to_payg field), tests | PR-α1 + PR-β1 |
-| **PR-ζ2** | feat(seed-pipeline): `_load_state` + `audit-seeds resume <run_id>` | ADR settled | ~300 | `plugins/seed_pipeline/orchestrator.py` (_load_state companion to _persist_state), `plugins/seed_pipeline/cli.py` (resume sub-app), idempotency-key check at phase boundary, tests | PR-ζ1 + PR-δ2 |
+| **PR-ζ2** | feat(seed-generation): `_load_state` + `audit-seeds resume <run_id>` | ADR settled | ~300 | `plugins/seed_generation/orchestrator.py` (_load_state companion to _persist_state), `plugins/seed_generation/cli.py` (resume sub-app), idempotency-key check at phase boundary, tests | PR-ζ1 + PR-δ2 |
 | **PR-ζ3** | feat(autoresearch): `_load_pending_audit` + `--resume <session>` | ADR settled | ~200 | `autoresearch/train.py` (resume entry point + active-source check), tests | PR-ζ1 + PR-δ1 |
 | **PR-ζ4** | feat(checkpoint): idempotency-key + local response cache | ADR settled | ~350 | `core/runtime_state/idempotency.py` (NEW, SQLite-backed cache at `~/.geode/self-improving-loop/<s>/idempotency.db`), LLM call wrapper checks cache pre-call, writes post-call, tests | PR-ζ1 |
 | **PR-ζ5** | feat(observability): credential-rollover detection + journal event | ADR settled | ~150 | resume path comparison: checkpoint.active_sources vs current resolved sources → emit `credential_rolled_over` event to journal (P1c), tests | PR-ζ1 + PR-γ1 |
-| **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into self-improving-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_self_improving_loop_binding(family) → (source, profile)`, autoresearch + seed-pipeline LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
+| **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into self-improving-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_self_improving_loop_binding(family) → (source, profile)`, autoresearch + seed-generation LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
 | **PR-ζ5.6** | feat(cli): 2-axis account picker (provider ←→ × profile ↑↓) | 2026-05-19 picker UX directive | ~250 | `core/cli/account_picker.py` (NEW, mirrors `core/cli/effort_picker.py` 2-axis pattern), `/login picker` slash, banner abort-dialog auto-trigger (PR-γ1 wire), agent loop NL phrase recogniser, tests | PR-ζ5.5 + PR-γ1 |
 | **PR-ζ6** | docs + runbook | wrap-up | ~150 | `docs/audits/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual w/ picker screenshots), CHANGELOG entries, plan doc finalisation | Phase ζ |
 
@@ -153,7 +153,7 @@ Phase ζ — checkpoint + resume on credential rollout
 
 Reads ``~/.geode/config.toml`` [self_improving_loop.*] sections into a typed
 pydantic v2 model. The loader is the SoT consumed by autoresearch,
-seed-pipeline, petri_audit, and geode_main wherever self-improving-loop
+seed-generation, petri_audit, and geode_main wherever self-improving-loop
 runtime decisions are made.
 """
 
@@ -187,7 +187,7 @@ class SelfImprovingLoopConfig(BaseModel):
     abort_threshold: float = Field(0.9, ge=0.0, le=1.0)
     autoresearch: AutoresearchConfig = AutoresearchConfig()
     petri: dict[str, SelfImprovingLoopBindings] = {}  # role → bindings
-    seed_pipeline: dict[str, ...] = {}
+    seed_generation: dict[str, ...] = {}
 
 def load_self_improving_loop_config(path: Path | None = None) -> SelfImprovingLoopConfig:
     """Load + validate ``~/.geode/config.toml`` [self_improving_loop.*] section."""
@@ -276,8 +276,8 @@ PR-δ1 (autoresearch/train.py):
 - `_build_audit_command()` 가 config 통해 값 조회
 - 기존 module 상수는 deprecation comment + 1 release 후 제거
 
-PR-δ2 (seed-pipeline + petri user_overrides):
-- `plugins/seed_pipeline/picker.py` 의 default bindings 가 `[self_improving_loop.seed_pipeline.role.<X>]` 로 lookup
+PR-δ2 (seed-generation + petri user_overrides):
+- `plugins/seed_generation/picker.py` 의 default bindings 가 `[self_improving_loop.seed_generation.role.<X>]` 로 lookup
 - `plugins/petri_audit/user_overrides.py` 의 `~/.geode/petri.toml` reader → `[self_improving_loop.petri.<role>]` 로 redirect
 - migration helper: `geode config migrate-petri-toml` 1회성 명령 (기존 petri.toml → config.toml 이전)
 - 이전 후 `~/.geode/petri.toml` 은 deprecated warning + N+1 release 후 제거
@@ -290,7 +290,7 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 2. **Post-implementation GAP** (cycle skill Phase E): 본 plan 의 scope close 됐는지 codex MCP audit.
 3. **Phase 종료 시 plan 갱신**: 본 doc 의 PR ledger 행에 `✅ #<PR-number>` 추가.
 
-기본적으로 `seed-pipeline-cycle` skill 의 Phase A-F 그대로 적용.
+기본적으로 `seed-generation-cycle` skill 의 Phase A-F 그대로 적용.
 
 ## Risk register
 
@@ -304,7 +304,7 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 | Phase ζ resume 시 active_source 가 변경됐으나 idempotency-key 가 매칭되어 잘못된 cached response 재사용 | idempotency-key 가 `(run_id, unit_id, agent_role)` 만으로 구성 — source 가 바뀌어도 의미상 같은 unit. 단 critical 변경 (e.g. judge=opus → judge=sonnet) 은 caller 가 새 key 발급 책임 (config.toml hash 를 key 에 prefix) |
 | Phase ζ 의 SQLite idempotency.db 가 disk full 로 write 실패 | atomic_write_io 패턴 채택, write 실패 시 in-memory only fallback + journal 에 `idempotency_disabled` event |
 | co-scientist 원본/reference impl 모두 production-ready resume 미제공 → 우리가 first-class implementer | ADR 의 reference table 에 명시. LangGraph + Inspect_ai + Stripe 의 검증된 패턴 합성, novel design 아님 |
-| ProfileRotator wiring (PR-ζ5.5) 에서 autoresearch + seed-pipeline 의 LLM call 사이트가 수십 개라 migration 누락 위험 | Codex MCP audit 으로 `grep -r "agentic_call\|llm.*call"` 후 모든 사이트가 profile.name 전달하는지 검증. 누락된 site 는 fallback 으로 기본 profile resolver 의 결과 사용 (행동 변경 없음) |
+| ProfileRotator wiring (PR-ζ5.5) 에서 autoresearch + seed-generation 의 LLM call 사이트가 수십 개라 migration 누락 위험 | Codex MCP audit 으로 `grep -r "agentic_call\|llm.*call"` 후 모든 사이트가 profile.name 전달하는지 검증. 누락된 site 는 fallback 으로 기본 profile resolver 의 결과 사용 (행동 변경 없음) |
 | 2-axis picker UX (PR-ζ5.6) 가 non-tty (CI / pipe) 환경에서 깨짐 | `pick_model_and_effort` 와 동일 패턴 — `sys.stdin.isatty()` 체크 후 fallback 으로 numbered list 출력 + arg-by-name 지원 (e.g. `/login picker --provider anthropic --profile work`) |
 | paperclip/crumb subprocess delegate (`claude -p`) 흡수 여부 | 본 sprint scope 외 — `docs/audits/2026-05-18-i2-paperclip-review.md` 가 별도 "Deferred — PAYG path 충분" 결정. Future ADR 으로 분리 |
 

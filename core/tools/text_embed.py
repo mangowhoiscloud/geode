@@ -1,7 +1,7 @@
 """text_embed — OpenAI text-embedding-3-small Python helper.
 
 S4 deliverable per ADR-003. Provides a synchronous + async API for the
-seed-pipeline Proximity agent (3-track dedup) to compute vector
+seed-generation Proximity agent (3-track dedup) to compute vector
 embeddings for candidate-seed bodies and pool members.
 
 NOT exposed as an LLM-dispatch tool (no entry in
@@ -14,7 +14,7 @@ Provider — OpenAI ``text-embedding-3-small`` (1536-dim, $0.02 per 1M
 tokens). The ADR-003 settled decision: single-provider, PAYG only
 (ChatGPT Plus OAuth does not expose embeddings API). Per ADR-001's
 operational defaults the embedding call is a flat cost — embedded into
-the seed-pipeline cost rollup on the caller's ``SeedAgentResult``.
+the seed-generation cost rollup on the caller's ``SeedAgentResult``.
 
 P-checklist application (cycle-skill SKILL.md):
 
@@ -68,7 +68,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two equal-dim vectors.
 
     Returns 0.0 when either vector is the zero vector (avoids
-    ZeroDivisionError; the seed-pipeline interprets 0.0 as "no
+    ZeroDivisionError; the seed-generation interprets 0.0 as "no
     similarity signal"). Raises ``ValueError`` on dim mismatch.
 
     Pure function — no I/O, suitable for use inside the Proximity

@@ -49,6 +49,27 @@ functional change.
 
 ### Changed
 
+- **Rename `seed_pipeline` → `seed_generation` across the runtime.** The
+  prior name "pipeline" was a generic implementation-detail noun that didn't
+  reveal the module's purpose — generating seed candidates through an 8-stage
+  process (S0 manifest → S1 generator → S2 critic → S3 evolver → S4-S8
+  ranker/pilot/proximity/meta_reviewer/tournament). The explicit
+  domain-verb+noun name `seed_generation` makes the intent clear from the
+  folder path alone, same explicit-naming principle as the outer_loop →
+  self_improving_loop rename in this release. Affects 72 files: the Python
+  package (`plugins/seed_pipeline/` → `plugins/seed_generation/`), the plugin
+  manifest (`seed_pipeline.plugin.toml` → `seed_generation.plugin.toml`),
+  config classes (`SeedPipelineConfig` → `SeedGenerationConfig`,
+  `SeedPipelineManifest` → `SeedGenerationManifest`), the TOML section
+  `[self_improving_loop.seed_pipeline]` → `[self_improving_loop.seed_generation]`,
+  the skill directory (`.geode/skills/seed-pipeline-cycle/` →
+  `.geode/skills/seed-generation-cycle/`), and the test directory. The
+  user-facing CLI command `audit-seeds` is left unchanged because it is
+  already explicit. Historical records (CHANGELOG, 2026-05-15 audits, 2026-05-18
+  sprint plan rename to seed-generation-sprint-plan.md) follow the same
+  verbatim-preservation rule as the outer_loop rename. Quality gates pass:
+  ruff + ruff format + mypy clean (352 source files), 844 + 26 skipped
+  tests pass on rename-affected files, dry-run smoke writes correctly.
 - **Rename `outer_loop` → `self_improving_loop` across the runtime.** The
   identifier `outer_loop` only described position (an outer loop around
   petri+autoresearch+seed) without describing intent. The work this loop

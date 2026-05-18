@@ -15,7 +15,7 @@ import pytest
 from core.config.self_improving_loop import (
     AutoresearchConfig,
     PetriRoleConfig,
-    SeedPipelineConfig,
+    SeedGenerationConfig,
     SelfImprovingLoopBindings,
     SelfImprovingLoopConfig,
     load_self_improving_loop_config,
@@ -34,7 +34,7 @@ def test_default_config_has_safe_defaults() -> None:
     assert cfg.warn_threshold == pytest.approx(0.5)
     assert cfg.abort_threshold == pytest.approx(0.9)
     assert isinstance(cfg.autoresearch, AutoresearchConfig)
-    assert isinstance(cfg.seed_pipeline, SeedPipelineConfig)
+    assert isinstance(cfg.seed_generation, SeedGenerationConfig)
     assert cfg.petri == {}
 
 
@@ -133,25 +133,25 @@ source = "claude-cli"
     assert cfg.petri["judge"].model == "claude-opus-4-7"
 
 
-def test_load_reads_seed_pipeline_subsection(tmp_path: Path) -> None:
-    """[self_improving_loop.seed_pipeline] + nested role bindings deserialise."""
+def test_load_reads_seed_generation_subsection(tmp_path: Path) -> None:
+    """[self_improving_loop.seed_generation] + nested role bindings deserialise."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[self_improving_loop.seed_pipeline]
+[self_improving_loop.seed_generation]
 candidates_default = 20
 default_gen_tag = "gen3"
 
-[self_improving_loop.seed_pipeline.roles.generator]
+[self_improving_loop.seed_generation.roles.generator]
 model = "gpt-5.5"
 source = "openai-codex"
 """,
     )
     cfg = load_self_improving_loop_config(path)
-    assert cfg.seed_pipeline.candidates_default == 20
-    assert cfg.seed_pipeline.default_gen_tag == "gen3"
-    assert cfg.seed_pipeline.roles["generator"].model == "gpt-5.5"
+    assert cfg.seed_generation.candidates_default == 20
+    assert cfg.seed_generation.default_gen_tag == "gen3"
+    assert cfg.seed_generation.roles["generator"].model == "gpt-5.5"
 
 
 def test_extra_forbid_rejects_typo(tmp_path: Path) -> None:

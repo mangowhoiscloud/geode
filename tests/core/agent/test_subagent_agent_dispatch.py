@@ -24,7 +24,7 @@ def seed_generator_registry() -> AgentRegistry:
         AgentDefinition(
             name="seed_generator",
             role="Petri seed candidate generator",
-            system_prompt="You are the Generation agent of the seed-pipeline.",
+            system_prompt="You are the Generation agent of the seed-generation.",
             tools=["read_document", "write_file", "grep_files"],
             model="claude-sonnet-4-6",
         )

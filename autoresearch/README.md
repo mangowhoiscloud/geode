@@ -99,7 +99,7 @@ autoresearch/
 ## Cross-loop handoff (P0b)
 
 `AUTORESEARCH_SEED_SELECT` env var swaps in a directory of seed `.md`
-files at audit time. The companion seed-pipeline writes its winning
+files at audit time. The companion seed-generation writes its winning
 candidates to `<run_dir>/survivors/` (a directory of symlinks) and
 stamps `state.pool_path_out` to that path; a parent driver can pipe
 that into `AUTORESEARCH_SEED_SELECT` so the next audit consumes the

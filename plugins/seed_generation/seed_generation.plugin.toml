@@ -1,0 +1,123 @@
+# Seed pipeline plugin manifest — declarative 7-role + 3-judge-panel binding.
+#
+# Per ADR-003 the source / adapter layers (per-family credential resolution +
+# concrete adapter modules) are REUSED from `plugins/petri_audit/petri.plugin.toml`.
+# This manifest defines only:
+#
+#   1. [seed_generation]              — enabled roles
+#   2. [seed_generation.role.<name>]  — per-role default + allowed model set
+#   3. [seed_generation.judge_panel]  — Ranker phase's 3-voter binding +
+#                                     required_diversity_families gate
+#
+# Loader: plugins.seed_generation.manifest.load_manifest() →
+#         SeedGenerationManifest (pydantic). Validates against the Petri source
+#         table so voter sources are always one of petri.source.<family>.allowed.
+#
+# 7-role topology — ADR-001 §Topology (paper's 6 agents + Pilot for GEODE):
+#
+#   generator → proximity → critic → pilot → ranker → evolver → meta_reviewer
+#
+# Defaults reflect ADR-003's settled-decision table (Plan §13). Override
+# via ~/.geode/seed-generation.toml is wired in S5.5 (picker).
+
+[seed_generation]
+enabled_roles = [
+    "generator",
+    "critic",
+    "proximity",
+    "pilot",
+    "ranker",
+    "evolver",
+    "meta_reviewer",
+]
+
+# ── Roles ────────────────────────────────────────────────────────────────────
+
+[seed_generation.role.generator]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.5",
+]
+role_contract = ".claude/agents/seed_generator.md"
+
+[seed_generation.role.critic]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.5",
+]
+role_contract = ".claude/agents/seed_critic.md"
+
+[seed_generation.role.proximity]
+# Embedding-based — not LLM completion. ``kind="embedding"`` is the
+# explicit dispatch tag so the S4 wiring routes through the
+# ``text_embed`` tool, NOT Petri's [petri.adapter.*] table. Without
+# this discriminator downstream code would have to guess the role's
+# kind from the model-name string.
+default_model = "text-embedding-3-small"
+allowed_models = ["text-embedding-3-small"]
+role_contract = ".claude/agents/seed_proximity.md"
+kind = "embedding"
+
+[seed_generation.role.pilot]
+default_model = "claude-haiku-4-5"
+allowed_models = [
+    "claude-haiku-4-5",
+    "gpt-5.4-mini",
+]
+role_contract = ".claude/agents/seed_pilot.md"
+
+[seed_generation.role.ranker]
+# 3-judge panel orchestrator. Its own default_model is a placeholder —
+# the panel's voter binding (below) drives actual LLM calls.
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+]
+role_contract = ".claude/agents/seed_ranker.md"
+
+[seed_generation.role.evolver]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+]
+role_contract = ".claude/agents/seed_evolver.md"
+
+[seed_generation.role.meta_reviewer]
+default_model = "claude-opus-4-7"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+]
+role_contract = ".claude/agents/seed_meta_reviewer.md"
+
+# ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
+#
+# Per ADR-003: 3-voter panel with provider diversity gate. Each voter's
+# (family, source) pair must match plugins/petri_audit/petri.plugin.toml's
+# [petri.source.<family>].allowed list so the existing adapter binding
+# applies. The manifest loader validates this cross-manifest constraint
+# at load time, NOT lazily.
+
+[seed_generation.judge_panel]
+required_diversity_families = 2
+
+[[seed_generation.judge_panel.voters]]
+model = "claude-sonnet-4-6"
+family = "anthropic"
+source = "claude-cli"
+
+[[seed_generation.judge_panel.voters]]
+model = "gpt-5.5"
+family = "openai"
+source = "openai-codex"
+
+[[seed_generation.judge_panel.voters]]
+model = "claude-haiku-4-5"
+family = "anthropic"
+source = "api_key"

@@ -1,6 +1,6 @@
-# 2026-05-18 — seed-pipeline gen1 run-book
+# 2026-05-18 — seed-generation gen1 run-book
 
-> First scheduled execution of the seed-pipeline orchestrator end-to-end.
+> First scheduled execution of the seed-generation orchestrator end-to-end.
 > Treated here as a run-book (operator-followable procedure) rather than
 > a finished artifact, because two prerequisites remain open. See the
 > "Prerequisites" section below.
@@ -8,7 +8,7 @@
 ## Status
 
 **Run-book authored, execution deferred.** S12 (sprint plan
-`docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`) ships this
+`docs/plans/2026-05-18-seed-generation-sprint-plan.md`) ships this
 document + the empty `plugins/petri_audit/seeds_gen1/` directory; the
 actual run waits on the two prerequisites.
 
@@ -29,8 +29,8 @@ actual run waits on the two prerequisites.
 
 ```bash
 uv run python -c "
-from plugins.seed_pipeline.picker import pick_bindings
-from plugins.seed_pipeline.cost_preview import estimate_cost, format_cost_summary
+from plugins.seed_generation.picker import pick_bindings
+from plugins.seed_generation.cost_preview import estimate_cost, format_cost_summary
 pr = pick_bindings(auto_probe=True)
 print(format_cost_summary(estimate_cost(pr, candidate_count=15)))
 "
@@ -45,8 +45,8 @@ notice prints once.
 
 ```bash
 uv run python -c "
-from plugins.seed_pipeline.picker import pick_bindings
-from plugins.seed_pipeline.pre_flight import run_pre_flight
+from plugins.seed_generation.picker import pick_bindings
+from plugins.seed_generation.pre_flight import run_pre_flight
 report = run_pre_flight(pick_bindings(), soft_usd=2.0, hard_usd=10.0)
 for issue in report.issues:
     print(issue.severity, issue.code, issue.message, '|', issue.fix)
@@ -73,26 +73,26 @@ is exercised; the operator should READ the preview before confirming.
 
 After the prompt, the orchestrator walks all 7 phases (Generator →
 Proximity → Critic → Pilot → Ranker → Evolver → MetaReviewer) and
-writes the run state to `~/.geode/seed-pipeline/gen1-broken_tool_use/`.
+writes the run state to `~/.geode/seed-generation/gen1-broken_tool_use/`.
 
 ### 4. Inspect the run artifacts
 
 | Artifact | Location |
 |----------|----------|
-| state.json (S8 offload) | `~/.geode/seed-pipeline/gen1-<dim>/state.json` |
-| elo_log.tsv (S6) | `~/.geode/seed-pipeline/gen1-<dim>/elo_log.tsv` |
-| candidates_*/ | `~/.geode/seed-pipeline/gen1-<dim>/candidates/`, `candidates_evolved/` |
+| state.json (S8 offload) | `~/.geode/seed-generation/gen1-<dim>/state.json` |
+| elo_log.tsv (S6) | `~/.geode/seed-generation/gen1-<dim>/elo_log.tsv` |
+| candidates_*/ | `~/.geode/seed-generation/gen1-<dim>/candidates/`, `candidates_evolved/` |
 | meta_review | state.json `meta_review` key |
 
 ### 5. Promote surviving candidates
 
 ```bash
 # Inspect state.json → meta_review.session_summary
-jq .meta_review ~/.geode/seed-pipeline/gen1-broken_tool_use/state.json
+jq .meta_review ~/.geode/seed-generation/gen1-broken_tool_use/state.json
 
 # Promote the top-K survivors into plugins/petri_audit/seeds_gen1/
 for survivor in $(jq -r .survivors[] state.json); do
-  cp ~/.geode/seed-pipeline/gen1-broken_tool_use/candidates/${survivor}.md \
+  cp ~/.geode/seed-generation/gen1-broken_tool_use/candidates/${survivor}.md \
      plugins/petri_audit/seeds_gen1/
 done
 ```
@@ -117,7 +117,7 @@ EOF
 
 ```bash
 git add plugins/petri_audit/seeds_gen1/
-git commit -m "data: seed-pipeline gen1 — N survivors for <target_dim>"
+git commit -m "data: seed-generation gen1 — N survivors for <target_dim>"
 git tag autoresearch/2026-05-XX-seeds-gen1
 ```
 
@@ -129,7 +129,7 @@ the reproducible marker for "this audit run defined the baseline."
 - `plugins/petri_audit/seeds_gen1/` contains 5+ promoted survivors.
 - `autoresearch/state/baseline.json` exists with the new schema
   (`{"dim_means": ..., "dim_stderr": ...}`).
-- `~/.geode/seed-pipeline/gen1-<dim>/state.json` archived alongside
+- `~/.geode/seed-generation/gen1-<dim>/state.json` archived alongside
   this run-book at `docs/audits/seed-generation-runs/2026-05-18/`.
 - An updated `session_summary` paragraph (from the MetaReviewer
   output) is pasted into a follow-up session handoff note.

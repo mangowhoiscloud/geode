@@ -1,7 +1,7 @@
 # ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
 
 > **Status**: Accepted (2026-05-19)
-> **Scope**: GEODE self-improving-loop (autoresearch + seed-pipeline). When a subscription credential (Claude Code OAuth, ChatGPT Plus OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
+> **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). When a subscription credential (Claude Code OAuth, ChatGPT Plus OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
 
 ## Context
 
@@ -40,7 +40,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 | Autoresearch | `autoresearch/state/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
 | Primitive | `core/utils/atomic_io.py` | tmp + `os.replace` + `fsync` | — | ✅ |
 
-**Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-pipeline + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode audit-seeds resume` will re-hydrate"* but the load path is not implemented.
+**Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-generation + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode audit-seeds resume` will re-hydrate"* but the load path is not implemented.
 
 ## Decision
 
@@ -59,7 +59,7 @@ Per autoresearch's `git commit per generation` + co-scientist's "Supervisor writ
 | Driver | Unit boundary | Checkpoint write trigger |
 |---|---|---|
 | autoresearch | generation (= one `train.py` invocation = one audit subprocess) | after `_should_promote()` decision, before `_write_baseline()` |
-| seed-pipeline | phase (Generation → Proximity → Critic → Pilot → Ranker → Evolver → MetaReviewer) | after `_run_phase()` returns, before next `_run_phase()` |
+| seed-generation | phase (Generation → Proximity → Critic → Pilot → Ranker → Evolver → MetaReviewer) | after `_run_phase()` returns, before next `_run_phase()` |
 | Petri inner-loop | sample (one seed × auditor × judge transcript) | already handled by `inspect_ai` `.eval` log — GEODE self-improving-loop just records `eval` path |
 
 Inside a unit (e.g., mid-LLM-call), we accept "lose this unit" as the cost ceiling. Checkpointing inside an LLM call is rejected (storage churn vs. UX value).
@@ -70,9 +70,9 @@ Inside a unit (e.g., mid-LLM-call), we accept "lose this unit" as the cost ceili
 <run_id>::<driver>::<unit_kind>::<unit_id>::<agent_role>
 
 Examples:
-  2026-05-19T1530Z-a1b2c3 :: seed-pipeline :: phase     :: pilot      :: pilot-llm
-  2026-05-19T1530Z-a1b2c3 :: seed-pipeline :: candidate :: c-007      :: critic
-  2026-05-19T1530Z-a1b2c3 :: seed-pipeline :: match     :: m042       :: voter-haiku
+  2026-05-19T1530Z-a1b2c3 :: seed-generation :: phase     :: pilot      :: pilot-llm
+  2026-05-19T1530Z-a1b2c3 :: seed-generation :: candidate :: c-007      :: critic
+  2026-05-19T1530Z-a1b2c3 :: seed-generation :: match     :: m042       :: voter-haiku
   2026-05-19T1610Z-b4c5d6 :: autoresearch  :: audit     :: 7f3a9c2    :: judge
 ```
 
@@ -89,7 +89,7 @@ Logged into `~/.geode/self-improving-loop/<session>/journal.jsonl` (P1c) per LLM
     "openai":    "openai-codex"
   },
   "completed_units": ["...idempotency-keys..."],
-  "next_unit": {"driver": "seed-pipeline", "kind": "phase", "id": "ranker"},
+  "next_unit": {"driver": "seed-generation", "kind": "phase", "id": "ranker"},
   "fallback_to_payg": false
 }
 ```
@@ -108,7 +108,7 @@ GEODE already has a richer, in-process equivalent — `core/auth/profiles.py` (A
 **Decision** (Phase ζ extension):
 
 1. **Wire `ProfileRotator` into the self-improving-loop credential path.**
-   `resolve_credential_source(family, ..., fallback_to_payg)` returns the source key (e.g. `claude-cli`); a new layer `resolve_self_improving_loop_binding(family) → (source, profile)` adds the second dimension. autoresearch / seed-pipeline pass `profile.name` through every LLM call so failures route into `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set.
+   `resolve_credential_source(family, ..., fallback_to_payg)` returns the source key (e.g. `claude-cli`); a new layer `resolve_self_improving_loop_binding(family) → (source, profile)` adds the second dimension. autoresearch / seed-generation pass `profile.name` through every LLM call so failures route into `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set.
 
 2. **Rotation is operator-driven, never automatic.** When strict-mode trips abort (PR-β1's `CredentialResolutionError(subscription_only=True)`), the FE banner (PR-γ1) checks whether ProfileRotator has another eligible profile for the same family. If yes, the abort dialog shows a 2-axis picker (next sub-section). If no, the dialog shows the existing "add a profile / wait for reset / opt-in PAYG" options.
 
@@ -176,11 +176,11 @@ Implementation reuses `pick_model_and_effort`'s raw-tty 2-axis input loop. Per d
 Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`. **8 PRs** (~2100 LOC + 1 backfill) — expanded from 6 after the 2026-05-19 paperclip/crumb directive:
 
 - **PR-ζ1**: extend `SessionCheckpoint` schema for self-improving-loop fields (active_sources, completed_units, next_unit, fallback_to_payg, active_profile). Tests round-trip.
-- **PR-ζ2**: `_load_state()` companion for `plugins/seed_pipeline/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
+- **PR-ζ2**: `_load_state()` companion for `plugins/seed_generation/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
 - **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `autoresearch/train.py`.
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
-- **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-pipeline pass `profile.name` through LLM call metadata so cooldowns track per-account.
+- **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.
 - **PR-ζ5.6** (NEW): 2-axis account picker (provider ←→ × profile ↑↓), mirroring `core/cli/effort_picker.py`. Two entry points: (a) `/login picker` slash command + auto-trigger from the red banner abort dialog (PR-γ1 trigger condition), (b) agent loop natural-language phrase recogniser invokes the picker programmatically. Action row: Enter (swap+resume) / n (add new profile via `claude /login` subprocess delegate) / w (wait for reset) / p (opt-in PAYG for this run) / Esc (keep aborted).
 - **PR-ζ6**: docs + sample resume run-book (`docs/audits/2026-05-19-resume-rollout-runbook.md`) + CHANGELOG.
 
@@ -198,4 +198,4 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 - GEODE `SessionCheckpoint`: `core/runtime_state/session_checkpoint.py`
 - GEODE `atomic_io`: `core/utils/atomic_io.py`
 - Predecessor plan: `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`
-- Predecessor ADRs: `docs/architecture/seed-pipeline-decision.md`, `docs/architecture/autoresearch-axis-decision.md`
+- Predecessor ADRs: `docs/architecture/seed-generation-decision.md`, `docs/architecture/autoresearch-axis-decision.md`
