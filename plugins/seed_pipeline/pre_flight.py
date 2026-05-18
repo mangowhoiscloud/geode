@@ -1,19 +1,18 @@
-"""Seed-pipeline pre-flight check — validate auth + budget before a run.
+"""Seed-pipeline pre-flight check — validate auth + diversity before a run.
 
-Runs BEFORE the first LLM call so a misconfigured auth path or an
-absurd budget cap surfaces as a clear error instead of mid-run cost
-overrun or quorum collapse.
+Runs BEFORE the first LLM call so a misconfigured auth path or a
+collapsed judge panel surfaces as a clear error instead of mid-run
+quorum failure.
 
-Three categories of check:
+Two categories of check (PR 1 dropped the prior budget-sanity check —
+spend is now controlled by the pre-run cost preview + human gate at
+the CLI surface, not by hard caps in the orchestrator):
 
 1. **Auth probe**: for each :class:`RoleBinding` / :class:`VoterBinding`,
    verify the resolved source's credential is reachable. ``claude-cli``
    / ``openai-codex`` use the per-family OAuth helpers; ``api_key``
    reads :data:`core.config.settings` env-resolved keys.
-2. **Budget sanity**: reject obviously-wrong (soft > hard, negative, or
-   absurdly high) caps so the supervisor doesn't accidentally
-   un-budget a fan-out.
-3. **Panel diversity**: piggyback on
+2. **Panel diversity**: piggyback on
    :func:`plugins.seed_pipeline.picker.validate_runtime_diversity` so
    the pre-flight gate fails fast if a user override collapsed the
    judge panel.

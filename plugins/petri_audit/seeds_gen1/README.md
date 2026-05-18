@@ -10,16 +10,10 @@ output of the S12 generation run (sprint plan
 **EMPTY — awaiting first run.** S12 ships the scaffolding (this
 directory + the run-book at
 `docs/audits/seed-generation-runs/2026-05-18/`) but the actual
-generation is deferred behind two prerequisites:
+generation is deferred behind one prerequisite + one external
+constraint:
 
-1. **S6.5-wire (task #73)** — `BudgetGuard` real-time worker
-   propagation. Until the per-phase guard threads through to the
-   worker subprocess's LLM call sites, soft/hard caps fire only at
-   the end of each phase rather than mid-call. Acceptable for a
-   manually-supervised first run but should land before unattended
-   generations.
-
-2. **PipelineRegistry agent factories** — `plugins/seed_pipeline/cli.py`
+1. **PipelineRegistry agent factories** — `plugins/seed_pipeline/cli.py`
    `_dispatch_pipeline()` currently builds an empty
    `PipelineRegistry`, so `Pipeline.run()` raises a `RuntimeError("no
    registered agent")` on the first phase. The 7 concrete agents
@@ -28,7 +22,7 @@ generation is deferred behind two prerequisites:
    resolved `RoleBinding` from the picker and registered before
    `geode audit-seeds generate` can produce real seeds.
 
-3. **Credit availability** — the user has flagged Anthropic credits
+2. **Credit availability** — the user has flagged Anthropic credits
    as currently constrained (Session 60-62 baseline retry notes).
    When credits become available the operator can execute the
    run-book below; until then the gate flow + cost preview + slash
