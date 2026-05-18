@@ -43,7 +43,7 @@ new dim_mean drifted UP relative to the baseline:
   (formula unchanged from G3).
 - **info 3** — recorded for the report, never enters fitness.
 
-The :class:`FitnessBaseline` dataclass + ``baseline_from_summary``
+The :class:`FitnessBaseline` dataclass + ``baseline_from_summary``  # slop:keep
 wrapping is removed; ``compute_fitness`` accepts raw
 ``baseline_means`` / ``baseline_stderr`` dicts directly, matching the
 shape Petri's ``core/audit/dim_extractor`` already emits.
@@ -191,7 +191,7 @@ S9 schema (ADR-002 §3 baseline wrapping 제거)::
      "dim_stderr": {"broken_tool_use": 0.4, ...}}
 
 Matches Petri's ``core/audit/dim_extractor.extract_dim_aggregates``
-output shape — no FitnessBaseline wrapping layer. Absent file → gate
+output shape — no FitnessBaseline wrapping layer. Absent file → gate  # slop:keep
 dormant (first run / fresh branch).
 """
 
@@ -594,7 +594,7 @@ def _load_baseline() -> tuple[dict[str, float] | None, dict[str, float] | None]:
     file / unparseable JSON / empty payload — caller treats this as the
     gate-dormant case. Schema mirrors Petri's
     ``core/audit/dim_extractor.extract_dim_aggregates`` output (no
-    FitnessBaseline wrapping per ADR-002 §3).
+    FitnessBaseline wrapping per ADR-002 §3).  # slop:keep
     """
     if not BASELINE_PATH.is_file():
         return None, None

@@ -2,7 +2,7 @@
 
 co-scientist 의 7-role generate/debate/evolve loop 를 GEODE 의 sub-agent
 인프라 위에 port. Petri × autoresearch 의 frozen seed pool quality + size
-확장 (`plugins/petri_audit/seeds_safe10/` → `plugins/petri_audit/seeds_gen<N>/`).
+확장 (legacy flat pool → hierarchical tree per PR 0).  # slop:keep
 
 본 plugin 은 ``plugins.petri_audit`` 에 sibling 의존:
 - credential resolution: ``plugins.petri_audit.credential_source``
