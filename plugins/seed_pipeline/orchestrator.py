@@ -39,6 +39,7 @@ register themselves; once registered the phase calls succeed.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -65,6 +66,37 @@ __all__ = [
     "PipelineRegistry",
     "PipelineState",
 ]
+
+
+def _state_to_json(state: PipelineState) -> str:
+    """Serialize PipelineState fields safe for JSON persistence.
+
+    Skips runtime-only fields (``budget_guard``, ``run_dir`` path
+    object). Path-typed fields are coerced to strings so the JSON is
+    portable across machines (re-hydration converts back).
+    """
+    payload: dict[str, Any] = {
+        "run_id": state.run_id,
+        "target_dim": state.target_dim,
+        "gen_tag": state.gen_tag,
+        "candidates_requested": state.candidates_requested,
+        "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,
+        "pool_path_out": str(state.pool_path_out) if state.pool_path_out else None,
+        "run_dir": str(state.run_dir) if state.run_dir else None,
+        "candidates": state.candidates,
+        "reflections": state.reflections,
+        "pilot_scores": state.pilot_scores,
+        "elo_ratings": state.elo_ratings,
+        "survivors": state.survivors,
+        "evolved_candidates": state.evolved_candidates,
+        "meta_review": state.meta_review,
+        "usd_spent": state.usd_spent,
+        "prompt_tokens": state.prompt_tokens,
+        "completion_tokens": state.completion_tokens,
+        "baseline_means": state.baseline_means,
+        "baseline_stderr": state.baseline_stderr,
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
 _PHASE_ORDER: tuple[str, ...] = (
@@ -210,6 +242,10 @@ class Pipeline:
         )
         for phase in _PHASE_ORDER:
             self._run_phase(phase)
+        # S8 parent-context offload — persist the final state.json so a
+        # follow-up CLI invocation (S11) can resume the meta-review +
+        # survivor pool without re-reading every candidate body.
+        self._persist_state()
         log.info(
             "seed-pipeline run finished: run_id=%s survivors=%d usd=%.4f",
             self.state.run_id,
@@ -217,6 +253,39 @@ class Pipeline:
             self.state.usd_spent,
         )
         return self.state
+
+    def _persist_state(self) -> None:
+        """Write a JSON snapshot of state to ``<run_dir>/state.json``.
+
+        S8 parent-context offload — the parent loop should not have to
+        carry the entire pool in memory after the meta_review fires.
+        Persisting the state at end-of-run is the offload boundary; the
+        S11 CLI ``geode audit-seeds resume`` will re-hydrate from here.
+
+        Skipped when ``state.run_dir`` is None (test fixtures often
+        omit it); state is kept in memory for the caller to consume.
+        Persistence failures log a WARNING but do not raise — the
+        primary signal is the in-memory state, not the disk artifact.
+        """
+        if self.state.run_dir is None:
+            return
+        try:
+            self.state.run_dir.mkdir(parents=True, exist_ok=True)
+            snapshot_path = self.state.run_dir / "state.json"
+            snapshot_path.write_text(
+                _state_to_json(self.state),
+                encoding="utf-8",
+            )
+            log.info(
+                "seed-pipeline parent-context offload: state persisted to %s",
+                snapshot_path,
+            )
+        except OSError as exc:
+            log.warning(
+                "seed-pipeline parent-context offload failed at %s: %s",
+                self.state.run_dir,
+                exc,
+            )
 
     def _run_phase(self, role: str) -> SeedAgentResult:
         """Look up the role's agent, invoke it, merge the result.
