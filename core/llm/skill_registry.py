@@ -1,7 +1,7 @@
 """Skill registry -- discover and manage .md skill files.
 
-Skills are YAML frontmatter + Markdown body files that inject prompt fragments
-into the PromptAssembler pipeline. (ADR-007)
+Skills are YAML frontmatter + Markdown body files that can be rendered into the
+active AgenticLoop prompt path.
 """
 
 from __future__ import annotations

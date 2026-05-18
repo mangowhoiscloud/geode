@@ -174,6 +174,15 @@ functional change.
 
 ### Changed
 
+- **Prompt assembly unified onto AgenticLoop path / 프롬프트 조립 경로 단일화.**
+  `GEODE_WRAPPER_OVERRIDE` now loads in `core.agent.system_prompt`, the
+  production path used by every `AgenticLoop` turn, instead of the deleted
+  dead assembler path. Real-mode autoresearch mutations now replace the
+  active static wrapper and fail closed on invalid env/file/schema input.
+  KR: `GEODE_WRAPPER_OVERRIDE` 가 실제 `AgenticLoop` 시스템 프롬프트에서
+  소비되며, 잘못된 override 는 기본 wrapper 로 조용히 fallback 하지 않고
+  `RuntimeError` 로 중단한다.
+
 - **autoresearch judge model: sonnet → opus.** `autoresearch/train.py`
   default `JUDGE_MODEL` flipped from `claude-code/sonnet` to
   `claude-code/opus` (and `autoresearch/program.md` reference table
@@ -218,6 +227,13 @@ functional change.
   `core.config.settings` env fields. 24 unit tests.
 
 ### Removed
+
+- **Dead `PromptAssembler` production path / 미사용 `PromptAssembler` 경로 제거.**
+  Removed the unreachable `PromptAssembler` class, runtime
+  `prompt_assembler` field, and bootstrap factory. `core.llm.prompt_assembler`
+  now only keeps the active `with_math_output_formatting()` helper and its
+  regression tests. KR: production call site 가 없던 이중 프롬프트 조립 경로를
+  제거하고 skill injection 은 loop 의 `{skill_context}` 치환 경로만 남겼다.
 
 - **BudgetGuard layer removed (PR 1).** Per the
   2026-05-18 directive ("비용 가드는 제거하자"), the entire

@@ -15,11 +15,13 @@ prompt without depending on the NL Router module.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
@@ -31,12 +33,43 @@ log = logging.getLogger(__name__)
 _MAX_SECTION_LINES = 20
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
+_WRAPPER_OVERRIDE_ENV = "GEODE_WRAPPER_OVERRIDE"
+WRAPPER_OVERRIDE_HOOK_READY = True
 
 # Prompt caching boundary marker. The Anthropic adapter splits the prompt at
 # this opening tag — content BEFORE it is stable across turns (cache hit),
 # content AFTER it changes per turn (no cache). XML-shaped per G7 of the
 # 2026-05-12 prompt audit so the entire prompt is consistently tag-delimited.
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
+
+
+def _load_wrapper_override() -> str | None:
+    """Return autoresearch's wrapper override, or ``None`` when disabled.
+
+    ``GEODE_WRAPPER_OVERRIDE`` points to a JSON ``dict[str, str]``. The values
+    replace the static wrapper section. Once the env var is set, load/schema
+    failures are fatal so real-mode autoresearch cannot silently spend quota on
+    the default wrapper.
+    """
+    override_path = os.environ.get(_WRAPPER_OVERRIDE_ENV)
+    if not override_path:
+        return None
+    path = Path(override_path)
+    if not path.is_file():
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} file not found")
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} load failed: {exc}") from exc
+    if not isinstance(data, dict) or not data:
+        raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} must be a non-empty dict[str, str]")
+    for key, value in data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise RuntimeError(
+                f"{_WRAPPER_OVERRIDE_ENV}={path} has non-string key/value at {key!r}"
+            )
+    return "\n\n".join(data.values())
 
 
 def _audit_mode_active() -> bool:
@@ -101,17 +134,23 @@ def build_system_prompt(model: str = "") -> str:
     The baseline is intentionally domain-neutral. Specialized pipelines live
     outside the core runtime.
     """
+    wrapper_override = _load_wrapper_override()
+
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
+        static = with_math_output_formatting(wrapper_override) if wrapper_override else ""
         parts: list[str] = []
         if model:
             mc = _build_model_card(model)
             if mc:
                 parts.append(mc)
         parts.append(_build_date_context())
-        return PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
+        dynamic = PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
+        if static:
+            return static + "\n\n" + dynamic
+        return dynamic
 
-    static = with_math_output_formatting(_generic_static_prefix())
+    static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
 
     # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
     # GEODE behaves as a thin wrapper around the base model).

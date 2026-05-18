@@ -56,7 +56,7 @@ geode/
 │       ├── run.log              ← audit subprocess stdout/stderr
 │       └── audit_logs/          ← per-experiment archive
 ├── plugins/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
-└── core/llm/prompt_assembler.py ← `_load_wrapper_override` (Phase 0 hook)
+└── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
 `.gitignore` 의 `autoresearch/state/` 가 runtime artifact 격리.
@@ -91,8 +91,8 @@ train.py 가 내부적으로 수행:
 
 1. `WRAPPER_PROMPT_SECTIONS` → `state/wrapper-override.json` 으로 dump.
 2. `GEODE_WRAPPER_OVERRIDE=<path>` env 로 `geode audit` subprocess 호출.
-3. subprocess 안에서 `core/llm/prompt_assembler.py:_load_wrapper_override`
-   가 본 dict 를 system prompt 의 base 로 inject.
+3. subprocess 안에서 `core/agent/system_prompt.py:_load_wrapper_override`
+   가 본 dict 를 AgenticLoop system prompt 의 static wrapper 로 inject.
 4. `plugins/petri_audit/runner.py` 가 `inspect eval inspect_petri/audit`
    subprocess 호출 → 19 dim AlphaEval judge → archive `.eval` log.
 5. archive 의 sample.scores → dim_means + dim_stderr aggregate → stdout
@@ -197,16 +197,22 @@ append-only. 9 column.
 
 ## 7. Wrapper override hook
 
-`core/llm/prompt_assembler.py:_load_wrapper_override`:
+`core/agent/system_prompt.py:_load_wrapper_override`:
 
 - env `GEODE_WRAPPER_OVERRIDE=<json path>` 가 set 되면 JSON 파일 load.
 - dict value 를 `\n\n` join 하여 system prompt 의 base 로 대체.
-- `fragments_used` 에 `wrapper-override:<N>sections` 기록 (audit 가능).
-- env 미설정 / 파일 미존재 / JSON 파싱 실패 시 silent skip → 기존
-  wrapper 사용 (graceful degradation).
+- env 미설정 시 기존 wrapper 사용.
+- env 가 set 됐는데 파일 미존재 / JSON 파싱 실패 / schema 불일치면
+  `RuntimeError` 로 fail-closed.
 
 본 hook 이 `autoresearch/train.py::WRAPPER_PROMPT_SECTIONS` 의 mutation 을
 실제 GEODE runtime 의 system prompt 까지 propagate 하는 단일 통로.
+
+Prompt assembly 는 PR #1181 follow-up 이후 단일 active path 로 정리됐다:
+`AgenticLoop._build_system_prompt()` → `core.agent.system_prompt.build_system_prompt()`
+→ `core.agent.loop._context.build_system_prompt()`. Legacy
+`PromptAssembler.assemble()` path 는 production call site 가 없어서 삭제됐고,
+skill injection 은 loop 의 `{skill_context}` placeholder substitution 만 사용한다.
 
 ## 8. CI ratchet integration
 
@@ -228,7 +234,7 @@ ratchet 의 input 이 되는 경로:
 
 | Risk | Mitigation |
 |---|---|
-| mutation 이 GEODE syntax 깨뜨림 | wrapper override JSON 의 schema 단순 (str→str dict). syntax break X. 단 `prompt_assembler.py` 의 load 가 silent skip → fitness 변화 없음. |
+| mutation 이 GEODE syntax 깨뜨림 | wrapper override JSON 의 schema 단순 (str→str dict). syntax break X. env 가 잘못되면 `core/agent/system_prompt.py` load 가 fail-closed 하므로 fitness 가 기본 wrapper 로 조용히 오염되지 않음. |
 | Generation drift (cumulative bias) | per-generation `results.tsv` + cross-axis ratchet (§5) + critical axis strict gate. |
 | Long-running loop 의 cost 폭주 | per-audit budget 5분 + outer-loop agent 의 timeout (program.md). ChatGPT Plus / Claude Max OAuth path = $0 per-token. |
 | Goodhart's law (rubric self-mutation) | AlphaEval rubric (`plugins/petri_audit/judge_dims/geode_5axes.yaml`) 는 program.md 의 CANNOT 항. seed pool (`plugins/petri_audit/seeds_safe10/`) 도 mutation 불가. |
@@ -256,6 +262,6 @@ PR 로 추가될 수 있는 컴포넌트 (현재는 미구현):
 - Karpathy reference: `~/.claude/projects/-Users-mango-workspace-geode/memory/research_karpathy_autoresearch_agenthub.md` + `~/workspace/autoresearch/` (228791f)
 - Gen 0 plan + signal: `docs/audits/2026-05-15-autoresearch-gen0-plan.md` + `docs/audits/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `docs/audits/2026-05-16-autoresearch-gen0-baseline.md`
-- Wrapper override hook 구현: `core/llm/prompt_assembler.py:_load_wrapper_override`
+- Wrapper override hook 구현: `core/agent/system_prompt.py:_load_wrapper_override`
 - Petri audit harness: `plugins/petri_audit/runner.py` + `plugins/petri_audit/judge_dims/geode_5axes.yaml`
 - Karpathy 5 원칙 skill: `karpathy-patterns` (`.claude/skills/`)

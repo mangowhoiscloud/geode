@@ -80,6 +80,10 @@ def build_system_prompt(loop: AgenticLoop) -> str:
     skill_ctx = ""
     if loop._skill_registry is not None:
         skill_ctx = loop._skill_registry.get_context_block()
+    # Skills enter the active prompt path here: the loop-level registry renders
+    # one context block, then ``{skill_context}`` in the system wrapper is
+    # substituted below. The legacy PromptAssembler Phase 2 injection path was
+    # removed; do not add a second skill-injection route.
     # S2-fix (2026-05-18) — both branches honor the ``{skill_context}``
     # placeholder so AgentDefinition authors can opt into explicit skill
     # injection (matching ``_DEFAULT_AGENTS`` semantics). If the override
