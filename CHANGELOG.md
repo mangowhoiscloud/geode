@@ -69,6 +69,15 @@ functional change.
   proximity,pilot,ranker,evolver,meta_reviewer}.md` YAML frontmatter +
   body contract for the AgentRegistry loader. Each role documents its
   inputs, output schema, quality bar, and forbidden behaviour.
+- **Generation agent (S2).** `plugins/seed_pipeline/agents/generator.py`
+  fans out `state.candidates_requested` parallel sub-agents via the
+  parent `SubAgentManager`, each dispatched to the `seed_generator`
+  AgentDefinition with a per-candidate SubTask (target dim, generation
+  tag, candidate id, output path). Successful sub-agent results merge
+  into `state.candidates` as `{id, path, target_dim, gen_tag, task_id,
+  duration_ms}`; failed candidates drop out with a warning. All-fail
+  → `error_category="generation_failed"`. `announce=False` so sub-spawns
+  don't double-fire the parent loop's announce queue.
 
 ## [0.99.13] — 2026-05-18
 
