@@ -69,7 +69,7 @@ from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
 from plugins.seed_pipeline.orchestrator import PipelineState
 
 if TYPE_CHECKING:
-    from core.agent.sub_agent import SubAgentManager
+    from core.agent.sub_agent import SubAgentManager, SubTask
 
 log = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ class Generator(BaseSeedAgent):
             output={"candidates": candidates},
         )
 
-    def _build_tasks(self, state: PipelineState, candidates_dir: object) -> list:
+    def _build_tasks(self, state: PipelineState, candidates_dir: object) -> list[SubTask]:
         """Build the per-candidate SubTask list.
 
         Imports ``SubTask`` lazily so test fixtures that monkeypatch the
@@ -196,7 +196,7 @@ class Generator(BaseSeedAgent):
         from core.agent.sub_agent import SubTask
 
         pool_path = str(state.pool_path_in) if state.pool_path_in else ""
-        tasks: list = []
+        tasks: list[SubTask] = []
         for index in range(state.candidates_requested):
             candidate_id = f"{state.gen_tag}-{index:03d}-{uuid.uuid4().hex[:8]}"
             output_path = f"{candidates_dir}/{candidate_id}.md"
