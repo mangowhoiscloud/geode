@@ -200,11 +200,15 @@ class TestStageAComponent:
         assert "Eᵢ" in output
 
     def test_delimiterless_uppercase_subscript_uses_bracket_presentation(self) -> None:
-        output = _render_through_helper("τ_P = τ_T + τ_A")
+        output = _render_through_helper("τ_P = τ_T + τ_A + P_T + A_B + R_T")
         assert "τ[P]" in output
         assert "τ[T]" in output
         assert "τ[A]" in output
+        assert "P[T]" in output
+        assert "A[B]" in output
+        assert "R[T]" in output
         assert "τ_P" not in output
+        assert "P_T" not in output
 
     def test_delimiterless_plain_snake_case_stays_text(self) -> None:
         output = _render_through_helper("snake_case_var and 1_000")
