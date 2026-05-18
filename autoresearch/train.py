@@ -401,6 +401,123 @@ def compute_fitness(
 
 
 # ---------------------------------------------------------------------------
+# Results — TSV (10-col) + JSONL (raw)
+# ---------------------------------------------------------------------------
+#
+# S10 (ADR-002) replaces the pre-S9 9-col TSV (5-axis names) with a
+# 10-col TSV keyed on per-tier aggregates + a per-row JSONL line that
+# carries the full 15-dim raw signal. Operator appends both to
+# ``autoresearch/state/results.{tsv,jsonl}`` after each audit so the
+# outer-loop history is queryable without re-running the audit.
+#
+# TSV is grep-friendly (one line per audit, fixed columns); JSONL is
+# the raw-truth artifact used by the meta-reviewer agent (S8) to
+# compute next-gen priors. Both files are gitignored (autoresearch/
+# state/* repo-level rule).
+
+RESULTS_TSV_HEADER: tuple[str, ...] = (
+    "commit",
+    "fitness",
+    "critical_min",
+    "critical_mean",
+    "auxiliary_mean",
+    "stability_score",
+    "info_mean",
+    "dim_count_engaged",
+    "verdict",
+    "description",
+)
+
+
+def _tier_mean(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
+    """Average of the per-dim scores for one tier."""
+    if not dims:
+        return 0.0
+    vals = [dim_scores.get(d, 0.0) for d in dims]
+    return sum(vals) / len(vals)
+
+
+def _tier_min(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
+    """Minimum per-dim score across a tier (surfaces critical regressions)."""
+    if not dims:
+        return 0.0
+    return min(dim_scores.get(d, 0.0) for d in dims)
+
+
+def format_results_tsv_row(
+    *,
+    commit: str,
+    fitness: float,
+    dim_scores: dict[str, float],
+    dim_means: dict[str, float],
+    verdict: str,
+    description: str,
+) -> str:
+    """Render one 10-col results.tsv row.
+
+    ``dim_scores`` is the output of :func:`compute_dim_scores` (includes
+    the synthetic ``"stability"`` key). ``dim_means`` is the raw audit
+    emit — used here only to compute ``dim_count_engaged`` (how many
+    of the 15 dims actually surfaced a measurement, vs filled with
+    defaults). Description must not contain newlines or tabs — caller
+    sanitizes.
+    """
+    safe_desc = description.replace("\t", " ").replace("\n", " ").strip()
+    engaged = sum(1 for dim in AXIS_TIERS if dim in dim_means)
+    fields = (
+        commit,
+        f"{fitness:.6f}",
+        f"{_tier_min(dim_scores, CRITICAL_DIMS):.4f}",
+        f"{_tier_mean(dim_scores, CRITICAL_DIMS):.4f}",
+        f"{_tier_mean(dim_scores, AUXILIARY_DIMS):.4f}",
+        f"{dim_scores.get('stability', STABILITY_FALLBACK):.4f}",
+        f"{_tier_mean(dim_scores, INFO_DIMS):.4f}",
+        str(engaged),
+        verdict,
+        safe_desc,
+    )
+    return "\t".join(fields)
+
+
+def format_results_jsonl_row(
+    *,
+    commit: str,
+    fitness: float,
+    dim_means: dict[str, float],
+    dim_stderr: dict[str, float],
+    dim_scores: dict[str, float],
+    verdict: str,
+    description: str,
+    baseline_active: bool,
+) -> str:
+    """Render one results.jsonl line — full per-dim raw signal.
+
+    Schema (JSON object on one line)::
+
+        {"commit": "...", "fitness": 0.535895,
+         "dim_means": {...15 entries...},
+         "dim_stderr": {...},
+         "dim_scores": {...15 + 'stability'...},
+         "verdict": "keep", "description": "...",
+         "baseline_active": true}
+
+    The meta-reviewer agent (S8) reads this artifact to compute
+    next-gen priors without re-running the audit.
+    """
+    payload = {
+        "commit": commit,
+        "fitness": round(fitness, 6),
+        "dim_means": {d: round(dim_means.get(d, 0.0), 4) for d in AXIS_TIERS},
+        "dim_stderr": {d: round(dim_stderr.get(d, 0.0), 4) for d in AXIS_TIERS},
+        "dim_scores": {k: round(v, 4) for k, v in dim_scores.items()},
+        "verdict": verdict,
+        "description": description.replace("\n", " ").strip(),
+        "baseline_active": baseline_active,
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
@@ -511,6 +628,40 @@ def main() -> int:
         total_seconds,
         args.dry_run,
         baseline_active=baseline_means is not None,
+    )
+
+    # S10 — emit results.{tsv,jsonl} lines on stdout so the outer-loop
+    # operator (or a follow-up script) can append them to the rolling
+    # autoresearch/state/results.{tsv,jsonl}. We don't write the files
+    # directly because the verdict / description are decided by the
+    # operator AFTER reading the print_summary; emitting at this stage
+    # would freeze in a default. Operators tee the line manually.
+    commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
+    description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
+    verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
+    print(
+        "results_tsv: "
+        + format_results_tsv_row(
+            commit=commit,
+            fitness=fitness,
+            dim_scores=dim_scores,
+            dim_means=dim_means,
+            verdict=verdict,
+            description=description,
+        )
+    )
+    print(
+        "results_jsonl: "
+        + format_results_jsonl_row(
+            commit=commit,
+            fitness=fitness,
+            dim_means=dim_means,
+            dim_stderr=dim_stderr,
+            dim_scores=dim_scores,
+            verdict=verdict,
+            description=description,
+            baseline_active=baseline_means is not None,
+        )
     )
     return 0
 
