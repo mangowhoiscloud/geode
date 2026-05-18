@@ -385,7 +385,10 @@ def test_ranker_survivors_count_respects_k() -> None:
 
 
 def test_ranker_emits_elo_log_tsv(tmp_path: Any) -> None:
-    """Ranker writes <run_dir>/elo_log.tsv per AgentDef contract."""
+    """Ranker writes <run_dir>/elo_log.tsv per AgentDef contract.
+
+    P1a — header now prepends ``gen_tag`` so cross-generation joins work.
+    """
     state = _state_with_candidates(3)
     state.run_dir = tmp_path
     manager = _AlwaysAWinsManager()
@@ -400,8 +403,11 @@ def test_ranker_emits_elo_log_tsv(tmp_path: Any) -> None:
     content = log_path.read_text(encoding="utf-8")
     # Header + at least one row
     lines = [line for line in content.splitlines() if line]
-    assert lines[0].startswith("match_id\t")
+    assert lines[0].startswith("gen_tag\tmatch_id\t")
     assert len(lines) > 1
+    # Every data row starts with the state's gen_tag.
+    for row in lines[1:]:
+        assert row.startswith(state.gen_tag + "\t")
 
 
 def test_ranker_no_elo_log_when_run_dir_unset() -> None:

@@ -75,7 +75,7 @@ Phase F — fill-in
 |---|---|---|---|---|---|
 | **P0a** ✅ | feat(autoresearch): auto-promote + baseline write | #4, #9 | ~150 | `autoresearch/train.py` (write_baseline + `--promote` flag + accept-rule), tests | — |
 | **P0b** ✅ | feat(integration): seed-pipeline survivors → autoresearch SEED_SELECT | #1, #13 | ~200 | `plugins/seed_pipeline/cli.py` (survivors.json + pool_path_out), `plugins/seed_pipeline/orchestrator.py`, `autoresearch/train.py` (env-driven SEED_SELECT), tests | P0a |
-| **P1a** | feat(integration): generation linkage (gen-tag in argv + tsv schema) | #2, #3, #7, #11 | ~100 | `autoresearch/train.py` (argv + tsv +2col), `plugins/seed_pipeline/agents/ranker.py` (elo +1col), `~/.geode/outer-loop/sessions.jsonl` index | P0b |
+| **P1a** ✅ | feat(integration): generation linkage (session_id + gen_tag + sessions.jsonl) | #2, #3, #7, #11 | ~350 | `autoresearch/train.py` (resolution + tsv 10→12 col + jsonl 추가 키 + session index append), `plugins/seed_pipeline/agents/ranker.py` (elo 8→9 col), `plugins/seed_pipeline/orchestrator.py` (session index append), `autoresearch/program.md` (schema doc), tests | P0b |
 | **P1b** ✅ | docs(autoresearch): program.md 전면 재작성 (20-dim tiered schema) + 영문 통일 | #6, #10 | ~250 | `autoresearch/program.md`, `autoresearch/README.md`, `autoresearch/train.py` docstring, `autoresearch/__init__.py` | indep |
 | **P1c** | feat(observability): structured session journal | #18, #19 | ~250 | `core/observability/session_journal.py` (NEW), `core/wiring/bootstrap.py` (STARTED/FAILED 핸들러 등록), `plugins/seed_pipeline/cli.py` (cost emit), tests | P1a |
 | **Phase C** | gen-0 baseline smoke run (1-shot real mode) | — | 0 LOC + data | `autoresearch/state/baseline.json` (gen-0 data) | P1a, P1b, P1c |

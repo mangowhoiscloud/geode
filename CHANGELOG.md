@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **P1a — generation linkage (session_id + gen_tag + sessions.jsonl
+  index).** Closes 2026-05-19 outer-loop wiring plan Phase B defects
+  #2 + #3 + #7 + #11. `autoresearch/train.py` adds
+  `_resolve_session_id()` (default `<ISO>T<HHMM>Z-<short uuid>`,
+  overrideable via `AUTORESEARCH_SESSION_ID`) and `_resolve_gen_tag()`
+  (default `autoresearch-<commit>`, overrideable via
+  `AUTORESEARCH_GEN_TAG`). `RESULTS_TSV_HEADER` grows 10 → 12 columns
+  with `session_id` / `gen_tag` prepended; `format_results_jsonl_row`
+  adds the same two top-level keys. `plugins/seed_pipeline/agents/
+  ranker.py` extends `elo_log.tsv` 8 → 9 columns with `gen_tag`
+  prepended. `plugins/seed_pipeline/orchestrator.py` `Pipeline.run()`
+  appends a JSON record to a shared `~/.geode/outer-loop/sessions.jsonl`
+  index on every run; `autoresearch/train.py` does the same at the
+  end of `main()`. The cross-loop index is the join point for outer-
+  loop observability — every outer-loop component writes one row per
+  run with `session_id` + `gen_tag` + `component` + started/ended,
+  plus component-specific extras (commit + fitness + verdict +
+  promoted for autoresearch; survivors / usd_spent / pool_path_out
+  for seed-pipeline). `autoresearch/program.md` updated to document
+  the 12-column schema, new env overrides, and 12-col example rows.
+  Existing autoresearch and ranker tests updated for the new
+  signatures; 8 new tests cover resolution (session_id / gen_tag
+  default + env override + whitespace), session-index append +
+  multi-append + OSError isolation, Pipeline-level append + OSError
+  isolation, and `elo_log` `gen_tag` prefix.
+
 ### Changed
 
 - **P1b — autoresearch outer-loop sys prompt unified to English + 20-dim

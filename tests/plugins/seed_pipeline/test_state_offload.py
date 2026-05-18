@@ -229,3 +229,54 @@ def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
     survivors_dir = tmp_path / "survivors"
     names = sorted(p.name for p in survivors_dir.iterdir())
     assert names == ["c-new.md"]
+
+
+# ---------------------------------------------------------------------------
+# P1a — cross-loop session index (defects #2, #3 from 2026-05-19 plan)
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_appends_session_index(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Pipeline.run() appends one row to ``~/.geode/outer-loop/sessions.jsonl``."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(tmp_path)
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    index = fake_home / ".geode" / "outer-loop" / "sessions.jsonl"
+    assert index.is_file()
+    lines = index.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    assert row["session_id"] == state.run_id
+    assert row["gen_tag"] == state.gen_tag
+    assert row["component"] == "seed-pipeline"
+    assert row["target_dim"] == state.target_dim
+    assert row["survivors"] == len(state.survivors)
+    assert row["usd_spent"] == round(state.usd_spent, 6)
+    assert row["started_at"] <= row["ended_at"]
+
+
+def test_pipeline_session_index_swallows_oserror(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Index-append OSError must not break the run."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    original_mkdir = Path.mkdir
+
+    def _selective_mkdir(self: Path, *a: Any, **kw: Any) -> None:
+        if "outer-loop" in str(self):
+            raise OSError("simulated")
+        return original_mkdir(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "mkdir", _selective_mkdir)
+    state = _populated_state(tmp_path)
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()  # Must NOT raise.
+    # State persistence (other paths) still works.
+    assert (tmp_path / "state.json").is_file()

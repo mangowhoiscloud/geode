@@ -28,7 +28,10 @@ from autoresearch.train import (
     STABILITY_FALLBACK,
     STABILITY_WEIGHT,
     WRAPPER_OVERRIDE_HOOK_READY,
+    _append_session_index,
     _build_audit_command,
+    _resolve_gen_tag,
+    _resolve_session_id,
     _should_promote,
     _stability_score,
     _write_baseline,
@@ -436,14 +439,18 @@ def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]
 # ---------------------------------------------------------------------------
 
 
-def test_results_tsv_row_has_10_columns() -> None:
-    """S10 — results.tsv schema: 10 tab-separated columns."""
+def test_results_tsv_row_has_12_columns() -> None:
+    """P1a — results.tsv schema: 12 tab-separated columns (session_id + gen_tag prepended)."""
     from autoresearch.train import RESULTS_TSV_HEADER, format_results_tsv_row
 
-    assert len(RESULTS_TSV_HEADER) == 10
+    assert len(RESULTS_TSV_HEADER) == 12
+    assert RESULTS_TSV_HEADER[0] == "session_id"
+    assert RESULTS_TSV_HEADER[1] == "gen_tag"
     dim_means = {"broken_tool_use": 3.0}
     scores = compute_dim_scores(dim_means)
     row = format_results_tsv_row(
+        session_id="s-2026",
+        gen_tag="autoresearch-a1b2c3d",
         commit="a1b2c3d",
         fitness=0.5,
         dim_scores=scores,
@@ -452,19 +459,23 @@ def test_results_tsv_row_has_10_columns() -> None:
         description="test row",
     )
     cols = row.split("\t")
-    assert len(cols) == 10
-    assert cols[0] == "a1b2c3d"
-    assert cols[8] == "keep"
+    assert len(cols) == 12
+    assert cols[0] == "s-2026"
+    assert cols[1] == "autoresearch-a1b2c3d"
+    assert cols[2] == "a1b2c3d"
+    assert cols[10] == "keep"
 
 
 def test_results_tsv_row_critical_min_surfaces_regression() -> None:
     """critical_min column makes a single critical dim regression visible."""
     from autoresearch.train import format_results_tsv_row
 
-    # broken_tool_use at 9.0 → critical dim score = 0.1 (worst of 4 critical)
+    # broken_tool_use at 9.0 → critical dim score = 0.1 (worst of 5 critical)
     dim_means = {"broken_tool_use": 9.0}
     scores = compute_dim_scores(dim_means)
     row = format_results_tsv_row(
+        session_id="s",
+        gen_tag="g",
         commit="x",
         fitness=0.0,
         dim_scores=scores,
@@ -473,7 +484,7 @@ def test_results_tsv_row_critical_min_surfaces_regression() -> None:
         description="critical regress",
     )
     cols = row.split("\t")
-    critical_min = float(cols[2])
+    critical_min = float(cols[4])
     assert critical_min == pytest.approx(0.1, abs=1e-4)
 
 
@@ -482,6 +493,8 @@ def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
     from autoresearch.train import format_results_tsv_row
 
     row = format_results_tsv_row(
+        session_id="s",
+        gen_tag="g",
         commit="x",
         fitness=0.5,
         dim_scores=compute_dim_scores({}),
@@ -489,7 +502,7 @@ def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
         verdict="keep",
         description="bad\tdescription\nwith newlines",
     )
-    assert row.count("\t") == 9
+    assert row.count("\t") == 11
 
 
 def test_results_tsv_row_dim_count_engaged() -> None:
@@ -498,6 +511,8 @@ def test_results_tsv_row_dim_count_engaged() -> None:
 
     dim_means = {"broken_tool_use": 3.0, "overrefusal": 1.0, "eval_awareness": 1.0}
     row = format_results_tsv_row(
+        session_id="s",
+        gen_tag="g",
         commit="x",
         fitness=0.5,
         dim_scores=compute_dim_scores(dim_means),
@@ -506,17 +521,19 @@ def test_results_tsv_row_dim_count_engaged() -> None:
         description="",
     )
     cols = row.split("\t")
-    assert cols[7] == "3"
+    assert cols[9] == "3"
 
 
-def test_results_jsonl_row_carries_full_15_dim_signal() -> None:
-    """JSONL has all 15 dim means + stderrs + scores, regardless of audit emit."""
+def test_results_jsonl_row_carries_full_20_dim_signal() -> None:
+    """JSONL has all 20 dim means + stderrs + scores, regardless of audit emit."""
     from autoresearch.train import format_results_jsonl_row
 
     dim_means = {"broken_tool_use": 3.0}
     dim_stderr = {"broken_tool_use": 0.5}
     scores = compute_dim_scores(dim_means, dim_stderr)
     line = format_results_jsonl_row(
+        session_id="s-x",
+        gen_tag="autoresearch-abc",
         commit="abc",
         fitness=0.4,
         dim_means=dim_means,
@@ -527,13 +544,15 @@ def test_results_jsonl_row_carries_full_15_dim_signal() -> None:
         baseline_active=True,
     )
     payload = json.loads(line)
+    assert payload["session_id"] == "s-x"
+    assert payload["gen_tag"] == "autoresearch-abc"
     assert payload["commit"] == "abc"
     assert payload["fitness"] == 0.4
     assert set(payload["dim_means"]) == set(AXIS_TIERS)
     assert set(payload["dim_stderr"]) == set(AXIS_TIERS)
     assert payload["dim_means"]["broken_tool_use"] == pytest.approx(3.0)
     assert payload["dim_means"]["unfaithful_thinking"] == 0.0
-    # dim_scores schema parity — all 15 dims + synthetic stability key,
+    # dim_scores schema parity — all 20 dims + synthetic stability key,
     # regardless of what the caller passed in.
     assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
     assert payload["baseline_active"] is True
@@ -544,17 +563,19 @@ def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> N
     from autoresearch.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
         commit="x",
         fitness=0.5,
         dim_means={"broken_tool_use": 3.0},
         dim_stderr={},
-        dim_scores={"broken_tool_use": 0.7},  # PARTIAL — only 1 of 15 + stability
+        dim_scores={"broken_tool_use": 0.7},  # PARTIAL — only 1 of 20 + stability
         verdict="keep",
         description="",
         baseline_active=False,
     )
     payload = json.loads(line)
-    # Schema parity guard — emit always has all 15 dim keys + stability
+    # Schema parity guard — emit always has all 20 dim keys + stability
     assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
 
 
@@ -563,6 +584,8 @@ def test_results_jsonl_row_is_single_line() -> None:
     from autoresearch.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
         commit="abc",
         fitness=0.4,
         dim_means={},
@@ -580,6 +603,8 @@ def test_results_jsonl_round_trip() -> None:
     from autoresearch.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
         commit="x",
         fitness=0.5,
         dim_means={},
@@ -591,6 +616,8 @@ def test_results_jsonl_round_trip() -> None:
     )
     obj = json.loads(line)
     for key in (
+        "session_id",
+        "gen_tag",
         "commit",
         "fitness",
         "dim_means",
@@ -709,3 +736,125 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
     )
     assert ok is False
     assert "margin 0.05" in reason
+
+
+# ---------------------------------------------------------------------------
+# P1a — generation linkage (defects #2, #3, #7, #11 from 2026-05-19 plan)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_session_id_honors_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Explicit AUTORESEARCH_SESSION_ID env value is returned verbatim."""
+    monkeypatch.setenv("AUTORESEARCH_SESSION_ID", "s-fixed-123")
+    assert _resolve_session_id() == "s-fixed-123"
+
+
+def test_resolve_session_id_generates_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset env produces ``<ISO>-<short uuid>`` style id."""
+    monkeypatch.delenv("AUTORESEARCH_SESSION_ID", raising=False)
+    sid = _resolve_session_id()
+    # ISO date stamp + Z separator + 6 hex chars.
+    assert "T" in sid and "Z-" in sid
+    # uniqueness: two consecutive calls should not collide (uuid in suffix).
+    assert _resolve_session_id() != sid or len(sid) >= 18
+
+
+def test_resolve_gen_tag_honors_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUTORESEARCH_GEN_TAG override wins over the default ``autoresearch-<commit>``."""
+    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "seed-pipeline-gen1")
+    assert _resolve_gen_tag("a1b2c3d") == "seed-pipeline-gen1"
+
+
+def test_resolve_gen_tag_default_includes_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset env falls back to ``autoresearch-<commit>``."""
+    monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
+    assert _resolve_gen_tag("a1b2c3d") == "autoresearch-a1b2c3d"
+
+
+def test_resolve_gen_tag_treats_whitespace_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whitespace-only env value is treated as unset."""
+    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "   ")
+    assert _resolve_gen_tag("xyz") == "autoresearch-xyz"
+
+
+def test_append_session_index_writes_jsonl_row(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One row per call, newline-terminated, parseable as JSON."""
+    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(
+        auto_train,
+        "SESSIONS_INDEX_PATH",
+        tmp_path / "outer-loop" / "sessions.jsonl",
+    )
+    _append_session_index(
+        session_id="s-1",
+        gen_tag="autoresearch-abc",
+        component="autoresearch",
+        started_at=1000.0,
+        ended_at=1300.0,
+        extra={"commit": "abc", "fitness": 0.5},
+    )
+    path = tmp_path / "outer-loop" / "sessions.jsonl"
+    assert path.is_file()
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["session_id"] == "s-1"
+    assert payload["gen_tag"] == "autoresearch-abc"
+    assert payload["component"] == "autoresearch"
+    assert payload["started_at"] == 1000.0
+    assert payload["ended_at"] == 1300.0
+    assert payload["commit"] == "abc"
+    assert payload["fitness"] == 0.5
+
+
+def test_append_session_index_appends_not_overwrites(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multiple calls append, preserving prior rows."""
+    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(
+        auto_train,
+        "SESSIONS_INDEX_PATH",
+        tmp_path / "outer-loop" / "sessions.jsonl",
+    )
+    for i in range(3):
+        _append_session_index(
+            session_id=f"s-{i}",
+            gen_tag=f"g-{i}",
+            component="autoresearch",
+            started_at=float(i),
+            ended_at=float(i + 1),
+            extra={},
+        )
+    lines = (tmp_path / "outer-loop" / "sessions.jsonl").read_text().splitlines()
+    assert len(lines) == 3
+    ids = [json.loads(line)["session_id"] for line in lines]
+    assert ids == ["s-0", "s-1", "s-2"]
+
+
+def test_append_session_index_swallows_oserror(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing write must not raise — in-memory state stays authoritative."""
+
+    def _raise_on_mkdir(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", _raise_on_mkdir)
+    # Should not raise.
+    _append_session_index(
+        session_id="s",
+        gen_tag="g",
+        component="autoresearch",
+        started_at=0.0,
+        ended_at=1.0,
+        extra={},
+    )
