@@ -79,6 +79,16 @@ functional change.
   → `error_category="generation_failed"`. `announce=False` so sub-spawns
   don't double-fire the parent loop's announce queue.
 
+- **Reflection (Critic) agent (S3).** `plugins/seed_pipeline/agents/critic.py`
+  fans out one sub-agent per candidate (dispatched to the `seed_critic`
+  AgentDefinition) and collects dim-level critique JSON keyed by
+  `candidate_id` into `state.reflections`. Pairs results by `task_id`
+  dict lookup (S2-fix pattern), pins `candidate_id` from the task (never
+  trusts the LLM echo), validates the required `_REQUIRED_CRITIQUE_FIELDS`
+  set before merging. JSON-as-text fallback in `output["text"]` supported.
+  All-fail → `error_category="critique_failed"`. 10 unit tests +
+  `_ReverseOrderManager` regression covering completion-order pairing.
+
 - **Seed pipeline manifest schema + cross-manifest validator (S2.5).**
   `plugins/seed_pipeline/{seed_pipeline.plugin.toml, manifest.py}` per
   ADR-003 — 7-role + 3-voter judge panel declarative binding. Reuses
