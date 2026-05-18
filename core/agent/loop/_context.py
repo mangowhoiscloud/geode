@@ -68,14 +68,26 @@ def repair_messages(messages: list[dict[str, Any]]) -> None:
 
 
 def build_system_prompt(loop: AgenticLoop) -> str:
-    """Build the system prompt with skill context and agentic suffix."""
-    base = _build_system_prompt(model=loop.model)
-    # Inject skill context into placeholder
+    """Build the system prompt with skill context and agentic suffix.
+
+    S2-wire (2026-05-18): when ``loop._system_prompt_override`` is set
+    (AgentDefinition-driven spawn), the override replaces the default
+    GEODE system body. Skill context + agentic suffix + system_suffix
+    are still appended so tool-calling and observability invariants
+    hold for all spawns regardless of role.
+    """
+    override = getattr(loop, "_system_prompt_override", None)
     skill_ctx = ""
     if loop._skill_registry is not None:
         skill_ctx = loop._skill_registry.get_context_block()
-    base = base.replace("{skill_context}", skill_ctx or '<available_skills status="empty" />')
-    prompt = base + "\n" + AGENTIC_SUFFIX
+    if override:
+        base = override
+        if skill_ctx:
+            base = base + "\n\n" + skill_ctx
+    else:
+        base = _build_system_prompt(model=loop.model)
+        base = base.replace("{skill_context}", skill_ctx or '<available_skills status="empty" />')
+    prompt: str = base + "\n" + AGENTIC_SUFFIX
     if loop._system_suffix:
         prompt += "\n\n" + loop._system_suffix
     return prompt
