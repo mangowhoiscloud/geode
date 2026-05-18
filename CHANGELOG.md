@@ -49,6 +49,21 @@ functional change.
 
 ### Added
 
+- **Meta-review agent + parent-context offload (S8).** New
+  `plugins/seed_pipeline/agents/meta_reviewer.py` dispatches a single
+  sub-agent (no per-candidate fan-out) carrying a compact state
+  snapshot (candidate counts, target_dim coverage, elo p50/p95,
+  evolution yield) so the LLM produces an aggregate report without
+  context blowing past 1KB. Required fields: `coverage`,
+  `underrepresented_dims`, `overrepresented_dims`, `next_gen_priors`,
+  `elo_distribution`, `evolution_yield`, `session_summary` — partial
+  payloads dropped via `parse_structured_output`. Adds
+  `_persist_state()` to `Pipeline.run()` (S8 parent-context offload)
+  that writes `<run_dir>/state.json` after meta-review fires;
+  runtime-only fields (`budget_guard`) skipped, Path fields coerced
+  to strings. Skipped silently when `state.run_dir` is None; persist
+  failures logged as WARNING (in-memory state remains primary).
+  17 unit tests (12 meta_reviewer + 5 state_offload).
 - **Evolution agent (S7).** New `plugins/seed_pipeline/agents/evolver.py`
   fans out one sub-agent per Ranker survivor; each reads the Critic's
   `rewrite_section` hint + the per-candidate `weaknesses` + Pilot

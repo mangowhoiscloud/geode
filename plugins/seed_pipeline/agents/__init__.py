@@ -7,7 +7,7 @@
 - pilot         (S5, ✓) — GEODE addition (scientist-in-the-loop 자리)
 - ranker        (S6, ✓) — Elo tournament + 3-judge panel
 - evolver       (S7, ✓) — Reflection-driven section rewrite
-- meta_reviewer (S8)
+- meta_reviewer (S8, ✓) — coverage + next-gen prior + session summary
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from plugins.seed_pipeline.agents.base import (
 from plugins.seed_pipeline.agents.critic import Critic
 from plugins.seed_pipeline.agents.evolver import Evolver
 from plugins.seed_pipeline.agents.generator import Generator
+from plugins.seed_pipeline.agents.meta_reviewer import MetaReviewer
 from plugins.seed_pipeline.agents.pilot import Pilot
 from plugins.seed_pipeline.agents.proximity import Proximity
 from plugins.seed_pipeline.agents.ranker import Ranker
@@ -29,6 +30,7 @@ __all__ = [
     "Critic",
     "Evolver",
     "Generator",
+    "MetaReviewer",
     "Pilot",
     "Proximity",
     "Ranker",
