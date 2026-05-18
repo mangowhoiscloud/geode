@@ -469,31 +469,6 @@
     }
   },
   {
-    "name": "text_embed",
-    "description": "Computes vector embeddings for a list of text strings. Uses OpenAI text-embedding-3-small (1536-dim). Used by the seed-pipeline Proximity agent (ADR-003) for dedup; not intended for general agent use. Returns vectors aligned 1:1 with input order. Requires OPENAI_API_KEY.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "texts": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of text strings to embed."
-        },
-        "model": {
-          "type": "string",
-          "description": "Embedding model (default: text-embedding-3-small)."
-        }
-      },
-      "required": [
-        "texts"
-      ]
-    }
-  },
-  {
     "name": "read_document",
     "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view local file contents. For remote URLs, use web_fetch instead. For file discovery, use glob_files first.",
     "category": "discovery",

@@ -1,8 +1,14 @@
-"""text_embed tool — OpenAI text-embedding-3-small wrapper.
+"""text_embed — OpenAI text-embedding-3-small Python helper.
 
 S4 deliverable per ADR-003. Provides a synchronous + async API for the
 seed-pipeline Proximity agent (3-track dedup) to compute vector
 embeddings for candidate-seed bodies and pool members.
+
+NOT exposed as an LLM-dispatch tool (no entry in
+``core/tools/definitions.json``). Proximity imports ``embed_texts``
+directly because the Proximity phase is pure-Python — it does NOT
+run an LLM completion that would dispatch tools by name. Other agents
+have no use case for embeddings, so this stays internal.
 
 Provider — OpenAI ``text-embedding-3-small`` (1536-dim, $0.02 per 1M
 tokens). The ADR-003 settled decision: single-provider, PAYG only

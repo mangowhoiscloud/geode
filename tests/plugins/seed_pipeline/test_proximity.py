@@ -209,3 +209,65 @@ def test_proximity_missing_candidate_file(tmp_path: Path) -> None:
 def test_thresholds_pinned() -> None:
     assert EMBED_SIMILARITY_THRESHOLD == 0.85
     assert LEXICAL_JACCARD_THRESHOLD == 0.40
+
+
+def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
+    """Pool-vs-candidate dedup — candidate matching a pool seed by lexical
+    track is marked, even if no sibling candidate matches.
+    """
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    pool_body = " ".join(["foo bar baz qux qaz wxy abc def ghi"] * 4)
+    (pool_dir / "pool_seed.md").write_text(pool_body, encoding="utf-8")
+
+    state = _make_state(tmp_path)
+    state.pool_path_in = pool_dir
+    # c1 is similar to pool_seed; c2 is unique
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body=pool_body),
+        _make_candidate(
+            "c2", tmp_path / "c2.md", body="totally unrelated content here"
+        ),
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    pool_texts = proximity._load_pool_texts(state)
+    lexical_dupes = proximity._lexical_track(candidate_texts, pool_texts)
+    assert "c1" in lexical_dupes
+    assert "c2" not in lexical_dupes
+
+
+def test_proximity_pool_dedup_embedding(tmp_path: Path) -> None:
+    """Pool-vs-candidate dedup — embedding track marks candidate matching pool."""
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    (pool_dir / "pool_seed.md").write_text("pool body content", encoding="utf-8")
+
+    state = _make_state(tmp_path)
+    state.pool_path_in = pool_dir
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="x"),
+        _make_candidate("c2", tmp_path / "c2.md", body="y"),
+    ]
+    # 2 candidates + 1 pool — c1's vector matches the pool vector.
+    fake_vectors = [
+        [1.0, 0.0, 0.0],  # c1
+        [0.0, 1.0, 0.0],  # c2 — distinct
+        [1.0, 0.0, 0.0],  # pool_seed — matches c1
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    pool_texts = proximity._load_pool_texts(state)
+    with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
+        embed_dupes = proximity._embedding_track(candidate_texts, pool_texts)
+    assert "c1" in embed_dupes
+    assert "c2" not in embed_dupes
+
+
+def test_proximity_pool_path_missing_dir_logged(tmp_path: Path) -> None:
+    """Non-existent pool_path_in path returns empty list with WARNING."""
+    state = _make_state(tmp_path)
+    state.pool_path_in = tmp_path / "nonexistent_pool"
+    proximity = Proximity()
+    pool_texts = proximity._load_pool_texts(state)
+    assert pool_texts == []
