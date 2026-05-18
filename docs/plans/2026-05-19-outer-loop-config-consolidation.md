@@ -117,6 +117,8 @@ Phase ζ — checkpoint + resume on credential rollout
   PR-ζ3 — autoresearch _load_pending_audit() + --resume flag (~200 LOC)
   PR-ζ4 — idempotency-key + 로컬 response cache (~/.geode/outer-loop/<s>/idempotency.db)  (~350 LOC)
   PR-ζ5 — credential-rollover detection + journal event (~150 LOC)
+  PR-ζ5.5 — outer-loop ↔ ProfileRotator wiring                  (~300 LOC)
+  PR-ζ5.6 — 2-axis account picker (provider ←→ × profile ↑↓)    (~250 LOC)
   PR-ζ6 — docs + runbook                                       (~100 LOC)
                                   ↓
 [Phase C of wiring sprint] — gen-0 baseline smoke (~$5)
@@ -135,10 +137,12 @@ Phase ζ — checkpoint + resume on credential rollout
 | **PR-ζ3** | feat(autoresearch): `_load_pending_audit` + `--resume <session>` | ADR settled | ~200 | `autoresearch/train.py` (resume entry point + active-source check), tests | PR-ζ1 + PR-δ1 |
 | **PR-ζ4** | feat(checkpoint): idempotency-key + local response cache | ADR settled | ~350 | `core/runtime_state/idempotency.py` (NEW, SQLite-backed cache at `~/.geode/outer-loop/<s>/idempotency.db`), LLM call wrapper checks cache pre-call, writes post-call, tests | PR-ζ1 |
 | **PR-ζ5** | feat(observability): credential-rollover detection + journal event | ADR settled | ~150 | resume path comparison: checkpoint.active_sources vs current resolved sources → emit `credential_rolled_over` event to journal (P1c), tests | PR-ζ1 + PR-γ1 |
-| **PR-ζ6** | docs + runbook | wrap-up | ~100 | `docs/audits/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual), CHANGELOG entries, plan doc finalisation | Phase ζ |
+| **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into outer-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_outer_loop_binding(family) → (source, profile)`, autoresearch + seed-pipeline LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
+| **PR-ζ5.6** | feat(cli): 2-axis account picker (provider ←→ × profile ↑↓) | 2026-05-19 picker UX directive | ~250 | `core/cli/account_picker.py` (NEW, mirrors `core/cli/effort_picker.py` 2-axis pattern), `/login picker` slash, banner abort-dialog auto-trigger (PR-γ1 wire), agent loop NL phrase recogniser, tests | PR-ζ5.5 + PR-γ1 |
+| **PR-ζ6** | docs + runbook | wrap-up | ~150 | `docs/audits/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual w/ picker screenshots), CHANGELOG entries, plan doc finalisation | Phase ζ |
 
-**Total estimate**: ~2,350 LOC (Phase α-ε ~1,050 + Phase ζ ~1,300) + 1 ADR + 1 schema doc + 1 runbook + 1 sample fixture.
-**Sprint estimate**: 4-5 sprint (per-PR Codex MCP audit 포함).
+**Total estimate**: ~2,900 LOC (Phase α-ε ~1,050 + Phase ζ ~1,850) + 1 ADR + 1 schema doc + 1 runbook + 1 sample fixture.
+**Sprint estimate**: 5-6 sprint (per-PR Codex MCP audit 포함).
 
 ## Phase α (PR-α1) — config schema 상세
 
@@ -300,6 +304,9 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 | Phase ζ resume 시 active_source 가 변경됐으나 idempotency-key 가 매칭되어 잘못된 cached response 재사용 | idempotency-key 가 `(run_id, unit_id, agent_role)` 만으로 구성 — source 가 바뀌어도 의미상 같은 unit. 단 critical 변경 (e.g. judge=opus → judge=sonnet) 은 caller 가 새 key 발급 책임 (config.toml hash 를 key 에 prefix) |
 | Phase ζ 의 SQLite idempotency.db 가 disk full 로 write 실패 | atomic_write_io 패턴 채택, write 실패 시 in-memory only fallback + journal 에 `idempotency_disabled` event |
 | co-scientist 원본/reference impl 모두 production-ready resume 미제공 → 우리가 first-class implementer | ADR 의 reference table 에 명시. LangGraph + Inspect_ai + Stripe 의 검증된 패턴 합성, novel design 아님 |
+| ProfileRotator wiring (PR-ζ5.5) 에서 autoresearch + seed-pipeline 의 LLM call 사이트가 수십 개라 migration 누락 위험 | Codex MCP audit 으로 `grep -r "agentic_call\|llm.*call"` 후 모든 사이트가 profile.name 전달하는지 검증. 누락된 site 는 fallback 으로 기본 profile resolver 의 결과 사용 (행동 변경 없음) |
+| 2-axis picker UX (PR-ζ5.6) 가 non-tty (CI / pipe) 환경에서 깨짐 | `pick_model_and_effort` 와 동일 패턴 — `sys.stdin.isatty()` 체크 후 fallback 으로 numbered list 출력 + arg-by-name 지원 (e.g. `/login picker --provider anthropic --profile work`) |
+| paperclip/crumb subprocess delegate (`claude -p`) 흡수 여부 | 본 sprint scope 외 — `docs/audits/2026-05-18-i2-paperclip-review.md` 가 별도 "Deferred — PAYG path 충분" 결정. Future ADR 으로 분리 |
 
 ## Reference
 
@@ -314,6 +321,8 @@ PR-δ2 (seed-pipeline + petri user_overrides):
   - "설정은 SOT 로 단일화해서 묶고"
   - "outer loop 가 subscription 초과로 끊겨도 계정 롤아웃해서 이어갈 수 있게 체크포인트와 같은 replay-resume 조치"
   - "ADR 들어가기 전에 관련 레퍼런스 디깅 + 원본인 co-scientist 의 패키지 구현본 살피기"
+  - "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로 롤아웃이 가능한지 살피고 현재 구조에서 어떻게 보강 구현할지도 고려"
+  - "유저가 자연어 뿐 아니라 UI/UX 로도 선택/입력할 수 있게 개선 (GEODE 슬래시 명령어 구조 참고). 롤아웃 기준은 자동이 아니라 크레딧 소진 시 연결된 프로바이더별로 연결된 계정을 리스트업 혹은 추가 입력하도록 UI/UX 를 제시 (provider 변경은 좌우, 계정 선택은 위아래)"
 - Codex CLI `forced_login_method`: https://developers.openai.com/codex/config-reference
 - prompt_toolkit `bottom_toolbar` + refresh: https://github.com/prompt-toolkit/python-prompt-toolkit/issues/277
 - Hermes auxiliary roles: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
@@ -323,6 +332,9 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 - Stripe idempotency keys: https://docs.stripe.com/api/idempotent_requests
 - co-scientist paper: https://arxiv.org/abs/2502.18864 (§4.5 + §5)
 - AI-CoScientist reference impl: https://github.com/The-Swarm-Corporation/AI-CoScientist
+- paperclip / crumb subprocess pattern: `docs/audits/2026-05-18-i2-paperclip-review.md` + 외부 `~/workspace/crumb/src/adapters/claude-local.ts`
+- GEODE 기존 multi-profile infra: `core/auth/profiles.py` (AuthProfile + ProfileStore), `core/auth/rotation.py` (ProfileRotator), `core/auth/credential_breadcrumb.py` (LLM hint)
+- GEODE 기존 2-axis picker pattern: `core/cli/effort_picker.py` (`pick_model_and_effort` — Claude Code `ModelPicker.tsx` parity)
 
 ## Post-completion exit
 
