@@ -6,12 +6,9 @@ from unittest.mock import patch
 
 from plugins.seed_pipeline.picker import PickerResult, RoleBinding, VoterBinding
 from plugins.seed_pipeline.pre_flight import (
-    MAX_BUDGET_USD,
-    MIN_BUDGET_USD,
     PreFlightIssue,
     PreFlightReport,
     check_auth,
-    check_budget,
     check_diversity,
     run_pre_flight,
 )
@@ -45,35 +42,6 @@ def _good_picker() -> PickerResult:
         diversity_families=2,
         subscription_paths_in_use=frozenset(),
     )
-
-
-def test_check_budget_valid_returns_empty() -> None:
-    assert check_budget(soft_usd=2.0, hard_usd=10.0) == []
-
-
-def test_check_budget_negative_soft_errors() -> None:
-    issues = check_budget(soft_usd=-1.0, hard_usd=10.0)
-    assert any(i.code == "budget.non_positive" and i.severity == "error" for i in issues)
-
-
-def test_check_budget_zero_hard_errors() -> None:
-    issues = check_budget(soft_usd=1.0, hard_usd=0.0)
-    assert any(i.code == "budget.non_positive" and i.severity == "error" for i in issues)
-
-
-def test_check_budget_soft_above_hard_errors() -> None:
-    issues = check_budget(soft_usd=10.0, hard_usd=5.0)
-    assert any(i.code == "budget.soft_above_hard" and i.severity == "error" for i in issues)
-
-
-def test_check_budget_absurd_high_warns() -> None:
-    issues = check_budget(soft_usd=1.0, hard_usd=MAX_BUDGET_USD + 1.0)
-    assert any(i.code == "budget.absurd_high" and i.severity == "warning" for i in issues)
-
-
-def test_check_budget_absurd_low_warns() -> None:
-    issues = check_budget(soft_usd=MIN_BUDGET_USD / 2, hard_usd=1.0)
-    assert any(i.code == "budget.absurd_low" and i.severity == "warning" for i in issues)
 
 
 def test_check_auth_all_present() -> None:
@@ -171,7 +139,7 @@ def test_check_diversity_collapsed_panel_errors() -> None:
 def test_run_pre_flight_aggregates_all_checks() -> None:
     picker = _good_picker()
     with patch("plugins.seed_pipeline.pre_flight._credential_present", return_value=True):
-        report = run_pre_flight(picker, soft_usd=2.0, hard_usd=10.0)
+        report = run_pre_flight(picker)
     assert isinstance(report, PreFlightReport)
     assert not report.has_errors
 
@@ -179,16 +147,8 @@ def test_run_pre_flight_aggregates_all_checks() -> None:
 def test_run_pre_flight_surfaces_errors() -> None:
     picker = _good_picker()
     with patch("plugins.seed_pipeline.pre_flight._credential_present", return_value=False):
-        report = run_pre_flight(picker, soft_usd=2.0, hard_usd=10.0)
+        report = run_pre_flight(picker)
     assert report.has_errors
-
-
-def test_run_pre_flight_surfaces_budget_errors() -> None:
-    picker = _good_picker()
-    with patch("plugins.seed_pipeline.pre_flight._credential_present", return_value=True):
-        report = run_pre_flight(picker, soft_usd=10.0, hard_usd=2.0)
-    assert report.has_errors
-    assert any(i.code == "budget.soft_above_hard" for i in report.issues)
 
 
 def test_pre_flight_report_has_errors_only_for_error_severity() -> None:

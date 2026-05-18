@@ -27,7 +27,7 @@ Lifecycle
    ``[seed_pipeline.role.<name>]`` manifest entry. The manifest carries
    ``default_model`` + ``allowed_models`` + ``role_contract`` (S2.5).
 2. ``execute(state)`` — synchronous entry point. The orchestrator
-   wraps each call in its own ``BudgetGuard`` and sub-agent isolation.
+   provides sub-agent isolation and cost rollup.
 3. Returns ``SeedAgentResult`` with ``status``, ``output`` payload,
    token usage, optional ``error_message``.
 

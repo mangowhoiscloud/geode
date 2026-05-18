@@ -14,7 +14,7 @@ Provider — OpenAI ``text-embedding-3-small`` (1536-dim, $0.02 per 1M
 tokens). The ADR-003 settled decision: single-provider, PAYG only
 (ChatGPT Plus OAuth does not expose embeddings API). Per ADR-001's
 operational defaults the embedding call is a flat cost — embedded into
-the seed-pipeline budget rollup via the caller's ``BudgetGuard``.
+the seed-pipeline cost rollup on the caller's ``SeedAgentResult``.
 
 P-checklist application (cycle-skill SKILL.md):
 

@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **BudgetGuard layer removed (PR 1).** Per the
+  2026-05-18 directive ("비용 가드는 제거하자"), the entire
+  per-phase budget cap mechanism is gone. Deleted:
+  - `core/agent/sub_agent_budget.py` (BudgetGuard / SubAgentBudget /
+    BudgetExceededError / DEFAULT_SOFT_USD=2.00 / DEFAULT_HARD_USD=10.00)
+  - `PipelineState.budget_guard` field
+  - `Pipeline._run_phase` BudgetGuard creation + `BudgetExceededError`
+    handling + previous-guard restore
+  - `Pipeline.__init__` `budget_soft_usd` / `budget_hard_usd` kwargs
+  - `pre_flight.check_budget()` + `MIN_BUDGET_USD` / `MAX_BUDGET_USD`
+    constants
+  - `run_pre_flight(picker, soft_usd, hard_usd)` signature → now just
+    `run_pre_flight(picker)` (auth + diversity only)
+  - CLI `--soft-usd` / `--hard-usd` options on `geode audit-seeds`
+  - `HookEvent.SUBAGENT_BUDGET_WARNING` (HookEvent count 59 → 58)
+  - `tests/core/agent/test_sub_agent_budget.py`,
+    `tests/core/agent/test_budget_race.py`
+
+  Spend is now controlled by the pre-run cost preview + human gate at
+  the CLI surface (`geode audit-seeds` prints the cost summary and
+  prompts for confirm unless `--yes`). Cost rollup still happens —
+  agents set `SeedAgentResult.usd_spent` / `prompt_tokens` /
+  `completion_tokens` directly and the orchestrator sums them into
+  `state.*` for the run-level total. The pre-PR-1 task #73 (S6.5-wire
+  BudgetGuard worker propagation) is obsolete and was deleted.
+
 ### Changed
 
 - **Petri seed hierarchy + 5 new dims (PR 0).** `plugins/petri_audit/`
