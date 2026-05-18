@@ -238,53 +238,7 @@ async def call_llm_with_tools_async(
         )
         return cast(ToolUseResult, tools_result)
 
-    providers: list[tuple[str, str]] = [(provider, target_model)]
-    if settings.llm_cross_provider_failover:
-        from core.llm.provider_dispatch import _get_fallback_chain
-
-        for p in settings.llm_cross_provider_order:
-            if p != provider:
-                chain = _get_fallback_chain(p)
-                if chain:
-                    providers.append((p, chain[0]))
-
-    last_exc: Exception | None = None
-    t0 = time.perf_counter()
-    for idx, (provider_name, provider_model) in enumerate(providers):
-        try:
-            return await _dispatch(provider_name, provider_model)
-        except Exception as exc:
-            last_exc = exc
-            if idx < len(providers) - 1:
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-                next_provider, next_model = providers[idx + 1]
-                log.warning(
-                    "Cross-provider fallback: %s(%s) -> %s(%s) [%s] after %.0fms",
-                    provider_name,
-                    provider_model,
-                    next_provider,
-                    next_model,
-                    "call_llm_with_tools_async",
-                    elapsed_ms,
-                )
-                _fire_hook(
-                    HookEvent.FALLBACK_CROSS_PROVIDER,
-                    {
-                        "from_provider": provider_name,
-                        "to_provider": next_provider,
-                        "from_model": provider_model,
-                        "to_model": next_model,
-                        "function": "call_llm_with_tools_async",
-                        "error": str(exc),
-                        "elapsed_ms": round(elapsed_ms, 1),
-                        "attempt": idx,
-                    },
-                )
-                continue
-            raise
-
-    assert last_exc is not None
-    raise last_exc
+    return await _dispatch(provider, target_model)
 
 
 __all__ = ["call_llm_with_tools_async"]

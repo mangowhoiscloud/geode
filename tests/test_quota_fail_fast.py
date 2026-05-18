@@ -43,6 +43,8 @@ from unittest.mock import MagicMock
 import core.agent.loop as _loop_mod
 import core.agent.loop._model_switching as _switching_mod
 import core.llm.adapters as _adapters_mod
+import core.llm.provider_dispatch as _provider_dispatch_mod
+from core.config._settings import Settings
 from core.llm.errors import BillingError
 
 # ---------------------------------------------------------------------------
@@ -60,6 +62,18 @@ def test_cross_provider_fallback_map_is_empty_for_all_providers() -> None:
             "v0.53.0 governance redesign requires empty list. Silent "
             "provider swap creates cost surprise + behavior drift."
         )
+
+
+def test_provider_dispatch_has_no_cross_provider_dispatcher() -> None:
+    """Router calls must not have a shared cross-provider fallback entry point."""
+    assert not hasattr(_provider_dispatch_mod, "_cross_provider_dispatch")
+
+
+def test_settings_class_has_no_cross_provider_failover_field() -> None:
+    """The opt-in cross-provider failover setting was deleted, not hidden."""
+    assert "llm_cross_provider_failover" not in Settings.model_fields
+    assert "llm_cross_provider_order" not in Settings.model_fields
+    assert not hasattr(Settings, "llm_cross_provider_failover")
 
 
 def test_loop_has_no_escalation_methods() -> None:

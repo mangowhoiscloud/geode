@@ -1,16 +1,13 @@
-"""Provider dispatch — per-provider configuration and cross-provider fallback.
+"""Provider dispatch — per-provider configuration and failover helpers.
 
 Extracted from router.py to reduce module size. Contains circuit breaker
-singletons, provider dispatch table, retry helpers, and cross-provider
-dispatch logic.
+singletons, provider dispatch table, and retry helpers.
 """
 
 from __future__ import annotations
 
 import logging
-import time
-from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any
 
 from core.config import (
     ANTHROPIC_FALLBACK_CHAIN,
@@ -49,7 +46,7 @@ _hooks_ctx: Any = None  # HookSystem | None — set via set_dispatch_hooks()
 
 
 def set_dispatch_hooks(hooks: Any) -> None:
-    """Wire HookSystem into provider_dispatch for cross-provider hook events."""
+    """Wire HookSystem into provider_dispatch for compatibility."""
     global _hooks_ctx
     _hooks_ctx = hooks
 
@@ -216,68 +213,3 @@ def _retry_provider_aware(
         billing_message=f"{provider} API billing/credit error.",
         provider_label=provider.upper(),
     )
-
-
-T_Result = TypeVar("T_Result")
-
-
-def _cross_provider_dispatch(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
-    primary_provider: str,
-    primary_model: str,
-    dispatch_fn: Callable[[str, str], T_Result],
-    function_name: str,
-) -> T_Result:
-    """Execute dispatch_fn(provider, model) with opt-in cross-provider fallback.
-
-    When ``settings.llm_cross_provider_failover`` is True and the primary
-    provider chain is exhausted, iterates through ``llm_cross_provider_order``
-    trying each remaining provider's primary model.
-    """
-    from core.config import settings
-
-    providers: list[tuple[str, str]] = [(primary_provider, primary_model)]
-    if settings.llm_cross_provider_failover:
-        for p in settings.llm_cross_provider_order:
-            if p != primary_provider:
-                chain = _get_fallback_chain(p)
-                if chain:
-                    providers.append((p, chain[0]))
-
-    last_exc: Exception | None = None
-    t0 = time.perf_counter()
-    for idx, (provider, model) in enumerate(providers):
-        try:
-            return dispatch_fn(provider, model)
-        except Exception as exc:
-            last_exc = exc
-            if idx < len(providers) - 1:
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-                next_p, next_m = providers[idx + 1]
-                log.warning(
-                    "Cross-provider fallback: %s(%s) -> %s(%s) [%s] after %.0fms",
-                    provider,
-                    model,
-                    next_p,
-                    next_m,
-                    function_name,
-                    elapsed_ms,
-                )
-                _fire_hook(
-                    HookEvent.FALLBACK_CROSS_PROVIDER,
-                    {
-                        "from_provider": provider,
-                        "to_provider": next_p,
-                        "from_model": model,
-                        "to_model": next_m,
-                        "function": function_name,
-                        "error": str(exc),
-                        "elapsed_ms": round(elapsed_ms, 1),
-                        "attempt": idx,
-                    },
-                )
-                continue
-            raise
-
-    # Unreachable when providers is non-empty; satisfies type checker
-    assert last_exc is not None
-    raise last_exc
