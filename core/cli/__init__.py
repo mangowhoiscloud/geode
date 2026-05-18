@@ -18,6 +18,7 @@ from typing import Any
 
 import typer
 from plugins.petri_audit.cli_audit import audit, petri_archive
+from plugins.seed_pipeline.cli import audit_seeds_app
 
 from core import __version__
 
@@ -331,6 +332,7 @@ app.command()(history)
 app.command()(serve)
 app.command()(audit)
 app.command(name="petri-archive")(petri_archive)
+app.add_typer(audit_seeds_app, name="audit-seeds")
 
 
 def _version_option(value: bool) -> None:

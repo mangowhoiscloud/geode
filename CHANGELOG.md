@@ -49,6 +49,20 @@ functional change.
 
 ### Added
 
+- **Seed-pipeline CLI sub-app + `/audit-seeds` slash + human gate (S11).**
+  New `plugins/seed_pipeline/cli.py` defines a `geode audit-seeds`
+  Typer sub-app (`generate` action with `--target-dim`, `--gen-tag`,
+  `--candidates`, `--soft-usd`, `--hard-usd`, `--yes`, `--quiet`
+  options) AND a `/audit-seeds` slash command. The flow composes the
+  S5.5 picker → S6.5 cost preview → S6.5 pre-flight → human gate (last
+  off-ramp before LLM calls) → S1 Pipeline.run(). Pre-flight error or
+  user-says-no aborts with exit 1; dispatch exception → exit 2;
+  pipeline success → exit 0. `core/cli/routing.py` registers
+  `/audit-seeds` slash; `core/cli/__init__.py` mounts the Typer
+  sub-app under `geode audit-seeds`. 16 unit tests covering yes/no
+  gate, pre-flight abort, dispatch exception, cost summary emission,
+  ToS quiet suppression, slash arg parsing edges (quote error,
+  unknown flag, short flags, count parse).
 - **autoresearch results.tsv 10-col + results.jsonl raw emit (S10).**
   `autoresearch/train.py` adds `format_results_tsv_row()` (10-col
   schema: `commit, fitness, critical_min, critical_mean,
