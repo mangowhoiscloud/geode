@@ -79,6 +79,12 @@ functional change.
   → `error_category="generation_failed"`. `announce=False` so sub-spawns
   don't double-fire the parent loop's announce queue.
 
+- **`seed-pipeline-cycle` skill (cycle scaffold).** Session 63 의 6-PR 검증
+  사이클을 `.geode/skills/seed-pipeline-cycle/SKILL.md` 로 codify. 6 phase
+  (Allocation / Implement + P1-P7 checklist / Verify + Codex MCP audit /
+  PR & CI / Merge & Cleanup / Optional Review). S2.5-S12 + 모든 fix-up
+  PR 에 동일 적용. 본 SKILL 자체가 1st 적용 사례.
+
 ### Fixed
 
 - **Seed pipeline S2-fix.** Multi-PR review found 7 issues in the merged
