@@ -300,9 +300,7 @@ class TestOpenAIResponsesApiMigration:
         # PR #1316 — PAYG switched from blocking responses.create to streaming
         # responses.stream (via _stream_openai_response helper) for TTFB parity
         # with Anthropic/Codex.
-        uses_responses = (
-            "responses.create" in module_source or "responses.stream" in module_source
-        )
+        uses_responses = "responses.create" in module_source or "responses.stream" in module_source
         assert uses_responses
         assert "chat.completions.create" not in call_source
 
