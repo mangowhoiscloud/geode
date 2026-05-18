@@ -15,6 +15,18 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+def _cached_tokens_from_usage(usage: Any, *detail_attrs: str) -> int:
+    """Return cached token count from the first supported usage detail path."""
+    for attr in detail_attrs:
+        details = getattr(usage, attr, None)
+        if details is None:
+            continue
+        cached = getattr(details, "cached_tokens", None)
+        if isinstance(cached, int):
+            return cached
+    return 0
+
+
 @dataclass(slots=True)
 class ToolUseBlock:
     """A single tool-use request from the LLM."""
@@ -245,10 +257,7 @@ def normalize_openai(response: Any) -> AgenticResponse:
         # portion is *included* in ``prompt_tokens`` so we surface it
         # separately for the tracker (which prices it at the cache_read
         # rate). No cache_write equivalent on Chat Completions.
-        cache_read = 0
-        prompt_details = getattr(response.usage, "prompt_tokens_details", None)
-        if prompt_details is not None:
-            cache_read = getattr(prompt_details, "cached_tokens", 0) or 0
+        cache_read = _cached_tokens_from_usage(response.usage, "prompt_tokens_details")
         usage = ResponseUsage(
             input_tokens=response.usage.prompt_tokens or 0,
             output_tokens=response.usage.completion_tokens or 0,
@@ -361,10 +370,20 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
         details = getattr(response.usage, "output_tokens_details", None)
         if details is not None:
             thinking_tok = getattr(details, "reasoning_tokens", 0) or 0
+        # Responses API reports prompt-cache hits under
+        # ``input_tokens_details.cached_tokens``. Keep the
+        # ``prompt_tokens_details`` fallback so older Chat-Completions-shaped
+        # mocks or compatibility layers still surface cache reads.
+        cache_read = _cached_tokens_from_usage(
+            response.usage,
+            "input_tokens_details",
+            "prompt_tokens_details",
+        )
         usage = ResponseUsage(
             input_tokens=getattr(response.usage, "input_tokens", 0) or 0,
             output_tokens=getattr(response.usage, "output_tokens", 0) or 0,
             thinking_tokens=thinking_tok,
+            cache_read_tokens=cache_read,
         )
 
     if not blocks and (usage.output_tokens or 0) > (usage.thinking_tokens or 0):

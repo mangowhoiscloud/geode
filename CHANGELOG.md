@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Provider parity cache + streaming fixes.** Codex/OpenAI Responses usage now
+  surfaces `input_tokens_details.cached_tokens` as cache-read telemetry, OpenAI
+  PAYG `agentic_call` uses Responses streaming instead of blocking create, and
+  GLM `agentic_call` streams Chat Completions with `prompt_cache_key` routing plus
+  a session-scoped unsupported-param fallback.
+- **Provider parity cache + streaming fixes.** Codex/OpenAI Responses usage 의
+  `input_tokens_details.cached_tokens` 를 cache-read telemetry 로 반영하고,
+  OpenAI PAYG `agentic_call` 은 blocking create 대신 Responses streaming 을
+  사용합니다. GLM `agentic_call` 은 Chat Completions streaming 과
+  `prompt_cache_key` 라우팅을 사용하며, 파라미터 미지원 시 세션 동안 fallback
+  상태를 캐시합니다.
 ### Added
 
 - **PR-γ1 — 3-tier subscription quota banner + abort dialog.** Closes

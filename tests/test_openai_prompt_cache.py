@@ -74,13 +74,13 @@ def test_key_length_is_32_hex_chars() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Adapter wiring — prompt_cache_key reaches responses.create
+# Adapter wiring — prompt_cache_key reaches responses.stream
 # ---------------------------------------------------------------------------
 
 
 def test_agentic_call_injects_prompt_cache_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """The adapter must include ``prompt_cache_key`` in the kwargs sent to
-    ``client.responses.create``.  Capture the kwargs via a stub client.
+    ``client.responses.stream``.  Capture the kwargs via a stub client.
 
     The codebase does not depend on pytest-asyncio, so we drive the async
     method via ``asyncio.run`` directly — matching the pattern used by
@@ -95,10 +95,26 @@ def test_agentic_call_injects_prompt_cache_key(monkeypatch: pytest.MonkeyPatch) 
         output: list[Any] = []
         output_text = ""
 
-    class _StubResponses:
-        def create(self, **kwargs: Any) -> Any:
-            captured.update(kwargs)
+    class _StubStream:
+        async def __aenter__(self) -> _StubStream:
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def __aiter__(self) -> _StubStream:
+            return self
+
+        async def __anext__(self) -> Any:
+            raise StopAsyncIteration
+
+        async def get_final_response(self) -> Any:
             return _StubResponse()
+
+    class _StubResponses:
+        def stream(self, **kwargs: Any) -> Any:
+            captured.update(kwargs)
+            return _StubStream()
 
     class _StubClient:
         def __init__(self) -> None:

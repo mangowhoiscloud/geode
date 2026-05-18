@@ -482,6 +482,21 @@ def _is_payg_reasoning_model(model: str) -> bool:
     return model in _PAYG_REASONING_O_SERIES or model.startswith("gpt-5")
 
 
+async def _stream_openai_response(client: Any, create_kwargs: dict[str, Any]) -> Any:
+    """Run a Responses API stream and return a final response with output items."""
+    async with client.responses.stream(**create_kwargs) as stream:
+        accumulated_items: list[Any] = []
+        async for event in stream:
+            if getattr(event, "type", "") == "response.output_item.done":
+                item = getattr(event, "item", None)
+                if item is not None:
+                    accumulated_items.append(item)
+        final = await stream.get_final_response()
+        if accumulated_items:
+            final.output = accumulated_items
+        return final
+
+
 class OpenAIAgenticAdapter:
     """OpenAI agentic adapter via Responses API (P1 Gateway pattern).
 
@@ -638,10 +653,7 @@ class OpenAIAgenticAdapter:
                 oai_effort = _EFFORT_MAP.get(effort, "medium")
                 create_kwargs["reasoning"] = {"effort": oai_effort, "summary": "auto"}
                 create_kwargs["include"] = ["reasoning.encrypted_content"]
-            response = client.responses.create(**create_kwargs)
-            if inspect.isawaitable(response):
-                return await response
-            return response
+            return await _stream_openai_response(client, create_kwargs)
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

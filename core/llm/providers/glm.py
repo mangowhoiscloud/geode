@@ -8,8 +8,10 @@ and failover chain.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
+from types import SimpleNamespace
 from typing import Any
 
 from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY
@@ -106,11 +108,10 @@ def get_circuit_breaker() -> CircuitBreaker:
 # GlmAgenticAdapter — ZhipuAI GLM adapter for agentic loop
 # ---------------------------------------------------------------------------
 
-import inspect  # noqa: E402
-
 from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
     OpenAIAgenticAdapter,
+    _build_prompt_cache_key,
     _convert_messages_to_openai,
     _tools_to_chat_completions,
 )
@@ -165,11 +166,112 @@ def _glm_thinking_supported(model: str) -> bool:
     return model in _GLM_THINKING_MODELS
 
 
+def _glm_prompt_cache_key_rejected(exc: Exception) -> bool:
+    """Return True when GLM rejects the optional prompt-cache routing key."""
+    detail = str(exc).lower()
+    if "prompt_cache_key" not in detail and "prompt cache key" not in detail:
+        return False
+    return any(
+        marker in detail
+        for marker in (
+            "unsupported parameter",
+            "unknown parameter",
+            "invalid parameter",
+            "unexpected keyword",
+            "not permitted",
+        )
+    )
+
+
+async def _consume_glm_chat_stream(stream_obj: Any) -> Any:
+    """Convert Chat Completions delta chunks into a normalizable response."""
+    if inspect.isawaitable(stream_obj):
+        stream_obj = await stream_obj
+
+    if not hasattr(stream_obj, "__aiter__") and not hasattr(stream_obj, "__iter__"):
+        return stream_obj
+
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    tool_calls_by_index: dict[int, dict[str, str]] = {}
+    finish_reason = "stop"
+    usage: Any = None
+
+    async def _handle_chunk(chunk: Any) -> None:
+        nonlocal finish_reason, usage
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+        for choice in getattr(chunk, "choices", None) or []:
+            choice_finish = getattr(choice, "finish_reason", None)
+            if choice_finish:
+                finish_reason = choice_finish
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            content = getattr(delta, "content", None)
+            if isinstance(content, str) and content:
+                content_parts.append(content)
+            reasoning = getattr(delta, "reasoning_content", None)
+            if isinstance(reasoning, str) and reasoning:
+                reasoning_parts.append(reasoning)
+            for call in getattr(delta, "tool_calls", None) or []:
+                index = getattr(call, "index", None)
+                if not isinstance(index, int):
+                    index = len(tool_calls_by_index)
+                acc = tool_calls_by_index.setdefault(
+                    index,
+                    {"id": "", "name": "", "arguments": ""},
+                )
+                call_id = getattr(call, "id", None)
+                if isinstance(call_id, str) and call_id:
+                    acc["id"] = call_id
+                function = getattr(call, "function", None)
+                if function is not None:
+                    name = getattr(function, "name", None)
+                    if isinstance(name, str) and name:
+                        acc["name"] += name
+                    arguments = getattr(function, "arguments", None)
+                    if isinstance(arguments, str) and arguments:
+                        acc["arguments"] += arguments
+
+    if hasattr(stream_obj, "__aiter__"):
+        async for chunk in stream_obj:
+            await _handle_chunk(chunk)
+    else:
+        for chunk in stream_obj:
+            await _handle_chunk(chunk)
+
+    tool_calls = [
+        SimpleNamespace(
+            id=call["id"],
+            function=SimpleNamespace(
+                name=call["name"],
+                arguments=call["arguments"] or "{}",
+            ),
+        )
+        for _, call in sorted(tool_calls_by_index.items())
+    ]
+    message = SimpleNamespace(
+        content="".join(content_parts),
+        reasoning_content="".join(reasoning_parts),
+        tool_calls=tool_calls,
+    )
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)],
+        usage=usage,
+    )
+
+
 class GlmAgenticAdapter(OpenAIAgenticAdapter):
     """ZhipuAI GLM adapter (glm-5.1, glm-5, glm-5-turbo, glm-5v-turbo, glm-4.7-flash).
 
     Injects GLM native web_search tool alongside function tools.
     """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._prompt_cache_key_supported = True
 
     @property
     def provider_name(self) -> str:
@@ -242,19 +344,31 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                     "type": _thinking_type,
                     "clear_thinking": False,
                 }
-            response = client.chat.completions.create(
-                model=m,
-                messages=oai_messages,
-                tools=oai_tools if oai_tools else None,
-                tool_choice=tc_val if oai_tools else None,
-                max_completion_tokens=max_tokens,
-                temperature=temperature,
-                extra_body=local_extra or None,
-                timeout=120.0,
-            )
-            if inspect.isawaitable(response):
-                return await response
-            return response
+            create_kwargs: dict[str, Any] = {
+                "model": m,
+                "messages": oai_messages,
+                "tools": oai_tools if oai_tools else None,
+                "tool_choice": tc_val if oai_tools else None,
+                "max_completion_tokens": max_tokens,
+                "temperature": temperature,
+                # Passed to the SDK call as extra_body= via **create_kwargs.
+                "extra_body": local_extra or None,
+                "timeout": 120.0,
+                "stream": True,
+                "stream_options": {"include_usage": True},
+            }
+            if self._prompt_cache_key_supported:
+                create_kwargs["prompt_cache_key"] = _build_prompt_cache_key(system, oai_tools)
+            try:
+                response = client.chat.completions.create(**create_kwargs)
+                return await _consume_glm_chat_stream(response)
+            except Exception as exc:
+                if "prompt_cache_key" in create_kwargs and _glm_prompt_cache_key_rejected(exc):
+                    self._prompt_cache_key_supported = False
+                    create_kwargs.pop("prompt_cache_key", None)
+                    response = client.chat.completions.create(**create_kwargs)
+                    return await _consume_glm_chat_stream(response)
+                raise
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)
