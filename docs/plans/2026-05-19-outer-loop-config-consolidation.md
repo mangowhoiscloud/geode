@@ -76,7 +76,7 @@ source = "claude-cli"
 candidates_default = 15
 default_gen_tag    = "gen1"
 # 7 role × source binding 도 명시 가능
-# [outer_loop.seed_pipeline.role.generator]
+# [outer_loop.seed_pipeline.roles.generator]
 # model = "gpt-5.5"
 # source = "openai-codex"
 ```
@@ -115,7 +115,7 @@ Phase ε — backfill (필요 시)
 
 | PR | Title | Defects / scope | LOC | Files (예상) | Blocking |
 |---|---|---|---|---|---|
-| **PR-α1** | feat(config): outer_loop schema + loader (pydantic) | 신규 | ~250 | `core/config/outer_loop.py` (NEW), `core/paths.py` (확장), `tests/core/config/test_outer_loop.py` | — |
+| **PR-α1** ✅ | feat(config): outer_loop schema + loader (pydantic) | 신규 | ~360 | `core/config/outer_loop.py` (NEW), `tests/test_outer_loop_config.py` (NEW, 16 tests) | — |
 | **PR-β1** | feat(petri): subscription-only guard + abort path | 사용자 directive | ~150 | `plugins/petri_audit/petri.plugin.toml` (allowed 단일화), `plugins/petri_audit/credential_source.py` (fallback flag 점검), abort msg formatter, tests | PR-α1 |
 | **PR-γ1** | feat(cli): 3-tier quota banner + abort dialog | UX | ~200 | `core/cli/quota_banner.py` (NEW), `core/cli/repl.py` integration, abort dialog template, tests | PR-β1 |
 | **PR-δ1** | refactor(autoresearch): consume outer_loop config | migration | ~150 | `autoresearch/train.py` (module 상수 → config lazy load with default fallback), tests, program.md doc sync | PR-α1 |

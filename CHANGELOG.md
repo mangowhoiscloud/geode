@@ -49,6 +49,26 @@ functional change.
 
 ### Added
 
+- **PR-α1 — outer-loop config schema + loader (pydantic v2).** Closes
+  2026-05-19 config consolidation plan Phase α. New
+  `core/config/outer_loop.py` exposes `OuterLoopConfig` (root) +
+  `AutoresearchConfig` / `PetriRoleConfig` / `SeedPipelineConfig` /
+  `OuterLoopBindings` sub-models, all `extra='forbid'` for typo guard.
+  `load_outer_loop_config(path?)` reads the `[outer_loop.*]` section of
+  `~/.geode/config.toml` (or `GEODE_CONFIG_TOML` env override, or
+  explicit path arg) and returns a fully-defaulted model when the
+  file/section is missing. Strict-mode defaults: `fallback_to_payg=False`
+  (PAYG fallback denied), `warn_threshold=0.5`, `abort_threshold=0.9`
+  (validator enforces abort > warn). Autoresearch defaults mirror the
+  current `autoresearch/train.py` module constants so callers can be
+  migrated without behaviour change. Lives in a separate module from
+  `core.config._settings.Settings` so cold-start callers that only need
+  e.g. `ANTHROPIC_PRIMARY` constants don't pay the outer-loop
+  validation cost. 16 unit tests covering defaults, sub-config defaults,
+  missing-file fallback, empty-section fallback, env override, explicit
+  path arg, typo rejection (top-level + sub-section), threshold
+  validation, range clamping, and binding round-trip.
+
 - **Plan — Outer-Loop Config Consolidation + Subscription Guard + FE
   Warning UX (2026-05-19).** New
   `docs/plans/2026-05-19-outer-loop-config-consolidation.md` codifies
