@@ -344,6 +344,32 @@ def main() -> int:
         print("✅ no broken internal links")
     print()
 
+    # Raw `<a href="/docs/...">` in TSX bypasses Next.js basePath rewriting
+    # (only `<Link>` auto-prefixes). The resulting static HTML keeps the
+    # literal `/docs/...` which resolves at the domain root, returning 404
+    # on the deployed site at `mangowhoiscloud.github.io/docs/...` instead
+    # of `mangowhoiscloud.github.io/geode/docs/...`. Guard against the
+    # regression that PR #1330 fixed by failing on any raw `/docs/` href.
+    base_path_violations: list[str] = []
+    for link in links:
+        if link.target.startswith("/docs/"):
+            base_path_violations.append(
+                f"  {link.file.relative_to(args.base.parent)}:{link.line}  href={link.target!r} "
+                "(needs /geode prefix; raw <a> does not auto-prefix basePath)",
+            )
+    if base_path_violations:
+        print(
+            f"❌ {len(base_path_violations)} raw href missing /geode basePath:",
+        )
+        for line in base_path_violations:
+            print(line)
+        print()
+        print(
+            'Fix: replace `href="/docs/..."` with `href="/geode/docs/..."` '
+            "(or migrate to next/link `<Link>` which auto-prefixes).",
+        )
+        print()
+
     if unresolved and not args.quiet:
         print(f"ℹ️  {len(unresolved)} unresolved (interpolated or relative):")
         for line in unresolved[:20]:
@@ -364,7 +390,7 @@ def main() -> int:
         else:
             print("✅ all external URLs reachable")
 
-    return 1 if broken or ext_broken else 0
+    return 1 if broken or ext_broken or base_path_violations else 0
 
 
 if __name__ == "__main__":

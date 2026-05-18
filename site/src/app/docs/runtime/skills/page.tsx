@@ -78,7 +78,7 @@ priority: 100
             <p>등록 시점: 다음 bootstrap 또는 session 재시작 시 자동 인식.</p>
 
             <p className="text-white/40 text-sm">
-              <em>참조:</em> <a href="/docs/runtime/context">Context System</a> (5-layer prompt assembly에서 skill이 L3로 주입),
+              <em>참조:</em> <a href="/geode/docs/runtime/context">Context System</a> (5-layer prompt assembly에서 skill이 L3로 주입),
               wiki/concepts/geode-prompt-assembly.md, portfolio §3 Recursion (scaffold 측 skill discovery와 mirror).
             </p>
           </>
@@ -149,7 +149,7 @@ priority: 100
             <p>The skill is picked up at the next bootstrap or session restart.</p>
 
             <p className="text-white/40 text-sm">
-              <em>See:</em> <a href="/docs/runtime/context">Context System</a> (the skill is injected at L3 of the
+              <em>See:</em> <a href="/geode/docs/runtime/context">Context System</a> (the skill is injected at L3 of the
               5-layer prompt assembly), wiki/concepts/geode-prompt-assembly.md, portfolio §3 Recursion (mirror of
               scaffold-side skill discovery).
             </p>

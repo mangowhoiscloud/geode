@@ -62,7 +62,7 @@ export default function Page() {
             <h2>Petri / inspect_ai</h2>
             <ul>
               <li>
-                <strong>Anthropic Alignment Science Petri</strong> — alignment audit framework (Auditor·Target·Judge 3-role, 173 seeds, 38 dims). 본 docs <a href="/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
+                <strong>Anthropic Alignment Science Petri</strong> — alignment audit framework (Auditor·Target·Judge 3-role, 173 seeds, 38 dims). 본 docs <a href="/geode/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
@@ -100,7 +100,7 @@ export default function Page() {
             <h2>Karpathy autoresearch (2026-03) 의 5 reusable pattern</h2>
             <p>
               GEODE의 핵심 안전 메커니즘은 Karpathy의 autoresearch 패턴을 long-running agent context로 일반화한 것입니다.
-              <a href="/docs/explanation/ratchet">왜 ratchet 규율인가</a> 페이지에서 직접 인용합니다.
+              <a href="/geode/docs/explanation/ratchet">왜 ratchet 규율인가</a> 페이지에서 직접 인용합니다.
             </p>
             <ol>
               <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up headroom.</li>
@@ -167,7 +167,7 @@ export default function Page() {
             <ul>
               <li>
                 <strong>Anthropic Alignment Science Petri</strong> — alignment audit framework (Auditor, Target, Judge,
-                173 seeds, 38 dims). Covered in the <a href="/docs/petri/overview">Petri × GEODE</a> chapter.
+                173 seeds, 38 dims). Covered in the <a href="/geode/docs/petri/overview">Petri × GEODE</a> chapter.
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
@@ -213,7 +213,7 @@ export default function Page() {
             <h2>Karpathy autoresearch (2026-03): five reusable patterns</h2>
             <p>
               GEODE's core safety mechanism generalizes Karpathy's autoresearch patterns to a long-running agent
-              context. <a href="/docs/explanation/ratchet">Why Ratchet Discipline</a> cites these directly.
+              context. <a href="/geode/docs/explanation/ratchet">Why Ratchet Discipline</a> cites these directly.
             </p>
             <ol>
               <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE's StuckDetector at 7200s plus 30s wrap-up headroom is the generalized form.</li>

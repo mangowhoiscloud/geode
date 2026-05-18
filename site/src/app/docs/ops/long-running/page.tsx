@@ -34,7 +34,7 @@ max_turns = 200`}</pre>
 
             <h2>관측</h2>
             <ul>
-              <li><a href="/docs/harness/hooks"><code>CONTEXT_OVERFLOW</code> hook</a> 으로 발생 감지</li>
+              <li><a href="/geode/docs/harness/hooks"><code>CONTEXT_OVERFLOW</code> hook</a> 으로 발생 감지</li>
               <li>Runlog에 사용량 시계열 기록</li>
             </ul>
 
@@ -63,7 +63,7 @@ max_turns = 200`}</pre>
 
             <h2>Observability</h2>
             <ul>
-              <li><a href="/docs/harness/hooks"><code>CONTEXT_OVERFLOW</code> hook</a> fires on hit.</li>
+              <li><a href="/geode/docs/harness/hooks"><code>CONTEXT_OVERFLOW</code> hook</a> fires on hit.</li>
               <li>Usage time series lands in runlog.</li>
             </ul>
 

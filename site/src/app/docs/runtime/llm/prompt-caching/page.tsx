@@ -29,7 +29,7 @@ __GEODE_PROMPT_CACHE_BOUNDARY__
 </dynamic_context>`}</pre>
             <p>
               <code>build_system_prompt()</code>이 이 marker를 두 섹션 사이에 삽입합니다.
-              audit-mode는 dynamic 블록을 strip합니다 (<a href="/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a> 참조).
+              audit-mode는 dynamic 블록을 strip합니다 (<a href="/geode/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a> 참조).
             </p>
             <ul>
               <li>

@@ -28,8 +28,8 @@ export default function Page() {
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/docs/run/providers">프로바이더 설정</a>으로 키를 등록합니다.</li>
-              <li>비용 가드는 <a href="/docs/ops/cost">비용 모니터링</a>에서.</li>
+              <li><a href="/geode/docs/run/providers">프로바이더 설정</a>으로 키를 등록합니다.</li>
+              <li>비용 가드는 <a href="/geode/docs/ops/cost">비용 모니터링</a>에서.</li>
             </ul>
 
             <p className="text-white/40 text-sm"><em>출처:</em> 본 repo README §Path A/B + wiki/concepts/geode-llm-models.md</p>
@@ -51,8 +51,8 @@ export default function Page() {
 
             <h2>Next</h2>
             <ul>
-              <li>Register your keys: <a href="/docs/run/providers">Configure Providers</a>.</li>
-              <li>Cost guards live in <a href="/docs/ops/cost">Cost Monitoring</a>.</li>
+              <li>Register your keys: <a href="/geode/docs/run/providers">Configure Providers</a>.</li>
+              <li>Cost guards live in <a href="/geode/docs/ops/cost">Cost Monitoring</a>.</li>
             </ul>
 
             <p className="text-white/40 text-sm"><em>Source:</em> repo README §Path A/B and wiki/concepts/geode-llm-models.md.</p>

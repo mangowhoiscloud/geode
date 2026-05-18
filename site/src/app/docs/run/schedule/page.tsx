@@ -33,7 +33,7 @@ export default function Page() {
               <li>일시정지: <code>geode schedule pause &lt;id&gt;</code></li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/docs/runtime/scheduler">Scheduler reference</a>, wiki/concepts/geode-lifecycle-commands.md</p>
+            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/geode/docs/runtime/scheduler">Scheduler reference</a>, wiki/concepts/geode-lifecycle-commands.md</p>
           </>
         }
         en={
@@ -57,7 +57,7 @@ export default function Page() {
               <li>Pause: <code>geode schedule pause &lt;id&gt;</code></li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>See:</em> <a href="/docs/runtime/scheduler">Scheduler reference</a>, wiki/concepts/geode-lifecycle-commands.md.</p>
+            <p className="text-white/40 text-sm"><em>See:</em> <a href="/geode/docs/runtime/scheduler">Scheduler reference</a>, wiki/concepts/geode-lifecycle-commands.md.</p>
           </>
         }
       />

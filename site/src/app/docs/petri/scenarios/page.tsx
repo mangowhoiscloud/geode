@@ -85,8 +85,8 @@ export default function Page() {
             <h2>참고</h2>
             <ul>
               <li>현 GEODE seeds 첫 등장: v0.91.0 (scenarios v1) → v0.92.0 (v2) → v0.93.0 (v3). audit reports는 <code>docs/audits/</code>.</li>
-              <li>실행: <a href="/docs/petri/run">감사 실행</a></li>
-              <li>차원: <a href="/docs/petri/judge-dimensions">38 Judge 차원</a></li>
+              <li>실행: <a href="/geode/docs/petri/run">감사 실행</a></li>
+              <li>차원: <a href="/geode/docs/petri/judge-dimensions">38 Judge 차원</a></li>
               <li>publish된 결과: <a href="/petri-bundle/">/geode/petri-bundle/</a></li>
             </ul>
           </>
@@ -148,8 +148,8 @@ export default function Page() {
             <h2>See also</h2>
             <ul>
               <li>GEODE seeds first landed in v0.91.0 (scenarios v1), v0.92.0 (v2), v0.93.0 (v3). Audit reports under <code>docs/audits/</code>.</li>
-              <li>Run: <a href="/docs/petri/run">Run an Audit</a></li>
-              <li>Dimensions: <a href="/docs/petri/judge-dimensions">38 Judge Dimensions</a></li>
+              <li>Run: <a href="/geode/docs/petri/run">Run an Audit</a></li>
+              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">38 Judge Dimensions</a></li>
               <li>Published results: <a href="/petri-bundle/">/geode/petri-bundle/</a></li>
             </ul>
           </>
