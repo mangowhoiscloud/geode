@@ -81,6 +81,7 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "runtime/context", title: "Context System", titleKo: "컨텍스트 시스템", summary: "5-tier memory hierarchy plus 5-layer prompt assembly plus 200K guard. Every LLM call's context is built here.", summaryKo: "5계층 메모리 + 5층 프롬프트 어셈블리 + 200K 가드. 모든 LLM 호출의 컨텍스트가 여기서 조립됩니다.", quadrant: "reference" },
       { slug: "runtime/tools/protocol", title: "Tool Protocol", titleKo: "도구 프로토콜", summary: "Registry, deferred loading, 53 tools. Six always-loaded, the rest fetched on demand.", summaryKo: "레지스트리, 지연 로딩, 53개 도구. 6개 상시 로드, 나머지는 요청 시 가져옴.", quadrant: "reference" },
       { slug: "runtime/tools/mcp", title: "MCP Servers", titleKo: "MCP 서버", summary: "Servers, 25K result guard, HTML to Markdown fallback.", summaryKo: "서버, 25K 결과 가드, HTML to Markdown 폴백.", quadrant: "reference" },
+      { slug: "runtime/ui/cli-latex", title: "CLI LaTeX Rendering", titleKo: "CLI LaTeX 렌더링", summary: "Five-tier LaTeX rendering stack in the terminal. Detection, Unicode flatten, 2D pretty print, image fallback, ASCII guard.", summaryKo: "터미널 안 5-tier LaTeX 렌더링 스택. detection, Unicode flatten, 2D pretty print, image fallback, ASCII guard.", quadrant: "reference" },
     ],
   },
   {
@@ -93,6 +94,7 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "harness/lifecycle", title: "Lifecycle", titleKo: "라이프사이클", summary: "Bootstrap, serve, shutdown. ContextVar injection order. Cold-start lazy arc.", summaryKo: "Bootstrap, serve, shutdown. ContextVar 주입 순서. cold-start lazy arc.", quadrant: "reference" },
       { slug: "runtime/scheduler", title: "Scheduler", titleKo: "스케줄러", summary: "Natural language plus cron plus jitter. Where jobs persist.", summaryKo: "자연어 + cron + jitter. 작업 영속 위치.", quadrant: "reference" },
       { slug: "runtime/orchestration", title: "Orchestration", titleKo: "오케스트레이션", summary: "LangGraph StateGraph. Node topology. Send API parallelism.", summaryKo: "LangGraph StateGraph. 노드 토폴로지. Send API 병렬화.", quadrant: "reference" },
+      { slug: "harness/serve-gateway", title: "Serve Gateway", titleKo: "Serve 게이트웨이", summary: "Operations guide for the serve daemon's messaging gateway. Slack, Discord, Telegram pollers, binding routing, lane queue.", summaryKo: "serve 데몬의 메신저 게이트웨이 운영 가이드. Slack, Discord, Telegram poller, binding 라우팅, lane queue.", quadrant: "how-to" },
     ],
   },
   {
@@ -103,6 +105,10 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "runtime/computer-use", title: "Computer Use", titleKo: "컴퓨터 사용", summary: "Provider-agnostic desktop automation. Anthropic plus OpenAI unified.", summaryKo: "프로바이더 독립 데스크탑 자동화. Anthropic + OpenAI 통합.", quadrant: "reference" },
       { slug: "runtime/automation", title: "Automation", titleKo: "자동화", summary: "Feedback loop plus model promotion. Drift detection. Sidecar between agent and runtime.", summaryKo: "피드백 루프 + 모델 프로모션. drift 감지. agent와 runtime 사이의 사이드카.", quadrant: "reference" },
       { slug: "runtime/auth", title: "Auth and OAuth", titleKo: "인증과 OAuth", summary: "Profile rotator, Anthropic ToS path, Codex flow.", summaryKo: "프로파일 로테이터, Anthropic ToS 경로, Codex 플로우.", quadrant: "reference" },
+      { slug: "capabilities/outer-loop", title: "Outer-Loop Config", titleKo: "아우터 루프 설정", summary: "Pydantic v2 schema + loader for autoresearch + seed-pipeline + petri shared thresholds. Strict mode by default.", summaryKo: "autoresearch + seed-pipeline + petri 공유 임계값의 pydantic v2 schema + loader. strict mode 가 기본.", quadrant: "reference" },
+      { slug: "capabilities/seed-pipeline", title: "Seed Pipeline", titleKo: "Seed 파이프라인", summary: "Plugin that regenerates the Petri seed corpus per generation. Picker, orchestrator, manifest, cost preview.", summaryKo: "Petri seed 코퍼스를 generation 마다 자가 생성하는 플러그인. picker, orchestrator, manifest, cost preview.", quadrant: "reference" },
+      { slug: "capabilities/autoresearch", title: "Autoresearch", titleKo: "자가 ML 실험 루프", summary: "Karpathy autoresearch fork. Closed-loop generation runner with G1-G6 stability gates.", summaryKo: "Karpathy autoresearch fork. G1-G6 안정성 게이트 closed-loop generation runner.", quadrant: "reference" },
+      { slug: "capabilities/co-scientist", title: "Co-Scientist Cycle", titleKo: "Co-Scientist 사이클", summary: "Six-phase cycle codified as a Claude Code skill. Phase boundary is the checkpoint.", summaryKo: "Claude Code 스킬 로 구현 한 6-phase 사이클. phase boundary 가 곧 checkpoint.", quadrant: "explanation" },
     ],
   },
   {
@@ -111,6 +117,9 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "검증",
     pages: [
       { slug: "verification/guardrails", title: "Guardrails G1-G4", titleKo: "가드레일 G1-G4", summary: "Schema, Range, Grounding, Consistency. Fail-fast ladder.", summaryKo: "Schema, Range, Grounding, Consistency. fail-fast 사다리.", quadrant: "reference" },
+      { slug: "verification/biasbuster", title: "BiasBuster", titleKo: "BiasBuster", summary: "Confirmation, Recency, Anchoring detection on top of G1-G4. Re-prompt or abstain when flagged.", summaryKo: "G1-G4 위에 얹는 Confirmation, Recency, Anchoring 편향 탐지. 검출 시 re-prompt 또는 abstain.", quadrant: "reference" },
+      { slug: "verification/cross-llm", title: "Cross-LLM Verification", titleKo: "Cross-LLM 검증", summary: "Independent second-opinion verifier. Different provider re-scores the verdict.", summaryKo: "독립된 second-opinion 검증. 다른 프로바이더가 verdict 를 재평가.", quadrant: "reference" },
+      { slug: "verification/cause-decision-tree", title: "Cause Decision Tree", titleKo: "원인 분류 트리", summary: "Six cause types map onto five recovery actions. Removes the 'just retry' anti-pattern.", summaryKo: "6 cause 유형이 5 가지 복구 행동에 매핑. 'just retry' 안티패턴 제거.", quadrant: "reference" },
       { slug: "verification/observability", title: "Observability", titleKo: "관측성", summary: "Four lenses: hooks, RunLog, audit diagnostics, Petri. The native observability stack.", summaryKo: "네 가지 렌즈: 훅, RunLog, audit diagnostics, Petri. 자체 관측성 스택.", quadrant: "reference" },
       { slug: "petri/overview", title: "Petri × GEODE", titleKo: "Petri × GEODE", summary: "Anthropic Alignment Science's framework, wrapped over GEODE's agent. 173 + 22 seeds, 22 / 38 judge dimensions.", summaryKo: "Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. 173 + 22 seeds, 22 / 38 judge 차원.", quadrant: "explanation" },
       { slug: "petri/scenarios", title: "Petri Scenarios", titleKo: "Petri 시나리오", summary: "173 default Petri seeds plus 22 GEODE-specific seed files across 15 dimension buckets (critical, auxiliary, info).", summaryKo: "Petri 기본 173 seeds + GEODE 22 seed 파일 (15 dim 버킷: critical, auxiliary, info).", quadrant: "reference" },
@@ -127,6 +136,8 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "ops/long-running", title: "Long-running Safety", titleKo: "장기 실행 안전", summary: "Token guards, context overflow, sliding window. Graceful drain.", summaryKo: "토큰 가드, 컨텍스트 오버플로, 슬라이딩 윈도. graceful drain.", quadrant: "how-to" },
       { slug: "ops/cost", title: "Cost Monitoring", titleKo: "비용 모니터링", summary: "Per-session and per-day budgets. Usage ledger schema. When to switch models.", summaryKo: "세션·일별 예산. usage ledger 스키마. 모델 전환 시점.", quadrant: "how-to" },
       { slug: "ops/oauth", title: "OAuth Token Rotation", titleKo: "OAuth 토큰 회전", summary: "Anthropic ToS, Codex flow, refresh policy.", summaryKo: "Anthropic ToS, Codex 플로우, 갱신 정책.", quadrant: "how-to" },
+      { slug: "ops/release-pypi-lifecycle", title: "Release + PyPI Lifecycle", titleKo: "릴리스 + PyPI 라이프사이클", summary: "Version bump across four SOT locations, release.yml, rebuild and restart cadence.", summaryKo: "4 군데 version bump, release.yml, rebuild + restart 사이클.", quadrant: "how-to" },
+      { slug: "ops/backlog-dispose", title: "Backlog Disposal", titleKo: "백로그 처분", summary: "Retire ideas with a paper trail instead of silent delete. Three disposal decisions.", summaryKo: "조용한 삭제 대신 흔적 을 남기는 dispose. 3 종 결정.", quadrant: "how-to" },
     ],
   },
   {
@@ -148,6 +159,7 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "reference/frontier-comparison", title: "Frontier Comparison", titleKo: "프론티어 비교", summary: "GEODE versus Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch.", summaryKo: "GEODE와 Claude Code, Codex CLI, OpenClaw, Hermes, autoresearch 비교.", quadrant: "reference" },
       { slug: "reference/changelog", title: "CHANGELOG", titleKo: "CHANGELOG", summary: "Full version history auto-synced from CHANGELOG.md on every main push.", summaryKo: "main push 마다 CHANGELOG.md에서 자동 sync된 전체 버전 이력.", quadrant: "reference" },
       { slug: "reference/sot-metrics", title: "System Metrics SOT", titleKo: "시스템 메트릭 SOT", summary: "Live values for version, modules, tests, releases, since.", summaryKo: "version, 모듈, 테스트, 릴리스, since 라이브 값.", quadrant: "reference" },
+      { slug: "reference/petri-bundle-isolation", title: "Petri Bundle Isolation", titleKo: "Petri 번들 격리", summary: "Operator reference for the petri-publish.yml workflow + validator + hygiene ratchet.", summaryKo: "petri-publish.yml workflow + validator + hygiene ratchet 의 운영자 reference.", quadrant: "reference" },
     ],
   },
 ];
