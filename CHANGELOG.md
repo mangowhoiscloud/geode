@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Plan — Outer-Loop Wiring Sprint (2026-05-19).** New
+  `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` codifies the
+  7-PR + 1 data-run + 1 audit-pass plan that closes the 20-defect
+  outer-loop audit from Session 63 continuation. Phases A→F (wiring
+  → schema → gen-0 smoke → namespace+viewer → multi-gen → fill-in)
+  with per-phase GAP protocol via `seed-pipeline-cycle` skill.
+  Predecessor: `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
+  (16-PR S0-S12 sprint, closed except S12 execution).
+
 ### Changed
 
 - **autoresearch judge model: sonnet → opus.** `autoresearch/train.py`
