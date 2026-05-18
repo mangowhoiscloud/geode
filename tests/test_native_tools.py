@@ -289,13 +289,15 @@ class TestOpenAIResponsesApiMigration:
         assert "Responses API" in docstring
 
     def test_openai_uses_responses_api(self) -> None:
-        """OpenAI adapter must use responses.create (not chat.completions)."""
+        """OpenAI adapter must use Responses API (create or stream), not chat.completions."""
         import inspect
 
         from core.llm.providers.openai import OpenAIAgenticAdapter
 
         source = inspect.getsource(OpenAIAgenticAdapter.agentic_call)
-        assert "responses.create" in source
+        # PR #1316 — PAYG switched from blocking responses.create to streaming
+        # responses.stream for TTFB parity with Anthropic/Codex.
+        assert "responses.create" in source or "responses.stream" in source
         assert "chat.completions.create" not in source
 
     def test_openai_native_web_search_constant(self) -> None:
