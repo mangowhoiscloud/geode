@@ -49,6 +49,23 @@ functional change.
 
 ### Added
 
+- **Cost preview + pre-flight check (S6.5).** New
+  `plugins/seed_pipeline/cost_preview.py` estimates per-role +
+  aggregate USD spend for one full pipeline run using
+  `core.llm.token_tracker.MODEL_PRICING` × per-role token budgets
+  calibrated from ADR-001 §5 (e.g. generator 3000 in / 1000 out per
+  candidate, ranker 3000 in / 300 out per match-voter). Reports
+  separate `subscription_usd` vs `payg_usd` so subscription-backed
+  paths surface as "quota burn equivalent" without conflating with
+  PAYG charge. `format_cost_summary()` renders a plain-text table
+  for the S11 CLI confirm prompt. New
+  `plugins/seed_pipeline/pre_flight.py` runs three checks before
+  the first LLM call: credential probe (claude-cli / openai-codex
+  OAuth + per-family api_key env vars), budget sanity (soft > hard,
+  non-positive, MIN/MAX bounds), runtime panel diversity (piggybacks
+  `validate_runtime_diversity`). Returns a `PreFlightReport` with
+  structured `PreFlightIssue` rows (severity / code / message /
+  fix-hint) instead of raising. 36 unit tests.
 - **Ranker agent + Elo tournament + 3-judge panel (S6).** New
   `plugins/seed_pipeline/tournament.py` ships pure Elo math —
   `initial_ratings`, `expected_score`, `apply_match` (in-place rating
