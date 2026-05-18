@@ -74,6 +74,26 @@ class TestTier1Unicode:
     def test_unsupported_uppercase_subscript_uses_bracket_presentation(self) -> None:
         assert _render_tier1("τ_P") == "τ[P]"
         assert _render_tier1("tau_P") == "tau[P]"
+        assert _render_tier1("P_T") == "P[T]"
+        assert _render_tier1("A_B") == "A[B]"
+        assert _render_tier1("R_T") == "R[T]"
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("P_t", "Pₜ"),
+            ("tau_P", "tau[P]"),
+            ("IBM_T", "IBM_T"),
+            ("alpha_beta", "alpha_beta"),
+            ("snake_case", "snake_case"),
+            ("X^*", "X^*"),
+            ("x^T", "xᵀ"),
+            ("lambda_max", "lambdaₘₐₓ"),
+            ("lambda_min", "lambdaₘᵢₙ"),
+        ],
+    )
+    def test_script_regressions_stay_on_existing_paths(self, source: str, expected: str) -> None:
+        assert _render_tier1(source) == expected
 
     def test_empty_string(self) -> None:
         assert render_latex("").plain == ""

@@ -49,6 +49,20 @@ functional change.
 
 ### Fixed
 
+- **CLI LaTeX single-letter uppercase subscript fallback.** `P_T`,
+  `A_B`, `R_T` 처럼 base 가 단일 대문자 Latin 변수이고 payload 도 대문자
+  Latin 인 delimiter-less script 는 Unicode subscript codepoint 가 없을 때
+  bracket fallback 으로 `P[T]` / `A[B]` / `R[T]` 로 표시합니다.
+  `IBM_T` 같은 acronym base, `snake_case`, `alpha_beta`, Markdown code/path
+  guard, 그리고 `P_t` / `x^T` 의 기존 Unicode script 경로는 유지됩니다.
+- **CLI LaTeX single-letter uppercase subscript fallback.** Delimiter-less
+  scripts whose base is one uppercase Latin variable and whose payload is
+  uppercase Latin now use the existing bracket fallback when Unicode lacks the
+  script codepoint, so `P_T`, `A_B`, and `R_T` render as `P[T]`, `A[B]`, and
+  `R[T]`. Acronym bases such as `IBM_T`, plain identifiers such as
+  `snake_case` and `alpha_beta`, Markdown code/path guards, and existing
+  Unicode script paths such as `P_t` and `x^T` remain unchanged.
+
 - **Agentic tool executor wiring.** Restored `generate_report` and `export_json`
   in the AgenticLoop `ToolExecutor` handler map, added the missing generic
   `generate_data` implementation, and added a regression check that every
