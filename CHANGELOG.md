@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
+  (2026-05-19).** New `docs/architecture/outer-loop-resume-decision.md`
+  documents the design for resume-after-subscription-exhaustion: layer
+  on top of existing `SessionCheckpoint` (C3 production-ready resume
+  infra), borrow LangGraph `thread_id`-keyed checkpoint pattern +
+  Inspect_ai stable sample-ID idempotency + Stripe Idempotency-Key
+  replay semantics. Auto-rotation explicitly rejected (Hermes bug
+  tracker documents fragility). User-driven credential boundary
+  matches the Codex `forced_login_method` banner pattern already
+  adopted in PR-β1. Reference findings: co-scientist paper claims
+  "easy restarts in case of any failure" in 1 sentence but neither
+  paper nor Swarms reference impl provides usable mechanism (impl
+  README TODO marks save-state broken). Plan
+  `docs/plans/2026-05-19-outer-loop-config-consolidation.md` extended
+  with Phase ζ (6 new PRs, ~1300 LOC) — `SessionCheckpoint` schema
+  extension + seed-pipeline `_load_state` + autoresearch
+  `_load_pending_audit` + idempotency-key cache + credential-rollover
+  detection + runbook. Phase C gen-0 smoke remains gated on the
+  expanded Phase α-ζ.
+
 ### Fixed
 
 - **Agentic tool executor wiring.** Restored `generate_report` and `export_json`
