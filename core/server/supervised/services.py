@@ -240,16 +240,34 @@ class SharedServices:
         Defaults (research_assistant, data_analyst, web_researcher) load
         first; then ``.claude/agents/`` files are loaded per-file so a
         single bad/duplicate file doesn't drop the rest. Conflicts with
-        a default are skipped with a warning — the user's file does NOT
-        override the default in this S2-wire iteration; an explicit
-        override mechanism can land later if needed.
+        a default are skipped — user override is intentionally NOT
+        supported in this iteration; an explicit override mechanism can
+        land later if needed (logged at WARNING so users discover their
+        file isn't taking effect).
+
+        S2-fix (2026-05-18) — anchor the loader at ``get_project_root()``
+        rather than ``Path(".claude/agents")`` (cwd-relative). The
+        previous default silently returned zero files when ``geode serve``
+        was launched from a directory without ``.claude/agents/`` (e.g.
+        ``$HOME``), which made the entire S2-wire dispatch a no-op in
+        common operator deployments.
         """
+        from core.paths import get_project_root
         from core.skills.agents import AgentRegistry, SubagentLoader
 
         registry = AgentRegistry()
         registry.load_defaults()
-        loader = SubagentLoader()
-        for path in loader.discover():
+        agents_dir = get_project_root() / ".claude" / "agents"
+        loader = SubagentLoader(agents_dir=agents_dir)
+        discovered = loader.discover()
+        if not discovered:
+            log.info(
+                "AgentRegistry: no .claude/agents/*.md found at %s; "
+                "only the 3 built-in defaults are registered",
+                agents_dir,
+            )
+        loaded = 0
+        for path in discovered:
             try:
                 definition = loader.load_file(path)
             except Exception:
@@ -257,11 +275,20 @@ class SharedServices:
                 continue
             try:
                 registry.register(definition)
+                loaded += 1
             except ValueError:
-                log.debug(
-                    "AgentRegistry: %r already registered (default wins)",
+                log.warning(
+                    "AgentRegistry: %r conflicts with a built-in default and "
+                    "was NOT loaded — rename the file or unregister the "
+                    "default to apply your override (path=%s)",
                     definition.name,
+                    path,
                 )
+        log.info(
+            "AgentRegistry: loaded %d agents (3 defaults + %d from .claude/agents/)",
+            len(registry),
+            loaded,
+        )
         return registry
 
     def _propagate_contextvars(self) -> None:

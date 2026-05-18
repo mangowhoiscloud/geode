@@ -79,6 +79,43 @@ functional change.
   → `error_category="generation_failed"`. `announce=False` so sub-spawns
   don't double-fire the parent loop's announce queue.
 
+### Fixed
+
+- **Seed pipeline S2-fix.** Multi-PR review found 7 issues in the merged
+  S0-S2-wire stack; all resolved here:
+  - `Generator` now pairs `SubResult` to `SubTask` by `task_id` dict
+    lookup (previously `zip(tasks, results, strict=False)` silently
+    mismatched candidate metadata with whichever sub-agent finished
+    first, because `SubAgentManager.delegate` returns in completion
+    order, not submission order). Regression test covers reverse-order
+    + unmatched-result case.
+  - `BudgetGuard.record_usage` hard-cap check moved inside the lock so
+    concurrent recorders cannot both observe `usd_after < cap`, exit
+    the critical section, and bypass the kill.
+  - `Pipeline._run_phase` cost rollup moved into `finally` so the
+    `BudgetGuard`'s accumulated `usd_spent` / `prompt_tokens` /
+    `completion_tokens` flow into `state` on every path including
+    re-raised exceptions and `BudgetExceededError`. Regression test
+    pins the invariant.
+  - `SharedServices._build_agent_registry` now anchors `SubagentLoader`
+    at `get_project_root() / ".claude" / "agents"` rather than the
+    cwd-relative default; logs INFO when no agents are discovered.
+  - `build_system_prompt` honors the `{skill_context}` placeholder in
+    both the override and default branches; substitutes in place when
+    present, appends when absent.
+  - `filter_handlers` warns when the `AgentDefinition.tools` whitelist
+    references a tool name that doesn't exist in the handler registry
+    (silent typo previously degraded the agent to zero tools).
+  - `Generator` module docstring updated — "Known wiring gaps" section
+    replaced with a "Wiring history" section noting S2-wire RESOLVED.
+  - `SeedAgentResult` docstring adds explicit "why not reuse
+    `SubAgentResult`" rationale.
+- **Budget defaults relaxed.** `SEED_PIPELINE_BUDGET_SOFT_USD` default
+  raised $0.50 → $2.00 and `_HARD_USD` $2.00 → $10.00 so seed-pipeline
+  on subscription paths (claude-cli / codex-cli, ToS-aware) doesn't
+  trip false-positive soft warnings on long-form generation. PAYG users
+  drop them via the env vars.
+
 ## [0.99.13] — 2026-05-18
 
 **Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip

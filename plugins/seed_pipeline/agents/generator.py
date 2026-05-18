@@ -34,29 +34,21 @@ orchestrator. Generator's own ``execute`` is short (build tasks, call
 ``delegate``, parse results) so the dominant cost is per-sub-agent
 LLM work, not Generator orchestration.
 
-Known wiring gaps (tracked outside S2):
-----------------------------------------
+Wiring history
+==============
 
-1. **AgentDefinition dispatch** (task #S2-wire). ``SubAgentManager.delegate``
-   sets ``SubTask.agent="seed_generator"``, but the production code path
-   ``_build_worker_request`` does not yet call ``_resolve_agent`` to
-   apply the AgentDefinition's ``system_prompt`` / ``tools`` /
-   ``model``. Without that wiring the sub-agent runs with GEODE's
-   default system prompt rather than the ``.claude/agents/seed_generator.md``
-   contract. The seed-pipeline plugin is correct at the orchestration
-   layer; the worker-layer fix is a separate PR.
-
-2. **BudgetGuard real-time enforcement** (task #S6.5-wire). The
-   orchestrator's per-phase BudgetGuard is attached to
-   ``state.budget_guard`` but not propagated into the subprocess
-   worker. Sub-agent LLM call sites do not yet call
-   ``guard.record_usage`` mid-flight, so a runaway sub-agent can
-   exceed the soft cap within one phase. Per-phase rollup (after
-   ``delegate`` returns) still works for accounting, but hard
-   enforcement requires worker-layer wiring (S6.5).
-
-Both gaps are intentional — wire-ups land in dedicated PRs to keep
-S2's surface focused on the Generation phase contract.
+- **S2-wire (RESOLVED, 2026-05-18)**: ``SubAgentManager._build_worker_request``
+  now resolves ``SubTask.agent="seed_generator"`` to the AgentDefinition,
+  propagates ``system_prompt`` / ``tools`` / ``model`` to the worker via
+  ``WorkerRequest`` new fields, and the worker applies them as
+  ``AgenticLoop(system_prompt_override=…)``. The whitelist filter
+  (``filter_handlers``) removes non-allowed tools.
+- **S6.5-wire (PENDING, task #73)**: BudgetGuard real-time enforcement
+  inside the worker subprocess. Per-phase rollup is already wired (the
+  orchestrator credits ``guard.record_usage`` totals into ``state.usd_spent``
+  on every path including exceptions, as of S2-fix), but mid-flight cap
+  enforcement at LLM call sites requires worker-layer wiring scheduled
+  for S6.5.
 """
 
 from __future__ import annotations
@@ -146,22 +138,35 @@ class Generator(BaseSeedAgent):
         # events.
         results = self._manager.delegate(tasks, announce=False)
 
+        # S2-fix (2026-05-18) — pair results by task_id, NOT by positional zip.
+        # ``SubAgentManager.delegate`` returns SubResult in *completion* order
+        # (poll loop in ``core/agent/sub_agent.py``), not submission order, so
+        # zip(tasks, results) was silently mismatching candidate metadata with
+        # whichever sub-agent finished first. Build a task lookup keyed by
+        # ``task_id`` and iterate results.
+        tasks_by_id: dict[str, object] = {task.task_id: task for task in tasks}
         candidates: list[dict[str, object]] = []
         failed: list[tuple[str, str]] = []
-        for task, result in zip(tasks, results, strict=False):
+        for result in results:
+            task = tasks_by_id.get(result.task_id)
+            if task is None:
+                # Manager returned a result for a task we didn't submit —
+                # surface as an unmatched failure so the run is auditable.
+                failed.append((result.task_id, f"unmatched_result: {result.error or 'no_task'}"))
+                continue
             if result.success:
                 candidates.append(
                     {
-                        "id": task.args["candidate_id"],
-                        "path": task.args["output_path"],
-                        "target_dim": task.args["target_dim"],
-                        "gen_tag": task.args["gen_tag"],
-                        "task_id": task.task_id,
+                        "id": task.args["candidate_id"],  # type: ignore[attr-defined]
+                        "path": task.args["output_path"],  # type: ignore[attr-defined]
+                        "target_dim": task.args["target_dim"],  # type: ignore[attr-defined]
+                        "gen_tag": task.args["gen_tag"],  # type: ignore[attr-defined]
+                        "task_id": task.task_id,  # type: ignore[attr-defined]
                         "duration_ms": result.duration_ms,
                     }
                 )
             else:
-                failed.append((task.task_id, result.error or "unknown"))
+                failed.append((task.task_id, result.error or "unknown"))  # type: ignore[attr-defined]
 
         if failed:
             log.warning(

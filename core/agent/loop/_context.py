@@ -80,13 +80,24 @@ def build_system_prompt(loop: AgenticLoop) -> str:
     skill_ctx = ""
     if loop._skill_registry is not None:
         skill_ctx = loop._skill_registry.get_context_block()
+    # S2-fix (2026-05-18) — both branches honor the ``{skill_context}``
+    # placeholder so AgentDefinition authors can opt into explicit skill
+    # injection (matching ``_DEFAULT_AGENTS`` semantics). If the override
+    # has no placeholder, the skill block is appended; if it does, the
+    # placeholder is substituted in place. Empty-state marker preserved
+    # for both paths so prompts never ship a literal ``{skill_context}``
+    # token to the LLM.
+    skill_replacement = skill_ctx or '<available_skills status="empty" />'
     if override:
-        base = override
-        if skill_ctx:
-            base = base + "\n\n" + skill_ctx
+        if "{skill_context}" in override:
+            base = override.replace("{skill_context}", skill_replacement)
+        else:
+            base = override
+            if skill_ctx:
+                base = base + "\n\n" + skill_ctx
     else:
         base = _build_system_prompt(model=loop.model)
-        base = base.replace("{skill_context}", skill_ctx or '<available_skills status="empty" />')
+        base = base.replace("{skill_context}", skill_replacement)
     prompt: str = base + "\n" + AGENTIC_SUFFIX
     if loop._system_suffix:
         prompt += "\n\n" + loop._system_suffix

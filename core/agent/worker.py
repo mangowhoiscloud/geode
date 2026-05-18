@@ -139,11 +139,24 @@ def filter_handlers(
     - When ``agent_allowed_tools`` is non-empty, tools not on the whitelist
       are added to the denied set (whitelist takes precedence over
       inherited tools).
+    - S2-fix (2026-05-18): whitelist entries that don't match any handler
+      are logged at WARNING so a typo in ``.claude/agents/<name>.md``'s
+      ``tools:`` frontmatter (e.g. ``foo_typo``) doesn't silently degrade
+      the agent's capability to zero tools.
     """
     denied = set(denied_tools)
     denied.add("delegate_task")
     if agent_allowed_tools:
         allowed = set(agent_allowed_tools)
+        unknown = allowed - set(handlers)
+        if unknown:
+            log.warning(
+                "filter_handlers: AgentDefinition whitelist contains "
+                "tool names not in the handler registry — %s. The agent "
+                "will run without these tools. Check the 'tools:' "
+                "frontmatter for typos.",
+                sorted(unknown),
+            )
         for tool_name in list(handlers):
             if tool_name not in allowed:
                 denied.add(tool_name)
