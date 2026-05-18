@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **P0b — seed-pipeline ↔ autoresearch cross-loop handoff.** Closes
+  2026-05-19 outer-loop wiring plan Phase A defects #1 + #13.
+  `plugins/seed_pipeline/orchestrator.py` gains `_persist_survivors()`
+  which emits two artifacts under `<run_dir>`: (1) `survivors.json`
+  metadata view (`{gen_tag, target_dim, run_id, survivors:
+  [{id, path, elo_rating, pilot}]}`) and (2) `survivors/` directory of
+  symlinks to each survivor's candidate `.md` body file.
+  `state.pool_path_out` is stamped to the **directory** (not the JSON)
+  because that is what inspect-petri's `--seed-select` consumer expects
+  (flat-glob of `*.md`). `_persist_survivors()` runs BEFORE
+  `_persist_state()` so the resulting `state.json` carries the new
+  `pool_path_out`. Symlink dir is cleared between runs to avoid
+  accumulation. `autoresearch/train.py` introduces `_resolve_seed_select()`
+  which returns the `AUTORESEARCH_SEED_SELECT` env override or falls
+  back to the hierarchical default; `_build_audit_command` calls it
+  at argv-build time so a parent driver can pipe seed-pipeline's
+  winners directly into the next audit. 10 unit tests (6 orchestrator
+  for survivors.json schema / symlink dir / pool_path_out stamp into
+  state.json / run_dir-unset / missing-elo-pilot / stale-symlink-cleanup,
+  4 autoresearch for default / override / whitespace / argv-resolution).
+
 - **P0a — autoresearch auto-promote + baseline write.** Closes 2026-05-19
   outer-loop wiring plan Phase A defects #4 + #9. New `_write_baseline()`
   helper persists the current audit's dim aggregates to

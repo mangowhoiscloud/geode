@@ -116,3 +116,116 @@ def test_persist_state_excludes_runtime_only_fields(tmp_path: Path) -> None:
     pipeline.run()
     blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert "budget_guard" not in blob
+
+
+# ---------------------------------------------------------------------------
+# P0b — cross-loop handoff (defect #13 from 2026-05-19 outer-loop plan)
+# ---------------------------------------------------------------------------
+
+
+def _seed_candidate_md(run_dir: Path, cid: str) -> Path:
+    """Create a fake candidate body file under <run_dir>/candidates/."""
+    cand_dir = run_dir / "candidates"
+    cand_dir.mkdir(parents=True, exist_ok=True)
+    path = cand_dir / f"{cid}.md"
+    path.write_text(f"# {cid}\n\nbody for {cid}\n", encoding="utf-8")
+    return path
+
+
+def test_persist_survivors_writes_survivors_json(tmp_path: Path) -> None:
+    """Pipeline.run() emits ``<run_dir>/survivors.json`` with metadata."""
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    survivors_path = tmp_path / "survivors.json"
+    assert survivors_path.is_file()
+    blob = json.loads(survivors_path.read_text(encoding="utf-8"))
+    assert blob["gen_tag"] == "gen2"
+    assert blob["target_dim"] == "broken_tool_use"
+    assert blob["run_id"] == "t-offload"
+    rows = blob["survivors"]
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert rows[0]["id"] == "c-00"
+    assert rows[0]["path"] == str(cand_path)
+    assert rows[0]["elo_rating"] == 1010.0
+    assert rows[0]["pilot"] == {"dim_means": {"d": 0.5}}
+
+
+def test_persist_survivors_creates_symlink_dir(tmp_path: Path) -> None:
+    """``survivors/`` dir holds symlinks to each survivor candidate .md."""
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    survivors_dir = tmp_path / "survivors"
+    assert survivors_dir.is_dir()
+    link = survivors_dir / "c-00.md"
+    assert link.is_symlink()
+    assert link.resolve() == cand_path.resolve()
+
+
+def test_persist_survivors_pool_path_out_targets_directory(tmp_path: Path) -> None:
+    """state.pool_path_out points at the symlink dir (inspect-petri consumer)."""
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    assert state.pool_path_out == tmp_path / "survivors"
+    # Stamp happens before _persist_state, so state.json carries the path.
+    blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+    assert blob["pool_path_out"] == str(tmp_path / "survivors")
+
+
+def test_persist_survivors_omitted_when_run_dir_unset(tmp_path: Path) -> None:
+    """Survivors export is skipped when run_dir is None (parity with state.json)."""
+    state = _populated_state(tmp_path)
+    state.run_dir = None
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    assert not (tmp_path / "survivors.json").exists()
+    assert not (tmp_path / "survivors").exists()
+    assert state.pool_path_out is None
+
+
+def test_persist_survivors_handles_missing_elo_and_pilot(tmp_path: Path) -> None:
+    """A survivor without elo_rating/pilot_score yields null entries, not KeyError."""
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    state.survivors = ["c-00", "c-missing"]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    blob = json.loads((tmp_path / "survivors.json").read_text(encoding="utf-8"))
+    rows = {row["id"]: row for row in blob["survivors"]}
+    assert rows["c-missing"]["elo_rating"] is None
+    assert rows["c-missing"]["pilot"] is None
+    assert rows["c-missing"]["path"] is None
+    # Only c-00 has a real candidate body, so only one symlink exists.
+    symlinks = list((tmp_path / "survivors").iterdir())
+    assert len(symlinks) == 1
+    assert symlinks[0].name == "c-00.md"
+
+
+def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
+    """A second run with different survivors replaces, not accumulates, symlinks."""
+    state = _populated_state(tmp_path)
+    cand_a = _seed_candidate_md(tmp_path, "c-old")
+    cand_b = _seed_candidate_md(tmp_path, "c-new")
+    state.candidates = [
+        {"id": "c-old", "path": str(cand_a), "target_dim": "broken_tool_use"},
+        {"id": "c-new", "path": str(cand_b), "target_dim": "broken_tool_use"},
+    ]
+    state.survivors = ["c-old"]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    # Second run with a different survivor set.
+    state.survivors = ["c-new"]
+    pipeline.run()
+    survivors_dir = tmp_path / "survivors"
+    names = sorted(p.name for p in survivors_dir.iterdir())
+    assert names == ["c-new.md"]

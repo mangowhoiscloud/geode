@@ -70,9 +70,25 @@ JUDGE_MODEL = "claude-code/opus"
 USE_OAUTH = True
 SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"
+"""Default seed pool — hierarchical tree (post-PR-0). P0b adds the
+``AUTORESEARCH_SEED_SELECT`` env override consumed by
+:func:`_resolve_seed_select` so the seed-pipeline cross-loop handoff
+(``survivors.json``) can swap in its winners. The constant stays the
+literal default so existing tests and outer-loop agents can grep it."""
 DIM_SET_NAME = "5axes"
 MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = True
+
+
+def _resolve_seed_select() -> str:
+    """Return the seed-select argv value, honoring ``AUTORESEARCH_SEED_SELECT``.
+
+    Empty / unset env falls back to the hierarchical
+    :data:`SEED_SELECT` default. Resolved at call-time (not import-time)
+    so tests can monkeypatch the env var.
+    """
+    override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
+    return override or SEED_SELECT
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +227,7 @@ def _build_audit_command() -> list[str]:
         "--judge",
         JUDGE_MODEL,
         "--seed-select",
-        SEED_SELECT,
+        _resolve_seed_select(),
         "--seeds",
         str(SEED_LIMIT),
         "--dim-set",
