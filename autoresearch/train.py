@@ -66,7 +66,7 @@ from pathlib import Path
 
 BUDGET_MINUTES = 5
 TARGET_MODEL = "geode/gpt-5.5"
-JUDGE_MODEL = "claude-code/sonnet"
+JUDGE_MODEL = "claude-code/opus"
 USE_OAUTH = True
 SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"

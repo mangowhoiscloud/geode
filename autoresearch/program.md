@@ -111,7 +111,7 @@ total_seconds:            315.4
 seed_count:               10
 dim_count:                15
 target_model:             geode/gpt-5.5
-judge_model:              claude-code/sonnet
+judge_model:              claude-code/opus
 budget_minutes:           5
 wrapper_override_active:  true
 section_count:            5
