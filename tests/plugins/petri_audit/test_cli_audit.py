@@ -8,9 +8,10 @@ constructed command + cost estimate.
 from __future__ import annotations
 
 import pytest
-from core.cli import app
 from plugins.petri_audit.cli_audit import _build_slash_parser, cmd_audit_slash
 from typer.testing import CliRunner
+
+from core.cli import app
 
 runner = CliRunner()
 

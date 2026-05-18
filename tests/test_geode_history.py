@@ -6,9 +6,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.cli import app
 from core.llm.usage_store import UsageStore
 from typer.testing import CliRunner
+
+from core.cli import app
 
 
 @pytest.fixture()
