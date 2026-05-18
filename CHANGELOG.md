@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-γ1 — 3-tier subscription quota banner + abort dialog.** Closes
+  2026-05-19 outer-loop config consolidation plan Phase γ + 사용자
+  directive "운영 주체일 GEODE 의 FE 에도 경고문이 출력되도록 UI/UX
+  추가." New `core/cli/quota_banner.py`:
+  `QuotaState` (immutable snapshot, clamps usage ratio to [0, 1]) +
+  `SubscriptionQuotaBanner` (thread-safe; `tier()` returns green /
+  yellow / red against `[outer_loop] warn_threshold` /
+  `abort_threshold` from PR-α1; `render()` returns prompt_toolkit
+  HTML; empty on cold start) +
+  `trip_abort` / `clear_abort` (strict-mode PR-β1 handler calls
+  trip_abort with the resolver's actionable message when
+  `CredentialResolutionError(subscription_only=True)` fires) +
+  `QuotaBannerRefresher` (daemon thread calling injected
+  `invalidate` at cadence — prompt_toolkit issue #277 pattern;
+  injectable so tests don't drag in prompt_toolkit) +
+  `install_banner` / `current_banner` / `uninstall_banner` (singleton
+  accessor) + `render_abort_message → AbortDialog` (title names the
+  family; body is resolver msg verbatim — same remedies in dialog +
+  log + stderr). `core/cli/prompt_session.py` installs the banner and
+  binds its render to `PromptSession(bottom_toolbar=...)`; gracefully
+  degrades to no banner when the config is unavailable. 23 unit tests
+  cover ratio clamping / 3-tier transitions / aborted-state lock /
+  render output / thread safety / singleton lifecycle / refresher
+  cadence + exception isolation + start idempotency / abort dialog
+  title + body verbatim. Frontier reference: Codex CLI `status_line`
+  config + Hermes TUI status bar + prompt_toolkit issue #277.
+
 ### Infrastructure
 
 - **Petri bundle isolation.** Split the petri-bundle integrity gate out of

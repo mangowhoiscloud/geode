@@ -2,8 +2,9 @@
 
 from unittest.mock import patch
 
-from core.cli import app
 from typer.testing import CliRunner
+
+from core.cli import app
 
 runner = CliRunner()
 
