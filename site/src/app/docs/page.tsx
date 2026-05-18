@@ -8,8 +8,8 @@ import { GEODE_SOT } from "@/data/geode/sot";
 
 export default function DocsIndex() {
   const locale = useLocale();
-  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 58 hook events, 61 tools.`;
-  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 58 훅, 61 도구.`;
+  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 58 hook events, 53 tools.`;
+  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 58 훅, 53 도구.`;
   return (
     <DocsShell
       slug=""

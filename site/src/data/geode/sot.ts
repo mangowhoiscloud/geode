@@ -8,18 +8,18 @@
  */
 
 export const GEODE_SOT = {
-  version: "0.99.13",
+  version: "0.99.16",
   modules: {
-    core: 301,
-    plugins: 28,
-    total: 329,
+    core: 305,
+    plugins: 47,
+    total: 352,
   },
   tests: {
-    standard: 4897,
+    standard: 4910,
     live: 24,
-    total: 4921,
+    total: 4934,
   },
-  releases: 156,
+  releases: 159,
   since: "2026-02",
   syncedAt: "2026-05-18",
 } as const;

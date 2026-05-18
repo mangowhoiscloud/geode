@@ -26,7 +26,7 @@ export default function Page() {
               <thead><tr><th>파일</th><th>역할</th></tr></thead>
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td>최상위 <code>bootstrap()</code></td></tr>
-                <tr><td><code>core/wiring/</code> (5 modules)</td><td>각 단계 구현과 시그널 핸들러</td></tr>
+                <tr><td><code>core/wiring/</code> (7 modules)</td><td>각 단계 구현과 시그널 핸들러</td></tr>
                 <tr><td><code>core/server/</code> (10 modules)</td><td>IPC 리스너, 요청 디스패치, 데몬 메인 루프</td></tr>
               </tbody>
             </table>
@@ -111,7 +111,7 @@ def _send_client_capability(self) -> None:
               <thead><tr><th>File</th><th>Role</th></tr></thead>
               <tbody>
                 <tr><td><code>core/runtime.py</code></td><td>top-level <code>bootstrap()</code></td></tr>
-                <tr><td><code>core/wiring/</code> (5 modules)</td><td>phase implementations + signal handlers</td></tr>
+                <tr><td><code>core/wiring/</code> (7 modules)</td><td>phase implementations + signal handlers</td></tr>
                 <tr><td><code>core/server/</code> (10 modules)</td><td>IPC listener, request dispatch, daemon main loop</td></tr>
               </tbody>
             </table>
