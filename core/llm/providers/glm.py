@@ -111,7 +111,6 @@ def get_circuit_breaker() -> CircuitBreaker:
 from core.llm.errors import UserCancelledError  # noqa: E402
 from core.llm.providers.openai import (  # noqa: E402
     OpenAIAgenticAdapter,
-    _build_prompt_cache_key,
     _convert_messages_to_openai,
     _tools_to_chat_completions,
 )
@@ -164,23 +163,6 @@ _GLM_THINKING_MODELS: frozenset[str] = frozenset(
 def _glm_thinking_supported(model: str) -> bool:
     """Return True if the GLM model accepts the ``thinking`` field."""
     return model in _GLM_THINKING_MODELS
-
-
-def _glm_prompt_cache_key_rejected(exc: Exception) -> bool:
-    """Return True when GLM rejects the optional prompt-cache routing key."""
-    detail = str(exc).lower()
-    if "prompt_cache_key" not in detail and "prompt cache key" not in detail:
-        return False
-    return any(
-        marker in detail
-        for marker in (
-            "unsupported parameter",
-            "unknown parameter",
-            "invalid parameter",
-            "unexpected keyword",
-            "not permitted",
-        )
-    )
 
 
 async def _consume_glm_chat_stream(stream_obj: Any) -> Any:
@@ -269,10 +251,6 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
     Injects GLM native web_search tool alongside function tools.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._prompt_cache_key_supported = True
-
     @property
     def provider_name(self) -> str:
         return "glm"
@@ -344,6 +322,16 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                     "type": _thinking_type,
                     "clear_thinking": False,
                 }
+            # Z.AI Chat Completions does not document OpenAI Responses'
+            # ``prompt_cache_key`` routing knob; context caching is automatic
+            # server-side and reports read hits via
+            # ``usage.prompt_tokens_details.cached_tokens``. ``stream_options``
+            # is also absent from the Z.AI streaming guide, whose examples show
+            # final-chunk usage without it, so keep the request shape to the
+            # documented fields only.
+            # https://docs.z.ai/api-reference/llm/chat-completion
+            # https://docs.z.ai/guides/capabilities/cache
+            # https://docs.z.ai/guides/capabilities/streaming
             create_kwargs: dict[str, Any] = {
                 "model": m,
                 "messages": oai_messages,
@@ -355,20 +343,9 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
                 "extra_body": local_extra or None,
                 "timeout": 120.0,
                 "stream": True,
-                "stream_options": {"include_usage": True},
             }
-            if self._prompt_cache_key_supported:
-                create_kwargs["prompt_cache_key"] = _build_prompt_cache_key(system, oai_tools)
-            try:
-                response = client.chat.completions.create(**create_kwargs)
-                return await _consume_glm_chat_stream(response)
-            except Exception as exc:
-                if "prompt_cache_key" in create_kwargs and _glm_prompt_cache_key_rejected(exc):
-                    self._prompt_cache_key_supported = False
-                    create_kwargs.pop("prompt_cache_key", None)
-                    response = client.chat.completions.create(**create_kwargs)
-                    return await _consume_glm_chat_stream(response)
-                raise
+            response = client.chat.completions.create(**create_kwargs)
+            return await _consume_glm_chat_stream(response)
 
         try:
             response, used_model = await call_with_failover(failover_models, _do_call)

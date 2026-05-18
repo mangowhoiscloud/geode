@@ -70,6 +70,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 try:
     from core.agent.system_prompt import WRAPPER_OVERRIDE_HOOK_READY as _CORE_WRAPPER_OVERRIDE_READY
@@ -79,6 +80,14 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Hyperparameters (agent may tune one at a time)
 # ---------------------------------------------------------------------------
+#
+# PR-δ1 (2026-05-19) — these module constants are the **fallback
+# defaults** when no ``~/.geode/config.toml`` ``[outer_loop.autoresearch]``
+# section is present. ``_get_autoresearch_config()`` lazily loads the
+# config and the call sites consult its fields directly. The constant
+# names stay literal so the outer-loop agent (per ``program.md``) can
+# still grep + edit them in this file; the config layer makes them
+# operator-overridable without code changes.
 
 BUDGET_MINUTES = 5
 TARGET_MODEL = "geode/gpt-5.5"
@@ -96,15 +105,50 @@ MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
+def _get_autoresearch_config() -> Any:
+    """Lazily load ``[outer_loop.autoresearch]`` from ``~/.geode/config.toml``.
+
+    Returns the typed ``AutoresearchConfig`` (PR-α1) when the loader is
+    available; falls back to a fresh ``AutoresearchConfig`` (whose
+    defaults mirror the module constants verbatim) on
+    ``ImportError`` / load failure so this module stays importable in
+    test contexts that stub ``core.config``.
+
+    Tests can monkeypatch this function to inject a custom config
+    without touching ``~/.geode/config.toml``.
+    """
+    try:
+        from core.config.outer_loop import load_outer_loop_config
+
+        return load_outer_loop_config().autoresearch
+    except Exception:
+        # Use the in-module default (matches AutoresearchConfig() exactly,
+        # which is verified by tests/test_outer_loop_config.py::
+        # test_autoresearch_defaults_match_train_module).
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            budget_minutes=BUDGET_MINUTES,
+            target_model=TARGET_MODEL,
+            judge_model=JUDGE_MODEL,
+            use_oauth=USE_OAUTH,
+            seed_limit=SEED_LIMIT,
+            seed_select=SEED_SELECT,
+            dim_set=DIM_SET_NAME,
+            max_turns=MAX_TURNS,
+        )
+
+
 def _resolve_seed_select() -> str:
     """Return the seed-select argv value, honoring ``AUTORESEARCH_SEED_SELECT``.
 
-    Empty / unset env falls back to the hierarchical
-    :data:`SEED_SELECT` default. Resolved at call-time (not import-time)
-    so tests can monkeypatch the env var.
+    Precedence (Codex CLI pattern):
+    1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
+    2. ``[outer_loop.autoresearch] seed_select`` from ``config.toml``.
+    3. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
-    return override or SEED_SELECT
+    return override or _get_autoresearch_config().seed_select
 
 
 # ---------------------------------------------------------------------------
@@ -240,26 +284,33 @@ dormant (first run / fresh branch).
 
 
 def _build_audit_command() -> list[str]:
-    """Construct the ``geode audit`` subprocess argv."""
+    """Construct the ``geode audit`` subprocess argv.
+
+    PR-δ1 reads hyperparameters from
+    :func:`_get_autoresearch_config` so operators can override via
+    ``~/.geode/config.toml`` ``[outer_loop.autoresearch]`` without
+    editing this file.
+    """
+    cfg = _get_autoresearch_config()
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
     argv += [
         "--target",
-        TARGET_MODEL,
+        cfg.target_model,
         "--judge",
-        JUDGE_MODEL,
+        cfg.judge_model,
         "--seed-select",
         _resolve_seed_select(),
         "--seeds",
-        str(SEED_LIMIT),
+        str(cfg.seed_limit),
         "--dim-set",
-        DIM_SET_NAME,
+        cfg.dim_set,
         "--max-turns",
-        str(MAX_TURNS),
+        str(cfg.max_turns),
         "--live",
         "--yes",
     ]
-    if USE_OAUTH:
+    if cfg.use_oauth:
         argv.append("--use-oauth")
     return argv
 
@@ -318,7 +369,7 @@ def run_audit(
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
-        timeout=BUDGET_MINUTES * 60 + 120,
+        timeout=_get_autoresearch_config().budget_minutes * 60 + 120,
         check=False,
     )
     audit_seconds = time.time() - audit_started
@@ -630,11 +681,12 @@ def print_summary(
             print(f"{dim}_stderr: {dim_stderr[dim]:.4f}")
     print(f"audit_seconds:            {audit_seconds:.1f}")
     print(f"total_seconds:            {total_seconds:.1f}")
-    print(f"seed_count:               {SEED_LIMIT}")
+    cfg = _get_autoresearch_config()
+    print(f"seed_count:               {cfg.seed_limit}")
     print(f"dim_count:                {len(AXIS_TIERS)}")
-    print(f"target_model:             {TARGET_MODEL}")
-    print(f"judge_model:              {JUDGE_MODEL}")
-    print(f"budget_minutes:           {BUDGET_MINUTES}")
+    print(f"target_model:             {cfg.target_model}")
+    print(f"judge_model:              {cfg.judge_model}")
+    print(f"budget_minutes:           {cfg.budget_minutes}")
     print(f"wrapper_override_active:  {str(WRAPPER_OVERRIDE_HOOK_READY).lower()}")
     print(f"section_count:            {len(WRAPPER_PROMPT_SECTIONS)}")
     print(f"stability_source:         {'stderr-aggregate' if dim_stderr else 'placeholder'}")

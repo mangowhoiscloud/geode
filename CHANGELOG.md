@@ -47,6 +47,112 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.17] — 2026-05-19
+
+### Fixed
+
+- **GLM documented request shape for Z.AI Chat Completions.** Removed the
+  speculative `prompt_cache_key` send-and-retry path added as a defensive PR
+  #1316 measure after grounding showed Z.AI Chat Completions has no such
+  request parameter and performs context caching automatically. Fresh GLM
+  sessions now make one clean streaming call instead of paying one rejected
+  call plus retry.
+- **GLM Z.AI Chat Completions request shape 정정.** PR #1316 의 방어적
+  `prompt_cache_key` send-and-retry 경로를 제거했습니다. 재검증 결과 Z.AI
+  Chat Completions 에는 해당 request parameter 가 없고 context caching 은
+  서버에서 자동 수행됩니다. 이제 새 GLM 세션은 reject 1회 + retry 1회 대신
+  정상 streaming call 1회만 수행합니다.
+
+### Removed
+
+- **GLM unsupported cache and stream request knobs.** Dropped
+  `prompt_cache_key`, the session-scoped unsupported-parameter fallback branch,
+  and undocumented `stream_options` from the GLM adapter. Cache-read telemetry
+  still comes from Z.AI's documented
+  `usage.prompt_tokens_details.cached_tokens` response field.
+- **GLM 미지원 cache/stream request knob 제거.** GLM adapter 에서
+  `prompt_cache_key`, 세션 단위 unsupported-parameter fallback branch, 문서화되지
+  않은 `stream_options` 를 삭제했습니다. Cache-read telemetry 는 계속 Z.AI 가
+  문서화한 `usage.prompt_tokens_details.cached_tokens` 응답 필드에서 읽습니다.
+- **Cross-provider failover settings and dispatch paths.** Removed
+  `_cross_provider_dispatch`, the text/parsed router wrapper calls, the async
+  tools cross-provider loop, and `llm_cross_provider_failover` /
+  `llm_cross_provider_order`. Provider-internal fallback chains remain intact.
+  This removes the env var/settings surface for the old opt-in cross-provider
+  hop; default was already `False`, so visible user impact should be near zero.
+- **Cross-provider failover settings and dispatch paths 제거.**
+  `_cross_provider_dispatch`, text/parsed router wrapper 호출, async tools
+  cross-provider loop, `llm_cross_provider_failover` /
+  `llm_cross_provider_order` 를 삭제했습니다. Provider 내부 fallback chain 은
+  유지됩니다. 기존 opt-in env var/settings surface 는 사라지지만 default 가 이미
+  `False` 였으므로 사용자 visible 영향은 거의 없습니다.
+
+### Changed
+
+- **PR-δ1 — autoresearch consumes `[outer_loop.autoresearch]` config.**
+  Closes 2026-05-19 outer-loop config consolidation plan Phase δ
+  (first half — re-land after PR #1317 was closed during
+  CHANGELOG-conflict recovery; rebased onto the current develop
+  tip on 2026-05-19). `autoresearch/train.py` adds
+  `_get_autoresearch_config()` — lazily loads
+  `OuterLoopConfig.autoresearch` (PR-α1) and falls back to a
+  `SimpleNamespace` mirroring the module constants on `ImportError` /
+  load failure so the module stays importable in test contexts that
+  stub `core.config`. Call sites swap module-constant reads for
+  `cfg.X` reads: `_build_audit_command` (target / judge / seed_limit /
+  dim_set / max_turns / use_oauth), `_resolve_seed_select`
+  (config.seed_select as second precedence after env override),
+  `run_audit` (timeout calc), and `print_summary` (output values).
+  Module constants stay literal so the outer-loop agent's grep-based
+  workflow per `program.md` keeps working — they are now the **final
+  fallback** in the 3-tier precedence (env → config → module
+  constant). No-op behaviour change at the default level (verified by
+  `test_get_autoresearch_config_defaults_match_module_constants`).
+  5 new unit tests cover helper shape / defaults parity / argv
+  flow-through / env-vs-config precedence / config-vs-module
+  fallback.
+- **PR-δ2 — seed-pipeline + petri user_overrides consume outer-loop
+  config.** Closes 2026-05-19 outer-loop config consolidation plan
+  Phase δ (second half). `plugins/seed_pipeline/cli.py`:
+  `_get_seed_pipeline_config()` lazily loads
+  `[outer_loop.seed_pipeline]` from PR-α1 and falls back to a
+  `SimpleNamespace` mirroring the module defaults on ImportError /
+  load failure; both `audit_seeds_generate` (Typer) and
+  `cmd_audit_seeds_slash` (`/audit-seeds`) now resolve `--gen-tag` /
+  `--candidates` from the config when omitted (sentinel `None`),
+  built-in fallback `gen1` / `15` only when the config is absent.
+  `plugins/petri_audit/user_overrides.py`: `read_role_override`
+  consults `[outer_loop.petri.<role>]` first (when no explicit
+  path), legacy `~/.geode/petri.toml` is the fallback;
+  `_read_role_from_outer_loop` lets pydantic ValueError bubble so
+  config typos surface immediately, swallows only ImportError;
+  `auto` source is treated as unset so registry auto-expansion
+  still runs. New `migration_plan_from_petri_toml()` read-only
+  diff helper (wired into `geode config migrate-petri-toml` in
+  PR-ε1). 9 new tests covering precedence / `auto` dropping /
+  explicit path bypass / ValueError bubble / ImportError fallback /
+  migration; petri / registry / user_overrides fixtures now pin
+  `GEODE_CONFIG_TOML` at a non-existent tmp path so host
+  `~/.geode/config.toml` `[outer_loop.petri.*]` cannot bleed into
+  test results.
+- **ADR + plan extension — paperclip/crumb-style within-source profile
+  rotation + 2-axis account picker UX.** Closes 2026-05-19 user
+  directive "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로
+  롤아웃 + provider 좌우 / account 위아래 picker." Updates
+  `docs/architecture/outer-loop-resume-decision.md` with a new
+  "Within-source account rotation" section: GEODE already has
+  `core/auth/profiles.py` + `rotation.py` + `credential_breadcrumb.py`
+  (richer than paperclip/crumb's subprocess pickup); outer-loop just
+  wasn't using it. Adds an "Account picker UX (2-axis)" section with
+  ASCII mockup mirroring `core/cli/effort_picker.py`
+  (`pick_model_and_effort`) — provider←→ × profile↑↓ + action row
+  (Enter swap / n add / w wait / p PAYG opt-in / Esc keep aborted).
+  Two entry points: `/login picker` slash + agent-loop NL recogniser.
+  Rotation is **operator-driven**, never automatic. Plan ledger
+  expanded from 6 to 8 PRs under Phase ζ — PR-ζ5.5 (ProfileRotator
+  wiring into outer-loop credential path) + PR-ζ5.6 (account picker
+  UI). Total sprint LOC 2,350 → 2,900.
+
 ## [0.99.16] — 2026-05-19
 
 ### Fixed

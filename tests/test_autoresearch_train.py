@@ -93,6 +93,115 @@ def test_seed_select_points_at_hierarchical_tree() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PR-δ1 — autoresearch consumes [outer_loop.autoresearch] config
+# ---------------------------------------------------------------------------
+
+
+def test_get_autoresearch_config_returns_config_object() -> None:
+    """Helper returns an object exposing all 8 autoresearch fields."""
+    from autoresearch.train import _get_autoresearch_config
+
+    cfg = _get_autoresearch_config()
+    for attr in (
+        "budget_minutes",
+        "target_model",
+        "judge_model",
+        "use_oauth",
+        "seed_limit",
+        "seed_select",
+        "dim_set",
+        "max_turns",
+    ):
+        assert hasattr(cfg, attr), f"missing field {attr}"
+
+
+def test_get_autoresearch_config_defaults_match_module_constants() -> None:
+    """No-op behaviour change — unconfigured loader matches module constants.
+
+    Verified by tests/test_outer_loop_config.py at the schema layer; this
+    test asserts the consumer side stays in sync.
+    """
+    from autoresearch.train import (
+        BUDGET_MINUTES,
+        DIM_SET_NAME,
+        JUDGE_MODEL,
+        MAX_TURNS,
+        SEED_LIMIT,
+        SEED_SELECT,
+        TARGET_MODEL,
+        USE_OAUTH,
+        _get_autoresearch_config,
+    )
+
+    cfg = _get_autoresearch_config()
+    assert cfg.budget_minutes == BUDGET_MINUTES
+    assert cfg.target_model == TARGET_MODEL
+    assert cfg.judge_model == JUDGE_MODEL
+    assert cfg.use_oauth == USE_OAUTH
+    assert cfg.seed_limit == SEED_LIMIT
+    assert cfg.seed_select == SEED_SELECT
+    assert cfg.dim_set == DIM_SET_NAME
+    assert cfg.max_turns == MAX_TURNS
+
+
+def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Monkeypatching _get_autoresearch_config flows through to argv."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            budget_minutes=10,
+            target_model="geode/claude-opus-4-7",
+            judge_model="claude-code/sonnet",
+            use_oauth=False,
+            seed_limit=25,
+            seed_select="plugins/petri_audit/seeds_safe10",
+            dim_set="legacy",
+            max_turns=20,
+        ),
+    )
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    argv = auto_train._build_audit_command()
+    assert "geode/claude-opus-4-7" in argv
+    assert "claude-code/sonnet" in argv
+    assert "25" in argv
+    assert "legacy" in argv
+    assert "20" in argv
+    # use_oauth=False → no --use-oauth flag.
+    assert "--use-oauth" not in argv
+
+
+def test_resolve_seed_select_falls_back_to_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without env override, resolver reads config.seed_select."""
+    from types import SimpleNamespace
+
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(seed_select="custom/seeds"),
+    )
+    assert auto_train._resolve_seed_select() == "custom/seeds"
+
+
+def test_resolve_seed_select_env_wins_over_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUTORESEARCH_SEED_SELECT env var still trumps config.seed_select."""
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "env/seeds")
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(seed_select="config/seeds"),
+    )
+    assert auto_train._resolve_seed_select() == "env/seeds"
+
+
+# ---------------------------------------------------------------------------
 # P0b — env-driven seed-select override (defect #1 from 2026-05-19 plan)
 # ---------------------------------------------------------------------------
 

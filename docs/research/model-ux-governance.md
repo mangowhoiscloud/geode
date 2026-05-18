@@ -455,7 +455,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 | **router-level retry** | `core/llm/fallback.py:retry_with_backoff_generic` (~228줄) | per-model 재시도 + 모델 chain iteration |
 | **agentic loop escalation** | `core/agent/loop.py:_try_model_escalation` (line 1563) | 모든 retry 실패 시 chain 의 다음 모델로 swap |
 | **cross-provider escalation** | `core/agent/loop.py:_try_cross_provider_escalation` (line 1637) + `core/llm/adapters.py:215 CROSS_PROVIDER_FALLBACK` | provider chain 도 exhausted 시 다른 provider 로 점프 |
-| **opt-in flag** | `core/config.py:317 llm_cross_provider_failover: bool = False` | cross-provider auto-failover toggle (현재 default OFF — 안전 장치 이미 있음) |
+| **deleted opt-in flag** | `core/config/_settings.py` — `llm_cross_provider_failover` / `llm_cross_provider_order` 제거 완료 (`#TBD`) | cross-provider auto-failover toggle 삭제. provider-internal fallback chain 은 유지 |
 | **billing fail-fast** | `core/llm/errors.py:is_billing_fatal` + `core/llm/fallback.py:267` (v0.52.3) | quota=billing 에러 시 retry 즉시 중단 (BillingError raise) — **이미 구현됨** |
 | **request-fatal fail-fast** | `core/llm/errors.py:is_request_fatal` + `fallback.py` (v0.52.6) | 400 Unsupported parameter 등 즉시 중단 — **이미 구현됨** |
 
@@ -471,11 +471,11 @@ v0.52.5 incident (provider-switch session):
 
 ### 제안 governance — fail-fast on quota
 
-**Phase F1 — Cross-provider failover 명시적 비활성화 + 제거**
-- `llm_cross_provider_failover` 가 v0.52.4 부터 default `False` — 이미 비활성. 추가로:
-  - `_try_cross_provider_escalation` 함수 자체 deprecate (`loop.py:1637`)
-  - `CROSS_PROVIDER_FALLBACK` map 제거 (`adapters.py:215`)
-  - `_cross_provider_dispatch` 호출 경로 제거 (`provider_dispatch.py:196`)
+**Phase F1 — Cross-provider failover 제거 완료 (`#TBD`)**
+- `llm_cross_provider_failover` / `llm_cross_provider_order` settings fields 삭제 완료.
+- `_cross_provider_dispatch` 삭제 및 `call_llm` / `call_llm_parsed` wrapper 경로 제거 완료.
+- `call_llm_with_tools_async` 의 inline cross-provider loop 제거 완료.
+- 기존 `_try_cross_provider_escalation` / `CROSS_PROVIDER_FALLBACK` auto-swap 경로는 v0.90.0 계열에서 이미 제거 또는 empty back-compat 상태.
 - 영향: provider 가 exhausted 됐을 때 silent 다른 provider 점프 사라짐. 명시적 에러 raise.
 
 **Phase F2 — Quota-exhausted 친절한 안내**
@@ -513,10 +513,10 @@ v0.52.5 incident (provider-switch session):
 
 | File | 변경 | Breaking? | Effort |
 |------|------|-----------|--------|
-| `core/llm/adapters.py:215` `CROSS_PROVIDER_FALLBACK` | 제거 | Yes — `llm_cross_provider_failover=True` 사용자에게 영향 (현재 default False 라 거의 0명) | S |
-| `core/agent/loop.py:1637` `_try_cross_provider_escalation` | 제거 | 위와 동일 | S |
-| `core/llm/provider_dispatch.py:196` `_cross_provider_dispatch` | 제거 | 위와 동일 | S |
-| `core/config.py:317-318` `llm_cross_provider_failover/order` | 제거 | 사용자 config 무효화 | S |
+| `core/llm/adapters.py:215` `CROSS_PROVIDER_FALLBACK` | 제거/empty back-compat 완료 | Yes — 과거 `llm_cross_provider_failover=True` 사용자에게 영향 (default False 라 거의 0명) | Done |
+| `core/agent/loop.py:1637` `_try_cross_provider_escalation` | 제거 완료 | 위와 동일 | Done |
+| `core/llm/provider_dispatch.py` `_cross_provider_dispatch` | 제거 완료 (`#TBD`) | 위와 동일 | Done |
+| `core/config/_settings.py` `llm_cross_provider_failover/order` | 제거 완료 (`#TBD`) | 사용자 config/env var 무효화 | Done |
 | `core/agent/loop.py:1563` `_try_model_escalation` | F3-(B) 적용: chain 깊이 1로 | 일부 동작 변경 | M |
 | `core/llm/errors.py:BillingError` | `user_message(plan, provider)` method 추가 | 추가 only | S |
 | `core/cli/ipc_client.py` + `core/ui/agentic_ui.py` | `quota_exhausted` event + renderer | 추가 only | M |
@@ -524,7 +524,7 @@ v0.52.5 incident (provider-switch session):
 
 ### Migration impact
 
-- **사용자 visible 변화**: cross-provider auto-switch 제거. 하지만 `llm_cross_provider_failover=False` 가 default 라 대부분 사용자 영향 0.
+- **사용자 visible 변화**: cross-provider auto-switch 제거. 삭제 전 `llm_cross_provider_failover=False` 가 default 였으므로 대부분 사용자 영향 0. 이제 해당 env var / settings field 는 존재하지 않음.
 - **breadcrumb (B5, v0.52.3) 보존**: LLM 이 다른 provider 알 수 있게 hint 주는 건 유지 (정보 ≠ 자동 swap).
 - **same-provider chain 단순화 (F3-B)**: incident 의 5×4 storm 이 5×2 로 감소. timing 도 ~40s → ~16s.
 

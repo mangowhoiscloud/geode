@@ -7,9 +7,8 @@ tool-use entry point ``call_llm_with_tools_async``.
 
 All five entry points share the same shape: resolve provider, fire
 LLM_CALL_START, dispatch to Anthropic SDK or OpenAI-compatible SDK, record
-usage, fire LLM_CALL_END (with error or latency). Cross-provider fallback
-runs through ``_cross_provider_dispatch`` so a 5xx on Anthropic can flow to
-OpenAI without each call site re-implementing the chain.
+usage, and fire LLM_CALL_END (with error or latency). Provider-internal
+fallback stays inside the selected provider's retry chain.
 
 Each entry point lives in its own leaf sub-module for SRP and testability.
 Tests that need to monkeypatch a provider client (``get_anthropic_client``,
