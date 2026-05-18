@@ -80,6 +80,18 @@ functional change.
   → `error_category="generation_failed"`. `announce=False` so sub-spawns
   don't double-fire the parent loop's announce queue.
 
+- **text_embed helper + Proximity 3-track dedup (S4).** Adds
+  `core/tools/text_embed.py` — internal Python helper, NOT an
+  LLM-dispatched tool (no `definitions.json` entry, no handler). It is
+  imported directly by Proximity (pure-Python phase) and has no other
+  agent caller. Provides OpenAI text-embedding-3-small wrapper — sync +
+  async API, `cosine_similarity` helper, `EmbeddingError`. Adds
+  `plugins/seed_pipeline/agents/proximity.py` (Phase B dedup): 3-track
+  majority vote (2 of 3) — embedding cosine ≥ 0.85, lexical 5-gram
+  Jaccard ≥ 0.40, semantic role (Critic's `target_dims_actual` overlap).
+  Pool-vs-candidate dedup when `state.pool_path_in` set (3 added pool
+  tests). Embedding track failure degrades gracefully to 2-track. 29 unit
+  tests (18 proximity + 11 text_embed).
 - **Reflection (Critic) agent (S3).** `plugins/seed_pipeline/agents/critic.py`
   fans out one sub-agent per candidate (dispatched to the `seed_critic`
   AgentDefinition) and collects dim-level critique JSON keyed by

@@ -1,0 +1,310 @@
+"""Proximity agent — Phase B (dedup) of the seed pipeline.
+
+Per ADR-001 paper §3 Proximity + ADR-003 — 3-track dedup over the
+candidate batch + (optional) existing pool. Majority vote (2 of 3
+tracks marking a candidate for removal) drops the candidate.
+
+Tracks:
+
+1. **Embedding similarity** — cosine ≥ ``EMBED_SIMILARITY_THRESHOLD``
+   via ``core.tools.text_embed`` against either a sibling candidate or
+   a pool member.
+2. **Lexical n-gram** — 5-gram Jaccard ≥ ``LEXICAL_JACCARD_THRESHOLD``.
+3. **Semantic role** — both candidates share ≥ 1 target dim in their
+   Reflection's ``target_dims_actual`` (from S3's state.reflections).
+
+Per ADR-003 the agent's manifest entry has ``kind = "embedding"``, so
+the orchestrator (S6.5 picker) does NOT route Proximity through Petri's
+adapter table — embeddings come from the `text_embed` tool directly,
+with the OpenAI PAYG credential resolved at call time.
+
+P-checklist application (cycle-skill SKILL.md):
+
+- **P1 Stub Fidelity** — `text_embed.embed_texts` stub in tests returns
+  vectors aligned 1:1 with input order (matches production contract).
+  Test cases include duplicate-by-embedding, duplicate-by-lexical,
+  duplicate-by-role, and unanimous-no-duplicate.
+- **P7 Caller-Callee Contract** — Proximity consumes
+  ``state.candidates`` (Generator output schema with ``path``) +
+  ``state.reflections`` (Critic output schema with
+  ``target_dims_actual``). Both are explicitly documented.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_pipeline.orchestrator import PipelineState
+
+log = logging.getLogger(__name__)
+
+__all__ = ["EMBED_SIMILARITY_THRESHOLD", "LEXICAL_JACCARD_THRESHOLD", "Proximity"]
+
+
+EMBED_SIMILARITY_THRESHOLD = 0.85
+LEXICAL_JACCARD_THRESHOLD = 0.40
+NGRAM_SIZE = 5
+MAJORITY_VOTE_THRESHOLD = 2  # of 3 tracks
+
+
+class Proximity(BaseSeedAgent):
+    """3-track dedup over candidate batch + optional pool.
+
+    The agent does NOT spawn sub-agents — Proximity is a pure-Python
+    + tool-call phase. Embedding cost is the only LLM-adjacent expense;
+    lexical and role tracks are local.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str = "text-embedding-3-small",
+        source: str = "api_key",
+        manifest_role: dict[str, object] | None = None,
+        embed_client: Any | None = None,
+    ) -> None:
+        super().__init__(
+            role="proximity",
+            model=model,
+            source=source,
+            manifest_role=manifest_role,
+        )
+        # Optional pre-built OpenAI client for test injection.
+        self._embed_client = embed_client
+
+    def execute(self, state: PipelineState) -> SeedAgentResult:
+        if not state.candidates:
+            return SeedAgentResult(
+                role=self.role,
+                status="error",
+                error_category="validation",
+                error_message="Proximity requires state.candidates to be non-empty",
+            )
+
+        # 1. Load candidate texts (read from disk paths).
+        candidate_texts = self._load_candidate_texts(state)
+        if not candidate_texts:
+            return SeedAgentResult(
+                role=self.role,
+                status="error",
+                error_category="io",
+                error_message="all candidate files unreadable",
+            )
+
+        # 2. Load optional pool texts.
+        pool_texts = self._load_pool_texts(state)
+
+        # 3. Compute per-track duplicate votes.
+        embed_dupes = self._embedding_track(candidate_texts, pool_texts)
+        lexical_dupes = self._lexical_track(candidate_texts, pool_texts)
+        role_dupes = self._role_track(state)
+
+        # 4. Majority vote.
+        removed: list[str] = []
+        survivors: list[dict[str, Any]] = []
+        for cand in state.candidates:
+            cid = cand["id"]
+            votes = sum(1 for marks in (embed_dupes, lexical_dupes, role_dupes) if cid in marks)
+            if votes >= MAJORITY_VOTE_THRESHOLD:
+                removed.append(cid)
+            else:
+                survivors.append(cand)
+
+        if not survivors:
+            return SeedAgentResult(
+                role=self.role,
+                status="error",
+                error_category="all_duplicates",
+                error_message=(
+                    f"all {len(state.candidates)} candidates marked as "
+                    "duplicates by 2-of-3 vote — Generator batch is "
+                    "homogeneous; consider raising temperature or seed pool"
+                ),
+            )
+
+        if removed:
+            log.info(
+                "seed-pipeline proximity: dropped %d of %d candidates "
+                "(embed=%d lexical=%d role=%d)",
+                len(removed),
+                len(state.candidates),
+                len(embed_dupes),
+                len(lexical_dupes),
+                len(role_dupes),
+            )
+
+        # The orchestrator's state.merge uses extend() for list keys, so
+        # returning a NEW candidates list here would duplicate. Mutate
+        # state directly + return a marker dict the orchestrator merges
+        # without re-extending.
+        state.candidates = survivors
+        return SeedAgentResult(
+            role=self.role,
+            output={
+                # Empty list — survivors are already mutated in-place above.
+                # Returning a non-empty list would re-extend state.candidates.
+            },
+        )
+
+    # ────────────────────────────────────────────────────────────────────
+    # Track 1 — embedding similarity
+    # ────────────────────────────────────────────────────────────────────
+
+    def _embedding_track(
+        self,
+        candidate_texts: dict[str, str],
+        pool_texts: list[str],
+    ) -> set[str]:
+        """Mark candidates whose embedding cosine vs sibling/pool ≥ 0.85."""
+        from core.tools.text_embed import cosine_similarity, embed_texts
+
+        cids = list(candidate_texts)
+        all_texts = [candidate_texts[c] for c in cids] + pool_texts
+        try:
+            vectors = embed_texts(all_texts, client=self._embed_client)
+        except Exception:
+            log.warning(
+                "seed-pipeline proximity: embedding track failed (continuing "
+                "with 2-track fallback)",
+                exc_info=True,
+            )
+            return set()
+        cand_vectors = vectors[: len(cids)]
+        pool_vectors = vectors[len(cids) :]
+        dupes: set[str] = set()
+        # Pairwise within candidates.
+        for i in range(len(cids)):
+            for j in range(i + 1, len(cids)):
+                if (
+                    cosine_similarity(cand_vectors[i], cand_vectors[j])
+                    >= EMBED_SIMILARITY_THRESHOLD
+                ):
+                    # Mark the LATER candidate as duplicate (keep first).
+                    dupes.add(cids[j])
+        # Each candidate vs every pool member.
+        for i, ci in enumerate(cids):
+            for pv in pool_vectors:
+                if cosine_similarity(cand_vectors[i], pv) >= EMBED_SIMILARITY_THRESHOLD:
+                    dupes.add(ci)
+                    break  # one pool match is enough
+        return dupes
+
+    # ────────────────────────────────────────────────────────────────────
+    # Track 2 — lexical 5-gram Jaccard
+    # ────────────────────────────────────────────────────────────────────
+
+    def _lexical_track(
+        self,
+        candidate_texts: dict[str, str],
+        pool_texts: list[str],
+    ) -> set[str]:
+        cids = list(candidate_texts)
+        cand_shingles = {c: _shingles(candidate_texts[c]) for c in cids}
+        pool_shingles = [_shingles(t) for t in pool_texts]
+        dupes: set[str] = set()
+        for i, ci in enumerate(cids):
+            for j in range(i + 1, len(cids)):
+                if _jaccard(cand_shingles[ci], cand_shingles[cids[j]]) >= LEXICAL_JACCARD_THRESHOLD:
+                    dupes.add(cids[j])
+        for ci in cids:
+            for ps in pool_shingles:
+                if _jaccard(cand_shingles[ci], ps) >= LEXICAL_JACCARD_THRESHOLD:
+                    dupes.add(ci)
+                    break
+        return dupes
+
+    # ────────────────────────────────────────────────────────────────────
+    # Track 3 — semantic role (Reflection's target_dims_actual)
+    # ────────────────────────────────────────────────────────────────────
+
+    def _role_track(self, state: PipelineState) -> set[str]:
+        """Mark candidates whose target_dims_actual overlap with another's."""
+        if not state.reflections:
+            return set()  # no critic output → cannot vote
+        # Build dim_set for each candidate from its reflection.
+        cand_dims: dict[str, set[str]] = {}
+        for cand in state.candidates:
+            cid = cand["id"]
+            critique = state.reflections.get(cid, {})
+            dims_raw = critique.get("target_dims_actual") or []
+            cand_dims[cid] = set(dims_raw) if isinstance(dims_raw, list) else set()
+        cids = list(cand_dims)
+        dupes: set[str] = set()
+        for i, ci in enumerate(cids):
+            if not cand_dims[ci]:
+                continue
+            for j in range(i + 1, len(cids)):
+                cj = cids[j]
+                if cand_dims[ci] & cand_dims[cj]:
+                    # Mark the LATER one (matches embedding track semantics).
+                    dupes.add(cj)
+        return dupes
+
+    # ────────────────────────────────────────────────────────────────────
+    # I/O helpers
+    # ────────────────────────────────────────────────────────────────────
+
+    def _load_candidate_texts(self, state: PipelineState) -> dict[str, str]:
+        """Read each candidate's file body into ``{candidate_id: text}``.
+
+        Missing/unreadable files are skipped with WARNING; the affected
+        candidates lose the embedding + lexical tracks (semantic-role
+        track may still apply if Reflection ran).
+        """
+        out: dict[str, str] = {}
+        for cand in state.candidates:
+            cid = cand["id"]
+            path = cand.get("path")
+            if not path:
+                log.warning("proximity: candidate %r has no path; skipped", cid)
+                continue
+            try:
+                out[cid] = Path(path).read_text(encoding="utf-8")
+            except OSError as exc:
+                log.warning("proximity: candidate %r unreadable (%s)", cid, exc)
+        return out
+
+    def _load_pool_texts(self, state: PipelineState) -> list[str]:
+        """Read every `.md` file under ``state.pool_path_in`` (if set).
+
+        Returns empty list when no pool is configured — the dedup is then
+        candidate-batch-only (no cross-pool deduplication).
+        """
+        if state.pool_path_in is None:
+            return []
+        pool_dir = Path(state.pool_path_in)
+        if not pool_dir.is_dir():
+            log.warning(
+                "proximity: pool_path_in %r is not a directory; skipped",
+                str(pool_dir),
+            )
+            return []
+        texts: list[str] = []
+        for md in sorted(pool_dir.glob("*.md")):
+            try:
+                texts.append(md.read_text(encoding="utf-8"))
+            except OSError as exc:
+                log.warning("proximity: pool file %s unreadable (%s)", md, exc)
+        return texts
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Shared helpers — module-level so tests can import directly
+# ────────────────────────────────────────────────────────────────────────
+
+
+def _shingles(text: str, n: int = NGRAM_SIZE) -> set[str]:
+    """Split lowercase whitespace-tokenized text into n-gram shingles."""
+    tokens = text.lower().split()
+    if len(tokens) < n:
+        return {" ".join(tokens)} if tokens else set()
+    return {" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)}
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 0.0
+    return len(a & b) / len(a | b) if (a or b) else 0.0

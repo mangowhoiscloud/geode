@@ -7,8 +7,9 @@ from pathlib import Path
 
 import core.paths as paths_mod
 import pytest
-from core.tools import sandbox
 from core.tools.document_tools import ReadDocumentTool
+
+from core.tools import sandbox
 
 
 @pytest.fixture(autouse=True)
