@@ -4,6 +4,15 @@
 
 Proposed
 
+Update (PR #1181 follow-up): the `PromptAssembler` implementation described
+below was removed after production audit showed it had no call sites. Active
+prompt assembly is now unified on `AgenticLoop._build_system_prompt()` →
+`core.agent.system_prompt.build_system_prompt()` →
+`core.agent.loop._context.build_system_prompt()`. Skill context is injected only
+through the `{skill_context}` placeholder from `loop._skill_registry`, and the
+autoresearch wrapper override now lives in `core.agent.system_prompt`; do not
+re-introduce a second assembler path.
+
 ## Date
 
 2026-02-27

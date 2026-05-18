@@ -11,7 +11,7 @@ Agent CAN modify:
     Adding, deleting, reordering, and rewording are all fair game.
     The dict is exported to the audit subprocess via
     ``GEODE_WRAPPER_OVERRIDE`` and the GEODE runtime's
-    ``PromptAssembler`` Phase 0 replaces the wrapper base with it.
+    active AgenticLoop system prompt replaces the wrapper base with it.
   * Hyperparameters such as ``BUDGET_MINUTES`` / ``TARGET_MODEL`` /
     ``JUDGE_MODEL`` / ``USE_OAUTH`` — change one at a time so the
     fitness delta is attributable.
@@ -71,6 +71,11 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+try:
+    from core.agent.system_prompt import WRAPPER_OVERRIDE_HOOK_READY as _CORE_WRAPPER_OVERRIDE_READY
+except ImportError:
+    _CORE_WRAPPER_OVERRIDE_READY = False
+
 # ---------------------------------------------------------------------------
 # Hyperparameters (agent may tune one at a time)
 # ---------------------------------------------------------------------------
@@ -88,7 +93,7 @@ SEED_SELECT = "plugins/petri_audit/seeds"
 literal default so existing tests and outer-loop agents can grep it."""
 DIM_SET_NAME = "5axes"
 MAX_TURNS = 10
-WRAPPER_OVERRIDE_HOOK_READY = True
+WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
 def _resolve_seed_select() -> str:
