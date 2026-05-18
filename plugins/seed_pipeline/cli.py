@@ -35,7 +35,7 @@ import logging
 import shlex
 import sys
 from collections.abc import Callable
-from typing import IO
+from typing import IO, Any
 
 import typer
 
@@ -65,6 +65,24 @@ audit_seeds_app = typer.Typer(
 )
 
 
+def _get_seed_pipeline_config() -> Any:
+    """Lazily load ``[outer_loop.seed_pipeline]`` from ``~/.geode/config.toml``.
+
+    PR-δ2 (2026-05-19) — moves the ``gen_tag`` / ``candidates`` CLI
+    defaults onto the outer-loop config SoT. Returns a fully-defaulted
+    ``SeedPipelineConfig`` on import / load failure so the CLI stays
+    usable when ``core.config`` is unavailable in test contexts.
+    """
+    try:
+        from core.config.outer_loop import load_outer_loop_config
+
+        return load_outer_loop_config().seed_pipeline
+    except Exception:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(candidates_default=15, default_gen_tag="gen1")
+
+
 @audit_seeds_app.command("generate")
 def audit_seeds_generate(
     target_dim: str = typer.Option(
@@ -73,17 +91,24 @@ def audit_seeds_generate(
         "-d",
         help="Target Petri dim for this generation (e.g. broken_tool_use).",
     ),
-    gen_tag: str = typer.Option(
-        "gen1",
+    gen_tag: str | None = typer.Option(
+        None,
         "--gen-tag",
         "-g",
-        help="Generation tag — used in candidate ids and run_dir.",
+        help=(
+            "Generation tag used in candidate ids and run_dir. Defaults to "
+            "the configured outer_loop.seed_pipeline.default_gen_tag "
+            "(built-in fallback: 'gen1')."
+        ),
     ),
-    candidates: int = typer.Option(
-        15,
+    candidates: int | None = typer.Option(
+        None,
         "--candidates",
         "-n",
-        help="Target N for the generator phase (default 15).",
+        help=(
+            "Target N for the generator phase. Defaults to the configured "
+            "outer_loop.seed_pipeline.candidates_default (built-in fallback: 15)."
+        ),
     ),
     yes: bool = typer.Option(
         False,
@@ -100,11 +125,19 @@ def audit_seeds_generate(
 ) -> None:
     """Generate a new candidate batch — runs picker → cost preview →
     pre-flight → confirm → Pipeline.run().
+
+    PR-δ2 (2026-05-19) — ``--gen-tag`` and ``--candidates`` default to
+    values read from ``~/.geode/config.toml`` ``[outer_loop.seed_pipeline]``
+    when omitted, then fall back to module defaults
+    (``"gen1"`` / ``15``).
     """
+    cfg = _get_seed_pipeline_config()
+    resolved_gen_tag = gen_tag if gen_tag is not None else cfg.default_gen_tag
+    resolved_candidates = candidates if candidates is not None else cfg.candidates_default
     exit_code = run_audit_seeds(
         target_dim=target_dim,
-        gen_tag=gen_tag,
-        candidates=candidates,
+        gen_tag=resolved_gen_tag,
+        candidates=resolved_candidates,
         yes=yes,
         quiet=quiet,
     )
@@ -300,8 +333,8 @@ def cmd_audit_seeds_slash(args: str) -> int:
         allow_abbrev=False,
     )
     parser.add_argument("--target-dim", "-d", required=True)
-    parser.add_argument("--gen-tag", "-g", default="gen1")
-    parser.add_argument("--candidates", "-n", type=int, default=15)
+    parser.add_argument("--gen-tag", "-g", default=None)
+    parser.add_argument("--candidates", "-n", type=int, default=None)
     parser.add_argument("--yes", "-y", action="store_true")
     parser.add_argument("--quiet", "-q", action="store_true")
     try:
@@ -312,10 +345,13 @@ def cmd_audit_seeds_slash(args: str) -> int:
     except argparse.ArgumentError as exc:
         sys.stderr.write(f"/audit-seeds: {exc}\n")
         return 2
+    cfg = _get_seed_pipeline_config()
+    resolved_gen_tag = ns.gen_tag if ns.gen_tag is not None else cfg.default_gen_tag
+    resolved_candidates = ns.candidates if ns.candidates is not None else cfg.candidates_default
     return run_audit_seeds(
         target_dim=ns.target_dim,
-        gen_tag=ns.gen_tag,
-        candidates=ns.candidates,
+        gen_tag=resolved_gen_tag,
+        candidates=resolved_candidates,
         yes=ns.yes,
         quiet=ns.quiet,
     )

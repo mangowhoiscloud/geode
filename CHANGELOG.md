@@ -49,6 +49,30 @@ functional change.
 
 ### Changed
 
+- **PR-δ2 — seed-pipeline + petri user_overrides consume outer-loop
+  config.** Closes 2026-05-19 outer-loop config consolidation plan
+  Phase δ (second half). `plugins/seed_pipeline/cli.py`:
+  `_get_seed_pipeline_config()` lazily loads
+  `[outer_loop.seed_pipeline]` from PR-α1 and falls back to a
+  `SimpleNamespace` mirroring the module defaults on ImportError /
+  load failure; both `audit_seeds_generate` (Typer) and
+  `cmd_audit_seeds_slash` (`/audit-seeds`) now resolve `--gen-tag` /
+  `--candidates` from the config when omitted (sentinel `None`),
+  built-in fallback `gen1` / `15` only when the config is absent.
+  `plugins/petri_audit/user_overrides.py`: `read_role_override`
+  consults `[outer_loop.petri.<role>]` first (when no explicit
+  path), legacy `~/.geode/petri.toml` is the fallback;
+  `_read_role_from_outer_loop` lets pydantic ValueError bubble so
+  config typos surface immediately, swallows only ImportError;
+  `auto` source is treated as unset so registry auto-expansion
+  still runs. New `migration_plan_from_petri_toml()` read-only
+  diff helper (wired into `geode config migrate-petri-toml` in
+  PR-ε1). 9 new tests covering precedence / `auto` dropping /
+  explicit path bypass / ValueError bubble / ImportError fallback /
+  migration; petri / registry / user_overrides fixtures now pin
+  `GEODE_CONFIG_TOML` at a non-existent tmp path so host
+  `~/.geode/config.toml` `[outer_loop.petri.*]` cannot bleed into
+  test results.
 - **ADR + plan extension — paperclip/crumb-style within-source profile
   rotation + 2-axis account picker UX.** Closes 2026-05-19 user
   directive "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로
