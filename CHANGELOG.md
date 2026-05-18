@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **autoresearch judge model: sonnet → opus.** `autoresearch/train.py`
+  default `JUDGE_MODEL` flipped from `claude-code/sonnet` to
+  `claude-code/opus` (and `autoresearch/program.md` reference table
+  updated to match). Per 2026-05-19 directive: opus judge for the outer
+  Elo loop trades extra latency for tighter 15-dim adjudication during
+  gen-0 baseline collection. Routes via the same `claude-code/*` inspect
+  prefix → claude-cli adapter (no auth path change).
+
 ### Added
 
 - **Slop prevention audit + 6-lens skill (PR 3).** New
