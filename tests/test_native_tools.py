@@ -292,13 +292,19 @@ class TestOpenAIResponsesApiMigration:
         """OpenAI adapter must use Responses API (create or stream), not chat.completions."""
         import inspect
 
+        from core.llm.providers import openai as openai_module
         from core.llm.providers.openai import OpenAIAgenticAdapter
 
-        source = inspect.getsource(OpenAIAgenticAdapter.agentic_call)
+        call_source = inspect.getsource(OpenAIAgenticAdapter.agentic_call)
+        module_source = inspect.getsource(openai_module)
         # PR #1316 — PAYG switched from blocking responses.create to streaming
-        # responses.stream for TTFB parity with Anthropic/Codex.
-        assert "responses.create" in source or "responses.stream" in source
-        assert "chat.completions.create" not in source
+        # responses.stream (via _stream_openai_response helper) for TTFB parity
+        # with Anthropic/Codex.
+        uses_responses = (
+            "responses.create" in module_source or "responses.stream" in module_source
+        )
+        assert uses_responses
+        assert "chat.completions.create" not in call_source
 
     def test_openai_native_web_search_constant(self) -> None:
         """_OPENAI_NATIVE_TOOLS must include web_search."""
