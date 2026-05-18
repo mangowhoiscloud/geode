@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.15] — 2026-05-19
+
 ### Added
 
 - **ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
