@@ -6,13 +6,14 @@ import os
 import sys
 
 import pytest
+from core.observability.otel_export import resolve_endpoint
+
 from core.observability import (
     OtelExportError,
     disable,
     enable,
     status,
 )
-from core.observability.otel_export import resolve_endpoint
 
 
 def test_status_default_disabled() -> None:
@@ -72,9 +73,12 @@ def test_module_level_imports_do_not_pull_traceloop() -> None:
     if "traceloop" in sys.modules:
         # Another test may have force-imported it; this test is best-effort.
         pytest.skip("traceloop already in sys.modules from a sibling test")
-    # Re-import path that we exercise on cold start:
-    import core.observability
-    import core.observability.otel_export  # noqa: F401
+    # Re-import path that we exercise on cold start. importlib so ruff
+    # can't elide these as "unused" — the test asserts the side effect.
+    import importlib
+
+    importlib.import_module("core.observability")
+    importlib.import_module("core.observability.otel_export")
 
     assert "traceloop" not in sys.modules
     assert "traceloop.sdk" not in sys.modules
