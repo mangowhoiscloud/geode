@@ -67,6 +67,8 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -208,6 +210,12 @@ STATE_DIR = REPO_ROOT / "autoresearch" / "state"
 RUN_LOG = STATE_DIR / "run.log"
 AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 BASELINE_PATH = STATE_DIR / "baseline.json"
+
+OUTER_LOOP_HOME = Path.home() / ".geode" / "outer-loop"
+SESSIONS_INDEX_PATH = OUTER_LOOP_HOME / "sessions.jsonl"
+"""P1a — shared outer-loop session registry. One JSON record per run
+from any outer-loop driver (autoresearch / seed-pipeline) so external
+tools can join across the two loops via ``session_id`` + ``gen_tag``."""
 """Per-branch baseline written by the outer-loop agent after a promote.
 
 S9 schema (ADR-002 §3 — baseline wrapping removed)::
@@ -459,6 +467,8 @@ def compute_fitness(
 # state/* repo-level rule).
 
 RESULTS_TSV_HEADER: tuple[str, ...] = (
+    "session_id",
+    "gen_tag",
     "commit",
     "fitness",
     "critical_min",
@@ -470,6 +480,9 @@ RESULTS_TSV_HEADER: tuple[str, ...] = (
     "verdict",
     "description",
 )
+"""P1a — added ``session_id`` + ``gen_tag`` as the first two columns
+so cross-run / cross-loop joins work without parsing description.
+See `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` Phase B."""
 
 
 def _tier_mean(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
@@ -489,6 +502,8 @@ def _tier_min(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
 
 def format_results_tsv_row(
     *,
+    session_id: str,
+    gen_tag: str,
     commit: str,
     fitness: float,
     dim_scores: dict[str, float],
@@ -496,8 +511,9 @@ def format_results_tsv_row(
     verdict: str,
     description: str,
 ) -> str:
-    """Render one 10-col results.tsv row.
+    """Render one 12-col results.tsv row.
 
+    P1a prepends ``session_id`` + ``gen_tag`` so cross-run joins work.
     ``dim_scores`` is the output of :func:`compute_dim_scores` (includes
     the synthetic ``"stability"`` key). ``dim_means`` is the raw audit
     emit — used here only to compute ``dim_count_engaged`` (how many
@@ -508,6 +524,8 @@ def format_results_tsv_row(
     safe_desc = description.replace("\t", " ").replace("\n", " ").strip()
     engaged = sum(1 for dim in AXIS_TIERS if dim in dim_means)
     fields = (
+        session_id,
+        gen_tag,
         commit,
         f"{fitness:.6f}",
         f"{_tier_min(dim_scores, CRITICAL_DIMS):.4f}",
@@ -524,6 +542,8 @@ def format_results_tsv_row(
 
 def format_results_jsonl_row(
     *,
+    session_id: str,
+    gen_tag: str,
     commit: str,
     fitness: float,
     dim_means: dict[str, float],
@@ -535,9 +555,12 @@ def format_results_jsonl_row(
 ) -> str:
     """Render one results.jsonl line — full per-dim raw signal.
 
+    P1a adds ``session_id`` + ``gen_tag`` as top-level keys.
+
     Schema (JSON object on one line)::
 
-        {"commit": "...", "fitness": 0.535895,
+        {"session_id": "...", "gen_tag": "...",
+         "commit": "...", "fitness": 0.535895,
          "dim_means": {...20 entries...},
          "dim_stderr": {...20 entries...},
          "dim_scores": {...20 + 'stability'...},
@@ -554,6 +577,8 @@ def format_results_jsonl_row(
     scores_full = {d: round(dim_scores.get(d, 0.0), 4) for d in AXIS_TIERS}
     scores_full["stability"] = round(dim_scores.get("stability", STABILITY_FALLBACK), 4)
     payload = {
+        "session_id": session_id,
+        "gen_tag": gen_tag,
         "commit": commit,
         "fitness": round(fitness, 6),
         "dim_means": {d: round(dim_means.get(d, 0.0), 4) for d in AXIS_TIERS},
@@ -615,6 +640,65 @@ def print_summary(
 # ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
+
+
+def _resolve_session_id() -> str:
+    """Return the session_id for this run.
+
+    Honours ``AUTORESEARCH_SESSION_ID`` (typically set by a parent
+    driver that wants to correlate across multiple invocations);
+    otherwise generates ``<ISO date>T<HH:MM>Z-<short-uuid>``.
+    """
+    override = os.environ.get("AUTORESEARCH_SESSION_ID", "").strip()
+    if override:
+        return override
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%MZ")
+    short = uuid.uuid4().hex[:6]
+    return f"{stamp}-{short}"
+
+
+def _resolve_gen_tag(commit: str) -> str:
+    """Return the gen_tag for this audit.
+
+    Honours ``AUTORESEARCH_GEN_TAG`` so a parent driver (e.g. seed-
+    pipeline cycle) can label generations consistently across runs.
+    Default: ``autoresearch-<commit>``.
+    """
+    override = os.environ.get("AUTORESEARCH_GEN_TAG", "").strip()
+    if override:
+        return override
+    return f"autoresearch-{commit}"
+
+
+def _append_session_index(
+    *,
+    session_id: str,
+    gen_tag: str,
+    component: str,
+    started_at: float,
+    ended_at: float,
+    extra: dict[str, object],
+) -> None:
+    """Append one row to ``~/.geode/outer-loop/sessions.jsonl``.
+
+    P1a — shared cross-loop session registry. Persistence failures log
+    nothing (a stderr print here would pollute the grep-friendly
+    stdout block) and the in-memory run still completes.
+    """
+    try:
+        OUTER_LOOP_HOME.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, object] = {
+            "session_id": session_id,
+            "gen_tag": gen_tag,
+            "component": component,
+            "started_at": started_at,
+            "ended_at": ended_at,
+        }
+        payload.update(extra)
+        with SESSIONS_INDEX_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def _load_baseline() -> tuple[dict[str, float] | None, dict[str, float] | None]:
@@ -743,6 +827,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    session_id = _resolve_session_id()
+    started_at = time.time()
+
     try:
         dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(dry_run=args.dry_run)
     except Exception as exc:
@@ -775,11 +862,16 @@ def main() -> int:
     # operator AFTER reading the print_summary; emitting at this stage
     # would freeze in a default. Operators tee the line manually.
     commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
+    gen_tag = _resolve_gen_tag(commit)
     description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
     verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
+    print(f"session_id:               {session_id}")
+    print(f"gen_tag:                  {gen_tag}")
     print(
         "results_tsv: "
         + format_results_tsv_row(
+            session_id=session_id,
+            gen_tag=gen_tag,
             commit=commit,
             fitness=fitness,
             dim_scores=dim_scores,
@@ -791,6 +883,8 @@ def main() -> int:
     print(
         "results_jsonl: "
         + format_results_jsonl_row(
+            session_id=session_id,
+            gen_tag=gen_tag,
             commit=commit,
             fitness=fitness,
             dim_means=dim_means,
@@ -806,17 +900,34 @@ def main() -> int:
     # dry-run emulates data; promoting that would freeze in a synthetic
     # baseline, so the gate is short-circuited.
     if args.dry_run:
-        print("baseline_promoted:        false (dry-run)")
+        promoted_line = "false (dry-run)"
     elif args.no_promote:
-        print("baseline_promoted:        false (--no-promote)")
+        promoted_line = "false (--no-promote)"
     elif args.promote:
         _write_baseline(dim_means, dim_stderr)
-        print("baseline_promoted:        true (--promote, manual override)")
+        promoted_line = "true (--promote, manual override)"
     else:
         ok, reason = _should_promote(dim_means, dim_stderr, baseline_means, baseline_stderr)
         if ok:
             _write_baseline(dim_means, dim_stderr)
-        print(f"baseline_promoted:        {str(ok).lower()} ({reason})")
+        promoted_line = f"{str(ok).lower()} ({reason})"
+    print(f"baseline_promoted:        {promoted_line}")
+
+    # P1a — append to the shared cross-loop session registry.
+    _append_session_index(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        component="autoresearch",
+        started_at=started_at,
+        ended_at=time.time(),
+        extra={
+            "commit": commit,
+            "fitness": round(fitness, 6),
+            "verdict": verdict,
+            "promoted": promoted_line,
+            "dry_run": args.dry_run,
+        },
+    )
     return 0
 
 

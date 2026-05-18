@@ -330,11 +330,14 @@ class Ranker(BaseSeedAgent):
         try:
             state.run_dir.mkdir(parents=True, exist_ok=True)
             with log_path.open("w", encoding="utf-8") as fh:
-                fh.write("match_id\ta\tb\twinner\tvotes\tvoter_ids\trating_a\trating_b\n")
+                # P1a — prepend gen_tag so cross-generation joins work
+                # without parsing the run_dir path.
+                fh.write("gen_tag\tmatch_id\ta\tb\twinner\tvotes\tvoter_ids\trating_a\trating_b\n")
                 for o in outcomes:
                     fh.write(
                         "\t".join(
                             [
+                                state.gen_tag,
                                 o.match_id,
                                 o.a,
                                 o.b,
