@@ -310,3 +310,102 @@ def test_run_audit_seeds_quiet_suppresses_tos_notice() -> None:
             stderr=err,
         )
     assert "ToS notice" not in err.getvalue()
+
+
+# ── PR-δ2: ``--gen-tag`` / ``--candidates`` default to outer_loop config ──
+
+
+def test_get_seed_pipeline_config_returns_loader_value() -> None:
+    """``_get_seed_pipeline_config`` reads ``[outer_loop.seed_pipeline]``."""
+    from types import SimpleNamespace
+
+    from plugins.seed_pipeline import cli as cli_mod
+
+    fake = SimpleNamespace(candidates_default=42, default_gen_tag="genQ")
+    with patch(
+        "core.config.outer_loop.load_outer_loop_config",
+        return_value=SimpleNamespace(seed_pipeline=fake),
+    ):
+        cfg = cli_mod._get_seed_pipeline_config()
+    assert cfg.candidates_default == 42
+    assert cfg.default_gen_tag == "genQ"
+
+
+def test_get_seed_pipeline_config_falls_back_when_loader_raises() -> None:
+    """A raising loader yields the module-level fallback (gen1 / 15)."""
+    from plugins.seed_pipeline import cli as cli_mod
+
+    def _boom() -> object:
+        raise RuntimeError("simulated load failure")
+
+    with patch("core.config.outer_loop.load_outer_loop_config", _boom):
+        cfg = cli_mod._get_seed_pipeline_config()
+    assert cfg.candidates_default == 15
+    assert cfg.default_gen_tag == "gen1"
+
+
+def test_audit_seeds_generate_uses_config_defaults() -> None:
+    """When the user omits ``--gen-tag`` / ``--candidates``, the Typer
+    command resolves them through ``_get_seed_pipeline_config`` before
+    delegating to ``run_audit_seeds``."""
+    from types import SimpleNamespace
+
+    from plugins.seed_pipeline.cli import audit_seeds_app
+    from typer.testing import CliRunner
+
+    captured: dict[str, Any] = {}
+
+    def _capture_run(**kwargs: Any) -> int:
+        captured.update(kwargs)
+        return 0
+
+    fake_cfg = SimpleNamespace(
+        seed_pipeline=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
+    )
+    with (
+        patch("core.config.outer_loop.load_outer_loop_config", return_value=fake_cfg),
+        patch("plugins.seed_pipeline.cli.run_audit_seeds", _capture_run),
+    ):
+        result = CliRunner().invoke(
+            audit_seeds_app,
+            ["--target-dim", "broken_tool_use"],
+        )
+    assert result.exit_code == 0, result.output
+    assert captured["gen_tag"] == "gen7"
+    assert captured["candidates"] == 8
+
+
+def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
+    """Explicit ``--gen-tag`` / ``--candidates`` still override the config."""
+    from types import SimpleNamespace
+
+    from plugins.seed_pipeline.cli import audit_seeds_app
+    from typer.testing import CliRunner
+
+    captured: dict[str, Any] = {}
+
+    def _capture_run(**kwargs: Any) -> int:
+        captured.update(kwargs)
+        return 0
+
+    fake_cfg = SimpleNamespace(
+        seed_pipeline=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
+    )
+    with (
+        patch("core.config.outer_loop.load_outer_loop_config", return_value=fake_cfg),
+        patch("plugins.seed_pipeline.cli.run_audit_seeds", _capture_run),
+    ):
+        result = CliRunner().invoke(
+            audit_seeds_app,
+            [
+                "--target-dim",
+                "broken_tool_use",
+                "--gen-tag",
+                "gen9",
+                "--candidates",
+                "20",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert captured["gen_tag"] == "gen9"
+    assert captured["candidates"] == 20

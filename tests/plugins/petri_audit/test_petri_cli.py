@@ -23,6 +23,10 @@ def _petri_toml(tmp_path: Path, monkeypatch):
     """Redirect petri.toml + clear all stateful caches."""
     target = tmp_path / "petri.toml"
     monkeypatch.setenv("GEODE_PETRI_TOML", str(target))
+    # PR-δ2 — pin GEODE_CONFIG_TOML at a non-existent tmp path so the
+    # outer-loop loader (now consulted by read_role_override) returns
+    # defaults regardless of the host's real ~/.geode/config.toml.
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "outer_loop_isolation_sentinel.toml"))
     clear_manifest_cache()
     cs.clear_suppressions()
     yield target
