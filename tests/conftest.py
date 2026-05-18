@@ -5,6 +5,7 @@ special test-time setup; the hook system is wired only when an
 HookSystem instance is present.
 """
 
+import contextlib
 import os
 import tempfile
 
@@ -46,11 +47,15 @@ def _reset_auth_singletons():
     _infra._profile_rotator = None
     _pr._plan_registry = None
     # Make sure no leftover auth.toml from a prior test run influences this one
-    if os.path.exists(_test_auth_toml):
+    # xdist-parallel race: two workers may both see the file exist then both try
+    # to remove it. Tolerate concurrent FileNotFoundError.
+    with contextlib.suppress(FileNotFoundError):
         os.remove(_test_auth_toml)
     yield
     _infra._profile_store = None
     _infra._profile_rotator = None
     _pr._plan_registry = None
-    if os.path.exists(_test_auth_toml):
+    # xdist-parallel race: two workers may both see the file exist then both try
+    # to remove it. Tolerate concurrent FileNotFoundError.
+    with contextlib.suppress(FileNotFoundError):
         os.remove(_test_auth_toml)

@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.16] — 2026-05-19
+
 ### Fixed
 
 - **Provider parity cache + streaming fixes.** Codex/OpenAI Responses usage now
