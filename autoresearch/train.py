@@ -986,9 +986,12 @@ def main() -> int:
         },
     )
 
-    # P1c — append a single audit_finished event to the structured
-    # session journal so downstream observability can join via
-    # session_id + gen_tag.
+    # P1c — emit the audit_finished journal event as a stream marker.
+    # Canonical run metrics (commit, fitness, verdict, promoted) live in
+    # sessions.jsonl (see _append_session_index above); duplicating them
+    # here causes drift between the two sinks (P0a dedup,
+    # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §6).
+    # Consumers join via session_id + gen_tag.
     try:
         from core.observability import SessionJournal
 
@@ -999,13 +1002,7 @@ def main() -> int:
         ).append(
             "audit_finished",
             level="info" if fitness > 0.0 else "warn",
-            payload={
-                "commit": commit,
-                "fitness": round(fitness, 6),
-                "verdict": verdict,
-                "promoted": promoted_line,
-                "dry_run": args.dry_run,
-            },
+            payload={"dry_run": args.dry_run},
         )
     except ImportError:
         # core.observability is optional; surface only when present.

@@ -69,6 +69,27 @@ class SessionJournal:
     events. Use :meth:`append` for individual events;
     :func:`session_journal_scope` for ContextVar-bound activation so
     hook handlers can discover the journal automatically.
+
+    SoT contract (P0a dedup, 2026-05-19 observability audit §6)
+    ------------------------------------------------------------
+
+    Canonical run-level metrics (fitness, verdict, survivors, usd_spent,
+    promoted, commit, target_dim, candidates, pool_path_out, …) live in
+    ``sessions.jsonl`` — one row per run, written by
+    ``_append_session_index``. Journal events MUST NOT duplicate those
+    fields in their payload; instead they act as stream markers (started /
+    progress / finished) and carry only event-specific context. Readers
+    that need canonical metrics join via ``session_id + gen_tag``.
+
+    Field placement guide:
+
+    - ``sessions.jsonl`` row: fitness, verdict, survivors, usd_spent,
+      promoted, commit, target_dim, candidates, pool_path_out,
+      started_at, ended_at (run summary, written at end-of-run).
+    - ``journal.jsonl`` event payload: event-scoped context only — e.g.
+      ``{"dry_run": True}`` for ``audit_finished`` (a flag that affects
+      interpretation but isn't a metric), or stage-specific intermediate
+      data for events that have no canonical row.
     """
 
     def __init__(

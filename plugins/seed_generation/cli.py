@@ -268,16 +268,12 @@ def _dispatch_pipeline(
     journal.append("pipeline_started", payload={"target_dim": target_dim})
     with session_journal_scope(journal):
         pipeline.run()
-    journal.append(
-        "pipeline_finished",
-        payload={
-            "survivors": len(state.survivors),
-            "usd_spent": round(state.usd_spent, 6),
-            "pool_path_out": (
-                str(state.pool_path_out) if state.pool_path_out is not None else None
-            ),
-        },
-    )
+    # P0a dedup — canonical run metrics (survivors, usd_spent, pool_path_out)
+    # live in sessions.jsonl via Pipeline._append_session_index. The
+    # pipeline_finished event is a stream marker so consumers can checkpoint;
+    # they join via session_id + gen_tag for the canonical row. See
+    # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §6.
+    journal.append("pipeline_finished", payload={})
     survivors_line = (
         f"seed-generation: survivors.json at {state.pool_path_out}\n"
         if state.pool_path_out is not None

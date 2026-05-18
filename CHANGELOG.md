@@ -49,6 +49,21 @@ functional change.
 
 ### Changed
 
+- **P0a — dedup `audit_finished` / `pipeline_finished` journal payloads
+  against `sessions.jsonl` SoT.** Per the 2026-05-19 observability audit
+  §6, the journal event payloads were duplicating run-level canonical
+  fields (fitness, verdict, commit, promoted, survivors, usd_spent,
+  pool_path_out) that already live in `sessions.jsonl`. Drift risk:
+  updating one sink without the other produces inconsistent state.
+  Resolution: `sessions.jsonl` is the SoT for run-level metrics;
+  `journal.jsonl` events become stream markers — `audit_finished`
+  payload trimmed to `{"dry_run": ...}` (the only context-flag field),
+  `pipeline_finished` payload trimmed to `{}`. Consumers join via
+  `session_id + gen_tag`. The SessionJournal docstring now encodes the
+  SoT contract + field-placement guide so future writers don't reopen the
+  drift. Dry-run smoke verifies the new minimal payload (`payload:
+  {"dry_run": true}`) while sessions.jsonl still carries the full
+  canonical row.
 - **Rename `seed_pipeline` → `seed_generation` across the runtime.** The
   prior name "pipeline" was a generic implementation-detail noun that didn't
   reveal the module's purpose — generating seed candidates through an 8-stage
