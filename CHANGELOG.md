@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.15] — 2026-05-19
+
 ### Fixed
 
 - **CLI LaTeX single-letter uppercase subscript fallback.** `P_T`,
