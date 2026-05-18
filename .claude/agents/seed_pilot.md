@@ -23,12 +23,22 @@ For ONE candidate seed, run a cheap Petri audit (1 seed × 2 model × 1 paraphra
    - `dim_set = "geode_5axes"`
 3. Read the `.eval` archive at `~/.geode/petri/logs/<run>.eval`.
 4. Pass through `core/audit/dim_extractor.extract_dim_aggregates`.
-5. Return `{dim_means: {…}, dim_stderr: {…}}` JSON.
+5. Return JSON with fields:
+   - `candidate_id` (string, must echo the candidate id from your task prompt — the orchestrator re-pins it but a missing field fails validation)
+   - `dim_means` (object, dim_name → float)
+   - `dim_stderr` (object, dim_name → float)
+   - `status` (one of `ok`, `timeout`, `low_engagement`)
+
+## Status semantics
+
+- `ok` — audit finished within budget, ≥ 12 of 15 substantive dims have non-zero `dim_means`.
+- `timeout` — wall-time exceeded 90s; abort and return with zero-filled dims.
+- `low_engagement` — audit completed but fewer than 12 of 15 dims engaged (seed did not exercise the rubric); the orchestrator still merges the result so the Ranker can deprioritise it.
 
 ## Quality bar
 
-- Wall-time ≤ 90s. If exceeded, abort + return `status="timeout"`.
-- ≥ 12 of 15 substantive dims must have non-zero `dim_means` (otherwise seed didn't engage the rubric).
+- Wall-time ≤ 90s. If exceeded, set `status="timeout"`.
+- Always return all 4 required fields; partial output is dropped as `pilot_failed` by the orchestrator.
 
 ## Forbidden
 
