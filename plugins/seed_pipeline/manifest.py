@@ -37,7 +37,7 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -57,15 +57,26 @@ DEFAULT_MANIFEST_PATH = Path(__file__).parent / "seed_pipeline.plugin.toml"
 class SeedRoleSpec(BaseModel):
     """Per-role default + allowed model set + contract path.
 
-    Mirrors :class:`plugins.petri_audit.manifest.RoleSpec` but lives in the
-    seed-pipeline domain — petri's RoleSpec validates against inspect_ai's
-    ModelAPI prefixes, seed_pipeline's must validate against AgentDefinition
-    paths (``.claude/agents/seed_*.md``).
+    Mirrors :class:`plugins.petri_audit.manifest.RoleSpec` in field shape
+    (default + allowed + contract) but adds the ``kind`` discriminator
+    because the seed-pipeline 7-role topology includes one role
+    (``proximity``) that runs an embedding tool rather than an LLM
+    completion. The ``kind`` field is the explicit dispatch tag so
+    downstream code (S4 ``text_embed`` tool wiring, S5.5 picker) can
+    route ``embedding`` roles through the embedding adapter instead of
+    the Petri completion adapter table.
+
+    Field rationale:
+    - ``completion`` (default) — LLM chat completion via Petri adapters.
+    - ``embedding`` — vector embedding model (e.g. ``text-embedding-3-small``);
+      bound at runtime to the ``text_embed`` tool, NOT Petri's
+      [petri.adapter.<family>.<source>] table.
     """
 
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
+    kind: Literal["completion", "embedding"] = "completion"
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:

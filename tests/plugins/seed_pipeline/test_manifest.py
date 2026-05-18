@@ -213,6 +213,36 @@ def test_manifest_get_role_known_returns_spec() -> None:
     assert spec.default_model in spec.allowed_models
 
 
+def test_role_kind_completion_default() -> None:
+    """Roles default to kind='completion' when not specified."""
+    spec = SeedRoleSpec(
+        default_model="claude-sonnet-4-6",
+        allowed_models=["claude-sonnet-4-6"],
+    )
+    assert spec.kind == "completion"
+
+
+def test_role_kind_embedding_explicit() -> None:
+    """An embedding role (e.g. proximity) must set kind='embedding'."""
+    spec = SeedRoleSpec(
+        default_model="text-embedding-3-small",
+        allowed_models=["text-embedding-3-small"],
+        kind="embedding",
+    )
+    assert spec.kind == "embedding"
+
+
+def test_bundled_proximity_role_is_embedding() -> None:
+    """Proximity role in seed_pipeline.plugin.toml must be embedding kind."""
+    clear_manifest_cache()
+    manifest = load_manifest()
+    proximity = manifest.get_role("proximity")
+    assert proximity.kind == "embedding"
+    # Sibling check — generator/critic remain completion
+    assert manifest.get_role("generator").kind == "completion"
+    assert manifest.get_role("critic").kind == "completion"
+
+
 # ---------------------------------------------------------------------------
 # Parse path (no I/O — dict literal)
 # ---------------------------------------------------------------------------

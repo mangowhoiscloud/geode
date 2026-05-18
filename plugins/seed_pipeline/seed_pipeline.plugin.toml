@@ -52,13 +52,15 @@ allowed_models = [
 role_contract = ".claude/agents/seed_critic.md"
 
 [seed_pipeline.role.proximity]
-# Embedding-based — not LLM completion. The default_model names the
-# embedding model; the manifest loader special-cases this role so its
-# binding goes through the `text_embed` tool (S4) rather than the
-# Petri adapter table.
+# Embedding-based — not LLM completion. ``kind="embedding"`` is the
+# explicit dispatch tag so the S4 wiring routes through the
+# ``text_embed`` tool, NOT Petri's [petri.adapter.*] table. Without
+# this discriminator downstream code would have to guess the role's
+# kind from the model-name string.
 default_model = "text-embedding-3-small"
 allowed_models = ["text-embedding-3-small"]
 role_contract = ".claude/agents/seed_proximity.md"
+kind = "embedding"
 
 [seed_pipeline.role.pilot]
 default_model = "claude-haiku-4-5"
