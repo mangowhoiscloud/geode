@@ -49,6 +49,20 @@ functional change.
 
 ### Added
 
+- **Seed-pipeline gen1 run-book + seeds_gen1/ scaffolding (S12).**
+  Creates `plugins/petri_audit/seeds_gen1/` directory (empty README
+  documenting the prerequisite gates) and the operator run-book at
+  `docs/audits/seed-generation-runs/2026-05-18/run-book.md` covering
+  the 7-step procedure (picker dry-run → pre-flight → `geode
+  audit-seeds generate` → inspect artifacts → promote survivors →
+  refresh `autoresearch/state/baseline.json` (new S9 schema) → tag).
+  Execution itself is deferred behind two prerequisites still
+  pending: S6.5-wire (BudgetGuard worker propagation, task #73) and
+  S11-wire (PipelineRegistry agent-factory instantiation). The
+  run-book gives the operator a copy-pasteable procedure as soon as
+  those land + Anthropic credits become available; until then, the
+  CLI gate flow + cost preview + slash command are fully exercisable
+  end-to-end with the empty registry.
 - **Seed-pipeline CLI sub-app + `/audit-seeds` slash + human gate (S11).**
   New `plugins/seed_pipeline/cli.py` defines a `geode audit-seeds`
   Typer sub-app (`generate` action with `--target-dim`, `--gen-tag`,
