@@ -71,7 +71,6 @@ from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 # demand, deferring the SDK load until first access.
 from core.llm.fallback import CircuitBreaker as CircuitBreaker
 from core.llm.fallback import retry_with_backoff_generic as retry_with_backoff_generic
-from core.llm.provider_dispatch import _cross_provider_dispatch as _cross_provider_dispatch
 from core.llm.provider_dispatch import _get_fallback_chain as _get_fallback_chain
 from core.llm.provider_dispatch import _get_provider_client as _get_provider_client
 from core.llm.provider_dispatch import _retry_provider_aware as _retry_provider_aware

@@ -7,7 +7,6 @@ import time
 
 from core.hooks.system import HookEvent
 from core.llm.provider_dispatch import (
-    _cross_provider_dispatch,
     _get_provider_client,
     _retry_provider_aware,
 )
@@ -38,7 +37,8 @@ def call_llm(
     """Synchronous LLM call with provider-aware routing and failover.
 
     Routes to Anthropic, OpenAI, or GLM SDK based on the model name.
-    Returns text content. Supports cross-provider fallback when enabled.
+    Returns text content. Provider-internal fallback is handled by the
+    selected provider's retry chain.
     """
     from core.config import settings
 
@@ -121,7 +121,7 @@ def call_llm(
         )
         return result
 
-    return _cross_provider_dispatch(provider, target_model, _dispatch, "call_llm")
+    return _dispatch(provider, target_model)
 
 
 # Re-export shims so test patches like ``core.llm.router.calls.text.X`` work

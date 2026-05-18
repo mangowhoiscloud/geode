@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **Cross-provider failover settings and dispatch paths.** Removed
+  `_cross_provider_dispatch`, the text/parsed router wrapper calls, the async
+  tools cross-provider loop, and `llm_cross_provider_failover` /
+  `llm_cross_provider_order`. Provider-internal fallback chains remain intact.
+  This removes the env var/settings surface for the old opt-in cross-provider
+  hop; default was already `False`, so visible user impact should be near zero.
+- **Cross-provider failover settings and dispatch paths 제거.**
+  `_cross_provider_dispatch`, text/parsed router wrapper 호출, async tools
+  cross-provider loop, `llm_cross_provider_failover` /
+  `llm_cross_provider_order` 를 삭제했습니다. Provider 내부 fallback chain 은
+  유지됩니다. 기존 opt-in env var/settings surface 는 사라지지만 default 가 이미
+  `False` 였으므로 사용자 visible 영향은 거의 없습니다.
+
 ## [0.99.16] — 2026-05-19
 
 ### Fixed

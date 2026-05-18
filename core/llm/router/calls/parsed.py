@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 from core.hooks.system import HookEvent
 from core.llm.provider_dispatch import (
-    _cross_provider_dispatch,
     _get_provider_client,
     _retry_provider_aware,
 )
@@ -44,10 +43,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
     max_tokens: int = 4096,
     temperature: float = 0.3,
 ) -> T:
-    """LLM call with provider-aware structured output routing.
-
-    Supports cross-provider fallback when enabled.
-    """
+    """LLM call with provider-aware structured output routing."""
     from core.config import settings
 
     target_model = model or settings.model
@@ -138,7 +134,7 @@ def call_llm_parsed(  # noqa: UP047 — PEP695 syntax requires Python 3.12+
         )
         return result
 
-    return _cross_provider_dispatch(provider, target_model, _dispatch, "call_llm_parsed")
+    return _dispatch(provider, target_model)
 
 
 __all__ = ["_get_provider_client", "call_llm_parsed", "get_anthropic_client"]
