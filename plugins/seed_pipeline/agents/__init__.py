@@ -4,7 +4,7 @@
 - generator     (S2, ✓)
 - critic        (S3, ✓) — Reflection
 - proximity     (S4, ✓) — 3-track dedup (embedding + lexical + role)
-- pilot         (S5, ✓) — GEODE addition (scientist-in-the-loop 자리)
+- pilot         (S5, ✓) — GEODE addition (scientist-in-the-loop slot)
 - ranker        (S6, ✓) — Elo tournament + 3-judge panel
 - evolver       (S7, ✓) — Reflection-driven section rewrite
 - meta_reviewer (S8, ✓) — coverage + next-gen prior + session summary

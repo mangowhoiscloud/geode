@@ -1,6 +1,6 @@
 """Pipeline orchestrator — 7-phase generate-debate-evolve loop.
 
-Maps ADR-001 의 7-phase topology (Generation → Proximity → Reflection
+Maps the ADR-001 7-phase topology (Generation → Proximity → Reflection
 → Pilot → Ranking → Evolution → Meta-review) onto a sequential phase
 dispatcher backed by :class:`PipelineRegistry`. Each phase is a method
 that reads :class:`PipelineState`, looks up the role's agent from the

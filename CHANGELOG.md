@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **seed-pipeline module docstrings — English unification (P1b follow-up).**
+  `plugins/seed_pipeline/__init__.py` (5 Korean lines), `agents/__init__.py`
+  (1 line), `orchestrator.py` first docstring (1 line) → all English.
+  Tier-1 system prompts (`.claude/agents/seed_*.md` × 7,
+  `autoresearch/program.md`, `autoresearch/train.py`'s
+  `WRAPPER_PROMPT_SECTIONS`) were already monolingual per P1b/earlier
+  work; this PR closes the remaining Tier-2 module-docstring gap so
+  any outer-loop agent that imports the package and reads docstrings
+  sees consistent English throughout. Tier-3 backend implementation
+  comments in `plugins/petri_audit/{runner,codex_provider,
+  optimize,bias}.py` remain unchanged — they describe backend
+  constraints (OAuth policy, cache pricing math) rather than agent
+  instructions.
+
 ### Added
 
 - **P1c — structured session journal + SUBAGENT_STARTED/FAILED hook
