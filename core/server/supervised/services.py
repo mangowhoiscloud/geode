@@ -208,20 +208,61 @@ class SharedServices:
     # --- internal helpers -----------------------------------------------------
 
     def _build_sub_agent_manager(self) -> Any:
-        """Build SubAgentManager with shared resources."""
+        """Build SubAgentManager with shared resources.
+
+        S2-wire (2026-05-18): construct AgentRegistry from .claude/agents/
+        + _DEFAULT_AGENTS so SubAgentManager can resolve SubTask.agent
+        names (e.g. seed_generator) into the AgentDefinition's
+        system_prompt + tools + model. Without an AgentRegistry the
+        production path silently fell back to GEODE's default prompt
+        regardless of the named role.
+        """
         from core.agent.sub_agent import SubAgentManager
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
 
         global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
+        agent_registry = self._build_agent_registry()
+
         return SubAgentManager(
             IsolatedRunner(hooks=self.hook_system, lane=global_lane),
             action_handlers=self.tool_handlers,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
+            agent_registry=agent_registry,
             hooks=self.hook_system,
             max_depth=settings.max_subagent_depth,
         )
+
+    def _build_agent_registry(self) -> Any:
+        """Build AgentRegistry with defaults + .claude/agents/*.md.
+
+        Defaults (research_assistant, data_analyst, web_researcher) load
+        first; then ``.claude/agents/`` files are loaded per-file so a
+        single bad/duplicate file doesn't drop the rest. Conflicts with
+        a default are skipped with a warning — the user's file does NOT
+        override the default in this S2-wire iteration; an explicit
+        override mechanism can land later if needed.
+        """
+        from core.skills.agents import AgentRegistry, SubagentLoader
+
+        registry = AgentRegistry()
+        registry.load_defaults()
+        loader = SubagentLoader()
+        for path in loader.discover():
+            try:
+                definition = loader.load_file(path)
+            except Exception:
+                log.warning("AgentRegistry: failed to load %s (skipped)", path, exc_info=True)
+                continue
+            try:
+                registry.register(definition)
+            except ValueError:
+                log.debug(
+                    "AgentRegistry: %r already registered (default wins)",
+                    definition.name,
+                )
+        return registry
 
     def _propagate_contextvars(self) -> None:
         """Re-inject ContextVars for daemon/scheduler threads."""

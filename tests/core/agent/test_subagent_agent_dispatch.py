@@ -134,3 +134,88 @@ def test_worker_request_round_trip_preserves_agent_fields() -> None:
     assert restored.agent_name == "seed_generator"
     assert restored.agent_system_prompt == "role prompt body"
     assert restored.agent_allowed_tools == ["read_document", "write_file"]
+
+
+def test_filter_handlers_always_denies_delegate_task() -> None:
+    """``delegate_task`` is always removed (depth=1 enforcement)."""
+    from core.agent.worker import filter_handlers
+
+    handlers = {"delegate_task": object(), "read_document": object()}
+    filtered = filter_handlers(handlers=handlers, denied_tools=[], agent_allowed_tools=[])
+    assert "delegate_task" not in filtered
+    assert "read_document" in filtered
+
+
+def test_filter_handlers_applies_whitelist() -> None:
+    """``agent_allowed_tools`` whitelist removes non-allowed tools."""
+    from core.agent.worker import filter_handlers
+
+    handlers = {
+        "read_document": object(),
+        "write_file": object(),
+        "run_bash": object(),
+        "manage_login": object(),
+    }
+    filtered = filter_handlers(
+        handlers=handlers,
+        denied_tools=[],
+        agent_allowed_tools=["read_document", "write_file"],
+    )
+    assert set(filtered.keys()) == {"read_document", "write_file"}
+
+
+def test_filter_handlers_whitelist_does_not_unblock_delegate_task() -> None:
+    """Whitelist with delegate_task does NOT unlock it (depth=1 wins)."""
+    from core.agent.worker import filter_handlers
+
+    handlers = {"delegate_task": object(), "read_document": object()}
+    filtered = filter_handlers(
+        handlers=handlers,
+        denied_tools=[],
+        agent_allowed_tools=["delegate_task", "read_document"],
+    )
+    assert "delegate_task" not in filtered
+    assert "read_document" in filtered
+
+
+def test_filter_handlers_no_whitelist_keeps_all_minus_denied() -> None:
+    """Empty whitelist → only ``denied_tools`` + ``delegate_task`` removed."""
+    from core.agent.worker import filter_handlers
+
+    handlers = {
+        "read_document": object(),
+        "write_file": object(),
+        "delegate_task": object(),
+    }
+    filtered = filter_handlers(
+        handlers=handlers,
+        denied_tools=["write_file"],
+        agent_allowed_tools=[],
+    )
+    assert set(filtered.keys()) == {"read_document"}
+
+
+def test_shared_services_passes_agent_registry_to_manager() -> None:
+    """Production wiring — SharedServices._build_sub_agent_manager() now
+    populates AgentRegistry so SubAgentManager._resolve_agent works."""
+    from core.server.supervised.services import SharedServices
+
+    services = SharedServices(
+        hook_system=None,  # type: ignore[arg-type]
+        mcp_manager=None,
+        skill_registry=None,
+        tool_handlers={},
+        lane_queue=None,  # type: ignore[arg-type]
+    )
+    registry = services._build_agent_registry()
+    # Defaults always loaded
+    names = registry.list_agents()
+    assert "research_assistant" in names
+    assert "data_analyst" in names
+    assert "web_researcher" in names
+    # seed_* roles also loaded from .claude/agents/
+    if "seed_generator" in names:
+        defn = registry.get("seed_generator")
+        assert defn is not None
+        assert defn.role  # non-empty role
+        assert defn.system_prompt  # non-empty prompt

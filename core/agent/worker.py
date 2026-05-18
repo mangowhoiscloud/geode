@@ -125,6 +125,33 @@ class WorkerResult:
 # ---------------------------------------------------------------------------
 
 
+def filter_handlers(
+    *,
+    handlers: dict[str, Any],
+    denied_tools: list[str],
+    agent_allowed_tools: list[str],
+) -> dict[str, Any]:
+    """Apply denied-set + AgentDefinition whitelist to the tool handler map.
+
+    Pure function — testable without the worker's AgenticLoop bootstrap.
+
+    - ``delegate_task`` is always denied (depth=1 enforcement).
+    - When ``agent_allowed_tools`` is non-empty, tools not on the whitelist
+      are added to the denied set (whitelist takes precedence over
+      inherited tools).
+    """
+    denied = set(denied_tools)
+    denied.add("delegate_task")
+    if agent_allowed_tools:
+        allowed = set(agent_allowed_tools)
+        for tool_name in list(handlers):
+            if tool_name not in allowed:
+                denied.add(tool_name)
+    if denied:
+        return {k: v for k, v in handlers.items() if k not in denied}
+    return handlers
+
+
 def _save_result_backup(result: WorkerResult) -> None:
     """Save result JSON to ~/.geode/workers/ for crash debugging."""
     try:
@@ -148,21 +175,11 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     handlers = _build_tool_handlers(verbose=False)
 
     # 2. Filter tools
-    # Always deny delegate_task in worker (depth=1 enforcement).
-    denied = set(request.denied_tools)
-    denied.add("delegate_task")
-    # S2-wire (2026-05-18): when agent_allowed_tools is set, the
-    # AgentDefinition declared a whitelist. Tools NOT on that whitelist
-    # are added to the denied set so the spawned worker only sees the
-    # tools the agent role is supposed to use. ``delegate_task`` remains
-    # denied regardless (depth=1).
-    if request.agent_allowed_tools:
-        allowed = set(request.agent_allowed_tools)
-        for tool_name in list(handlers):
-            if tool_name not in allowed:
-                denied.add(tool_name)
-    if denied:
-        handlers = {k: v for k, v in handlers.items() if k not in denied}
+    handlers = filter_handlers(
+        handlers=handlers,
+        denied_tools=request.denied_tools,
+        agent_allowed_tools=request.agent_allowed_tools,
+    )
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
