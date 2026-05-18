@@ -22,10 +22,17 @@ export default function Page() {
             </ul>
 
             <h2>설치</h2>
+            <p>
+              PyPI 배포명은 <code>geode-agent</code>이고, 설치되는 실행 명령은
+              <code>geode</code>입니다.
+            </p>
+            <pre>{`uv tool install geode-agent
+geode version`}</pre>
+            <p>현재 릴리즈가 아직 PyPI에 공개되지 않았거나 GEODE 자체를 개발한다면 소스 체크아웃으로 설치합니다.</p>
             <pre>{`git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
 uv sync
-uv tool install -e .`}</pre>
+uv tool install -e . --force`}</pre>
 
             <h2>설정</h2>
             <p>
@@ -46,6 +53,12 @@ geode "summarize the latest AI research trends"
 
 # Daemon mode (long-running, IPC-served)
 geode serve`}</pre>
+
+            <h2>업데이트와 삭제</h2>
+            <pre>{`uv tool upgrade geode-agent   # PyPI 설치 업데이트
+geode update                  # 소스 체크아웃 업데이트
+geode uninstall               # 런타임 데이터 + 설치된 CLI 제거
+uv tool uninstall geode-agent # CLI만 제거`}</pre>
 
             <h2>방금 일어난 일</h2>
             <p>
@@ -77,10 +90,17 @@ geode serve`}</pre>
             </ul>
 
             <h2>Install</h2>
+            <p>
+              The PyPI distribution is <code>geode-agent</code>. It installs the
+              <code>geode</code> command.
+            </p>
+            <pre>{`uv tool install geode-agent
+geode version`}</pre>
+            <p>If the current release has not been published to PyPI yet, or you are developing GEODE itself, install from source instead.</p>
             <pre>{`git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
 uv sync
-uv tool install -e .`}</pre>
+uv tool install -e . --force`}</pre>
 
             <h2>Configure</h2>
             <p>
@@ -102,6 +122,12 @@ geode "summarize the latest AI research trends"
 
 # Daemon mode (long-running, IPC-served)
 geode serve`}</pre>
+
+            <h2>Update and uninstall</h2>
+            <pre>{`uv tool upgrade geode-agent   # update a PyPI install
+geode update                  # update a source checkout
+geode uninstall               # remove runtime data + installed CLI
+uv tool uninstall geode-agent # remove only the CLI`}</pre>
 
             <h2>What just happened</h2>
             <p>

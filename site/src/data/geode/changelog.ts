@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-05-17
+ * Last sync: 2026-05-18
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Agentic tool executor wiring.** Restored `generate_report` and `export_json`\n  in the AgenticLoop `ToolExecutor` handler map, added the missing generic\n  `generate_data` implementation, and added a regression check that every\n  LLM-exposed base tool has either a handler or an explicit executor path."
   },
   {
     "version": "0.99.13",
@@ -803,4 +803,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-05-17";
+export const CHANGELOG_SYNCED_AT = "2026-05-18";

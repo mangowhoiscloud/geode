@@ -24,9 +24,13 @@ export default function Page() {
             <pre>{`# 1) 기존 데몬 종료
 kill $(ps aux | grep "geode serve" | grep -v grep | awk '{print $2}')
 
-# 2) 의존성 + CLI 재설치 후 재기동
-uv tool install -e . --force
+# 2a) PyPI 설치라면 CLI 패키지 업데이트
+uv tool upgrade geode-agent
+geode serve &
+
+# 2b) 소스 체크아웃 설치라면 의존성 + editable CLI 갱신
 uv sync
+uv tool install -e . --force
 geode serve &`}</pre>
 
             <h2>종료</h2>
@@ -55,9 +59,13 @@ geode /clean      # 캐시 비우기`}</pre>
             <pre>{`# 1) Kill the running daemon
 kill $(ps aux | grep "geode serve" | grep -v grep | awk '{print $2}')
 
-# 2) Reinstall and restart
-uv tool install -e . --force
+# 2a) For a PyPI install, upgrade the CLI package
+uv tool upgrade geode-agent
+geode serve &
+
+# 2b) For a source checkout, refresh dependencies + editable CLI
 uv sync
+uv tool install -e . --force
 geode serve &`}</pre>
 
             <h2>Stop</h2>

@@ -31,6 +31,7 @@ on:
       - ".github/workflows/pages.yml"
   pull_request:
     paths:
+      - "site/**"
       - "docs/petri-bundle/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
