@@ -44,13 +44,76 @@ spawn a sub-agent — the embedding API is called directly.
 from __future__ import annotations
 
 import abc
+import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 log = logging.getLogger(__name__)
 
-__all__ = ["BaseSeedAgent", "SeedAgentResult"]
+__all__ = ["BaseSeedAgent", "SeedAgentResult", "parse_structured_output"]
+
+
+def parse_structured_output(
+    raw_output: Any,
+    *,
+    required_fields: Sequence[str],
+    pin_field: str | None = None,
+    pin_value: Any = None,
+) -> dict[str, Any] | None:
+    """Extract a structured JSON dict from a sub-agent's SubResult.output.
+
+    Shared parser used by Critic (S3), Pilot (S5), and Ranker voters
+    (S6) — all of which dispatch one sub-agent per work item and
+    expect a JSON response. Hoisted to base.py to avoid duplicating the
+    JSON-as-text fallback + required-field validation across 3+ agents
+    (see post-merge audit recommendation, 2026-05-18).
+
+    Accepts either:
+    - ``raw_output`` already a dict (most adapters serialize JSON →
+      dict in ``SubResult.output`` directly).
+    - ``raw_output`` a dict with a ``"text"`` key holding a JSON string
+      (fallback for adapters that pass through raw text).
+
+    Returns ``None`` (so the caller drops the result) when:
+    - ``raw_output`` is not a dict and has no parseable ``text`` field.
+    - The parsed dict is missing ANY of ``required_fields``.
+
+    When ``pin_field`` is provided, the function overrides that key
+    with ``pin_value`` after validation — used to pin candidate_id /
+    match_id from the task args so a wrong LLM echo can't reroute a
+    result to the wrong slot.
+    """
+    if not isinstance(raw_output, dict):
+        return None
+    parsed: dict[str, Any] | None = None
+    # Prefer the dict-as-structured-output shape when any required field
+    # is present (or when there are no required fields and no "text" key,
+    # in which case the dict itself is the payload).
+    has_required = any(f in raw_output for f in required_fields)
+    has_text = isinstance(raw_output.get("text"), str)
+    if has_required or (not required_fields and not has_text):
+        parsed = dict(raw_output)
+    elif has_text:
+        try:
+            candidate = json.loads(raw_output["text"])
+        except json.JSONDecodeError:
+            return None
+        if isinstance(candidate, dict):
+            parsed = candidate
+    if parsed is None:
+        return None
+    missing = [f for f in required_fields if f not in parsed]
+    if missing:
+        log.warning(
+            "seed-pipeline parse_structured_output: missing required fields %s",
+            missing,
+        )
+        return None
+    if pin_field is not None:
+        parsed[pin_field] = pin_value
+    return parsed
 
 
 @dataclass

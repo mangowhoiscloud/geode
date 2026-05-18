@@ -49,6 +49,31 @@ functional change.
 
 ### Added
 
+- **Ranker agent + Elo tournament + 3-judge panel (S6).** New
+  `plugins/seed_pipeline/tournament.py` ships pure Elo math —
+  `initial_ratings`, `expected_score`, `apply_match` (in-place rating
+  update), `plan_matches` (~N log₂ N distinct pairs, presentation
+  order randomized to defeat position bias), `top_k`, and
+  `majority_winner` (strict majority — split ballots collapse to
+  tie). Default K-factor = 32, top-K = 5. New
+  `plugins/seed_pipeline/agents/ranker.py` orchestrates the
+  tournament — for each match it fans out 3 voter sub-agents (one
+  per `VoterBinding` from the S5.5 picker), pins `match_id` from
+  the task, validates winner whitelist (A / B / tie), majority-votes
+  with quorum = 2-of-3 (matches with ≤ 1 valid vote are skipped).
+  Lifts shared JSON parser to `plugins/seed_pipeline/agents/base.py`
+  as `parse_structured_output` (used by Ranker; Critic/Pilot will
+  follow in a future retrofit). Per-match elo_log.tsv emitted to
+  `state.run_dir` (commit-friendly) per the seed_ranker AgentDef
+  contract. Voter task description includes Pilot `dim_means` for
+  both candidates so judges weigh empirical engagement signal
+  alongside the seed body. plan_registry binding deferred to S11
+  (CLI wiring) — Ranker already accepts resolved `VoterBinding` list
+  at construction, so the picker → Ranker handoff is end-to-end.
+  52 unit tests (27 tournament + 16 ranker + 9 base parser; reverse-
+  order completion, quorum-loss skip, invalid winner reject, JSON-as-
+  text fallback, frozen dataclass guard, elo_log.tsv emission, pilot
+  dim_means routing in voter description).
 - **Seed-pipeline picker + ToS notice + runtime diversity validator (S5.5).**
   `plugins/seed_pipeline/picker.py` resolves each of the 7 roles' concrete
   `(model, family, source)` binding by walking the manifest's
