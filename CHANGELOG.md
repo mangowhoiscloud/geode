@@ -60,10 +60,89 @@ functional change.
   사용합니다. GLM `agentic_call` 은 Chat Completions streaming 과
   `prompt_cache_key` 라우팅을 사용하며, 파라미터 미지원 시 세션 동안 fallback
   상태를 캐시합니다.
+### Added
+
+- **PR-γ1 — 3-tier subscription quota banner + abort dialog.** Closes
+  2026-05-19 outer-loop config consolidation plan Phase γ + 사용자
+  directive "운영 주체일 GEODE 의 FE 에도 경고문이 출력되도록 UI/UX
+  추가." New `core/cli/quota_banner.py`:
+  `QuotaState` (immutable snapshot, clamps usage ratio to [0, 1]) +
+  `SubscriptionQuotaBanner` (thread-safe; `tier()` returns green /
+  yellow / red against `[outer_loop] warn_threshold` /
+  `abort_threshold` from PR-α1; `render()` returns prompt_toolkit
+  HTML; empty on cold start) +
+  `trip_abort` / `clear_abort` (strict-mode PR-β1 handler calls
+  trip_abort with the resolver's actionable message when
+  `CredentialResolutionError(subscription_only=True)` fires) +
+  `QuotaBannerRefresher` (daemon thread calling injected
+  `invalidate` at cadence — prompt_toolkit issue #277 pattern;
+  injectable so tests don't drag in prompt_toolkit) +
+  `install_banner` / `current_banner` / `uninstall_banner` (singleton
+  accessor) + `render_abort_message → AbortDialog` (title names the
+  family; body is resolver msg verbatim — same remedies in dialog +
+  log + stderr). `core/cli/prompt_session.py` installs the banner and
+  binds its render to `PromptSession(bottom_toolbar=...)`; gracefully
+  degrades to no banner when the config is unavailable. 23 unit tests
+  cover ratio clamping / 3-tier transitions / aborted-state lock /
+  render output / thread safety / singleton lifecycle / refresher
+  cadence + exception isolation + start idempotency / abort dialog
+  title + body verbatim. Frontier reference: Codex CLI `status_line`
+  config + Hermes TUI status bar + prompt_toolkit issue #277.
+
+### Infrastructure
+
+- **Petri bundle isolation.** Split the petri-bundle integrity gate out of
+  `pages.yml` into a dedicated `.github/workflows/petri-publish.yml`
+  workflow so a non-petri site-build failure can no longer mask a corrupt
+  bundle and vice versa. The new workflow runs on every PR that touches
+  `docs/petri-bundle/**`, `scripts/validate_petri_bundle.py`,
+  `scripts/check_repo_hygiene.py`, or the workflow file itself, plus a
+  daily 00:30 UTC cron and `workflow_dispatch`. The deploy still goes
+  through `pages.yml` (single Pages artifact source), but the validator
+  now runs **before** `npm install/build` in that workflow too — a bundle
+  regression aborts the deploy at the cheapest possible step. PR-gate
+  also emits a regression warning when any `.eval` or `assets/**` file
+  was deleted vs the base branch.
+- **Deeper bundle validator.** `scripts/validate_petri_bundle.py` now
+  opens each `.eval` zip and rejects: `header.results=None`, empty
+  `results.scores[]`, any score with empty `metrics`, missing
+  `header.json`, bad zip data, and missing top-level viewer assets
+  (`index.html` + `assets/index.js` + `assets/index.css`). These are the
+  exact triggers behind the click-time `formatPrettyDecimal(g.metrics[i]
+  .value)` TypeError in inspect_ai #1747. Backed by 13 unit tests in
+  `tests/test_validate_petri_bundle.py`. New `zipfile-zstd` dev-group
+  dependency (Python 3.14+ no-op shim) keeps the validator pure-stdlib
+  on the lint path — no `[audit]` extra required.
+- **Petri bundle delete-protection ratchet.** `check_repo_hygiene.py`
+  enforces a `PETRI_EVAL_FLOOR = 9` lower bound on
+  `docs/petri-bundle/logs/*.eval` count. Any PR that drops bundle
+  archives must lower the floor in the same change (Karpathy P4 explicit-
+  action ratchet), preventing silent deletions during unrelated refactors.
 
 ## [0.99.15] — 2026-05-19
 
 ### Added
+
+- **PR-β1 — Petri subscription-only credential mode.** Closes
+  2026-05-19 outer-loop config consolidation plan Phase β. New
+  `PAYG_SOURCE = "api_key"` constant tags the conventional PAYG entry
+  in `plugins/petri_audit/petri.plugin.toml` (every family's
+  `api_key` source). `resolve_credential_source()` gains a
+  `fallback_to_payg: bool = True` kwarg: when ``False``, the auto-
+  expansion loop filters out the PAYG source so subscription runs
+  cannot silently bill the user's API key after OAuth quota
+  exhaustion. Explicit `override="api_key"` still works (caller takes
+  responsibility — no surprise). On no-source-resolution,
+  `CredentialResolutionError(subscription_only=True)` carries a
+  Stripe-style actionable message naming the
+  ``[outer_loop] fallback_to_payg = true`` opt-in, the quota reset
+  wait, and the per-role pin alternative; FE banner (PR-γ1) reads
+  ``err.subscription_only`` to decide whether to render the abort
+  dialog. Default kwarg (``True``) preserves pre-2026-05-19 behaviour
+  so call sites unaware of the flag stay backward-compatible.
+  7 new unit tests (filter / OAuth-still-wins / message contents /
+  flag exposure / back-compat default / override bypass / PAYG_SOURCE
+  constant).
 
 - **ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
   (2026-05-19).** New `docs/architecture/outer-loop-resume-decision.md`

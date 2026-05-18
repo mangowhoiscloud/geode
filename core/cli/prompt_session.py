@@ -106,13 +106,58 @@ def _build_prompt_session() -> Any:
             event.app.invalidate()
 
     history_path = Path.home() / ".geode_history"
+
+    # PR-γ1 — install + bind the subscription quota banner. Lazy-load
+    # the outer-loop config so prompt_session stays importable when
+    # ``core.config.outer_loop`` is unavailable (test contexts).
+    bottom_toolbar = _make_bottom_toolbar()
+
     return PromptSession(
         history=FileHistory(str(history_path)),
         message=HTML("<b>&gt;</b> "),
         enable_history_search=True,
         multiline=True,
         key_bindings=kb,
+        bottom_toolbar=bottom_toolbar,
     )
+
+
+def _make_bottom_toolbar() -> Any:
+    """Build the bottom_toolbar callable for the REPL.
+
+    Installs a process-wide :class:`SubscriptionQuotaBanner` keyed on
+    the outer-loop config's warn / abort thresholds, then returns its
+    ``render`` method as the prompt_toolkit ``bottom_toolbar`` value.
+    Returns ``None`` when the outer-loop config is unavailable so the
+    REPL falls back to no-banner gracefully.
+    """
+    from prompt_toolkit.formatted_text import HTML as _HTML
+
+    from core.cli.quota_banner import SubscriptionQuotaBanner, install_banner
+
+    try:
+        from core.config.outer_loop import load_outer_loop_config
+
+        cfg = load_outer_loop_config()
+        warn = cfg.warn_threshold
+        abort = cfg.abort_threshold
+    except Exception:
+        log.warning("outer-loop config unavailable; banner uses defaults", exc_info=True)
+        warn, abort = 0.5, 0.9
+
+    banner = SubscriptionQuotaBanner(
+        warn_threshold=warn,
+        abort_threshold=abort,
+    )
+    install_banner(banner)
+
+    def _render() -> Any:
+        text = banner.render()
+        if not text:
+            return ""
+        return _HTML(text)
+
+    return _render
 
 
 _select_policy_applied = False

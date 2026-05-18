@@ -126,6 +126,24 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
+      # Run the petri ratchet BEFORE npm install/build. A corrupt bundle
+      # must fail fast and independently of the Next.js build — that way a
+      # site build failure (unrelated to petri) doesn't mask a regression
+      # in the published archives, and a bundle regression doesn't waste a
+      # full site build. See .github/workflows/petri-publish.yml for the
+      # PR-gate counterpart.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dev group (zipfile-zstd for validator)
+        working-directory: ${{ github.workspace }}
+        run: uv sync
+
+      - name: Validate docs/petri-bundle (deep — pre-build gate)
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/validate_petri_bundle.py
+
       - name: Sync GEODE stats into site SOT
         run: npm run sync-stats
         env:
@@ -136,10 +154,6 @@ jobs:
 
       - name: Build static export
         run: npm run build
-
-      - name: Validate docs/petri-bundle before publish
-        working-directory: ${{ github.workspace }}
-        run: python3 scripts/validate_petri_bundle.py
 
       - name: Copy docs/petri-bundle into site/out
         working-directory: ${{ github.workspace }}

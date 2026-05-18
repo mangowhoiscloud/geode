@@ -201,9 +201,9 @@ async def _default_geode_runner(
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
     from core.audit.diagnostics import diag
-    from core.cli import _build_tool_handlers, _set_readiness
     from core.wiring.startup import check_readiness
 
+    from core.cli import _build_tool_handlers, _set_readiness
     from plugins.petri_audit.audit_mode import (
         apply_to_profile_policy,
         apply_to_readiness,

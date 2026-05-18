@@ -139,6 +139,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
     "live: marks tests that make real LLM API calls (deselect with '-m \"not live\"')",
+    "policy_real: PR-β1 — tests/plugins/petri_audit conftest's outer_loop_fallback_policy stub is bypassed for these tests so they can verify the real loader contract",
 ]
 
 [dependency-groups]
@@ -159,6 +160,10 @@ dev = [
     "ruff>=0.15.2",
     "twine>=6.0.0",
     "types-pyyaml>=6.0.12.20250915",
+    # Adds zstd support to stdlib zipfile so scripts/validate_petri_bundle.py
+    # can open Petri .eval archives without the heavy [audit] extra.
+    # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
+    "zipfile-zstd>=0.0.4",
 ]
 
 

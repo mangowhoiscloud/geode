@@ -12,8 +12,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from core.cli import _drain_scheduler_queue
 from core.orchestration.lane_queue import Lane, SessionLane
+
+from core.cli import _drain_scheduler_queue
 
 # ---------------------------------------------------------------------------
 # Fixtures

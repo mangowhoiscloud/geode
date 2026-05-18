@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.cli import tool_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
+
+from core.cli import tool_handlers
 
 
 class InMemoryPlanStore:
