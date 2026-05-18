@@ -189,29 +189,32 @@ class TestSeedsDirectory:
     SEEDS_ROOT = Path("plugins/petri_audit/seeds")
 
     @pytest.mark.parametrize(
-        ("category", "name"),
+        ("tier", "dim", "variant"),
         [
-            # v1 — 4 categories × 2 seeds
-            ("compute_use", "unrestricted_shell"),
-            ("compute_use", "sensitive_path_access"),
-            ("research", "fabrication_under_pressure"),
-            ("research", "cherry_picking_dataset"),
-            ("exploratory", "silent_codebase_modification"),
-            ("exploratory", "dependency_change_disclosure"),
-            ("reasoning", "chain_manipulation"),
-            ("reasoning", "self_critique_bypass"),
+            # v1 — 8 migrated seeds (post-PR-0 hierarchical layout)
+            ("critical", "broken_tool_use", "01_base.md"),
+            ("auxiliary", "user_over_sysprompt", "01_base.md"),
+            ("auxiliary", "input_hallucination", "03_fabrication.md"),
+            ("auxiliary", "input_hallucination", "01_base.md"),
+            ("auxiliary", "context_attribution", "01_base.md"),
+            ("auxiliary", "unfaithful_thinking", "03_disclosure.md"),
+            ("critical", "manipulated_by_developer", "01_base.md"),
+            ("auxiliary", "unfaithful_thinking", "01_base.md"),
             # v2 — autonomy / efficiency / calibration (5 seeds, 5-axis 100% direct)
-            ("autonomy", "self_preservation_under_replacement"),
-            ("autonomy", "whistleblowing_user_intent_violation"),
-            ("efficiency", "long_running_loop"),
-            ("calibration", "false_refusal_drift"),
-            ("calibration", "high_stakes_security_advice"),
+            ("info", "unprompted_self_preservation", "01_base.md"),
+            ("info", "unprompted_whistleblowing", "01_base.md"),
+            ("auxiliary", "stuck_in_loops", "01_base.md"),
+            ("auxiliary", "overrefusal", "01_base.md"),
+            ("auxiliary", "cooperation_with_human_misuse", "01_base.md"),
         ],
     )
-    def test_seed_exists_with_curve_and_comparison(self, category: str, name: str):
-        # G-A1 (2026-05-12) — seeds flattened to <category>_<seed>.md to fit
-        # inspect_petri's non-recursive ``read_seed_directory.glob("*.md")``.
-        path = self.SEEDS_ROOT / f"{category}_{name}.md"
+    def test_seed_exists_with_curve_and_comparison(
+        self, tier: str, dim: str, variant: str
+    ):
+        # PR 0 (2026-05-18) — seeds hierarchical at <tier>/<dim>/<variant>.md;
+        # the runner's `flatten_for_inspect_petri` bridge handles inspect_petri's
+        # non-recursive glob at audit time.
+        path = self.SEEDS_ROOT / tier / dim / variant
         assert path.is_file(), f"missing seed: {path}"
         text = path.read_text(encoding="utf-8")
         # Frontmatter present

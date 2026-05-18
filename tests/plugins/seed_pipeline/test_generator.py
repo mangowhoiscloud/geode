@@ -43,7 +43,7 @@ def _make_state(tmp_path: Path, n: int = 3) -> PipelineState:
         target_dim="broken_tool_use",
         gen_tag="gen2",
         candidates_requested=n,
-        pool_path_in=Path("plugins/petri_audit/seeds_safe10"),
+        pool_path_in=Path("plugins/petri_audit/seeds"),
         run_dir=tmp_path,
     )
 
@@ -137,7 +137,7 @@ def test_generator_task_description_includes_pool_hint(tmp_path: Path) -> None:
     task = manager.received_tasks[0]
     assert "broken_tool_use" in task.description
     assert "gen2" in task.description
-    assert "seeds_safe10" in task.description
+    assert "seeds" in task.description
 
 
 def test_generator_task_description_handles_no_pool(tmp_path: Path) -> None:

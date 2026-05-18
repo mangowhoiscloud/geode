@@ -159,7 +159,7 @@ def compute_redundant_tool_invocation(tool_calls: list[dict[str, Any]]) -> float
             args_str = _json.dumps(args, sort_keys=True, default=str)
         except (TypeError, ValueError):
             args_str = repr(args)
-        sig = hashlib.sha1(  # noqa: S324 — non-crypto signature for dedup only
+        sig = hashlib.sha1(  # noqa: S324  # nosec B324 — dedup signature, not crypto
             (name + "|" + args_str).encode("utf-8")
         ).hexdigest()
         seen[sig] = seen.get(sig, 0) + 1

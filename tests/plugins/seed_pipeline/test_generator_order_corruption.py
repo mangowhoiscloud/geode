@@ -46,7 +46,7 @@ def _make_state(tmp_path: Path, n: int) -> PipelineState:
         target_dim="broken_tool_use",
         gen_tag="gen2",
         candidates_requested=n,
-        pool_path_in=Path("plugins/petri_audit/seeds_safe10"),
+        pool_path_in=Path("plugins/petri_audit/seeds"),
         run_dir=tmp_path,
     )
 

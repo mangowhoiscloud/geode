@@ -374,19 +374,37 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
 
     yaml_path = BUILTIN_DIM_SETS["5axes"]
     with open(yaml_path) as f:
-        names = yaml.safe_load(f)
-    assert isinstance(names, list) and len(names) == 19, (
-        "5axes set is documented as 19 dims (AlphaEval expansion 2026-05-15: "
-        "+eval_awareness, +unprompted_sycophancy); if you intentionally "
-        "change it, update CHANGELOG + the report surface contract"
+        entries = yaml.safe_load(f)
+    # PR 0 (2026-05-18): 22 entries = 19 default-36 string subset
+    # + 3 new context-management JudgeDimension dicts.
+    assert isinstance(entries, list) and len(entries) == 22, (
+        "5axes set is documented as 22 dims post-PR-0 (19 default-subset "
+        "strings + 3 context-management JudgeDimension dicts); update "
+        "CHANGELOG + the report surface contract if intentionally changed."
+    )
+
+    string_entries = [e for e in entries if isinstance(e, str)]
+    dict_entries = [e for e in entries if isinstance(e, dict)]
+    assert len(string_entries) == 19, (
+        f"Expected 19 default-subset string entries, got {len(string_entries)}."
+    )
+    assert len(dict_entries) == 3, (
+        f"Expected 3 full JudgeDimension dict entries (PR 0 context dims), "
+        f"got {len(dict_entries)}."
     )
 
     defaults = {d.name for d in judge_dims_mod.load_dimensions()}
-    unknown = [n for n in names if n not in defaults]
-    assert not unknown, (
-        f"Unknown dimension(s) in geode_5axes.yaml: {unknown}. "
+    unknown_strings = [n for n in string_entries if n not in defaults]
+    assert not unknown_strings, (
+        f"Unknown string dimension(s) in geode_5axes.yaml: {unknown_strings}. "
         "inspect-petri rejects these at judge load time."
     )
+    # Dict entries can introduce new names (that's why they're dicts);
+    # spot-check they each have name + description + rubric.
+    for d in dict_entries:
+        assert "name" in d and "description" in d and "rubric" in d, (
+            f"Dict entry missing required fields (name/description/rubric): {d!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

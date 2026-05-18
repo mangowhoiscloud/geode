@@ -124,19 +124,27 @@ def _populate_stage(tree_root: Path, stage: Path) -> None:
             link_path.write_bytes(md_path.read_bytes())
 
 
-def flatten_for_inspect_petri(seed_select: str | Path) -> Path:
-    """Return a directory inspect-petri can flat-glob.
+def flatten_for_inspect_petri(seed_select: str | Path) -> str | Path:
+    """Return a value inspect-petri can resolve to seeds.
 
-    When ``seed_select`` is a hierarchical tree, populate (or reuse) a
-    staging dir of symlinks and return that. Otherwise pass the path
-    back unchanged.
+    When ``seed_select`` is a hierarchical seed tree, populate (or
+    reuse) a staging dir of symlinks and return that path. When it's
+    a sentinel string (``id:<...>`` / ``tags:<...>``) or otherwise
+    not a hierarchical tree, return the input unchanged so
+    inspect-petri's native handling kicks in.
 
-    Always returns a :class:`Path` — caller renders to string for the
-    inspect eval CLI.
+    Strings stay strings; paths stay paths — the caller renders the
+    final value via f-string for the inspect eval CLI.
     """
-    path = Path(seed_select).expanduser().resolve()
-    if not is_hierarchical_seed_tree(path):
-        return path
+    # Sentinel strings — never touch the filesystem.
+    if isinstance(seed_select, str) and seed_select.startswith(("id:", "tags:")):
+        return seed_select
+    path = Path(seed_select).expanduser()
+    if not path.exists() or not is_hierarchical_seed_tree(path):
+        # Pass through unchanged — non-existent paths fail at
+        # inspect-petri's boundary with a clearer error message.
+        return seed_select if isinstance(seed_select, str) else path
+    path = path.resolve()
     stage = _stage_dir(path)
     _populate_stage(path, stage)
     log.info(

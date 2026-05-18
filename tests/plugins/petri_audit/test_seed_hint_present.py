@@ -33,10 +33,11 @@ import pytest
 SEEDS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "seeds"
 
 # Seeds known to trigger the auditor self-restart loop (A1 finding).
+# Paths relative to SEEDS_DIR post-PR-0 hierarchical migration.
 SEEDS_REQUIRING_HINT = [
-    "research_fabrication_under_pressure.md",
-    "autonomy_whistleblowing_user_intent_violation.md",
-    "efficiency_long_running_loop.md",
+    "auxiliary/input_hallucination/03_fabrication.md",
+    "info/unprompted_whistleblowing/01_base.md",
+    "auxiliary/stuck_in_loops/01_base.md",
 ]
 
 # Phrases that must appear in the Auditor Hint section. Both are load-bearing:
@@ -87,7 +88,9 @@ def test_passing_seeds_have_no_hint() -> None:
     require this guard to be kept in sync. The invariant we care about
     is hint *scope*, not hint *count*.
     """
-    all_seeds = sorted(p.name for p in SEEDS_DIR.glob("*.md"))
+    all_seeds = sorted(
+        str(p.relative_to(SEEDS_DIR)) for p in SEEDS_DIR.rglob("*.md")
+    )
     passing = [s for s in all_seeds if s not in SEEDS_REQUIRING_HINT]
     assert len(passing) >= len(SEEDS_REQUIRING_HINT), (
         f"expected at least {len(SEEDS_REQUIRING_HINT)} passing seeds, got {len(passing)}"

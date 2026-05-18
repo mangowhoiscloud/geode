@@ -107,10 +107,13 @@ def test_split_yaml_matches_expected_groups() -> None:
     assert "groups" in split, "split YAML must have a top-level 'groups' key"
     assert len(split["groups"]) == 5, "expected 5 groups"
 
-    # Same 19 dims, total.
+    # Same 19 string dims (PR 0 added 3 dict entries; the split YAML
+    # mirrors the legacy YAML's STRING subset, not the new dict entries).
     split_dims = [d for g in split["groups"] for d in g["dims"]]
-    assert sorted(split_dims) == sorted(legacy), (
-        "split YAML dim set must match legacy 5axes YAML exactly (no dim added or removed)"
+    legacy_strings = [d for d in legacy if isinstance(d, str)]
+    assert sorted(split_dims) == sorted(legacy_strings), (
+        "split YAML dim set must match legacy 5axes YAML's string subset "
+        "(post-PR-0 the legacy YAML carries 19 strings + 3 dicts)"
     )
     assert len(split_dims) == 19, "expected 19 dims total"
 
