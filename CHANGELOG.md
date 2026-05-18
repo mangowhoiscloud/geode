@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.17] — 2026-05-19
+
 ### Fixed
 
 - **GLM documented request shape for Z.AI Chat Completions.** Removed the
