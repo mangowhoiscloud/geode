@@ -71,8 +71,6 @@ class SessionJournal:
     hook handlers can discover the journal automatically.
     """
 
-    DEFAULT_HOME = Path.home() / ".geode" / "outer-loop"
-
     def __init__(
         self,
         *,
@@ -85,7 +83,11 @@ class SessionJournal:
         self.gen_tag = gen_tag
         self.component = component
         if path is None:
-            path = self.DEFAULT_HOME / session_id / "journal.jsonl"
+            # Lazy resolve via core.paths so test monkeypatch on
+            # ``Path.home()`` is honoured after reloading the module.
+            from core.paths import GLOBAL_OUTER_LOOP_DIR
+
+            path = GLOBAL_OUTER_LOOP_DIR / session_id / "journal.jsonl"
         self.path = path
 
     def append(

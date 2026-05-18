@@ -120,16 +120,19 @@ def test_session_journal_scope_restores_on_exception(tmp_path: Path) -> None:
 
 
 def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Unset path falls back to ~/.geode/outer-loop/<session>/journal.jsonl."""
+    """Unset path falls back to ``GLOBAL_OUTER_LOOP_DIR`` / <session> / journal.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
-    # Re-import the module so SessionJournal.DEFAULT_HOME picks up the new $HOME.
+    # Reload both core.paths and core.observability.session_journal so
+    # the lazy import resolves under the monkeypatched Path.home().
     import importlib
 
-    import core.observability.session_journal as mod
+    import core.observability.session_journal as journal_mod
+    import core.paths as paths_mod
 
-    importlib.reload(mod)
-    journal = mod.SessionJournal(
+    importlib.reload(paths_mod)
+    importlib.reload(journal_mod)
+    journal = journal_mod.SessionJournal(
         session_id="s-default",
         gen_tag="g",
         component="autoresearch",
@@ -138,6 +141,10 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert journal.path == expected
     journal.append("event")
     assert expected.is_file()
+    # Restore originals so subsequent tests see the real home.
+    monkeypatch.undo()
+    importlib.reload(paths_mod)
+    importlib.reload(journal_mod)
 
 
 def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
