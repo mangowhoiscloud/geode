@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **4-path × 4-component auth coverage matrix (PR 2).** New
+  `plugins/seed_pipeline/auth_coverage.py` defines the canonical
+  16-cell matrix: 4 components (`seed_pipeline`, `petri_audit`,
+  `autoresearch`, `geode_main`) × 4 paths (`anthropic.claude-cli`,
+  `anthropic.api_key`, `openai.openai-codex`, `openai.api_key`). All
+  16 cells currently marked supported. Pins the **TEST_SETUP_PROFILE**
+  the user specified on 2026-05-18 (co-scientist / autoresearch /
+  GEODE main → openai.openai-codex via gpt-5.5 subscription; Petri
+  → anthropic.claude-cli). Adds `auth_status_table()` formatter for
+  operator inspection (canonical + optional resolved-live overlay).
+  New `tests/integration/test_auth_path_coverage.py` walks every
+  cell to verify routing is actually wired: seed_pipeline via
+  `pick_bindings()` override, petri via manifest `[petri.source.*]`,
+  autoresearch via `train.USE_OAUTH` flag, GEODE main via
+  `core.config.settings` env fields. 24 unit tests.
+
 ### Removed
 
 - **BudgetGuard layer removed (PR 1).** Per the
