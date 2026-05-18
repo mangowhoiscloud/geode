@@ -26,7 +26,6 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-import core.cli as _cli_pkg
 import pytest
 from core.auth.auth_toml import save_auth_toml
 from core.auth.profiles import AuthProfile, CredentialType
@@ -34,6 +33,8 @@ from core.cli.commands import cmd_login
 from core.llm.routing.plan_registry import get_plan_registry
 from core.llm.routing.plans import Plan, PlanKind
 from core.wiring.container import ensure_profile_store
+
+import core.cli as _cli_pkg
 
 # ---------------------------------------------------------------------------
 # Contract 1 — CLI dispatch sends refresh signal after THIN auth commands
