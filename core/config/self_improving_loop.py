@@ -1,8 +1,8 @@
 """Outer-loop config — single SoT loader.
 
-Reads ``~/.geode/config.toml`` ``[outer_loop.*]`` sections into a typed
+Reads ``~/.geode/config.toml`` ``[self_improving_loop.*]`` sections into a typed
 pydantic v2 model. The loader is the SoT consumed by autoresearch /
-seed-pipeline / petri_audit / geode_main wherever outer-loop runtime
+seed-pipeline / petri_audit / geode_main wherever self-improving-loop runtime
 decisions are made.
 
 Why a separate module from :mod:`core.config`
@@ -10,7 +10,7 @@ Why a separate module from :mod:`core.config`
 
 :class:`core.config._settings.Settings` carries the user-facing GEODE
 runtime config (anthropic credential source, default model, etc.) and
-is consumed by hundreds of call sites. Adding outer-loop fields there
+is consumed by hundreds of call sites. Adding self-improving-loop fields there
 would inflate every cold-start invocation that just wants a single
 constant.
 
@@ -25,7 +25,7 @@ Precedence (Codex / OpenAI Agents pattern)
 
 1. Per-component env var override (e.g. ``AUTORESEARCH_TARGET_MODEL``)
    — handled at the caller, not here.
-2. ``~/.geode/config.toml`` ``[outer_loop.*]`` section — this loader.
+2. ``~/.geode/config.toml`` ``[self_improving_loop.*]`` section — this loader.
 3. Module-level constants in ``autoresearch/train.py`` / picker
    defaults — fallback when the section is missing.
 4. Pydantic model default — last resort.
@@ -49,12 +49,12 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "AutoresearchConfig",
-    "OuterLoopBindings",
-    "OuterLoopConfig",
     "PetriRoleConfig",
     "SeedPipelineConfig",
+    "SelfImprovingLoopBindings",
+    "SelfImprovingLoopConfig",
     "Source",
-    "load_outer_loop_config",
+    "load_self_improving_loop_config",
 ]
 
 
@@ -62,7 +62,7 @@ Source = Literal["claude-cli", "openai-codex", "api_key", "auto"]
 """Credential source label — matches ``plugins.petri_audit.petri.plugin.toml``."""
 
 
-class OuterLoopBindings(BaseModel):
+class SelfImprovingLoopBindings(BaseModel):
     """Generic per-role binding (model + source + optional fallback override)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -70,7 +70,7 @@ class OuterLoopBindings(BaseModel):
     model: str
     source: Source
     fallback_to_payg: bool | None = None
-    """``None`` → inherit ``[outer_loop] fallback_to_payg``."""
+    """``None`` → inherit ``[self_improving_loop] fallback_to_payg``."""
 
 
 class PetriRoleConfig(BaseModel):
@@ -102,7 +102,7 @@ class AutoresearchConfig(BaseModel):
 class SeedPipelineConfig(BaseModel):
     """seed-pipeline runtime knobs.
 
-    Per-role bindings live under ``[outer_loop.seed_pipeline.role.<X>]``
+    Per-role bindings live under ``[self_improving_loop.seed_pipeline.role.<X>]``
     and are loaded into :attr:`roles`.
     """
 
@@ -110,12 +110,12 @@ class SeedPipelineConfig(BaseModel):
 
     candidates_default: Annotated[int, Field(ge=1, le=100)] = 15
     default_gen_tag: str = "gen1"
-    roles: dict[str, OuterLoopBindings] = Field(default_factory=dict)
+    roles: dict[str, SelfImprovingLoopBindings] = Field(default_factory=dict)
     fallback_to_payg: bool | None = None
 
 
-class OuterLoopConfig(BaseModel):
-    """Top-level [outer_loop.*] config root.
+class SelfImprovingLoopConfig(BaseModel):
+    """Top-level [self_improving_loop.*] config root.
 
     Validation entry point — every field has a documented default so an
     empty / missing config file still produces a usable instance.
@@ -145,7 +145,7 @@ class OuterLoopConfig(BaseModel):
     seed_pipeline: SeedPipelineConfig = Field(default_factory=SeedPipelineConfig)
 
     @model_validator(mode="after")
-    def _abort_above_warn(self) -> OuterLoopConfig:
+    def _abort_above_warn(self) -> SelfImprovingLoopConfig:
         # ``model_validator(mode='after')`` runs after every field is
         # populated (including defaults), so the inversion is caught
         # even when the user only sets one of the two thresholds.
@@ -172,34 +172,34 @@ def _resolve_config_path(path: Path | str | None) -> Path:
     return GLOBAL_CONFIG_TOML
 
 
-def load_outer_loop_config(path: Path | str | None = None) -> OuterLoopConfig:
-    """Load + validate the ``[outer_loop.*]`` section of ``config.toml``.
+def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImprovingLoopConfig:
+    """Load + validate the ``[self_improving_loop.*]`` section of ``config.toml``.
 
-    Returns a fully-defaulted :class:`OuterLoopConfig` when:
+    Returns a fully-defaulted :class:`SelfImprovingLoopConfig` when:
     - the file does not exist, or
-    - the file has no ``[outer_loop]`` section.
+    - the file has no ``[self_improving_loop]`` section.
 
     Raises:
-        ValueError: when the ``[outer_loop.*]`` section exists but
+        ValueError: when the ``[self_improving_loop.*]`` section exists but
             contains unknown fields or fails pydantic validation.
             The error is bubbled verbatim so the operator sees the
             offending key / value.
     """
     resolved = _resolve_config_path(path)
     if not resolved.is_file():
-        log.debug("outer-loop config: %s does not exist; using defaults", resolved)
-        return OuterLoopConfig()
+        log.debug("self-improving-loop config: %s does not exist; using defaults", resolved)
+        return SelfImprovingLoopConfig()
     try:
         with resolved.open("rb") as fh:
             raw = tomllib.load(fh)
     except OSError as exc:
         log.warning(
-            "outer-loop config: could not read %s (%s); using defaults",
+            "self-improving-loop config: could not read %s (%s); using defaults",
             resolved,
             exc,
         )
-        return OuterLoopConfig()
-    section = raw.get("outer_loop")
+        return SelfImprovingLoopConfig()
+    section = raw.get("self_improving_loop")
     if not isinstance(section, dict):
-        return OuterLoopConfig()
-    return OuterLoopConfig.model_validate(section)
+        return SelfImprovingLoopConfig()
+    return SelfImprovingLoopConfig.model_validate(section)

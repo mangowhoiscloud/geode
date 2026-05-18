@@ -27,7 +27,7 @@ Priority for the ``auto`` sentinel:
 3. Manifest ``[petri.source.<family>].default`` if not auto.
 4. Manifest ``[petri.source.<family>].allowed`` order — first non-auto,
    non-suppressed, *available* source wins. Manifest ordering is the
-   intent — keep OAuth first so the autoresearch outer loop hits
+   intent — keep OAuth first so the autoresearch self-improving loop hits
    subscription quota by default; API-key fallback still resolves when
    the user has only ``ANTHROPIC_API_KEY`` set.
 """
@@ -52,8 +52,8 @@ __all__ = [
     "clear_suppressions",
     "is_suppressed",
     "list_credential_sources",
-    "outer_loop_fallback_policy",
     "resolve_credential_source",
+    "self_improving_loop_fallback_policy",
     "suppress_credential_source",
 ]
 
@@ -70,7 +70,7 @@ Every family in the Petri manifest has ``api_key`` as its PAYG entry
 ``resolve_credential_source(fallback_to_payg=False)`` filters this
 source out so a subscription run never silently bills the user's API
 key after OAuth quota exhaustion. See
-``docs/plans/2026-05-19-outer-loop-config-consolidation.md`` Phase β.
+``docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`` Phase β.
 """
 
 
@@ -81,7 +81,7 @@ class CredentialResolutionError(RuntimeError):
     ``subscription_only`` flag so callers (e.g. the /petri picker, the
     FE banner) can render an actionable error instead of a bare
     traceback. The default message is Stripe-style (cause + remedy +
-    docs) and mentions ``[outer_loop] fallback_to_payg = true`` as the
+    docs) and mentions ``[self_improving_loop] fallback_to_payg = true`` as the
     explicit opt-in.
     """
 
@@ -98,16 +98,16 @@ class CredentialResolutionError(RuntimeError):
         if subscription_only:
             super().__init__(
                 f"family={family}: no subscription credential source available "
-                f"(allowed={allowed}, PAYG fallback blocked by [outer_loop] "
+                f"(allowed={allowed}, PAYG fallback blocked by [self_improving_loop] "
                 f"fallback_to_payg=false).\n"
                 f"\n"
                 f"To continue NOW, do one of:\n"
                 f"  1. Wait until the subscription quota resets.\n"
                 f"  2. Enable PAYG fallback (will incur cost):\n"
                 f"     ~/.geode/config.toml:\n"
-                f"       [outer_loop]\n"
+                f"       [self_improving_loop]\n"
                 f"       fallback_to_payg = true\n"
-                f"  3. Pin a different source in [outer_loop.petri.<role>] "
+                f"  3. Pin a different source in [self_improving_loop.petri.<role>] "
                 f'with source = "api_key".\n'
             )
         else:
@@ -166,27 +166,27 @@ def list_credential_sources(family: str) -> list[dict[str, Any]]:
     return out
 
 
-def outer_loop_fallback_policy() -> bool:
-    """Read the ``[outer_loop] fallback_to_payg`` flag from config.toml.
+def self_improving_loop_fallback_policy() -> bool:
+    """Read the ``[self_improving_loop] fallback_to_payg`` flag from config.toml.
 
     Default ``True`` preserves pre-2026-05-19 behaviour. Production
     Petri call sites (``registry.get_binding`` / ``models.to_inspect_model``)
     invoke this helper to thread the flag into
     :func:`resolve_credential_source` without each call site needing
-    to import ``core.config.outer_loop`` directly.
+    to import ``core.config.self_improving_loop`` directly.
 
     Lazy import so this module stays usable in test contexts that
     stub ``core.config``.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
     except ImportError:
         return True
     try:
-        return load_outer_loop_config().fallback_to_payg
+        return load_self_improving_loop_config().fallback_to_payg
     except Exception:
         log.warning(
-            "outer-loop config load failed; defaulting to fallback_to_payg=True",
+            "self-improving-loop config load failed; defaulting to fallback_to_payg=True",
             exc_info=True,
         )
         return True

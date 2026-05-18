@@ -18,11 +18,13 @@ from plugins.petri_audit import credential_source as cs
 
 
 @pytest.fixture(autouse=True)
-def _isolate_outer_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-δ2 — pin the outer-loop config loader to a non-existent tmp path so
-    a developer / CI host with real ``[outer_loop.petri.*]`` does not bleed
+def _isolate_self_improving_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-δ2 — pin the self-improving-loop config loader to a non-existent tmp path so
+    a developer / CI host with real ``[self_improving_loop.petri.*]`` does not bleed
     into ``read_role_override`` results."""
-    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "outer_loop_isolation_sentinel.toml"))
+    monkeypatch.setenv(
+        "GEODE_CONFIG_TOML", str(tmp_path / "self_improving_loop_isolation_sentinel.toml")
+    )
     # Same isolation for the legacy petri.toml path, in case any test
     # touches save_role_override indirectly.
     monkeypatch.setenv("GEODE_PETRI_TOML", str(tmp_path / "petri.toml"))

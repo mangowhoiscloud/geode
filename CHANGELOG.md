@@ -47,6 +47,44 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Rename `outer_loop` → `self_improving_loop` across the runtime.** The
+  identifier `outer_loop` only described position (an outer loop around
+  petri+autoresearch+seed) without describing intent. The work this loop
+  actually does is iteratively improving the agent's own performance via
+  gen-N → gen-N+1 fitness ratcheting, so the explicit term
+  `self_improving_loop` is adopted everywhere the operator is expected to
+  read or write: the Python module (`core/config/outer_loop.py` →
+  `core/config/self_improving_loop.py`), the config classes
+  (`OuterLoopConfig` → `SelfImprovingLoopConfig`,
+  `OuterLoopBindings` → `SelfImprovingLoopBindings`), the loader
+  (`load_outer_loop_config` → `load_self_improving_loop_config`), the
+  `[outer_loop.*]` TOML section (now `[self_improving_loop.*]`), and the
+  runtime directory (`~/.geode/outer-loop/` → `~/.geode/self-improving-loop/`).
+  Per the 2026-05-19 audit (`docs/audits/2026-05-19-self-improving-loop-observability-gap.md`)
+  the historical record (this changelog, the 2026-05-15 audits) is left
+  verbatim; only living docs / plans / code are migrated. Quality gates
+  pass: ruff + ruff format + mypy clean, 853 + 27 skipped tests pass on
+  rename-affected files, dry-run smoke writes to the new path.
+- **Docs cleanup — `/tmp/geode-serve.log` references redirected to the
+  internal log path.** `docs/setup.md` / `docs/setup.ko.md` / `README.md`
+  previously instructed operators to redirect `geode serve` stdout/stderr
+  to `/tmp/geode-serve.log`, bypassing the internal `SERVE_LOG_PATH =
+  ~/.geode/logs/serve.log` infrastructure. Replaced with the correct
+  `~/.geode/logs/serve.log` path so the documented workflow matches the
+  default observability hierarchy. Reinforces
+  `feedback_fa4_temp_location` memory rule.
+
+### Added
+
+- **`docs/audits/2026-05-19-self-improving-loop-observability-gap.md`** — full
+  matrix of pipeline events × observability channels, error-swallow
+  inventory, dedup/missing/GAP priorities (P0/P1/P2), and the PR plan
+  (η1a rename → η1b seed-rename → P0a dedup → P0b autoresearch events →
+  P0c quota banner writer → P1/P2). Serves as SoT for the follow-up PR
+  series.
+
 ## [0.99.17] — 2026-05-19
 
 ### Fixed

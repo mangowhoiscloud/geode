@@ -93,7 +93,7 @@ def test_seed_select_points_at_hierarchical_tree() -> None:
 
 
 # ---------------------------------------------------------------------------
-# PR-δ1 — autoresearch consumes [outer_loop.autoresearch] config
+# PR-δ1 — autoresearch consumes [self_improving_loop.autoresearch] config
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +118,7 @@ def test_get_autoresearch_config_returns_config_object() -> None:
 def test_get_autoresearch_config_defaults_match_module_constants() -> None:
     """No-op behaviour change — unconfigured loader matches module constants.
 
-    Verified by tests/test_outer_loop_config.py at the schema layer; this
+    Verified by tests/test_self_improving_loop_config.py at the schema layer; this
     test asserts the consumer side stays in sync.
     """
     from autoresearch.train import (
@@ -895,11 +895,11 @@ def test_append_session_index_writes_jsonl_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One row per call, newline-terminated, parseable as JSON."""
-    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "outer-loop" / "sessions.jsonl",
+        tmp_path / "self-improving-loop" / "sessions.jsonl",
     )
     _append_session_index(
         session_id="s-1",
@@ -909,7 +909,7 @@ def test_append_session_index_writes_jsonl_row(
         ended_at=1300.0,
         extra={"commit": "abc", "fitness": 0.5},
     )
-    path = tmp_path / "outer-loop" / "sessions.jsonl"
+    path = tmp_path / "self-improving-loop" / "sessions.jsonl"
     assert path.is_file()
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -928,11 +928,11 @@ def test_append_session_index_appends_not_overwrites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Multiple calls append, preserving prior rows."""
-    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "outer-loop" / "sessions.jsonl",
+        tmp_path / "self-improving-loop" / "sessions.jsonl",
     )
     for i in range(3):
         _append_session_index(
@@ -943,7 +943,7 @@ def test_append_session_index_appends_not_overwrites(
             ended_at=float(i + 1),
             extra={},
         )
-    lines = (tmp_path / "outer-loop" / "sessions.jsonl").read_text().splitlines()
+    lines = (tmp_path / "self-improving-loop" / "sessions.jsonl").read_text().splitlines()
     assert len(lines) == 3
     ids = [json.loads(line)["session_id"] for line in lines]
     assert ids == ["s-0", "s-1", "s-2"]

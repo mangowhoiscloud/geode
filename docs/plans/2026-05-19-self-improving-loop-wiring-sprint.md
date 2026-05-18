@@ -3,12 +3,12 @@
 **Date**: 2026-05-19
 **Status**: Approved (sequencing confirmed 2026-05-19)
 **Owner**: mangowhoiscloud
-**Driving audit**: Session 63 outer-loop topology audit (직전 대화 2026-05-19, 20 verified defects)
+**Driving audit**: Session 63 self-improving-loop topology audit (직전 대화 2026-05-19, 20 verified defects)
 **Predecessor sprints**: `2026-05-18-seed-pipeline-sprint-plan.md` (16-PR S0-S12 sprint, S12 execution 만 deferred)
 
 ## Goal
 
-Session 63 의 seed-pipeline / autoresearch / Petri 16-PR sprint 가 S12 실행만 남기고 closure 된 상태에서, outer-loop 가 진짜 self-improving 으로 set-and-forget 굴러가도록 만드는 마지막 10% wiring 을 완성. 20 verified defect 중 17 개를 7 PR + 1 data run + 1 timeboxed 2nd audit 으로 처리.
+Session 63 의 seed-pipeline / autoresearch / Petri 16-PR sprint 가 S12 실행만 남기고 closure 된 상태에서, self-improving-loop 가 진짜 self-improving 으로 set-and-forget 굴러가도록 만드는 마지막 10% wiring 을 완성. 20 verified defect 중 17 개를 7 PR + 1 data run + 1 timeboxed 2nd audit 으로 처리.
 
 ## Driving audit — 20 defects (severity / layer)
 
@@ -79,9 +79,9 @@ Phase F — fill-in
 | **P1b** ✅ | docs(autoresearch): program.md 전면 재작성 (20-dim tiered schema) + 영문 통일 | #6, #10 | ~250 | `autoresearch/program.md`, `autoresearch/README.md`, `autoresearch/train.py` docstring, `autoresearch/__init__.py` | indep |
 | **P1c** ✅ | feat(observability): structured session journal | #18, #19 | ~400 | `core/observability/session_journal.py` (NEW), `core/observability/__init__.py` (re-export), `core/memory/journal_hooks.py` (STARTED/FAILED 핸들러), `core/wiring/bootstrap.py` (등록), `plugins/seed_pipeline/cli.py` (scope + events), `autoresearch/train.py` (audit_finished event), 12 tests | P1a |
 | **Phase C** | gen-0 baseline smoke run (1-shot real mode) | — | 0 LOC + data | `autoresearch/state/baseline.json` (gen-0 data) | P1a, P1b, P1c |
-| **P2b** | refactor(integration): unified outer-loop namespace + Petri sink + GC | #5, #15, #16 | ~300 | migration: `autoresearch/state/`, `~/.geode/seed-pipeline/`, `~/.geode/petri-audit/seed-stage/` → `~/.geode/outer-loop/<session>/{autoresearch,seed-pipeline,petri}/`; GC for `seed-stage/` (mtime > 7d); `~/.geode/outer-loop/<session>/petri/audit_logs/*.eval` 단일 sink | Phase C |
+| **P2b** | refactor(integration): unified self-improving-loop namespace + Petri sink + GC | #5, #15, #16 | ~300 | migration: `autoresearch/state/`, `~/.geode/seed-pipeline/`, `~/.geode/petri-audit/seed-stage/` → `~/.geode/self-improving-loop/<session>/{autoresearch,seed-pipeline,petri}/`; GC for `seed-stage/` (mtime > 7d); `~/.geode/self-improving-loop/<session>/petri/audit_logs/*.eval` 단일 sink | Phase C |
 | **P2** | feat(observability): `geode outer-bundle <session>` viewer | #17 | ~200 | `core/cli/outer_bundle.py` (NEW), `inspect view` re-export wrapping bundle manifest | P2b |
-| **Phase E** | S12 execution + 2nd audit pass | — | 0 LOC + data | `plugins/petri_audit/seeds_gen1/`, `docs/audits/2026-05-XX-outer-loop-2nd-audit.md` | P2 |
+| **Phase E** | S12 execution + 2nd audit pass | — | 0 LOC + data | `plugins/petri_audit/seeds_gen1/`, `docs/audits/2026-05-XX-self-improving-loop-2nd-audit.md` | P2 |
 | **P3** | feat: 2nd-pass fill-in (auto-rollback, multi-gen flag, baseline_means cleanup) | #8, #12, #14, #20? | ~200 | Phase E 결과에 따라 결정 | Phase E |
 
 **Total estimate**: ~1,550 LOC + 2 data runs.
@@ -92,7 +92,7 @@ Phase F — fill-in
 | # | Item | Decision |
 |---|---|---|
 | 1 | gen-0 baseline 시점 | Phase C — P1a/P1b/P1c **후**. 이유: schema 가 변경된 후 실측해야 data migration 안 함 |
-| 2 | `~/.geode/outer-loop/` namespace 일원화 시점 | Phase D — gen-0 데이터 보고 결정해야 후회 안 함. Phase C 까지는 기존 분산 경로 유지 |
+| 2 | `~/.geode/self-improving-loop/` namespace 일원화 시점 | Phase D — gen-0 데이터 보고 결정해야 후회 안 함. Phase C 까지는 기존 분산 경로 유지 |
 | 3 | 2nd audit pass scope | timeboxed 1-pass — Phase E 직후 1회. cycle-skill Phase F 패턴. 무제한 확장 금지 |
 | 4 | `--gen-tag` 포맷 | `<scheme>-<id>` 예: `autoresearch-176d8778` (commit hash 7 자), `seed-pipeline-gen1`. session_id 와 별개 |
 | 5 | session_id 포맷 | ISO date + short uuid: `2026-05-19T15:30Z-a1b2c3` |
@@ -119,7 +119,7 @@ Phase F — fill-in
 - [ ] `results.jsonl` 첫 줄 15-dim raw 검사
 - [ ] `--promote` 로 baseline.json 작성 (P0a 동작 확인)
 - [ ] cost ~$5 이하 (BUDGET_MINUTES=5, OAuth path)
-- [ ] `~/.geode/outer-loop/<session>/journal.jsonl` 에 P1c event 누적 확인
+- [ ] `~/.geode/self-improving-loop/<session>/journal.jsonl` 에 P1c event 누적 확인
 - [ ] schema 미세조정 필요한지 검토 → 필요 시 P1a' fix-up PR
 
 ## Phase E (S12 execution) — 실행 체크리스트
@@ -137,7 +137,7 @@ Phase F — fill-in
 | Risk | Mitigation |
 |---|---|
 | schema 미세조정이 P1a' fix-up 으로 끝나지 않고 P1a 재설계 필요 | Phase C 이전에 fix-up tolerance 명시. 재설계 필요 시 Phase D 진입 보류 |
-| `~/.geode/outer-loop/` 마이그레이션 P2b 에서 기존 RunLog/usage JSONL 와 충돌 | P2b 첫 step 에 dry-run mode 추가, 영향받는 SQL/file path 사전 audit |
+| `~/.geode/self-improving-loop/` 마이그레이션 P2b 에서 기존 RunLog/usage JSONL 와 충돌 | P2b 첫 step 에 dry-run mode 추가, 영향받는 SQL/file path 사전 audit |
 | 2nd audit pass 가 무제한 확장 | Phase E 직후 1-pass cut-off, 발견 결손은 모두 P3 로 일괄 packing |
 | credit 재고갈 (Phase C + E 합쳐 ~$15) | Phase C 와 E 사이에 비용 누적 확인, BUDGET_MINUTES 감축 옵션 |
 
@@ -146,5 +146,5 @@ Phase F — fill-in
 - Driving audit: 2026-05-19 대화의 20-defect 검증 표
 - Predecessor: `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
 - Cycle skill: `.claude/skills/seed-pipeline-cycle/SKILL.md`
-- Memory: `project_autoresearch_outer_loop.md` (gen-0 baseline BLOCKED → 2026-05-19 시점 credit 복구)
+- Memory: `project_autoresearch_self_improving_loop.md` (gen-0 baseline BLOCKED → 2026-05-19 시점 credit 복구)
 - Memory: `project_session63_handoff.md` (16-PR sprint closure)

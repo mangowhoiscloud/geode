@@ -4,14 +4,14 @@
 **Status**: Approved (decisions confirmed 2026-05-19)
 **Owner**: mangowhoiscloud
 **Driving directive**: 2026-05-19 user directive — subscription 소진 시 PAYG 자동 폴백 차단 + 설정 SoT 단일화 + GEODE FE 에 경고 UX 추가
-**Predecessor**: `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` (Phase A + B 완료; Phase C smoke 진입 전 본 plan 의 5 PR 완료 필요)
+**Predecessor**: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md` (Phase A + B 완료; Phase C smoke 진입 전 본 plan 의 5 PR 완료 필요)
 **Reference report**: 2026-05-19 conversation, P1/P2/P3 syntheses (Hermes auxiliary + Codex forced_login_method + prompt_toolkit bottom_toolbar)
 
 ## Goal
 
 세 문제를 동시에 해결:
 
-1. **설정 SoT 단일화** — 현재 8개 surface 에 분산된 outer-loop 설정을 `~/.geode/config.toml` 의 `[outer_loop.*]` section 으로 통합. 사용자가 한 파일만 보면 어디서 무엇을 바꿀지 안다.
+1. **설정 SoT 단일화** — 현재 8개 surface 에 분산된 self-improving-loop 설정을 `~/.geode/config.toml` 의 `[self_improving_loop.*]` section 으로 통합. 사용자가 한 파일만 보면 어디서 무엇을 바꿀지 안다.
 2. **Subscription 소진 시 hard abort** — Codex CLI 의 `forced_login_method` 패턴 채택. 기본 동작은 stricter (subscription 소진 시 abort + 안내), PAYG fallback 은 explicit opt-in.
 3. **FE 경고 UX** — prompt_toolkit `bottom_toolbar` 3-tier banner (green <50% / yellow 50-90% / red >90% or abort) + abort 시 full-screen dialog. 운영 주체인 사용자가 quota 상태를 항상 본다.
 
@@ -19,12 +19,12 @@
 
 | # | Item | Decision | Rationale / source |
 |---|------|----------|--------------------|
-| 1 | Config 파일 위치 | `~/.geode/config.toml` 의 `[outer_loop.*]` section | 단일 SoT 원칙 — 모든 GEODE 설정 한 파일 |
+| 1 | Config 파일 위치 | `~/.geode/config.toml` 의 `[self_improving_loop.*]` section | 단일 SoT 원칙 — 모든 GEODE 설정 한 파일 |
 | 2 | Subscription 소진 시 기본 동작 | Stricter (abort + 안내), `fallback_to_payg = false` default | 사용자 directive + frontier 모든 사례가 silent fallback 을 footgun 으로 검증 |
-| 3 | Fallback opt-in 방법 | `[outer_loop] fallback_to_payg = true` (전역) 또는 per-component `[outer_loop.<comp>] fallback_to_payg = true` | Codex `forced_login_method` 의 직접 변형 |
+| 3 | Fallback opt-in 방법 | `[self_improving_loop] fallback_to_payg = true` (전역) 또는 per-component `[self_improving_loop.<comp>] fallback_to_payg = true` | Codex `forced_login_method` 의 직접 변형 |
 | 4 | FE UX | `bottom_toolbar` 3-tier banner + abort dialog | prompt_toolkit issue #277 패턴, Hermes TUI 유사 |
 | 5 | Quota signal 출처 | agent 의 last response usage field (provider polling 금지) | rate-limit / cost overhead 회피 |
-| 6 | Migration 방식 | autoresearch/train.py module 상수 → config 로 lazy fallback; 기존 `~/.geode/petri.toml` 의 `[petri.<role>]` 은 `[outer_loop.petri.<role>]` 로 1-shot 이전 (backwards-compat shim 없음, CANNOT 규칙) | 깨끗한 hard cut |
+| 6 | Migration 방식 | autoresearch/train.py module 상수 → config 로 lazy fallback; 기존 `~/.geode/petri.toml` 의 `[petri.<role>]` 은 `[self_improving_loop.petri.<role>]` 로 1-shot 이전 (backwards-compat shim 없음, CANNOT 규칙) | 깨끗한 hard cut |
 | 7 | Config schema 검증 | pydantic v2 model + JSON schema 자동 export → 사용자가 `geode config doctor` 로 검증 | type-safe loader |
 | 8 | banner refresh 주기 | 5초 background thread + `app.invalidate()` | issue #277 documented pattern |
 
@@ -38,16 +38,16 @@
 [anthropic]
 # ...
 
-# ===== 신규 [outer_loop.*] section =====
+# ===== 신규 [self_improving_loop.*] section =====
 
-[outer_loop]
+[self_improving_loop]
 # subscription 소진 시 PAYG 자동 폴백 차단. true 로 바꿔야 fallback 허용.
 fallback_to_payg = false
 # 0.0-1.0. 이 비율 이상 사용 시 banner yellow → red 전환.
 warn_threshold = 0.5
 abort_threshold = 0.9
 
-[outer_loop.autoresearch]
+[self_improving_loop.autoresearch]
 # 기존 autoresearch/train.py module 상수의 SoT 이전
 budget_minutes = 5
 target_model   = "geode/gpt-5.5"
@@ -60,23 +60,23 @@ max_turns      = 10
 # 옵션: per-component fallback override
 # fallback_to_payg = true
 
-[outer_loop.petri.auditor]
+[self_improving_loop.petri.auditor]
 model  = "claude-sonnet-4-6"
 source = "claude-cli"
 
-[outer_loop.petri.target]
+[self_improving_loop.petri.target]
 model  = "geode/gpt-5.5"
 source = "openai-codex"
 
-[outer_loop.petri.judge]
+[self_improving_loop.petri.judge]
 model  = "claude-opus-4-7"
 source = "claude-cli"
 
-[outer_loop.seed_pipeline]
+[self_improving_loop.seed_pipeline]
 candidates_default = 15
 default_gen_tag    = "gen1"
 # 7 role × source binding 도 명시 가능
-# [outer_loop.seed_pipeline.roles.generator]
+# [self_improving_loop.seed_pipeline.roles.generator]
 # model = "gpt-5.5"
 # source = "openai-codex"
 ```
@@ -87,9 +87,9 @@ default_gen_tag    = "gen1"
 - `env: AUTORESEARCH_{SESSION_ID, GEN_TAG, DESCRIPTION, VERDICT, SEED_SELECT}` — **ephemeral per-run override**. 배치 스크립트 / CI 용. config.toml 값 override 가능
 
 폐기:
-- `~/.geode/petri.toml` (`GEODE_PETRI_TOML`) — `[outer_loop.petri.<role>]` 로 흡수
+- `~/.geode/petri.toml` (`GEODE_PETRI_TOML`) — `[self_improving_loop.petri.<role>]` 로 흡수
 - `autoresearch/train.py` 의 module 상수 — config loader 의 default fallback 으로만 유지 (lazy)
-- `plugins/seed_pipeline/auth_coverage.py` 의 `TEST_SETUP_PROFILE` — `[outer_loop.test_profile]` section 또는 test fixture 로 이전
+- `plugins/seed_pipeline/auth_coverage.py` 의 `TEST_SETUP_PROFILE` — `[self_improving_loop.test_profile]` section 또는 test fixture 로 이전
 
 ## PR ledger (5 PR + 1 backfill)
 
@@ -111,13 +111,13 @@ Phase ε — backfill (필요 시)
   PR-ε1 — 잔존 결손 / 2nd audit pass / docs sync       (~100 LOC)
                                   ↓
 Phase ζ — checkpoint + resume on credential rollout
-  (ADR: docs/architecture/outer-loop-resume-decision.md)
-  PR-ζ1 — SessionCheckpoint schema 확장 (outer-loop 필드)  (~200 LOC)
+  (ADR: docs/architecture/self-improving-loop-resume-decision.md)
+  PR-ζ1 — SessionCheckpoint schema 확장 (self-improving-loop 필드)  (~200 LOC)
   PR-ζ2 — seed-pipeline _load_state() + `audit-seeds resume`  (~300 LOC)
   PR-ζ3 — autoresearch _load_pending_audit() + --resume flag (~200 LOC)
-  PR-ζ4 — idempotency-key + 로컬 response cache (~/.geode/outer-loop/<s>/idempotency.db)  (~350 LOC)
+  PR-ζ4 — idempotency-key + 로컬 response cache (~/.geode/self-improving-loop/<s>/idempotency.db)  (~350 LOC)
   PR-ζ5 — credential-rollover detection + journal event (~150 LOC)
-  PR-ζ5.5 — outer-loop ↔ ProfileRotator wiring                  (~300 LOC)
+  PR-ζ5.5 — self-improving-loop ↔ ProfileRotator wiring                  (~300 LOC)
   PR-ζ5.6 — 2-axis account picker (provider ←→ × profile ↑↓)    (~250 LOC)
   PR-ζ6 — docs + runbook                                       (~100 LOC)
                                   ↓
@@ -126,18 +126,18 @@ Phase ζ — checkpoint + resume on credential rollout
 
 | PR | Title | Defects / scope | LOC | Files (예상) | Blocking |
 |---|---|---|---|---|---|
-| **PR-α1** ✅ | feat(config): outer_loop schema + loader (pydantic) | 신규 | ~360 | `core/config/outer_loop.py` (NEW), `tests/test_outer_loop_config.py` (NEW, 16 tests) | — |
+| **PR-α1** ✅ | feat(config): self_improving_loop schema + loader (pydantic) | 신규 | ~360 | `core/config/self_improving_loop.py` (NEW), `tests/test_self_improving_loop_config.py` (NEW, 16 tests) | — |
 | **PR-β1** ✅ | feat(petri): subscription-only guard + abort path | 사용자 directive | ~170 | `plugins/petri_audit/credential_source.py` (PAYG_SOURCE 상수 + fallback_to_payg kwarg + subscription_only error flag + actionable msg), 7 new tests | PR-α1 |
 | **PR-γ1** ✅ | feat(cli): 3-tier quota banner + abort dialog | UX | ~520 | `core/cli/quota_banner.py` (NEW: QuotaState + SubscriptionQuotaBanner + QuotaBannerRefresher + AbortDialog + singleton accessor + render_abort_message), `core/cli/prompt_session.py` integration (bottom_toolbar bind), 23 tests | PR-α1 |
-| **PR-δ1** ✅ | refactor(autoresearch): consume outer_loop config | migration | ~180 | `autoresearch/train.py` (`_get_autoresearch_config` 헬퍼 + 4 call sites 마이그), 5 new tests | PR-α1 |
-| **PR-δ2** ✅ | refactor(seed-pipeline+petri): consume outer_loop config | migration | ~290 | `plugins/seed_pipeline/cli.py` (typer + slash sentinel + `_get_seed_pipeline_config`), `plugins/petri_audit/user_overrides.py` (outer_loop precedence + `_read_role_from_outer_loop` + `migration_plan_from_petri_toml`), 9 new tests + GEODE_CONFIG_TOML isolation in test_petri_cli / test_registry / test_user_overrides | PR-α1 + PR-δ1 |
+| **PR-δ1** ✅ | refactor(autoresearch): consume self_improving_loop config | migration | ~180 | `autoresearch/train.py` (`_get_autoresearch_config` 헬퍼 + 4 call sites 마이그), 5 new tests | PR-α1 |
+| **PR-δ2** ✅ | refactor(seed-pipeline+petri): consume self_improving_loop config | migration | ~290 | `plugins/seed_pipeline/cli.py` (typer + slash sentinel + `_get_seed_pipeline_config`), `plugins/petri_audit/user_overrides.py` (self_improving_loop precedence + `_read_role_from_self_improving_loop` + `migration_plan_from_petri_toml`), 9 new tests + GEODE_CONFIG_TOML isolation in test_petri_cli / test_registry / test_user_overrides | PR-α1 + PR-δ1 |
 | **PR-ε1** | docs + backfill | post-merge audit | ~100 | sync `program.md` / `README` / CLAUDE.md, sample config.toml fixture | Phase β+γ+δ |
-| **PR-ζ1** | feat(checkpoint): SessionCheckpoint outer-loop schema 확장 | ADR settled | ~200 | `core/runtime_state/session_checkpoint.py` 확장 (active_sources / completed_units / next_unit / fallback_to_payg field), tests | PR-α1 + PR-β1 |
+| **PR-ζ1** | feat(checkpoint): SessionCheckpoint self-improving-loop schema 확장 | ADR settled | ~200 | `core/runtime_state/session_checkpoint.py` 확장 (active_sources / completed_units / next_unit / fallback_to_payg field), tests | PR-α1 + PR-β1 |
 | **PR-ζ2** | feat(seed-pipeline): `_load_state` + `audit-seeds resume <run_id>` | ADR settled | ~300 | `plugins/seed_pipeline/orchestrator.py` (_load_state companion to _persist_state), `plugins/seed_pipeline/cli.py` (resume sub-app), idempotency-key check at phase boundary, tests | PR-ζ1 + PR-δ2 |
 | **PR-ζ3** | feat(autoresearch): `_load_pending_audit` + `--resume <session>` | ADR settled | ~200 | `autoresearch/train.py` (resume entry point + active-source check), tests | PR-ζ1 + PR-δ1 |
-| **PR-ζ4** | feat(checkpoint): idempotency-key + local response cache | ADR settled | ~350 | `core/runtime_state/idempotency.py` (NEW, SQLite-backed cache at `~/.geode/outer-loop/<s>/idempotency.db`), LLM call wrapper checks cache pre-call, writes post-call, tests | PR-ζ1 |
+| **PR-ζ4** | feat(checkpoint): idempotency-key + local response cache | ADR settled | ~350 | `core/runtime_state/idempotency.py` (NEW, SQLite-backed cache at `~/.geode/self-improving-loop/<s>/idempotency.db`), LLM call wrapper checks cache pre-call, writes post-call, tests | PR-ζ1 |
 | **PR-ζ5** | feat(observability): credential-rollover detection + journal event | ADR settled | ~150 | resume path comparison: checkpoint.active_sources vs current resolved sources → emit `credential_rolled_over` event to journal (P1c), tests | PR-ζ1 + PR-γ1 |
-| **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into outer-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_outer_loop_binding(family) → (source, profile)`, autoresearch + seed-pipeline LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
+| **PR-ζ5.5** | feat(petri+auth): wire ProfileRotator into self-improving-loop credential path | 2026-05-19 paperclip/crumb directive | ~300 | `plugins/petri_audit/credential_source.py` (route mark_failure → ProfileRotator), new `resolve_self_improving_loop_binding(family) → (source, profile)`, autoresearch + seed-pipeline LLM call sites pass profile.name through metadata, tests | PR-β1 + PR-δ1 + PR-δ2 |
 | **PR-ζ5.6** | feat(cli): 2-axis account picker (provider ←→ × profile ↑↓) | 2026-05-19 picker UX directive | ~250 | `core/cli/account_picker.py` (NEW, mirrors `core/cli/effort_picker.py` 2-axis pattern), `/login picker` slash, banner abort-dialog auto-trigger (PR-γ1 wire), agent loop NL phrase recogniser, tests | PR-ζ5.5 + PR-γ1 |
 | **PR-ζ6** | docs + runbook | wrap-up | ~150 | `docs/audits/2026-05-19-resume-rollout-runbook.md` (NEW, operator manual w/ picker screenshots), CHANGELOG entries, plan doc finalisation | Phase ζ |
 
@@ -146,14 +146,14 @@ Phase ζ — checkpoint + resume on credential rollout
 
 ## Phase α (PR-α1) — config schema 상세
 
-신규 모듈 `core/config/outer_loop.py`:
+신규 모듈 `core/config/self_improving_loop.py`:
 
 ```python
 """Outer-loop config — single SoT loader.
 
-Reads ``~/.geode/config.toml`` [outer_loop.*] sections into a typed
+Reads ``~/.geode/config.toml`` [self_improving_loop.*] sections into a typed
 pydantic v2 model. The loader is the SoT consumed by autoresearch,
-seed-pipeline, petri_audit, and geode_main wherever outer-loop
+seed-pipeline, petri_audit, and geode_main wherever self-improving-loop
 runtime decisions are made.
 """
 
@@ -162,7 +162,7 @@ from pydantic import BaseModel, Field
 
 Source = Literal["claude-cli", "openai-codex", "api_key", "auto"]
 
-class OuterLoopBindings(BaseModel):
+class SelfImprovingLoopBindings(BaseModel):
     model_config = {"extra": "forbid"}  # typo guard
     model: str
     source: Source
@@ -180,23 +180,23 @@ class AutoresearchConfig(BaseModel):
     max_turns: int = 10
     fallback_to_payg: bool | None = None
 
-class OuterLoopConfig(BaseModel):
+class SelfImprovingLoopConfig(BaseModel):
     model_config = {"extra": "forbid"}
     fallback_to_payg: bool = False
     warn_threshold: float = Field(0.5, ge=0.0, le=1.0)
     abort_threshold: float = Field(0.9, ge=0.0, le=1.0)
     autoresearch: AutoresearchConfig = AutoresearchConfig()
-    petri: dict[str, OuterLoopBindings] = {}  # role → bindings
+    petri: dict[str, SelfImprovingLoopBindings] = {}  # role → bindings
     seed_pipeline: dict[str, ...] = {}
 
-def load_outer_loop_config(path: Path | None = None) -> OuterLoopConfig:
-    """Load + validate ``~/.geode/config.toml`` [outer_loop.*] section."""
+def load_self_improving_loop_config(path: Path | None = None) -> SelfImprovingLoopConfig:
+    """Load + validate ``~/.geode/config.toml`` [self_improving_loop.*] section."""
     ...
 ```
 
 Precedence (Codex / OpenAI Agents 패턴):
 1. env var override (e.g. `AUTORESEARCH_TARGET_MODEL`)
-2. `~/.geode/config.toml` `[outer_loop.*]`
+2. `~/.geode/config.toml` `[self_improving_loop.*]`
 3. autoresearch/train.py module 상수 (deprecated default)
 4. pydantic model default
 
@@ -213,7 +213,7 @@ Precedence (Codex / OpenAI Agents 패턴):
    default = "openai-codex"
    allowed = ["openai-codex"]
    ```
-   PAYG fallback 은 `[outer_loop] fallback_to_payg = true` 일 때만 manifest override 로 `api_key` 추가.
+   PAYG fallback 은 `[self_improving_loop] fallback_to_payg = true` 일 때만 manifest override 로 `api_key` 추가.
 
 2. `plugins/petri_audit/credential_source.py`:
    - `resolve_credential_source(fallback_to_payg: bool)` 신규 인자
@@ -229,11 +229,11 @@ Precedence (Codex / OpenAI Agents 패턴):
        1. Wait until the reset window.
        2. Or enable PAYG fallback (will incur cost):
           ~/.geode/config.toml:
-            [outer_loop]
+            [self_improving_loop]
             fallback_to_payg = true
-       3. Or pin a different model in [outer_loop.petri.judge].
+       3. Or pin a different model in [self_improving_loop.petri.judge].
 
-     Doc: https://docs.geode.dev/outer-loop/subscription-mode
+     Doc: https://docs.geode.dev/self-improving-loop/subscription-mode
      ```
 
 3. abort path 가 어디서든 발화하도록 `core/observability/session_journal.py` 에 `subscription_exhausted` event 추가. P1c 의 journal 이 capture.
@@ -269,7 +269,7 @@ PR-δ1 (autoresearch/train.py):
   ```python
   def get_config() -> AutoresearchConfig:
       try:
-          return load_outer_loop_config().autoresearch
+          return load_self_improving_loop_config().autoresearch
       except FileNotFoundError:
           return AutoresearchConfig()  # module-default fallback
   ```
@@ -277,8 +277,8 @@ PR-δ1 (autoresearch/train.py):
 - 기존 module 상수는 deprecation comment + 1 release 후 제거
 
 PR-δ2 (seed-pipeline + petri user_overrides):
-- `plugins/seed_pipeline/picker.py` 의 default bindings 가 `[outer_loop.seed_pipeline.role.<X>]` 로 lookup
-- `plugins/petri_audit/user_overrides.py` 의 `~/.geode/petri.toml` reader → `[outer_loop.petri.<role>]` 로 redirect
+- `plugins/seed_pipeline/picker.py` 의 default bindings 가 `[self_improving_loop.seed_pipeline.role.<X>]` 로 lookup
+- `plugins/petri_audit/user_overrides.py` 의 `~/.geode/petri.toml` reader → `[self_improving_loop.petri.<role>]` 로 redirect
 - migration helper: `geode config migrate-petri-toml` 1회성 명령 (기존 petri.toml → config.toml 이전)
 - 이전 후 `~/.geode/petri.toml` 은 deprecated warning + N+1 release 후 제거
 
@@ -296,7 +296,7 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 
 | Risk | Mitigation |
 |---|---|
-| pydantic v2 의 strict 모드가 기존 config.toml 의 미지 필드 reject | `extra="forbid"` 는 `[outer_loop.*]` section 에만 적용; 다른 section 의 미지 필드 무시 |
+| pydantic v2 의 strict 모드가 기존 config.toml 의 미지 필드 reject | `extra="forbid"` 는 `[self_improving_loop.*]` section 에만 적용; 다른 section 의 미지 필드 무시 |
 | `~/.geode/petri.toml` 사용자가 직접 수정한 상태 | migration helper 가 dry-run 으로 diff 보여준 후 confirm; 사용자가 yes 누를 때까지 변환 안 함 |
 | FE banner 의 background thread 가 REPL exit 시 안 닫힘 | `atexit` + signal handler 로 thread join |
 | Codex CLI 처럼 abort 가 이미 stream 중인 generation 을 중간에 끊으면 사용자 confusion | abort 는 NEXT turn 의 진입 직전 시점에만 발화; 진행 중인 turn 은 끝까지 완료 |
@@ -311,15 +311,15 @@ PR-δ2 (seed-pipeline + petri user_overrides):
 ## Reference
 
 - Frontier reference report: 2026-05-19 conversation P1/P2/P3 syntheses
-- Phase ζ ADR: `docs/architecture/outer-loop-resume-decision.md`
-- Predecessor: `docs/plans/2026-05-19-outer-loop-wiring-sprint.md`
+- Phase ζ ADR: `docs/architecture/self-improving-loop-resume-decision.md`
+- Predecessor: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 - Memory: `feedback_local_quality_gates_full.md` (CI ratchet)
 - 사용자 directive 2026-05-19:
   - "subscription 이 다 되면 종료하고 안내 문구만 출력해주는게 맞아"
   - "별도의 fallback 체인은 걸지마"
   - "운영 주체일 GEODE 의 FE 에도 경고문이 출력되도록 UI/UX 추가"
   - "설정은 SOT 로 단일화해서 묶고"
-  - "outer loop 가 subscription 초과로 끊겨도 계정 롤아웃해서 이어갈 수 있게 체크포인트와 같은 replay-resume 조치"
+  - "self-improving loop 가 subscription 초과로 끊겨도 계정 롤아웃해서 이어갈 수 있게 체크포인트와 같은 replay-resume 조치"
   - "ADR 들어가기 전에 관련 레퍼런스 디깅 + 원본인 co-scientist 의 패키지 구현본 살피기"
   - "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로 롤아웃이 가능한지 살피고 현재 구조에서 어떻게 보강 구현할지도 고려"
   - "유저가 자연어 뿐 아니라 UI/UX 로도 선택/입력할 수 있게 개선 (GEODE 슬래시 명령어 구조 참고). 롤아웃 기준은 자동이 아니라 크레딧 소진 시 연결된 프로바이더별로 연결된 계정을 리스트업 혹은 추가 입력하도록 UI/UX 를 제시 (provider 변경은 좌우, 계정 선택은 위아래)"

@@ -137,14 +137,14 @@ def get_binding(
     # Source priority — caller arg → petri.toml → resolve_credential_source
     # cascade ('auto' expansion happens inside).
     source_override = source or user_override.get("source")
-    # PR-β1 — honour [outer_loop] fallback_to_payg. Default True preserves
+    # PR-β1 — honour [self_improving_loop] fallback_to_payg. Default True preserves
     # pre-2026-05-19 behaviour for callers that haven't migrated yet.
-    from plugins.petri_audit.credential_source import outer_loop_fallback_policy
+    from plugins.petri_audit.credential_source import self_improving_loop_fallback_policy
 
     resolved_source = resolve_credential_source(
         family,
         override=source_override,
-        fallback_to_payg=outer_loop_fallback_policy(),
+        fallback_to_payg=self_improving_loop_fallback_policy(),
     )
     adapter_spec = manifest.get_adapter(family, resolved_source)
 

@@ -66,17 +66,17 @@ audit_seeds_app = typer.Typer(
 
 
 def _get_seed_pipeline_config() -> Any:
-    """Lazily load ``[outer_loop.seed_pipeline]`` from ``~/.geode/config.toml``.
+    """Lazily load ``[self_improving_loop.seed_pipeline]`` from ``~/.geode/config.toml``.
 
     PR-δ2 (2026-05-19) — moves the ``gen_tag`` / ``candidates`` CLI
-    defaults onto the outer-loop config SoT. Returns a fully-defaulted
+    defaults onto the self-improving-loop config SoT. Returns a fully-defaulted
     ``SeedPipelineConfig`` on import / load failure so the CLI stays
     usable when ``core.config`` is unavailable in test contexts.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
 
-        return load_outer_loop_config().seed_pipeline
+        return load_self_improving_loop_config().seed_pipeline
     except Exception:
         from types import SimpleNamespace
 
@@ -97,7 +97,7 @@ def audit_seeds_generate(
         "-g",
         help=(
             "Generation tag used in candidate ids and run_dir. Defaults to "
-            "the configured outer_loop.seed_pipeline.default_gen_tag "
+            "the configured self_improving_loop.seed_pipeline.default_gen_tag "
             "(built-in fallback: 'gen1')."
         ),
     ),
@@ -107,7 +107,7 @@ def audit_seeds_generate(
         "-n",
         help=(
             "Target N for the generator phase. Defaults to the configured "
-            "outer_loop.seed_pipeline.candidates_default (built-in fallback: 15)."
+            "self_improving_loop.seed_pipeline.candidates_default (built-in fallback: 15)."
         ),
     ),
     yes: bool = typer.Option(
@@ -127,7 +127,7 @@ def audit_seeds_generate(
     pre-flight → confirm → Pipeline.run().
 
     PR-δ2 (2026-05-19) — ``--gen-tag`` and ``--candidates`` default to
-    values read from ``~/.geode/config.toml`` ``[outer_loop.seed_pipeline]``
+    values read from ``~/.geode/config.toml`` ``[self_improving_loop.seed_pipeline]``
     when omitted, then fall back to module defaults
     (``"gen1"`` / ``15``).
     """
@@ -255,11 +255,11 @@ def _dispatch_pipeline(
     out.write(f"seed-pipeline: run_dir={run_dir}\n")
     out.flush()
     # P1c — bind a SessionJournal so hook-routed subagent events land in
-    # ``~/.geode/outer-loop/<session_id>/journal.jsonl`` (default path),
+    # ``~/.geode/self-improving-loop/<session_id>/journal.jsonl`` (default path),
     # keeping the cross-loop journal location uniform with the
     # autoresearch driver. The seed-pipeline ``<run_dir>`` keeps the
     # state.json + survivors.json + elo_log.tsv (per-run artifacts);
-    # observability events live one level up under outer-loop/.
+    # observability events live one level up under self-improving-loop/.
     journal = SessionJournal(
         session_id=run_id,
         gen_tag=gen_tag,

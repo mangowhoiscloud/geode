@@ -120,7 +120,7 @@ def test_session_journal_scope_restores_on_exception(tmp_path: Path) -> None:
 
 
 def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Unset path falls back to ``GLOBAL_OUTER_LOOP_DIR`` / <session> / journal.jsonl."""
+    """Unset path falls back to ``GLOBAL_SELF_IMPROVING_LOOP_DIR`` / <session> / journal.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
     # Reload both core.paths and core.observability.session_journal so
@@ -137,7 +137,7 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
         gen_tag="g",
         component="autoresearch",
     )
-    expected = fake_home / ".geode" / "outer-loop" / "s-default" / "journal.jsonl"
+    expected = fake_home / ".geode" / "self-improving-loop" / "s-default" / "journal.jsonl"
     assert journal.path == expected
     journal.append("event")
     assert expected.is_file()

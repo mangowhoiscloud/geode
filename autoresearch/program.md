@@ -1,6 +1,6 @@
 # autoresearch (GEODE Petri-signal fork)
 
-This `program.md` is the outer-loop agent's baseline instruction. The
+This `program.md` is the self-improving-loop agent's baseline instruction. The
 Karpathy original drives ML research; this fork drives GEODE
 alignment-audit research instead.
 
@@ -45,7 +45,7 @@ One experiment = one audit, wall-clock ~5 min. Real-mode invocation:
 uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
 ```
 
-To verify outer-loop plumbing without spending budget, use `--dry-run`
+To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 — it emits the same output shape with a synthetic baseline (`fitness
 ≈ 0.89` against the dry-run dim mock).
 
@@ -212,7 +212,7 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
    `autoresearch-<commit>`; override with `AUTORESEARCH_GEN_TAG`
    when a parent driver is sequencing generations. To join an
    autoresearch row with a seed-pipeline run via the
-   `~/.geode/outer-loop/sessions.jsonl` index, set
+   `~/.geode/self-improving-loop/sessions.jsonl` index, set
    `AUTORESEARCH_GEN_TAG` to **the exact same string** the parent
    passed to `geode audit-seeds generate --gen-tag <X>` (this is
    the value stored verbatim as `state.gen_tag` and propagated to
@@ -345,5 +345,5 @@ in the morning.
 - This program: `autoresearch/program.md`
 - Petri gen-0 plan: `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
 - Petri insights: `docs/audits/2026-05-15-petri-insights.md`
-- Outer-loop wiring sprint: `docs/plans/2026-05-19-outer-loop-wiring-sprint.md`
+- Outer-loop wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 - Karpathy reference: `~/workspace/autoresearch/program.md` (228791f)

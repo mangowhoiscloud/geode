@@ -1,7 +1,7 @@
 """Shared fixtures for ``tests/plugins/petri_audit/``.
 
 PR-β1 (2026-05-19) introduced strict-mode credential resolution: when
-``[outer_loop] fallback_to_payg`` is unset, the new default is
+``[self_improving_loop] fallback_to_payg`` is unset, the new default is
 ``False`` (per the consolidation plan's settled decision #2). The
 existing registry / models / petri-cli tests pre-date that policy and
 seed ``ANTHROPIC_API_KEY`` expecting the resolver to fall through to
@@ -9,7 +9,7 @@ seed ``ANTHROPIC_API_KEY`` expecting the resolver to fall through to
 
 Rather than force every legacy test to opt-in, the conftest applies a
 session-wide autouse override that pins
-``outer_loop_fallback_policy()`` to ``True`` (= pre-PR-β1 behaviour)
+``self_improving_loop_fallback_policy()`` to ``True`` (= pre-PR-β1 behaviour)
 **except** for the four new policy tests that exercise the helper
 directly. Those tests carry the marker ``policy_real`` so they
 bypass the stub.
@@ -29,7 +29,7 @@ import pytest
 def _pin_fallback_policy_true(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pin ``outer_loop_fallback_policy()`` to ``True`` for legacy tests.
+    """Pin ``self_improving_loop_fallback_policy()`` to ``True`` for legacy tests.
 
     Tests carrying the ``policy_real`` marker get the real helper so
     they can verify the loader contract end-to-end.
@@ -38,4 +38,4 @@ def _pin_fallback_policy_true(
         return
     from plugins.petri_audit import credential_source as cs
 
-    monkeypatch.setattr(cs, "outer_loop_fallback_policy", lambda: True)
+    monkeypatch.setattr(cs, "self_improving_loop_fallback_policy", lambda: True)

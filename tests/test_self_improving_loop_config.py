@@ -1,5 +1,5 @@
-"""Tests for ``core/config/outer_loop.py`` — single SoT loader for the
-``~/.geode/config.toml`` ``[outer_loop.*]`` section.
+"""Tests for ``core/config/self_improving_loop.py`` — single SoT loader for the
+``~/.geode/config.toml`` ``[self_improving_loop.*]`` section.
 
 Covers schema defaults, sub-config defaults, missing-file fallback,
 empty-section fallback, env override (``GEODE_CONFIG_TOML``), explicit
@@ -12,13 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.config.outer_loop import (
+from core.config.self_improving_loop import (
     AutoresearchConfig,
-    OuterLoopBindings,
-    OuterLoopConfig,
     PetriRoleConfig,
     SeedPipelineConfig,
-    load_outer_loop_config,
+    SelfImprovingLoopBindings,
+    SelfImprovingLoopConfig,
+    load_self_improving_loop_config,
 )
 
 
@@ -28,8 +28,8 @@ def _write_toml(path: Path, body: str) -> None:
 
 
 def test_default_config_has_safe_defaults() -> None:
-    """OuterLoopConfig() with no input yields strict-mode safe defaults."""
-    cfg = OuterLoopConfig()
+    """SelfImprovingLoopConfig() with no input yields strict-mode safe defaults."""
+    cfg = SelfImprovingLoopConfig()
     assert cfg.fallback_to_payg is False  # strict default
     assert cfg.warn_threshold == pytest.approx(0.5)
     assert cfg.abort_threshold == pytest.approx(0.9)
@@ -53,51 +53,51 @@ def test_autoresearch_defaults_match_train_module() -> None:
 
 
 def test_load_returns_defaults_when_file_missing(tmp_path: Path) -> None:
-    """Missing file → fully-defaulted OuterLoopConfig, no error."""
-    cfg = load_outer_loop_config(tmp_path / "nonexistent.toml")
-    assert cfg == OuterLoopConfig()
+    """Missing file → fully-defaulted SelfImprovingLoopConfig, no error."""
+    cfg = load_self_improving_loop_config(tmp_path / "nonexistent.toml")
+    assert cfg == SelfImprovingLoopConfig()
 
 
 def test_load_returns_defaults_when_section_missing(tmp_path: Path) -> None:
-    """Existing file without [outer_loop] section → defaults."""
+    """Existing file without [self_improving_loop] section → defaults."""
     path = tmp_path / "config.toml"
     _write_toml(path, "[settings]\nfoo = 'bar'\n")
-    cfg = load_outer_loop_config(path)
-    assert cfg == OuterLoopConfig()
+    cfg = load_self_improving_loop_config(path)
+    assert cfg == SelfImprovingLoopConfig()
 
 
-def test_load_reads_outer_loop_section(tmp_path: Path) -> None:
-    """[outer_loop] section keys override defaults."""
+def test_load_reads_self_improving_loop_section(tmp_path: Path) -> None:
+    """[self_improving_loop] section keys override defaults."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 fallback_to_payg = true
 warn_threshold = 0.6
 abort_threshold = 0.95
 """,
     )
-    cfg = load_outer_loop_config(path)
+    cfg = load_self_improving_loop_config(path)
     assert cfg.fallback_to_payg is True
     assert cfg.warn_threshold == pytest.approx(0.6)
     assert cfg.abort_threshold == pytest.approx(0.95)
 
 
 def test_load_reads_autoresearch_subsection(tmp_path: Path) -> None:
-    """[outer_loop.autoresearch] section deserialises into AutoresearchConfig."""
+    """[self_improving_loop.autoresearch] section deserialises into AutoresearchConfig."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[outer_loop.autoresearch]
+[self_improving_loop.autoresearch]
 target_model = "geode/claude-opus-4-7"
 judge_model = "claude-code/sonnet"
 budget_minutes = 10
 seed_limit = 25
 """,
     )
-    cfg = load_outer_loop_config(path)
+    cfg = load_self_improving_loop_config(path)
     assert cfg.autoresearch.target_model == "geode/claude-opus-4-7"
     assert cfg.autoresearch.judge_model == "claude-code/sonnet"
     assert cfg.autoresearch.budget_minutes == 10
@@ -107,25 +107,25 @@ seed_limit = 25
 
 
 def test_load_reads_petri_role_bindings(tmp_path: Path) -> None:
-    """[outer_loop.petri.<role>] keys become PetriRoleConfig entries."""
+    """[self_improving_loop.petri.<role>] keys become PetriRoleConfig entries."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[outer_loop.petri.auditor]
+[self_improving_loop.petri.auditor]
 model = "claude-sonnet-4-6"
 source = "claude-cli"
 
-[outer_loop.petri.target]
+[self_improving_loop.petri.target]
 model = "geode/gpt-5.5"
 source = "openai-codex"
 
-[outer_loop.petri.judge]
+[self_improving_loop.petri.judge]
 model = "claude-opus-4-7"
 source = "claude-cli"
 """,
     )
-    cfg = load_outer_loop_config(path)
+    cfg = load_self_improving_loop_config(path)
     assert set(cfg.petri) == {"auditor", "target", "judge"}
     assert cfg.petri["auditor"].model == "claude-sonnet-4-6"
     assert cfg.petri["auditor"].source == "claude-cli"
@@ -134,21 +134,21 @@ source = "claude-cli"
 
 
 def test_load_reads_seed_pipeline_subsection(tmp_path: Path) -> None:
-    """[outer_loop.seed_pipeline] + nested role bindings deserialise."""
+    """[self_improving_loop.seed_pipeline] + nested role bindings deserialise."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[outer_loop.seed_pipeline]
+[self_improving_loop.seed_pipeline]
 candidates_default = 20
 default_gen_tag = "gen3"
 
-[outer_loop.seed_pipeline.roles.generator]
+[self_improving_loop.seed_pipeline.roles.generator]
 model = "gpt-5.5"
 source = "openai-codex"
 """,
     )
-    cfg = load_outer_loop_config(path)
+    cfg = load_self_improving_loop_config(path)
     assert cfg.seed_pipeline.candidates_default == 20
     assert cfg.seed_pipeline.default_gen_tag == "gen3"
     assert cfg.seed_pipeline.roles["generator"].model == "gpt-5.5"
@@ -160,27 +160,27 @@ def test_extra_forbid_rejects_typo(tmp_path: Path) -> None:
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 falback_to_payg = true
 """,
     )
     with pytest.raises(Exception) as exc_info:
-        load_outer_loop_config(path)
+        load_self_improving_loop_config(path)
     assert "falback_to_payg" in str(exc_info.value)
 
 
 def test_extra_forbid_rejects_typo_in_autoresearch(tmp_path: Path) -> None:
-    """Unknown field in [outer_loop.autoresearch] → ValidationError."""
+    """Unknown field in [self_improving_loop.autoresearch] → ValidationError."""
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[outer_loop.autoresearch]
+[self_improving_loop.autoresearch]
 budget_minute = 5
 """,
     )
     with pytest.raises(Exception) as exc_info:
-        load_outer_loop_config(path)
+        load_self_improving_loop_config(path)
     assert "budget_minute" in str(exc_info.value)
 
 
@@ -190,13 +190,13 @@ def test_abort_threshold_must_exceed_warn(tmp_path: Path) -> None:
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 warn_threshold = 0.8
 abort_threshold = 0.7
 """,
     )
     with pytest.raises(Exception) as exc_info:
-        load_outer_loop_config(path)
+        load_self_improving_loop_config(path)
     assert "abort_threshold" in str(exc_info.value)
 
 
@@ -206,12 +206,12 @@ def test_threshold_range_clamps(tmp_path: Path) -> None:
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 warn_threshold = 1.5
 """,
     )
     with pytest.raises(Exception):
-        load_outer_loop_config(path)
+        load_self_improving_loop_config(path)
 
 
 def test_env_override_resolves_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -220,12 +220,12 @@ def test_env_override_resolves_config_path(tmp_path: Path, monkeypatch: pytest.M
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 warn_threshold = 0.42
 """,
     )
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(path))
-    cfg = load_outer_loop_config()
+    cfg = load_self_improving_loop_config()
     assert cfg.warn_threshold == pytest.approx(0.42)
 
 
@@ -233,19 +233,19 @@ def test_explicit_path_arg_wins_over_env(tmp_path: Path, monkeypatch: pytest.Mon
     """Explicit path argument trumps GEODE_CONFIG_TOML env var."""
     env_path = tmp_path / "env.toml"
     arg_path = tmp_path / "arg.toml"
-    _write_toml(env_path, "[outer_loop]\nwarn_threshold = 0.1\n")
-    _write_toml(arg_path, "[outer_loop]\nwarn_threshold = 0.9\n")
+    _write_toml(env_path, "[self_improving_loop]\nwarn_threshold = 0.1\n")
+    _write_toml(arg_path, "[self_improving_loop]\nwarn_threshold = 0.9\n")
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(env_path))
     # abort_threshold must remain > warn so reduce abort and bump warn:
     # write a valid file at arg_path.
-    _write_toml(arg_path, "[outer_loop]\nwarn_threshold = 0.5\nabort_threshold = 0.9\n")
-    cfg = load_outer_loop_config(arg_path)
+    _write_toml(arg_path, "[self_improving_loop]\nwarn_threshold = 0.5\nabort_threshold = 0.9\n")
+    cfg = load_self_improving_loop_config(arg_path)
     assert cfg.warn_threshold == pytest.approx(0.5)
 
 
 def test_bindings_dataclass_round_trip() -> None:
-    """OuterLoopBindings serialises both ways without loss."""
-    b = OuterLoopBindings(model="x", source="claude-cli", fallback_to_payg=True)
+    """SelfImprovingLoopBindings serialises both ways without loss."""
+    b = SelfImprovingLoopBindings(model="x", source="claude-cli", fallback_to_payg=True)
     assert b.model == "x"
     assert b.source == "claude-cli"
     assert b.fallback_to_payg is True
@@ -257,13 +257,13 @@ def test_petri_role_default_source_is_auto() -> None:
     assert p.source == "auto"
 
 
-def test_load_handles_empty_outer_loop_section(tmp_path: Path) -> None:
-    """File with `[outer_loop]` but no body → defaults (model_validator must
+def test_load_handles_empty_self_improving_loop_section(tmp_path: Path) -> None:
+    """File with `[self_improving_loop]` but no body → defaults (model_validator must
     not reject the default-vs-default threshold pair)."""
     path = tmp_path / "config.toml"
-    _write_toml(path, "[outer_loop]\n")
-    cfg = load_outer_loop_config(path)
-    assert cfg == OuterLoopConfig()
+    _write_toml(path, "[self_improving_loop]\n")
+    cfg = load_self_improving_loop_config(path)
+    assert cfg == SelfImprovingLoopConfig()
 
 
 def test_threshold_inversion_caught_when_only_warn_set(tmp_path: Path) -> None:
@@ -274,12 +274,12 @@ def test_threshold_inversion_caught_when_only_warn_set(tmp_path: Path) -> None:
     _write_toml(
         path,
         """
-[outer_loop]
+[self_improving_loop]
 warn_threshold = 0.95
 """,
     )
     with pytest.raises(Exception) as exc_info:
-        load_outer_loop_config(path)
+        load_self_improving_loop_config(path)
     assert "abort_threshold" in str(exc_info.value)
 
 
@@ -288,11 +288,11 @@ def test_default_path_resolves_to_global_config_toml(
 ) -> None:
     """Without explicit path or env override, the loader resolves to
     ``core.paths.GLOBAL_CONFIG_TOML``."""
-    import core.config.outer_loop as mod
+    import core.config.self_improving_loop as mod
 
     monkeypatch.delenv("GEODE_CONFIG_TOML", raising=False)
     fake = tmp_path / "global.toml"
-    _write_toml(fake, "[outer_loop]\nwarn_threshold = 0.33\n")
+    _write_toml(fake, "[self_improving_loop]\nwarn_threshold = 0.33\n")
     monkeypatch.setattr(mod, "GLOBAL_CONFIG_TOML", fake)
-    cfg = load_outer_loop_config()
+    cfg = load_self_improving_loop_config()
     assert cfg.warn_threshold == pytest.approx(0.33)

@@ -30,7 +30,7 @@ AI co-scientist paper 의 6-agent topology (Generation / Reflection / Ranking / 
 ## Decision Drivers
 
 - **No external dep**: GEODE 본체에 LangGraph 없음. seed-pipeline 만 LangGraph 추가 시 본체 분리 어색. self-host SubAgentManager 가 이미 6-phase 의 90% 받침.
-- **Frozen ground-truth contract**: seed pool 은 outer-loop agent 가 mutate 불가. pipeline 은 user-trigger only, autoresearch loop 외부 별도 phase.
+- **Frozen ground-truth contract**: seed pool 은 self-improving-loop agent 가 mutate 불가. pipeline 은 user-trigger only, autoresearch loop 외부 별도 phase.
 - **Co-evolution risk 완화**: Generator + Pilot judge 가 다른 family. 3-judge panel 의 provider diversity 강제 (최소 2 family).
 - **Karpathy 단일 file pattern 호환**: pipeline 결과 = `plugins/petri_audit/seeds_gen<N>/` 새 디렉토리. autoresearch 의 `program.md` Setup §3 가 seed pool path 만 갱신.
 
@@ -100,5 +100,5 @@ Parent `AgenticLoop` 가 central orchestrator. `depth=1` 한계 내에서 phase 
 - GEODE SubAgentManager — `core/agent/sub_agent.py:1-114`
 - Petri inner-loop — `plugins/petri_audit/` (P1-A~G manifest pattern)
 - Outer-loop SOT — `autoresearch/program.md`
-- Petri × autoresearch closed-loop — `[[project_autoresearch_outer_loop]]`
+- Petri × autoresearch closed-loop — `[[project_autoresearch_self_improving_loop]]`
 - Plan A revised 누적 회의록 — 직전 4 보고서 (Plan A vs B, 인프라 평가, UI/UX 통합, 폴더 layout)

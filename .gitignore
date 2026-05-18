@@ -144,3 +144,4 @@ site/tsconfig.tsbuildinfo
 # autoresearch outer-loop runtime artifact (results.tsv, audit_logs/, failure_log)
 autoresearch/state/*
 !autoresearch/state/.gitkeep
+.claude/scratch/

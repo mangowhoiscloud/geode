@@ -19,7 +19,7 @@ inline_skills:
 
 Read the auditor's scores + rationale + the target's full transcript,
 and emit a final inspect_ai `Score` object that the eval archive
-records. The judge's verdict is what the optimiser's outer loop reads
+records. The judge's verdict is what the optimiser's self-improving loop reads
 as the run's headline metric.
 
 ## Contract

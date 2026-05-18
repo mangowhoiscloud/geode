@@ -1,11 +1,11 @@
 """3-tier quota banner + abort dialog for GEODE's REPL.
 
-PR-γ1 of the 2026-05-19 outer-loop config consolidation plan. Renders a
+PR-γ1 of the 2026-05-19 self-improving-loop config consolidation plan. Renders a
 ``bottom_toolbar`` callable that the prompt_toolkit ``PromptSession``
 plumbs into the REPL frame. The banner colour reflects current
 subscription quota usage against the
-``[outer_loop] warn_threshold`` / ``abort_threshold`` from
-:mod:`core.config.outer_loop`:
+``[self_improving_loop] warn_threshold`` / ``abort_threshold`` from
+:mod:`core.config.self_improving_loop`:
 
 - **green**  — usage < warn_threshold (subscription healthy)
 - **yellow** — warn ≤ usage < abort (approaching limit)
@@ -26,7 +26,7 @@ is idle (prompt_toolkit issue #277 pattern). Tests inject the
 ``invalidate`` callable so the prompt_toolkit dependency stays out of
 the unit-test scope.
 
-Reference: ``docs/plans/2026-05-19-outer-loop-config-consolidation.md``
+Reference: ``docs/plans/2026-05-19-self-improving-loop-config-consolidation.md``
 Phase γ + frontier survey (Codex CLI status_line, Hermes TUI status bar).
 """
 

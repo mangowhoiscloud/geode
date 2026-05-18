@@ -103,7 +103,7 @@ def read_role_override(role: str, *, path: Path | str | None = None) -> RoleOver
     """Return the override dict for a single role (empty if unset).
 
     PR-δ2 (2026-05-19) — precedence:
-      1. ``[outer_loop.petri.<role>]`` section in ``~/.geode/config.toml``
+      1. ``[self_improving_loop.petri.<role>]`` section in ``~/.geode/config.toml``
          (PR-α1 single SoT).
       2. Legacy ``[petri.<role>]`` in ``~/.geode/petri.toml`` (only
          honoured when ``path`` is the default; explicit path arg
@@ -116,21 +116,21 @@ def read_role_override(role: str, *, path: Path | str | None = None) -> RoleOver
     follow-up PR-ε1 wires it into ``geode config migrate-petri-toml``.
     """
     if path is None:
-        outer_override = _read_role_from_outer_loop(role)
+        outer_override = _read_role_from_self_improving_loop(role)
         if outer_override:
             return outer_override
     return load_user_overrides(path).get(role, {})
 
 
-def _read_role_from_outer_loop(role: str) -> RoleOverride:
-    """Pull ``[outer_loop.petri.<role>]`` into the legacy RoleOverride shape.
+def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
+    """Pull ``[self_improving_loop.petri.<role>]`` into the legacy RoleOverride shape.
 
     Returns an empty dict when the section is absent (no role configured)
     or the loader is unavailable (test contexts that stub
     ``core.config``).
 
     Strict-mode validation errors (``ValueError`` raised by
-    :func:`core.config.outer_loop.load_outer_loop_config`) are
+    :func:`core.config.self_improving_loop.load_self_improving_loop_config`) are
     intentionally *not* caught — they propagate so an operator who
     typos a key sees the failure rather than silently keeps reading
     the legacy ``petri.toml``. ``ImportError`` is the only exception
@@ -138,10 +138,10 @@ def _read_role_from_outer_loop(role: str) -> RoleOverride:
     stub out ``core.config``.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
     except ImportError:
         return {}
-    cfg = load_outer_loop_config()
+    cfg = load_self_improving_loop_config()
     entry = cfg.petri.get(role)
     if entry is None:
         return {}
@@ -273,7 +273,7 @@ def migration_plan_from_petri_toml(
 
     Used by ``geode config migrate-petri-toml`` (landing in PR-ε1) to
     show the operator a dry-run diff before copying the entries to
-    ``~/.geode/config.toml`` ``[outer_loop.petri.*]``. This function
+    ``~/.geode/config.toml`` ``[self_improving_loop.petri.*]``. This function
     *reads only* — it does not mutate either file. Empty dict when the
     legacy file is absent or has no per-role overrides.
     """

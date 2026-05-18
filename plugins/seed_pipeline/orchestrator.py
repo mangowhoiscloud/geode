@@ -239,7 +239,7 @@ class Pipeline:
         # follow-up CLI invocation (S11) can resume the meta-review +
         # survivor pool without re-reading every candidate body.
         self._persist_state()
-        # P1a — append to the shared outer-loop session registry.
+        # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
         log.info(
             "seed-pipeline run finished: run_id=%s survivors=%d usd=%.4f",
@@ -250,15 +250,15 @@ class Pipeline:
         return self.state
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
-        """Append one row to ``~/.geode/outer-loop/sessions.jsonl``.
+        """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
 
         P1a — shared cross-loop registry. ``session_id`` defaults to
         ``state.run_id`` (already unique per ``audit-seeds generate``
         invocation). I/O failures are logged but never raise; the
         in-memory ``state`` stays authoritative.
         """
-        outer_loop_home = Path.home() / ".geode" / "outer-loop"
-        index_path = outer_loop_home / "sessions.jsonl"
+        self_improving_loop_home = Path.home() / ".geode" / "self-improving-loop"
+        index_path = self_improving_loop_home / "sessions.jsonl"
         payload = {
             "session_id": self.state.run_id,
             "gen_tag": self.state.gen_tag,
@@ -272,7 +272,7 @@ class Pipeline:
             "pool_path_out": (str(self.state.pool_path_out) if self.state.pool_path_out else None),
         }
         try:
-            outer_loop_home.mkdir(parents=True, exist_ok=True)
+            self_improving_loop_home.mkdir(parents=True, exist_ok=True)
             with index_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
         except OSError as exc:
@@ -285,7 +285,7 @@ class Pipeline:
     def _persist_survivors(self) -> None:
         """Cross-loop handoff: emit ``survivors.json`` + ``survivors/`` dir.
 
-        P0b — defect #13 from 2026-05-19 outer-loop wiring plan. Writes
+        P0b — defect #13 from 2026-05-19 self-improving-loop wiring plan. Writes
         two artifacts under ``<run_dir>``:
 
         1. ``survivors.json`` — metadata view for downstream queries

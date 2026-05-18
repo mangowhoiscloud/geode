@@ -162,7 +162,7 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 - ADR-001 (Seed Pipeline) — seed N 확장 정당화
 - `autoresearch/train.py:240-540` — 변경 대상 영역
-- `autoresearch/program.md` — outer-loop SOT
+- `autoresearch/program.md` — self-improving-loop SOT
 - `core/audit/dim_extractor.py` — raw 신호 emit (변경 없음)
 - AlphaEval (parity 폐기) — arXiv:2508.13174
-- `[[project_autoresearch_outer_loop]]` — closed-loop 직전 상태
+- `[[project_autoresearch_self_improving_loop]]` — closed-loop 직전 상태

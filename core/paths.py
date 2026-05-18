@@ -49,12 +49,12 @@ GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
 # `core.auth.auth_toml` overrides via `GEODE_AUTH_TOML` env var; this
 # constant is the default fallback.
 GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
-# P1a + P1c (2026-05-19) — outer-loop wiring sprint. Shared cross-loop
+# P1a + P1c (2026-05-19) — self-improving-loop wiring sprint. Shared cross-loop
 # namespace: ``sessions.jsonl`` (P1a, run-level index, one row per
 # autoresearch/seed-pipeline run) + ``<session_id>/journal.jsonl``
 # (P1c, event stream within a single run). See
-# ``docs/plans/2026-05-19-outer-loop-wiring-sprint.md``.
-GLOBAL_OUTER_LOOP_DIR = GEODE_HOME / "outer-loop"
+# ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
+GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
 # Read by ``plugins.petri_audit.user_overrides`` and merged into the

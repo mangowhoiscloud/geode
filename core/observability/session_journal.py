@@ -1,8 +1,8 @@
-"""Structured per-session journal — P1c outer-loop wiring plan.
+"""Structured per-session journal — P1c self-improving-loop wiring plan.
 
 The session journal is a JSONL artifact that captures discrete events
-from one outer-loop run (autoresearch or seed-pipeline). It complements
-the run-level ``~/.geode/outer-loop/sessions.jsonl`` index (P1a) which
+from one self-improving-loop run (autoresearch or seed-pipeline). It complements
+the run-level ``~/.geode/self-improving-loop/sessions.jsonl`` index (P1a) which
 holds exactly one row per run: this module captures the *event stream*
 within that run.
 
@@ -18,7 +18,7 @@ Schema (one event per line)::
       "payload": {...}
     }
 
-Path: ``~/.geode/outer-loop/<session_id>/journal.jsonl``.
+Path: ``~/.geode/self-improving-loop/<session_id>/journal.jsonl``.
 
 Design notes
 ------------
@@ -57,14 +57,14 @@ __all__ = [
 
 
 _current_journal: contextvars.ContextVar[SessionJournal | None] = contextvars.ContextVar(
-    "outer_loop_session_journal", default=None
+    "self_improving_loop_session_journal", default=None
 )
 
 
 class SessionJournal:
     """Per-run JSONL event log.
 
-    Constructed once at the start of an outer-loop run (autoresearch or
+    Constructed once at the start of an self-improving-loop run (autoresearch or
     seed-pipeline) and passed through to callers that emit structured
     events. Use :meth:`append` for individual events;
     :func:`session_journal_scope` for ContextVar-bound activation so
@@ -85,9 +85,9 @@ class SessionJournal:
         if path is None:
             # Lazy resolve via core.paths so test monkeypatch on
             # ``Path.home()`` is honoured after reloading the module.
-            from core.paths import GLOBAL_OUTER_LOOP_DIR
+            from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
 
-            path = GLOBAL_OUTER_LOOP_DIR / session_id / "journal.jsonl"
+            path = GLOBAL_SELF_IMPROVING_LOOP_DIR / session_id / "journal.jsonl"
         self.path = path
 
     def append(

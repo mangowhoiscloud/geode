@@ -11,9 +11,9 @@ is swapped from ML (GPT pre-train + `val_bpb`) to alignment auditing
 ## Why fork instead of port
 
 The 3-file constraint Karpathy keeps so small is **the** design.
-The outer-loop agent (Claude Code / Codex) advances research by
+The self-improving-loop agent (Claude Code / Codex) advances research by
 mutating a single file and grepping a few metrics. If GEODE's
-outer loop can pass through the same constraint, the cost frontier of
+self-improving loop can pass through the same constraint, the cost frontier of
 self-improvement simplifies sharply. This fork places an equivalent
 single-mutation file (`train.py`) and a read-only harness
 (`prepare.py`) inside the GEODE tree to reuse exactly that loop
@@ -72,7 +72,7 @@ The final `---` block on stdout carries grep-friendly metrics.
 
 ## Running the agent
 
-Boot the outer-loop agent with `program.md` in context. The
+Boot the self-improving-loop agent with `program.md` in context. The
 Karpathy-style prompt translates directly:
 
 ```
@@ -123,13 +123,13 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 
 - Karpathy autoresearch: https://github.com/karpathy/autoresearch (228791f)
 - Local reference clone: `~/workspace/autoresearch`
-- GEODE outer-loop spec (older 6-module stub, replaced by this fork):
+- GEODE self-improving-loop spec (older 6-module stub, replaced by this fork):
   `docs/architecture/autoresearch.md`
 - Petri evidence (gen-0 fitness signal):
   `docs/audits/2026-05-15-petri-insights.md` +
   `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
 - Wiring sprint plan:
-  `docs/plans/2026-05-19-outer-loop-wiring-sprint.md`
+  `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 
 ## License
 

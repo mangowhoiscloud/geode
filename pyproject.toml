@@ -139,7 +139,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests requiring external services",
     "live: marks tests that make real LLM API calls (deselect with '-m \"not live\"')",
-    "policy_real: PR-β1 — tests/plugins/petri_audit conftest's outer_loop_fallback_policy stub is bypassed for these tests so they can verify the real loader contract",
+    "policy_real: PR-β1 — tests/plugins/petri_audit conftest's self_improving_loop_fallback_policy stub is bypassed for these tests so they can verify the real loader contract",
 ]
 
 [dependency-groups]

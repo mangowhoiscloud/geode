@@ -265,7 +265,7 @@ def test_subscription_only_error_message_actionable(monkeypatch):
         cs.resolve_credential_source("anthropic", fallback_to_payg=False)
     msg = str(excinfo.value)
     assert "fallback_to_payg = true" in msg
-    assert "[outer_loop]" in msg
+    assert "[self_improving_loop]" in msg
     assert "subscription" in msg.lower()
 
 
@@ -329,65 +329,65 @@ def test_strict_mode_blocks_payg_default_for_zhipuai(monkeypatch):
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
-    """outer_loop_fallback_policy() defaults True when [outer_loop] absent.
+def test_self_improving_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
+    """self_improving_loop_fallback_policy() defaults True when [self_improving_loop] absent.
 
-    Tested by monkeypatching load_outer_loop_config to return the default
-    OuterLoopConfig (which has fallback_to_payg=False per the strict
+    Tested by monkeypatching load_self_improving_loop_config to return the default
+    SelfImprovingLoopConfig (which has fallback_to_payg=False per the strict
     default settled in PR-α1 — but the helper itself just reads the field).
     """
-    from core.config.outer_loop import OuterLoopConfig
+    from core.config.self_improving_loop import SelfImprovingLoopConfig
 
-    # Unconfigured → default OuterLoopConfig().fallback_to_payg is False.
+    # Unconfigured → default SelfImprovingLoopConfig().fallback_to_payg is False.
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
-        lambda: OuterLoopConfig(),
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SelfImprovingLoopConfig(),
     )
-    assert cs.outer_loop_fallback_policy() is False
+    assert cs.self_improving_loop_fallback_policy() is False
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_reads_user_config(monkeypatch):
+def test_self_improving_loop_fallback_policy_reads_user_config(monkeypatch):
     """When config sets fallback_to_payg=True, helper returns True."""
-    from core.config.outer_loop import OuterLoopConfig
+    from core.config.self_improving_loop import SelfImprovingLoopConfig
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
-        lambda: OuterLoopConfig(fallback_to_payg=True),
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SelfImprovingLoopConfig(fallback_to_payg=True),
     )
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_safe_on_import_error(monkeypatch):
-    """If core.config.outer_loop is unavailable, helper returns True
+def test_self_improving_loop_fallback_policy_safe_on_import_error(monkeypatch):
+    """If core.config.self_improving_loop is unavailable, helper returns True
     (back-compat preservation)."""
     import builtins
 
     real_import = builtins.__import__
 
     def _raising(name, *args, **kwargs):
-        if name == "core.config.outer_loop":
+        if name == "core.config.self_improving_loop":
             raise ImportError("simulated")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", _raising)
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_safe_on_load_failure(monkeypatch):
-    """If load_outer_loop_config raises (corrupt TOML, etc.), helper
+def test_self_improving_loop_fallback_policy_safe_on_load_failure(monkeypatch):
+    """If load_self_improving_loop_config raises (corrupt TOML, etc.), helper
     returns True and logs a warning rather than breaking the run."""
 
     def _raise():
         raise RuntimeError("corrupt config")
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         _raise,
     )
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 def test_smoke_adapter_module_round_trip(monkeypatch):

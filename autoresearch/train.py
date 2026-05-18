@@ -4,7 +4,7 @@ Single-experiment runner for autoresearch (Petri-signal fork).
 Karpathy's upstream ``train.py`` is a single-GPU GPT pre-train (model +
 Muon optimiser + training loop, ~630 LOC). This fork's ``train.py``
 keeps the same role but runs **one audit per invocation** — it is the
-single file the outer-loop agent modifies.
+single file the self-improving-loop agent modifies.
 
 Agent CAN modify:
   * ``WRAPPER_PROMPT_SECTIONS`` — the system prompt's section dict.
@@ -82,10 +82,10 @@ except ImportError:
 # ---------------------------------------------------------------------------
 #
 # PR-δ1 (2026-05-19) — these module constants are the **fallback
-# defaults** when no ``~/.geode/config.toml`` ``[outer_loop.autoresearch]``
+# defaults** when no ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]``
 # section is present. ``_get_autoresearch_config()`` lazily loads the
 # config and the call sites consult its fields directly. The constant
-# names stay literal so the outer-loop agent (per ``program.md``) can
+# names stay literal so the self-improving-loop agent (per ``program.md``) can
 # still grep + edit them in this file; the config layer makes them
 # operator-overridable without code changes.
 
@@ -99,14 +99,14 @@ SEED_SELECT = "plugins/petri_audit/seeds"
 ``AUTORESEARCH_SEED_SELECT`` env override consumed by
 :func:`_resolve_seed_select` so the seed-pipeline cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
-literal default so existing tests and outer-loop agents can grep it."""
+literal default so existing tests and self-improving-loop agents can grep it."""
 DIM_SET_NAME = "5axes"
 MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
 def _get_autoresearch_config() -> Any:
-    """Lazily load ``[outer_loop.autoresearch]`` from ``~/.geode/config.toml``.
+    """Lazily load ``[self_improving_loop.autoresearch]`` from ``~/.geode/config.toml``.
 
     Returns the typed ``AutoresearchConfig`` (PR-α1) when the loader is
     available; falls back to a fresh ``AutoresearchConfig`` (whose
@@ -118,12 +118,12 @@ def _get_autoresearch_config() -> Any:
     without touching ``~/.geode/config.toml``.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
 
-        return load_outer_loop_config().autoresearch
+        return load_self_improving_loop_config().autoresearch
     except Exception:
         # Use the in-module default (matches AutoresearchConfig() exactly,
-        # which is verified by tests/test_outer_loop_config.py::
+        # which is verified by tests/test_self_improving_loop_config.py::
         # test_autoresearch_defaults_match_train_module).
         from types import SimpleNamespace
 
@@ -144,7 +144,7 @@ def _resolve_seed_select() -> str:
 
     Precedence (Codex CLI pattern):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``[outer_loop.autoresearch] seed_select`` from ``config.toml``.
+    2. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
     3. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
@@ -260,12 +260,12 @@ RUN_LOG = STATE_DIR / "run.log"
 AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 BASELINE_PATH = STATE_DIR / "baseline.json"
 
-OUTER_LOOP_HOME = Path.home() / ".geode" / "outer-loop"
-SESSIONS_INDEX_PATH = OUTER_LOOP_HOME / "sessions.jsonl"
-"""P1a — shared outer-loop session registry. One JSON record per run
-from any outer-loop driver (autoresearch / seed-pipeline) so external
+SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"
+SESSIONS_INDEX_PATH = SELF_IMPROVING_LOOP_HOME / "sessions.jsonl"
+"""P1a — shared self-improving-loop session registry. One JSON record per run
+from any self-improving-loop driver (autoresearch / seed-pipeline) so external
 tools can join across the two loops via ``session_id`` + ``gen_tag``."""
-"""Per-branch baseline written by the outer-loop agent after a promote.
+"""Per-branch baseline written by the self-improving-loop agent after a promote.
 
 S9 schema (ADR-002 §3 — baseline wrapping removed)::
 
@@ -288,7 +288,7 @@ def _build_audit_command() -> list[str]:
 
     PR-δ1 reads hyperparameters from
     :func:`_get_autoresearch_config` so operators can override via
-    ``~/.geode/config.toml`` ``[outer_loop.autoresearch]`` without
+    ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]`` without
     editing this file.
     """
     cfg = _get_autoresearch_config()
@@ -515,7 +515,7 @@ def compute_fitness(
 # 10-col TSV keyed on per-tier aggregates + a per-row JSONL line that
 # carries the full 20-dim raw signal. Operator appends both to
 # ``autoresearch/state/results.{tsv,jsonl}`` after each audit so the
-# outer-loop history is queryable without re-running the audit.
+# self-improving-loop history is queryable without re-running the audit.
 #
 # TSV is grep-friendly (one line per audit, fixed columns); JSONL is
 # the raw-truth artifact used by the meta-reviewer agent (S8) to
@@ -538,7 +538,7 @@ RESULTS_TSV_HEADER: tuple[str, ...] = (
 )
 """P1a — added ``session_id`` + ``gen_tag`` as the first two columns
 so cross-run / cross-loop joins work without parsing description.
-See `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` Phase B."""
+See `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md` Phase B."""
 
 
 def _tier_mean(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
@@ -665,7 +665,7 @@ def print_summary(
     """Karpathy-style grep-friendly stdout block — per-dim scores + means + stderr.
 
     Per ADR-002 + PR 0 the report lists all 20 dims (5 critical +
-    12 auxiliary + 3 info) so the outer-loop agent's results.tsv can
+    12 auxiliary + 3 info) so the self-improving-loop agent's results.tsv can
     carry the raw signal without re-projection. Fitness weights 17
     dims (critical + auxiliary) + the stability axis.
     """
@@ -736,14 +736,14 @@ def _append_session_index(
     ended_at: float,
     extra: dict[str, object],
 ) -> None:
-    """Append one row to ``~/.geode/outer-loop/sessions.jsonl``.
+    """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
 
     P1a — shared cross-loop session registry. Persistence failures log
     nothing (a stderr print here would pollute the grep-friendly
     stdout block) and the in-memory run still completes.
     """
     try:
-        OUTER_LOOP_HOME.mkdir(parents=True, exist_ok=True)
+        SELF_IMPROVING_LOOP_HOME.mkdir(parents=True, exist_ok=True)
         payload: dict[str, object] = {
             "session_id": session_id,
             "gen_tag": gen_tag,
@@ -912,7 +912,7 @@ def main() -> int:
         baseline_active=baseline_means is not None,
     )
 
-    # S10 — emit results.{tsv,jsonl} lines on stdout so the outer-loop
+    # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
     # operator (or a follow-up script) can append them to the rolling
     # autoresearch/state/results.{tsv,jsonl}. We don't write the files
     # directly because the verdict / description are decided by the

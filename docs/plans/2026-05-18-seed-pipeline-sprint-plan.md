@@ -137,5 +137,5 @@ main backmerge — S4, S8, S12 직후 (3 회).
 - AlphaEval (parity 폐기) — arXiv:2508.13174
 - open-coscientist (reference only) — https://github.com/jataware/open-coscientist
 - 이전 4 회의 보고서 (Plan A vs B 비교 / 인프라 평가 / UI/UX 통합 / 폴더 layout)
-- 직전 outer-loop closed-loop wiring 컨텍스트 (PR #1187+#1189+#1190 develop merged)
+- 직전 self-improving-loop closed-loop wiring 컨텍스트 (PR #1187+#1189+#1190 develop merged)
 - v0.99.13 release main HEAD `728a2111` (Session 62 handoff)

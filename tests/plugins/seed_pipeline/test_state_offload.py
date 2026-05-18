@@ -119,7 +119,7 @@ def test_persist_state_excludes_runtime_only_fields(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# P0b — cross-loop handoff (defect #13 from 2026-05-19 outer-loop plan)
+# P0b — cross-loop handoff (defect #13 from 2026-05-19 self-improving-loop plan)
 # ---------------------------------------------------------------------------
 
 
@@ -240,13 +240,13 @@ def test_pipeline_appends_session_index(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """Pipeline.run() appends one row to ``~/.geode/outer-loop/sessions.jsonl``."""
+    """Pipeline.run() appends one row to ``~/.geode/self-improving-loop/sessions.jsonl``."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
     pipeline.run()
-    index = fake_home / ".geode" / "outer-loop" / "sessions.jsonl"
+    index = fake_home / ".geode" / "self-improving-loop" / "sessions.jsonl"
     assert index.is_file()
     lines = index.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -270,7 +270,7 @@ def test_pipeline_session_index_swallows_oserror(
     original_mkdir = Path.mkdir
 
     def _selective_mkdir(self: Path, *a: Any, **kw: Any) -> None:
-        if "outer-loop" in str(self):
+        if "self-improving-loop" in str(self):
             raise OSError("simulated")
         return original_mkdir(self, *a, **kw)
 
