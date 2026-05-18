@@ -78,7 +78,7 @@ S12 — First seeds_gen1 generation run + 첫 baseline autoresearch
 | 6 | Sprint cadence | 16 PR 연속 (mid-checkpoint 없음, per-PR Codex MCP audit 만) |
 | 7 | seed pool naming | `seeds_gen<N>` (gen suffix, monotonic). `seeds_safe10` 보존 |
 | 8 | `text_embed` provider | OpenAI text-embedding-3-small ($0.02/1M tok) |
-| 9 | Token budget guard | soft warning at $0.50/sub-agent, hard kill at $2.00 (config 가능) |
+| 9 | Token budget guard | soft warning at $2.00/sub-agent, hard kill at $10.00 (S2-fix relaxed from $0.50/$2.00 — subscription-path long-form generation 의 false-positive 회피. PAYG 사용자는 env 로 낮춤) |
 | 10 | Scope dial | Option α (user 결정) |
 | 11 | PAYG cost cap (pipeline 1회) | soft $0.30, hard $1.00 |
 | 12 | Slash | 별도 `/audit-seeds` (not `/petri seed-gen`) |

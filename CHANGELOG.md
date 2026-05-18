@@ -58,9 +58,10 @@ functional change.
   arrive in S2-S8.
 - **Sub-agent budget guard.** `core/agent/sub_agent_budget.py` adds
   per-invocation token + USD cap (`BudgetGuard` + `SubAgentBudget`).
-  Soft warning at $0.50 / sub-agent, hard kill at $2.00, env-overridable
-  via `SEED_PIPELINE_BUDGET_SOFT_USD` / `_HARD_USD`. Cost derived from
-  `core.llm.token_tracker.calculate_cost`.
+  Soft warning at $2.00 / sub-agent, hard kill at $10.00 (relaxed in
+  S2-fix from initial $0.50 / $2.00 after user feedback on subscription-
+  path headroom), env-overridable via `SEED_PIPELINE_BUDGET_SOFT_USD` /
+  `_HARD_USD`. Cost derived from `core.llm.token_tracker.calculate_cost`.
 - **Seed-pipeline Lane.** `core/wiring/container.py` registers a new
   `seed-pipeline` Lane with `max_concurrent=16` (sibling to `global=8`,
   `gateway=4`) so 15-20 candidate parallel spawns + tournament matches
