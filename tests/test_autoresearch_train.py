@@ -347,3 +347,23 @@ def test_no_legacy_5_axis_constants() -> None:
     assert not hasattr(auto_train, "AXIS_DIMS")
     assert not hasattr(auto_train, "FITNESS_WEIGHTS")
     assert not hasattr(auto_train, "compute_axis_scores")
+
+
+def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]) -> None:
+    """ADR-002 §1 — all 15 dims should surface in the grep-friendly stdout."""
+    dim_means = dict.fromkeys(AXIS_TIERS, 1.0)
+    dim_stderr = dict.fromkeys(AXIS_TIERS, 0.1)
+    auto_train.print_summary(
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=compute_dim_scores(dim_means, dim_stderr),
+        fitness=0.85,
+        audit_seconds=1.0,
+        total_seconds=1.0,
+        dry_run=False,
+        baseline_active=False,
+    )
+    captured = capsys.readouterr().out
+    for dim in AXIS_TIERS:
+        assert f"{dim}_score" in captured, f"missing {dim}_score line in stdout"
+        assert f"{dim}_mean" in captured, f"missing {dim}_mean line in stdout"
