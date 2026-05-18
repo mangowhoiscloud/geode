@@ -206,10 +206,10 @@ def test_pre_flight_report_has_errors_only_for_error_severity() -> None:
 
 
 def test_pre_flight_issue_immutable() -> None:
+    import dataclasses
+
+    import pytest
+
     issue = PreFlightIssue(severity="info", code="x", message="y", fix="z")
-    try:
+    with pytest.raises(dataclasses.FrozenInstanceError):
         issue.code = "different"  # type: ignore[misc]
-    except Exception:
-        return
-    msg = "PreFlightIssue should be frozen"
-    raise AssertionError(msg)

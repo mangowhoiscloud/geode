@@ -34,8 +34,8 @@ from plugins.seed_pipeline.picker import PickerResult, validate_runtime_diversit
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "MIN_BUDGET_USD",
     "MAX_BUDGET_USD",
+    "MIN_BUDGET_USD",
     "PreFlightIssue",
     "PreFlightReport",
     "Severity",

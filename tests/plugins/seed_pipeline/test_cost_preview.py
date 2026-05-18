@@ -244,6 +244,10 @@ def test_estimate_cost_unknown_model_logs_and_zeros() -> None:
 
 
 def test_cost_row_immutable() -> None:
+    import dataclasses
+
+    import pytest
+
     row = CostRow(
         role="x",
         model="y",
@@ -253,15 +257,15 @@ def test_cost_row_immutable() -> None:
         est_usd=0.0,
         subscription_backed=False,
     )
-    try:
+    with pytest.raises(dataclasses.FrozenInstanceError):
         row.calls = 5  # type: ignore[misc]
-    except Exception:
-        return
-    msg = "CostRow should be frozen"
-    raise AssertionError(msg)
 
 
 def test_cost_estimate_immutable() -> None:
+    import dataclasses
+
+    import pytest
+
     est = CostEstimate(
         rows=[],
         total_usd=0.0,
@@ -271,9 +275,5 @@ def test_cost_estimate_immutable() -> None:
         match_count=0,
         voter_count=0,
     )
-    try:
+    with pytest.raises(dataclasses.FrozenInstanceError):
         est.total_usd = 1.0  # type: ignore[misc]
-    except Exception:
-        return
-    msg = "CostEstimate should be frozen"
-    raise AssertionError(msg)

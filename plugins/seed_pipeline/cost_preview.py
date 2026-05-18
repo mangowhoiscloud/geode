@@ -33,6 +33,7 @@ import math
 from dataclasses import dataclass
 
 from core.llm.token_tracker import MODEL_PRICING
+
 from plugins.seed_pipeline.picker import PickerResult, RoleBinding
 
 log = logging.getLogger(__name__)
@@ -241,8 +242,9 @@ def format_cost_summary(estimate: CostEstimate) -> str:
             f"  {row.role:<13}  {row.model:<26}  {row.calls:>5}  ${row.est_usd:>7.4f}{marker}"
         )
     lines.append("  ─────────────────────────────────────────────────────────────")
+    total_calls = sum(r.calls for r in estimate.rows)
     lines.append(
-        f"  total                                              {sum(r.calls for r in estimate.rows):>5}  "
+        f"  total                                              {total_calls:>5}  "
         f"${estimate.total_usd:>7.4f}"
     )
     if estimate.subscription_usd > 0:
