@@ -85,6 +85,7 @@ class AgenticLoop:
         enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
         system_suffix: str = "",
+        system_prompt_override: str | None = None,
         quiet: bool = False,
         disable_settings_drift: bool = False,
     ) -> None:
@@ -92,6 +93,15 @@ class AgenticLoop:
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
         self._system_suffix = system_suffix
+        # S2-wire (2026-05-18): when set, _build_system_prompt uses this
+        # string as the entire role/instruction body, replacing the
+        # default ``_build_system_prompt(model=loop.model)`` output.
+        # Skill context + agentic suffix still appended (tool calling
+        # contract preserved). Used by AgentDefinition-driven sub-agents
+        # (``.claude/agents/seed_*.md``) so the seed_generator role's
+        # full contract — not GEODE's generic system prompt — drives
+        # the spawned worker.
+        self._system_prompt_override = system_prompt_override
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens

@@ -208,20 +208,88 @@ class SharedServices:
     # --- internal helpers -----------------------------------------------------
 
     def _build_sub_agent_manager(self) -> Any:
-        """Build SubAgentManager with shared resources."""
+        """Build SubAgentManager with shared resources.
+
+        S2-wire (2026-05-18): construct AgentRegistry from .claude/agents/
+        + _DEFAULT_AGENTS so SubAgentManager can resolve SubTask.agent
+        names (e.g. seed_generator) into the AgentDefinition's
+        system_prompt + tools + model. Without an AgentRegistry the
+        production path silently fell back to GEODE's default prompt
+        regardless of the named role.
+        """
         from core.agent.sub_agent import SubAgentManager
         from core.config import settings
         from core.orchestration.isolated_execution import IsolatedRunner
 
         global_lane = self.lane_queue.get_lane("global") if self.lane_queue else None
+        agent_registry = self._build_agent_registry()
+
         return SubAgentManager(
             IsolatedRunner(hooks=self.hook_system, lane=global_lane),
             action_handlers=self.tool_handlers,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
+            agent_registry=agent_registry,
             hooks=self.hook_system,
             max_depth=settings.max_subagent_depth,
         )
+
+    def _build_agent_registry(self) -> Any:
+        """Build AgentRegistry with defaults + .claude/agents/*.md.
+
+        Defaults (research_assistant, data_analyst, web_researcher) load
+        first; then ``.claude/agents/`` files are loaded per-file so a
+        single bad/duplicate file doesn't drop the rest. Conflicts with
+        a default are skipped — user override is intentionally NOT
+        supported in this iteration; an explicit override mechanism can
+        land later if needed (logged at WARNING so users discover their
+        file isn't taking effect).
+
+        S2-fix (2026-05-18) — anchor the loader at ``get_project_root()``
+        rather than ``Path(".claude/agents")`` (cwd-relative). The
+        previous default silently returned zero files when ``geode serve``
+        was launched from a directory without ``.claude/agents/`` (e.g.
+        ``$HOME``), which made the entire S2-wire dispatch a no-op in
+        common operator deployments.
+        """
+        from core.paths import get_project_root
+        from core.skills.agents import AgentRegistry, SubagentLoader
+
+        registry = AgentRegistry()
+        registry.load_defaults()
+        agents_dir = get_project_root() / ".claude" / "agents"
+        loader = SubagentLoader(agents_dir=agents_dir)
+        discovered = loader.discover()
+        if not discovered:
+            log.info(
+                "AgentRegistry: no .claude/agents/*.md found at %s; "
+                "only the 3 built-in defaults are registered",
+                agents_dir,
+            )
+        loaded = 0
+        for path in discovered:
+            try:
+                definition = loader.load_file(path)
+            except Exception:
+                log.warning("AgentRegistry: failed to load %s (skipped)", path, exc_info=True)
+                continue
+            try:
+                registry.register(definition)
+                loaded += 1
+            except ValueError:
+                log.warning(
+                    "AgentRegistry: %r conflicts with a built-in default and "
+                    "was NOT loaded — rename the file or unregister the "
+                    "default to apply your override (path=%s)",
+                    definition.name,
+                    path,
+                )
+        log.info(
+            "AgentRegistry: loaded %d agents (3 defaults + %d from .claude/agents/)",
+            len(registry),
+            loaded,
+        )
+        return registry
 
     def _propagate_contextvars(self) -> None:
         """Re-inject ContextVars for daemon/scheduler threads."""

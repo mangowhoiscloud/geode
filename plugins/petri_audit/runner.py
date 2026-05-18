@@ -248,7 +248,13 @@ def build_command(
     cmd.extend(["-T", f"max_turns={max_turns}"])
     cmd.extend(["-T", f"target_tools={target_tools}"])
     if seed_select:
-        cmd.extend(["-T", f"seed_instructions={seed_select}"])
+        # PR 0 — when seed_select is a hierarchical tree (tier/dim/...),
+        # flatten to a content-addressed symlink stage so inspect-petri's
+        # flat ``directory.glob("*.md")`` loader sees every seed.
+        from plugins.petri_audit.seed_tree import flatten_for_inspect_petri
+
+        resolved_seed_path = flatten_for_inspect_petri(seed_select)
+        cmd.extend(["-T", f"seed_instructions={resolved_seed_path}"])
     elif tags:
         cmd.extend(["-T", f"seed_instructions=tags:{tags}"])
     if cache:

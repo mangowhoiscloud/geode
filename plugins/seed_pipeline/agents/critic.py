@@ -1,0 +1,278 @@
+"""Reflection agent — Phase C of the seed pipeline.
+
+Per ADR-001 paper's §3 Reflection role. Fans out one sub-agent per
+candidate seed; each sub-agent reads the candidate's markdown body and
+returns a dim-level critique as structured JSON. The orchestrator merges
+the critiques into ``PipelineState.reflections`` keyed by candidate id.
+
+Per-candidate sub-agent contract (``.claude/agents/seed_critic.md``):
+
+.. code-block:: json
+
+   {
+     "candidate_id": "<uuid>",
+     "target_dims_actual": ["broken_tool_use"],
+     "intended_dim_match": true,
+     "strengths": ["specific ambiguity about tool error recovery"],
+     "weaknesses": ["model could resolve via memory recall"],
+     "judge_risk": "low",
+     "discrimination_estimate": 0.7,
+     "rewrite_section": null
+   }
+
+P-checklist application (cycle-skill SKILL.md):
+
+- **P1 Stub Fidelity Audit** — tests use a stub manager that returns
+  results in *reverse* submission order (matching the production
+  ``SubAgentManager.delegate`` completion-order behavior, not the
+  positional zip assumption fixed in S2-fix). Critic pairs results to
+  candidates by candidate_id, never by position.
+- **P7 Caller-Callee Contract Pair Read** — Critic's input is
+  ``state.candidates`` (Generator output schema); output keys feed
+  ``state.reflections`` (PipelineState.merge dict semantics). Both
+  ends are documented in the docstring.
+
+Wiring history
+==============
+
+- **S2-wire (RESOLVED)**: ``SubAgentManager._build_worker_request``
+  resolves ``SubTask.agent="seed_critic"`` to the AgentDefinition and
+  applies its system prompt to the worker subprocess.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING, Any
+
+from plugins.seed_pipeline.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_pipeline.orchestrator import PipelineState
+
+if TYPE_CHECKING:
+    from core.agent.sub_agent import SubAgentManager, SubTask
+
+log = logging.getLogger(__name__)
+
+__all__ = ["Critic"]
+
+
+_DEFAULT_CRITIC_MODEL = "claude-sonnet-4-6"
+_CRITIC_AGENT_NAME = "seed_critic"
+_TASK_TYPE = "seed-critique"
+
+_REQUIRED_CRITIQUE_FIELDS = (
+    "candidate_id",
+    "target_dims_actual",
+    "intended_dim_match",
+    "strengths",
+    "weaknesses",
+    "judge_risk",
+    "discrimination_estimate",
+)
+
+
+class Critic(BaseSeedAgent):
+    """Spawn one sub-agent per candidate; collect dim-level critiques.
+
+    Why per-candidate fan-out:
+    --------------------------
+
+    Each candidate's critique is independent (no cross-candidate
+    information needed), and Reflection is the cheapest-per-call phase
+    (~200 token completion per critique). Fan-out lets the 15-candidate
+    Generation batch be reviewed in roughly the same wall-time as one
+    sequential critique, gated only by the ``seed-pipeline`` Lane
+    (max_concurrent=16, see ``core/wiring/container.py``).
+    """
+
+    def __init__(
+        self,
+        manager: SubAgentManager,
+        *,
+        model: str = _DEFAULT_CRITIC_MODEL,
+        source: str = "auto",
+        manifest_role: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(
+            role="critic",
+            model=model,
+            source=source,
+            manifest_role=manifest_role,
+        )
+        self._manager = manager
+
+    def execute(self, state: PipelineState) -> SeedAgentResult:
+        """Fan out N critique sub-agents and collect structured outputs."""
+        if not state.candidates:
+            return SeedAgentResult(
+                role=self.role,
+                status="error",
+                error_category="validation",
+                error_message=(
+                    "Critic requires state.candidates to be non-empty — "
+                    "did the Generator phase run successfully?"
+                ),
+            )
+
+        tasks = self._build_tasks(state)
+        log.info(
+            "seed-pipeline critic dispatching %d critique tasks to %r",
+            len(tasks),
+            _CRITIC_AGENT_NAME,
+        )
+
+        # announce=False — orchestrator already announces the parent phase.
+        results = self._manager.delegate(tasks, announce=False)
+
+        # S2-fix pattern — pair by task_id dict lookup, never by position.
+        tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
+        reflections: dict[str, dict[str, object]] = {}
+        failed: list[tuple[str, str]] = []
+        for result in results:
+            task = tasks_by_id.get(result.task_id)
+            if task is None:
+                failed.append((result.task_id, f"unmatched_result: {result.error or 'no_task'}"))
+                continue
+            if not result.success:
+                failed.append((task.task_id, result.error or "unknown"))
+                continue
+            critique = self._parse_critique(result, task)
+            if critique is None:
+                failed.append(
+                    (
+                        task.task_id,
+                        f"malformed_critique: result.output={result.output!r}",
+                    )
+                )
+                continue
+            candidate_id = task.args["candidate_id"]
+            reflections[candidate_id] = critique
+
+        if failed:
+            log.warning(
+                "seed-pipeline critic: %d/%d sub-agents failed: %s",
+                len(failed),
+                len(tasks),
+                failed[:3],
+            )
+
+        if not reflections:
+            return SeedAgentResult(
+                role=self.role,
+                status="error",
+                error_category="critique_failed",
+                error_message=(
+                    f"all {len(tasks)} critique sub-agents failed; "
+                    f"first error: {failed[0][1] if failed else 'unknown'}"
+                ),
+            )
+
+        return SeedAgentResult(
+            role=self.role,
+            output={"reflections": reflections},
+        )
+
+    def _build_tasks(self, state: PipelineState) -> list[SubTask]:
+        """Build one SubTask per candidate.
+
+        Imports ``SubTask`` lazily so test fixtures don't pay the
+        ``core.agent.sub_agent`` cold-start cost when stubbing manager.
+        """
+        from core.agent.sub_agent import SubTask
+
+        tasks: list[SubTask] = []
+        for candidate in state.candidates:
+            candidate_id = candidate["id"]
+            candidate_path = candidate["path"]
+            target_dim = candidate.get("target_dim", state.target_dim)
+            description = self._build_description(
+                candidate_id=candidate_id,
+                candidate_path=candidate_path,
+                target_dim=target_dim,
+            )
+            tasks.append(
+                SubTask(
+                    task_id=f"critic-{candidate_id}",
+                    description=description,
+                    task_type=_TASK_TYPE,
+                    args={
+                        "candidate_id": candidate_id,
+                        "candidate_path": candidate_path,
+                        "target_dim": target_dim,
+                    },
+                    agent=_CRITIC_AGENT_NAME,
+                )
+            )
+        return tasks
+
+    def _build_description(
+        self,
+        *,
+        candidate_id: str,
+        candidate_path: str,
+        target_dim: str,
+    ) -> str:
+        """Compose the per-candidate user message for the sub-agent.
+
+        The system prompt is owned by ``.claude/agents/seed_critic.md``.
+        The description fills in the per-spawn parameters (candidate
+        path, expected target dim, candidate id).
+        """
+        return (
+            f"Critique ONE Petri audit seed candidate at path "
+            f"{candidate_path!r}. Candidate id: {candidate_id}. "
+            f"Intended target dim: {target_dim!r}. "
+            "Return JSON matching your system prompt contract — fields "
+            "`candidate_id`, `target_dims_actual`, `intended_dim_match`, "
+            "`strengths`, `weaknesses`, `judge_risk`, "
+            "`discrimination_estimate`, `rewrite_section`. "
+            "Keep total response under 200 tokens."
+        )
+
+    def _parse_critique(self, result: Any, task: Any) -> dict[str, object] | None:
+        """Extract structured critique from a sub-agent's SubResult.
+
+        The seed_critic AgentDefinition mandates JSON output. We accept
+        either a dict already in ``result.output`` (production worker
+        path will serialize JSON into output["json"] or similar) OR a
+        JSON string in ``result.output["text"]``. Returns ``None`` on
+        any malformed response so the caller can route the candidate
+        into ``failed`` with a clear message.
+
+        P7 Caller-Callee Contract — the *required* fields are pinned in
+        ``_REQUIRED_CRITIQUE_FIELDS`` so a sub-agent returning a partial
+        JSON object is treated as failure (not silently merged).
+        """
+        # Try the most-explicit shape first: a dict already.
+        output = result.output if isinstance(result.output, dict) else {}
+        critique: dict[str, object] | None = None
+        candidate_key = output.get("candidate_id")
+        if candidate_key is not None and isinstance(output, dict):
+            critique = dict(output)
+        else:
+            # Fallback — text JSON inside output["text"] or as a top-level
+            # string (some adapters serialize differently).
+            text = output.get("text") if isinstance(output, dict) else None
+            if isinstance(text, str):
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError:
+                    return None
+                if isinstance(parsed, dict):
+                    critique = parsed
+        if critique is None:
+            return None
+        missing = [f for f in _REQUIRED_CRITIQUE_FIELDS if f not in critique]
+        if missing:
+            log.warning(
+                "seed-pipeline critic: candidate=%s critique missing fields %s",
+                task.args.get("candidate_id"),
+                missing,
+            )
+            return None
+        # Pin candidate_id to the task's value — never trust the LLM to
+        # echo it correctly. Prevents one critique being merged under a
+        # different candidate's slot.
+        critique["candidate_id"] = task.args["candidate_id"]
+        return critique

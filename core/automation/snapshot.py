@@ -29,7 +29,7 @@ DEFAULT_MAX_RECENT = 30
 def _sanitize_state(state: dict[str, Any]) -> dict[str, Any]:
     """Filter internal (``_``-prefixed) fields that may not be JSON-serializable.
 
-    Objects like PromptAssembler, ToolDefinitions, and bootstrap parameters are
+    Objects like ToolDefinitions, live clients, and bootstrap parameters are
     injected into the state at graph compile time but should not be persisted.
     """
     return {k: v for k, v in state.items() if not k.startswith("_")}
@@ -121,8 +121,8 @@ class SnapshotManager:
         """Capture a new snapshot.
 
         Internal fields (prefixed with ``_``) are filtered out to avoid
-        serialization errors from non-JSON-serializable objects like
-        PromptAssembler or ToolDefinitions.
+        serialization errors from non-JSON-serializable objects like live
+        clients or ToolDefinitions.
         """
         snapshot_id = f"snap-{uuid.uuid4().hex[:12]}"
         clean_state = _sanitize_state(pipeline_state or {})

@@ -511,18 +511,40 @@ class SubAgentManager:
         difficulty = getattr(task, "difficulty", "medium")
         task_effort = _DIFFICULTY_TO_EFFORT.get(difficulty, settings.agentic_effort)
 
+        # S2-wire (2026-05-18): resolve AgentDefinition if task.agent is set
+        # so the worker can apply the agent's system_prompt + tools + model.
+        # Pre-S2-wire, _resolve_agent was only called by the legacy task-
+        # handler path; the production subprocess path defaulted to GEODE's
+        # generic prompt regardless of task.agent.
+        agent_ctx = self._resolve_agent(task)
+        agent_name = ""
+        agent_system_prompt = ""
+        agent_allowed_tools: list[str] = []
+        worker_model = settings.model
+        if agent_ctx is not None:
+            agent_name = str(agent_ctx.get("agent_name", ""))
+            agent_system_prompt = str(agent_ctx.get("system_prompt", ""))
+            tools_raw = agent_ctx.get("tools") or []
+            agent_allowed_tools = [str(t) for t in tools_raw]
+            # AgentDefinition model override wins over settings default.
+            if agent_ctx.get("model"):
+                worker_model = str(agent_ctx["model"])
+
         return WorkerRequest(
             task_id=task.task_id,
             task_type=task.task_type,
             description=task.description,
             args=task.args,
             denied_tools=denied,
-            model=settings.model,
-            provider=_resolve_provider(settings.model),
+            model=worker_model,
+            provider=_resolve_provider(worker_model),
             timeout_s=self._timeout_s,
             time_budget_s=self._time_budget_s,
             thinking_budget=settings.agentic_thinking_budget,
             effort=task_effort,
+            agent_name=agent_name,
+            agent_system_prompt=agent_system_prompt,
+            agent_allowed_tools=agent_allowed_tools,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

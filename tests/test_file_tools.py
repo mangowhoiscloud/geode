@@ -8,8 +8,9 @@ from pathlib import Path
 
 import core.paths as paths_mod
 import pytest
-from core.tools import sandbox
 from core.tools.file_tools import EditFileTool, GlobTool, GrepTool, WriteFileTool
+
+from core.tools import sandbox
 
 
 @pytest.fixture(autouse=True)

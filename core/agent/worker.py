@@ -51,6 +51,18 @@ class WorkerRequest:
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
     effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh" (v0.56.0)
     isolation: str = ""  # Reserved for Phase 3: "worktree" etc.
+    # Agent context (S2-wire, 2026-05-18):
+    # When ``agent_name`` is non-empty the parent has resolved an
+    # AgentDefinition (``.claude/agents/<agent_name>.md``) and pre-
+    # populated the role/system prompt/tools/model overrides. The
+    # worker applies these to the spawned AgenticLoop so the spawn
+    # actually behaves as the named agent rather than the generic
+    # default. ``agent_allowed_tools`` is a *whitelist* that the worker
+    # translates into a denied set against the full tool list; empty
+    # means the agent inherits the parent's denied set unchanged.
+    agent_name: str = ""
+    agent_system_prompt: str = ""
+    agent_allowed_tools: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -76,6 +88,9 @@ class WorkerRequest:
             thinking_budget=data.get("thinking_budget", 0),
             effort=data.get("effort", "high"),
             isolation=data.get("isolation", ""),
+            agent_name=data.get("agent_name", ""),
+            agent_system_prompt=data.get("agent_system_prompt", ""),
+            agent_allowed_tools=data.get("agent_allowed_tools", []),
         )
 
 
@@ -110,6 +125,46 @@ class WorkerResult:
 # ---------------------------------------------------------------------------
 
 
+def filter_handlers(
+    *,
+    handlers: dict[str, Any],
+    denied_tools: list[str],
+    agent_allowed_tools: list[str],
+) -> dict[str, Any]:
+    """Apply denied-set + AgentDefinition whitelist to the tool handler map.
+
+    Pure function — testable without the worker's AgenticLoop bootstrap.
+
+    - ``delegate_task`` is always denied (depth=1 enforcement).
+    - When ``agent_allowed_tools`` is non-empty, tools not on the whitelist
+      are added to the denied set (whitelist takes precedence over
+      inherited tools).
+    - S2-fix (2026-05-18): whitelist entries that don't match any handler
+      are logged at WARNING so a typo in ``.claude/agents/<name>.md``'s
+      ``tools:`` frontmatter (e.g. ``foo_typo``) doesn't silently degrade
+      the agent's capability to zero tools.
+    """
+    denied = set(denied_tools)
+    denied.add("delegate_task")
+    if agent_allowed_tools:
+        allowed = set(agent_allowed_tools)
+        unknown = allowed - set(handlers)
+        if unknown:
+            log.warning(
+                "filter_handlers: AgentDefinition whitelist contains "
+                "tool names not in the handler registry — %s. The agent "
+                "will run without these tools. Check the 'tools:' "
+                "frontmatter for typos.",
+                sorted(unknown),
+            )
+        for tool_name in list(handlers):
+            if tool_name not in allowed:
+                denied.add(tool_name)
+    if denied:
+        return {k: v for k, v in handlers.items() if k not in denied}
+    return handlers
+
+
 def _save_result_backup(result: WorkerResult) -> None:
     """Save result JSON to ~/.geode/workers/ for crash debugging."""
     try:
@@ -132,12 +187,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 
     handlers = _build_tool_handlers(verbose=False)
 
-    # 2. Filter denied tools
-    denied = set(request.denied_tools)
-    # Always deny delegate_task in worker (depth=1 enforcement)
-    denied.add("delegate_task")
-    if denied:
-        handlers = {k: v for k, v in handlers.items() if k not in denied}
+    # 2. Filter tools
+    handlers = filter_handlers(
+        handlers=handlers,
+        denied_tools=request.denied_tools,
+        agent_allowed_tools=request.agent_allowed_tools,
+    )
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
@@ -154,6 +209,13 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 
     # 5. Build AgenticLoop
     from core.agent.loop import AgenticLoop
+
+    # S2-wire (2026-05-18): propagate AgentDefinition.system_prompt into the
+    # spawned loop so AgentDefinition-driven sub-agents (seed_generator etc.)
+    # actually behave as the named agent rather than running GEODE's generic
+    # default. Worker carries the resolved prompt over the IPC boundary so
+    # the subprocess does not need its own AgentRegistry lookup.
+    system_prompt_override: str | None = request.agent_system_prompt or None
 
     loop = AgenticLoop(
         conversation,
@@ -173,6 +235,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         thinking_budget=request.thinking_budget,
         effort=request.effort,
         time_budget_s=request.time_budget_s,
+        system_prompt_override=system_prompt_override,
         quiet=True,  # Suppress spinner — parent handles UI
     )
 

@@ -186,7 +186,7 @@ class ContextAssembler:
         context["_session_id"] = session_id
         context["_subject_id"] = subject_id
 
-        # ADR-007: Generate _llm_summary for PromptAssembler consumption
+        # Generate _llm_summary for prompt consumers that need a compact block.
         context["_llm_summary"] = self._build_llm_summary(context)
 
         return context
@@ -310,7 +310,7 @@ class ContextAssembler:
     ) -> str:
         """Build a pre-formatted LLM-readable summary from assembled context.
 
-        Contract (ADR-007): PromptAssembler reads this value directly without parsing.
+        Contract: prompt consumers read this value directly without parsing.
 
         Karpathy P6 L2 extraction: prioritize high-value information instead of
         hard truncation.  Each tier gets a budget proportional to its value:

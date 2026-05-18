@@ -14,7 +14,7 @@ Centralizes creation and lifecycle of all infrastructure singletons:
 - L2 Memory: OrganizationMemory, HybridSessionStore, ContextAssembler
 
 Implementation details are decomposed into `core.wiring`:
-    bootstrap  — hooks, memory, session, config_watcher, task, prompt, plugin_registry
+    bootstrap  — hooks, memory, session, config_watcher, task, plugin_registry
     infra      — policies, tools, LLM, auth, lanes
     automation — L4.5 9 components + hook wiring
     adapters   — MCP signal/notification/calendar/gateway
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -47,7 +47,6 @@ if TYPE_CHECKING:
     from core.automation.model_registry import ModelRegistry
     from core.automation.outcome_tracking import OutcomeTracker
     from core.automation.snapshot import SnapshotManager
-    from core.llm.prompt_assembler import PromptAssembler
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
@@ -140,11 +139,10 @@ class RuntimeAutomationConfig:
 
 @dataclass
 class RuntimeMemoryConfig:
-    """L2 Memory + Prompt assembly components (all optional)."""
+    """L2 Memory components (all optional)."""
 
     organization_memory: MonoLakeOrganizationMemory | None = None
     context_assembler: ContextAssembler | None = None
-    prompt_assembler: Any | None = field(default=None)  # PromptAssembler (TYPE_CHECKING)
 
 
 # ---------------------------------------------------------------------------
@@ -203,11 +201,10 @@ class GeodeRuntime:
         self.trigger_manager = auto.trigger_manager
         self.scheduler_service = auto.scheduler_service
         self.feedback_loop = auto.feedback_loop
-        # Unpack memory (L2 + ADR-007)
+        # Unpack memory (L2)
         mem = memory or RuntimeMemoryConfig()
         self.organization_memory = mem.organization_memory
         self.context_assembler = mem.context_assembler
-        self.prompt_assembler: PromptAssembler | None = mem.prompt_assembler
         # L4 Task tracking
         self.task_graph: TaskGraph | None = None
         self._task_bridge: TaskGraphHookBridge | None = None
@@ -299,7 +296,6 @@ class GeodeRuntime:
         memory_config = RuntimeMemoryConfig(
             organization_memory=memory["organization_memory"],
             context_assembler=memory["context_assembler"],
-            prompt_assembler=memory["prompt_assembler"],
         )
         instance = cls(core_config, automation_config, memory_config)
         instance.run_id = run_id
@@ -401,11 +397,6 @@ class GeodeRuntime:
             project_memory=project_memory,
         )
 
-        try:
-            prompt_assembler = bootstrap.build_prompt_assembler(hooks=hooks)
-        except ImportError:
-            log.debug("ADR-007 prompt_assembler not yet available — skipping")
-            prompt_assembler = None
         task_graph, task_bridge = bootstrap.build_task_graph(
             hooks=hooks,
             subject_id=subject_id,
@@ -415,7 +406,6 @@ class GeodeRuntime:
             "project_memory": project_memory,
             "organization_memory": organization_memory,
             "context_assembler": context_assembler,
-            "prompt_assembler": prompt_assembler,
             "task_graph": task_graph,
             "task_bridge": task_bridge,
         }

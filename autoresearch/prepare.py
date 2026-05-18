@@ -33,10 +33,12 @@ import yaml
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SEED_POOL_DIR = REPO_ROOT / "plugins" / "petri_audit" / "seeds_safe10"
+SEED_POOL_DIR = REPO_ROOT / "plugins" / "petri_audit" / "seeds"
 RUBRIC_FILE = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
-EXPECTED_SEED_COUNT = 10  # 5 base × 2 paraphrase
-EXPECTED_DIM_COUNT = 19  # AlphaEval expansion (17 base + eval_awareness + unprompted_sycophancy)
+MIN_SEED_COUNT = 18  # post-PR-0 minimum (18 migrated + 4 new dim bases)
+EXPECTED_DIM_COUNT = (
+    22  # PR 0: 19 (base + AlphaEval) + 3 new context-management JudgeDimension entries
+)
 
 CACHE_DIR = Path.home() / ".cache" / "autoresearch-petri"
 REPORT_FILE = CACHE_DIR / "prepare-report.txt"
@@ -49,35 +51,47 @@ FALLBACK_REPORT_FILE = REPO_ROOT / "autoresearch" / "state" / "prepare-report.tx
 
 
 def check_seed_pool() -> tuple[bool, str]:
-    """Verify the 10 safe-seed pool exists with the expected layout."""
+    """Verify the hierarchical seed pool exists with the expected layout.
+
+    Post-PR-0 the seed pool is a tree:
+    ``seeds/<tier>/<dim>/<NN>_<variant>.md``. We walk recursively and
+    enforce a minimum count rather than an exact one — gen1+ runs may
+    grow the pool.
+    """
     if not SEED_POOL_DIR.is_dir():
         return False, f"missing seed pool dir: {SEED_POOL_DIR}"
-    seeds = sorted(SEED_POOL_DIR.glob("*.md"))
-    if len(seeds) != EXPECTED_SEED_COUNT:
+    # PR 0: hierarchical tree — verify the 3 tier dirs exist
+    for tier in ("critical", "auxiliary", "info"):
+        if not (SEED_POOL_DIR / tier).is_dir():
+            return False, f"hierarchical tier missing: {SEED_POOL_DIR / tier}"
+    seeds = sorted(SEED_POOL_DIR.rglob("*.md"))
+    if len(seeds) < MIN_SEED_COUNT:
         return (
             False,
-            f"expected {EXPECTED_SEED_COUNT} seeds in {SEED_POOL_DIR}, found {len(seeds)}",
+            f"expected at least {MIN_SEED_COUNT} seeds under {SEED_POOL_DIR}, found {len(seeds)}",
         )
-    # spot-check: paraphrase pair convention (`*_p1.md` next to `*.md`)
-    bases = {p.stem for p in seeds if not p.stem.endswith("_p1")}
-    paraphrases = {p.stem.removesuffix("_p1") for p in seeds if p.stem.endswith("_p1")}
-    missing = bases ^ paraphrases
-    if missing:
-        return (
-            False,
-            f"seed pool paraphrase pairing inconsistent — orphans: {sorted(missing)}",
-        )
-    return True, f"seed pool OK — {len(seeds)} files in {SEED_POOL_DIR}"
+    return True, f"seed pool OK — {len(seeds)} files under {SEED_POOL_DIR}"
 
 
 def check_rubric() -> tuple[bool, str]:
-    """Verify the AlphaEval rubric file has the expected dim count."""
+    """Verify the AlphaEval rubric file has the expected dim count.
+
+    Post-PR-0 the YAML is mixed: 19 string entries (default-36 subset)
+    + 3 full ``JudgeDimension`` dict entries (new context-management
+    dims). inspect-petri's ``judge_dimensions()`` accepts
+    ``Sequence[str | JudgeDimension]``.
+    """
     if not RUBRIC_FILE.is_file():
         return False, f"missing rubric file: {RUBRIC_FILE}"
     with RUBRIC_FILE.open(encoding="utf-8") as f:
         dims = yaml.safe_load(f)
-    if not isinstance(dims, list) or not all(isinstance(dim, str) for dim in dims):
-        return False, f"rubric must be a flat YAML list of dimension names: {RUBRIC_FILE}"
+    if not isinstance(dims, list):
+        return False, f"rubric must be a YAML list: {RUBRIC_FILE}"
+    valid = all(isinstance(d, str) or (isinstance(d, dict) and "name" in d) for d in dims)
+    if not valid:
+        return False, (
+            f"rubric entries must be strings or dicts with a 'name' field: {RUBRIC_FILE}"
+        )
     if len(dims) != EXPECTED_DIM_COUNT:
         return (
             False,

@@ -68,14 +68,41 @@ def repair_messages(messages: list[dict[str, Any]]) -> None:
 
 
 def build_system_prompt(loop: AgenticLoop) -> str:
-    """Build the system prompt with skill context and agentic suffix."""
-    base = _build_system_prompt(model=loop.model)
-    # Inject skill context into placeholder
+    """Build the system prompt with skill context and agentic suffix.
+
+    S2-wire (2026-05-18): when ``loop._system_prompt_override`` is set
+    (AgentDefinition-driven spawn), the override replaces the default
+    GEODE system body. Skill context + agentic suffix + system_suffix
+    are still appended so tool-calling and observability invariants
+    hold for all spawns regardless of role.
+    """
+    override = getattr(loop, "_system_prompt_override", None)
     skill_ctx = ""
     if loop._skill_registry is not None:
         skill_ctx = loop._skill_registry.get_context_block()
-    base = base.replace("{skill_context}", skill_ctx or '<available_skills status="empty" />')
-    prompt = base + "\n" + AGENTIC_SUFFIX
+    # Skills enter the active prompt path here: the loop-level registry renders
+    # one context block, then ``{skill_context}`` in the system wrapper is
+    # substituted below. The legacy PromptAssembler Phase 2 injection path was
+    # removed; do not add a second skill-injection route.
+    # S2-fix (2026-05-18) — both branches honor the ``{skill_context}``
+    # placeholder so AgentDefinition authors can opt into explicit skill
+    # injection (matching ``_DEFAULT_AGENTS`` semantics). If the override
+    # has no placeholder, the skill block is appended; if it does, the
+    # placeholder is substituted in place. Empty-state marker preserved
+    # for both paths so prompts never ship a literal ``{skill_context}``
+    # token to the LLM.
+    skill_replacement = skill_ctx or '<available_skills status="empty" />'
+    if override:
+        if "{skill_context}" in override:
+            base = override.replace("{skill_context}", skill_replacement)
+        else:
+            base = override
+            if skill_ctx:
+                base = base + "\n\n" + skill_ctx
+    else:
+        base = _build_system_prompt(model=loop.model)
+        base = base.replace("{skill_context}", skill_replacement)
+    prompt: str = base + "\n" + AGENTIC_SUFFIX
     if loop._system_suffix:
         prompt += "\n\n" + loop._system_suffix
     return prompt

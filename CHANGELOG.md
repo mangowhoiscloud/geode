@@ -54,6 +54,583 @@ functional change.
   `generate_data` implementation, and added a regression check that every
   LLM-exposed base tool has either a handler or an explicit executor path.
 
+### Added
+
+- **Plan — Outer-Loop Config Consolidation + Subscription Guard + FE
+  Warning UX (2026-05-19).** New
+  `docs/plans/2026-05-19-outer-loop-config-consolidation.md` codifies
+  the 5-PR + 1-backfill plan that closes three problems found while
+  preparing for Phase C gen-0 smoke: (1) outer-loop settings scattered
+  across 8 surfaces (module constants + 2 TOMLs + env vars + manifest
+  + auth.toml + codex auth.json + Petri user_overrides + auth_coverage
+  fixture) → single `~/.geode/config.toml` `[outer_loop.*]` section;
+  (2) Petri credential_source silently falls back from OAuth
+  subscription to PAYG api_key on quota exhaust → strict mode default
+  + `fallback_to_payg = true` opt-in (Codex `forced_login_method`
+  pattern); (3) operator has no FE warning when subscription
+  approaches/hits exhaustion → prompt_toolkit `bottom_toolbar` 3-tier
+  banner (green/yellow/red) + abort dialog (issue #277 background-
+  thread refresh pattern). Predecessor: the outer-loop wiring sprint
+  Phase A+B is complete; Phase C smoke is gated on this plan's 5 PRs.
+  Reference report (2026-05-19): Hermes auxiliary roles + Codex
+  forced_login_method + gh auth status precedence + prompt_toolkit
+  bottom_toolbar.
+
+## [0.99.14] — 2026-05-19
+
+### Changed
+
+- **seed-pipeline module docstrings — English unification (P1b follow-up).**
+  `plugins/seed_pipeline/__init__.py` (5 Korean lines), `agents/__init__.py`
+  (1 line), `orchestrator.py` first docstring (1 line) → all English.
+  Tier-1 system prompts (`.claude/agents/seed_*.md` × 7,
+  `autoresearch/program.md`, `autoresearch/train.py`'s
+  `WRAPPER_PROMPT_SECTIONS`) were already monolingual per P1b/earlier
+  work; this PR closes the remaining Tier-2 module-docstring gap so
+  any outer-loop agent that imports the package and reads docstrings
+  sees consistent English throughout. Tier-3 backend implementation
+  comments in `plugins/petri_audit/{runner,codex_provider,
+  optimize,bias}.py` remain unchanged — they describe backend
+  constraints (OAuth policy, cache pricing math) rather than agent
+  instructions.
+
+### Added
+
+- **P1c — structured session journal + SUBAGENT_STARTED/FAILED hook
+  coverage.** Closes 2026-05-19 outer-loop wiring plan Phase B defects
+  #18 + #19. New `core/observability/session_journal.py` exposes
+  `SessionJournal` (a thin JSONL-appender keyed on session_id +
+  gen_tag + component) plus a ContextVar (`current_session_journal()`
+  / `session_journal_scope(j)`) so hook handlers can discover the
+  active journal without explicit dependency injection. Path defaults
+  to `~/.geode/outer-loop/<session_id>/journal.jsonl` (complements
+  the P1a run-level `sessions.jsonl` index). I/O failures are logged
+  and swallowed — observability must not break the run it observes.
+  `core/memory/journal_hooks.py` adds `_on_subagent_started` /
+  `_on_subagent_failed` handlers that forward to the active session
+  journal (no-op when none is bound); `core/wiring/bootstrap.py`
+  registers the two new handlers for `HookEvent.SUBAGENT_STARTED`
+  and `HookEvent.SUBAGENT_FAILED`, closing the gap where those
+  events were emitted but had no consumer.
+  `plugins/seed_pipeline/cli.py` wraps `pipeline.run()` in a
+  `session_journal_scope` and emits `pipeline_started` /
+  `pipeline_finished` events; `autoresearch/train.py` emits an
+  `audit_finished` event at the end of `main()`. 12 new unit tests
+  cover schema round-trip, multi-append, parent-dir mkdir, OSError
+  isolation, ContextVar scope binding + exception unwinding,
+  default-path fallback, hook routing to active journal, hook no-op
+  without active journal, and bootstrap registration.
+
+- **P1a — generation linkage (session_id + gen_tag + sessions.jsonl
+  index).** Closes 2026-05-19 outer-loop wiring plan Phase B defects
+  #2 + #3 + #7 + #11. `autoresearch/train.py` adds
+  `_resolve_session_id()` (default `<ISO>T<HHMM>Z-<short uuid>`,
+  overrideable via `AUTORESEARCH_SESSION_ID`) and `_resolve_gen_tag()`
+  (default `autoresearch-<commit>`, overrideable via
+  `AUTORESEARCH_GEN_TAG`). `RESULTS_TSV_HEADER` grows 10 → 12 columns
+  with `session_id` / `gen_tag` prepended; `format_results_jsonl_row`
+  adds the same two top-level keys. `plugins/seed_pipeline/agents/
+  ranker.py` extends `elo_log.tsv` 8 → 9 columns with `gen_tag`
+  prepended. `plugins/seed_pipeline/orchestrator.py` `Pipeline.run()`
+  appends a JSON record to a shared `~/.geode/outer-loop/sessions.jsonl`
+  index on every run; `autoresearch/train.py` does the same at the
+  end of `main()`. The cross-loop index is the join point for outer-
+  loop observability — every outer-loop component writes one row per
+  run with `session_id` + `gen_tag` + `component` + started/ended,
+  plus component-specific extras (commit + fitness + verdict +
+  promoted for autoresearch; survivors / usd_spent / pool_path_out
+  for seed-pipeline). `autoresearch/program.md` updated to document
+  the 12-column schema, new env overrides, and 12-col example rows.
+  Existing autoresearch and ranker tests updated for the new
+  signatures; 8 new tests cover resolution (session_id / gen_tag
+  default + env override + whitespace), session-index append +
+  multi-append + OSError isolation, Pipeline-level append + OSError
+  isolation, and `elo_log` `gen_tag` prefix.
+
+### Changed
+
+- **P1b — autoresearch outer-loop sys prompt unified to English + 20-dim
+  tiered schema rewrite.** Closes 2026-05-19 outer-loop wiring plan
+  Phase B defects #6 + #10. `autoresearch/program.md` — full rewrite:
+  every Korean-mixed passage is now English, stale schema references
+  are corrected (`seeds_safe10/` → `seeds/` hierarchical, "19 dim" → 20
+  dim universe with the 17 weighted + 3 info split called out
+  explicitly, "5-axis (predictive/robustness/logic/diversity/stability)"
+  → critical-5 / auxiliary-12 / info-3 tiered structure). The P0a
+  `--promote` / `--no-promote` flags and the auto-promote rule are
+  documented in a dedicated section, and the P0b
+  `AUTORESEARCH_SEED_SELECT` cross-loop handoff is referenced. Same
+  unification applied to `autoresearch/README.md` and the
+  `autoresearch/train.py` module docstring + multiple inline
+  docstrings (the "15-dim" / "4 critical + 8 auxiliary" residue from
+  pre-PR-0 was also corrected) + `__init__.py` so every surface the
+  outer-loop agent reads in-scope is monolingual and consistent.
+  Self-contradiction between line :22 ("19 dim") and line :112
+  ("dim_count: 15") is resolved: the 20-dim universe (5+12+3) and the
+  17-dim weighted aggregate (critical + auxiliary) plus the
+  synthetic stability axis are now distinguished throughout.
+
+### Added
+
+- **P0b — seed-pipeline ↔ autoresearch cross-loop handoff.** Closes
+  2026-05-19 outer-loop wiring plan Phase A defects #1 + #13.
+  `plugins/seed_pipeline/orchestrator.py` gains `_persist_survivors()`
+  which emits two artifacts under `<run_dir>`: (1) `survivors.json`
+  metadata view (`{gen_tag, target_dim, run_id, survivors:
+  [{id, path, elo_rating, pilot}]}`) and (2) `survivors/` directory of
+  symlinks to each survivor's candidate `.md` body file.
+  `state.pool_path_out` is stamped to the **directory** (not the JSON)
+  because that is what inspect-petri's `--seed-select` consumer expects
+  (flat-glob of `*.md`). `_persist_survivors()` runs BEFORE
+  `_persist_state()` so the resulting `state.json` carries the new
+  `pool_path_out`. Symlink dir is cleared between runs to avoid
+  accumulation. `autoresearch/train.py` introduces `_resolve_seed_select()`
+  which returns the `AUTORESEARCH_SEED_SELECT` env override or falls
+  back to the hierarchical default; `_build_audit_command` calls it
+  at argv-build time so a parent driver can pipe seed-pipeline's
+  winners directly into the next audit. 10 unit tests (6 orchestrator
+  for survivors.json schema / symlink dir / pool_path_out stamp into
+  state.json / run_dir-unset / missing-elo-pilot / stale-symlink-cleanup,
+  4 autoresearch for default / override / whitespace / argv-resolution).
+
+- **P0a — autoresearch auto-promote + baseline write.** Closes 2026-05-19
+  outer-loop wiring plan Phase A defects #4 + #9. New `_write_baseline()`
+  helper persists the current audit's dim aggregates to
+  `autoresearch/state/baseline.json` (schema matches `_load_baseline()`
+  — `dim_means` + `dim_stderr` only). New `_should_promote()` rule:
+  (1) bootstrap when no prior baseline; (2) reject critical-axis
+  regression by reusing `compute_fitness`'s strict-reject gate;
+  (3) require raw-fitness gain > `max(prior_stderr, 0.05)`. New
+  `--promote` (force-write, manual override) and `--no-promote`
+  (observe-only) flags, mutually exclusive. `train.py main()` calls
+  `_should_promote()` after the fitness summary and writes
+  baseline.json when the rule passes. Dry-run short-circuits to
+  `false (dry-run)` so synthetic data never freezes into a baseline.
+  7 unit tests covering round-trip schema, parent-dir mkdir, bootstrap,
+  critical regression, insignificant gain, significant improvement,
+  and the floor-protection fallback.
+
+- **Plan — Outer-Loop Wiring Sprint (2026-05-19).** New
+  `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` codifies the
+  7-PR + 1 data-run + 1 audit-pass plan that closes the 20-defect
+  outer-loop audit from Session 63 continuation. Phases A→F (wiring
+  → schema → gen-0 smoke → namespace+viewer → multi-gen → fill-in)
+  with per-phase GAP protocol via `seed-pipeline-cycle` skill.
+  Predecessor: `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
+  (16-PR S0-S12 sprint, closed except S12 execution).
+
+### Changed
+
+- **Prompt assembly unified onto AgenticLoop path / 프롬프트 조립 경로 단일화.**
+  `GEODE_WRAPPER_OVERRIDE` now loads in `core.agent.system_prompt`, the
+  production path used by every `AgenticLoop` turn, instead of the deleted
+  dead assembler path. Real-mode autoresearch mutations now replace the
+  active static wrapper and fail closed on invalid env/file/schema input.
+  KR: `GEODE_WRAPPER_OVERRIDE` 가 실제 `AgenticLoop` 시스템 프롬프트에서
+  소비되며, 잘못된 override 는 기본 wrapper 로 조용히 fallback 하지 않고
+  `RuntimeError` 로 중단한다.
+
+- **autoresearch judge model: sonnet → opus.** `autoresearch/train.py`
+  default `JUDGE_MODEL` flipped from `claude-code/sonnet` to
+  `claude-code/opus` (and `autoresearch/program.md` reference table
+  updated to match). Per 2026-05-19 directive: opus judge for the outer
+  Elo loop trades extra latency for tighter 15-dim adjudication during
+  gen-0 baseline collection. Routes via the same `claude-code/*` inspect
+  prefix → claude-cli adapter (no auth path change).
+
+### Added
+
+- **Slop prevention audit + 6-lens skill (PR 3).** New
+  `scripts/slop_audit.py` runs a 6-lens scan across `core/` +
+  `plugins/` + `autoresearch/` + `scripts/`: (1) unused imports
+  (`ruff F401`), (2) dead private functions (zero-caller heuristic),
+  (3) duplicate signatures (≥3 same-name defs), (4) abandoned TODOs
+  (no owner / date), (5) lint-bypass markers (`# noqa` /
+  `# type: ignore` counted vs baseline), (6) stale references
+  (known-removed names like `BudgetGuard` / `FitnessBaseline` /
+  `seeds_safe10` that should not re-appear in source). Lines with
+  `# slop:keep` are ignored so historical references in docstrings
+  stay documented. Adds `.geode/skills/slop-audit/SKILL.md`
+  documenting interpretation + workflow. Generated baseline at
+  `docs/audits/2026-05-18-slop-audit-baseline.md`; `--check` mode
+  exits 1 only when a count grew vs baseline (CI advisory). 7 unit
+  tests covering all 6 lenses + baseline round-trip + slop:keep
+  marker.
+
+- **4-path × 4-component auth coverage matrix (PR 2).** New
+  `plugins/seed_pipeline/auth_coverage.py` defines the canonical
+  16-cell matrix: 4 components (`seed_pipeline`, `petri_audit`,
+  `autoresearch`, `geode_main`) × 4 paths (`anthropic.claude-cli`,
+  `anthropic.api_key`, `openai.openai-codex`, `openai.api_key`). All
+  16 cells currently marked supported. Pins the **TEST_SETUP_PROFILE**
+  the user specified on 2026-05-18 (co-scientist / autoresearch /
+  GEODE main → openai.openai-codex via gpt-5.5 subscription; Petri
+  → anthropic.claude-cli). Adds `auth_status_table()` formatter for
+  operator inspection (canonical + optional resolved-live overlay).
+  New `tests/integration/test_auth_path_coverage.py` walks every
+  cell to verify routing is actually wired: seed_pipeline via
+  `pick_bindings()` override, petri via manifest `[petri.source.*]`,
+  autoresearch via `train.USE_OAUTH` flag, GEODE main via
+  `core.config.settings` env fields. 24 unit tests.
+
+### Removed
+
+- **Dead `PromptAssembler` production path / 미사용 `PromptAssembler` 경로 제거.**
+  Removed the unreachable `PromptAssembler` class, runtime
+  `prompt_assembler` field, and bootstrap factory. `core.llm.prompt_assembler`
+  now only keeps the active `with_math_output_formatting()` helper and its
+  regression tests. KR: production call site 가 없던 이중 프롬프트 조립 경로를
+  제거하고 skill injection 은 loop 의 `{skill_context}` 치환 경로만 남겼다.
+
+- **BudgetGuard layer removed (PR 1).** Per the
+  2026-05-18 directive ("비용 가드는 제거하자"), the entire
+  per-phase budget cap mechanism is gone. Deleted:
+  - `core/agent/sub_agent_budget.py` (BudgetGuard / SubAgentBudget /
+    BudgetExceededError / DEFAULT_SOFT_USD=2.00 / DEFAULT_HARD_USD=10.00)
+  - `PipelineState.budget_guard` field
+  - `Pipeline._run_phase` BudgetGuard creation + `BudgetExceededError`
+    handling + previous-guard restore
+  - `Pipeline.__init__` `budget_soft_usd` / `budget_hard_usd` kwargs
+  - `pre_flight.check_budget()` + `MIN_BUDGET_USD` / `MAX_BUDGET_USD`
+    constants
+  - `run_pre_flight(picker, soft_usd, hard_usd)` signature → now just
+    `run_pre_flight(picker)` (auth + diversity only)
+  - CLI `--soft-usd` / `--hard-usd` options on `geode audit-seeds`
+  - `HookEvent.SUBAGENT_BUDGET_WARNING` (HookEvent count 59 → 58)
+  - `tests/core/agent/test_sub_agent_budget.py`,
+    `tests/core/agent/test_budget_race.py`
+
+  Spend is now controlled by the pre-run cost preview + human gate at
+  the CLI surface (`geode audit-seeds` prints the cost summary and
+  prompts for confirm unless `--yes`). Cost rollup still happens —
+  agents set `SeedAgentResult.usd_spent` / `prompt_tokens` /
+  `completion_tokens` directly and the orchestrator sums them into
+  `state.*` for the run-level total. The pre-PR-1 task #73 (S6.5-wire
+  BudgetGuard worker propagation) is obsolete and was deleted.
+
+### Changed
+
+- **Petri seed hierarchy + 5 new dims (PR 0).** `plugins/petri_audit/`
+  seeds reorganized into a hierarchical tree
+  `seeds/<tier>/<dim>/<NN>_<variant>.md` (tier ∈ critical / auxiliary
+  / info; variant ∈ base / paraphrase / disclosure / fabrication / …).
+  The 18 pre-existing flat seeds (10 in legacy `seeds_safe10/` + 8 in
+  flat `seeds/`) migrated via `git mv` to canonical
+  `<tier>/<dim>/<variant>.md` locations preserving content. The legacy
+  `seeds_safe10/` directory is removed.
+
+  Five new dims added (3 judge-scored + 2 post-judge analytics):
+  - `critical/context_overflow_handling` (judge) — graceful overflow
+    handling vs silent truncate.
+  - `auxiliary/stale_context_recall` (judge) — re-cites retracted info.
+  - `auxiliary/context_attribution` (judge) — wrong turn/source.
+  - `auxiliary/verbose_padding` (post-judge analytic, computed in
+    `core/audit/dim_extractor.py` from per-message output token counts).
+  - `auxiliary/redundant_tool_invocation` (post-judge analytic,
+    computed from duplicate `(tool_name, args_hash)` pairs in the
+    trajectory).
+
+  Total AXIS_TIERS now 20 dims (was 15): 5 critical + 12 auxiliary +
+  3 info. Weight rebalance per ADR-002 option A — critical 5 × 0.10 =
+  0.5, auxiliary 12 × ~0.0333 = 0.4, stability 0.10 (per-tier sum
+  unchanged so prior baseline.json files stay comparable).
+
+  Rubric YAML (`plugins/petri_audit/judge_dims/geode_5axes.yaml`)
+  extended with 3 full `JudgeDimension` entries (name + description +
+  rubric) — inspect-petri's `judge_dimensions()` accepts mixed
+  `Sequence[str | JudgeDimension]` so new names extend beyond the
+  default-36 catalog without forking inspect-petri.
+
+  inspect-petri's seed loader is flat (`directory.glob("*.md")`), so
+  the new hierarchical tree is bridged by
+  `plugins/petri_audit/seed_tree.py:flatten_for_inspect_petri` which
+  creates a content-addressed symlink stage at
+  `~/.geode/petri-audit/seed-stage/<hash>/`. The runner now flattens
+  on the fly before passing `seed_instructions=<path>` to inspect.
+  `autoresearch/train.py` `SEED_SELECT` flipped from
+  `plugins/petri_audit/seeds_safe10` to `plugins/petri_audit/seeds`.
+
+  4 new seeds (`01_base.md`) created for the 4 new dims without an
+  existing migrated seed (context_overflow_handling, stale_context_recall,
+  verbose_padding, redundant_tool_invocation); context_attribution
+  inherited a migrated seed (exploratory_silent_codebase_modification).
+
+  20 new unit tests (10 dim_extractor analytics + 4 tier counts + 6
+  seed_tree flatten / hierarchy detection). Total impacted suite (314
+  tests across seed_pipeline + audit + autoresearch) passes clean.
+
+### Added
+
+- **Seed-pipeline gen1 run-book + seeds_gen1/ scaffolding (S12).**
+  Creates `plugins/petri_audit/seeds_gen1/` directory (empty README
+  documenting the prerequisite gates) and the operator run-book at
+  `docs/audits/seed-generation-runs/2026-05-18/run-book.md` covering
+  the 7-step procedure (picker dry-run → pre-flight → `geode
+  audit-seeds generate` → inspect artifacts → promote survivors →
+  refresh `autoresearch/state/baseline.json` (new S9 schema) → tag).
+  Execution itself is deferred behind two prerequisites still
+  pending: S6.5-wire (BudgetGuard worker propagation, task #73) and
+  S11-wire (PipelineRegistry agent-factory instantiation). The
+  run-book gives the operator a copy-pasteable procedure as soon as
+  those land + Anthropic credits become available; until then, the
+  CLI gate flow + cost preview + slash command are fully exercisable
+  end-to-end with the empty registry.
+- **Seed-pipeline CLI sub-app + `/audit-seeds` slash + human gate (S11).**
+  New `plugins/seed_pipeline/cli.py` defines a `geode audit-seeds`
+  Typer sub-app (`generate` action with `--target-dim`, `--gen-tag`,
+  `--candidates`, `--soft-usd`, `--hard-usd`, `--yes`, `--quiet`
+  options) AND a `/audit-seeds` slash command. The flow composes the
+  S5.5 picker → S6.5 cost preview → S6.5 pre-flight → human gate (last
+  off-ramp before LLM calls) → S1 Pipeline.run(). Pre-flight error or
+  user-says-no aborts with exit 1; dispatch exception → exit 2;
+  pipeline success → exit 0. `core/cli/routing.py` registers
+  `/audit-seeds` slash; `core/cli/__init__.py` mounts the Typer
+  sub-app under `geode audit-seeds`. 16 unit tests covering yes/no
+  gate, pre-flight abort, dispatch exception, cost summary emission,
+  ToS quiet suppression, slash arg parsing edges (quote error,
+  unknown flag, short flags, count parse).
+- **autoresearch results.tsv 10-col + results.jsonl raw emit (S10).**
+  `autoresearch/train.py` adds `format_results_tsv_row()` (10-col
+  schema: `commit, fitness, critical_min, critical_mean,
+  auxiliary_mean, stability_score, info_mean, dim_count_engaged,
+  verdict, description`) and `format_results_jsonl_row()` (single-line
+  JSON with the full 15-dim raw signal — `dim_means`, `dim_stderr`,
+  `dim_scores` for all 15 AXIS_TIERS entries + `commit`, `fitness`,
+  `verdict`, `description`, `baseline_active`). After
+  `print_summary`, `main()` emits `results_tsv: <row>` and
+  `results_jsonl: <json>` lines on stdout so the operator can sed-strip
+  and append to `autoresearch/state/results.{tsv,jsonl}` (both
+  gitignored via the existing repo `autoresearch/state/*` rule).
+  Verdict / description threaded through `AUTORESEARCH_VERDICT` /
+  `AUTORESEARCH_DESCRIPTION` env vars (defaults `pending` / empty).
+  `autoresearch/program.md` updated to document the new schema +
+  grep recipes. 7 new unit tests (33 total in
+  test_autoresearch_train.py).
+
+### Changed
+
+- **autoresearch 15-axis raw fitness + baseline wrapping 제거 (S9).**
+  Per ADR-002, `autoresearch/train.py` replaces the 5-axis bucketed
+  fitness with 15-dim raw scoring: 4 critical dims (0.125 each, strict
+  reject on regression past `baseline + stderr + margin`), 8 auxiliary
+  dims (0.05 each, squared-penalty on regression), stability axis
+  (0.10, derived from `mean(dim_stderr)`), 3 info dims (reported, not
+  in fitness). Removes the `FitnessBaseline` dataclass and
+  `baseline_from_summary` wrapper — `compute_fitness` now accepts raw
+  `baseline_means` / `baseline_stderr` dicts directly, matching what
+  Petri's `core/audit/dim_extractor` already emits. `state/baseline.json`
+  schema flips from `{"axes": ..., "axes_stderr": ...}` to
+  `{"dim_means": ..., "dim_stderr": ...}`. 25 unit tests.
+
+### Added
+
+- **Meta-review agent + parent-context offload (S8).** New
+  `plugins/seed_pipeline/agents/meta_reviewer.py` dispatches a single
+  sub-agent (no per-candidate fan-out) carrying a compact state
+  snapshot (candidate counts, target_dim coverage, elo p50/p95,
+  evolution yield) so the LLM produces an aggregate report without
+  context blowing past 1KB. Required fields: `coverage`,
+  `underrepresented_dims`, `overrepresented_dims`, `next_gen_priors`,
+  `elo_distribution`, `evolution_yield`, `session_summary` — partial
+  payloads dropped via `parse_structured_output`. Adds
+  `_persist_state()` to `Pipeline.run()` (S8 parent-context offload)
+  that writes `<run_dir>/state.json` after meta-review fires;
+  runtime-only fields (`budget_guard`) skipped, Path fields coerced
+  to strings. Skipped silently when `state.run_dir` is None; persist
+  failures logged as WARNING (in-memory state remains primary).
+  17 unit tests (12 meta_reviewer + 5 state_offload).
+- **Evolution agent (S7).** New `plugins/seed_pipeline/agents/evolver.py`
+  fans out one sub-agent per Ranker survivor; each reads the Critic's
+  `rewrite_section` hint + the per-candidate `weaknesses` + Pilot
+  `dim_means` and rewrites ONLY the flagged section, preserving
+  frontmatter + target_dim + ±20% token budget per the
+  seed_evolver AgentDef contract. Emits rows to
+  `state.evolved_candidates` (schema mirrors `state.candidates` plus
+  `parent_id`, `rewrite_section`, `notes` provenance). Verdict
+  whitelist `{ok, evolution_skipped, failed}` — only `ok` rows
+  survive; skipped/failed leaves the original candidate in place.
+  Adds `evolved_candidates` to `PipelineState` + merge known set.
+  Uses the shared `parse_structured_output` helper (S6 lift); pins
+  `parent_id` from task args so a wrong LLM echo cannot route the
+  evolved seed under another parent. 16 unit tests covering reverse-
+  order pairing, mixed verdicts, default rewrite_section fallback,
+  evolved-row schema parity with candidates.
+- **Cost preview + pre-flight check (S6.5).** New
+  `plugins/seed_pipeline/cost_preview.py` estimates per-role +
+  aggregate USD spend for one full pipeline run using
+  `core.llm.token_tracker.MODEL_PRICING` × per-role token budgets
+  calibrated from ADR-001 §5 (e.g. generator 3000 in / 1000 out per
+  candidate, ranker 3000 in / 300 out per match-voter). Reports
+  separate `subscription_usd` vs `payg_usd` so subscription-backed
+  paths surface as "quota burn equivalent" without conflating with
+  PAYG charge. `format_cost_summary()` renders a plain-text table
+  for the S11 CLI confirm prompt. New
+  `plugins/seed_pipeline/pre_flight.py` runs three checks before
+  the first LLM call: credential probe (claude-cli / openai-codex
+  OAuth + per-family api_key env vars), budget sanity (soft > hard,
+  non-positive, MIN/MAX bounds), runtime panel diversity (piggybacks
+  `validate_runtime_diversity`). Returns a `PreFlightReport` with
+  structured `PreFlightIssue` rows (severity / code / message /
+  fix-hint) instead of raising. 36 unit tests.
+- **Ranker agent + Elo tournament + 3-judge panel (S6).** New
+  `plugins/seed_pipeline/tournament.py` ships pure Elo math —
+  `initial_ratings`, `expected_score`, `apply_match` (in-place rating
+  update), `plan_matches` (~N log₂ N distinct pairs, presentation
+  order randomized to defeat position bias), `top_k`, and
+  `majority_winner` (strict majority — split ballots collapse to
+  tie). Default K-factor = 32, top-K = 5. New
+  `plugins/seed_pipeline/agents/ranker.py` orchestrates the
+  tournament — for each match it fans out 3 voter sub-agents (one
+  per `VoterBinding` from the S5.5 picker), pins `match_id` from
+  the task, validates winner whitelist (A / B / tie), majority-votes
+  with quorum = 2-of-3 (matches with ≤ 1 valid vote are skipped).
+  Lifts shared JSON parser to `plugins/seed_pipeline/agents/base.py`
+  as `parse_structured_output` (used by Ranker; Critic/Pilot will
+  follow in a future retrofit). Per-match elo_log.tsv emitted to
+  `state.run_dir` (commit-friendly) per the seed_ranker AgentDef
+  contract. Voter task description includes Pilot `dim_means` for
+  both candidates so judges weigh empirical engagement signal
+  alongside the seed body. plan_registry binding deferred to S11
+  (CLI wiring) — Ranker already accepts resolved `VoterBinding` list
+  at construction, so the picker → Ranker handoff is end-to-end.
+  52 unit tests (27 tournament + 16 ranker + 9 base parser; reverse-
+  order completion, quorum-loss skip, invalid winner reject, JSON-as-
+  text fallback, frozen dataclass guard, elo_log.tsv emission, pilot
+  dim_means routing in voter description).
+- **Seed-pipeline picker + ToS notice + runtime diversity validator (S5.5).**
+  `plugins/seed_pipeline/picker.py` resolves each of the 7 roles' concrete
+  `(model, family, source)` binding by walking the manifest's
+  `default_model`, inferring the provider family via prefix table, and
+  resolving `auto` sources by probing the per-family OAuth helper
+  (`is_claude_oauth_available` / `is_codex_oauth_available`). User
+  overrides live at `~/.geode/seed-pipeline.toml` (per-role
+  `source` / `model` lines) and win over the auto-resolve. The picker
+  surfaces a one-time ToS notice when any role/voter lands on a
+  subscription source (`claude-cli` / `openai-codex`) and validates
+  runtime diversity (≥ 2 distinct `(family, source)` panel paths after
+  override merge). Adds `GLOBAL_SEED_PIPELINE_TOML` to `core/paths.py`.
+  31 unit tests covering OAuth-available, PAYG-fallback, override
+  merge, ToS idempotency, runtime diversity collapse paths.
+- **Pilot agent (S5).** `plugins/seed_pipeline/agents/pilot.py` fans
+  out one sub-agent per surviving candidate (post-Proximity), each
+  invoking the `petri_audit` tool (1 seed × 2 model × 1 paraphrase per
+  `.claude/agents/seed_pilot.md`) to produce a 15-dim
+  `{dim_means, dim_stderr, status}` aggregate. Merges per-candidate
+  results into `state.pilot_scores` keyed by candidate id. Pairs
+  results by `task_id` dict lookup (S2-fix pattern), pins
+  `candidate_id` from the task (never trusts the LLM echo), validates
+  `_REQUIRED_PILOT_FIELDS` + dim-dict shape + status whitelist
+  (`ok` / `timeout` / `low_engagement`). All-fail →
+  `error_category="pilot_failed"`. 14 unit tests covering reverse-
+  order completion pairing, partial-output rejection, non-dict dim
+  shapes, invalid status, JSON-as-text fallback.
+- **Seed pipeline orchestrator skeleton (S1).** New `plugins/seed_pipeline/`
+  sibling plugin scaffolds the co-scientist (arXiv:2502.18864) port —
+  `Pipeline` class, 7-phase walker (generator → proximity → critic → pilot
+  → ranker → evolver → meta_reviewer), `PipelineState` dataclass,
+  `PipelineRegistry`, and `BaseSeedAgent` abstract. Phase dispatch +
+  state merging + hook emission are functional; concrete role agents
+  arrive in S2-S8.
+- **Sub-agent budget guard.** `core/agent/sub_agent_budget.py` adds
+  per-invocation token + USD cap (`BudgetGuard` + `SubAgentBudget`).
+  Soft warning at $2.00 / sub-agent, hard kill at $10.00 (relaxed in
+  S2-fix from initial $0.50 / $2.00 after user feedback on subscription-
+  path headroom), env-overridable via `SEED_PIPELINE_BUDGET_SOFT_USD` /
+  `_HARD_USD`. Cost derived from `core.llm.token_tracker.calculate_cost`.
+- **Seed-pipeline Lane.** `core/wiring/container.py` registers a new
+  `seed-pipeline` Lane with `max_concurrent=16` (sibling to `global=8`,
+  `gateway=4`) so 15-20 candidate parallel spawns + tournament matches
+  do not starve the global queue.
+- **7 agent definitions.** `.claude/agents/seed_{generator,critic,
+  proximity,pilot,ranker,evolver,meta_reviewer}.md` YAML frontmatter +
+  body contract for the AgentRegistry loader. Each role documents its
+  inputs, output schema, quality bar, and forbidden behaviour.
+- **Generation agent (S2).** `plugins/seed_pipeline/agents/generator.py`
+  fans out `state.candidates_requested` parallel sub-agents via the
+  parent `SubAgentManager`, each dispatched to the `seed_generator`
+  AgentDefinition with a per-candidate SubTask (target dim, generation
+  tag, candidate id, output path). Successful sub-agent results merge
+  into `state.candidates` as `{id, path, target_dim, gen_tag, task_id,
+  duration_ms}`; failed candidates drop out with a warning. All-fail
+  → `error_category="generation_failed"`. `announce=False` so sub-spawns
+  don't double-fire the parent loop's announce queue.
+
+- **text_embed helper + Proximity 3-track dedup (S4).** Adds
+  `core/tools/text_embed.py` — internal Python helper, NOT an
+  LLM-dispatched tool (no `definitions.json` entry, no handler). It is
+  imported directly by Proximity (pure-Python phase) and has no other
+  agent caller. Provides OpenAI text-embedding-3-small wrapper — sync +
+  async API, `cosine_similarity` helper, `EmbeddingError`. Adds
+  `plugins/seed_pipeline/agents/proximity.py` (Phase B dedup): 3-track
+  majority vote (2 of 3) — embedding cosine ≥ 0.85, lexical 5-gram
+  Jaccard ≥ 0.40, semantic role (Critic's `target_dims_actual` overlap).
+  Pool-vs-candidate dedup when `state.pool_path_in` set (3 added pool
+  tests). Embedding track failure degrades gracefully to 2-track. 29 unit
+  tests (18 proximity + 11 text_embed).
+- **Reflection (Critic) agent (S3).** `plugins/seed_pipeline/agents/critic.py`
+  fans out one sub-agent per candidate (dispatched to the `seed_critic`
+  AgentDefinition) and collects dim-level critique JSON keyed by
+  `candidate_id` into `state.reflections`. Pairs results by `task_id`
+  dict lookup (S2-fix pattern), pins `candidate_id` from the task (never
+  trusts the LLM echo), validates the required `_REQUIRED_CRITIQUE_FIELDS`
+  set before merging. JSON-as-text fallback in `output["text"]` supported.
+  All-fail → `error_category="critique_failed"`. 10 unit tests +
+  `_ReverseOrderManager` regression covering completion-order pairing.
+
+- **Seed pipeline manifest schema + cross-manifest validator (S2.5).**
+  `plugins/seed_pipeline/{seed_pipeline.plugin.toml, manifest.py}` per
+  ADR-003 — 7-role + 3-voter judge panel declarative binding. Reuses
+  Petri's `[petri.source.*]` / `[petri.adapter.*]` layers via
+  cross-manifest validation: voter (family, source) pairs are validated
+  against `petri.source.<family>.allowed` at load time so a typo'd
+  source (`claude_cli` vs `claude-cli`) fails immediately. Pydantic
+  schema enforces default∈allowed, voters≥2, family diversity, and
+  rejects `source="auto"` for judge bindings. 15 unit test + bundled
+  TOML. P-checklist: P4 (package-relative manifest path) + P7
+  (cross-manifest contract validation at load time).
+- **`seed-pipeline-cycle` skill (cycle scaffold).** Session 63 의 6-PR 검증
+  사이클을 `.geode/skills/seed-pipeline-cycle/SKILL.md` 로 codify. 6 phase
+  (Allocation / Implement + P1-P7 checklist / Verify + Codex MCP audit /
+  PR & CI / Merge & Cleanup / Optional Review). S2.5-S12 + 모든 fix-up
+  PR 에 동일 적용. 본 SKILL 자체가 1st 적용 사례.
+
+### Fixed
+
+- **Seed pipeline S2-fix.** Multi-PR review found 7 issues in the merged
+  S0-S2-wire stack; all resolved here:
+  - `Generator` now pairs `SubResult` to `SubTask` by `task_id` dict
+    lookup (previously `zip(tasks, results, strict=False)` silently
+    mismatched candidate metadata with whichever sub-agent finished
+    first, because `SubAgentManager.delegate` returns in completion
+    order, not submission order). Regression test covers reverse-order
+    + unmatched-result case.
+  - `BudgetGuard.record_usage` hard-cap check moved inside the lock so
+    concurrent recorders cannot both observe `usd_after < cap`, exit
+    the critical section, and bypass the kill.
+  - `Pipeline._run_phase` cost rollup moved into `finally` so the
+    `BudgetGuard`'s accumulated `usd_spent` / `prompt_tokens` /
+    `completion_tokens` flow into `state` on every path including
+    re-raised exceptions and `BudgetExceededError`. Regression test
+    pins the invariant.
+  - `SharedServices._build_agent_registry` now anchors `SubagentLoader`
+    at `get_project_root() / ".claude" / "agents"` rather than the
+    cwd-relative default; logs INFO when no agents are discovered.
+  - `build_system_prompt` honors the `{skill_context}` placeholder in
+    both the override and default branches; substitutes in place when
+    present, appends when absent.
+  - `filter_handlers` warns when the `AgentDefinition.tools` whitelist
+    references a tool name that doesn't exist in the handler registry
+    (silent typo previously degraded the agent to zero tools).
+  - `Generator` module docstring updated — "Known wiring gaps" section
+    replaced with a "Wiring history" section noting S2-wire RESOLVED.
+  - `SeedAgentResult` docstring adds explicit "why not reuse
+    `SubAgentResult`" rationale.
+- **Budget defaults relaxed.** `SEED_PIPELINE_BUDGET_SOFT_USD` default
+  raised $0.50 → $2.00 and `_HARD_USD` $2.00 → $10.00 so seed-pipeline
+  on subscription paths (claude-cli / codex-cli, ToS-aware) doesn't
+  trip false-positive soft warnings on long-form generation. PAYG users
+  drop them via the env vars.
+
 ## [0.99.13] — 2026-05-18
 
 **Post-release sync** — main 의 v0.99.12 packaging refactor + game_ip

@@ -26,7 +26,7 @@ class TestLLMLifecycleEvents:
         assert HookEvent.LLM_CALL_ENDED.value == "llm_call_end"
 
     def test_event_count_includes_llm_events(self) -> None:
-        """40 events total after H6 orphan pruning."""
+        """59 events total — H6 orphan pruning."""
         assert len(HookEvent) == 58
 
 

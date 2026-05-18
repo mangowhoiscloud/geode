@@ -1,4 +1,4 @@
-"""Bootstrap wiring — hooks, memory, session, config_watcher, task, prompt, plugin registry.
+"""Bootstrap wiring — hooks, memory, session, config_watcher, task, plugin registry.
 
 Extracted from core.runtime as standalone functions (formerly GeodeRuntime staticmethods).
 """
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     # annotations (``from __future__ import annotations``).  Each class
     # is imported lazily inside its build_* function below; this block
     # exists solely so mypy / IDEs can resolve the annotations.
-    from core.llm.prompt_assembler import PromptAssembler
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.port import SessionStorePort
@@ -215,6 +214,9 @@ def build_hooks(
                 "journal_pipeline_end": [HookEvent.PIPELINE_ENDED],
                 "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
+                # P1c — close defect #18 (STARTED + FAILED had no consumer).
+                "journal_subagent_started": [HookEvent.SUBAGENT_STARTED],
+                "journal_subagent_failed": [HookEvent.SUBAGENT_FAILED],
             }
             for evt in target_events.get(handler_name, []):
                 hooks.register(evt, handler_fn, name=handler_name, priority=60)
@@ -694,23 +696,6 @@ def build_task_graph(
     bridge = TaskGraphHookBridge(graph, subject_prefix=prefix)
     bridge.register(hooks)
     return graph, bridge
-
-
-def build_prompt_assembler(
-    *,
-    hooks: HookSystem,
-    skill_dirs: list[Path] | None = None,
-) -> PromptAssembler:
-    """Build PromptAssembler with SkillRegistry and hook integration (ADR-007)."""
-    from core.llm.prompt_assembler import PromptAssembler
-    from core.llm.skill_registry import SkillRegistry
-
-    skill_registry = SkillRegistry(extra_dirs=skill_dirs or [])
-    skill_registry.discover()
-    return PromptAssembler(
-        skill_registry=skill_registry,
-        hooks=hooks,
-    )
 
 
 # ---------------------------------------------------------------------------
