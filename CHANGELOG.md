@@ -49,6 +49,23 @@ functional change.
 
 ### Added
 
+- **Slop prevention audit + 6-lens skill (PR 3).** New
+  `scripts/slop_audit.py` runs a 6-lens scan across `core/` +
+  `plugins/` + `autoresearch/` + `scripts/`: (1) unused imports
+  (`ruff F401`), (2) dead private functions (zero-caller heuristic),
+  (3) duplicate signatures (≥3 same-name defs), (4) abandoned TODOs
+  (no owner / date), (5) lint-bypass markers (`# noqa` /
+  `# type: ignore` counted vs baseline), (6) stale references
+  (known-removed names like `BudgetGuard` / `FitnessBaseline` /
+  `seeds_safe10` that should not re-appear in source). Lines with
+  `# slop:keep` are ignored so historical references in docstrings
+  stay documented. Adds `.geode/skills/slop-audit/SKILL.md`
+  documenting interpretation + workflow. Generated baseline at
+  `docs/audits/2026-05-18-slop-audit-baseline.md`; `--check` mode
+  exits 1 only when a count grew vs baseline (CI advisory). 7 unit
+  tests covering all 6 lenses + baseline round-trip + slop:keep
+  marker.
+
 - **4-path × 4-component auth coverage matrix (PR 2).** New
   `plugins/seed_pipeline/auth_coverage.py` defines the canonical
   16-cell matrix: 4 components (`seed_pipeline`, `petri_audit`,

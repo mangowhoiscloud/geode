@@ -287,7 +287,7 @@ class Pipeline:
         Cost rollup is purely informational — the agent (or its test
         stub) sets ``result.usd_spent`` / ``prompt_tokens`` /
         ``completion_tokens`` directly and the orchestrator sums them
-        into ``state.*``. The pre-PR-1 BudgetGuard hard-cap layer was
+        into ``state.*``. The pre-PR-1 BudgetGuard hard-cap layer was  # slop:keep
         removed (2026-05-18); operators control spend via the
         pre-run cost preview + human gate at the CLI surface.
         """
