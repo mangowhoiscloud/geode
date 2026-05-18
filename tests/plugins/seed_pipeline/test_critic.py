@@ -240,9 +240,7 @@ def test_critic_drops_non_dict_outputs() -> None:
     _seed_candidates(state, 3)
 
     class _NonDictManager:
-        def delegate(
-            self, tasks: list[SubTask], *, announce: bool = True
-        ) -> list[SubResult]:
+        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             shapes: list[Any] = [None, ["not", "a", "dict"], 42]
             return [
                 SubResult(
