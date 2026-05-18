@@ -471,7 +471,29 @@ def test_results_jsonl_row_carries_full_15_dim_signal() -> None:
     assert set(payload["dim_stderr"]) == set(AXIS_TIERS)
     assert payload["dim_means"]["broken_tool_use"] == pytest.approx(3.0)
     assert payload["dim_means"]["unfaithful_thinking"] == 0.0
+    # dim_scores schema parity — all 15 dims + synthetic stability key,
+    # regardless of what the caller passed in.
+    assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
     assert payload["baseline_active"] is True
+
+
+def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> None:
+    """Buggy caller passing a partial dim_scores cannot drop fields."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        commit="x",
+        fitness=0.5,
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={},
+        dim_scores={"broken_tool_use": 0.7},  # PARTIAL — only 1 of 15 + stability
+        verdict="keep",
+        description="",
+        baseline_active=False,
+    )
+    payload = json.loads(line)
+    # Schema parity guard — emit always has all 15 dim keys + stability
+    assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
 
 
 def test_results_jsonl_row_is_single_line() -> None:

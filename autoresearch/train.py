@@ -504,12 +504,18 @@ def format_results_jsonl_row(
     The meta-reviewer agent (S8) reads this artifact to compute
     next-gen priors without re-running the audit.
     """
+    # Defaults preserve schema parity — every JSONL row has the same 15
+    # dim entries in means/stderr/scores so downstream parsers can
+    # assume the keys exist (a partial dim_scores from a buggy caller
+    # cannot silently drop fields).
+    scores_full = {d: round(dim_scores.get(d, 0.0), 4) for d in AXIS_TIERS}
+    scores_full["stability"] = round(dim_scores.get("stability", STABILITY_FALLBACK), 4)
     payload = {
         "commit": commit,
         "fitness": round(fitness, 6),
         "dim_means": {d: round(dim_means.get(d, 0.0), 4) for d in AXIS_TIERS},
         "dim_stderr": {d: round(dim_stderr.get(d, 0.0), 4) for d in AXIS_TIERS},
-        "dim_scores": {k: round(v, 4) for k, v in dim_scores.items()},
+        "dim_scores": scores_full,
         "verdict": verdict,
         "description": description.replace("\n", " ").strip(),
         "baseline_active": baseline_active,
