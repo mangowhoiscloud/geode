@@ -61,8 +61,31 @@ functional change.
   `llm_cross_provider_order` 를 삭제했습니다. Provider 내부 fallback chain 은
   유지됩니다. 기존 opt-in env var/settings surface 는 사라지지만 default 가 이미
   `False` 였으므로 사용자 visible 영향은 거의 없습니다.
+
 ### Changed
 
+- **PR-δ1 — autoresearch consumes `[outer_loop.autoresearch]` config.**
+  Closes 2026-05-19 outer-loop config consolidation plan Phase δ
+  (first half — re-land after PR #1317 was closed during
+  CHANGELOG-conflict recovery; rebased onto the current develop
+  tip on 2026-05-19). `autoresearch/train.py` adds
+  `_get_autoresearch_config()` — lazily loads
+  `OuterLoopConfig.autoresearch` (PR-α1) and falls back to a
+  `SimpleNamespace` mirroring the module constants on `ImportError` /
+  load failure so the module stays importable in test contexts that
+  stub `core.config`. Call sites swap module-constant reads for
+  `cfg.X` reads: `_build_audit_command` (target / judge / seed_limit /
+  dim_set / max_turns / use_oauth), `_resolve_seed_select`
+  (config.seed_select as second precedence after env override),
+  `run_audit` (timeout calc), and `print_summary` (output values).
+  Module constants stay literal so the outer-loop agent's grep-based
+  workflow per `program.md` keeps working — they are now the **final
+  fallback** in the 3-tier precedence (env → config → module
+  constant). No-op behaviour change at the default level (verified by
+  `test_get_autoresearch_config_defaults_match_module_constants`).
+  5 new unit tests cover helper shape / defaults parity / argv
+  flow-through / env-vs-config precedence / config-vs-module
+  fallback.
 - **PR-δ2 — seed-pipeline + petri user_overrides consume outer-loop
   config.** Closes 2026-05-19 outer-loop config consolidation plan
   Phase δ (second half). `plugins/seed_pipeline/cli.py`:
