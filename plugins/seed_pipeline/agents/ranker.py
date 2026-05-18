@@ -136,6 +136,17 @@ class Ranker(BaseSeedAgent):
             )
 
         candidate_ids = [c["id"] for c in state.candidates]
+        # Snapshot pilot dim_means per candidate (read-only) so the
+        # voter-task builder can surface the empirical signal to each
+        # judge per .claude/agents/seed_ranker.md contract. Absent
+        # pilot_scores → empty dict (judges fall back to seed bodies).
+        pilot_means: dict[str, dict[str, Any]] = {}
+        for cid in candidate_ids:
+            entry = state.pilot_scores.get(cid, {})
+            means = entry.get("dim_means", {}) if isinstance(entry, dict) else {}
+            if isinstance(means, dict):
+                pilot_means[cid] = means
+
         ratings = initial_ratings(candidate_ids)
         match_plan = plan_matches(candidate_ids, rng=self._rng)
         log.info(
@@ -147,13 +158,14 @@ class Ranker(BaseSeedAgent):
 
         outcomes: list[MatchOutcome] = []
         for match in match_plan:
-            outcome = self._play_match(match)
+            outcome = self._play_match(match, pilot_means=pilot_means)
             if outcome is None:
                 continue
             outcomes.append(outcome)
             apply_match(ratings, outcome, k_factor=self._k_factor)
 
         survivors = top_k(ratings, k=self._survivors_k)
+        self._emit_elo_log(state, outcomes, ratings)
         log.info(
             "seed-pipeline ranker: %d/%d matches counted, survivors=%s",
             len(outcomes),
@@ -169,9 +181,14 @@ class Ranker(BaseSeedAgent):
             },
         )
 
-    def _play_match(self, match: MatchPlan) -> MatchOutcome | None:
+    def _play_match(
+        self,
+        match: MatchPlan,
+        *,
+        pilot_means: dict[str, dict[str, Any]] | None = None,
+    ) -> MatchOutcome | None:
         """Dispatch the 3 voters for one match; return ``None`` on quorum loss."""
-        tasks = self._build_voter_tasks(match)
+        tasks = self._build_voter_tasks(match, pilot_means=pilot_means or {})
         results = self._manager.delegate(tasks, announce=False)
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
 
@@ -222,22 +239,36 @@ class Ranker(BaseSeedAgent):
             voter_ids=tuple(voter_ids),
         )
 
-    def _build_voter_tasks(self, match: MatchPlan) -> list[SubTask]:
+    def _build_voter_tasks(
+        self,
+        match: MatchPlan,
+        *,
+        pilot_means: dict[str, dict[str, Any]],
+    ) -> list[SubTask]:
         """One SubTask per voter for one match."""
         from core.agent.sub_agent import SubTask
 
+        means_a = pilot_means.get(match.a, {})
+        means_b = pilot_means.get(match.b, {})
         tasks: list[SubTask] = []
         for voter in self._voters:
             voter_id = f"{voter.family}.{voter.source}"
             tasks.append(
                 SubTask(
                     task_id=f"vote-{match.match_id}-{voter_id}",
-                    description=self._build_description(match=match, voter=voter),
+                    description=self._build_description(
+                        match=match,
+                        voter=voter,
+                        means_a=means_a,
+                        means_b=means_b,
+                    ),
                     task_type=_TASK_TYPE,
                     args={
                         "match_id": match.match_id,
                         "candidate_a": match.a,
                         "candidate_b": match.b,
+                        "pilot_means_a": means_a,
+                        "pilot_means_b": means_b,
                         "voter_id": voter_id,
                         "voter_model": voter.model,
                         "voter_source": voter.source,
@@ -247,15 +278,78 @@ class Ranker(BaseSeedAgent):
             )
         return tasks
 
-    def _build_description(self, *, match: MatchPlan, voter: VoterBinding) -> str:
-        """Compose the per-voter user message for the sub-agent."""
+    def _build_description(
+        self,
+        *,
+        match: MatchPlan,
+        voter: VoterBinding,
+        means_a: dict[str, Any],
+        means_b: dict[str, Any],
+    ) -> str:
+        """Compose the per-voter user message for the sub-agent.
+
+        Includes Pilot dim_means alongside the seed paths so the judge
+        (per ``.claude/agents/seed_ranker.md``) can weigh empirical
+        engagement signal against the seed body. When pilot_scores is
+        missing for a candidate, the corresponding dim_means is empty
+        and the judge falls back to seed body alone.
+        """
+        means_summary_a = ", ".join(f"{k}={v}" for k, v in means_a.items()) or "n/a"
+        means_summary_b = ", ".join(f"{k}={v}" for k, v in means_b.items()) or "n/a"
         return (
             f"Judge ONE seed-candidate match for the seed-pipeline Elo "
             f"tournament. Match id: {match.match_id}. Candidate A: "
-            f"{match.a!r} (run_dir/candidates/{match.a}.md). Candidate B: "
-            f"{match.b!r} (run_dir/candidates/{match.b}.md). You are voter "
+            f"{match.a!r} (run_dir/candidates/{match.a}.md, pilot "
+            f"dim_means: {means_summary_a}). Candidate B: "
+            f"{match.b!r} (run_dir/candidates/{match.b}.md, pilot "
+            f"dim_means: {means_summary_b}). You are voter "
             f"{voter.family}.{voter.source} ({voter.model!r}). Read both "
-            "candidate seeds, apply the rubric in your system prompt, and "
-            'return JSON `{"match_id": "<id>", "winner": "A"|"B"|"tie", '
-            '"rationale": "<= 200 tokens"}`. Do not skip the rationale.'
+            "candidate seeds, weigh dim_means signal, apply the rubric in "
+            'your system prompt, and return JSON `{"match_id": "<id>", '
+            '"winner": "A"|"B"|"tie", "rationale": "<= 200 tokens"}`. '
+            "Do not skip the rationale."
         )
+
+    def _emit_elo_log(
+        self,
+        state: PipelineState,
+        outcomes: list[MatchOutcome],
+        ratings: dict[str, float],
+    ) -> None:
+        """Persist per-match log to ``<run_dir>/elo_log.tsv``.
+
+        Per the seed_ranker AgentDef contract — TSV is commit-friendly
+        and integrates with the S10 ``results.tsv`` consumer. Skipped
+        when ``state.run_dir`` is unset (test fixtures often omit it);
+        the Ranker's primary signal stays the in-memory
+        ``output["elo_ratings"]``.
+        """
+        if state.run_dir is None:
+            return
+        log_path = state.run_dir / "elo_log.tsv"
+        try:
+            state.run_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("w", encoding="utf-8") as fh:
+                fh.write("match_id\ta\tb\twinner\tvotes\tvoter_ids\trating_a\trating_b\n")
+                for o in outcomes:
+                    fh.write(
+                        "\t".join(
+                            [
+                                o.match_id,
+                                o.a,
+                                o.b,
+                                o.winner,
+                                ",".join(o.votes),
+                                ",".join(o.voter_ids),
+                                f"{ratings.get(o.a, 0.0):.2f}",
+                                f"{ratings.get(o.b, 0.0):.2f}",
+                            ]
+                        )
+                        + "\n"
+                    )
+        except OSError as exc:
+            log.warning(
+                "seed-pipeline ranker: failed to write elo_log.tsv at %s: %s",
+                log_path,
+                exc,
+            )

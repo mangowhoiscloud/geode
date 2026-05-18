@@ -382,3 +382,66 @@ def test_ranker_survivors_count_respects_k() -> None:
     )
     result = ranker.execute(state)
     assert len(result.output["survivors"]) == 3
+
+
+def test_ranker_emits_elo_log_tsv(tmp_path: Any) -> None:
+    """Ranker writes <run_dir>/elo_log.tsv per AgentDef contract."""
+    state = _state_with_candidates(3)
+    state.run_dir = tmp_path
+    manager = _AlwaysAWinsManager()
+    ranker = Ranker(
+        manager=manager,  # type: ignore[arg-type]
+        voters=_voters(),
+        rng=random.Random(0),
+    )
+    ranker.execute(state)
+    log_path = tmp_path / "elo_log.tsv"
+    assert log_path.is_file()
+    content = log_path.read_text(encoding="utf-8")
+    # Header + at least one row
+    lines = [line for line in content.splitlines() if line]
+    assert lines[0].startswith("match_id\t")
+    assert len(lines) > 1
+
+
+def test_ranker_no_elo_log_when_run_dir_unset() -> None:
+    """Without state.run_dir, Ranker still completes (test fixtures often omit)."""
+    state = _state_with_candidates(3)
+    state.run_dir = None
+    manager = _AlwaysAWinsManager()
+    ranker = Ranker(
+        manager=manager,  # type: ignore[arg-type]
+        voters=_voters(),
+        rng=random.Random(0),
+    )
+    result = ranker.execute(state)
+    assert result.success
+
+
+def test_ranker_voter_description_includes_pilot_means() -> None:
+    """Pilot dim_means flow into the voter task description when present."""
+    state = _state_with_candidates(2)
+    state.pilot_scores = {
+        "c-00": {
+            "candidate_id": "c-00",
+            "dim_means": {"dim_01": 0.71, "dim_02": 0.55},
+            "dim_stderr": {"dim_01": 0.1, "dim_02": 0.2},
+            "status": "ok",
+        },
+        "c-01": {
+            "candidate_id": "c-01",
+            "dim_means": {"dim_01": 0.42},
+            "dim_stderr": {"dim_01": 0.05},
+            "status": "ok",
+        },
+    }
+    manager = _AlwaysAWinsManager()
+    ranker = Ranker(
+        manager=manager,  # type: ignore[arg-type]
+        voters=_voters(),
+        rng=random.Random(0),
+    )
+    ranker.execute(state)
+    # At least one task's description should mention dim_01 from pilot means.
+    descriptions = [t.description for t in manager.received_tasks]
+    assert any("dim_01" in d for d in descriptions), descriptions[:1]

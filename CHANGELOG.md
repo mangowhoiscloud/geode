@@ -63,10 +63,17 @@ functional change.
   with quorum = 2-of-3 (matches with ≤ 1 valid vote are skipped).
   Lifts shared JSON parser to `plugins/seed_pipeline/agents/base.py`
   as `parse_structured_output` (used by Ranker; Critic/Pilot will
-  follow in a future retrofit). 49 unit tests (24 tournament + 14
-  ranker + 9 base parser; reverse-order completion, quorum-loss
-  skip, invalid winner reject, JSON-as-text fallback, frozen
-  dataclass guard).
+  follow in a future retrofit). Per-match elo_log.tsv emitted to
+  `state.run_dir` (commit-friendly) per the seed_ranker AgentDef
+  contract. Voter task description includes Pilot `dim_means` for
+  both candidates so judges weigh empirical engagement signal
+  alongside the seed body. plan_registry binding deferred to S11
+  (CLI wiring) — Ranker already accepts resolved `VoterBinding` list
+  at construction, so the picker → Ranker handoff is end-to-end.
+  52 unit tests (27 tournament + 16 ranker + 9 base parser; reverse-
+  order completion, quorum-loss skip, invalid winner reject, JSON-as-
+  text fallback, frozen dataclass guard, elo_log.tsv emission, pilot
+  dim_means routing in voter description).
 - **Seed-pipeline picker + ToS notice + runtime diversity validator (S5.5).**
   `plugins/seed_pipeline/picker.py` resolves each of the 7 roles' concrete
   `(model, family, source)` binding by walking the manifest's
