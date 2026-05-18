@@ -225,9 +225,7 @@ def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
     # c1 is similar to pool_seed; c2 is unique
     state.candidates = [
         _make_candidate("c1", tmp_path / "c1.md", body=pool_body),
-        _make_candidate(
-            "c2", tmp_path / "c2.md", body="totally unrelated content here"
-        ),
+        _make_candidate("c2", tmp_path / "c2.md", body="totally unrelated content here"),
     ]
     proximity = Proximity()
     candidate_texts = proximity._load_candidate_texts(state)
