@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.14] — 2026-05-19
+
 ### Changed
 
 - **seed-pipeline module docstrings — English unification (P1b follow-up).**
