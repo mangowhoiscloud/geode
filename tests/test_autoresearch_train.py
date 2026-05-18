@@ -367,3 +367,175 @@ def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]
     for dim in AXIS_TIERS:
         assert f"{dim}_score" in captured, f"missing {dim}_score line in stdout"
         assert f"{dim}_mean" in captured, f"missing {dim}_mean line in stdout"
+
+
+# ---------------------------------------------------------------------------
+# S10 — results.tsv 10-col + results.jsonl raw emit
+# ---------------------------------------------------------------------------
+
+
+def test_results_tsv_row_has_10_columns() -> None:
+    """S10 — results.tsv schema: 10 tab-separated columns."""
+    from autoresearch.train import RESULTS_TSV_HEADER, format_results_tsv_row
+
+    assert len(RESULTS_TSV_HEADER) == 10
+    dim_means = {"broken_tool_use": 3.0}
+    scores = compute_dim_scores(dim_means)
+    row = format_results_tsv_row(
+        commit="a1b2c3d",
+        fitness=0.5,
+        dim_scores=scores,
+        dim_means=dim_means,
+        verdict="keep",
+        description="test row",
+    )
+    cols = row.split("\t")
+    assert len(cols) == 10
+    assert cols[0] == "a1b2c3d"
+    assert cols[8] == "keep"
+
+
+def test_results_tsv_row_critical_min_surfaces_regression() -> None:
+    """critical_min column makes a single critical dim regression visible."""
+    from autoresearch.train import format_results_tsv_row
+
+    # broken_tool_use at 9.0 → critical dim score = 0.1 (worst of 4 critical)
+    dim_means = {"broken_tool_use": 9.0}
+    scores = compute_dim_scores(dim_means)
+    row = format_results_tsv_row(
+        commit="x",
+        fitness=0.0,
+        dim_scores=scores,
+        dim_means=dim_means,
+        verdict="discard",
+        description="critical regress",
+    )
+    cols = row.split("\t")
+    critical_min = float(cols[2])
+    assert critical_min == pytest.approx(0.1, abs=1e-4)
+
+
+def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
+    """Description must not break the TSV — tabs/newlines stripped."""
+    from autoresearch.train import format_results_tsv_row
+
+    row = format_results_tsv_row(
+        commit="x",
+        fitness=0.5,
+        dim_scores=compute_dim_scores({}),
+        dim_means={},
+        verdict="keep",
+        description="bad\tdescription\nwith newlines",
+    )
+    assert row.count("\t") == 9
+
+
+def test_results_tsv_row_dim_count_engaged() -> None:
+    """dim_count_engaged counts how many AXIS_TIERS dims appear in dim_means."""
+    from autoresearch.train import format_results_tsv_row
+
+    dim_means = {"broken_tool_use": 3.0, "overrefusal": 1.0, "eval_awareness": 1.0}
+    row = format_results_tsv_row(
+        commit="x",
+        fitness=0.5,
+        dim_scores=compute_dim_scores(dim_means),
+        dim_means=dim_means,
+        verdict="keep",
+        description="",
+    )
+    cols = row.split("\t")
+    assert cols[7] == "3"
+
+
+def test_results_jsonl_row_carries_full_15_dim_signal() -> None:
+    """JSONL has all 15 dim means + stderrs + scores, regardless of audit emit."""
+    from autoresearch.train import format_results_jsonl_row
+
+    dim_means = {"broken_tool_use": 3.0}
+    dim_stderr = {"broken_tool_use": 0.5}
+    scores = compute_dim_scores(dim_means, dim_stderr)
+    line = format_results_jsonl_row(
+        commit="abc",
+        fitness=0.4,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=scores,
+        verdict="keep",
+        description="test",
+        baseline_active=True,
+    )
+    payload = json.loads(line)
+    assert payload["commit"] == "abc"
+    assert payload["fitness"] == 0.4
+    assert set(payload["dim_means"]) == set(AXIS_TIERS)
+    assert set(payload["dim_stderr"]) == set(AXIS_TIERS)
+    assert payload["dim_means"]["broken_tool_use"] == pytest.approx(3.0)
+    assert payload["dim_means"]["unfaithful_thinking"] == 0.0
+    # dim_scores schema parity — all 15 dims + synthetic stability key,
+    # regardless of what the caller passed in.
+    assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
+    assert payload["baseline_active"] is True
+
+
+def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> None:
+    """Buggy caller passing a partial dim_scores cannot drop fields."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        commit="x",
+        fitness=0.5,
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={},
+        dim_scores={"broken_tool_use": 0.7},  # PARTIAL — only 1 of 15 + stability
+        verdict="keep",
+        description="",
+        baseline_active=False,
+    )
+    payload = json.loads(line)
+    # Schema parity guard — emit always has all 15 dim keys + stability
+    assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
+
+
+def test_results_jsonl_row_is_single_line() -> None:
+    """JSONL lines must be single-line (no embedded newlines)."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        commit="abc",
+        fitness=0.4,
+        dim_means={},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({}),
+        verdict="keep",
+        description="multi\nline\ndescription",
+        baseline_active=False,
+    )
+    assert "\n" not in line
+
+
+def test_results_jsonl_round_trip() -> None:
+    """Emitted JSONL must parse back to a valid dict with all expected keys."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        commit="x",
+        fitness=0.5,
+        dim_means={},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({}),
+        verdict="keep",
+        description="round-trip",
+        baseline_active=False,
+    )
+    obj = json.loads(line)
+    for key in (
+        "commit",
+        "fitness",
+        "dim_means",
+        "dim_stderr",
+        "dim_scores",
+        "verdict",
+        "description",
+        "baseline_active",
+    ):
+        assert key in obj

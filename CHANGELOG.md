@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **autoresearch results.tsv 10-col + results.jsonl raw emit (S10).**
+  `autoresearch/train.py` adds `format_results_tsv_row()` (10-col
+  schema: `commit, fitness, critical_min, critical_mean,
+  auxiliary_mean, stability_score, info_mean, dim_count_engaged,
+  verdict, description`) and `format_results_jsonl_row()` (single-line
+  JSON with the full 15-dim raw signal — `dim_means`, `dim_stderr`,
+  `dim_scores` for all 15 AXIS_TIERS entries + `commit`, `fitness`,
+  `verdict`, `description`, `baseline_active`). After
+  `print_summary`, `main()` emits `results_tsv: <row>` and
+  `results_jsonl: <json>` lines on stdout so the operator can sed-strip
+  and append to `autoresearch/state/results.{tsv,jsonl}` (both
+  gitignored via the existing repo `autoresearch/state/*` rule).
+  Verdict / description threaded through `AUTORESEARCH_VERDICT` /
+  `AUTORESEARCH_DESCRIPTION` env vars (defaults `pending` / empty).
+  `autoresearch/program.md` updated to document the new schema +
+  grep recipes. 7 new unit tests (33 total in
+  test_autoresearch_train.py).
+
 ### Changed
 
 - **autoresearch 15-axis raw fitness + baseline wrapping 제거 (S9).**
