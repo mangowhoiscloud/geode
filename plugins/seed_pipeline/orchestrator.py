@@ -259,6 +259,7 @@ class Pipeline:
         previous_guard = self.state.budget_guard
         self.state.budget_guard = guard
 
+        result: SeedAgentResult | None = None
         try:
             with self._acquire_lane(role):
                 try:
@@ -294,23 +295,41 @@ class Pipeline:
                         result.duration_ms = duration
         finally:
             self.state.budget_guard = previous_guard
+            # S2-fix (2026-05-18) — guard authoritative rollup, runs on EVERY
+            # path (success / BudgetExceeded result / re-raised exception).
+            # Pre-fix the rollup ran only on the success / BudgetExceeded
+            # paths because it was AFTER the try/finally, and a generic
+            # Exception re-raise skipped past it. Any guard.record_usage()
+            # calls made before a crash were silently dropped from
+            # state.usd_spent / .prompt_tokens / .completion_tokens.
+            #
+            # The guard is the single source of truth for cost when LLM
+            # call sites use it. For test-stub agents that bypass the guard
+            # entirely (set result.* directly), the post-finally block
+            # below credits result.* instead. Never both — exactly one of
+            # (guard, result) accounts for state.
+            guard_used = guard.budget.usd_spent > 0 or guard.budget.prompt_tokens > 0
+            if guard_used:
+                self.state.usd_spent += guard.budget.usd_spent
+                self.state.prompt_tokens += guard.budget.prompt_tokens
+                self.state.completion_tokens += guard.budget.completion_tokens
 
-        # If the agent did not propagate cost on its SeedAgentResult,
-        # pull from the guard (authoritative — guard intercepts the
-        # actual LLM calls). Concrete S2-S8 agents wire their LLM call
-        # sites to guard.record_usage and copy the guard's totals onto
-        # their result before returning.
-        if result.usd_spent == 0.0 and guard.budget.usd_spent > 0:
+        # Mirror guard usage onto result for observability (does NOT add
+        # to state again — the finally block already credited).
+        if guard.budget.usd_spent > 0 and result.usd_spent == 0.0:
             result.usd_spent = guard.budget.usd_spent
             result.prompt_tokens = guard.budget.prompt_tokens
             result.completion_tokens = guard.budget.completion_tokens
 
-        # Roll up the result's reported cost into state. Result.* is the
-        # single source for state aggregation so tests can stub agents
-        # without going through the guard.
-        self.state.usd_spent += result.usd_spent
-        self.state.prompt_tokens += result.prompt_tokens
-        self.state.completion_tokens += result.completion_tokens
+        # Stub-agent path — result.* was set directly without going through
+        # the guard. Credit state from result here (guard rollup above was
+        # a no-op since guard.usd_spent == 0).
+        if not guard_used and (
+            result.usd_spent > 0 or result.prompt_tokens > 0 or result.completion_tokens > 0
+        ):
+            self.state.usd_spent += result.usd_spent
+            self.state.prompt_tokens += result.prompt_tokens
+            self.state.completion_tokens += result.completion_tokens
 
         if result.success:
             self.state.merge(role, result.output)

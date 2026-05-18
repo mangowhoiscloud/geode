@@ -60,8 +60,16 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-DEFAULT_SOFT_USD = _env_float("SEED_PIPELINE_BUDGET_SOFT_USD", 0.50)
-DEFAULT_HARD_USD = _env_float("SEED_PIPELINE_BUDGET_HARD_USD", 2.00)
+# S2-fix (2026-05-18) — defaults relaxed per user feedback. Previous
+# 0.50 / 2.00 were too conservative for seed-pipeline use cases where
+# subscription paths (claude-cli, codex-cli) cost $0 against quota
+# rather than PAYG, but the orchestrator still tripped soft warnings
+# on the per-phase cost rollup of long-form generation. New defaults
+# 2.00 / 10.00 give the typical 15-candidate Generation phase + a
+# 3-judge tournament headroom without false positives. PAYG users
+# can drop them back via the env vars below.
+DEFAULT_SOFT_USD = _env_float("SEED_PIPELINE_BUDGET_SOFT_USD", 2.00)
+DEFAULT_HARD_USD = _env_float("SEED_PIPELINE_BUDGET_HARD_USD", 10.00)
 
 
 class BudgetExceededError(RuntimeError):
@@ -172,6 +180,12 @@ class BudgetGuard:
             input_tokens=prompt_tokens,
             output_tokens=completion_tokens,
         )
+        # S2-fix (2026-05-18) — hard-cap check must happen *inside* the lock
+        # so concurrent recorders can't both observe usd_after < cap, exit
+        # the critical section, and bypass the kill. Pre-fix the lock was
+        # released before the cap test (line 193), admitting an over-spend
+        # race of up to N-1 calls when N sub-agents share one guard.
+        hard_exceeded = False
         with self._lock:
             self._budget.prompt_tokens += prompt_tokens
             self._budget.completion_tokens += completion_tokens
@@ -180,6 +194,10 @@ class BudgetGuard:
             soft_crossed_now = not self._budget.soft_warned and usd_after >= self._budget.soft_usd
             if soft_crossed_now:
                 self._budget.soft_warned = True
+            hard_exceeded = usd_after > self._budget.hard_usd
+        # Callbacks + raise happen OUTSIDE the lock so the holder doesn't
+        # block other recorders while a slow callback runs, but the decision
+        # of whether to fire was made under the lock above.
         if soft_crossed_now and self._on_soft_warn is not None:
             try:
                 self._on_soft_warn(self._budget)
@@ -190,7 +208,7 @@ class BudgetGuard:
                     usd_after,
                     exc_info=True,
                 )
-        if usd_after > self._budget.hard_usd:
+        if hard_exceeded:
             raise BudgetExceededError(
                 usd_spent=usd_after,
                 hard_usd=self._budget.hard_usd,

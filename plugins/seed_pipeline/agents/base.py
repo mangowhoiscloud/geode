@@ -57,10 +57,25 @@ __all__ = ["BaseSeedAgent", "SeedAgentResult"]
 class SeedAgentResult:
     """Standardized result of one phase-agent invocation.
 
-    Maps onto ``core.agent.sub_agent.SubAgentResult`` for roles that
-    spawn sub-agents, but lives in the seed-pipeline domain so the
-    orchestrator can also use it for non-sub-agent roles
-    (Proximity, in particular).
+    Why not reuse ``core.agent.sub_agent.SubAgentResult``? S2-fix
+    (2026-05-18) explicit rationale — both dataclasses share ~80% of
+    fields (status / duration / token counts / error category), but
+    their *aggregation semantics* differ:
+
+    - ``SubAgentResult`` is per-TASK (one spawn → one result), with
+      ``task_id`` + ``announced`` flag for the parent loop's announce
+      queue. It is N-many per phase when Generator/Ranker fan out.
+    - ``SeedAgentResult`` is per-ROLE (one phase → one result),
+      consumed by the orchestrator's state merge. Carries ``output``
+      dict whose keys (``candidates``, ``reflections``, ``elo_ratings``,
+      …) map directly onto ``PipelineState`` fields.
+
+    Wrapping SubAgentResult would force every role to construct a
+    fake ``task_id`` and force the orchestrator to know about
+    sub-task-vs-phase polymorphism. Keeping them sibling types lets
+    each evolve in its own domain. Roles that spawn sub-agents
+    (Generator, Ranker, Pilot) translate ``list[SubResult]`` →
+    ``SeedAgentResult.output`` inside ``execute()``.
     """
 
     role: str
