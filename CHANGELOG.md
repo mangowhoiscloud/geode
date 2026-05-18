@@ -61,6 +61,25 @@ functional change.
   `llm_cross_provider_order` 를 삭제했습니다. Provider 내부 fallback chain 은
   유지됩니다. 기존 opt-in env var/settings surface 는 사라지지만 default 가 이미
   `False` 였으므로 사용자 visible 영향은 거의 없습니다.
+### Changed
+
+- **ADR + plan extension — paperclip/crumb-style within-source profile
+  rotation + 2-axis account picker UX.** Closes 2026-05-19 user
+  directive "paperclip, crumb 의 사례처럼 로컬에 기록된 계정 기록으로
+  롤아웃 + provider 좌우 / account 위아래 picker." Updates
+  `docs/architecture/outer-loop-resume-decision.md` with a new
+  "Within-source account rotation" section: GEODE already has
+  `core/auth/profiles.py` + `rotation.py` + `credential_breadcrumb.py`
+  (richer than paperclip/crumb's subprocess pickup); outer-loop just
+  wasn't using it. Adds an "Account picker UX (2-axis)" section with
+  ASCII mockup mirroring `core/cli/effort_picker.py`
+  (`pick_model_and_effort`) — provider←→ × profile↑↓ + action row
+  (Enter swap / n add / w wait / p PAYG opt-in / Esc keep aborted).
+  Two entry points: `/login picker` slash + agent-loop NL recogniser.
+  Rotation is **operator-driven**, never automatic. Plan ledger
+  expanded from 6 to 8 PRs under Phase ζ — PR-ζ5.5 (ProfileRotator
+  wiring into outer-loop credential path) + PR-ζ5.6 (account picker
+  UI). Total sprint LOC 2,350 → 2,900.
 
 ## [0.99.16] — 2026-05-19
 
