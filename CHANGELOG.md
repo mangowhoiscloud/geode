@@ -47,6 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Petri bundle isolation.** Split the petri-bundle integrity gate out of
+  `pages.yml` into a dedicated `.github/workflows/petri-publish.yml`
+  workflow so a non-petri site-build failure can no longer mask a corrupt
+  bundle and vice versa. The new workflow runs on every PR that touches
+  `docs/petri-bundle/**`, `scripts/validate_petri_bundle.py`,
+  `scripts/check_repo_hygiene.py`, or the workflow file itself, plus a
+  daily 00:30 UTC cron and `workflow_dispatch`. The deploy still goes
+  through `pages.yml` (single Pages artifact source), but the validator
+  now runs **before** `npm install/build` in that workflow too — a bundle
+  regression aborts the deploy at the cheapest possible step. PR-gate
+  also emits a regression warning when any `.eval` or `assets/**` file
+  was deleted vs the base branch.
+- **Deeper bundle validator.** `scripts/validate_petri_bundle.py` now
+  opens each `.eval` zip and rejects: `header.results=None`, empty
+  `results.scores[]`, any score with empty `metrics`, missing
+  `header.json`, bad zip data, and missing top-level viewer assets
+  (`index.html` + `assets/index.js` + `assets/index.css`). These are the
+  exact triggers behind the click-time `formatPrettyDecimal(g.metrics[i]
+  .value)` TypeError in inspect_ai #1747. Backed by 13 unit tests in
+  `tests/test_validate_petri_bundle.py`. New `zipfile-zstd` dev-group
+  dependency (Python 3.14+ no-op shim) keeps the validator pure-stdlib
+  on the lint path — no `[audit]` extra required.
+- **Petri bundle delete-protection ratchet.** `check_repo_hygiene.py`
+  enforces a `PETRI_EVAL_FLOOR = 9` lower bound on
+  `docs/petri-bundle/logs/*.eval` count. Any PR that drops bundle
+  archives must lower the floor in the same change (Karpathy P4 explicit-
+  action ratchet), preventing silent deletions during unrelated refactors.
+
 ## [0.99.15] — 2026-05-19
 
 ### Added

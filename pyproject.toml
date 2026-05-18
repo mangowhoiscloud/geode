@@ -159,6 +159,10 @@ dev = [
     "ruff>=0.15.2",
     "twine>=6.0.0",
     "types-pyyaml>=6.0.12.20250915",
+    # Adds zstd support to stdlib zipfile so scripts/validate_petri_bundle.py
+    # can open Petri .eval archives without the heavy [audit] extra.
+    # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
+    "zipfile-zstd>=0.0.4",
 ]
 
 
