@@ -783,9 +783,7 @@ def main() -> int:
         _write_baseline(dim_means, dim_stderr)
         print("baseline_promoted:        true (--promote, manual override)")
     else:
-        ok, reason = _should_promote(
-            dim_means, dim_stderr, baseline_means, baseline_stderr
-        )
+        ok, reason = _should_promote(dim_means, dim_stderr, baseline_means, baseline_stderr)
         if ok:
             _write_baseline(dim_means, dim_stderr)
         print(f"baseline_promoted:        {str(ok).lower()} ({reason})")
