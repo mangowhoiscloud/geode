@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **PR-β1 — Petri subscription-only credential mode.** Closes
+  2026-05-19 outer-loop config consolidation plan Phase β. New
+  `PAYG_SOURCE = "api_key"` constant tags the conventional PAYG entry
+  in `plugins/petri_audit/petri.plugin.toml` (every family's
+  `api_key` source). `resolve_credential_source()` gains a
+  `fallback_to_payg: bool = True` kwarg: when ``False``, the auto-
+  expansion loop filters out the PAYG source so subscription runs
+  cannot silently bill the user's API key after OAuth quota
+  exhaustion. Explicit `override="api_key"` still works (caller takes
+  responsibility — no surprise). On no-source-resolution,
+  `CredentialResolutionError(subscription_only=True)` carries a
+  Stripe-style actionable message naming the
+  ``[outer_loop] fallback_to_payg = true`` opt-in, the quota reset
+  wait, and the per-role pin alternative; FE banner (PR-γ1) reads
+  ``err.subscription_only`` to decide whether to render the abort
+  dialog. Default kwarg (``True``) preserves pre-2026-05-19 behaviour
+  so call sites unaware of the flag stay backward-compatible.
+  7 new unit tests (filter / OAuth-still-wins / message contents /
+  flag exposure / back-compat default / override bypass / PAYG_SOURCE
+  constant).
+
 - **ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
   (2026-05-19).** New `docs/architecture/outer-loop-resume-decision.md`
   documents the design for resume-after-subscription-exhaustion: layer

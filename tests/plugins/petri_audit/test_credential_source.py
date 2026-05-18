@@ -230,6 +230,162 @@ def test_error_carries_family_and_allowed():
     assert "api_key" in err.allowed
 
 
+# ── PR-β1: subscription-only mode (fallback_to_payg=False) ─────────────────
+
+
+def test_fallback_disabled_filters_api_key_from_auto_expansion(monkeypatch):
+    """With fallback_to_payg=False, auto expansion must skip api_key
+    even when ANTHROPIC_API_KEY is set."""
+    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    # Without fallback: api_key chosen.
+    assert cs.resolve_credential_source("anthropic") == "api_key"
+    # With fallback disabled: api_key filtered → no OAuth available → raise.
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
+    assert excinfo.value.subscription_only is True
+
+
+def test_fallback_disabled_returns_oauth_when_available(monkeypatch):
+    """With fallback_to_payg=False and OAuth available, returns OAuth."""
+    monkeypatch.setattr(
+        cs,
+        "is_adapter_available",
+        lambda fam, src: src == "claude-cli",
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")  # would-be fallback
+    assert cs.resolve_credential_source("anthropic", fallback_to_payg=False) == "claude-cli"
+
+
+def test_subscription_only_error_message_actionable(monkeypatch):
+    """Stripe-style actionable message must mention the config remedy."""
+    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
+    msg = str(excinfo.value)
+    assert "fallback_to_payg = true" in msg
+    assert "[outer_loop]" in msg
+    assert "subscription" in msg.lower()
+
+
+def test_subscription_only_error_carries_flag(monkeypatch):
+    """``subscription_only`` attribute exposed for FE banner consumption."""
+    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source("anthropic", fallback_to_payg=False)
+    assert excinfo.value.subscription_only is True
+    # Backwards-compat: default invocation has subscription_only=False.
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    with pytest.raises(cs.CredentialResolutionError) as excinfo2:
+        cs.resolve_credential_source("anthropic")
+    assert excinfo2.value.subscription_only is False
+
+
+def test_fallback_default_true_preserves_backcompat(monkeypatch):
+    """Default behaviour (no kwarg) matches pre-2026-05-19 resolver."""
+    monkeypatch.delenv("ANTHROPIC_OAUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert cs.resolve_credential_source("anthropic") == "api_key"
+
+
+def test_override_bypasses_subscription_only_filter(monkeypatch):
+    """Explicit override of ``api_key`` wins even with fallback_to_payg=False.
+
+    Rationale: explicit override = caller takes responsibility; the
+    subscription-only filter is only for the auto-expansion path."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert (
+        cs.resolve_credential_source("anthropic", override="api_key", fallback_to_payg=False)
+        == "api_key"
+    )
+
+
+def test_payg_source_constant_matches_manifest():
+    """PAYG_SOURCE constant is the literal `api_key` string."""
+    assert cs.PAYG_SOURCE == "api_key"
+
+
+def test_strict_mode_blocks_payg_default_for_zhipuai(monkeypatch):
+    """zhipuai manifest default is `api_key` (no OAuth alternative).
+
+    Strict mode (fallback_to_payg=False) must block the concrete-default
+    path too, not only the auto-expansion loop. Explicit override stays
+    a valid escape hatch.
+    """
+    monkeypatch.setenv("ZHIPUAI_API_KEY", "glm-test")
+    # Default kwarg returns api_key as before.
+    assert cs.resolve_credential_source("zhipuai") == "api_key"
+    # Strict mode + no override → raise.
+    with pytest.raises(cs.CredentialResolutionError) as excinfo:
+        cs.resolve_credential_source("zhipuai", fallback_to_payg=False)
+    assert excinfo.value.subscription_only is True
+    # Explicit override bypasses the filter (caller responsibility).
+    assert (
+        cs.resolve_credential_source("zhipuai", override="api_key", fallback_to_payg=False)
+        == "api_key"
+    )
+
+
+def test_outer_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
+    """outer_loop_fallback_policy() defaults True when [outer_loop] absent.
+
+    Tested by monkeypatching load_outer_loop_config to return the default
+    OuterLoopConfig (which has fallback_to_payg=False per the strict
+    default settled in PR-α1 — but the helper itself just reads the field).
+    """
+    from core.config.outer_loop import OuterLoopConfig
+
+    # Unconfigured → default OuterLoopConfig().fallback_to_payg is False.
+    monkeypatch.setattr(
+        "core.config.outer_loop.load_outer_loop_config",
+        lambda: OuterLoopConfig(),
+    )
+    assert cs.outer_loop_fallback_policy() is False
+
+
+def test_outer_loop_fallback_policy_reads_user_config(monkeypatch):
+    """When config sets fallback_to_payg=True, helper returns True."""
+    from core.config.outer_loop import OuterLoopConfig
+
+    monkeypatch.setattr(
+        "core.config.outer_loop.load_outer_loop_config",
+        lambda: OuterLoopConfig(fallback_to_payg=True),
+    )
+    assert cs.outer_loop_fallback_policy() is True
+
+
+def test_outer_loop_fallback_policy_safe_on_import_error(monkeypatch):
+    """If core.config.outer_loop is unavailable, helper returns True
+    (back-compat preservation)."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _raising(name, *args, **kwargs):
+        if name == "core.config.outer_loop":
+            raise ImportError("simulated")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _raising)
+    assert cs.outer_loop_fallback_policy() is True
+
+
+def test_outer_loop_fallback_policy_safe_on_load_failure(monkeypatch):
+    """If load_outer_loop_config raises (corrupt TOML, etc.), helper
+    returns True and logs a warning rather than breaking the run."""
+
+    def _raise():
+        raise RuntimeError("corrupt config")
+
+    monkeypatch.setattr(
+        "core.config.outer_loop.load_outer_loop_config",
+        _raise,
+    )
+    assert cs.outer_loop_fallback_policy() is True
+
+
 def test_smoke_adapter_module_round_trip(monkeypatch):
     """Resolved source must be loadable by the adapter registry."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
