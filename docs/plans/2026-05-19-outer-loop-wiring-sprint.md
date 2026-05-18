@@ -73,7 +73,7 @@ Phase F — fill-in
 
 | PR | Title | Defects | LOC | Files (예상) | Blocking |
 |---|---|---|---|---|---|
-| **P0a** | feat(autoresearch): auto-promote + baseline write | #4, #9 | ~150 | `autoresearch/train.py` (write_baseline + `--promote` flag + accept-rule), tests | — |
+| **P0a** ✅ | feat(autoresearch): auto-promote + baseline write | #4, #9 | ~150 | `autoresearch/train.py` (write_baseline + `--promote` flag + accept-rule), tests | — |
 | **P0b** | feat(integration): seed-pipeline survivors → autoresearch SEED_SELECT | #1, #13 | ~200 | `plugins/seed_pipeline/cli.py` (survivors.json + pool_path_out), `plugins/seed_pipeline/orchestrator.py`, `autoresearch/train.py` (env-driven SEED_SELECT), tests | P0a |
 | **P1a** | feat(integration): generation linkage (gen-tag in argv + tsv schema) | #2, #3, #7, #11 | ~100 | `autoresearch/train.py` (argv + tsv +2col), `plugins/seed_pipeline/agents/ranker.py` (elo +1col), `~/.geode/outer-loop/sessions.jsonl` index | P0b |
 | **P1b** | docs(autoresearch): program.md 전면 재작성 (15-dim tiered schema) | #6, #10 | ~150 | `autoresearch/program.md`, `autoresearch/README.md` (cross-ref) | indep |
