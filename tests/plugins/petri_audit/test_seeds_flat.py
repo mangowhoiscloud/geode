@@ -85,7 +85,6 @@ def test_flatten_bridge_produces_flat_dir_inspect_petri_can_read(
     """The flatten bridge produces a flat staging dir with every seed."""
     pytest.importorskip("inspect_petri")
     from inspect_petri._seeds._markdown import read_seed_directory
-
     from plugins.petri_audit.seed_tree import flatten_for_inspect_petri
 
     stage_root = tmp_path / "stage_root"
