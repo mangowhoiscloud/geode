@@ -65,7 +65,7 @@ return response.text`}</pre>
               <code>build_system_prompt()</code>가 STATIC/DYNAMIC 경계
               마커(<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>)와 함께 시스템
               프롬프트를 조립합니다. Anthropic 어댑터는 이 마커를 기준으로 프롬프트
-              캐싱을 위해 분할합니다. <a href="/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>을
+              캐싱을 위해 분할합니다. <a href="/geode/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>을
               참고하세요.
             </p>
 
@@ -145,7 +145,7 @@ return response.text`}</pre>
               <code>core/agent/system_prompt.py</code> assembles the system prompt
               with a STATIC/DYNAMIC boundary marker (<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>).
               The Anthropic adapter splits at this marker for prompt caching. See{" "}
-              <a href="/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
+              <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.
             </p>
 
             <h2>Hook integration</h2>

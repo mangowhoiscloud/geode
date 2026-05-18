@@ -26,7 +26,7 @@ export default function Page() {
                 <tr><td><strong>Hooks</strong></td><td>이벤트 (58개)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (LLM 호출 1회)</td><td>medium (s)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call (assertion-grade)</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (min to hour)</td><td><a href="/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (min to hour)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
               </tbody>
             </table>
 
@@ -55,7 +55,7 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              자세히: <a href="/docs/harness/hooks">Hook System</a>.
+              자세히: <a href="/geode/docs/harness/hooks">Hook System</a>.
             </p>
 
             <h2>렌즈 2. RunLog</h2>
@@ -108,10 +108,10 @@ class CallDiagnostic:
               세션 단위 grain. N seeds × M turns의 격자로 misalignment risk를 측정. Auditor(적대) · Target(GEODE) · Judge 3-role 구성.
             </p>
             <ul>
-              <li>전체 통합: <a href="/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>시나리오: <a href="/docs/petri/scenarios">Petri Scenarios</a> (173 default + 13 GEODE-specific)</li>
-              <li>실행: <a href="/docs/petri/run">Petri Run</a></li>
-              <li>차원: <a href="/docs/petri/judge-dimensions">17/38 Judge 차원</a></li>
+              <li>전체 통합: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
+              <li>시나리오: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (173 default + 13 GEODE-specific)</li>
+              <li>실행: <a href="/geode/docs/petri/run">Petri Run</a></li>
+              <li>차원: <a href="/geode/docs/petri/judge-dimensions">17/38 Judge 차원</a></li>
             </ul>
 
             <h2>Usage Ledger (v0.66+)</h2>
@@ -171,7 +171,7 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐�
                 <tr><td><strong>Hooks</strong></td><td>events (58)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (one LLM call)</td><td>medium (seconds)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call assertion-grade</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (minutes to hours)</td><td><a href="/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (minutes to hours)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
               </tbody>
             </table>
 
@@ -201,7 +201,7 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐�
               </tbody>
             </table>
             <p>
-              Details: <a href="/docs/harness/hooks">Hook System</a>.
+              Details: <a href="/geode/docs/harness/hooks">Hook System</a>.
             </p>
 
             <h2>Lens 2. RunLog</h2>
@@ -258,10 +258,10 @@ class CallDiagnostic:
               (adversarial), Target (GEODE), Judge.
             </p>
             <ul>
-              <li>Integration: <a href="/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>Scenarios: <a href="/docs/petri/scenarios">Petri Scenarios</a> (173 default plus 13 GEODE-specific)</li>
-              <li>Run: <a href="/docs/petri/run">Petri Run</a></li>
-              <li>Dimensions: <a href="/docs/petri/judge-dimensions">17 / 38 Judge Dimensions</a></li>
+              <li>Integration: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
+              <li>Scenarios: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (173 default plus 13 GEODE-specific)</li>
+              <li>Run: <a href="/geode/docs/petri/run">Petri Run</a></li>
+              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">17 / 38 Judge Dimensions</a></li>
             </ul>
 
             <h2>Usage Ledger (since v0.66)</h2>

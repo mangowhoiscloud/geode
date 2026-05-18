@@ -37,7 +37,7 @@ codex login
 geode /clean # 캐시 비우기
 geode serve & # 재기동`}</pre>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> wiki/concepts/geode-oauth-policy.md, <a href="/docs/runtime/auth">Auth and OAuth reference</a></p>
+            <p className="text-white/40 text-sm"><em>참조:</em> wiki/concepts/geode-oauth-policy.md, <a href="/geode/docs/runtime/auth">Auth and OAuth reference</a></p>
           </>
         }
         en={
@@ -65,7 +65,7 @@ codex login
 geode /clean # clear caches
 geode serve & # restart`}</pre>
 
-            <p className="text-white/40 text-sm"><em>See:</em> wiki/concepts/geode-oauth-policy.md, <a href="/docs/runtime/auth">Auth and OAuth reference</a>.</p>
+            <p className="text-white/40 text-sm"><em>See:</em> wiki/concepts/geode-oauth-policy.md, <a href="/geode/docs/runtime/auth">Auth and OAuth reference</a>.</p>
           </>
         }
       />
