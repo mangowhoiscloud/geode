@@ -158,13 +158,23 @@ def _get_autoresearch_config() -> Any:
 def _resolve_seed_select() -> str:
     """Return the seed-select argv value, honoring ``AUTORESEARCH_SEED_SELECT``.
 
-    Precedence (Codex CLI pattern):
+    Precedence (Codex CLI pattern, post-PR-G1 4-tier):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
-    3. :data:`SEED_SELECT` module constant (final fallback).
+    2. ``~/.geode/self-improving-loop/latest_seed_pool`` symlink — closed-loop
+       fallback stamped by seed-generation's ``_persist_survivors``. Lets
+       autoresearch auto-pick the freshest survivor pool without a manual
+       env export. Skipped when the symlink is missing or its target is
+       gone (e.g. clean install with no prior seed-generation run).
+    3. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
+    4. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
-    return override or _get_autoresearch_config().seed_select
+    if override:
+        return override
+    latest = SELF_IMPROVING_LOOP_HOME / "latest_seed_pool"
+    if latest.is_symlink() and latest.exists():
+        return str(latest.resolve())
+    return str(_get_autoresearch_config().seed_select)
 
 
 # ---------------------------------------------------------------------------
