@@ -116,8 +116,9 @@ uv tool uninstall geode-agent # CLI만 제거
 geode serve                # foreground (Ctrl+C로 종료)
 geode serve -p 5.0         # poll interval 5초 (기본값: 3.0)
 
-# Background (프로덕션)
-nohup geode serve > /tmp/geode-serve.log 2>&1 &
+# Background (프로덕션) — stdout/stderr는 내부 로거가
+# ~/.geode/logs/serve.log 로 기록합니다. 별도 스트림이 필요할 때만 redirect 하세요.
+nohup geode serve >/dev/null 2>&1 &
 ```
 
 ### 옵션
@@ -177,10 +178,10 @@ max_rounds = 5
 
 ```bash
 geode serve &
-grep "binding" /tmp/geode-serve.log
+grep "binding" ~/.geode/logs/serve.log
 # → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
 
-grep "Slack poller seeded" /tmp/geode-serve.log
+grep "Slack poller seeded" ~/.geode/logs/serve.log
 # → Slack poller seeded ts=... for C0XXXXXXXXX
 ```
 

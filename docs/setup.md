@@ -116,8 +116,9 @@ uv tool uninstall geode-agent # CLI only
 geode serve                # foreground (Ctrl+C to stop)
 geode serve -p 5.0         # poll interval 5초 (default: 3.0)
 
-# Background (production)
-nohup geode serve > /tmp/geode-serve.log 2>&1 &
+# Background (production) — stdout/stderr go to ~/.geode/logs/serve.log
+# via the internal logger; redirect only if you need a separate stream.
+nohup geode serve >/dev/null 2>&1 &
 ```
 
 ### Options
@@ -177,10 +178,10 @@ max_rounds = 5
 
 ```bash
 geode serve &
-grep "binding" /tmp/geode-serve.log
+grep "binding" ~/.geode/logs/serve.log
 # → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
 
-grep "Slack poller seeded" /tmp/geode-serve.log
+grep "Slack poller seeded" ~/.geode/logs/serve.log
 # → Slack poller seeded ts=... for C0XXXXXXXXX
 ```
 

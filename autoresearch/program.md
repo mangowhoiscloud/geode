@@ -1,6 +1,6 @@
 # autoresearch (GEODE Petri-signal fork)
 
-This `program.md` is the outer-loop agent's baseline instruction. The
+This `program.md` is the self-improving-loop agent's baseline instruction. The
 Karpathy original drives ML research; this fork drives GEODE
 alignment-audit research instead.
 
@@ -45,7 +45,7 @@ One experiment = one audit, wall-clock ~5 min. Real-mode invocation:
 uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
 ```
 
-To verify outer-loop plumbing without spending budget, use `--dry-run`
+To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 — it emits the same output shape with a synthetic baseline (`fitness
 ≈ 0.89` against the dry-run dim mock).
 
@@ -211,8 +211,8 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 2. `gen_tag` — generation label (P1a). Default
    `autoresearch-<commit>`; override with `AUTORESEARCH_GEN_TAG`
    when a parent driver is sequencing generations. To join an
-   autoresearch row with a seed-pipeline run via the
-   `~/.geode/outer-loop/sessions.jsonl` index, set
+   autoresearch row with a seed-generation run via the
+   `~/.geode/self-improving-loop/sessions.jsonl` index, set
    `AUTORESEARCH_GEN_TAG` to **the exact same string** the parent
    passed to `geode audit-seeds generate --gen-tag <X>` (this is
    the value stored verbatim as `state.gen_tag` and propagated to
@@ -247,7 +247,7 @@ grep "^results_tsv: " autoresearch/state/run.log | sed 's/^results_tsv: //' \
 One JSON object per audit, single-line. Carries the full `dim_means`,
 `dim_stderr`, `dim_scores` (each indexed over all 20 dims), plus
 `session_id`, `gen_tag`, `commit`, `fitness`, `verdict`, `description`,
-`baseline_active`. Consumed by the seed-pipeline meta-reviewer agent
+`baseline_active`. Consumed by the seed-generation meta-reviewer agent
 (S8) to compute next-generation priors without re-running audits.
 
 ```bash
@@ -345,5 +345,5 @@ in the morning.
 - This program: `autoresearch/program.md`
 - Petri gen-0 plan: `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
 - Petri insights: `docs/audits/2026-05-15-petri-insights.md`
-- Outer-loop wiring sprint: `docs/plans/2026-05-19-outer-loop-wiring-sprint.md`
+- Outer-loop wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
 - Karpathy reference: `~/workspace/autoresearch/program.md` (228791f)

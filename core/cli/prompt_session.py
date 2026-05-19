@@ -108,8 +108,8 @@ def _build_prompt_session() -> Any:
     history_path = Path.home() / ".geode_history"
 
     # PR-γ1 — install + bind the subscription quota banner. Lazy-load
-    # the outer-loop config so prompt_session stays importable when
-    # ``core.config.outer_loop`` is unavailable (test contexts).
+    # the self-improving-loop config so prompt_session stays importable when
+    # ``core.config.self_improving_loop`` is unavailable (test contexts).
     bottom_toolbar = _make_bottom_toolbar()
 
     return PromptSession(
@@ -126,9 +126,9 @@ def _make_bottom_toolbar() -> Any:
     """Build the bottom_toolbar callable for the REPL.
 
     Installs a process-wide :class:`SubscriptionQuotaBanner` keyed on
-    the outer-loop config's warn / abort thresholds, then returns its
+    the self-improving-loop config's warn / abort thresholds, then returns its
     ``render`` method as the prompt_toolkit ``bottom_toolbar`` value.
-    Returns ``None`` when the outer-loop config is unavailable so the
+    Returns ``None`` when the self-improving-loop config is unavailable so the
     REPL falls back to no-banner gracefully.
     """
     from prompt_toolkit.formatted_text import HTML as _HTML
@@ -136,13 +136,13 @@ def _make_bottom_toolbar() -> Any:
     from core.cli.quota_banner import SubscriptionQuotaBanner, install_banner
 
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
 
-        cfg = load_outer_loop_config()
+        cfg = load_self_improving_loop_config()
         warn = cfg.warn_threshold
         abort = cfg.abort_threshold
     except Exception:
-        log.warning("outer-loop config unavailable; banner uses defaults", exc_info=True)
+        log.warning("self-improving-loop config unavailable; banner uses defaults", exc_info=True)
         warn, abort = 0.5, 0.9
 
     banner = SubscriptionQuotaBanner(
@@ -150,6 +150,18 @@ def _make_bottom_toolbar() -> Any:
         abort_threshold=abort,
     )
     install_banner(banner)
+
+    # P0c — wire the per-response Anthropic quota writer (callback
+    # registration instead of cross-layer import: the agent path
+    # ``core.llm.providers.anthropic`` is forbidden by import-linter from
+    # depending on ``core.cli.*``, so the CLI owns the import direction
+    # and pushes its setter in).
+    try:
+        from core.llm.providers.anthropic import register_quota_setter
+
+        register_quota_setter(banner.set_state)
+    except Exception:  # pragma: no cover - defensive
+        log.warning("anthropic quota setter registration failed", exc_info=True)
 
     def _render() -> Any:
         text = banner.render()

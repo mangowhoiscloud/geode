@@ -11,18 +11,20 @@ from plugins.petri_audit.registry import (
     FamilyInferenceError,
     PetriBinding,
     get_binding,
-    infer_family,
+    infer_provider,
 )
 
 from plugins.petri_audit import credential_source as cs
 
 
 @pytest.fixture(autouse=True)
-def _isolate_outer_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-δ2 — pin the outer-loop config loader to a non-existent tmp path so
-    a developer / CI host with real ``[outer_loop.petri.*]`` does not bleed
+def _isolate_self_improving_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-δ2 — pin the self-improving-loop config loader to a non-existent tmp path so
+    a developer / CI host with real ``[self_improving_loop.petri.*]`` does not bleed
     into ``read_role_override`` results."""
-    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "outer_loop_isolation_sentinel.toml"))
+    monkeypatch.setenv(
+        "GEODE_CONFIG_TOML", str(tmp_path / "self_improving_loop_isolation_sentinel.toml")
+    )
     # Same isolation for the legacy petri.toml path, in case any test
     # touches save_role_override indirectly.
     monkeypatch.setenv("GEODE_PETRI_TOML", str(tmp_path / "petri.toml"))
@@ -45,7 +47,7 @@ def _scrub_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _stub_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +58,7 @@ def _stub_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(openai_codex_oauth, "is_available", lambda: False)
 
 
-# ── infer_family ───────────────────────────────────────────────────────────
+# ── infer_provider ───────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -75,18 +77,18 @@ def _stub_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
         ("openai-api/gpt-5.5", "openai"),
     ],
 )
-def test_infer_family(model: str, expected: str) -> None:
-    assert infer_family(model) == expected
+def test_infer_provider(model: str, expected: str) -> None:
+    assert infer_provider(model) == expected
 
 
-def test_infer_family_unknown_raises() -> None:
-    with pytest.raises(FamilyInferenceError, match="cannot infer family"):
-        infer_family("mystery-model-7")
+def test_infer_provider_unknown_raises() -> None:
+    with pytest.raises(FamilyInferenceError, match="cannot infer provider"):
+        infer_provider("mystery-model-7")
 
 
-def test_infer_family_empty_raises() -> None:
+def test_infer_provider_empty_raises() -> None:
     with pytest.raises(FamilyInferenceError, match="empty model"):
-        infer_family("")
+        infer_provider("")
 
 
 # ── get_binding — happy path ───────────────────────────────────────────────
@@ -99,7 +101,7 @@ def test_get_binding_auditor_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert binding.role == "auditor"
     assert binding.model == "claude-sonnet-4-6"
     assert binding.source == "api_key"
-    assert binding.family == "anthropic"
+    assert binding.provider == "anthropic"
     assert binding.adapter_module == "plugins.petri_audit.adapters.http_anthropic"
     assert binding.inspect_prefix == "anthropic"
     assert binding.inspect_id == "anthropic/claude-sonnet-4-6"
@@ -114,13 +116,13 @@ def test_get_binding_judge_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_binding_target_uses_geode_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Target role always routes through GeodeModelAPI regardless of family."""
+    """Target role always routes through GeodeModelAPI regardless of provider."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     binding = get_binding("target")
     assert binding.role == "target"
     assert binding.model == "claude-haiku-4-5"
     # Family adapter still recorded — shows underlying source in picker.
-    assert binding.family == "anthropic"
+    assert binding.provider == "anthropic"
     assert binding.adapter_module == "plugins.petri_audit.adapters.http_anthropic"
     # But the inspect id uses 'geode' prefix unconditionally.
     assert binding.inspect_prefix == "geode"
@@ -149,7 +151,7 @@ def test_get_binding_source_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_binding_model_not_in_allowed_raises() -> None:
-    """auditor.allowed_models excludes GLM family — manifest enforced."""
+    """auditor.allowed_models excludes GLM provider — manifest enforced."""
     with pytest.raises(ValueError, match="not in allowed_models"):
         get_binding("auditor", model="glm-4-6")
 
@@ -190,7 +192,7 @@ def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -
     """Target with a GPT model still routes through 'geode/' prefix."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
     binding = get_binding("target", model="gpt-5.4-mini")
-    assert binding.family == "openai"
+    assert binding.provider == "openai"
     assert binding.adapter_module == "plugins.petri_audit.adapters.http_openai"
     assert binding.inspect_prefix == "geode"
     assert binding.inspect_id == "geode/gpt-5.4-mini"
@@ -199,7 +201,7 @@ def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -
 def test_get_binding_target_with_glm_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ZHIPUAI_API_KEY", "glm-test")
     binding = get_binding("target", model="glm-4-6")
-    assert binding.family == "zhipuai"
+    assert binding.provider == "zhipuai"
     assert binding.inspect_prefix == "geode"
     assert binding.inspect_id == "geode/glm-4-6"
 

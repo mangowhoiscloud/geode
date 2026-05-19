@@ -49,12 +49,12 @@ GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
 # `core.auth.auth_toml` overrides via `GEODE_AUTH_TOML` env var; this
 # constant is the default fallback.
 GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
-# P1a + P1c (2026-05-19) — outer-loop wiring sprint. Shared cross-loop
+# P1a + P1c (2026-05-19) — self-improving-loop wiring sprint. Shared cross-loop
 # namespace: ``sessions.jsonl`` (P1a, run-level index, one row per
-# autoresearch/seed-pipeline run) + ``<session_id>/journal.jsonl``
+# autoresearch/seed-generation run) + ``<session_id>/journal.jsonl``
 # (P1c, event stream within a single run). See
-# ``docs/plans/2026-05-19-outer-loop-wiring-sprint.md``.
-GLOBAL_OUTER_LOOP_DIR = GEODE_HOME / "outer-loop"
+# ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
+GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
 # Read by ``plugins.petri_audit.user_overrides`` and merged into the
@@ -69,12 +69,12 @@ GLOBAL_PETRI_TOML = GEODE_HOME / "petri.toml"
 # routing legacy file); P2-B..E migrate the legacy consumers onto the
 # global manifest.
 GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
-# P5 (Session 63, S5.5) — per-user seed-pipeline role × source override.
-# Read by ``plugins.seed_pipeline.picker.load_user_overrides`` and merged
+# P5 (Session 63, S5.5) — per-user seed-generation role × source override.
+# Read by ``plugins.seed_generation.picker.load_user_overrides`` and merged
 # into the picker's per-role binding resolver. Distinct from
-# ``GLOBAL_PETRI_TOML`` because seed-pipeline owns its own 7-role × judge-
+# ``GLOBAL_PETRI_TOML`` because seed-generation owns its own 7-role × judge-
 # panel binding model (see ADR-003 §"override surface").
-GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed-pipeline.toml"
+GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed-generation.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
 # resolution; see `core/llm/skill_registry.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via

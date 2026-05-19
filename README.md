@@ -296,7 +296,7 @@ Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic),
 <details>
 <summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
 
-Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f /tmp/geode-serve.log` to see what the model is actually doing.
+Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
 </details>
 
 <details>

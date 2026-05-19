@@ -11,7 +11,7 @@ tools into the GEODE ToolExecutor:
   :mod:`plugins.petri_audit.viz`. cost_tier=free.
 - ``eval_dspy_optimize`` — Petri smoke result → DSPy prompt re-compile
   via :func:`plugins.petri_audit.optimize.optimize_prompt`. M1 (judge ≠
-  generator family) + M2 (PR-only auto-edit) + M3 (budget cap) + M10
+  generator provider) + M2 (PR-only auto-edit) + M3 (budget cap) + M10
   (compile_id) gates enforced inside the runner; M4 (TextGrad depth=1)
   enforced by :mod:`plugins.petri_audit.textgrad_wrapper` when the
   caller follows up with a textual-gradient step. EXPENSIVE_TOOLS-gated;
@@ -121,7 +121,7 @@ def _build_audit_handlers() -> dict[str, Any]:
                 "tool": "eval_dspy_optimize",
                 "error": (
                     "judge, generator, eval_log_path are required. M1 needs "
-                    "judge ≠ generator family — pick e.g. judge=claude-haiku-4-5-* "
+                    "judge ≠ generator provider — pick e.g. judge=claude-haiku-4-5-* "
                     "with generator=gpt-5.4."
                 ),
             }

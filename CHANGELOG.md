@@ -47,6 +47,229 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **P1c — seed_generation orchestrator per-stage journal emit.** The
+  S0-S11 phase transitions previously surfaced only through `log.info`
+  and `log.warning`, so a run that succeeded technically left no
+  structured record of which phase took how long, which phase failed,
+  or whether an agent had been re-registered. Audit §4 tracked this as
+  "Per-stage 전이 | ⚠️ log.info | … | journal 무". This commit adds:
+  * `_emit_orchestrator_event` helper (ContextVar-based journal
+    discovery, defensive failure swallow, P0a SoT contract docstring).
+  * `phase_started` (info) before each agent execute.
+  * `phase_finished` (info) on success with `{role, duration_ms}`.
+  * `phase_failed` (error) on `status="error"` with
+    `{role, duration_ms, error head, raised=False}`, or on agent raise
+    with `raised=True` (exception still propagates).
+  * `agent_reregistered` (warn) when `PipelineRegistry.register`
+    replaces an existing role.
+  5 new tests cover the success / soft-failure / hard-failure /
+  re-register paths plus the no-op-outside-scope guard. Codex MCP
+  cross-LLM verify: "No findings".
+
+### Fixed
+
+- **P1b — subscription / credential resolver journal emit.** Three
+  silent fallbacks in the credential layer (audit §4 + §5) become
+  observable so post-mortem can see which path the run took:
+  1. `CredentialResolutionError(subscription_only=True)` now emits
+     `credential_subscription_abort` (level=error) carrying the
+     provider and allowed-source list.
+  2. `self_improving_loop_fallback_policy()` emits
+     `fallback_policy_resolved` on every call with the resolved value
+     plus source (`config` / `import_error_default` /
+     `load_error_default`) so it is clear whether the run consulted
+     the user's config or fell back to the lenient default.
+  3. `_read_role_from_self_improving_loop` emits
+     `petri_role_legacy_fallback` when the import fails and the
+     resolver silently drops to the legacy `~/.geode/petri.toml`.
+  Each emit is via a private helper that discovers the SessionJournal
+  through the ContextVar (`current_session_journal()`) and silently
+  no-ops outside scope; failure to emit is swallowed so the resolver's
+  return contract is unchanged. 5 new tests cover the happy paths +
+  no-journal no-op; the two policy-real tests carry the new
+  `policy_real` marker so they bypass the conftest's session-wide pin.
+  Codex MCP cross-LLM verify: "No findings".
+- **P1a — 529 Overloaded responses now retry instead of bubbling up.**
+  Investigating the audit's "529 Overloaded retry 정책 미정" row
+  revealed that the initial assumption ("any 5xx maps to
+  `InternalServerError`, which is already in the retry tuple") was
+  wrong. The Anthropic SDK ships a dedicated `anthropic._exceptions.
+  OverloadedError` with `status_code: Literal[529] = 529` that
+  inherits from `APIStatusError` directly, not from
+  `InternalServerError`. So every 529 — common during Anthropic
+  capacity dips — was previously a silent immediate failure rather
+  than a retryable transient. Fix:
+  1. Add `"OverloadedError"` to `_ANTHROPIC_LAZY_TUPLES["RETRYABLE_ERRORS"]`.
+  2. Add `_resolve_anthropic_exception` fallthrough to
+     `anthropic._exceptions` since `OverloadedError` is not at the
+     top-level `anthropic` namespace.
+  3. Wire `_on_retry_journal_emit` into both sync + async
+     `retry_with_backoff_generic` so retries (529 + 5xx + rate-limit)
+     emit `llm_retry` events into the active SessionJournal —
+     silent retries become observable (level=warn for the load-bearing
+     three error types, info otherwise).
+  6 new tests guard the contract: OverloadedError sibling-of-
+  InternalServerError invariant, tuple membership for both classes,
+  journal emit happy path + Overloaded-as-warn level + no-journal
+  no-op + sync/async callback wiring. Codex MCP cross-LLM verify on
+  the implementation surfaced this exact gap during the discovery
+  test that asserted `class OverloadedError not in src` — turning a
+  reasoning error in the audit document into a real production fix.
+
+### Changed
+
+- **P0c — quota banner writer wiring (anthropic provider + subscription
+  abort).** Implementation uses a **callback-registration pattern**
+  (`register_quota_setter`) rather than direct import — the import-linter
+  contracts (`Agent stays pure`, `Server may host agent but never CLI`)
+  forbid `core.llm.providers.* → core.cli.*`, so the CLI owns the
+  import direction and pushes its `banner.set_state` setter in on REPL
+  startup. `uninstall_banner` clears the registered setter symmetrically. Per the 2026-05-19 observability audit §4, the
+  `SubscriptionQuotaBanner` was installed at REPL startup but never fed
+  in production code — `set_state` and `trip_abort` had 0 callers
+  outside tests, so operators saw no quota signal at all. Two writers
+  now close that gap:
+  1. `core/llm/providers/anthropic.py` — httpx event hooks on both sync
+     and async singleton clients read `anthropic-ratelimit-tokens-{limit,
+     remaining}` from every response and push `set_state(provider="anthropic",
+     used_tokens, total_tokens)`. Async hook is `async def`. Silently
+     skips on missing headers (PAYG path) or missing banner (non-REPL
+     invocations).
+  2. `plugins/petri_audit/credential_source.py` —
+     `CredentialResolutionError(subscription_only=True)` now also calls
+     `trip_abort` with the actionable resolver message before raising,
+     so the FE banner turns red the moment the resolver aborts.
+     Non-subscription errors do not trip.
+  Six new tests guard the wiring: header parsing (limit/remaining/missing/
+  unparseable), feeder happy path / no-banner no-op / missing-headers
+  no-op, and the credential trip wiring (subscription_only trips,
+  generic doesn't trip, no banner installed is safe). Codex MCP
+  cross-LLM verify: clean on first pass.
+- **Rename `family` → `provider` in provider-semantic contexts.** The
+  identifier `family` ambiguously named both (a) the LLM vendor —
+  anthropic / openai / zhipuai — and (b) within-vendor model versioning
+  ("GLM-5 family", "GLM-4.7 family"). The provider-semantic uses are
+  renamed to `provider` so the routing/credential/quota/audit/picker
+  layers all speak the same vocabulary; model-version groupings in
+  `core/llm/providers/glm.py` become explicit "GLM-N series (zhipuai
+  provider)" since the provider for every GLM model is Zhipu. Affects
+  41 production files + 7 test files: quota_banner / credential_source /
+  petri_audit (registry, models, optimize, bias, cli, adapters,
+  manifest) / seed_generation (picker, manifest, cli, pre_flight,
+  cost_preview, auth_coverage, ranker) / pricing_loader / definitions.json
+  tool description ("M1 — judge ≠ generator provider"). Function
+  renames: `infer_family` → `infer_provider`, `family_of` →
+  `provider_of`, `same_family` → `same_provider`, `_parse_family` →
+  `_parse_provider`. Constant rename: `_PROVIDER_TO_FAMILY` →
+  `_ROUTING_TO_AUDIT_PROVIDER` (the table bridges routing-manifest
+  provider names to Petri audit provider names — e.g. "glm" →
+  "zhipuai"). Codex MCP cross-LLM verify caught 3 HIGH (test sites that
+  the initial script missed — `tests/core/cli/test_quota_banner.py`,
+  `tests/integration/test_auth_path_coverage.py`, `tests/test_pricing_loader.py`)
+  + 3 MEDIUM (constant rename, TOML schema comments, tool description
+  text). All fixed in the same commit; final pass "No findings".
+- **P0b — autoresearch SessionJournal event coverage.** Per the 2026-05-19
+  observability audit §4, the autoresearch run was emitting only one
+  journal event (`audit_finished`) — every other lifecycle transition was
+  silently swallowed. Added 8 events covering the documented gaps:
+  `audit_started` (run entry), `config_snapshot` (which
+  `[self_improving_loop.autoresearch]` values resolved), `wrapper_override_dumped`
+  (override path), `subprocess_started` / `subprocess_finished` /
+  `subprocess_timeout` (real-mode lifecycle, the latter at `level=error`),
+  `audit_failed` (catch-all on main exception),
+  `baseline_decision` (was a baseline present + did it activate),
+  `per_dim_scores` (per-dim breakdown — aggregate `fitness` stays in
+  sessions.jsonl per P0a §6). Introduces `_emit_journal` helper at module
+  scope so the ImportError-safe boilerplate is no longer duplicated 8×.
+  `gen_tag` computation lifted to the top of `main()` so subprocess
+  events emitted during `run_audit` share the same `session_id +
+  gen_tag` pair as the eventual sessions.jsonl row. Six new tests guard
+  the contract: emit helper happy path / level=error / empty-id no-op,
+  `run_audit(dry_run=True)` integration, a main()-drive test asserting
+  the exact 6-event dry-run sequence + payload keys, a SoT regression
+  guard that asserts no journal payload contains any sessions.jsonl
+  canonical field (fitness/verdict/promoted/commit/survivors/usd_spent/
+  pool_path_out), and a subprocess timeout integration test that mocks
+  `subprocess.run` to raise `TimeoutExpired` and asserts the right
+  events fire at the right levels in the right order. Verification was
+  cross-LLM (Codex MCP read-only review) per
+  `feedback_codex_mcp_verification` — initial MEDIUM finding ("hand-emit
+  literals can't catch regressions at the real emit sites") addressed
+  in the same change.
+- **P0a — dedup `audit_finished` / `pipeline_finished` journal payloads
+  against `sessions.jsonl` SoT.** Per the 2026-05-19 observability audit
+  §6, the journal event payloads were duplicating run-level canonical
+  fields (fitness, verdict, commit, promoted, survivors, usd_spent,
+  pool_path_out) that already live in `sessions.jsonl`. Drift risk:
+  updating one sink without the other produces inconsistent state.
+  Resolution: `sessions.jsonl` is the SoT for run-level metrics;
+  `journal.jsonl` events become stream markers — `audit_finished`
+  payload trimmed to `{"dry_run": ...}` (the only context-flag field),
+  `pipeline_finished` payload trimmed to `{}`. Consumers join via
+  `session_id + gen_tag`. The SessionJournal docstring now encodes the
+  SoT contract + field-placement guide so future writers don't reopen the
+  drift. Dry-run smoke verifies the new minimal payload (`payload:
+  {"dry_run": true}`) while sessions.jsonl still carries the full
+  canonical row.
+- **Rename `seed_pipeline` → `seed_generation` across the runtime.** The
+  prior name "pipeline" was a generic implementation-detail noun that didn't
+  reveal the module's purpose — generating seed candidates through an 8-stage
+  process (S0 manifest → S1 generator → S2 critic → S3 evolver → S4-S8
+  ranker/pilot/proximity/meta_reviewer/tournament). The explicit
+  domain-verb+noun name `seed_generation` makes the intent clear from the
+  folder path alone, same explicit-naming principle as the outer_loop →
+  self_improving_loop rename in this release. Affects 72 files: the Python
+  package (`plugins/seed_pipeline/` → `plugins/seed_generation/`), the plugin
+  manifest (`seed_pipeline.plugin.toml` → `seed_generation.plugin.toml`),
+  config classes (`SeedPipelineConfig` → `SeedGenerationConfig`,
+  `SeedPipelineManifest` → `SeedGenerationManifest`), the TOML section
+  `[self_improving_loop.seed_pipeline]` → `[self_improving_loop.seed_generation]`,
+  the skill directory (`.geode/skills/seed-pipeline-cycle/` →
+  `.geode/skills/seed-generation-cycle/`), and the test directory. The
+  user-facing CLI command `audit-seeds` is left unchanged because it is
+  already explicit. Historical records (CHANGELOG, 2026-05-15 audits, 2026-05-18
+  sprint plan rename to seed-generation-sprint-plan.md) follow the same
+  verbatim-preservation rule as the outer_loop rename. Quality gates pass:
+  ruff + ruff format + mypy clean (352 source files), 844 + 26 skipped
+  tests pass on rename-affected files, dry-run smoke writes correctly.
+- **Rename `outer_loop` → `self_improving_loop` across the runtime.** The
+  identifier `outer_loop` only described position (an outer loop around
+  petri+autoresearch+seed) without describing intent. The work this loop
+  actually does is iteratively improving the agent's own performance via
+  gen-N → gen-N+1 fitness ratcheting, so the explicit term
+  `self_improving_loop` is adopted everywhere the operator is expected to
+  read or write: the Python module (`core/config/outer_loop.py` →
+  `core/config/self_improving_loop.py`), the config classes
+  (`OuterLoopConfig` → `SelfImprovingLoopConfig`,
+  `OuterLoopBindings` → `SelfImprovingLoopBindings`), the loader
+  (`load_outer_loop_config` → `load_self_improving_loop_config`), the
+  `[outer_loop.*]` TOML section (now `[self_improving_loop.*]`), and the
+  runtime directory (`~/.geode/outer-loop/` → `~/.geode/self-improving-loop/`).
+  Per the 2026-05-19 audit (`docs/audits/2026-05-19-self-improving-loop-observability-gap.md`)
+  the historical record (this changelog, the 2026-05-15 audits) is left
+  verbatim; only living docs / plans / code are migrated. Quality gates
+  pass: ruff + ruff format + mypy clean, 853 + 27 skipped tests pass on
+  rename-affected files, dry-run smoke writes to the new path.
+- **Docs cleanup — `/tmp/geode-serve.log` references redirected to the
+  internal log path.** `docs/setup.md` / `docs/setup.ko.md` / `README.md`
+  previously instructed operators to redirect `geode serve` stdout/stderr
+  to `/tmp/geode-serve.log`, bypassing the internal `SERVE_LOG_PATH =
+  ~/.geode/logs/serve.log` infrastructure. Replaced with the correct
+  `~/.geode/logs/serve.log` path so the documented workflow matches the
+  default observability hierarchy. Reinforces
+  `feedback_fa4_temp_location` memory rule.
+
+### Added
+
+- **`docs/audits/2026-05-19-self-improving-loop-observability-gap.md`** — full
+  matrix of pipeline events × observability channels, error-swallow
+  inventory, dedup/missing/GAP priorities (P0/P1/P2), and the PR plan
+  (η1a rename → η1b seed-rename → P0a dedup → P0b autoresearch events →
+  P0c quota banner writer → P1/P2). Serves as SoT for the follow-up PR
+  series.
+
 ## [0.99.17] — 2026-05-19
 
 ### Fixed

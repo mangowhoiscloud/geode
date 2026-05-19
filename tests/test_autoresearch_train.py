@@ -13,6 +13,8 @@ FitnessBaseline wrapping), and the per-dim score map.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -30,6 +32,7 @@ from autoresearch.train import (
     WRAPPER_OVERRIDE_HOOK_READY,
     _append_session_index,
     _build_audit_command,
+    _emit_journal,
     _resolve_gen_tag,
     _resolve_session_id,
     _should_promote,
@@ -93,7 +96,7 @@ def test_seed_select_points_at_hierarchical_tree() -> None:
 
 
 # ---------------------------------------------------------------------------
-# PR-δ1 — autoresearch consumes [outer_loop.autoresearch] config
+# PR-δ1 — autoresearch consumes [self_improving_loop.autoresearch] config
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +121,7 @@ def test_get_autoresearch_config_returns_config_object() -> None:
 def test_get_autoresearch_config_defaults_match_module_constants() -> None:
     """No-op behaviour change — unconfigured loader matches module constants.
 
-    Verified by tests/test_outer_loop_config.py at the schema layer; this
+    Verified by tests/test_self_improving_loop_config.py at the schema layer; this
     test asserts the consumer side stays in sync.
     """
     from autoresearch.train import (
@@ -218,7 +221,7 @@ def test_resolve_seed_select_honors_env_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A populated env var redirects seed-select to the seed-pipeline survivors."""
+    """A populated env var redirects seed-select to the seed-generation survivors."""
     override = str(tmp_path / "survivors.json")
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
     assert auto_train._resolve_seed_select() == override
@@ -872,8 +875,8 @@ def test_resolve_session_id_generates_when_env_unset(
 
 def test_resolve_gen_tag_honors_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """AUTORESEARCH_GEN_TAG override wins over the default ``autoresearch-<commit>``."""
-    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "seed-pipeline-gen1")
-    assert _resolve_gen_tag("a1b2c3d") == "seed-pipeline-gen1"
+    monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "seed-generation-gen1")
+    assert _resolve_gen_tag("a1b2c3d") == "seed-generation-gen1"
 
 
 def test_resolve_gen_tag_default_includes_commit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -895,11 +898,11 @@ def test_append_session_index_writes_jsonl_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One row per call, newline-terminated, parseable as JSON."""
-    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "outer-loop" / "sessions.jsonl",
+        tmp_path / "self-improving-loop" / "sessions.jsonl",
     )
     _append_session_index(
         session_id="s-1",
@@ -909,7 +912,7 @@ def test_append_session_index_writes_jsonl_row(
         ended_at=1300.0,
         extra={"commit": "abc", "fitness": 0.5},
     )
-    path = tmp_path / "outer-loop" / "sessions.jsonl"
+    path = tmp_path / "self-improving-loop" / "sessions.jsonl"
     assert path.is_file()
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -928,11 +931,11 @@ def test_append_session_index_appends_not_overwrites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Multiple calls append, preserving prior rows."""
-    monkeypatch.setattr(auto_train, "OUTER_LOOP_HOME", tmp_path / "outer-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "outer-loop" / "sessions.jsonl",
+        tmp_path / "self-improving-loop" / "sessions.jsonl",
     )
     for i in range(3):
         _append_session_index(
@@ -943,7 +946,7 @@ def test_append_session_index_appends_not_overwrites(
             ended_at=float(i + 1),
             extra={},
         )
-    lines = (tmp_path / "outer-loop" / "sessions.jsonl").read_text().splitlines()
+    lines = (tmp_path / "self-improving-loop" / "sessions.jsonl").read_text().splitlines()
     assert len(lines) == 3
     ids = [json.loads(line)["session_id"] for line in lines]
     assert ids == ["s-0", "s-1", "s-2"]
@@ -967,3 +970,263 @@ def test_append_session_index_swallows_oserror(
         ended_at=1.0,
         extra={},
     )
+
+
+# ---------------------------------------------------------------------------
+# P0b — autoresearch journal event coverage
+# ---------------------------------------------------------------------------
+#
+# These tests guard the SessionJournal emission contract documented in
+# docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4 (event
+# coverage) and §6 (SoT dedup: journal payloads must not duplicate
+# sessions.jsonl canonical fields). Regression here means a future writer
+# accidentally puts ``fitness`` / ``verdict`` / ``promoted`` / ``commit``
+# back into a journal payload, which would re-open the drift P0a closed.
+
+
+# Fields that live in sessions.jsonl (the SoT for run-level metrics) and
+# therefore MUST NOT appear in any journal event payload. Update this set
+# only when sessions.jsonl's `extra` payload changes — keeping the
+# regression guard tight against the SoT contract.
+_SESSIONS_JSONL_CANONICAL_FIELDS = frozenset(
+    {"fitness", "verdict", "promoted", "commit", "survivors", "usd_spent", "pool_path_out"}
+)
+
+
+def _journal_path(tmp_path: Path, session_id: str) -> Path:
+    return tmp_path / "self-improving-loop" / session_id / "journal.jsonl"
+
+
+def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import core.paths
+
+    monkeypatch.setattr(
+        core.paths,
+        "GLOBAL_SELF_IMPROVING_LOOP_DIR",
+        tmp_path / "self-improving-loop",
+    )
+
+
+def test_emit_journal_writes_event_with_full_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Happy path — _emit_journal produces one well-formed JSONL row."""
+    _redirect_journal(tmp_path, monkeypatch)
+    _emit_journal(
+        "s-test",
+        "gen-test",
+        "audit_started",
+        payload={"dry_run": True},
+    )
+    path = _journal_path(tmp_path, "s-test")
+    assert path.is_file()
+    rows = path.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 1
+    record = json.loads(rows[0])
+    assert record["session_id"] == "s-test"
+    assert record["gen_tag"] == "gen-test"
+    assert record["component"] == "autoresearch"
+    assert record["event"] == "audit_started"
+    assert record["level"] == "info"
+    assert record["payload"] == {"dry_run": True}
+
+
+def test_emit_journal_supports_error_level(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """level='error' propagates so subprocess_timeout / audit_failed surface."""
+    _redirect_journal(tmp_path, monkeypatch)
+    _emit_journal(
+        "s-err",
+        "gen-err",
+        "subprocess_timeout",
+        level="error",
+        payload={"timeout_sec": 420},
+    )
+    record = json.loads(_journal_path(tmp_path, "s-err").read_text().splitlines()[0])
+    assert record["level"] == "error"
+    assert record["payload"] == {"timeout_sec": 420}
+
+
+def test_emit_journal_noops_on_empty_session_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No session_id → no emission. Allows run_audit() to be called from unit
+    tests without session_id/gen_tag without raising or writing stray files."""
+    _redirect_journal(tmp_path, monkeypatch)
+    _emit_journal("", "gen-x", "audit_started", payload={"dry_run": True})
+    # No journal file should be created.
+    assert not (tmp_path / "self-improving-loop").exists() or not any(
+        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+    )
+
+
+def test_emit_journal_noops_on_empty_gen_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No gen_tag → no emission. Same guard as the session_id case."""
+    _redirect_journal(tmp_path, monkeypatch)
+    _emit_journal("s-x", "", "audit_started", payload={"dry_run": True})
+    assert not (tmp_path / "self-improving-loop").exists() or not any(
+        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+    )
+
+
+def test_run_audit_dry_run_emits_p0b_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Integration: dry-run path emits wrapper_override_dumped (subprocess
+    events skip the dry-run shortcut by design)."""
+    _redirect_journal(tmp_path, monkeypatch)
+    run_audit(dry_run=True, session_id="s-int", gen_tag="gen-int")
+    path = _journal_path(tmp_path, "s-int")
+    assert path.is_file()
+    events = [json.loads(line)["event"] for line in path.read_text().splitlines()]
+    assert "wrapper_override_dumped" in events
+    # Subprocess events MUST NOT fire in dry-run (no subprocess invoked).
+    assert "subprocess_started" not in events
+    assert "subprocess_finished" not in events
+    assert "subprocess_timeout" not in events
+
+
+def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, Path, Path]:
+    """Drive ``autoresearch.train.main()`` under ``--dry-run`` with all FS
+    paths redirected into ``tmp_path``. Returns ``(exit_code, journal_path,
+    sessions_path)``. The journal_path is the file for the run's
+    session_id (resolved by main); the test reads it back to assert
+    event ordering and payload shape."""
+    import autoresearch.train as auto_train
+    import core.paths
+
+    sip_home = tmp_path / "self-improving-loop"
+    monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", sip_home)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sip_home)
+    monkeypatch.setattr(auto_train, "SESSIONS_INDEX_PATH", sip_home / "sessions.jsonl")
+    # Redirect autoresearch/state writes so they don't pollute the repo.
+    state_dir = tmp_path / "state"
+    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
+    monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
+    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    # No baseline file → baseline_decision payload reflects the empty case.
+    monkeypatch.setenv("AUTORESEARCH_VERDICT", "pending")
+    monkeypatch.setenv("AUTORESEARCH_DESCRIPTION", "test-dry-run")
+    monkeypatch.setattr(sys, "argv", ["autoresearch/train.py", "--dry-run"])
+    exit_code = auto_train.main()
+
+    # Find the single run dir under sip_home (session_id resolved at runtime).
+    run_dirs = [p for p in sip_home.iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1, f"expected one run dir under {sip_home}, got {run_dirs}"
+    journal_path = run_dirs[0] / "journal.jsonl"
+    sessions_path = sip_home / "sessions.jsonl"
+    return exit_code, journal_path, sessions_path
+
+
+def test_main_dry_run_emits_full_p0b_event_sequence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: main() under --dry-run emits the documented event
+    sequence in order and with the documented payload keys."""
+    exit_code, journal_path, _ = _drive_main_dry_run(tmp_path, monkeypatch)
+    assert exit_code == 0
+    rows = [json.loads(line) for line in journal_path.read_text().splitlines()]
+    events = [r["event"] for r in rows]
+    # Dry-run skips subprocess events; the rest must fire in this order.
+    assert events == [
+        "audit_started",
+        "config_snapshot",
+        "wrapper_override_dumped",
+        "baseline_decision",
+        "per_dim_scores",
+        "audit_finished",
+    ], f"event sequence mismatch: {events}"
+    # Spot-check payload keys are the documented event-scoped context.
+    by_event = {r["event"]: r["payload"] for r in rows}
+    assert set(by_event["audit_started"].keys()) == {"dry_run"}
+    assert set(by_event["config_snapshot"].keys()) == {
+        "target_model",
+        "judge_model",
+        "budget_minutes",
+        "seed_limit",
+        "dim_set",
+        "max_turns",
+        "use_oauth",
+    }
+    assert set(by_event["wrapper_override_dumped"].keys()) == {"path"}
+    assert set(by_event["baseline_decision"].keys()) == {
+        "baseline_present",
+        "baseline_active",
+        "no_baseline_flag",
+    }
+    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores"}
+    assert set(by_event["audit_finished"].keys()) == {"dry_run"}
+
+
+def test_main_dry_run_payloads_exclude_sessions_jsonl_canonical_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SoT regression guard against the real main() callsites (not literals).
+
+    Drives main() then asserts no journal event payload contains any
+    sessions.jsonl canonical field (P0a §6). Catches the regression where
+    a future writer puts ``fitness`` / ``verdict`` / ``commit`` /
+    ``promoted`` / etc. back into a journal payload at the actual emit
+    sites — something the hand-emit literal test can never catch.
+    """
+    _, journal_path, _ = _drive_main_dry_run(tmp_path, monkeypatch)
+    leaked: list[tuple[str, str]] = []
+    for line in journal_path.read_text().splitlines():
+        record = json.loads(line)
+        payload_keys = set(record["payload"].keys())
+        overlap = payload_keys & _SESSIONS_JSONL_CANONICAL_FIELDS
+        if overlap:
+            leaked.append((record["event"], ",".join(sorted(overlap))))
+    assert not leaked, (
+        f"main() journal payloads leaked sessions.jsonl canonical fields: "
+        f"{leaked}. These belong in sessions.jsonl only (SoT, P0a §6); "
+        "journal events must carry event-scoped context only."
+    )
+
+
+def test_run_audit_subprocess_timeout_emits_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``subprocess.run`` raises ``TimeoutExpired`` (real-mode hit
+    timeout), ``run_audit`` must emit ``subprocess_timeout`` at error
+    level before propagating, then the caller's audit_failed handler
+    fires from main()."""
+    import autoresearch.train as auto_train
+
+    _redirect_journal(tmp_path, monkeypatch)
+    monkeypatch.setattr(auto_train, "WRAPPER_OVERRIDE_HOOK_READY", True)
+    # State-dir redirects so wrapper_override write doesn't touch the repo.
+    state_dir = tmp_path / "state"
+    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
+    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
+
+    def _raise_timeout(*_args: object, **kwargs: object) -> object:
+        raise subprocess.TimeoutExpired(cmd=["geode", "audit"], timeout=420)
+
+    monkeypatch.setattr(auto_train.subprocess, "run", _raise_timeout)
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_audit(dry_run=False, session_id="s-to", gen_tag="gen-to")
+
+    rows = [json.loads(line) for line in _journal_path(tmp_path, "s-to").read_text().splitlines()]
+    events = [(r["event"], r["level"]) for r in rows]
+    # wrapper_override_dumped fires before subprocess; subprocess_started then
+    # subprocess_timeout. subprocess_finished must NOT fire.
+    assert ("wrapper_override_dumped", "info") in events
+    assert ("subprocess_started", "info") in events
+    assert ("subprocess_timeout", "error") in events
+    assert not any(name == "subprocess_finished" for name, _ in events)
+    # subprocess_timeout payload carries the configured timeout, nothing else.
+    to_row = next(r for r in rows if r["event"] == "subprocess_timeout")
+    assert set(to_row["payload"].keys()) == {"timeout_sec"}

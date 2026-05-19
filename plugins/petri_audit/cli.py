@@ -32,7 +32,7 @@ from plugins.petri_audit.registry import (
     FamilyInferenceError,
     PetriBinding,
     get_binding,
-    infer_family,
+    infer_provider,
 )
 from plugins.petri_audit.user_overrides import (
     clear_overrides,
@@ -122,14 +122,14 @@ def _cmd_set_model(role: str, model_arg: str) -> None:
         return
 
     # Family change resets source to 'auto' (manifest default) — old
-    # source may be incompatible with new family (e.g. claude-cli on
+    # source may be incompatible with new provider (e.g. claude-cli on
     # gpt-* makes no sense).
     existing = read_role_override(role)
     extra: dict[str, str | None] = {}
     if "source" in existing:
-        old_family = _safe_family(existing.get("model") or role_spec.default_model)
-        new_family = _safe_family(chosen)
-        if old_family != new_family:
+        old_provider = _safe_provider(existing.get("model") or role_spec.default_model)
+        new_provider = _safe_provider(chosen)
+        if old_provider != new_provider:
             extra["source"] = ""  # erase
 
     save_role_override(role, model=chosen, **extra)
@@ -147,17 +147,17 @@ def _cmd_set_source(role: str, source_arg: str) -> None:
     role_spec = manifest.get_role(role)
     # Family from the role's currently-chosen model (user override or default).
     current_model = read_role_override(role).get("model") or role_spec.default_model
-    family = _safe_family(current_model)
-    if family is None:
+    provider = _safe_provider(current_model)
+    if provider is None:
         _pkg.console.print(
-            f"  [warning]Cannot infer family for current model {current_model!r}[/warning]\n"
+            f"  [warning]Cannot infer provider for current model {current_model!r}[/warning]\n"
         )
         return
 
-    source_spec = manifest.get_source(family)
+    source_spec = manifest.get_source(provider)
     if source_arg not in source_spec.allowed:
         _pkg.console.print(
-            f"  [warning]Source {source_arg!r} not allowed for family {family}[/warning]"
+            f"  [warning]Source {source_arg!r} not allowed for provider {provider}[/warning]"
         )
         _pkg.console.print(f"  [muted]Allowed: {', '.join(source_spec.allowed)}[/muted]\n")
         return
@@ -213,13 +213,13 @@ def _print_status() -> None:
             source_label = _format_source_label(binding)
             rows.append((role, binding.model, source_label, binding.inspect_id))
         except CredentialResolutionError as e:
-            # No credential for this family — show the row with a marker.
+            # No credential for this provider — show the row with a marker.
             user_model = (
                 read_role_override(role).get("model")
                 or load_manifest().get_role(role).default_model
             )
-            rows.append((role, user_model, f"[warning]unresolved[/warning] ({e.family})", "—"))
-            missing_envs.update(_env_vars_for_family(e.family))
+            rows.append((role, user_model, f"[warning]unresolved[/warning] ({e.provider})", "—"))
+            missing_envs.update(_env_vars_for_provider(e.provider))
         except Exception as e:
             rows.append((role, "?", f"[warning]error: {type(e).__name__}[/warning]", "—"))
 
@@ -299,16 +299,16 @@ def _picker_for_role(role: str) -> None:
         return
     chosen_model = role_spec.allowed_models[midx]
 
-    # ── Step 2: source picker (filtered by family of chosen model) ────────
+    # ── Step 2: source picker (filtered by provider of chosen model) ────────
     try:
-        family = infer_family(chosen_model)
+        provider = infer_provider(chosen_model)
     except FamilyInferenceError as e:
         _pkg.console.print(f"  [warning]{e}[/warning]\n")
         return
 
-    sources_info = list_credential_sources(family)
+    sources_info = list_credential_sources(provider)
     if not sources_info:
-        _pkg.console.print(f"  [warning]No sources declared for family={family}[/warning]\n")
+        _pkg.console.print(f"  [warning]No sources declared for provider={provider}[/warning]\n")
         return
 
     current_source = current.get("source") or AUTO_SOURCE
@@ -330,7 +330,7 @@ def _picker_for_role(role: str) -> None:
     source_menu = TerminalMenu(
         src_entries,
         title=f"\n  /petri {role}  ·  Step 2/2 — source for "
-        f"family={family}, model={chosen_model}\n",
+        f"provider={provider}, model={chosen_model}\n",
         menu_cursor="  > ",
         menu_cursor_style=("fg_cyan", "bold"),
         cursor_index=default_src_idx,
@@ -364,9 +364,9 @@ def _resolve_model_name(arg: str, allowed: list[str]) -> str | None:
     return None
 
 
-def _safe_family(model: str) -> str | None:
+def _safe_provider(model: str) -> str | None:
     try:
-        return infer_family(model)
+        return infer_provider(model)
     except FamilyInferenceError:
         return None
 
@@ -380,11 +380,11 @@ def _format_source_label(binding: PetriBinding) -> str:
     return binding.source
 
 
-def _env_vars_for_family(family: str) -> list[str]:
-    """Return all auth env vars declared by adapters for a family."""
+def _env_vars_for_provider(provider: str) -> list[str]:
+    """Return all auth env vars declared by adapters for a provider."""
     manifest = load_manifest()
     out: list[str] = []
-    for source, adapter in manifest.adapters.get(family, {}).items():
+    for source, adapter in manifest.adapters.get(provider, {}).items():
         del source
         out.extend(adapter.auth_env_vars)
     return out

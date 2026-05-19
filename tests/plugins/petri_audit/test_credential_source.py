@@ -27,10 +27,10 @@ def _scrub_env(monkeypatch):
 @pytest.fixture(autouse=True)
 def _stub_settings(monkeypatch):
     """Pin _settings_source to None across the suite so the resolver does not
-    short-circuit on whatever GEODE's real ``settings.<family>_credential_source``
+    short-circuit on whatever GEODE's real ``settings.<provider>_credential_source``
     happens to be configured to. Tests that exercise the settings path opt in
     by re-patching _settings_source explicitly."""
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
 
 
 @pytest.fixture(autouse=True)
@@ -176,7 +176,7 @@ def test_resolve_reads_settings_explicit(monkeypatch):
     monkeypatch.setattr(
         cs,
         "_settings_source",
-        lambda family: "api_key" if family == "anthropic" else None,
+        lambda provider: "api_key" if provider == "anthropic" else None,
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     assert cs.resolve_credential_source("anthropic") == "api_key"
@@ -184,13 +184,13 @@ def test_resolve_reads_settings_explicit(monkeypatch):
 
 def test_resolve_settings_auto_falls_to_expansion(monkeypatch):
     """settings returns None / 'auto' → manifest default → auto expansion."""
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     assert cs.resolve_credential_source("anthropic") == "api_key"
 
 
 def test_resolve_settings_invalid_raises(monkeypatch):
-    monkeypatch.setattr(cs, "_settings_source", lambda family: "imposter")
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: "imposter")
     with pytest.raises(cs.CredentialResolutionError):
         cs.resolve_credential_source("anthropic")
 
@@ -221,11 +221,11 @@ def test_suppress_is_idempotent():
 # ── CredentialResolutionError shape ────────────────────────────────────────
 
 
-def test_error_carries_family_and_allowed():
+def test_error_carries_provider_and_allowed():
     with pytest.raises(cs.CredentialResolutionError) as excinfo:
         cs.resolve_credential_source("anthropic")
     err = excinfo.value
-    assert err.family == "anthropic"
+    assert err.provider == "anthropic"
     assert "claude-cli" in err.allowed
     assert "api_key" in err.allowed
 
@@ -265,7 +265,7 @@ def test_subscription_only_error_message_actionable(monkeypatch):
         cs.resolve_credential_source("anthropic", fallback_to_payg=False)
     msg = str(excinfo.value)
     assert "fallback_to_payg = true" in msg
-    assert "[outer_loop]" in msg
+    assert "[self_improving_loop]" in msg
     assert "subscription" in msg.lower()
 
 
@@ -329,65 +329,65 @@ def test_strict_mode_blocks_payg_default_for_zhipuai(monkeypatch):
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
-    """outer_loop_fallback_policy() defaults True when [outer_loop] absent.
+def test_self_improving_loop_fallback_policy_returns_true_when_unconfigured(monkeypatch):
+    """self_improving_loop_fallback_policy() defaults True when [self_improving_loop] absent.
 
-    Tested by monkeypatching load_outer_loop_config to return the default
-    OuterLoopConfig (which has fallback_to_payg=False per the strict
+    Tested by monkeypatching load_self_improving_loop_config to return the default
+    SelfImprovingLoopConfig (which has fallback_to_payg=False per the strict
     default settled in PR-α1 — but the helper itself just reads the field).
     """
-    from core.config.outer_loop import OuterLoopConfig
+    from core.config.self_improving_loop import SelfImprovingLoopConfig
 
-    # Unconfigured → default OuterLoopConfig().fallback_to_payg is False.
+    # Unconfigured → default SelfImprovingLoopConfig().fallback_to_payg is False.
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
-        lambda: OuterLoopConfig(),
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SelfImprovingLoopConfig(),
     )
-    assert cs.outer_loop_fallback_policy() is False
+    assert cs.self_improving_loop_fallback_policy() is False
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_reads_user_config(monkeypatch):
+def test_self_improving_loop_fallback_policy_reads_user_config(monkeypatch):
     """When config sets fallback_to_payg=True, helper returns True."""
-    from core.config.outer_loop import OuterLoopConfig
+    from core.config.self_improving_loop import SelfImprovingLoopConfig
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
-        lambda: OuterLoopConfig(fallback_to_payg=True),
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SelfImprovingLoopConfig(fallback_to_payg=True),
     )
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_safe_on_import_error(monkeypatch):
-    """If core.config.outer_loop is unavailable, helper returns True
+def test_self_improving_loop_fallback_policy_safe_on_import_error(monkeypatch):
+    """If core.config.self_improving_loop is unavailable, helper returns True
     (back-compat preservation)."""
     import builtins
 
     real_import = builtins.__import__
 
     def _raising(name, *args, **kwargs):
-        if name == "core.config.outer_loop":
+        if name == "core.config.self_improving_loop":
             raise ImportError("simulated")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", _raising)
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 @pytest.mark.policy_real
-def test_outer_loop_fallback_policy_safe_on_load_failure(monkeypatch):
-    """If load_outer_loop_config raises (corrupt TOML, etc.), helper
+def test_self_improving_loop_fallback_policy_safe_on_load_failure(monkeypatch):
+    """If load_self_improving_loop_config raises (corrupt TOML, etc.), helper
     returns True and logs a warning rather than breaking the run."""
 
     def _raise():
         raise RuntimeError("corrupt config")
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         _raise,
     )
-    assert cs.outer_loop_fallback_policy() is True
+    assert cs.self_improving_loop_fallback_policy() is True
 
 
 def test_smoke_adapter_module_round_trip(monkeypatch):
@@ -396,3 +396,166 @@ def test_smoke_adapter_module_round_trip(monkeypatch):
     source = cs.resolve_credential_source("anthropic")
     # The chosen source is a real adapter that the registry can probe.
     assert is_adapter_available("anthropic", source) is True
+
+
+# ── P0c — subscription_only error trips the quota banner ────────────────
+
+
+def test_subscription_only_credential_error_trips_banner():
+    """Raising CredentialResolutionError(subscription_only=True) must push
+    the abort state to the active quota banner (P0c writer wiring per
+    docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4).
+    Operators see the red banner immediately without reading tracebacks."""
+    from core.cli.quota_banner import (
+        SubscriptionQuotaBanner,
+        install_banner,
+        uninstall_banner,
+    )
+
+    banner = SubscriptionQuotaBanner()
+    install_banner(banner)
+    try:
+        with pytest.raises(cs.CredentialResolutionError):
+            raise cs.CredentialResolutionError(
+                "anthropic", ["api_key", "claude-cli"], subscription_only=True
+            )
+        state = banner.state
+        assert state.aborted is True
+        assert "anthropic" in state.abort_reason
+        assert "fallback_to_payg" in state.abort_reason
+    finally:
+        uninstall_banner()
+
+
+def test_non_subscription_credential_error_does_not_trip_banner():
+    """Generic CredentialResolutionError (no source available, not a
+    subscription exhaustion) must NOT trip the banner — only subscription
+    aborts get the red state."""
+    from core.cli.quota_banner import (
+        SubscriptionQuotaBanner,
+        install_banner,
+        uninstall_banner,
+    )
+
+    banner = SubscriptionQuotaBanner()
+    install_banner(banner)
+    try:
+        with pytest.raises(cs.CredentialResolutionError):
+            raise cs.CredentialResolutionError("anthropic", ["api_key"])
+        assert banner.state.aborted is False
+    finally:
+        uninstall_banner()
+
+
+def test_subscription_only_banner_trip_safe_when_no_banner_installed():
+    """When no banner is installed (non-REPL invocation) the error must
+    still raise cleanly — the wiring is optional, not load-bearing."""
+    from core.cli.quota_banner import uninstall_banner
+
+    uninstall_banner()
+    with pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError(
+            "anthropic", ["api_key", "claude-cli"], subscription_only=True
+        )
+
+
+# ── P1b — credential resolver journal emit ──────────────────────────────
+
+
+def _emit_test_journal(tmp_path):
+    """Build a SessionJournal under tmp_path. Caller activates with session_journal_scope."""
+    from core.observability import SessionJournal
+
+    sip_home = tmp_path / "self-improving-loop"
+
+    class _ScopedPaths:
+        pass
+
+    journal = SessionJournal(
+        session_id="s-p1b",
+        gen_tag="gen-p1b",
+        component="autoresearch",
+        path=sip_home / "s-p1b" / "journal.jsonl",
+    )
+    return journal, sip_home
+
+
+def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch):
+    """CredentialResolutionError(subscription_only=True) must emit a
+    credential_subscription_abort event with provider + allowed payload."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+    with session_journal_scope(journal), pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError(
+            "anthropic", ["api_key", "claude-cli"], subscription_only=True
+        )
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    abort_events = [r for r in rows if r["event"] == "credential_subscription_abort"]
+    assert len(abort_events) == 1
+    abort = abort_events[0]
+    assert abort["level"] == "error"
+    assert abort["payload"]["provider"] == "anthropic"
+    assert abort["payload"]["allowed"] == ["api_key", "claude-cli"]
+
+
+@pytest.mark.policy_real
+def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp_path, monkeypatch):
+    """Successful config read emits fallback_policy_resolved with
+    source='config' so the operator sees which path the resolver took."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+
+    # Force a known fallback_to_payg value by stubbing the loader.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SimpleNamespace(fallback_to_payg=False),
+    )
+    with session_journal_scope(journal):
+        assert cs.self_improving_loop_fallback_policy() is False
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
+    assert len(events) == 1
+    assert events[0]["payload"] == {"value": False, "source": "config"}
+
+
+@pytest.mark.policy_real
+def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_path, monkeypatch):
+    """When the loader raises, the helper still returns the lenient
+    default but the journal records source='load_error_default' so the
+    silent fallback is auditable."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+
+    def _raise():
+        raise RuntimeError("corrupt config")
+
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        _raise,
+    )
+    with session_journal_scope(journal):
+        assert cs.self_improving_loop_fallback_policy() is True
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
+    assert len(events) == 1
+    assert events[0]["level"] == "warn"
+    assert events[0]["payload"] == {"value": True, "source": "load_error_default"}
+
+
+def test_credential_journal_emit_noop_outside_scope(monkeypatch):
+    """Outside a SessionJournal scope (single-shot CLI) the emit must
+    no-op cleanly so the resolver's contract is unchanged."""
+    # No session_journal_scope active.
+    with pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)

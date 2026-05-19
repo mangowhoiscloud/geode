@@ -252,7 +252,7 @@ def infer_provider_from_model(model: str) -> str:
     - Provider-prefixed ids (``anthropic/...``, ``openai/...``,
       ``openai-codex/...``, ``geode/<base>``) — the prefix wins for
       ``openai-codex`` (OAuth-routed), otherwise the bare model id is
-      reclassified by the family rules above.
+      reclassified by the provider rules above.
 
     The OAuth probe is read-only and tolerates a missing
     ``plugins.petri_audit`` package (the predicate lives there because

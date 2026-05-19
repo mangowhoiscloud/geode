@@ -1,6 +1,6 @@
 """Petri audit adapter registry — manifest-driven lazy dispatch.
 
-Each ``(family, source)`` pair in :mod:`plugins.petri_audit.manifest`
+Each ``(provider, source)`` pair in :mod:`plugins.petri_audit.manifest`
 maps to a concrete adapter module. The registry imports those modules
 lazily so the default ``uv sync`` (no ``[audit]`` extra) keeps cold-start
 clean, and exposes a uniform interface:
@@ -44,28 +44,28 @@ __all__ = [
 ]
 
 
-def get_adapter_spec(family: str, source: str) -> AdapterSpec:
+def get_adapter_spec(provider: str, source: str) -> AdapterSpec:
     """Return the :class:`AdapterSpec` declared by the active manifest.
 
     Thin wrapper kept here so callers don't need to import
     :func:`plugins.petri_audit.manifest.load_manifest` directly.
     """
-    return load_manifest().get_adapter(family, source)
+    return load_manifest().get_adapter(provider, source)
 
 
-def load_adapter_module(family: str, source: str) -> ModuleType:
-    """Import the adapter module for ``(family, source)`` lazily.
+def load_adapter_module(provider: str, source: str) -> ModuleType:
+    """Import the adapter module for ``(provider, source)`` lazily.
 
     Raises :class:`ImportError` when the declared module is missing
     (e.g. the ``[audit]`` extra is not installed and the adapter
     depends on it); raises :class:`KeyError` when the manifest has no
     binding for the pair (see :class:`PetriManifest.get_adapter`).
     """
-    spec = get_adapter_spec(family, source)
+    spec = get_adapter_spec(provider, source)
     return importlib.import_module(spec.module)
 
 
-def register_adapter(family: str, source: str) -> None:
+def register_adapter(provider: str, source: str) -> None:
     """Invoke the adapter module's ``register()`` if it exposes one.
 
     Stock providers (inspect_ai's native ``anthropic`` / ``openai`` /
@@ -75,13 +75,13 @@ def register_adapter(family: str, source: str) -> None:
     subclass into inspect_ai's registry. Idempotent — inspect_ai's
     registry overwrites existing entries with the same name.
     """
-    module = load_adapter_module(family, source)
+    module = load_adapter_module(provider, source)
     register_fn = getattr(module, "register", None)
     if callable(register_fn):
         register_fn()
 
 
-def is_adapter_available(family: str, source: str) -> bool:
+def is_adapter_available(provider: str, source: str) -> bool:
     """Probe whether the adapter has credentials to run.
 
     Returns ``True`` when:
@@ -95,7 +95,7 @@ def is_adapter_available(family: str, source: str) -> bool:
     be side-effect-free, so import failures collapse to "unavailable".
     """
     try:
-        module = load_adapter_module(family, source)
+        module = load_adapter_module(provider, source)
     except ImportError:
         return False
     probe = getattr(module, "is_available", None)
@@ -107,7 +107,7 @@ def is_adapter_available(family: str, source: str) -> bool:
     # Fallback — check env vars from the manifest.
     import os
 
-    spec = get_adapter_spec(family, source)
+    spec = get_adapter_spec(provider, source)
     if not spec.auth_env_vars:
         # No env vars declared and no probe function — assume available
         # (e.g. geode target adapter, which uses GeodeModelAPI internally).
@@ -115,7 +115,7 @@ def is_adapter_available(family: str, source: str) -> bool:
     return any(os.environ.get(env_var) for env_var in spec.auth_env_vars)
 
 
-def get_adapter_metadata(family: str, source: str) -> dict[str, Any] | None:
+def get_adapter_metadata(provider: str, source: str) -> dict[str, Any] | None:
     """Return picker-friendly metadata from the adapter module.
 
     Only OAuth-backed adapters populate this — stock API-key adapters
@@ -123,7 +123,7 @@ def get_adapter_metadata(family: str, source: str) -> dict[str, Any] | None:
     missing metadata as benign and fall back to defaults).
     """
     try:
-        module = load_adapter_module(family, source)
+        module = load_adapter_module(provider, source)
     except ImportError:
         return None
     fn = getattr(module, "metadata", None)

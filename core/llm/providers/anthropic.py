@@ -41,17 +41,52 @@ if TYPE_CHECKING:
 # the PEP 562 ``__getattr__`` hook below; type annotations use the
 # ``TYPE_CHECKING`` block above so mypy still sees them.
 _ANTHROPIC_LAZY_TUPLES: dict[str, tuple[str, ...]] = {
-    "RETRYABLE_ERRORS": ("RateLimitError", "APIConnectionError", "InternalServerError"),
+    # P1a (2026-05-19) — OverloadedError (status 529) is a sibling of
+    # InternalServerError under APIStatusError, NOT a subclass. The
+    # original tuple omitted it, so every 529 bubbled up without retry —
+    # a silent failure during Anthropic capacity dips. The audit row
+    # "529 Overloaded retry 정책 미정" tracked this exact gap.
+    "RETRYABLE_ERRORS": (
+        "RateLimitError",
+        "APIConnectionError",
+        "InternalServerError",
+        "OverloadedError",
+    ),
     "NON_RETRYABLE_ERRORS": ("AuthenticationError", "BadRequestError"),
 }
+
+
+def _resolve_anthropic_exception(name: str) -> type[Exception]:
+    """Resolve an anthropic SDK exception class, falling through to the
+    private ``_exceptions`` namespace.
+
+    P1a — ``OverloadedError`` (529) lives only in ``anthropic._exceptions``,
+    not at the top-level ``anthropic`` namespace, so a simple
+    ``getattr(anthropic, name)`` raises ``AttributeError`` for it. The
+    fallthrough keeps the rest of the lazy resolution working for
+    classes that DO sit at the top level (RateLimitError,
+    InternalServerError, etc.).
+    """
+    import anthropic
+
+    candidate: Any
+    if hasattr(anthropic, name):
+        candidate = getattr(anthropic, name)
+    else:
+        from anthropic import _exceptions as _ex
+
+        candidate = getattr(_ex, name)
+    if not (isinstance(candidate, type) and issubclass(candidate, Exception)):
+        raise TypeError(
+            f"anthropic attribute {name!r} resolved to {candidate!r}, expected Exception subclass"
+        )
+    return candidate
 
 
 def __getattr__(name: str) -> Any:
     """PEP 562 module attribute hook — resolve anthropic-derived names lazily."""
     if name in _ANTHROPIC_LAZY_TUPLES:
-        import anthropic
-
-        value = tuple(getattr(anthropic, n) for n in _ANTHROPIC_LAZY_TUPLES[name])
+        value = tuple(_resolve_anthropic_exception(n) for n in _ANTHROPIC_LAZY_TUPLES[name])
         globals()[name] = value
         return value
     if name == "TextBlockParam":
@@ -116,6 +151,163 @@ _async_client_lock = threading.Lock()
 # Circuit breaker for Anthropic API calls
 _circuit_breaker = CircuitBreaker()
 
+
+# ---------------------------------------------------------------------------
+# P0c — quota banner writer wiring (callback-registration pattern)
+# ---------------------------------------------------------------------------
+#
+# httpx event hook that feeds ``SubscriptionQuotaBanner.set_state`` from
+# the ``anthropic-ratelimit-tokens-*`` response headers. Runs on every
+# response; values are present on subscription-OAuth routed calls and
+# typically absent on PAYG calls — the hook silently skips when the
+# headers are missing so PAYG users see no banner change.
+#
+# Architecture note: we do NOT ``from core.cli.quota_banner import …`` here
+# because the import-linter contracts (``Agent stays pure``,
+# ``Server may host agent but never CLI``) forbid
+# ``core.llm.providers.* → core.cli.*``. Instead we expose
+# :func:`register_quota_setter` and let the CLI layer push its
+# ``banner.set_state`` callable in. The provider only knows about a
+# generic ``Callable``; the banner module owns the import direction.
+#
+# Banner SoT: only this quota writer (and the trip_abort call in
+# ``plugins.petri_audit.credential_source``, which is in plugins/ and
+# may import core.cli) feeds the banner. Per the 2026-05-19
+# observability audit §4, the banner was previously installed but never
+# fed in production code — the operator never saw a quota signal.
+
+
+# Type alias for the callback signature so the registration helper has a
+# concrete signature without dragging the SubscriptionQuotaBanner type in.
+_QuotaSetter = Any  # Callable[..., None] — kwargs: provider, used_tokens, total_tokens
+_quota_setter: _QuotaSetter | None = None
+
+
+def register_quota_setter(setter: _QuotaSetter | None) -> None:
+    """Install (or clear) the per-call quota-banner update callback.
+
+    Called by the CLI front-end immediately after ``install_banner`` so
+    the response hook can update the banner state without
+    ``core.llm.providers.anthropic`` importing ``core.cli.quota_banner``
+    (which the import-linter contract forbids — the agent path must not
+    depend on the CLI). Passing ``None`` clears the callback (used by
+    the CLI ``uninstall_banner`` path + by tests to detach between cases).
+    """
+    global _quota_setter
+    _quota_setter = setter
+
+
+def _extract_anthropic_quota(headers: object) -> tuple[int, int] | None:
+    """Parse ``(used, limit)`` from ``anthropic-ratelimit-tokens-*`` headers.
+
+    Returns ``None`` when the headers are absent (PAYG path) or
+    unparseable (defensive — never raise from the response hook). Both
+    values are int tokens for the **current rate-limit window** (per-day
+    on subscription OAuth; per-minute on PAYG); the banner renders them
+    as a usage ratio.
+    """
+    try:
+        limit_str = headers.get("anthropic-ratelimit-tokens-limit")  # type: ignore[attr-defined]
+        remaining_str = headers.get("anthropic-ratelimit-tokens-remaining")  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+    if not limit_str or not remaining_str:
+        return None
+    try:
+        limit = int(limit_str)
+        remaining = int(remaining_str)
+    except (TypeError, ValueError):
+        return None
+    used = max(0, limit - remaining)
+    return used, limit
+
+
+def _feed_banner_from_anthropic_response(response: object) -> None:
+    """Read Anthropic rate-limit headers and push to the active banner.
+
+    No-op when no banner is installed (CLI front-end didn't start one) or
+    when the response carries no rate-limit headers. Defensive: any
+    exception here is swallowed because observability MUST NOT break the
+    response path it observes (parity with SessionJournal.append).
+    """
+    try:
+        headers = getattr(response, "headers", None)
+        if headers is None:
+            return
+        parsed = _extract_anthropic_quota(headers)
+        if parsed is None:
+            return
+        used, limit = parsed
+        setter = _quota_setter
+        if setter is None:
+            return
+        setter(provider="anthropic", used_tokens=used, total_tokens=limit)
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic quota banner feed failed", exc_info=True)
+
+
+def _sync_response_hook(response: object) -> None:
+    """httpx sync event hook — delegates to the banner feeder."""
+    _feed_banner_from_anthropic_response(response)
+
+
+async def _async_response_hook(response: object) -> None:
+    """httpx async event hook — delegates to the banner feeder."""
+    _feed_banner_from_anthropic_response(response)
+
+
+def _on_retry_journal_emit(
+    *,
+    model: str,
+    attempt: int,
+    max_retries: int,
+    delay_s: float,
+    elapsed_s: float,
+    error_type: str,
+) -> None:
+    """``on_retry`` callback — emit ``llm_retry`` event to the active journal.
+
+    P1a — closes the silent-retry gap from the 2026-05-19 observability
+    audit §4 row "529 Overloaded retry 정책 미정". The 529 → InternalServerError
+    classification is already correct (Anthropic SDK maps ``status_code >= 500``
+    to ``InternalServerError`` which is in ``RETRYABLE_ERRORS``), but the
+    retry itself was previously silent — operators saw the final outcome
+    but not the retry count or the triggering error.
+
+    Discovered via the ContextVar set in ``session_journal_scope``; no-op
+    when not in scope (single REPL invocation outside an autoresearch /
+    seed-generation run) so the helper is safe to wire unconditionally.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        # Treat overload / rate-limit / 5xx as warning level; connection
+        # blips stay info because they're routine in long-running runs.
+        level = (
+            "warn"
+            if error_type in {"InternalServerError", "RateLimitError", "OverloadedError"}
+            else "info"
+        )
+        journal.append(
+            "llm_retry",
+            level=level,
+            payload={
+                "provider": "anthropic",
+                "model": model,
+                "attempt": attempt,
+                "max_retries": max_retries,
+                "delay_s": round(delay_s, 3),
+                "elapsed_s": round(elapsed_s, 3),
+                "error_type": error_type,
+            },
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic llm_retry journal emit failed", exc_info=True)
+
+
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS resolve through the
 # module-level ``__getattr__`` hook (defined above) on first use.  Their
 # concrete tuples used to live here as eager module-level expressions
@@ -153,6 +345,7 @@ def get_anthropic_client() -> anthropic.Anthropic:
             http_client = httpx.Client(
                 limits=_build_httpx_limits(),
                 timeout=_build_httpx_timeout(),
+                event_hooks={"response": [_sync_response_hook]},
             )
             _sync_client = anthropic.Anthropic(
                 api_key=_resolve_anthropic_key(),
@@ -185,6 +378,7 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
             http_client = httpx.AsyncClient(
                 limits=_build_httpx_limits(),
                 timeout=_build_httpx_timeout(),
+                event_hooks={"response": [_async_response_hook]},
             )
             _async_client = anthropic.AsyncAnthropic(
                 api_key=key,
@@ -352,6 +546,7 @@ def retry_with_backoff(
         ),
         max_retries=_max_retries,
         provider_label="LLM",
+        on_retry=_on_retry_journal_emit,
     )
 
 
@@ -391,6 +586,7 @@ async def retry_with_backoff_async(
         ),
         max_retries=_max_retries,
         provider_label="LLM",
+        on_retry=_on_retry_journal_emit,
     )
 
 

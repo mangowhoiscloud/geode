@@ -1,11 +1,11 @@
 """3-tier quota banner + abort dialog for GEODE's REPL.
 
-PR-γ1 of the 2026-05-19 outer-loop config consolidation plan. Renders a
+PR-γ1 of the 2026-05-19 self-improving-loop config consolidation plan. Renders a
 ``bottom_toolbar`` callable that the prompt_toolkit ``PromptSession``
 plumbs into the REPL frame. The banner colour reflects current
 subscription quota usage against the
-``[outer_loop] warn_threshold`` / ``abort_threshold`` from
-:mod:`core.config.outer_loop`:
+``[self_improving_loop] warn_threshold`` / ``abort_threshold`` from
+:mod:`core.config.self_improving_loop`:
 
 - **green**  — usage < warn_threshold (subscription healthy)
 - **yellow** — warn ≤ usage < abort (approaching limit)
@@ -26,7 +26,7 @@ is idle (prompt_toolkit issue #277 pattern). Tests inject the
 ``invalidate`` callable so the prompt_toolkit dependency stays out of
 the unit-test scope.
 
-Reference: ``docs/plans/2026-05-19-outer-loop-config-consolidation.md``
+Reference: ``docs/plans/2026-05-19-self-improving-loop-config-consolidation.md``
 Phase γ + frontier survey (Codex CLI status_line, Hermes TUI status bar).
 """
 
@@ -67,7 +67,7 @@ class QuotaState:
     calls will succeed until the operator opts in or swaps account.
     """
 
-    family: str = ""
+    provider: str = ""
     used_tokens: int = 0
     total_tokens: int = 0
     aborted: bool = False
@@ -117,14 +117,14 @@ class SubscriptionQuotaBanner:
     def set_state(
         self,
         *,
-        family: str,
+        provider: str,
         used_tokens: int,
         total_tokens: int,
     ) -> None:
         """Replace the quota counters. Does not touch the ``aborted`` flag."""
         with self._lock:
             self._state = QuotaState(
-                family=family,
+                provider=provider,
                 used_tokens=used_tokens,
                 total_tokens=total_tokens,
                 aborted=self._state.aborted,
@@ -140,7 +140,7 @@ class SubscriptionQuotaBanner:
         """
         with self._lock:
             self._state = QuotaState(
-                family=self._state.family,
+                provider=self._state.provider,
                 used_tokens=self._state.used_tokens,
                 total_tokens=self._state.total_tokens,
                 aborted=True,
@@ -153,7 +153,7 @@ class SubscriptionQuotaBanner:
         """
         with self._lock:
             self._state = QuotaState(
-                family=self._state.family,
+                provider=self._state.provider,
                 used_tokens=self._state.used_tokens,
                 total_tokens=self._state.total_tokens,
                 aborted=False,
@@ -182,14 +182,14 @@ class SubscriptionQuotaBanner:
         Format::
 
             ⬤ green   subscription healthy (12% used)
-            ⬤ yellow  approaching limit (62% of <family>)
+            ⬤ yellow  approaching limit (62% of <provider>)
             ⬤ red     aborted — see /status
 
-        Renders empty string when no family is set yet (cold start) so
+        Renders empty string when no provider is set yet (cold start) so
         the banner doesn't flash an unconfigured state.
         """
         state = self.state
-        if not state.family and state.total_tokens == 0 and not state.aborted:
+        if not state.provider and state.total_tokens == 0 and not state.aborted:
             return ""
         tier = self.tier()
         pct = round(state.usage_ratio * 100)
@@ -202,16 +202,16 @@ class SubscriptionQuotaBanner:
                 )
             return (
                 f'<style fg="red" bg="black"> ⬤ </style>'
-                f"<b> {state.family}: {pct}% used</b>"
+                f"<b> {state.provider}: {pct}% used</b>"
                 f" — abort threshold {int(self._abort * 100)}%"
             )
         if tier == "yellow":
             return (
                 f'<style fg="yellow"> ⬤ </style>'
-                f"{state.family}: {pct}% used"
+                f"{state.provider}: {pct}% used"
                 f" — approaching {int(self._abort * 100)}% limit"
             )
-        return f'<style fg="green"> ⬤ </style>{state.family}: {pct}% used — healthy'
+        return f'<style fg="green"> ⬤ </style>{state.provider}: {pct}% used — healthy'
 
 
 # Module-level singleton + ContextVar accessor.
@@ -312,16 +312,16 @@ class AbortDialog:
     button_label: str = "Dismiss"
 
 
-def render_abort_message(family: str, resolver_message: str) -> AbortDialog:
+def render_abort_message(provider: str, resolver_message: str) -> AbortDialog:
     """Compose the abort dialog body from a strict-mode resolution error.
 
     ``resolver_message`` is :attr:`CredentialResolutionError.args[0]`
     when ``subscription_only=True`` — it already contains the 3
     actionable remedies (wait / opt-in fallback / pin per-role). The
-    dialog wraps it with a title that names the offending family.
+    dialog wraps it with a title that names the offending provider.
     """
     return AbortDialog(
-        title=f"Subscription quota exhausted — {family}",
+        title=f"Subscription quota exhausted — {provider}",
         body=resolver_message,
     )
 
@@ -338,5 +338,18 @@ def install_banner(banner: SubscriptionQuotaBanner) -> None:
 
 
 def uninstall_banner() -> None:
-    """Detach the active banner (used during REPL teardown / test cleanup)."""
+    """Detach the active banner (used during REPL teardown / test cleanup).
+
+    Also clears the Anthropic quota setter callback registered via
+    :func:`core.llm.providers.anthropic.register_quota_setter` so a
+    teardown test doesn't leave a dangling reference to the just-detached
+    banner. Defensive import — anthropic SDK may not be loadable in
+    every test environment.
+    """
     _set_current_banner(None)
+    try:
+        from core.llm.providers.anthropic import register_quota_setter
+
+        register_quota_setter(None)
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic quota setter clear failed", exc_info=True)

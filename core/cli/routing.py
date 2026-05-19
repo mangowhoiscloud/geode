@@ -100,7 +100,7 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         name="/audit-seeds",
         location=RunLocation.THIN,
         description="Seed-pipeline candidate generation (co-scientist 7-role)",
-        handler_path="plugins.seed_pipeline.cli:cmd_audit_seeds_slash",
+        handler_path="plugins.seed_generation.cli:cmd_audit_seeds_slash",
     ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.
