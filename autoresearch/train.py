@@ -1,10 +1,26 @@
 """
-Single-experiment runner for autoresearch (Petri-signal fork).
+Single-experiment runner for autoresearch — GEODE self-improving loop driver.
 
-Karpathy's upstream ``train.py`` is a single-GPU GPT pre-train (model +
-Muon optimiser + training loop, ~630 LOC). This fork's ``train.py``
-keeps the same role but runs **one audit per invocation** — it is the
-single file the self-improving-loop agent modifies.
+``train.py`` runs **one audit per invocation** and is the single file
+the self-improving-loop agent modifies. Role split with petri (the
+measurement layer) is strict:
+
+* **petri** owns *what gets measured* — the 20-dim rubric
+  (``plugins/petri_audit/judge_dims/geode_5axes.yaml``) defines the
+  dim universe, ``geode audit`` runs the judge subprocess, and
+  ``core/audit/dim_extractor`` emits raw ``dim_means`` /
+  ``dim_stderr`` dicts on the 1–10 concerning-behaviour scale.
+* **autoresearch (this file)** owns *how the measurement accrues into
+  a selection signal* — tier classification (``AXIS_TIERS``), weight
+  allocation (``DIM_WEIGHTS`` + ``STABILITY_WEIGHT``), the cross-axis
+  monotone gate (``compute_fitness``), and the auto-promote rule
+  (``decide_promote``). No code path here re-implements raw
+  measurement — every per-dim number is sourced verbatim from petri's
+  ``dim_extractor`` output.
+
+The 3-file shape (``prepare`` / ``train`` / ``program.md``),
+fixed-budget per-run constraint, and "git as optimiser" idiom are
+borrowed from Karpathy's autoresearch (MIT, 2026-03).
 
 Agent CAN modify:
   * ``WRAPPER_PROMPT_SECTIONS`` — the system prompt's section dict.
@@ -746,7 +762,7 @@ def print_summary(
     dry_run: bool,
     baseline_active: bool,
 ) -> None:
-    """Karpathy-style grep-friendly stdout block — per-dim scores + means + stderr.
+    """Grep-friendly stdout block — per-dim scores + means + stderr.
 
     Per ADR-002 + PR 0 the report lists all 20 dims (5 critical +
     12 auxiliary + 3 info) so the self-improving-loop agent's results.tsv can
