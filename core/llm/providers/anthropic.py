@@ -41,17 +41,52 @@ if TYPE_CHECKING:
 # the PEP 562 ``__getattr__`` hook below; type annotations use the
 # ``TYPE_CHECKING`` block above so mypy still sees them.
 _ANTHROPIC_LAZY_TUPLES: dict[str, tuple[str, ...]] = {
-    "RETRYABLE_ERRORS": ("RateLimitError", "APIConnectionError", "InternalServerError"),
+    # P1a (2026-05-19) — OverloadedError (status 529) is a sibling of
+    # InternalServerError under APIStatusError, NOT a subclass. The
+    # original tuple omitted it, so every 529 bubbled up without retry —
+    # a silent failure during Anthropic capacity dips. The audit row
+    # "529 Overloaded retry 정책 미정" tracked this exact gap.
+    "RETRYABLE_ERRORS": (
+        "RateLimitError",
+        "APIConnectionError",
+        "InternalServerError",
+        "OverloadedError",
+    ),
     "NON_RETRYABLE_ERRORS": ("AuthenticationError", "BadRequestError"),
 }
+
+
+def _resolve_anthropic_exception(name: str) -> type[Exception]:
+    """Resolve an anthropic SDK exception class, falling through to the
+    private ``_exceptions`` namespace.
+
+    P1a — ``OverloadedError`` (529) lives only in ``anthropic._exceptions``,
+    not at the top-level ``anthropic`` namespace, so a simple
+    ``getattr(anthropic, name)`` raises ``AttributeError`` for it. The
+    fallthrough keeps the rest of the lazy resolution working for
+    classes that DO sit at the top level (RateLimitError,
+    InternalServerError, etc.).
+    """
+    import anthropic
+
+    candidate: Any
+    if hasattr(anthropic, name):
+        candidate = getattr(anthropic, name)
+    else:
+        from anthropic import _exceptions as _ex
+
+        candidate = getattr(_ex, name)
+    if not (isinstance(candidate, type) and issubclass(candidate, Exception)):
+        raise TypeError(
+            f"anthropic attribute {name!r} resolved to {candidate!r}, expected Exception subclass"
+        )
+    return candidate
 
 
 def __getattr__(name: str) -> Any:
     """PEP 562 module attribute hook — resolve anthropic-derived names lazily."""
     if name in _ANTHROPIC_LAZY_TUPLES:
-        import anthropic
-
-        value = tuple(getattr(anthropic, n) for n in _ANTHROPIC_LAZY_TUPLES[name])
+        value = tuple(_resolve_anthropic_exception(n) for n in _ANTHROPIC_LAZY_TUPLES[name])
         globals()[name] = value
         return value
     if name == "TextBlockParam":
@@ -193,6 +228,59 @@ def _sync_response_hook(response: object) -> None:
 async def _async_response_hook(response: object) -> None:
     """httpx async event hook — delegates to the banner feeder."""
     _feed_banner_from_anthropic_response(response)
+
+
+def _on_retry_journal_emit(
+    *,
+    model: str,
+    attempt: int,
+    max_retries: int,
+    delay_s: float,
+    elapsed_s: float,
+    error_type: str,
+) -> None:
+    """``on_retry`` callback — emit ``llm_retry`` event to the active journal.
+
+    P1a — closes the silent-retry gap from the 2026-05-19 observability
+    audit §4 row "529 Overloaded retry 정책 미정". The 529 → InternalServerError
+    classification is already correct (Anthropic SDK maps ``status_code >= 500``
+    to ``InternalServerError`` which is in ``RETRYABLE_ERRORS``), but the
+    retry itself was previously silent — operators saw the final outcome
+    but not the retry count or the triggering error.
+
+    Discovered via the ContextVar set in ``session_journal_scope``; no-op
+    when not in scope (single REPL invocation outside an autoresearch /
+    seed-generation run) so the helper is safe to wire unconditionally.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        # Treat overload / rate-limit / 5xx as warning level; connection
+        # blips stay info because they're routine in long-running runs.
+        level = (
+            "warn"
+            if error_type in {"InternalServerError", "RateLimitError", "OverloadedError"}
+            else "info"
+        )
+        journal.append(
+            "llm_retry",
+            level=level,
+            payload={
+                "provider": "anthropic",
+                "model": model,
+                "attempt": attempt,
+                "max_retries": max_retries,
+                "delay_s": round(delay_s, 3),
+                "elapsed_s": round(elapsed_s, 3),
+                "error_type": error_type,
+            },
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic llm_retry journal emit failed", exc_info=True)
+
 
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS resolve through the
 # module-level ``__getattr__`` hook (defined above) on first use.  Their
@@ -432,6 +520,7 @@ def retry_with_backoff(
         ),
         max_retries=_max_retries,
         provider_label="LLM",
+        on_retry=_on_retry_journal_emit,
     )
 
 
@@ -471,6 +560,7 @@ async def retry_with_backoff_async(
         ),
         max_retries=_max_retries,
         provider_label="LLM",
+        on_retry=_on_retry_journal_emit,
     )
 
 

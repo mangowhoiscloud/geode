@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **P1a — 529 Overloaded responses now retry instead of bubbling up.**
+  Investigating the audit's "529 Overloaded retry 정책 미정" row
+  revealed that the initial assumption ("any 5xx maps to
+  `InternalServerError`, which is already in the retry tuple") was
+  wrong. The Anthropic SDK ships a dedicated `anthropic._exceptions.
+  OverloadedError` with `status_code: Literal[529] = 529` that
+  inherits from `APIStatusError` directly, not from
+  `InternalServerError`. So every 529 — common during Anthropic
+  capacity dips — was previously a silent immediate failure rather
+  than a retryable transient. Fix:
+  1. Add `"OverloadedError"` to `_ANTHROPIC_LAZY_TUPLES["RETRYABLE_ERRORS"]`.
+  2. Add `_resolve_anthropic_exception` fallthrough to
+     `anthropic._exceptions` since `OverloadedError` is not at the
+     top-level `anthropic` namespace.
+  3. Wire `_on_retry_journal_emit` into both sync + async
+     `retry_with_backoff_generic` so retries (529 + 5xx + rate-limit)
+     emit `llm_retry` events into the active SessionJournal —
+     silent retries become observable (level=warn for the load-bearing
+     three error types, info otherwise).
+  6 new tests guard the contract: OverloadedError sibling-of-
+  InternalServerError invariant, tuple membership for both classes,
+  journal emit happy path + Overloaded-as-warn level + no-journal
+  no-op + sync/async callback wiring. Codex MCP cross-LLM verify on
+  the implementation surfaced this exact gap during the discovery
+  test that asserted `class OverloadedError not in src` — turning a
+  reasoning error in the audit document into a real production fix.
+
 ### Changed
 
 - **P0c — quota banner writer wiring (anthropic provider + subscription
