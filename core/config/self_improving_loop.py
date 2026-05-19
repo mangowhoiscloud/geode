@@ -74,11 +74,18 @@ class SelfImprovingLoopBindings(BaseModel):
 
 
 class PetriRoleConfig(BaseModel):
-    """Petri role binding (auditor / target / judge)."""
+    """Petri role binding (auditor / target / judge).
+
+    Both ``model`` and ``source`` are optional so a partial override
+    (e.g. pin source but keep manifest default model) is representable —
+    parity with the legacy ``~/.geode/petri.toml`` semantics that
+    ``read_role_override`` exposes (both fields optional, missing →
+    manifest default).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str
+    model: str = ""
     source: Source = "auto"
     fallback_to_payg: bool | None = None
 

@@ -257,6 +257,15 @@ geode serve                          # starts the always-on Gateway daemon
 
 Configure channel bindings in `.geode/config.toml` (Slack bot token, Discord webhook, etc.). See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
 
+### Optional — Self-improving loop config (`~/.geode/config.toml`)
+
+Tune the autoresearch / seed-generation / petri audit drivers — model picks, dim set, banner thresholds, PAYG fallback policy — by copying the `[self_improving_loop.*]` sections from [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) into `~/.geode/config.toml`. Absent sections fall back to documented defaults. To migrate per-role entries from the legacy `~/.geode/petri.toml`:
+
+```bash
+geode config migrate-petri-toml          # dry-run preview
+geode config migrate-petri-toml --yes    # append [self_improving_loop.petri.*] to config.toml
+```
+
 ---
 
 ## Troubleshooting

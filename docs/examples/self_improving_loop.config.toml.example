@@ -1,0 +1,95 @@
+# GEODE — sample `[self_improving_loop.*]` config (paste into `~/.geode/config.toml`)
+#
+# Copy the sections you need into `~/.geode/config.toml`. The file is
+# loaded by `core.config.self_improving_loop.load_self_improving_loop_config`
+# at runtime; absent sections fall back to the documented defaults below.
+#
+# Precedence (Codex / OpenAI Agents pattern):
+#   1. Per-component env var (e.g. AUTORESEARCH_SEED_SELECT) — per-run override.
+#   2. `~/.geode/config.toml` `[self_improving_loop.*]` section — this file.
+#   3. Module-level constants in `autoresearch/train.py` etc. — last resort.
+#
+# Schema reference: `core/config/self_improving_loop.py` (pydantic `SelfImprovingLoopConfig`).
+# Plan: `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`.
+
+# ---------------------------------------------------------------------------
+# Global flags (apply to every self-improving-loop driver)
+# ---------------------------------------------------------------------------
+[self_improving_loop]
+# Block PAYG fallback when subscription quota is exhausted. Default `false`
+# aborts with an actionable error (Codex CLI `forced_login_method` pattern).
+# Flip to `true` to opt into automatic PAYG charges when the OAuth path
+# runs out — the change is logged via the credential resolver journal
+# (`fallback_policy_resolved` event with source="config").
+fallback_to_payg = false
+# Banner thresholds — 0.0–1.0 ratio of used / total tokens.
+# < warn = green, [warn, abort) = yellow, >= abort = red (aborts the run).
+warn_threshold  = 0.5
+abort_threshold = 0.9
+
+# ---------------------------------------------------------------------------
+# autoresearch driver (autoresearch/train.py)
+# ---------------------------------------------------------------------------
+[self_improving_loop.autoresearch]
+# Inner-audit wall-clock budget (minutes). 1–60. Subprocess timeout is
+# `budget_minutes * 60 + 120`. Default 5.
+budget_minutes = 5
+# Model that the inner Petri audit sends prompts to (the *target*).
+target_model = "geode/gpt-5.5"
+# Model that scores each rollout via inspect_petri's judge contract.
+# Default keeps judge ≠ target provider for the M1 cross-provider guard
+# (`plugins/petri_audit/optimize.py`).
+judge_model = "claude-code/opus"
+# Use Claude Code / Codex OAuth for the audit subprocess when available.
+# Falls through to PAYG only when `fallback_to_payg = true` above.
+use_oauth = true
+# Number of seed prompts to sample from `seed_select`. 1–1000.
+seed_limit = 10
+# Seed pool path (hierarchical tree, post-PR-0). The `AUTORESEARCH_SEED_SELECT`
+# env var overrides this for cross-loop handoff from seed-generation.
+seed_select = "plugins/petri_audit/seeds"
+# Which dim manifest the audit measures (`5axes` / `legacy` / custom yaml path).
+dim_set  = "5axes"
+# Per-rollout max tool-use turns. 1–200.
+max_turns = 10
+# Optional override of the global flag for autoresearch only.
+# fallback_to_payg = true
+
+# ---------------------------------------------------------------------------
+# seed-generation driver (plugins/seed_generation/)
+# ---------------------------------------------------------------------------
+[self_improving_loop.seed_generation]
+# Default `--candidates` for `geode audit-seeds generate` when omitted on
+# the CLI. 1–100.
+candidates_default = 15
+# Default `--gen-tag` for the same command. Operators usually pass
+# explicit tags per run; this is the bare-CLI fallback.
+default_gen_tag = "gen1"
+# Optional per-role binding (model, provider, source). When unset, the
+# picker derives the binding from `plugins/seed_generation/seed_generation.plugin.toml`
+# defaults. Example:
+# [self_improving_loop.seed_generation.roles.generator]
+# model    = "gpt-5.5"
+# provider = "openai"
+# source   = "openai-codex"
+
+# ---------------------------------------------------------------------------
+# petri audit role overrides (replaces legacy ~/.geode/petri.toml)
+# ---------------------------------------------------------------------------
+# Per-role override of the model + credential source used during
+# `geode audit` runs. Each entry is optional — absent role → manifest
+# defaults from `plugins/petri_audit/petri.plugin.toml`. Migrate
+# existing `~/.geode/petri.toml` entries via
+# `geode config migrate-petri-toml --yes`.
+
+[self_improving_loop.petri.auditor]
+model  = "claude-sonnet-4-6"
+source = "claude-cli"
+
+[self_improving_loop.petri.target]
+model  = "geode/gpt-5.5"
+source = "openai-codex"
+
+[self_improving_loop.petri.judge]
+model  = "claude-opus-4-7"
+source = "claude-cli"
