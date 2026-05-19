@@ -143,7 +143,10 @@ def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
     result = runner.invoke(app, ["--yes"])
     assert result.exit_code == 1, result.output
     assert "auditor" in result.output
-    assert "Refusing to append" in result.output
+    # Rich may wrap "Refusing to append" across a soft newline at narrow
+    # terminal widths (CI vs local). Normalise whitespace before asserting.
+    normalised = " ".join(result.output.split())
+    assert "Refusing to append" in normalised
     # Destination MUST NOT be modified — guard against partial double-write.
     assert target.read_text(encoding="utf-8") == (
         '[self_improving_loop.petri.auditor]\nmodel = "old-model"\n'
