@@ -441,8 +441,18 @@ def test_read_role_no_emit_when_self_improving_loop_available(
     tmp_path: Path,
 ) -> None:
     """Happy path — the new self-improving-loop config IS loadable. No
-    legacy-fallback event fires (we use the new SoT successfully even
-    when no override exists for the role)."""
+    ``petri_role_legacy_fallback`` event fires (we use the new SoT
+    successfully even when no override exists for the role).
+
+    PR-P2 — the autouse isolation fixture pins ``GEODE_CONFIG_TOML`` at a
+    missing path, so the loader fires its new
+    ``self_improving_loop_config_defaults_applied`` notice (expected
+    behavior — that signal is the new-SoT default fallback marker, not a
+    legacy fallback). We assert only the legacy-fallback event is
+    absent.
+    """
+    import json
+
     from core.observability import SessionJournal, session_journal_scope
 
     journal = SessionJournal(
@@ -454,5 +464,7 @@ def test_read_role_no_emit_when_self_improving_loop_available(
     with session_journal_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
     assert result == {}
-    # No journal file written because no event emitted.
-    assert not journal.path.exists()
+    if journal.path.exists():
+        rows = [json.loads(line) for line in journal.path.read_text().splitlines() if line.strip()]
+        legacy_events = [r for r in rows if r["event"] == "petri_role_legacy_fallback"]
+        assert legacy_events == []
