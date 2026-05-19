@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.19] — 2026-05-20
+
+3 develop PRs landed since v0.99.18: PR-ε1 (#1341) config migrate CLI +
+sample fixture, PR-P2 (#1342) observability journal events
+(config-default + cost-divergence + pre-flight), and the autoresearch
+self-positioning rewrite (#1343, role split with petri made explicit).
+20 new tests; 4956 non-live + 5 live; 306 core + 47 plugins.
+
 ### Changed
 
 - **autoresearch self-positioning rewrite — drop "fork" framing, name the
