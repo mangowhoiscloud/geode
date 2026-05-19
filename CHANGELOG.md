@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.18] — 2026-05-19
+
+PR #1336 squash `15ca2921` — explicit-naming rename pass + observability
+audit P0+P1 fix-up. 127 files, +3531 / -1531, 33+ new tests, 1 production
+silent-fail surfaced and fixed (Anthropic 529 `OverloadedError`).
+
 ### Fixed
 
 - **P1c — seed_generation orchestrator per-stage journal emit.** The
