@@ -49,6 +49,27 @@ functional change.
 
 ### Fixed
 
+- **P1b — subscription / credential resolver journal emit.** Three
+  silent fallbacks in the credential layer (audit §4 + §5) become
+  observable so post-mortem can see which path the run took:
+  1. `CredentialResolutionError(subscription_only=True)` now emits
+     `credential_subscription_abort` (level=error) carrying the
+     provider and allowed-source list.
+  2. `self_improving_loop_fallback_policy()` emits
+     `fallback_policy_resolved` on every call with the resolved value
+     plus source (`config` / `import_error_default` /
+     `load_error_default`) so it is clear whether the run consulted
+     the user's config or fell back to the lenient default.
+  3. `_read_role_from_self_improving_loop` emits
+     `petri_role_legacy_fallback` when the import fails and the
+     resolver silently drops to the legacy `~/.geode/petri.toml`.
+  Each emit is via a private helper that discovers the SessionJournal
+  through the ContextVar (`current_session_journal()`) and silently
+  no-ops outside scope; failure to emit is swallowed so the resolver's
+  return contract is unchanged. 5 new tests cover the happy paths +
+  no-journal no-op; the two policy-real tests carry the new
+  `policy_real` marker so they bypass the conftest's session-wide pin.
+  Codex MCP cross-LLM verify: "No findings".
 - **P1a — 529 Overloaded responses now retry instead of bubbling up.**
   Investigating the audit's "529 Overloaded retry 정책 미정" row
   revealed that the initial assumption ("any 5xx maps to

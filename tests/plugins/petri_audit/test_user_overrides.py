@@ -395,3 +395,64 @@ model = "claude-sonnet-4-6"
 def test_migration_plan_empty_when_no_legacy_file(petri_toml: Path) -> None:
     """No file → empty dict, no raise."""
     assert uo.migration_plan_from_petri_toml() == {}
+
+
+# ── P1b — petri_role_legacy_fallback journal emit ──────────────────────
+
+
+def test_read_role_emits_journal_when_self_improving_loop_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``core.config.self_improving_loop`` cannot be imported, the
+    role reader silently falls back to the legacy petri.toml. P1b makes
+    that silent fallback observable via a ``petri_role_legacy_fallback``
+    event so post-mortem can see when the new SoT was bypassed."""
+    import json
+    import sys
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal = SessionJournal(
+        session_id="s-legacy",
+        gen_tag="gen-legacy",
+        component="autoresearch",
+        path=tmp_path / "journal.jsonl",
+    )
+
+    # Force the lazy import inside _read_role_from_self_improving_loop to fail
+    # by inserting None into sys.modules — the `from … import …` then raises.
+    monkeypatch.setitem(sys.modules, "core.config.self_improving_loop", None)
+
+    with session_journal_scope(journal):
+        result = uo._read_role_from_self_improving_loop("auditor")
+
+    assert result == {}
+    assert journal.path.is_file()
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    legacy_events = [r for r in rows if r["event"] == "petri_role_legacy_fallback"]
+    assert len(legacy_events) == 1
+    assert legacy_events[0]["payload"] == {
+        "role": "auditor",
+        "reason": "import_error",
+    }
+
+
+def test_read_role_no_emit_when_self_improving_loop_available(
+    tmp_path: Path,
+) -> None:
+    """Happy path — the new self-improving-loop config IS loadable. No
+    legacy-fallback event fires (we use the new SoT successfully even
+    when no override exists for the role)."""
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal = SessionJournal(
+        session_id="s-newpath",
+        gen_tag="gen-newpath",
+        component="autoresearch",
+        path=tmp_path / "journal.jsonl",
+    )
+    with session_journal_scope(journal):
+        result = uo._read_role_from_self_improving_loop("auditor")
+    assert result == {}
+    # No journal file written because no event emitted.
+    assert not journal.path.exists()

@@ -29,12 +29,41 @@ This is fine for a CLI-only path that fires on user keystroke.
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_PETRI_TOML
+
+log = logging.getLogger(__name__)
+
+
+def _emit_user_overrides_event(
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Emit a user-overrides event into the active SessionJournal.
+
+    P1b — closes the silent legacy-petri.toml fallback gap from the
+    2026-05-19 observability audit §5. Discovered via the ContextVar
+    so callers outside a self-improving-loop run (single-shot CLI
+    invocations) are no-ops. Failure to emit must not break the
+    override resolver — exception swallowed.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        journal.append(event, level=level, payload=payload or {})
+    except Exception:  # pragma: no cover - defensive
+        log.debug("user_overrides: journal emit %s failed", event, exc_info=True)
+
 
 __all__ = [
     "RoleOverride",
@@ -140,6 +169,14 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     try:
         from core.config.self_improving_loop import load_self_improving_loop_config
     except ImportError:
+        # P1b — emit so the operator can see that the run silently fell
+        # back to the legacy petri.toml instead of consulting the new
+        # [self_improving_loop.petri.<role>] config section. No-op when
+        # no journal is in scope.
+        _emit_user_overrides_event(
+            "petri_role_legacy_fallback",
+            payload={"role": role, "reason": "import_error"},
+        )
         return {}
     cfg = load_self_improving_loop_config()
     entry = cfg.petri.get(role)

@@ -123,6 +123,17 @@ class CredentialResolutionError(RuntimeError):
                     f"[self_improving_loop] fallback_to_payg=true or wait for reset."
                 ),
             )
+            # P1b — journal event so post-mortem can see exactly which
+            # provider hit the subscription abort. The banner state is
+            # process-local; the journal entry is what survives the run.
+            _emit_credential_event(
+                "credential_subscription_abort",
+                level="error",
+                payload={
+                    "provider": provider,
+                    "allowed": list(allowed),
+                },
+            )
         else:
             super().__init__(
                 f"provider={provider}: no credential source available "
@@ -148,6 +159,41 @@ def _trip_banner_subscription_abort(*, provider: str, reason: str) -> None:
         banner.trip_abort(reason=reason)
     except Exception:  # pragma: no cover - defensive
         log.debug("credential_source: quota banner trip_abort failed", exc_info=True)
+
+
+def _emit_credential_event(
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Emit a credential-resolver event into the active SessionJournal.
+
+    P1b — close the silent-fallback gap from the 2026-05-19 observability
+    audit §5. Three resolver decisions were previously taken without any
+    journal trace:
+      * ``self_improving_loop_fallback_policy`` ImportError → silently
+        returns ``True`` (assumes lenient default)
+      * ``CredentialResolutionError(subscription_only=True)`` → user sees
+        the message but no event lands in the run journal
+      * ``_read_role_from_self_improving_loop`` ImportError →
+        ``read_role_override`` silently falls back to the legacy
+        ``~/.geode/petri.toml``
+
+    Each call now records what decision was actually taken. The journal
+    is discovered via the ContextVar so callers outside an autoresearch /
+    seed-generation run (single-shot CLI invocations) are no-ops.
+    Failure to emit must not break the resolver — exception swallowed.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        journal.append(event, level=level, payload=payload or {})
+    except Exception:  # pragma: no cover - defensive
+        log.debug("credential_source: journal emit %s failed", event, exc_info=True)
 
 
 def list_credential_sources(provider: str) -> list[dict[str, Any]]:
@@ -213,13 +259,30 @@ def self_improving_loop_fallback_policy() -> bool:
     try:
         from core.config.self_improving_loop import load_self_improving_loop_config
     except ImportError:
+        # P1b — record the silent default so the operator can see
+        # whether the run actually consulted the user's config or fell
+        # back to the lenient default.
+        _emit_credential_event(
+            "fallback_policy_resolved",
+            payload={"value": True, "source": "import_error_default"},
+        )
         return True
     try:
-        return load_self_improving_loop_config().fallback_to_payg
+        resolved = load_self_improving_loop_config().fallback_to_payg
+        _emit_credential_event(
+            "fallback_policy_resolved",
+            payload={"value": resolved, "source": "config"},
+        )
+        return resolved
     except Exception:
         log.warning(
             "self-improving-loop config load failed; defaulting to fallback_to_payg=True",
             exc_info=True,
+        )
+        _emit_credential_event(
+            "fallback_policy_resolved",
+            level="warn",
+            payload={"value": True, "source": "load_error_default"},
         )
         return True
 

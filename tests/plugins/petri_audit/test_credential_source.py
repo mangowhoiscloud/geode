@@ -457,3 +457,105 @@ def test_subscription_only_banner_trip_safe_when_no_banner_installed():
         raise cs.CredentialResolutionError(
             "anthropic", ["api_key", "claude-cli"], subscription_only=True
         )
+
+
+# ── P1b — credential resolver journal emit ──────────────────────────────
+
+
+def _emit_test_journal(tmp_path):
+    """Build a SessionJournal under tmp_path. Caller activates with session_journal_scope."""
+    from core.observability import SessionJournal
+
+    sip_home = tmp_path / "self-improving-loop"
+
+    class _ScopedPaths:
+        pass
+
+    journal = SessionJournal(
+        session_id="s-p1b",
+        gen_tag="gen-p1b",
+        component="autoresearch",
+        path=sip_home / "s-p1b" / "journal.jsonl",
+    )
+    return journal, sip_home
+
+
+def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch):
+    """CredentialResolutionError(subscription_only=True) must emit a
+    credential_subscription_abort event with provider + allowed payload."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+    with session_journal_scope(journal), pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError(
+            "anthropic", ["api_key", "claude-cli"], subscription_only=True
+        )
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    abort_events = [r for r in rows if r["event"] == "credential_subscription_abort"]
+    assert len(abort_events) == 1
+    abort = abort_events[0]
+    assert abort["level"] == "error"
+    assert abort["payload"]["provider"] == "anthropic"
+    assert abort["payload"]["allowed"] == ["api_key", "claude-cli"]
+
+
+@pytest.mark.policy_real
+def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp_path, monkeypatch):
+    """Successful config read emits fallback_policy_resolved with
+    source='config' so the operator sees which path the resolver took."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+
+    # Force a known fallback_to_payg value by stubbing the loader.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: SimpleNamespace(fallback_to_payg=False),
+    )
+    with session_journal_scope(journal):
+        assert cs.self_improving_loop_fallback_policy() is False
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
+    assert len(events) == 1
+    assert events[0]["payload"] == {"value": False, "source": "config"}
+
+
+@pytest.mark.policy_real
+def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_path, monkeypatch):
+    """When the loader raises, the helper still returns the lenient
+    default but the journal records source='load_error_default' so the
+    silent fallback is auditable."""
+    import json
+
+    from core.observability import session_journal_scope
+
+    journal, _ = _emit_test_journal(tmp_path)
+
+    def _raise():
+        raise RuntimeError("corrupt config")
+
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        _raise,
+    )
+    with session_journal_scope(journal):
+        assert cs.self_improving_loop_fallback_policy() is True
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    events = [r for r in rows if r["event"] == "fallback_policy_resolved"]
+    assert len(events) == 1
+    assert events[0]["level"] == "warn"
+    assert events[0]["payload"] == {"value": True, "source": "load_error_default"}
+
+
+def test_credential_journal_emit_noop_outside_scope(monkeypatch):
+    """Outside a SessionJournal scope (single-shot CLI) the emit must
+    no-op cleanly so the resolver's contract is unchanged."""
+    # No session_journal_scope active.
+    with pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError("anthropic", ["api_key"], subscription_only=True)
