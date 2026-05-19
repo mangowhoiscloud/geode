@@ -8,7 +8,7 @@ in place to a rolling ``elo_ratings`` dict; final survivors are the
 top-K by descending rating.
 
 Per ADR-001 §3 Ranking + the panel diversity gate (manifest-time
-``required_diversity_families ≥ 2``, runtime-validated by the S5.5
+``required_diversity_providers ≥ 2``, runtime-validated by the S5.5
 picker), the Ranker NEVER judges directly — it only orchestrates the
 voters.
 
@@ -252,7 +252,7 @@ class Ranker(BaseSeedAgent):
         means_b = pilot_means.get(match.b, {})
         tasks: list[SubTask] = []
         for voter in self._voters:
-            voter_id = f"{voter.family}.{voter.source}"
+            voter_id = f"{voter.provider}.{voter.source}"
             tasks.append(
                 SubTask(
                     task_id=f"vote-{match.match_id}-{voter_id}",
@@ -273,7 +273,7 @@ class Ranker(BaseSeedAgent):
                         "voter_model": voter.model,
                         "voter_source": voter.source,
                     },
-                    agent=f"seed_ranker_voter_{voter.family}",
+                    agent=f"seed_ranker_voter_{voter.provider}",
                 )
             )
         return tasks
@@ -303,7 +303,7 @@ class Ranker(BaseSeedAgent):
             f"dim_means: {means_summary_a}). Candidate B: "
             f"{match.b!r} (run_dir/candidates/{match.b}.md, pilot "
             f"dim_means: {means_summary_b}). You are voter "
-            f"{voter.family}.{voter.source} ({voter.model!r}). Read both "
+            f"{voter.provider}.{voter.source} ({voter.model!r}). Read both "
             "candidate seeds, weigh dim_means signal, apply the rubric in "
             'your system prompt, and return JSON `{"match_id": "<id>", '
             '"winner": "A"|"B"|"tie", "rationale": "<= 200 tokens"}`. '

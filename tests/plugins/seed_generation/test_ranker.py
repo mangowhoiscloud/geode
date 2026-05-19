@@ -26,9 +26,9 @@ from plugins.seed_generation.picker import VoterBinding
 
 def _voters() -> list[VoterBinding]:
     return [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="claude-cli"),
-        VoterBinding(model="gpt-5.5", family="openai", source="openai-codex"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
     ]
 
 

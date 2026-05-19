@@ -22,7 +22,7 @@ P-checklist application:
   via :data:`core.llm.token_tracker.MODEL_PRICING`; the cost preview
   never reads `~/.geode/config.toml` directly.
 - **P7 Caller-Callee Contract**: every estimate row exposes the
-  fields the S11 CLI needs (role, model, family, source, calls,
+  fields the S11 CLI needs (role, model, provider, source, calls,
   est_usd) so the prompt renderer doesn't have to compute deltas.
 """
 
@@ -82,7 +82,7 @@ class CostRow:
 
     role: str
     model: str
-    family: str
+    provider: str
     source: str
     calls: int
     est_usd: float
@@ -213,7 +213,7 @@ def _estimate_role(
     return CostRow(
         role=role,
         model=binding.model,
-        family=binding.family,
+        provider=binding.provider,
         source=binding.source,
         calls=calls,
         est_usd=est_usd,

@@ -17,62 +17,62 @@ def _make_picker_result(*, voter_source: str = "api_key") -> PickerResult:
         "generator": RoleBinding(
             role="generator",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "critic": RoleBinding(
             role="critic",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
             model="text-embedding-3-small",
-            family="openai",
+            provider="openai",
             source="api_key",
             kind="embedding",
         ),
         "pilot": RoleBinding(
             role="pilot",
             model="claude-haiku-4-5",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "ranker": RoleBinding(
             role="ranker",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "evolver": RoleBinding(
             role="evolver",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "meta_reviewer": RoleBinding(
             role="meta_reviewer",
             model="claude-opus-4-7",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
     }
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source=voter_source),
-        VoterBinding(model="gpt-5.5", family="openai", source="api_key"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source=voter_source),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
     ]
     return PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
 
@@ -143,14 +143,14 @@ def test_estimate_cost_subscription_vs_payg_split() -> None:
     bindings["generator"] = RoleBinding(
         role="generator",
         model="claude-sonnet-4-6",
-        family="anthropic",
+        provider="anthropic",
         source="claude-cli",
         kind="completion",
     )
     pr = PickerResult(
         bindings=bindings,
         voters=pr.voters,
-        diversity_families=pr.diversity_families,
+        diversity_providers=pr.diversity_providers,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     est = estimate_cost(pr, candidate_count=15)
@@ -191,14 +191,14 @@ def test_format_cost_summary_marks_subscription_rows() -> None:
     bindings["generator"] = RoleBinding(
         role="generator",
         model="claude-sonnet-4-6",
-        family="anthropic",
+        provider="anthropic",
         source="claude-cli",
         kind="completion",
     )
     pr = PickerResult(
         bindings=bindings,
         voters=pr.voters,
-        diversity_families=pr.diversity_families,
+        diversity_providers=pr.diversity_providers,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     est = estimate_cost(pr, candidate_count=5)
@@ -211,7 +211,7 @@ def test_estimate_cost_row_carries_binding_metadata() -> None:
     est = estimate_cost(pr, candidate_count=5)
     for row in est.rows:
         assert row.model
-        assert row.family in {"anthropic", "openai", "zhipuai"}
+        assert row.provider in {"anthropic", "openai", "zhipuai"}
         assert row.source
         assert row.calls >= 0
         assert row.est_usd >= 0
@@ -223,19 +223,19 @@ def test_estimate_cost_unknown_model_logs_and_zeros() -> None:
         "generator": RoleBinding(
             role="generator",
             model="mystery-x9-unknown",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
     }
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="api_key"),
-        VoterBinding(model="gpt-5.5", family="openai", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="api_key"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
     ]
     pr = PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
     est = estimate_cost(pr, candidate_count=5)
@@ -251,7 +251,7 @@ def test_cost_row_immutable() -> None:
     row = CostRow(
         role="x",
         model="y",
-        family="z",
+        provider="z",
         source="w",
         calls=0,
         est_usd=0.0,

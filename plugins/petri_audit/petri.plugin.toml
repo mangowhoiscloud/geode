@@ -3,8 +3,8 @@
 # Schema layers:
 #   1. [petri] — enabled roles (auditor / target / judge)
 #   2. [petri.role.<name>] — per-role default model + allowed model set + contract
-#   3. [petri.source.<family>] — per-family default credential source + allowed sources
-#   4. [petri.adapter.<family>.<source>] — concrete adapter binding (module, env vars,
+#   3. [petri.source.<provider>] — per-provider default credential source + allowed sources
+#   4. [petri.adapter.<provider>.<source>] — concrete adapter binding (module, env vars,
 #      inspect_ai prefix, endpoint / binary)
 #
 # Loader: plugins.petri_audit.manifest.load_manifest() → PetriManifest (pydantic).
@@ -31,7 +31,7 @@ role_contract = "roles/auditor.md"
 
 [petri.role.target]
 # Target always routes through GeodeModelAPI (`geode/<model>`) regardless of
-# family — the audit evaluates GEODE-as-a-system. The user only pins the base
+# provider — the audit evaluates GEODE-as-a-system. The user only pins the base
 # LLM GEODE uses internally.
 default_model = "claude-haiku-4-5"
 allowed_models = [
@@ -54,7 +54,7 @@ allowed_models = [
 ]
 role_contract = "roles/judge.md"
 
-# ── Sources (per family) ─────────────────────────────────────────────────────
+# ── Sources (per provider) ─────────────────────────────────────────────────────
 
 [petri.source.anthropic]
 # "auto" = consult settings.anthropic_credential_source, fall back to keychain
@@ -74,7 +74,7 @@ allowed = ["openai-codex", "api_key", "auto"]
 default = "api_key"
 allowed = ["api_key"]
 
-# ── Adapters (per family × source) ───────────────────────────────────────────
+# ── Adapters (per provider × source) ───────────────────────────────────────────
 
 [petri.adapter.anthropic.api_key]
 module = "plugins.petri_audit.adapters.http_anthropic"
@@ -104,7 +104,7 @@ inspect_prefix = "openai-codex"
 auth_env_vars = ["OPENAI_OAUTH_TOKEN"]
 
 [petri.adapter.zhipuai.api_key]
-# GLM family routes through GeodeModelAPI (`geode/<model>`) because inspect_ai
+# GLM provider routes through GeodeModelAPI (`geode/<model>`) because inspect_ai
 # has no native GLM provider.
 module = "plugins.petri_audit.adapters.http_zhipuai"
 inspect_prefix = "geode"

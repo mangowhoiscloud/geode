@@ -67,7 +67,7 @@ class QuotaState:
     calls will succeed until the operator opts in or swaps account.
     """
 
-    family: str = ""
+    provider: str = ""
     used_tokens: int = 0
     total_tokens: int = 0
     aborted: bool = False
@@ -117,14 +117,14 @@ class SubscriptionQuotaBanner:
     def set_state(
         self,
         *,
-        family: str,
+        provider: str,
         used_tokens: int,
         total_tokens: int,
     ) -> None:
         """Replace the quota counters. Does not touch the ``aborted`` flag."""
         with self._lock:
             self._state = QuotaState(
-                family=family,
+                provider=provider,
                 used_tokens=used_tokens,
                 total_tokens=total_tokens,
                 aborted=self._state.aborted,
@@ -140,7 +140,7 @@ class SubscriptionQuotaBanner:
         """
         with self._lock:
             self._state = QuotaState(
-                family=self._state.family,
+                provider=self._state.provider,
                 used_tokens=self._state.used_tokens,
                 total_tokens=self._state.total_tokens,
                 aborted=True,
@@ -153,7 +153,7 @@ class SubscriptionQuotaBanner:
         """
         with self._lock:
             self._state = QuotaState(
-                family=self._state.family,
+                provider=self._state.provider,
                 used_tokens=self._state.used_tokens,
                 total_tokens=self._state.total_tokens,
                 aborted=False,
@@ -182,14 +182,14 @@ class SubscriptionQuotaBanner:
         Format::
 
             ⬤ green   subscription healthy (12% used)
-            ⬤ yellow  approaching limit (62% of <family>)
+            ⬤ yellow  approaching limit (62% of <provider>)
             ⬤ red     aborted — see /status
 
-        Renders empty string when no family is set yet (cold start) so
+        Renders empty string when no provider is set yet (cold start) so
         the banner doesn't flash an unconfigured state.
         """
         state = self.state
-        if not state.family and state.total_tokens == 0 and not state.aborted:
+        if not state.provider and state.total_tokens == 0 and not state.aborted:
             return ""
         tier = self.tier()
         pct = round(state.usage_ratio * 100)
@@ -202,16 +202,16 @@ class SubscriptionQuotaBanner:
                 )
             return (
                 f'<style fg="red" bg="black"> ⬤ </style>'
-                f"<b> {state.family}: {pct}% used</b>"
+                f"<b> {state.provider}: {pct}% used</b>"
                 f" — abort threshold {int(self._abort * 100)}%"
             )
         if tier == "yellow":
             return (
                 f'<style fg="yellow"> ⬤ </style>'
-                f"{state.family}: {pct}% used"
+                f"{state.provider}: {pct}% used"
                 f" — approaching {int(self._abort * 100)}% limit"
             )
-        return f'<style fg="green"> ⬤ </style>{state.family}: {pct}% used — healthy'
+        return f'<style fg="green"> ⬤ </style>{state.provider}: {pct}% used — healthy'
 
 
 # Module-level singleton + ContextVar accessor.
@@ -312,16 +312,16 @@ class AbortDialog:
     button_label: str = "Dismiss"
 
 
-def render_abort_message(family: str, resolver_message: str) -> AbortDialog:
+def render_abort_message(provider: str, resolver_message: str) -> AbortDialog:
     """Compose the abort dialog body from a strict-mode resolution error.
 
     ``resolver_message`` is :attr:`CredentialResolutionError.args[0]`
     when ``subscription_only=True`` — it already contains the 3
     actionable remedies (wait / opt-in fallback / pin per-role). The
-    dialog wraps it with a title that names the offending family.
+    dialog wraps it with a title that names the offending provider.
     """
     return AbortDialog(
-        title=f"Subscription quota exhausted — {family}",
+        title=f"Subscription quota exhausted — {provider}",
         body=resolver_message,
     )
 

@@ -27,10 +27,10 @@ def _scrub_env(monkeypatch):
 @pytest.fixture(autouse=True)
 def _stub_settings(monkeypatch):
     """Pin _settings_source to None across the suite so the resolver does not
-    short-circuit on whatever GEODE's real ``settings.<family>_credential_source``
+    short-circuit on whatever GEODE's real ``settings.<provider>_credential_source``
     happens to be configured to. Tests that exercise the settings path opt in
     by re-patching _settings_source explicitly."""
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
 
 
 @pytest.fixture(autouse=True)
@@ -176,7 +176,7 @@ def test_resolve_reads_settings_explicit(monkeypatch):
     monkeypatch.setattr(
         cs,
         "_settings_source",
-        lambda family: "api_key" if family == "anthropic" else None,
+        lambda provider: "api_key" if provider == "anthropic" else None,
     )
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     assert cs.resolve_credential_source("anthropic") == "api_key"
@@ -184,13 +184,13 @@ def test_resolve_reads_settings_explicit(monkeypatch):
 
 def test_resolve_settings_auto_falls_to_expansion(monkeypatch):
     """settings returns None / 'auto' → manifest default → auto expansion."""
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     assert cs.resolve_credential_source("anthropic") == "api_key"
 
 
 def test_resolve_settings_invalid_raises(monkeypatch):
-    monkeypatch.setattr(cs, "_settings_source", lambda family: "imposter")
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: "imposter")
     with pytest.raises(cs.CredentialResolutionError):
         cs.resolve_credential_source("anthropic")
 
@@ -221,11 +221,11 @@ def test_suppress_is_idempotent():
 # ── CredentialResolutionError shape ────────────────────────────────────────
 
 
-def test_error_carries_family_and_allowed():
+def test_error_carries_provider_and_allowed():
     with pytest.raises(cs.CredentialResolutionError) as excinfo:
         cs.resolve_credential_source("anthropic")
     err = excinfo.value
-    assert err.family == "anthropic"
+    assert err.provider == "anthropic"
     assert "claude-cli" in err.allowed
     assert "api_key" in err.allowed
 

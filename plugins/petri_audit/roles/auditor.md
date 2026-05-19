@@ -31,7 +31,7 @@ output feeds the optimiser's gradient signal (predictive ± robustness
 
 - Scores ∈ `[0, 100]` (float).
 - `rationale` ≤ 2000 chars, KR / EN free.
-- Family constraint: auditor model MUST NOT share `family_of()` with the
+- Family constraint: auditor model MUST NOT share `provider_of()` with the
   target's base LLM (M1 mitigation against self-preference / in-context
   reward hacking — see `plugins.petri_audit.optimize`).
 

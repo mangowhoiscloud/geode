@@ -10,7 +10,7 @@ the CLI surface, not by hard caps in the orchestrator):
 
 1. **Auth probe**: for each :class:`RoleBinding` / :class:`VoterBinding`,
    verify the resolved source's credential is reachable. ``claude-cli``
-   / ``openai-codex`` use the per-family OAuth helpers; ``api_key``
+   / ``openai-codex`` use the per-provider OAuth helpers; ``api_key``
    reads :data:`core.config.settings` env-resolved keys.
 2. **Panel diversity**: piggyback on
    :func:`plugins.seed_generation.picker.validate_runtime_diversity` so
@@ -74,7 +74,7 @@ class PreFlightReport:
         self.issues.append(issue)
 
 
-def _credential_present(family: str, source: str) -> bool:
+def _credential_present(provider: str, source: str) -> bool:
     """Probe whether the resolved credential is reachable.
 
     Returns False (silently) on import or probe error so the
@@ -92,17 +92,17 @@ def _credential_present(family: str, source: str) -> bool:
         if source == "api_key":
             from core.config import settings
 
-            if family == "anthropic":
+            if provider == "anthropic":
                 return bool(getattr(settings, "anthropic_api_key", "") or "")
-            if family == "openai":
+            if provider == "openai":
                 return bool(getattr(settings, "openai_api_key", "") or "")
-            if family == "zhipuai":
+            if provider == "zhipuai":
                 return bool(getattr(settings, "zhipuai_api_key", "") or "")
     except Exception as exc:  # pragma: no cover - defensive
         log.debug(
-            "seed-generation pre-flight: credential probe raised %s (family=%r source=%r)",
+            "seed-generation pre-flight: credential probe raised %s (provider=%r source=%r)",
             exc,
-            family,
+            provider,
             source,
         )
         return False
@@ -114,21 +114,21 @@ def check_auth(picker_result: PickerResult) -> list[PreFlightIssue]:
     issues: list[PreFlightIssue] = []
     seen: set[tuple[str, str]] = set()
 
-    def _check(family: str, source: str, label: str) -> None:
-        key = (family, source)
+    def _check(provider: str, source: str, label: str) -> None:
+        key = (provider, source)
         if key in seen:
             return
         seen.add(key)
-        if not _credential_present(family, source):
+        if not _credential_present(provider, source):
             issues.append(
                 PreFlightIssue(
                     severity="error",
                     code="auth.unreachable",
                     message=(
-                        f"{label} resolved to {family}.{source} but the "
+                        f"{label} resolved to {provider}.{source} but the "
                         f"credential is not reachable."
                     ),
-                    fix=_fix_for(family, source),
+                    fix=_fix_for(provider, source),
                 )
             )
 
@@ -138,13 +138,13 @@ def check_auth(picker_result: PickerResult) -> list[PreFlightIssue]:
         if binding.kind == "embedding":
             _check("openai", "api_key", f"role {role!r}")
             continue
-        _check(binding.family, binding.source, f"role {role!r}")
+        _check(binding.provider, binding.source, f"role {role!r}")
     for voter in picker_result.voters:
-        _check(voter.family, voter.source, f"voter {voter.family}.{voter.source}")
+        _check(voter.provider, voter.source, f"voter {voter.provider}.{voter.source}")
     return issues
 
 
-def _fix_for(family: str, source: str) -> str:
+def _fix_for(provider: str, source: str) -> str:
     """Human-readable remediation hint for a missing credential."""
     if source == "claude-cli":
         return "Run `claude login` (or set GEODE_ANTHROPIC_CREDENTIAL_SOURCE=api_key)."
@@ -155,9 +155,9 @@ def _fix_for(family: str, source: str) -> str:
             "anthropic": "ANTHROPIC_API_KEY",
             "openai": "OPENAI_API_KEY",
             "zhipuai": "ZHIPUAI_API_KEY",
-        }.get(family, "<family>_API_KEY")
-        return f"Set {env_var} (or `geode login set-key {family} <…>`)."
-    return f"Resolve the {family}.{source} binding via ~/.geode/seed-generation.toml."
+        }.get(provider, "<provider>_API_KEY")
+        return f"Set {env_var} (or `geode login set-key {provider} <…>`)."
+    return f"Resolve the {provider}.{source} binding via ~/.geode/seed-generation.toml."
 
 
 def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
@@ -172,7 +172,7 @@ def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
                 message=str(exc),
                 fix=(
                     "Edit ~/.geode/seed-generation.toml to spread the judge panel "
-                    "across ≥ 2 (family, source) pairs."
+                    "across ≥ 2 (provider, source) pairs."
                 ),
             )
         ]

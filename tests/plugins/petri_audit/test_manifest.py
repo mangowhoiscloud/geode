@@ -92,12 +92,12 @@ def test_default_manifest_role_defaults_in_allowed() -> None:
 def test_default_manifest_adapter_coverage() -> None:
     """Every non-auto source in source.allowed has an adapter."""
     manifest = load_manifest()
-    for family, source_spec in manifest.sources.items():
+    for provider, source_spec in manifest.sources.items():
         for source in source_spec.allowed:
             if source == "auto":
                 continue
             # raises if missing
-            manifest.get_adapter(family, source)
+            manifest.get_adapter(provider, source)
 
 
 def test_default_manifest_default_path_constant() -> None:
@@ -167,7 +167,7 @@ def test_get_role_unknown_raises_keyerror() -> None:
 
 def test_get_source_unknown_raises_keyerror() -> None:
     manifest = load_manifest()
-    with pytest.raises(KeyError, match="Unknown petri family"):
+    with pytest.raises(KeyError, match="Unknown petri provider"):
         manifest.get_source("nonexistent")
 
 

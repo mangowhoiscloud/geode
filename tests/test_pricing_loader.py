@@ -81,7 +81,7 @@ def test_parity_with_legacy_context_windows() -> None:
 
 
 def test_anthropic_derive_formula(tmp_path: Path) -> None:
-    """Anthropic family: cache_write = input × 1.25, cache_read = input × 0.1,
+    """Anthropic provider: cache_write = input × 1.25, cache_read = input × 0.1,
     thinking = output."""
     toml = tmp_path / "p.toml"
     toml.write_text(
@@ -170,7 +170,7 @@ output_per_mtok = 4.4
 # ── Negative validation ────────────────────────────────────────────────────
 
 
-def test_unknown_family_raises(tmp_path: Path) -> None:
+def test_unknown_provider_raises(tmp_path: Path) -> None:
     toml = tmp_path / "p.toml"
     toml.write_text(
         """
@@ -183,7 +183,7 @@ output_per_mtok = 2.0
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="unknown family"):
+    with pytest.raises(ValueError, match="unknown provider"):
         load_pricing_catalogue(toml)
 
 

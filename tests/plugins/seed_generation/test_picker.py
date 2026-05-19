@@ -29,7 +29,7 @@ from plugins.seed_generation.picker import (
     SUBSCRIPTION_SOURCES,
     PickerResult,
     VoterBinding,
-    infer_family,
+    infer_provider,
     iter_distinct_paths,
     list_subscription_roles,
     load_user_overrides,
@@ -75,11 +75,11 @@ def _make_manifest() -> SeedGenerationManifest:
     }
     judge_panel = JudgePanelSpec(
         voters=[
-            VoterSpec(model="claude-sonnet-4-6", family="anthropic", source="claude-cli"),
-            VoterSpec(model="gpt-5.5", family="openai", source="openai-codex"),
-            VoterSpec(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+            VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+            VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
+            VoterSpec(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
         ],
-        required_diversity_families=2,
+        required_diversity_providers=2,
     )
     return SeedGenerationManifest(
         enabled_roles=list(roles.keys()),
@@ -88,24 +88,24 @@ def _make_manifest() -> SeedGenerationManifest:
     )
 
 
-def test_infer_family_claude_models() -> None:
-    assert infer_family("claude-sonnet-4-6") == "anthropic"
-    assert infer_family("claude-opus-4-7") == "anthropic"
-    assert infer_family("claude-haiku-4-5") == "anthropic"
+def test_infer_provider_claude_models() -> None:
+    assert infer_provider("claude-sonnet-4-6") == "anthropic"
+    assert infer_provider("claude-opus-4-7") == "anthropic"
+    assert infer_provider("claude-haiku-4-5") == "anthropic"
 
 
-def test_infer_family_openai_models() -> None:
-    assert infer_family("gpt-5.5") == "openai"
-    assert infer_family("text-embedding-3-small") == "openai"
+def test_infer_provider_openai_models() -> None:
+    assert infer_provider("gpt-5.5") == "openai"
+    assert infer_provider("text-embedding-3-small") == "openai"
 
 
-def test_infer_family_zhipuai() -> None:
-    assert infer_family("glm-4.5") == "zhipuai"
+def test_infer_provider_zhipuai() -> None:
+    assert infer_provider("glm-4.5") == "zhipuai"
 
 
-def test_infer_family_unknown_raises() -> None:
+def test_infer_provider_unknown_raises() -> None:
     with pytest.raises(ValueError, match=r"did not match any known prefix"):
-        infer_family("mystery-model-1")
+        infer_provider("mystery-model-1")
 
 
 def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
@@ -117,14 +117,14 @@ def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
     assert set(result.bindings) == set(manifest.enabled_roles)
     # All Claude-* roles resolve to claude-cli when OAuth is available.
     for role in ("generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
-        assert result.bindings[role].family == "anthropic"
+        assert result.bindings[role].provider == "anthropic"
         assert result.bindings[role].source == "claude-cli"
-    # Proximity (embedding) — openai family, but with OAuth probe we still
+    # Proximity (embedding) — openai provider, but with OAuth probe we still
     # land on openai-codex (semantics of "auto" probe). Note this is a
     # known limitation; embeddings actually need api_key but the picker's
     # job here is the binding, not the runtime check (S4 text_embed reads
     # OPENAI_API_KEY directly so this won't break in practice).
-    assert result.bindings["proximity"].family == "openai"
+    assert result.bindings["proximity"].provider == "openai"
 
 
 def test_pick_bindings_resolves_payg_when_no_oauth() -> None:
@@ -180,11 +180,11 @@ def test_pick_bindings_voter_panel_resolved() -> None:
     assert sources == {"claude-cli", "openai-codex", "api_key"}
 
 
-def test_pick_bindings_diversity_families_count() -> None:
+def test_pick_bindings_diversity_providers_count() -> None:
     manifest = _make_manifest()
     result = pick_bindings(manifest=manifest, overrides={}, auto_probe=False)
-    # Voters: anthropic, openai, anthropic → 2 distinct families
-    assert result.diversity_families == 2
+    # Voters: anthropic, openai, anthropic → 2 distinct providers
+    assert result.diversity_providers == 2
 
 
 def test_pick_bindings_subscription_paths_in_use() -> None:
@@ -243,7 +243,7 @@ def test_print_tos_notice_emits_when_subscription_in_use() -> None:
     result = PickerResult(
         bindings={},
         voters=[],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     buf = io.StringIO()
@@ -259,7 +259,7 @@ def test_print_tos_notice_silent_when_no_subscription() -> None:
     result = PickerResult(
         bindings={},
         voters=[],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
     buf = io.StringIO()
@@ -272,7 +272,7 @@ def test_print_tos_notice_idempotent_within_process() -> None:
     result = PickerResult(
         bindings={},
         voters=[],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     buf = io.StringIO()
@@ -287,7 +287,7 @@ def test_print_tos_notice_force_reemits() -> None:
     result = PickerResult(
         bindings={},
         voters=[],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset({"openai-codex"}),
     )
     buf = io.StringIO()
@@ -302,7 +302,7 @@ def test_print_tos_notice_quiet_suppresses() -> None:
     result = PickerResult(
         bindings={},
         voters=[],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     buf = io.StringIO()
@@ -314,25 +314,25 @@ def test_validate_runtime_diversity_pass() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", family="anthropic", source="claude-cli"),
-            VoterBinding(model="m2", family="openai", source="openai-codex"),
-            VoterBinding(model="m3", family="anthropic", source="api_key"),
+            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m2", provider="openai", source="openai-codex"),
+            VoterBinding(model="m3", provider="anthropic", source="api_key"),
         ],
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
-    # 2 families, 3 distinct paths → passes both gates.
+    # 2 providers, 3 distinct paths → passes both gates.
     validate_runtime_diversity(result)
 
 
-def test_validate_runtime_diversity_family_collapse_raises() -> None:
+def test_validate_runtime_diversity_provider_collapse_raises() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", family="anthropic", source="claude-cli"),
-            VoterBinding(model="m2", family="anthropic", source="api_key"),
+            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m2", provider="anthropic", source="api_key"),
         ],
-        diversity_families=1,
+        diversity_providers=1,
         subscription_paths_in_use=frozenset(),
     )
     with pytest.raises(ValueError, match=r"runtime diversity violated"):
@@ -343,11 +343,11 @@ def test_validate_runtime_diversity_path_collapse_raises() -> None:
     result = PickerResult(
         bindings={},
         voters=[
-            VoterBinding(model="m1", family="anthropic", source="claude-cli"),
-            VoterBinding(model="m2", family="anthropic", source="claude-cli"),
-            VoterBinding(model="m3", family="anthropic", source="claude-cli"),
+            VoterBinding(model="m1", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m2", provider="anthropic", source="claude-cli"),
+            VoterBinding(model="m3", provider="anthropic", source="claude-cli"),
         ],
-        diversity_families=1,
+        diversity_providers=1,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     with pytest.raises(ValueError, match=r"runtime"):
@@ -369,7 +369,7 @@ def test_iter_distinct_paths_dedupes() -> None:
     result = pick_bindings(manifest=manifest, overrides={}, auto_probe=False)
     paths = list(iter_distinct_paths(result))
     # Roles all api_key; voters include 3 distinct paths
-    # → distinct (family, source) pairs across all bindings.
+    # → distinct (provider, source) pairs across all bindings.
     assert len(paths) == len(set(paths)), "duplicates leaked"
 
 
@@ -389,17 +389,17 @@ def test_pick_bindings_role_binding_immutable() -> None:
 
 def test_pick_bindings_unknown_model_prefix_logs_and_defaults() -> None:
     """A user override with an unrecognised model prefix falls back to anthropic
-    family (warning logged) rather than crashing the picker.
+    provider (warning logged) rather than crashing the picker.
 
     Note: with the override-model allowlist (enforced in pick_bindings),
-    the override is rejected at the model-validation step BEFORE family
-    inference runs, so the binding lands on the default model's family
+    the override is rejected at the model-validation step BEFORE provider
+    inference runs, so the binding lands on the default model's provider
     (anthropic for generator's default ``claude-sonnet-4-6``).
     """
     manifest = _make_manifest()
     overrides = {"generator": {"model": "mystery-x9"}}
     result = pick_bindings(manifest=manifest, overrides=overrides, auto_probe=False)
-    assert result.bindings["generator"].family == "anthropic"
+    assert result.bindings["generator"].provider == "anthropic"
 
 
 def test_pick_bindings_rejects_override_model_outside_allowlist() -> None:
@@ -412,7 +412,7 @@ def test_pick_bindings_rejects_override_model_outside_allowlist() -> None:
 
 
 def test_pick_bindings_rejects_override_source_outside_petri_allowed() -> None:
-    """Override source not in petri.source.<family>.allowed falls back to auto-resolve."""
+    """Override source not in petri.source.<provider>.allowed falls back to auto-resolve."""
     manifest = _make_manifest()
     overrides = {"generator": {"source": "bogus-source"}}
     with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
@@ -422,7 +422,7 @@ def test_pick_bindings_rejects_override_source_outside_petri_allowed() -> None:
 
 
 def test_pick_bindings_enforce_diversity_default_passes_with_valid_manifest() -> None:
-    """Default enforce_diversity=True passes for the shipped 2-family panel."""
+    """Default enforce_diversity=True passes for the shipped 2-provider panel."""
     manifest = _make_manifest()
     # Should not raise.
     pick_bindings(manifest=manifest, overrides={}, auto_probe=False)
@@ -430,18 +430,18 @@ def test_pick_bindings_enforce_diversity_default_passes_with_valid_manifest() ->
 
 def test_pick_bindings_enforce_diversity_off_allows_collapsed_panel() -> None:
     """enforce_diversity=False lets tests construct deliberately-bad panels."""
-    # Override the manifest in-flight with a single-family panel via mocking
+    # Override the manifest in-flight with a single-provider panel via mocking
     # `validate_runtime_diversity` would error if enforce_diversity stayed True.
     manifest = _make_manifest()
-    # Replace voters with a 1-family panel (this is normally rejected at
+    # Replace voters with a 1-provider panel (this is normally rejected at
     # manifest load by JudgePanelSpec, but we patch the manifest itself).
     object.__setattr__(
         manifest.judge_panel,
         "voters",
-        [VoterSpec(model="claude-sonnet-4-6", family="anthropic", source="claude-cli")],
+        [VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli")],
     )
     # With enforce_diversity=False the picker returns without raising.
     result = pick_bindings(
         manifest=manifest, overrides={}, auto_probe=False, enforce_diversity=False
     )
-    assert result.diversity_families == 1
+    assert result.diversity_providers == 1

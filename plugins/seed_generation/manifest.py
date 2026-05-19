@@ -3,16 +3,16 @@
 Reads ``plugins/seed_generation/seed_generation.plugin.toml`` into a validated
 pydantic tree. Source / adapter layers are intentionally NOT defined here
 — they are reused from ``plugins/petri_audit/petri.plugin.toml`` (the
-Petri manifest is the SOT for credential family/source binding). The
+Petri manifest is the SOT for credential provider/source binding). The
 seed-generation manifest's voter rows are cross-validated against the
-Petri source table at load time so a typo'd ``family`` or ``source`` is
+Petri source table at load time so a typo'd ``provider`` or ``source`` is
 caught immediately, not on first runtime use.
 
 Layers (mirroring TOML structure):
 
 - :class:`SeedRoleSpec` — per-role default model + allowed model set
-- :class:`VoterSpec` — one (model, family, source) row in judge_panel
-- :class:`JudgePanelSpec` — voters list + required_diversity_families gate
+- :class:`VoterSpec` — one (model, provider, source) row in judge_panel
+- :class:`JudgePanelSpec` — voters list + required_diversity_providers gate
 - :class:`SeedGenerationManifest` — top-level container with cross-layer +
   cross-manifest consistency checks
 
@@ -26,7 +26,7 @@ P1-P7 prevention checklist application (cycle-skill SKILL.md):
   ``Path(__file__).parent / "seed_generation.plugin.toml"`` — package-
   relative, not cwd-relative. Same anchor pattern as Petri's manifest.
 - **P7 Caller-Callee Contract**: voter source values are validated
-  against ``petri_audit.manifest.PetriManifest.get_source(family).allowed``
+  against ``petri_audit.manifest.PetriManifest.get_source(provider).allowed``
   so a typo'd ``source = "claude_cli"`` (underscore vs hyphen) is
   caught at load time rather than at runtime when the picker tries
   to bind to a non-existent adapter.
@@ -70,7 +70,7 @@ class SeedRoleSpec(BaseModel):
     - ``completion`` (default) — LLM chat completion via Petri adapters.
     - ``embedding`` — vector embedding model (e.g. ``text-embedding-3-small``);
       bound at runtime to the ``text_embed`` tool, NOT Petri's
-      [petri.adapter.<family>.<source>] table.
+      [petri.adapter.<provider>.<source>] table.
     """
 
     default_model: str
@@ -92,24 +92,24 @@ class VoterSpec(BaseModel):
 
     Fields:
     - ``model`` — the LLM model name (e.g. ``claude-sonnet-4-6``).
-    - ``family`` — provider family (e.g. ``anthropic``, ``openai``); must
-      match one of Petri's ``[petri.source.<family>]`` keys.
+    - ``provider`` — provider id (e.g. ``anthropic``, ``openai``); must
+      match one of Petri's ``[petri.source.<provider>]`` keys.
     - ``source`` — credential source (e.g. ``claude-cli``, ``openai-codex``,
       ``api_key``); must be in
-      ``petri.source.<family>.allowed``. The ``auto`` sentinel is rejected
+      ``petri.source.<provider>.allowed``. The ``auto`` sentinel is rejected
       here — judge voters require a concrete binding so the panel diversity
       check is meaningful.
     """
 
     model: str
-    family: str
+    provider: str
     source: str
 
     @model_validator(mode="after")
     def _source_not_auto(self) -> VoterSpec:
         if self.source == "auto":
             raise ValueError(
-                f"voter ({self.model}, {self.family}) cannot use source=auto — "
+                f"voter ({self.model}, {self.provider}) cannot use source=auto — "
                 "judge panel diversity requires concrete bindings"
             )
         return self
@@ -119,18 +119,18 @@ class JudgePanelSpec(BaseModel):
     """Ranker phase's 3-voter panel + diversity gate."""
 
     voters: list[VoterSpec]
-    required_diversity_families: int = 2
+    required_diversity_providers: int = 2
 
     @model_validator(mode="after")
     def _diversity(self) -> JudgePanelSpec:
         if len(self.voters) < 2:
             raise ValueError(f"judge panel requires >= 2 voters, got {len(self.voters)}")
-        families = {v.family for v in self.voters}
-        if len(families) < self.required_diversity_families:
+        providers = {v.provider for v in self.voters}
+        if len(providers) < self.required_diversity_providers:
             raise ValueError(
                 f"judge panel diversity violated — voters span "
-                f"{sorted(families)} ({len(families)} family/families) but "
-                f"required_diversity_families={self.required_diversity_families}"
+                f"{sorted(providers)} ({len(providers)} provider/providers) but "
+                f"required_diversity_providers={self.required_diversity_providers}"
             )
         return self
 
@@ -157,11 +157,11 @@ class SeedGenerationManifest(BaseModel):
             raise KeyError(f"Unknown seed_generation role {role!r}; enabled={self.enabled_roles}")
         return self.roles[role]
 
-    def list_voter_families(self) -> list[str]:
-        return [v.family for v in self.judge_panel.voters]
+    def list_voter_providers(self) -> list[str]:
+        return [v.provider for v in self.judge_panel.voters]
 
     def voter_diversity(self) -> int:
-        return len(set(self.list_voter_families()))
+        return len(set(self.list_voter_providers()))
 
 
 def _parse_manifest_dict(data: dict[str, Any]) -> SeedGenerationManifest:
@@ -177,7 +177,7 @@ def _parse_manifest_dict(data: dict[str, Any]) -> SeedGenerationManifest:
     judge_data = seed.get("judge_panel", {})
     judge_panel = JudgePanelSpec(
         voters=[VoterSpec(**v) for v in judge_data.get("voters", [])],
-        required_diversity_families=judge_data.get("required_diversity_families", 2),
+        required_diversity_providers=judge_data.get("required_diversity_providers", 2),
     )
 
     return SeedGenerationManifest(
@@ -188,11 +188,11 @@ def _parse_manifest_dict(data: dict[str, Any]) -> SeedGenerationManifest:
 
 
 def _cross_validate_with_petri(manifest: SeedGenerationManifest) -> None:
-    """Validate voter (family, source) pairs against Petri's source table.
+    """Validate voter (provider, source) pairs against Petri's source table.
 
     P7 Caller-Callee Contract — the seed_generation manifest depends on the
     Petri manifest as the SOT for credential source binding. A typo here
-    (``claude_cli`` instead of ``claude-cli``, or a non-existent family)
+    (``claude_cli`` instead of ``claude-cli``, or a non-existent provider)
     must fail at manifest load, not when the picker attempts to resolve
     the adapter. This function is the cross-manifest gate.
 
@@ -205,17 +205,17 @@ def _cross_validate_with_petri(manifest: SeedGenerationManifest) -> None:
     petri = load_petri_manifest()
     for voter in manifest.judge_panel.voters:
         try:
-            source_spec = petri.get_source(voter.family)
+            source_spec = petri.get_source(voter.provider)
         except KeyError as exc:
             raise ValueError(
-                f"voter {voter.model!r} (family={voter.family!r}) — family "
+                f"voter {voter.model!r} (provider={voter.provider!r}) — provider "
                 f"not in petri.source table; "
-                f"known families = {sorted(petri.sources)}"
+                f"known providers = {sorted(petri.sources)}"
             ) from exc
         if voter.source not in source_spec.allowed:
             raise ValueError(
-                f"voter {voter.model!r} ({voter.family}.{voter.source}) — "
-                f"source not in petri.source.{voter.family}.allowed = "
+                f"voter {voter.model!r} ({voter.provider}.{voter.source}) — "
+                f"source not in petri.source.{voter.provider}.allowed = "
                 f"{source_spec.allowed}"
             )
 

@@ -19,27 +19,27 @@ def _good_picker() -> PickerResult:
         "generator": RoleBinding(
             role="generator",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
             model="text-embedding-3-small",
-            family="openai",
+            provider="openai",
             source="api_key",
             kind="embedding",
         ),
     }
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="api_key"),
-        VoterBinding(model="gpt-5.5", family="openai", source="api_key"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="api_key"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
     ]
     return PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
 
@@ -73,8 +73,8 @@ def test_check_auth_embedding_role_probes_openai_api_key() -> None:
     picker = _good_picker()
     probed: list[tuple[str, str]] = []
 
-    def _probe(family: str, source: str) -> bool:
-        probed.append((family, source))
+    def _probe(provider: str, source: str) -> bool:
+        probed.append((provider, source))
         return True
 
     with patch("plugins.seed_generation.pre_flight._credential_present", side_effect=_probe):
@@ -83,31 +83,31 @@ def test_check_auth_embedding_role_probes_openai_api_key() -> None:
 
 
 def test_check_auth_dedups_repeated_pairs() -> None:
-    """Two voters with same (family, source) → only one probe."""
+    """Two voters with same (provider, source) → only one probe."""
     bindings = {
         "generator": RoleBinding(
             role="generator",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
     }
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="api_key"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
-        VoterBinding(model="gpt-5.5", family="openai", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="api_key"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
     ]
     picker = PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
     probed: list[tuple[str, str]] = []
 
-    def _probe(family: str, source: str) -> bool:
-        probed.append((family, source))
+    def _probe(provider: str, source: str) -> bool:
+        probed.append((provider, source))
         return True
 
     with patch("plugins.seed_generation.pre_flight._credential_present", side_effect=_probe):
@@ -121,15 +121,15 @@ def test_check_diversity_valid_returns_empty() -> None:
 
 
 def test_check_diversity_collapsed_panel_errors() -> None:
-    """A single-family panel triggers a diversity error."""
+    """A single-provider panel triggers a diversity error."""
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="claude-cli"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
     ]
     picker = PickerResult(
         bindings={},
         voters=voters,
-        diversity_families=1,
+        diversity_providers=1,
         subscription_paths_in_use=frozenset(),
     )
     issues = check_diversity(picker)

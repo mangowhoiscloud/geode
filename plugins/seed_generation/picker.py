@@ -1,15 +1,15 @@
 """Seed-pipeline picker — 7-role × 4-path auth resolver + ToS notice.
 
 For each enabled role in the seed-generation manifest, the picker resolves
-the concrete ``(model, family, source)`` binding the role will use at
+the concrete ``(model, provider, source)`` binding the role will use at
 runtime, factoring in:
 
 1. The role's ``default_model`` from
    ``plugins/seed_generation/seed_generation.plugin.toml``.
-2. The model's provider family, inferred from a prefix table (claude-*
+2. The model's provider, inferred from a prefix table (claude-*
    → anthropic, gpt-* / text-embedding-* → openai, glm-* → zhipuai).
 3. The Petri source table's ``default`` (typically ``auto``) for that
-   family.
+   provider.
 4. The OAuth probe (``is_claude_oauth_available`` /
    ``is_codex_oauth_available``) when the source is ``auto``.
 5. The user override at ``~/.geode/seed-generation.toml`` (per-role
@@ -18,7 +18,7 @@ runtime, factoring in:
 The 4 paths spanned by the picker are:
 
 ============== ====================== ===================
-family         OAuth source           PAYG source
+provider         OAuth source           PAYG source
 ============== ====================== ===================
 anthropic      ``claude-cli``         ``api_key``
 openai         ``openai-codex``       ``api_key``
@@ -38,14 +38,14 @@ a module-level flag); CLI front-ends can suppress with ``quiet=True``.
 Diversity validator
 ===================
 
-The :class:`JudgePanelSpec` already enforces ``required_diversity_families``
+The :class:`JudgePanelSpec` already enforces ``required_diversity_providers``
 at manifest load. The picker adds a *runtime* check
 (:func:`validate_runtime_diversity`) that the *resolved* voter sources
-remain on ≥ N distinct ``(family, source)`` pairs after OAuth probing
+remain on ≥ N distinct ``(provider, source)`` pairs after OAuth probing
 and user overrides — a user override that collapses all 3 judges onto
 ``anthropic.claude-cli`` would defeat the bias guarantee even though the
-manifest-time families check still passes (all voters claim
-``family=anthropic`` but two of them now share an identical source).
+manifest-time providers check still passes (all voters claim
+``provider=anthropic`` but two of them now share an identical source).
 
 P1-P7 prevention checklist application:
 
@@ -84,7 +84,7 @@ __all__ = [
     "PickerResult",
     "RoleBinding",
     "VoterBinding",
-    "infer_family",
+    "infer_provider",
     "load_user_overrides",
     "pick_bindings",
     "print_tos_notice",
@@ -96,7 +96,7 @@ __all__ = [
 SUBSCRIPTION_SOURCES = frozenset({"claude-cli", "openai-codex"})
 
 
-_FAMILY_PREFIX_MAP: tuple[tuple[str, str], ...] = (
+_PROVIDER_PREFIX_MAP: tuple[tuple[str, str], ...] = (
     ("claude-", "anthropic"),
     ("text-embedding-", "openai"),
     ("gpt-", "openai"),
@@ -106,12 +106,12 @@ _FAMILY_PREFIX_MAP: tuple[tuple[str, str], ...] = (
 )
 
 
-_FAMILY_DEFAULT_OAUTH: dict[str, str] = {
+_PROVIDER_DEFAULT_OAUTH: dict[str, str] = {
     "anthropic": "claude-cli",
     "openai": "openai-codex",
 }
 
-_FAMILY_DEFAULT_PAYG: dict[str, str] = {
+_PROVIDER_DEFAULT_PAYG: dict[str, str] = {
     "anthropic": "api_key",
     "openai": "api_key",
     "zhipuai": "api_key",
@@ -135,7 +135,7 @@ class RoleBinding:
 
     role: str
     model: str
-    family: str
+    provider: str
     source: str
     kind: Literal["completion", "embedding"]
 
@@ -145,7 +145,7 @@ class VoterBinding:
     """Resolved auth binding for one judge-panel voter."""
 
     model: str
-    family: str
+    provider: str
     source: str
 
 
@@ -162,22 +162,22 @@ class PickerResult:
 
     bindings: dict[str, RoleBinding]
     voters: list[VoterBinding]
-    diversity_families: int
+    diversity_providers: int
     subscription_paths_in_use: frozenset[str]
 
 
-def infer_family(model: str) -> str:
-    """Return the provider family for ``model`` (best-effort by prefix).
+def infer_provider(model: str) -> str:
+    """Return the provider for ``model`` (best-effort by prefix).
 
     Raises ``ValueError`` for unrecognised prefixes — better to fail
     loudly at picker time than to bind to the wrong adapter.
     """
-    for prefix, family in _FAMILY_PREFIX_MAP:
+    for prefix, provider in _PROVIDER_PREFIX_MAP:
         if model.startswith(prefix):
-            return family
+            return provider
     raise ValueError(
-        f"infer_family: model {model!r} did not match any known prefix "
-        f"({[p for p, _ in _FAMILY_PREFIX_MAP]})"
+        f"infer_provider: model {model!r} did not match any known prefix "
+        f"({[p for p, _ in _PROVIDER_PREFIX_MAP]})"
     )
 
 
@@ -224,13 +224,13 @@ def load_user_overrides(
     return out
 
 
-def _probe_oauth(family: str) -> bool:
-    """Lazy OAuth probe — imports the per-family helper only when needed."""
-    if family == "anthropic":
+def _probe_oauth(provider: str) -> bool:
+    """Lazy OAuth probe — imports the per-provider helper only when needed."""
+    if provider == "anthropic":
         from plugins.petri_audit.claude_code_provider import is_claude_oauth_available
 
         return is_claude_oauth_available()
-    if family == "openai":
+    if provider == "openai":
         from plugins.petri_audit.codex_provider import is_codex_oauth_available
 
         return is_codex_oauth_available()
@@ -238,33 +238,33 @@ def _probe_oauth(family: str) -> bool:
 
 
 def _resolve_source(
-    family: str,
+    provider: str,
     *,
     hint: str | None = None,
     auto_probe: bool = True,
 ) -> str:
-    """Resolve a concrete source for ``family``.
+    """Resolve a concrete source for ``provider``.
 
     - ``hint`` may be one of: a concrete source (returned as-is after
-      family-allowance check via the caller); ``"auto"`` (probe OAuth →
+      provider-allowance check via the caller); ``"auto"`` (probe OAuth →
       fall back to api_key); or ``None`` (equivalent to ``"auto"``).
     - ``auto_probe=False`` skips the OAuth probe (used by tests and by
       pre-flight dry-runs that don't want to touch the keychain).
     """
     if hint and hint != "auto":
         return hint
-    if auto_probe and family in _FAMILY_DEFAULT_OAUTH:
+    if auto_probe and provider in _PROVIDER_DEFAULT_OAUTH:
         try:
-            if _probe_oauth(family):
-                return _FAMILY_DEFAULT_OAUTH[family]
+            if _probe_oauth(provider):
+                return _PROVIDER_DEFAULT_OAUTH[provider]
         except Exception as exc:  # pragma: no cover - defensive
             log.debug(
-                "seed-generation picker: OAuth probe for family=%r raised %s — "
+                "seed-generation picker: OAuth probe for provider=%r raised %s — "
                 "falling back to PAYG",
-                family,
+                provider,
                 exc,
             )
-    return _FAMILY_DEFAULT_PAYG.get(family, "api_key")
+    return _PROVIDER_DEFAULT_PAYG.get(provider, "api_key")
 
 
 def pick_bindings(
@@ -300,7 +300,7 @@ def pick_bindings(
     WARNING) when it is not in the role's ``allowed_models`` —
     falling back to ``default_model``. Override ``source`` values are
     cross-checked against Petri's source table and dropped (with a
-    WARNING) when they are not in ``petri.source.<family>.allowed``,
+    WARNING) when they are not in ``petri.source.<provider>.allowed``,
     falling back to the resolved auto / PAYG source. This keeps a
     typo or unsupported pairing from producing a bad ``RoleBinding``
     that the S6 Ranker would then dispatch against the wrong adapter.
@@ -318,23 +318,23 @@ def pick_bindings(
         override = overrides.get(role_name, {})
         model = _validate_override_model(role_name, override.get("model"), spec)
         try:
-            family = infer_family(model)
+            provider = infer_provider(model)
         except ValueError:
             log.warning(
-                "seed-generation picker: role=%r model=%r — family inference failed, "
+                "seed-generation picker: role=%r model=%r — provider inference failed, "
                 "defaulting to anthropic",
                 role_name,
                 model,
             )
-            family = "anthropic"
+            provider = "anthropic"
         source_hint = _validate_override_source(
-            role_name, override.get("source"), family, petri_sources
+            role_name, override.get("source"), provider, petri_sources
         )
-        source = _resolve_source(family, hint=source_hint, auto_probe=auto_probe)
+        source = _resolve_source(provider, hint=source_hint, auto_probe=auto_probe)
         bindings[role_name] = RoleBinding(
             role=role_name,
             model=model,
-            family=family,
+            provider=provider,
             source=source,
             kind=spec.kind,
         )
@@ -347,25 +347,25 @@ def pick_bindings(
         voters.append(
             VoterBinding(
                 model=voter.model,
-                family=voter.family,
+                provider=voter.provider,
                 source=resolved_source,
             )
         )
         if resolved_source in SUBSCRIPTION_SOURCES:
             subscription_paths.add(resolved_source)
 
-    diversity_families = len({v.family for v in voters})
+    diversity_providers = len({v.provider for v in voters})
 
     result = PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=diversity_families,
+        diversity_providers=diversity_providers,
         subscription_paths_in_use=frozenset(subscription_paths),
     )
     if enforce_diversity:
         validate_runtime_diversity(
             result,
-            required_family_count=manifest.judge_panel.required_diversity_families,
+            required_provider_count=manifest.judge_panel.required_diversity_providers,
         )
     return result
 
@@ -390,13 +390,13 @@ def _validate_override_model(role_name: str, override_model: str | None, spec: S
 
 
 def _load_petri_sources() -> dict[str, set[str]]:
-    """Build ``{family: allowed_sources}`` from the Petri manifest.
+    """Build ``{provider: allowed_sources}`` from the Petri manifest.
 
     Loaded lazily and tolerantly — if the Petri manifest is unavailable
     in a test fixture, override-source validation falls back to a
     permissive mode (logs WARNING but does not block). The seed-generation
     manifest's cross-validator already rejects voter rows with bad
-    families/sources at load time, so override validation is the second
+    providers/sources at load time, so override validation is the second
     line of defence.
     """
     try:
@@ -411,15 +411,15 @@ def _load_petri_sources() -> dict[str, set[str]]:
         )
         return {}
     out: dict[str, set[str]] = {}
-    for family, spec in getattr(petri, "sources", {}).items():
-        out[family] = set(getattr(spec, "allowed", []))
+    for provider, spec in getattr(petri, "sources", {}).items():
+        out[provider] = set(getattr(spec, "allowed", []))
     return out
 
 
 def _validate_override_source(
     role_name: str,
     override_source: str | None,
-    family: str,
+    provider: str,
     petri_sources: dict[str, set[str]],
 ) -> str | None:
     """Return an override source if allowed, else None (caller will auto-resolve).
@@ -432,14 +432,14 @@ def _validate_override_source(
         return None
     if override_source == "auto":
         return "auto"
-    allowed = petri_sources.get(family)
+    allowed = petri_sources.get(provider)
     if allowed and override_source not in allowed:
         log.warning(
             "seed-generation picker: role=%r override source=%r not in "
             "petri.source.%s.allowed=%s — falling back to auto-resolve",
             role_name,
             override_source,
-            family,
+            provider,
             sorted(allowed),
         )
         return None
@@ -451,7 +451,7 @@ def _resolve_voter_source(voter: VoterSpec, *, auto_probe: bool) -> str:
     at manifest load), but call through :func:`_resolve_source` so a
     future relaxation of that rule transparently picks up OAuth probing.
     """
-    return _resolve_source(voter.family, hint=voter.source, auto_probe=auto_probe)
+    return _resolve_source(voter.provider, hint=voter.source, auto_probe=auto_probe)
 
 
 def print_tos_notice(
@@ -503,33 +503,33 @@ def reset_tos_notice() -> None:
 def validate_runtime_diversity(
     result: PickerResult,
     *,
-    required_family_count: int = 2,
+    required_provider_count: int = 2,
     required_voter_path_count: int = 2,
 ) -> None:
     """Verify the resolved bindings preserve panel diversity at runtime.
 
     Two checks:
 
-    1. ``len({v.family for v in result.voters}) >= required_family_count``
+    1. ``len({v.provider for v in result.voters}) >= required_provider_count``
        — same gate as the manifest, re-run after override merge so a
-       user override that swaps a voter's family is caught.
-    2. ``len({(v.family, v.source) for v in result.voters}) >= required_voter_path_count``
+       user override that swaps a voter's provider is caught.
+    2. ``len({(v.provider, v.source) for v in result.voters}) >= required_voter_path_count``
        — voters must span at least ``required_voter_path_count`` distinct
-       *paths* (family + source pair), not just families. A panel that
+       *paths* (provider + source pair), not just providers. A panel that
        collapsed all 3 judges onto a single ``(anthropic, claude-cli)``
        binding would pass check #1 in some pathological override flows
        but fails this stricter runtime check.
 
     Raises ``ValueError`` on either failure.
     """
-    family_set = {v.family for v in result.voters}
-    if len(family_set) < required_family_count:
+    provider_set = {v.provider for v in result.voters}
+    if len(provider_set) < required_provider_count:
         raise ValueError(
             f"judge panel runtime diversity violated — resolved voters "
-            f"span families {sorted(family_set)} ({len(family_set)} of "
-            f"required {required_family_count})"
+            f"span providers {sorted(provider_set)} ({len(provider_set)} of "
+            f"required {required_provider_count})"
         )
-    path_set = {(v.family, v.source) for v in result.voters}
+    path_set = {(v.provider, v.source) for v in result.voters}
     if len(path_set) < required_voter_path_count:
         raise ValueError(
             f"judge panel runtime path diversity violated — resolved voters "
@@ -550,15 +550,15 @@ def list_subscription_roles(result: PickerResult) -> list[str]:
 
 
 def iter_distinct_paths(result: PickerResult) -> Iterable[tuple[str, str]]:
-    """Iterate distinct ``(family, source)`` pairs across roles + voters."""
+    """Iterate distinct ``(provider, source)`` pairs across roles + voters."""
     seen: set[tuple[str, str]] = set()
     for binding in result.bindings.values():
-        key = (binding.family, binding.source)
+        key = (binding.provider, binding.source)
         if key not in seen:
             seen.add(key)
             yield key
     for voter in result.voters:
-        key = (voter.family, voter.source)
+        key = (voter.provider, voter.source)
         if key not in seen:
             seen.add(key)
             yield key

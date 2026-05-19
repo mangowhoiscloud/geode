@@ -8,7 +8,7 @@ if/elif chains.
 Layers (mirroring TOML structure):
 
 - :class:`RoleSpec` — per-role default model + allowed model set
-- :class:`SourceSpec` — per-family default credential source + allowed sources
+- :class:`SourceSpec` — per-provider default credential source + allowed sources
 - :class:`AdapterSpec` — concrete (module, inspect_prefix, env vars) binding
 - :class:`PetriManifest` — top-level container with cross-layer consistency
 
@@ -40,7 +40,7 @@ __all__ = [
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "petri.plugin.toml"
 
 # "auto" is a sentinel — resolved at binding time via
-# ``settings.{family}_credential_source`` + keychain probe — so it
+# ``settings.{provider}_credential_source`` + keychain probe — so it
 # never appears as a concrete adapter key.
 AUTO_SOURCE = "auto"
 
@@ -62,7 +62,7 @@ class RoleSpec(BaseModel):
 
 
 class SourceSpec(BaseModel):
-    """Per-family default credential source + allowed source set."""
+    """Per-provider default credential source + allowed source set."""
 
     default: str
     allowed: list[str]
@@ -75,7 +75,7 @@ class SourceSpec(BaseModel):
 
 
 class AdapterSpec(BaseModel):
-    """Concrete adapter binding for a (family, source) pair.
+    """Concrete adapter binding for a (provider, source) pair.
 
     ``module`` — dotted import path; loaded lazily by the adapter registry.
     ``inspect_prefix`` — prefix that ``to_inspect_model`` emits (e.g.
@@ -109,18 +109,18 @@ class PetriManifest(BaseModel):
             raise ValueError(
                 f"enabled_roles {self.enabled_roles} != role spec keys {sorted(self.roles)}"
             )
-        # 2. every (family, source) in source.allowed has an adapter
+        # 2. every (provider, source) in source.allowed has an adapter
         #    (excluding the "auto" sentinel — resolved at binding time)
-        for family, source_spec in self.sources.items():
-            family_adapters = self.adapters.get(family, {})
+        for provider, source_spec in self.sources.items():
+            provider_adapters = self.adapters.get(provider, {})
             for source in source_spec.allowed:
                 if source == AUTO_SOURCE:
                     continue
-                if source not in family_adapters:
+                if source not in provider_adapters:
                     raise ValueError(
-                        f"family={family} source={source} listed in "
-                        f"[petri.source.{family}].allowed but no adapter at "
-                        f"[petri.adapter.{family}.{source}]"
+                        f"provider={provider} source={source} listed in "
+                        f"[petri.source.{provider}].allowed but no adapter at "
+                        f"[petri.adapter.{provider}.{source}]"
                     )
         return self
 
@@ -131,24 +131,24 @@ class PetriManifest(BaseModel):
             raise KeyError(f"Unknown petri role {role!r}; enabled={self.enabled_roles}")
         return self.roles[role]
 
-    def get_source(self, family: str) -> SourceSpec:
-        if family not in self.sources:
-            raise KeyError(f"Unknown petri family {family!r}; known={sorted(self.sources)}")
-        return self.sources[family]
+    def get_source(self, provider: str) -> SourceSpec:
+        if provider not in self.sources:
+            raise KeyError(f"Unknown petri provider {provider!r}; known={sorted(self.sources)}")
+        return self.sources[provider]
 
-    def get_adapter(self, family: str, source: str) -> AdapterSpec:
+    def get_adapter(self, provider: str, source: str) -> AdapterSpec:
         if source == AUTO_SOURCE:
             raise ValueError(
                 "Cannot resolve adapter for 'auto' — caller must resolve to a "
                 "concrete source first (e.g. via credential_source.resolve)"
             )
-        family_adapters = self.adapters.get(family, {})
-        if source not in family_adapters:
+        provider_adapters = self.adapters.get(provider, {})
+        if source not in provider_adapters:
             raise KeyError(
-                f"No adapter for family={family} source={source}; "
-                f"known sources for this family={sorted(family_adapters)}"
+                f"No adapter for provider={provider} source={source}; "
+                f"known sources for this provider={sorted(provider_adapters)}"
             )
-        return family_adapters[source]
+        return provider_adapters[source]
 
     def get_role_contract(self, role: str, *, base_dir: Path | None = None) -> RoleContract:
         """Parse and validate the role contract MD for ``role``.
@@ -240,8 +240,8 @@ def _parse_manifest_dict(data: dict[str, Any]) -> PetriManifest:
         roles={k: RoleSpec(**v) for k, v in petri.get("role", {}).items()},
         sources={k: SourceSpec(**v) for k, v in petri.get("source", {}).items()},
         adapters={
-            family: {src: AdapterSpec(**v) for src, v in srcs.items()}
-            for family, srcs in petri.get("adapter", {}).items()
+            provider: {src: AdapterSpec(**v) for src, v in srcs.items()}
+            for provider, srcs in petri.get("adapter", {}).items()
         },
     )
 

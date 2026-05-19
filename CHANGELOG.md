@@ -49,6 +49,29 @@ functional change.
 
 ### Changed
 
+- **Rename `family` → `provider` in provider-semantic contexts.** The
+  identifier `family` ambiguously named both (a) the LLM vendor —
+  anthropic / openai / zhipuai — and (b) within-vendor model versioning
+  ("GLM-5 family", "GLM-4.7 family"). The provider-semantic uses are
+  renamed to `provider` so the routing/credential/quota/audit/picker
+  layers all speak the same vocabulary; model-version groupings in
+  `core/llm/providers/glm.py` become explicit "GLM-N series (zhipuai
+  provider)" since the provider for every GLM model is Zhipu. Affects
+  41 production files + 7 test files: quota_banner / credential_source /
+  petri_audit (registry, models, optimize, bias, cli, adapters,
+  manifest) / seed_generation (picker, manifest, cli, pre_flight,
+  cost_preview, auth_coverage, ranker) / pricing_loader / definitions.json
+  tool description ("M1 — judge ≠ generator provider"). Function
+  renames: `infer_family` → `infer_provider`, `family_of` →
+  `provider_of`, `same_family` → `same_provider`, `_parse_family` →
+  `_parse_provider`. Constant rename: `_PROVIDER_TO_FAMILY` →
+  `_ROUTING_TO_AUDIT_PROVIDER` (the table bridges routing-manifest
+  provider names to Petri audit provider names — e.g. "glm" →
+  "zhipuai"). Codex MCP cross-LLM verify caught 3 HIGH (test sites that
+  the initial script missed — `tests/core/cli/test_quota_banner.py`,
+  `tests/integration/test_auth_path_coverage.py`, `tests/test_pricing_loader.py`)
+  + 3 MEDIUM (constant rename, TOML schema comments, tool description
+  text). All fixed in the same commit; final pass "No findings".
 - **P0b — autoresearch SessionJournal event coverage.** Per the 2026-05-19
   observability audit §4, the autoresearch run was emitting only one
   journal event (`audit_finished`) — every other lifecycle transition was

@@ -1,18 +1,18 @@
 """Integration test — 4-path × 4-component auth coverage matrix.
 
-Walks every (component, family, source) cell in
+Walks every (component, provider, source) cell in
 ``plugins.seed_generation.auth_coverage.AUTH_COVERAGE_MATRIX`` and
 verifies the routing surface is actually wired:
 
 - **seed_generation** — `pick_bindings()` with a user override forces the
   cell's source; the resolved `RoleBinding` must reflect it.
-- **petri_audit** — the manifest's `[petri.source.<family>].allowed`
+- **petri_audit** — the manifest's `[petri.source.<provider>].allowed`
   list contains the cell's source.
 - **autoresearch** — `train.py`'s SEED_SELECT + USE_OAUTH knobs can
   reach both subscription (`USE_OAUTH=True`) and PAYG (`USE_OAUTH=False`)
-  variants of each family.
+  variants of each provider.
 - **geode_main** — the credential resolver in `core.config.settings`
-  has the env field for the cell's family + source.
+  has the env field for the cell's provider + source.
 
 Also exercises the **TEST_SETUP_PROFILE** the user pinned on
 2026-05-18 (seed_generation + autoresearch + geode_main → openai.openai-codex,
@@ -49,7 +49,7 @@ def test_matrix_covers_all_four_paths_per_component() -> None:
     }
     by_component: dict[str, set[tuple[str, str]]] = {}
     for cell in AUTH_COVERAGE_MATRIX:
-        by_component.setdefault(cell.component, set()).add((cell.path.family, cell.path.source))
+        by_component.setdefault(cell.component, set()).add((cell.path.provider, cell.path.source))
     assert set(by_component) == {
         "seed_generation",
         "petri_audit",
@@ -80,7 +80,7 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
     """`pick_bindings()` honours a user override pinning the cell's source.
 
     Constructs a minimal in-memory manifest + override and verifies the
-    resolved RoleBinding for the cell's family lands on the requested
+    resolved RoleBinding for the cell's provider lands on the requested
     source.
     """
     from plugins.seed_generation.manifest import (
@@ -91,18 +91,18 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
     )
     from plugins.seed_generation.picker import pick_bindings
 
-    # Pick a model whose family matches the cell.
-    model = "claude-sonnet-4-6" if cell.path.family == "anthropic" else "gpt-5.5"
+    # Pick a model whose provider matches the cell.
+    model = "claude-sonnet-4-6" if cell.path.provider == "anthropic" else "gpt-5.5"
     role_name = "generator"
     manifest = SeedGenerationManifest(
         enabled_roles=[role_name],
         roles={role_name: SeedRoleSpec(default_model=model, allowed_models=[model])},
         judge_panel=JudgePanelSpec(
             voters=[
-                VoterSpec(model="claude-sonnet-4-6", family="anthropic", source="api_key"),
-                VoterSpec(model="gpt-5.5", family="openai", source="api_key"),
+                VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="api_key"),
+                VoterSpec(model="gpt-5.5", provider="openai", source="api_key"),
             ],
-            required_diversity_families=2,
+            required_diversity_providers=2,
         ),
     )
     overrides = {role_name: {"source": cell.path.source}}
@@ -113,26 +113,26 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
         enforce_diversity=False,
     )
     binding = result.bindings[role_name]
-    assert binding.family == cell.path.family
+    assert binding.provider == cell.path.provider
     assert binding.source == cell.path.source
 
 
 @pytest.mark.parametrize("cell", _cells_for("petri_audit"))
 def test_petri_manifest_supports_cell(cell: AuthCell) -> None:
-    """Petri's `[petri.source.<family>].allowed` lists the cell source."""
+    """Petri's `[petri.source.<provider>].allowed` lists the cell source."""
     from plugins.petri_audit.manifest import load_manifest as load_petri_manifest
 
     petri = load_petri_manifest()
-    source_spec = petri.get_source(cell.path.family)
+    source_spec = petri.get_source(cell.path.provider)
     assert cell.path.source in source_spec.allowed, (
-        f"petri manifest [petri.source.{cell.path.family}].allowed missing "
+        f"petri manifest [petri.source.{cell.path.provider}].allowed missing "
         f"{cell.path.source!r}; got {source_spec.allowed}"
     )
 
 
 @pytest.mark.parametrize("cell", _cells_for("autoresearch"))
 def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
-    """`autoresearch/train.py`'s flags can drive each cell's family.
+    """`autoresearch/train.py`'s flags can drive each cell's provider.
 
     Subscription paths (`claude-cli` / `openai-codex`) ride the
     `USE_OAUTH=True` branch; `api_key` rides the explicit env-var
@@ -150,7 +150,7 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     else:
         from core.config import _settings as settings_module
 
-        env_var = f"{cell.path.family}_api_key"
+        env_var = f"{cell.path.provider}_api_key"
         assert (
             hasattr(settings_module.Settings.model_fields[env_var], "alias")
             or hasattr(settings_module, env_var)
@@ -160,11 +160,11 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
 
 @pytest.mark.parametrize("cell", _cells_for("geode_main"))
 def test_geode_main_has_credential_field_for_cell(cell: AuthCell) -> None:
-    """`core.config.settings` exposes the credential field per family."""
+    """`core.config.settings` exposes the credential field per provider."""
     from core.config import settings
 
     if cell.path.source == "api_key":
-        attr = f"{cell.path.family}_api_key"
+        attr = f"{cell.path.provider}_api_key"
         assert hasattr(settings, attr), f"settings missing {attr}"
     elif cell.path.source == "claude-cli":
         from plugins.petri_audit.claude_code_provider import is_claude_oauth_available

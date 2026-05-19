@@ -52,33 +52,33 @@ def test_usage_ratio_clamps_below_zero() -> None:
 
 def test_tier_green_below_warn() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="anthropic", used_tokens=30, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=30, total_tokens=100)
     assert banner.tier() == "green"
 
 
 def test_tier_yellow_between_warn_and_abort() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="anthropic", used_tokens=60, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=60, total_tokens=100)
     assert banner.tier() == "yellow"
 
 
 def test_tier_red_at_or_above_abort() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="anthropic", used_tokens=90, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=90, total_tokens=100)
     assert banner.tier() == "red"
 
 
 def test_tier_red_when_aborted_regardless_of_usage() -> None:
     """Strict-mode trip_abort locks the banner to red."""
     banner = SubscriptionQuotaBanner()
-    banner.set_state(family="anthropic", used_tokens=5, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=5, total_tokens=100)
     banner.trip_abort(reason="oauth quota exhausted")
     assert banner.tier() == "red"
 
 
 def test_clear_abort_returns_to_usage_tier() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="anthropic", used_tokens=10, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
     banner.trip_abort(reason="quota")
     assert banner.tier() == "red"
     banner.clear_abort()
@@ -89,14 +89,14 @@ def test_clear_abort_returns_to_usage_tier() -> None:
 
 
 def test_render_empty_on_cold_start() -> None:
-    """No family set + no quota counters → empty string (no flash)."""
+    """No provider set + no quota counters → empty string (no flash)."""
     banner = SubscriptionQuotaBanner()
     assert banner.render() == ""
 
 
 def test_render_green_format() -> None:
     banner = SubscriptionQuotaBanner()
-    banner.set_state(family="anthropic", used_tokens=10, total_tokens=100)
+    banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
     out = banner.render()
     assert "green" in out
     assert "anthropic" in out
@@ -105,7 +105,7 @@ def test_render_green_format() -> None:
 
 def test_render_yellow_format() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="openai", used_tokens=70, total_tokens=100)
+    banner.set_state(provider="openai", used_tokens=70, total_tokens=100)
     out = banner.render()
     assert "yellow" in out
     assert "openai" in out
@@ -115,7 +115,7 @@ def test_render_yellow_format() -> None:
 
 def test_render_red_when_at_abort_threshold() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    banner.set_state(family="openai", used_tokens=95, total_tokens=100)
+    banner.set_state(provider="openai", used_tokens=95, total_tokens=100)
     out = banner.render()
     assert "red" in out
     assert "95%" in out
@@ -139,7 +139,7 @@ def test_set_state_is_thread_safe() -> None:
 
     def _write(i: int) -> None:
         for _ in range(100):
-            banner.set_state(family=f"f-{i}", used_tokens=i, total_tokens=1000)
+            banner.set_state(provider=f"f-{i}", used_tokens=i, total_tokens=1000)
 
     threads = [threading.Thread(target=_write, args=(i,)) for i in range(8)]
     for t in threads:
@@ -150,7 +150,7 @@ def test_set_state_is_thread_safe() -> None:
     # and a coherent QuotaState dataclass.
     final = banner.state
     assert final.total_tokens == 1000
-    assert final.family.startswith("f-")
+    assert final.provider.startswith("f-")
 
 
 # ── singleton accessor ───────────────────────────────────────────────────

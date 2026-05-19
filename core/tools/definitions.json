@@ -1359,7 +1359,7 @@
   },
   {
     "name": "eval_dspy_optimize",
-    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to compile, auto-tune, or DSPy-optimize a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (pre-plan-D risk catalog): M1 — judge ≠ generator family (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
+    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to compile, auto-tune, or DSPy-optimize a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (pre-plan-D risk catalog): M1 — judge ≠ generator provider (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
     "category": "evaluation",
     "cost_tier": "expensive",
     "input_schema": {

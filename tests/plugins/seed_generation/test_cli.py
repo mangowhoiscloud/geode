@@ -30,27 +30,27 @@ def _good_picker() -> PickerResult:
         "generator": RoleBinding(
             role="generator",
             model="claude-sonnet-4-6",
-            family="anthropic",
+            provider="anthropic",
             source="api_key",
             kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
             model="text-embedding-3-small",
-            family="openai",
+            provider="openai",
             source="api_key",
             kind="embedding",
         ),
     }
     voters = [
-        VoterBinding(model="claude-sonnet-4-6", family="anthropic", source="api_key"),
-        VoterBinding(model="gpt-5.5", family="openai", source="api_key"),
-        VoterBinding(model="claude-haiku-4-5", family="anthropic", source="api_key"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="api_key"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
     ]
     return PickerResult(
         bindings=bindings,
         voters=voters,
-        diversity_families=2,
+        diversity_providers=2,
         subscription_paths_in_use=frozenset(),
     )
 
@@ -294,7 +294,7 @@ def test_run_audit_seeds_quiet_suppresses_tos_notice() -> None:
     sub_picker = PickerResult(
         bindings=picker.bindings,
         voters=picker.voters,
-        diversity_families=picker.diversity_families,
+        diversity_providers=picker.diversity_providers,
         subscription_paths_in_use=frozenset({"claude-cli"}),
     )
     with (

@@ -1,9 +1,9 @@
-"""HTTP API-key adapter for Zhipu (GLM family) — routes via GeodeModelAPI.
+"""HTTP API-key adapter for Zhipu (GLM provider) — routes via GeodeModelAPI.
 
 Maps the manifest binding ``[petri.adapter.zhipuai.api_key]`` to
 inspect_ai's ``geode/<model>`` provider (registered by
 :mod:`plugins.petri_audit.targets.geode_target`). inspect_ai has no
-native GLM provider, so GLM family ids are routed through the GEODE
+native GLM provider, so GLM provider ids are routed through the GEODE
 wrapper that the full agentic stack uses anyway — the same path
 production code takes.
 

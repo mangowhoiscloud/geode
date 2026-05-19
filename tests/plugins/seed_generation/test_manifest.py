@@ -3,7 +3,7 @@
 Coverage targets the P-checklist (cycle-skill SKILL.md):
 
 - P4 Environment Anchor — DEFAULT_MANIFEST_PATH package-relative
-- P7 Caller-Callee Contract — voter (family, source) cross-validated
+- P7 Caller-Callee Contract — voter (provider, source) cross-validated
   against the Petri manifest's source table
 """
 
@@ -40,14 +40,14 @@ def test_role_default_must_be_in_allowed() -> None:
 
 def test_voter_rejects_auto_source() -> None:
     with pytest.raises(ValueError, match="auto"):
-        VoterSpec(model="claude-sonnet-4-6", family="anthropic", source="auto")
+        VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="auto")
 
 
 def test_judge_panel_requires_minimum_voters() -> None:
     with pytest.raises(ValueError, match=">= 2 voters"):
         JudgePanelSpec(
-            voters=[VoterSpec(model="x", family="anthropic", source="api_key")],
-            required_diversity_families=1,
+            voters=[VoterSpec(model="x", provider="anthropic", source="api_key")],
+            required_diversity_providers=1,
         )
 
 
@@ -55,21 +55,21 @@ def test_judge_panel_diversity_violation() -> None:
     with pytest.raises(ValueError, match="diversity violated"):
         JudgePanelSpec(
             voters=[
-                VoterSpec(model="x1", family="anthropic", source="api_key"),
-                VoterSpec(model="x2", family="anthropic", source="claude-cli"),
-                VoterSpec(model="x3", family="anthropic", source="claude-cli"),
+                VoterSpec(model="x1", provider="anthropic", source="api_key"),
+                VoterSpec(model="x2", provider="anthropic", source="claude-cli"),
+                VoterSpec(model="x3", provider="anthropic", source="claude-cli"),
             ],
-            required_diversity_families=2,
+            required_diversity_providers=2,
         )
 
 
 def test_judge_panel_diversity_satisfied() -> None:
     panel = JudgePanelSpec(
         voters=[
-            VoterSpec(model="x1", family="anthropic", source="api_key"),
-            VoterSpec(model="x2", family="openai", source="api_key"),
+            VoterSpec(model="x1", provider="anthropic", source="api_key"),
+            VoterSpec(model="x2", provider="openai", source="api_key"),
         ],
-        required_diversity_families=2,
+        required_diversity_providers=2,
     )
     assert len(panel.voters) == 2
 
@@ -87,8 +87,8 @@ def test_manifest_role_keys_must_match_enabled_roles() -> None:
             },
             judge_panel=JudgePanelSpec(
                 voters=[
-                    VoterSpec(model="x", family="anthropic", source="api_key"),
-                    VoterSpec(model="y", family="openai", source="api_key"),
+                    VoterSpec(model="x", provider="anthropic", source="api_key"),
+                    VoterSpec(model="y", provider="openai", source="api_key"),
                 ],
             ),
         )
@@ -129,12 +129,12 @@ def test_bundled_manifest_voters_pass_cross_validation() -> None:
     # The defaults pin (anthropic, claude-cli), (openai, openai-codex),
     # (anthropic, api_key) — all must be in Petri's allowed lists.
     for voter in voters:
-        assert voter.family in {"anthropic", "openai"}
+        assert voter.provider in {"anthropic", "openai"}
         assert voter.source in {"claude-cli", "openai-codex", "api_key"}
 
 
-def test_voter_unknown_family_rejected(tmp_path: Path) -> None:
-    """Cross-manifest validation — unknown family in voter must fail."""
+def test_voter_unknown_provider_rejected(tmp_path: Path) -> None:
+    """Cross-manifest validation — unknown provider in voter must fail."""
     bad_toml = tmp_path / "bad.toml"
     bad_toml.write_text(
         textwrap.dedent(
@@ -147,16 +147,16 @@ def test_voter_unknown_family_rejected(tmp_path: Path) -> None:
             allowed_models = ["x"]
 
             [seed_generation.judge_panel]
-            required_diversity_families = 2
+            required_diversity_providers = 2
 
             [[seed_generation.judge_panel.voters]]
             model = "x"
-            family = "imaginary-llm-provider"
+            provider = "imaginary-llm-provider"
             source = "api_key"
 
             [[seed_generation.judge_panel.voters]]
             model = "y"
-            family = "anthropic"
+            provider = "anthropic"
             source = "api_key"
             """
         )
@@ -180,16 +180,16 @@ def test_voter_unknown_source_rejected(tmp_path: Path) -> None:
             allowed_models = ["x"]
 
             [seed_generation.judge_panel]
-            required_diversity_families = 2
+            required_diversity_providers = 2
 
             [[seed_generation.judge_panel.voters]]
             model = "x"
-            family = "anthropic"
+            provider = "anthropic"
             source = "claude_cli"
 
             [[seed_generation.judge_panel.voters]]
             model = "y"
-            family = "openai"
+            provider = "openai"
             source = "api_key"
             """
         )
@@ -264,16 +264,16 @@ def test_parse_manifest_dict_minimal_valid() -> None:
                 }
             },
             "judge_panel": {
-                "required_diversity_families": 2,
+                "required_diversity_providers": 2,
                 "voters": [
                     {
                         "model": "claude-sonnet-4-6",
-                        "family": "anthropic",
+                        "provider": "anthropic",
                         "source": "api_key",
                     },
                     {
                         "model": "gpt-5.5",
-                        "family": "openai",
+                        "provider": "openai",
                         "source": "api_key",
                     },
                 ],

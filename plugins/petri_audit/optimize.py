@@ -10,7 +10,7 @@ Risk catalogue + mitigations are SOT'd in
 전제 잠금** — calls violating them raise :class:`OptimizeError` rather
 than silently soft-failing:
 
-- **M1** (judge ≠ generator family) — :func:`_check_family_split`
+- **M1** (judge ≠ generator provider) — :func:`_check_provider_split`
 - **M2** (PR-only auto-edit) — never mutates the live config; output
   lands at ``output_dir/<compile_id>.json`` and the report's
   ``next_step`` instructs the caller to open a PR. Auto-merge is
@@ -38,7 +38,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from plugins.petri_audit.models import family_of, same_family
+from plugins.petri_audit.models import provider_of, same_provider
 
 log = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ class OptimizeReport:
     compile_id: str
     judge: str
     generator: str
-    judge_family: str
-    generator_family: str
+    judge_provider: str
+    generator_provider: str
     output_path: Path
     estimated_usd: float
     estimated_usd_cap: float
@@ -94,8 +94,8 @@ class OptimizeReport:
             "compile_id": self.compile_id,
             "judge": self.judge,
             "generator": self.generator,
-            "judge_family": self.judge_family,
-            "generator_family": self.generator_family,
+            "judge_provider": self.judge_provider,
+            "generator_provider": self.generator_provider,
             "output_path": str(self.output_path),
             "estimated_usd": self.estimated_usd,
             "estimated_usd_cap": self.estimated_usd_cap,
@@ -106,24 +106,24 @@ class OptimizeReport:
         }
 
 
-def _check_family_split(judge: str, generator: str) -> tuple[str, str]:
-    """M1 — refuse same-family judge/generator pairs."""
-    judge_family = family_of(judge)
-    generator_family = family_of(generator)
-    if judge_family == "unknown" or generator_family == "unknown":
+def _check_provider_split(judge: str, generator: str) -> tuple[str, str]:
+    """M1 — refuse same-provider judge/generator pairs."""
+    judge_provider = provider_of(judge)
+    generator_provider = provider_of(generator)
+    if judge_provider == "unknown" or generator_provider == "unknown":
         raise OptimizeError(
-            f"M1 family check needs known providers; got "
-            f"judge={judge!r} ({judge_family}), "
-            f"generator={generator!r} ({generator_family})."
+            f"M1 provider check needs known providers; got "
+            f"judge={judge!r} ({judge_provider}), "
+            f"generator={generator!r} ({generator_provider})."
         )
-    if same_family(judge, generator):
+    if same_provider(judge, generator):
         raise OptimizeError(
-            f"M1 violation — judge ({judge_family}) shares a family with "
-            f"generator ({generator_family}). In-context reward hacking + "
+            f"M1 violation — judge ({judge_provider}) shares a provider with "
+            f"generator ({generator_provider}). In-context reward hacking + "
             f"self-preference bias risk. Pick a judge from a different "
             f"vendor (see plan § D 단계 도입 전 위험 카탈로그 R1/R3)."
         )
-    return judge_family, generator_family
+    return judge_provider, generator_provider
 
 
 def _check_budget(max_compile_usd: float) -> float:
@@ -200,7 +200,7 @@ def optimize_prompt(
     eval_log = Path(eval_log_path)
     output_root = Path(output_dir)
 
-    judge_family, generator_family = _check_family_split(judge, generator)
+    judge_provider, generator_provider = _check_provider_split(judge, generator)
     estimated_usd = _check_budget(max_compile_usd)
 
     compile_id = compile_id_for(
@@ -212,7 +212,7 @@ def optimize_prompt(
     output_path = output_root / f"{compile_id}.json"
 
     notes: list[str] = [
-        f"M1 ok: judge={judge_family} ≠ generator={generator_family}",
+        f"M1 ok: judge={judge_provider} ≠ generator={generator_provider}",
         f"M3 ok: budget cap ${max_compile_usd:.2f} ≥ ${estimated_usd:.2f} per compile",
         f"M10: compile_id={compile_id}, seed={seed}",
     ]
@@ -223,8 +223,8 @@ def optimize_prompt(
             compile_id=compile_id,
             judge=judge,
             generator=generator,
-            judge_family=judge_family,
-            generator_family=generator_family,
+            judge_provider=judge_provider,
+            generator_provider=generator_provider,
             output_path=output_path,
             estimated_usd=estimated_usd,
             estimated_usd_cap=max_compile_usd,
@@ -267,8 +267,8 @@ def optimize_prompt(
         "compile_id": compile_id,
         "judge": judge,
         "generator": generator,
-        "judge_family": judge_family,
-        "generator_family": generator_family,
+        "judge_provider": judge_provider,
+        "generator_provider": generator_provider,
         "eval_log_sha256": hashlib.sha256(eval_log.read_bytes()).hexdigest(),
         "seed": seed,
         "max_compile_usd": max_compile_usd,
@@ -281,8 +281,8 @@ def optimize_prompt(
         compile_id=compile_id,
         judge=judge,
         generator=generator,
-        judge_family=judge_family,
-        generator_family=generator_family,
+        judge_provider=judge_provider,
+        generator_provider=generator_provider,
         output_path=output_path,
         estimated_usd=estimated_usd,
         estimated_usd_cap=max_compile_usd,

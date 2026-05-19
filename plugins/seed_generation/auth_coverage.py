@@ -7,7 +7,7 @@ GEODE main) must be reachable via every supported auth path
 ``openai.openai-codex``, ``openai.api_key``).
 
 The matrix is the **single source of truth** for which (component,
-family, source) cells the system claims to support. Tests in
+provider, source) cells the system claims to support. Tests in
 ``tests/integration/test_auth_path_coverage.py`` walk every cell and
 verify the routing is actually wired.
 
@@ -38,13 +38,13 @@ Source = Literal["claude-cli", "openai-codex", "api_key"]
 
 @dataclass(frozen=True)
 class Path:
-    """One auth path — (family, source) pair."""
+    """One auth path — (provider, source) pair."""
 
-    family: Family
+    provider: Family
     source: Source
 
     def __str__(self) -> str:
-        return f"{self.family}.{self.source}"
+        return f"{self.provider}.{self.source}"
 
 
 @dataclass(frozen=True)

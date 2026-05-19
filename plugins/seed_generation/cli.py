@@ -5,7 +5,7 @@ S11 wires the seed-generation orchestrator into both the top-level
 slash command. The CLI composes the existing modules:
 
 1. :func:`plugins.seed_generation.picker.pick_bindings` — resolve per-role
-   ``(model, family, source)`` bindings (S5.5 picker).
+   ``(model, provider, source)`` bindings (S5.5 picker).
 2. :func:`plugins.seed_generation.cost_preview.estimate_cost` — render
    per-role + aggregate USD estimate (S6.5 cost preview).
 3. :func:`plugins.seed_generation.pre_flight.run_pre_flight` — credential
