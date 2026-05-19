@@ -2791,7 +2791,7 @@ routing ownership 이동.
 - **`scripts/check_docs_links.py` — docs 사이트 링크 정적 + HTTP 점검
   스크립트.** site/src 의 모든 `.tsx`/`.ts` 에서 본문/JSX 링크 패턴 (
   `href="..."`, ``href={`...`}``, `src="..."`, `to="..."`, 그리고 markdown
-  스타일 `[text](url)`) 을 모두 추출. 4 분류:
+  스타일 `[label](href)`) 을 모두 추출. 4 분류:
   - **internal /docs/...** — `site/src/app/docs/` 하위 `page.tsx` slug
     와 차집합 → 누락 시 broken
   - **internal /<other>...** — `/portfolio`, `/works`, `/petri-bundle/`
@@ -2810,7 +2810,7 @@ routing ownership 이동.
 - **`scripts/check_docs_links.py` — static + HTTP audit script for docs
   site links.** Extracts every link-shaped string from `site/src/**.tsx`
   / `.ts` (JSX `href="..."`, ``href={`...`}``, `src="..."`, `to="..."`,
-  and markdown-style `[text](url)` inside string literals). Classifies
+  and markdown-style `[label](href)` inside string literals). Classifies
   into four buckets:
   - **internal /docs/...** — diffed against the `page.tsx` slug set
     under `site/src/app/docs/`; misses flagged.
