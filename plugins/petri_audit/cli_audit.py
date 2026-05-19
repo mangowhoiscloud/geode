@@ -27,6 +27,7 @@ import logging
 import os
 import shlex
 from pathlib import Path
+from typing import Any
 
 import typer
 from core.ui.console import console
@@ -88,9 +89,16 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
     if not report.archived_raw:
         return
     try:
-        from core.audit.dim_extractor import extract_dim_aggregates
+        from core.audit.dim_extractor import extract_dim_aggregates, extract_evidence
 
         aggregates = extract_dim_aggregates(report.archived_raw)
+        # G2 (2026-05-20) — bundle per-dim top-K evidence into the same
+        # stdout JSON so ``autoresearch/train.py`` can persist it
+        # alongside dim_means/dim_stderr in ``state/baseline.json``.
+        # top_k=3 mirrors the agreed evidence-volume tier (~250 KB
+        # per audit; runner-friendly). Empty evidence dict is fine —
+        # autoresearch treats it as "no signal".
+        evidence = extract_evidence(report.archived_raw, top_k=3)
     except Exception:
         log.warning(
             "petri_audit: dim aggregate emission failed for %s",
@@ -100,7 +108,10 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
         return
     if not aggregates.get("dim_means"):
         return
-    print(json.dumps(aggregates, separators=(",", ":")))
+    summary_payload: dict[str, Any] = dict(aggregates)
+    if evidence:
+        summary_payload["evidence"] = evidence
+    print(json.dumps(summary_payload, separators=(",", ":")))
 
 
 def audit(

@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-G2 — Petri evidence schema in `baseline.json` + audit-summary
+  pipe.** Second PR of the 2026-05-20 self-improving-loop wiring
+  sprint (G1-G5). `core/audit/dim_extractor.extract_evidence(eval_path,
+  top_k=3)` extracts per-dim worst-K sample rows (`{sample_id, value,
+  explanation, highlights}`) from the petri `.eval` archive — the
+  "engineering evidence" the G5 self-improving-loop runner needs to
+  rewrite prompts with anchored grounding (not just scalar drift).
+  `plugins/petri_audit/cli_audit._emit_dim_aggregates` bundles
+  evidence into the same stdout JSON line autoresearch already
+  grep-parses. `autoresearch/train.py` `_load_baseline` /
+  `_write_baseline` schema extended to `{dim_means, dim_stderr,
+  evidence}`; `run_audit` 5-tuple return adds `evidence` as the third
+  element. Backward compat: missing `evidence` key in summary or
+  legacy baseline.json → empty dict, no behavior change.
+  **Naming hygiene companion** (per `feedback_no_naive_variable_names`):
+  PR-G1 의 3 G1 test 들에서 `tmp_path` 통째 흘림 정리 — `run_dir` /
+  `run_root` alias 도입. PR-G2 자체 신규 코드는 처음부터 의미 부여
+  (`evidence_by_dim`, `archive_path`, `baseline_payload`,
+  `summary_payload`). 18 new tests cover 7 evidence extractor
+  scenarios + 4 baseline I/O roundtrips + 2 audit summary parsing
+  paths + 3 G1 test alias diffs. Quality gates: ruff / mypy / 93+
+  evidence-touched tests green.
+
 ### Changed
 
 - **autoresearch self-positioning rewrite — drop "fork" framing, name the
