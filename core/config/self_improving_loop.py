@@ -179,6 +179,36 @@ def _resolve_config_path(path: Path | str | None) -> Path:
     return GLOBAL_CONFIG_TOML
 
 
+def _emit_defaults_notice(reason: str, path: Path) -> None:
+    """Notify the active SessionJournal that the loader fell back to defaults.
+
+    P2 — closes the "config loader default sub silent" gap from the
+    2026-05-19 observability audit §4. ``reason`` is one of
+    ``file_missing`` / ``read_error`` / ``section_missing`` so the
+    operator can tell which fallback fired without re-reading the file.
+    The emit is a no-op outside an :func:`session_journal_scope` so
+    callers that load the config without an active audit run (REPL
+    bootstrap, petri user-overrides) stay unaffected.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        journal.append(
+            "self_improving_loop_config_defaults_applied",
+            level="warn" if reason == "read_error" else "info",
+            payload={"reason": reason, "path": str(path)},
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "self-improving-loop config: defaults-notice emit failed (reason=%r)",
+            reason,
+            exc_info=True,
+        )
+
+
 def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImprovingLoopConfig:
     """Load + validate the ``[self_improving_loop.*]`` section of ``config.toml``.
 
@@ -195,6 +225,7 @@ def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImpro
     resolved = _resolve_config_path(path)
     if not resolved.is_file():
         log.debug("self-improving-loop config: %s does not exist; using defaults", resolved)
+        _emit_defaults_notice("file_missing", resolved)
         return SelfImprovingLoopConfig()
     try:
         with resolved.open("rb") as fh:
@@ -205,8 +236,10 @@ def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImpro
             resolved,
             exc,
         )
+        _emit_defaults_notice("read_error", resolved)
         return SelfImprovingLoopConfig()
     section = raw.get("self_improving_loop")
     if not isinstance(section, dict):
+        _emit_defaults_notice("section_missing", resolved)
         return SelfImprovingLoopConfig()
     return SelfImprovingLoopConfig.model_validate(section)

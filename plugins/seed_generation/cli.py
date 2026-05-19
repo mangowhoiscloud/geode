@@ -39,7 +39,7 @@ from typing import IO, Any
 
 import typer
 
-from plugins.seed_generation.cost_preview import estimate_cost, format_cost_summary
+from plugins.seed_generation.cost_preview import CostEstimate, estimate_cost, format_cost_summary
 from plugins.seed_generation.picker import (
     PickerResult,
     pick_bindings,
@@ -162,42 +162,99 @@ def run_audit_seeds(
     ``confirm_fn`` to bypass the interactive prompt, ``stdout`` /
     ``stderr`` to capture the rendered summary, and (via monkeypatch)
     swap out the picker / pipeline factory.
+
+    PR-P2 — the SessionJournal scope is opened here (was previously
+    inside ``_dispatch_pipeline``) so cost-preview, pre-flight, and
+    user-abort events also land in the per-session journal. Pre-flight
+    failures (the dominant pre-PR observability gap) now emit
+    ``preflight_failed`` with the structured issue list before the run
+    aborts.
     """
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
 
-    picker_result = pick_bindings()
-    print_tos_notice(picker_result, file=err, quiet=quiet)
+    from core.observability import SessionJournal, session_journal_scope
 
-    cost = estimate_cost(picker_result, candidate_count=candidates)
-    out.write(format_cost_summary(cost) + "\n")
+    run_id = f"{gen_tag}-{target_dim}"
+    journal = SessionJournal(
+        session_id=run_id,
+        gen_tag=gen_tag,
+        component="seed-generation",
+    )
+    with session_journal_scope(journal):
+        picker_result = pick_bindings()
+        print_tos_notice(picker_result, file=err, quiet=quiet)
 
-    report = run_pre_flight(picker_result)
-    out.write(render_pre_flight_report(report) + "\n")
-    if report.has_errors:
-        err.write("seed-generation: pre-flight failed; aborting.\n")
-        return 1
-
-    if not yes:
-        prompter = confirm_fn or _default_confirm
-        if not prompter(out, err):
-            err.write("seed-generation: user aborted at confirm prompt.\n")
-            return 1
-
-    # Pipeline construction is deferred until after the gate so the
-    # heavy SubAgentManager wiring isn't paid on a dry preview.
-    try:
-        _dispatch_pipeline(
-            picker_result=picker_result,
-            target_dim=target_dim,
-            gen_tag=gen_tag,
-            candidates_requested=candidates,
-            out=out,
-            err=err,
+        cost = estimate_cost(picker_result, candidate_count=candidates)
+        out.write(format_cost_summary(cost) + "\n")
+        journal.append(
+            "cost_preview",
+            payload={
+                "estimated_usd_total": round(cost.total_usd, 6),
+                "estimated_usd_subscription": round(cost.subscription_usd, 6),
+                "estimated_usd_payg": round(cost.payg_usd, 6),
+                "candidate_count": cost.candidate_count,
+                "match_count": cost.match_count,
+                "voter_count": cost.voter_count,
+            },
         )
-    except Exception as exc:  # pragma: no cover - bubbles up rich error
-        err.write(f"seed-generation: run failed — {exc}\n")
-        return 2
+
+        report = run_pre_flight(picker_result)
+        out.write(render_pre_flight_report(report) + "\n")
+        if report.has_errors:
+            journal.append(
+                "preflight_failed",
+                level="error",
+                payload={
+                    "issue_count": len(report.issues),
+                    "issues": [
+                        {
+                            "severity": issue.severity,
+                            "code": issue.code,
+                            "message": issue.message,
+                        }
+                        for issue in report.issues
+                    ],
+                },
+            )
+            err.write("seed-generation: pre-flight failed; aborting.\n")
+            return 1
+        journal.append(
+            "preflight_passed",
+            payload={"issue_count": len(report.issues)},
+        )
+
+        if not yes:
+            prompter = confirm_fn or _default_confirm
+            if not prompter(out, err):
+                journal.append(
+                    "user_aborted",
+                    level="warn",
+                    payload={"stage": "confirm_prompt"},
+                )
+                err.write("seed-generation: user aborted at confirm prompt.\n")
+                return 1
+
+        # Pipeline construction is deferred until after the gate so the
+        # heavy SubAgentManager wiring isn't paid on a dry preview.
+        try:
+            _dispatch_pipeline(
+                picker_result=picker_result,
+                target_dim=target_dim,
+                gen_tag=gen_tag,
+                candidates_requested=candidates,
+                cost=cost,
+                out=out,
+                err=err,
+            )
+        except Exception as exc:  # pragma: no cover - bubbles up rich error
+            journal.append(
+                "pipeline_run_failed",
+                level="error",
+                payload={"error": repr(exc)[:200]},
+            )
+            err.write(f"seed-generation: run failed — {exc}\n")
+            return 2
     return 0
 
 
@@ -215,6 +272,7 @@ def _dispatch_pipeline(
     target_dim: str,
     gen_tag: str,
     candidates_requested: int,
+    cost: CostEstimate,
     out: IO[str],
     err: IO[str],
 ) -> None:
@@ -224,10 +282,17 @@ def _dispatch_pipeline(
     --help`) doesn't pay the SubAgentManager + orchestrator cold-start
     cost. The function is monkeypatched in tests to assert the gate
     flow before the heavy import.
+
+    PR-P2 — the SessionJournal scope is now opened by the caller
+    (``run_audit_seeds``) so cost-preview / pre-flight events emitted
+    before this dispatch land in the same per-session journal.
+    Pipeline lifecycle markers (``pipeline_started`` /
+    ``pipeline_finished``) and the post-run ``cost_divergence`` event
+    are emitted via :func:`core.observability.current_session_journal`.
     """
     from core.paths import GEODE_HOME
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.observability import current_session_journal
     from plugins.seed_generation.orchestrator import (
         Pipeline,
         PipelineRegistry,
@@ -254,36 +319,64 @@ def _dispatch_pipeline(
     out.write(f"seed-generation: starting run {run_id!r}\n")
     out.write(f"seed-generation: run_dir={run_dir}\n")
     out.flush()
-    # P1c — bind a SessionJournal so hook-routed subagent events land in
-    # ``~/.geode/self-improving-loop/<session_id>/journal.jsonl`` (default path),
-    # keeping the cross-loop journal location uniform with the
-    # autoresearch driver. The seed-generation ``<run_dir>`` keeps the
-    # state.json + survivors.json + elo_log.tsv (per-run artifacts);
-    # observability events live one level up under self-improving-loop/.
-    journal = SessionJournal(
-        session_id=run_id,
-        gen_tag=gen_tag,
-        component="seed-generation",
-    )
-    journal.append("pipeline_started", payload={"target_dim": target_dim})
-    with session_journal_scope(journal):
-        pipeline.run()
+
+    journal = current_session_journal()
+    if journal is not None:
+        journal.append("pipeline_started", payload={"target_dim": target_dim})
+
+    pipeline.run()
+
     # P0a dedup — canonical run metrics (survivors, usd_spent, pool_path_out)
     # live in sessions.jsonl via Pipeline._append_session_index. The
     # pipeline_finished event is a stream marker so consumers can checkpoint;
     # they join via session_id + gen_tag for the canonical row. See
     # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §6.
-    journal.append("pipeline_finished", payload={})
+    if journal is not None:
+        journal.append("pipeline_finished", payload={})
+        _emit_cost_divergence(journal, predicted_usd=cost.total_usd, actual_usd=state.usd_spent)
+
     survivors_line = (
         f"seed-generation: survivors.json at {state.pool_path_out}\n"
         if state.pool_path_out is not None
         else "seed-generation: survivors.json not written (run_dir unset)\n"
     )
+    journal_line = f"seed-generation: journal at {journal.path}\n" if journal is not None else ""
     out.write(
         f"seed-generation: run {run_id!r} finished; "
         f"survivors={len(state.survivors)} usd={state.usd_spent:.4f}\n"
-        f"seed-generation: state.json at {run_dir / 'state.json'}\n"
-        f"seed-generation: journal at {journal.path}\n" + survivors_line
+        f"seed-generation: state.json at {run_dir / 'state.json'}\n" + journal_line + survivors_line
+    )
+
+
+# P2-2 — cost_divergence threshold above which the event is elevated to
+# ``warn`` so a log scanner / dashboard can highlight runs that materially
+# overshot the pre-run estimate. Set at 50 % drift — matches the audit
+# §4 "예측-실측 divergence 추적 불가" gap where any sizeable miss should
+# surface, but small variance from the empirical token-budget heuristic
+# (typical ±20 %) stays at info level.
+_COST_DIVERGENCE_WARN_RATIO: float = 0.5
+
+
+def _emit_cost_divergence(journal: Any, *, predicted_usd: float, actual_usd: float) -> None:
+    """Emit a ``cost_divergence`` event comparing pre-run estimate to actual spend.
+
+    ``ratio`` is ``(actual - predicted) / predicted`` so a positive
+    value means overspend; ``None`` when the prediction was zero (e.g.
+    a fully subscription-backed run where the PAYG total is $0). Above
+    the warn threshold the event is elevated to ``warn`` level.
+    """
+    delta = actual_usd - predicted_usd
+    ratio: float | None = (delta / predicted_usd) if predicted_usd > 0 else None
+    level = "warn" if (ratio is not None and abs(ratio) >= _COST_DIVERGENCE_WARN_RATIO) else "info"
+    journal.append(
+        "cost_divergence",
+        level=level,
+        payload={
+            "predicted_usd": round(predicted_usd, 6),
+            "actual_usd": round(actual_usd, 6),
+            "delta_usd": round(delta, 6),
+            "ratio": round(ratio, 4) if ratio is not None else None,
+        },
     )
 
 
