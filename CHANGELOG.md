@@ -49,6 +49,28 @@ functional change.
 
 ### Changed
 
+- **P0c — quota banner writer wiring (anthropic provider + subscription
+  abort).** Per the 2026-05-19 observability audit §4, the
+  `SubscriptionQuotaBanner` was installed at REPL startup but never fed
+  in production code — `set_state` and `trip_abort` had 0 callers
+  outside tests, so operators saw no quota signal at all. Two writers
+  now close that gap:
+  1. `core/llm/providers/anthropic.py` — httpx event hooks on both sync
+     and async singleton clients read `anthropic-ratelimit-tokens-{limit,
+     remaining}` from every response and push `set_state(provider="anthropic",
+     used_tokens, total_tokens)`. Async hook is `async def`. Silently
+     skips on missing headers (PAYG path) or missing banner (non-REPL
+     invocations).
+  2. `plugins/petri_audit/credential_source.py` —
+     `CredentialResolutionError(subscription_only=True)` now also calls
+     `trip_abort` with the actionable resolver message before raising,
+     so the FE banner turns red the moment the resolver aborts.
+     Non-subscription errors do not trip.
+  Six new tests guard the wiring: header parsing (limit/remaining/missing/
+  unparseable), feeder happy path / no-banner no-op / missing-headers
+  no-op, and the credential trip wiring (subscription_only trips,
+  generic doesn't trip, no banner installed is safe). Codex MCP
+  cross-LLM verify: clean on first pass.
 - **Rename `family` → `provider` in provider-semantic contexts.** The
   identifier `family` ambiguously named both (a) the LLM vendor —
   anthropic / openai / zhipuai — and (b) within-vendor model versioning

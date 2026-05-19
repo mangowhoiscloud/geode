@@ -110,12 +110,44 @@ class CredentialResolutionError(RuntimeError):
                 f"  3. Pin a different source in [self_improving_loop.petri.<role>] "
                 f'with source = "api_key".\n'
             )
+            # P0c — trip the FE banner red so the operator sees the abort
+            # state without reading the traceback. SoT contract per
+            # docs/audits/2026-05-19-self-improving-loop-observability-gap.md
+            # §4: the banner was previously installed but never tripped
+            # from production code. The reason string mirrors the actionable
+            # message above so /status renders the same remediation path.
+            _trip_banner_subscription_abort(
+                provider=provider,
+                reason=(
+                    f"{provider}: subscription quota exhausted — enable "
+                    f"[self_improving_loop] fallback_to_payg=true or wait for reset."
+                ),
+            )
         else:
             super().__init__(
                 f"provider={provider}: no credential source available "
                 f"(allowed={allowed}); set an env var from the picker or "
                 f"adjust settings.{provider}_credential_source"
             )
+
+
+def _trip_banner_subscription_abort(*, provider: str, reason: str) -> None:
+    """Push the subscription-exhausted state to the active quota banner.
+
+    No-op when no banner is installed (non-REPL invocations) or when
+    ``core.cli.quota_banner`` is unavailable. Defensive: any exception is
+    swallowed because observability must not break the error path it
+    observes — the CredentialResolutionError still raises.
+    """
+    try:
+        from core.cli.quota_banner import current_banner
+
+        banner = current_banner()
+        if banner is None:
+            return
+        banner.trip_abort(reason=reason)
+    except Exception:  # pragma: no cover - defensive
+        log.debug("credential_source: quota banner trip_abort failed", exc_info=True)
 
 
 def list_credential_sources(provider: str) -> list[dict[str, Any]]:

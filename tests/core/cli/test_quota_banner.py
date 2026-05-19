@@ -266,3 +266,94 @@ def test_render_abort_message_passes_resolver_text_verbatim() -> None:
     )
     dlg = render_abort_message("openai", msg)
     assert dlg.body == msg
+
+
+# ── P0c — banner writer wiring (anthropic.py response hook) ─────────────
+
+
+def test_extract_anthropic_quota_parses_rate_limit_headers() -> None:
+    """Headers carrying anthropic-ratelimit-tokens-{limit,remaining} parse
+    to (used, total) tuple."""
+    from core.llm.providers.anthropic import _extract_anthropic_quota
+
+    headers = {
+        "anthropic-ratelimit-tokens-limit": "1000",
+        "anthropic-ratelimit-tokens-remaining": "250",
+    }
+    assert _extract_anthropic_quota(headers) == (750, 1000)
+
+
+def test_extract_anthropic_quota_returns_none_when_headers_missing() -> None:
+    """PAYG path — no rate-limit headers → no-op signal back to caller."""
+    from core.llm.providers.anthropic import _extract_anthropic_quota
+
+    assert _extract_anthropic_quota({}) is None
+    assert _extract_anthropic_quota({"x-other": "v"}) is None
+
+
+def test_extract_anthropic_quota_returns_none_on_unparseable_values() -> None:
+    """Defensive — never raise from the response hook."""
+    from core.llm.providers.anthropic import _extract_anthropic_quota
+
+    assert (
+        _extract_anthropic_quota(
+            {
+                "anthropic-ratelimit-tokens-limit": "not-a-number",
+                "anthropic-ratelimit-tokens-remaining": "250",
+            }
+        )
+        is None
+    )
+
+
+def test_feed_banner_from_anthropic_response_updates_installed_banner() -> None:
+    """Hook reads headers off the response and pushes state into the
+    process-wide banner. No-op when no banner installed."""
+    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+
+    banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
+    install_banner(banner)
+
+    class _FakeResponse:
+        headers = {
+            "anthropic-ratelimit-tokens-limit": "1000",
+            "anthropic-ratelimit-tokens-remaining": "700",
+        }
+
+    _feed_banner_from_anthropic_response(_FakeResponse())
+    state = banner.state
+    assert state.provider == "anthropic"
+    assert state.used_tokens == 300
+    assert state.total_tokens == 1000
+
+
+def test_feed_banner_noops_when_no_banner_installed() -> None:
+    """Without a banner installed, the hook must silently return."""
+    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+
+    # Banner is detached by the autouse fixture.
+
+    class _FakeResponse:
+        headers = {
+            "anthropic-ratelimit-tokens-limit": "1000",
+            "anthropic-ratelimit-tokens-remaining": "700",
+        }
+
+    # Just ensures no exception is raised.
+    _feed_banner_from_anthropic_response(_FakeResponse())
+
+
+def test_feed_banner_noops_on_missing_headers() -> None:
+    """PAYG path keeps banner state untouched."""
+    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+
+    banner = SubscriptionQuotaBanner()
+    install_banner(banner)
+    banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
+
+    class _FakeResponse:
+        headers: dict[str, str] = {}
+
+    _feed_banner_from_anthropic_response(_FakeResponse())
+    assert banner.state.used_tokens == 10
+    assert banner.state.total_tokens == 100

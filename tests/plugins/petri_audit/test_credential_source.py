@@ -396,3 +396,64 @@ def test_smoke_adapter_module_round_trip(monkeypatch):
     source = cs.resolve_credential_source("anthropic")
     # The chosen source is a real adapter that the registry can probe.
     assert is_adapter_available("anthropic", source) is True
+
+
+# ── P0c — subscription_only error trips the quota banner ────────────────
+
+
+def test_subscription_only_credential_error_trips_banner():
+    """Raising CredentialResolutionError(subscription_only=True) must push
+    the abort state to the active quota banner (P0c writer wiring per
+    docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4).
+    Operators see the red banner immediately without reading tracebacks."""
+    from core.cli.quota_banner import (
+        SubscriptionQuotaBanner,
+        install_banner,
+        uninstall_banner,
+    )
+
+    banner = SubscriptionQuotaBanner()
+    install_banner(banner)
+    try:
+        with pytest.raises(cs.CredentialResolutionError):
+            raise cs.CredentialResolutionError(
+                "anthropic", ["api_key", "claude-cli"], subscription_only=True
+            )
+        state = banner.state
+        assert state.aborted is True
+        assert "anthropic" in state.abort_reason
+        assert "fallback_to_payg" in state.abort_reason
+    finally:
+        uninstall_banner()
+
+
+def test_non_subscription_credential_error_does_not_trip_banner():
+    """Generic CredentialResolutionError (no source available, not a
+    subscription exhaustion) must NOT trip the banner — only subscription
+    aborts get the red state."""
+    from core.cli.quota_banner import (
+        SubscriptionQuotaBanner,
+        install_banner,
+        uninstall_banner,
+    )
+
+    banner = SubscriptionQuotaBanner()
+    install_banner(banner)
+    try:
+        with pytest.raises(cs.CredentialResolutionError):
+            raise cs.CredentialResolutionError("anthropic", ["api_key"])
+        assert banner.state.aborted is False
+    finally:
+        uninstall_banner()
+
+
+def test_subscription_only_banner_trip_safe_when_no_banner_installed():
+    """When no banner is installed (non-REPL invocation) the error must
+    still raise cleanly — the wiring is optional, not load-bearing."""
+    from core.cli.quota_banner import uninstall_banner
+
+    uninstall_banner()
+    with pytest.raises(cs.CredentialResolutionError):
+        raise cs.CredentialResolutionError(
+            "anthropic", ["api_key", "claude-cli"], subscription_only=True
+        )

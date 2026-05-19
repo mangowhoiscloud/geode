@@ -116,6 +116,84 @@ _async_client_lock = threading.Lock()
 # Circuit breaker for Anthropic API calls
 _circuit_breaker = CircuitBreaker()
 
+
+# ---------------------------------------------------------------------------
+# P0c — quota banner writer wiring
+# ---------------------------------------------------------------------------
+#
+# httpx event hook that feeds ``SubscriptionQuotaBanner.set_state`` from
+# the ``anthropic-ratelimit-tokens-*`` response headers. Runs on every
+# response; values are present on subscription-OAuth routed calls and
+# typically absent on PAYG calls — the hook silently skips when the
+# headers are missing so PAYG users see no banner change.
+#
+# Banner SoT: only the quota writer here (and the trip_abort call in
+# ``plugins.petri_audit.credential_source``) feeds the banner. Per the
+# 2026-05-19 observability audit §4, the banner was previously installed
+# but never fed in production code — the operator never saw a quota
+# signal. This hook closes that gap.
+
+
+def _extract_anthropic_quota(headers: object) -> tuple[int, int] | None:
+    """Parse ``(used, limit)`` from ``anthropic-ratelimit-tokens-*`` headers.
+
+    Returns ``None`` when the headers are absent (PAYG path) or
+    unparseable (defensive — never raise from the response hook). Both
+    values are int tokens for the **current rate-limit window** (per-day
+    on subscription OAuth; per-minute on PAYG); the banner renders them
+    as a usage ratio.
+    """
+    try:
+        limit_str = headers.get("anthropic-ratelimit-tokens-limit")  # type: ignore[attr-defined]
+        remaining_str = headers.get("anthropic-ratelimit-tokens-remaining")  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+    if not limit_str or not remaining_str:
+        return None
+    try:
+        limit = int(limit_str)
+        remaining = int(remaining_str)
+    except (TypeError, ValueError):
+        return None
+    used = max(0, limit - remaining)
+    return used, limit
+
+
+def _feed_banner_from_anthropic_response(response: object) -> None:
+    """Read Anthropic rate-limit headers and push to the active banner.
+
+    No-op when no banner is installed (CLI front-end didn't start one) or
+    when the response carries no rate-limit headers. Defensive: any
+    exception here is swallowed because observability MUST NOT break the
+    response path it observes (parity with SessionJournal.append).
+    """
+    try:
+        headers = getattr(response, "headers", None)
+        if headers is None:
+            return
+        parsed = _extract_anthropic_quota(headers)
+        if parsed is None:
+            return
+        used, limit = parsed
+        from core.cli.quota_banner import current_banner
+
+        banner = current_banner()
+        if banner is None:
+            return
+        banner.set_state(provider="anthropic", used_tokens=used, total_tokens=limit)
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic quota banner feed failed", exc_info=True)
+
+
+def _sync_response_hook(response: object) -> None:
+    """httpx sync event hook — delegates to the banner feeder."""
+    _feed_banner_from_anthropic_response(response)
+
+
+async def _async_response_hook(response: object) -> None:
+    """httpx async event hook — delegates to the banner feeder."""
+    _feed_banner_from_anthropic_response(response)
+
 # v0.88.0 — RETRYABLE_ERRORS / NON_RETRYABLE_ERRORS resolve through the
 # module-level ``__getattr__`` hook (defined above) on first use.  Their
 # concrete tuples used to live here as eager module-level expressions
@@ -153,6 +231,7 @@ def get_anthropic_client() -> anthropic.Anthropic:
             http_client = httpx.Client(
                 limits=_build_httpx_limits(),
                 timeout=_build_httpx_timeout(),
+                event_hooks={"response": [_sync_response_hook]},
             )
             _sync_client = anthropic.Anthropic(
                 api_key=_resolve_anthropic_key(),
@@ -185,6 +264,7 @@ def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnt
             http_client = httpx.AsyncClient(
                 limits=_build_httpx_limits(),
                 timeout=_build_httpx_timeout(),
+                event_hooks={"response": [_async_response_hook]},
             )
             _async_client = anthropic.AsyncAnthropic(
                 api_key=key,
