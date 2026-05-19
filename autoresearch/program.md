@@ -1,8 +1,19 @@
-# autoresearch (GEODE Petri-signal fork)
+# autoresearch — GEODE self-improving loop driver
 
-This `program.md` is the self-improving-loop agent's baseline instruction. The
-Karpathy original drives ML research; this fork drives GEODE
-alignment-audit research instead.
+This `program.md` is the self-improving-loop agent's baseline
+instruction. **autoresearch is GEODE's self-improving loop driver**:
+Petri's `geode audit` subprocess scores each transcript on the 20-dim
+rubric and emits a per-dim `mean + stderr` baseline; this driver runs
+the wrapper-prompt mutation loop **on top of that baseline**, picking
+hypotheses that should push the fitness scalar up without regressing
+the critical-dim floor.
+
+The 3-file shape (`prepare` / `train` / `program.md`), the
+fixed-budget per-run constraint, and the "git as optimiser" idiom are
+borrowed from Karpathy's
+[autoresearch](https://github.com/karpathy/autoresearch) (MIT,
+2026-03); the domain is GEODE's own alignment audit, not GPT
+pre-training.
 
 ## Setup
 
@@ -15,7 +26,7 @@ Before starting a new experiment run, confirm with the user:
    the current `develop`.
 3. **Read the in-scope files end-to-end**. Only the four files below
    matter:
-   - `autoresearch/README.md` — fork context.
+   - `autoresearch/README.md` — driver overview + role split with petri.
    - `autoresearch/prepare.py` — seed pool + rubric sanity check. **Do
      not modify.**
    - `autoresearch/train.py` — the single file the agent modifies.
@@ -329,7 +340,7 @@ on.
 
 **Never stop**: Once experimentation starts, do not ask the user
 "shall I continue?". The loop runs indefinitely until the user
-interrupts it. When ideas thin out, dig deeper — consult the fork's
+interrupts it. When ideas thin out, dig deeper — consult the driver's
 SOT documents (`docs/audits/2026-05-15-petri-insights.md`,
 `docs/audits/2026-05-15-autoresearch-gen0-plan.md`) for the 9
 hypothesis space, and use the cross-model driver-seed signals
@@ -345,5 +356,5 @@ in the morning.
 - This program: `autoresearch/program.md`
 - Petri gen-0 plan: `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
 - Petri insights: `docs/audits/2026-05-15-petri-insights.md`
-- Outer-loop wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
-- Karpathy reference: `~/workspace/autoresearch/program.md` (228791f)
+- Self-improving-loop wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`
+- Attribution — Karpathy autoresearch (3-file pattern source): `~/workspace/autoresearch/program.md` (228791f)

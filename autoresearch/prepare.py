@@ -1,17 +1,20 @@
 """
-One-time sanity check for autoresearch experiments (Petri-signal fork).
+One-time sanity check for autoresearch — GEODE self-improving loop pre-flight.
 
-Karpathy 원본의 ``prepare.py`` 는 fineweb 다운로드 + BPE tokenizer 학습
-이었음. 본 fork 의 prepare 는 그 자리에 **fixed audit harness** 의 무결성
-검증을 둠 — Petri seed pool 의 file count / format, AlphaEval rubric 의 dim
-count, audit CLI 의 dry-run reachability.
+``train.py`` 가 자동 엔지니어링 루프를 돌리기 전에 ``prepare.py`` 가 한 번
+실행되어 **fixed audit harness** 의 무결성을 검증한다 — Petri seed pool 의
+file count / format, AlphaEval rubric 의 dim count, audit CLI 의 dry-run
+reachability. 측정 대상 (rubric · seed pool · subprocess 진입점) 은 모두
+petri 가 소유하는 자산이며, ``prepare.py`` 는 그 자산이 자동 엔지니어링
+루프에 사용 가능한 상태인지를 확인할 뿐 직접 수정하지 않는다.
 
 Usage:
     uv run python autoresearch/prepare.py             # full check
     uv run python autoresearch/prepare.py --skip-cli  # rubric/seed only
 
-Artefact 위치 (원본 prepare 의 ``~/.cache/autoresearch/`` 와 동일한 정신
-으로, 본 fork 는 ``~/.cache/autoresearch-petri/`` 에 sanity report 만 저장):
+Artefact 위치 — sanity report 만 ``~/.cache/autoresearch-petri/`` 에
+저장한다 (3-file pattern 의 그릇은 Karpathy autoresearch 에서 차용했지만
+저장 위치는 GEODE 의 ``~/.cache/`` 관행을 따른다):
 
     ~/.cache/autoresearch-petri/prepare-report.txt
 """
@@ -152,7 +155,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print("autoresearch (Petri-signal fork) — prepare.py sanity check")
+    print("autoresearch — prepare.py sanity check")
     print(f"  repo: {REPO_ROOT}")
     print()
 

@@ -47,6 +47,25 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **autoresearch self-positioning rewrite — drop "fork" framing, name the
+  petri/autoresearch role split.** The 5 autoresearch files (`__init__.py`,
+  `program.md`, `README.md`, `train.py` docstring, `prepare.py`) no longer
+  describe themselves as "a Petri-signal fork of Karpathy/autoresearch".
+  autoresearch is now framed as **GEODE's self-improving loop driver**:
+  petri owns the *measurement* layer (rubric + dim scoring +
+  `dim_extractor` raw `mean`/`stderr`); autoresearch owns the
+  *aggregation + selection* layer (tier classification, weights, cross-axis
+  gate, auto-promote). The 3-file shape + fixed-budget loop + git-as-optimiser
+  idiom borrowed from Karpathy autoresearch (MIT, 2026-03) stay credited
+  as attribution but are no longer the headline framing. README.md adds a
+  role-split table verifying no code duplication between petri's
+  `core/audit/dim_extractor.extract_dim_aggregates` (raw measurement only)
+  and autoresearch's `compute_fitness` (selection only). No behaviour
+  change — `prepare.py` stdout banner and `train.py` docstring header are
+  the only string outputs that move.
+
 ### Added
 
 - **PR-ε1 — `geode config migrate-petri-toml` CLI + sample
