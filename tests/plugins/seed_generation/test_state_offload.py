@@ -232,6 +232,79 @@ def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# G1 — latest_seed_pool symlink (closed-loop wiring sprint, 2026-05-20)
+# ---------------------------------------------------------------------------
+
+
+def test_persist_survivors_updates_latest_seed_pool_symlink(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """``~/.geode/self-improving-loop/latest_seed_pool`` is stamped to this run."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
+    assert latest.is_symlink()
+    assert latest.resolve() == (tmp_path / "survivors").resolve()
+
+
+def test_persist_survivors_latest_symlink_moves_forward(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """A second run replaces the symlink target rather than failing on EEXIST."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    run_a = tmp_path / "runA"
+    run_a.mkdir()
+    state_a = _populated_state(run_a)
+    cand_a = _seed_candidate_md(run_a, "c-00")
+    state_a.candidates = [{"id": "c-00", "path": str(cand_a), "target_dim": "broken_tool_use"}]
+    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+
+    run_b = tmp_path / "runB"
+    run_b.mkdir()
+    state_b = _populated_state(run_b)
+    cand_b = _seed_candidate_md(run_b, "c-00")
+    state_b.candidates = [{"id": "c-00", "path": str(cand_b), "target_dim": "broken_tool_use"}]
+    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_b / "survivors").resolve()
+
+
+def test_persist_survivors_latest_symlink_swallows_oserror(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Symlink-update failure must not break the run (handoff is best-effort)."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    original_symlink = Path.symlink_to
+
+    def _selective_symlink(self: Path, target: Any, *a: Any, **kw: Any) -> None:
+        if self.name == "latest_seed_pool":
+            raise OSError("simulated symlink failure")
+        return original_symlink(self, target, *a, **kw)
+
+    monkeypatch.setattr(Path, "symlink_to", _selective_symlink)
+    state = _populated_state(tmp_path)
+    cand_path = _seed_candidate_md(tmp_path, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()  # must not raise
+    # state.pool_path_out is still stamped — canonical handoff remains intact.
+    assert state.pool_path_out == tmp_path / "survivors"
+
+
+# ---------------------------------------------------------------------------
 # P1a — cross-loop session index (defects #2, #3 from 2026-05-19 plan)
 # ---------------------------------------------------------------------------
 

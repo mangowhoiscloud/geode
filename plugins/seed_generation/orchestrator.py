@@ -391,6 +391,7 @@ class Pipeline:
                 dst = survivors_dir / src.name
                 dst.symlink_to(src.resolve())
             self.state.pool_path_out = survivors_dir
+            self._update_latest_seed_pool_symlink(survivors_dir)
             log.info(
                 "seed-generation cross-loop handoff: %d survivors → %s (metadata at %s)",
                 len(rows),
@@ -401,6 +402,34 @@ class Pipeline:
             log.warning(
                 "seed-generation survivors export failed at %s: %s",
                 self.state.run_dir,
+                exc,
+            )
+
+    @staticmethod
+    def _update_latest_seed_pool_symlink(survivors_dir: Path) -> None:
+        """Point ``~/.geode/self-improving-loop/latest_seed_pool`` at this run's survivors.
+
+        G1 closed-loop wiring: autoresearch ``_resolve_seed_select`` reads
+        this symlink as the env-less fallback so the next audit
+        automatically consumes the freshest survivor pool without a
+        manual ``AUTORESEARCH_SEED_SELECT=…`` export. Older runs stay
+        addressable by their ``<run_dir>/survivors/`` path; only the
+        symlink target moves forward.
+
+        Failures are logged but never raise — the canonical handoff is
+        ``state.pool_path_out`` + ``sessions.jsonl``; the symlink is a
+        convenience accelerator, not a correctness boundary.
+        """
+        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_seed_pool"
+        try:
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(survivors_dir.resolve())
+        except OSError as exc:
+            log.warning(
+                "seed-generation latest_seed_pool symlink update failed at %s: %s",
+                latest,
                 exc,
             )
 

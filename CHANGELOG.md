@@ -49,6 +49,21 @@ functional change.
 
 ### Added
 
+- **PR-G1 — `latest_seed_pool` symlink closes the seed-generation →
+  autoresearch handoff.** First PR of the 2026-05-20 self-improving-loop
+  wiring sprint (5 PRs, G1-G5). `Pipeline._persist_survivors` now
+  stamps `~/.geode/self-improving-loop/latest_seed_pool` to the current
+  run's `survivors/` directory after the cross-loop handoff fires;
+  `autoresearch/train.py::_resolve_seed_select` gains a 4-tier
+  precedence (env > latest_seed_pool symlink > config seed_select >
+  module constant) so the next audit auto-picks the freshest survivor
+  pool without a manual `AUTORESEARCH_SEED_SELECT=…` export. Dead
+  symlinks (target removed) fall through to config — clean install
+  with no prior seed-generation run still works. 6 new tests cover
+  symlink creation + forward-move on second run + OSError tolerance +
+  4-tier precedence + dead-symlink fallback. Quality gates: ruff /
+  mypy / 376 seed-gen+autoresearch tests all green.
+
 - **PR-ε1 — `geode config migrate-petri-toml` CLI + sample
   `[self_improving_loop.*]` config fixture.** Closes the docs +
   backfill phase of the 2026-05-19 self-improving-loop config
