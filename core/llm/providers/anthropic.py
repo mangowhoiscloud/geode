@@ -153,7 +153,7 @@ _circuit_breaker = CircuitBreaker()
 
 
 # ---------------------------------------------------------------------------
-# P0c — quota banner writer wiring
+# P0c — quota banner writer wiring (callback-registration pattern)
 # ---------------------------------------------------------------------------
 #
 # httpx event hook that feeds ``SubscriptionQuotaBanner.set_state`` from
@@ -162,11 +162,39 @@ _circuit_breaker = CircuitBreaker()
 # typically absent on PAYG calls — the hook silently skips when the
 # headers are missing so PAYG users see no banner change.
 #
-# Banner SoT: only the quota writer here (and the trip_abort call in
-# ``plugins.petri_audit.credential_source``) feeds the banner. Per the
-# 2026-05-19 observability audit §4, the banner was previously installed
-# but never fed in production code — the operator never saw a quota
-# signal. This hook closes that gap.
+# Architecture note: we do NOT ``from core.cli.quota_banner import …`` here
+# because the import-linter contracts (``Agent stays pure``,
+# ``Server may host agent but never CLI``) forbid
+# ``core.llm.providers.* → core.cli.*``. Instead we expose
+# :func:`register_quota_setter` and let the CLI layer push its
+# ``banner.set_state`` callable in. The provider only knows about a
+# generic ``Callable``; the banner module owns the import direction.
+#
+# Banner SoT: only this quota writer (and the trip_abort call in
+# ``plugins.petri_audit.credential_source``, which is in plugins/ and
+# may import core.cli) feeds the banner. Per the 2026-05-19
+# observability audit §4, the banner was previously installed but never
+# fed in production code — the operator never saw a quota signal.
+
+
+# Type alias for the callback signature so the registration helper has a
+# concrete signature without dragging the SubscriptionQuotaBanner type in.
+_QuotaSetter = Any  # Callable[..., None] — kwargs: provider, used_tokens, total_tokens
+_quota_setter: _QuotaSetter | None = None
+
+
+def register_quota_setter(setter: _QuotaSetter | None) -> None:
+    """Install (or clear) the per-call quota-banner update callback.
+
+    Called by the CLI front-end immediately after ``install_banner`` so
+    the response hook can update the banner state without
+    ``core.llm.providers.anthropic`` importing ``core.cli.quota_banner``
+    (which the import-linter contract forbids — the agent path must not
+    depend on the CLI). Passing ``None`` clears the callback (used by
+    the CLI ``uninstall_banner`` path + by tests to detach between cases).
+    """
+    global _quota_setter
+    _quota_setter = setter
 
 
 def _extract_anthropic_quota(headers: object) -> tuple[int, int] | None:
@@ -210,12 +238,10 @@ def _feed_banner_from_anthropic_response(response: object) -> None:
         if parsed is None:
             return
         used, limit = parsed
-        from core.cli.quota_banner import current_banner
-
-        banner = current_banner()
-        if banner is None:
+        setter = _quota_setter
+        if setter is None:
             return
-        banner.set_state(provider="anthropic", used_tokens=used, total_tokens=limit)
+        setter(provider="anthropic", used_tokens=used, total_tokens=limit)
     except Exception:  # pragma: no cover - defensive
         log.debug("anthropic quota banner feed failed", exc_info=True)
 

@@ -306,32 +306,50 @@ def test_extract_anthropic_quota_returns_none_on_unparseable_values() -> None:
     )
 
 
-def test_feed_banner_from_anthropic_response_updates_installed_banner() -> None:
-    """Hook reads headers off the response and pushes state into the
-    process-wide banner. No-op when no banner installed."""
-    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+def test_feed_banner_from_anthropic_response_invokes_registered_setter() -> None:
+    """Hook reads headers off the response and pushes through the
+    registered ``register_quota_setter`` callback. The agent path does
+    NOT import ``core.cli.quota_banner`` directly (import-linter forbids
+    it); the CLI front-end registers its setter on REPL startup."""
+    from core.llm.providers.anthropic import (
+        _feed_banner_from_anthropic_response,
+        register_quota_setter,
+    )
 
-    banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
-    install_banner(banner)
+    received: dict[str, object] = {}
 
-    class _FakeResponse:
-        headers = {
-            "anthropic-ratelimit-tokens-limit": "1000",
-            "anthropic-ratelimit-tokens-remaining": "700",
+    def _setter(**kwargs: object) -> None:
+        received.update(kwargs)
+
+    register_quota_setter(_setter)
+    try:
+
+        class _FakeResponse:
+            headers = {
+                "anthropic-ratelimit-tokens-limit": "1000",
+                "anthropic-ratelimit-tokens-remaining": "700",
+            }
+
+        _feed_banner_from_anthropic_response(_FakeResponse())
+        assert received == {
+            "provider": "anthropic",
+            "used_tokens": 300,
+            "total_tokens": 1000,
         }
-
-    _feed_banner_from_anthropic_response(_FakeResponse())
-    state = banner.state
-    assert state.provider == "anthropic"
-    assert state.used_tokens == 300
-    assert state.total_tokens == 1000
+    finally:
+        register_quota_setter(None)
 
 
-def test_feed_banner_noops_when_no_banner_installed() -> None:
-    """Without a banner installed, the hook must silently return."""
-    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+def test_feed_banner_noops_when_no_setter_registered() -> None:
+    """Without a registered setter, the hook must silently return —
+    non-REPL invocations (geode audit subprocess) get no banner update
+    and no crash."""
+    from core.llm.providers.anthropic import (
+        _feed_banner_from_anthropic_response,
+        register_quota_setter,
+    )
 
-    # Banner is detached by the autouse fixture.
+    register_quota_setter(None)
 
     class _FakeResponse:
         headers = {
@@ -345,15 +363,83 @@ def test_feed_banner_noops_when_no_banner_installed() -> None:
 
 def test_feed_banner_noops_on_missing_headers() -> None:
     """PAYG path keeps banner state untouched."""
-    from core.llm.providers.anthropic import _feed_banner_from_anthropic_response
+    from core.llm.providers.anthropic import (
+        _feed_banner_from_anthropic_response,
+        register_quota_setter,
+    )
+
+    received: list[dict[str, object]] = []
+
+    def _setter(**kwargs: object) -> None:
+        received.append(kwargs)
+
+    register_quota_setter(_setter)
+    try:
+
+        class _FakeResponse:
+            headers: dict[str, str] = {}
+
+        _feed_banner_from_anthropic_response(_FakeResponse())
+        assert received == []
+    finally:
+        register_quota_setter(None)
+
+
+def test_install_banner_then_register_setter_wires_end_to_end() -> None:
+    """Integration: prompt_session installs the banner then registers
+    banner.set_state as the setter. A subsequent response feed updates
+    the banner via the callback (matching real REPL behavior)."""
+    from core.llm.providers.anthropic import (
+        _feed_banner_from_anthropic_response,
+        register_quota_setter,
+    )
+
+    banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
+    install_banner(banner)
+    register_quota_setter(banner.set_state)
+    try:
+
+        class _FakeResponse:
+            headers = {
+                "anthropic-ratelimit-tokens-limit": "1000",
+                "anthropic-ratelimit-tokens-remaining": "200",
+            }
+
+        _feed_banner_from_anthropic_response(_FakeResponse())
+        assert banner.state.provider == "anthropic"
+        assert banner.state.used_tokens == 800
+        assert banner.state.total_tokens == 1000
+    finally:
+        register_quota_setter(None)
+
+
+def test_uninstall_banner_clears_registered_setter() -> None:
+    """``uninstall_banner`` MUST also clear the anthropic quota setter so
+    a teardown doesn't leave a dangling reference to the detached
+    banner. Otherwise the next response feed would still call the old
+    banner's ``set_state`` and silently update a banner that the CLI no
+    longer renders."""
+    from core.llm.providers.anthropic import (
+        _feed_banner_from_anthropic_response,
+        register_quota_setter,
+    )
 
     banner = SubscriptionQuotaBanner()
     install_banner(banner)
-    banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
+    register_quota_setter(banner.set_state)
+    uninstall_banner()
+
+    # After uninstall, the setter should be cleared — feeding more
+    # responses must NOT update banner state.
+    banner.set_state(provider="anthropic", used_tokens=42, total_tokens=100)
 
     class _FakeResponse:
-        headers: dict[str, str] = {}
+        headers = {
+            "anthropic-ratelimit-tokens-limit": "999",
+            "anthropic-ratelimit-tokens-remaining": "500",
+        }
 
     _feed_banner_from_anthropic_response(_FakeResponse())
-    assert banner.state.used_tokens == 10
+    # Banner state stays at the value we wrote manually, not 499/999.
+    assert banner.state.used_tokens == 42
     assert banner.state.total_tokens == 100

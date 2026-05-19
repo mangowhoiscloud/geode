@@ -151,6 +151,18 @@ def _make_bottom_toolbar() -> Any:
     )
     install_banner(banner)
 
+    # P0c — wire the per-response Anthropic quota writer (callback
+    # registration instead of cross-layer import: the agent path
+    # ``core.llm.providers.anthropic`` is forbidden by import-linter from
+    # depending on ``core.cli.*``, so the CLI owns the import direction
+    # and pushes its setter in).
+    try:
+        from core.llm.providers.anthropic import register_quota_setter
+
+        register_quota_setter(banner.set_state)
+    except Exception:  # pragma: no cover - defensive
+        log.warning("anthropic quota setter registration failed", exc_info=True)
+
     def _render() -> Any:
         text = banner.render()
         if not text:

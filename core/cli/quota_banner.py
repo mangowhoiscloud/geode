@@ -338,5 +338,18 @@ def install_banner(banner: SubscriptionQuotaBanner) -> None:
 
 
 def uninstall_banner() -> None:
-    """Detach the active banner (used during REPL teardown / test cleanup)."""
+    """Detach the active banner (used during REPL teardown / test cleanup).
+
+    Also clears the Anthropic quota setter callback registered via
+    :func:`core.llm.providers.anthropic.register_quota_setter` so a
+    teardown test doesn't leave a dangling reference to the just-detached
+    banner. Defensive import — anthropic SDK may not be loadable in
+    every test environment.
+    """
     _set_current_banner(None)
+    try:
+        from core.llm.providers.anthropic import register_quota_setter
+
+        register_quota_setter(None)
+    except Exception:  # pragma: no cover - defensive
+        log.debug("anthropic quota setter clear failed", exc_info=True)

@@ -121,7 +121,12 @@ functional change.
 ### Changed
 
 - **P0c — quota banner writer wiring (anthropic provider + subscription
-  abort).** Per the 2026-05-19 observability audit §4, the
+  abort).** Implementation uses a **callback-registration pattern**
+  (`register_quota_setter`) rather than direct import — the import-linter
+  contracts (`Agent stays pure`, `Server may host agent but never CLI`)
+  forbid `core.llm.providers.* → core.cli.*`, so the CLI owns the
+  import direction and pushes its `banner.set_state` setter in on REPL
+  startup. `uninstall_banner` clears the registered setter symmetrically. Per the 2026-05-19 observability audit §4, the
   `SubscriptionQuotaBanner` was installed at REPL startup but never fed
   in production code — `set_state` and `trip_abort` had 0 callers
   outside tests, so operators saw no quota signal at all. Two writers
