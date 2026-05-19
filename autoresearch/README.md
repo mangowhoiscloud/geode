@@ -1,27 +1,40 @@
-# autoresearch — Petri-signal fork (GEODE)
+# autoresearch — GEODE self-improving loop driver
 
-A GEODE Petri-domain fork of Karpathy's
-[autoresearch](https://github.com/karpathy/autoresearch) (MIT, 2026-03,
-26K+ stars — a single-file ML training loop). The original
-3-file pattern (`prepare` / `train` / `program.md`), fixed-budget
-loop, and "git as optimiser" philosophy are kept verbatim; the domain
-is swapped from ML (GPT pre-train + `val_bpb`) to alignment auditing
-(Petri seed pool + AlphaEval fitness).
+`autoresearch/` is **GEODE's self-improving loop driver**. Petri's
+`geode audit` subprocess scores each transcript on the 20-dim alignment
+rubric and emits a per-dim `mean + stderr` baseline; this driver runs
+the wrapper-prompt mutation loop on top of that baseline, picking
+hypotheses that push the fitness scalar up without regressing the
+5 critical dims.
 
-## Why fork instead of port
+The 3-file shape (`prepare` / `train` / `program.md`), fixed per-run
+budget, and "git as optimiser" idiom are borrowed from Karpathy's
+[autoresearch](https://github.com/karpathy/autoresearch) (MIT,
+2026-03, 26K+ stars). The domain is GEODE's own alignment audit —
+not GPT pre-training — so `val_bpb` is replaced by the AlphaEval
+fitness scalar, `fineweb` tokenisation by the Petri seed pool +
+20-dim rubric, and the Muon-optimised training loop by a single
+audit invocation per file edit.
 
-The 3-file constraint Karpathy keeps so small is **the** design.
-The self-improving-loop agent (Claude Code / Codex) advances research by
-mutating a single file and grepping a few metrics. If GEODE's
-self-improving loop can pass through the same constraint, the cost frontier of
-self-improvement simplifies sharply. This fork places an equivalent
-single-mutation file (`train.py`) and a read-only harness
-(`prepare.py`) inside the GEODE tree to reuse exactly that loop
-pattern.
+## Role split — petri vs autoresearch
+
+| Layer | Owner | Outputs |
+|------|-------|---------|
+| dim universe (20 names + 3 info) | `plugins/petri_audit/judge_dims/geode_5axes.yaml` | rubric YAML |
+| per-dim raw measurement (`mean` + `stderr`, 1-10 concerning scale) | `geode audit` subprocess (LLM judge) → `core/audit/dim_extractor` | `dim_means` / `dim_stderr` dicts |
+| per-run baseline (latest "good" snapshot) | autoresearch (`state/baseline.json` after promote) | promoted snapshot |
+| tier classification (critical / auxiliary / info) | autoresearch (`AXIS_TIERS` in `train.py`) | constant tuples |
+| weight allocation (17 + stability sum to 1.0) | autoresearch (`DIM_WEIGHTS` + `STABILITY_WEIGHT`) | constant dict |
+| cross-axis gate + auto-promote rule | autoresearch (`compute_fitness` / `decide_promote`) | scalar + verdict |
+| wrapper-prompt mutation candidate | self-improving-loop agent (edits `WRAPPER_PROMPT_SECTIONS`) | git commit |
+
+Petri owns *what* gets measured; autoresearch owns *how it accrues into
+fitness* and *what counts as a promote*. No code overlap — the boundary
+runs through `dim_extractor` → `compute_fitness`.
 
 ## How it works
 
-Same three-file structure as the original:
+Same three-file structure borrowed from Karpathy autoresearch:
 
 - **`prepare.py`** — Petri seed pool + AlphaEval 20-dim rubric
   existence/format sanity check and audit-harness self-test. The
@@ -32,13 +45,13 @@ Same three-file structure as the original:
   wording, additions, deletions, and reordering are all fair game.
 - **`program.md`** — instructions to the agent. Humans modify this.
 
-The original's fixed 5-min wall-clock budget becomes the audit budget
+The Karpathy 5-min wall-clock budget maps onto the audit budget
 (default ~5 min, capped by ChatGPT Plus quota / Anthropic API spend).
-The original's `val_bpb` metric becomes AlphaEval fitness — a 17-dim
-weighted aggregate (5 critical + 12 auxiliary) plus a derived
-stability axis (1.0 total weight, **higher = better**), with 3 info
-dims tracked alongside but not weighted. `results.tsv` keeps the same role but
-its columns are now per-tier aggregates and `fitness`; the raw 20-dim
+The `val_bpb` metric maps onto AlphaEval fitness — a 17-dim weighted
+aggregate (5 critical + 12 auxiliary) plus a derived stability axis
+(1.0 total weight, **higher = better**), with 3 info dims tracked
+alongside but not weighted. `results.tsv` keeps a per-row layout but
+its columns are per-tier aggregates and `fitness`; the raw 20-dim
 signal lives in the companion `results.jsonl`.
 
 Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
@@ -73,7 +86,7 @@ The final `---` block on stdout carries grep-friendly metrics.
 ## Running the agent
 
 Boot the self-improving-loop agent with `program.md` in context. The
-Karpathy-style prompt translates directly:
+boot prompt is intentionally minimal:
 
 ```
 Read program.md and start a new experiment. Begin with the baseline
@@ -106,7 +119,7 @@ that into `AUTORESEARCH_SEED_SELECT` so the next audit consumes the
 evolved pool instead of the static tree. Unset / whitespace falls
 back to the hierarchical `plugins/petri_audit/seeds/` default.
 
-## Design choices (preserved from the original)
+## Design choices
 
 - **Single file to modify.** The agent only edits `train.py`. The
   mutation scope's upper bound is explicit, so every diff is
@@ -121,9 +134,10 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 
 ## Source
 
-- Karpathy autoresearch: https://github.com/karpathy/autoresearch (228791f)
-- Local reference clone: `~/workspace/autoresearch`
-- GEODE self-improving-loop spec (older 6-module stub, replaced by this fork):
+- Attribution — Karpathy autoresearch (3-file pattern + fixed-budget
+  loop source): https://github.com/karpathy/autoresearch (228791f);
+  local reference clone at `~/workspace/autoresearch`.
+- Older 6-module self-improving-loop stub (superseded by this driver):
   `docs/architecture/autoresearch.md`
 - Petri evidence (gen-0 fitness signal):
   `docs/audits/2026-05-15-petri-insights.md` +
@@ -133,5 +147,5 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 
 ## License
 
-MIT (matches the upstream). The fork inherits the GEODE repo's
-license.
+MIT (matches the Karpathy autoresearch attribution); this driver
+otherwise inherits the GEODE repo's license terms.

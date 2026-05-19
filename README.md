@@ -24,7 +24,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.18 — Long-running Autonomous Execution Harness
+# GEODE v0.99.19 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
@@ -257,6 +257,15 @@ geode serve                          # starts the always-on Gateway daemon
 
 Configure channel bindings in `.geode/config.toml` (Slack bot token, Discord webhook, etc.). See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
 
+### Optional — Self-improving loop config (`~/.geode/config.toml`)
+
+Tune the autoresearch / seed-generation / petri audit drivers — model picks, dim set, banner thresholds, PAYG fallback policy — by copying the `[self_improving_loop.*]` sections from [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) into `~/.geode/config.toml`. Absent sections fall back to documented defaults. To migrate per-role entries from the legacy `~/.geode/petri.toml`:
+
+```bash
+geode config migrate-petri-toml          # dry-run preview
+geode config migrate-petri-toml --yes    # append [self_improving_loop.petri.*] to config.toml
+```
+
 ---
 
 ## Troubleshooting
@@ -333,7 +342,7 @@ geode update                  # source checkout
 
 ## How GEODE compares
 
-Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.18**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
+Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.19**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
 <details>
 <summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>

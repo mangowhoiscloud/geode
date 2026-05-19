@@ -16,6 +16,7 @@ import io
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from plugins.seed_generation.cli import (
     cmd_audit_seeds_slash,
     render_pre_flight_report,
@@ -375,6 +376,233 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
     assert result.exit_code == 0, result.output
     assert captured["gen_tag"] == "gen7"
     assert captured["candidates"] == 8
+
+
+# ── PR-P2 — SessionJournal events for cost preview, preflight, cost divergence ──
+
+
+def _journal_rows(journal_path: Any) -> list[dict[str, Any]]:
+    import json
+    from pathlib import Path
+
+    p = Path(journal_path)
+    if not p.exists():
+        return []
+    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) -> None:
+    """``run_audit_seeds`` opens a SessionJournal scope and emits
+    ``cost_preview`` with predicted-spend breakdown before any pipeline
+    work begins. Verifies the outer-scope wiring introduced in PR-P2."""
+    import json
+
+    journal_path = tmp_path / "journal.jsonl"
+    with (
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline"),
+        patch("core.observability.session_journal.SessionJournal") as MockJournal,
+    ):
+        # Force the constructor to bind our temp path so we can read the artifact.
+        from core.observability import SessionJournal as RealJournal
+
+        MockJournal.side_effect = lambda **kwargs: RealJournal(
+            session_id=kwargs["session_id"],
+            gen_tag=kwargs["gen_tag"],
+            component=kwargs["component"],
+            path=journal_path,
+        )
+        # Re-import the symbol used inside run_audit_seeds since the import is
+        # local — patching the constructor on the module class is enough.
+        out, err = io.StringIO(), io.StringIO()
+        with patch("core.observability.SessionJournal", MockJournal):
+            run_audit_seeds(
+                target_dim="broken_tool_use",
+                yes=True,
+                stdout=out,
+                stderr=err,
+            )
+
+    events = [json.loads(line) for line in journal_path.read_text("utf-8").splitlines() if line]
+    cost_events = [e for e in events if e["event"] == "cost_preview"]
+    assert len(cost_events) == 1
+    payload = cost_events[0]["payload"]
+    assert "estimated_usd_total" in payload
+    assert payload["candidate_count"] == 15
+    assert "voter_count" in payload
+
+
+def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
+    journal_path = tmp_path / "journal.jsonl"
+    from core.observability import SessionJournal as RealJournal
+
+    def _bind(**kwargs: Any) -> Any:
+        return RealJournal(
+            session_id=kwargs["session_id"],
+            gen_tag=kwargs["gen_tag"],
+            component=kwargs["component"],
+            path=journal_path,
+        )
+
+    out, err = io.StringIO(), io.StringIO()
+    with (
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline"),
+        patch("core.observability.SessionJournal", side_effect=_bind),
+    ):
+        run_audit_seeds(target_dim="broken_tool_use", yes=True, stdout=out, stderr=err)
+
+    events = _journal_rows(journal_path)
+    passed = [e for e in events if e["event"] == "preflight_passed"]
+    failed = [e for e in events if e["event"] == "preflight_failed"]
+    assert len(passed) == 1
+    assert passed[0]["payload"]["issue_count"] == 0
+    assert failed == []
+
+
+def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -> None:
+    """The dominant pre-PR observability gap — preflight error path now
+    surfaces the structured issue list before exit code 1."""
+    journal_path = tmp_path / "journal.jsonl"
+    bad_report = PreFlightReport(
+        issues=[
+            PreFlightIssue(
+                severity="error",
+                code="auth.unreachable",
+                message="anthropic.api_key missing",
+                fix="set ANTHROPIC_API_KEY",
+            ),
+            PreFlightIssue(
+                severity="warning",
+                code="diversity.collapsed",
+                message="only 1 provider",
+                fix="spread judges",
+            ),
+        ]
+    )
+
+    from core.observability import SessionJournal as RealJournal
+
+    def _bind(**kwargs: Any) -> Any:
+        return RealJournal(
+            session_id=kwargs["session_id"],
+            gen_tag=kwargs["gen_tag"],
+            component=kwargs["component"],
+            path=journal_path,
+        )
+
+    out, err = io.StringIO(), io.StringIO()
+    with (
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=bad_report),
+        patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
+        patch("core.observability.SessionJournal", side_effect=_bind),
+    ):
+        code = run_audit_seeds(
+            target_dim="broken_tool_use",
+            yes=True,
+            stdout=out,
+            stderr=err,
+        )
+
+    assert code == 1
+    mock_dispatch.assert_not_called()
+    events = _journal_rows(journal_path)
+    failed = [e for e in events if e["event"] == "preflight_failed"]
+    assert len(failed) == 1
+    assert failed[0]["level"] == "error"
+    payload = failed[0]["payload"]
+    assert payload["issue_count"] == 2
+    codes = {issue["code"] for issue in payload["issues"]}
+    assert codes == {"auth.unreachable", "diversity.collapsed"}
+
+
+def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
+    journal_path = tmp_path / "journal.jsonl"
+    from core.observability import SessionJournal as RealJournal
+
+    def _bind(**kwargs: Any) -> Any:
+        return RealJournal(
+            session_id=kwargs["session_id"],
+            gen_tag=kwargs["gen_tag"],
+            component=kwargs["component"],
+            path=journal_path,
+        )
+
+    out, err = io.StringIO(), io.StringIO()
+    with (
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline"),
+        patch("core.observability.SessionJournal", side_effect=_bind),
+    ):
+        code = run_audit_seeds(
+            target_dim="broken_tool_use",
+            yes=False,
+            stdout=out,
+            stderr=err,
+            confirm_fn=lambda _o, _e: False,
+        )
+
+    assert code == 1
+    events = _journal_rows(journal_path)
+    aborted = [e for e in events if e["event"] == "user_aborted"]
+    assert len(aborted) == 1
+    assert aborted[0]["payload"]["stage"] == "confirm_prompt"
+
+
+def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
+    """Predicted vs actual within ±50 % stays at ``info`` level."""
+    from plugins.seed_generation.cli import _emit_cost_divergence
+
+    from core.observability import SessionJournal
+
+    journal = SessionJournal(
+        session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
+    )
+    _emit_cost_divergence(journal, predicted_usd=10.0, actual_usd=11.0)
+    rows = _journal_rows(journal.path)
+    assert len(rows) == 1
+    assert rows[0]["event"] == "cost_divergence"
+    assert rows[0]["level"] == "info"
+    assert rows[0]["payload"]["predicted_usd"] == 10.0
+    assert rows[0]["payload"]["actual_usd"] == 11.0
+    assert rows[0]["payload"]["delta_usd"] == pytest.approx(1.0)
+    assert rows[0]["payload"]["ratio"] == pytest.approx(0.1, rel=1e-3)
+
+
+def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
+    """Actual > 1.5 × predicted → ``warn`` level so a dashboard can highlight."""
+    from plugins.seed_generation.cli import _emit_cost_divergence
+
+    from core.observability import SessionJournal
+
+    journal = SessionJournal(
+        session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
+    )
+    _emit_cost_divergence(journal, predicted_usd=2.0, actual_usd=5.0)
+    rows = _journal_rows(journal.path)
+    assert rows[0]["level"] == "warn"
+    assert rows[0]["payload"]["ratio"] == pytest.approx(1.5)
+
+
+def test_emit_cost_divergence_ratio_none_when_predicted_zero(tmp_path: Any) -> None:
+    """Subscription-only run with $0 predicted PAYG → ratio is ``None``,
+    level stays ``info`` (we can't compute a meaningful overshoot %)."""
+    from plugins.seed_generation.cli import _emit_cost_divergence
+
+    from core.observability import SessionJournal
+
+    journal = SessionJournal(
+        session_id="t", gen_tag="t", component="seed-generation", path=tmp_path / "j.jsonl"
+    )
+    _emit_cost_divergence(journal, predicted_usd=0.0, actual_usd=0.42)
+    rows = _journal_rows(journal.path)
+    assert rows[0]["level"] == "info"
+    assert rows[0]["payload"]["ratio"] is None
+    assert rows[0]["payload"]["actual_usd"] == 0.42
 
 
 def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:

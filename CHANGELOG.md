@@ -47,6 +47,78 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.19] — 2026-05-20
+
+3 develop PRs landed since v0.99.18: PR-ε1 (#1341) config migrate CLI +
+sample fixture, PR-P2 (#1342) observability journal events
+(config-default + cost-divergence + pre-flight), and the autoresearch
+self-positioning rewrite (#1343, role split with petri made explicit).
+20 new tests; 4956 non-live + 5 live; 306 core + 47 plugins.
+
+### Changed
+
+- **autoresearch self-positioning rewrite — drop "fork" framing, name the
+  petri/autoresearch role split.** The 5 autoresearch files (`__init__.py`,
+  `program.md`, `README.md`, `train.py` docstring, `prepare.py`) no longer
+  describe themselves as "a Petri-signal fork of Karpathy/autoresearch".
+  autoresearch is now framed as **GEODE's self-improving loop driver**:
+  petri owns the *measurement* layer (rubric + dim scoring +
+  `dim_extractor` raw `mean`/`stderr`); autoresearch owns the
+  *aggregation + selection* layer (tier classification, weights, cross-axis
+  gate, auto-promote). The 3-file shape + fixed-budget loop + git-as-optimiser
+  idiom borrowed from Karpathy autoresearch (MIT, 2026-03) stay credited
+  as attribution but are no longer the headline framing. README.md adds a
+  role-split table verifying no code duplication between petri's
+  `core/audit/dim_extractor.extract_dim_aggregates` (raw measurement only)
+  and autoresearch's `compute_fitness` (selection only). No behaviour
+  change — `prepare.py` stdout banner and `train.py` docstring header are
+  the only string outputs that move.
+
+### Added
+
+- **PR-P2 — config-default + cost-divergence + pre-flight SessionJournal
+  events (3 events × 3 sites).** Closes the residual §7 items #9/#10/#11
+  from `docs/audits/2026-05-19-self-improving-loop-observability-gap.md`.
+  `core.config.self_improving_loop.load_self_improving_loop_config` now
+  emits `self_improving_loop_config_defaults_applied` (with
+  `reason ∈ {file_missing, read_error, section_missing}`) into the
+  active `SessionJournal` whenever it falls back to defaults — operators
+  can finally tell which fallback fired without re-reading the TOML
+  through the loader trace. `plugins.seed_generation.cli.run_audit_seeds`
+  now opens its `SessionJournal` scope earlier (was inside
+  `_dispatch_pipeline`), so the new `cost_preview` + `preflight_passed` /
+  `preflight_failed` (with structured `issue_count` + per-issue
+  `severity`/`code`/`message`) + `user_aborted` events land in the
+  per-session journal alongside the existing `pipeline_started` /
+  `pipeline_finished`. Post-run a `cost_divergence` event compares the
+  pre-run `cost_preview.total_usd` to `state.usd_spent` and elevates the
+  level to `warn` above ±50 % drift so dashboards can highlight runs
+  that materially missed the empirical token-budget estimate. 11 new
+  tests cover the 3 reasons × emit-when-scope-active / silent-when-out,
+  the 4 new journal events + their level promotion, and the existing
+  `petri_role_legacy_fallback` happy-path is updated to ignore the new
+  defaults-applied signal.
+
+- **PR-ε1 — `geode config migrate-petri-toml` CLI + sample
+  `[self_improving_loop.*]` config fixture.** Closes the docs +
+  backfill phase of the 2026-05-19 self-improving-loop config
+  consolidation plan. The new Typer subcommand reads the legacy
+  `~/.geode/petri.toml` via the existing
+  `migration_plan_from_petri_toml` helper and either (default) prints
+  the `[self_improving_loop.petri.*]` snippets the operator should
+  paste, or (`--yes`) appends them to `~/.geode/config.toml` directly
+  after refusing if the destination already has overlapping role
+  sections (re-write safety). Broken TOML in the destination → refuses
+  with exit 2 and an actionable message. `docs/examples/self_improving_loop.config.toml.example`
+  ships the canonical annotated schema for every section
+  (`[self_improving_loop]` thresholds + `.autoresearch` /
+  `.seed_generation` / `.petri.<role>` blocks). README.md +
+  README.ko.md now point operators at the example file and CLI.
+  README.ko.md residual `/tmp/geode-serve.log` reference (missed in
+  PR #1336 docs cleanup) also updated to `~/.geode/logs/serve.log`.
+  9 new tests cover the renderer + dry-run + `--yes` happy path +
+  overlap-guard + broken-TOML guard + empty-plan path.
+
 ## [0.99.18] — 2026-05-19
 
 PR #1336 squash `15ca2921` — explicit-naming rename pass + observability
