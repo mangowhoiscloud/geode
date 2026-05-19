@@ -93,6 +93,34 @@ def _state_to_json(state: PipelineState) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def _emit_orchestrator_event(
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Emit a seed-generation event into the active SessionJournal.
+
+    P1c — closes the "per-stage transition silent" gap from the
+    2026-05-19 observability audit §4. Discovered via the ContextVar
+    that ``run_audit_seeds`` activates around ``pipeline.run()``; no-op
+    outside that scope. SoT contract per P0a §6: payload carries only
+    event-scoped context (role, duration_ms, error head), never
+    canonical run-level metrics like ``survivors`` / ``usd_spent`` /
+    ``pool_path_out`` which live in sessions.jsonl. Failure to emit is
+    swallowed so the pipeline contract is unchanged.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        journal.append(event, level=level, payload=payload or {})
+    except Exception:  # pragma: no cover - defensive
+        log.debug("seed-generation: journal emit %s failed", event, exc_info=True)
+
+
 _PHASE_ORDER: tuple[str, ...] = (
     "generator",
     "proximity",
@@ -185,6 +213,11 @@ class PipelineRegistry:
     def register(self, agent: BaseSeedAgent) -> None:
         if agent.role in self._agents:
             log.warning("re-registering seed-generation role=%r", agent.role)
+            _emit_orchestrator_event(
+                "agent_reregistered",
+                level="warn",
+                payload={"role": agent.role},
+            )
         self._agents[agent.role] = agent
 
     def get(self, role: str) -> BaseSeedAgent | None:
@@ -430,6 +463,7 @@ class Pipeline:
             )
 
         self._emit_hook(HookEvent.SUBAGENT_STARTED, role)
+        _emit_orchestrator_event("phase_started", payload={"role": role})
         started = time.time()
 
         result: SeedAgentResult | None = None
@@ -440,6 +474,16 @@ class Pipeline:
                 duration = (time.time() - started) * 1000
                 log.exception("seed-generation phase %s raised", role)
                 self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=str(exc))
+                _emit_orchestrator_event(
+                    "phase_failed",
+                    level="error",
+                    payload={
+                        "role": role,
+                        "duration_ms": round(duration, 3),
+                        "error": str(exc)[:200],
+                        "raised": True,
+                    },
+                )
                 if self._on_phase_error is not None:
                     self._on_phase_error(role, exc)
                 raise
@@ -459,8 +503,22 @@ class Pipeline:
         if result.success:
             self.state.merge(role, result.output)
             self._emit_hook(HookEvent.SUBAGENT_COMPLETED, role)
+            _emit_orchestrator_event(
+                "phase_finished",
+                payload={"role": role, "duration_ms": round(duration, 3)},
+            )
         else:
             self._emit_hook(HookEvent.SUBAGENT_FAILED, role, error=result.error_message)
+            _emit_orchestrator_event(
+                "phase_failed",
+                level="error",
+                payload={
+                    "role": role,
+                    "duration_ms": round(duration, 3),
+                    "error": (result.error_message or "")[:200],
+                    "raised": False,
+                },
+            )
         return result
 
     def _acquire_lane(self, role: str) -> Any:

@@ -181,3 +181,163 @@ class _RecordingHookSystem:
     def trigger(self, event: object, data: dict[str, object] | None = None) -> list[object]:
         self.events.append((event, data or {}))
         return []
+
+
+# ── P1c — per-stage SessionJournal emit ─────────────────────────────────
+
+
+class _FailingAgent(BaseSeedAgent):
+    """Returns success=False so the phase_failed (non-raise) path fires."""
+
+    def __init__(self, role: str) -> None:
+        super().__init__(role=role, model="stub-model")
+
+    def execute(self, state: PipelineState) -> SeedAgentResult:
+        return SeedAgentResult(
+            role=self.role,
+            output={},
+            status="error",
+            error_message="stub-induced soft failure",
+        )
+
+
+class _RaisingAgent(BaseSeedAgent):
+    """Raises so the phase_failed (raised=True) path fires."""
+
+    def __init__(self, role: str) -> None:
+        super().__init__(role=role, model="stub-model")
+
+    def execute(self, state: PipelineState) -> SeedAgentResult:
+        raise RuntimeError("stub-induced hard failure")
+
+
+def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None:
+    """Every phase fires phase_started + phase_finished in order."""
+    import json
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    registry, _ = _make_registry_with_all_stubs()
+    state = PipelineState(run_id="t-p1c", target_dim="broken_tool_use", gen_tag="gen2")
+    journal = SessionJournal(
+        session_id="t-p1c",
+        gen_tag="gen2",
+        component="seed-generation",
+        path=tmp_path / "journal.jsonl",
+    )
+    with session_journal_scope(journal):
+        Pipeline(state, registry).run()
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    started = [r for r in rows if r["event"] == "phase_started"]
+    finished = [r for r in rows if r["event"] == "phase_finished"]
+    assert [r["payload"]["role"] for r in started] == [
+        "generator",
+        "proximity",
+        "critic",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+    ]
+    assert [r["payload"]["role"] for r in finished] == [
+        "generator",
+        "proximity",
+        "critic",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+    ]
+    for r in finished:
+        assert "duration_ms" in r["payload"]
+        # SoT contract — no canonical fields leak into phase events.
+        assert "survivors" not in r["payload"]
+        assert "usd_spent" not in r["payload"]
+
+
+def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
+    """When the agent returns success=False, phase_failed fires with
+    raised=False + error head."""
+    import json
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    registry = PipelineRegistry()
+    registry.register(_FailingAgent("generator"))
+    for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_StubAgent(r))
+    state = PipelineState(run_id="t-soft", target_dim="x", gen_tag="gen2")
+    journal = SessionJournal(
+        session_id="t-soft",
+        gen_tag="gen2",
+        component="seed-generation",
+        path=tmp_path / "journal.jsonl",
+    )
+    with session_journal_scope(journal):
+        Pipeline(state, registry).run()
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    failed = [r for r in rows if r["event"] == "phase_failed"]
+    assert len(failed) == 1
+    assert failed[0]["level"] == "error"
+    assert failed[0]["payload"]["role"] == "generator"
+    assert failed[0]["payload"]["raised"] is False
+    assert "stub-induced soft failure" in failed[0]["payload"]["error"]
+
+
+def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
+    """When the agent raises, phase_failed fires with raised=True and the
+    exception bubbles."""
+    import json
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    registry = PipelineRegistry()
+    registry.register(_RaisingAgent("generator"))
+    state = PipelineState(run_id="t-hard", target_dim="x", gen_tag="gen2")
+    journal = SessionJournal(
+        session_id="t-hard",
+        gen_tag="gen2",
+        component="seed-generation",
+        path=tmp_path / "journal.jsonl",
+    )
+    with (
+        session_journal_scope(journal),
+        pytest.raises(RuntimeError, match="stub-induced hard failure"),
+    ):
+        Pipeline(state, registry).run()
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    failed = [r for r in rows if r["event"] == "phase_failed"]
+    assert len(failed) == 1
+    assert failed[0]["payload"]["raised"] is True
+
+
+def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
+    """Re-registering an existing role emits agent_reregistered (warn level)."""
+    import json
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal = SessionJournal(
+        session_id="t-rereg",
+        gen_tag="gen2",
+        component="seed-generation",
+        path=tmp_path / "journal.jsonl",
+    )
+    registry = PipelineRegistry()
+    registry.register(_StubAgent("generator"))
+    with session_journal_scope(journal):
+        registry.register(_StubAgent("generator"))
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    rereg = [r for r in rows if r["event"] == "agent_reregistered"]
+    assert len(rereg) == 1
+    assert rereg[0]["level"] == "warn"
+    assert rereg[0]["payload"] == {"role": "generator"}
+
+
+def test_orchestrator_emits_noop_outside_journal_scope() -> None:
+    """When no SessionJournal is in scope, emits must silently no-op so
+    the orchestrator contract is unchanged."""
+    registry, _ = _make_registry_with_all_stubs()
+    state = PipelineState(run_id="t-noscope", target_dim="x", gen_tag="gen2")
+    # No session_journal_scope active — must not raise.
+    Pipeline(state, registry).run()

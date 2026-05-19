@@ -49,6 +49,27 @@ functional change.
 
 ### Fixed
 
+- **P1c — seed_generation orchestrator per-stage journal emit.** The
+  S0-S11 phase transitions previously surfaced only through `log.info`
+  and `log.warning`, so a run that succeeded technically left no
+  structured record of which phase took how long, which phase failed,
+  or whether an agent had been re-registered. Audit §4 tracked this as
+  "Per-stage 전이 | ⚠️ log.info | … | journal 무". This commit adds:
+  * `_emit_orchestrator_event` helper (ContextVar-based journal
+    discovery, defensive failure swallow, P0a SoT contract docstring).
+  * `phase_started` (info) before each agent execute.
+  * `phase_finished` (info) on success with `{role, duration_ms}`.
+  * `phase_failed` (error) on `status="error"` with
+    `{role, duration_ms, error head, raised=False}`, or on agent raise
+    with `raised=True` (exception still propagates).
+  * `agent_reregistered` (warn) when `PipelineRegistry.register`
+    replaces an existing role.
+  5 new tests cover the success / soft-failure / hard-failure /
+  re-register paths plus the no-op-outside-scope guard. Codex MCP
+  cross-LLM verify: "No findings".
+
+### Fixed
+
 - **P1b — subscription / credential resolver journal emit.** Three
   silent fallbacks in the credential layer (audit §4 + §5) become
   observable so post-mortem can see which path the run took:
