@@ -2,7 +2,7 @@
 role: target
 description: >-
   System under test. Always routed through `GeodeModelAPI` (`geode/<model>`)
-  regardless of family — the audit evaluates GEODE-as-a-system (agentic
+  regardless of provider — the audit evaluates GEODE-as-a-system (agentic
   loop + tools + hooks + memory), not the base LLM in isolation. User
   pins the base LLM that GEODE uses internally; the wrapper is fixed.
 default_model: claude-haiku-4-5

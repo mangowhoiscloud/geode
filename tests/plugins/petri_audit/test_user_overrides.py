@@ -10,18 +10,20 @@ from plugins.petri_audit import user_overrides as uo
 
 
 @pytest.fixture(autouse=True)
-def _isolate_outer_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolate_self_improving_loop_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point ``GEODE_CONFIG_TOML`` at a non-existent tmp path so the
-    outer-loop loader returns defaults.
+    self-improving-loop loader returns defaults.
 
     Without this, a developer / CI host with real
-    ``[outer_loop.petri.*]`` entries in ``~/.geode/config.toml`` would
+    ``[self_improving_loop.petri.*]`` entries in ``~/.geode/config.toml`` would
     silently change the result of ``read_role_override`` because the
-    new precedence (PR-δ2) checks the outer-loop section before the
+    new precedence (PR-δ2) checks the self-improving-loop section before the
     legacy ``petri.toml``. Pinning the env var keeps each test
     hermetic.
     """
-    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "outer_loop_isolation_sentinel.toml"))
+    monkeypatch.setenv(
+        "GEODE_CONFIG_TOML", str(tmp_path / "self_improving_loop_isolation_sentinel.toml")
+    )
 
 
 @pytest.fixture
@@ -207,13 +209,13 @@ def test_load_quoting_robust(petri_toml: Path):
     assert uo.read_role_override("auditor")["model"] == 'gpt-5.5 "tactical"'
 
 
-# ── PR-δ2: outer_loop config takes precedence over legacy petri.toml ──────
+# ── PR-δ2: self_improving_loop config takes precedence over legacy petri.toml ──────
 
 
-def test_read_role_override_prefers_outer_loop(
+def test_read_role_override_prefers_self_improving_loop(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When [outer_loop.petri.<role>] is set, it wins over petri.toml."""
+    """When [self_improving_loop.petri.<role>] is set, it wins over petri.toml."""
     petri_toml.write_text(
         """
 [petri.auditor]
@@ -225,7 +227,7 @@ source = "api_key"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             petri={
                 "auditor": SimpleNamespace(
@@ -244,7 +246,7 @@ source = "api_key"
 def test_read_role_override_falls_back_to_petri_toml(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No [outer_loop.petri.<role>] section → legacy petri.toml wins."""
+    """No [self_improving_loop.petri.<role>] section → legacy petri.toml wins."""
     petri_toml.write_text(
         """
 [petri.judge]
@@ -256,7 +258,7 @@ source = "claude-cli"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(petri={}),
     )
     override = uo.read_role_override("judge")
@@ -264,7 +266,7 @@ source = "claude-cli"
     assert override["source"] == "claude-cli"
 
 
-def test_read_role_override_explicit_path_skips_outer_loop(
+def test_read_role_override_explicit_path_skips_self_improving_loop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Explicit ``path`` always reads the legacy file (snapshot use case)."""
@@ -279,11 +281,11 @@ model = "snapshot-model"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             petri={
                 "auditor": SimpleNamespace(
-                    model="outer-loop-model",
+                    model="self-improving-loop-model",
                     source="auto",
                     fallback_to_payg=None,
                 )
@@ -302,7 +304,7 @@ def test_read_role_override_auto_source_dropped(
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.outer_loop.load_outer_loop_config",
+        "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             petri={
                 "auditor": SimpleNamespace(
@@ -339,7 +341,7 @@ model = "geode/gpt-5.5"
     def _boom() -> object:
         raise ValueError("unknown field 'shoulb_be_should_be'")
 
-    monkeypatch.setattr("core.config.outer_loop.load_outer_loop_config", _boom)
+    monkeypatch.setattr("core.config.self_improving_loop.load_self_improving_loop_config", _boom)
     with pytest.raises(ValueError, match="unknown field"):
         uo.read_role_override("target")
 
@@ -347,7 +349,7 @@ model = "geode/gpt-5.5"
 def test_read_role_override_falls_through_on_import_error(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ImportError on ``core.config.outer_loop`` still falls through to
+    """ImportError on ``core.config.self_improving_loop`` still falls through to
     the legacy file — the module must stay importable in stubbed
     environments."""
     petri_toml.write_text(
@@ -362,7 +364,7 @@ model = "geode/gpt-5.5"
     real_import = builtins.__import__
 
     def _raising(name: str, *args: object, **kwargs: object) -> object:
-        if name == "core.config.outer_loop":
+        if name == "core.config.self_improving_loop":
             raise ImportError("simulated")
         return real_import(name, *args, **kwargs)
 
@@ -393,3 +395,64 @@ model = "claude-sonnet-4-6"
 def test_migration_plan_empty_when_no_legacy_file(petri_toml: Path) -> None:
     """No file → empty dict, no raise."""
     assert uo.migration_plan_from_petri_toml() == {}
+
+
+# ── P1b — petri_role_legacy_fallback journal emit ──────────────────────
+
+
+def test_read_role_emits_journal_when_self_improving_loop_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``core.config.self_improving_loop`` cannot be imported, the
+    role reader silently falls back to the legacy petri.toml. P1b makes
+    that silent fallback observable via a ``petri_role_legacy_fallback``
+    event so post-mortem can see when the new SoT was bypassed."""
+    import json
+    import sys
+
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal = SessionJournal(
+        session_id="s-legacy",
+        gen_tag="gen-legacy",
+        component="autoresearch",
+        path=tmp_path / "journal.jsonl",
+    )
+
+    # Force the lazy import inside _read_role_from_self_improving_loop to fail
+    # by inserting None into sys.modules — the `from … import …` then raises.
+    monkeypatch.setitem(sys.modules, "core.config.self_improving_loop", None)
+
+    with session_journal_scope(journal):
+        result = uo._read_role_from_self_improving_loop("auditor")
+
+    assert result == {}
+    assert journal.path.is_file()
+    rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
+    legacy_events = [r for r in rows if r["event"] == "petri_role_legacy_fallback"]
+    assert len(legacy_events) == 1
+    assert legacy_events[0]["payload"] == {
+        "role": "auditor",
+        "reason": "import_error",
+    }
+
+
+def test_read_role_no_emit_when_self_improving_loop_available(
+    tmp_path: Path,
+) -> None:
+    """Happy path — the new self-improving-loop config IS loadable. No
+    legacy-fallback event fires (we use the new SoT successfully even
+    when no override exists for the role)."""
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal = SessionJournal(
+        session_id="s-newpath",
+        gen_tag="gen-newpath",
+        component="autoresearch",
+        path=tmp_path / "journal.jsonl",
+    )
+    with session_journal_scope(journal):
+        result = uo._read_role_from_self_improving_loop("auditor")
+    assert result == {}
+    # No journal file written because no event emitted.
+    assert not journal.path.exists()

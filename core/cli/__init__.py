@@ -18,7 +18,7 @@ from typing import Any
 
 import typer
 from plugins.petri_audit.cli_audit import audit, petri_archive
-from plugins.seed_pipeline.cli import audit_seeds_app
+from plugins.seed_generation.cli import audit_seeds_app
 
 from core import __version__
 

@@ -29,12 +29,41 @@ This is fine for a CLI-only path that fires on user keystroke.
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_PETRI_TOML
+
+log = logging.getLogger(__name__)
+
+
+def _emit_user_overrides_event(
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Emit a user-overrides event into the active SessionJournal.
+
+    P1b — closes the silent legacy-petri.toml fallback gap from the
+    2026-05-19 observability audit §5. Discovered via the ContextVar
+    so callers outside a self-improving-loop run (single-shot CLI
+    invocations) are no-ops. Failure to emit must not break the
+    override resolver — exception swallowed.
+    """
+    try:
+        from core.observability import current_session_journal
+
+        journal = current_session_journal()
+        if journal is None:
+            return
+        journal.append(event, level=level, payload=payload or {})
+    except Exception:  # pragma: no cover - defensive
+        log.debug("user_overrides: journal emit %s failed", event, exc_info=True)
+
 
 __all__ = [
     "RoleOverride",
@@ -103,7 +132,7 @@ def read_role_override(role: str, *, path: Path | str | None = None) -> RoleOver
     """Return the override dict for a single role (empty if unset).
 
     PR-δ2 (2026-05-19) — precedence:
-      1. ``[outer_loop.petri.<role>]`` section in ``~/.geode/config.toml``
+      1. ``[self_improving_loop.petri.<role>]`` section in ``~/.geode/config.toml``
          (PR-α1 single SoT).
       2. Legacy ``[petri.<role>]`` in ``~/.geode/petri.toml`` (only
          honoured when ``path`` is the default; explicit path arg
@@ -116,21 +145,21 @@ def read_role_override(role: str, *, path: Path | str | None = None) -> RoleOver
     follow-up PR-ε1 wires it into ``geode config migrate-petri-toml``.
     """
     if path is None:
-        outer_override = _read_role_from_outer_loop(role)
+        outer_override = _read_role_from_self_improving_loop(role)
         if outer_override:
             return outer_override
     return load_user_overrides(path).get(role, {})
 
 
-def _read_role_from_outer_loop(role: str) -> RoleOverride:
-    """Pull ``[outer_loop.petri.<role>]`` into the legacy RoleOverride shape.
+def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
+    """Pull ``[self_improving_loop.petri.<role>]`` into the legacy RoleOverride shape.
 
     Returns an empty dict when the section is absent (no role configured)
     or the loader is unavailable (test contexts that stub
     ``core.config``).
 
     Strict-mode validation errors (``ValueError`` raised by
-    :func:`core.config.outer_loop.load_outer_loop_config`) are
+    :func:`core.config.self_improving_loop.load_self_improving_loop_config`) are
     intentionally *not* caught — they propagate so an operator who
     typos a key sees the failure rather than silently keeps reading
     the legacy ``petri.toml``. ``ImportError`` is the only exception
@@ -138,10 +167,18 @@ def _read_role_from_outer_loop(role: str) -> RoleOverride:
     stub out ``core.config``.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
     except ImportError:
+        # P1b — emit so the operator can see that the run silently fell
+        # back to the legacy petri.toml instead of consulting the new
+        # [self_improving_loop.petri.<role>] config section. No-op when
+        # no journal is in scope.
+        _emit_user_overrides_event(
+            "petri_role_legacy_fallback",
+            payload={"role": role, "reason": "import_error"},
+        )
         return {}
-    cfg = load_outer_loop_config()
+    cfg = load_self_improving_loop_config()
     entry = cfg.petri.get(role)
     if entry is None:
         return {}
@@ -273,7 +310,7 @@ def migration_plan_from_petri_toml(
 
     Used by ``geode config migrate-petri-toml`` (landing in PR-ε1) to
     show the operator a dry-run diff before copying the entries to
-    ``~/.geode/config.toml`` ``[outer_loop.petri.*]``. This function
+    ``~/.geode/config.toml`` ``[self_improving_loop.petri.*]``. This function
     *reads only* — it does not mutate either file. Empty dict when the
     legacy file is absent or has no per-role overrides.
     """

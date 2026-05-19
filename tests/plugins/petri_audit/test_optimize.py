@@ -22,11 +22,11 @@ from plugins.petri_audit.optimize import (
 )
 
 # ---------------------------------------------------------------------------
-# M1 — judge ≠ generator family
+# M1 — judge ≠ generator provider
 # ---------------------------------------------------------------------------
 
 
-def test_optimize_rejects_same_family(tmp_path: Path) -> None:
+def test_optimize_rejects_same_provider(tmp_path: Path) -> None:
     log = tmp_path / "fake.eval"
     log.write_bytes(b"")
     with pytest.raises(OptimizeError, match="M1 violation"):
@@ -38,10 +38,10 @@ def test_optimize_rejects_same_family(tmp_path: Path) -> None:
         )
 
 
-def test_optimize_rejects_unknown_family(tmp_path: Path) -> None:
+def test_optimize_rejects_unknown_provider(tmp_path: Path) -> None:
     log = tmp_path / "fake.eval"
     log.write_bytes(b"")
-    with pytest.raises(OptimizeError, match="M1 family check needs"):
+    with pytest.raises(OptimizeError, match="M1 provider check needs"):
         optimize_prompt(
             judge="mystery-judge",
             generator="claude-opus-4-7",
@@ -50,7 +50,7 @@ def test_optimize_rejects_unknown_family(tmp_path: Path) -> None:
         )
 
 
-def test_optimize_accepts_cross_family(tmp_path: Path) -> None:
+def test_optimize_accepts_cross_provider(tmp_path: Path) -> None:
     log = tmp_path / "fake.eval"
     log.write_bytes(b"")
     report = optimize_prompt(
@@ -61,8 +61,8 @@ def test_optimize_accepts_cross_family(tmp_path: Path) -> None:
         dry_run=True,
     )
     assert isinstance(report, OptimizeReport)
-    assert report.judge_family == "anthropic"
-    assert report.generator_family == "openai"
+    assert report.judge_provider == "anthropic"
+    assert report.generator_provider == "openai"
     assert any("M1 ok" in n for n in report.notes)
 
 
@@ -210,8 +210,8 @@ def test_live_writes_artefact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert report.output_path.exists()
     payload = json.loads(report.output_path.read_text())
     assert payload["compile_id"] == report.compile_id
-    assert payload["judge_family"] == "anthropic"
-    assert payload["generator_family"] == "openai"
+    assert payload["judge_provider"] == "anthropic"
+    assert payload["generator_provider"] == "openai"
     assert payload["dspy_version"] == "3.1.2"
     assert payload["seed"] == 42
 
@@ -235,8 +235,8 @@ def test_report_to_dict_round_trip(tmp_path: Path) -> None:
         "compile_id",
         "judge",
         "generator",
-        "judge_family",
-        "generator_family",
+        "judge_provider",
+        "generator_provider",
         "output_path",
         "estimated_usd",
         "estimated_usd_cap",

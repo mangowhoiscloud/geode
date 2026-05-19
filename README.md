@@ -24,7 +24,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.17 — Long-running Autonomous Execution Harness
+# GEODE v0.99.18 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
@@ -296,7 +296,7 @@ Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic),
 <details>
 <summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
 
-Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f /tmp/geode-serve.log` to see what the model is actually doing.
+Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
 </details>
 
 <details>
@@ -333,7 +333,7 @@ geode update                  # source checkout
 
 ## How GEODE compares
 
-Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.17**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
+Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.18**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
 <details>
 <summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>

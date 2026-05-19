@@ -117,7 +117,7 @@ def make_journal_handlers(
         """P1c — emit a session-journal entry on subagent start.
 
         Falls through silently when no session journal is bound to the
-        current ContextVar (i.e. outside an outer-loop run). The
+        current ContextVar (i.e. outside an self-improving-loop run). The
         existing project journal is not touched on STARTED — only
         COMPLETED / FAILED carry summary text worth recording there.
         """

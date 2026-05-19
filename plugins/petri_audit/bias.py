@@ -33,7 +33,7 @@ The adjustment is **conservative** in both directions:
   shrinks.
 
 Either direction reduces the apparent "GEODE looks great when judged
-by its own family" effect. Reports must note the correction with
+by its own provider" effect. Reports must note the correction with
 ``[same-provider bias -10..-22% applied]`` so reviewers see that the
 finding survived the disadvantage, not because the raw score was
 high.

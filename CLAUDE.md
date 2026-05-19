@@ -8,11 +8,11 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.17
+- **Version**: 0.99.18
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 301 core + 36 plugins = 337
+- **Modules**: 305 core + 47 plugins = 352
 - **Tests**: 4910 (+24 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -336,4 +336,4 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
 | `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Covers the Petri × GEODE N7' Monitor timeout case and stable watch patterns (cat-and-grep / stdbuf streaming / polling). |
 | `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |
-| `seed-pipeline-cycle` | seed-pipeline, sprint, cycle, S2, S3, …, scaffold cycle | Session 63 의 6-PR (S0/S1/S2/S2-wire/S2-fix/cycle-skill) 검증 사이클 — Phase A-F (Allocation / Implement+P1-P7 / Verify+Codex MCP / PR&CI / Merge / Optional Review). S2.5-S12 + 모든 fix-up PR 적용. |
+| `seed-generation-cycle` | seed-generation, sprint, cycle, S2, S3, …, scaffold cycle | Session 63 의 6-PR (S0/S1/S2/S2-wire/S2-fix/cycle-skill) 검증 사이클 — Phase A-F (Allocation / Implement+P1-P7 / Verify+Codex MCP / PR&CI / Merge / Optional Review). S2.5-S12 + 모든 fix-up PR 적용. |

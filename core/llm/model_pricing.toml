@@ -7,10 +7,10 @@
 #
 # Quasi-static — refresh per quarter on pricing or model-list changes.
 # Schema layers:
-#   [pricing.<family>.<model>]  per-token pricing (per-million-token units)
-#   [context_windows]            model → int (tokens)
+#   [pricing.<provider>.<model>]  per-token pricing (per-million-token units)
+#   [context_windows]              model → int (tokens)
 #
-# Derive formulas applied by the loader (family-specific):
+# Derive formulas applied by the loader (provider-specific):
 #   anthropic: cache_write = input × 1.25, cache_read = input × 0.1,
 #              thinking = output
 #   openai:    cache_read = cached_per_mtok (explicit),

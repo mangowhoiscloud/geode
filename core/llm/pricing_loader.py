@@ -5,7 +5,7 @@ P3-A (2026-05-17) introduces this loader. P3-B migrates
 ``MODEL_CONTEXT_WINDOW`` dicts to consume it. Until then the loader is
 dormant — no production call site reads from this module.
 
-Schema (matches the TOML, family-prefixed):
+Schema (matches the TOML, provider-prefixed):
 
 - ``[pricing.anthropic.<model>]`` — ``input_per_mtok`` + ``output_per_mtok``.
   Loader applies the Anthropic derive: ``cache_write = input × 1.25``,
@@ -101,8 +101,8 @@ class PricingCatalogue:
     context_windows: dict[str, int]
 
 
-def _parse_family(family: str, entries: dict[str, Any]) -> dict[str, ModelPrice]:
-    """Build a {model: ModelPrice} dict for a single family section."""
+def _parse_provider(provider: str, entries: dict[str, Any]) -> dict[str, ModelPrice]:
+    """Build a {model: ModelPrice} dict for a single provider section."""
     out: dict[str, ModelPrice] = {}
     for model, fields in entries.items():
         if not isinstance(fields, dict):
@@ -112,12 +112,12 @@ def _parse_family(family: str, entries: dict[str, Any]) -> dict[str, ModelPrice]
             output_mtok = float(fields["output_per_mtok"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(
-                f"[pricing.{family}.{model!r}]: missing or non-numeric "
+                f"[pricing.{provider}.{model!r}]: missing or non-numeric "
                 f"input_per_mtok / output_per_mtok"
             ) from exc
-        if family == "anthropic":
+        if provider == "anthropic":
             out[model] = _derive_anthropic(input_mtok, output_mtok)
-        elif family == "openai":
+        elif provider == "openai":
             out[model] = _derive_openai(
                 input_mtok,
                 output_mtok,
@@ -126,8 +126,8 @@ def _parse_family(family: str, entries: dict[str, Any]) -> dict[str, ModelPrice]
             )
         else:
             raise ValueError(
-                f"[pricing.{family}.{model!r}]: unknown family — supported "
-                f"families are 'anthropic' and 'openai' (GLM models route "
+                f"[pricing.{provider}.{model!r}]: unknown provider — supported "
+                f"providers are 'anthropic' and 'openai' (GLM models route "
                 f"through 'openai' by manifest convention)"
             )
     return out
@@ -142,10 +142,10 @@ def _load_cached(path_str: str) -> PricingCatalogue:
         raise ValueError(f"{path}: [pricing] is not a table")
 
     pricing: dict[str, ModelPrice] = {}
-    for family, entries in pricing_section.items():
+    for provider, entries in pricing_section.items():
         if not isinstance(entries, dict):
             continue
-        pricing.update(_parse_family(family, entries))
+        pricing.update(_parse_provider(provider, entries))
 
     context_raw = data.get("context_windows", {})
     if not isinstance(context_raw, dict):

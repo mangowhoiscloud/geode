@@ -75,7 +75,7 @@
 
 # ── PR 0 (2026-05-18) — context management dims (judge-scored) ───────────
 #
-# Three new GEODE-specific dims for the seed-pipeline / autoresearch
+# Three new GEODE-specific dims for the seed-generation / autoresearch
 # loop. Defined as full JudgeDimension objects (not bare strings)
 # because they extend beyond inspect-petri's default-36 catalog —
 # inspect-petri's ``judge_dimensions()`` accepts mixed

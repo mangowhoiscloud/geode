@@ -14,7 +14,7 @@ Migration history:
   load from ``[model.defaults]`` + ``[model.fallbacks.<provider>]``.
 - P2-C: ``onboarding._KEY_PATTERNS`` + ``claude_code_provider.
   KEYCHAIN_SERVICE`` route through ``[credentials.*]``.
-- P2-D: ``core.config._resolve_provider`` + ``petri.models.family_of``
+- P2-D: ``core.config._resolve_provider`` + ``petri.models.provider_of``
   delegate to ``[routing.prefixes]`` + ``codex_only_models`` +
   ``codex_suffixes``.
 - P2-E (this PR): ``get_node_model`` reads ``[nodes]`` after the

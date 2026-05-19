@@ -74,7 +74,7 @@ except ImportError:
 # so calls land on ``api.anthropic.com/v1/messages`` and consume the
 # user's Claude Max subscription quota (per-token PAYG = 0). Sibling of
 # ``openai-codex`` — the two subscription sources together close the
-# cost frontier for the autoresearch outer loop. Refactored from the
+# cost frontier for the autoresearch self-improving loop. Refactored from the
 # subprocess CLI invocation (judge-only) to API-direct after Path 2
 # verification on 2026-05-17.
 try:

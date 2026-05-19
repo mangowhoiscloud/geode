@@ -21,43 +21,43 @@ def _clear_caches():
 
 
 def _concrete_bindings() -> list[tuple[str, str]]:
-    """Return every (family, source) pair from the default manifest, skipping
+    """Return every (provider, source) pair from the default manifest, skipping
     the 'auto' sentinel which is not a concrete adapter."""
     manifest = load_manifest()
     pairs: list[tuple[str, str]] = []
-    for family, source_spec in manifest.sources.items():
+    for provider, source_spec in manifest.sources.items():
         for source in source_spec.allowed:
             if source != AUTO_SOURCE:
-                pairs.append((family, source))
+                pairs.append((provider, source))
     return pairs
 
 
 # ── load_adapter_module ────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("family,source", _concrete_bindings())
-def test_every_manifest_binding_imports(family: str, source: str):
-    """Every (family, source) declared by manifest resolves to an importable
+@pytest.mark.parametrize("provider,source", _concrete_bindings())
+def test_every_manifest_binding_imports(provider: str, source: str):
+    """Every (provider, source) declared by manifest resolves to an importable
     Python module — guards against typos in the manifest module path."""
-    module = load_adapter_module(family, source)
+    module = load_adapter_module(provider, source)
     assert module is not None
 
 
-@pytest.mark.parametrize("family,source", _concrete_bindings())
-def test_module_exposes_inspect_prefix(family: str, source: str):
+@pytest.mark.parametrize("provider,source", _concrete_bindings())
+def test_module_exposes_inspect_prefix(provider: str, source: str):
     """Adapter modules export ``INSPECT_PREFIX`` matching the manifest entry."""
-    module = load_adapter_module(family, source)
-    spec = get_adapter_spec(family, source)
+    module = load_adapter_module(provider, source)
+    spec = get_adapter_spec(provider, source)
     assert getattr(module, "INSPECT_PREFIX", None) == spec.inspect_prefix
 
 
 # ── register_adapter ───────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("family,source", _concrete_bindings())
-def test_module_exposes_register(family: str, source: str):
+@pytest.mark.parametrize("provider,source", _concrete_bindings())
+def test_module_exposes_register(provider: str, source: str):
     """Every adapter module exposes a callable ``register`` (may be a no-op)."""
-    module = load_adapter_module(family, source)
+    module = load_adapter_module(provider, source)
     register_fn = getattr(module, "register", None)
     assert callable(register_fn)
 
@@ -161,11 +161,11 @@ def test_metadata_rejects_non_dict(monkeypatch):
 # ── Unknown bindings ───────────────────────────────────────────────────────
 
 
-def test_load_unknown_family_raises_keyerror():
-    # ``get_adapter`` falls through to "No adapter for family=…" when the
-    # family has no entry in ``manifest.adapters`` (empty dict). The exact
+def test_load_unknown_provider_raises_keyerror():
+    # ``get_adapter`` falls through to "No adapter for provider=…" when the
+    # provider has no entry in ``manifest.adapters`` (empty dict). The exact
     # message is the manifest's; we just verify the failure mode.
-    with pytest.raises(KeyError, match="No adapter for family=nonexistent"):
+    with pytest.raises(KeyError, match="No adapter for provider=nonexistent"):
         load_adapter_module("nonexistent", "api_key")
 
 

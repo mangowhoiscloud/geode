@@ -29,7 +29,7 @@ from plugins.petri_audit.models import (
         ("glm-4.7-flash", "geode/glm-4.7-flash"),
     ],
 )
-def test_to_inspect_model_known_families(geode_id: str, expected: str) -> None:
+def test_to_inspect_model_known_providers(geode_id: str, expected: str) -> None:
     # PR #6 (2026-05-14) — pin ``use_oauth=False`` so the legacy
     # ``openai/<model>`` mapping is exercised regardless of whether the
     # test runner has a Codex OAuth token in the environment. The
@@ -83,7 +83,7 @@ def test_to_inspect_target_none_returns_default_sentinel() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_list_audit_models_includes_each_family() -> None:
+def test_list_audit_models_includes_each_provider() -> None:
     pairs = list_audit_models()
     inspect_ids = {inspect for _, inspect in pairs}
     # PR B — claude-* now resolves to ``claude-code/`` when the Claude

@@ -24,9 +24,11 @@ def _petri_toml(tmp_path: Path, monkeypatch):
     target = tmp_path / "petri.toml"
     monkeypatch.setenv("GEODE_PETRI_TOML", str(target))
     # PR-δ2 — pin GEODE_CONFIG_TOML at a non-existent tmp path so the
-    # outer-loop loader (now consulted by read_role_override) returns
+    # self-improving-loop loader (now consulted by read_role_override) returns
     # defaults regardless of the host's real ~/.geode/config.toml.
-    monkeypatch.setenv("GEODE_CONFIG_TOML", str(tmp_path / "outer_loop_isolation_sentinel.toml"))
+    monkeypatch.setenv(
+        "GEODE_CONFIG_TOML", str(tmp_path / "self_improving_loop_isolation_sentinel.toml")
+    )
     clear_manifest_cache()
     cs.clear_suppressions()
     yield target
@@ -42,7 +44,7 @@ def _scrub_env(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _stub_settings(monkeypatch):
-    monkeypatch.setattr(cs, "_settings_source", lambda family: None)
+    monkeypatch.setattr(cs, "_settings_source", lambda provider: None)
 
 
 @pytest.fixture(autouse=True)
@@ -126,10 +128,10 @@ def test_set_model_normalised_match(captured, monkeypatch):
     assert uo.read_role_override("auditor").get("model") == "claude-opus-4-7"
 
 
-def test_set_model_family_change_resets_source(captured, monkeypatch):
-    """Switching family (claude- → gpt-) erases the now-incompatible source."""
+def test_set_model_provider_change_resets_source(captured, monkeypatch):
+    """Switching provider (claude- → gpt-) erases the now-incompatible source."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    # Initial — claude family + claude-cli source.
+    # Initial — claude provider + claude-cli source.
     uo.save_role_override("auditor", model="claude-opus-4-7", source="claude-cli")
     cmd_petri("model auditor gpt-5.5")
     out = uo.read_role_override("auditor")
@@ -161,21 +163,21 @@ def test_set_source_updates_override(captured, monkeypatch):
 def test_set_source_rejects_invalid(captured):
     cmd_petri("source auditor imposter")
     joined = "\n".join(captured)
-    assert "not allowed for family" in joined
+    assert "not allowed for provider" in joined
     assert uo.read_role_override("auditor") == {}
 
 
-def test_set_source_family_aware(captured):
-    """A source belonging to a different family is rejected.
-    auditor's default model is claude-* (family=anthropic) → openai-codex
-    is not allowed for that family."""
+def test_set_source_provider_aware(captured):
+    """A source belonging to a different provider is rejected.
+    auditor's default model is claude-* (provider=anthropic) → openai-codex
+    is not allowed for that provider."""
     cmd_petri("source auditor openai-codex")
     joined = "\n".join(captured)
-    assert "not allowed for family" in joined
+    assert "not allowed for provider" in joined
 
 
 def test_set_source_auto(captured):
-    """'auto' is always a valid source for any family that lists it."""
+    """'auto' is always a valid source for any provider that lists it."""
     cmd_petri("source auditor auto")
     assert uo.read_role_override("auditor").get("source") == "auto"
 

@@ -24,7 +24,7 @@ def test_eval_dspy_optimize_missing_args_returns_error() -> None:
     assert "judge, generator, eval_log_path are required" in result["error"]
 
 
-def test_eval_dspy_optimize_same_family_returns_error(tmp_path: Path) -> None:
+def test_eval_dspy_optimize_same_provider_returns_error(tmp_path: Path) -> None:
     from core.cli.tool_handlers.audit import _build_audit_handlers
 
     log = tmp_path / "fake.eval"
@@ -57,8 +57,8 @@ def test_eval_dspy_optimize_dry_run_happy_path(tmp_path: Path) -> None:
     assert result["tool"] == "eval_dspy_optimize"
     optimize = result["optimize"]
     assert optimize["dry_run"] is True
-    assert optimize["judge_family"] == "anthropic"
-    assert optimize["generator_family"] == "openai"
+    assert optimize["judge_provider"] == "anthropic"
+    assert optimize["generator_provider"] == "openai"
     assert "M2" in optimize["next_step"]
 
 
@@ -98,7 +98,7 @@ def test_eval_dspy_optimize_in_aggregate_handlers() -> None:
 
 
 # ---------------------------------------------------------------------------
-# family_of / same_family — M1 helpers
+# provider_of / same_provider — M1 helpers
 # ---------------------------------------------------------------------------
 
 
@@ -120,23 +120,23 @@ def test_eval_dspy_optimize_in_aggregate_handlers() -> None:
         ("", "unknown"),
     ],
 )
-def test_family_of(model_id: str, expected: str) -> None:
-    from plugins.petri_audit.models import family_of
+def test_provider_of(model_id: str, expected: str) -> None:
+    from plugins.petri_audit.models import provider_of
 
-    assert family_of(model_id) == expected
-
-
-def test_same_family_unknown_returns_false() -> None:
-    from plugins.petri_audit.models import same_family
-
-    # Two unknown ids must NOT count as same-family.
-    assert same_family("mystery-a", "mystery-b") is False
-    assert same_family("mystery-a", "claude-opus-4-7") is False
+    assert provider_of(model_id) == expected
 
 
-def test_same_family_cross_family_pairs() -> None:
-    from plugins.petri_audit.models import same_family
+def test_same_provider_unknown_returns_false() -> None:
+    from plugins.petri_audit.models import same_provider
 
-    assert same_family("claude-haiku-4-5-20251001", "gpt-5.5") is False
-    assert same_family("claude-opus-4-7", "claude-haiku-4-5-20251001") is True
-    assert same_family("gpt-5.4", "gpt-5.4-mini") is True
+    # Two unknown ids must NOT count as same-provider.
+    assert same_provider("mystery-a", "mystery-b") is False
+    assert same_provider("mystery-a", "claude-opus-4-7") is False
+
+
+def test_same_provider_cross_provider_pairs() -> None:
+    from plugins.petri_audit.models import same_provider
+
+    assert same_provider("claude-haiku-4-5-20251001", "gpt-5.5") is False
+    assert same_provider("claude-opus-4-7", "claude-haiku-4-5-20251001") is True
+    assert same_provider("gpt-5.4", "gpt-5.4-mini") is True

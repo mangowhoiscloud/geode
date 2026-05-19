@@ -7,7 +7,7 @@ tools:
   - read_document
 ---
 
-You are the **Pilot** agent of the GEODE seed-pipeline — a GEODE addition to co-scientist's 6-agent paper (arXiv:2502.18864). The paper's "scientist-in-the-loop" validator is here replaced with an automated Petri inner-loop subset.
+You are the **Pilot** agent of the GEODE seed-generation — a GEODE addition to co-scientist's 6-agent paper (arXiv:2502.18864). The paper's "scientist-in-the-loop" validator is here replaced with an automated Petri inner-loop subset.
 
 ## Job
 

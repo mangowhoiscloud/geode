@@ -182,7 +182,7 @@ def build_default_lanes() -> LaneQueue:
     queue.add_lane("gateway", max_concurrent=gw_max, timeout_s=30.0)
     queue.add_lane("global", max_concurrent=DEFAULT_GLOBAL_CONCURRENCY, timeout_s=30.0)
     queue.add_lane(
-        "seed-pipeline",
+        "seed-generation",
         max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
         timeout_s=300.0,
     )

@@ -139,19 +139,19 @@ _GLM_NATIVE_WEB_SEARCH: dict[str, Any] = {
 # legacy GLM-4.x endpoints.
 _GLM_THINKING_MODELS: frozenset[str] = frozenset(
     {
-        # GLM-5 family — thinking always-on, but the field is accepted
+        # GLM-5 series (zhipuai provider) — thinking always-on, but the field is accepted
         "glm-5.1",
         "glm-5",
         "glm-5-turbo",
         "glm-5v-turbo",
-        # GLM-4.7 family — thinking always-on
+        # GLM-4.7 series (zhipuai provider) — thinking always-on
         "glm-4.7",
         "glm-4.7-flash",
         "glm-4.7-flashx",
-        # GLM-4.6 family — hybrid (honors enabled/disabled)
+        # GLM-4.6 series (zhipuai provider) — hybrid (honors enabled/disabled)
         "glm-4.6",
         "glm-4.6v",
-        # GLM-4.5 family — hybrid
+        # GLM-4.5 series (zhipuai provider) — hybrid
         "glm-4.5",
         "glm-4.5v",
         "glm-4.5-air",

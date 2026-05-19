@@ -1,9 +1,9 @@
 # seeds_gen1 — first co-scientist generated batch
 
 This directory will hold the first `gen1` batch of Petri seeds produced
-by the seed-pipeline orchestrator (`plugins/seed_pipeline/`). It is the
+by the seed-generation orchestrator (`plugins/seed_generation/`). It is the
 output of the S12 generation run (sprint plan
-`docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`).
+`docs/plans/2026-05-18-seed-generation-sprint-plan.md`).
 
 ## Current status
 
@@ -13,7 +13,7 @@ directory + the run-book at
 generation is deferred behind one prerequisite + one external
 constraint:
 
-1. **PipelineRegistry agent factories** — `plugins/seed_pipeline/cli.py`
+1. **PipelineRegistry agent factories** — `plugins/seed_generation/cli.py`
    `_dispatch_pipeline()` currently builds an empty
    `PipelineRegistry`, so `Pipeline.run()` raises a `RuntimeError("no
    registered agent")` on the first phase. The 7 concrete agents

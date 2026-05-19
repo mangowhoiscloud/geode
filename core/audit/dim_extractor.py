@@ -1,6 +1,6 @@
 """Aggregate per-dim judge scores from a petri ``.eval`` archive.
 
-The ``autoresearch`` outer-loop (``autoresearch/train.py``) needs the
+The ``autoresearch`` self-improving-loop (``autoresearch/train.py``) needs the
 audit's per-dim mean + stderr to compute a fitness aggregate.
 inspect_ai's stdout from ``inspect eval`` does not include this — only
 human-readable rows and a ``Log: …`` trailer pointing at the archive.
@@ -279,7 +279,7 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]
     - the archive has zero samples with numeric dim scores.
 
     Failures during read are logged at WARNING and swallowed — the
-    outer-loop is best-effort scaffolding, not a blocker.
+    self-improving-loop is best-effort scaffolding, not a blocker.
     """
     try:
         from inspect_ai.log import read_eval_log

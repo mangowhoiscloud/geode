@@ -4,7 +4,7 @@ Single-experiment runner for autoresearch (Petri-signal fork).
 Karpathy's upstream ``train.py`` is a single-GPU GPT pre-train (model +
 Muon optimiser + training loop, ~630 LOC). This fork's ``train.py``
 keeps the same role but runs **one audit per invocation** — it is the
-single file the outer-loop agent modifies.
+single file the self-improving-loop agent modifies.
 
 Agent CAN modify:
   * ``WRAPPER_PROMPT_SECTIONS`` — the system prompt's section dict.
@@ -82,10 +82,10 @@ except ImportError:
 # ---------------------------------------------------------------------------
 #
 # PR-δ1 (2026-05-19) — these module constants are the **fallback
-# defaults** when no ``~/.geode/config.toml`` ``[outer_loop.autoresearch]``
+# defaults** when no ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]``
 # section is present. ``_get_autoresearch_config()`` lazily loads the
 # config and the call sites consult its fields directly. The constant
-# names stay literal so the outer-loop agent (per ``program.md``) can
+# names stay literal so the self-improving-loop agent (per ``program.md``) can
 # still grep + edit them in this file; the config layer makes them
 # operator-overridable without code changes.
 
@@ -97,16 +97,16 @@ SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"
 """Default seed pool — hierarchical tree (post-PR-0). P0b adds the
 ``AUTORESEARCH_SEED_SELECT`` env override consumed by
-:func:`_resolve_seed_select` so the seed-pipeline cross-loop handoff
+:func:`_resolve_seed_select` so the seed-generation cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
-literal default so existing tests and outer-loop agents can grep it."""
+literal default so existing tests and self-improving-loop agents can grep it."""
 DIM_SET_NAME = "5axes"
 MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
 def _get_autoresearch_config() -> Any:
-    """Lazily load ``[outer_loop.autoresearch]`` from ``~/.geode/config.toml``.
+    """Lazily load ``[self_improving_loop.autoresearch]`` from ``~/.geode/config.toml``.
 
     Returns the typed ``AutoresearchConfig`` (PR-α1) when the loader is
     available; falls back to a fresh ``AutoresearchConfig`` (whose
@@ -118,12 +118,12 @@ def _get_autoresearch_config() -> Any:
     without touching ``~/.geode/config.toml``.
     """
     try:
-        from core.config.outer_loop import load_outer_loop_config
+        from core.config.self_improving_loop import load_self_improving_loop_config
 
-        return load_outer_loop_config().autoresearch
+        return load_self_improving_loop_config().autoresearch
     except Exception:
         # Use the in-module default (matches AutoresearchConfig() exactly,
-        # which is verified by tests/test_outer_loop_config.py::
+        # which is verified by tests/test_self_improving_loop_config.py::
         # test_autoresearch_defaults_match_train_module).
         from types import SimpleNamespace
 
@@ -144,7 +144,7 @@ def _resolve_seed_select() -> str:
 
     Precedence (Codex CLI pattern):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``[outer_loop.autoresearch] seed_select`` from ``config.toml``.
+    2. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
     3. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
@@ -260,12 +260,12 @@ RUN_LOG = STATE_DIR / "run.log"
 AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 BASELINE_PATH = STATE_DIR / "baseline.json"
 
-OUTER_LOOP_HOME = Path.home() / ".geode" / "outer-loop"
-SESSIONS_INDEX_PATH = OUTER_LOOP_HOME / "sessions.jsonl"
-"""P1a — shared outer-loop session registry. One JSON record per run
-from any outer-loop driver (autoresearch / seed-pipeline) so external
+SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"
+SESSIONS_INDEX_PATH = SELF_IMPROVING_LOOP_HOME / "sessions.jsonl"
+"""P1a — shared self-improving-loop session registry. One JSON record per run
+from any self-improving-loop driver (autoresearch / seed-generation) so external
 tools can join across the two loops via ``session_id`` + ``gen_tag``."""
-"""Per-branch baseline written by the outer-loop agent after a promote.
+"""Per-branch baseline written by the self-improving-loop agent after a promote.
 
 S9 schema (ADR-002 §3 — baseline wrapping removed)::
 
@@ -283,12 +283,43 @@ dormant (first run / fresh branch).
 # ---------------------------------------------------------------------------
 
 
+def _emit_journal(
+    session_id: str,
+    gen_tag: str,
+    event: str,
+    *,
+    level: str = "info",
+    payload: dict[str, object] | None = None,
+) -> None:
+    """Emit one SessionJournal event for this audit run.
+
+    P0b — autoresearch event coverage (docs/audits/2026-05-19-
+    self-improving-loop-observability-gap.md §4). Centralises the
+    SessionJournal lazy-import + payload SoT contract (P0a §6: journal
+    events MUST NOT duplicate sessions.jsonl canonical fields). No-op
+    when ``session_id`` / ``gen_tag`` are empty (run_audit called from
+    tests without them) or when ``core.observability`` is unavailable
+    in the import context.
+    """
+    if not session_id or not gen_tag:
+        return
+    try:
+        from core.observability import SessionJournal
+    except ImportError:
+        return
+    SessionJournal(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        component="autoresearch",
+    ).append(event, level=level, payload=payload or {})
+
+
 def _build_audit_command() -> list[str]:
     """Construct the ``geode audit`` subprocess argv.
 
     PR-δ1 reads hyperparameters from
     :func:`_get_autoresearch_config` so operators can override via
-    ``~/.geode/config.toml`` ``[outer_loop.autoresearch]`` without
+    ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]`` without
     editing this file.
     """
     cfg = _get_autoresearch_config()
@@ -328,6 +359,9 @@ def _dump_wrapper_override() -> Path:
 
 def run_audit(
     dry_run: bool,
+    *,
+    session_id: str = "",
+    gen_tag: str = "",
 ) -> tuple[dict[str, float], dict[str, float], float, float]:
     """Invoke a single audit. Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
 
@@ -335,10 +369,22 @@ def run_audit(
     of dim means so the loop scaffolding can be smoke-tested without touching
     LLM quota / API credits. dry-run returns an empty ``dim_stderr`` so the
     stability axis falls back to the placeholder constant.
+
+    ``session_id`` / ``gen_tag`` are forwarded for SessionJournal emission
+    (P0b — wrapper_override_dumped / subprocess_started / subprocess_finished
+    / subprocess_timeout events). Both default to empty so unit tests that
+    call ``run_audit(dry_run=...)`` directly stay unchanged — emission is
+    skipped when either is empty.
     """
     started = time.time()
     AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)
     override_path = _dump_wrapper_override()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "wrapper_override_dumped",
+        payload={"path": str(override_path)},
+    )
 
     if dry_run:
         dim_means = {
@@ -361,18 +407,46 @@ def run_audit(
     argv = _build_audit_command()
     env = os.environ.copy()
     env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
+    timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
+
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "subprocess_started",
+        payload={"argv_len": len(argv), "timeout_sec": timeout_sec},
+    )
 
     audit_started = time.time()
-    proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
-        argv,
-        env=env,
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=_get_autoresearch_config().budget_minutes * 60 + 120,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
+            argv,
+            env=env,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "subprocess_timeout",
+            level="error",
+            payload={"timeout_sec": timeout_sec},
+        )
+        raise
     audit_seconds = time.time() - audit_started
+
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "subprocess_finished",
+        payload={
+            "exit_code": proc.returncode,
+            "audit_seconds": round(audit_seconds, 3),
+        },
+    )
 
     log_text = proc.stdout + "\n--- stderr ---\n" + proc.stderr
     RUN_LOG.write_text(log_text, encoding="utf-8")
@@ -515,7 +589,7 @@ def compute_fitness(
 # 10-col TSV keyed on per-tier aggregates + a per-row JSONL line that
 # carries the full 20-dim raw signal. Operator appends both to
 # ``autoresearch/state/results.{tsv,jsonl}`` after each audit so the
-# outer-loop history is queryable without re-running the audit.
+# self-improving-loop history is queryable without re-running the audit.
 #
 # TSV is grep-friendly (one line per audit, fixed columns); JSONL is
 # the raw-truth artifact used by the meta-reviewer agent (S8) to
@@ -538,7 +612,7 @@ RESULTS_TSV_HEADER: tuple[str, ...] = (
 )
 """P1a — added ``session_id`` + ``gen_tag`` as the first two columns
 so cross-run / cross-loop joins work without parsing description.
-See `docs/plans/2026-05-19-outer-loop-wiring-sprint.md` Phase B."""
+See `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md` Phase B."""
 
 
 def _tier_mean(dim_scores: dict[str, float], dims: tuple[str, ...]) -> float:
@@ -665,7 +739,7 @@ def print_summary(
     """Karpathy-style grep-friendly stdout block — per-dim scores + means + stderr.
 
     Per ADR-002 + PR 0 the report lists all 20 dims (5 critical +
-    12 auxiliary + 3 info) so the outer-loop agent's results.tsv can
+    12 auxiliary + 3 info) so the self-improving-loop agent's results.tsv can
     carry the raw signal without re-projection. Fitness weights 17
     dims (critical + auxiliary) + the stability axis.
     """
@@ -736,14 +810,14 @@ def _append_session_index(
     ended_at: float,
     extra: dict[str, object],
 ) -> None:
-    """Append one row to ``~/.geode/outer-loop/sessions.jsonl``.
+    """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
 
     P1a — shared cross-loop session registry. Persistence failures log
     nothing (a stderr print here would pollute the grep-friendly
     stdout block) and the in-memory run still completes.
     """
     try:
-        OUTER_LOOP_HOME.mkdir(parents=True, exist_ok=True)
+        SELF_IMPROVING_LOOP_HOME.mkdir(parents=True, exist_ok=True)
         payload: dict[str, object] = {
             "session_id": session_id,
             "gen_tag": gen_tag,
@@ -886,20 +960,80 @@ def main() -> int:
 
     session_id = _resolve_session_id()
     started_at = time.time()
+    # P0b — compute gen_tag up-front so journal events emitted during
+    # run_audit (subprocess lifecycle) can carry the same session_id +
+    # gen_tag pair as the eventual sessions.jsonl row.
+    commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
+    gen_tag = _resolve_gen_tag(commit)
+
+    cfg = _get_autoresearch_config()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "audit_started",
+        payload={"dry_run": args.dry_run},
+    )
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "config_snapshot",
+        payload={
+            "target_model": cfg.target_model,
+            "judge_model": cfg.judge_model,
+            "budget_minutes": cfg.budget_minutes,
+            "seed_limit": cfg.seed_limit,
+            "dim_set": cfg.dim_set,
+            "max_turns": cfg.max_turns,
+            "use_oauth": cfg.use_oauth,
+        },
+    )
 
     try:
-        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(dry_run=args.dry_run)
+        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(
+            dry_run=args.dry_run,
+            session_id=session_id,
+            gen_tag=gen_tag,
+        )
     except Exception as exc:
+        # P0b — audit_failed marker for stream consumers. The specific
+        # cause (subprocess_timeout / RuntimeError) has its own event
+        # emitted from inside run_audit when applicable.
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "audit_failed",
+            level="error",
+            payload={"error": str(exc)[:200]},
+        )
         print(f"audit failed: {exc}", file=sys.stderr)
         return 1
 
     baseline_means, baseline_stderr = (None, None) if args.no_baseline else _load_baseline()
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "baseline_decision",
+        payload={
+            "baseline_present": baseline_means is not None,
+            "baseline_active": baseline_means is not None and not args.no_baseline,
+            "no_baseline_flag": args.no_baseline,
+        },
+    )
     dim_scores = compute_dim_scores(dim_means, dim_stderr)
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
         baseline_means=baseline_means,
         baseline_stderr=baseline_stderr,
+    )
+    # P0b — per-dim score breakdown lives in the journal (event-scoped).
+    # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
+    # breakdown is not in sessions.jsonl so it belongs here, not duplicated.
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "per_dim_scores",
+        payload={"dim_scores": {k: round(v, 4) for k, v in dim_scores.items()}},
     )
     print_summary(
         dim_means,
@@ -912,14 +1046,12 @@ def main() -> int:
         baseline_active=baseline_means is not None,
     )
 
-    # S10 — emit results.{tsv,jsonl} lines on stdout so the outer-loop
+    # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
     # operator (or a follow-up script) can append them to the rolling
     # autoresearch/state/results.{tsv,jsonl}. We don't write the files
     # directly because the verdict / description are decided by the
     # operator AFTER reading the print_summary; emitting at this stage
     # would freeze in a default. Operators tee the line manually.
-    commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
-    gen_tag = _resolve_gen_tag(commit)
     description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
     verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
     print(f"session_id:               {session_id}")
@@ -986,30 +1118,19 @@ def main() -> int:
         },
     )
 
-    # P1c — append a single audit_finished event to the structured
-    # session journal so downstream observability can join via
-    # session_id + gen_tag.
-    try:
-        from core.observability import SessionJournal
-
-        SessionJournal(
-            session_id=session_id,
-            gen_tag=gen_tag,
-            component="autoresearch",
-        ).append(
-            "audit_finished",
-            level="info" if fitness > 0.0 else "warn",
-            payload={
-                "commit": commit,
-                "fitness": round(fitness, 6),
-                "verdict": verdict,
-                "promoted": promoted_line,
-                "dry_run": args.dry_run,
-            },
-        )
-    except ImportError:
-        # core.observability is optional; surface only when present.
-        pass
+    # P1c — emit the audit_finished journal event as a stream marker.
+    # Canonical run metrics (commit, fitness, verdict, promoted) live in
+    # sessions.jsonl (see _append_session_index above); duplicating them
+    # here causes drift between the two sinks (P0a dedup,
+    # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §6).
+    # Consumers join via session_id + gen_tag.
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "audit_finished",
+        level="info" if fitness > 0.0 else "warn",
+        payload={"dry_run": args.dry_run},
+    )
     return 0
 
 

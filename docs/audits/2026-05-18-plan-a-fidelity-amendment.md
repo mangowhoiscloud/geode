@@ -1,7 +1,7 @@
-# Fidelity amendment — Plan A seed-pipeline sprint 한정 (CLAUDE.md + Claude Code system-prompt 일부)
+# Fidelity amendment — Plan A seed-generation sprint 한정 (CLAUDE.md + Claude Code system-prompt 일부)
 
 **Date**: 2026-05-18
-**Scope**: Seed Pipeline sprint S1-S12 (16 PR)
+**Scope**: Seed Generation sprint S1-S12 (16 PR)
 **Sunset**: S12 merge to main → 본 amendment 만료, CLAUDE.md 본래 규칙 복귀.
 
 ## 배경
@@ -27,7 +27,7 @@ CLAUDE.md 의 simplicity / minimum-viable 제약을 그대로 적용하면 7 rol
 | 시스템 prompt 원문 | 본 sprint 적용 |
 |---|---|
 | "Don't add features, refactor, or introduce abstractions beyond what the task requires" | 본 sprint 의 task = ADR-001 의 7 role + Elo tournament + 3-judge panel + manifest + picker + cost preview + pre-flight. 본 ADR 범위 전부가 task. |
-| "Three similar lines is better than premature abstraction" | `BaseSeedAgent` 추상화 (`plugins/seed_pipeline/agents/base.py`) 허용. paper 의 6-way symmetry from arXiv:2502.18864 Figure 1. premature 아닌 structural. |
+| "Three similar lines is better than premature abstraction" | `BaseSeedAgent` 추상화 (`plugins/seed_generation/agents/base.py`) 허용. paper 의 6-way symmetry from arXiv:2502.18864 Figure 1. premature 아닌 structural. |
 | "Don't design for hypothetical future requirements" | seed pool naming `seeds_gen<N>` monotonic 은 hypothetical future 아닌 paper 의 cumulative-generation 패턴 직접 구현. |
 
 ## 강화 대상 (sprint 한정 + 영구)
@@ -55,9 +55,9 @@ CLAUDE.md 의 simplicity / minimum-viable 제약을 그대로 적용하면 7 rol
 
 본 sprint 의 PR review (사람 또는 Codex MCP) 시 다음 패턴을 **정상**으로 판정:
 
-1. `plugins/seed_pipeline/agents/base.py` 의 `BaseSeedAgent` 추상 클래스 — 7 role 공통 contract 표현 (paper 6 + GEODE Pilot).
+1. `plugins/seed_generation/agents/base.py` 의 `BaseSeedAgent` 추상 클래스 — 7 role 공통 contract 표현 (paper 6 + GEODE Pilot).
 2. 7 role 각자가 `BaseSeedAgent` 상속 — 본 sprint 의 핵심 architectural choice (paper 의 multi-agent symmetry + GEODE Pilot).
-3. `plugins/seed_pipeline/{tournament.py, cost_preview.py, pre_flight.py}` 의 별도 모듈 분리 — orchestrator 의 책임 비대화 방지.
+3. `plugins/seed_generation/{tournament.py, cost_preview.py, pre_flight.py}` 의 별도 모듈 분리 — orchestrator 의 책임 비대화 방지.
 4. `manifest.py` 의 pydantic schema + drift validator — Petri P1-A 의 직접 차용 패턴. premature schema 가 아닌 multi-source binding 의 contract.
 
 다음 패턴은 **비정상 (PR reject)**:
@@ -78,9 +78,9 @@ CLAUDE.md 의 simplicity / minimum-viable 제약을 그대로 적용하면 7 rol
 ## References
 
 - CLAUDE.md (project root) — `### CANNOT` 전 항목, `### 2. Plan + Socratic Gate`, `### Refactoring Deception Prevention`
-- ADR-001 `docs/architecture/seed-pipeline-decision.md`
+- ADR-001 `docs/architecture/seed-generation-decision.md`
 - ADR-002 `docs/architecture/autoresearch-axis-decision.md`
-- ADR-003 `docs/architecture/seed-pipeline-ui-decision.md`
-- Plan `docs/plans/2026-05-18-seed-pipeline-sprint-plan.md`
+- ADR-003 `docs/architecture/seed-generation-ui-decision.md`
+- Plan `docs/plans/2026-05-18-seed-generation-sprint-plan.md`
 - AI co-scientist paper — arXiv:2502.18864 (6-agent contract)
 - `.geode/skills/codex-mcp-verify/SKILL.md` — per-task Codex MCP skill
