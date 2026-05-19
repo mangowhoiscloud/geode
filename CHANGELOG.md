@@ -428,6 +428,17 @@ silent-fail surfaced and fixed (Anthropic 529 `OverloadedError`).
 
 ### Infrastructure
 
+- **Petri 번들 격리.** petri-bundle 무결성 게이트를 `pages.yml` 에서
+  분리하여 별도의 `.github/workflows/petri-publish.yml` 워크플로우로
+  이관. petri 와 무관한 site 빌드 실패가 번들 배포를 가리거나, 번들
+  회귀가 site 빌드를 가리는 양방향 결합을 차단. 신규 워크플로우는
+  `docs/petri-bundle/**`, `scripts/validate_petri_bundle.py`,
+  `scripts/check_repo_hygiene.py`, 워크플로우 파일 자체의 변경 PR 마다
+  실행되며, 매일 00:30 UTC cron + `workflow_dispatch` 가 추가 안전망.
+  실제 deploy 는 `pages.yml` 의 단일 Pages artifact 로 유지하되,
+  validator 가 `npm install/build` *직전* 으로 이동하여 번들 회귀가
+  가장 저렴한 단계에서 abort. PR-gate 가 base branch 와 diff 해서
+  `.eval` / `assets/**` 파일 삭제 시 경고 emit.
 - **Petri bundle isolation.** Split the petri-bundle integrity gate out of
   `pages.yml` into a dedicated `.github/workflows/petri-publish.yml`
   workflow so a non-petri site-build failure can no longer mask a corrupt
@@ -436,10 +447,19 @@ silent-fail surfaced and fixed (Anthropic 529 `OverloadedError`).
   `scripts/check_repo_hygiene.py`, or the workflow file itself, plus a
   daily 00:30 UTC cron and `workflow_dispatch`. The deploy still goes
   through `pages.yml` (single Pages artifact source), but the validator
-  now runs **before** `npm install/build` in that workflow too — a bundle
+  now runs **before** `npm install/build` in that workflow too. a bundle
   regression aborts the deploy at the cheapest possible step. PR-gate
   also emits a regression warning when any `.eval` or `assets/**` file
   was deleted vs the base branch.
+- **번들 validator 심화 검사.** `scripts/validate_petri_bundle.py` 가 이제
+  각 `.eval` zip 내부 까지 열어서 차단: `header.results=None`, 빈
+  `results.scores[]`, 빈 `metrics` 를 가진 score, 누락된 `header.json`,
+  bad zip, 누락된 최상위 viewer asset (`index.html` + `assets/index.js`
+  + `assets/index.css`). 이들은 모두 `inspect_ai #1747` 의 클릭 시점
+  `formatPrettyDecimal(g.metrics[i].value)` TypeError 의 알려진 trigger.
+  `tests/test_validate_petri_bundle.py` 의 13 unit test 가 회귀 보호.
+  신규 dev-group dep `zipfile-zstd` (Python 3.14+ 에서는 no-op shim)
+  로 validator 가 `[audit]` extra 없이도 zstd 압축된 entry 열람 가능.
 - **Deeper bundle validator.** `scripts/validate_petri_bundle.py` now
   opens each `.eval` zip and rejects: `header.results=None`, empty
   `results.scores[]`, any score with empty `metrics`, missing
@@ -449,7 +469,12 @@ silent-fail surfaced and fixed (Anthropic 529 `OverloadedError`).
   .value)` TypeError in inspect_ai #1747. Backed by 13 unit tests in
   `tests/test_validate_petri_bundle.py`. New `zipfile-zstd` dev-group
   dependency (Python 3.14+ no-op shim) keeps the validator pure-stdlib
-  on the lint path — no `[audit]` extra required.
+  on the lint path. no `[audit]` extra required.
+- **Petri 번들 삭제 보호 ratchet.** `check_repo_hygiene.py` 가
+  `docs/petri-bundle/logs/*.eval` 파일 개수 의 하한 (`PETRI_EVAL_FLOOR
+  = 9`) 강제. archive 를 줄이려면 동일 PR 에서 floor 도 같이 낮춰야
+  하므로 (Karpathy P4 explicit-action ratchet), 무관한 리팩토링 PR 의
+  silent 삭제 가 차단.
 - **Petri bundle delete-protection ratchet.** `check_repo_hygiene.py`
   enforces a `PETRI_EVAL_FLOOR = 9` lower bound on
   `docs/petri-bundle/logs/*.eval` count. Any PR that drops bundle
