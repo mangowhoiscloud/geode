@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-ε1 — `geode config migrate-petri-toml` CLI + sample
+  `[self_improving_loop.*]` config fixture.** Closes the docs +
+  backfill phase of the 2026-05-19 self-improving-loop config
+  consolidation plan. The new Typer subcommand reads the legacy
+  `~/.geode/petri.toml` via the existing
+  `migration_plan_from_petri_toml` helper and either (default) prints
+  the `[self_improving_loop.petri.*]` snippets the operator should
+  paste, or (`--yes`) appends them to `~/.geode/config.toml` directly
+  after refusing if the destination already has overlapping role
+  sections (re-write safety). Broken TOML in the destination → refuses
+  with exit 2 and an actionable message. `docs/examples/self_improving_loop.config.toml.example`
+  ships the canonical annotated schema for every section
+  (`[self_improving_loop]` thresholds + `.autoresearch` /
+  `.seed_generation` / `.petri.<role>` blocks). README.md +
+  README.ko.md now point operators at the example file and CLI.
+  README.ko.md residual `/tmp/geode-serve.log` reference (missed in
+  PR #1336 docs cleanup) also updated to `~/.geode/logs/serve.log`.
+  9 new tests cover the renderer + dry-run + `--yes` happy path +
+  overlap-guard + broken-TOML guard + empty-plan path.
+
 ## [0.99.18] — 2026-05-19
 
 PR #1336 squash `15ca2921` — explicit-naming rename pass + observability

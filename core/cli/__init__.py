@@ -310,9 +310,11 @@ app = typer.Typer(
 )
 
 # Subcommand groups
+from core.cli.cmd_config import app as config_app  # noqa: E402
 from core.cli.cmd_skill import app as skill_app  # noqa: E402
 
 app.add_typer(skill_app, name="skill")
+app.add_typer(config_app, name="config")
 
 
 # ---------------------------------------------------------------------------
