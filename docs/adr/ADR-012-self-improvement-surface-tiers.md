@@ -14,13 +14,13 @@ GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Refle
 
 Petri 17-dim 중 **양의 압력 (성능 향상) 으로 작동하는 dim 은 사실상 `broken_tool_use` 1개** 뿐이고 나머지는 alignment / safety evaluation 축으로 음의 압력 ("안 망가지기") 이다. 17-dim 의 가중치가 동일 차원에 압축돼 fitness 의 정의역이 "에이전트가 망가지지 않는지" 에 쏠려 있다. seed pool 의 정교화 + skill 진화의 노력 대부분이 alignment dim 의 마이크로-튜닝으로 흡수되는 구조적 누수.
 
-### 발견 2 — Mutation 표면의 wiring 누수 (audit 시점 1/5, S0a 이후 2/5)
+### 발견 2 — Mutation 표면의 wiring 누수 (audit 시점 1/5, S0a+S0b 이후 3/5)
 
 PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`) 가 진단한 audit 시점 결과 — mutator 가 mutate 할 수 있다고 명세된 5 slot 중 인퍼런스 reader 가 살아있는 slot 은 `prompt` 하나뿐. 나머지 4 (`tool_policy` / `decomposition` / `retrieval` / `reflection`) 는 SoT 파일 + mutation dispatcher 는 있지만 **인퍼런스 경로에서 정책을 읽어 행동에 반영하는 reader 가 부재** — `core/self_improving_loop/policies.py:29-37` 의 docstring 이 직접 자백한다 (PR-6 의 의도적 follow-up 미완 + 잊혀짐).
 
-**S0a (2026-05-21 머지) 이후 상태**: `tool_policy` 가 ALIVE 로 전환 — `core/agent/tool_policy.py` 의 reader 가 `core/agent/loop/_helpers.py:get_agentic_tools` 에서 호출된다. 따라서 audit 시점 1/5 → 현재 2/5 ALIVE. 남은 dead slot 은 `decomposition` (S0c) / `retrieval` (S0d 처치 결정) / `reflection` (S0b).
+**S0a + S0b (2026-05-21 머지) 이후 상태**: `tool_policy` + `reflection` 이 ALIVE 로 전환. `tool_policy` reader 는 `core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools` 에서 호출. `reflection` reader 는 `core/agent/reflection_policy.py` → `_reflection.py` 의 reflection LLM 호출 직전 적용. 따라서 audit 시점 1/5 → 현재 3/5 ALIVE. 남은 dead slot 은 `decomposition` (S0c) / `retrieval` (S0d 처치 결정).
 
-→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 audit 시점 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이었다 (1/40~1/85 누수). S0a 이후 2축 × 1-2dim = 2-4 면적으로 회복 중이고 S0b/c 완료 시 4축까지 회복 예정.
+→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 audit 시점 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이었다 (1/40~1/85 누수). S0a + S0b 이후 3축 × 1-2dim = 3-6 면적으로 회복 중이고 S0c 완료 시 4축까지 회복 예정.
 
 ### 발견 3 — Fine-tune 표면의 채널 제약
 
@@ -47,7 +47,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 | 5축 SoT `tool_policy` | `tool-policy.json` | **가동 중** (S0a, 2026-05-21) | **ALIVE** — `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` |
 | 5축 SoT `decomposition` | `decomposition.json` | mutation target 정의만 | **DEAD** — `core/orchestration/goal_decomposer.py` 가 `load_prompt("decomposer", "system")` 로 별도 SoT 사용 중. `decomposition.json` 미연결. S0c reader 신설 필요 |
 | 5축 SoT `retrieval` | `retrieval.json` | mutation target 정의만 | **DEAD** — RAG 인프라 부재. S0d 에서 deprecate 또는 보류 |
-| 5축 SoT `reflection` | `reflection.json` | mutation target 정의만 | **DEAD** — `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` 이 module-level constant. S0b reader 신설 필요 |
+| 5축 SoT `reflection` | `reflection.json` | **가동 중** (S0b, 2026-05-21) | **ALIVE** — `core/agent/reflection_policy.py` (`_load_reflection_policy_override` + `apply_reflection_policy`) → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 |
 | Skill 정의 | `.claude/skills/<name>/` (20+개) | 수동 (mutation 채널 밖) | n/a (M1 에서 6번째 target_kind 로 개통) |
 | Agent contract | `.claude/agents/seed_*.md` (7-role) | 수동 (mutation 채널 밖) | n/a (M2 에서 7번째 target_kind, 좁게 — mutator 자신 제외) |
 | Plugin 분석 코드 | `plugins/petri_audit/`, `plugins/seed_generation/` | 수동 | n/a (M5 에서 격리된 진입 슬롯) |
@@ -137,7 +137,7 @@ PR-AUDIT-5SLOT 으로 진단 완료. dead slot 별 reader 신설:
 | Sub-PR | 작업 | ROI |
 |---|---|---|
 | S0a | `tool_policy` reader 신설 — `core/agent/loop/AgenticLoop._select_tools()` 또는 동등 진입점에서 `tool-policy.json` 의 allowed/forbidden/priority 정책 읽어 도구 후보 필터 (~30 line) | **단기 1순위** — `broken_tool_use` dim 직접 영향 (17-dim 중 유일한 양의 압력 dim) |
-| S0b | `reflection` reader 신설 — `_REFLECTION_TOOL` 의 description/instructions/criteria 를 `reflection.json` sections 로 override (`wrapper-sections` 패턴 재사용) | **단기 2순위** — `admire_means` + `ux_means` 동시 영향 |
+| S0b | `reflection` reader 신설 (머지 완료, #1408) — `_REFLECTION_TOOL["description"]` + `_SYSTEM_PROMPT` 를 `reflection.json` 의 `description` / `system_prompt` field 로 override. `input_schema` 는 mutate 대상 아님 (typed payload contract 보존). | **단기 2순위** — `admire_means` + `ux_means` 동시 영향 |
 | S0c | `decomposition` reader 신설 — `load_prompt("decomposer", "system")` 과 `decomposition.json` 의 sections 연결 (또는 `_load_decomposition_policy()` 신설) | 단기 3순위 — `task_success_rate` 영향 |
 | S0d | `retrieval` 처치 결정 — RAG 인프라 신설 여부 결정 후 (a) reader 신설 (b) `TARGET_KINDS` 에서 제거 5축 → 4축 축소 (c) 보류 | 단기 4순위 또는 deprecate |
 

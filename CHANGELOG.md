@@ -49,6 +49,36 @@ functional change.
 
 ### Added
 
+- **PR-S0b — `reflection` reader 신설 (ADR-012 dead slot 살리기 #2).**
+  PR-S0a (#1407) 의 패턴을 그대로 차용해 두 번째 dead slot
+  (`reflection`) 을 살림. **schema** (두 field 모두 optional, string):
+  `description` (`_REFLECTION_TOOL["description"]` override) /
+  `system_prompt` (`_SYSTEM_PROMPT` override). `input_schema` 와 `name`
+  은 mutate 대상 아님 — `record_reflection` 의 typed payload contract
+  (`hypotheses` / `confidence` / `next_action_hint`) 보존. **Resolution
+  order**: ① `GEODE_REFLECTION_POLICY_OVERRIDE` env var (audit
+  subprocess, strict — schema 실패 시 RuntimeError) ②
+  `~/.geode/self-improving-loop/reflection.json` (daily-run, graceful)
+  ③ `None`. 단일 적용 지점: `core/agent/loop/_reflection.py` 의
+  reflection LLM `agentic_call` 직전 — `apply_reflection_policy` 가
+  `(tool, system_prompt)` 튜플 정규화 후 `tools=[active_tool]` +
+  `system=active_system` 으로 전달. Tool dict 은 deep-copy 후 mutate 해서
+  module-level constant `_REFLECTION_TOOL` 의 오염 방지. **Read-Write
+  parity**: `write_policy()` 가 `dict[str, str]` 만 직렬화하므로 reader
+  도 string payload 그대로 수용 (S0a 의 list/string 두 형태 정규화는
+  reflection 에서는 본질 string 이라 split 불필요). **회귀 marker
+  의 의도된 발화**: PR-AUDIT-5SLOT 의 `test_dead_slot_has_no_inference_reader`
+  parametrize 에서 `reflection.json` 제거 + 새
+  `test_reflection_slot_is_now_alive_post_s0b` 추가. audit doc 의
+  상태표에 `reflection` 행 ALIVE 갱신 + Post-S0b update 섹션 + 3/5 ALIVE
+  anchor. ADR-012 본문의 Tier 1 표 + invariant test 의 ALIVE/DEAD count
+  (`== 2/== 3` → `== 3/== 2`) 동기화. `autoresearch/train.py` 의 audit
+  subprocess env wiring 에 `GEODE_REFLECTION_POLICY_OVERRIDE` 추가 (S0a
+  의 wrapper + tool_policy 옆에). ROI: `admire_means` (S2 신설 예정) +
+  `ux_means` (S1 신설 예정) 양쪽에 영향 — reflection 품질이 응답 품질로
+  직결되는 fitness 경로. 18 new invariant test + 기존 PR-AUDIT-5SLOT +
+  ADR-012 test 함께 통과 (총 73 test 그린).
+
 - **PR-S0a — `tool_policy` reader 신설 (ADR-012 dead slot 살리기 #1).**
   PR-AUDIT-5SLOT (#1405) 의 진단 — 5축 mutation 중 4축이 dead policy
   (인퍼런스 reader 부재) — 의 첫 처치. `tool-policy.json` 정책이

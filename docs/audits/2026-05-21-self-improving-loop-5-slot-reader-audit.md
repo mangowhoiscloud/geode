@@ -39,7 +39,7 @@ infrastructure is committed before the policies that consume them.
 | `tool_policy` | `tool-policy.json` | ✓ | **audit 시점 없음** — `paths.py:92`, `policies.py:130` 정의만. **S0a 이후** `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` | **DEAD → ALIVE (S0a, 2026-05-21 머지)** |
 | `decomposition` | `decomposition.json` | ✓ | **없음** — `_decomposition.py:31` 의 `GoalDecomposer` 는 prompt 를 `core.llm.prompts.load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드. 즉 hardcoded 가 아니지만 어느 경로도 `decomposition.json` 을 읽지 않음 — 그게 dead 사유 | **DEAD** |
 | `retrieval` | `retrieval.json` | ✓ | **없음** — `paths.py:94`, `policies.py:132` 정의만 | **DEAD** |
-| `reflection` | `reflection.json` | ✓ | **없음** — `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` schema + reflection prompt 가 module-level constant. `reflection.json` 미연결 | **DEAD** |
+| `reflection` | `reflection.json` | ✓ | **audit 시점 없음** — `_REFLECTION_TOOL` + `_SYSTEM_PROMPT` 가 module-level constant. **S0b 이후** `core/agent/reflection_policy.py` (`_load_reflection_policy_override` + `apply_reflection_policy`) → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 | **DEAD → ALIVE (S0b, 2026-05-21 머지)** |
 
 **총평** (audit 시점, 2026-05-21 오전): 1/5 ALIVE, 4/5 DEAD.
 
@@ -51,9 +51,19 @@ ADR-012 S0a (`tool_policy` reader 신설) 머지 후 상태:
 |---|---|---|
 | `tool_policy` | **DEAD → ALIVE** | `core/agent/tool_policy.py` 의 `_load_tool_policy_override` + `apply_tool_policy` → `core/agent/loop/_helpers.py:get_agentic_tools` (도구 후보 단일 진입점) |
 
-**현재 상태**: 2/5 ALIVE, 3/5 DEAD. 남은 dead slot: `decomposition` (S0b 예정) / `retrieval` (S0d 처치 결정 예정) / `reflection` (S0c 예정).
+**S0a 직후 상태**: 2/5 ALIVE, 3/5 DEAD.
 
-## 4. 인과 체인의 끊김
+### Post-S0b (2026-05-21 오후 2차) update
+
+ADR-012 S0b (`reflection` reader 신설) 머지 후 상태:
+
+| Slot | 변동 | 새 reader 위치 |
+|---|---|---|
+| `reflection` | **DEAD → ALIVE** | `core/agent/reflection_policy.py` 의 `_load_reflection_policy_override` + `apply_reflection_policy` → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 |
+
+**현재 상태**: 3/5 ALIVE, 2/5 DEAD. 남은 dead slot: `decomposition` (S0c 예정) / `retrieval` (S0d 처치 결정 예정).
+
+## 4. 인과 체인의 끊김 (audit 시점 사실, Post-S0a/S0b 갱신은 §3 참고)
 
 ```
 mutator LLM
@@ -71,9 +81,9 @@ mutator LLM
 
 → 4 slot 의 mutation 은 fitness gate 에서 항상 "no signal" 로 처리된다. mutator 는 이걸 "이 slot 은 fitness 개선이 어려운 영역" 으로 잘못 학습할 수 있다.
 
-## 5. ALIVE slot 의 상세 — `prompt`
+## 5. ALIVE slot 의 상세 — `prompt` (audit 시점)
 
-`prompt` 만이 진화 압력에 닿는 유일한 slot. 인퍼런스 경로:
+audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일한 slot. **Post-S0a/S0b 머지 (오후) 이후 `tool_policy` + `reflection` 추가 ALIVE** — §3 의 Post-S0* update 섹션 참고. 인퍼런스 경로 도식은 audit 시점 사실로 보존:
 
 | 단계 | 코드 위치 | 동작 |
 |---|---|---|
@@ -84,7 +94,7 @@ mutator LLM
 | 5 | `core/agent/loop/agent_loop.py` | 구성된 system prompt 가 LLM 호출 경로로 흘러들어감 |
 | 6 | Petri eval | 변경된 system prompt 로 응답 → dim_means 변동 → fitness gate 작동 |
 
-이게 5축 중 유일하게 닫힌 루프. 나머지 4축은 (1)→(2) 사이에서 끊김.
+이게 audit 시점 (2026-05-21 오전) 의 사실 — 5축 중 유일하게 닫힌 루프, 나머지 4축은 (1)→(2) 사이에서 끊김. **Post-S0a/S0b 머지 후**: `tool_policy` (`core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`) 와 `reflection` (`core/agent/reflection_policy.py` → `_reflection.py` LLM 호출 직전) 도 동일하게 닫힌 루프로 회복.
 
 ## 6. DEAD slot 별 권고
 
@@ -118,13 +128,13 @@ mutator LLM
 | 권고 B (deprecate) | 현재 단계에서는 deprecate 가 정직함. RAG 인프라가 신설되는 시점에 다시 도입 |
 | ROI 추정 | **권고 B 단기 / 권고 A 중-장기 conditional** |
 
-### 6d. `reflection`
+### 6d. `reflection` (S0b 머지 완료, 2026-05-21)
 
 | 항목 | 내용 |
 |---|---|
 | 의도 | 응답 생성 후 self-critique 정책 |
-| 현재 | `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` schema + reflection prompt 가 module-level constant 로 hardcoded — `reflection.json` 무관 |
-| 권고 A (살리기) | `_REFLECTION_TOOL` 의 description / instructions / criteria 를 `reflection.json` 의 sections 로 override (마찬가지로 `wrapper-sections` 패턴 재사용) |
+| audit 시점 | `_REFLECTION_TOOL` schema + `_SYSTEM_PROMPT` 가 module-level constant 로 hardcoded — `reflection.json` 무관 |
+| S0b 머지 후 | `core/agent/reflection_policy.py` 신설 (`_load_reflection_policy_override` + `apply_reflection_policy`), `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용. schema: `description` / `system_prompt` (둘 다 string). `input_schema` 는 contract 보존 차원에서 mutate 대상 아님 |
 | 권고 B (deprecate) | 같음 |
 | ROI 추정 | **권고 A** — reflection 품질 ↑ → 응답 품질 ↑ → `admire_means` (단기 S2) 와 `ux_means` 동시 영향 |
 
@@ -153,9 +163,12 @@ grep -n "GoalDecomposer" core/agent/loop/_decomposition.py
 grep -n 'load_prompt("decomposer"' core/orchestration/goal_decomposer.py
 grep -n "_REFLECTION_TOOL" core/agent/loop/_reflection.py
 grep -n "PR-6 stops at the" core/self_improving_loop/policies.py
-# Reader 부재 — 4 DEAD slot 의 SoT 파일명이 인퍼런스 디렉토리 어디에서도
-# 참조되지 않는지 확인 (self_improving_loop 의 mutation 정의/디스패처는 제외):
-for slot in tool-policy.json decomposition.json retrieval.json reflection.json; do
+# Reader 부재 — 현재 DEAD slot 의 SoT 파일명이 인퍼런스 디렉토리 어디에서도
+# 참조되지 않는지 확인 (self_improving_loop 의 mutation 정의/디스패처는 제외).
+# Post-S0a/S0b 머지 후: 4 DEAD → 2 DEAD (decomposition + retrieval).
+# tool-policy.json (S0a 머지) / reflection.json (S0b 머지) 는 audit-only
+# 시점 historical 검색에서만 사용:
+for slot in decomposition.json retrieval.json; do
   grep -rn "$slot" core/agent core/orchestration core/skills core/llm plugins autoresearch \
     | grep -v "self_improving_loop/policies.py" \
     | grep -v "self_improving_loop/runner.py" \

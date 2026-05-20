@@ -606,13 +606,19 @@ def run_audit(
     argv = _build_audit_command()
     env = os.environ.copy()
     env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
-    # ADR-012 S0a (2026-05-21) — audit subprocess 가 mutation 적용된
-    # tool_policy SoT 를 strict mode 로 읽도록 env 강제. 파일 부재 시
-    # subprocess 가 fail-fast (quota 절약).
-    from core.paths import GLOBAL_TOOL_POLICY_PATH
+    # ADR-012 S0a/S0b (2026-05-21) — audit subprocess 가 mutation 적용된
+    # 5축 SoT 를 strict mode 로 읽도록 env 강제. SoT 파일이 존재할 때만
+    # env 를 set 해서 subprocess 가 strict mode 로 동작 (파일 부재 시
+    # RuntimeError); SoT 파일이 없으면 env 미설정으로 subprocess 가
+    # graceful no-op 경로 (현재 default behaviour 보존). 즉 strict-fail
+    # 은 "SoT 가 디스크에 있는데도 subprocess 가 못 읽는 경우" 만 발화 —
+    # mutation 이 진행 중인 audit 의 quota 절약 목적.
+    from core.paths import GLOBAL_REFLECTION_POLICY_PATH, GLOBAL_TOOL_POLICY_PATH
 
     if GLOBAL_TOOL_POLICY_PATH.is_file():
         env["GEODE_TOOL_POLICY_OVERRIDE"] = str(GLOBAL_TOOL_POLICY_PATH)
+    if GLOBAL_REFLECTION_POLICY_PATH.is_file():
+        env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(GLOBAL_REFLECTION_POLICY_PATH)
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
