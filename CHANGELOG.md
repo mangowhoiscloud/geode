@@ -49,6 +49,25 @@ functional change.
 
 ### Added
 
+- **X3 — ``/login providers`` exposes the provider-variant table +
+  equivalence map.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (X3: *Provider equivalence
+  map 사용자 가시성 0*). Pre-fix the equivalence map (``openai ↔
+  openai-codex``, ``glm ↔ glm-coding``) lived only in
+  ``core.llm.registry.PROVIDER_EQUIVALENCE``; users saw the
+  ``provider`` label in ``/login`` / ``/model`` and had no way to
+  discover that a Codex Plus token and an OpenAI PAYG key both serve
+  a ``gpt-5.x`` request, or that a GLM Coding key shadows the PAYG
+  endpoint. The new subcommand renders each ``PROVIDER_VARIANTS``
+  entry with display name + auth type + default base URL + bound-plan
+  count, then prints every multi-member equivalence class once
+  (singletons skipped, sibling-key duplicates de-duped). Singular
+  alias ``/login provider`` is accepted. ``/login help`` documents the
+  command. 5 new tests in ``tests/test_login_providers.py`` pin the
+  dispatch path, the variant-table coverage, the equivalence header,
+  the de-dup invariant (one arrow per class), and the help-text
+  discoverability.
+
 - **PR-Π3 — Proximity embedding conditions on the research goal
   (`state.target_dim`).** Closes the third P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison; completes the
