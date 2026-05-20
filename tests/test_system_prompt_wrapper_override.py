@@ -86,3 +86,93 @@ def test_invalid_wrapper_override_schema_fails_closed(
 
     with pytest.raises(RuntimeError, match=r"non-empty dict\[str, str\]"):
         build_system_prompt()
+
+
+# ---------------------------------------------------------------------------
+# G5a — env-less SoT fallback (~/.geode/self-improving-loop/wrapper-sections.json)
+# ---------------------------------------------------------------------------
+
+
+def test_sot_fallback_default_when_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No SoT file + no env → default wrapper (router-style baseline)."""
+    sot_path = tmp_path / "wrapper-sections.json"  # never created
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    prompt = build_system_prompt()
+    assert "You are an autonomous execution agent" in prompt
+
+
+def test_sot_fallback_loaded_when_file_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SoT file present + no env → SoT replaces default wrapper."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(
+        json.dumps({"role": "G5A_SOT_LOADED_WRAPPER", "extra": "second section"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    prompt = build_system_prompt()
+    assert "G5A_SOT_LOADED_WRAPPER" in prompt
+    assert "second section" in prompt
+    assert "You are an autonomous execution agent" not in prompt
+
+
+def test_env_override_wins_over_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """GEODE_WRAPPER_OVERRIDE env beats the SoT fallback."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": "G5A_SOT_LOADED_WRAPPER"}), encoding="utf-8")
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    override_path = _write_override(tmp_path, {"role": "ENV_OVERRIDE_WINS"})
+    monkeypatch.setenv("GEODE_WRAPPER_OVERRIDE", str(override_path))
+    prompt = build_system_prompt()
+    assert "ENV_OVERRIDE_WINS" in prompt
+    assert "G5A_SOT_LOADED_WRAPPER" not in prompt
+
+
+def test_sot_fallback_unparseable_uses_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Corrupted SoT → graceful degrade to default, no RuntimeError."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text("{ not valid json", encoding="utf-8")
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    prompt = build_system_prompt()
+    assert "You are an autonomous execution agent" in prompt
+    assert "G5A_SOT" not in prompt
+
+
+def test_sot_fallback_empty_dict_uses_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Empty dict SoT → graceful degrade."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({}), encoding="utf-8")
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    prompt = build_system_prompt()
+    assert "You are an autonomous execution agent" in prompt
+
+
+def test_sot_fallback_non_string_values_uses_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Non-string value in SoT → graceful degrade."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": 42}), encoding="utf-8")
+    monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    prompt = build_system_prompt()
+    assert "You are an autonomous execution agent" in prompt
+
+
+def test_sot_path_parity_with_autoresearch() -> None:
+    """G5a — autoresearch.train.WRAPPER_SECTIONS_SOT_PATH ===
+    core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH.
+
+    The two SoT path constants are deliberately *duplicated* (not
+    imported) to keep the import-linter "Agent stays pure" contract
+    intact, so the parity must be pinned by a test instead.
+    """
+    from autoresearch import train as auto_train
+
+    from core.agent import system_prompt
+
+    assert auto_train.WRAPPER_SECTIONS_SOT_PATH == system_prompt._WRAPPER_SECTIONS_SOT_PATH

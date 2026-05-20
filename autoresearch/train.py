@@ -78,6 +78,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -87,6 +88,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 try:
     from core.agent.system_prompt import WRAPPER_OVERRIDE_HOOK_READY as _CORE_WRAPPER_OVERRIDE_READY
@@ -252,7 +255,7 @@ INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "inf
 # Wrapper prompt sections — MUTATION TARGET
 # ---------------------------------------------------------------------------
 
-WRAPPER_PROMPT_SECTIONS: dict[str, str] = {
+_WRAPPER_PROMPT_SECTIONS_FALLBACK: dict[str, str] = {
     "role": (
         "You are GEODE, a general-purpose autonomous execution agent. "
         "You perform research, analysis, automation, and scheduling for the user."
@@ -275,6 +278,88 @@ WRAPPER_PROMPT_SECTIONS: dict[str, str] = {
         "Do not invent justifications after the fact."
     ),
 }
+"""Hard-coded fallback wrapper sections.
+
+G5a (2026-05-20) — the *live* mutation target is the file-backed SoT
+:data:`WRAPPER_SECTIONS_SOT_PATH`. The G5b self-improving-loop runner
+edits that file (and commits it) when promoting a wrapper-prompt
+mutation. This dict is the bootstrap default that ships with the
+codebase so a clean checkout still has a working wrapper before any
+audit has promoted a mutation.
+"""
+
+
+def load_wrapper_prompt_sections() -> dict[str, str]:
+    """Load the *current* wrapper sections — SoT first, fallback otherwise.
+
+    Resolution order:
+
+    1. ``~/.geode/self-improving-loop/wrapper-sections.json`` — the
+       cross-process SoT the G5b runner writes after promoting a
+       wrapper-prompt mutation. This is the file that ties the
+       autoresearch loop, the daily ``geode`` invocation, and the
+       audit subprocess together: they all read the same JSON dict.
+    2. :data:`_WRAPPER_PROMPT_SECTIONS_FALLBACK` — bootstrap default
+       (clean checkout / no promote yet / unparseable SoT).
+
+    Schema validation is strict: every key + value must be a string.
+    Schema failure logs a WARNING and falls back to the hardcoded
+    default — the autoresearch loop should never crash because of a
+    bad on-disk patch; the runner is expected to roll the patch back
+    on the next iteration anyway.
+    """
+    if not WRAPPER_SECTIONS_SOT_PATH.is_file():
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    try:
+        raw = WRAPPER_SECTIONS_SOT_PATH.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning(
+            "wrapper sections SoT at %s is unreadable (%s); using fallback",
+            WRAPPER_SECTIONS_SOT_PATH,
+            exc,
+        )
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    if not isinstance(data, dict) or not data:
+        log.warning(
+            "wrapper sections SoT at %s is not a non-empty dict; using fallback",
+            WRAPPER_SECTIONS_SOT_PATH,
+        )
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    for key, value in data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            log.warning(
+                "wrapper sections SoT at %s has non-string key/value at %r; using fallback",
+                WRAPPER_SECTIONS_SOT_PATH,
+                key,
+            )
+            return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    return data
+
+
+def write_wrapper_prompt_sections(sections: dict[str, str]) -> None:
+    """Persist the wrapper sections to the cross-process SoT.
+
+    G5b runner calls this after the LLM proposes a single-section
+    mutation and the operator (or auto-promote rule) accepts it.
+    Validation matches :func:`load_wrapper_prompt_sections` — every
+    key/value must be a string, dict must be non-empty.
+
+    Raises :class:`ValueError` on schema violation so the runner aborts
+    BEFORE writing a bad SoT that would make every consumer fall back
+    to the bootstrap default.
+    """
+    if not isinstance(sections, dict) or not sections:
+        raise ValueError("wrapper sections must be a non-empty dict[str, str]")
+    for key, value in sections.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ValueError(f"wrapper sections has non-string key/value at {key!r}")
+    WRAPPER_SECTIONS_SOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    WRAPPER_SECTIONS_SOT_PATH.write_text(
+        json.dumps(sections, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -284,6 +369,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = REPO_ROOT / "autoresearch" / "state"
 RUN_LOG = STATE_DIR / "run.log"
 AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
+
+# G5a — file-backed SoT for the wrapper prompt sections, shared between
+# autoresearch (writer when the G5b runner promotes a mutation),
+# ``core.agent.system_prompt`` (reader for daily GEODE runs), and the
+# audit subprocess (reader via the GEODE_WRAPPER_OVERRIDE env hook).
+# Placed under ``~/.geode/`` so it survives ``git worktree remove`` and
+# is shared across worktrees / processes.
+WRAPPER_SECTIONS_SOT_PATH = Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
+
+# Resolved at module-load time so existing readers (``_dump_wrapper_override``,
+# ``print_summary``) keep their constant-style API. The G5b runner edits
+# the SoT file (``WRAPPER_SECTIONS_SOT_PATH``) and re-invokes train.py
+# in a fresh subprocess — the daemon path doesn't need hot reload here
+# because the wrapper-override env hook re-reads on every audit anyway.
+WRAPPER_PROMPT_SECTIONS: dict[str, str] = load_wrapper_prompt_sections()
 BASELINE_PATH = STATE_DIR / "baseline.json"
 
 SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"

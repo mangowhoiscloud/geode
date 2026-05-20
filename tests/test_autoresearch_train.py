@@ -1481,3 +1481,98 @@ def test_run_audit_subprocess_timeout_emits_event(
     # subprocess_timeout payload carries the configured timeout, nothing else.
     to_row = next(r for r in rows if r["event"] == "subprocess_timeout")
     assert set(to_row["payload"].keys()) == {"timeout_sec"}
+
+
+# ---------------------------------------------------------------------------
+# G5a — wrapper sections SoT (load + write + roundtrip)
+# ---------------------------------------------------------------------------
+
+
+def test_load_wrapper_prompt_sections_uses_fallback_when_no_sot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No SoT file → hardcoded fallback."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+    # Must be a fresh dict (defensive copy) so caller mutations don't
+    # leak into the module-level fallback.
+    sections["mutated"] = "x"
+    assert "mutated" not in auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_reads_sot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SoT file with valid schema → loaded verbatim."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(
+        json.dumps({"role": "evolved role", "tools": "evolved tools"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == {"role": "evolved role", "tools": "evolved tools"}
+
+
+def test_load_wrapper_prompt_sections_unparseable_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text("{ not valid json", encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_non_dict_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    assert auto_train.load_wrapper_prompt_sections() == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_non_string_value_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": 42}), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    assert auto_train.load_wrapper_prompt_sections() == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_write_wrapper_prompt_sections_roundtrip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "subdir" / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    payload = {"role": "rev2", "tools": "rev2 tools"}
+    auto_train.write_wrapper_prompt_sections(payload)
+    assert sot_path.is_file()
+    persisted = json.loads(sot_path.read_text(encoding="utf-8"))
+    assert persisted == payload
+    # Roundtrip via loader.
+    assert auto_train.load_wrapper_prompt_sections() == payload
+
+
+def test_write_wrapper_prompt_sections_rejects_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    with pytest.raises(ValueError, match="non-empty dict"):
+        auto_train.write_wrapper_prompt_sections({})
+    assert not sot_path.exists()
+
+
+def test_write_wrapper_prompt_sections_rejects_non_string(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    with pytest.raises(ValueError, match="non-string"):
+        auto_train.write_wrapper_prompt_sections({"role": 42})  # type: ignore[dict-item]
+    assert not sot_path.exists()
