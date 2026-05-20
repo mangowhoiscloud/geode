@@ -50,11 +50,11 @@ functional change.
 ### Added
 
 - **PR-S2 — `admire_means` fitness 축 + 3축 다축화 (ADR-012 단기).**
-  S1 의 `ux_means` 옆에 추가되는 **체감 품질** 양의 압력 축.
-  `plugins/seed_generation/agents/ranker.py` 의 ELO + 3-voter
-  cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 —
-  mutation before/after 응답을 동일 panel 이 pairwise 평가, win-rate
-  를 fitness 신호로 변환. **`autoresearch/admire_means.py` 신설** —
+  S1 의 `ux_means` 옆에 추가되는 **체감 품질** 양의 압력 축의
+  **schema + math + hook interface** 신설. 실제 `plugins/seed_generation/agents/ranker.py`
+  의 ELO + 3-voter panel 호출 wiring 은 S2b (별도 PR) — 본 PR 에서는
+  hook (`collect_admire_means_from_ranker`) 가 placeholder (None 반환)
+  로 ranker 호출 자리를 명시만 함. **`autoresearch/admire_means.py` 신설** —
   2-field schema (`pairwise_win_rate` 0.70 + `human_calibration_corr`
   0.30, 합 1.0) + `compute_admire_aggregate` (None → 0.5 neutral,
   calibration dampening 으로 Goodhart fooling 방어) +

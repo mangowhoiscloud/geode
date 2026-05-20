@@ -53,6 +53,22 @@ def test_calibration_threshold_in_valid_range() -> None:
     assert CALIBRATION_THRESHOLD >= 0.5
 
 
+def test_calibration_threshold_exact_value() -> None:
+    """CALIBRATION_THRESHOLD == 0.7 — Goodhart 방어 핵심 anchor (Codex
+    MCP catch). 변경 시 test + docstring + ADR 모두 동기 갱신 필요."""
+    assert CALIBRATION_THRESHOLD == 0.7
+
+
+def test_calibration_dampening_at_exact_threshold_full_signal() -> None:
+    """corr == threshold edge case — dampening = min(1.0, 1.0) = 1.0."""
+    edge = {"pairwise_win_rate": 1.0, "human_calibration_corr": CALIBRATION_THRESHOLD}
+    expected = (
+        ADMIRE_DIM_WEIGHTS["pairwise_win_rate"] * 1.0
+        + ADMIRE_DIM_WEIGHTS["human_calibration_corr"] * CALIBRATION_THRESHOLD
+    )
+    assert abs(compute_admire_aggregate(edge) - expected) < 1e-9
+
+
 # ---------------------------------------------------------------------------
 # 2. compute_admire_aggregate
 # ---------------------------------------------------------------------------

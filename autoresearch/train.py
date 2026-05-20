@@ -812,10 +812,20 @@ def compute_fitness(
 
     ``ux_means`` (ADR-012 S1, 2026-05-21) — 양의 압력 4-field
     (success_rate / token_cost_norm / revert_ratio_norm / latency_norm).
-    ``None`` 이면 dim-only fallback (no-op). 주어지면 fitness =
-    ``DIM_WEIGHT_TOTAL × dim_part + UX_WEIGHT × ux_aggregate`` 의 가중
-    합 (운영 권장 가중치: dim 0.7 + ux 0.3). admire_means 신설 (S2) 시
-    3축 다축화.
+    ``admire_means`` (ADR-012 S2, 2026-05-21) — 양의 압력 2-field
+    (pairwise_win_rate / human_calibration_corr).
+
+    분기 로직:
+    - ``ux_means is None and admire_means is None`` → dim-only fallback
+      (현재 behavior 보존, S1 전 caller 와 호환)
+    - ``admire_means is None`` (ux 만) → 2축 (UX_FITNESS_DIM_WEIGHT 0.7
+      + UX_FITNESS_UX_WEIGHT 0.3) — S1 backwards compat
+    - ``admire_means`` 활성 (or 둘 다) → 3축 재배분 (FITNESS_DIM_WEIGHT
+      0.4 + FITNESS_UX_WEIGHT 0.3 + FITNESS_ADMIRE_WEIGHT 0.3). ``ux``
+      누락 시 neutral 0.5 으로 처리.
+
+    Critical gate (regress 시 ``0.0``) 는 ux/admire 와 무관하게 strict-
+    reject — ADR-012 §Decision.2 의 multi-axis strict-reject 보존.
     """
     aggregate = 0.0
     for dim, weight in DIM_WEIGHTS.items():
