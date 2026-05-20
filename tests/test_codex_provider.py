@@ -17,9 +17,16 @@ class TestCodexConfig:
     def test_codex_base_url(self):
         assert "chatgpt.com/backend-api" in CODEX_BASE_URL
 
-    def test_codex_fallback_chain(self):
-        assert CODEX_PRIMARY in CODEX_FALLBACK_CHAIN
-        assert len(CODEX_FALLBACK_CHAIN) >= 2
+    def test_codex_fallback_chain_default_empty(self):
+        """v0.99.19 — silent same-provider fallback removed. Shipped
+        default for the chain is an empty list (opt-in knob). The
+        constant must still be a list so user-tuned chains from
+        ``~/.geode/routing.toml`` propagate as before."""
+        assert isinstance(CODEX_FALLBACK_CHAIN, list)
+        assert CODEX_FALLBACK_CHAIN == [], (
+            "Shipped default for CODEX_FALLBACK_CHAIN must be empty. "
+            "Users opt in via ~/.geode/routing.toml [model.fallbacks]."
+        )
 
     def test_resolve_provider_codex_models(self):
         from core.config import _resolve_provider
@@ -176,14 +183,17 @@ class TestAdapterMap:
         assert "openai-codex" in _ADAPTER_MAP
         assert "CodexAgenticAdapter" in _ADAPTER_MAP["openai-codex"]
 
-    def test_codex_cross_provider_fallback(self):
-        from core.llm.adapters import CROSS_PROVIDER_FALLBACK
+    def test_no_cross_provider_fallback_shim(self):
+        """v0.99.19 — the empty-dict ``CROSS_PROVIDER_FALLBACK`` shim is
+        deleted. The v0.50.0 invariant ("openai-codex must not silently
+        jump to another provider") is preserved by absence of the chain
+        code itself, not by an empty-dict sentinel."""
+        from core.llm import adapters as _adapters_mod
 
-        # v0.50.0: openai-codex no longer auto-falls back across providers.
-        # OAuth scope is provider-specific (chatgpt.com/backend-api/codex),
-        # so silent jumps to PAYG OpenAI/Anthropic would surprise users.
-        assert "openai-codex" in CROSS_PROVIDER_FALLBACK
-        assert CROSS_PROVIDER_FALLBACK["openai-codex"] == []
+        assert not hasattr(_adapters_mod, "CROSS_PROVIDER_FALLBACK"), (
+            "CROSS_PROVIDER_FALLBACK resurfaced — cross-provider silent "
+            "fallback elimination requires the symbol to stay deleted."
+        )
 
 
 class TestModelSelector:

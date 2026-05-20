@@ -65,6 +65,7 @@ def cmd_login(args: str) -> None:
         /login remove <plan>
         /login route <model> <plan> [<plan>...]
         /login quota          — per-plan usage breakdown
+        /login health [<profile>] — eligibility verdict + actionable suggestion
         /login status         — legacy alias of bare /login
     """
     from core.cli import commands as _pkg
@@ -107,6 +108,9 @@ def cmd_login(args: str) -> None:
         return
     if sub == "quota":
         _login_quota()
+        return
+    if sub == "health":
+        _login_health(rest)
         return
     if sub in ("providers", "provider"):
         _login_providers()
@@ -197,7 +201,18 @@ def _login_help() -> None:
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
         "  [label]/login quota[/label]                 Per-plan quota / usage\n"
+        "  [label]/login health[/label] [<profile>]    Eligibility verdict per profile\n"
         "  [label]/login providers[/label]             Provider variants + equivalence map\n"
+        "\n"
+        "  [muted]Eligibility verdicts (shown next to each profile in /login):[/muted]\n"
+        "  [muted]  ok               — profile passes every check, ready to dispatch[/muted]\n"
+        "  [muted]  missing_key      — key/token field is empty; rerun add or set-key[/muted]\n"
+        "  [muted]  expired          — OAuth token past expires_at; refresh via the[/muted]\n"
+        "  [muted]                     owning CLI (`claude` / `codex`) and rerun /login[/muted]\n"
+        "  [muted]  cooling_down     — consecutive failures tripped backoff; wait for[/muted]\n"
+        "  [muted]                     cooldown or run /login health <profile> for ETA[/muted]\n"
+        "  [muted]  disabled         — manually disabled (`/login remove` to delete)[/muted]\n"
+        "  [muted]  provider_mismatch — not for the queried provider (info only)[/muted]\n"
     )
 
 
@@ -915,6 +930,85 @@ def _login_quota() -> None:
                 else ""
             )
         )
+    _pkg.console.print()
+
+
+# ---------------------------------------------------------------------------
+# /login health — per-profile eligibility verdict + actionable suggestion
+# ---------------------------------------------------------------------------
+
+
+_HEALTH_SUGGESTIONS: dict[str, str] = {
+    "ok": "Ready to dispatch.",
+    "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
+    "`/login set-key <plan> <key>` to populate.",
+    "expired": "OAuth token past expires_at. Re-run the owning CLI's login "
+    "(e.g. `claude` or `codex`) and then `/login refresh` so GEODE "
+    "picks the new token up.",
+    "cooling_down": "Backoff after consecutive failures. The verdict line "
+    "shows the cooldown deadline — wait it out or "
+    "`/login use <other-plan>` to switch providers in the meantime.",
+    "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
+    "edit `~/.geode/auth.toml` to flip `disabled=false`).",
+    "provider_mismatch": "Profile belongs to a different provider — info only, no action needed.",
+}
+
+
+def _login_health(rest: str) -> None:
+    """Render eligibility verdicts for one profile or every profile.
+
+    L5 — the `/login` status dashboard already shows an inline reject
+    badge (cooldown / expired / etc), but the reason codes are opaque
+    until the user knows what each one means. ``/login help`` now
+    documents the codes; this subcommand turns the same data into a
+    per-profile report with an actionable suggestion ("re-run
+    `claude`", "wait Xm", …) so the user can resolve a verdict without
+    guessing.
+    """
+    from core.auth.profiles import EligibilityResult
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
+    store = ensure_profile_store()
+    profiles = store.list_all()
+    if not profiles:
+        _pkg.console.print(
+            "  [muted]No profiles registered. Run `/login add` to create one.[/muted]\n"
+        )
+        return
+
+    target = rest.strip()
+
+    # When the operator names a profile, narrow down — same matching the
+    # rest of the login subcommands use (exact name).
+    verdicts: list[EligibilityResult] = []
+    seen_providers: set[str] = set()
+    for profile in profiles:
+        if profile.provider in seen_providers:
+            continue
+        seen_providers.add(profile.provider)
+        verdicts.extend(store.evaluate_eligibility(profile.provider))
+
+    if target:
+        narrowed = [v for v in verdicts if v.profile_name == target]
+        if not narrowed:
+            _pkg.console.print(
+                f"\n  [warning]No profile named[/warning] {target}\n"
+                "  [muted]Run `/login` to list all profiles.[/muted]\n"
+            )
+            return
+        verdicts = narrowed
+
+    _pkg.console.print("\n  [header]Eligibility[/header]")
+    for v in verdicts:
+        code = v.reason_code
+        badge = "[success]ok[/success]" if v.eligible else f"[warning]{code}[/warning]"
+        _pkg.console.print(f"  {badge:<24} [bold]{v.profile_name}[/bold]")
+        if v.detail:
+            _pkg.console.print(f"    [muted]{v.detail}[/muted]")
+        suggestion = _HEALTH_SUGGESTIONS.get(code, "")
+        if suggestion:
+            _pkg.console.print(f"    → {suggestion}")
     _pkg.console.print()
 
 

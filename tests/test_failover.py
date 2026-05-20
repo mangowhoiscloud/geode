@@ -46,20 +46,31 @@ class TestRetryWithBackoff:
         assert len(retry_sleeps) == 1, retry_sleeps
 
     @patch("core.llm.fallback.time.sleep")
-    def test_fallback_model_on_persistent_failure(self, mock_sleep):
-        """After MAX_RETRIES on primary, should try fallback models."""
+    def test_no_silent_fallback_to_other_models(self, mock_sleep):
+        """v0.99.19 invariant: shipped default `FALLBACK_MODELS` is empty.
+
+        Pre-fix the loop tried each model in the chain after MAX_RETRIES
+        exhausted the primary. With the shipped knob default empty, the
+        loop attempts ``MAX_RETRIES`` calls against the supplied model
+        and then raises — no silent swap. Users who opt in via
+        ``~/.geode/routing.toml`` get the chain behaviour back; the
+        invariant here pins the *default* behaviour.
+        """
         rate_err = anthropic.RateLimitError.__new__(anthropic.RateLimitError)
         rate_err.status_code = 429
         rate_err.message = "rate limited"
 
-        # Fail MAX_RETRIES times on primary, succeed on fallback
-        side_effects = [rate_err] * MAX_RETRIES + ["fallback_ok"]
-        fn = MagicMock(side_effect=side_effects)
-        result = _retry_with_backoff(fn, model="primary-model")
-        assert result == "fallback_ok"
-        # Should have called with fallback model
-        last_call = fn.call_args
-        assert last_call.kwargs["model"] in FALLBACK_MODELS
+        fn = MagicMock(side_effect=rate_err)
+        with pytest.raises(anthropic.RateLimitError):
+            _retry_with_backoff(fn, model="primary-model")
+
+        # Every call must have been against the primary model.
+        for call in fn.call_args_list:
+            assert call.kwargs["model"] == "primary-model", (
+                f"silent fallback to {call.kwargs['model']!r} detected — "
+                "shipped knob default forbids same-provider chain."
+            )
+        assert fn.call_count == MAX_RETRIES
 
     def test_bad_request_not_retried(self):
         """BadRequestError should not be retried."""
@@ -115,8 +126,13 @@ class TestCallLlmFailover:
 
 
 class TestFallbackModels:
-    def test_fallback_models_defined(self):
-        assert len(FALLBACK_MODELS) >= 1
+    def test_fallback_models_default_empty(self):
+        """v0.99.19 — shipped default knob is empty (no silent fallback)."""
+        assert isinstance(FALLBACK_MODELS, list)
+        assert FALLBACK_MODELS == [], (
+            "Shipped FALLBACK_MODELS must default to empty. "
+            "Users opt in via ~/.geode/routing.toml [model.fallbacks]."
+        )
 
     def test_max_retries_positive(self):
         assert MAX_RETRIES >= 1

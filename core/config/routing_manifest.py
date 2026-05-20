@@ -194,9 +194,12 @@ class RoutingManifest(BaseModel):
 
     @model_validator(mode="after")
     def _consistency(self) -> RoutingManifest:
-        # 1) Every fallback chain's first element matches the corresponding
-        # default — prevents drift between [model.defaults] and
-        # [model.fallbacks] when only one is edited.
+        # 1) When a fallback chain is *explicitly populated* (user opt-in),
+        # its first element must match the corresponding default — prevents
+        # drift between [model.defaults] and [model.fallbacks]. v0.99.19 —
+        # an empty chain is the *shipped default* (silent fallback removed)
+        # so the empty case is no longer an error; it simply means "no
+        # auto-retry to alternate models".
         for provider, chain in (
             ("anthropic", self.fallbacks.anthropic),
             ("openai", self.fallbacks.openai),
@@ -204,7 +207,7 @@ class RoutingManifest(BaseModel):
             ("glm", self.fallbacks.glm),
         ):
             if not chain:
-                raise ValueError(f"fallback chain for {provider} is empty")
+                continue  # opt-out: no chain
             default = self.defaults.get(provider)
             if default and chain[0] != default:
                 raise ValueError(
