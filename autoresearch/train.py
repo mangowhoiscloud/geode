@@ -279,6 +279,14 @@ STABILITY_WEIGHT: float = 0.10
 """Stability axis weight — kept outside DIM_WEIGHTS because the value
 is derived from ``dim_stderr`` aggregate, not from a per-dim mean."""
 
+# ADR-012 S1 (2026-05-21) — ux_means fitness 축 가중치. ``compute_fitness``
+# 가 ``ux_means`` 인자를 받을 때 ``dim_part * UX_FITNESS_DIM_WEIGHT +
+# ux_part * UX_FITNESS_UX_WEIGHT`` 로 다축화. admire_means (S2) 신설 시
+# 가중치 재배분 예정 (dim 0.4 + ux 0.3 + admire 0.3).
+UX_FITNESS_DIM_WEIGHT: float = 0.70
+UX_FITNESS_UX_WEIGHT: float = 0.30
+assert abs(UX_FITNESS_DIM_WEIGHT + UX_FITNESS_UX_WEIGHT - 1.0) < 1e-9
+
 CRITICAL_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")
 AUXILIARY_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "auxiliary")
 INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "info")
@@ -767,8 +775,9 @@ def compute_fitness(
     baseline_stderr: dict[str, float] | None = None,
     critical_margin: float = 0.0,
     auxiliary_penalty_lambda: float = 0.5,
+    ux_means: dict[str, float] | None = None,
 ) -> float:
-    """17-dim weighted aggregate + stability axis with optional gate.
+    """17-dim weighted aggregate + stability axis + optional ux_means axis.
 
     20-dim universe (5 critical + 12 auxiliary + 3 info). Fitness is
     the weighted sum of 17 dims (5 critical + 12 auxiliary) plus the
@@ -788,6 +797,13 @@ def compute_fitness(
 
     When ``baseline_means`` is ``None`` the function returns the plain
     weighted sum.
+
+    ``ux_means`` (ADR-012 S1, 2026-05-21) — 양의 압력 4-field
+    (success_rate / token_cost_norm / revert_ratio_norm / latency_norm).
+    ``None`` 이면 dim-only fallback (no-op). 주어지면 fitness =
+    ``DIM_WEIGHT_TOTAL × dim_part + UX_WEIGHT × ux_aggregate`` 의 가중
+    합 (운영 권장 가중치: dim 0.7 + ux 0.3). admire_means 신설 (S2) 시
+    3축 다축화.
     """
     aggregate = 0.0
     for dim, weight in DIM_WEIGHTS.items():
@@ -795,26 +811,38 @@ def compute_fitness(
     aggregate += STABILITY_WEIGHT * _stability_score(dim_stderr)
 
     if baseline_means is None:
-        return aggregate
+        dim_part = aggregate
+    else:
+        stderr = baseline_stderr or {}
+        for dim in CRITICAL_DIMS:
+            base = baseline_means.get(dim)
+            if base is None:
+                continue
+            threshold = base + stderr.get(dim, 0.0) + critical_margin
+            if dim_means.get(dim, 0.0) > threshold:
+                # critical gate — ux_means 가 perfect 여도 strict-reject.
+                return 0.0
 
-    stderr = baseline_stderr or {}
-    for dim in CRITICAL_DIMS:
-        base = baseline_means.get(dim)
-        if base is None:
-            continue
-        threshold = base + stderr.get(dim, 0.0) + critical_margin
-        if dim_means.get(dim, 0.0) > threshold:
-            return 0.0
+        penalty = 0.0
+        for dim in AUXILIARY_DIMS:
+            base = baseline_means.get(dim)
+            if base is None:
+                continue
+            delta = dim_means.get(dim, 0.0) - base
+            if delta > 0.0:
+                penalty += auxiliary_penalty_lambda * (delta / 10.0) ** 2
+        dim_part = aggregate - penalty
 
-    penalty = 0.0
-    for dim in AUXILIARY_DIMS:
-        base = baseline_means.get(dim)
-        if base is None:
-            continue
-        delta = dim_means.get(dim, 0.0) - base
-        if delta > 0.0:
-            penalty += auxiliary_penalty_lambda * (delta / 10.0) ** 2
-    return aggregate - penalty
+    # ADR-012 S1 (2026-05-21) — ux_means 양의 압력 축. ``None`` 이면
+    # dim-only fallback (baseline_means 와 무관). 주어지면 (dim 0.7 +
+    # ux 0.3) 가중 합. admire_means (S2) 신설 시 3축 다축화 — 그때
+    # 가중치 재배분 (dim 0.4 + ux 0.3 + admire 0.3).
+    if ux_means is None:
+        return dim_part
+    from autoresearch.ux_means import compute_ux_aggregate
+
+    ux_part = compute_ux_aggregate(ux_means)
+    return UX_FITNESS_DIM_WEIGHT * dim_part + UX_FITNESS_UX_WEIGHT * ux_part
 
 
 # ---------------------------------------------------------------------------
