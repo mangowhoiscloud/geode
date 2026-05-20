@@ -6,6 +6,24 @@ GEODE extends the agent-grid pattern with two downstream stages —
 visualization walks the full Co-Scientist → Petri → autoresearch
 self-improving cycle.
 
+Layout rule (post-v2 rewrite)
+=============================
+A single fixed 3-zone layout keeps text and content from ever
+overlapping, and stages flow strictly **left → right**:
+
+* TITLE BAR (y ≈ 3.0–3.5) — reserved for bit text. Old title fades
+  out before the new one fades in (no Transform — Transform leaves
+  both visible mid-tween).
+* CONTENT ZONE (y ≈ 2.5 ↓ −2.0) split into three vertical bands:
+  - STAGE 1 (LEFT,   x ≈ −4.5) — Co-Scientist pattern (seed-generation)
+  - STAGE 2 (CENTER, x ≈   0.0) — Petri audit (measurement)
+  - STAGE 3 (RIGHT,  x ≈   4.5) — autoresearch (selection + promote)
+* FOOTER (y ≈ −3.3) — three progress dots (active stage = green).
+
+Active-stage elements render at full opacity; the prior stage dims to
+30% as the narrative moves right, leaving a "trail" without clutter.
+Every data-flow arrow points LEFT→RIGHT.
+
 12-bit storyboard + 5s outro is defined in
 ``docs/visualizations/geode-hero-storyboard.md`` (single source of truth).
 
@@ -13,11 +31,10 @@ Render
 ======
 ::
 
-    uv run manim -pqh scripts/visualizations/geode_hero.py GeodeSelfImprovingHero          # EN
-    GEODE_HERO_LANG=ko uv run manim -pqh scripts/visualizations/geode_hero.py GeodeSelfImprovingHero   # KO
+    uv run manim -qh -o GeodeHero-EN scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
+    GEODE_HERO_LANG=ko uv run manim -qh -o GeodeHero-KO scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
 
-Outputs to ``media/videos/geode_hero/1080p60/GeodeSelfImprovingHero.mp4``.
-Rename per language for distribution.
+Outputs to ``media/videos/geode_hero/1080p60/GeodeHero-{EN,KO}.mp4``.
 """
 
 from __future__ import annotations
@@ -25,13 +42,11 @@ from __future__ import annotations
 import os
 
 from manim import (
-    BLACK,
     DOWN,
     LEFT,
     ORIGIN,
     RIGHT,
     UP,
-    Arrow,
     Circle,
     Create,
     DashedLine,
@@ -45,7 +60,6 @@ from manim import (
     Scene,
     Square,
     Text,
-    Transform,
     VGroup,
     Write,
     config,
@@ -60,23 +74,28 @@ config.frame_rate = 60
 
 LANG = os.environ.get("GEODE_HERO_LANG", "en").lower()
 
-# Color palette — matches Co-Scientist aesthetic + GEODE additions.
-COLOR_AGENT = "#F4CCCC"  # light pink — seed-generation agents
-COLOR_WINNER = "#A4C2F4"  # light blue — promoted / tournament winners
-COLOR_UNFILLED = "#D9D9D9"  # grey — unfilled slot / supervisor
-COLOR_CRITICAL = "#E06666"  # red — critical-axis floor
-COLOR_PROMOTED = "#93C47D"  # green — auto-promote pass
-COLOR_PETRI = "#FFE599"  # soft yellow — measurement layer
-COLOR_ARROW = "#666666"  # medium grey — dashed connectors
+# Color palette — Co-Scientist aesthetic + GEODE extensions.
+COLOR_AGENT = "#F4CCCC"
+COLOR_WINNER = "#A4C2F4"
+COLOR_UNFILLED = "#D9D9D9"
+COLOR_CRITICAL = "#E06666"
+COLOR_PROMOTED = "#93C47D"
+COLOR_PETRI = "#FFE599"
+COLOR_ARROW = "#666666"
 COLOR_TEXT = "#000000"
 COLOR_TEXT_ACCENT = "#444444"
+COLOR_TRAIL = "#BBBBBB"  # dimmed stage history
 
-# Default sans-serif fonts. EN uses Helvetica (macOS-bundled); KO uses
-# Apple SD Gothic Neo so Korean glyphs render without empty boxes.
-# Manim's Pango backend requires the font name to be a non-empty string
-# even when defaults would suffice — passing ``None`` raises TypeError.
+# Fonts.
 EN_FONT = "Helvetica"
 KOR_FONT = "Apple SD Gothic Neo"
+
+# Layout zones (Manim default frame is 14.22 × 8.0 units at 16:9).
+TITLE_Y = 3.4
+CONTENT_TOP = 2.5
+CONTENT_BOTTOM = -2.0
+FOOTER_Y = -3.3
+STAGE_X = {"s1": -4.5, "s2": 0.0, "s3": 4.5}
 
 # ───────────────────────────────────────────────────────────────────────
 # EN / KO text lookup
@@ -97,6 +116,9 @@ T: dict[str, dict[str, str]] = {
         "bit_11": "Auto-promote: gain > max(stderr, 0.05)",
         "bit_12": "Next generation: wrapper-prompt mutation",
         "outro": "Self-improving over generations",
+        "stage_1": "seed-generation",
+        "stage_2": "Petri audit",
+        "stage_3": "autoresearch",
         "agent_generator": "generator",
         "agent_proximity": "proximity",
         "agent_critic": "critic",
@@ -104,16 +126,15 @@ T: dict[str, dict[str, str]] = {
         "agent_ranker": "ranker",
         "agent_evolver": "evolver",
         "agent_meta_reviewer": "meta_reviewer",
-        "petri_box": "Petri (geode audit)",
+        "scientist_label": "Engineer",
+        "survivors_label": "Survivors",
+        "fitness_label": "fitness",
+        "generations_label": "generation",
+        "promote": "PROMOTE",
+        "discard": "DISCARD",
         "baseline_json": "baseline.json",
         "gen_n": "gen N",
         "gen_n_plus_1": "gen N+1",
-        "scientist_label": "Engineer",
-        "leaderboard_label": "Survivors",
-        "discard": "DISCARD",
-        "promote": "PROMOTE",
-        "fitness_label": "fitness",
-        "generations_label": "generation",
     },
     "ko": {
         "bit_1": "엔지니어가 연구 목표를 명세",
@@ -129,6 +150,9 @@ T: dict[str, dict[str, str]] = {
         "bit_11": "Auto-promote — gain > max(stderr, 0.05)",
         "bit_12": "다음 세대 — wrapper-prompt mutation",
         "outro": "세대를 거듭한 자기 개선",
+        "stage_1": "seed-generation",
+        "stage_2": "Petri audit",
+        "stage_3": "autoresearch",
         "agent_generator": "generator",
         "agent_proximity": "proximity",
         "agent_critic": "critic",
@@ -136,32 +160,24 @@ T: dict[str, dict[str, str]] = {
         "agent_ranker": "ranker",
         "agent_evolver": "evolver",
         "agent_meta_reviewer": "meta_reviewer",
-        "petri_box": "Petri (geode audit)",
+        "scientist_label": "엔지니어",
+        "survivors_label": "Survivors",
+        "fitness_label": "fitness",
+        "generations_label": "세대",
+        "promote": "PROMOTE",
+        "discard": "DISCARD",
         "baseline_json": "baseline.json",
         "gen_n": "세대 N",
         "gen_n_plus_1": "세대 N+1",
-        "scientist_label": "엔지니어",
-        "leaderboard_label": "Survivors",
-        "discard": "DISCARD",
-        "promote": "PROMOTE",
-        "fitness_label": "fitness",
-        "generations_label": "세대",
     },
 }
 
 
 def _t(key: str) -> str:
-    """Lookup the active-language string. Falls back to EN on miss."""
     return T.get(LANG, T["en"]).get(key, T["en"].get(key, key))
 
 
 def _make_text(text: str, **kw) -> Text:
-    """Construct a Text with KO-aware font selection.
-
-    On EN renders we let Manim pick its bundled font. On KO renders we
-    request the macOS-bundled Korean font so glyph fallbacks do not
-    show empty boxes.
-    """
     font = kw.pop("font", None)
     if font is None:
         font = KOR_FONT if LANG == "ko" else EN_FONT
@@ -170,47 +186,43 @@ def _make_text(text: str, **kw) -> Text:
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Helpers — reusable shape factories
+# Shape factories
 # ───────────────────────────────────────────────────────────────────────
 
 
-def _agent_box(label_key: str, *, color: str = COLOR_AGENT, width: float = 2.2) -> VGroup:
-    """A rounded pink box with a centered label — the GEODE agent unit."""
+def _agent_box(label_key: str, *, color: str = COLOR_AGENT, width: float = 1.6) -> VGroup:
     body = Rectangle(
         width=width,
-        height=0.7,
+        height=0.55,
         stroke_color=COLOR_ARROW,
-        stroke_width=1.5,
+        stroke_width=1.2,
         fill_color=color,
         fill_opacity=0.85,
     )
-    body.set_corner_radius = 0.1  # visual hint only — Manim Rectangle is sharp
-    label = _make_text(_t(label_key), color=COLOR_TEXT, font_size=20)
+    label = _make_text(_t(label_key), color=COLOR_TEXT, font_size=16)
     label.move_to(body.get_center())
     return VGroup(body, label)
 
 
-def _scientist_icon() -> VGroup:
-    """A simple person icon: head circle + body trapezoid (rectangle)."""
-    head = Circle(radius=0.15, color=COLOR_WINNER, fill_color=COLOR_WINNER, fill_opacity=1.0)
-    head.shift(UP * 0.25)
+def _scientist_icon(scale: float = 1.0) -> VGroup:
+    head = Circle(radius=0.13 * scale, color=COLOR_WINNER, fill_color=COLOR_WINNER, fill_opacity=1.0)
+    head.shift(UP * 0.2 * scale)
     body = Rectangle(
-        width=0.5,
-        height=0.3,
+        width=0.4 * scale,
+        height=0.25 * scale,
         stroke_color=COLOR_WINNER,
         fill_color=COLOR_WINNER,
         fill_opacity=1.0,
     )
-    body.shift(DOWN * 0.05)
+    body.shift(DOWN * 0.05 * scale)
     icon = VGroup(head, body)
-    label = _make_text(_t("scientist_label"), color=COLOR_TEXT, font_size=16)
-    label.next_to(icon, DOWN, buff=0.1)
+    label = _make_text(_t("scientist_label"), color=COLOR_TEXT, font_size=14)
+    label.next_to(icon, DOWN, buff=0.08)
     return VGroup(icon, label)
 
 
-def _dashed_arrow(start, end) -> DashedLine:
-    """Co-Scientist-style dashed connector."""
-    return DashedLine(start, end, color=COLOR_ARROW, stroke_width=2, dash_length=0.15)
+def _dashed_arrow(start, end, *, color: str = COLOR_ARROW) -> DashedLine:
+    return DashedLine(start, end, color=color, stroke_width=2, dash_length=0.12)
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -219,9 +231,20 @@ def _dashed_arrow(start, end) -> DashedLine:
 
 
 class GeodeSelfImprovingHero(Scene):
-    """12-bit walkthrough of GEODE's Co-Scientist → Petri → autoresearch loop."""
+    """12-bit walkthrough of GEODE's Co-Scientist → Petri → autoresearch loop.
+
+    State held on ``self`` so each bit method can fade/move/dim
+    elements created by previous bits without re-querying the scene
+    mobjects. Use the helpers ``_set_title`` / ``_set_active_stage`` /
+    ``_dim`` to keep the layout rules consistent everywhere.
+    """
+
+    title: Text | None = None
+    stage_dots: dict[str, Circle] | None = None
+    stage_labels: dict[str, Text] | None = None
 
     def construct(self) -> None:
+        self._setup_footer()
         self._bit_1_engineer_goal()
         self._bit_2_seven_agents()
         self._bit_3_generate_critique_evolve()
@@ -237,36 +260,103 @@ class GeodeSelfImprovingHero(Scene):
         self._outro_ratchet_summary()
 
     # ──────────────────────────────────────────────────────────────────
-    # Stage 1 — Co-Scientist pattern (GEODE seed-generation)
+    # Layout helpers
+    # ──────────────────────────────────────────────────────────────────
+
+    def _set_title(self, key: str, *, font_size: int = 26) -> None:
+        """Replace the title bar text without overlap.
+
+        Old title fades out before the new one fades in — a Transform
+        leaves both visible mid-tween, which was the source of the
+        text/box overlap before this rewrite.
+        """
+        new_title = _make_text(_t(key), font_size=font_size, color=COLOR_TEXT).move_to(
+            UP * TITLE_Y
+        )
+        if self.title is None:
+            self.play(FadeIn(new_title), run_time=0.35)
+        else:
+            self.play(FadeOut(self.title), run_time=0.2)
+            self.play(FadeIn(new_title), run_time=0.35)
+        self.title = new_title
+
+    def _setup_footer(self) -> None:
+        """Three stage dots at the footer; the active one lights green."""
+        dots = {}
+        labels = {}
+        for i, (key, label_key) in enumerate(
+            (("s1", "stage_1"), ("s2", "stage_2"), ("s3", "stage_3"))
+        ):
+            x = -3.5 + i * 3.5
+            dot = Circle(
+                radius=0.12,
+                color=COLOR_ARROW,
+                fill_color=COLOR_UNFILLED,
+                fill_opacity=1.0,
+            ).move_to(RIGHT * x + UP * FOOTER_Y)
+            label = _make_text(
+                _t(label_key), font_size=15, color=COLOR_TEXT_ACCENT
+            ).next_to(dot, DOWN, buff=0.12)
+            dots[key] = dot
+            labels[key] = label
+        self.stage_dots = dots
+        self.stage_labels = labels
+        self.play(
+            *[Create(d) for d in dots.values()],
+            *[FadeIn(label) for label in labels.values()],
+            run_time=0.4,
+        )
+
+    def _set_active_stage(self, stage_key: str) -> None:
+        """Mark one footer dot green; reset the others to unfilled."""
+        assert self.stage_dots is not None
+        anims = []
+        for key, dot in self.stage_dots.items():
+            target_fill = COLOR_PROMOTED if key == stage_key else COLOR_UNFILLED
+            anims.append(dot.animate.set_fill(target_fill, opacity=1.0))
+        self.play(*anims, run_time=0.3)
+
+    def _dim(self, group: VGroup, *, opacity: float = 0.3) -> None:
+        """Fade a previous-stage element to ``opacity`` (trail effect)."""
+        self.play(group.animate.set_opacity(opacity), run_time=0.3)
+
+    # ──────────────────────────────────────────────────────────────────
+    # Stage 1 — Co-Scientist pattern (GEODE seed-generation, LEFT)
     # ──────────────────────────────────────────────────────────────────
 
     def _bit_1_engineer_goal(self) -> None:
-        """0–1.5s — Engineer icon + research-goal speech bubble."""
-        self.engineer = _scientist_icon()
-        self.engineer.shift(UP * 3.0)
+        """Engineer icon (top-left) above STAGE 1 zone — sits in the title
+        gutter so the agent grid below has clean vertical room."""
+        self._set_title("bit_1")
+        self._set_active_stage("s1")
 
-        speech = _make_text(_t("bit_1"), font_size=28).next_to(self.engineer, DOWN, buff=0.5)
-        self.speech = speech
-
-        self.play(FadeIn(self.engineer), run_time=0.6)
-        self.play(Write(speech), run_time=0.9)
+        # Engineer goes between the title bar (y=3.4) and the content top
+        # (y=2.5) so it never overlaps the agent box that arrives in bit 2.
+        self.engineer = _scientist_icon(scale=0.9).move_to(
+            RIGHT * STAGE_X["s1"] + UP * (TITLE_Y - 0.7)
+        )
+        self.play(FadeIn(self.engineer), run_time=0.5)
 
     def _bit_2_seven_agents(self) -> None:
-        """1.5–4s — Outer GEODE seed-generation box + 7 specialist agents."""
-        self.outer_box = Rectangle(
-            width=8.0,
-            height=4.5,
+        """7-agent grid inside the STAGE 1 LEFT zone (upper sub-region)."""
+        self._set_title("bit_2")
+
+        # Compact the agent box so the Survivors leaderboard (bit 4) has
+        # its own clean band below — no overlap.
+        outer_box = Rectangle(
+            width=3.4,
+            height=2.7,
             stroke_color=COLOR_ARROW,
-            stroke_width=2,
+            stroke_width=1.5,
             fill_color="#FFFFFF",
             fill_opacity=0.0,
-        ).shift(DOWN * 0.5)
+        ).move_to(RIGHT * STAGE_X["s1"] + UP * 0.4)
 
-        outer_label = _make_text("GEODE seed-generation", font_size=22, color=COLOR_TEXT_ACCENT)
-        outer_label.next_to(self.outer_box, UP, buff=0.1)
-        self.outer_label = outer_label
+        outer_label = _make_text(
+            "GEODE " + _t("stage_1"), font_size=15, color=COLOR_TEXT_ACCENT
+        ).next_to(outer_box, UP, buff=0.1)
 
-        agent_keys = [
+        agent_keys = (
             "agent_generator",
             "agent_proximity",
             "agent_critic",
@@ -274,122 +364,121 @@ class GeodeSelfImprovingHero(Scene):
             "agent_ranker",
             "agent_evolver",
             "agent_meta_reviewer",
-        ]
-        positions = [
-            LEFT * 2.5 + UP * 0.8,
-            ORIGIN + UP * 0.8,
-            RIGHT * 2.5 + UP * 0.8,
-            LEFT * 2.5 + DOWN * 0.2,
-            ORIGIN + DOWN * 0.2,
-            RIGHT * 2.5 + DOWN * 0.2,
-            ORIGIN + DOWN * 1.2,
-        ]
-        agents = []
-        for key, pos in zip(agent_keys, positions):
-            a = _agent_box(key)
-            a.move_to(self.outer_box.get_center() + pos * 0.6)
-            agents.append(a)
-        self.agents = {key: a for key, a in zip(agent_keys, agents)}
-
-        self.play(Create(self.outer_box), Write(outer_label), run_time=0.6)
-        self.play(
-            LaggedStart(*[FadeIn(a) for a in agents], lag_ratio=0.12),
-            run_time=1.8,
         )
-        # Update bit text
-        new_text = _make_text(_t("bit_2"), font_size=26).move_to(self.speech.get_center())
-        self.play(Transform(self.speech, new_text), run_time=0.5)
+        # 3 columns × 3 rows, last row only the center cell. Spacing
+        # tightened so the 7 agents fit inside the shrunk outer_box.
+        layout_offsets = (
+            LEFT * 1.0 + UP * 0.8,
+            ORIGIN + UP * 0.8,
+            RIGHT * 1.0 + UP * 0.8,
+            LEFT * 1.0,
+            ORIGIN,
+            RIGHT * 1.0,
+            ORIGIN + DOWN * 0.8,
+        )
+        agents = []
+        for key, offset in zip(agent_keys, layout_offsets):
+            box = _agent_box(key, width=1.4)
+            box.move_to(outer_box.get_center() + offset)
+            agents.append(box)
+        self.agents = VGroup(*agents)
+        self.s1_group = VGroup(outer_box, outer_label, self.agents)
+
+        self.play(Create(outer_box), Write(outer_label), run_time=0.5)
+        self.play(LaggedStart(*[FadeIn(a) for a in agents], lag_ratio=0.1), run_time=1.4)
 
     def _bit_3_generate_critique_evolve(self) -> None:
-        """4–6s — generator → critic → evolver chain flash."""
-        chain = ["agent_generator", "agent_critic", "agent_evolver"]
-        new_text = _make_text(_t("bit_3"), font_size=26).move_to(self.speech.get_center())
-        self.play(Transform(self.speech, new_text), run_time=0.4)
-        for key in chain:
-            self.play(Flash(self.agents[key], color=COLOR_WINNER, flash_radius=0.6), run_time=0.4)
+        """Flash generator → critic → evolver in order."""
+        self._set_title("bit_3")
+        for key in ("agent_generator", "agent_critic", "agent_evolver"):
+            # The box-list indexes line up with the agent_keys order above.
+            idx = {
+                "agent_generator": 0,
+                "agent_proximity": 1,
+                "agent_critic": 2,
+                "agent_pilot": 3,
+                "agent_ranker": 4,
+                "agent_evolver": 5,
+                "agent_meta_reviewer": 6,
+            }[key]
+            self.play(Flash(self.agents[idx], color=COLOR_WINNER, flash_radius=0.5), run_time=0.4)
 
     def _bit_4_tournament_survivors(self) -> None:
-        """6–8s — survivors leaderboard appears; slots fill blue."""
+        """Survivors leaderboard appears below the agent grid (still STAGE 1)."""
+        self._set_title("bit_4")
+
         leaderboard = VGroup(
             *[
                 Rectangle(
-                    width=1.6,
-                    height=0.45,
+                    width=1.4,
+                    height=0.22,
                     stroke_color=COLOR_ARROW,
-                    stroke_width=1.5,
+                    stroke_width=1.0,
                     fill_color=COLOR_UNFILLED,
                     fill_opacity=0.9,
-                ).shift(DOWN * (i * 0.55))
-                for i in range(5)
+                )
+                for _ in range(5)
             ]
-        )
-        leaderboard.move_to(RIGHT * 5.2 + DOWN * 0.5)
-        self.leaderboard = leaderboard
+        ).arrange(DOWN, buff=0.06)
+        # Position below the agent grid (which now ends ~y = -0.95) with a
+        # clear vertical gap before the footer (y = -3.3).
+        leaderboard.move_to(RIGHT * STAGE_X["s1"] + DOWN * 2.0)
         leaderboard_label = _make_text(
-            _t("leaderboard_label"), font_size=20, color=COLOR_TEXT_ACCENT
-        ).next_to(leaderboard, UP, buff=0.2)
+            _t("survivors_label"), font_size=14, color=COLOR_TEXT_ACCENT
+        ).next_to(leaderboard, UP, buff=0.1)
+        self.leaderboard = leaderboard
         self.leaderboard_label = leaderboard_label
 
-        agent_box_right_edge = self.outer_box.get_right() + RIGHT * 0.1
-        arrow_to_leaderboard = _dashed_arrow(agent_box_right_edge, leaderboard.get_left())
-        self.arrow_to_leaderboard = arrow_to_leaderboard
+        # Dim the upper grid so it doesn't compete visually.
+        self._dim(self.s1_group, opacity=0.45)
 
-        new_text = _make_text(_t("bit_4"), font_size=26).move_to(self.speech.get_center())
-        self.play(Transform(self.speech, new_text), run_time=0.4)
-        self.play(Create(leaderboard), Write(leaderboard_label), Create(arrow_to_leaderboard), run_time=0.8)
-
-        # Fill top 3 slots blue (winners), keep bottom 2 grey.
+        self.play(Create(leaderboard), Write(leaderboard_label), run_time=0.6)
         for i in range(3):
             self.play(
                 leaderboard[i].animate.set_fill(COLOR_WINNER, opacity=0.9),
-                run_time=0.3,
+                run_time=0.25,
             )
 
     # ──────────────────────────────────────────────────────────────────
-    # Stage 2 — Petri audit (measurement)
+    # Stage 2 — Petri audit (CENTER)
     # ──────────────────────────────────────────────────────────────────
 
     def _bit_5_to_petri(self) -> None:
-        """8–10s — Petri box appears, dashed arrow from survivors."""
+        """Arrow from STAGE 1 leaderboard → STAGE 2 Petri box (CENTER)."""
+        self._set_title("bit_5")
+        # Dim entire stage-1 group to trail-grey.
+        self._dim(self.s1_group, opacity=0.3)
+        self._dim(VGroup(self.leaderboard, self.leaderboard_label), opacity=0.5)
+        self._set_active_stage("s2")
+
         petri_box = Rectangle(
-            width=2.5,
-            height=1.4,
+            width=3.0,
+            height=1.0,
             stroke_color=COLOR_ARROW,
-            stroke_width=1.8,
+            stroke_width=1.5,
             fill_color=COLOR_PETRI,
             fill_opacity=0.85,
-        )
-        petri_box.shift(DOWN * 2.5 + RIGHT * 2.5)
-        petri_label = _make_text(_t("petri_box"), font_size=18, color=COLOR_TEXT)
-        petri_label.move_to(petri_box.get_center())
+        ).move_to(RIGHT * STAGE_X["s2"] + UP * (CONTENT_TOP - 0.5))
+        petri_label = _make_text(
+            "Petri (geode audit)", font_size=18, color=COLOR_TEXT
+        ).move_to(petri_box.get_center())
         self.petri_box = VGroup(petri_box, petri_label)
 
         survivors_to_petri = _dashed_arrow(
-            self.leaderboard.get_bottom() + DOWN * 0.05,
-            petri_box.get_top() + UP * 0.05,
+            self.leaderboard.get_right() + RIGHT * 0.1,
+            petri_box.get_left() + LEFT * 0.1,
         )
         self.survivors_to_petri = survivors_to_petri
 
-        new_text = _make_text(_t("bit_5"), font_size=26).move_to(self.speech.get_center())
-        self.play(Transform(self.speech, new_text), run_time=0.4)
-        self.play(Create(self.petri_box), Create(survivors_to_petri), run_time=1.2)
+        self.play(Create(petri_box), Write(petri_label), run_time=0.6)
+        self.play(Create(survivors_to_petri), run_time=0.5)
 
     def _bit_6_20_dim_rubric(self) -> None:
-        """10–12.5s — 4×5 grid (20 cells), tier-colored."""
-        # Fade out the seed-generation interior to free the canvas.
-        self.play(
-            *[FadeOut(a) for a in self.agents.values()],
-            FadeOut(self.outer_label),
-            self.outer_box.animate.set_opacity(0.0),
-            FadeOut(self.engineer),
-            FadeOut(self.leaderboard_label),
-            run_time=0.6,
-        )
+        """4×5 grid (20 dims) below the Petri box, tier-colored."""
+        self._set_title("bit_6")
 
         grid = VGroup()
-        tiers = (
-            ["critical"] * 5 + ["auxiliary"] * 12 + ["info"] * 3
-        )  # 20 dims tiered exactly as autoresearch/train.py
+        tiers = ["critical"] * 5 + ["auxiliary"] * 12 + ["info"] * 3
         for i, tier in enumerate(tiers):
             row, col = divmod(i, 5)
             fill = {
@@ -398,29 +487,25 @@ class GeodeSelfImprovingHero(Scene):
                 "info": COLOR_UNFILLED,
             }[tier]
             cell = Square(
-                side_length=0.42,
+                side_length=0.32,
                 stroke_color=COLOR_ARROW,
                 stroke_width=1.0,
                 fill_color=fill,
                 fill_opacity=0.6,
             )
-            cell.shift(LEFT * 4 + DOWN * 0.5 + RIGHT * (col * 0.5) + DOWN * (row * 0.5))
+            cell.shift(
+                RIGHT * (STAGE_X["s2"] - 0.7 + col * 0.35)
+                + UP * (0.3 - row * 0.35)
+            )
             grid.add(cell)
         self.grid = grid
 
-        new_text = _make_text(_t("bit_6"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
-        self.play(
-            LaggedStart(*[FadeIn(c) for c in grid], lag_ratio=0.05),
-            run_time=1.6,
-        )
+        self.play(LaggedStart(*[FadeIn(c) for c in grid], lag_ratio=0.04), run_time=1.4)
 
     def _bit_7_judge_scoring(self) -> None:
-        """12.5–14.5s — each cell flashes a score (concerning-behavior 1-10)."""
-        new_text = _make_text(_t("bit_7"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
+        """Each cell flashes a 1-10 score (lower is better)."""
+        self._set_title("bit_7")
 
-        # Synthetic scores — lower better. Critical 2-4, aux 3-6, info 5-7.
         scores = (
             [3.4, 2.8, 3.1, 2.5, 3.7]
             + [4.2, 5.1, 3.8, 4.7, 5.3, 3.9, 4.4, 5.8, 4.1, 4.9, 5.2, 3.6]
@@ -428,361 +513,328 @@ class GeodeSelfImprovingHero(Scene):
         )
         score_texts = []
         for cell, sc in zip(self.grid, scores):
-            t = _make_text(f"{sc:.1f}", font_size=14, color=COLOR_TEXT)
-            t.move_to(cell.get_center())
+            t = _make_text(f"{sc:.1f}", font_size=11, color=COLOR_TEXT).move_to(cell.get_center())
             score_texts.append(t)
         self.score_texts = score_texts
         self.play(
-            LaggedStart(*[FadeIn(t) for t in score_texts], lag_ratio=0.04),
-            run_time=1.4,
+            LaggedStart(*[FadeIn(t) for t in score_texts], lag_ratio=0.03),
+            run_time=1.2,
         )
 
     def _bit_8_dim_extractor(self) -> None:
-        """14.5–16.5s — grid collapses → two dict-shaped boxes."""
+        """Grid collapses; two dict-shaped boxes appear below it (still STAGE 2)."""
+        self._set_title("bit_8")
+
         means_box = Rectangle(
-            width=3.6,
-            height=0.7,
+            width=3.0,
+            height=0.5,
             stroke_color=COLOR_ARROW,
+            stroke_width=1.0,
             fill_color=COLOR_PETRI,
             fill_opacity=0.4,
-        ).shift(RIGHT * 1.0 + UP * 0.5)
+        ).move_to(RIGHT * STAGE_X["s2"] + DOWN * 0.6)
         means_label = _make_text(
-            "dim_means: {broken_tool_use: 2.5, ...}",
-            font_size=14,
+            "dim_means: {broken_tool_use: 2.5, …}",
+            font_size=11,
             color=COLOR_TEXT,
         ).move_to(means_box.get_center())
-
         stderr_box = Rectangle(
-            width=3.6,
-            height=0.7,
+            width=3.0,
+            height=0.5,
             stroke_color=COLOR_ARROW,
+            stroke_width=1.0,
             fill_color=COLOR_PETRI,
             fill_opacity=0.4,
-        ).shift(RIGHT * 1.0 + DOWN * 0.3)
+        ).move_to(RIGHT * STAGE_X["s2"] + DOWN * 1.2)
         stderr_label = _make_text(
-            "dim_stderr: {broken_tool_use: 0.4, ...}",
-            font_size=14,
+            "dim_stderr: {broken_tool_use: 0.4, …}",
+            font_size=11,
             color=COLOR_TEXT,
         ).move_to(stderr_box.get_center())
 
-        new_text = _make_text(_t("bit_8"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
         self.play(
             *[FadeOut(t) for t in self.score_texts],
             *[FadeOut(c) for c in self.grid],
             run_time=0.4,
         )
-        self.play(
-            FadeIn(means_box),
-            FadeIn(means_label),
-            FadeIn(stderr_box),
-            FadeIn(stderr_label),
-            run_time=0.8,
-        )
         self.dim_boxes = VGroup(means_box, means_label, stderr_box, stderr_label)
+        self.play(FadeIn(self.dim_boxes), run_time=0.6)
 
     # ──────────────────────────────────────────────────────────────────
-    # Stage 3 — autoresearch (selection + promote)
+    # Stage 3 — autoresearch (RIGHT)
     # ──────────────────────────────────────────────────────────────────
 
     def _bit_9_compute_fitness(self) -> None:
-        """16.5–19s — formula + scalar fitness gauge."""
+        """Formula + gauge appear in the STAGE 3 RIGHT zone."""
+        self._set_title("bit_9")
+        # Dim stage-2 elements to history trail.
+        self._dim(VGroup(self.petri_box, self.dim_boxes, self.survivors_to_petri), opacity=0.35)
+        self._set_active_stage("s3")
+
+        # Arrow STAGE 2 → STAGE 3.
+        s2_to_s3 = _dashed_arrow(
+            self.dim_boxes.get_right() + RIGHT * 0.1,
+            RIGHT * (STAGE_X["s3"] - 1.6) + UP * (CONTENT_TOP - 1.2),
+        )
+        self.s2_to_s3 = s2_to_s3
+        self.play(Create(s2_to_s3), run_time=0.4)
+
         formula = _make_text(
             "fitness = Σ wᵢ × (10 − dim_meansᵢ) / 10",
-            font_size=20,
-        )
-        formula.shift(LEFT * 3.0 + DOWN * 1.2)
+            font_size=14,
+            color=COLOR_TEXT_ACCENT,
+        ).move_to(RIGHT * STAGE_X["s3"] + UP * (CONTENT_TOP - 0.2))
         self.formula = formula
 
         gauge_track = Rectangle(
-            width=4.0,
-            height=0.35,
+            width=2.6,
+            height=0.3,
             stroke_color=COLOR_ARROW,
             fill_color=COLOR_UNFILLED,
             fill_opacity=0.9,
-        ).shift(RIGHT * 2.0 + DOWN * 1.2)
+        ).move_to(RIGHT * STAGE_X["s3"] + UP * 0.6)
         gauge_fill = Rectangle(
-            width=4.0 * 0.54,
-            height=0.35,
+            width=2.6 * 0.54,
+            height=0.3,
             stroke_color=COLOR_ARROW,
             fill_color=COLOR_WINNER,
             fill_opacity=0.95,
         )
         gauge_fill.align_to(gauge_track, LEFT)
         gauge_fill.align_to(gauge_track, UP)
-        gauge_value = _make_text("0.54", font_size=18, color=COLOR_TEXT).next_to(
-            gauge_track, RIGHT, buff=0.2
+        gauge_value = _make_text("0.54", font_size=14, color=COLOR_TEXT).next_to(
+            gauge_track, DOWN, buff=0.1
         )
         self.gauge_track = gauge_track
         self.gauge_fill = gauge_fill
         self.gauge_value = gauge_value
 
-        new_text = _make_text(_t("bit_9"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
-        self.play(Write(formula), run_time=0.8)
-        self.play(Create(gauge_track), FadeIn(gauge_fill), Write(gauge_value), run_time=1.0)
+        self.play(Write(formula), run_time=0.6)
+        self.play(Create(gauge_track), FadeIn(gauge_fill), Write(gauge_value), run_time=0.8)
 
     def _bit_10_critical_floor(self) -> None:
-        """19–22s — 5 critical-dim bars + floor line + flash to 0.0 then recover."""
-        new_text = _make_text(_t("bit_10"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
+        """Critical-dim bars + floor line; demo a regression collapse + recovery."""
+        self._set_title("bit_10")
 
-        # 5 critical-dim bars (right side, vertical).
+        bars_origin = RIGHT * STAGE_X["s3"] + DOWN * 0.5
         bars = VGroup()
         for i in range(5):
             bar = Rectangle(
-                width=0.3,
-                height=1.0 + (0.4 if i == 2 else 0.0),  # bar 2 is the offender.
+                width=0.22,
+                height=0.5 + (0.3 if i == 2 else 0.0),
                 stroke_color=COLOR_ARROW,
+                stroke_width=0.8,
                 fill_color=COLOR_CRITICAL,
-                fill_opacity=0.8,
+                fill_opacity=0.85,
             )
-            bar.shift(LEFT * 3.5 + UP * 1.5 + RIGHT * (i * 0.6))
+            # Anchor the bottom of each bar on the same y-baseline.
+            bar.move_to(bars_origin + RIGHT * (-1.0 + i * 0.4))
             bars.add(bar)
-
-        floor_y = LEFT * 3.5 + UP * 2.5 + RIGHT * 0.0  # baseline + stderr + margin
         floor_line = DashedLine(
-            LEFT * 4.0 + UP * 2.3,
-            LEFT * 0.5 + UP * 2.3,
+            bars_origin + LEFT * 1.3 + UP * 0.05,
+            bars_origin + RIGHT * 1.3 + UP * 0.05,
             color=COLOR_CRITICAL,
             stroke_width=2,
-            dash_length=0.1,
+            dash_length=0.08,
         )
         floor_label = _make_text(
-            "critical floor",
-            font_size=14,
-            color=COLOR_CRITICAL,
-        ).next_to(floor_line, RIGHT, buff=0.1)
+            "critical floor", font_size=11, color=COLOR_CRITICAL
+        ).next_to(floor_line, RIGHT, buff=0.05)
 
-        self.play(Create(bars), Create(floor_line), Write(floor_label), run_time=0.8)
+        self.play(Create(bars), Create(floor_line), Write(floor_label), run_time=0.7)
 
-        # Bar 2 crosses — flash gauge to 0.0.
+        # bar 2 crosses — gauge slams to 0.0.
         self.play(
-            Flash(self.gauge_fill, color=COLOR_CRITICAL, flash_radius=0.5),
+            Flash(self.gauge_fill, color=COLOR_CRITICAL, flash_radius=0.4),
             self.gauge_fill.animate.stretch_to_fit_width(0.01).align_to(self.gauge_track, LEFT),
-            Transform(
-                self.gauge_value,
-                _make_text("0.00", font_size=18, color=COLOR_CRITICAL).move_to(
-                    self.gauge_value.get_center()
-                ),
-            ),
-            run_time=0.8,
+            FadeOut(self.gauge_value),
+            run_time=0.5,
         )
+        zero_value = _make_text("0.00", font_size=14, color=COLOR_CRITICAL).next_to(
+            self.gauge_track, DOWN, buff=0.1
+        )
+        self.play(FadeIn(zero_value), run_time=0.2)
 
-        # Recovery: gate trims bar 2 back, gauge returns to 0.54.
+        # Recovery — bar 2 trimmed below floor; gauge restored.
         self.play(
-            bars[2].animate.stretch_to_fit_height(1.0).shift(UP * 0.2),
+            bars[2].animate.stretch_to_fit_height(0.5).align_to(bars[0], DOWN),
             run_time=0.4,
         )
-        self.play(
-            self.gauge_fill.animate.stretch_to_fit_width(4.0 * 0.54).align_to(self.gauge_track, LEFT),
-            Transform(
-                self.gauge_value,
-                _make_text("0.54", font_size=18, color=COLOR_TEXT).move_to(self.gauge_value.get_center()),
-            ),
-            run_time=0.6,
+        new_value = _make_text("0.54", font_size=14, color=COLOR_TEXT).next_to(
+            self.gauge_track, DOWN, buff=0.1
         )
+        self.play(
+            self.gauge_fill.animate.stretch_to_fit_width(2.6 * 0.54).align_to(
+                self.gauge_track, LEFT
+            ),
+            FadeOut(zero_value),
+            FadeIn(new_value),
+            run_time=0.5,
+        )
+        self.gauge_value = new_value
         self.critical_bars = bars
         self.floor_line = floor_line
         self.floor_label = floor_label
 
     def _bit_11_auto_promote(self) -> None:
-        """22–25s — discard / promote demonstration + baseline.json update."""
-        new_text = _make_text(_t("bit_11"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
+        """DISCARD then PROMOTE demo; baseline.json box turns green."""
+        self._set_title("bit_11")
 
-        # Push gauge from 0.54 → 0.57 (delta +0.03, below threshold).
-        self.play(
-            self.gauge_fill.animate.stretch_to_fit_width(4.0 * 0.57).align_to(
-                self.gauge_track, LEFT
-            ),
-            Transform(
-                self.gauge_value,
-                _make_text("0.57", font_size=18, color=COLOR_TEXT).move_to(self.gauge_value.get_center()),
-            ),
-            run_time=0.5,
-        )
-        discard_label = _make_text(
-            _t("discard") + "  Δ=+0.03 < 0.05",
-            font_size=18,
+        # Δ +0.03 < 0.05 → DISCARD.
+        delta_label = _make_text(
+            "Δ +0.03 < 0.05  ✗",
+            font_size=14,
             color=COLOR_CRITICAL,
-        ).next_to(self.gauge_track, DOWN, buff=0.3)
-        self.play(Write(discard_label), run_time=0.4)
-        self.play(FadeOut(discard_label), run_time=0.3)
-
-        # Reset → push to 0.62 (delta +0.08 — promotes).
+        ).next_to(self.gauge_track, UP, buff=0.4)
         self.play(
-            self.gauge_fill.animate.stretch_to_fit_width(4.0 * 0.62).align_to(
+            self.gauge_fill.animate.stretch_to_fit_width(2.6 * 0.57).align_to(
                 self.gauge_track, LEFT
             ),
-            Transform(
-                self.gauge_value,
-                _make_text("0.62", font_size=18, color=COLOR_PROMOTED).move_to(
-                    self.gauge_value.get_center()
-                ),
-            ),
+            FadeIn(delta_label),
             run_time=0.5,
         )
-        promote_label = _make_text(
-            _t("promote") + "  Δ=+0.08 > 0.05",
-            font_size=18,
-            color=COLOR_PROMOTED,
-        ).next_to(self.gauge_track, DOWN, buff=0.3)
-        self.play(
-            Write(promote_label),
-            self.gauge_fill.animate.set_fill(COLOR_PROMOTED, opacity=0.95),
-            run_time=0.5,
-        )
+        self.play(FadeOut(delta_label), run_time=0.3)
 
-        # baseline.json box appears + receives the update.
+        # Δ +0.08 > 0.05 → PROMOTE.
+        delta_label_2 = _make_text(
+            "Δ +0.08 > 0.05  ✓",
+            font_size=14,
+            color=COLOR_PROMOTED,
+        ).next_to(self.gauge_track, UP, buff=0.4)
+        new_value = _make_text("0.62", font_size=14, color=COLOR_PROMOTED).next_to(
+            self.gauge_track, DOWN, buff=0.1
+        )
+        self.play(
+            self.gauge_fill.animate.stretch_to_fit_width(2.6 * 0.62)
+            .align_to(self.gauge_track, LEFT)
+            .set_fill(COLOR_PROMOTED, opacity=0.95),
+            FadeOut(self.gauge_value),
+            FadeIn(new_value),
+            FadeIn(delta_label_2),
+            run_time=0.6,
+        )
+        self.gauge_value = new_value
+
         baseline_box = Rectangle(
-            width=2.6,
-            height=0.6,
+            width=2.4,
+            height=0.5,
             stroke_color=COLOR_PROMOTED,
+            stroke_width=1.5,
             fill_color=COLOR_PROMOTED,
             fill_opacity=0.4,
-        ).shift(RIGHT * 2.0 + UP * 0.5)
+        ).move_to(RIGHT * STAGE_X["s3"] + DOWN * 1.6)
         baseline_label = _make_text(
-            _t("baseline_json"), font_size=18, color=COLOR_TEXT
+            _t("baseline_json"), font_size=14, color=COLOR_TEXT
         ).move_to(baseline_box.get_center())
         self.baseline_box = VGroup(baseline_box, baseline_label)
-
-        self.play(FadeIn(self.baseline_box), run_time=0.4)
-        self.promote_label = promote_label
+        self.play(FadeIn(self.baseline_box), run_time=0.5)
+        self.promote_label = delta_label_2
 
     def _bit_12_next_generation(self) -> None:
-        """25–28s — wrapper-prompt mutation + cycle closure."""
-        new_text = _make_text(_t("bit_12"), font_size=24).move_to(UP * 3.0)
-        self.play(Transform(self.speech, new_text), run_time=0.4)
+        """Cycle-closure arrow: STAGE 3 baseline.json → STAGE 1 agent grid."""
+        self._set_title("bit_12")
 
-        # Wrapper-prompt sections box (5 sections, one highlighted).
-        wrapper_box = VGroup(
-            *[
-                Rectangle(
-                    width=2.4,
-                    height=0.35,
-                    stroke_color=COLOR_ARROW,
-                    fill_color=COLOR_WINNER if i == 2 else COLOR_UNFILLED,
-                    fill_opacity=0.9,
-                )
-                for i in range(5)
-            ]
-        ).arrange(DOWN, buff=0.1)
-        wrapper_box.shift(LEFT * 3.5 + DOWN * 0.5)
-        wrapper_label = _make_text(
-            "wrapper_prompt_sections", font_size=14, color=COLOR_TEXT_ACCENT
-        ).next_to(wrapper_box, UP, buff=0.15)
-
-        self.play(FadeIn(wrapper_box), Write(wrapper_label), run_time=0.6)
-
-        # Cycle arrow: baseline.json → wrapper_box → (implicit) seed-generation box (off-screen).
-        cycle_arrow = _dashed_arrow(self.baseline_box.get_left(), wrapper_box.get_right())
-        self.play(Create(cycle_arrow), run_time=0.4)
-
-        gen_label = _make_text(
-            f"{_t('gen_n')}  →  {_t('gen_n_plus_1')}",
-            font_size=22,
+        # Cycle arrow sweeps right→bottom→left to close the loop.
+        cycle_arrow = _dashed_arrow(
+            self.baseline_box.get_bottom() + DOWN * 0.05,
+            RIGHT * STAGE_X["s1"] + UP * (FOOTER_Y + 0.6),
             color=COLOR_PROMOTED,
-        ).shift(DOWN * 2.8)
-        self.play(Write(gen_label), run_time=0.6)
-        self.wrapper_box = wrapper_box
-        self.wrapper_label = wrapper_label
+        )
+        gen_label = _make_text(
+            f"{_t('gen_n')} → {_t('gen_n_plus_1')}",
+            font_size=18,
+            color=COLOR_PROMOTED,
+        ).move_to(ORIGIN + DOWN * 2.6)
         self.cycle_arrow = cycle_arrow
         self.gen_label = gen_label
+
+        self.play(Create(cycle_arrow), run_time=0.7)
+        self.play(Write(gen_label), run_time=0.5)
+
+        # Briefly re-highlight stage 1 (loop closure) — re-light the agent grid.
+        self._set_active_stage("s1")
+        self.play(self.s1_group.animate.set_opacity(0.85), run_time=0.4)
 
     # ──────────────────────────────────────────────────────────────────
     # Outro — Self-improving over generations
     # ──────────────────────────────────────────────────────────────────
 
     def _outro_ratchet_summary(self) -> None:
-        """28–35s — all clears, fitness-over-generations ratchet chart."""
-        self.play(
-            *[
-                FadeOut(o)
-                for o in (
-                    self.speech,
-                    self.formula,
-                    self.gauge_track,
-                    self.gauge_fill,
-                    self.gauge_value,
-                    self.critical_bars,
-                    self.floor_line,
-                    self.floor_label,
-                    self.dim_boxes,
-                    self.petri_box,
-                    self.survivors_to_petri,
-                    self.leaderboard,
-                    self.arrow_to_leaderboard,
-                    self.baseline_box,
-                    self.wrapper_box,
-                    self.wrapper_label,
-                    self.cycle_arrow,
-                    self.gen_label,
-                    self.promote_label,
-                )
-            ],
-            run_time=0.6,
-        )
+        """Clear canvas; fitness-over-generations ratchet chart."""
+        to_clear = [
+            self.engineer,
+            self.s1_group,
+            self.leaderboard,
+            self.leaderboard_label,
+            self.petri_box,
+            self.survivors_to_petri,
+            self.dim_boxes,
+            self.s2_to_s3,
+            self.formula,
+            self.gauge_track,
+            self.gauge_fill,
+            self.gauge_value,
+            self.critical_bars,
+            self.floor_line,
+            self.floor_label,
+            self.baseline_box,
+            self.cycle_arrow,
+            self.gen_label,
+            self.promote_label,
+        ]
+        # Also drop the footer dots + labels — the chart is the whole
+        # story now.
+        assert self.stage_dots is not None
+        assert self.stage_labels is not None
+        to_clear.extend(self.stage_dots.values())
+        to_clear.extend(self.stage_labels.values())
+        self.play(*[FadeOut(m) for m in to_clear if m is not None], run_time=0.6)
 
-        title = _make_text(_t("outro"), font_size=34, color=COLOR_TEXT).shift(UP * 3.0)
-        self.play(Write(title), run_time=0.8)
+        # Title.
+        if self.title is not None:
+            self.play(FadeOut(self.title), run_time=0.3)
+        outro_title = _make_text(
+            _t("outro"), font_size=34, color=COLOR_TEXT
+        ).move_to(UP * TITLE_Y)
+        self.play(FadeIn(outro_title), run_time=0.6)
 
-        # Axes — include_numbers requires LaTeX which isn't available on
-        # vanilla CI / dev installs. We render tick marks via NumberLine
-        # and add axis labels separately via _make_text.
+        # Axes.
         x_axis = NumberLine(
-            x_range=[0, 10, 2],
-            length=8,
-            color=COLOR_ARROW,
-            include_numbers=False,
+            x_range=[0, 10, 2], length=8, color=COLOR_ARROW, include_numbers=False
         ).shift(DOWN * 1.5)
         y_axis = NumberLine(
             x_range=[0, 1, 0.2],
             length=4,
             color=COLOR_ARROW,
             include_numbers=False,
-            rotation=90 * 0.01745329,  # 90° in radians
+            rotation=90 * 0.01745329,
         ).shift(LEFT * 4.0 + UP * 0.5)
-
-        x_label = _make_text(_t("generations_label"), font_size=18, color=COLOR_TEXT_ACCENT).next_to(
-            x_axis, DOWN, buff=0.4
+        x_label = _make_text(
+            _t("generations_label"), font_size=16, color=COLOR_TEXT_ACCENT
+        ).next_to(x_axis, DOWN, buff=0.3)
+        y_label = _make_text(
+            _t("fitness_label"), font_size=16, color=COLOR_TEXT_ACCENT
+        ).next_to(y_axis, LEFT, buff=0.25)
+        self.play(
+            Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.7
         )
-        y_label = _make_text(_t("fitness_label"), font_size=18, color=COLOR_TEXT_ACCENT).next_to(
-            y_axis, LEFT, buff=0.3
-        )
 
-        self.play(Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.8)
-
-        # Plot a synthetic fitness-ratchet curve (monotonically increasing).
+        # Plot.
         fits = [0.54, 0.57, 0.62, 0.65, 0.69, 0.71, 0.74, 0.77, 0.79, 0.82]
-        x0 = x_axis.number_to_point(0)
-        # x_axis is on x-direction; y-axis goes vertical from the same origin shifted.
-        # We position each gen i on the x-axis and lift it by fitness × 4 (y-axis length).
         dots = VGroup()
         commits = VGroup()
         connectors = VGroup()
         prev_pt = None
         for i, f in enumerate(fits):
             x_pt = x_axis.number_to_point(i + 1)
-            y_lift = UP * (f * 4)
-            pt = x_pt + (y_lift - UP * (0.0))  # lift relative to axis baseline
-            # The y-axis baseline is at the shifted x_axis y-coordinate;
-            # we simply lift from the x_axis point by f * 4 units (matches y_axis length=4).
             pt = x_pt + UP * (f * 4)
             dot = Circle(
-                radius=0.08,
-                color=COLOR_PROMOTED,
-                fill_color=COLOR_PROMOTED,
-                fill_opacity=1.0,
+                radius=0.07, color=COLOR_PROMOTED, fill_color=COLOR_PROMOTED, fill_opacity=1.0
             ).move_to(pt)
             dots.add(dot)
-            # Commit chain: dot column to the right.
             commit_dot = Circle(
-                radius=0.1,
-                color=COLOR_PROMOTED,
-                fill_color=COLOR_WINNER,
-                fill_opacity=1.0,
-            ).shift(RIGHT * 5.0 + DOWN * 2.2 + UP * (i * 0.35))
+                radius=0.08, color=COLOR_PROMOTED, fill_color=COLOR_WINNER, fill_opacity=1.0
+            ).shift(RIGHT * 5.5 + DOWN * 2.0 + UP * (i * 0.28))
             commits.add(commit_dot)
             if prev_pt is not None:
                 connectors.add(Line(prev_pt, pt, color=COLOR_PROMOTED, stroke_width=2))
