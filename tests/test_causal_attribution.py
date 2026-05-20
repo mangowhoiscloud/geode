@@ -48,7 +48,7 @@ def test_mutation_default_expected_dim_is_per_instance() -> None:
     """Defensive — ``default_factory=dict`` must NOT share state across
     instances. Mutating one mutation's expected_dim must not leak."""
     m1 = Mutation(target_section="a", new_value="x", rationale="r")
-    m1.expected_dim["safety"] = 0.3  # type: ignore[index]
+    m1.expected_dim["safety"] = 0.3
     m2 = Mutation(target_section="a", new_value="x", rationale="r")
     assert m2.expected_dim == {}
 
@@ -140,6 +140,23 @@ def test_parse_mutation_drops_non_numeric_expected_dim_entries() -> None:
     )
     m = parse_mutation(raw)
     assert m.expected_dim == {"helpfulness": 0.4}
+
+
+def test_parse_mutation_drops_bool_expected_dim_entries() -> None:
+    """Codex MCP review #1 catch — ``bool`` is an ``int`` subclass, so
+    ``isinstance(True, int | float)`` returns True. Without an explicit
+    bool guard ``{"safety": true}`` would silently coerce to ``1.0``.
+    Pin that bool values are rejected like other non-numeric types."""
+    raw = json.dumps(
+        {
+            "target_section": "sec",
+            "new_value": "val",
+            "rationale": "r",
+            "expected_dim": {"safety": True, "helpfulness": False, "novel": 0.4},
+        }
+    )
+    m = parse_mutation(raw)
+    assert m.expected_dim == {"novel": 0.4}
 
 
 def test_parse_mutation_drops_non_dict_expected_dim() -> None:

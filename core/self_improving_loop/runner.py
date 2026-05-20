@@ -515,7 +515,11 @@ def parse_mutation(raw: str) -> Mutation:
     expected_dim: dict[str, float] = {}
     if isinstance(expected_raw, dict):
         for k, v in expected_raw.items():
-            if isinstance(k, str) and isinstance(v, int | float):
+            # ``bool`` is an ``int`` subclass — exclude it explicitly so
+            # ``{"safety": true}`` doesn't silently become ``1.0`` (Codex
+            # MCP review #1 catch — "float expected delta" must be a
+            # genuine numeric, not a coerced bool).
+            if isinstance(k, str) and isinstance(v, int | float) and not isinstance(v, bool):
                 expected_dim[k] = float(v)
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
