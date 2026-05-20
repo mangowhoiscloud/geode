@@ -297,10 +297,7 @@ class Pipeline:
             # AFTER generator must see candidates; ``meta_reviewer``
             # is the only exception (operates on the run record,
             # not the candidates pool).
-            if (
-                phase in {"generator", "proximity"}
-                and not self.state.candidates
-            ):
+            if phase in {"generator", "proximity"} and not self.state.candidates:
                 log.warning(
                     "seed-generation aborting: phase %r left state.candidates empty "
                     "(target_dim=%s, run_id=%s). Downstream phases would emit "
