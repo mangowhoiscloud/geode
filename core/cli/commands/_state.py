@@ -172,6 +172,28 @@ def _get_profile_store() -> ProfileStore:
     return ensure_profile_store()
 
 
+def model_available(model_id: str) -> bool:
+    """Return True if `model_id` has a usable credential route.
+
+    Mirrors what ``AgenticLoop`` would resolve at the next LLM call:
+    delegates to ``resolve_routing(model_id)`` (which walks per-model
+    routing → equivalence-class scan → single-provider fallback → PAYG
+    synthesis) and treats a non-None ``RoutingTarget`` as "available".
+
+    Used by the ``/model`` picker (M5) to flag entries whose provider
+    has no authenticated profile yet — so the user sees *why* a model
+    won't switch instead of selecting it and bouncing off the
+    ``_check_provider_key`` warning. Returns ``False`` defensively when
+    routing raises so a broken plan registry does not lock the picker.
+    """
+    try:
+        from core.llm.routing.plan_registry import resolve_routing
+
+        return resolve_routing(model_id) is not None
+    except Exception:
+        return False
+
+
 def resolve_action(cmd: str) -> str | None:
     """Resolve a slash command to its action name. Returns None if unknown."""
     return COMMAND_MAP.get(cmd)

@@ -215,12 +215,17 @@ def _read_key() -> str:
 
 
 def _render(
-    profiles: list[tuple[str, str, str, str]],
+    profiles: list[tuple[str, str, str, str, bool]],
     cursor: int,
     effort_per_model: dict[str, str | None],
     initial_model: str,
 ) -> int:
     """Render the picker. Returns lines written so the caller can rewind.
+
+    Tuple shape: ``(model_id, provider, label, cost, available)``. The
+    ``available`` flag (M5) toggles a ``(login required)`` suffix and a
+    dimmed row so the user can see *which* models are blocked by missing
+    credentials before selecting one.
 
     Layout (mirrors the user-supplied spec):
 
@@ -228,7 +233,7 @@ def _render(
         Switch between models. Applies to this session.
 
         ❯ 1. {label} {default-marker}     {description}
-          2. {label}                       {description}
+          2. {label}              (login required)
           ...
 
         ◉ {Effort} effort {(default)} ← → to adjust
@@ -248,28 +253,33 @@ def _render(
     # Compute label column width so descriptions align
     label_width = max(len(p[2]) for p in profiles) + 2
 
-    for i, (mid, _prov, label, _cost) in enumerate(profiles):
+    for i, (mid, _prov, label, _cost, available) in enumerate(profiles):
         cursor_marker = "❯" if i == cursor else " "
         is_initial = mid == initial_model
         default_check = " ✔" if is_initial else "  "
         index = f"{i + 1}."
         desc = model_description(mid)
+        avail_suffix = "" if available else "  \033[2m(login required)\033[0m"
         if i == cursor:
+            highlight = "1;36" if available else "0;36"
             out.write(
-                f"  \033[1;36m{cursor_marker} {index} {label:<{label_width}}{default_check}\033[0m"
-                f"  \033[2m{desc}\033[0m\n"
+                f"  \033[{highlight}m{cursor_marker} {index} {label:<{label_width}}"
+                f"{default_check}\033[0m"
+                f"  \033[2m{desc}\033[0m{avail_suffix}\n"
             )
         else:
+            row_open = "\033[2m" if not available else ""
+            row_close = "\033[0m" if not available else ""
             out.write(
-                f"  {cursor_marker} {index} {label:<{label_width}}{default_check}"
-                f"  \033[2m{desc}\033[0m\n"
+                f"  {row_open}{cursor_marker} {index} {label:<{label_width}}{default_check}"
+                f"{row_close}  \033[2m{desc}\033[0m{avail_suffix}\n"
             )
         lines += 1
 
     # Effort line for the focused model
     out.write("\n")
     lines += 1
-    cur_mid, cur_prov, _cur_label, _cur_cost = profiles[cursor]
+    cur_mid, cur_prov, _cur_label, _cur_cost, _cur_avail = profiles[cursor]
     levels = supported_efforts(cur_mid, cur_prov)
     current = effort_per_model.get(cur_mid)
     default = default_effort(cur_mid, cur_prov)
@@ -299,13 +309,17 @@ def _clear_lines(n: int) -> None:
 
 
 def pick_model_and_effort(
-    profiles: list[tuple[str, str, str, str]],
+    profiles: list[tuple[str, str, str, str, bool]],
     current_model: str,
     current_effort: str,
 ) -> PickerResult:
     """Run the interactive picker.
 
-    profiles: ordered list of (model_id, provider, label, cost) tuples.
+    profiles: ordered list of ``(model_id, provider, label, cost, available)``
+    tuples. The ``available`` flag (M5) marks whether the user has a usable
+    credential — selecting an unavailable model returns the existing
+    selection unchanged so the caller can show a ``(login required)``
+    notice instead of bouncing off ``_check_provider_key`` later.
     Returns PickerResult with the chosen model + effort, or
     cancelled=True on q/ESC.
     """
@@ -339,8 +353,18 @@ def pick_model_and_effort(
             _clear_lines(line_count)
             return PickerResult(model_id=current_model, effort=current_effort, cancelled=True)
         if key == _KEY_ENTER:
+            chosen_mid, chosen_prov, _label, _cost, available = profiles[cursor]
+            if not available:
+                # M5 — block the selection so the caller can render a
+                # "Login first" hint. Treat as cancellation so settings
+                # don't shift to a model the LLM call would reject.
+                _clear_lines(line_count)
+                return PickerResult(
+                    model_id=current_model,
+                    effort=current_effort,
+                    cancelled=True,
+                )
             _clear_lines(line_count)
-            chosen_mid, chosen_prov, *_rest = profiles[cursor]
             return PickerResult(
                 model_id=chosen_mid,
                 effort=effort_per_model.get(chosen_mid),

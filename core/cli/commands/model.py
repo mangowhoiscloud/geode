@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import logging
 
-from core.cli.commands._state import _MODEL_INDEX, MODEL_PROFILES, ModelProfile
+from core.cli.commands._state import (
+    _MODEL_INDEX,
+    MODEL_PROFILES,
+    ModelProfile,
+    model_available,
+)
 
 log = logging.getLogger(__name__)
 
@@ -125,11 +130,20 @@ def _interactive_model_picker() -> None:
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
-    profiles = [(p.id, p.provider, p.label, p.cost) for p in MODEL_PROFILES]
+    profiles = [(p.id, p.provider, p.label, p.cost, model_available(p.id)) for p in MODEL_PROFILES]
     current_effort = getattr(settings, "agentic_effort", "high")
     result = pick_model_and_effort(profiles, settings.model, current_effort)
     if result.cancelled:
+        # M5 — surface the "login first" path explicitly when the user
+        # tried to pick an unavailable model. ``pick_model_and_effort``
+        # returns ``cancelled=True`` for both q/ESC and the blocked-Enter
+        # case; if the cursor still points at an unavailable entry we
+        # assume the latter.
         _pkg.console.print("  [muted]Cancelled[/muted]")
+        _pkg.console.print(
+            "  [muted]Tip: run `/login` to add credentials for any model "
+            "marked (login required).[/muted]"
+        )
         _pkg.console.print()
         return
 
@@ -160,7 +174,11 @@ def cmd_model(args: str) -> None:
             _pkg.console.print("  [header]Models[/header]")
             for i, p in enumerate(MODEL_PROFILES, 1):
                 marker = " ←" if p.id == settings.model else ""
-                _pkg.console.print(f"  {i}. {p.label:<12} {p.provider:<10} {p.cost}{marker}")
+                # M5 — surface login-state so a curl-driven caller (or a
+                # user who pipes /model into stdin) sees which entries
+                # would 401 before they hit them.
+                avail = "" if model_available(p.id) else "  [muted](login required)[/muted]"
+                _pkg.console.print(f"  {i}. {p.label:<12} {p.provider:<10} {p.cost}{marker}{avail}")
             _pkg.console.print()
             _pkg.console.print("  [muted]Usage: /model <number> or /model <name>[/muted]")
             _pkg.console.print()
@@ -198,6 +216,23 @@ def cmd_model(args: str) -> None:
         for p in MODEL_PROFILES:
             _pkg.console.print(f" [muted]{p.id}[/muted]", end="")
         _pkg.console.print()
+        _pkg.console.print()
+        return
+
+    if not model_available(selected.id):
+        # M5 — explicit /model <name> can still trip the credential
+        # path. Surface the "login required" hint *before* applying so
+        # the user doesn't see settings flip then immediately get the
+        # _check_provider_key warning on next call.
+        _pkg.console.print(
+            f"  [warning]{selected.label} ({selected.provider}) "
+            "has no authenticated profile.[/warning]"
+        )
+        _pkg.console.print(
+            f"  [muted]Run `/login {selected.provider}` (OAuth) or "
+            f"`/login add` (API key) first, then retry "
+            f"`/model {selected.id}`.[/muted]"
+        )
         _pkg.console.print()
         return
 
