@@ -594,7 +594,9 @@ async def retry_with_backoff_async(
 # ClaudeAgenticAdapter — Anthropic LLM adapter for agentic loop
 # ---------------------------------------------------------------------------
 
-_API_ALLOWED_KEYS = frozenset({"name", "description", "input_schema", "cache_control", "type"})
+_API_ALLOWED_KEYS = frozenset(
+    {"name", "description", "input_schema", "cache_control", "type", "strict"}
+)
 
 # Models that support server-side context management + compaction beta.
 # Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta

@@ -306,7 +306,18 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         # struct + Hermes ``agent/transports/codex.py`` shape. Spec doc:
         # ``docs/research/codex-oauth-request-spec.md`` (3-codebase grounded).
         oai_tools = _tools_to_openai(tools)
-        tc_val = tool_choice.get("type", "auto") if isinstance(tool_choice, dict) else tool_choice
+        # PR-B fix-up #1 — route through the cross-provider normaliser
+        # so canonical ``"any"`` → OpenAI/Responses ``"required"`` and
+        # ``{"type": "tool", "name": "X"}`` → ``{"type": "function",
+        # "name": "X"}`` translate correctly. Pre-fix the codex adapter
+        # only grabbed ``tool_choice.get("type")`` which silently passed
+        # the literal ``"any"`` or ``"tool"`` string straight through —
+        # values the Responses API rejects, so any forced-tool caller
+        # (e.g. ``core.agent.loop._reflection.reflect_async``) hit
+        # silent no-ops on the ``openai-codex`` provider.
+        from core.llm.tool_choice import normalize as _normalize_tool_choice
+
+        tc_val: Any = _normalize_tool_choice("openai", tool_choice) or "auto"
         is_reasoning = _is_codex_reasoning_model(model)
 
         async def _do_call(m: str) -> Any:

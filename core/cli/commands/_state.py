@@ -71,6 +71,81 @@ MODEL_PROFILES: list[ModelProfile] = [
 
 _MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
 
+
+# ---------------------------------------------------------------------------
+# Agent Role Registry — PR-A (2026-05-21)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AgentRole:
+    """One LLM-driven role inside GEODE that owns its own model knob.
+
+    ``/model`` cycles through registered roles via Tab so each role's
+    chosen model can be picked through the same UI. Each role maps to:
+
+      * ``settings_field`` — the ``Settings`` attribute that drives the
+        runtime (read by the producer, e.g. ``settings.model`` →
+        AgenticLoop; ``settings.cognitive_reflection_model`` →
+        ``core.agent.loop._reflection.reflect_async``).
+      * ``env_var`` — the canonical env var name written by
+        ``_upsert_env`` so the picker's choice survives one restart.
+      * ``toml_section`` / ``toml_key`` — durable persistence path in
+        ``~/.geode/config.toml`` so the picker's choice survives every
+        restart.
+      * ``description`` — short hint shown next to the role tab.
+    """
+
+    name: str
+    label: str
+    settings_field: str
+    env_var: str
+    toml_section: str
+    toml_key: str
+    description: str
+    has_effort: bool  # primary uses agentic_effort, reflection doesn't
+
+
+AGENT_ROLES: list[AgentRole] = [
+    AgentRole(
+        name="primary",
+        label="Primary",
+        settings_field="model",
+        env_var="GEODE_MODEL",
+        toml_section="llm",
+        toml_key="primary_model",
+        description="Main agentic loop — drives plan / act / observe rounds",
+        has_effort=True,
+    ),
+    AgentRole(
+        name="reflection",
+        label="Reflection",
+        settings_field="cognitive_reflection_model",
+        env_var="GEODE_COGNITIVE_REFLECTION_MODEL",
+        toml_section="cognitive",
+        toml_key="reflection_model",
+        description="Belief-update node (PR-3 C-2) — runs after each tool batch",
+        has_effort=False,
+    ),
+]
+
+_ROLE_INDEX: dict[str, AgentRole] = {r.name: r for r in AGENT_ROLES}
+
+
+def role_by_name(name: str) -> AgentRole:
+    """Return the :class:`AgentRole` matching ``name``.
+
+    Raises :class:`ValueError` on unknown roles so the picker fails
+    closed rather than silently writing to an unexpected settings field.
+    """
+    try:
+        return _ROLE_INDEX[name]
+    except KeyError as exc:
+        raise ValueError(
+            f"unknown agent role {name!r}; expected one of {[r.name for r in AGENT_ROLES]!r}"
+        ) from exc
+
+
 # ---------------------------------------------------------------------------
 # Conversation Context ContextVar (shared with tool handlers)
 # ---------------------------------------------------------------------------

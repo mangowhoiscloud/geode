@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "AutoresearchConfig",
+    "MutatorConfig",
     "PetriRoleConfig",
     "SeedGenerationConfig",
     "SelfImprovingLoopBindings",
@@ -106,6 +107,71 @@ class AutoresearchConfig(BaseModel):
     fallback_to_payg: bool | None = None
 
 
+class MutatorConfig(BaseModel):
+    """Mutator-role binding for ``core/self_improving_loop/runner.py``.
+
+    PR-1 G-A — pre-fix the runner instantiated ``anthropic.Anthropic()``
+    directly and pinned ``model="claude-opus-4-7"`` as a literal, so
+    every self-improving loop mutation was bound to one provider and
+    one model regardless of operator intent. The new manifest section
+    follows the same shape as ``[seed_generation.role.<X>]`` and
+    ``[petri.role.<X>]`` — default model + allowed model set + optional
+    role contract — so the mutator is a first-class role in the
+    paperclip-style abstraction.
+
+    Field semantics (each one is *consumed* by the runner; see test
+    invariants in ``tests/test_self_improving_loop_gap_fill.py``):
+
+    - ``default_model`` — primary model id the runner sends to the
+      router dispatcher.
+    - ``allowed_models`` — allow-list pinned by a pydantic validator
+      *and* by a runtime check inside ``_default_llm_call`` (fails
+      closed if the default drifts outside the list).
+    - ``source`` — mirrors the petri source resolver enum
+      (``auto`` / ``api_key`` / ``claude-cli`` / ``openai-codex``).
+      Stored on the resolved adapter so the runner's credential
+      selection records the operator's intent in telemetry, even
+      though the rotator currently consumes the same enum implicitly
+      via ``[petri.source.<provider>]``.
+    - ``role_contract`` — path (repo-relative) to the mutator's
+      operator-facing contract document. Surfaced by ``/petri`` /
+      ``/login`` views so the operator can grep the contract before
+      flipping the model.
+    - ``max_tokens`` — passed through to ``adapter.agentic_call``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_model: str = "claude-opus-4-7"
+    allowed_models: list[str] = Field(
+        default_factory=lambda: [
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "gpt-5.5",
+            "gpt-5.4",
+        ]
+    )
+    source: Literal["auto", "api_key", "claude-cli", "openai-codex"] = "auto"
+    role_contract: str = ".claude/agents/self_improving_loop_mutator.md"
+    max_tokens: Annotated[int, Field(ge=128, le=200_000)] = 1024
+    fallback_to_payg: bool | None = None
+
+    @model_validator(mode="after")
+    def _default_in_allowed(self) -> MutatorConfig:
+        """Allow-list invariant — ``default_model`` must appear in
+        ``allowed_models`` (matches the petri / seed_generation manifest
+        contract). Pre-validator drift would let an operator set a
+        ``default_model`` that the runtime guard then rejects, which is
+        confusing — fail at load time with the same message."""
+        if self.allowed_models and self.default_model not in self.allowed_models:
+            raise ValueError(
+                f"MutatorConfig.default_model={self.default_model!r} not in "
+                f"allowed_models={self.allowed_models!r}"
+            )
+        return self
+
+
 class SeedGenerationConfig(BaseModel):
     """seed-generation runtime knobs.
 
@@ -150,6 +216,10 @@ class SelfImprovingLoopConfig(BaseModel):
     """Map of role name → PetriRoleConfig. Expected keys: auditor /
     target / judge."""
     seed_generation: SeedGenerationConfig = Field(default_factory=SeedGenerationConfig)
+    mutator: MutatorConfig = Field(default_factory=MutatorConfig)
+    """PR-1 G-A — mutator role manifest. Closes the hardcoded
+    ``model="claude-opus-4-7"`` + direct ``anthropic.Anthropic()``
+    call in ``core/self_improving_loop/runner.py``."""
 
     @model_validator(mode="after")
     def _abort_above_warn(self) -> SelfImprovingLoopConfig:
