@@ -606,6 +606,13 @@ def run_audit(
     argv = _build_audit_command()
     env = os.environ.copy()
     env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
+    # ADR-012 S0a (2026-05-21) — audit subprocess 가 mutation 적용된
+    # tool_policy SoT 를 strict mode 로 읽도록 env 강제. 파일 부재 시
+    # subprocess 가 fail-fast (quota 절약).
+    from core.paths import GLOBAL_TOOL_POLICY_PATH
+
+    if GLOBAL_TOOL_POLICY_PATH.is_file():
+        env["GEODE_TOOL_POLICY_OVERRIDE"] = str(GLOBAL_TOOL_POLICY_PATH)
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(

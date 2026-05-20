@@ -56,14 +56,16 @@ def test_tier_1_lists_all_5_slots_with_alive_dead_status() -> None:
     text = _read_adr()
     for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
         assert f"`{slot}`" in text, f"slot missing in Tier 1: {slot}"
-    # ALIVE = exactly 1 (prompt 만), DEAD = exactly 4 — Codex MCP 검증 결과 반영,
-    # 단순 ≥ 4 가 아니라 정확한 count 로 강화.
-    assert text.count("**ALIVE**") == 1, (
-        f"PR-AUDIT-5SLOT 결과 ALIVE slot 은 1 개여야 함. count={text.count('**ALIVE**')}"
+    # ALIVE/DEAD count — S0a 머지 (2026-05-21) 후 `tool_policy` ALIVE 로 전환.
+    # 현재 상태: 2 ALIVE (prompt + tool_policy) / 3 DEAD (decomposition/retrieval/reflection).
+    # S0b/c/d 머지 시마다 이 count 와 ADR Tier 1 표를 함께 갱신.
+    assert text.count("**ALIVE**") == 2, (
+        f"S0a 후 ALIVE slot 은 정확히 2 개 (prompt + tool_policy) 여야 함. "
+        f"count={text.count('**ALIVE**')}"
     )
-    assert text.count("**DEAD**") == 4, (
-        f"PR-AUDIT-5SLOT 결과 DEAD slot 은 정확히 4 개여야 함. "
-        f"count={text.count('**DEAD**')} (S0a-c 의 reader 신설 후 ADR 갱신 시 함께 수정)"
+    assert text.count("**DEAD**") == 3, (
+        f"S0a 후 DEAD slot 은 정확히 3 개 (decomposition + retrieval + reflection) 여야 함. "
+        f"count={text.count('**DEAD**')} (S0b/c/d 의 reader 신설 후 함께 수정)"
     )
 
 

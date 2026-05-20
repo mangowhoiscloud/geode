@@ -49,6 +49,33 @@ functional change.
 
 ### Added
 
+- **PR-S0a — `tool_policy` reader 신설 (ADR-012 dead slot 살리기 #1).**
+  PR-AUDIT-5SLOT (#1405) 의 진단 — 5축 mutation 중 4축이 dead policy
+  (인퍼런스 reader 부재) — 의 첫 처치. `tool-policy.json` 정책이
+  실제 도구 후보 필터링에 적용되는 단일 진입점 신설. `wrapper-sections.json`
+  reader 패턴 (`system_prompt.py:_load_wrapper_override` +
+  `_strict_load`/`_graceful_load`) 그대로 차용. **schema** (3 field
+  모두 optional, forward-compatible): `allowed_tools` (whitelist) /
+  `forbidden_tools` (blacklist) / `priority_order` (호출 순서).
+  정책 부재 → no-op (현재 행동 보존). **Resolution order**:
+  ① `GEODE_TOOL_POLICY_OVERRIDE` env var (audit subprocess, strict —
+  schema 실패 시 RuntimeError) ② `~/.geode/self-improving-loop/tool-policy.json`
+  (daily-run SoT, graceful — schema 실패 시 WARNING + no-op) ③ `None`.
+  단일 적용 지점: `core/agent/loop/_helpers.py:get_agentic_tools` 의
+  마지막 단계 — base tools + ToolRegistry extras + MCP tools 가
+  모두 합쳐진 직후 정책 필터/재정렬 적용. ADR-012 의 G2 (5축 mutation
+  의 fitness delta 가 음의 압력 dim 에 편향 측정) 가 비로소 의미를
+  가지려면 이 reader 가 필수 — `broken_tool_use` dim 이 Petri 17-dim
+  중 유일한 양의 압력 dim 이라 `tool_policy` 진화 압력이 가장 직접
+  닿는 자리. **회귀 marker 의 의도된 발화**: PR-AUDIT-5SLOT 의 invariant
+  test `test_dead_slot_has_no_inference_reader` 의 parametrize 에서
+  `tool-policy.json` 제거 + 새 `test_tool_policy_slot_is_now_alive_post_s0a`
+  추가. audit doc 의 상태표에 Post-S0a (2026-05-21 오후) update
+  섹션 추가하여 2/5 ALIVE, 3/5 DEAD 명시. ADR-012 본문의 Tier 1 표
+  와 invariant test 의 ALIVE/DEAD exact count (`== 1` / `== 4` →
+  `== 2` / `== 3`) 동기화. 19개 new invariant test + 기존 PR-AUDIT-5SLOT
+  + ADR-012 test 함께 통과 (총 51 test 그린).
+
 - **ADR-012 — Self-Improvement Surface Tiers (Proposed).** GEODE 의
   self-improving loop 가 직면한 두 가지 직교 누수를 명시적으로
   진단하고, 단기 → 중기 → 장기 성장 곡선 + 의사결정 게이트

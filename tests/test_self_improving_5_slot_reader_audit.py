@@ -95,7 +95,12 @@ def test_audit_doc_exists() -> None:
 def test_audit_doc_pins_1_alive_4_dead() -> None:
     """결론 한 줄 anchor."""
     text = _read(AUDIT_DOC)
-    assert "1/5 ALIVE, 4/5 DEAD" in text
+    # ADR-012 S0a (2026-05-21) 머지 이후 `tool_policy` 가 ALIVE 로 전환.
+    # audit 시점 (2026-05-21 아침) 의 사실은 1/5 — 그 줄을 유지하면서
+    # post-S0a update 섹션이 함께 등장하는지 확인.
+    assert "1/5 ALIVE, 4/5 DEAD" in text  # 원본 audit 시점 사실
+    assert "Post-S0a" in text  # S0a 후속 갱신 섹션
+    assert "2/5 ALIVE, 3/5 DEAD" in text  # 현재 상태
 
 
 def test_audit_doc_names_all_5_slots() -> None:
@@ -140,7 +145,9 @@ def test_prompt_reader_is_called_in_agentic_loop() -> None:
 @pytest.mark.parametrize(
     "sot_filename",
     [
-        "tool-policy.json",
+        # ADR-012 S0a (2026-05-21) 머지 이후 ``tool-policy.json`` 은 ALIVE —
+        # ``core/agent/tool_policy.py`` 의 reader 가 ``core/agent/loop/_helpers.py``
+        # 의 ``get_agentic_tools`` 에서 호출된다. 이 parametrize 에서 제거됨.
         "decomposition.json",
         "retrieval.json",
         "reflection.json",
@@ -150,14 +157,35 @@ def test_dead_slot_has_no_inference_reader(sot_filename: str) -> None:
     """DEAD slot 의 SoT 파일명이 인퍼런스 경로 (core/agent + core/orchestration +
     core/skills + core/llm + plugins + autoresearch — self_improving_loop
     의 mutation 정의/디스패처는 제외) 어디에서도 참조되지 않음을 pin.
-    S0a/b/c PR 에서 reader 가 신설되면 이 test 가 실패해서 함께
-    갱신해야 한다 (의도된 anchor 회귀)."""
+    S0b/c PR 에서 reader 가 신설되면 이 test 가 실패해서 함께 갱신해야
+    한다 (의도된 anchor 회귀)."""
     hits = _grep_inference_dirs(sot_filename)
     # 0 hits 가 정상 (DEAD)
     assert hits == [], (
         f"DEAD slot {sot_filename!r} 의 reader 가 발견됨. "
-        f"S0a/b/c 권고의 reader 신설이라면 이 test 와 audit doc 의 상태표를 "
+        f"S0b/c 권고의 reader 신설이라면 이 test 와 audit doc 의 상태표를 "
         f"ALIVE 로 갱신해야 함. hits={hits}"
+    )
+
+
+def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
+    """ADR-012 S0a 머지 이후 ``tool-policy.json`` 은 ALIVE — reader 가
+    ``core/agent/tool_policy.py`` 에 존재 + ``_helpers.py`` 의 도구 통합
+    경로에서 실제로 호출됨. PR-AUDIT-5SLOT 의 의도된 회귀 marker 의
+    발화 결과 (Codex MCP catch — cosmetic 검증 → call chain 검증)."""
+    hits = _grep_inference_dirs("tool-policy.json")
+    # tool_policy.py 의 path constant alias 위치 + _helpers.py 의 호출 위치
+    assert any("tool_policy.py" in h for h in hits), (
+        f"tool-policy.json 이 core/agent/tool_policy.py 에서 발견되어야 함. hits={hits}"
+    )
+    # Call chain 검증 — _helpers.get_agentic_tools 가 _load_tool_policy_override 를 호출.
+    helpers_src = (REPO_ROOT / "core/agent/loop/_helpers.py").read_text(encoding="utf-8")
+    assert "_load_tool_policy_override" in helpers_src, (
+        "_helpers.py 가 _load_tool_policy_override 를 import/호출해야 함 — "
+        "reader 가 inference 경로에 실제로 wired 됐는지 검증."
+    )
+    assert "apply_tool_policy" in helpers_src, (
+        "_helpers.py 가 apply_tool_policy 를 호출해야 함 — 정책이 도구 목록에 적용되는지."
     )
 
 
