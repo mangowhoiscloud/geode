@@ -168,11 +168,18 @@ def effort_label(level: str) -> str:
 
 @dataclass
 class PickerResult:
-    """Outcome of the two-axis picker."""
+    """Outcome of the picker.
+
+    PR-A (2026-05-21) — added ``role`` so a single Enter persists to
+    the *currently focused* agent role (primary / reflection / future:
+    mutator). Defaults to ``"primary"`` for backward compatibility
+    with callers that don't pass ``roles``.
+    """
 
     model_id: str
     effort: str | None  # None → no effort knob applies for this model
     cancelled: bool = False
+    role: str = "primary"
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +192,7 @@ _KEY_LEFT = "LEFT"
 _KEY_RIGHT = "RIGHT"
 _KEY_ENTER = "ENTER"
 _KEY_QUIT = "QUIT"
+_KEY_TAB = "TAB"
 
 
 def _read_key() -> str:
@@ -205,6 +213,8 @@ def _read_key() -> str:
             return {"A": _KEY_UP, "B": _KEY_DOWN, "C": _KEY_RIGHT, "D": _KEY_LEFT}.get(ch3, "")
         if ch in ("\r", "\n"):
             return _KEY_ENTER
+        if ch == "\t":
+            return _KEY_TAB
         if ch in ("q", "Q"):
             return _KEY_QUIT
         if ch == "\x03":
@@ -219,6 +229,10 @@ def _render(
     cursor: int,
     effort_per_model: dict[str, str | None],
     initial_model: str,
+    *,
+    roles: list[tuple[str, str, str]] | None = None,
+    role_cursor: int = 0,
+    role_initials: dict[str, str] | None = None,
 ) -> int:
     """Render the picker. Returns lines written so the caller can rewind.
 
@@ -230,19 +244,12 @@ def _render(
     badge so a user who pinned the PAYG escape hatch sees the
     override before selecting.
 
-    Layout (mirrors the user-supplied spec):
-
-        Select model
-        Switch between models. Applies to this session.
-
-        ❯ 1. {label} {default-marker}     {description}
-          2. {label}              (login required)
-          3. {label}              (forced: apikey)
-          ...
-
-        ◉ {Effort} effort {(default)} ← → to adjust
-
-        Enter to confirm · Esc to exit
+    PR-A (2026-05-21) — when ``roles`` is supplied
+    (``[(name, label, description), ...]``), a role-tab strip is
+    drawn at the top with the currently-focused role highlighted.
+    ``role_initials`` carries the current per-role model id so each
+    tab can show its own ✔ marker (the focused role's model gets the
+    ✔; other roles' selections appear next to their tab label).
     """
     out = sys.stdout
     lines = 0
@@ -253,6 +260,22 @@ def _render(
         "Models with effort knobs let you tune reasoning depth with ←→ arrows.\033[0m\n\n"
     )
     lines += 4
+
+    # PR-A — role tabs above the model list. Only render when more
+    # than one role is registered; single-role callers (legacy
+    # behaviour) skip the strip so the existing UX is unchanged.
+    if roles and len(roles) > 1:
+        tab_parts: list[str] = []
+        for i, (_name, role_label, _desc) in enumerate(roles):
+            if i == role_cursor:
+                tab_parts.append(f"\033[1;36m[ {role_label} ]\033[0m")
+            else:
+                tab_parts.append(f"\033[2m[ {role_label} ]\033[0m")
+        out.write("  " + " ".join(tab_parts) + "  \033[2m(Tab to cycle)\033[0m\n")
+        if 0 <= role_cursor < len(roles):
+            out.write(f"  \033[2m{roles[role_cursor][2]}\033[0m\n")
+        out.write("\n")
+        lines += 3
 
     # Compute label column width so descriptions align
     label_width = max(len(p[2]) for p in profiles) + 2
@@ -318,6 +341,10 @@ def pick_model_and_effort(
     profiles: list[tuple[str, str, str, str, bool, str | None]],
     current_model: str,
     current_effort: str,
+    *,
+    roles: list[tuple[str, str, str]] | None = None,
+    initial_role: str = "primary",
+    role_initial_models: dict[str, str] | None = None,
 ) -> PickerResult:
     """Run the interactive picker.
 
@@ -332,11 +359,36 @@ def pick_model_and_effort(
     explicitly overridden the default routing (``"apikey"`` etc.), or
     ``None`` when at default — the picker renders a ``(forced: …)``
     badge so the override stays visible at selection time.
-    Returns PickerResult with the chosen model + effort, or
+
+    PR-A (2026-05-21) — when ``roles`` is supplied
+    (``[(name, label, description), ...]`` for each registered agent
+    role), the picker draws a tab strip at the top and lets Tab cycle
+    between roles. ``initial_role`` selects the focused tab on entry
+    (must match one of the names in ``roles`` or defaults to the
+    first). ``role_initial_models`` carries the *current* model id
+    per role so cycling Tab re-anchors the cursor to that role's
+    selection. When ``roles`` is None or has length 1, the picker
+    behaves identically to its single-axis predecessor.
+
+    Returns PickerResult with the chosen model + effort + role, or
     cancelled=True on q/ESC.
     """
     if not profiles:
         return PickerResult(model_id=current_model, effort=None, cancelled=True)
+
+    # Normalise role state. Roles list of one (or None) means
+    # single-role mode — same UX as before.
+    if roles is None or len(roles) <= 1:
+        role_names: list[str] = ["primary"]
+        role_tabs: list[tuple[str, str, str]] = []
+    else:
+        role_names = [r[0] for r in roles]
+        role_tabs = list(roles)
+    role_cursor = role_names.index(initial_role) if initial_role in role_names else 0
+    role_initial_models = dict(role_initial_models or {})
+    # Per-role anchor model — falls back to ``current_model`` (which
+    # is the focused role's current selection) when not supplied.
+    role_initial_models.setdefault(role_names[role_cursor], current_model)
 
     cursor = next(
         (i for i, (mid, *_rest) in enumerate(profiles) if mid == current_model),
@@ -354,16 +406,35 @@ def pick_model_and_effort(
         else:
             effort_per_model[mid] = default_effort(mid, prov)
 
-    line_count = _render(profiles, cursor, effort_per_model, current_model)
+    initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
+    line_count = _render(
+        profiles,
+        cursor,
+        effort_per_model,
+        initial_for_render,
+        roles=role_tabs or None,
+        role_cursor=role_cursor,
+        role_initials=role_initial_models,
+    )
     while True:
         try:
             key = _read_key()
         except KeyboardInterrupt:
             _clear_lines(line_count)
-            return PickerResult(model_id=current_model, effort=current_effort, cancelled=True)
+            return PickerResult(
+                model_id=current_model,
+                effort=current_effort,
+                cancelled=True,
+                role=role_names[role_cursor],
+            )
         if key == _KEY_QUIT:
             _clear_lines(line_count)
-            return PickerResult(model_id=current_model, effort=current_effort, cancelled=True)
+            return PickerResult(
+                model_id=current_model,
+                effort=current_effort,
+                cancelled=True,
+                role=role_names[role_cursor],
+            )
         if key == _KEY_ENTER:
             chosen_mid, chosen_prov, _label, _cost, available, _forced = profiles[cursor]
             if not available:
@@ -375,14 +446,27 @@ def pick_model_and_effort(
                     model_id=current_model,
                     effort=current_effort,
                     cancelled=True,
+                    role=role_names[role_cursor],
                 )
             _clear_lines(line_count)
             return PickerResult(
                 model_id=chosen_mid,
                 effort=effort_per_model.get(chosen_mid),
                 cancelled=False,
+                role=role_names[role_cursor],
             )
-        if key == _KEY_UP:
+        if key == _KEY_TAB and len(role_names) > 1:
+            role_cursor = (role_cursor + 1) % len(role_names)
+            # Re-anchor cursor to the new role's current model so the
+            # picker's highlight follows the role-switch instead of
+            # staying on whichever row the user was hovering.
+            new_anchor = role_initial_models.get(role_names[role_cursor])
+            if new_anchor is not None:
+                cursor = next(
+                    (i for i, (mid, *_rest) in enumerate(profiles) if mid == new_anchor),
+                    cursor,
+                )
+        elif key == _KEY_UP:
             cursor = (cursor - 1) % len(profiles)
         elif key == _KEY_DOWN:
             cursor = (cursor + 1) % len(profiles)
@@ -397,4 +481,13 @@ def pick_model_and_effort(
         else:
             continue
         _clear_lines(line_count)
-        line_count = _render(profiles, cursor, effort_per_model, current_model)
+        initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
+        line_count = _render(
+            profiles,
+            cursor,
+            effort_per_model,
+            initial_for_render,
+            roles=role_tabs or None,
+            role_cursor=role_cursor,
+            role_initials=role_initial_models,
+        )

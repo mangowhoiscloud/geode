@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-A — ``/model`` role tab for reflection-model selection.** Pre-
+  PR-A the picker only set ``settings.model`` (primary agentic loop).
+  The PR-3 C-2 reflection node had a knob
+  (``settings.cognitive_reflection_model``) but no runtime UI —
+  operators had to edit ``~/.geode/config.toml`` or
+  ``GEODE_COGNITIVE_REFLECTION_MODEL`` and restart. New
+  ``AGENT_ROLES`` registry in ``core/cli/commands/_state.py``
+  declares each LLM-driven role (currently ``primary`` +
+  ``reflection``; mutator/judge are follow-ups) with its settings
+  field, env var, and ``config.toml (section, key)``. ``/model``
+  interactive picker draws a Tab-cyclable tab strip at the top so a
+  single Enter persists to the focused role's knob.
+  ``/model reflection <name>`` (or ``/model reflection`` for the
+  picker focused on that tab) is the explicit non-interactive path.
+  The non-tty fallback list now annotates each model with per-role
+  markers (``P←`` primary, ``R←`` reflection) so curl-driven callers
+  see both selections at once. ``PickerResult`` gains a ``role``
+  field (default ``"primary"`` for backward compat). The
+  context-window guard runs only for primary (reflection's clean-
+  context discipline from PR-3 sidesteps the main loop's context
+  size). 15 invariant tests pin registry / signature / dispatcher /
+  reflection-branch persistence / role-prefix parsing.
+
 ## [0.99.24] — 2026-05-21
 
 > **Cognitive Loop Uplift Sprint** — 6 PRs (#1373 / #1374 / #1375 /
