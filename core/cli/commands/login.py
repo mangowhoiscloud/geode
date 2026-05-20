@@ -16,6 +16,7 @@ _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from simple_term_menu import TerminalMenu
 
@@ -65,6 +66,7 @@ def cmd_login(args: str) -> None:
         /login remove <plan>
         /login route <model> <plan> [<plan>...]
         /login quota          — per-plan usage breakdown
+        /login health [<profile>] — eligibility verdict + actionable suggestion
         /login status         — legacy alias of bare /login
     """
     from core.cli import commands as _pkg
@@ -107,6 +109,12 @@ def cmd_login(args: str) -> None:
         return
     if sub == "quota":
         _login_quota()
+        return
+    if sub == "health":
+        _login_health(rest)
+        return
+    if sub in ("providers", "provider"):
+        _login_providers()
         return
     if sub == "source":
         _login_source(rest)
@@ -194,7 +202,43 @@ def _login_help() -> None:
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
         "  [label]/login quota[/label]                 Per-plan quota / usage\n"
+        "  [label]/login health[/label] [<profile>]    Eligibility verdict per profile\n"
+        "  [label]/login providers[/label]             Provider variants + equivalence map\n"
+        "\n"
+        "  [muted]Eligibility verdicts (shown next to each profile in /login):[/muted]\n"
+        "  [muted]  ok               — profile passes every check, ready to dispatch[/muted]\n"
+        "  [muted]  missing_key      — key/token field is empty; rerun add or set-key[/muted]\n"
+        "  [muted]  expired          — OAuth token past expires_at; refresh via the[/muted]\n"
+        "  [muted]                     owning CLI (`claude` / `codex`) and rerun /login[/muted]\n"
+        "  [muted]  cooling_down     — consecutive failures tripped backoff; wait for[/muted]\n"
+        "  [muted]                     cooldown or run /login health <profile> for ETA[/muted]\n"
+        "  [muted]  disabled         — manually disabled (`/login remove` to delete)[/muted]\n"
+        "  [muted]  provider_mismatch — not for the queried provider (info only)[/muted]\n"
     )
+
+
+def _format_plan_binding(registry: Any, plan_id: str) -> str:
+    """Render a profile's plan binding as ``<id> (<kind>·<tier or display>)``.
+
+    L3 — pre-fix the ``Profiles`` table only printed ``plan=<id>``, so a
+    user looking at ``glm:work`` saw ``plan=glm-coding-lite`` without
+    knowing it was a subscription plan vs PAYG, or what tier it belonged
+    to. This helper resolves the binding through ``PlanRegistry.get``
+    and appends ``kind``, ``display_name`` (when meaningful), and
+    ``subscription_tier`` so the row carries the full link.
+    Falls back to the bare ``id`` if the plan vanished and to
+    ``(none)`` when the profile has no ``plan_id`` set.
+    """
+    if not plan_id:
+        return "[muted](none)[/muted]"
+    plan = registry.get(plan_id)
+    if plan is None:
+        return f"{plan_id} [muted](unbound)[/muted]"
+    kind = plan.kind.value
+    tier = getattr(plan, "subscription_tier", None)
+    tier_suffix = f"·{tier}" if tier else ""
+    display = getattr(plan, "display_name", "") or plan_id
+    return f"[bold]{plan_id}[/bold] [muted]({kind}{tier_suffix} · {display})[/muted]"
 
 
 def _login_show_status() -> None:
@@ -274,7 +318,12 @@ def _login_show_status() -> None:
                     CredentialType.TOKEN: "token",
                     CredentialType.API_KEY: "api-key",
                 }.get(p.credential_type, "?")
-                plan_id = p.plan_id or "[muted](none)[/muted]"
+                # L3 — surface Plan binding detail (display_name + kind +
+                # subscription_tier) so an OAuth profile row actually
+                # says *what subscription* it talks to instead of just an
+                # opaque plan id. Falls back to ``(none)`` when the
+                # profile is PAYG / unmanaged.
+                plan_label = _format_plan_binding(registry, p.plan_id)
                 managed = f" · managed:{p.managed_by}" if p.managed_by else ""
                 expiry = ""
                 if p.expires_at:
@@ -294,7 +343,7 @@ def _login_show_status() -> None:
                 _pkg.console.print(
                     f"  {badge_str}  {p.name:<28} "
                     f"[muted]{badge:<7}[/muted] {p.masked_key} "
-                    f"plan={plan_id}{managed}{expiry}"
+                    f"plan={plan_label}{managed}{expiry}"
                 )
     _pkg.console.print()
 
@@ -911,4 +960,146 @@ def _login_quota() -> None:
                 else ""
             )
         )
+    _pkg.console.print()
+
+
+# ---------------------------------------------------------------------------
+# /login health — per-profile eligibility verdict + actionable suggestion
+# ---------------------------------------------------------------------------
+
+
+_HEALTH_SUGGESTIONS: dict[str, str] = {
+    "ok": "Ready to dispatch.",
+    "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
+    "`/login set-key <plan> <key>` to populate.",
+    "expired": "OAuth token past expires_at. Re-run the owning CLI's login "
+    "(e.g. `claude` or `codex`) and then `/login refresh` so GEODE "
+    "picks the new token up.",
+    "cooling_down": "Backoff after consecutive failures. The verdict line "
+    "shows the cooldown deadline — wait it out or "
+    "`/login use <other-plan>` to switch providers in the meantime.",
+    "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
+    "edit `~/.geode/auth.toml` to flip `disabled=false`).",
+    "provider_mismatch": "Profile belongs to a different provider — info only, no action needed.",
+}
+
+
+def _login_health(rest: str) -> None:
+    """Render eligibility verdicts for one profile or every profile.
+
+    L5 — the `/login` status dashboard already shows an inline reject
+    badge (cooldown / expired / etc), but the reason codes are opaque
+    until the user knows what each one means. ``/login help`` now
+    documents the codes; this subcommand turns the same data into a
+    per-profile report with an actionable suggestion ("re-run
+    `claude`", "wait Xm", …) so the user can resolve a verdict without
+    guessing.
+    """
+    from core.auth.profiles import EligibilityResult
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
+    store = ensure_profile_store()
+    profiles = store.list_all()
+    if not profiles:
+        _pkg.console.print(
+            "  [muted]No profiles registered. Run `/login add` to create one.[/muted]\n"
+        )
+        return
+
+    target = rest.strip()
+
+    # When the operator names a profile, narrow down — same matching the
+    # rest of the login subcommands use (exact name).
+    verdicts: list[EligibilityResult] = []
+    seen_providers: set[str] = set()
+    for profile in profiles:
+        if profile.provider in seen_providers:
+            continue
+        seen_providers.add(profile.provider)
+        verdicts.extend(store.evaluate_eligibility(profile.provider))
+
+    if target:
+        narrowed = [v for v in verdicts if v.profile_name == target]
+        if not narrowed:
+            _pkg.console.print(
+                f"\n  [warning]No profile named[/warning] {target}\n"
+                "  [muted]Run `/login` to list all profiles.[/muted]\n"
+            )
+            return
+        verdicts = narrowed
+
+    _pkg.console.print("\n  [header]Eligibility[/header]")
+    for v in verdicts:
+        code = v.reason_code
+        badge = "[success]ok[/success]" if v.eligible else f"[warning]{code}[/warning]"
+        _pkg.console.print(f"  {badge:<24} [bold]{v.profile_name}[/bold]")
+        if v.detail:
+            _pkg.console.print(f"    [muted]{v.detail}[/muted]")
+        suggestion = _HEALTH_SUGGESTIONS.get(code, "")
+        if suggestion:
+            _pkg.console.print(f"    → {suggestion}")
+    _pkg.console.print()
+
+
+# ---------------------------------------------------------------------------
+# /login providers — variant registry + equivalence map view
+# ---------------------------------------------------------------------------
+
+
+def _login_providers() -> None:
+    """Render provider variants + which providers share a model family.
+
+    X3 — pre-fix the equivalence map (``openai ↔ openai-codex``,
+    ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users
+    saw the ``provider`` label in ``/login`` / ``/model`` and had no way
+    to discover that a Codex Plus token and an OpenAI PAYG key both
+    serve a ``gpt-5.x`` request, or that a GLM Coding key shadows the
+    PAYG endpoint. Surfacing the table makes the policy auditable
+    without grep'ing ``PROVIDER_EQUIVALENCE`` in code.
+    """
+    from core.cli import commands as _pkg
+    from core.llm.registry import PROVIDER_EQUIVALENCE, PROVIDER_VARIANTS
+    from core.llm.routing.plan_registry import get_plan_registry
+
+    registry = get_plan_registry()
+    plans = registry.list_all()
+    plans_by_provider: dict[str, int] = {}
+    for plan in plans:
+        plans_by_provider[plan.provider] = plans_by_provider.get(plan.provider, 0) + 1
+
+    _pkg.console.print("\n  [header]Provider variants[/header]")
+    # Stable order: registry insertion order, which mirrors the chain user
+    # would see in /login status.
+    for spec in PROVIDER_VARIANTS.values():
+        plan_count = plans_by_provider.get(spec.id, 0)
+        plan_badge = f"  [muted]{plan_count} plan{'s' if plan_count != 1 else ''}[/muted]"
+        _pkg.console.print(
+            f"  [bold]{spec.id:<16}[/bold] "
+            f"[muted]{spec.auth_type:<16}[/muted] "
+            f"{spec.display_name}"
+            f"{plan_badge}"
+        )
+        _pkg.console.print(f"    [muted]{spec.default_base_url}[/muted]")
+
+    _pkg.console.print("\n  [header]Equivalence map[/header]")
+    _pkg.console.print(
+        "  [muted]Resolving to the left key tries the right list in order; "
+        "a credential from any sibling can serve the request.[/muted]"
+    )
+    # Singletons (only the provider itself) are noise — show only true
+    # equivalence classes with ≥ 2 members.
+    multi_member = {k: v for k, v in PROVIDER_EQUIVALENCE.items() if len(v) > 1}
+    if not multi_member:
+        _pkg.console.print("  [muted]No equivalence classes registered.[/muted]")
+    else:
+        # Render each class once (de-dup by tuple of members, preserve
+        # the dict-insertion entry-point as the key shown).
+        seen: set[tuple[str, ...]] = set()
+        for base in multi_member:
+            members = tuple(PROVIDER_EQUIVALENCE[base])
+            if members in seen:
+                continue
+            seen.add(members)
+            _pkg.console.print(f"  [bold]{base:<16}[/bold] → " + " · ".join(members))
     _pkg.console.print()
