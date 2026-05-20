@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-3 C-2 — reflection node (LLM-driven belief update after the
+  tool batch).** Pre-PR-3 the loop went tool result → next action with
+  no explicit belief-update step; ``CognitiveState.hypotheses`` and
+  ``CognitiveState.confidence`` were declared in PR-2 but never
+  populated. New ``core/agent/loop/_reflection.py`` runs one LLM call
+  after every tool-use round (skipped on text-only rounds — nothing to
+  reflect on). The call sees only a compact state snapshot + tool-
+  result summary (clean-context discipline) and returns a small JSON
+  object: ``hypotheses[<=5]`` (each <= 120 chars), ``confidence ∈
+  [0,1]``, and ``next_action_hint`` (pushed into ``subgoals``, rolling
+  cap 5). Errors are swallowed inside ``reflect_async`` — the loop
+  stays robust to a flaky reflection model. Dispatch goes through
+  ``core.llm.router.call_with_failover`` so the credential rotator is
+  shared with every other provider-aware caller (paperclip-style
+  abstraction from PR-1 G-A). Three new settings knobs control the
+  node: ``cognitive_reflection_enabled`` (bool, default True),
+  ``cognitive_reflection_model`` (default
+  ``claude-haiku-4-5-20251001`` — cheapest Claude that still follows
+  the JSON schema), ``cognitive_reflection_max_tokens`` (int, default
+  512). All three accept env-var (``GEODE_COGNITIVE_REFLECTION_*``) and
+  ``config.toml`` (``[cognitive] reflection_*``) overrides via
+  ``_TOML_TO_SETTINGS``. The reflection step fires between
+  ``record_round`` and the ``COGNITIVE_REFLECT`` hook event so
+  downstream listeners see the LLM-derived belief update, not the
+  deterministic post-record_round snapshot.
+
 - **PR-2 C-1 — explicit ``CognitiveState`` container attached to the
   agentic loop.** Pre-PR-2 the loop kept cognitive state implicit
   inside ``ConversationContext.messages`` — there was no named place
