@@ -142,6 +142,32 @@ class HookEvent(Enum):
     # Reasoning metrics (DTR-inspired observability)
     REASONING_METRICS = "reasoning_metrics"
 
+    # Cognitive cycle telemetry (C-6 — PR-2 cognitive-loop uplift sprint).
+    # Six steps form the abstract cognitive cycle a downstream Petri /
+    # Inspect viewer can segment a session by. Every event carries the
+    # ``cognitive_state`` snapshot in its payload (see
+    # ``CognitiveState.to_snapshot``) so the viewer can replay state
+    # evolution without re-parsing the transcript.
+    #
+    # PERCEIVE: input received — user prompt + current context observed.
+    # PLAN:     pre-LLM-call — the loop is deciding what to do next.
+    # ACT:      tool execution started — the loop is taking an action.
+    # OBSERVE:  tool execution ended — the loop is reading back results.
+    # REFLECT:  round-end summary — the loop is updating its beliefs
+    #           (PR-3 adds a dedicated reflection LLM call; PR-2 fires
+    #           the event at turn complete with a deterministic
+    #           summary).
+    # UPDATE_MEMORY: cognitive-level sibling of MEMORY_SAVED — fires
+    #           when the loop writes anything that should persist
+    #           cross-round (episodic memory / rule update / outcome
+    #           ledger entry).
+    COGNITIVE_PERCEIVE = "cognitive_perceive"
+    COGNITIVE_PLAN = "cognitive_plan"
+    COGNITIVE_ACT = "cognitive_act"
+    COGNITIVE_OBSERVE = "cognitive_observe"
+    COGNITIVE_REFLECT = "cognitive_reflect"
+    COGNITIVE_UPDATE_MEMORY = "cognitive_update_memory"
+
 
 @dataclass
 class HookResult:

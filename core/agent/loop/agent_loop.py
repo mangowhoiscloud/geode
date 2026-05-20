@@ -195,6 +195,16 @@ class AgenticLoop:
         except Exception:
             log.warning("SessionCheckpoint init failed", exc_info=True)
 
+        # PR-2 C-1 — explicit cognitive state container. ``goal`` is set on
+        # the first ``arun()`` call (user input becomes the session goal);
+        # ``round_count`` / ``last_action`` / ``last_observation`` /
+        # ``observations`` are updated at each round end. Hypotheses +
+        # confidence are PR-3 territory (the reflection node will populate
+        # them). See ``core/agent/cognitive_state.py`` for the rationale.
+        from core.agent.cognitive_state import CognitiveState
+
+        self.cognitive_state = CognitiveState()
+
     # ------------------------------------------------------------------
     # Lifecycle / metrics — delegate to ``_lifecycle``
     # ------------------------------------------------------------------
@@ -240,6 +250,97 @@ class AgenticLoop:
     def _inject_credential_breadcrumb(self) -> None:
         """Delegates to :func:`_lifecycle.inject_credential_breadcrumb`."""
         return _lifecycle.inject_credential_breadcrumb(self)
+
+    async def _emit_cognitive(self, event: HookEvent, **payload: Any) -> None:
+        """PR-2 C-6 — emit a cognitive-cycle event with the state
+        snapshot attached.
+
+        Centralises the (a) hook-system None-guard, (b) session_id
+        injection, (c) ``cognitive_state`` snapshot embedding so each
+        call site stays a one-liner and ``arun`` doesn't balloon past
+        the ruff complexity gates.
+        """
+        if not self._hooks:
+            return
+        await self._hooks.trigger_async(
+            event,
+            {
+                "session_id": self._session_id,
+                "cognitive_state": self.cognitive_state.to_snapshot(),
+                **payload,
+            },
+        )
+
+    async def _record_text_only_round(self, round_idx: int, *, text: str) -> None:
+        """PR-2 C-6 — record round end + emit REFLECT/UPDATE_MEMORY for
+        text-only completions (``stop_reason != "tool_use"``).
+
+        Codex MCP review #1 catch — without this, ``record_round`` only
+        ran on tool-use rounds, violating the conditional-read-parity
+        rule. ACT/OBSERVE are intentionally NOT emitted here: the loop
+        took no action and observed no tool result this round, so the
+        cognitive cycle on a text-only turn is PERCEIVE → PLAN →
+        REFLECT (the LLM "thought aloud" then ended the turn).
+        ``last_action`` is recorded as ``"text-only"`` and
+        ``last_observation`` as a 80-char head of the emitted text so
+        downstream readers can distinguish *no-action* turns from
+        *failed-tool* turns.
+        """
+        head = text.strip().replace("\n", " ")
+        if len(head) > 80:
+            head = head[:80] + "…"
+        self.cognitive_state.record_round(
+            action="text-only",
+            observation=head or "(empty text)",
+        )
+        await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
+
+    async def _run_cognitive_act_observe_cycle(
+        self, response: Any, round_idx: int
+    ) -> list[dict[str, Any]]:
+        """PR-2 C-6 — emit ACT before the tool batch, run the batch,
+        emit OBSERVE after, update :attr:`cognitive_state` round-end
+        fields, emit REFLECT + UPDATE_MEMORY.
+
+        Extracted from ``arun`` to keep the run-loop within the ruff
+        complexity gates while preserving the cognitive-cycle event
+        ordering (PERCEIVE -> PLAN -> ACT -> OBSERVE -> REFLECT ->
+        UPDATE_MEMORY).
+        """
+        tool_names: list[str] = []
+        for block in getattr(response, "content", None) or []:
+            if getattr(block, "type", None) == "tool_use":
+                tool_names.append(getattr(block, "name", "unknown"))
+
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_ACT,
+            round=round_idx + 1,
+            tool_names=tool_names,
+        )
+
+        tool_results = await self._tool_processor.process(response)
+
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_OBSERVE,
+            round=round_idx + 1,
+            tool_names=tool_names,
+            result_count=len(tool_results),
+        )
+
+        # Deterministic round-end state update. Action = tool names (or
+        # "text-only"); observation = result-count summary. PR-3
+        # replaces the deterministic summary with an LLM-derived
+        # belief update from the reflection node.
+        self.cognitive_state.record_round(
+            action=("tools: " + ", ".join(tool_names)) if tool_names else "text-only",
+            observation=f"{len(tool_results)} tool result(s)",
+        )
+
+        await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
+
+        return tool_results
 
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
@@ -400,6 +501,18 @@ class AgenticLoop:
                     text=intercept.reason, rounds=0, termination_reason="input_blocked"
                 )
 
+        # PR-2 C-1 + C-6 — set the cognitive-state goal to the user input
+        # of the first arun() call (subsequent calls in the same session
+        # keep the original goal so observations accumulate against it).
+        # Then fire PERCEIVE with the state snapshot so a downstream
+        # viewer can segment the session by cognitive cycle step.
+        if not self.cognitive_state.goal:
+            self.cognitive_state.goal = user_input
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_PERCEIVE,
+            user_input=user_input,
+        )
+
         # Add user message to conversation context
         self.context.add_user_message(user_input)
 
@@ -498,6 +611,13 @@ class AgenticLoop:
                         termination_reason="context_exhausted",
                     )
                     return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
+            # PR-2 C-6 — pre-LLM-call PLAN event. See ``_emit_cognitive``.
+            await self._emit_cognitive(
+                HookEvent.COGNITIVE_PLAN,
+                round=round_idx + 1,
+                model=self.model,
+            )
 
             # Show spinner while waiting for LLM response
             # IPC mode: send structured event; direct mode: TextSpinner
@@ -861,6 +981,7 @@ class AgenticLoop:
                         "behaviour, or step you want me to focus on next?\n\n"
                         f"Most recent reasoning (truncated):\n{summary}"
                     )
+                    await self._record_text_only_round(round_idx, text=last_text)
                     result = AgenticResult(
                         text=clarification,
                         tool_calls=self._tool_processor.tool_log,
@@ -890,6 +1011,7 @@ class AgenticLoop:
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
                 messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
+                await self._record_text_only_round(round_idx, text=text)
                 reason = "forced_text" if is_last_round else "natural"
                 result = AgenticResult(
                     text=text,
@@ -899,7 +1021,7 @@ class AgenticLoop:
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-            tool_results = await self._tool_processor.process(response)
+            tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
 
             # Feature 5: Backpressure on consecutive tool failures
             # Feature 6: Convergence detection (stuck loop)
