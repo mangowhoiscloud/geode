@@ -295,8 +295,43 @@ def _cmd_run(opts: list[str]) -> None:
 
         console.print()
 
-    console.print(f"  [muted]summary:[/muted] applied={applied}  rejected={rejected}")
+    # PR-G4 (2026-05-21) — surface the mutator's resolved (model, source)
+    # so the operator knows which channel was billed for this run.
+    # Both are read from the same toml SoT (``[self_improving_loop.mutator]``)
+    # the runner consults at dispatch time; with PR-MINIMAL-2 G1a a
+    # ``None`` default_model means the mutator inherited
+    # ``Settings.model``, which we resolve here for the display line.
+    resolved_model, resolved_source = _resolve_run_summary_telemetry()
+    console.print(
+        f"  [muted]summary:[/muted] applied={applied}  rejected={rejected}  "
+        f"model={resolved_model}  source={resolved_source}"
+    )
     console.print()
+
+
+def _resolve_run_summary_telemetry() -> tuple[str, str]:
+    """Resolve the (model, source) the mutator just dispatched against.
+
+    Mirrors the runner's ``_default_llm_call`` resolution: read
+    ``MutatorConfig.default_model`` from ``~/.geode/config.toml``, fall
+    back to ``Settings.model`` when unset (PR-MINIMAL-2 G1a). Read
+    ``MutatorConfig.source`` directly. Best-effort — returns ``"?"``
+    placeholders when the config layer cannot be imported (e.g. test
+    contexts that stub ``core.config``).
+    """
+    try:
+        from core.config import settings
+        from core.config.self_improving_loop import load_self_improving_loop_config
+
+        cfg = load_self_improving_loop_config()
+        model = cfg.mutator.default_model or settings.model
+        source = cfg.mutator.source
+        return (model, source)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).debug("run-summary telemetry resolve failed", exc_info=True)
+        return ("?", "?")
 
 
 def _parse_run_opts(opts: list[str]) -> dict[str, Any] | None:
