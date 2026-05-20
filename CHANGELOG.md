@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **PR-S6 — `bench_means` + Petri/bench cross-validation gate (Path C
+  inspect_ai federation).** ADR-012 §S6 — frontier capability evaluation
+  통합으로 fitness 4축 다축화. Petri (alignment) + bench (capability)
+  의 **양방향 cross-validation gate** 로 Goodhart fooling 방어.
+  **`autoresearch/bench_means.py` 신설** — 4-field schema (swe_bench_pass
+  0.40 + tau_bench_success 0.30 + humaneval_pass1 0.15 + gaia_accuracy
+  0.15, 합 1.0) + `compute_bench_aggregate` (None → 0.5 neutral) +
+  `validate_bench_schema` + `detect_cross_validation_conflict` (Petri
+  promote + bench regress = "alignment_only_fooling", bench promote +
+  Petri critical regress = "capability_at_alignment_cost") +
+  `collect_bench_means_from_inspect_ai` (S6b placeholder).
+  **`autoresearch/train.py` 4축 다축화** — FITNESS_DIM_4AX (0.30) +
+  FITNESS_UX_4AX (0.25) + FITNESS_ADMIRE_4AX (0.20) + FITNESS_BENCH_4AX
+  (0.25, 합 1.0). dim 비중이 0.40 → 0.30 으로 추가 감소. `compute_fitness`
+  에 `bench_means` + `baseline_bench_means` 인자 추가. 분기 로직 —
+  셋 다 None / ux only / admire 활성 (3축) / bench 활성 (4축 +
+  cross-validation gate). Conflict 검출 시 0.0 strict-reject. **양의
+  압력 coverage 7/23 = 30.4% → 11/27 = 40.7% 확장** (Petri 의 1/17 한계
+  돌파, frontier 합의 능가). 28 invariant
+  test (S6) + 30 (S2) + 27 (S1) = **85/85 통과**. inspect_ai federation
+  의 실제 multi-eval wiring (Petri scenario + SWE/TAU task 동시 실행)
+  은 S6b (별도 PR).
+
 - **PR-S2 — `admire_means` fitness 축 + 3축 다축화 (ADR-012 단기).**
   S1 의 `ux_means` 옆에 추가되는 **체감 품질** 양의 압력 축의
   **schema + math + hook interface** 신설. 실제 `plugins/seed_generation/agents/ranker.py`
