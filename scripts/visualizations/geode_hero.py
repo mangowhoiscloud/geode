@@ -92,9 +92,25 @@ COLOR_TEXT = "#000000"
 COLOR_TEXT_ACCENT = "#444444"
 COLOR_TRAIL = "#BBBBBB"  # dimmed stage history
 
-# Fonts.
-EN_FONT = "Helvetica"
-KOR_FONT = "Apple SD Gothic Neo"
+# Fonts — Anthropic-style modern geometric sans pair.
+#
+# EN: ``Helvetica Neue`` (macOS-bundled, 'HelveticaNeue.ttc') — closest
+# system match to Anthropic's Styrene/Inter visual identity that
+# Manim's Pango backend renders without spacing / kerning artifacts.
+# Inter (OFL) was tested but Pango misreads its ligature table on
+# macOS, inserting spurious whitespace between consonants
+# (e.g. ``GE ODE``, ``cr itic``, ``Petr i aud it``).
+#
+# KO: ``Pretendard`` (OFL; ``brew install --cask font-pretendard``) —
+# modern Korean sans that pairs cleanly with Helvetica Neue, mirroring
+# Anthropic's bilingual typographic system. Verified to render without
+# the Apple SD Gothic Neo "초반 멈춤" glyph artifact from the v4
+# render.
+#
+# CI ensures both fonts are present before any render runs
+# (``verify_hero_layout.py`` aborts early if either is missing).
+EN_FONT = "Helvetica Neue"
+KOR_FONT = "Pretendard"
 
 # Layout zones (Manim default frame is 14.22 × 8.0 units at 16:9).
 TITLE_Y = 3.4
@@ -416,40 +432,93 @@ class GeodeSelfImprovingHero(Scene):
         self.title = new_title
 
     def _setup_footer(self) -> None:
-        """Three stage dots at the footer; the active one lights green."""
-        dots = {}
-        labels = {}
-        for i, (key, label_key) in enumerate(
-            (("s1", "stage_1"), ("s2", "stage_2"), ("s3", "stage_3"))
-        ):
+        """Three stage dots laid out as a git commit chain.
+
+        Reference: GitHub commit graph + Karpathy autoresearch's "git as
+        optimiser" idiom. Each stage = one commit (small filled dot +
+        3-char hash above + stage label below); commits are linked by
+        a short horizontal connector segment; a HEAD pointer
+        (triangle + "HEAD" text) hovers over the active commit.
+        """
+        dots: dict[str, Circle] = {}
+        labels: dict[str, Text] = {}
+        hashes: dict[str, Text] = {}
+        connectors: list[Line] = []
+        positions = (("s1", "stage_1", "a3f"), ("s2", "stage_2", "b7c"), ("s3", "stage_3", "d92"))
+
+        for i, (key, label_key, commit_hash) in enumerate(positions):
             x = -3.5 + i * 3.5
             dot = Circle(
-                radius=0.12,
+                radius=0.11,
                 color=COLOR_ARROW,
                 fill_color=COLOR_UNFILLED,
                 fill_opacity=1.0,
             ).move_to(RIGHT * x + UP * FOOTER_Y)
+            hash_text = _make_text(
+                commit_hash, font_size=12, color=COLOR_TEXT_ACCENT
+            ).next_to(dot, UP, buff=0.05)
             label = _make_text(
-                _t(label_key), font_size=15, color=COLOR_TEXT_ACCENT
+                _t(label_key), font_size=14, color=COLOR_TEXT_ACCENT
             ).next_to(dot, DOWN, buff=0.12)
             dots[key] = dot
+            hashes[key] = hash_text
             labels[key] = label
+
+        # Horizontal connectors between adjacent dots (commit graph edge).
+        for left_key, right_key in (("s1", "s2"), ("s2", "s3")):
+            left = dots[left_key].get_right() + RIGHT * 0.02
+            right = dots[right_key].get_left() + LEFT * 0.02
+            connectors.append(
+                Line(left, right, color=COLOR_ARROW, stroke_width=2)
+            )
+
+        # HEAD pointer — small downward triangle + "HEAD" text above s1.
+        head_anchor = dots["s1"].get_top() + UP * 0.18
+        head_triangle = Polygon(
+            head_anchor + UP * 0.0,
+            head_anchor + UP * 0.12 + LEFT * 0.08,
+            head_anchor + UP * 0.12 + RIGHT * 0.08,
+            color=COLOR_PROMOTED,
+            fill_color=COLOR_PROMOTED,
+            fill_opacity=1.0,
+            stroke_width=1.0,
+        )
+        head_label = _make_text(
+            "HEAD", font_size=11, color=COLOR_PROMOTED
+        ).next_to(head_triangle, UP, buff=0.04)
+        head_pointer = VGroup(head_triangle, head_label)
+
         self.stage_dots = dots
         self.stage_labels = labels
+        self.stage_hashes = hashes
+        self.stage_connectors = connectors
+        self.head_pointer = head_pointer
+
         self.play(
+            *[Create(c) for c in connectors],
             *[Create(d) for d in dots.values()],
+            *[FadeIn(h) for h in hashes.values()],
             *[FadeIn(label) for label in labels.values()],
-            run_time=0.4,
+            FadeIn(head_pointer),
+            run_time=0.6,
         )
 
     def _set_active_stage(self, stage_key: str) -> None:
-        """Mark one footer dot green; reset the others to unfilled."""
+        """Light the matching commit green; slide the HEAD pointer over it."""
         assert self.stage_dots is not None
         anims = []
         for key, dot in self.stage_dots.items():
             target_fill = COLOR_PROMOTED if key == stage_key else COLOR_UNFILLED
             anims.append(dot.animate.set_fill(target_fill, opacity=1.0))
-        self.play(*anims, run_time=0.3)
+        # Move HEAD pointer above the active commit (preserving its
+        # vertical offset).
+        target_dot = self.stage_dots[stage_key]
+        target_anchor = target_dot.get_top() + UP * 0.18
+        # The pointer's bottom should sit at target_anchor.
+        current_bottom = self.head_pointer[0].get_bottom()
+        delta = target_anchor - current_bottom
+        anims.append(self.head_pointer.animate.shift(delta))
+        self.play(*anims, run_time=0.4)
 
     def _dim(self, group: VGroup, *, opacity: float = 0.3) -> None:
         """Fade a previous-stage element to ``opacity`` (trail effect)."""
@@ -514,9 +583,12 @@ class GeodeSelfImprovingHero(Scene):
             RIGHT * 1.15,
             ORIGIN + DOWN * 0.8,
         )
+        # ``meta_reviewer`` is the longest label (13 chars) — its box is
+        # explicitly wider so the verify_hero_layout ratchet doesn't fire
+        # the OVERFLOW guard. Others stay at 1.05 to preserve grid look.
         agents = []
         for key, offset in zip(agent_keys, layout_offsets):
-            box = _agent_box(key, width=1.05)
+            box = _agent_box(key, width=1.4 if key == "agent_meta_reviewer" else 1.05)
             box.move_to(outer_box.get_center() + offset)
             agents.append(box)
         self.agents = VGroup(*agents)
@@ -611,10 +683,15 @@ class GeodeSelfImprovingHero(Scene):
             petri_box.get_left() + LEFT * 0.1,
             head_color=COLOR_PETRI,
         )
+        # Next-step label above the arrow head.
+        arrow_label_s1_to_s2 = _make_text(
+            "→ audit", font_size=12, color=COLOR_TEXT_ACCENT
+        ).move_to(survivors_to_petri.get_center() + UP * 0.2)
         self.survivors_to_petri = survivors_to_petri
+        self.arrow_label_s1_to_s2 = arrow_label_s1_to_s2
 
         self.play(Create(petri_box), Write(petri_label), run_time=0.6)
-        self.play(Create(survivors_to_petri), run_time=0.5)
+        self.play(Create(survivors_to_petri), FadeIn(arrow_label_s1_to_s2), run_time=0.5)
 
     def _bit_6_20_dim_rubric(self) -> None:
         """4×5 grid (20 dims) below the Petri box, tier-colored."""
@@ -723,8 +800,12 @@ class GeodeSelfImprovingHero(Scene):
             RIGHT * (STAGE_X["s3"] - 1.6) + UP * (CONTENT_TOP - 1.2),
             head_color=COLOR_WINNER,
         )
+        arrow_label_s2_to_s3 = _make_text(
+            "→ select", font_size=12, color=COLOR_TEXT_ACCENT
+        ).move_to(s2_to_s3.get_center() + UP * 0.2)
         self.s2_to_s3 = s2_to_s3
-        self.play(Create(s2_to_s3), run_time=0.4)
+        self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
+        self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
 
         formula = _make_text(
             "fitness = Σ wᵢ × (10 − dim_meansᵢ) / 10",
@@ -891,16 +972,63 @@ class GeodeSelfImprovingHero(Scene):
             head_color=COLOR_PROMOTED,
             curve_angle=math.pi / 3,
         )
+        cycle_label = _make_text(
+            "→ next gen", font_size=12, color=COLOR_PROMOTED
+        ).move_to(DOWN * 1.6)
         gen_label = _make_text(
             f"{_t('gen_n')} → {_t('gen_n_plus_1')}",
             font_size=18,
             color=COLOR_PROMOTED,
         ).move_to(ORIGIN + DOWN * 2.6)
         self.cycle_arrow = cycle_arrow
+        self.cycle_label = cycle_label
         self.gen_label = gen_label
 
-        self.play(Create(cycle_arrow), run_time=0.7)
+        self.play(Create(cycle_arrow), FadeIn(cycle_label), run_time=0.7)
         self.play(Write(gen_label), run_time=0.5)
+
+        # Git-commit cycle closure — append a fourth commit dot
+        # (next-generation seed-generation) to the footer chain and move
+        # the HEAD pointer onto it. Mirrors `git commit` after a merge.
+        assert self.stage_dots is not None
+        s3_dot = self.stage_dots["s3"]
+        new_dot_pos = s3_dot.get_center() + RIGHT * 3.5
+        new_dot = Circle(
+            radius=0.11,
+            color=COLOR_PROMOTED,
+            fill_color=COLOR_PROMOTED,
+            fill_opacity=1.0,
+        ).move_to(new_dot_pos)
+        new_hash = _make_text(
+            "e15", font_size=12, color=COLOR_PROMOTED
+        ).next_to(new_dot, UP, buff=0.05)
+        new_label = _make_text(
+            _t("stage_1"), font_size=14, color=COLOR_PROMOTED
+        ).next_to(new_dot, DOWN, buff=0.12)
+        new_conn = Line(
+            s3_dot.get_right() + RIGHT * 0.02,
+            new_dot.get_left() + LEFT * 0.02,
+            color=COLOR_PROMOTED,
+            stroke_width=2,
+        )
+
+        # Slide HEAD pointer onto the new commit.
+        head_target = new_dot.get_top() + UP * 0.18
+        head_delta = head_target - self.head_pointer[0].get_bottom()
+
+        self.cycle_new_dot = new_dot
+        self.cycle_new_hash = new_hash
+        self.cycle_new_label = new_label
+        self.cycle_new_connector = new_conn
+
+        self.play(
+            Create(new_conn),
+            FadeIn(new_dot),
+            FadeIn(new_hash),
+            FadeIn(new_label),
+            self.head_pointer.animate.shift(head_delta),
+            run_time=0.7,
+        )
 
         # Briefly re-highlight stage 1 (loop closure) — re-light the agent grid.
         self._set_active_stage("s1")
@@ -919,8 +1047,10 @@ class GeodeSelfImprovingHero(Scene):
             self.leaderboard_label,
             self.petri_box,
             self.survivors_to_petri,
+            getattr(self, "arrow_label_s1_to_s2", None),
             self.dim_boxes,
             self.s2_to_s3,
+            getattr(self, "arrow_label_s2_to_s3", None),
             self.formula,
             self.gauge_track,
             self.gauge_fill,
@@ -930,8 +1060,13 @@ class GeodeSelfImprovingHero(Scene):
             self.floor_label,
             self.baseline_box,
             self.cycle_arrow,
+            getattr(self, "cycle_label", None),
             self.gen_label,
             self.promote_label,
+            getattr(self, "cycle_new_dot", None),
+            getattr(self, "cycle_new_hash", None),
+            getattr(self, "cycle_new_label", None),
+            getattr(self, "cycle_new_connector", None),
         ]
         # Also drop the footer dots + labels — the chart is the whole
         # story now.
@@ -939,6 +1074,9 @@ class GeodeSelfImprovingHero(Scene):
         assert self.stage_labels is not None
         to_clear.extend(self.stage_dots.values())
         to_clear.extend(self.stage_labels.values())
+        to_clear.extend(self.stage_hashes.values())
+        to_clear.extend(self.stage_connectors)
+        to_clear.append(self.head_pointer)
         self.play(*[FadeOut(m) for m in to_clear if m is not None], run_time=0.6)
 
         # Title.
