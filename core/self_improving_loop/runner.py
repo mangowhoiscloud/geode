@@ -562,17 +562,29 @@ class SelfImprovingLoopRunner:
         the caller can decide whether to retry.
         """
         ctx = build_runner_context()
+        original_sections = dict(ctx.current_sections)
         user_prompt = _build_user_prompt(ctx)
         raw_response = self.llm_call(_build_system_prompt(), user_prompt)
         mutation = parse_mutation(raw_response)
         _new_sections, previous_value = apply_mutation(
             mutation, current_sections=ctx.current_sections
         )
-        log_path = append_audit_log(
-            mutation,
-            previous_value=previous_value,
-            log_path=self.audit_log_path,
-        )
+        # G5b.fix3 (2026-05-20) — atomicity boundary: if the audit log
+        # write fails after the SoT mutation lands, the in-disk state is
+        # silently divergent (SoT advanced, history missing). Roll the
+        # SoT back to ``original_sections`` so the next iteration sees a
+        # consistent state. Best-effort: rollback can itself fail (rare
+        # filesystem outage); we log + re-raise the original exception
+        # so the caller knows the iteration failed.
+        try:
+            log_path = append_audit_log(
+                mutation,
+                previous_value=previous_value,
+                log_path=self.audit_log_path,
+            )
+        except OSError as exc:
+            self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+            raise
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=mutation)
         if self.rerun_enabled:
@@ -580,6 +592,46 @@ class SelfImprovingLoopRunner:
             self._invoke_autoresearch(repo_root)
         self._append_self_improving_loop_index(mutation, previous_value)
         return mutation
+
+    @staticmethod
+    def _rollback_sot(
+        original_sections: dict[str, str],
+        *,
+        mutation: Mutation,
+        exc: OSError,
+    ) -> None:
+        """Restore the SoT to ``original_sections`` after a post-apply failure.
+
+        G5b.fix3 — invoked from ``run_once`` when
+        :func:`append_audit_log` raises ``OSError`` *after*
+        :func:`apply_mutation` has already written the new sections to
+        disk. The SoT must be rolled back to the pre-mutation state so
+        the loop never persists a mutation that has no audit-log row;
+        otherwise the git-as-optimiser ledger and the live state would
+        diverge silently.
+
+        Rollback failure is itself logged but never raised in place of
+        the original ``exc`` — the caller already has the more useful
+        signal (audit-log write failed).
+        """
+        try:
+            from autoresearch.train import write_wrapper_prompt_sections
+
+            write_wrapper_prompt_sections(original_sections)
+            log.error(
+                "self-improving-loop runner: audit-log write failed (%s); "
+                "SoT rolled back to pre-mutation state for section %r",
+                exc,
+                mutation.target_section,
+            )
+        except Exception:  # pragma: no cover — defensive
+            log.exception(
+                "self-improving-loop runner: audit-log write failed (%s) AND "
+                "rollback failed — SoT may be in a divergent state for "
+                "section %r",
+                exc,
+                mutation.target_section,
+            )
 
     def _invoke_autoresearch(self, repo_root: Path) -> None:
         """Wrap the autoresearch subprocess so tests can override."""

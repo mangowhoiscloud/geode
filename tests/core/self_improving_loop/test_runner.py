@@ -458,13 +458,7 @@ def test_system_prompt_falls_back_when_program_md_missing(
 
 
 def test_load_program_md_reads_real_file_in_repo() -> None:
-    """The real ``autoresearch/program.md`` file is reachable from the runner.
-
-    Sanity check that the path resolution in :func:`_load_program_md`
-    actually finds the in-repo file — if a refactor moves the runner,
-    this test fails loudly instead of silently dropping into the
-    fallback prompt every run.
-    """
+    """The real ``autoresearch/program.md`` file is reachable from the runner."""
     from core.self_improving_loop.runner import _load_program_md
 
     program_md = _load_program_md()
@@ -518,3 +512,90 @@ def test_run_once_uses_program_md_in_system_prompt(
     assert "The runner must surface this." in captured["system"]
     # And the mutation contract suffix is still appended.
     assert "Response schema:" in captured["system"]
+
+
+# ---------------------------------------------------------------------------
+# G5b.fix3 (2026-05-20) — atomicity: SoT rolls back on audit-log OSError
+# ---------------------------------------------------------------------------
+
+
+def test_runner_rolls_back_sot_when_audit_log_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If append_audit_log raises OSError after SoT mutation, the SoT must
+    revert to the pre-mutation state so the next iteration sees consistency."""
+    from autoresearch import train as auto_train
+
+    from core.self_improving_loop import runner
+
+    sot_path = tmp_path / "wrapper-sections.json"
+    original = {"role": "ORIGINAL_ROLE", "tools": "ORIGINAL_TOOLS"}
+    sot_path.write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_baseline",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        lambda: None,
+    )
+
+    def _explode_audit_log(*_a: Any, **_kw: Any) -> None:
+        raise OSError("simulated audit log write failure")
+
+    monkeypatch.setattr(runner, "append_audit_log", _explode_audit_log)
+    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+
+    instance = runner.SelfImprovingLoopRunner(
+        llm_call=lambda _s, _u: json.dumps(
+            {"target_section": "role", "new_value": "MUTATED", "rationale": "r"}
+        ),
+        audit_log_path=tmp_path / "mutations.jsonl",
+        commit_enabled=False,
+        rerun_enabled=False,
+    )
+    with pytest.raises(OSError, match="simulated audit log write failure"):
+        instance.run_once()
+
+    # The SoT must have rolled back to the original.
+    persisted = json.loads(sot_path.read_text(encoding="utf-8"))
+    assert persisted == original, (
+        "G5b.fix3 regression: audit-log OSError did not roll back the SoT. "
+        f"Expected {original}, got {persisted}."
+    )
+
+
+def test_runner_success_path_unchanged_by_rollback_logic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When audit-log write succeeds, SoT carries the mutation forward."""
+    from autoresearch import train as auto_train
+
+    from core.self_improving_loop import runner
+
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_baseline",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        lambda: None,
+    )
+    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+
+    instance = runner.SelfImprovingLoopRunner(
+        llm_call=lambda _s, _u: json.dumps(
+            {"target_section": "role", "new_value": "NEW", "rationale": "r"}
+        ),
+        audit_log_path=tmp_path / "mutations.jsonl",
+        commit_enabled=False,
+        rerun_enabled=False,
+    )
+    instance.run_once()
+    # SoT carries the mutation; rollback path not taken.
+    persisted = json.loads(sot_path.read_text(encoding="utf-8"))
+    assert persisted["role"] == "NEW"

@@ -49,6 +49,21 @@ functional change.
 
 ### Fixed
 
+- **G5b.fix3 — SoT rolls back when audit-log write fails (atomicity
+  fix for the mutation runner).** Codex MCP LLM-as-Judge on PR-G5b
+  (#1350) caught the third finding: `apply_mutation` writes the
+  wrapper-sections SoT to disk *before* `append_audit_log` records
+  the mutation. If the audit log write raised `OSError`, the SoT had
+  already advanced and the ledger had no record — the next iteration
+  would build on a mutation with no history. Fix: wrap
+  `append_audit_log` in `try/except OSError` inside `run_once`; on
+  failure, `_rollback_sot` restores the SoT to the pre-mutation
+  `original_sections` and the original `OSError` is re-raised so the
+  caller knows the iteration failed. Rollback failure itself logs but
+  doesn't shadow the original error. 2 new tests: rollback restores
+  SoT on audit-log failure / success path unchanged when audit-log
+  works.
+
 - **G5b.fix2 — `core/self_improving_loop/runner.py` actually loads
   `autoresearch/program.md` so "program.md-driven" is no longer fiction.**
   Codex MCP LLM-as-Judge on PR-G5b (#1350) caught the second
