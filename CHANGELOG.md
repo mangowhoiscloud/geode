@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-E — causal attribution × CognitiveState confidence-stability
+  term.** Concern #5 from the post-sprint frontier matrix: PR-5's
+  ``compute_attribution`` only consumed baseline dim deltas + the
+  LLM's ``expected_dim`` commitment, ignoring the per-round
+  ``confidence`` trajectory the PR-3 reflection node produced and
+  PR-4's episodic memory persisted. Two mutations with identical
+  dim deltas but wildly different belief stability looked identical.
+  PR-E plugs the gap. ``compute_attribution`` gains an optional
+  ``confidence_trajectory`` kwarg; when supplied with ≥ 2 samples
+  the payload gains ``confidence_stability ∈ [0,1]`` (formula
+  ``1.0 - clamp(sample_stddev, 0, 1)``: 1.0 = rock-steady,
+  0.0 = wild oscillation). New helper
+  ``confidence_trajectory_from_episodes`` pulls the trajectory from
+  a list of PR-4 ``Episode`` rows (filters non-numeric / bool /
+  out-of-range entries, mirroring PR-3's bool-exclusion guard).
+  ``write_attribution`` forwards the trajectory through.
+  ``attribution_score`` is intentionally unchanged so PR-6 policy-
+  mutation aggregators can weight dim-deltas vs belief stability
+  independently. 18 invariant tests pin the stability math + the
+  episodic adapter + payload integration + write-forwarding.
+
 ### Changed
 
 - **PR-D Phase 1 — ``arun`` god-method decomposition (session-start
