@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-AUDIT-5SLOT — self-improving loop 5 slot reader-wiring audit.**
+  ADR-012 (self-improvement surface tiers) 작성 도중 발견한 wiring
+  누수의 정직한 진단. mutator 가 mutate 할 수 있는 5 slot
+  (`prompt` / `tool_policy` / `decomposition` / `retrieval` /
+  `reflection`) 중 인퍼런스 경로에서 실제로 정책을 읽어 행동에
+  반영하는 reader 가 살아있는 slot 은 `prompt` 1개 뿐. 나머지 4
+  slot 은 mutation target 으로 정의돼 있지만 reader 가 부재하거나
+  hardcoded constant 로 우회되어 있어 mutation 의 fitness 압력이
+  닿지 못함 (**dead policy**). `core/self_improving_loop/policies.py:29-37`
+  의 docstring 이 직접 자백 — "PR-6 stops at the *file format +
+  dispatcher*. The Voyager-style learning loops that actually
+  exercise the new SoTs land as follow-ups". 그 follow-up 이 잊혀진
+  상태로 현재까지 운영 중. 결과적으로 GEODE 의 self-improving
+  loop 가 명세상 5축 진화지만 실제로는 **1축 진화** 였음. 진단
+  결과를 `docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`
+  에 정직히 기록 + invariant test 13개로 ALIVE slot (`prompt`)
+  reader 경로 보장 + DEAD slot 4개의 reader 부재 anchor (S0a/b/c
+  PR 에서 reader 신설되면 test 가 실패해서 함께 갱신되도록
+  의도된 회귀 marker). dead slot 별 권고 (살리기 / deprecate)
+  는 ADR-012 의 S0 sub-PR 시퀀스로 분리.
+
 ### Fixed
 
 - **PR-COSCI-1 — co-scientist 3-item fix-up.** Wave-parallel
