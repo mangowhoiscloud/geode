@@ -1,14 +1,16 @@
-"""PR-RATCHET-1 invariants — 5 mutation SoT files moved in-repo.
+"""PR-RATCHET-1 invariants — 5 mutation-target policy files moved in-repo.
 
 Pins:
-- 5 SoT constants now point under ``autoresearch/state/sot/``.
-- ``.gitignore`` allows the new path (negation re-includes ``sot/**``).
+- 5 policy SoT constants now point under ``autoresearch/state/policies/``.
+- ``.gitignore`` allows the new path (negation re-includes ``policies/**``).
 - ``LEGACY_SOT_DIR`` still references ``~/.geode/self-improving-loop/``
   for the lazy migration path.
 - ``_maybe_migrate_legacy_sot`` copies the legacy file to the new
   location on first read/write, is idempotent, preserves the legacy
-  source (operator can roll back manually), and silently no-ops when
-  the new path already exists or the legacy file is missing.
+  source (operator can roll back manually), silently no-ops when the
+  new path already exists or the legacy file is missing, and treats
+  ANY copy-time exception (incl. ``UnicodeDecodeError``) as
+  best-effort observability (Codex MCP catch on PR-RATCHET-1).
 """
 
 from __future__ import annotations
@@ -25,22 +27,22 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_sot_constants_under_in_repo_sot_dir() -> None:
-    """Each of the 5 SoT constants must resolve under
-    ``<repo>/autoresearch/state/sot/`` — NOT ``~/.geode/...``. The
-    in-repo location is the CI-ratchet alignment fix."""
+def test_policy_constants_under_in_repo_policies_dir() -> None:
+    """Each of the 5 policy SoT constants must resolve under
+    ``<repo>/autoresearch/state/policies/`` — NOT ``~/.geode/...``.
+    The in-repo location is the CI-ratchet alignment fix."""
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_SOT,
+        GLOBAL_POLICIES_DIR,
         GLOBAL_REFLECTION_POLICY_SOT,
         GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_SOT_DIR,
         GLOBAL_TOOL_POLICY_SOT,
         GLOBAL_WRAPPER_SECTIONS_SOT,
     )
 
-    sot_dir_parts = GLOBAL_SOT_DIR.parts
-    # The in-repo SoT dir's last three components are fixed:
-    assert sot_dir_parts[-3:] == ("autoresearch", "state", "sot")
+    policies_dir_parts = GLOBAL_POLICIES_DIR.parts
+    # The in-repo policies dir's last three components are fixed:
+    assert policies_dir_parts[-3:] == ("autoresearch", "state", "policies")
 
     paths_by_kind = {
         "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_SOT,
@@ -51,7 +53,7 @@ def test_sot_constants_under_in_repo_sot_dir() -> None:
     }
     for filename, path in paths_by_kind.items():
         assert path.name == filename
-        assert path.parent == GLOBAL_SOT_DIR
+        assert path.parent == GLOBAL_POLICIES_DIR
 
 
 def test_legacy_sot_dir_still_exported() -> None:
@@ -79,17 +81,17 @@ def test_legacy_sot_dir_still_exported() -> None:
         ".gitkeep",
     ],
 )
-def test_sot_files_not_gitignored(filename: str) -> None:
+def test_policy_files_not_gitignored(filename: str) -> None:
     """``git check-ignore <path>`` must exit 1 (not ignored) for the
-    new in-repo SoT files. Pre-PR-RATCHET-1, ``autoresearch/state/*``
+    new in-repo policy files. Pre-PR-RATCHET-1, ``autoresearch/state/*``
     swept everything under the rug; the negation
-    ``!autoresearch/state/sot/**`` re-includes them."""
-    from core.paths import GLOBAL_SOT_DIR
+    ``!autoresearch/state/policies/**`` re-includes them."""
+    from core.paths import GLOBAL_POLICIES_DIR
 
     git_bin = shutil.which("git")
     if git_bin is None:
         pytest.skip("git executable not in PATH")
-    target = GLOBAL_SOT_DIR / filename
+    target = GLOBAL_POLICIES_DIR / filename
     # Run from the worktree root so .gitignore is the right one.
     repo_root = Path(__file__).resolve().parents[1]
     result = subprocess.run(  # noqa: S603
@@ -181,6 +183,30 @@ def test_migration_handles_unknown_kind(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert not new_path.exists()
 
 
+def test_migration_swallows_unicode_decode_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Codex MCP catch (PR-RATCHET-1): legacy file with non-UTF-8
+    content used to raise ``UnicodeDecodeError`` past the ``OSError``
+    catch. The widened ``except Exception`` must swallow it so the
+    caller falls through to the empty-state branch."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    new_path = tmp_path / "new" / "tool-policy.json"
+    # Latin-1 byte 0xff is not a valid UTF-8 lead byte.
+    legacy_file = legacy_dir / "tool-policy.json"
+    legacy_file.write_bytes(b"\xff\xfe garbled-bytes")
+
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    # Must NOT raise.
+    policies_mod._maybe_migrate_legacy_sot("tool_policy", new_path)
+    # New path stays absent — the caller's FileNotFoundError fallback
+    # path will produce an empty policy state.
+    assert not new_path.exists()
+
+
 @pytest.mark.parametrize(
     "kind, expected_filename",
     [
@@ -224,6 +250,24 @@ def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert result == {"delegate_task.priority": "8"}
     # Migration also created the in-repo file as a side effect
     assert new_path.is_file()
+
+
+def test_train_module_fallback_path_points_in_repo() -> None:
+    """Codex MCP catch (PR-RATCHET-1): ``autoresearch/train.py`` has a
+    fallback path used when ``core.paths`` cannot be imported. Pre-fix
+    the fallback hardcoded ``~/.geode/self-improving-loop/...`` —
+    silently re-introducing the out-of-repo location. Pin that the
+    fallback now resolves under the in-repo policies dir so a
+    degraded import does not bypass the git-as-optimiser invariant."""
+    import inspect
+
+    import autoresearch.train as auto_train
+
+    src = inspect.getsource(auto_train)
+    # The fallback must NOT contain the legacy operator-home literal.
+    assert "self-improving-loop" not in src or "policies" in src
+    # The in-repo target name must be present in the fallback.
+    assert '"policies"' in src or "/policies/" in src
 
 
 def test_write_policy_triggers_migration_before_write(

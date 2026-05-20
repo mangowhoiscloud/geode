@@ -73,14 +73,20 @@ _LEGACY_FILE_NAMES: dict[str, str] = {
 
 
 def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
-    """Copy the pre-RATCHET-1 SoT file to ``new_path`` if it exists
-    and the new in-repo path doesn't yet. Idempotent — once the
-    in-repo file is present the legacy copy is ignored on subsequent
-    calls.
+    """Copy the pre-RATCHET-1 policy file to ``new_path`` if it
+    exists and the new in-repo path doesn't yet. Idempotent — once
+    the in-repo file is present the legacy copy is ignored on
+    subsequent calls.
 
     Failures are logged but never raise — the caller's
     ``FileNotFoundError`` fallback (returning ``{}``) still produces
-    a usable state.
+    a usable state. The catch is intentionally broad (``Exception``)
+    because the migration is best-effort observability glue: a
+    decode failure (e.g. non-UTF-8 legacy JSON, ``UnicodeDecodeError``)
+    or any other unexpected condition should leave the caller free
+    to fall through to the empty-policy state rather than crash the
+    self-improving loop. Codex MCP review of PR-RATCHET-1 caught
+    the original ``except OSError`` scope being too narrow.
     """
     if new_path.exists():
         return
@@ -98,7 +104,7 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
             legacy_path,
             new_path,
         )
-    except OSError:
+    except Exception:
         log.warning(
             "PR-RATCHET-1 migration: failed to copy %s → %s",
             legacy_path,
@@ -156,7 +162,7 @@ def load_policy(kind: str) -> dict[str, str]:
 
     PR-RATCHET-1 (2026-05-21) — lazy migration from the pre-PR
     ``~/.geode/self-improving-loop/`` location to the in-repo
-    ``autoresearch/state/sot/`` location runs before the read.
+    ``autoresearch/state/policies/`` location runs before the read.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
