@@ -337,10 +337,41 @@ class AgenticLoop:
             observation=f"{len(tool_results)} tool result(s)",
         )
 
+        # PR-3 C-2 — reflection node. One extra LLM call (opt-out via
+        # ``settings.cognitive_reflection_enabled = False``) populates
+        # ``hypotheses`` / ``confidence`` / appends a hint to
+        # ``subgoals``. The REFLECT hook fires *after* the LLM call so
+        # downstream listeners see the LLM-derived belief update, not
+        # the deterministic post-record_round snapshot.
+        await self._maybe_reflect(tool_results)
+
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
         return tool_results
+
+    async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
+        """PR-3 C-2 — call the reflection node if enabled.
+
+        Reads ``settings.cognitive_reflection_enabled`` lazily so an
+        operator flipping the toggle via ``GEODE_COGNITIVE_REFLECTION_ENABLED``
+        or ``[cognitive] reflection_enabled = false`` takes effect at
+        the next round (no restart needed). Errors are swallowed inside
+        ``reflect_async`` — the loop must stay robust to a flaky
+        reflection model.
+        """
+        from core.config import settings
+
+        if not settings.cognitive_reflection_enabled:
+            return
+        from core.agent.loop._reflection import reflect_async
+
+        await reflect_async(
+            self.cognitive_state,
+            tool_results,
+            model=settings.cognitive_reflection_model,
+            max_tokens=settings.cognitive_reflection_max_tokens,
+        )
 
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
