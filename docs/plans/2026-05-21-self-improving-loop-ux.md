@@ -262,10 +262,10 @@ diagram + per-stage role 매트릭스 + harness radio + scope/quota.
 │  Profile  [● balanced]  cheap  max-quality  subs-only  petri-alignment      │
 │                                                                             │
 │  Pipeline (harness=autoresearch)                                            │
-│  ┌─ ① Seed gen ──┐  ┌─ ② Mutate ────┐  ┌─ ③ Measure ──┐  ┌─ ④ Aggregate ─┐  │
+│  ┌─ ① Seed gen ──┐  ┌─ ② Mutate ────┐  ┌─ ③ Measure ──┐  ┌─ ④ Orchestrate┐  │
 │  │ co-scientist  │→ │ Mode B runner │→ │ Petri        │→ │ autoresearch  │  │
-│  │ 7 roles · gen1│  │ mutator LLM   │  │ 17-dim audit │  │ fitness gate  │  │
-│  │ 15 cand       │  │ → SoT write   │  │ bias auto ⓘ  │  │ 5min budget   │  │
+│  │ 7 roles · gen1│  │ mutator LLM   │  │ 17-dim audit │  │ subprocess    │  │
+│  │ 15 cand       │  │ → SoT write   │  │ bias auto ⓘ  │  │ conductor (×5)│  │
 │  └───────────────┘  └───────────────┘  └──────────────┘  └───────────────┘  │
 │                                                                             │
 │  Harness mode                                                               │
@@ -281,7 +281,7 @@ diagram + per-stage role 매트릭스 + harness radio + scope/quota.
 │  │  ③     │ Petri auditor       │ claude-opus-4-7    │ oauth  │ ●●●   │    │
 │  │  ③     │ Petri target        │ geode/gpt-5.5      │ oauth  │ ●○○   │    │
 │  │  ③     │ Petri judge         │ claude-code/opus   │ oauth  │ ●●●   │    │
-│  │  ④     │ (autoresearch gate — pure compute, no model)                │  │
+│  │  ④     │ (autoresearch orchestrator — no LLM; conducts ③ subprocess)│  │
 │  └────────┴─────────────────────┴────────────────────┴────────┴───────┘    │
 │                                                                             │
 │  Petri-only                                                                 │
@@ -314,6 +314,105 @@ diagram + per-stage role 매트릭스 + harness radio + scope/quota.
 | `petri_raw` | co-scientist + mutator + Petri auditor/target/judge |
 | `seed tournament` | co-scientist + mutator |
 | `no-op` | mutator only |
+
+### Stage ④ autoresearch orchestrator — sub-panel
+
+autoresearch 는 LLM 호출 주체가 아니지만 **5개 책임을 가진 subprocess
+conductor** (코드 ground: 2026-05-21 verification):
+
+| # | Responsibility | Code anchor |
+|---|---------------|-------------|
+| ① | Seed pool cross-loop receiver | `autoresearch/train.py:161-180` `_resolve_seed_select` (env > symlink > toml > module) |
+| ② | Mutation in-flight delivery | `autoresearch/train.py:484-492` `_dump_wrapper_override` + `env["GEODE_WRAPPER_OVERRIDE"]` (line 555) |
+| ③ | Measurement subprocess lifecycle | `autoresearch/train.py:495-614` `run_audit` (spawn + timeout + capture) |
+| ④ | Fitness / promote decider | `autoresearch/train.py:672-728 compute_fitness`, `:1047-1099 _should_promote` |
+| ⑤ | Telemetry emitter | `autoresearch/train.py:421-449 _emit_journal` (9 events) |
+
+`results.tsv` / `results.jsonl` rendering is **stdout only** — caller (operator
+script or `SelfImprovingLoopRunner._run_autoresearch_subprocess`) appends to
+disk. Git commit is NOT autoresearch's responsibility — post-audit agent owns.
+
+Operator-visible sub-panel (Tier 1 dashboard 의 stage ④ 카드 클릭 시):
+
+```
+┌─ Stage ④ autoresearch orchestrator ────────────────────────────────────────┐
+│                                                                              │
+│   subprocess control                                                         │
+│     budget_minutes      5     (1 ~ 60)         ⓘ subprocess timeout         │
+│     max_turns           10    (1 ~ 200)        ⓘ audit transcript depth     │
+│     use_oauth           [✓]                    ⓘ subscription vs PAYG       │
+│                                                                              │
+│   measurement scope                                                          │
+│     seed_limit          10    (1 ~ 1000)       ⓘ Petri audit 시나리오 수    │
+│     dim_set             5axes (5axes | geode_5axes)                          │
+│     seed_select         auto  (env > symlink > toml > module)                │
+│       └─ resolved      ~/.geode/.../latest_seed_pool → <co-scientist run>   │
+│                                                                              │
+│   mutation delivery (G7)                                                     │
+│     wrapper-override   state/wrapper-override.json   [last dumped 12:34:56]  │
+│     env injection      GEODE_WRAPPER_OVERRIDE → audit subprocess             │
+│                                                                              │
+│   subprocess lifecycle (G10)                                                 │
+│     last run           02:34 elapsed · ok  /  timeout · failed               │
+│     forwards to ③      --target=gpt-5.5  --judge=opus  (edit stage ③ →)    │
+│                                                                              │
+│   fitness aggregation                                                        │
+│     critical floor     strict reject on regression of 5 critical dims        │
+│     fitness margin     0.05  (raw_fitness gain > max(prior_stderr, .05))    │
+│     stability weight   0.10                                                  │
+│                                                                              │
+│   promote decision (G8)                                                      │
+│     last promoted      2026-05-21T10:00  baseline.json fitness=0.7345       │
+│     last decision      promote · reject (margin 0.012 ≤ 0.05)                │
+│                                                                              │
+│   telemetry (G9 — last 9 journal events)                                     │
+│     12:34:00 audit_started   12:34:01 config_snapshot                        │
+│     12:34:01 wrapper_override_dumped  12:34:02 subprocess_started            │
+│     12:36:30 subprocess_finished  12:36:31 baseline_decision (promote)       │
+│     12:36:32 per_dim_scores  12:36:33 audit_finished                         │
+│                                                                              │
+│   model column: (none — autoresearch 자체는 LLM 호출 주체 아님)              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Stage ④ owner re-attribution
+
+이전 Petri-only 블록에 잘못 들어있던 knob 들 → Stage ④ sub-panel 로 이동:
+
+| Knob | 이전 위치 | 정정 위치 | Owner (코드) |
+|------|---------|---------|------------|
+| `budget_minutes` | Petri-only | Stage ④ subprocess control | autoresearch (subprocess timeout 산정) |
+| `max_turns` | Petri-only | Stage ④ subprocess control | autoresearch (argv 전달) |
+| `seed_limit` | (불명) | Stage ④ measurement scope | autoresearch (argv 전달) |
+| `dim_set` | Petri-only | Stage ④ measurement scope | autoresearch (argv 전달) |
+| `use_oauth` | (없음) | Stage ④ subprocess control | autoresearch (argv conditional flag) |
+| `_resolve_seed_select` 4-tier | (없음) | Stage ④ measurement scope | autoresearch (precedence resolver) |
+| `_dump_wrapper_override` env conveyor | (없음) | Stage ④ mutation delivery | autoresearch (mutation in-flight delivery) |
+| `_should_promote` 3-rule | "pure compute" 단순화 | Stage ④ promote decision | autoresearch (3-rule gate) |
+| 9개 SessionJournal event | (없음) | Stage ④ telemetry timeline | autoresearch (observability) |
+| Subprocess timeout/failed branch | (없음) | Stage ④ subprocess lifecycle | autoresearch (lifecycle manager) |
+
+Petri-only 블록에 남는 것 (정합 유지):
+- bias correction (-10~22%) — `plugins/petri_audit/bias.py` owner
+- audit_mode (allow_dangerous / allow_write / force_dry_run / auto_approve)
+- per-transcript judge rubric application
+
+### GAP list — UI 비주얼화 누락
+
+| # | Knob/동작 | Owner | Pre-PR-OPS-2 dashboard | 정정 위치 |
+|---|---------|------|----------|-----------|
+| G1 | `budget_minutes` | autoresearch | Petri-only block | Stage ④ subprocess control |
+| G2 | `max_turns` | autoresearch | Petri-only block | Stage ④ subprocess control |
+| G3 | `seed_limit` | autoresearch | (없음) | Stage ④ measurement scope |
+| G4 | `dim_set` | autoresearch | Petri-only block | Stage ④ measurement scope |
+| G5 | `use_oauth` | autoresearch | (없음) | Stage ④ subprocess control |
+| G6 | `seed_select` 4-tier resolution | autoresearch | (없음) | Stage ④ measurement scope (resolved path) |
+| G7 | `GEODE_WRAPPER_OVERRIDE` env conveyor | autoresearch | (없음) | Stage ④ mutation delivery |
+| G8 | `_should_promote` 3-rule | autoresearch | "pure compute" | Stage ④ promote decision (rule view) |
+| G9 | 9 SessionJournal event timeline | autoresearch | (없음) | Stage ④ telemetry |
+| G10 | subprocess timeout/failed status | autoresearch | (없음) | Stage ④ subprocess lifecycle |
+| G11 | `results.tsv` / `.jsonl` viewer | autoresearch (stdout) | (없음) | PR-OPS-3 results viewer |
+| G12 | Git commit owner clarification | NOT autoresearch (post-audit agent) | 사용자 혼동 위험 | "외부 agent 책임" 라벨 |
 
 ### Tier 2 — drill-down sub-pickers
 
