@@ -41,12 +41,6 @@ _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", defa
 # format). Naming matches the AgenticLoop constructor kwarg so the
 # data shape is unambiguous. Empty string = top-level loop.
 #
-# TODO(PR-F-followup): A separate ContextVar ``parent_session_id``
-# (uuid format) is needed when the sub-agent spawner is plumbed to
-# forward the parent's actual ``_session_id`` through WorkerRequest.
-# Today only the in-process spawn path carries lineage; subprocess
-# children (``SubAgentManager → worker.py``) record empty.
-#
 # TODO(PR-F-followup): Same-task nested spawn (A → B → A) is NOT
 # covered by PR-4's lifetime comment below — that comment talks
 # about repeated arun() in the same task and separate asyncio
@@ -57,6 +51,17 @@ _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", defa
 # when this path becomes a documented use case.
 _active_parent_session_key: ContextVar[str] = ContextVar(
     "geode_active_parent_session_key", default=""
+)
+# Subagent-lineage (2026-05-21) — companion ContextVar to
+# ``_active_parent_session_key`` carrying the parent loop's
+# ``_session_id`` (uuid format, e.g. ``"s-ab12cd34..."``, distinct
+# from the OpenClaw routing key). Subprocess sub-agents now thread
+# this from WorkerRequest so the child's Episodes record both the
+# routing key (for grouping by spawning parent) and the parent's
+# concrete session id (for direct attribution back to a single
+# parent run record). Empty string = top-level loop.
+_active_parent_session_id: ContextVar[str] = ContextVar(
+    "geode_active_parent_session_id", default=""
 )
 
 
@@ -92,10 +97,10 @@ def get_parent_session_key() -> str:
     the episodic recorder so cross-session attribution can group
     child Episode rows by spawning parent.
 
-    NOTE: this is the *routing key*, NOT the parent's ``_session_id``
-    uuid. A future PR can add a separate ``parent_session_id``
-    ContextVar when the sub-agent spawner is plumbed to forward
-    the parent's actual session id through WorkerRequest."""
+    Companion accessor :func:`get_parent_session_id` returns the
+    parent's ``_session_id`` uuid; both are needed because the
+    routing key groups runs while the uuid pinpoints a single
+    parent invocation."""
     return _active_parent_session_key.get()
 
 
@@ -105,11 +110,27 @@ def set_parent_session_key(parent_session_key: str) -> None:
     _active_parent_session_key.set(parent_session_key)
 
 
+def get_parent_session_id() -> str:
+    """Return the active loop's parent ``_session_id`` (uuid format),
+    or ``""`` for a top-level loop. Subprocess sub-agents bind this
+    from ``WorkerRequest.parent_session_id``; in-process sub-agents
+    bind it from the parent's ``self._session_id`` at spawn time."""
+    return _active_parent_session_id.get()
+
+
+def set_parent_session_id(parent_session_id: str) -> None:
+    """Bind ``parent_session_id`` to the current context. Empty
+    string clears the binding (top-level loop)."""
+    _active_parent_session_id.set(parent_session_id)
+
+
 __all__ = [
     "get_cognitive_state",
+    "get_parent_session_id",
     "get_parent_session_key",
     "get_session_id",
     "set_cognitive_state",
+    "set_parent_session_id",
     "set_parent_session_key",
     "set_session_id",
 ]
