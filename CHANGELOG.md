@@ -49,6 +49,28 @@ functional change.
 
 ### Added
 
+- **M2 — ``/model`` picker surfaces ``settings.forced_login_method``
+  per provider.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (M2: *`forced_login_method`
+  가 `/model` UX 에 안 보임*). Pre-fix the Codex-CLI-parity escape
+  hatch (``forced_login_method = {"openai": "apikey"}``) silently
+  re-sorted the plan chain in
+  ``plan_registry._apply_forced_login_method`` so a user selecting
+  ``gpt-5.5`` expecting Codex Plus quietly ended up on PAYG. New
+  ``commands._state.forced_login_method_for(provider)`` collapses the
+  default values (``"subscription"`` / ``"auto"`` / unset) to ``None``
+  and normalises the apikey aliases (``apikey`` / ``api`` / ``api_key``
+  / ``key``) to ``"apikey"`` — same alias map as
+  ``_apply_forced_login_method`` so the badge stays in lockstep with
+  the actual sort behaviour. The picker tuple gained a 6th element
+  ``forced_method``; ``effort_picker._render`` appends a
+  ``(forced: <method>)`` badge after the ``(login required)`` suffix
+  when the value is non-None, and the non-tty ``/model`` list does the
+  same so curl-driven callers see the override. 8 new tests in
+  ``tests/test_model_forced_method.py`` cover the default collapse,
+  the alias normalisation, the exception-swallowing defence, the
+  picker render path, and the non-tty list path.
+
 - **M5 — ``/model`` picker now surfaces login-state per row.** Closes the
   governance gap noted in ``docs/research/model-ux-governance.md`` (M5:
   *MODEL_PROFILES 가 login-state 필터링 안 됨*). Pre-fix the picker

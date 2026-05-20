@@ -18,6 +18,7 @@ from core.cli.commands._state import (
     _MODEL_INDEX,
     MODEL_PROFILES,
     ModelProfile,
+    forced_login_method_for,
     model_available,
 )
 
@@ -130,7 +131,17 @@ def _interactive_model_picker() -> None:
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
-    profiles = [(p.id, p.provider, p.label, p.cost, model_available(p.id)) for p in MODEL_PROFILES]
+    profiles = [
+        (
+            p.id,
+            p.provider,
+            p.label,
+            p.cost,
+            model_available(p.id),
+            forced_login_method_for(p.provider),
+        )
+        for p in MODEL_PROFILES
+    ]
     current_effort = getattr(settings, "agentic_effort", "high")
     result = pick_model_and_effort(profiles, settings.model, current_effort)
     if result.cancelled:
@@ -178,7 +189,13 @@ def cmd_model(args: str) -> None:
                 # user who pipes /model into stdin) sees which entries
                 # would 401 before they hit them.
                 avail = "" if model_available(p.id) else "  [muted](login required)[/muted]"
-                _pkg.console.print(f"  {i}. {p.label:<12} {p.provider:<10} {p.cost}{marker}{avail}")
+                # M2 — same row also surfaces a per-provider
+                # ``forced_login_method`` override (Codex CLI parity).
+                forced = forced_login_method_for(p.provider)
+                forced_suffix = f"  [muted](forced: {forced})[/muted]" if forced else ""
+                _pkg.console.print(
+                    f"  {i}. {p.label:<12} {p.provider:<10} {p.cost}{marker}{avail}{forced_suffix}"
+                )
             _pkg.console.print()
             _pkg.console.print("  [muted]Usage: /model <number> or /model <name>[/muted]")
             _pkg.console.print()
