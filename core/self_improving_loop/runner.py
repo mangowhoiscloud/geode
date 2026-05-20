@@ -15,7 +15,9 @@ What the runner adds:
 2. **Prompt rendering** — pack the context into the program.md system
    prompt + a structured user message asking for ONE mutation.
 3. **LLM dispatch** — call the injected ``llm_call`` callable; the
-   default binding hits ``claude-opus-4-7`` via the anthropic SDK.
+   default binding reads ``[self_improving_loop.mutator]`` from
+   ``~/.geode/config.toml`` and dispatches through
+   ``core.llm.router.call_with_failover``.
 4. **Response parsing** — extract a :class:`Mutation` from the LLM's
    JSON, validate against the SoT schema.
 5. **Apply + audit log** — call ``write_wrapper_prompt_sections`` and
@@ -312,35 +314,124 @@ LLMCallable = Callable[[str, str], str]
 
 
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
-    """Anthropic SDK call to ``claude-opus-4-7``.
+    """Mutator LLM call routed through ``core.llm.router`` (PR-1 G-A).
 
-    Imported lazily so the runner module stays importable without the
-    anthropic SDK in test environments. Tests inject a mock callable
-    via ``SelfImprovingLoopRunner(llm_call=...)``.
+    Pre-PR-1 (v0.99.22) this body instantiated ``anthropic.Anthropic()``
+    directly and pinned ``model="claude-opus-4-7"`` as a literal —
+    paperclip-style abstraction goal: route through the same
+    ``call_with_failover`` path every other provider-aware caller uses,
+    and read the model id from ``[self_improving_loop.mutator]`` so the
+    operator can flip provider/model without editing this file.
+
+    Resolution order:
+
+    1. ``~/.geode/config.toml [self_improving_loop.mutator] default_model``
+       (user override).
+    2. ``MutatorConfig.default_model`` ship default (``claude-opus-4-7``).
+
+    The model id is routed through ``core.llm.router.call_with_failover``
+    so the same credential / provider rotator the agentic loop uses
+    also serves the mutator — no second SDK client, no second key
+    store.
+
+    Tests inject a mock callable via
+    ``SelfImprovingLoopRunner(llm_call=...)`` and skip this code path
+    entirely; the lazy SDK imports keep the test cold-start free of
+    anthropic.
     """
-    try:
-        import anthropic
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "self-improving-loop runner requires the anthropic SDK "
-            "(install with `uv sync` or pass a mock llm_call)"
-        ) from exc
+    import asyncio
+    import logging as _logging
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+    from core.config import _resolve_provider
+    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.llm.adapters import resolve_agentic_adapter
+    from core.llm.router import call_with_failover
+
+    cfg = load_self_improving_loop_config()
+    model = cfg.mutator.default_model
+    max_tokens = cfg.mutator.max_tokens
+    source = cfg.mutator.source
+    role_contract = cfg.mutator.role_contract
+
+    # PR-1 G-A — defensive check kept here even though MutatorConfig's
+    # pydantic validator also enforces it: allowed_models is a paperclip-
+    # style allow-list (matches petri.role.<X>.allowed_models). A drift
+    # between config and validator would fail closed instead of silently
+    # calling an unlisted model.
+    if cfg.mutator.allowed_models and model not in cfg.mutator.allowed_models:
+        raise RuntimeError(
+            f"mutator default_model {model!r} is not in MutatorConfig.allowed_models "
+            f"{cfg.mutator.allowed_models!r}"
+        )
+
+    provider = _resolve_provider(model)
+    adapter = resolve_agentic_adapter(provider)
+
+    # PR-1 G-A fix-up — `source` and `role_contract` must affect *something*
+    # observable, otherwise they're silent declarative knobs (Codex MCP
+    # 2nd-pass review flagged this as a knob-vs-deletion violation).
+    # Surface: every mutator call logs (model, provider, source,
+    # role_contract, max_tokens) so a downstream Petri / Inspect viewer
+    # can group runs by operator intent. Same shape as
+    # `core.llm.router._hooks` emit but recorded at the mutator
+    # boundary (the router doesn't know it's serving the mutator role
+    # specifically).
+    #
+    # A planned future surface — credential-source forcing — would
+    # require a downstream reader in the adapter / router credential
+    # chain; that reader does not exist on main yet, so PR-1 stops at
+    # the telemetry surface and the C-5 (policy mutation expansion) PR
+    # will wire the second half once the reader lands.
+    _logging.getLogger("core.self_improving_loop.runner").info(
+        "mutator dispatch: model=%s provider=%s source=%s role_contract=%s max_tokens=%d",
+        model,
+        provider,
+        source,
+        role_contract,
+        max_tokens,
     )
-    # Concatenate text blocks defensively — the SDK can return a list
-    # of content blocks even for a single text response.
+
+    async def _do_call(m: str) -> object:
+        return await adapter.agentic_call(
+            model=m,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[],
+            tool_choice={"type": "auto"},
+            max_tokens=max_tokens,
+            temperature=0.3,
+        )
+
+    # ``call_with_failover`` is the router's async dispatcher (transport
+    # layer) — accepts an ordered model list. PR-1 keeps it single-
+    # element so the M5 silent-fallback knob default is preserved; an
+    # operator who wants the mutator to fall through to alternate models
+    # populates ``MutatorConfig.allowed_models`` and the dispatcher's
+    # ``models`` list is expanded in a follow-up PR.
+    response, _used_model = asyncio.run(call_with_failover([model], _do_call))
+    if response is None:
+        last_err = getattr(adapter, "last_error", None)
+        raise RuntimeError(
+            f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
+        )
+
+    # Adapter normalises to AgenticResponse — concatenate text blocks.
     text_chunks: list[str] = []
-    for block in response.content:
+    for block in getattr(response, "content", []):
         text = getattr(block, "text", "")
         if text:
             text_chunks.append(text)
-    return "".join(text_chunks)
+    text = "".join(text_chunks)
+    if not text:
+        # Empty text is a known anti-pattern surface (``parse_mutation``
+        # raises ValueError downstream); callers that catch it can retry,
+        # but failing fast here keeps the error message targeted instead
+        # of letting JSON parsing carry the blame.
+        raise RuntimeError(
+            f"mutator LLM call returned empty text "
+            f"(model={model}, provider={provider}, used={_used_model!r})"
+        )
+    return text
 
 
 def parse_mutation(raw: str) -> Mutation:
@@ -525,7 +616,8 @@ class SelfImprovingLoopRunner:
     Construction parameters:
 
     * ``llm_call`` — injected callable. Defaults to
-      :func:`_default_llm_call` (anthropic SDK); tests pass a mock.
+      :func:`_default_llm_call` (reads ``MutatorConfig`` + dispatches
+      through ``core.llm.router.call_with_failover``); tests pass a mock.
     * ``audit_log_path`` — override for the audit jsonl location
       (tests).
     * ``commit_enabled`` — when ``False``, skip the git step

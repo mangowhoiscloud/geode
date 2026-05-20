@@ -34,7 +34,20 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
     )
-    model: str = "claude-opus-4-6"  # overridden by GEODE_MODEL env var; see ANTHROPIC_PRIMARY
+    # PR-1 G-E (2026-05-21) — bumped from claude-opus-4-6 to match
+    # routing.toml [model.defaults] anthropic. ANTHROPIC_PRIMARY constant
+    # is the source of truth; this default mirrors it.
+    model: str = "claude-opus-4-7"
+    learning_extract_model: str = Field(
+        default="glm-4.7-flash",
+        validation_alias=AliasChoices("learning_extract_model", "GEODE_LEARNING_EXTRACT_MODEL"),
+        description=(
+            "Free-tier GLM model used by ``core.hooks.llm_extract_learning`` "
+            "(PR-1 G-D). Pre-fix this was a hardcoded literal inside the "
+            "hook; the field surfaces the knob so operators can flip to "
+            "a different free model without editing the hook."
+        ),
+    )
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 
@@ -94,7 +107,8 @@ class Settings(BaseSettings):
     interrupt_nodes: str = ""  # comma-separated node names, e.g. "verification,scoring"
 
     # LLM — Router & Verification
-    router_model: str = "claude-opus-4-6"  # see ANTHROPIC_PRIMARY
+    # PR-1 G-E — same bump as ``model`` field above.
+    router_model: str = "claude-opus-4-7"
     default_secondary_model: str = "gpt-5.4"  # see OPENAI_PRIMARY
     agreement_threshold: float = 0.67
 
