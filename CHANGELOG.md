@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-G4 — `/self-improving run` summary now carries source
+  telemetry.** Wave 1 / 3 PRs. Adds ``model=...`` and ``source=...``
+  to the per-run summary line so the operator can verify which
+  channel was billed at the end of a confirmation cycle. New
+  ``_resolve_run_summary_telemetry`` helper mirrors the runner's
+  ``_default_llm_call`` resolution (G1a inherit: ``None`` default
+  → ``Settings.model``). Defensive — config-import failure returns
+  ``("?", "?")`` placeholders rather than crashing the slash.
+  4 invariant tests pin the summary-line shape, the inherit path,
+  explicit-default override, and the placeholder fallback.
+
 ### Changed
 
 - **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
