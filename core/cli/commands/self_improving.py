@@ -38,8 +38,16 @@ __all__ = ["cmd_self_improving"]
 
 
 _HISTORY_DEFAULT_N = 5
-_RUN_DEFERRED_ACTIONS = frozenset({"history", "rollback", "config"})
-_KNOWN_ACTIONS = frozenset({"status", "run"}) | _RUN_DEFERRED_ACTIONS
+# PR-MINIMAL-1 (2026-05-21) — only ``config`` stays deferred. The
+# ``history`` and ``rollback`` actions used to be reserved slots
+# (PR-OPS-1) but git already provides both — ``git log`` for the
+# audit ledger, ``git revert`` for the rollback — now that
+# PR-RATCHET-1 has the 5 policy SoT files in-repo. The slash
+# handlers below print the exact git command instead, keeping the
+# operator inside one tool surface without re-implementing what
+# git does natively.
+_RUN_DEFERRED_ACTIONS = frozenset({"config"})
+_KNOWN_ACTIONS = frozenset({"status", "run", "history", "rollback"}) | _RUN_DEFERRED_ACTIONS
 _DESIGN_DOC = "docs/plans/2026-05-21-self-improving-loop-ux.md"
 _RUN_DEFAULT_ITERATIONS = 1
 _RUN_MAX_ITERATIONS = 10
@@ -62,6 +70,14 @@ def cmd_self_improving(args: str) -> None:
         _cmd_run(parts[1:])
         return
 
+    if action == "history":
+        _cmd_history()
+        return
+
+    if action == "rollback":
+        _cmd_rollback(parts[1:])
+        return
+
     if action in _RUN_DEFERRED_ACTIONS:
         console.print()
         console.print(
@@ -74,8 +90,8 @@ def cmd_self_improving(args: str) -> None:
     console.print()
     console.print(f"  [warning]Unknown action: /self-improving {action}[/warning]")
     console.print(
-        "  [muted]Available now: [/muted]status / run   "
-        "[muted]Coming PR-OPS-2b/3:[/muted] history / rollback / config"
+        "  [muted]Available now: [/muted]status / run / history / rollback   "
+        "[muted]Coming PR-OPS-3:[/muted] config"
     )
     console.print()
 
@@ -496,3 +512,96 @@ def _clip(s: str, n: int) -> str:
     if len(s) <= n:
         return s
     return s[: n - 1] + "…"
+
+
+# ---------------------------------------------------------------------------
+# ``/self-improving history`` + ``/self-improving rollback`` — PR-MINIMAL-1
+# ---------------------------------------------------------------------------
+#
+# These two actions intentionally delegate to git rather than
+# re-implement what git already does on top of the in-repo mutation
+# ledger (``autoresearch/state/mutations.jsonl``) + the 5 policy SoT
+# JSONs at ``autoresearch/state/policies/`` (both git-tracked since
+# PR-RATCHET-1, 2026-05-21). Re-implementing the JSONL tail walker +
+# a custom rollback verb would duplicate `git log` + `git revert`
+# while losing standard git ergonomics (refs / SHAs / signed
+# commits / hooks). The handlers below print the exact git command
+# so the operator stays inside one mental model.
+
+
+def _cmd_history() -> None:
+    """Show the operator how to read the mutation history via git.
+
+    The mutation ledger (``autoresearch/state/mutations.jsonl``) +
+    the 5 policy SoT JSONs (``autoresearch/state/policies/``) are
+    git-trackable (``.gitignore`` negation lets them be added);
+    after the first applied mutation lands a commit, ``git log``
+    over either path is the canonical history view. Codex MCP
+    catch on PR-MINIMAL-1: until that first commit, the files are
+    NOT YET tracked (``git ls-files`` returns only the ``.gitkeep``
+    placeholders), so we print an empty-state caveat alongside the
+    recipes.
+    """
+    console.print()
+    console.print("  [header]Self-improving loop — history[/header]")
+    console.print()
+    console.print(
+        "  [muted]Mutation ledger (one row per mutation, with ts / id / "
+        "target_kind / target_section / rationale):[/muted]"
+    )
+    console.print("    [bold]git log -p autoresearch/state/mutations.jsonl[/bold]")
+    console.print(
+        "    [muted]→ empty when no mutation has been applied yet "
+        "(first /self-improving run apply seeds the ledger).[/muted]"
+    )
+    console.print()
+    console.print("  [muted]Compact form (commit message + 1-line ledger row):[/muted]")
+    console.print("    [bold]git log --oneline autoresearch/state/mutations.jsonl[/bold]")
+    console.print()
+    console.print(
+        "  [muted]Current policy state (5 SoT files, see ``git diff`` for "
+        "the current vs last-promoted snapshot):[/muted]"
+    )
+    console.print("    [bold]git log --stat autoresearch/state/policies/[/bold]")
+    console.print()
+    console.print(
+        "  [muted]Quick recent summary (last N applied/rejected/rolled_back rows):[/muted]"
+    )
+    console.print("    [bold]/self-improving status[/bold]")
+    console.print()
+
+
+def _cmd_rollback(opts: list[str]) -> None:
+    """Show the operator how to undo a mutation via git.
+
+    Every applied mutation is a git commit (``_git_commit_audit_log``
+    PR-G5b idiom), so ``git revert <sha>`` is the canonical rollback.
+    We print the recipe + a small helper command for finding the SHA
+    matching a ``mutation_id``.
+    """
+    target = opts[0] if opts else None
+    console.print()
+    console.print("  [header]Self-improving loop — rollback[/header]")
+    console.print()
+    if target is not None:
+        console.print(f"  [muted]Find the commit that applied mutation_id={target!r}:[/muted]")
+        console.print(
+            f"    [bold]git log --all --grep={target!r} -- "
+            "autoresearch/state/mutations.jsonl[/bold]"
+        )
+        console.print()
+        console.print("  [muted]Revert that commit:[/muted]")
+        console.print("    [bold]git revert <sha-from-above>[/bold]")
+    else:
+        console.print("  [muted]Find the SHA of the mutation you want to undo:[/muted]")
+        console.print("    [bold]git log --oneline -p autoresearch/state/mutations.jsonl[/bold]")
+        console.print()
+        console.print("  [muted]Revert it:[/muted]")
+        console.print("    [bold]git revert <sha>[/bold]")
+        console.print()
+        console.print(
+            "  [muted]Tip: give a mutation_id explicitly to get the grep "
+            "form, e.g.[/muted] [bold]/self-improving rollback "
+            "<mutation_id>[/bold]"
+        )
+    console.print()

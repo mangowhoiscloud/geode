@@ -455,8 +455,8 @@ Petri-only 블록에 남는 것 (정합 유지):
 | `/self-improving` (no action) | = `status` (default) | OPS-1 |
 | `/self-improving status` | recent baseline + last N mutations | OPS-1 |
 | `/self-improving run [--n N] [--profile=…]` | N iterations with per-iteration confirmation prompt | OPS-2 |
-| `/self-improving history [--n N]` | last N audit rows tabular | OPS-3 |
-| `/self-improving rollback <mutation_id>` | restore previous_value to SoT + audit row | OPS-3 |
+| `/self-improving history` | git log recipes over mutations.jsonl + policies/ | MINIMAL-1 |
+| `/self-improving rollback [<mutation_id>]` | git revert recipe (+ git log --grep helper) | MINIMAL-1 |
 | `/self-improving config` | show/edit `[self_improving_loop.*]` toml | OPS-3 |
 | `/sil <action>` | alias | OPS-1 (registered for forward compat) |
 
@@ -529,11 +529,27 @@ Apply? [y/N/d=show-diff/s=show-rationale]:
 
 ### PR-OPS-3
 
-- [ ] `/self-improving history` + `/self-improving rollback`
 - [ ] `/self-improving config` slash
-- [ ] 나머지 3 profile (subs-only / petri-alignment / tournament / custom)
 - [ ] Quota bar real-time wiring (FE banner)
 - [ ] co-scientist survivors hierarchical `<tier>/<dim>/` dir layout
+
+> **PR-MINIMAL-1 (2026-05-21) drops**:
+> - `/self-improving history` — wired to print `git log -p autoresearch/state/mutations.jsonl` recipe. PR-RATCHET-1 made both mutations.jsonl + policies/ git-tracked, so `git log` IS the canonical history; no need to re-implement a JSONL tail walker in the slash.
+> - `/self-improving rollback <id>` — wired to print `git revert <sha>` recipe (with `git log --grep=<id>` to find the SHA). Re-implementing rollback would duplicate git semantics.
+> - 7-profile preset bundle (cheap/balanced/max-quality/subs-only/petri-alignment/tournament/custom) — deferred indefinitely; upstream Karpathy autoresearch has no profile concept. `~/.geode/config.toml` toml overrides cover the same need with one less concept. PR-OPS-2b's dashboard will surface `Settings.model` + `[self_improving_loop.*]` toml values directly.
+> - Tier 2 drill-down sub-pickers (m / s / h / a / d) — strongly de-prioritised. Tier 1 dashboard renders the current state; operators edit `config.toml` for changes. Re-introduce only when concrete operator demand surfaces.
+> - 4-harness picker (autoresearch / petri_raw / seed tournament / no-op) → single default `autoresearch`. `--harness=<name>` flag stays as power-user opt-in but isn't surfaced in the default UI.
+
+## Mode A vs Mode B (post-MINIMAL-1)
+
+| Mode | Trigger | LLM | Audit channel |
+|------|---------|-----|--------------|
+| **A. Karpathy idiom** | External Claude/Codex session boots with `autoresearch/program.md` as system prompt; operator reads + edits `autoresearch/train.py` manually | Whatever runs the external session (typically Claude Code) | `git diff` + `git log`; same `autoresearch/state/policies/*.json` SoT |
+| **B. Programmatic** (canonical) | `geode /self-improving run` slash OR scheduled job calling `SelfImprovingLoopRunner.run_once()` | `[self_improving_loop.mutator] default_model` (default `claude-opus-4-7`) | `git log autoresearch/state/mutations.jsonl` + `git diff autoresearch/state/policies/` |
+
+**Mode A 의 운영자 매뉴얼**: `autoresearch/README.md` 의 "Running the agent" 섹션 참조 — boot prompt `Read program.md and start a new experiment` 로 외부 long-horizon Claude 세션 띄우면 됨. Mode A 는 *manual long-horizon agent* path. GEODE CLI 의 슬래시/툴 표면은 Mode B 만 trigger 함 — 두 path 가 동일 `autoresearch/state/policies/` SoT 를 공유하므로 결과는 호환됨.
+
+**PR-MINIMAL-1 (2026-05-21) — Mode A 는 docs-only**. CLI/REPL 표면은 Mode B 에 집중. Mode A 에 별도 UI 슬래시 추가 안 함 (외부 agent session 컨트롤은 GEODE 책임 밖).
 
 ## DONT lessons applied (CLAUDE.md table)
 
