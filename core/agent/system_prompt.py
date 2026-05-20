@@ -25,7 +25,7 @@ from pathlib import Path
 
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
-from core.paths import get_project_root
+from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT, get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -43,18 +43,46 @@ WRAPPER_OVERRIDE_HOOK_READY = True
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
-def _load_wrapper_override() -> str | None:
-    """Return autoresearch's wrapper override, or ``None`` when disabled.
+_WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_SOT
+"""G5a — cross-process SoT path shared with :mod:`autoresearch.train`.
 
-    ``GEODE_WRAPPER_OVERRIDE`` points to a JSON ``dict[str, str]``. The values
-    replace the static wrapper section. Once the env var is set, load/schema
-    failures are fatal so real-mode autoresearch cannot silently spend quota on
-    the default wrapper.
+Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_SOT` so the
+``.geode`` literal lives in exactly one place (path-literal guard
+contract); the module-local alias is kept so tests can monkeypatch
+``core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH`` without
+mutating the shared constant.
+"""
+
+
+def _load_wrapper_override() -> str | None:
+    """Return the active wrapper override, or ``None`` when no override is set.
+
+    Resolution order (G5a, 2026-05-20):
+
+    1. ``GEODE_WRAPPER_OVERRIDE`` env var — audit subprocess hook.
+       When set, the file MUST exist and parse; schema / load failures
+       are fatal so real-mode autoresearch cannot silently spend
+       quota on the default wrapper.
+    2. ``~/.geode/self-improving-loop/wrapper-sections.json`` — daily-run
+       SoT written by the G5b self-improving-loop runner. When the env
+       var is unset and this file exists, daily ``geode`` invocations
+       automatically pick up the evolved wrapper without any manual
+       env management. Schema failures here log a WARNING and fall
+       through to ``None`` (graceful degrade to ``_generic_static_prefix``)
+       so a corrupted SoT can't brick GEODE.
+    3. ``None`` — use ``_generic_static_prefix`` (router default).
     """
     override_path = os.environ.get(_WRAPPER_OVERRIDE_ENV)
-    if not override_path:
-        return None
-    path = Path(override_path)
+    if override_path:
+        return _strict_load(Path(override_path))
+    # G5a env-less fallback — daily-run SoT lookup.
+    if _WRAPPER_SECTIONS_SOT_PATH.is_file():
+        return _graceful_load(_WRAPPER_SECTIONS_SOT_PATH)
+    return None
+
+
+def _strict_load(path: Path) -> str:
+    """Audit-subprocess path: schema failures raise RuntimeError."""
     if not path.is_file():
         raise RuntimeError(f"{_WRAPPER_OVERRIDE_ENV}={path} file not found")
     try:
@@ -69,6 +97,35 @@ def _load_wrapper_override() -> str | None:
             raise RuntimeError(
                 f"{_WRAPPER_OVERRIDE_ENV}={path} has non-string key/value at {key!r}"
             )
+    return "\n\n".join(data.values())
+
+
+def _graceful_load(path: Path) -> str | None:
+    """Daily-run SoT path: schema failures log + return ``None``.
+
+    Asymmetric handling versus :func:`_strict_load` is intentional:
+    a daily ``geode`` invocation must never hard-fail because of a
+    corrupted self-improving-loop artifact; the audit subprocess
+    must hard-fail because spending quota on the wrong wrapper is
+    worse than the audit aborting.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError):
+        log.warning("wrapper sections SoT at %s is unreadable; using default", path)
+        return None
+    if not isinstance(data, dict) or not data:
+        log.warning("wrapper sections SoT at %s is not a non-empty dict; using default", path)
+        return None
+    for key, value in data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            log.warning(
+                "wrapper sections SoT at %s has non-string key/value at %r; using default",
+                path,
+                key,
+            )
+            return None
     return "\n\n".join(data.values())
 
 

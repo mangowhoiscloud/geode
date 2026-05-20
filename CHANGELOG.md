@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **PR-G5a — wrapper sections file-backed SoT + env-less daily-run
+  fallback.** First half of the 2026-05-20 self-improving-loop wiring
+  sprint's final PR (G5). Splits the static
+  `WRAPPER_PROMPT_SECTIONS` dict in `autoresearch/train.py` into:
+  (a) a hardcoded `_WRAPPER_PROMPT_SECTIONS_FALLBACK` bootstrap default
+  and (b) a cross-process file SoT at
+  `~/.geode/self-improving-loop/wrapper-sections.json` which the
+  upcoming G5b runner edits when it promotes a mutation. New
+  `load_wrapper_prompt_sections()` + `write_wrapper_prompt_sections()`
+  helpers; module-level `WRAPPER_PROMPT_SECTIONS` is now derived from
+  the SoT-first resolution. `core/agent/system_prompt._load_wrapper_override`
+  gains a 2-tier resolution: env var (strict-fail) → daily-run SoT
+  (graceful-degrade on schema failure). The asymmetric error handling
+  is intentional — audit subprocesses must hard-fail rather than spend
+  quota on the wrong wrapper, daily GEODE runs must never crash from a
+  corrupted self-improving-loop artifact. The two SoT path constants
+  are duplicated (autoresearch + core/agent) to keep the import-linter
+  "Agent stays pure" contract intact; parity pinned by
+  `test_sot_path_parity_with_autoresearch`. 15 new tests (8
+  system_prompt SoT + 7 autoresearch load/write + 1 parity) — quality
+  gates: ruff / format / mypy / 432 tests green. G5b (LLM-driven
+  mutation runner) lands in a follow-up PR.
+
 - **PR-G4 — `next_gen_priors` persist + next-run reader.** Fourth PR
   of the 2026-05-20 self-improving-loop wiring sprint (G1-G5).
   `Pipeline._persist_meta_review` writes a first-class
