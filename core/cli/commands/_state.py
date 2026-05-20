@@ -172,6 +172,66 @@ def _get_profile_store() -> ProfileStore:
     return ensure_profile_store()
 
 
+def model_available(model_id: str) -> bool:
+    """Return True if `model_id` has a usable credential route.
+
+    Mirrors what ``AgenticLoop`` would resolve at the next LLM call:
+    delegates to ``resolve_routing(model_id)`` (which walks per-model
+    routing → equivalence-class scan → single-provider fallback → PAYG
+    synthesis) and treats a non-None ``RoutingTarget`` as "available".
+
+    Used by the ``/model`` picker (M5) to flag entries whose provider
+    has no authenticated profile yet — so the user sees *why* a model
+    won't switch instead of selecting it and bouncing off the
+    ``_check_provider_key`` warning. Returns ``False`` defensively when
+    routing raises so a broken plan registry does not lock the picker.
+    """
+    try:
+        from core.llm.routing.plan_registry import resolve_routing
+
+        return resolve_routing(model_id) is not None
+    except Exception:
+        return False
+
+
+# v0.99.19 M2 — surface ``settings.forced_login_method`` per provider in
+# the ``/model`` picker. Pre-fix the picker silently honoured the user's
+# escape hatch (Codex CLI parity) so a user with
+# ``forced_login_method = {"openai": "apikey"}`` would pick ``gpt-5.5``
+# expecting Codex Plus and get PAYG instead. The badge below makes the
+# override visible at selection time.
+_FORCED_METHOD_DEFAULTS: frozenset[str] = frozenset({"subscription", "auto", ""})
+_FORCED_METHOD_APIKEY_ALIASES: frozenset[str] = frozenset({"apikey", "api", "api_key", "key"})
+
+
+def forced_login_method_for(provider: str) -> str | None:
+    """Return the user-visible label for `settings.forced_login_method[provider]`.
+
+    ``None`` when the setting is at its default (``"subscription"`` /
+    ``"auto"`` / unset) so the picker only renders a badge when the
+    user has *explicitly* chosen a non-default routing — that's the
+    bit that surprises them.
+
+    Mirrors the normalisation in
+    ``core.llm.routing.plan_registry._apply_forced_login_method`` so the
+    badge stays in lockstep with the actual sort behaviour: any of
+    ``apikey`` / ``api`` / ``api_key`` / ``key`` collapse to the
+    ``"apikey"`` label that the underlying sort uses.
+    """
+    try:
+        from core.config import settings
+
+        forced = (getattr(settings, "forced_login_method", {}) or {}).get(provider, "")
+    except Exception:
+        return None
+    value = str(forced).strip().lower()
+    if value in _FORCED_METHOD_DEFAULTS:
+        return None
+    if value in _FORCED_METHOD_APIKEY_ALIASES:
+        return "apikey"
+    return value or None
+
+
 def resolve_action(cmd: str) -> str | None:
     """Resolve a slash command to its action name. Returns None if unknown."""
     return COMMAND_MAP.get(cmd)

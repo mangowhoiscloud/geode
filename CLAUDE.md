@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.21
+- **Version**: 0.99.22
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -132,6 +132,7 @@ Append (don't rotate) — each row is a *frozen* lesson.
 | 2026-05-20 PR-G3 #1347 | Conditional read parity | "seed-generation reads baseline.json evidence" | `_resolve_target_dim` loads baseline ONLY in the `--target-dim auto` branch; explicit `--target-dim <name>` returns `(dim, None)`. Half the call sites get no evidence. | A new context-loading feature must work for ALL call shapes that touch the same downstream prompt. Symmetric branches > one-sided wiring. |
 | 2026-05-20 PR-G3 #1347 | Graceful-contract violation | "`load_baseline` returns `None` on unparseable JSON" | True for malformed JSON, but `float(v)` on non-numeric `dim_means` raises `ValueError` before the contract kicks in. | "Graceful" must be defined at every input boundary, not just the outer try. Schema-typed casts need their own try. |
 | 2026-05-20 PR-G2 #1346 | Reader-assumption drift | "evidence in baseline.json reaches downstream" | Evidence only persists when the audit PROMOTES the baseline. A failing/regressed audit never updates `baseline.json` → downstream reads stale evidence forever. | "Latest" and "promoted" are different SoTs. Document which one each reader assumes; persist both if the loop needs them. |
+| 2026-05-21 PR-fallback-knob | Premature scope expansion (deletion vs knob) | "FALLBACK 체인과 레이어를 제거해. Self-improving Loop + Agentic Loop 스코프에 전역으로 지켜야할 사안" → interpreted as *delete every code path*. After Steps 1-8 finished (~30 files), the user clarified "사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성이야" — the intent was a *user-tunable knob*, not full deletion. | When a user directive says "제거" without specifying *what* is being removed (the silent default behaviour vs. the entire code path), pause to disambiguate: ask "should the chain be a knob the user can opt into, or should the chain code itself be deleted?" The cheap one-question gate would have saved ~30 edits + a `git checkout origin/develop -- <files>` revert. |
 
 **How to use this table**:
 1. Before every PR push, scan the table for an analogous pattern. If your PR could match a row, it probably does.

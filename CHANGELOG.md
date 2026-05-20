@@ -47,7 +47,141 @@ functional change.
 
 ## [Unreleased]
 
-<<<<<<< HEAD
+## [0.99.22] — 2026-05-20
+
+### Added
+
+- **X1 (first slice) — per-provider auth-order: pinned profile wins
+  in ``ProfileRotator.resolve``; new ``/login use-profile`` +
+  ``/login order`` surface.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (X1: *per-provider
+  user-tunable auth order 부재*). Pre-fix ``ProfileRotator.resolve``
+  sorted eligible profiles solely by type-priority + LRU, so an
+  operator with multiple OAuth profiles for the same provider could
+  not pin a preferred one without removing the others —
+  ``ProfileStore.set_active(name)`` existed but the rotator ignored
+  it. ``ProfileStore`` gained a ``_pinned_active`` map (separate from
+  the auto-set legacy ``_active`` that ``add()`` writes for the first
+  profile per provider) and a ``get_pinned_active(provider)``
+  accessor; ``set_active`` writes both. ``ProfileRotator.resolve``
+  now surfaces the pinned profile first when it is eligible, falling
+  back to the legacy ``sort_key`` order otherwise so the LRU/type-
+  priority tests still pass and an ineligible pin gracefully steps
+  aside. CLI: ``/login use-profile <name>`` (set), ``/login order
+  [<provider>]`` (show effective order per provider with
+  ``active`` / ``queued`` / ``<reject_reason>`` rows). The
+  ``/login`` Profiles dashboard appends ``(active)`` to the pinned
+  row so the rotator's priority surfaces alongside the eligibility
+  badge. 10 new tests in ``tests/test_login_auth_order.py`` cover
+  the rotator pin/fallback/ineligible-step-aside contracts and the
+  CLI command paths (success / unknown name / missing arg / per-
+  provider narrowing / empty store). Full list ordering (multi-rank
+  per provider) is deferred to a follow-up slice — this PR pins the
+  *first* candidate.
+
+- **M2 — ``/model`` picker surfaces ``settings.forced_login_method``
+  per provider.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (M2: *`forced_login_method`
+  가 `/model` UX 에 안 보임*). Pre-fix the Codex-CLI-parity escape
+  hatch (``forced_login_method = {"openai": "apikey"}``) silently
+  re-sorted the plan chain in
+  ``plan_registry._apply_forced_login_method`` so a user selecting
+  ``gpt-5.5`` expecting Codex Plus quietly ended up on PAYG. New
+  ``commands._state.forced_login_method_for(provider)`` collapses the
+  default values (``"subscription"`` / ``"auto"`` / unset) to ``None``
+  and normalises the apikey aliases (``apikey`` / ``api`` / ``api_key``
+  / ``key``) to ``"apikey"`` — same alias map as
+  ``_apply_forced_login_method`` so the badge stays in lockstep with
+  the actual sort behaviour. The picker tuple gained a 6th element
+  ``forced_method``; ``effort_picker._render`` appends a
+  ``(forced: <method>)`` badge after the ``(login required)`` suffix
+  when the value is non-None, and the non-tty ``/model`` list does the
+  same so curl-driven callers see the override. 8 new tests in
+  ``tests/test_model_forced_method.py`` cover the default collapse,
+  the alias normalisation, the exception-swallowing defence, the
+  picker render path, and the non-tty list path.
+
+- **M5 — ``/model`` picker now surfaces login-state per row.** Closes the
+  governance gap noted in ``docs/research/model-ux-governance.md`` (M5:
+  *MODEL_PROFILES 가 login-state 필터링 안 됨*). Pre-fix the picker
+  rendered every entry in ``MODEL_PROFILES`` regardless of whether the
+  user had registered a credential for that provider; selecting an
+  unauthenticated model bounced off the ``_check_provider_key`` warning
+  on the next LLM call — by then ``settings.model`` had already shifted,
+  producing the confusing "switched but doesn't work" state. New
+  ``core.cli.commands._state.model_available(model_id)`` delegates to
+  ``resolve_routing(model_id)`` (the same path ``AgenticLoop`` walks at
+  call time) and is False when no credential route exists. The
+  interactive picker tuple gained a 5th ``available`` element so
+  ``effort_picker.pick_model_and_effort`` can (a) dim un-credentialed
+  rows + append ``(login required)`` and (b) return ``cancelled=True``
+  when Enter lands on an unavailable entry, leaving settings untouched.
+  ``/model <name>`` for an unauthenticated provider now prints the
+  ``/login`` hint *before* ``_apply_model`` runs, and the non-tty list
+  (``/model`` piped) appends ``(login required)`` so curl-driven callers
+  see the same status. 6 new tests in ``tests/test_model_login_filter.py``
+  cover the helper (True/False/exception swallowing), the picker's
+  blocked-Enter contract, and the explicit-name hint path.
+
+- **L5 — ``/login help`` carries the eligibility-verdict legend; new
+  ``/login health [<profile>]`` walks the verdict per profile with an
+  actionable suggestion.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L5: *Help text 에
+  eligibility verdict 부재*). Pre-fix the ``/login`` status dashboard
+  already rendered each profile with an inline reject badge (cooldown
+  / expired / disabled / missing_key / provider_mismatch / ok), but
+  the reason codes were opaque to first-time readers and there was no
+  per-profile health view. ``_login_help`` now documents every
+  ``ProfileRejectReason`` code; ``cmd_login`` routes the new
+  ``health`` subcommand to ``_login_health``, which walks
+  ``ProfileStore.evaluate_eligibility`` and prints, per profile, the
+  badge (``ok`` / reason_code), the detail string, and an actionable
+  ``→ suggestion`` row pulled from the ``_HEALTH_SUGGESTIONS`` table
+  ("re-run ``claude``", "wait <cooldown>", …). ``/login health
+  <unknown>`` warns + points back at bare ``/login``; the empty-store
+  path prints the "no profiles" hint without crashing. 7 new tests in
+  ``tests/test_login_health.py`` pin the legend, the router, the
+  no-arg / narrowed / unknown / empty-store cases, and the suggestion
+  surfacing.
+
+- **X3 — ``/login providers`` exposes the provider-variant table +
+  equivalence map.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (X3: *Provider equivalence
+  map 사용자 가시성 0*). Pre-fix the equivalence map (``openai ↔
+  openai-codex``, ``glm ↔ glm-coding``) lived only in
+  ``core.llm.registry.PROVIDER_EQUIVALENCE``; users saw the
+  ``provider`` label in ``/login`` / ``/model`` and had no way to
+  discover that a Codex Plus token and an OpenAI PAYG key both serve
+  a ``gpt-5.x`` request, or that a GLM Coding key shadows the PAYG
+  endpoint. The new subcommand renders each ``PROVIDER_VARIANTS``
+  entry with display name + auth type + default base URL + bound-plan
+  count, then prints every multi-member equivalence class once
+  (singletons skipped, sibling-key duplicates de-duped). Singular
+  alias ``/login provider`` is accepted. ``/login help`` documents the
+  command. 5 new tests in ``tests/test_login_providers.py`` pin the
+  dispatch path, the variant-table coverage, the equivalence header,
+  the de-dup invariant (one arrow per class), and the help-text
+  discoverability.
+
+- **L3 — ``/login`` Profiles section surfaces full Plan binding
+  detail.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L3: *OAuth status 가 plan
+  바인딩 안 보여줌*). Pre-fix the Profiles table printed the bare
+  ``plan=<id>`` next to each profile; a user looking at ``glm:work``
+  saw ``plan=glm-coding-lite`` and had no way to know it was a
+  subscription plan (vs PAYG) or what tier it sat in. New
+  ``_format_plan_binding(registry, plan_id)`` resolves the binding
+  through ``PlanRegistry.get`` and renders ``<id> (<kind>·<tier> ·
+  <display_name>)`` — so the same row now reads
+  ``plan=glm-coding-lite (subscription·Lite · GLM Coding Lite)``.
+  Falls back to ``(none)`` on an empty ``plan_id`` and to
+  ``<id> (unbound)`` when the Plan vanished after the AuthProfile
+  was created (so the operator notices the dangling reference instead
+  of seeing an opaque id). 5 new tests in
+  ``tests/test_login_plan_binding.py`` cover the full label, the
+  no-tier PAYG path, the two fallbacks, and the end-to-end dashboard
+  render.
+
 ## [0.99.21] — 2026-05-20
 
 Co-Scientist parity sprint closure — 3 PRs (#1357 + #1360 + #1361)
@@ -100,7 +234,6 @@ goal-conditioning). 23 new tests; 5082 non-live + 5 live; 308 core
   §3.3.4's implicit guarantee that the proximity graph keeps the
   hypothesis pool diverse without requiring upstream resampling.
 
-=======
 ## [0.99.20] — 2026-05-20
 
 Self-improving-loop wiring sprint G1-G5b + 5 fix-ups + CLAUDE.md immune-system
@@ -109,7 +242,6 @@ update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#135
 
 ### Added
 
->>>>>>> origin/main
 - **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
   diverse-bracket Elo seeding.** Closes the first P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison: pre-Π1 the Proximity
@@ -132,6 +264,51 @@ update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#135
   graceful fallback), the diverse-bracket policy (lowest-proximity
   pairs win the budget, missing entries default to 0.0, empty graph
   falls back to random), and the Ranker integration.
+
+### Changed
+
+- **Silent same-provider model fallback off by default (opt-in knob).**
+  Per user direction 2026-05-21 ("FALLBACK 체인과 레이어를 제거해 …
+  사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성"), the shipped
+  ``[model.fallbacks]`` section in ``core/config/routing.toml`` now
+  carries empty lists for every provider; primary-model failure no
+  longer silently retries against secondary / tertiary models for the
+  default user. ``RoutingManifest._consistency`` accepts an empty
+  fallback chain as valid (opt-out) and runs the drift-check only when
+  the chain is populated. The chain code path itself (``*_FALLBACK_
+  CHAIN`` constants, ``RoutingManifest.fallbacks``,
+  ``retry_with_backoff_generic(fallback_models=...)``,
+  ``AgenticLLMPort.fallback_chain``, provider adapters'
+  ``fallback_chain`` properties, ``call_with_failover``, system-prompt
+  hint block) stays intact so users who *explicitly* want transient-
+  error coverage can opt in by editing ``~/.geode/routing.toml``:
+
+      [model.fallbacks]
+      anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]
+
+  Plan: ``docs/plans/2026-05-21-silent-fallback-elimination.md``.
+  Pre-change the v0.52.3 GLM incident triggered a 5×4 retry storm
+  (~40s); the new default raises ``BillingError`` / the last exception
+  after the per-model retry budget exhausts (~8s) and fires
+  ``quota_exhausted`` (BillingError → IPC event → thin-client panel,
+  unchanged from v0.53.0). Users on the opt-in knob see the previous
+  chain behaviour.
+
+### Removed
+
+- **``CROSS_PROVIDER_FALLBACK`` empty-dict back-compat shim removed.**
+  The cross-provider auto-swap path was deleted in v0.53.0 (the
+  ``llm_cross_provider_failover`` setting + ``_try_cross_provider_
+  escalation`` method gone); only the empty-dict sentinel
+  ``CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]]`` lingered
+  in ``core/llm/adapters.py`` + re-exported from ``core/llm/router/
+  __init__.py``. Keeping a tombstone symbol invites accidental re-
+  introduction of cross-provider chains, so the symbol + its re-export
+  are now deleted outright. Three tests
+  (``test_quota_fail_fast.py::test_cross_provider_fallback_map_is_empty_for_all_providers``,
+  ``test_codex_provider.py::TestAdapterMap::test_codex_cross_provider_fallback``,
+  ``test_provider_label_consistency.py::TestCrossProviderFallbackSafety``)
+  rewritten to assert the symbol stays *deleted* (``not hasattr``).
 
 ### Fixed
 
@@ -359,8 +536,6 @@ update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#135
   paths + 3 G1 test alias diffs. Quality gates: ruff / mypy / 93+
   evidence-touched tests green.
 
-<<<<<<< HEAD
-=======
 ## [0.99.19] — 2026-05-20
 
 Detailed backfill of v0.99.19 — the squash `a6012e02` (PR #1345) actually
@@ -368,7 +543,6 @@ landed **4 PRs** on main: ε1 + P2 + autoresearch deforking + PR-G1
 `latest_seed_pool` symlink (#1344). The original v0.99.19 release body
 omitted PR-G1; this section restores the full entry list.
 
->>>>>>> origin/main
 ### Changed
 
 - **autoresearch self-positioning rewrite — drop "fork" framing, name the

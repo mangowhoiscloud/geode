@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from core.cli.commands import MODEL_PROFILES
 from core.config import _resolve_provider
-from core.llm.adapters import _ADAPTER_MAP, CROSS_PROVIDER_FALLBACK
+from core.llm import adapters as _adapters_mod
+from core.llm.adapters import _ADAPTER_MAP
 
 
 class TestProviderRouting:
@@ -49,15 +50,15 @@ class TestAdapterMapAlignment:
 
 
 class TestCrossProviderFallbackSafety:
-    def test_glm_does_not_auto_fall_back(self) -> None:
-        # GLM Coding Plan auth errors must not silently divert to a metered
-        # OpenAI key. Cross-plan jumps are an explicit user choice in v0.50+.
-        assert CROSS_PROVIDER_FALLBACK.get("glm") == []
-
-    def test_openai_codex_does_not_auto_fall_back(self) -> None:
-        # Codex OAuth scope is unique to chatgpt.com/backend-api; silently
-        # retrying on a PAYG provider would surprise the user with billing.
-        assert CROSS_PROVIDER_FALLBACK.get("openai-codex") == []
+    def test_cross_provider_fallback_shim_removed(self) -> None:
+        """v0.99.19 — the empty-dict ``CROSS_PROVIDER_FALLBACK`` shim is
+        deleted. Re-introducing it would invite a code path that silently
+        diverts to a different provider on quota / billing failure."""
+        assert not hasattr(_adapters_mod, "CROSS_PROVIDER_FALLBACK"), (
+            "CROSS_PROVIDER_FALLBACK resurfaced — silent provider swap is "
+            "globally forbidden. On quota exhaustion the agentic loop fires "
+            "``quota_exhausted`` and the user picks a new model via /model."
+        )
 
 
 class TestModelProfileLabels:
