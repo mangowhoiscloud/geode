@@ -84,7 +84,12 @@ functional change.
   ACT → process → OBSERVE → ``record_round`` → REFLECT →
   UPDATE_MEMORY block from ``arun`` so the run-loop stays within the
   ruff complexity gates while preserving the cognitive-cycle event
-  ordering.
+  ordering. Text-only rounds (``stop_reason != "tool_use"`` —
+  natural / forced_text / user_clarification_needed) go through
+  ``_record_text_only_round`` instead: ACT/OBSERVE are intentionally
+  skipped (no tool ran), only REFLECT + UPDATE_MEMORY fire, and
+  ``last_action`` is tagged ``"text-only"`` so a downstream viewer
+  can distinguish no-action turns from failed-tool turns.
 
 - **Cognitive loop uplift sprint plan
   (`docs/plans/2026-05-21-cognitive-loop-uplift.md`).** Maps every

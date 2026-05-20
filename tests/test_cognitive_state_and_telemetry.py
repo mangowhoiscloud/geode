@@ -212,6 +212,36 @@ def test_arun_emits_all_six_cognitive_events() -> None:
         )
 
 
+def test_text_only_round_also_calls_record_round() -> None:
+    """Codex MCP review #1 (HIGH) catch — text-only completions
+    (``stop_reason != "tool_use"``) used to bypass
+    ``_run_cognitive_act_observe_cycle`` and therefore
+    ``record_round``. The CHANGELOG claim that ``record_round``
+    fires "at every round end" was false for natural / forced_text
+    / user_clarification_needed completions.
+
+    Pin that ``_record_text_only_round`` exists and is called from
+    both text-only return paths so round_count + observations stay
+    in lock-step with the actual round count regardless of how the
+    round ended."""
+    from core.agent.loop import agent_loop as _agent_loop_mod
+    from core.agent.loop.agent_loop import AgenticLoop
+
+    # The helper exists and updates round_count + emits REFLECT/UPDATE.
+    src = inspect.getsource(AgenticLoop._record_text_only_round)
+    assert "self.cognitive_state.record_round(" in src
+    assert "HookEvent.COGNITIVE_REFLECT" in src
+    assert "HookEvent.COGNITIVE_UPDATE_MEMORY" in src
+
+    # Both text-only return paths call it before ``return``.
+    module_src = inspect.getsource(_agent_loop_mod)
+    assert module_src.count("await self._record_text_only_round(") >= 2, (
+        "Both text-only return paths (user_clarification_needed and "
+        "natural/forced_text) must call _record_text_only_round before "
+        "returning, or round_count drifts from the actual round count."
+    )
+
+
 def test_arun_emits_cognitive_state_snapshot_in_payload() -> None:
     """Every cognitive event payload must include the
     ``cognitive_state`` snapshot so a downstream viewer can replay

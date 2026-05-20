@@ -271,6 +271,33 @@ class AgenticLoop:
             },
         )
 
+    async def _record_text_only_round(self, round_idx: int, *, text: str) -> None:
+        """PR-2 C-6 — record round end + emit REFLECT/UPDATE_MEMORY for
+        text-only completions (``stop_reason != "tool_use"``).
+
+        Codex MCP review #1 catch — without this, ``record_round`` only
+        ran on tool-use rounds, violating the conditional-read-parity
+        rule. ACT/OBSERVE are intentionally NOT emitted here: the loop
+        took no action and observed no tool result this round, so the
+        cognitive cycle on a text-only turn is PERCEIVE → PLAN →
+        REFLECT (the LLM "thought aloud" then ended the turn).
+        ``last_action`` is recorded as ``"text-only"`` and
+        ``last_observation`` as a 80-char head of the emitted text so
+        downstream readers can distinguish *no-action* turns from
+        *failed-tool* turns.
+        """
+        head = text.strip().replace("\n", " ")
+        if len(head) > 80:
+            head = head[:80] + "…"
+        self.cognitive_state.record_round(
+            action="text-only",
+            observation=head or "(empty text)",
+        )
+        await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1
+        )
+
     async def _run_cognitive_act_observe_cycle(
         self, response: Any, round_idx: int
     ) -> list[dict[str, Any]]:
@@ -958,6 +985,7 @@ class AgenticLoop:
                         "behaviour, or step you want me to focus on next?\n\n"
                         f"Most recent reasoning (truncated):\n{summary}"
                     )
+                    await self._record_text_only_round(round_idx, text=last_text)
                     result = AgenticResult(
                         text=clarification,
                         tool_calls=self._tool_processor.tool_log,
@@ -987,6 +1015,7 @@ class AgenticLoop:
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
                 messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
+                await self._record_text_only_round(round_idx, text=text)
                 reason = "forced_text" if is_last_round else "natural"
                 result = AgenticResult(
                     text=text,
