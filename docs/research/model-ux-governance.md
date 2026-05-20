@@ -399,7 +399,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 | L2 | `/login refresh` success silent (logged but no console) | S3 | S | Hermes `auth login --refresh` |
 | L3 | OAuth status 가 plan 바인딩 안 보여줌 | S2 | M | OpenClaw `auth show <profile>` shows plan link |
 | L4 | `/key` 마이그레이션 UX 부족 (redirect msg 만, 가이드 부재) | S3 | S | Hermes `auth migrate` |
-| L5 | Help text 에 eligibility verdict 부재 | S2 | S | OpenClaw `auth health <profile>` |
+| L5 | Eligibility verdict legend + `/login health` | Done (v0.99.19) | S | `/login help` 이 reason_code 6개 모두 의미 설명 + `/login health [<profile>]` 가 단일/전체 profile 의 verdict + actionable suggestion 출력. |
 
 ### Cross-cutting (architectural)
 
