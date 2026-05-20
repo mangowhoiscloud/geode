@@ -108,6 +108,23 @@ def test_prompt_dirty_triggers_rebuild_even_without_drift() -> None:
     assert stub.build_calls == 1
 
 
+def test_both_drift_and_dirty_still_rebuild_exactly_once() -> None:
+    """Both flags set: OR-chain short-circuits on the first True.
+    Rebuild path still runs exactly once (not twice). Pin against a
+    future refactor that accidentally double-rebuilds."""
+    stub = _StubLoop(sync_returns_drifted=True, prompt_dirty=True)
+    result = _call_helper(stub, "ORIGINAL", None)
+    assert result == "REBUILT_PROMPT"
+    assert stub.build_calls == 1
+    # drift sync runs unconditionally (left operand of OR); dirty
+    # flag is consulted only if drift returns False (short-circuit).
+    # Here drift=True so the OR short-circuits — dirty is not
+    # *evaluated for branching*, but the post-rebuild reset still
+    # clears it.
+    assert stub.sync_calls == 1
+    assert stub._prompt_dirty is False
+
+
 def test_rebuild_clears_prompt_dirty_flag() -> None:
     """After rebuild ``_prompt_dirty`` must be False so subsequent
     rounds don't loop-rebuild."""

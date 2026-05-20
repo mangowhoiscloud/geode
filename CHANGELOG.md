@@ -63,9 +63,10 @@ functional change.
   decomposition_hint) -> str``. ``arun`` rebinds the local from the
   helper's return value, preserving the exact pre-refactor
   semantics (drift sync + dirty-flag OR-chain, rebuild path, hint
-  append with ``\n\n`` separator, dirty flag clear). 13 invariant
+  append with ``\n\n`` separator, dirty flag clear). 14 invariant
   tests pin the helper signature, all 4 trigger combinations
-  (drift / dirty / both / neither), rebuild side-effect, hint
+  (drift / dirty / both / neither — both-case verifies OR
+  short-circuit + single rebuild), rebuild side-effect, hint
   append/skip/ignore-when-not-rebuilding, ``arun`` delegation +
   anti-residue, and cross-phase regression (Phase 1 + 2a helpers
   still intact). Phase 2c (LLM-call dispatch + retry budget) will
