@@ -95,12 +95,13 @@ def test_audit_doc_exists() -> None:
 def test_audit_doc_pins_1_alive_4_dead() -> None:
     """결론 한 줄 anchor."""
     text = _read(AUDIT_DOC)
-    # ADR-012 S0a (2026-05-21) 머지 이후 `tool_policy` 가 ALIVE 로 전환.
-    # audit 시점 (2026-05-21 아침) 의 사실은 1/5 — 그 줄을 유지하면서
-    # post-S0a update 섹션이 함께 등장하는지 확인.
+    # ADR-012 S0a/S0b (2026-05-21) 머지 이후 `tool_policy`/`reflection` 이 ALIVE.
+    # audit 시점 의 사실은 1/5 — 그 줄을 유지하면서 post-S0* update 섹션
+    # 들이 함께 등장하는지 확인.
     assert "1/5 ALIVE, 4/5 DEAD" in text  # 원본 audit 시점 사실
     assert "Post-S0a" in text  # S0a 후속 갱신 섹션
-    assert "2/5 ALIVE, 3/5 DEAD" in text  # 현재 상태
+    assert "Post-S0b" in text  # S0b 후속 갱신 섹션
+    assert "3/5 ALIVE, 2/5 DEAD" in text  # 현재 상태 (S0b 후)
 
 
 def test_audit_doc_names_all_5_slots() -> None:
@@ -145,19 +146,19 @@ def test_prompt_reader_is_called_in_agentic_loop() -> None:
 @pytest.mark.parametrize(
     "sot_filename",
     [
-        # ADR-012 S0a (2026-05-21) 머지 이후 ``tool-policy.json`` 은 ALIVE —
-        # ``core/agent/tool_policy.py`` 의 reader 가 ``core/agent/loop/_helpers.py``
-        # 의 ``get_agentic_tools`` 에서 호출된다. 이 parametrize 에서 제거됨.
+        # ADR-012 S0a/S0b (2026-05-21) 머지 이후 ``tool-policy.json`` 과
+        # ``reflection.json`` 이 ALIVE — 각각의 reader 가
+        # ``core/agent/{tool_policy,reflection_policy}.py`` 에 존재. 이
+        # parametrize 에서 제거됨.
         "decomposition.json",
         "retrieval.json",
-        "reflection.json",
     ],
 )
 def test_dead_slot_has_no_inference_reader(sot_filename: str) -> None:
     """DEAD slot 의 SoT 파일명이 인퍼런스 경로 (core/agent + core/orchestration +
     core/skills + core/llm + plugins + autoresearch — self_improving_loop
     의 mutation 정의/디스패처는 제외) 어디에서도 참조되지 않음을 pin.
-    S0b/c PR 에서 reader 가 신설되면 이 test 가 실패해서 함께 갱신해야
+    S0c/d PR 에서 reader 가 신설되면 이 test 가 실패해서 함께 갱신해야
     한다 (의도된 anchor 회귀)."""
     hits = _grep_inference_dirs(sot_filename)
     # 0 hits 가 정상 (DEAD)
@@ -203,12 +204,23 @@ def test_decomposition_slot_not_wired_to_decomposition_json() -> None:
     assert "decomposition.json" not in src
 
 
-def test_reflection_slot_dead_via_hardcoded_tool_schema() -> None:
-    """reflection slot 의 dead 사유 — _REFLECTION_TOOL 가 module-level constant."""
-    src = _read("core/agent/loop/_reflection.py")
-    assert "_REFLECTION_TOOL" in src
-    # reflection.json 을 읽는 reader 없음
-    assert "reflection.json" not in src
+def test_reflection_slot_is_now_alive_post_s0b() -> None:
+    """ADR-012 S0b 머지 이후 ``reflection.json`` 은 ALIVE — reader 가
+    ``core/agent/reflection_policy.py`` 에 존재 + ``_reflection.py`` 의
+    reflection LLM 호출 직전에 실제로 호출됨. PR-AUDIT-5SLOT 의 의도된
+    회귀 marker 의 발화 결과."""
+    hits = _grep_inference_dirs("reflection.json")
+    assert any("reflection_policy.py" in h for h in hits), (
+        f"reflection.json 이 core/agent/reflection_policy.py 에서 발견되어야 함. hits={hits}"
+    )
+    # Call chain 검증 — _reflection.py 가 reflection_policy 의 reader 를 호출.
+    reflection_src = _read("core/agent/loop/_reflection.py")
+    assert "_load_reflection_policy_override" in reflection_src, (
+        "_reflection.py 가 _load_reflection_policy_override 를 호출해야 함."
+    )
+    assert "apply_reflection_policy" in reflection_src, (
+        "_reflection.py 가 apply_reflection_policy 를 호출해야 함 — 정책이 reflection LLM 호출에 적용되는지."
+    )
 
 
 # ---------------------------------------------------------------------------

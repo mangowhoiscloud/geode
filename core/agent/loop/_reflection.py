@@ -260,6 +260,18 @@ async def reflect_async(
             max_tokens,
         )
 
+        # ADR-012 S0b — 5축의 ``reflection`` SoT 가 인퍼런스 경로에서
+        # 실제로 적용되는 단일 지점. 정책이 부재하면 ``apply_reflection_policy``
+        # 는 입력 그대로 반환 (현재 행동 보존).
+        from core.agent.reflection_policy import (
+            _load_reflection_policy_override,
+            apply_reflection_policy,
+        )
+
+        active_tool, active_system = apply_reflection_policy(
+            _REFLECTION_TOOL, _SYSTEM_PROMPT, _load_reflection_policy_override()
+        )
+
         async def _do_call(m: str) -> object:
             # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs
             # mark *both* ``"any"`` and named-tool forcing as
@@ -275,9 +287,9 @@ async def reflect_async(
             # ``"auto"`` on OpenAI/Codex via the shared normaliser.
             return await adapter.agentic_call(
                 model=m,
-                system=_SYSTEM_PROMPT,
+                system=active_system,
                 messages=[{"role": "user", "content": user_prompt}],
-                tools=[_REFLECTION_TOOL],
+                tools=[active_tool],
                 tool_choice="auto",
                 max_tokens=max_tokens,
                 temperature=0.2,
