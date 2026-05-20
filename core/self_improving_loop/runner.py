@@ -369,21 +369,19 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
     # PR-1 G-A fix-up — `source` and `role_contract` must affect *something*
     # observable, otherwise they're silent declarative knobs (Codex MCP
-    # 2nd-pass review flagged this as a knob-vs-deletion violation). Two
-    # surfaces:
+    # 2nd-pass review flagged this as a knob-vs-deletion violation).
+    # Surface: every mutator call logs (model, provider, source,
+    # role_contract, max_tokens) so a downstream Petri / Inspect viewer
+    # can group runs by operator intent. Same shape as
+    # `core.llm.router._hooks` emit but recorded at the mutator
+    # boundary (the router doesn't know it's serving the mutator role
+    # specifically).
     #
-    #   (a) telemetry — every mutator call logs (model, provider,
-    #       source, role_contract) so a downstream Petri / Inspect
-    #       viewer can group runs by operator intent. Same shape as
-    #       `core.llm.router._hooks` emit but recorded at the mutator
-    #       boundary (the router doesn't know it's serving the mutator
-    #       role specifically).
-    #
-    #   (b) credential-source preference — when the operator picks a
-    #       non-`auto` source the runner sets the matching env override
-    #       so the petri source resolver (consumed inside the adapter
-    #       chain) honours the choice. This stays consistent with the
-    #       `forced_login_method` knob (M2) the agentic picker exposes.
+    # A planned future surface — credential-source forcing — would
+    # require a downstream reader in the adapter / router credential
+    # chain; that reader does not exist on main yet, so PR-1 stops at
+    # the telemetry surface and the C-5 (policy mutation expansion) PR
+    # will wire the second half once the reader lands.
     _logging.getLogger("core.self_improving_loop.runner").info(
         "mutator dispatch: model=%s provider=%s source=%s role_contract=%s max_tokens=%d",
         model,
@@ -392,10 +390,6 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
         role_contract,
         max_tokens,
     )
-    if source != "auto":
-        import os
-
-        os.environ.setdefault("GEODE_MUTATOR_FORCED_SOURCE", source)
 
     async def _do_call(m: str) -> object:
         return await adapter.agentic_call(
