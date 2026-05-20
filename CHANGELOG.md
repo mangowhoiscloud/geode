@@ -47,6 +47,61 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.23] — 2026-05-20
+
+Model-UX governance gap closure — final slice covering the items deferred
+from v0.99.22 (M3 / L1 already done in earlier versions; L2 / L4 / X1.1
+new in this release; X2 stays deferred pending operator decision).
+
+### Added
+
+- **X1.1 — full multi-rank auth ordering on top of X1's single-active
+  pin.** Closes the deferred slice of the X1 governance gap. New
+  ``ProfileStore.set_auth_order(provider, names)`` /
+  ``get_auth_order`` / ``clear_auth_order`` carry an ordered list of
+  profile names; ``ProfileRotator.resolve`` walks them in order before
+  falling back to the legacy ``sort_key`` tail. Missing or ineligible
+  entries gracefully step aside without starving lower ranks.
+  ``set_auth_order`` writes the head element to ``_pinned_active`` so
+  X1's ``/login`` ``(active)`` badge stays in sync. CLI:
+  ``/login order set <provider> <name1> [<name2> …]`` registers the
+  list; ``/login order clear <provider>`` drops it (back to LRU);
+  ``/login order [<provider>]`` now annotates ``active`` (rank 1) /
+  ``ranked`` (rank 2+) / ``queued`` (tail) / ``<reject_reason>``
+  (ineligible) per row. 13 new tests in
+  ``tests/test_login_auth_order_multi.py`` pin the store API
+  (set/get/clear + KeyError/ValueError surfaces), the rotator's
+  multi-rank walk + step-aside contract, and the CLI command paths.
+
+- **L2 — ``/login refresh`` console output.** Closes the governance
+  gap noted in ``docs/research/model-ux-governance.md`` (L2: *success
+  silent (logged but no console)*). Pre-fix the refresh branch only
+  emitted ``log.info`` records, so a REPL operator running
+  ``/login refresh`` saw nothing on stdout and could not tell whether
+  the daemon had picked up the new plan / profile. The success branch
+  now surfaces an ``auth.toml reloaded +N plan / +M profile`` line
+  with per-entry muted bullets; the no-change path prints a muted
+  "no new plans or profiles" line; the failure path prints a warning
+  pointing at the daemon log for the traceback. Logs preserved
+  (``log.info`` still records the same counts).
+
+- **L4 — ``/key`` (no args) inline migration guide.** Closes the
+  governance gap noted in ``docs/research/model-ux-governance.md``
+  (L4: *redirect msg 만, 가이드 부재*). Pre-fix ``/key`` (no args)
+  printed a single muted line and redirected to ``/login``, leaving
+  the operator without a learning surface for the new commands. The
+  redirect now carries a small migration table — ``/key <sk-...>`` →
+  ``/login add``, ``/key openai <key>`` → ``/login set-key openai-payg
+  <key>``, ``/key glm <key>`` → ``/login set-key glm-payg <key>`` —
+  plus a pointer to ``/login providers`` for the full variant table.
+
+### Notes — X2 still deferred
+
+X2 (system prompt model identity injection, v0.52.8) remains pending an
+operator decision among (A) keep as-is, (B) weaken to align with
+reference harnesses, (C) Codex-only assertion. The v0.52.5 incident's
+fix-2 (stale ack purge) is independent of this knob and stays.
+
 ## [0.99.22] — 2026-05-20
 
 ### Added

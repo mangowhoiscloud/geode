@@ -1190,7 +1190,7 @@ wheels = [
 
 [[package]]
 name = "geode-agent"
-version = "0.99.21"
+version = "0.99.23"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

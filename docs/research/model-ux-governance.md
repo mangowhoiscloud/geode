@@ -387,7 +387,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 |---|-----|----------|--------|---------------|
 | M1 | Provider label vs ID 불일치 (`"Codex (Plus)"` vs `openai-codex`) | S2 | S | OpenClaw uses single canonical key |
 | M2 | `forced_login_method` visible in `/model` picker | Done (v0.99.19) | M | `commands._state.forced_login_method_for(provider)` + 6-tuple picker — non-default override (`apikey` / `api` / etc.) renders `(forced: <method>)` badge in interactive + non-tty list. Alias map mirrors `plan_registry._apply_forced_login_method`. |
-| M3 | `gpt-5.5` static `_resolve_provider` → `"openai"` (실제는 Codex-only) | S1 | M | Hermes 의 PROVIDER_REGISTRY 모델 매핑 |
+| M3 | `gpt-5.5` static `_resolve_provider` → `openai-codex` | Done (v0.99.x) | M | `routing.toml [routing] codex_only_models = ["gpt-5.5", "gpt-5.5-pro"]` + `routing_manifest.resolve_provider` 가 `codex_only_models` → `codex_suffixes` → prefix 순. 더 이상 `openai` 로 잘못 라우팅 안 됨. |
 | M4 | Silent credential fallback (~~breadcrumb 추가~~ → v0.99.19 elimination) | Done (v0.99.19) | — | 본 doc Addendum 의 Phase F1 + F3 (옵션 C). silent fallback 자체를 제거; breadcrumb 도 dead code. |
 | M5 | `MODEL_PROFILES` login-state 필터링 | Done (v0.99.19) | S | `commands._state.model_available()` + 5-tuple picker — un-credentialed rows dim + `(login required)` suffix; Enter cancels instead of mutating settings; `/model <name>` emits `/login` hint before applying. |
 
@@ -395,18 +395,19 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 
 | # | Gap | Severity | Effort | Reference fix |
 |---|-----|----------|--------|---------------|
-| L1 | `/login list` shortcut 없음 (bare `/login` 만) | S3 | S | OpenClaw `models auth list` |
-| L2 | `/login refresh` success silent (logged but no console) | S3 | S | Hermes `auth login --refresh` |
+| L1 | `/login list` / `/login ls` shortcut | Done (v0.99.x) | S | `cmd_login` 의 router 에 `("status", "list", "ls")` alias 등재됨 (line 92). bare `/login` 과 동일 dashboard 출력. |
+| L2 | `/login refresh` console output | Done (v0.99.23) | S | success 시 `auth.toml reloaded +N plan / +M profile` 콘솔 출력 + 각 신규 plan/profile 별 muted bullet. no-change/failure path 별도 메시지. 기존 `log.info` 도 유지. |
 | L3 | OAuth status plan binding | Done (v0.99.19) | M | `/login` Profiles 섹션의 `plan=<id>` 가 `<id> (<kind>·<tier> · <display_name>)` 로 확장. `_format_plan_binding` helper 가 PlanRegistry.get 결과로 라벨 합성; 사라진 plan 은 `(unbound)` 로 표시. |
-| L4 | `/key` 마이그레이션 UX 부족 (redirect msg 만, 가이드 부재) | S3 | S | Hermes `auth migrate` |
+| L4 | `/key` 마이그레이션 가이드 | Done (v0.99.23) | S | `/key` (no args) 가 `/login` redirect 와 함께 legacy → 신규 surface 매핑 표 출력 (`/key <sk-...>` → `/login add` 등). 사용자가 별도 docs 없이 새 surface 학습 가능. |
 | L5 | Eligibility verdict legend + `/login health` | Done (v0.99.19) | S | `/login help` 이 reason_code 6개 모두 의미 설명 + `/login health [<profile>]` 가 단일/전체 profile 의 verdict + actionable suggestion 출력. |
 
 ### Cross-cutting (architectural)
 
 | # | Gap | Severity | Effort | Reference fix |
 |---|-----|----------|--------|---------------|
-| X1 | Per-provider user-tunable auth order (first slice) | Done (v0.99.19) | M | `ProfileStore.set_active` → `_pinned_active` 분리, `ProfileRotator.resolve` 가 manual pin 을 sort_key 보다 우선. CLI: `/login use-profile <name>` (set), `/login order [<provider>]` (show). `/login` Profiles row 에 `(active)` badge. Ineligible pin 은 graceful step-aside. Full list ordering 은 후속 PR (X1.1). |
-| X2 | system prompt model identity injection (v0.52.8) — reference 와 어긋남 | S2 | S | Decision: 유지 / 약화 / Codex-only 中 택 |
+| X1 | Per-provider user-tunable auth order (single-active pin) | Done (v0.99.19) | M | `ProfileStore.set_active` → `_pinned_active` 분리, `ProfileRotator.resolve` 가 manual pin 을 sort_key 보다 우선. CLI: `/login use-profile <name>` (set), `/login order [<provider>]` (show). |
+| X1.1 | Per-provider auth order (multi-rank list) | Done (v0.99.23) | M | `ProfileStore.set_auth_order(provider, names)` + `get_auth_order` + `clear_auth_order`. Rotator walks the list in order; head 가 `_pinned_active` 와 sync (X1 parity). CLI: `/login order set <provider> <n1> <n2>…`, `/login order clear <provider>`. Missing/ineligible 은 graceful step-aside. |
+| X2 | system prompt model identity injection (v0.52.8) — reference 와 어긋남 | Deferred — needs decision | S | 옵션 (A) 유지 / (B) 약화 / (C) Codex-only 中 사용자 결정 필요. v0.52.5 incident 의 fix-2 (stale ack purge) 는 X2 와 별개로 유지됨 — X2 결정은 *prompt-level* 강도 조정 only. |
 | X3 | Provider equivalence map view | Done (v0.99.19) | S | `/login providers` (alias `provider`) 가 PROVIDER_VARIANTS + base_url + multi-member equivalence class (openai ↔ openai-codex, glm ↔ glm-coding) 출력. de-dup 으로 같은 class 가 sibling key 마다 중복 표시되지 않음. |
 
 ### 종합 priority
