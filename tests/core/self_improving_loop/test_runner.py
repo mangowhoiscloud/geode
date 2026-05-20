@@ -299,8 +299,12 @@ def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     # sessions.jsonl side-effect landed in monkeypatched dir.
     sessions_path = tmp_path / "sil_home" / "sessions.jsonl"
     assert sessions_path.is_file()
-    # LLM prompt carried the system + sections context.
-    assert "WRAPPER_PROMPT_SECTIONS" in captured["user"]
+    # LLM prompt carried the system + policies context. PR-MINIMAL-2
+    # (2026-05-21) — _build_user_prompt now surfaces all 5 policy
+    # SoTs under "Current policy SoT (5 kinds):" rather than the
+    # legacy "Current WRAPPER_PROMPT_SECTIONS:" header.
+    assert "Current policy SoT" in captured["user"]
+    assert '"prompt"' in captured["user"]
     assert "Mutator" in captured["system"] or "mutator" in captured["system"]
 
 

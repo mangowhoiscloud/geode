@@ -47,6 +47,137 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-MINIMAL-2 — 11-item alignment / pruning bundle for the
+  self-improving loop config + runner.** Post-MINIMAL-1, surface
+  audits caught a cluster of config / wiring loose ends — silent
+  knobs, type-shape mismatches, missing context for the mutator
+  LLM, and a CLAUDE.md DONT-table candidate (program.md ↔
+  fallback prompt drift). PR-MINIMAL-2 bundles them in one PR per
+  user directive (single PR for the whole audit).
+
+  **Config trim** (5 items):
+  - **G1a** — ``MutatorConfig.default_model`` /
+    ``AutoresearchConfig.target_model`` / ``AutoresearchConfig.judge_model``
+    defaults flipped from string literals (``"claude-opus-4-7"`` /
+    ``"geode/gpt-5.5"`` / ``"claude-code/opus"``) to ``None``.
+    Both readers (``runner._default_llm_call`` and
+    ``train._build_audit_command``) fall back to ``Settings.model``
+    when the field is unset, so operator's ``/model`` choice flows
+    through both the mutator LLM and the audit subprocess
+    automatically. Explicit toml override
+    (``[self_improving_loop.mutator] default_model = "..."``) still
+    wins. New helper ``train._settings_model()`` reads
+    ``Settings.model`` with a defensive ``TARGET_MODEL`` fallback
+    for environments without ``core.config``.
+  - **C1** — ``MutatorConfig.allowed_models`` (5-model allow-list)
+    + matching ``_default_in_allowed`` pydantic validator removed.
+    The router's provider routing already guards model existence
+    per provider; the dedicated allow-list was extra surface that
+    caught nothing in practice.
+  - **C2 / A2** — ``fallback_to_payg`` per-component overrides
+    removed from ``SelfImprovingLoopBindings`` /
+    ``PetriRoleConfig`` / ``AutoresearchConfig`` / ``MutatorConfig``
+    / ``SeedGenerationConfig``. Only the global flag at
+    ``[self_improving_loop] fallback_to_payg`` survives — per-
+    component fields had NO downstream reader (dead config field).
+  - **A1** — ``MutatorConfig.role_contract`` field removed. Was
+    logged in the dispatch telemetry but never injected into the
+    LLM system prompt (operator-facing reference only). The file
+    ``.claude/agents/self_improving_loop_mutator.md`` stays on
+    disk as reference; the config field that pointed at it added
+    noise without operational effect.
+  - **B1** — ``AutoresearchConfig.use_oauth: bool`` (legacy bool)
+    replaced with ``source: Source`` (4-enum: ``auto`` / ``api_key``
+    / ``claude-cli`` / ``openai-codex``). Aligns shape with
+    ``MutatorConfig.source`` + ``PetriRoleConfig.source`` — one
+    credential vocabulary across the loop. The argv translator in
+    ``_build_audit_command`` adds ``--use-oauth`` when source is
+    anything except ``"api_key"`` (auto / claude-cli / openai-codex
+    all use subscription credentials).
+
+  **Path consolidation** (1 item):
+  - **B5** — ``MUTATION_AUDIT_LOG_PATH`` canonical definition
+    moved from ``core/self_improving_loop/runner.py:189`` to
+    ``core/paths.py`` alongside the other path constants. The
+    runner re-exports the name for backwards compat with the 5+
+    callers that import it from this module rather than from
+    ``core.paths``.
+
+  **Mutator context expansion** (1 item):
+  - **B2** — ``RunnerContext`` gains a ``current_policies: dict[str,
+    dict[str, str]]`` field carrying the *current state* of ALL 5
+    mutation targets (prompt / tool_policy / decomposition /
+    retrieval / reflection). ``build_runner_context`` loads all 5
+    policy SoT files; ``_build_user_prompt`` surfaces them under
+    ``"Current policy SoT (5 kinds):"`` so the mutator LLM sees
+    the full surface. Pre-PR the prompt only included
+    ``current_sections`` (wrapper-only), letting the LLM blind-
+    mutate the other 4 kinds without ever seeing their current
+    values. ``current_sections`` is preserved as a backwards-
+    compat alias of ``current_policies["prompt"]`` for the legacy
+    callers + the fallback rendering branch when
+    ``current_policies`` is empty.
+
+  **Drift guards + docs** (4 items):
+  - **B8** — ``_FALLBACK_SYSTEM_PROMPT`` ↔ ``autoresearch/program.md``
+    drift invariant: ``test_fallback_prompt_shares_setup_anchor_with_program_md``
+    pins the stable section anchor (``## Setup``) on the program.md
+    side AND the shared mutation-contract schema fields
+    (``target_section`` / ``new_value`` / ``rationale``) on the
+    fallback side, so an operator who edits one without the other
+    surfaces a CI hit.
+  - **A3 (partial)** — runner / train.py SessionJournal events
+    audited. The 9 documented events all fire; the 2 documented
+    "missing" events (``baseline_decision`` actual emit +
+    ``subprocess_failed``) are deferred to a future PR — full
+    9 → 3 collapse risks downstream consumers without explicit
+    migration. PR-MINIMAL-2 stops at the audit.
+  - **C5** — ``autoresearch/program.md`` agent contract updated
+    with a 5-row table listing every ``target_kind`` (prompt /
+    tool_policy / decomposition / retrieval / reflection) + the
+    file each one writes + a one-line "what it controls" column.
+    Mode A agents now know the full mutation surface, not just
+    the legacy wrapper-prompt slot.
+  - **Test invariants** — 17 new tests in
+    ``tests/test_self_improving_minimal_2.py`` pin every item
+    above (None-default reads, allow-list absence,
+    per-component fallback_to_payg absence, role_contract
+    absence, ``source`` enum + ``--use-oauth`` argv translator,
+    ``current_policies`` field + 5-kind population + LLM-prompt
+    surface, ``MUTATION_AUDIT_LOG_PATH`` location + re-export,
+    fallback-prompt drift anchors, program.md 5-kind table).
+
+  **Prior tests updated**:
+  - ``test_autoresearch_defaults_match_train_module`` — asserts
+    None defaults for target_model / judge_model + ``source ==
+    "auto"`` + no ``fallback_to_payg`` attr.
+  - ``test_load_reads_autoresearch_subsection`` — checks
+    ``source`` default instead of ``use_oauth``.
+  - ``test_bindings_dataclass_round_trip`` — drops
+    ``fallback_to_payg`` from the bindings construction call.
+  - ``test_mutator_config_exists_with_default_model`` — asserts
+    None default + absence of allow_list / role_contract /
+    fallback_to_payg.
+  - ``test_self_improving_loop_config_carries_mutator_section``
+    — asserts None default for mutator.default_model.
+  - ``test_runner_default_llm_call_consumes_source`` (renamed
+    from ``_consumes_source_and_role_contract``) — narrowed to
+    just ``source`` since ``role_contract`` is gone.
+  - ``test_program_md_example_log_matches_train_module_constants``
+    (renamed from ``_matches_config_defaults``) — compares
+    against ``train.TARGET_MODEL`` / ``JUDGE_MODEL`` module
+    constants since the config dataclass defaults are now None.
+  - ``test_runner_run_once_end_to_end`` — checks the new
+    ``"Current policy SoT"`` header instead of the legacy
+    ``"WRAPPER_PROMPT_SECTIONS"``.
+  - ``test_mutator_config_validator_rejects_default_outside_allowed``
+    + ``test_mutator_default_model_inherits_settings`` — old
+    validator-rejection test replaced with the new G1a
+    inherit-path pin (the validator was tied to the removed
+    allow-list).
+
 ### Added
 
 - **PR-MINIMAL-1 — `/self-improving history` + `/rollback` wired to git delegation; DONT-table guard codification; design doc cleanup.**

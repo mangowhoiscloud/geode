@@ -64,6 +64,22 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Modify `train.py`'s `WRAPPER_PROMPT_SECTIONS` dict. The system
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
+- Mutate any of the **5 policy SoT files** at
+  `autoresearch/state/policies/` (PR-MINIMAL-2, 2026-05-21):
+
+  | `target_kind`  | File                            | What it controls                     |
+  |----------------|---------------------------------|--------------------------------------|
+  | `prompt`       | `wrapper-sections.json`         | Wrapper prompt section text (legacy) |
+  | `tool_policy`  | `tool-policy.json`              | Tool selection priority + permissions |
+  | `decomposition`| `decomposition.json`            | Task decomposition heuristics         |
+  | `retrieval`    | `retrieval.json`                | Retrieval (RAG / memory) policies     |
+  | `reflection`   | `reflection.json`               | Self-reflection gate parameters       |
+
+  Each file is a `dict[str, str]` (same schema as wrapper-sections so
+  one editing pattern works across all 5). The Mode B runner
+  (`SelfImprovingLoopRunner`) dispatches by `Mutation.target_kind`
+  to the matching file; Mode A agents can edit any of the 5 directly
+  via `git`-tracked JSON.
 - Tune hyperparameters on `train.py`: `BUDGET_MINUTES`, `JUDGE_MODEL`,
   `TARGET_MODEL`, etc. Change **one at a time** so the fitness delta
   is attributable.

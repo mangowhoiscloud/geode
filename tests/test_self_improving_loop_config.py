@@ -39,17 +39,25 @@ def test_default_config_has_safe_defaults() -> None:
 
 
 def test_autoresearch_defaults_match_train_module() -> None:
-    """Defaults mirror the existing autoresearch/train.py module constants."""
+    """Defaults mirror the existing autoresearch/train.py module constants.
+
+    PR-MINIMAL-2 (2026-05-21) — three semantic changes:
+    - ``target_model`` / ``judge_model`` defaults flipped to ``None``
+      (G1a: inherit ``Settings.model`` when unset).
+    - ``use_oauth: bool = True`` → ``source: Source = "auto"`` (B1).
+    - ``fallback_to_payg`` per-component override removed (C2).
+    """
     a = AutoresearchConfig()
     assert a.budget_minutes == 5
-    assert a.target_model == "geode/gpt-5.5"
-    assert a.judge_model == "claude-code/opus"
-    assert a.use_oauth is True
+    assert a.target_model is None  # G1a inherit
+    assert a.judge_model is None  # G1a inherit
+    assert a.source == "auto"  # B1
     assert a.seed_limit == 10
     assert a.seed_select == "plugins/petri_audit/seeds"
     assert a.dim_set == "5axes"
     assert a.max_turns == 10
-    assert a.fallback_to_payg is None
+    # PR-MINIMAL-2: per-component fallback_to_payg removed
+    assert not hasattr(a, "fallback_to_payg")
 
 
 def test_load_returns_defaults_when_file_missing(tmp_path: Path) -> None:
@@ -102,8 +110,9 @@ seed_limit = 25
     assert cfg.autoresearch.judge_model == "claude-code/sonnet"
     assert cfg.autoresearch.budget_minutes == 10
     assert cfg.autoresearch.seed_limit == 25
-    # Untouched fields keep defaults.
-    assert cfg.autoresearch.use_oauth is True
+    # PR-MINIMAL-2 — untouched ``source`` field keeps its default
+    # (was ``use_oauth: bool = True``; now ``source: Source = "auto"``).
+    assert cfg.autoresearch.source == "auto"
 
 
 def test_load_reads_petri_role_bindings(tmp_path: Path) -> None:
@@ -244,11 +253,15 @@ def test_explicit_path_arg_wins_over_env(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_bindings_dataclass_round_trip() -> None:
-    """SelfImprovingLoopBindings serialises both ways without loss."""
-    b = SelfImprovingLoopBindings(model="x", source="claude-cli", fallback_to_payg=True)
+    """SelfImprovingLoopBindings serialises both ways without loss.
+
+    PR-MINIMAL-2 (2026-05-21) — per-component ``fallback_to_payg``
+    override removed (C2). Only the global flag survives at
+    ``[self_improving_loop] fallback_to_payg``."""
+    b = SelfImprovingLoopBindings(model="x", source="claude-cli")
     assert b.model == "x"
     assert b.source == "claude-cli"
-    assert b.fallback_to_payg is True
+    assert not hasattr(b, "fallback_to_payg")
 
 
 def test_petri_role_default_source_is_auto() -> None:

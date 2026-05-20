@@ -389,10 +389,17 @@ def _render_preflight(flags: dict[str, Any]) -> None:
     mutator_model: str = "?"
     mutator_source: str = "?"
     try:
+        from core.config import settings
         from core.config.self_improving_loop import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
-        mutator_model = cfg.mutator.default_model
+        # PR-MINIMAL-2 (2026-05-21) — G1a inherit: when
+        # MutatorConfig.default_model is None (the new default), fall
+        # back to Settings.model so the pre-flight display reflects
+        # what the runner will actually invoke. Explicit override
+        # (operator set ``[self_improving_loop.mutator] default_model``
+        # in config.toml) still wins.
+        mutator_model = cfg.mutator.default_model or settings.model
         mutator_source = cfg.mutator.source
     except Exception:
         # Best-effort UI: missing config falls through to the "?" placeholders.

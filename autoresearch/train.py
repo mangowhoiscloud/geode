@@ -109,9 +109,19 @@ except ImportError:
 # operator-overridable without code changes.
 
 BUDGET_MINUTES = 5
+# PR-MINIMAL-2 (2026-05-21) — target/judge module-constant fallbacks
+# stay literal so the agent (per ``program.md``) can grep + edit them
+# in this file. The pydantic ``AutoresearchConfig`` now defaults to
+# ``None`` for both (inherit ``Settings.model``); these literals come
+# into play only when the config layer hasn't been loaded yet.
 TARGET_MODEL = "geode/gpt-5.5"
 JUDGE_MODEL = "claude-code/opus"
-USE_OAUTH = True
+# PR-MINIMAL-2 — ``USE_OAUTH: bool`` replaced by ``SOURCE: str``
+# (one of "auto" / "api_key" / "claude-cli" / "openai-codex") to
+# match ``MutatorConfig.source`` / ``PetriRoleConfig.source`` shape.
+# ``_build_audit_command`` adds ``--use-oauth`` iff SOURCE is not
+# ``api_key``.
+SOURCE = "auto"
 SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"
 """Default seed pool — hierarchical tree (post-PR-0). P0b adds the
@@ -150,12 +160,34 @@ def _get_autoresearch_config() -> Any:
             budget_minutes=BUDGET_MINUTES,
             target_model=TARGET_MODEL,
             judge_model=JUDGE_MODEL,
-            use_oauth=USE_OAUTH,
+            source=SOURCE,
             seed_limit=SEED_LIMIT,
             seed_select=SEED_SELECT,
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
+
+
+def _settings_model() -> str:
+    """Return ``Settings.model`` for G1a inherit, or the module-constant
+    ``TARGET_MODEL`` fallback if ``core.config`` is unimportable.
+
+    PR-MINIMAL-2 (2026-05-21) — when ``AutoresearchConfig.target_model``
+    / ``judge_model`` is ``None`` (the new default), the argv builder
+    falls back through this resolver so the GEODE primary
+    ``Settings.model`` drives the audit subprocess. Operator sets
+    ``Settings.model`` once (or via ``/model``) and both audit roles
+    follow.
+    """
+    try:
+        from core.config import settings
+
+        return settings.model
+    except Exception:
+        # Same defensive fallback as ``_get_autoresearch_config`` —
+        # tests / unusual environments without core.config still
+        # import autoresearch.train cleanly.
+        return TARGET_MODEL
 
 
 def _resolve_seed_select() -> str:
@@ -465,15 +497,27 @@ def _build_audit_command() -> list[str]:
     :func:`_get_autoresearch_config` so operators can override via
     ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]`` without
     editing this file.
+
+    PR-MINIMAL-2 (2026-05-21) — two semantics:
+
+    1. ``cfg.target_model`` / ``cfg.judge_model`` of ``None`` resolves
+       to ``Settings.model`` (G1a inherit). Operator's ``/model``
+       choice flows through both audit roles automatically.
+    2. ``cfg.source`` (formerly ``cfg.use_oauth: bool``) maps to the
+       ``--use-oauth`` flag: any source except ``"api_key"`` enables
+       OAuth (auto / claude-cli / openai-codex all use subscription
+       credentials). ``api_key`` explicitly opts into PAYG.
     """
     cfg = _get_autoresearch_config()
+    target_model = cfg.target_model or _settings_model()
+    judge_model = cfg.judge_model or _settings_model()
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
     argv += [
         "--target",
-        cfg.target_model,
+        target_model,
         "--judge",
-        cfg.judge_model,
+        judge_model,
         "--seed-select",
         _resolve_seed_select(),
         "--seeds",
@@ -485,7 +529,7 @@ def _build_audit_command() -> list[str]:
         "--live",
         "--yes",
     ]
-    if cfg.use_oauth:
+    if getattr(cfg, "source", "auto") != "api_key":
         argv.append("--use-oauth")
     return argv
 
@@ -913,8 +957,8 @@ def print_summary(
     cfg = _get_autoresearch_config()
     print(f"seed_count:               {cfg.seed_limit}")
     print(f"dim_count:                {len(AXIS_TIERS)}")
-    print(f"target_model:             {cfg.target_model}")
-    print(f"judge_model:              {cfg.judge_model}")
+    print(f"target_model:             {cfg.target_model or _settings_model()}")
+    print(f"judge_model:              {cfg.judge_model or _settings_model()}")
     print(f"budget_minutes:           {cfg.budget_minutes}")
     print(f"wrapper_override_active:  {str(WRAPPER_OVERRIDE_HOOK_READY).lower()}")
     print(f"section_count:            {len(WRAPPER_PROMPT_SECTIONS)}")
@@ -1154,13 +1198,13 @@ def main() -> int:
         gen_tag,
         "config_snapshot",
         payload={
-            "target_model": cfg.target_model,
-            "judge_model": cfg.judge_model,
+            "target_model": cfg.target_model or _settings_model(),
+            "judge_model": cfg.judge_model or _settings_model(),
             "budget_minutes": cfg.budget_minutes,
             "seed_limit": cfg.seed_limit,
             "dim_set": cfg.dim_set,
             "max_turns": cfg.max_turns,
-            "use_oauth": cfg.use_oauth,
+            "source": getattr(cfg, "source", "auto"),
         },
     )
 

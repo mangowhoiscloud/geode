@@ -91,6 +91,14 @@ GLOBAL_TOOL_POLICY_SOT = GLOBAL_POLICIES_DIR / "tool-policy.json"
 GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_POLICIES_DIR / "decomposition.json"
 GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_POLICIES_DIR / "retrieval.json"
 GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_POLICIES_DIR / "reflection.json"
+# PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
+# applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
+# so the git-as-optimiser ledger and the current-state files are
+# co-located. Previously declared in
+# ``core/self_improving_loop/runner.py``; moved here for consistency
+# with the other path constants. The runner re-exports the constant
+# for backwards compat with existing callers.
+MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per

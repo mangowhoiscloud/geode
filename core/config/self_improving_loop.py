@@ -64,14 +64,19 @@ Source = Literal["claude-cli", "openai-codex", "api_key", "auto"]
 
 
 class SelfImprovingLoopBindings(BaseModel):
-    """Generic per-role binding (model + source + optional fallback override)."""
+    """Generic per-role binding (model + source).
+
+    PR-MINIMAL-2 (2026-05-21) — ``fallback_to_payg`` per-component
+    override removed; only the global flag at
+    ``[self_improving_loop] fallback_to_payg`` survives. Pre-PR the
+    per-component override had no downstream consumer, just config
+    surface noise.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     model: str
     source: Source
-    fallback_to_payg: bool | None = None
-    """``None`` → inherit ``[self_improving_loop] fallback_to_payg``."""
 
 
 class PetriRoleConfig(BaseModel):
@@ -88,88 +93,82 @@ class PetriRoleConfig(BaseModel):
 
     model: str = ""
     source: Source = "auto"
-    fallback_to_payg: bool | None = None
 
 
 class AutoresearchConfig(BaseModel):
-    """autoresearch/train.py runtime knobs."""
+    """autoresearch/train.py runtime knobs.
+
+    PR-MINIMAL-2 (2026-05-21) — three changes:
+
+    1. ``target_model`` / ``judge_model`` defaults flipped to ``None``
+       so they inherit ``Settings.model`` when unset. Operator edits
+       ``Settings.model`` (or ``/model``) in one place; both audit
+       roles follow. Explicit override still wins.
+    2. ``use_oauth: bool`` → ``source: Source`` (4-enum: auto / api_key
+       / claude-cli / openai-codex). Aligns shape with ``MutatorConfig.source``
+       and ``PetriRoleConfig.source`` — one credential vocabulary across
+       the loop instead of a bool here + Literal elsewhere.
+    3. ``fallback_to_payg`` per-component override removed; the global
+       flag at ``[self_improving_loop] fallback_to_payg`` survives.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
-    target_model: str = "geode/gpt-5.5"
-    judge_model: str = "claude-code/opus"
-    use_oauth: bool = True
+    target_model: str | None = None
+    """``None`` → inherit ``Settings.model``. Operator sets this only
+    when the autoresearch audit target must differ from the GEODE
+    primary (e.g. cross-model alignment audit)."""
+    judge_model: str | None = None
+    """``None`` → inherit ``Settings.model``. Operator sets this only
+    when the audit judge must differ from the GEODE primary."""
+    source: Source = "auto"
+    """Credential source for the audit subprocess. ``auto`` =
+    subscription-first with PAYG fallback per the global
+    ``fallback_to_payg`` flag. The argv translator maps non-``api_key``
+    sources to ``--use-oauth`` for the audit subprocess."""
     seed_limit: Annotated[int, Field(ge=1, le=1000)] = 10
     seed_select: str = "plugins/petri_audit/seeds"
     dim_set: str = "5axes"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
-    fallback_to_payg: bool | None = None
 
 
 class MutatorConfig(BaseModel):
     """Mutator-role binding for ``core/self_improving_loop/runner.py``.
 
-    PR-1 G-A — pre-fix the runner instantiated ``anthropic.Anthropic()``
-    directly and pinned ``model="claude-opus-4-7"`` as a literal, so
-    every self-improving loop mutation was bound to one provider and
-    one model regardless of operator intent. The new manifest section
-    follows the same shape as ``[seed_generation.role.<X>]`` and
-    ``[petri.role.<X>]`` — default model + allowed model set + optional
-    role contract — so the mutator is a first-class role in the
-    paperclip-style abstraction.
+    PR-1 G-A introduced this so the mutator was a first-class role
+    alongside ``[seed_generation.role.<X>]`` and ``[petri.role.<X>]``.
 
-    Field semantics (each one is *consumed* by the runner; see test
-    invariants in ``tests/test_self_improving_loop_gap_fill.py``):
+    PR-MINIMAL-2 (2026-05-21) — three trimmings:
 
-    - ``default_model`` — primary model id the runner sends to the
-      router dispatcher.
-    - ``allowed_models`` — allow-list pinned by a pydantic validator
-      *and* by a runtime check inside ``_default_llm_call`` (fails
-      closed if the default drifts outside the list).
-    - ``source`` — mirrors the petri source resolver enum
-      (``auto`` / ``api_key`` / ``claude-cli`` / ``openai-codex``).
-      Stored on the resolved adapter so the runner's credential
-      selection records the operator's intent in telemetry, even
-      though the rotator currently consumes the same enum implicitly
-      via ``[petri.source.<provider>]``.
-    - ``role_contract`` — path (repo-relative) to the mutator's
-      operator-facing contract document. Surfaced by ``/petri`` /
-      ``/login`` views so the operator can grep the contract before
-      flipping the model.
-    - ``max_tokens`` — passed through to ``adapter.agentic_call``.
+    1. ``default_model`` default flipped to ``None`` so it inherits
+       ``Settings.model`` when unset (G1a). Operator's ``/model`` choice
+       follows automatically; explicit override still wins.
+    2. ``allowed_models`` allow-list deleted. The pre-PR validator's
+       motivation (PR-1 G-A's *direct* ``anthropic.Anthropic()`` call
+       drift) is now obsolete since the runner dispatches through
+       ``core.llm.router.call_with_failover``; the router already
+       guards model existence per provider. Removing the list also
+       removes the matching ``_default_in_allowed`` pydantic validator.
+    3. ``role_contract`` field deleted — was logged in telemetry but
+       never injected into the system prompt (operator-facing docs
+       only). The file ``.claude/agents/self_improving_loop_mutator.md``
+       still exists as operator reference; the config field that
+       pointed at it added noise without operational effect.
+    4. ``fallback_to_payg`` per-component override removed (use global).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    default_model: str = "claude-opus-4-7"
-    allowed_models: list[str] = Field(
-        default_factory=lambda: [
-            "claude-opus-4-7",
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5-20251001",
-            "gpt-5.5",
-            "gpt-5.4",
-        ]
-    )
+    default_model: str | None = None
+    """``None`` → inherit ``Settings.model``. Operator sets this only
+    when the mutator LLM must differ from the GEODE primary (e.g.
+    use a smaller model to keep mutation cost down)."""
     source: Literal["auto", "api_key", "claude-cli", "openai-codex"] = "auto"
-    role_contract: str = ".claude/agents/self_improving_loop_mutator.md"
+    """Mirrors :data:`Source`. The router's credential rotator
+    consumes the same enum implicitly via ``[petri.source.<provider>]``."""
     max_tokens: Annotated[int, Field(ge=128, le=200_000)] = 1024
-    fallback_to_payg: bool | None = None
-
-    @model_validator(mode="after")
-    def _default_in_allowed(self) -> MutatorConfig:
-        """Allow-list invariant — ``default_model`` must appear in
-        ``allowed_models`` (matches the petri / seed_generation manifest
-        contract). Pre-validator drift would let an operator set a
-        ``default_model`` that the runtime guard then rejects, which is
-        confusing — fail at load time with the same message."""
-        if self.allowed_models and self.default_model not in self.allowed_models:
-            raise ValueError(
-                f"MutatorConfig.default_model={self.default_model!r} not in "
-                f"allowed_models={self.allowed_models!r}"
-            )
-        return self
+    """Passed through to ``adapter.agentic_call``."""
 
 
 class SeedGenerationConfig(BaseModel):
@@ -177,6 +176,9 @@ class SeedGenerationConfig(BaseModel):
 
     Per-role bindings live under ``[self_improving_loop.seed_generation.role.<X>]``
     and are loaded into :attr:`roles`.
+
+    PR-MINIMAL-2 (2026-05-21) — ``fallback_to_payg`` per-component
+    override removed; only the global flag survives.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -184,7 +186,6 @@ class SeedGenerationConfig(BaseModel):
     candidates_default: Annotated[int, Field(ge=1, le=100)] = 15
     default_gen_tag: str = "gen1"
     roles: dict[str, SelfImprovingLoopBindings] = Field(default_factory=dict)
-    fallback_to_payg: bool | None = None
 
 
 class SelfImprovingLoopConfig(BaseModel):

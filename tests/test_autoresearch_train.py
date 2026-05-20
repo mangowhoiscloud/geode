@@ -109,7 +109,7 @@ def test_get_autoresearch_config_returns_config_object() -> None:
         "budget_minutes",
         "target_model",
         "judge_model",
-        "use_oauth",
+        "source",
         "seed_limit",
         "seed_select",
         "dim_set",
@@ -121,8 +121,11 @@ def test_get_autoresearch_config_returns_config_object() -> None:
 def test_get_autoresearch_config_defaults_match_module_constants() -> None:
     """No-op behaviour change — unconfigured loader matches module constants.
 
-    Verified by tests/test_self_improving_loop_config.py at the schema layer; this
-    test asserts the consumer side stays in sync.
+    PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH`` module constant replaced
+    by ``SOURCE``. ``target_model`` / ``judge_model`` AutoresearchConfig
+    defaults flipped to ``None`` (G1a), but the train module constants
+    still carry literal defaults for the SimpleNamespace fallback path
+    when ``core.config`` is unimportable.
     """
     from autoresearch.train import (
         BUDGET_MINUTES,
@@ -131,16 +134,21 @@ def test_get_autoresearch_config_defaults_match_module_constants() -> None:
         MAX_TURNS,
         SEED_LIMIT,
         SEED_SELECT,
+        SOURCE,
         TARGET_MODEL,
-        USE_OAUTH,
         _get_autoresearch_config,
     )
+    from core.config.self_improving_loop import AutoresearchConfig
 
     cfg = _get_autoresearch_config()
-    assert cfg.budget_minutes == BUDGET_MINUTES
-    assert cfg.target_model == TARGET_MODEL
-    assert cfg.judge_model == JUDGE_MODEL
-    assert cfg.use_oauth == USE_OAUTH
+    expected = AutoresearchConfig()
+    assert cfg.budget_minutes == BUDGET_MINUTES == expected.budget_minutes
+    # G1a: AutoresearchConfig defaults to None, but the SimpleNamespace
+    # fallback (used when core.config can't be imported) carries the
+    # train module-constant literals. Either path is valid — accept both.
+    assert cfg.target_model in (TARGET_MODEL, None)
+    assert cfg.judge_model in (JUDGE_MODEL, None)
+    assert cfg.source == SOURCE
     assert cfg.seed_limit == SEED_LIMIT
     assert cfg.seed_select == SEED_SELECT
     assert cfg.dim_set == DIM_SET_NAME
@@ -148,7 +156,13 @@ def test_get_autoresearch_config_defaults_match_module_constants() -> None:
 
 
 def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Monkeypatching _get_autoresearch_config flows through to argv."""
+    """Monkeypatching _get_autoresearch_config flows through to argv.
+
+    PR-MINIMAL-2 (2026-05-21) — ``use_oauth: bool`` replaced by
+    ``source: Source`` (B1). ``source == "api_key"`` is the only
+    value that suppresses ``--use-oauth``; any other source enables
+    it (subscription credential).
+    """
     from types import SimpleNamespace
 
     monkeypatch.setattr(
@@ -158,7 +172,7 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
             budget_minutes=10,
             target_model="geode/claude-opus-4-7",
             judge_model="claude-code/sonnet",
-            use_oauth=False,
+            source="api_key",
             seed_limit=25,
             seed_select="plugins/petri_audit/seeds_safe10",
             dim_set="legacy",
@@ -172,7 +186,7 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
     assert "25" in argv
     assert "legacy" in argv
     assert "20" in argv
-    # use_oauth=False → no --use-oauth flag.
+    # source == "api_key" → no --use-oauth flag.
     assert "--use-oauth" not in argv
 
 
@@ -1220,6 +1234,9 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     # Spot-check payload keys are the documented event-scoped context.
     by_event = {r["event"]: r["payload"] for r in rows}
     assert set(by_event["audit_started"].keys()) == {"dry_run"}
+    # PR-MINIMAL-2 (2026-05-21) — ``use_oauth`` key renamed to
+    # ``source`` (B1: AutoresearchConfig.use_oauth: bool →
+    # AutoresearchConfig.source: Source enum).
     assert set(by_event["config_snapshot"].keys()) == {
         "target_model",
         "judge_model",
@@ -1227,7 +1244,7 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         "seed_limit",
         "dim_set",
         "max_turns",
-        "use_oauth",
+        "source",
     }
     assert set(by_event["wrapper_override_dumped"].keys()) == {"path"}
     assert set(by_event["baseline_decision"].keys()) == {
