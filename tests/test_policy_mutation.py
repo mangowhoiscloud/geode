@@ -346,6 +346,127 @@ def test_apply_mutation_preserves_previous_value(
 # ---------------------------------------------------------------------------
 
 
+def test_run_once_loads_target_kind_policy_not_wrapper_sections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex MCP review #1 (HIGH) catch — run_once used to always pass
+    ``ctx.current_sections`` (wrapper-prompt sections) into
+    apply_mutation, which would write wrapper-prompt content into the
+    wrong SoT for non-prompt target_kinds. Pin that run_once now
+    loads the correct policy via ``load_policy(mutation.target_kind)``."""
+    from autoresearch import train as _train
+    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    # Redirect tool_policy SoT to a tmp path so the test never touches
+    # ~/.geode/. Pre-populate with one entry to confirm load_policy is
+    # invoked (and ctx.current_sections is NOT used).
+    tool_path = tmp_path / "tool-policy.json"
+    _redirect_kind(monkeypatch, "tool_policy", tool_path)
+    write_policy("tool_policy", {"existing": "from_policy_file"})
+
+    # Stub the LLM call to return a tool_policy mutation.
+    monkeypatch.setattr(
+        SelfImprovingLoopRunner,
+        "_invoke_autoresearch",
+        lambda self, _root: None,
+    )
+    runner_llm = (
+        '{"target_section": "new_tool",'
+        ' "new_value": "use bash before read",'
+        ' "rationale": "r",'
+        ' "target_kind": "tool_policy"}'
+    )
+
+    # Stub build_runner_context so the test doesn't depend on a real
+    # baseline / wrapper-sections file.
+    from core.self_improving_loop.runner import RunnerContext
+
+    from core.self_improving_loop import runner as _runner_mod
+
+    monkeypatch.setattr(
+        _runner_mod,
+        "build_runner_context",
+        lambda: RunnerContext(current_sections={"wrapper_only": "WRAPPER CONTENTS"}),
+    )
+
+    # Stub the legacy writer so the test never touches the real
+    # wrapper-sections SoT.
+    monkeypatch.setattr(_train, "write_wrapper_prompt_sections", lambda _s: None)
+
+    audit_path = tmp_path / "mutations.jsonl"
+    runner = SelfImprovingLoopRunner(
+        llm_call=lambda _sys, _user: runner_llm,
+        audit_log_path=audit_path,
+    )
+    runner.run_once()
+
+    # After run_once with target_kind="tool_policy", the tool-policy
+    # SoT should have the original entry PLUS the new mutation, and
+    # the wrapper-sections-only "wrapper_only" key must NOT appear in
+    # the tool-policy file (which would prove the dispatcher bug
+    # Codex caught).
+    on_disk = json.loads(tool_path.read_text(encoding="utf-8"))
+    assert on_disk == {"existing": "from_policy_file", "new_tool": "use bash before read"}
+    assert "wrapper_only" not in on_disk
+
+
+def test_rollback_sot_dispatches_on_target_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex MCP review #1 (HIGH) catch — _rollback_sot used to always
+    call write_wrapper_prompt_sections, which for non-prompt mutations
+    would restore the wrong destination. Pin that rollback now
+    dispatches by target_kind."""
+    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    tool_path = tmp_path / "tool-policy.json"
+    _redirect_kind(monkeypatch, "tool_policy", tool_path)
+
+    # Initial state on disk
+    write_policy("tool_policy", {"baseline": "orig"})
+
+    # Simulate _rollback_sot directly
+    mutation = Mutation(
+        target_section="x",
+        new_value="y",
+        rationale="r",
+        target_kind="tool_policy",
+    )
+    SelfImprovingLoopRunner._rollback_sot(
+        {"baseline": "restored"}, mutation=mutation, exc=OSError("simulated")
+    )
+
+    # tool-policy.json should now reflect the *rollback* dict, NOT the
+    # original on-disk state, AND the legacy wrapper-sections writer
+    # must not have been touched.
+    on_disk = json.loads(tool_path.read_text(encoding="utf-8"))
+    assert on_disk == {"baseline": "restored"}
+
+
+def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin that the prompt branch still routes through
+    autoresearch.train.write_wrapper_prompt_sections — schema
+    enforcement (single-paragraph 600-char cap) must survive PR-6."""
+    from autoresearch import train as _train
+    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    written: list[dict[str, str]] = []
+    monkeypatch.setattr(_train, "write_wrapper_prompt_sections", lambda s: written.append(dict(s)))
+
+    mutation = Mutation(
+        target_section="role",
+        new_value="ship",
+        rationale="r",
+        target_kind="prompt",
+    )
+    SelfImprovingLoopRunner._rollback_sot(
+        {"role": "original"}, mutation=mutation, exc=OSError("simulated")
+    )
+    assert written == [{"role": "original"}]
+
+
 def test_global_policy_paths_under_self_improving_loop_dir() -> None:
     """All 5 SoT paths live under the same dir as wrapper-sections —
     operators expect them co-located."""

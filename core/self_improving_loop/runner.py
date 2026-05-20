@@ -244,9 +244,15 @@ _MUTATION_CONTRACT_SUFFIX = (
     "For THIS invocation, ignore the broader autoresearch loop instructions "
     "in program.md and act as a single-shot mutator with these constraints:\n"
     "\n"
-    "- Change exactly ONE section of WRAPPER_PROMPT_SECTIONS. Adding a new "
-    "section key counts as a change; deleting does NOT (the runner ignores "
-    "deletions).\n"
+    "- Change exactly ONE section of the chosen policy SoT (the dict "
+    "selected by ``target_kind`` — defaults to WRAPPER_PROMPT_SECTIONS "
+    "when omitted). Adding a new section key counts as a change; "
+    "deleting does NOT (the runner ignores deletions).\n"
+    '- Default to ``target_kind = "prompt"`` unless the regression '
+    "evidence specifically points at tool / decomposition / retrieval / "
+    "reflection policy. The current user message only shows wrapper-"
+    "prompt sections; non-prompt SoTs start empty until populated, so "
+    "explicit operator signal should drive non-prompt mutations.\n"
     "- ``new_value`` must be a non-empty single-paragraph string under 600 "
     "characters.\n"
     "- ``rationale`` must cite the specific regression evidence or "
@@ -766,13 +772,25 @@ class SelfImprovingLoopRunner:
         the caller can decide whether to retry.
         """
         ctx = build_runner_context()
-        original_sections = dict(ctx.current_sections)
         user_prompt = _build_user_prompt(ctx)
         raw_response = self.llm_call(_build_system_prompt(), user_prompt)
         mutation = parse_mutation(raw_response)
-        _new_sections, previous_value = apply_mutation(
-            mutation, current_sections=ctx.current_sections
-        )
+        # PR-6 C-5 (Codex MCP catch) — apply_mutation dispatches by
+        # target_kind, but ctx.current_sections is *always* the wrapper-
+        # prompt sections (built by build_runner_context). Passing those
+        # into a non-prompt apply would write wrapper-prompt contents
+        # into the wrong SoT file. Load the *correct* starting policy
+        # based on the parsed mutation's kind so the dispatcher writes
+        # the right destination. ``original_sections`` is captured AFTER
+        # the kind-aware load so rollback restores the matching SoT.
+        from core.self_improving_loop.policies import load_policy
+
+        if mutation.target_kind == "prompt":
+            target_sections = dict(ctx.current_sections)
+        else:
+            target_sections = load_policy(mutation.target_kind)
+        original_sections = dict(target_sections)
+        _new_sections, previous_value = apply_mutation(mutation, current_sections=target_sections)
         # G5b.fix3 (2026-05-20) — atomicity boundary: if the audit log
         # write fails after the SoT mutation lands, the in-disk state is
         # silently divergent (SoT advanced, history missing). Roll the
@@ -817,15 +835,27 @@ class SelfImprovingLoopRunner:
         Rollback failure is itself logged but never raised in place of
         the original ``exc`` — the caller already has the more useful
         signal (audit-log write failed).
+
+        PR-6 C-5 (Codex MCP catch) — rollback dispatches on
+        ``mutation.target_kind``. The prompt kind still writes through
+        ``autoresearch.train.write_wrapper_prompt_sections`` (legacy
+        schema enforcement); the four policy kinds go through
+        ``write_policy`` so the right SoT is restored.
         """
         try:
-            from autoresearch.train import write_wrapper_prompt_sections
+            if mutation.target_kind == "prompt":
+                from autoresearch.train import write_wrapper_prompt_sections
 
-            write_wrapper_prompt_sections(original_sections)
+                write_wrapper_prompt_sections(original_sections)
+            else:
+                from core.self_improving_loop.policies import write_policy
+
+                write_policy(mutation.target_kind, original_sections)
             log.error(
                 "self-improving-loop runner: audit-log write failed (%s); "
-                "SoT rolled back to pre-mutation state for section %r",
+                "SoT rolled back to pre-mutation state for kind %r section %r",
                 exc,
+                mutation.target_kind,
                 mutation.target_section,
             )
         except Exception:  # pragma: no cover — defensive
