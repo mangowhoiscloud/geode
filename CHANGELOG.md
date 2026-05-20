@@ -47,6 +47,47 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-OPS-1 — self-improving loop operator-facing surface (slash
+  `status` + design doc + frontmatter parity fix).** First slice of
+  the multi-PR self-improving-loop UX foundation. Pre-PR the closed
+  loop (co-scientist → Petri → autoresearch → mutator LLM → SoT
+  write) was fully wired in code but had zero operator entry point;
+  running it required ``python -c "from core.self_improving_loop
+  import SelfImprovingLoopRunner; …"``. PR-OPS-1 ships: (1) a new
+  ``docs/plans/2026-05-21-self-improving-loop-ux.md`` design doc
+  capturing the full inventory (35+ knobs across 5 components), the
+  3-tier UX hierarchy, the 7-profile preset bundle, the slash/NL
+  surfaces, the Mode A (Karpathy idiom — external agent reads
+  ``program.md``) vs Mode B (programmatic ``SelfImprovingLoopRunner``
+  single-call) distinction, and the 4-stage pipeline diagram
+  (seed-gen / mutate / measure / aggregate) with Petri promoted to a
+  first-class stage; (2) ``/self-improving`` slash (alias ``/sil``)
+  registered as a THIN ``CommandSpec`` with a ``status`` sub-action
+  that renders current baseline (fitness + promote_reason + ts)
+  plus the last 5 mutation audit rows — tolerant of missing/
+  malformed files so a fresh clone can call it without raising;
+  reserved sub-actions (``run``/``history``/``rollback``/``config``)
+  print a design-doc pointer for PR-OPS-2/3; (3) the seed_generator
+  agent contract (``.claude/agents/seed_generator.md``) amended to
+  require BOTH the co-scientist canonical ``target_dims`` field AND
+  a Petri-compatible ``tags: [<target_dim>, "geode_specific"]`` list
+  so downstream consumers reading either schema (Petri's
+  ``<tier>/<dim>/01_base.md`` shape uses ``tags``, co-scientist's
+  flat-dir survivors used ``target_dims`` only) keep dim attribution
+  intact when a mixed pool flows through ``flatten_for_inspect_petri``;
+  the per-spawn description prompt in
+  ``plugins/seed_generation/agents/generator.py`` mirrors the
+  contract reminder. 17 invariant tests pin the registry wiring
+  (``COMMAND_REGISTRY`` + ``COMMAND_MAP`` + dispatcher route +
+  ``/sil`` alias), the status sub-action output (baseline block +
+  mutations block + applied/rejected/rolled_back colourisation),
+  malformed-input tolerance (truncated JSON / partial JSONL row),
+  the reserved-action design-doc hint, the unknown-action help, and
+  the frontmatter schema parity (contract grep + generator source
+  grep for ``tags`` + ``geode_specific``).
+
 ### Changed
 
 - **Sub-agent lineage — subprocess WorkerRequest threading.** Closes

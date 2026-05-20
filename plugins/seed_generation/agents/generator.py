@@ -253,8 +253,9 @@ class Generator(BaseSeedAgent):
             f"Write the seed markdown to: {output_path}. "
             f"{pool_hint} "
             "See your system prompt (`seed_generator` AgentDefinition) for "
-            "the full contract — frontmatter fields, body length, realism "
-            "criterion, and forbidden patterns."
+            "the full contract — frontmatter fields (incl. `target_dims` AND "
+            f"`tags: [{state.target_dim!r}, 'geode_specific']` for Petri "
+            "compatibility), body length, realism criterion, and forbidden patterns."
         )
 
 

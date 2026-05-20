@@ -102,6 +102,13 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         description="Seed-pipeline candidate generation (co-scientist 7-role)",
         handler_path="plugins.seed_generation.cli:cmd_audit_seeds_slash",
     ),
+    "/self-improving": CommandSpec(
+        name="/self-improving",
+        aliases=("/sil",),
+        location=RunLocation.THIN,
+        description="Self-improving loop status (PR-OPS-1 — run/history/rollback deferred)",
+        handler_path="core.cli.commands.self_improving:cmd_self_improving",
+    ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.
     # 현재는 cli/__init__.py:_handle_command 가 IPC RPC로 위임 (호환).
