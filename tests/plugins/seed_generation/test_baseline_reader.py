@@ -41,7 +41,8 @@ def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
 
 
 def test_load_baseline_parses_g2_schema(tmp_path: Path) -> None:
-    """Post-G2 schema: dim_means + dim_stderr + evidence rows."""
+    """G2.fix (2026-05-20) — baseline.json's ``evidence`` key is silently
+    ignored. The cache was removed; petri's .eval is the SoT now."""
     state_dir = tmp_path
     baseline_path = state_dir / "baseline.json"
     baseline_path.write_text(
@@ -49,16 +50,7 @@ def test_load_baseline_parses_g2_schema(tmp_path: Path) -> None:
             {
                 "dim_means": {"broken_tool_use": 4.5},
                 "dim_stderr": {"broken_tool_use": 0.4},
-                "evidence": {
-                    "broken_tool_use": [
-                        {
-                            "sample_id": "seed-a",
-                            "value": 7.0,
-                            "explanation": "tool result hallucinated",
-                            "highlights": "- [M9] worst",
-                        }
-                    ]
-                },
+                "evidence": {"broken_tool_use": [{"sample_id": "seed-a", "value": 7.0}]},
             }
         ),
         encoding="utf-8",
@@ -67,11 +59,14 @@ def test_load_baseline_parses_g2_schema(tmp_path: Path) -> None:
     assert snapshot is not None
     assert snapshot.dim_means == {"broken_tool_use": 4.5}
     assert snapshot.dim_stderr == {"broken_tool_use": 0.4}
-    assert snapshot.evidence["broken_tool_use"][0]["sample_id"] == "seed-a"
+    # Snapshot no longer carries an evidence field.
+    assert not hasattr(snapshot, "evidence")
 
 
-def test_load_baseline_filters_garbage_evidence_rows(tmp_path: Path) -> None:
-    """Non-dict rows / non-list dim entries → silently dropped."""
+def test_load_baseline_ignores_evidence_key_regardless_of_shape(tmp_path: Path) -> None:
+    """G2.fix (2026-05-20) — load_baseline ignores ``evidence`` entirely.
+    Even garbage shapes don't affect snapshot construction (no field to
+    populate)."""
     state_dir = tmp_path
     baseline_path = state_dir / "baseline.json"
     baseline_path.write_text(
@@ -79,22 +74,20 @@ def test_load_baseline_filters_garbage_evidence_rows(tmp_path: Path) -> None:
             {
                 "dim_means": {"d": 4.0},
                 "dim_stderr": {"d": 0.3},
-                "evidence": {
-                    "d": [{"sample_id": "ok"}, "garbage", 7],
-                    "bad_dim": "not a list",
-                },
+                "evidence": {"d": [{"sample_id": "ok"}, "garbage", 7], "bad": "x"},
             }
         ),
         encoding="utf-8",
     )
     snapshot = load_baseline(baseline_path)
     assert snapshot is not None
-    assert list(snapshot.evidence.keys()) == ["d"]
-    assert snapshot.evidence["d"] == [{"sample_id": "ok"}]
+    assert snapshot.dim_means == {"d": 4.0}
+    assert not hasattr(snapshot, "evidence")
 
 
 def test_load_baseline_legacy_schema_no_evidence_key(tmp_path: Path) -> None:
-    """Pre-G2 baseline (no evidence key) → empty evidence dict."""
+    """G2.fix (2026-05-20) — pre-G2 baseline (no evidence key) parses cleanly;
+    snapshot carries only dim_means + dim_stderr."""
     state_dir = tmp_path
     baseline_path = state_dir / "baseline.json"
     baseline_path.write_text(
@@ -103,7 +96,8 @@ def test_load_baseline_legacy_schema_no_evidence_key(tmp_path: Path) -> None:
     )
     snapshot = load_baseline(baseline_path)
     assert snapshot is not None
-    assert snapshot.evidence == {}
+    assert snapshot.dim_means == {"d": 3.0}
+    assert snapshot.dim_stderr == {"d": 0.1}
 
 
 # ---------------------------------------------------------------------------
@@ -182,37 +176,90 @@ def test_pick_ignores_info_tier_dims() -> None:
 
 
 def test_format_evidence_empty_when_dim_missing() -> None:
-    snapshot = BaselineSnapshot(dim_means={"d": 4.0}, evidence={"d": []})
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0})
+    # No dim membership → empty block, regardless of archive state.
     assert format_evidence_block(snapshot, "nonexistent") == ""
 
 
-def test_format_evidence_empty_when_no_rows() -> None:
-    snapshot = BaselineSnapshot(dim_means={"d": 4.0}, evidence={"d": []})
-    assert format_evidence_block(snapshot, "d") == ""
+def test_format_evidence_empty_when_no_archive(tmp_path: Path) -> None:
+    """G2.fix (2026-05-20) — when the latest .eval symlink is unreachable,
+    format_evidence_block returns "" instead of raising."""
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0})
+    missing = tmp_path / "absent.eval"
+    assert format_evidence_block(snapshot, "d", eval_path=missing) == ""
 
 
-def test_format_evidence_renders_rows() -> None:
+def _write_fake_eval(monkeypatch: pytest.MonkeyPatch, archive: Path, payload: dict) -> None:
+    """Stub inspect_ai.log.read_eval_log + create a placeholder eval file
+    so extract_evidence sees the archive and our fake samples."""
+    from dataclasses import dataclass
+    from dataclasses import field as dc_field
+    from typing import Any as _Any
+
+    archive.write_bytes(b"placeholder")
+
+    @dataclass
+    class _Score:
+        value: _Any = None
+        explanation: str = ""
+        metadata: dict = dc_field(default_factory=dict)
+
+    @dataclass
+    class _Sample:
+        scores: dict = dc_field(default_factory=dict)
+        id: str = ""
+
+    @dataclass
+    class _Log:
+        samples: list = dc_field(default_factory=list)
+
+    samples = []
+    for row in payload.get("samples", []):
+        scores = {
+            "judge": _Score(
+                value=row.get("scores", {}),
+                explanation=row.get("explanation", ""),
+                metadata={"highlights": row.get("highlights", "")},
+            )
+        }
+        samples.append(_Sample(scores=scores, id=row.get("id", "")))
+    monkeypatch.setattr(
+        "inspect_ai.log.read_eval_log",
+        lambda *_a, **_kw: _Log(samples=samples),
+    )
+
+
+def test_format_evidence_renders_rows_from_latest_eval(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """G2.fix (2026-05-20) — evidence pulled from the petri archive at
+    runtime, not from a cached snapshot field."""
+    pytest.importorskip("inspect_ai.log")
     snapshot = BaselineSnapshot(
-        dim_means={"broken_tool_use": 4.5},
-        dim_stderr={"broken_tool_use": 0.4},
-        evidence={
-            "broken_tool_use": [
+        dim_means={"broken_tool_use": 4.5}, dim_stderr={"broken_tool_use": 0.4}
+    )
+    archive = tmp_path / "latest.eval"
+    _write_fake_eval(
+        monkeypatch,
+        archive,
+        {
+            "samples": [
                 {
-                    "sample_id": "seed-a",
-                    "value": 7.0,
+                    "id": "seed-a",
+                    "scores": {"broken_tool_use": 7.0},
                     "explanation": "tool result hallucinated",
                     "highlights": "- [M9] worst quote",
                 },
                 {
-                    "sample_id": "seed-b",
-                    "value": 5.5,
+                    "id": "seed-b",
+                    "scores": {"broken_tool_use": 5.5},
                     "explanation": "ignored failure",
                     "highlights": "",
                 },
             ]
         },
     )
-    block = format_evidence_block(snapshot, "broken_tool_use", max_rows=2)
+    block = format_evidence_block(snapshot, "broken_tool_use", max_rows=2, eval_path=archive)
     assert "dim: broken_tool_use" in block
     assert "dim_mean: 4.50 (stderr 0.40)" in block
     assert "seed-a" in block
@@ -222,41 +269,46 @@ def test_format_evidence_renders_rows() -> None:
     assert "seed-b" in block
 
 
-def test_format_evidence_caps_max_rows() -> None:
-    snapshot = BaselineSnapshot(
-        dim_means={"d": 4.0},
-        evidence={
-            "d": [
-                {"sample_id": f"seed-{i}", "value": float(10 - i), "explanation": ""}
-                for i in range(5)
-            ]
-        },
+def test_format_evidence_caps_max_rows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("inspect_ai.log")
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0})
+    archive = tmp_path / "latest.eval"
+    _write_fake_eval(
+        monkeypatch,
+        archive,
+        {"samples": [{"id": f"seed-{i}", "scores": {"d": float(10 - i)}} for i in range(5)]},
     )
-    block = format_evidence_block(snapshot, "d", max_rows=2)
-    # Header line says top-2 even though snapshot carries 5 rows.
+    block = format_evidence_block(snapshot, "d", max_rows=2, eval_path=archive)
+    # Header line says top-2 even though archive carries 5 samples.
     assert "top-2 worst samples" in block
-    # seed-0 and seed-1 rendered, seed-2 not.
+    # The two highest-scoring samples are seed-0 (value 10) + seed-1 (value 9).
     assert "seed-0" in block
     assert "seed-1" in block
     assert "seed-2" not in block
 
 
-def test_format_evidence_truncates_long_explanation() -> None:
+def test_format_evidence_truncates_long_explanation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Defensive cap so token-bounded prompts don't blow up on a long explanation."""
-    snapshot = BaselineSnapshot(
-        dim_means={"d": 4.0},
-        evidence={
-            "d": [
+    pytest.importorskip("inspect_ai.log")
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0})
+    archive = tmp_path / "latest.eval"
+    _write_fake_eval(
+        monkeypatch,
+        archive,
+        {
+            "samples": [
                 {
-                    "sample_id": "seed-x",
-                    "value": 9.0,
+                    "id": "seed-x",
+                    "scores": {"d": 9.0},
                     "explanation": "a" * 500,
                     "highlights": "",
                 }
             ]
         },
     )
-    block = format_evidence_block(snapshot, "d", max_rows=1)
+    block = format_evidence_block(snapshot, "d", max_rows=1, eval_path=archive)
     # 240-char cap mentioned in docstring.
     assert "a" * 240 in block
     assert "a" * 241 not in block

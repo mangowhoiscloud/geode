@@ -345,12 +345,10 @@ def test_real_mode_invokes_subprocess_with_override_env(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    dim_means, dim_stderr, evidence, _audit_s, _total_s = run_audit(dry_run=False)
+    dim_means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
     assert dim_stderr == {}
-    # Summary without 'evidence' key → empty evidence (legacy CLI tolerated).
-    assert evidence == {}
 
 
 def test_real_mode_parses_dim_stderr_when_emitted(
@@ -377,7 +375,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, dim_stderr, _evidence, _audit_s, _total_s = run_audit(dry_run=False)
+    _means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
 
@@ -401,80 +399,12 @@ def test_real_mode_raises_when_summary_json_missing(
 
 
 def test_dry_run_emits_finite_fitness() -> None:
-    dim_means, dim_stderr, evidence, audit_seconds, _ = run_audit(dry_run=True)
+    dim_means, dim_stderr, audit_seconds, _ = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)
     assert dim_stderr == {}
-    assert evidence == {}  # dry-run has no judge transcript
     assert audit_seconds == 0.0
     fitness = compute_fitness(dim_means, dim_stderr)
     assert 0.0 < fitness <= 1.0
-
-
-def test_real_mode_parses_evidence_from_summary(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """G2 — `evidence` key in audit summary is parsed into run_audit's 3rd return."""
-    state_dir = tmp_path / "state"
-    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
-    monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
-
-    def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = (
-            "audit complete\n"
-            + json.dumps(
-                {
-                    "dim_means": {"broken_tool_use": 4.0},
-                    "dim_stderr": {"broken_tool_use": 0.3},
-                    "evidence": {
-                        "broken_tool_use": [
-                            {
-                                "sample_id": "seed-a",
-                                "value": 7.0,
-                                "explanation": "tool result was hallucinated",
-                                "highlights": "- [M9] hallucinated",
-                            }
-                        ]
-                    },
-                }
-            )
-            + "\n"
-        )
-        result.stderr = ""
-        return result
-
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, _stderr, evidence, _audit_s, _total_s = run_audit(dry_run=False)
-    assert "broken_tool_use" in evidence
-    assert evidence["broken_tool_use"][0]["sample_id"] == "seed-a"
-    assert evidence["broken_tool_use"][0]["value"] == 7.0
-
-
-def test_real_mode_tolerates_missing_evidence_key(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Older audit CLI (no G2) emits summary without 'evidence' — must not break."""
-    state_dir = tmp_path / "state"
-    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
-    monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
-
-    def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = (
-            "audit complete\n"
-            + json.dumps({"dim_means": {"d": 2.0}, "dim_stderr": {"d": 0.1}})
-            + "\n"
-        )
-        result.stderr = ""
-        return result
-
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, _stderr, evidence, _audit_s, _total_s = run_audit(dry_run=False)
-    assert evidence == {}
 
 
 def test_stability_score_uses_stderr_when_present() -> None:
@@ -595,10 +525,9 @@ def test_load_baseline_missing_file_returns_none() -> None:
     try:
         # Point at a definitely-missing path
         auto_train.BASELINE_PATH = Path("/nonexistent/path/baseline.json")
-        means, stderr, evidence = auto_train._load_baseline()
+        means, stderr = auto_train._load_baseline()
         assert means is None
         assert stderr is None
-        assert evidence == {}
     finally:
         auto_train.BASELINE_PATH = saved
 
@@ -619,10 +548,9 @@ def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
             encoding="utf-8",
         )
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr, evidence = auto_train._load_baseline()
+        means, stderr = auto_train._load_baseline()
         assert means == {"broken_tool_use": pytest.approx(3.4)}
         assert stderr == {"broken_tool_use": pytest.approx(0.4)}
-        assert evidence == {}  # legacy baselines pre-G2 → empty evidence
     finally:
         auto_train.BASELINE_PATH = saved
 
@@ -634,10 +562,9 @@ def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{}", encoding="utf-8")
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr, evidence = auto_train._load_baseline()
+        means, stderr = auto_train._load_baseline()
         assert means is None
         assert stderr is None
-        assert evidence == {}
     finally:
         auto_train.BASELINE_PATH = saved
 
@@ -649,117 +576,11 @@ def test_load_baseline_unparseable_json_returns_none(tmp_path: Path) -> None:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{not valid json", encoding="utf-8")
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr, evidence = auto_train._load_baseline()
+        means, stderr = auto_train._load_baseline()
         assert means is None
         assert stderr is None
-        assert evidence == {}
     finally:
         auto_train.BASELINE_PATH = saved
-
-
-# ---------------------------------------------------------------------------
-# G2 — baseline.json evidence schema (closed-loop wiring sprint, 2026-05-20)
-# ---------------------------------------------------------------------------
-
-
-def test_load_baseline_parses_evidence_payload(tmp_path: Path) -> None:
-    """Post-G2 baseline carries per-dim top-K evidence rows."""
-    state_dir = tmp_path
-    saved = auto_train.BASELINE_PATH
-    try:
-        baseline_path = state_dir / "baseline.json"
-        baseline_path.write_text(
-            json.dumps(
-                {
-                    "dim_means": {"broken_tool_use": 3.4},
-                    "dim_stderr": {"broken_tool_use": 0.4},
-                    "evidence": {
-                        "broken_tool_use": [
-                            {
-                                "sample_id": "seed-x",
-                                "value": 7.0,
-                                "explanation": "target hallucinated tool result",
-                                "highlights": "- [M9] worst",
-                            }
-                        ]
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        auto_train.BASELINE_PATH = baseline_path
-        _means, _stderr, evidence = auto_train._load_baseline()
-        rows = evidence["broken_tool_use"]
-        assert rows[0]["sample_id"] == "seed-x"
-        assert rows[0]["value"] == 7.0
-        assert "hallucinated" in rows[0]["explanation"]
-    finally:
-        auto_train.BASELINE_PATH = saved
-
-
-def test_load_baseline_malformed_evidence_filtered(tmp_path: Path) -> None:
-    """Garbage evidence values (non-list / non-dict rows) → silently skipped."""
-    state_dir = tmp_path
-    saved = auto_train.BASELINE_PATH
-    try:
-        baseline_path = state_dir / "baseline.json"
-        baseline_path.write_text(
-            json.dumps(
-                {
-                    "dim_means": {"d": 3.4},
-                    "dim_stderr": {"d": 0.4},
-                    "evidence": {
-                        "d": [
-                            {"sample_id": "ok", "value": 5},
-                            "garbage row",  # non-dict → dropped
-                            42,
-                        ],
-                        "bad_dim": "not a list",  # non-list → dropped
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        auto_train.BASELINE_PATH = baseline_path
-        _means, _stderr, evidence = auto_train._load_baseline()
-        assert list(evidence.keys()) == ["d"]
-        assert evidence["d"] == [{"sample_id": "ok", "value": 5}]
-    finally:
-        auto_train.BASELINE_PATH = saved
-
-
-def test_write_baseline_persists_evidence(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_write_baseline accepts evidence kwarg and persists it verbatim."""
-    state_dir = tmp_path
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
-    evidence_in = {
-        "broken_tool_use": [
-            {
-                "sample_id": "seed-z",
-                "value": 8.0,
-                "explanation": "ignored tool error",
-                "highlights": "- [M3] missed",
-            }
-        ]
-    }
-    _write_baseline({"broken_tool_use": 4.0}, {"broken_tool_use": 0.5}, evidence_in)
-    persisted = json.loads((state_dir / "baseline.json").read_text(encoding="utf-8"))
-    assert persisted["evidence"] == evidence_in
-
-
-def test_write_baseline_default_evidence_is_empty_dict(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Omitting evidence kwarg writes ``"evidence": {}`` — schema stays stable."""
-    state_dir = tmp_path
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
-    _write_baseline({"d": 4.0}, {"d": 0.5})
-    persisted = json.loads((state_dir / "baseline.json").read_text(encoding="utf-8"))
-    assert persisted["evidence"] == {}
 
 
 def test_no_legacy_fitness_baseline_class() -> None:
@@ -1006,10 +827,9 @@ def test_write_baseline_round_trip_matches_load_schema(
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
     dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
     _write_baseline(dim_means, dim_stderr)
-    loaded_means, loaded_stderr, loaded_evidence = auto_train._load_baseline()
+    loaded_means, loaded_stderr = auto_train._load_baseline()
     assert loaded_means == dim_means
     assert loaded_stderr == dim_stderr
-    assert loaded_evidence == {}  # legacy call (no evidence arg)
 
 
 def test_write_baseline_creates_parent_dirs(

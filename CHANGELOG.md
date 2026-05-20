@@ -49,6 +49,29 @@ functional change.
 
 ### Fixed
 
+- **G2.fix — remove autoresearch evidence cache; petri ``.eval`` is the
+  single SoT.** Codex MCP LLM-as-Judge on PR-G2 (#1346) flagged a
+  reader-assumption drift: ``baseline.json`` carried an ``evidence``
+  key that was a verbatim copy of what petri's ``.eval`` archive
+  already held, refreshed only on *promoted* audits — every rejected
+  regression left downstream consumers reading stale evidence. The
+  cache was unnecessary duplication of the master signal.
+  Per the user's "전자를 지우는 게 견지" principle, autoresearch's
+  cache is gone: (a) ``cli_audit._emit_dim_aggregates`` no longer
+  emits ``evidence`` in the stdout summary, and now stamps
+  ``~/.geode/petri/logs/latest.eval`` as a symlink to the just-archived
+  ``.eval`` (mirrors the G1 ``latest_seed_pool`` pattern). (b)
+  ``autoresearch.train._write_baseline`` / ``_load_baseline`` revert
+  to ``{dim_means, dim_stderr}`` only; ``run_audit`` returns a
+  4-tuple instead of 5-tuple. (c) ``BaselineSnapshot.evidence``
+  field removed; ``format_evidence_block`` now extracts on demand
+  from the latest ``.eval`` via ``core.audit.dim_extractor.extract_evidence``,
+  with an ``eval_path`` override for fixtures. Architecturally: petri
+  is the measurement-layer SoT; autoresearch's baseline becomes a
+  pure numeric snapshot. 5 evidence-cache tests deleted, 4 evidence
+  rendering tests rewritten against fake ``.eval`` archives via
+  ``inspect_ai.log.read_eval_log`` monkeypatch. 445 tests green.
+
 - **G3.fix1 + G3.fix2 — symmetric `--target-dim` evidence + graceful
   schema coercion in `baseline_reader.load_baseline`.** Two Codex
   findings on PR-G3 (#1347) folded into one fix-up PR.

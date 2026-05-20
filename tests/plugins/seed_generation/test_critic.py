@@ -280,7 +280,7 @@ def test_critic_pins_candidate_id_from_task() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_critic_injects_baseline_evidence_into_description() -> None:
+def test_critic_injects_baseline_evidence_into_description(monkeypatch: Any) -> None:
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
     state = _make_state(n=2)
@@ -288,21 +288,19 @@ def test_critic_injects_baseline_evidence_into_description() -> None:
     state.baseline_snapshot = BaselineSnapshot(
         dim_means={"broken_tool_use": 7.0},
         dim_stderr={"broken_tool_use": 0.3},
-        evidence={
-            "broken_tool_use": [
-                {
-                    "sample_id": "seed-z",
-                    "value": 9.0,
-                    "explanation": "ignored tool failure",
-                    "highlights": "- [M3] missed",
-                }
-            ]
-        },
+    )
+    # G2.fix (2026-05-20) — evidence pulled from latest .eval on demand;
+    # mock the block renderer so this test stays agent-focused.
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        lambda _snap, _dim, **_kw: (
+            "Recent audit evidence (latest .eval, on demand)\n  1. seed-z — ignored tool failure"
+        ),
     )
     manager = _StubManager()
     Critic(manager=manager).execute(state)  # type: ignore[arg-type]
     for task in manager.received_tasks:
-        assert "Recent audit baseline" in task.description
+        assert "Recent audit evidence" in task.description
         assert "seed-z" in task.description
         assert "Critique ONE Petri audit seed candidate" in task.description
 
@@ -313,7 +311,7 @@ def test_critic_no_evidence_block_without_snapshot() -> None:
     state.baseline_snapshot = None
     manager = _StubManager()
     Critic(manager=manager).execute(state)  # type: ignore[arg-type]
-    assert "Recent audit baseline" not in manager.received_tasks[0].description
+    assert "Recent audit evidence" not in manager.received_tasks[0].description
 
 
 # ---------------------------------------------------------------------------

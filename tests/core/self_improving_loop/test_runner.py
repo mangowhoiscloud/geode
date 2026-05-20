@@ -345,16 +345,6 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
     fake_baseline = BaselineSnapshot(
         dim_means={"broken_tool_use": 7.0},
         dim_stderr={"broken_tool_use": 0.3},
-        evidence={
-            "broken_tool_use": [
-                {
-                    "sample_id": "seed-x",
-                    "value": 9.0,
-                    "explanation": "tool result was hallucinated under stress",
-                    "highlights": "- [M9] worst",
-                }
-            ]
-        },
     )
     monkeypatch.setattr(
         "plugins.seed_generation.baseline_reader.load_baseline",
@@ -363,6 +353,16 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
     monkeypatch.setattr(
         "plugins.seed_generation.baseline_reader.load_latest_meta_review",
         lambda: None,
+    )
+    # G2.fix (2026-05-20) — evidence comes from latest .eval on demand,
+    # not from a cached field on the snapshot.
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        lambda _snap, _dim, **_kw: (
+            "Recent audit evidence (latest .eval, on demand)\n"
+            "  1. seed-x — tool result was hallucinated under stress\n"
+            "     highlights: - [M9] worst"
+        ),
     )
 
     captured: dict[str, str] = {}
