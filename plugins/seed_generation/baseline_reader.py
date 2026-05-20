@@ -57,14 +57,19 @@ __all__ = [
 class BaselineSnapshot:
     """Frozen view of one ``autoresearch/state/baseline.json``.
 
-    All three fields are always present (empty dict / list when the
-    underlying JSON omits the key). Frozen so the snapshot is safe to
-    pass through sub-agent prompt builders without aliasing risk.
+    Both fields are always present (empty dict when the underlying JSON
+    omits the key). Frozen so the snapshot is safe to pass through
+    sub-agent prompt builders without aliasing risk.
+
+    G2.fix (2026-05-20) — the ``evidence`` field was removed. The
+    autoresearch ``baseline.json`` cache is now numeric-signal only;
+    per-dim explanation/highlights live in petri's ``.eval`` archive
+    (``~/.geode/petri/logs/latest.eval``) and are extracted on demand
+    by :func:`format_evidence_block`.
     """
 
     dim_means: dict[str, float] = field(default_factory=dict)
     dim_stderr: dict[str, float] = field(default_factory=dict)
-    evidence: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def _default_baseline_path() -> Path | None:
@@ -121,7 +126,6 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
     if not raw_means:
         return None
     raw_stderr = baseline_payload.get("dim_stderr") or {}
-    raw_evidence = baseline_payload.get("evidence") or {}
 
     # G3.fix2 (2026-05-20) — Codex caught a graceful-contract violation:
     # ``float(v)`` raised ``ValueError`` on non-numeric values, breaking
@@ -139,13 +143,10 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
         )
         return None
     dim_stderr = _coerce_dim_dict(raw_stderr)
-    evidence: dict[str, list[dict[str, Any]]] = {}
-    if isinstance(raw_evidence, dict):
-        for dim, dim_rows in raw_evidence.items():
-            if not isinstance(dim_rows, list):
-                continue
-            evidence[str(dim)] = [r for r in dim_rows if isinstance(r, dict)]
-    return BaselineSnapshot(dim_means=dim_means, dim_stderr=dim_stderr, evidence=evidence)
+    # G2.fix (2026-05-20) — evidence cache removed from baseline.json.
+    # Petri's ``.eval`` is the SoT; readers go through
+    # ``format_evidence_block`` which extracts on demand.
+    return BaselineSnapshot(dim_means=dim_means, dim_stderr=dim_stderr)
 
 
 def _coerce_dim_dict(raw: Any) -> dict[str, float]:
@@ -251,18 +252,37 @@ def pick_regression_target_dim(
     return min((d for d, v in candidates.items() if v == top_value), default=None)
 
 
+LATEST_PETRI_EVAL_PATH = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"
+"""G2.fix (2026-05-20) — petri's `.eval` archive is the single SoT for
+per-dim evidence. ``plugins.petri_audit.cli_audit`` updates this symlink
+after every audit (rejected or promoted); :func:`format_evidence_block`
+extracts evidence from it on demand instead of trusting a cached copy
+inside ``baseline.json``. Tests monkeypatch this constant to point at
+a fixture archive.
+"""
+
+
 def format_evidence_block(
     snapshot: BaselineSnapshot,
     dim: str,
     *,
     max_rows: int = 3,
-    header: str = "Recent audit baseline (regression evidence)",
+    header: str = "Recent audit evidence (latest .eval, on demand)",
+    eval_path: Path | None = None,
 ) -> str:
-    """Render ``snapshot.evidence[dim]`` as a prompt-ready string.
+    """Render top-K worst-sample evidence for ``dim`` from the latest petri ``.eval``.
+
+    G2.fix (2026-05-20) — the evidence cache in ``baseline.json`` is
+    gone; this function now resolves evidence on demand against petri's
+    ``~/.geode/petri/logs/latest.eval`` symlink (updated by
+    :func:`plugins.petri_audit.cli_audit._update_latest_petri_eval_symlink`
+    on every audit). The snapshot still gates rendering — the function
+    only emits a block when ``dim`` is present in ``snapshot.dim_means``,
+    so a bootstrap run with no baseline produces nothing.
 
     Layout::
 
-        Recent audit baseline (regression evidence)
+        Recent audit evidence (latest .eval, on demand)
         - dim: broken_tool_use
         - dim_mean: 7.2 (stderr 0.4)
         - top-3 worst samples:
@@ -273,17 +293,33 @@ def format_evidence_block(
     Returns an empty string when:
 
     - ``dim`` is empty / missing from ``snapshot.dim_means``, or
-    - ``snapshot.evidence[dim]`` is empty / absent (legacy baseline
-      with no G2 evidence rows), in which case the caller's prompt
-      falls through to its existing non-baseline message.
+    - the latest ``.eval`` is unreachable (no audit yet, OSError,
+      missing inspect_ai), or
+    - the archive carries no evidence rows for ``dim``.
 
-    ``max_rows`` caps the rendered rows independently of how many the
-    snapshot carries — the runner can tighten this for token-bounded
-    prompts.
+    ``max_rows`` caps the rendered rows independently of what the
+    archive holds. ``eval_path`` overrides the symlink default so tests
+    can point at a fixture.
     """
     if not dim or dim not in snapshot.dim_means:
         return ""
-    rows = snapshot.evidence.get(dim) or []
+    archive = eval_path if eval_path is not None else LATEST_PETRI_EVAL_PATH
+    if not archive.exists():
+        return ""
+    try:
+        from core.audit.dim_extractor import extract_evidence
+    except ImportError:  # pragma: no cover — core.audit always available
+        return ""
+    try:
+        evidence_by_dim = extract_evidence(archive, top_k=max_rows)
+    except Exception:
+        log.warning(
+            "baseline_reader: extract_evidence failed for %s; skipping block",
+            archive,
+            exc_info=True,
+        )
+        return ""
+    rows = evidence_by_dim.get(dim) or []
     if not rows:
         return ""
     mean = snapshot.dim_means[dim]
