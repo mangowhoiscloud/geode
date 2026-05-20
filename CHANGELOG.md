@@ -71,6 +71,85 @@ functional change.
   cover the helper (True/False/exception swallowing), the picker's
   blocked-Enter contract, and the explicit-name hint path.
 
+- **L5 — ``/login help`` carries the eligibility-verdict legend; new
+  ``/login health [<profile>]`` walks the verdict per profile with an
+  actionable suggestion.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L5: *Help text 에
+  eligibility verdict 부재*). Pre-fix the ``/login`` status dashboard
+  already rendered each profile with an inline reject badge (cooldown
+  / expired / disabled / missing_key / provider_mismatch / ok), but
+  the reason codes were opaque to first-time readers and there was no
+  per-profile health view. ``_login_help`` now documents every
+  ``ProfileRejectReason`` code; ``cmd_login`` routes the new
+  ``health`` subcommand to ``_login_health``, which walks
+  ``ProfileStore.evaluate_eligibility`` and prints, per profile, the
+  badge (``ok`` / reason_code), the detail string, and an actionable
+  ``→ suggestion`` row pulled from the ``_HEALTH_SUGGESTIONS`` table
+  ("re-run ``claude``", "wait <cooldown>", …). ``/login health
+  <unknown>`` warns + points back at bare ``/login``; the empty-store
+  path prints the "no profiles" hint without crashing. 7 new tests in
+  ``tests/test_login_health.py`` pin the legend, the router, the
+  no-arg / narrowed / unknown / empty-store cases, and the suggestion
+  surfacing.
+
+- **X3 — ``/login providers`` exposes the provider-variant table +
+  equivalence map.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (X3: *Provider equivalence
+  map 사용자 가시성 0*). Pre-fix the equivalence map (``openai ↔
+  openai-codex``, ``glm ↔ glm-coding``) lived only in
+  ``core.llm.registry.PROVIDER_EQUIVALENCE``; users saw the
+  ``provider`` label in ``/login`` / ``/model`` and had no way to
+  discover that a Codex Plus token and an OpenAI PAYG key both serve
+  a ``gpt-5.x`` request, or that a GLM Coding key shadows the PAYG
+  endpoint. The new subcommand renders each ``PROVIDER_VARIANTS``
+  entry with display name + auth type + default base URL + bound-plan
+  count, then prints every multi-member equivalence class once
+  (singletons skipped, sibling-key duplicates de-duped). Singular
+  alias ``/login provider`` is accepted. ``/login help`` documents the
+  command. 5 new tests in ``tests/test_login_providers.py`` pin the
+  dispatch path, the variant-table coverage, the equivalence header,
+  the de-dup invariant (one arrow per class), and the help-text
+  discoverability.
+
+- **L3 — ``/login`` Profiles section surfaces full Plan binding
+  detail.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L3: *OAuth status 가 plan
+  바인딩 안 보여줌*). Pre-fix the Profiles table printed the bare
+  ``plan=<id>`` next to each profile; a user looking at ``glm:work``
+  saw ``plan=glm-coding-lite`` and had no way to know it was a
+  subscription plan (vs PAYG) or what tier it sat in. New
+  ``_format_plan_binding(registry, plan_id)`` resolves the binding
+  through ``PlanRegistry.get`` and renders ``<id> (<kind>·<tier> ·
+  <display_name>)`` — so the same row now reads
+  ``plan=glm-coding-lite (subscription·Lite · GLM Coding Lite)``.
+  Falls back to ``(none)`` on an empty ``plan_id`` and to
+  ``<id> (unbound)`` when the Plan vanished after the AuthProfile
+  was created (so the operator notices the dangling reference instead
+  of seeing an opaque id). 5 new tests in
+  ``tests/test_login_plan_binding.py`` cover the full label, the
+  no-tier PAYG path, the two fallbacks, and the end-to-end dashboard
+  render.
+
+- **PR-Π3 — Proximity embedding conditions on the research goal
+  (`state.target_dim`).** Closes the third P0 gap from the
+  Co-Scientist ↔ GEODE proximity-agent comparison; completes the
+  3-PR proximity sprint (Π1 graph + Π2 partial-survive + Π3
+  goal-conditioning). `_embedding_track` now accepts a
+  `target_dim` kwarg; when non-empty, every candidate / pool text
+  is prefixed with `[goal: <dim>]\n` before the embedding call so
+  the same candidate body against two different research goals
+  produces different vectors. `Proximity.execute` forwards
+  `state.target_dim`. Backwards-compatible — empty `target_dim`
+  (legacy bootstrap path) returns the raw text unchanged; every
+  pre-Π3 call site behaves byte-identically. The lexical and role
+  tracks stay goal-agnostic (role already encodes the dim;
+  5-gram surface similarity isn't goal-sensitive). Matches
+  Co-Scientist §3.3.4: "similarity ... taking into account the
+  specific research goal". 6 new tests cover the helper
+  `_goal_condition` (empty / non-empty), the `_embedding_track`
+  forwarding (prefix attached / no prefix when empty), and the
+  end-to-end `execute` path (`state.target_dim` reaches the
+  embedding inputs / `state.target_dim = ""` legacy parity).
 
 - **PR-Π2 — Proximity `all_duplicates` partial-survive fallback (was: hard
   abort).** Closes the second P0 gap from the Co-Scientist ↔ GEODE
@@ -115,6 +194,51 @@ functional change.
   graceful fallback), the diverse-bracket policy (lowest-proximity
   pairs win the budget, missing entries default to 0.0, empty graph
   falls back to random), and the Ranker integration.
+
+### Changed
+
+- **Silent same-provider model fallback off by default (opt-in knob).**
+  Per user direction 2026-05-21 ("FALLBACK 체인과 레이어를 제거해 …
+  사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성"), the shipped
+  ``[model.fallbacks]`` section in ``core/config/routing.toml`` now
+  carries empty lists for every provider; primary-model failure no
+  longer silently retries against secondary / tertiary models for the
+  default user. ``RoutingManifest._consistency`` accepts an empty
+  fallback chain as valid (opt-out) and runs the drift-check only when
+  the chain is populated. The chain code path itself (``*_FALLBACK_
+  CHAIN`` constants, ``RoutingManifest.fallbacks``,
+  ``retry_with_backoff_generic(fallback_models=...)``,
+  ``AgenticLLMPort.fallback_chain``, provider adapters'
+  ``fallback_chain`` properties, ``call_with_failover``, system-prompt
+  hint block) stays intact so users who *explicitly* want transient-
+  error coverage can opt in by editing ``~/.geode/routing.toml``:
+
+      [model.fallbacks]
+      anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]
+
+  Plan: ``docs/plans/2026-05-21-silent-fallback-elimination.md``.
+  Pre-change the v0.52.3 GLM incident triggered a 5×4 retry storm
+  (~40s); the new default raises ``BillingError`` / the last exception
+  after the per-model retry budget exhausts (~8s) and fires
+  ``quota_exhausted`` (BillingError → IPC event → thin-client panel,
+  unchanged from v0.53.0). Users on the opt-in knob see the previous
+  chain behaviour.
+
+### Removed
+
+- **``CROSS_PROVIDER_FALLBACK`` empty-dict back-compat shim removed.**
+  The cross-provider auto-swap path was deleted in v0.53.0 (the
+  ``llm_cross_provider_failover`` setting + ``_try_cross_provider_
+  escalation`` method gone); only the empty-dict sentinel
+  ``CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]]`` lingered
+  in ``core/llm/adapters.py`` + re-exported from ``core/llm/router/
+  __init__.py``. Keeping a tombstone symbol invites accidental re-
+  introduction of cross-provider chains, so the symbol + its re-export
+  are now deleted outright. Three tests
+  (``test_quota_fail_fast.py::test_cross_provider_fallback_map_is_empty_for_all_providers``,
+  ``test_codex_provider.py::TestAdapterMap::test_codex_cross_provider_fallback``,
+  ``test_provider_label_consistency.py::TestCrossProviderFallbackSafety``)
+  rewritten to assert the symbol stays *deleted* (``not hasattr``).
 
 ### Fixed
 

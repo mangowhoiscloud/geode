@@ -156,6 +156,11 @@ class AgenticLLMPort(Protocol):
     """Protocol for agentic loop LLM calls.
 
     Implementations: ClaudeAgenticAdapter, OpenAIAgenticAdapter, GlmAgenticAdapter.
+
+    ``fallback_chain`` stays as an opt-in knob (v0.99.19): the shipped
+    default in ``core/config/routing.toml`` is an empty list (no
+    silent fallback), but users can populate ``~/.geode/routing.toml``
+    ``[model.fallbacks]`` to explicitly opt into a same-provider chain.
     """
 
     @property
@@ -184,7 +189,7 @@ class AgenticLLMPort(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# resolve_agentic_adapter — factory + cross-provider fallback map
+# resolve_agentic_adapter — factory
 # ---------------------------------------------------------------------------
 
 # Provider -> "module_path:ClassName"
@@ -195,23 +200,10 @@ _ADAPTER_MAP: dict[str, str] = {
     "openai-codex": "core.llm.providers.codex:CodexAgenticAdapter",
 }
 
-# v0.53.0 — Cross-provider fallback REMOVED.
-# Per the v0.53.0 governance redesign: API/구독 quota 초과 시 silent
-# provider switch 는 cost surprise + model behavior drift 를 만들어
-# 시스템 불확실성을 키운다. 사용자에게 명시적으로 quota 안내 + system
-# stop 이 정확. The v0.53.0 BillingError → quota_exhausted IPC event
-# 경로가 fail-fast 를 담당. Cross-provider hint (B5 breadcrumb,
-# v0.52.3) 는 LLM 이 다른 provider 존재를 알 수 있게 *정보* 만 주입 —
-# 자동 swap 과 분리.
-#
-# Empty map preserved for back-compat with any external import; will be
-# removed in a future release once all callers stop importing.
-CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]] = {
-    "anthropic": [],
-    "openai": [],
-    "glm": [],
-    "openai-codex": [],
-}
+# v0.53.0 removed cross-provider auto-swap; v0.99.19 removed the
+# empty-dict back-compat shim ``CROSS_PROVIDER_FALLBACK``. Quota
+# exhaustion surfaces ``BillingError`` → ``quota_exhausted`` IPC event
+# and the user picks the next provider via ``/model``.
 
 
 def resolve_agentic_adapter(provider: str) -> AgenticLLMPort:

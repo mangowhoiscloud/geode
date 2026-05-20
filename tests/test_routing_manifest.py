@@ -74,12 +74,15 @@ def test_default_manifest_path_exists() -> None:
     assert DEFAULT_MANIFEST_PATH.exists()
 
 
-def test_default_manifest_fallback_chains_nonempty() -> None:
+def test_default_manifest_fallback_chains_empty() -> None:
+    """v0.99.19 — shipped default is an opt-in knob: empty list = no
+    silent same-provider fallback. User populates ``~/.geode/routing.toml``
+    ``[model.fallbacks]`` to opt in."""
     manifest = load_routing_manifest()
-    assert manifest.fallbacks.anthropic[0] == manifest.defaults.anthropic
-    assert manifest.fallbacks.openai[0] == manifest.defaults.openai
-    assert manifest.fallbacks.codex[0] == manifest.defaults.codex
-    assert manifest.fallbacks.glm[0] == manifest.defaults.glm
+    assert manifest.fallbacks.anthropic == []
+    assert manifest.fallbacks.openai == []
+    assert manifest.fallbacks.codex == []
+    assert manifest.fallbacks.glm == []
 
 
 def test_default_manifest_routing_rules() -> None:
@@ -149,11 +152,14 @@ def test_fallback_default_drift_raises() -> None:
         _parse_manifest(bad)
 
 
-def test_empty_fallback_raises() -> None:
-    bad = _valid_dict()
-    bad["model"]["fallbacks"]["openai"] = []
-    with pytest.raises(ValueError, match="empty"):
-        _parse_manifest(bad)
+def test_empty_fallback_is_accepted() -> None:
+    """v0.99.19 — empty fallback chain = opt-out (no silent fallback).
+    Pre-fix this raised; the new invariant accepts the empty case so the
+    shipped default can encode "no auto-retry to alternates"."""
+    good = _valid_dict()
+    good["model"]["fallbacks"]["openai"] = []
+    manifest = _parse_manifest(good)
+    assert manifest.fallbacks.openai == []
 
 
 def test_prefix_target_empty_raises() -> None:

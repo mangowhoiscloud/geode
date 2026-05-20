@@ -127,7 +127,16 @@ class Proximity(BaseSeedAgent):
         pool_texts = self._load_pool_texts(state)
 
         # 3. Compute per-track duplicate votes + pair-wise similarity scores.
-        embed_dupes, embed_scores = self._embedding_track(candidate_texts, pool_texts)
+        # PR-Π3 — the embedding track conditions on ``state.target_dim`` so
+        # the same candidate text against two different research goals
+        # produces different vectors. Co-Scientist §3.3.4 calls this
+        # "calculates similarity ... taking into account the specific
+        # research goal". Lexical / role tracks stay goal-agnostic — role
+        # already encodes the dim, and lexical 5-gram similarity is
+        # surface-form only.
+        embed_dupes, embed_scores = self._embedding_track(
+            candidate_texts, pool_texts, target_dim=state.target_dim
+        )
         lexical_dupes, lexical_scores = self._lexical_track(candidate_texts, pool_texts)
         role_dupes = self._role_track(state)
 
@@ -288,6 +297,8 @@ class Proximity(BaseSeedAgent):
         self,
         candidate_texts: dict[str, str],
         pool_texts: list[str],
+        *,
+        target_dim: str = "",
     ) -> tuple[set[str], dict[tuple[str, str], float]]:
         """Mark candidates whose embedding cosine vs sibling/pool ≥ 0.85.
 
@@ -299,13 +310,25 @@ class Proximity(BaseSeedAgent):
         are not in the graph since the Ranker only ever schedules
         candidate-vs-candidate matches.
 
+        PR-Π3 — ``target_dim`` is prepended as ``[goal: <dim>] \\n`` to
+        every embedding input when non-empty. Co-Scientist §3.3.4
+        specifies similarity should "take into account the specific
+        research goal"; the prefix conditions the embedding output so
+        the same candidate text against two different research goals
+        produces different vectors. When ``target_dim`` is empty (legacy
+        call sites or tests that don't populate ``state.target_dim``)
+        the prefix is dropped and behavior is byte-identical to the
+        pre-Π3 path.
+
         On embedding-tool failure: both return values are empty (caller
         falls back to the 2-track lexical + role dedup vote).
         """
         from core.tools.text_embed import cosine_similarity, embed_texts
 
         cids = list(candidate_texts)
-        all_texts = [candidate_texts[c] for c in cids] + pool_texts
+        cand_inputs = [_goal_condition(candidate_texts[c], target_dim) for c in cids]
+        pool_inputs = [_goal_condition(t, target_dim) for t in pool_texts]
+        all_texts = cand_inputs + pool_inputs
         try:
             vectors = embed_texts(all_texts, client=self._embed_client)
         except Exception:
@@ -447,6 +470,22 @@ class Proximity(BaseSeedAgent):
 # ────────────────────────────────────────────────────────────────────────
 # Shared helpers — module-level so tests can import directly
 # ────────────────────────────────────────────────────────────────────────
+
+
+def _goal_condition(text: str, target_dim: str) -> str:
+    """Prepend a research-goal prefix when ``target_dim`` is non-empty.
+
+    PR-Π3 — Co-Scientist §3.3.4 requires similarity to be "taking into
+    account the specific research goal". For GEODE the goal is the
+    Petri target dim that the audit is being engineered against
+    (``state.target_dim``); the prefix shifts the embedding output so
+    the same candidate body against two different dims doesn't collapse
+    into the same vector. Empty ``target_dim`` returns the text
+    unchanged — every pre-Π3 call site keeps byte-identical behavior.
+    """
+    if not target_dim:
+        return text
+    return f"[goal: {target_dim}]\n{text}"
 
 
 def _pair_key(a: str, b: str) -> tuple[str, str]:

@@ -20,6 +20,7 @@ from plugins.seed_generation.agents.proximity import (
     LEXICAL_JACCARD_THRESHOLD,
     PARTIAL_SURVIVE_FLOOR,
     Proximity,
+    _goal_condition,
     _jaccard,
     _pair_key,
     _shingles,
@@ -425,6 +426,108 @@ def test_proximity_partial_survive_silent_when_no_journal_scope(
         result = Proximity().execute(state)
     assert result.success
     assert len(state.candidates) == PARTIAL_SURVIVE_FLOOR
+
+
+# ── PR-Π3 — research-goal context inject ──
+
+
+def test_goal_condition_returns_text_unchanged_when_empty_dim() -> None:
+    """Empty ``target_dim`` → no prefix; pre-Π3 byte-identical path."""
+    assert _goal_condition("alpha beta", target_dim="") == "alpha beta"
+    assert _goal_condition("", target_dim="") == ""
+
+
+def test_goal_condition_prepends_goal_prefix_when_dim_provided() -> None:
+    """Non-empty ``target_dim`` → ``[goal: <dim>]\\n<text>`` prefix."""
+    out = _goal_condition("alpha beta", target_dim="broken_tool_use")
+    assert out == "[goal: broken_tool_use]\nalpha beta"
+
+
+def test_embedding_track_passes_goal_prefix_to_embed_texts(tmp_path: Path) -> None:
+    """``_embedding_track`` forwards ``target_dim`` to the embedding call —
+    every input string carries the ``[goal: <dim>]\\n`` prefix."""
+    state = _make_state(tmp_path)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha beta"),
+        _make_candidate("c2", tmp_path / "c2.md", body="gamma delta"),
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        proximity._embedding_track(candidate_texts, [], target_dim="broken_tool_use")
+
+    assert "texts" in captured
+    assert all(t.startswith("[goal: broken_tool_use]\n") for t in captured["texts"])
+
+
+def test_embedding_track_no_prefix_when_target_dim_empty(tmp_path: Path) -> None:
+    """Default (no ``target_dim``) → embed inputs equal raw candidate text."""
+    state = _make_state(tmp_path)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha beta"),
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        proximity._embedding_track(candidate_texts, [], target_dim="")
+
+    assert captured["texts"] == ["alpha beta"]
+
+
+def test_execute_forwards_state_target_dim_to_embedding_track(tmp_path: Path) -> None:
+    """End-to-end — ``state.target_dim`` (set by orchestrator) reaches the
+    embedding inputs as a prefix. Pre-Π3 the dim was a state-only field
+    with no effect on the proximity track."""
+    state = _make_state(tmp_path)
+    # _make_state defaults state.target_dim = "broken_tool_use".
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha"),
+        _make_candidate("c2", tmp_path / "c2.md", body="alpha"),
+    ]
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        Proximity().execute(state)
+
+    assert "texts" in captured
+    assert all(t.startswith("[goal: broken_tool_use]\n") for t in captured["texts"])
+
+
+def test_execute_no_prefix_when_target_dim_empty(tmp_path: Path) -> None:
+    """``state.target_dim = ""`` (legacy bootstrap path) → embed inputs
+    unchanged. Backwards-compatible — every pre-Π3 call site behaves
+    byte-identically."""
+    state = _make_state(tmp_path)
+    state.target_dim = ""
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha"),
+    ]
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        Proximity().execute(state)
+
+    assert captured["texts"] == ["alpha"]
 
 
 def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
