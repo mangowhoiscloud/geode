@@ -63,7 +63,7 @@ ADR-012 S0b (`reflection` reader 신설) 머지 후 상태:
 
 **현재 상태**: 3/5 ALIVE, 2/5 DEAD. 남은 dead slot: `decomposition` (S0c 예정) / `retrieval` (S0d 처치 결정 예정).
 
-## 4. 인과 체인의 끊김
+## 4. 인과 체인의 끊김 (audit 시점 사실, Post-S0a/S0b 갱신은 §3 참고)
 
 ```
 mutator LLM
@@ -81,9 +81,9 @@ mutator LLM
 
 → 4 slot 의 mutation 은 fitness gate 에서 항상 "no signal" 로 처리된다. mutator 는 이걸 "이 slot 은 fitness 개선이 어려운 영역" 으로 잘못 학습할 수 있다.
 
-## 5. ALIVE slot 의 상세 — `prompt`
+## 5. ALIVE slot 의 상세 — `prompt` (audit 시점)
 
-`prompt` 만이 진화 압력에 닿는 유일한 slot. 인퍼런스 경로:
+audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일한 slot. **Post-S0a/S0b 머지 (오후) 이후 `tool_policy` + `reflection` 추가 ALIVE** — §3 의 Post-S0* update 섹션 참고. 인퍼런스 경로 도식은 audit 시점 사실로 보존:
 
 | 단계 | 코드 위치 | 동작 |
 |---|---|---|
@@ -94,7 +94,7 @@ mutator LLM
 | 5 | `core/agent/loop/agent_loop.py` | 구성된 system prompt 가 LLM 호출 경로로 흘러들어감 |
 | 6 | Petri eval | 변경된 system prompt 로 응답 → dim_means 변동 → fitness gate 작동 |
 
-이게 5축 중 유일하게 닫힌 루프. 나머지 4축은 (1)→(2) 사이에서 끊김.
+이게 audit 시점 (2026-05-21 오전) 의 사실 — 5축 중 유일하게 닫힌 루프, 나머지 4축은 (1)→(2) 사이에서 끊김. **Post-S0a/S0b 머지 후**: `tool_policy` (`core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`) 와 `reflection` (`core/agent/reflection_policy.py` → `_reflection.py` LLM 호출 직전) 도 동일하게 닫힌 루프로 회복.
 
 ## 6. DEAD slot 별 권고
 
@@ -163,9 +163,12 @@ grep -n "GoalDecomposer" core/agent/loop/_decomposition.py
 grep -n 'load_prompt("decomposer"' core/orchestration/goal_decomposer.py
 grep -n "_REFLECTION_TOOL" core/agent/loop/_reflection.py
 grep -n "PR-6 stops at the" core/self_improving_loop/policies.py
-# Reader 부재 — 4 DEAD slot 의 SoT 파일명이 인퍼런스 디렉토리 어디에서도
-# 참조되지 않는지 확인 (self_improving_loop 의 mutation 정의/디스패처는 제외):
-for slot in tool-policy.json decomposition.json retrieval.json reflection.json; do
+# Reader 부재 — 현재 DEAD slot 의 SoT 파일명이 인퍼런스 디렉토리 어디에서도
+# 참조되지 않는지 확인 (self_improving_loop 의 mutation 정의/디스패처는 제외).
+# Post-S0a/S0b 머지 후: 4 DEAD → 2 DEAD (decomposition + retrieval).
+# tool-policy.json (S0a 머지) / reflection.json (S0b 머지) 는 audit-only
+# 시점 historical 검색에서만 사용:
+for slot in decomposition.json retrieval.json; do
   grep -rn "$slot" core/agent core/orchestration core/skills core/llm plugins autoresearch \
     | grep -v "self_improving_loop/policies.py" \
     | grep -v "self_improving_loop/runner.py" \
