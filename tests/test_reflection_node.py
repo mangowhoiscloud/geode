@@ -99,6 +99,16 @@ def test_parse_reflection_no_object_raises() -> None:
         _reflection._parse_reflection("definitely not json")
 
 
+def test_parse_reflection_handles_bare_json_with_trailing_prose() -> None:
+    """Codex MCP review #2 non-blocking caveat — models occasionally
+    emit ``{"hypotheses":["a"]}\\nthanks`` (no fence, prose after the
+    object). The original fix-up #1 only ran extraction when the
+    candidate did NOT start with ``{`` so this case was bypassed and
+    json.loads choked on the trailing prose."""
+    parsed = _reflection._parse_reflection('{"hypotheses": ["a"], "confidence": 0.5}\nthanks!')
+    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+
+
 def test_apply_reflection_populates_hypotheses() -> None:
     state = CognitiveState(goal="x")
     _reflection._apply_reflection(state, {"hypotheses": ["h1", "h2"]})

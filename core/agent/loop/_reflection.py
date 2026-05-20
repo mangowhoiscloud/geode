@@ -141,10 +141,13 @@ def _parse_reflection(text: str) -> dict[str, Any]:
             candidate = candidate[:closing]
         candidate = candidate.strip()
 
-    if not candidate.startswith("{"):
-        # Extract the first balanced {...} block, ignoring braces
-        # inside strings. Returns the substring if found.
-        candidate = _extract_first_json_object(candidate)
+    # Always extract the first balanced {...} block — handles bare
+    # JSON followed by prose ("{...}\\nthanks"), prose prefix
+    # ("Here is the JSON: {...}"), and the happy path (returns the
+    # input unchanged when it's already a clean JSON object).
+    # Brace counting is string-aware so a ``}`` inside a value
+    # doesn't close the outer object early.
+    candidate = _extract_first_json_object(candidate)
 
     parsed = json.loads(candidate)
     if not isinstance(parsed, dict):
