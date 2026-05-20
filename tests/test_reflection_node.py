@@ -388,10 +388,12 @@ def test_reflect_async_passes_tool_schema_to_adapter(
     tools = adapter.last_kwargs.get("tools")
     assert isinstance(tools, list) and len(tools) == 1
     assert tools[0]["name"] == REFLECTION_TOOL_NAME
-    assert adapter.last_kwargs.get("tool_choice") == {
-        "type": "tool",
-        "name": REFLECTION_TOOL_NAME,
-    }
+    assert tools[0].get("strict") is True
+    # PR-B fix-up #1 — canonical ``"any"`` instead of the forced-named
+    # ``{"type": "tool", "name": ...}``. With only one tool declared,
+    # ``"any"`` effectively forces it AND stays compatible with
+    # Anthropic adaptive thinking.
+    assert adapter.last_kwargs.get("tool_choice") == "any"
 
 
 def test_reflect_async_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:

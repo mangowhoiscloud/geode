@@ -68,6 +68,13 @@ _REFLECTION_TOOL: dict[str, Any] = {
         "evolution not history. If the round produced no useful signal, keep "
         "the previous hypotheses and lower confidence."
     ),
+    # PR-B fix-up #1 — ``strict: True`` opts into Anthropic's strict
+    # tool-input validation so a malformed payload is rejected server-
+    # side instead of needing client-side coercion. Codex MCP review
+    # called out that the previous "Anthropic enforces schema" claim
+    # was overstated without this flag. See
+    # https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use
+    "strict": True,
     "input_schema": {
         "type": "object",
         "properties": {
@@ -248,12 +255,22 @@ async def reflect_async(
         )
 
         async def _do_call(m: str) -> object:
+            # PR-B fix-up #1 — canonical ``"any"`` (= must use SOME
+            # declared tool). Since only one tool is declared this
+            # effectively forces ``record_reflection``. ``{"type":
+            # "tool", "name": ...}`` would be more explicit but
+            # conflicts with Anthropic adaptive thinking (Opus 4.7 /
+            # Sonnet 4.6) per the Anthropic tool-use docs — the API
+            # returns 400 when forced-tool + extended-thinking
+            # combine. ``"any"`` is compatible with both regimes and
+            # cleanly translates to ``required`` for OpenAI / Codex
+            # via :func:`core.llm.tool_choice.normalize`.
             return await adapter.agentic_call(
                 model=m,
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
                 tools=[_REFLECTION_TOOL],
-                tool_choice={"type": "tool", "name": REFLECTION_TOOL_NAME},
+                tool_choice="any",
                 max_tokens=max_tokens,
                 temperature=0.2,
             )

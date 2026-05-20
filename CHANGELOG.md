@@ -60,21 +60,36 @@ functional change.
   ``tool_use`` contract every provider-aware GEODE caller already
   uses: declare a ``record_reflection`` tool with a JSON
   ``input_schema`` (``hypotheses[<=5]`` / ``confidence ∈ [0,1]`` /
-  ``next_action_hint``), force its invocation via
-  ``tool_choice={"type": "tool", "name": "record_reflection"}``,
+  ``next_action_hint``) + ``strict: True`` opt-in for the Anthropic
+  strict-tool-input validator, dispatch with the canonical
+  ``tool_choice="any"`` (= must use SOME declared tool; with only
+  one declared this effectively forces ``record_reflection`` while
+  staying compatible with Anthropic adaptive thinking on Opus 4.7),
   and read the parsed ``input`` dict directly off the
-  ``ToolUseBlock``. The Anthropic SDK enforces the schema server-
-  side, so the shape is guaranteed by the time the dispatcher sees
-  it. ``_apply_reflection`` keeps its schema-typed casts (incl. the
-  ``bool``-exclusion guard mirroring PR-5's mutator fix) so a
-  non-Anthropic provider in the dispatcher fork can't poison state.
-  Eliminates ~80 lines of parsing fallback + 4 parser-edge-case
-  tests; replaces them with 4 ``_extract_reflection_input``
-  resolver tests and 1 wire-up invariant test pinning that
-  ``reflect_async`` passes the tool schema + forced choice to the
-  adapter. Public surface exposes ``REFLECTION_TOOL_NAME`` so
-  transcript renderers / debug tools can grep without importing
-  the private dict.
+  ``ToolUseBlock``. ``_apply_reflection`` keeps its schema-typed
+  casts (incl. the ``bool``-exclusion guard mirroring PR-5's
+  mutator fix) so a non-Anthropic provider in the dispatcher fork
+  can't poison state. Eliminates ~80 lines of parsing fallback + 4
+  parser-edge-case tests; replaces them with 4
+  ``_extract_reflection_input`` resolver tests and 1 wire-up
+  invariant test pinning that ``reflect_async`` passes the tool
+  schema + ``tool_choice="any"`` to the adapter. Public surface
+  exposes ``REFLECTION_TOOL_NAME`` so transcript renderers / debug
+  tools can grep without importing the private dict.
+
+- **PR-B fix-up — Codex provider routes ``tool_choice`` through
+  the cross-provider normaliser.** Pre-fix
+  ``core/llm/providers/codex.py:309`` grabbed
+  ``tool_choice.get("type")`` and passed the literal value straight
+  through to the Responses API, dropping the forced-tool name
+  (``{"type": "tool", "name": "X"}`` → ``"tool"``) and rejecting
+  canonical aliases like ``"any"``. Any forced-tool caller (the
+  PR-B reflection node was the first) hit silent no-ops on the
+  ``openai-codex`` provider. Codex MCP review #1 caught the gap.
+  Fix routes through :func:`core.llm.tool_choice.normalize` (same
+  as the OpenAI/GLM adapters) so ``"any"`` becomes ``"required"``
+  and named-tool forcing translates to the OpenAI ``{"type":
+  "function", "name": "X"}`` shape.
 
 ### Added
 
