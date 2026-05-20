@@ -1,0 +1,150 @@
+{
+  "en": {
+    "agent_critic": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.3728,
+      "width": 0.3914
+    },
+    "agent_evolver": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.5789,
+      "width": 0.6078
+    },
+    "agent_generator": {
+      "height": 0.1713,
+      "ratio_h": 0.3426,
+      "ratio_w": 0.7217,
+      "width": 0.7578
+    },
+    "agent_meta_reviewer": {
+      "height": 0.1629,
+      "ratio_h": 0.3258,
+      "ratio_w": 0.8588,
+      "width": 1.2023
+    },
+    "agent_pilot": {
+      "height": 0.1771,
+      "ratio_h": 0.3543,
+      "ratio_w": 0.3261,
+      "width": 0.3424
+    },
+    "agent_proximity": {
+      "height": 0.1791,
+      "ratio_h": 0.3582,
+      "ratio_w": 0.6977,
+      "width": 0.7326
+    },
+    "agent_ranker": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.479,
+      "width": 0.5029
+    },
+    "baseline_json": {
+      "height": 0.1771,
+      "ratio_h": 0.3543,
+      "ratio_w": 0.4511,
+      "width": 1.0826
+    },
+    "dim_means_dict": {
+      "height": 0.1289,
+      "ratio_h": 0.2865,
+      "ratio_w": 0.7308,
+      "width": 2.4846
+    },
+    "dim_stderr_dict": {
+      "height": 0.1289,
+      "ratio_h": 0.2865,
+      "ratio_w": 0.7308,
+      "width": 2.4846
+    },
+    "fitness_formula": {
+      "height": 0.1938,
+      "ratio_h": 0.3875,
+      "ratio_w": 0.7395,
+      "width": 4.4367
+    },
+    "petri_box": {
+      "height": 0.2277,
+      "ratio_h": 0.2277,
+      "ratio_w": 0.3702,
+      "width": 1.1105
+    }
+  },
+  "ko": {
+    "agent_critic": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.3728,
+      "width": 0.3914
+    },
+    "agent_evolver": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.5789,
+      "width": 0.6078
+    },
+    "agent_generator": {
+      "height": 0.1713,
+      "ratio_h": 0.3426,
+      "ratio_w": 0.7217,
+      "width": 0.7578
+    },
+    "agent_meta_reviewer": {
+      "height": 0.1629,
+      "ratio_h": 0.3258,
+      "ratio_w": 0.8588,
+      "width": 1.2023
+    },
+    "agent_pilot": {
+      "height": 0.1771,
+      "ratio_h": 0.3543,
+      "ratio_w": 0.3261,
+      "width": 0.3424
+    },
+    "agent_proximity": {
+      "height": 0.1791,
+      "ratio_h": 0.3582,
+      "ratio_w": 0.6977,
+      "width": 0.7326
+    },
+    "agent_ranker": {
+      "height": 0.141,
+      "ratio_h": 0.282,
+      "ratio_w": 0.479,
+      "width": 0.5029
+    },
+    "baseline_json": {
+      "height": 0.1771,
+      "ratio_h": 0.3543,
+      "ratio_w": 0.4511,
+      "width": 1.0826
+    },
+    "dim_means_dict": {
+      "height": 0.1289,
+      "ratio_h": 0.2865,
+      "ratio_w": 0.7308,
+      "width": 2.4846
+    },
+    "dim_stderr_dict": {
+      "height": 0.1289,
+      "ratio_h": 0.2865,
+      "ratio_w": 0.7308,
+      "width": 2.4846
+    },
+    "fitness_formula": {
+      "height": 0.1938,
+      "ratio_h": 0.3875,
+      "ratio_w": 0.7395,
+      "width": 4.4367
+    },
+    "petri_box": {
+      "height": 0.2277,
+      "ratio_h": 0.2277,
+      "ratio_w": 0.3702,
+      "width": 1.1105
+    }
+  }
+}
