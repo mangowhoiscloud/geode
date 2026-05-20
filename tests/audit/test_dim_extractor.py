@@ -15,17 +15,20 @@ import pytest
 
 pytest.importorskip("inspect_ai.log")
 
-from core.audit.dim_extractor import extract_dim_aggregates
+from core.audit.dim_extractor import extract_dim_aggregates, extract_evidence
 
 
 @dataclass
 class FakeScore:
     value: Any = None
+    explanation: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class FakeSample:
     scores: dict[str, FakeScore] = field(default_factory=dict)
+    id: str = ""
 
 
 @dataclass
@@ -284,3 +287,149 @@ def test_compute_redundant_tool_invocation_handles_unserializable_args() -> None
     ]
     # Falls back to repr; same repr → still detected as duplicate
     assert compute_redundant_tool_invocation(calls) >= 4.0
+
+
+# ---------------------------------------------------------------------------
+# G2 — per-dim top-K evidence (2026-05-20 self-improving-loop wiring sprint)
+# ---------------------------------------------------------------------------
+
+
+class TestEvidence:
+    """``extract_evidence`` — per-dim top-K worst-sample {sample_id, value,
+    explanation, highlights} rows."""
+
+    def test_ranks_dim_rows_by_value_descending(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Highest dim value = most concerning; top_k picks the worst K."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(
+                    id="seed-low",
+                    scores={
+                        "judge": FakeScore(
+                            value={"broken_tool_use": 2},
+                            explanation="low concern",
+                            metadata={"highlights": "- [M1] low"},
+                        )
+                    },
+                ),
+                FakeSample(
+                    id="seed-high",
+                    scores={
+                        "judge": FakeScore(
+                            value={"broken_tool_use": 9},
+                            explanation="severe hallucination",
+                            metadata={"highlights": "- [M2] worst"},
+                        )
+                    },
+                ),
+                FakeSample(
+                    id="seed-mid",
+                    scores={
+                        "judge": FakeScore(
+                            value={"broken_tool_use": 5},
+                            explanation="mid concern",
+                            metadata={"highlights": "- [M3] mid"},
+                        )
+                    },
+                ),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        evidence_by_dim = extract_evidence(archive_path, top_k=2)
+        rows = evidence_by_dim["broken_tool_use"]
+        assert [r["sample_id"] for r in rows] == ["seed-high", "seed-mid"]
+        assert rows[0]["value"] == 9.0
+        assert "severe hallucination" in rows[0]["explanation"]
+        assert "[M2]" in rows[0]["highlights"]
+
+    def test_alphabetical_tiebreak_on_equal_value(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Equal values → sample_id alphabetical ascending. Stable diffs."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(id="seed-z", scores={"j": FakeScore(value={"d": 7})}),
+                FakeSample(id="seed-a", scores={"j": FakeScore(value={"d": 7})}),
+                FakeSample(id="seed-m", scores={"j": FakeScore(value={"d": 7})}),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        ranked_rows = extract_evidence(archive_path, top_k=3)["d"]
+        assert [r["sample_id"] for r in ranked_rows] == ["seed-a", "seed-m", "seed-z"]
+
+    def test_skips_scalar_valued_scores(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Scalar score.value can't be tied to a dim citation — silently skipped."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(
+                    id="seed-scalar",
+                    scores={"scalar": FakeScore(value=8.0, explanation="ignored")},
+                ),
+                FakeSample(
+                    id="seed-dict",
+                    scores={"judge": FakeScore(value={"dim_x": 4}, explanation="kept")},
+                ),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        evidence_by_dim = extract_evidence(archive_path, top_k=5)
+        assert "scalar" not in evidence_by_dim
+        assert "dim_x" in evidence_by_dim
+        assert evidence_by_dim["dim_x"][0]["explanation"] == "kept"
+
+    def test_top_k_zero_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """top_k<1 short-circuits — caller treats as 'no evidence wanted'."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[FakeSample(id="s", scores={"j": FakeScore(value={"d": 7})})]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        assert extract_evidence(archive_path, top_k=0) == {}
+
+    def test_missing_archive_returns_empty(self, tmp_path: Path) -> None:
+        """Same graceful contract as extract_dim_aggregates."""
+        missing_archive = tmp_path / "absent.eval"
+        assert extract_evidence(missing_archive, top_k=3) == {}
+
+    def test_read_failure_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Broken archive → empty evidence, no exception bubbled up."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+
+        def boom(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("synthetic read failure")
+
+        monkeypatch.setattr("inspect_ai.log.read_eval_log", boom)
+        assert extract_evidence(archive_path, top_k=3) == {}
+
+    def test_missing_explanation_and_highlights(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Sample without explanation/metadata → empty strings, not KeyError."""
+        archive_path = tmp_path / "fake.eval"
+        archive_path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[FakeSample(id="seed-bare", scores={"j": FakeScore(value={"d": 6})})]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        rows = extract_evidence(archive_path, top_k=1)["d"]
+        assert rows[0]["explanation"] == ""
+        assert rows[0]["highlights"] == ""

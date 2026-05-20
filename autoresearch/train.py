@@ -388,8 +388,10 @@ def run_audit(
     *,
     session_id: str = "",
     gen_tag: str = "",
-) -> tuple[dict[str, float], dict[str, float], float, float]:
-    """Invoke a single audit. Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
+) -> tuple[dict[str, float], dict[str, float], dict[str, list[dict[str, Any]]], float, float]:
+    """Invoke a single audit.
+
+    Returns ``(dim_means, dim_stderr, evidence, audit_seconds, total_seconds)``.
 
     ``dry_run=True`` skips the subprocess and emits a baseline-flavoured set
     of dim means so the loop scaffolding can be smoke-tested without touching
@@ -422,7 +424,10 @@ def run_audit(
         }
         audit_seconds = 0.0
         total_seconds = time.time() - started
-        return dim_means, {}, audit_seconds, total_seconds
+        # dry-run synthesises numeric fitness only — no judge transcript
+        # exists to extract evidence from, so the caller treats this as
+        # "no signal" (baseline.json carries an empty evidence dict).
+        return dim_means, {}, {}, audit_seconds, total_seconds
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
         raise RuntimeError(
@@ -489,8 +494,18 @@ def run_audit(
     summary = json.loads(summary_line)
     dim_means = {k: float(v) for k, v in summary.get("dim_means", {}).items()}
     dim_stderr = {k: float(v) for k, v in summary.get("dim_stderr", {}).items()}
+    # G2 — per-dim top-K evidence emitted by ``_emit_dim_aggregates`` in
+    # plugins/petri_audit/cli_audit.py. Missing key is fine (older audit
+    # CLI without the G2 wiring) — autoresearch treats it as no signal.
+    raw_evidence = summary.get("evidence") or {}
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    if isinstance(raw_evidence, dict):
+        for dim, rows in raw_evidence.items():
+            if not isinstance(rows, list):
+                continue
+            evidence[str(dim)] = [r for r in rows if isinstance(r, dict)]
     total_seconds = time.time() - started
-    return dim_means, dim_stderr, audit_seconds, total_seconds
+    return dim_means, dim_stderr, evidence, audit_seconds, total_seconds
 
 
 # ---------------------------------------------------------------------------
@@ -858,47 +873,76 @@ def _append_session_index(
         pass
 
 
-def _load_baseline() -> tuple[dict[str, float] | None, dict[str, float] | None]:
+def _load_baseline() -> tuple[
+    dict[str, float] | None,
+    dict[str, float] | None,
+    dict[str, list[dict[str, Any]]],
+]:
     """Read ``state/baseline.json`` if present.
 
-    Returns ``(dim_means, dim_stderr)``. Both are ``None`` on missing
-    file / unparseable JSON / empty payload — caller treats this as the
-    gate-dormant case. Schema mirrors Petri's
-    ``core/audit/dim_extractor.extract_dim_aggregates`` output (no
-    FitnessBaseline wrapping per ADR-002 §3).  # slop:keep
+    Returns ``(dim_means, dim_stderr, evidence)``. ``dim_means`` /
+    ``dim_stderr`` are ``None`` on missing file / unparseable JSON /
+    empty payload — caller treats this as the gate-dormant case.
+    ``evidence`` is always a dict (empty when the baseline predates
+    G2 wiring, when ``--no-baseline``-grade legacy baseline is loaded,
+    or when the audit produced no judge transcript). Schema (post-G2)::
+
+        {
+          "dim_means":  {dim: float, ...},
+          "dim_stderr": {dim: float, ...},
+          "evidence":   {dim: [{sample_id, value, explanation, highlights}, ...], ...}
+        }
+
+    Mirrors Petri's
+    ``core/audit/dim_extractor.extract_dim_aggregates`` + ``extract_evidence``
+    outputs.
     """
     if not BASELINE_PATH.is_file():
-        return None, None
+        return None, None, {}
     try:
-        payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+        baseline_payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None, None
-    means_raw = payload.get("dim_means") or {}
-    stderr_raw = payload.get("dim_stderr") or {}
-    if not means_raw:
-        return None, None
-    means = {k: float(v) for k, v in means_raw.items()}
-    stderr = {k: float(v) for k, v in stderr_raw.items()}
-    return means, stderr
+        return None, None, {}
+    raw_means = baseline_payload.get("dim_means") or {}
+    raw_stderr = baseline_payload.get("dim_stderr") or {}
+    if not raw_means:
+        return None, None, {}
+    baseline_means = {k: float(v) for k, v in raw_means.items()}
+    baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+    baseline_evidence: dict[str, list[dict[str, Any]]] = {}
+    raw_evidence = baseline_payload.get("evidence") or {}
+    if isinstance(raw_evidence, dict):
+        for dim, dim_rows in raw_evidence.items():
+            if not isinstance(dim_rows, list):
+                continue
+            baseline_evidence[str(dim)] = [r for r in dim_rows if isinstance(r, dict)]
+    return baseline_means, baseline_stderr, baseline_evidence
 
 
 def _write_baseline(
     dim_means: dict[str, float],
     dim_stderr: dict[str, float],
+    evidence: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     """Persist current audit's dim aggregates as the new baseline.
 
-    Schema matches :func:`_load_baseline` — ``{dim_means, dim_stderr}``
-    only, no wrapping (ADR-002 §3). Caller decides *when* to write
-    (auto-promote rule vs ``--promote`` manual override).
+    Schema matches :func:`_load_baseline` — ``{dim_means, dim_stderr,
+    evidence}``. ``evidence`` is the post-G2 (2026-05-20) addition:
+    per-dim top-K worst-sample {sample_id, value, explanation,
+    highlights} rows from the petri judge so the G5 self-improving-loop
+    runner has "why" anchors, not just scalar drift. ``None`` /
+    omitted evidence persists an empty dict (legacy callers stay
+    compatible). Caller decides *when* to write (auto-promote rule
+    vs ``--promote`` manual override).
     """
     BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    baseline_payload: dict[str, Any] = {
         "dim_means": {k: float(v) for k, v in dim_means.items()},
         "dim_stderr": {k: float(v) for k, v in dim_stderr.items()},
+        "evidence": evidence or {},
     }
     BASELINE_PATH.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -1015,7 +1059,7 @@ def main() -> int:
     )
 
     try:
-        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(
+        dim_means, dim_stderr, evidence, audit_seconds, total_seconds = run_audit(
             dry_run=args.dry_run,
             session_id=session_id,
             gen_tag=gen_tag,
@@ -1034,7 +1078,11 @@ def main() -> int:
         print(f"audit failed: {exc}", file=sys.stderr)
         return 1
 
-    baseline_means, baseline_stderr = (None, None) if args.no_baseline else _load_baseline()
+    if args.no_baseline:
+        baseline_means, baseline_stderr = None, None
+        _baseline_evidence: dict[str, list[dict[str, Any]]] = {}
+    else:
+        baseline_means, baseline_stderr, _baseline_evidence = _load_baseline()
     _emit_journal(
         session_id,
         gen_tag,
@@ -1119,12 +1167,12 @@ def main() -> int:
     elif args.no_promote:
         promoted_line = "false (--no-promote)"
     elif args.promote:
-        _write_baseline(dim_means, dim_stderr)
+        _write_baseline(dim_means, dim_stderr, evidence)
         promoted_line = "true (--promote, manual override)"
     else:
         ok, reason = _should_promote(dim_means, dim_stderr, baseline_means, baseline_stderr)
         if ok:
-            _write_baseline(dim_means, dim_stderr)
+            _write_baseline(dim_means, dim_stderr, evidence)
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 

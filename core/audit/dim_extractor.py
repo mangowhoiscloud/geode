@@ -47,6 +47,7 @@ __all__ = [
     "compute_redundant_tool_invocation",
     "compute_verbose_padding",
     "extract_dim_aggregates",
+    "extract_evidence",
 ]
 
 
@@ -323,3 +324,120 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]
         path.name,
     )
     return {"dim_means": dim_means, "dim_stderr": dim_stderr}
+
+
+def _walk_evidence(samples: Any) -> dict[str, list[dict[str, Any]]]:
+    """Per-dim list of ``{sample_id, value, explanation, highlights}`` rows.
+
+    Iterates the same ``(sample, scorer, score)`` triple shape that
+    :func:`_walk_dim_values` consumes, but instead of collecting plain
+    floats it preserves the judge's explanation + the
+    ``metadata.highlights`` quote anchor for each (sample, dim) cell.
+    These two fields are what the post-G2 ``autoresearch/state/baseline.json``
+    carries as "engineering evidence" — the *why* behind each dim's
+    numeric score so the G5 self-improving-loop runner can rewrite
+    GEODE's wrapper prompt with anchored grounding, not just a scalar
+    regression.
+
+    Only ``value: dict`` shape is processed (the petri judge pattern).
+    Scalar-valued scores can't be tied to a specific dim citation, so
+    they are intentionally skipped — they show up in dim_means /
+    dim_stderr regardless.
+
+    Returns an unsorted list per dim; ranking is the caller's job
+    (see :func:`extract_evidence`) so this helper stays pure and
+    cheaply unit-testable.
+    """
+    per_dim: dict[str, list[dict[str, Any]]] = {}
+    for sample in samples or []:
+        sample_id = str(getattr(sample, "id", "") or "")
+        scores = getattr(sample, "scores", None) or {}
+        try:
+            score_items = scores.items()
+        except AttributeError:
+            continue
+        for _scorer_name, score_obj in score_items:
+            value = getattr(score_obj, "value", None)
+            if not isinstance(value, dict):
+                continue
+            explanation = str(getattr(score_obj, "explanation", "") or "")
+            md = getattr(score_obj, "metadata", None) or {}
+            highlights = str(md.get("highlights", "") or "") if isinstance(md, dict) else ""
+            for dim, raw in value.items():
+                coerced = _coerce_float(raw)
+                if coerced is None:
+                    continue
+                per_dim.setdefault(str(dim), []).append(
+                    {
+                        "sample_id": sample_id,
+                        "value": coerced,
+                        "explanation": explanation,
+                        "highlights": highlights,
+                    }
+                )
+    return per_dim
+
+
+def extract_evidence(
+    eval_path: Path | str,
+    top_k: int = 3,
+) -> dict[str, list[dict[str, Any]]]:
+    """Return per-dim top-K worst-sample evidence rows.
+
+    For each dim, picks the ``top_k`` samples with the HIGHEST value
+    (higher = more concerning in the petri rubric) and emits the
+    sample's judge ``explanation`` + ``metadata.highlights`` quote
+    anchor. Ties on value break alphabetically on ``sample_id`` so
+    runs with identical content produce identical output (stable
+    diffing for the baseline.json gate).
+
+    Schema::
+
+        {
+            "broken_tool_use": [
+                {"sample_id": "autonomy_self_preservation",
+                 "value": 7.0,
+                 "explanation": "The target hallucinated …",
+                 "highlights": "- [M9] …"},
+                ...
+            ],
+            ...
+        }
+
+    Same graceful-no-op contract as :func:`extract_dim_aggregates`:
+    missing ``inspect_ai``, missing archive, or unreadable archive all
+    return ``{}``. The G5 self-improving-loop runner treats an empty
+    evidence dict as "no signal" and falls back to numeric-only
+    fitness, never errors.
+    """
+    if top_k < 1:
+        return {}
+    try:
+        from inspect_ai.log import read_eval_log
+    except ImportError:
+        log.debug("dim_extractor: inspect_ai not installed — evidence no-op")
+        return {}
+
+    archive_path = Path(eval_path).expanduser()
+    if not archive_path.is_file():
+        log.warning("dim_extractor: %s does not exist (evidence)", archive_path)
+        return {}
+
+    try:
+        elog = read_eval_log(str(archive_path))
+    except Exception:
+        log.warning("dim_extractor: failed to read %s (evidence)", archive_path, exc_info=True)
+        return {}
+
+    raw_per_dim = _walk_evidence(getattr(elog, "samples", None))
+    evidence_by_dim: dict[str, list[dict[str, Any]]] = {}
+    for dim, dim_rows in raw_per_dim.items():
+        ranked = sorted(dim_rows, key=lambda r: (-float(r["value"]), str(r["sample_id"])))
+        evidence_by_dim[dim] = ranked[:top_k]
+    log.info(
+        "dim_extractor: evidence for %d dim(s) (top_k=%d) from %s",
+        len(evidence_by_dim),
+        top_k,
+        archive_path.name,
+    )
+    return evidence_by_dim
