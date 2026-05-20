@@ -954,7 +954,6 @@ def _login_order(rest: str) -> None:
     Ineligible profiles surface with their reject reason so the
     operator sees why a pin might be ignored.
     """
-    from core.auth.profiles import AuthProfile
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
 
