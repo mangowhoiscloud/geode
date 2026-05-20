@@ -66,11 +66,32 @@ def test_adr_013_each_t_has_inference_entry_point() -> None:
         "load_all_tool_definitions",  # T1
         "SkillRegistry",  # T2
         "build_system_prompt",  # T3
-        "core/llm/router.py",  # T4
+        "core/llm/router/calls/_route.py",  # T4 (post-Codex fix — package not single module)
         "apply_messages_cache_control",  # T5
         "_is_clearly_simple",  # T6
     ):
         assert entry in text, f"inference entry point not cited: {entry}"
+
+
+def test_adr_013_inference_entry_points_actually_exist_in_repo() -> None:
+    """Codex MCP catch — source-backed verification. ADR 의 inference
+    진입점이 실제 repo 에 존재."""
+    # T1
+    assert (REPO_ROOT / "core/tools/base.py").is_file()
+    # T2 — core/skills/skills.py 의 SkillRegistry
+    skills_src = (REPO_ROOT / "core/skills/skills.py").read_text(encoding="utf-8")
+    assert "SkillRegistry" in skills_src or "Registry" in skills_src
+    # T3
+    sp_src = (REPO_ROOT / "core/agent/system_prompt.py").read_text(encoding="utf-8")
+    assert "build_system_prompt" in sp_src
+    # T4 — core/llm/router 가 package
+    assert (REPO_ROOT / "core/llm/router").is_dir()
+    # T5
+    anth_src = (REPO_ROOT / "core/llm/providers/anthropic.py").read_text(encoding="utf-8")
+    assert "apply_messages_cache_control" in anth_src
+    # T6
+    gd_src = (REPO_ROOT / "core/orchestration/goal_decomposer.py").read_text(encoding="utf-8")
+    assert "_is_clearly_simple" in gd_src
 
 
 # ---------------------------------------------------------------------------
