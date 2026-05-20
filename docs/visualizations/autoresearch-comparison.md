@@ -64,6 +64,33 @@
 | Rubric Detail page | none (val_bpb is scalar) | 20-dim tiered rubric + Petri audit emits + autoresearch aggregates |
 | Glossary | terse README | 19-term EN/KO term/definition table |
 
+## 4b. File-by-file walk — `autoresearch_filewalk.py`
+
+The hero video and the high-level overview scene (`autoresearch_compare.py`)
+both stay in the "what is borrowed / swapped / added" register. The
+**filewalk** scene zooms in on the three files themselves so the
+domain swap is visible as a diagram, not a table.
+
+| Filewalk Bit | What it shows | Source for the data |
+|---|---|---|
+| 1 — 6-panel grid | Karpathy `{prepare, train, program}` vs GEODE `{prepare, train, program}` side by side, with LoC + top symbols per panel | this doc §3 + LoC counts measured 2026-05-21 (`wc -l` on `autoresearch/` + Karpathy 228791f) |
+| 2-4 — per-file detail | Two large panels per file (prepare.py / train.py / program.md) with full outline + LoC delta arrow | this doc §1-§3 + actual `grep -c "^def\|^class"` |
+| 5 — LoC bar chart | Karpathy vs GEODE bars for each file; arithmetic Δ in the same row | 3 measurements above; `prepare.py 390→203 (-187)`, `train.py 724→1308 (+584)`, `program.md ~200→360 (+160)` |
+| 6 — 3×3 heatmap | rows = file, cols = (verbatim / swapped / added), cells = qualitative intensity in [0, 1] | this doc §1-§3 — counts of items in each section, normalised |
+| Outro | one-line takeaway: *"Same scaffold. Different objective. Bigger safety perimeter."* + 3-color dot row | summary of §1-§3 |
+
+Render:
+
+    uv run manim -qh -o AutoresearchFilewalk-EN \
+        scripts/visualizations/autoresearch_filewalk.py AutoresearchFilewalk
+    GEODE_HERO_LANG=ko uv run manim -qh -o AutoresearchFilewalk-KO \
+        scripts/visualizations/autoresearch_filewalk.py AutoresearchFilewalk
+
+Source: `scripts/visualizations/autoresearch_filewalk.py`. Heatmap
+intensities are hard-coded in the module-level `HEATMAP` dict and
+sourced from §1-§3 of this document — when the comparison evolves,
+update both sides together.
+
 ## 5. Acknowledgement
 
 The 3-file pattern, fixed-budget single-script idiom, and "git as
