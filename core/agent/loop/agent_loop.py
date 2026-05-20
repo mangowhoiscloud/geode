@@ -466,8 +466,11 @@ class AgenticLoop:
         # ``_session_id`` uuid). Bind it to the ContextVar so the
         # episodic recorder can stamp ``Episode.parent_session_key``
         # for cross-session attribution. Empty for top-level loops.
-        # Subprocess sub-agents (SubAgentManager → WorkerRequest path)
-        # don't yet forward this value; future PR for that plumbing.
+        # TODO(PR-F-followup): subprocess sub-agents (SubAgentManager
+        # → WorkerRequest → worker.py path) don't forward this value;
+        # child Episodes record empty. WorkerRequest needs a
+        # ``parent_session_key`` field + worker.py needs to honour it
+        # before spawning the child AgenticLoop.
         set_parent_session_key(self._parent_session_key)
         await self._emit_cognitive(
             HookEvent.COGNITIVE_PERCEIVE,

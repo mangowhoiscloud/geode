@@ -40,9 +40,21 @@ _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", defa
 # e.g. ``"subject:foo:bar"``, NOT the parent's ``_session_id`` uuid
 # format). Naming matches the AgenticLoop constructor kwarg so the
 # data shape is unambiguous. Empty string = top-level loop.
-# Future-PR scope: a separate ContextVar ``parent_session_id`` can
-# be added when the sub-agent spawner is plumbed to forward the
-# parent's actual ``_session_id`` through WorkerRequest.
+#
+# TODO(PR-F-followup): A separate ContextVar ``parent_session_id``
+# (uuid format) is needed when the sub-agent spawner is plumbed to
+# forward the parent's actual ``_session_id`` through WorkerRequest.
+# Today only the in-process spawn path carries lineage; subprocess
+# children (``SubAgentManager → worker.py``) record empty.
+#
+# TODO(PR-F-followup): Same-task nested spawn (A → B → A) is NOT
+# covered by PR-4's lifetime comment below — that comment talks
+# about repeated arun() in the same task and separate asyncio
+# tasks. If a top-level loop A spawns child B *in the same task*
+# (not subprocess), B's bind would leak back into A until A's next
+# arun() re-binds. Add Token-based reset (``ContextVar.set`` returns
+# a Token; pair with ``ContextVar.reset(token)`` in a try/finally)
+# when this path becomes a documented use case.
 _active_parent_session_key: ContextVar[str] = ContextVar(
     "geode_active_parent_session_key", default=""
 )
