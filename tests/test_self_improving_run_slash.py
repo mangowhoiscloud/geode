@@ -197,7 +197,9 @@ def test_parse_run_opts_iterations_out_of_range(
 
 
 @pytest.mark.parametrize(
-    "kind", ["prompt", "tool_policy", "decomposition", "retrieval", "reflection"]
+    "kind",
+    # ADR-012 S0d (2026-05-21) — retrieval deprecated. 4 active kinds.
+    ["prompt", "tool_policy", "decomposition", "reflection"],
 )
 def test_parse_run_opts_target_kind_valid(kind: str) -> None:
     from core.cli.commands.self_improving import _parse_run_opts
@@ -205,6 +207,14 @@ def test_parse_run_opts_target_kind_valid(kind: str) -> None:
     flags = _parse_run_opts(["--target-kind", kind])
     assert flags is not None
     assert flags["target_kind"] == kind
+
+
+def test_parse_run_opts_target_kind_retrieval_rejected_post_s0d() -> None:
+    """ADR-012 S0d — retrieval 은 더 이상 valid CLI target_kind 아님."""
+    from core.cli.commands.self_improving import _parse_run_opts
+
+    flags = _parse_run_opts(["--target-kind", "retrieval"])
+    assert flags is None, "retrieval 은 S0d 후 deprecated — CLI parsing 이 거부해야 함"
 
 
 def test_parse_run_opts_target_kind_invalid(

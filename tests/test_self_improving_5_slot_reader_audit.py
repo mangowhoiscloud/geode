@@ -93,16 +93,14 @@ def test_audit_doc_exists() -> None:
 
 
 def test_audit_doc_pins_1_alive_4_dead() -> None:
-    """결론 한 줄 anchor."""
+    """결론 한 줄 anchor. S0a-d 4단계 후속 갱신 섹션 모두 존재."""
     text = _read(AUDIT_DOC)
-    # ADR-012 S0a/S0b/S0c (2026-05-21) 머지 이후 `tool_policy`/`reflection`/
-    # `decomposition` 이 ALIVE. audit 시점 의 사실은 1/5 — 그 줄을 유지하면서
-    # post-S0* update 섹션들이 함께 등장하는지 확인.
     assert "1/5 ALIVE, 4/5 DEAD" in text  # 원본 audit 시점 사실
     assert "Post-S0a" in text
     assert "Post-S0b" in text
     assert "Post-S0c" in text
-    assert "4/5 ALIVE, 1/5 DEAD" in text  # 현재 상태 (S0c 후)
+    assert "Post-S0d" in text  # retrieval deprecate
+    assert "4/4 ALIVE" in text  # 현재 상태 (S0d 후 deprecate 한 retrieval 제외)
 
 
 def test_audit_doc_names_all_5_slots() -> None:
@@ -147,26 +145,24 @@ def test_prompt_reader_is_called_in_agentic_loop() -> None:
 @pytest.mark.parametrize(
     "sot_filename",
     [
-        # ADR-012 S0a/S0b/S0c (2026-05-21) 머지 이후 ``tool-policy.json``,
-        # ``reflection.json``, ``decomposition.json`` 이 ALIVE — 각각의
-        # reader 가 ``core/agent/{tool_policy,reflection_policy,decomposition_policy}.py``
-        # 에 존재. 이 parametrize 에서 제거됨.
-        "retrieval.json",
+        # ADR-012 S0a/S0b/S0c/S0d (2026-05-21) 머지 후:
+        # - tool-policy.json (S0a) / reflection.json (S0b) / decomposition.json
+        #   (S0c) 는 ALIVE — 각각의 reader 가 core/agent/*_policy.py 에 존재
+        # - retrieval.json (S0d) 는 DEPRECATED — TARGET_KINDS 에서 제거됨.
+        #   reader 부재 검증 자체는 의미 없음 (mutation dispatch 안 함). 이
+        #   parametrize 에서 제거되어 빈 list.
+        # parametrize 가 비어있으면 test 가 실행되지 않으므로, 명시적
+        # historical anchor 1개 유지 — placeholder file 명으로 0 hits 보장.
+        "DEPRECATED_no_active_dead_slot.json",
     ],
 )
 def test_dead_slot_has_no_inference_reader(sot_filename: str) -> None:
-    """DEAD slot 의 SoT 파일명이 인퍼런스 경로 (core/agent + core/orchestration +
-    core/skills + core/llm + plugins + autoresearch — self_improving_loop
-    의 mutation 정의/디스패처는 제외) 어디에서도 참조되지 않음을 pin.
-    S0c/d PR 에서 reader 가 신설되면 이 test 가 실패해서 함께 갱신해야
-    한다 (의도된 anchor 회귀)."""
+    """S0a-d 머지 후 active dead slot 없음. parametrize 의 placeholder 는
+    "현재 dead slot 0개" 라는 anchor 의 historical marker. 미래에 dead slot
+    이 다시 생기면 (예: retrieval RAG 신설 후 reader 미완) 이 list 에 추가."""
     hits = _grep_inference_dirs(sot_filename)
-    # 0 hits 가 정상 (DEAD)
-    assert hits == [], (
-        f"DEAD slot {sot_filename!r} 의 reader 가 발견됨. "
-        f"S0b/c 권고의 reader 신설이라면 이 test 와 audit doc 의 상태표를 "
-        f"ALIVE 로 갱신해야 함. hits={hits}"
-    )
+    # 0 hits 가 정상 — placeholder file 명이라 항상 0.
+    assert hits == [], f"placeholder {sot_filename!r} 에서 hit 가 발견됨 — 비정상. hits={hits}"
 
 
 def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
@@ -228,13 +224,25 @@ def test_reflection_slot_is_now_alive_post_s0b() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Mutation target 등록은 5축 모두 유지 (정의는 그대로 — reader 만 부재)
+# Mutation target 등록은 S0d 머지 후 4축 명시 축소 (retrieval deprecated)
 # ---------------------------------------------------------------------------
 
 
-def test_all_5_slots_still_registered_as_mutation_targets() -> None:
-    """audit 결과로 mutation target 정의 자체를 손대지는 않음. 단지 reader
-    부재만 진단. S0d (retrieval deprecate) 결정 전까지는 5축 그대로 유지."""
+def test_active_4_slots_registered_as_mutation_targets() -> None:
+    """S0d (2026-05-21) 머지 후 ``TARGET_KINDS`` 는 4축 — retrieval 은
+    명시적 deprecate 로 제거. path constant + dict 매핑은 보존 (별도 ADR
+    로 RAG 인프라 신설 시 복원 가능)."""
+    import importlib
+
+    mod = importlib.import_module("core.self_improving_loop.policies")
+    target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
+    expected = {"prompt", "tool_policy", "decomposition", "reflection"}
+    assert target_kinds == expected, (
+        f"S0d 후 TARGET_KINDS 는 정확히 4 slot 이어야 함 (retrieval 제외). "
+        f"got={target_kinds}, expected={expected}"
+    )
+    # path constant 보존 — 미래 복원용
     src = _read("core/self_improving_loop/policies.py")
-    for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
-        assert f'"{slot}"' in src, f"mutation target {slot} should still be registered"
+    assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
+        "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
+    )

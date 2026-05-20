@@ -56,15 +56,17 @@ def test_tier_1_lists_all_5_slots_with_alive_dead_status() -> None:
     text = _read_adr()
     for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
         assert f"`{slot}`" in text, f"slot missing in Tier 1: {slot}"
-    # ALIVE/DEAD count — S0a/S0b/S0c 머지 (2026-05-21) 후 `tool_policy` +
-    # `reflection` + `decomposition` ALIVE 로 전환. 현재 상태: 4 ALIVE /
-    # 1 DEAD (retrieval). S0d 머지 (deprecate or RAG 신설) 후 다시 갱신.
+    # ALIVE/DEAD/DEPRECATED count — S0a/S0b/S0c/S0d 머지 (2026-05-21) 후.
+    # 현재 상태: 4 ALIVE (prompt + tool_policy + decomposition + reflection) /
+    # 0 DEAD / 1 DEPRECATED (retrieval). 5축 → 4축 명시 축소.
     assert text.count("**ALIVE**") == 4, (
-        f"S0a/S0b/S0c 후 ALIVE slot 은 정확히 4 개여야 함. count={text.count('**ALIVE**')}"
+        f"S0a-d 후 ALIVE slot 은 정확히 4 개여야 함. count={text.count('**ALIVE**')}"
     )
-    assert text.count("**DEAD**") == 1, (
-        f"S0a/S0b/S0c 후 DEAD slot 은 정확히 1 개 (retrieval) 여야 함. "
-        f"count={text.count('**DEAD**')}"
+    assert text.count("**DEAD**") == 0, (
+        f"S0a-d 후 DEAD slot 은 0 개여야 함. count={text.count('**DEAD**')}"
+    )
+    assert text.count("**DEPRECATED**") >= 1, (
+        f"S0d 후 retrieval 이 DEPRECATED 로 명시되어야 함. count={text.count('**DEPRECATED**')}"
     )
 
 
@@ -222,13 +224,36 @@ def test_adr_cites_train_py_dim_weights_location() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. 5축 mutation target 정의는 그대로 유지 — ADR 은 reader 처치만 결정
+# 7. 4축 mutation target 정의 — S0d 이후 retrieval deprecate
 # ---------------------------------------------------------------------------
 
 
-def test_all_5_slots_still_registered_as_mutation_targets() -> None:
-    """ADR 이 reader 신설을 결정하지만 mutation target 정의 자체는
-    손대지 않음 (S0d 의 retrieval deprecate 결정 전까지)."""
+def test_active_4_slots_registered_as_mutation_targets() -> None:
+    """S0d (2026-05-21) 머지 후 retrieval 은 TARGET_KINDS 에서 제거.
+    나머지 4 slot 만 mutation 대상."""
+    import importlib
+
+    mod = importlib.import_module("core.self_improving_loop.policies")
+    target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
+    expected = {"prompt", "tool_policy", "decomposition", "reflection"}
+    assert target_kinds == expected, (
+        f"S0d 후 TARGET_KINDS 는 정확히 4 slot 이어야 함 (retrieval 제외). "
+        f"got={target_kinds}, expected={expected}"
+    )
+
+
+def test_retrieval_deprecated_but_path_constant_preserved() -> None:
+    """S0d 가 retrieval 을 deprecate 하면서도 path constant + dict 매핑은
+    보존해서 미래 RAG 인프라 신설 시 별도 ADR 로 복원 가능."""
     src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
-    for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
-        assert f'"{slot}"' in src, f"mutation target {slot} should still be registered"
+    # TARGET_KINDS 에서 제거 (== 4 slot 만)
+    assert '"retrieval",' not in src.split("TARGET_KINDS")[1].split(")")[0], (
+        "retrieval 은 TARGET_KINDS 에서 제거되어야 함"
+    )
+    # 단 path constant 매핑은 보존
+    assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
+        "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 보존되어야 함 (미래 복원 가능)"
+    )
+    # core/paths.py 의 path constant 도 보존
+    paths_src = (REPO_ROOT / "core/paths.py").read_text(encoding="utf-8")
+    assert "GLOBAL_RETRIEVAL_POLICY_PATH" in paths_src

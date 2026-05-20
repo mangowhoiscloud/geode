@@ -47,6 +47,43 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-S0d — `retrieval` slot deprecate (ADR-012 단기 시퀀스 종료).**
+  PR-AUDIT-5SLOT 의 4 dead slot 중 마지막 처치 — `TARGET_KINDS` 에서
+  `retrieval` 제거 → **5축 → 4축 명시 축소**. `GLOBAL_RETRIEVAL_POLICY_PATH`
+  + `_KIND_TO_PATH` 의 `retrieval` 매핑은 보존 (별도 ADR 로 미래 RAG
+  인프라 신설 시 복원 가능).
+  **결정 근거** — frontier 3-source 합의 Wiki injection (ADR-012
+  §Decision.3a):
+  (1) **Boris Cherny** (Claude Code architect) *Latent Space 2025-05*:
+  "Originally we tried RAG... **agentic search outperformed everything.
+  By a lot. By a lot**. At the cost of latency and tokens, you now have
+  really awesome search **without security downsides**"
+  (https://www.latent.space/p/claude-code).
+  (2) **arXiv 2605.15184** (PwC, 2026-05): 116-Q LongMemEval × Claude
+  Code/Codex/Gemini CLI/Chronos 4-harness 교차 — "**grep generally
+  yields higher accuracy than vector retrieval**".
+  (3) **Anthropic 공식 blog**: "navigates the way a software engineer
+  would: traverses file system, reads files, uses grep" + staleness
+  예시 ("RAG returns a function the team renamed two weeks ago").
+  **Frontier embedding 히트맵** (ADR §Decision.3a) — code/agent 도메인
+  3/3 (Claude Code / Codex CLI / Devin) 이 embedding 회피, memory
+  도메인 (Hermes-Agent / OpenClaw) 만 적극 사용. GEODE 의 self-improving
+  loop 정책 진화는 code/agent 도메인 → Claude Code 라인.
+  **Cursor 약화 4-축 원인**: long context 확장 / prompt caching 92%
+  prefix reuse + 81% 비용 절감 / agentic search 의 경험적 우세 / Bitter
+  Lesson tool use 성숙도.
+  Boris 의 6 근거 중 4개 (Performance / Index staleness / Precision /
+  Bitter Lesson) 가 GEODE 의 retrieval slot 에 직접 적용.
+  **invariant test 갱신**: ADR ALIVE/DEAD/DEPRECATED count
+  (`==4/==0/>=1`), `TARGET_KINDS` exact set 검증
+  (`{prompt, tool_policy, decomposition, reflection}`), path constant
+  보존 검증, DEAD parametrize placeholder 화. audit doc Post-S0d update
+  섹션 + `4/4 ALIVE` anchor.
+  **ADR-012 단기 S0 시퀀스 종료** — 5축 진화 면적 1축 → 4축 명시 안정화.
+  다음 PR: S1 (`ux_means` fitness 축 신설).
+
 ### Added
 
 - **PR-S0c — `decomposition` reader 신설 (ADR-012 dead slot 살리기 #3).**
