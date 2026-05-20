@@ -49,6 +49,40 @@ functional change.
 
 ### Added
 
+- **PR-4 C-3 — episodic action-outcome memory.** Pre-PR-4
+  ``core.memory`` carried four memory types (user / project /
+  feedback / reference) but had no place to record action → outcome
+  triples. New ``core/memory/episodic.py`` introduces an append-only
+  JSONL ledger at ``~/.geode/memory/episodes.jsonl`` (constants
+  ``GLOBAL_MEMORY_DIR`` + ``GLOBAL_EPISODES_LOG`` in ``core/paths.py``)
+  with one row per tool execution: ``timestamp_ns / session_id /
+  round / tool_name / tool_input_head (200 chars) / success / error
+  (200 chars) / duration_ms / cognitive_state`` snapshot. Rolling
+  cap of 1000 rows with 25%-overshoot rotation tolerance (atomic
+  temp-file rewrite so concurrent readers never see a partial file).
+  Retrieval API ``EpisodicStore.recent(*, tool_name, session_id,
+  limit)`` returns newest-first, defensively skips malformed rows
+  with a WARN. Process-global singleton via ``get_episodic_store`` /
+  ``set_episodic_store`` (test seam).
+
+- **PR-4 C-3 — ContextVar bridge for the active cognitive state.**
+  Hooks fired from inside the tool executor (TOOL_EXEC_ENDED → the
+  episodic recorder) need both ``CognitiveState`` and ``session_id``
+  but the executor knows neither. New
+  ``core/agent/cognitive_state_ctx.py`` exposes paired get/set
+  accessors (CLAUDE.md "ContextVar injection" rule — every
+  ``get_*()`` has a corresponding ``set_*()``). ``AgenticLoop.arun``
+  binds both at session start; the bootstrap hook reads them when
+  recording each episode.
+
+- **PR-4 C-3 — bootstrap TOOL_EXEC_ENDED handler.**
+  ``core/wiring/bootstrap.py`` registers the
+  ``episodic_memory_recorder`` plugin (priority 70, observer) — fires
+  after the interceptor chain but before audit loggers. Writes one
+  Episode per tool execution including the cognitive-state snapshot
+  read from the ContextVar. ``OSError`` during append is swallowed
+  with a WARN so a full disk can't crash the agentic loop.
+
 - **PR-3 C-2 — reflection node (LLM-driven belief update after the
   tool batch).** Pre-PR-3 the loop went tool result → next action with
   no explicit belief-update step; ``CognitiveState.hypotheses`` and

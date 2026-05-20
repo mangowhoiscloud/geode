@@ -62,6 +62,14 @@ GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 # (no env var required).
 GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "wrapper-sections.json"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
+# PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
+# (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per
+# tool execution with (timestamp, session_id, tool_name, tool_input,
+# success/error, cognitive_state snapshot). Rolling cap of
+# ``EPISODE_LOG_MAX_ROWS`` keeps the file bounded. Read by
+# :class:`core.memory.episodic.EpisodicStore` retrieval API.
+GLOBAL_MEMORY_DIR = GEODE_HOME / "memory"
+GLOBAL_EPISODES_LOG = GLOBAL_MEMORY_DIR / "episodes.jsonl"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
 # Read by ``plugins.petri_audit.user_overrides`` and merged into the
 # binding resolver. Kept as a separate TOML (rather than wedged into

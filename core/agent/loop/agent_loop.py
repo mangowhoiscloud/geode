@@ -539,6 +539,14 @@ class AgenticLoop:
         # viewer can segment the session by cognitive cycle step.
         if not self.cognitive_state.goal:
             self.cognitive_state.goal = user_input
+        # PR-4 C-3 — bind the CognitiveState to the ContextVar so
+        # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
+        # → episodic memory recorder) can read the live state without
+        # being coupled to AgenticLoop directly.
+        from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
+
+        set_cognitive_state(self.cognitive_state)
+        set_session_id(self._session_id)
         await self._emit_cognitive(
             HookEvent.COGNITIVE_PERCEIVE,
             user_input=user_input,
