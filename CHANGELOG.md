@@ -68,7 +68,7 @@ functional change.
   BEFORE the side-effect calls (``_emit_quota_panel`` /
   ``log.info``) inside the helper so terminal output stays clean
   — same defensive duplication the pre-refactor code had (the
-  outer ``finally`` also stops the spinner). 15 invariant tests
+  outer ``finally`` also stops the spinner). 14 invariant tests
   pin the helper signature, all 4 outcomes (response / billing /
   cancelled / context-exhausted-propagates), spinner-stop ordering
   before side effects, ``arun`` discriminator return-on-AgenticResult,
@@ -344,7 +344,7 @@ functional change.
   field (default ``"primary"`` for backward compat). The
   context-window guard runs only for primary (reflection's clean-
   context discipline from PR-3 sidesteps the main loop's context
-  size). 15 invariant tests pin registry / signature / dispatcher /
+  size). 14 invariant tests pin registry / signature / dispatcher /
   reflection-branch persistence / role-prefix parsing.
 
 ## [0.99.24] — 2026-05-21
