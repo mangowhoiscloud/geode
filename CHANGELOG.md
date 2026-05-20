@@ -49,6 +49,39 @@ functional change.
 
 ### Changed
 
+- **PR-D Phase 2c — ``_dispatch_llm_call`` extraction from
+  ``arun``.** Continues the god-method decomposition (Phase 1
+  session-start / 2a round guards / 2b model-drift sync already
+  merged). Phase 2c takes the LLM-call dispatch + two simple
+  exception handlers (``BillingError`` / ``UserCancelledError``)
+  from the round body into
+  ``AgenticLoop._dispatch_llm_call(system_prompt, messages,
+  round_idx, spinner) -> AgenticResponse | AgenticResult | None``.
+  Discriminator-return pattern: ``AgenticResponse`` on success,
+  ``AgenticResult`` on early-exit (caller ``return``s verbatim),
+  ``None`` when ``_call_llm`` returned ``None`` (caller's existing
+  error-classification handles it). ``_ContextExhaustedError`` is
+  *intentionally* not caught — it propagates so the inline
+  aggressive-recovery path (``continue`` retry vs
+  ``finalize_and_return`` give-up) stays exactly where it was
+  with its complex multi-branch control flow. Spinner stop runs
+  BEFORE the side-effect calls (``_emit_quota_panel`` /
+  ``log.info``) inside the helper so terminal output stays clean
+  — same defensive duplication the pre-refactor code had (the
+  outer ``finally`` also stops the spinner). 15 invariant tests
+  pin the helper signature, all 4 outcomes (response / billing /
+  cancelled / context-exhausted-propagates), spinner-stop ordering
+  before side effects, ``arun`` discriminator return-on-AgenticResult,
+  anti-residue (per-round inline ``BillingError`` /
+  ``UserCancelledError`` handlers gone, but the session-start
+  ``_try_decompose`` BillingError handler — separate from the
+  LLM-call path — preserved), and cross-phase regression (Phase 1 /
+  2a / 2b helpers still intact). Phase 3 (response handler /
+  overthinking / convergence detection) is the larger remaining
+  slice; planned after Phase 2c lands.
+
+### Changed
+
 - **PR-D Phase 2b — ``_sync_model_and_rebuild_prompt`` extraction
   from ``arun``.** Continues the god-method decomposition. Phase 1
   (v0.99.24) extracted session-start signals; Phase 2a (v0.99.25)

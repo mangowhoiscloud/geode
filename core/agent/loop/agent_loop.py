@@ -499,6 +499,54 @@ class AgenticLoop:
 
         return None
 
+    async def _dispatch_llm_call(
+        self,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+        spinner: TextSpinner,
+    ) -> AgenticResponse | AgenticResult | None:
+        """PR-D Phase 2c — LLM-call dispatch + simple-exception
+        handlers extracted from ``arun``'s while-loop body.
+
+        Returns:
+          * ``AgenticResponse`` on a successful call (caller proceeds
+            with response processing).
+          * ``AgenticResult`` on ``BillingError`` or
+            ``UserCancelledError`` (caller ``return``s this verbatim).
+          * ``None`` when ``_call_llm`` returns ``None`` (caller's
+            existing error-classification path handles it).
+
+        ``_ContextExhaustedError`` is NOT caught — propagates to the
+        caller so the inline aggressive-recovery path runs with its
+        ``continue``/``finalize_and_return`` branches intact.
+
+        Side effect: stops ``spinner`` BEFORE calling
+        ``_emit_quota_panel`` (BillingError) or ``log.info``
+        (UserCancelledError) so terminal output stays clean. The
+        caller's outer ``finally`` block also stops the spinner — this
+        is the same defensive duplication the pre-refactor code had.
+        Behaviour preserved exactly.
+        """
+        try:
+            return await self._call_llm(system_prompt, messages, round_idx=round_idx)
+        except BillingError as exc:
+            spinner.stop()
+            self._emit_quota_panel(exc)
+            return AgenticResult(
+                text=exc.user_message(),
+                rounds=round_idx + 1,
+                termination_reason="billing_error",
+            )
+        except UserCancelledError:
+            spinner.stop()
+            log.info("LLM call interrupted by user")
+            return AgenticResult(
+                text="Interrupted.",
+                rounds=round_idx + 1,
+                termination_reason="user_cancelled",
+            )
+
     async def _sync_model_and_rebuild_prompt(
         self, system_prompt: str, decomposition_hint: str | None
     ) -> str:
@@ -816,23 +864,20 @@ class AgenticLoop:
                 _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
             _spinner.start()
             try:
-                response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
-            except BillingError as exc:
-                _spinner.stop()
-                self._emit_quota_panel(exc)
-                return AgenticResult(
-                    text=exc.user_message(),
-                    rounds=round_idx + 1,
-                    termination_reason="billing_error",
+                # PR-D Phase 2c — BillingError + UserCancelledError
+                # paths extracted into a helper. The helper stops the
+                # spinner before its side-effects (emit_quota_panel,
+                # log.info) so terminal output stays clean. Returns
+                # ``AgenticResponse`` on success or ``AgenticResult``
+                # on early-exit; ``_ContextExhaustedError`` is NOT
+                # caught (keeps its complex recovery path inline
+                # because of the ``continue`` semantics).
+                _llm_outcome = await self._dispatch_llm_call(
+                    system_prompt, messages, round_idx, _spinner
                 )
-            except UserCancelledError:
-                _spinner.stop()
-                log.info("LLM call interrupted by user")
-                return AgenticResult(
-                    text="Interrupted.",
-                    rounds=round_idx + 1,
-                    termination_reason="user_cancelled",
-                )
+                if isinstance(_llm_outcome, AgenticResult):
+                    return _llm_outcome
+                response = _llm_outcome
             except _ContextExhaustedError as exc:
                 _spinner.stop()
                 log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
