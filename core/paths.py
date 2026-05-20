@@ -55,6 +55,12 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
 GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
+# G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
+# sections. Written by ``autoresearch.train.write_wrapper_prompt_sections``
+# after a self-improving-loop promotion; read by
+# ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs
+# (no env var required).
+GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "wrapper-sections.json"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
 # Read by ``plugins.petri_audit.user_overrides`` and merged into the

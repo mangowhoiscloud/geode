@@ -25,7 +25,7 @@ from pathlib import Path
 
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
-from core.paths import get_project_root
+from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT, get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -43,15 +43,14 @@ WRAPPER_OVERRIDE_HOOK_READY = True
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
-_WRAPPER_SECTIONS_SOT_PATH = (
-    Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
-)
+_WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_SOT
 """G5a — cross-process SoT path shared with :mod:`autoresearch.train`.
 
-Duplicated as a local Path constant (not imported from autoresearch)
-because :mod:`core.agent` must stay free of autoresearch dependencies
-per the import-linter "Agent stays pure" contract. The two definitions
-are pinned to byte-identity by ``tests/agent/test_wrapper_sot_path_parity``.
+Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_SOT` so the
+``.geode`` literal lives in exactly one place (path-literal guard
+contract); the module-local alias is kept so tests can monkeypatch
+``core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH`` without
+mutating the shared constant.
 """
 
 

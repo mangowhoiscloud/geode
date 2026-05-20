@@ -374,9 +374,18 @@ AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 # autoresearch (writer when the G5b runner promotes a mutation),
 # ``core.agent.system_prompt`` (reader for daily GEODE runs), and the
 # audit subprocess (reader via the GEODE_WRAPPER_OVERRIDE env hook).
-# Placed under ``~/.geode/`` so it survives ``git worktree remove`` and
-# is shared across worktrees / processes.
-WRAPPER_SECTIONS_SOT_PATH = Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
+# Sourced from ``core.paths.GLOBAL_WRAPPER_SECTIONS_SOT`` so the ``.geode``
+# literal lives in exactly one place (path-literal guard contract).
+try:
+    from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT as _CORE_WRAPPER_SECTIONS_SOT
+except ImportError:
+    # ``autoresearch.train`` is importable from environments where ``core``
+    # isn't installed (legacy fixture path) — fall back to the literal so the
+    # module still loads. Tests pin parity via ``test_sot_path_parity_with_autoresearch``.
+    _CORE_WRAPPER_SECTIONS_SOT = (
+        Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
+    )
+WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
 
 # Resolved at module-load time so existing readers (``_dump_wrapper_override``,
 # ``print_summary``) keep their constant-style API. The G5b runner edits
