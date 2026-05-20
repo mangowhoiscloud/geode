@@ -65,6 +65,55 @@ functional change.
   D1 full 9→3 event collapse remains deferred — pure naming churn
   with downstream consumer risk.
 
+- **PR-C6 — `docs/operator-mode-a.md` Mode A operator manual.**
+  Wave 2 / pure docs. Documents the Karpathy-idiom path for
+  running the self-improving loop via an external Claude Code or
+  Codex CLI session (vs the GEODE CLI's `/self-improving run`
+  Mode B path). Covers boot recipes for both clients, the agent
+  contract pointer at ``autoresearch/program.md``, the shared
+  SoT inventory (5 policy files + audit ledger + baseline +
+  results), a Mode A vs Mode B comparison matrix with 8
+  dimensions (boot effort / iterations / confirmation / mutator
+  LLM / audit log / rollback / quota / cost gate), and decision
+  guidance for when each mode is the right choice. 7 invariant
+  tests pin the doc's presence, the all-5-SoT references, both
+  boot recipes, the design-doc cross-reference, the slash command
+  reference, the ledger reference, and the Karpathy minimal boot
+  prompt anchor.
+
+- **PR-G2 — `/model` mutator role-tab.** Wave 1 / 3 PRs.
+  Extends the ``AGENT_ROLES`` registry (PR-A pattern: primary +
+  reflection) with a third entry: ``mutator``. Pre-PR operators
+  had to edit ``~/.geode/config.toml [self_improving_loop.mutator]
+  default_model`` manually; PR-G2 wires the same role-tab UI that
+  primary + reflection already use. The mutator role differs in
+  one respect — its model knob lives in ``MutatorConfig.default_model``
+  (toml-only, post-PR-MINIMAL-2 G1a defaults to ``None`` for
+  Settings.model inherit), not on ``Settings``. The
+  ``AgentRole.settings_field=""`` sentinel signals "no Settings
+  attribute to write"; ``_current_model_for_role`` reads the toml
+  value directly via the new ``_read_toml_value`` helper (tomllib +
+  defensive empty-on-malformed-or-missing), and ``_apply_model``
+  guards the ``object.__setattr__(settings, ...)`` call behind an
+  ``if role_def.settings_field:`` check so the picker's choice
+  persists via env var + ``upsert_config_toml`` only — exactly the
+  SoT path the runner's lazy ``load_self_improving_loop_config()``
+  reads at dispatch time. 7 invariant tests pin role registration,
+  empty-settings-field sentinel, toml read paths (set / unset /
+  malformed / missing file), and the apply-time settings write
+  guard.
+
+- **PR-G4 — `/self-improving run` summary now carries source
+  telemetry.** Wave 1 / 3 PRs. Adds ``model=...`` and ``source=...``
+  to the per-run summary line so the operator can verify which
+  channel was billed at the end of a confirmation cycle. New
+  ``_resolve_run_summary_telemetry`` helper mirrors the runner's
+  ``_default_llm_call`` resolution (G1a inherit: ``None`` default
+  → ``Settings.model``). Defensive — config-import failure returns
+  ``("?", "?")`` placeholders rather than crashing the slash.
+  4 invariant tests pin the summary-line shape, the inherit path,
+  explicit-default override, and the placeholder fallback.
+
 ### Changed
 
 - **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
