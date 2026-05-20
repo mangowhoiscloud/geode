@@ -26,6 +26,21 @@ def _read(path: str) -> str:
     return full.read_text(encoding="utf-8")
 
 
+# Inference reader 가 들어갈 수 있는 모든 코드 디렉토리. ``core/agent``
+# 외에도 ``core/orchestration`` (e.g. GoalDecomposer), ``core/skills``,
+# ``plugins/``, ``autoresearch/`` 까지 포함 — DEAD anchor 가 다른
+# 디렉토리에 reader 가 신설되는 경우도 catch 하도록.
+_READER_SEARCH_DIRS: tuple[str, ...] = (
+    "core/agent",
+    "core/orchestration",
+    "core/skills",
+    "core/llm",
+    "core/self_improving_loop",
+    "plugins",
+    "autoresearch",
+)
+
+
 def _grep_py_in_dir(needle: str, subdir: str) -> list[str]:
     """Recursively grep ``needle`` in ``*.py`` under ``REPO_ROOT/subdir``,
     skipping test files and bytecode. Returns ``path:lineno:line`` strings."""
@@ -44,6 +59,23 @@ def _grep_py_in_dir(needle: str, subdir: str) -> list[str]:
             if needle in line:
                 rel = path.relative_to(REPO_ROOT)
                 hits.append(f"{rel}:{i}:{line}")
+    return hits
+
+
+def _grep_inference_dirs(needle: str) -> list[str]:
+    """Aggregate ``_grep_py_in_dir`` over the full inference reader search
+    surface (all 7 dirs). Skips matches inside ``self_improving_loop``
+    mutation infra (policies.py / runner.py) because those define / dispatch
+    the SoT files, not consume them — that's exactly the bug audit pins."""
+    hits: list[str] = []
+    for sub in _READER_SEARCH_DIRS:
+        for line in _grep_py_in_dir(needle, sub):
+            # ``policies.py`` 와 ``runner.py`` 는 SoT 정의/디스패처. inference reader 아님.
+            if "self_improving_loop/policies.py" in line:
+                continue
+            if "self_improving_loop/runner.py" in line:
+                continue
+            hits.append(line)
     return hits
 
 
@@ -92,10 +124,11 @@ def test_prompt_slot_reader_alive_in_system_prompt() -> None:
 
 
 def test_prompt_reader_is_called_in_agentic_loop() -> None:
-    """``build_system_prompt`` 가 실제로 호출되는 경로가 살아있어야 한다."""
-    # AgenticLoop 또는 그 호출 사이트 어디서든 build_system_prompt 가 호출돼야 함.
-    hits = _grep_py_in_dir("build_system_prompt", "core/agent")
-    # 최소 2개 hit (정의 + 호출자 1개 이상)
+    """``build_system_prompt`` 가 실제로 호출되는 경로가 살아있어야 한다.
+    실제 chain (Codex MCP 검증): system_prompt.py → core/agent/loop/_context.py
+    → core/agent/loop/agent_loop.py."""
+    hits = _grep_inference_dirs("build_system_prompt")
+    # 최소 2개 hit (정의 + 호출자 1개 이상).
     assert len(hits) >= 2, f"build_system_prompt should have a caller; got {hits}"
 
 
@@ -114,23 +147,31 @@ def test_prompt_reader_is_called_in_agentic_loop() -> None:
     ],
 )
 def test_dead_slot_has_no_inference_reader(sot_filename: str) -> None:
-    """DEAD slot 의 SoT 파일명이 ``core/agent/`` 인퍼런스 경로 어디에서도
-    참조되지 않음을 pin. S0a/b/c PR 에서 reader 가 신설되면 이 test 가
-    실패해서 함께 갱신해야 한다 (의도된 anchor 회귀)."""
-    hits = _grep_py_in_dir(sot_filename, "core/agent")
+    """DEAD slot 의 SoT 파일명이 인퍼런스 경로 (core/agent + core/orchestration +
+    core/skills + core/llm + plugins + autoresearch — self_improving_loop
+    의 mutation 정의/디스패처는 제외) 어디에서도 참조되지 않음을 pin.
+    S0a/b/c PR 에서 reader 가 신설되면 이 test 가 실패해서 함께
+    갱신해야 한다 (의도된 anchor 회귀)."""
+    hits = _grep_inference_dirs(sot_filename)
     # 0 hits 가 정상 (DEAD)
     assert hits == [], (
-        f"DEAD slot {sot_filename!r} 의 reader 가 core/agent/ 에서 발견됨. "
-        f"S0a/b/c 권고 의 reader 신설이라면 이 test 와 audit doc 의 상태표를 "
+        f"DEAD slot {sot_filename!r} 의 reader 가 발견됨. "
+        f"S0a/b/c 권고의 reader 신설이라면 이 test 와 audit doc 의 상태표를 "
         f"ALIVE 로 갱신해야 함. hits={hits}"
     )
 
 
-def test_decomposition_slot_dead_via_hardcoded_goal_decomposer() -> None:
-    """decomposition slot 의 dead 사유 — GoalDecomposer 가 hardcoded."""
+def test_decomposition_slot_not_wired_to_decomposition_json() -> None:
+    """decomposition slot 의 dead 사유 — ``_decomposition.py`` 는
+    ``GoalDecomposer`` 를 호출하고 ``GoalDecomposer`` 의 prompt 는
+    ``core.llm.prompts.load_prompt("decomposer", "system")`` 으로
+    별도 prompt SoT 에서 로드 (즉 hardcoded 가 아님). 다만 어느 경로도
+    ``decomposition.json`` 을 읽지 않음 — 그게 decomposition slot 의
+    dead 사유. (Codex MCP 검증 결과 반영 — `hardcoded` 표현은 부정확,
+    `decomposition.json 미연결` 이 정확.)"""
     src = _read("core/agent/loop/_decomposition.py")
     assert "GoalDecomposer" in src
-    # decomposition.json 을 읽는 reader 없음
+    # decomposition.json 을 읽는 reader 없음 (loop 진입 지점)
     assert "decomposition.json" not in src
 
 
