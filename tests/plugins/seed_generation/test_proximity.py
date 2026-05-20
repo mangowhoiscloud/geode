@@ -15,9 +15,12 @@ from unittest.mock import patch
 
 from plugins.seed_generation.agents.proximity import (
     EMBED_SIMILARITY_THRESHOLD,
+    GRAPH_WEIGHT_EMBED,
+    GRAPH_WEIGHT_LEXICAL,
     LEXICAL_JACCARD_THRESHOLD,
     Proximity,
     _jaccard,
+    _pair_key,
     _shingles,
 )
 from plugins.seed_generation.orchestrator import PipelineState
@@ -96,7 +99,7 @@ def test_proximity_embedding_track_marks_duplicates(tmp_path: Path) -> None:
     proximity = Proximity()
     candidate_texts = proximity._load_candidate_texts(state)
     with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
-        embed_dupes = proximity._embedding_track(candidate_texts, [])
+        embed_dupes, _scores = proximity._embedding_track(candidate_texts, [])
     assert "c2" in embed_dupes
     assert "c1" not in embed_dupes
     assert "c3" not in embed_dupes
@@ -114,7 +117,7 @@ def test_proximity_lexical_track_marks_duplicates(tmp_path: Path) -> None:
     ]
     proximity = Proximity()
     candidate_texts = proximity._load_candidate_texts(state)
-    lexical_dupes = proximity._lexical_track(candidate_texts, [])
+    lexical_dupes, _scores = proximity._lexical_track(candidate_texts, [])
     assert "c2" in lexical_dupes
 
 
@@ -211,6 +214,74 @@ def test_thresholds_pinned() -> None:
     assert LEXICAL_JACCARD_THRESHOLD == 0.40
 
 
+# ── PR-Π1 — proximity graph emit ──
+
+
+def test_pair_key_sorts_alphabetically() -> None:
+    assert _pair_key("b", "a") == ("a", "b")
+    assert _pair_key("a", "b") == ("a", "b")
+    assert _pair_key("c2", "c10") == ("c10", "c2")  # lexicographic, not numeric
+
+
+def test_graph_weights_sum_to_one() -> None:
+    """Composite-score weights must sum to 1.0 so the graph value is in [0, 1]."""
+    assert GRAPH_WEIGHT_EMBED + GRAPH_WEIGHT_LEXICAL == 1.0
+
+
+def test_proximity_emits_graph_into_state(tmp_path: Path) -> None:
+    """``execute`` populates ``state.proximity_graph`` for every candidate pair."""
+    state = _make_state(tmp_path)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha beta gamma"),
+        _make_candidate("c2", tmp_path / "c2.md", body="alpha beta gamma"),  # near-dup
+        _make_candidate("c3", tmp_path / "c3.md", body="totally separate words"),
+    ]
+    state.reflections = {}
+    fake_vectors = [
+        [1.0, 0.0, 0.0, 0.0],  # c1
+        [0.95, 0.05, 0.0, 0.0],  # c2 — close to c1 but not dedup-triggering
+        [0.0, 1.0, 0.0, 0.0],  # c3 — far
+    ]
+    with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
+        Proximity().execute(state)
+    # All 3 candidate-candidate pairs land in the graph.
+    pair_c1_c2 = _pair_key("c1", "c2")
+    pair_c1_c3 = _pair_key("c1", "c3")
+    pair_c2_c3 = _pair_key("c2", "c3")
+    assert pair_c1_c2 in state.proximity_graph
+    assert pair_c1_c3 in state.proximity_graph
+    assert pair_c2_c3 in state.proximity_graph
+    # Near-duplicate pair scores higher than the orthogonal pair.
+    assert state.proximity_graph[pair_c1_c2] > state.proximity_graph[pair_c1_c3]
+    # All values are in [0, 1].
+    for score in state.proximity_graph.values():
+        assert 0.0 <= score <= 1.0
+
+
+def test_proximity_graph_empty_on_embedding_failure_but_lexical_filled(
+    tmp_path: Path,
+) -> None:
+    """Embedding failure → embed_scores empty, but lexical track still fills graph."""
+    state = _make_state(tmp_path)
+    # Use bodies long enough for shingles to overlap meaningfully.
+    body = " ".join(["foo bar baz qux qaz wxy abc def"] * 3)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body=body),
+        _make_candidate("c2", tmp_path / "c2.md", body=body),
+    ]
+    state.reflections = {}
+    with patch(
+        "core.tools.text_embed.embed_texts",
+        side_effect=RuntimeError("OPENAI down"),
+    ):
+        Proximity().execute(state)
+    # Graph still gets the lexical contribution alone.
+    pair = _pair_key("c1", "c2")
+    assert pair in state.proximity_graph
+    # Embed weight × 0 + lexical weight × jaccard — bounded above by lexical weight.
+    assert state.proximity_graph[pair] <= GRAPH_WEIGHT_LEXICAL
+
+
 def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
     """Pool-vs-candidate dedup — candidate matching a pool seed by lexical
     track is marked, even if no sibling candidate matches.
@@ -230,7 +301,7 @@ def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
     proximity = Proximity()
     candidate_texts = proximity._load_candidate_texts(state)
     pool_texts = proximity._load_pool_texts(state)
-    lexical_dupes = proximity._lexical_track(candidate_texts, pool_texts)
+    lexical_dupes, _scores = proximity._lexical_track(candidate_texts, pool_texts)
     assert "c1" in lexical_dupes
     assert "c2" not in lexical_dupes
 
@@ -257,7 +328,7 @@ def test_proximity_pool_dedup_embedding(tmp_path: Path) -> None:
     candidate_texts = proximity._load_candidate_texts(state)
     pool_texts = proximity._load_pool_texts(state)
     with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
-        embed_dupes = proximity._embedding_track(candidate_texts, pool_texts)
+        embed_dupes, _scores = proximity._embedding_track(candidate_texts, pool_texts)
     assert "c1" in embed_dupes
     assert "c2" not in embed_dupes
 
