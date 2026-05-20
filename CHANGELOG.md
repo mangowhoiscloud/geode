@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **PR-Π3 — Proximity embedding conditions on the research goal
+  (`state.target_dim`).** Closes the third P0 gap from the
+  Co-Scientist ↔ GEODE proximity-agent comparison; completes the
+  3-PR proximity sprint (Π1 graph + Π2 partial-survive + Π3
+  goal-conditioning). `_embedding_track` now accepts a
+  `target_dim` kwarg; when non-empty, every candidate / pool text
+  is prefixed with `[goal: <dim>]\n` before the embedding call so
+  the same candidate body against two different research goals
+  produces different vectors. `Proximity.execute` forwards
+  `state.target_dim`. Backwards-compatible — empty `target_dim`
+  (legacy bootstrap path) returns the raw text unchanged; every
+  pre-Π3 call site behaves byte-identically. The lexical and role
+  tracks stay goal-agnostic (role already encodes the dim;
+  5-gram surface similarity isn't goal-sensitive). Matches
+  Co-Scientist §3.3.4: "similarity ... taking into account the
+  specific research goal". 6 new tests cover the helper
+  `_goal_condition` (empty / non-empty), the `_embedding_track`
+  forwarding (prefix attached / no prefix when empty), and the
+  end-to-end `execute` path (`state.target_dim` reaches the
+  embedding inputs / `state.target_dim = ""` legacy parity).
+
 - **PR-Π2 — Proximity `all_duplicates` partial-survive fallback (was: hard
   abort).** Closes the second P0 gap from the Co-Scientist ↔ GEODE
   proximity-agent comparison. Pre-Π2 the `Proximity.execute` returned
