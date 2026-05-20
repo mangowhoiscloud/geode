@@ -47,6 +47,23 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.24] — 2026-05-21
+
+> **Cognitive Loop Uplift Sprint** — 6 PRs (#1373 / #1374 / #1375 /
+> #1376 / #1377 / #1378) close the gap between the self-improving
+> loop's *prompt-only* mutation surface and a full PERCEIVE → PLAN →
+> ACT → OBSERVE → REFLECT → UPDATE_MEMORY cognitive cycle. PR-1 fills
+> the paperclip-style abstraction gap so the mutator shares the
+> credential rotator. PR-2 introduces the `CognitiveState` container
+> and 6 cognitive `HookEvent` taxa. PR-3 wires an LLM-driven
+> reflection node that populates hypotheses + confidence. PR-4
+> persists action → outcome triples to a rolling episodic ledger.
+> PR-5 adds paired-baseline 95% CI causal attribution per applied
+> mutation. PR-6 expands the mutation target from "wrapper prompt
+> only" to five policy SoTs (prompt / tool_policy / decomposition /
+> retrieval / reflection). Modules 356 → 362 (+6), tests 5082 →
+> 5280 (+198).
+
 ### Added
 
 - **PR-6 C-5 — policy mutation expansion (5 target kinds).** Pre-PR-6
