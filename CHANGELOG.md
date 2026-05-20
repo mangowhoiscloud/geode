@@ -49,6 +49,43 @@ functional change.
 
 ### Added
 
+- **PR-2 C-1 — explicit ``CognitiveState`` container attached to the
+  agentic loop.** Pre-PR-2 the loop kept cognitive state implicit
+  inside ``ConversationContext.messages`` — there was no named place
+  for *goal*, *subgoals*, *observations*, *hypotheses*, *confidence*,
+  *last_action*, *last_observation*, or *round_count*, so downstream
+  cognitive features (reflection / episodic memory / causal
+  attribution) had nowhere to read from. New
+  ``core/agent/cognitive_state.py`` introduces an 8-field dataclass
+  (3-codebase consensus: OpenClaw ``Session.context.state``, Hermes
+  ``AgentMemory``, autoresearch ``RunState``). ``AgenticLoop.__init__``
+  instantiates it; ``arun`` sets ``goal`` on the first turn and calls
+  ``record_round(action, observation)`` at every round end. Rolling
+  cap of 32 observations keeps the snapshot bounded. ``to_snapshot()``
+  returns a *defensive-copy* dict so telemetry consumers cannot mutate
+  the live state through the snapshot. 4 fields (``subgoals`` /
+  ``hypotheses`` / ``confidence`` + the LLM-summary form of
+  ``observations``) stay empty until PR-3 wires the reflection node;
+  this is intentional scope split, not stub disguise — the field set
+  is pinned at 8 by an invariant test so a future PR can't add a 9th
+  without an explicit plan amendment.
+
+- **PR-2 C-6 — 6 cognitive-cycle ``HookEvent`` members + emit sites
+  in the agentic loop.** ``COGNITIVE_PERCEIVE`` /
+  ``COGNITIVE_PLAN`` / ``COGNITIVE_ACT`` / ``COGNITIVE_OBSERVE`` /
+  ``COGNITIVE_REFLECT`` / ``COGNITIVE_UPDATE_MEMORY`` are now first-
+  class hook events (string values prefixed ``cognitive_`` so log
+  filters / transcript renderers / Petri dashboards group them with a
+  single match). ``AgenticLoop._emit_cognitive`` is the shared
+  emitter — it injects ``session_id`` and embeds a fresh
+  ``cognitive_state.to_snapshot()`` in every payload so a downstream
+  viewer can replay state evolution without re-parsing the
+  transcript. ``_run_cognitive_act_observe_cycle`` extracts the
+  ACT → process → OBSERVE → ``record_round`` → REFLECT →
+  UPDATE_MEMORY block from ``arun`` so the run-loop stays within the
+  ruff complexity gates while preserving the cognitive-cycle event
+  ordering.
+
 - **Cognitive loop uplift sprint plan
   (`docs/plans/2026-05-21-cognitive-loop-uplift.md`).** Maps every
   hardcoded model/harness selection point in the self-improving loop
