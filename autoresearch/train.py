@@ -651,6 +651,24 @@ def run_audit(
     RUN_LOG.write_text(log_text, encoding="utf-8")
 
     if proc.returncode != 0:
+        # PR-MINIMAL-4 (2026-05-21) — non-zero subprocess exit emits an
+        # explicit ``subprocess_failed`` event before raising. The
+        # earlier ``subprocess_finished`` event carries ``exit_code``
+        # but downstream consumers grouping by event name need a
+        # *failure-specific* event to alert on; the top-level
+        # ``audit_failed`` catches the ``RuntimeError`` but loses the
+        # subprocess-specific context (exit_code, run_log path).
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "subprocess_failed",
+            level="error",
+            payload={
+                "exit_code": proc.returncode,
+                "run_log": str(RUN_LOG),
+                "stderr_tail": proc.stderr.splitlines()[-5:] if proc.stderr else [],
+            },
+        )
         raise RuntimeError(f"audit subprocess exit={proc.returncode}; see {RUN_LOG}")
 
     summary_line = next(

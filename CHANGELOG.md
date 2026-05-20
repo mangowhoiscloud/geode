@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-MINIMAL-4 — `subprocess_failed` SessionJournal event.**
+  Wave 1 / 3 PRs. Closes one of the two PR-MINIMAL-2 A3-deferred
+  observability gaps. ``autoresearch.train.run_audit`` pre-PR
+  only emitted ``subprocess_finished`` on every subprocess return;
+  the top-level ``audit_failed`` event caught the ``RuntimeError``
+  for non-zero exits but downstream consumers grouping by event
+  name lost subprocess-specific context. PR-MINIMAL-4 adds a
+  dedicated ``subprocess_failed`` (error level) event BEFORE the
+  ``raise RuntimeError`` so the typed event lands in the journal
+  even when the exception unwinds the stack. Payload carries
+  ``exit_code`` / ``run_log`` / ``stderr_tail`` (last 5 lines) for
+  at-a-glance triage. 4 invariant tests pin the new event, payload
+  shape, emit-before-raise ordering, and the preserved siblings.
+  D1 full 9→3 event collapse remains deferred — pure naming churn
+  with downstream consumer risk.
+
 ### Changed
 
 - **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
