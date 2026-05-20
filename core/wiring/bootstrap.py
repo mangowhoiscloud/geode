@@ -390,6 +390,70 @@ def build_hooks(
 
     _register_plugin("tool_approval_hook", _reg_tool_approval)
 
+    # PR-4 C-3 — episodic action-outcome ledger. TOOL_EXEC_ENDED carries
+    # (tool_name, tool_input, has_error, result, duration_ms); we record
+    # an Episode row + the COGNITIVE_UPDATE_MEMORY hook (PR-2) snapshot
+    # so PR-5 can compute "tool X succeeded in situation Y at rate Z"
+    # deltas. Hook is registered at priority 70 — observer, runs after
+    # the TOOL_EXEC_ENDED interceptors but before audit loggers.
+    #
+    # Threading note: the EpisodicStore.append path is synchronous file
+    # I/O. It fires inside the asyncio hook flow (the agent loop awaits
+    # ``trigger_with_result_async``) so it briefly blocks the event
+    # loop. Per-write cost is one ``write()`` + occasional rotation
+    # (capped at max_rows * 1.25 ≈ 1250 rows, with an atomic temp-file
+    # rewrite). Bounded enough that async-to-thread offload would add
+    # more overhead than it saves; revisit if hot-path profiling shows
+    # the recorder is a tail-latency contributor.
+    def _reg_episodic_memory() -> None:
+        import time
+
+        from core.agent.cognitive_state_ctx import get_cognitive_state, get_session_id
+        from core.memory.episodic import Episode, _summarise_tool_input, get_episodic_store
+
+        store = get_episodic_store()
+
+        def _on_tool_end(_event: HookEvent, data: dict[str, Any]) -> None:
+            tool_name = str(data.get("tool_name", "?"))
+            tool_input = data.get("tool_input")
+            has_error = bool(data.get("has_error"))
+            result = data.get("result")
+            error: str | None = None
+            if has_error and isinstance(result, dict):
+                error_val = result.get("error")
+                if isinstance(error_val, str):
+                    error = error_val[:200]
+            state = get_cognitive_state()
+            snapshot = state.to_snapshot() if state is not None else {}
+            session_id = get_session_id()
+            round_raw = snapshot.get("round_count", 0)
+            round_count = round_raw if isinstance(round_raw, int) else 0
+            input_head_arg = tool_input if isinstance(tool_input, dict | str) else None
+            episode = Episode(
+                timestamp_ns=time.time_ns(),
+                session_id=session_id,
+                round=round_count,
+                tool_name=tool_name,
+                tool_input_head=_summarise_tool_input(input_head_arg),
+                success=not has_error,
+                error=error,
+                duration_ms=float(data.get("duration_ms", 0.0)),
+                cognitive_state=snapshot,
+            )
+            try:
+                store.append(episode)
+            except OSError:
+                log.warning("episodic store append failed; skipping", exc_info=True)
+
+        hooks.register(
+            HookEvent.TOOL_EXEC_ENDED,
+            _on_tool_end,
+            name="episodic_memory_recorder",
+            priority=70,
+        )
+
+    _register_plugin("episodic_memory_hook", _reg_episodic_memory)
+
     # C8: Filesystem hook plugin auto-discovery (.geode/hooks/ + core/hooks/plugins/)
     def _reg_filesystem_plugins() -> None:
         from core.hooks.discovery import HookPluginLoader
