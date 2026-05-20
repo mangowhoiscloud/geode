@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **PR-Π2 — Proximity `all_duplicates` partial-survive fallback (was: hard
+  abort).** Closes the second P0 gap from the Co-Scientist ↔ GEODE
+  proximity-agent comparison. Pre-Π2 the `Proximity.execute` returned
+  `status="error"` / `error_category="all_duplicates"` whenever the
+  3-track majority vote dropped every candidate — a single bad Generator
+  batch (or pool-vs-candidate full overlap) killed the whole pipeline.
+  Post-Π2 the phase keeps the `PARTIAL_SURVIVE_FLOOR=3` most-diverse
+  candidates (lowest average proximity in the PR-Π1 graph; absent entries
+  default to 0.0 = maximally distant; lexicographic candidate-id tiebreak
+  for determinism). When the batch is already ≤ K every candidate
+  survives. A WARN log + a structured
+  `proximity_all_duplicates_fallback` SessionJournal event (payload
+  carries `original_count` / `survivor_count` / per-track dup counts)
+  surface the degraded path so it is never silent — outside an active
+  scope the emit is a no-op. 7 new tests cover the floor pin, the
+  `_partial_survive` helper (≤-floor returns all / lowest-avg wins /
+  tiebreak deterministic), end-to-end pool-vs-candidate trigger,
+  journal event emit, and silent-outside-scope. Matches Co-Scientist
+  §3.3.4's implicit guarantee that the proximity graph keeps the
+  hypothesis pool diverse without requiring upstream resampling.
+
 - **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
   diverse-bracket Elo seeding.** Closes the first P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison: pre-Π1 the Proximity
