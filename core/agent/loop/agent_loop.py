@@ -453,19 +453,22 @@ class AgenticLoop:
         # in the same task are not a documented use case.
         from core.agent.cognitive_state_ctx import (
             set_cognitive_state,
-            set_parent_session_id,
+            set_parent_session_key,
             set_session_id,
         )
 
         set_cognitive_state(self.cognitive_state)
         set_session_id(self._session_id)
         # PR-F (2026-05-21) — sub-agent lineage. When this loop was
-        # spawned via the OpenClaw spawn pattern, ``_parent_session_key``
-        # holds the parent's session identifier; bind it to the
-        # ContextVar so the episodic recorder can stamp
-        # ``Episode.parent_session_id`` for cross-session attribution.
-        # Empty for top-level loops.
-        set_parent_session_id(self._parent_session_key)
+        # spawned via the OpenClaw in-process spawn pattern,
+        # ``_parent_session_key`` holds the parent's routing key
+        # (e.g. ``"subject:foo:bar"`` — NOT the parent's
+        # ``_session_id`` uuid). Bind it to the ContextVar so the
+        # episodic recorder can stamp ``Episode.parent_session_key``
+        # for cross-session attribution. Empty for top-level loops.
+        # Subprocess sub-agents (SubAgentManager → WorkerRequest path)
+        # don't yet forward this value; future PR for that plumbing.
+        set_parent_session_key(self._parent_session_key)
         await self._emit_cognitive(
             HookEvent.COGNITIVE_PERCEIVE,
             user_input=user_input,

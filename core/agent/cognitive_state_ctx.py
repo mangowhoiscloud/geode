@@ -36,11 +36,15 @@ _active_state: ContextVar[CognitiveState | None] = ContextVar(
 _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", default="")
 # PR-F (2026-05-21) — sub-agent lineage. When the active loop is a
 # child spawned via the OpenClaw spawn pattern, this carries the
-# *parent* loop's ``session_id`` so the episodic recorder can stamp
-# the child's Episode rows with the parent reference for cross-
-# session attribution. Empty string = top-level loop, no parent.
-_active_parent_session_id: ContextVar[str] = ContextVar(
-    "geode_active_parent_session_id", default=""
+# parent loop's ``_parent_session_key`` (the OpenClaw routing key,
+# e.g. ``"subject:foo:bar"``, NOT the parent's ``_session_id`` uuid
+# format). Naming matches the AgenticLoop constructor kwarg so the
+# data shape is unambiguous. Empty string = top-level loop.
+# Future-PR scope: a separate ContextVar ``parent_session_id`` can
+# be added when the sub-agent spawner is plumbed to forward the
+# parent's actual ``_session_id`` through WorkerRequest.
+_active_parent_session_key: ContextVar[str] = ContextVar(
+    "geode_active_parent_session_key", default=""
 )
 
 
@@ -69,25 +73,31 @@ def set_session_id(session_id: str) -> None:
     _active_session_id.set(session_id)
 
 
-def get_parent_session_id() -> str:
-    """PR-F (2026-05-21) — return the active loop's *parent* session
-    id, or ``""`` for a top-level loop. Read by the episodic recorder
-    so cross-session attribution can group child Episode rows under
-    the parent."""
-    return _active_parent_session_id.get()
+def get_parent_session_key() -> str:
+    """PR-F (2026-05-21) — return the active loop's parent
+    ``_parent_session_key`` (OpenClaw routing-key format like
+    ``"subject:foo:bar"``), or ``""`` for a top-level loop. Read by
+    the episodic recorder so cross-session attribution can group
+    child Episode rows by spawning parent.
+
+    NOTE: this is the *routing key*, NOT the parent's ``_session_id``
+    uuid. A future PR can add a separate ``parent_session_id``
+    ContextVar when the sub-agent spawner is plumbed to forward
+    the parent's actual session id through WorkerRequest."""
+    return _active_parent_session_key.get()
 
 
-def set_parent_session_id(parent_session_id: str) -> None:
-    """Bind ``parent_session_id`` to the current context. Empty
+def set_parent_session_key(parent_session_key: str) -> None:
+    """Bind ``parent_session_key`` to the current context. Empty
     string clears the binding (top-level loop)."""
-    _active_parent_session_id.set(parent_session_id)
+    _active_parent_session_key.set(parent_session_key)
 
 
 __all__ = [
     "get_cognitive_state",
-    "get_parent_session_id",
+    "get_parent_session_key",
     "get_session_id",
     "set_cognitive_state",
-    "set_parent_session_id",
+    "set_parent_session_key",
     "set_session_id",
 ]

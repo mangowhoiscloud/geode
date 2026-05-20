@@ -58,11 +58,17 @@ EPISODE_LOG_MAX_ROWS = 1000
 class Episode:
     """One row in the episodic ledger.
 
-    PR-F (2026-05-21) — added ``parent_session_id`` for sub-agent
-    lineage. Empty string = top-level loop; otherwise the parent
-    AgenticLoop's ``session_id`` so cross-session attribution can
-    group child rows under the parent. Defaulted (not required) so
-    older readers + tests that hand-construct Episodes still work.
+    PR-F (2026-05-21) — added ``parent_session_key`` for sub-agent
+    lineage. Empty string = top-level loop; otherwise the parent's
+    OpenClaw routing key (the AgenticLoop ``_parent_session_key``
+    constructor kwarg — e.g. ``"subject:foo:bar"``, NOT a uuid).
+    Defaulted (not required) so older readers + tests that hand-
+    construct Episodes still work. NOTE: subprocess sub-agents
+    spawned via ``SubAgentManager → WorkerRequest`` do not yet
+    forward this value; their child Episodes record ``""``. The
+    in-process spawn path (``parent_session_key`` constructor kwarg
+    on AgenticLoop) is fully wired. See PR-F CHANGELOG for the
+    follow-up scope.
     """
 
     timestamp_ns: int
@@ -74,7 +80,7 @@ class Episode:
     error: str | None
     duration_ms: float
     cognitive_state: dict[str, Any] = field(default_factory=dict)
-    parent_session_id: str = ""
+    parent_session_key: str = ""
 
     def to_jsonl(self) -> str:
         """Serialize to a single JSONL line (no trailing newline)."""
