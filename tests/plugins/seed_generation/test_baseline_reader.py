@@ -426,3 +426,81 @@ def test_format_priors_block_caps_max_priors() -> None:
     assert "d-0" in block
     assert "d-1" in block
     assert "d-2" not in block
+
+
+# ---------------------------------------------------------------------------
+# G3.fix2 (2026-05-20) — schema graceful: non-numeric dim_means doesn't raise
+# ---------------------------------------------------------------------------
+
+
+def test_load_baseline_drops_non_numeric_dim_means(tmp_path: Path) -> None:
+    """Single bad numeric value → that dim dropped, rest kept (G3.fix2)."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {
+                    "broken_tool_use": 4.5,
+                    "bad_dim": "not a number",
+                    "another_bad": None,
+                    "input_hallucination": 6.0,
+                },
+                "dim_stderr": {"broken_tool_use": 0.4, "bad_stderr": "x"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is not None, (
+        "G3.fix2 regression: load_baseline raised instead of dropping the "
+        "non-numeric dim. The graceful-contract docstring promises None on "
+        "unparseable input, not a half-state."
+    )
+    # Good entries kept, bad entries dropped silently.
+    assert snapshot.dim_means == {
+        "broken_tool_use": 4.5,
+        "input_hallucination": 6.0,
+    }
+    assert snapshot.dim_stderr == {"broken_tool_use": 0.4}
+
+
+def test_load_baseline_all_bad_means_returns_none(tmp_path: Path) -> None:
+    """If every dim_means value is non-numeric, behave like an empty payload."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"a": "x", "b": None, "c": True},
+                "dim_stderr": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is None, (
+        "All dim_means values were non-numeric — the graceful contract "
+        "should treat this as 'no usable baseline' (None), same outcome as "
+        "an empty raw_means payload."
+    )
+
+
+def test_load_baseline_rejects_boolean_as_means_value(tmp_path: Path) -> None:
+    """Python's ``isinstance(True, int)`` quirk — booleans must not slip through."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 4.0, "weird": True},
+                "dim_stderr": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is not None
+    # The "weird" boolean must NOT make it into dim_means as 1.0.
+    assert "weird" not in snapshot.dim_means
+    assert snapshot.dim_means == {"broken_tool_use": 4.0}
