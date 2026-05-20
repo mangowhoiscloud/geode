@@ -30,7 +30,7 @@ import inspect
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# G-A — MutatorConfig manifest + runner.py uses call_with_retry, not anthropic SDK
+# G-A — MutatorConfig manifest + runner.py uses call_with_failover, not anthropic SDK
 # ---------------------------------------------------------------------------
 
 
@@ -55,7 +55,7 @@ def test_self_improving_loop_config_carries_mutator_section() -> None:
     assert root.mutator.default_model == "claude-opus-4-7"
 
 
-def test_runner_default_llm_call_routes_through_call_with_retry() -> None:
+def test_runner_default_llm_call_routes_through_call_with_failover() -> None:
     """Anti-deception — the runner must not instantiate the anthropic SDK
     directly; it must dispatch through the router so the credential /
     provider rotator applies."""
@@ -91,6 +91,32 @@ def test_runner_default_llm_call_import_resolves() -> None:
     from core.self_improving_loop.runner import _default_llm_call
 
     assert callable(_default_llm_call)
+
+
+def test_runner_default_llm_call_consumes_source_and_role_contract() -> None:
+    """Codex MCP 2nd-pass catch — ``MutatorConfig.source`` and
+    ``role_contract`` were declared but unread, which is the
+    knob-vs-deletion anti-pattern (declarative knob with no
+    behaviour). Pin that the runner body actually consults both
+    fields — telemetry log + forced-source env override."""
+    from core.self_improving_loop import runner
+
+    src = inspect.getsource(runner._default_llm_call)
+    assert "cfg.mutator.source" in src, (
+        "_default_llm_call must read MutatorConfig.source — otherwise "
+        "the field is a silent declarative knob (Codex MCP anti-pattern)."
+    )
+    assert "cfg.mutator.role_contract" in src, (
+        "_default_llm_call must read MutatorConfig.role_contract — "
+        "otherwise the field is a silent declarative knob."
+    )
+    # Telemetry surface — every dispatch must log (model, provider,
+    # source, role_contract) so downstream observers can group runs by
+    # operator intent.
+    assert "mutator dispatch:" in src, (
+        "_default_llm_call must emit a telemetry log row with the "
+        "MutatorConfig context so Petri / Inspect viewers can group runs."
+    )
 
 
 def test_mutator_config_validator_rejects_default_outside_allowed() -> None:

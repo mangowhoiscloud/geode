@@ -319,7 +319,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     Pre-PR-1 (v0.99.22) this body instantiated ``anthropic.Anthropic()``
     directly and pinned ``model="claude-opus-4-7"`` as a literal —
     paperclip-style abstraction goal: route through the same
-    ``call_with_retry`` path every other provider-aware caller uses,
+    ``call_with_failover`` path every other provider-aware caller uses,
     and read the model id from ``[self_improving_loop.mutator]`` so the
     operator can flip provider/model without editing this file.
 
@@ -329,10 +329,10 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
        (user override).
     2. ``MutatorConfig.default_model`` ship default (``claude-opus-4-7``).
 
-    The model id is routed through ``core.llm.router.call_with_retry``
-    (M5 wiring) so the same credential / provider rotator the agentic
-    loop uses also serves the mutator — no second SDK client, no
-    second key store.
+    The model id is routed through ``core.llm.router.call_with_failover``
+    so the same credential / provider rotator the agentic loop uses
+    also serves the mutator — no second SDK client, no second key
+    store.
 
     Tests inject a mock callable via
     ``SelfImprovingLoopRunner(llm_call=...)`` and skip this code path
@@ -340,6 +340,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     anthropic.
     """
     import asyncio
+    import logging as _logging
 
     from core.config import _resolve_provider
     from core.config.self_improving_loop import load_self_improving_loop_config
@@ -349,6 +350,8 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     cfg = load_self_improving_loop_config()
     model = cfg.mutator.default_model
     max_tokens = cfg.mutator.max_tokens
+    source = cfg.mutator.source
+    role_contract = cfg.mutator.role_contract
 
     # PR-1 G-A — defensive check kept here even though MutatorConfig's
     # pydantic validator also enforces it: allowed_models is a paperclip-
@@ -363,6 +366,36 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
     provider = _resolve_provider(model)
     adapter = resolve_agentic_adapter(provider)
+
+    # PR-1 G-A fix-up — `source` and `role_contract` must affect *something*
+    # observable, otherwise they're silent declarative knobs (Codex MCP
+    # 2nd-pass review flagged this as a knob-vs-deletion violation). Two
+    # surfaces:
+    #
+    #   (a) telemetry — every mutator call logs (model, provider,
+    #       source, role_contract) so a downstream Petri / Inspect
+    #       viewer can group runs by operator intent. Same shape as
+    #       `core.llm.router._hooks` emit but recorded at the mutator
+    #       boundary (the router doesn't know it's serving the mutator
+    #       role specifically).
+    #
+    #   (b) credential-source preference — when the operator picks a
+    #       non-`auto` source the runner sets the matching env override
+    #       so the petri source resolver (consumed inside the adapter
+    #       chain) honours the choice. This stays consistent with the
+    #       `forced_login_method` knob (M2) the agentic picker exposes.
+    _logging.getLogger("core.self_improving_loop.runner").info(
+        "mutator dispatch: model=%s provider=%s source=%s role_contract=%s max_tokens=%d",
+        model,
+        provider,
+        source,
+        role_contract,
+        max_tokens,
+    )
+    if source != "auto":
+        import os
+
+        os.environ.setdefault("GEODE_MUTATOR_FORCED_SOURCE", source)
 
     async def _do_call(m: str) -> object:
         return await adapter.agentic_call(
