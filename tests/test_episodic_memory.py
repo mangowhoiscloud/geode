@@ -307,13 +307,23 @@ def test_bootstrap_registers_episodic_memory_hook() -> None:
 
 def test_agentic_loop_arun_binds_contextvars() -> None:
     """Pin the writer side of the ContextVar parity. arun() must
-    call both set_cognitive_state and set_session_id at session
-    start so the bootstrap hook handler sees a bound state."""
+    bind both ContextVars at session start so the bootstrap hook
+    handler sees a bound state.
+
+    PR-D Phase 1 (2026-05-21) — the bind moved from ``arun``'s body
+    into the extracted ``_emit_session_start_signals`` helper which
+    ``arun`` always awaits before the while-loop. Either call site
+    satisfies the contract; check both."""
     from core.agent.loop.agent_loop import AgenticLoop
 
-    src = inspect.getsource(AgenticLoop.arun)
-    assert "set_cognitive_state(self.cognitive_state)" in src
-    assert "set_session_id(self._session_id)" in src
+    arun_src = inspect.getsource(AgenticLoop.arun)
+    helper_src = inspect.getsource(AgenticLoop._emit_session_start_signals)
+    # arun must AT LEAST call the helper that owns the bind.
+    assert "_emit_session_start_signals" in arun_src
+    # And the helper must do the bind (so the parity claim holds
+    # transitively).
+    assert "set_cognitive_state(self.cognitive_state)" in helper_src
+    assert "set_session_id(self._session_id)" in helper_src
 
 
 @pytest.fixture(autouse=True)

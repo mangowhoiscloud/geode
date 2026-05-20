@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-D Phase 1 — ``arun`` god-method decomposition (session-start
+  signals).** ``AgenticLoop.arun`` is 728 lines with 20+ early-exit
+  return paths — the frontier matrix (Task #36) flagged this as
+  concern #1 vs the Claude Code declarative ``while + structured
+  stop_reason`` pattern. Phase 1 extracts the *session-start signal
+  block* (USER_INPUT_RECEIVED interceptor / cognitive-state goal
+  init / ContextVar bind / COGNITIVE_PERCEIVE emit / transcript
+  ``record_session_start`` + ``record_user_message`` / SESSION_STARTED
+  hook) into a single ``_emit_session_start_signals`` helper that
+  returns ``AgenticResult | None`` — ``None`` on the happy path, the
+  ``input_blocked`` result on the sole early-exit. ``arun``'s setup
+  phase shrinks 707 → 658 AST lines (~49 LOC); control flow
+  preserved exactly (pure refactor, zero behaviour change verified
+  by Codex MCP review #1 against the pre-refactor commit). 10
+  invariant tests pin the
+  extracted ownership + verify ``arun`` no longer inlines the same
+  block (anti-residue guard). Subsequent phases will extract the
+  per-round body so the full declarative pattern emerges
+  incrementally; Phase 1 stops at the lowest-risk extraction so
+  Codex MCP can confirm zero behaviour change before larger surgery.
+
 ### Added
 
 - **PR-C — ``cognitive_reflection_interval`` every-N-rounds gate.** PR-3
