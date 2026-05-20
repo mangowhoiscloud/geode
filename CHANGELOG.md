@@ -67,10 +67,12 @@ functional change.
   only — show the mutation, NO write), `--n N` (1–10 iterations,
   default 1), `--target-kind X` (filter — skip iteration if the LLM
   proposes a different SoT kind than requested). (3) Per-iteration
-  confirmation prompt — `y` apply, `N`/empty/Ctrl-D reject (writes a
+  confirmation prompt — `y` apply, `N`/empty reject (writes a
   `kind=rejected` audit row for mutator-LLM learning signal), `d`
-  show diff and re-prompt, `s` show full rationale and re-prompt.
-  EOF/KeyboardInterrupt → abort breaks the iteration loop cleanly.
+  show diff and re-prompt, `s` show full rationale and re-prompt,
+  EOF/Ctrl-D/KeyboardInterrupt → abort breaks the iteration loop
+  cleanly *without* writing a rejection row (the abort is the
+  operator's intent to stop, not a verdict on the proposal).
   (4) Static text pre-flight block surfaces mutator model + source +
   target_kind filter + iterations + mode + harness label
   (no-op for now — PR-OPS-2b wires autoresearch/petri_raw harness

@@ -453,12 +453,23 @@ def _record_rejection(runner: Any, proposal: Any) -> None:
     signal — record it so the mutator LLM can learn (via the next
     iteration's context) which proposals get rejected and why.
     Best-effort: failure logged but not surfaced.
+
+    Codex MCP catch (2026-05-21, PR #1395): the runner's
+    ``audit_log_path`` defaults to ``None`` (lazy resolution — the
+    ``append_audit_log`` helper falls back to
+    ``MUTATION_AUDIT_LOG_PATH``). Mirror that resolution here so
+    ``Path(None)`` never trips on the real slash path where the
+    operator constructs the runner via ``_build_runner`` without
+    passing an audit_log_path.
     """
     import logging
     import time
 
+    from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
+
     log = logging.getLogger(__name__)
-    audit_path = Path(runner.audit_log_path)
+    raw_path = runner.audit_log_path or MUTATION_AUDIT_LOG_PATH
+    audit_path = Path(raw_path)
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "ts": time.time(),

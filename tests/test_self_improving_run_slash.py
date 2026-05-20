@@ -326,6 +326,35 @@ def test_cmd_run_confirm_n_records_rejection(
     assert "rejected" in out
 
 
+def test_cmd_run_confirm_n_with_default_audit_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Codex MCP catch (2026-05-21 PR #1395): the real ``_build_runner``
+    constructs ``SelfImprovingLoopRunner`` without ``audit_log_path``,
+    so it defaults to ``None``. ``_record_rejection`` must fall back
+    to ``MUTATION_AUDIT_LOG_PATH`` rather than crash on
+    ``Path(None)``. Pin the fallback so a refactor that drops it
+    surfaces here."""
+    from core.cli.commands import self_improving
+
+    runner, _ = _stub_runner_with_proposal()
+    runner.audit_log_path = None  # default value the real slash uses
+    fake_default = tmp_path / "fallback_mutations.jsonl"
+    monkeypatch.setattr(
+        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        fake_default,
+    )
+    monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)
+    monkeypatch.setattr(self_improving, "_prompt_confirmation", lambda _p: "reject")
+    self_improving._cmd_run([])
+    runner.apply_proposal.assert_not_called()
+    assert fake_default.exists(), "rejection must fall back to MUTATION_AUDIT_LOG_PATH"
+    out = capsys.readouterr().out
+    assert "rejected" in out
+
+
 def test_cmd_run_abort_breaks_loop(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
