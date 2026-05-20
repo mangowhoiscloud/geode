@@ -49,6 +49,28 @@ functional change.
 
 ### Added
 
+- **ADR-013 — Mutation Surface Expansion via JSON Schema Pattern (Proposed).**
+  ADR-012 의 S0a 검증된 패턴 (JSON SoT + reader + dispatcher) 을 6 신규
+  표면 (T1-T6) 으로 확장. **AlphaEvolve 식 코드 자체 mutation 은 명시적
+  배제** (자기수정 재귀 / silent breakage / Goodhart on benchmark /
+  dependency chain 4 risk). 모든 6 표면이 JSON mutation only — 코드
+  변경 0. **6 표면**: (T1) Tool descriptions (`tool-descriptions.json`,
+  OpenAI/Anthropic 검증) → broken_tool_use dim 직접. (T2) Skill registry
+  catalog (`skill-catalog.json`, Voyager 식) → routing 진화. (T3) Response
+  style guide (`style-guide.json`) → ux_means 의 success_rate + revert_ratio.
+  (T4) Provider routing (`provider-routing.json`, OpenRouter) → ux_means
+  의 token_cost_norm. (T5) Cache breakpoint policy (`cache-policy.json`,
+  Anthropic prompt caching) → M3 와 결합. (T6) Heuristic indicators
+  (`heuristics.json`, Promptbreeder 식) → gaia_accuracy 영향. **5-element
+  패턴**: SoT 파일 / Path constant / Reader 모듈 / Inference 진입점 /
+  Env var override (S0a 검증). **4-step lifecycle**: operator/mutator
+  JSON write → reader graceful load → apply_*_policy default+override
+  결합 → 에이전트 응답 시 정책 반영. 16 invariant test — ADR 본문의
+  Status/Context/Decision/Consequences/Reference + 6 T-surface 명세
+  + 5-element 패턴 + AlphaEvolve 배제 4 risk + frontier reference 6
+  + ADR-012 cross-reference + 우선순위 6 + 후속 PR 시퀀스 + fitness 축
+  영향 cross-check. 후속 PR T1-T6 task 등록 (#78-#83).
+
 - **PR-S6 — `bench_means` + Petri/bench cross-validation gate (Path C
   inspect_ai federation).** ADR-012 §S6 — frontier capability evaluation
   통합으로 fitness 4축 다축화. Petri (alignment) + bench (capability)
