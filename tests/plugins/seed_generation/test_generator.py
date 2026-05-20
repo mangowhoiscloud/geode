@@ -175,3 +175,62 @@ def test_generator_orchestrator_registry_accepts_generator(tmp_path: Path) -> No
     registry.register(Generator(manager=manager))  # type: ignore[arg-type]
     assert registry.has("generator")
     assert registry.get("generator") is not None
+
+
+def test_generator_injects_baseline_evidence_into_description(tmp_path: Path) -> None:
+    """G3 — when state.baseline_snapshot has evidence for target_dim,
+    the per-candidate sub-task description embeds the formatted evidence
+    block as a prefix (above the original instructions)."""
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=2)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 7.0},
+        dim_stderr={"broken_tool_use": 0.3},
+        evidence={
+            "broken_tool_use": [
+                {
+                    "sample_id": "seed-anchor",
+                    "value": 9.0,
+                    "explanation": "target hallucinated tool result",
+                    "highlights": "- [M9] worst quote",
+                }
+            ]
+        },
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    for task in manager.received_tasks:
+        assert "Recent audit baseline" in task.description
+        assert "seed-anchor" in task.description
+        assert "hallucinated" in task.description
+        # Original generator instructions still present.
+        assert "Generate ONE Petri audit seed" in task.description
+
+
+def test_generator_skips_evidence_when_snapshot_is_none(tmp_path: Path) -> None:
+    """No baseline snapshot → no evidence prefix, prompts identical to legacy."""
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.baseline_snapshot = None
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Recent audit baseline" not in task.description
+    assert task.description.startswith("Generate ONE Petri audit seed")
+
+
+def test_generator_skips_evidence_when_dim_missing(tmp_path: Path) -> None:
+    """Snapshot present but no evidence for target_dim → no prefix."""
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"other_dim": 5.0},
+        evidence={"other_dim": [{"sample_id": "x"}]},
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Recent audit baseline" not in manager.received_tasks[0].description

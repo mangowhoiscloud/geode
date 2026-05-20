@@ -190,6 +190,7 @@ class Critic(BaseSeedAgent):
                 candidate_id=candidate_id,
                 candidate_path=candidate_path,
                 target_dim=target_dim,
+                baseline_snapshot=state.baseline_snapshot,
             )
             tasks.append(
                 SubTask(
@@ -212,14 +213,31 @@ class Critic(BaseSeedAgent):
         candidate_id: str,
         candidate_path: str,
         target_dim: str,
+        baseline_snapshot: Any = None,
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
         The system prompt is owned by ``.claude/agents/seed_critic.md``.
         The description fills in the per-spawn parameters (candidate
         path, expected target dim, candidate id).
+
+        G3 — when ``baseline_snapshot`` carries evidence for
+        ``target_dim``, the per-dim worst-K rows from the previous
+        audit are prepended so the critic can flag candidates that
+        miss the actual regression mode (not just any generic dim
+        weakness).
         """
+        evidence_block = ""
+        if baseline_snapshot is not None:
+            try:
+                from plugins.seed_generation.baseline_reader import format_evidence_block
+
+                evidence_block = format_evidence_block(baseline_snapshot, target_dim)
+            except ImportError:  # pragma: no cover — defensive
+                evidence_block = ""
+        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
         return (
+            f"{evidence_prefix}"
             f"Critique ONE Petri audit seed candidate at path "
             f"{candidate_path!r}. Candidate id: {candidate_id}. "
             f"Intended target dim: {target_dim!r}. "
