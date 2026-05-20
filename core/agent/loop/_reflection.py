@@ -11,11 +11,16 @@ JSON: {...}"``, ``` ```json``` fences, trailing prose, etc.), and
 a 5-stage forgiving parser handled the drift. Codex MCP caught
 parser gaps 3 times during PR-3. The fix is to use the structured-
 output contract every other GEODE provider-aware caller already
-uses: declare a tool with a JSON schema, force its invocation, and
-read the parsed ``input`` dict directly off the ``ToolUseBlock``.
-The Anthropic SDK enforces the schema server-side, so the
-``hypotheses[]`` / ``confidence`` / ``next_action_hint`` shape is
-guaranteed by the time it reaches us.
+uses: declare a tool with a JSON ``input_schema`` + ``strict:
+True`` opt-in, prefer its invocation via ``tool_choice="auto"``,
+and read the parsed ``input`` dict directly off the
+``ToolUseBlock``. We use ``"auto"`` rather than forced
+``"any"`` / ``{"type": "tool"}`` because both forced shapes are
+incompatible with Anthropic extended/adaptive thinking — only
+``"auto"`` works across every model + thinking regime (Codex MCP
+PR-B review #2). With one tool declared and a strong system
+prompt the LLM still calls the tool on the happy path; rare
+declines fall through to a WARN + keep-previous-state path.
 
 Pre-PR-3 the agentic loop went tool result → next action with no
 explicit belief-update step. ``CognitiveState.hypotheses`` and
@@ -223,8 +228,9 @@ async def reflect_async(
     """Run the reflection LLM call and update ``state`` in place.
 
     PR-B (2026-05-21) — uses ``tool_use`` structured output (the
-    ``record_reflection`` tool with a forced ``tool_choice``). The
-    Anthropic SDK enforces the JSON schema, so we read ``input``
+    ``record_reflection`` tool with ``strict: True`` schema +
+    ``tool_choice="auto"``). The Anthropic API validates the schema
+    server-side when ``strict`` is set, so we read ``input``
     directly off the returned ``ToolUseBlock``.
 
     Errors (LLM failure, model declined the tool, schema mismatch
