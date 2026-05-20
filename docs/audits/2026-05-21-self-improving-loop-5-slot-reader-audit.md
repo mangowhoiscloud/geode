@@ -41,7 +41,17 @@ infrastructure is committed before the policies that consume them.
 | `retrieval` | `retrieval.json` | ✓ | **없음** — `paths.py:94`, `policies.py:132` 정의만 | **DEAD** |
 | `reflection` | `reflection.json` | ✓ | **없음** — `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` schema + reflection prompt 가 module-level constant. `reflection.json` 미연결 | **DEAD** |
 
-**총평**: 1/5 ALIVE, 4/5 DEAD.
+**총평** (audit 시점, 2026-05-21 오전): 1/5 ALIVE, 4/5 DEAD.
+
+### Post-S0a (2026-05-21 오후) update
+
+ADR-012 S0a (`tool_policy` reader 신설) 머지 후 상태:
+
+| Slot | 변동 | 새 reader 위치 |
+|---|---|---|
+| `tool_policy` | **DEAD → ALIVE** | `core/agent/tool_policy.py` 의 `_load_tool_policy_override` + `apply_tool_policy` → `core/agent/loop/_helpers.py:get_agentic_tools` (도구 후보 단일 진입점) |
+
+**현재 상태**: 2/5 ALIVE, 3/5 DEAD. 남은 dead slot: `decomposition` (S0b 예정) / `retrieval` (S0d 처치 결정 예정) / `reflection` (S0c 예정).
 
 ## 4. 인과 체인의 끊김
 

@@ -42,7 +42,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 | 표면 | 위치 | 현재 상태 | reader 상태 |
 |---|---|---|---|
 | 5축 SoT `prompt` | `wrapper-sections.json` | **가동 중** | **ALIVE** — `system_prompt.py:57` chain |
-| 5축 SoT `tool_policy` | `tool-policy.json` | mutation target 정의만 | **DEAD** — S0a reader 신설 필요 |
+| 5축 SoT `tool_policy` | `tool-policy.json` | **가동 중** (S0a, 2026-05-21) | **ALIVE** — `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` |
 | 5축 SoT `decomposition` | `decomposition.json` | mutation target 정의만 | **DEAD** — `core/orchestration/goal_decomposer.py` 가 `load_prompt("decomposer", "system")` 로 별도 SoT 사용 중. `decomposition.json` 미연결. S0c reader 신설 필요 |
 | 5축 SoT `retrieval` | `retrieval.json` | mutation target 정의만 | **DEAD** — RAG 인프라 부재. S0d 에서 deprecate 또는 보류 |
 | 5축 SoT `reflection` | `reflection.json` | mutation target 정의만 | **DEAD** — `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` 이 module-level constant. S0b reader 신설 필요 |
