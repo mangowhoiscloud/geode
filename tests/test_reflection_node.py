@@ -1,20 +1,24 @@
 """PR-3 C-2 — Reflection node invariants.
 
-Pins the structure + behaviour of ``core/agent/loop/_reflection.py``:
-prompt assembly, JSON parsing, schema-typed casts, settings knobs,
-and AgenticLoop wiring. The actual LLM call is mocked — tests must
-not consume provider quota.
+PR-B (2026-05-21) — migrated to Anthropic ``tool_use`` structured
+output. The free-form-JSON fence/brace parser is gone; the LLM
+invokes the ``record_reflection`` tool and we read ``input``
+directly off the ``ToolUseBlock``. Schema-typed casts in
+``_apply_reflection`` survive so a non-Anthropic provider (which
+may not enforce the schema server-side) can't poison state.
 """
 
 from __future__ import annotations
 
 import asyncio
 import inspect
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from core.agent.cognitive_state import CognitiveState
 from core.agent.loop import _reflection
+from core.agent.loop._reflection import REFLECTION_TOOL_NAME
 
 # ---------------------------------------------------------------------------
 # Pure-function invariants (no LLM)
@@ -54,59 +58,50 @@ def test_summarise_tool_results_caps_entries() -> None:
     assert "t8" not in out
 
 
-def test_parse_reflection_plain_json() -> None:
-    parsed = _reflection._parse_reflection('{"hypotheses": ["a"], "confidence": 0.5}')
-    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+# ---------------------------------------------------------------------------
+# Tool schema declaration — pinned so a refactor that drops fields surfaces here
+# ---------------------------------------------------------------------------
 
 
-def test_parse_reflection_strips_fence() -> None:
-    parsed = _reflection._parse_reflection('```json\n{"hypotheses": ["a"], "confidence": 0.5}\n```')
-    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+def test_reflection_tool_schema_declares_required_shape() -> None:
+    """Pin the tool schema. The Anthropic SDK enforces this server-
+    side, so dropping a property or required field would silently
+    change the contract."""
+    tool = _reflection._REFLECTION_TOOL
+    assert tool["name"] == REFLECTION_TOOL_NAME == "record_reflection"
+    schema = tool["input_schema"]
+    assert schema["type"] == "object"
+    props = schema["properties"]
+    assert set(props.keys()) == {"hypotheses", "confidence", "next_action_hint"}
+    assert props["hypotheses"]["type"] == "array"
+    assert props["hypotheses"]["maxItems"] == 5
+    assert props["confidence"]["type"] == "number"
+    assert props["confidence"]["minimum"] == 0.0
+    assert props["confidence"]["maximum"] == 1.0
+    # hypotheses + confidence are required; next_action_hint optional
+    assert set(schema["required"]) == {"hypotheses", "confidence"}
 
 
-def test_parse_reflection_raises_on_non_object() -> None:
-    with pytest.raises(ValueError):
-        _reflection._parse_reflection('["not", "an", "object"]')
+def test_anthropic_adapter_passes_strict_flag_through() -> None:
+    """Codex MCP review #2 catch — ``strict: True`` was being stripped
+    by ``_API_ALLOWED_KEYS`` filter on the Anthropic adapter so the
+    schema flag never reached the API. Pin that ``strict`` is in the
+    allowlist."""
+    from core.llm.providers.anthropic import _API_ALLOWED_KEYS
+
+    assert "strict" in _API_ALLOWED_KEYS
 
 
-def test_parse_reflection_strips_prose_prefix() -> None:
-    """Codex MCP review #1 catch — models often emit
-    ``"Here is the JSON: {...}"`` and the original fence-only parser
-    rejected those. The robust parser extracts the first balanced
-    ``{...}`` block."""
-    parsed = _reflection._parse_reflection(
-        'Here is the JSON: {"hypotheses": ["a"], "confidence": 0.5}'
-    )
-    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+def test_reflection_module_exports_tool_name_for_other_callers() -> None:
+    """Re-exported so downstream (transcript renderer, debug tools) can
+    grep for the tool name without importing the private dict."""
+    assert "REFLECTION_TOOL_NAME" in _reflection.__all__
+    assert REFLECTION_TOOL_NAME == "record_reflection"
 
 
-def test_parse_reflection_handles_text_after_closing_fence() -> None:
-    """Models sometimes emit ```json\\n{...}\\n```\\nhope this helps.
-    The original parser kept the trailing prose and failed to parse."""
-    parsed = _reflection._parse_reflection('```json\n{"hypotheses": ["a"]}\n```\nhope this helps')
-    assert parsed == {"hypotheses": ["a"]}
-
-
-def test_parse_reflection_brace_in_string_value() -> None:
-    """String-aware brace counting — a ``}`` inside a string value
-    must not close the outer object."""
-    parsed = _reflection._parse_reflection('{"hypotheses": ["a } with brace"], "confidence": 0.5}')
-    assert parsed == {"hypotheses": ["a } with brace"], "confidence": 0.5}
-
-
-def test_parse_reflection_no_object_raises() -> None:
-    with pytest.raises(ValueError):
-        _reflection._parse_reflection("definitely not json")
-
-
-def test_parse_reflection_handles_bare_json_with_trailing_prose() -> None:
-    """Codex MCP review #2 non-blocking caveat — models occasionally
-    emit ``{"hypotheses":["a"]}\\nthanks`` (no fence, prose after the
-    object). The original fix-up #1 only ran extraction when the
-    candidate did NOT start with ``{`` so this case was bypassed and
-    json.loads choked on the trailing prose."""
-    parsed = _reflection._parse_reflection('{"hypotheses": ["a"], "confidence": 0.5}\nthanks!')
-    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+# ---------------------------------------------------------------------------
+# _apply_reflection — schema-typed casts
+# ---------------------------------------------------------------------------
 
 
 def test_apply_reflection_populates_hypotheses() -> None:
@@ -138,6 +133,16 @@ def test_apply_reflection_clamps_confidence() -> None:
     assert state.confidence == 0.0
 
 
+def test_apply_reflection_rejects_bool_confidence() -> None:
+    """``bool`` is an ``int`` subclass — must be excluded so the LLM
+    can't accidentally collapse confidence to 0/1 by returning
+    True/False. Mirrors PR-5 fix-up on the mutator schema."""
+    state = CognitiveState(confidence=0.5)
+    _reflection._apply_reflection(state, {"confidence": True})
+    # True would have flipped confidence to 1.0; the guard preserves 0.5
+    assert state.confidence == 0.5
+
+
 def test_apply_reflection_pushes_hint_into_subgoals() -> None:
     state = CognitiveState()
     _reflection._apply_reflection(state, {"next_action_hint": "try X"})
@@ -156,7 +161,9 @@ def test_apply_reflection_caps_subgoals_at_five() -> None:
 
 def test_apply_reflection_ignores_wrong_types() -> None:
     """Schema-typed casts — bad types silently drop the field, not
-    poison the whole state."""
+    poison the whole state. Even though the Anthropic SDK enforces
+    types server-side, non-Anthropic providers don't, so this guard
+    protects the dispatcher fork."""
     state = CognitiveState(goal="x", confidence=0.5, hypotheses=["keep"])
     _reflection._apply_reflection(
         state,
@@ -166,6 +173,55 @@ def test_apply_reflection_ignores_wrong_types() -> None:
     assert state.hypotheses == ["keep"]
     assert state.confidence == 0.5
     assert state.subgoals == []
+
+
+# ---------------------------------------------------------------------------
+# _extract_reflection_input — tool_use block resolver
+# ---------------------------------------------------------------------------
+
+
+def _tool_use_block(name: str, payload: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(type="tool_use", name=name, input=payload)
+
+
+def _text_block(text: str) -> SimpleNamespace:
+    return SimpleNamespace(type="text", text=text)
+
+
+def test_extract_reflection_input_finds_named_tool_block() -> None:
+    response = SimpleNamespace(
+        content=[
+            _text_block("thinking..."),
+            _tool_use_block(
+                REFLECTION_TOOL_NAME,
+                {"hypotheses": ["h1"], "confidence": 0.5},
+            ),
+        ]
+    )
+    out = _reflection._extract_reflection_input(response)
+    assert out == {"hypotheses": ["h1"], "confidence": 0.5}
+
+
+def test_extract_reflection_input_ignores_other_tools() -> None:
+    response = SimpleNamespace(
+        content=[
+            _tool_use_block("some_other_tool", {"junk": True}),
+            _text_block("no reflection here"),
+        ]
+    )
+    assert _reflection._extract_reflection_input(response) is None
+
+
+def test_extract_reflection_input_handles_empty_content() -> None:
+    response = SimpleNamespace(content=[])
+    assert _reflection._extract_reflection_input(response) is None
+
+
+def test_extract_reflection_input_handles_none_content() -> None:
+    """Defensive — adapters that return a response without a content
+    attribute (or with content=None) must not crash the helper."""
+    response = SimpleNamespace(content=None)
+    assert _reflection._extract_reflection_input(response) is None
 
 
 # ---------------------------------------------------------------------------
@@ -227,26 +283,25 @@ def test_run_cognitive_act_observe_cycle_calls_maybe_reflect() -> None:
 
 
 # ---------------------------------------------------------------------------
-# reflect_async — error tolerance
+# reflect_async — error tolerance + tool_use roundtrip
 # ---------------------------------------------------------------------------
 
 
 class _StubAdapter:
-    def __init__(self, response: Any = None, raise_exc: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        response: Any = None,
+        raise_exc: BaseException | None = None,
+    ) -> None:
         self._response = response
         self._raise = raise_exc
+        self.last_kwargs: dict[str, Any] = {}
 
-    async def agentic_call(self, **_kwargs: Any) -> Any:
+    async def agentic_call(self, **kwargs: Any) -> Any:
+        self.last_kwargs = dict(kwargs)
         if self._raise is not None:
             raise self._raise
         return self._response
-
-
-class _StubResponse:
-    def __init__(self, text: str) -> None:
-        from types import SimpleNamespace
-
-        self.content = [SimpleNamespace(text=text)]
 
 
 def _install_reflection_stubs(
@@ -280,24 +335,37 @@ def test_reflect_async_swallows_llm_failure(monkeypatch: pytest.MonkeyPatch) -> 
     assert state.confidence == 0.4
 
 
-def test_reflect_async_swallows_empty_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    state = CognitiveState(hypotheses=["keep"])
-    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=_StubResponse("")))
+def test_reflect_async_swallows_response_without_tool_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the LLM ignores the forced tool_choice and returns only
+    text (or some other tool), keep previous state."""
+    state = CognitiveState(hypotheses=["keep"], confidence=0.4)
+    response = SimpleNamespace(content=[_text_block("I have nothing to say")])
+    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
 
     asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
     assert state.hypotheses == ["keep"]
+    assert state.confidence == 0.4
 
 
-def test_reflect_async_applies_valid_response(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reflect_async_applies_tool_use_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Happy path — adapter returns a ToolUseBlock with the parsed
+    input dict; reflect_async applies it to state."""
     state = CognitiveState(goal="x")
-    _install_reflection_stubs(
-        monkeypatch,
-        adapter=_StubAdapter(
-            response=_StubResponse(
-                '{"hypotheses": ["h1", "h2"], "confidence": 0.7, "next_action_hint": "do it"}'
+    response = SimpleNamespace(
+        content=[
+            _tool_use_block(
+                REFLECTION_TOOL_NAME,
+                {
+                    "hypotheses": ["h1", "h2"],
+                    "confidence": 0.7,
+                    "next_action_hint": "do it",
+                },
             )
-        ),
+        ]
     )
+    _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
 
     asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
     assert state.hypotheses == ["h1", "h2"]
@@ -305,20 +373,44 @@ def test_reflect_async_applies_valid_response(monkeypatch: pytest.MonkeyPatch) -
     assert state.subgoals == ["do it"]
 
 
-def test_reflect_async_swallows_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    state = CognitiveState(hypotheses=["keep"])
-    _install_reflection_stubs(
-        monkeypatch, adapter=_StubAdapter(response=_StubResponse("definitely not json"))
+def test_reflect_async_passes_tool_schema_to_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Wire-up invariant — reflect_async must call the adapter with
+    the reflection tool declared and tool_choice forced. Pin via
+    captured adapter kwargs so a refactor that drops tools=[]
+    surfaces here, not at runtime."""
+    state = CognitiveState()
+    adapter = _StubAdapter(
+        response=SimpleNamespace(
+            content=[
+                _tool_use_block(
+                    REFLECTION_TOOL_NAME,
+                    {"hypotheses": [], "confidence": 0.5},
+                )
+            ]
+        )
     )
+    _install_reflection_stubs(monkeypatch, adapter=adapter)
+
     asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
-    assert state.hypotheses == ["keep"]
+
+    tools = adapter.last_kwargs.get("tools")
+    assert isinstance(tools, list) and len(tools) == 1
+    assert tools[0]["name"] == REFLECTION_TOOL_NAME
+    assert tools[0].get("strict") is True
+    # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs mark
+    # both ``"any"`` and named-tool forcing as incompatible with
+    # adaptive/extended thinking, so only ``"auto"`` is safe across
+    # every reflection-model setting.
+    assert adapter.last_kwargs.get("tool_choice") == "auto"
 
 
 def test_reflect_async_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Codex MCP review #1 catch — provider / adapter resolution used
-    to escape the try block, breaking the agentic loop. Pin that even
-    setup-time errors (unknown model, missing adapter, importable
-    chain) keep the loop alive."""
+    """Codex MCP review (PR-3 #1) catch — provider / adapter
+    resolution used to escape the try block, breaking the agentic
+    loop. Pin that even setup-time errors (unknown model, missing
+    adapter, importable chain) keep the loop alive."""
     state = CognitiveState(hypotheses=["keep"], confidence=0.4)
 
     def _boom_resolve(_model: str) -> str:

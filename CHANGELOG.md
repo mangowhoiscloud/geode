@@ -47,6 +47,63 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-B — reflection node uses ``tool_use`` structured output.** Pre-
+  PR-B ``core/agent/loop/_reflection.py`` told the LLM "Return ONLY
+  this JSON, no prose" and ran a 5-stage forgiving parser
+  (``_parse_reflection`` + ``_extract_first_json_object`` with
+  fence strip + prose-prefix extraction + string-aware brace counting)
+  to recover from the contract drift the LLM inevitably caused.
+  Codex MCP caught parser gaps three times during the PR-3 review
+  rounds. PR-B replaces the entire fragile path with the same
+  ``tool_use`` contract every provider-aware GEODE caller already
+  uses: declare a ``record_reflection`` tool with a JSON
+  ``input_schema`` (``hypotheses[<=5]`` / ``confidence ∈ [0,1]`` /
+  ``next_action_hint``) + ``strict: True`` opt-in for the Anthropic
+  strict-tool-input validator, dispatch with the canonical
+  ``tool_choice="any"`` (= must use SOME declared tool; with only
+  one declared this effectively forces ``record_reflection`` while
+  staying compatible with Anthropic adaptive thinking on Opus 4.7),
+  and read the parsed ``input`` dict directly off the
+  ``ToolUseBlock``. ``_apply_reflection`` keeps its schema-typed
+  casts (incl. the ``bool``-exclusion guard mirroring PR-5's
+  mutator fix) so a non-Anthropic provider in the dispatcher fork
+  can't poison state. Eliminates ~80 lines of parsing fallback + 4
+  parser-edge-case tests; replaces them with 4
+  ``_extract_reflection_input`` resolver tests and 1 wire-up
+  invariant test pinning that ``reflect_async`` passes the tool
+  schema + ``tool_choice="any"`` to the adapter. Public surface
+  exposes ``REFLECTION_TOOL_NAME`` so transcript renderers / debug
+  tools can grep without importing the private dict.
+
+- **PR-B fix-up — Codex provider routes ``tool_choice`` through
+  the cross-provider normaliser.** Pre-fix
+  ``core/llm/providers/codex.py:309`` grabbed
+  ``tool_choice.get("type")`` and passed the literal value straight
+  through to the Responses API, dropping the forced-tool name
+  (``{"type": "tool", "name": "X"}`` → ``"tool"``) and rejecting
+  canonical aliases like ``"any"``. Any forced-tool caller (the
+  PR-B reflection node was the first) hit silent no-ops on the
+  ``openai-codex`` provider. Codex MCP review #1 caught the gap.
+  Fix routes through :func:`core.llm.tool_choice.normalize` (same
+  as the OpenAI/GLM adapters) so ``"auto"`` / ``"any"`` /
+  named-tool forcing translate to the right OpenAI/Responses
+  shapes.
+
+- **PR-B fix-up — Anthropic ``_API_ALLOWED_KEYS`` adds ``strict``;
+  reflection drops to ``tool_choice="auto"``.** Codex MCP review #2
+  caught: (a) ``strict: True`` was being stripped from the tool
+  definition before the Anthropic API call because the allow-list
+  filter omitted ``"strict"``; (b) ``tool_choice="any"`` (and any
+  named-tool forcing) is *also* incompatible with Anthropic
+  extended/adaptive thinking, not just the ``{"type": "tool"}``
+  shape — only ``"auto"`` works across every model + thinking
+  regime. Reflection now passes ``tool_choice="auto"``; with one
+  tool declared and a strong system prompt the LLM still calls it
+  on the happy path, and the rare decline is handled by
+  ``_extract_reflection_input`` returning ``None`` + WARN.
+
 ### Added
 
 - **PR-A — ``/model`` role tab for reflection-model selection.** Pre-
