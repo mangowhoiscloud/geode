@@ -164,6 +164,14 @@ class PipelineState:
     # baseline (None on first generation — bootstrap)
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
+    # G3 — full BaselineSnapshot (dim_means + dim_stderr + evidence) loaded
+    # from ``autoresearch/state/baseline.json`` when the CLI flow auto-picks
+    # or the operator explicitly opts into baseline-grounded generation. The
+    # generator / critic / evolver agents read ``snapshot.evidence[target_dim]``
+    # via :func:`plugins.seed_generation.baseline_reader.format_evidence_block`.
+    # ``None`` = bootstrap run (no audit baseline yet) — agents fall through
+    # to their non-baseline prompts.
+    baseline_snapshot: Any = None
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.

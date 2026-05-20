@@ -273,3 +273,44 @@ def test_critic_pins_candidate_id_from_task() -> None:
     assert "gen2-000-cand" in reflections
     assert reflections["gen2-000-cand"]["candidate_id"] == "gen2-000-cand"
     assert "WRONG-id-from-llm" not in reflections
+
+
+# ---------------------------------------------------------------------------
+# G3 — baseline evidence injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_critic_injects_baseline_evidence_into_description() -> None:
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    state = _make_state(n=2)
+    _seed_candidates(state, 2)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 7.0},
+        dim_stderr={"broken_tool_use": 0.3},
+        evidence={
+            "broken_tool_use": [
+                {
+                    "sample_id": "seed-z",
+                    "value": 9.0,
+                    "explanation": "ignored tool failure",
+                    "highlights": "- [M3] missed",
+                }
+            ]
+        },
+    )
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    for task in manager.received_tasks:
+        assert "Recent audit baseline" in task.description
+        assert "seed-z" in task.description
+        assert "Critique ONE Petri audit seed candidate" in task.description
+
+
+def test_critic_no_evidence_block_without_snapshot() -> None:
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.baseline_snapshot = None
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Recent audit baseline" not in manager.received_tasks[0].description

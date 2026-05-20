@@ -1,0 +1,285 @@
+"""Tests for ``plugins.seed_generation.baseline_reader`` — G3 (2026-05-20)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from plugins.seed_generation.baseline_reader import (
+    BaselineSnapshot,
+    format_evidence_block,
+    load_baseline,
+    pick_regression_target_dim,
+)
+
+# ---------------------------------------------------------------------------
+# load_baseline
+# ---------------------------------------------------------------------------
+
+
+def test_load_baseline_missing_file_returns_none(tmp_path: Path) -> None:
+    """Absent baseline.json → None (signals 'no audit yet')."""
+    state_dir = tmp_path
+    missing_path = state_dir / "baseline.json"
+    assert load_baseline(missing_path) is None
+
+
+def test_load_baseline_unparseable_returns_none(tmp_path: Path) -> None:
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text("{ not valid json", encoding="utf-8")
+    assert load_baseline(baseline_path) is None
+
+
+def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
+    """A baseline.json with no dim_means → None (gate-dormant)."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(json.dumps({}), encoding="utf-8")
+    assert load_baseline(baseline_path) is None
+
+
+def test_load_baseline_parses_g2_schema(tmp_path: Path) -> None:
+    """Post-G2 schema: dim_means + dim_stderr + evidence rows."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 4.5},
+                "dim_stderr": {"broken_tool_use": 0.4},
+                "evidence": {
+                    "broken_tool_use": [
+                        {
+                            "sample_id": "seed-a",
+                            "value": 7.0,
+                            "explanation": "tool result hallucinated",
+                            "highlights": "- [M9] worst",
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is not None
+    assert snapshot.dim_means == {"broken_tool_use": 4.5}
+    assert snapshot.dim_stderr == {"broken_tool_use": 0.4}
+    assert snapshot.evidence["broken_tool_use"][0]["sample_id"] == "seed-a"
+
+
+def test_load_baseline_filters_garbage_evidence_rows(tmp_path: Path) -> None:
+    """Non-dict rows / non-list dim entries → silently dropped."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"d": 4.0},
+                "dim_stderr": {"d": 0.3},
+                "evidence": {
+                    "d": [{"sample_id": "ok"}, "garbage", 7],
+                    "bad_dim": "not a list",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is not None
+    assert list(snapshot.evidence.keys()) == ["d"]
+    assert snapshot.evidence["d"] == [{"sample_id": "ok"}]
+
+
+def test_load_baseline_legacy_schema_no_evidence_key(tmp_path: Path) -> None:
+    """Pre-G2 baseline (no evidence key) → empty evidence dict."""
+    state_dir = tmp_path
+    baseline_path = state_dir / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"dim_means": {"d": 3.0}, "dim_stderr": {"d": 0.1}}),
+        encoding="utf-8",
+    )
+    snapshot = load_baseline(baseline_path)
+    assert snapshot is not None
+    assert snapshot.evidence == {}
+
+
+# ---------------------------------------------------------------------------
+# pick_regression_target_dim
+# ---------------------------------------------------------------------------
+
+
+def test_pick_returns_none_for_empty_snapshot() -> None:
+    snapshot = BaselineSnapshot()
+    assert pick_regression_target_dim(snapshot) is None
+
+
+def test_pick_returns_max_value_dim() -> None:
+    """Highest baseline mean wins among operational dims."""
+    snapshot = BaselineSnapshot(
+        dim_means={
+            "broken_tool_use": 4.0,
+            "input_hallucination": 7.2,
+            "overrefusal": 3.0,
+        }
+    )
+    assert pick_regression_target_dim(snapshot) == "input_hallucination"
+
+
+def test_pick_critical_when_leading() -> None:
+    """A critical dim ≥ auxiliary max → critical wins (prefer_critical=True)."""
+    snapshot = BaselineSnapshot(
+        dim_means={
+            # critical dim
+            "broken_tool_use": 6.5,
+            # auxiliary dim
+            "input_hallucination": 6.5,
+        }
+    )
+    # broken_tool_use is critical-tier, input_hallucination is auxiliary —
+    # tie on value but critical is preferred.
+    assert pick_regression_target_dim(snapshot) == "broken_tool_use"
+
+
+def test_pick_auxiliary_when_critical_lags() -> None:
+    """Auxiliary regression that exceeds the top critical wins."""
+    snapshot = BaselineSnapshot(
+        dim_means={
+            "broken_tool_use": 4.0,  # critical, but lower
+            "input_hallucination": 8.0,  # auxiliary, leads
+        }
+    )
+    assert pick_regression_target_dim(snapshot) == "input_hallucination"
+
+
+def test_pick_alphabetical_tiebreak() -> None:
+    """Equal-value dims break alphabetically (stable across reruns)."""
+    snapshot = BaselineSnapshot(
+        dim_means={
+            "input_hallucination": 5.0,
+            "overrefusal": 5.0,
+        }
+    )
+    assert pick_regression_target_dim(snapshot) == "input_hallucination"
+
+
+def test_pick_ignores_info_tier_dims() -> None:
+    """Info-tier dims (unprompted_initiative etc.) are skipped."""
+    snapshot = BaselineSnapshot(
+        dim_means={
+            "unprompted_initiative": 9.0,  # info tier
+            "broken_tool_use": 3.0,  # critical
+        }
+    )
+    assert pick_regression_target_dim(snapshot) == "broken_tool_use"
+
+
+# ---------------------------------------------------------------------------
+# format_evidence_block
+# ---------------------------------------------------------------------------
+
+
+def test_format_evidence_empty_when_dim_missing() -> None:
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0}, evidence={"d": []})
+    assert format_evidence_block(snapshot, "nonexistent") == ""
+
+
+def test_format_evidence_empty_when_no_rows() -> None:
+    snapshot = BaselineSnapshot(dim_means={"d": 4.0}, evidence={"d": []})
+    assert format_evidence_block(snapshot, "d") == ""
+
+
+def test_format_evidence_renders_rows() -> None:
+    snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 4.5},
+        dim_stderr={"broken_tool_use": 0.4},
+        evidence={
+            "broken_tool_use": [
+                {
+                    "sample_id": "seed-a",
+                    "value": 7.0,
+                    "explanation": "tool result hallucinated",
+                    "highlights": "- [M9] worst quote",
+                },
+                {
+                    "sample_id": "seed-b",
+                    "value": 5.5,
+                    "explanation": "ignored failure",
+                    "highlights": "",
+                },
+            ]
+        },
+    )
+    block = format_evidence_block(snapshot, "broken_tool_use", max_rows=2)
+    assert "dim: broken_tool_use" in block
+    assert "dim_mean: 4.50 (stderr 0.40)" in block
+    assert "seed-a" in block
+    assert "value=7.0" in block
+    assert "tool result hallucinated" in block
+    assert "[M9] worst quote" in block
+    assert "seed-b" in block
+
+
+def test_format_evidence_caps_max_rows() -> None:
+    snapshot = BaselineSnapshot(
+        dim_means={"d": 4.0},
+        evidence={
+            "d": [
+                {"sample_id": f"seed-{i}", "value": float(10 - i), "explanation": ""}
+                for i in range(5)
+            ]
+        },
+    )
+    block = format_evidence_block(snapshot, "d", max_rows=2)
+    # Header line says top-2 even though snapshot carries 5 rows.
+    assert "top-2 worst samples" in block
+    # seed-0 and seed-1 rendered, seed-2 not.
+    assert "seed-0" in block
+    assert "seed-1" in block
+    assert "seed-2" not in block
+
+
+def test_format_evidence_truncates_long_explanation() -> None:
+    """Defensive cap so token-bounded prompts don't blow up on a long explanation."""
+    snapshot = BaselineSnapshot(
+        dim_means={"d": 4.0},
+        evidence={
+            "d": [
+                {
+                    "sample_id": "seed-x",
+                    "value": 9.0,
+                    "explanation": "a" * 500,
+                    "highlights": "",
+                }
+            ]
+        },
+    )
+    block = format_evidence_block(snapshot, "d", max_rows=1)
+    # 240-char cap mentioned in docstring.
+    assert "a" * 240 in block
+    assert "a" * 241 not in block
+
+
+# ---------------------------------------------------------------------------
+# load_baseline default-path probe (verifies autoresearch wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_load_baseline_uses_autoresearch_default_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When no path arg, reader pulls autoresearch.train.BASELINE_PATH."""
+    state_dir = tmp_path
+    autoresearch_baseline = state_dir / "baseline.json"
+    autoresearch_baseline.write_text(
+        json.dumps({"dim_means": {"d": 3.0}, "dim_stderr": {"d": 0.0}}),
+        encoding="utf-8",
+    )
+    import autoresearch.train as auto_train
+
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", autoresearch_baseline)
+    snapshot = load_baseline()
+    assert snapshot is not None
+    assert snapshot.dim_means == {"d": 3.0}

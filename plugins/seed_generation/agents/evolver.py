@@ -219,6 +219,7 @@ class Evolver(BaseSeedAgent):
                 rewrite_section=rewrite_section,
                 weaknesses=reflection.get("weaknesses", []),
                 dim_means=pilot.get("dim_means", {}) if isinstance(pilot, dict) else {},
+                baseline_snapshot=state.baseline_snapshot,
             )
             tasks.append(
                 SubTask(
@@ -244,21 +245,34 @@ class Evolver(BaseSeedAgent):
         rewrite_section: str,
         weaknesses: list[Any],
         dim_means: dict[str, Any],
+        baseline_snapshot: Any = None,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
         The system prompt is owned by ``.claude/agents/seed_evolver.md``.
         The description fills in the parent candidate path, the section
-        the Critic flagged, the per-candidate weaknesses list, and the
-        Pilot dim_means so the sub-agent has all 3 signals the AgentDef
-        contract mandates.
+        the Critic flagged, the per-candidate weaknesses list, the
+        Pilot dim_means, AND (G3) the baseline-evidence block for the
+        target dim — so the evolver has both the in-run Pilot signal
+        and the cross-run audit regression context.
         """
         weakness_summary = "; ".join(str(w) for w in weaknesses) or "n/a"
         means_summary = ", ".join(f"{k}={v}" for k, v in dim_means.items()) or "n/a"
+        target_dim = candidate.get("target_dim", "unknown")
+        evidence_block = ""
+        if baseline_snapshot is not None:
+            try:
+                from plugins.seed_generation.baseline_reader import format_evidence_block
+
+                evidence_block = format_evidence_block(baseline_snapshot, target_dim)
+            except ImportError:  # pragma: no cover — defensive
+                evidence_block = ""
+        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
         return (
+            f"{evidence_prefix}"
             f"Evolve ONE Petri seed candidate. Parent id: {candidate['id']!r}. "
             f"Parent path: {candidate['path']!r}. Target dim: "
-            f"{candidate.get('target_dim', 'unknown')!r}. Rewrite section: "
+            f"{target_dim!r}. Rewrite section: "
             f"{rewrite_section!r}. Reflection weaknesses: {weakness_summary}. "
             f"Pilot dim_means: {means_summary}. Per your system prompt, "
             "rewrite ONLY that section, preserve frontmatter + target_dim, "

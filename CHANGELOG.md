@@ -49,6 +49,25 @@ functional change.
 
 ### Added
 
+- **PR-G3 — seed-generation reads `baseline.json` evidence + auto target
+  dim.** Third PR of the 2026-05-20 self-improving-loop wiring sprint
+  (G1-G5). New `plugins/seed_generation/baseline_reader.py` exposes
+  `load_baseline()` (typed snapshot of autoresearch's `baseline.json`),
+  `pick_regression_target_dim()` (critical-tier preference + alphabetical
+  tiebreak), and `format_evidence_block()` (prompt-ready string per dim).
+  CLI `--target-dim` is now optional (`None` / `"auto"` → reader picks
+  the worst-regressed dim from baseline.json; falls through to an
+  actionable "no baseline" error when none exists). `PipelineState`
+  gains a `baseline_snapshot` field carried through to generator /
+  critic / evolver sub-agent `_build_description`; the evidence block
+  prepends the existing instructions only when the snapshot has rows
+  for `target_dim`, so legacy bootstrap runs (no audit yet) stay
+  byte-identical. Lazy `from autoresearch.train import BASELINE_PATH`
+  keeps the seed-gen cold start free of autoresearch imports until the
+  reader is actually called. 31 new tests (16 baseline_reader + 4 CLI
+  auto-pick + 3 generator + 2 critic + 2 evolver) — quality gates:
+  ruff / format / mypy / 415 tests green.
+
 - **PR-G2 — Petri evidence schema in `baseline.json` + audit-summary
   pipe.** Second PR of the 2026-05-20 self-improving-loop wiring
   sprint (G1-G5). `core/audit/dim_extractor.extract_evidence(eval_path,

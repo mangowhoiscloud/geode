@@ -298,3 +298,43 @@ def test_evolver_evolved_row_schema_mirrors_candidates() -> None:
     assert "parent_id" in row
     assert "rewrite_section" in row
     assert "notes" in row
+
+
+# ---------------------------------------------------------------------------
+# G3 — baseline evidence injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_evolver_injects_baseline_evidence_into_description() -> None:
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    state = _state_with_survivors(n=1)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 7.0},
+        dim_stderr={"broken_tool_use": 0.3},
+        evidence={
+            "broken_tool_use": [
+                {
+                    "sample_id": "seed-evolver",
+                    "value": 9.0,
+                    "explanation": "target ignored verification step",
+                    "highlights": "- [M5] missed",
+                }
+            ]
+        },
+    )
+    manager = _StubManager()
+    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    for task in manager.received_tasks:
+        assert "Recent audit baseline" in task.description
+        assert "seed-evolver" in task.description
+        # Original pilot signals still present.
+        assert "Pilot dim_means" in task.description
+
+
+def test_evolver_no_evidence_block_without_snapshot() -> None:
+    state = _state_with_survivors(n=1)
+    state.baseline_snapshot = None
+    manager = _StubManager()
+    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Recent audit baseline" not in manager.received_tasks[0].description
