@@ -312,31 +312,67 @@ LLMCallable = Callable[[str, str], str]
 
 
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
-    """Anthropic SDK call to ``claude-opus-4-7``.
+    """Mutator LLM call routed through ``core.llm.router`` (PR-1 G-A).
 
-    Imported lazily so the runner module stays importable without the
-    anthropic SDK in test environments. Tests inject a mock callable
-    via ``SelfImprovingLoopRunner(llm_call=...)``.
+    Pre-PR-1 (v0.99.22) this body instantiated ``anthropic.Anthropic()``
+    directly and pinned ``model="claude-opus-4-7"`` as a literal —
+    paperclip-style abstraction goal: route through the same
+    ``call_with_retry`` path every other provider-aware caller uses,
+    and read the model id from ``[self_improving_loop.mutator]`` so the
+    operator can flip provider/model without editing this file.
+
+    Resolution order:
+
+    1. ``~/.geode/config.toml [self_improving_loop.mutator] default_model``
+       (user override).
+    2. ``MutatorConfig.default_model`` ship default (``claude-opus-4-7``).
+
+    The model id is routed through ``core.llm.router.call_with_retry``
+    (M5 wiring) so the same credential / provider rotator the agentic
+    loop uses also serves the mutator — no second SDK client, no
+    second key store.
+
+    Tests inject a mock callable via
+    ``SelfImprovingLoopRunner(llm_call=...)`` and skip this code path
+    entirely; the lazy SDK imports keep the test cold-start free of
+    anthropic.
     """
-    try:
-        import anthropic
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "self-improving-loop runner requires the anthropic SDK "
-            "(install with `uv sync` or pass a mock llm_call)"
-        ) from exc
+    import asyncio
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    # Concatenate text blocks defensively — the SDK can return a list
-    # of content blocks even for a single text response.
+    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.llm.adapters import resolve_agentic_adapter
+    from core.llm.router import call_with_retry
+
+    cfg = load_self_improving_loop_config()
+    model = cfg.mutator.default_model
+    max_tokens = cfg.mutator.max_tokens
+
+    from core.config import _resolve_provider
+
+    provider = _resolve_provider(model)
+    adapter = resolve_agentic_adapter(provider)
+
+    async def _do_call(m: str) -> object:
+        return await adapter.agentic_call(
+            model=m,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[],
+            tool_choice={"type": "auto"},
+            max_tokens=max_tokens,
+            temperature=0.3,
+        )
+
+    response, _used_model = asyncio.run(call_with_retry(model, _do_call))
+    if response is None:
+        last_err = getattr(adapter, "last_error", None)
+        raise RuntimeError(
+            f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
+        )
+
+    # Adapter normalises to AgenticResponse — concatenate text blocks.
     text_chunks: list[str] = []
-    for block in response.content:
+    for block in getattr(response, "content", []):
         text = getattr(block, "text", "")
         if text:
             text_chunks.append(text)

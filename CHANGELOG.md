@@ -47,6 +47,70 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Cognitive loop uplift sprint plan
+  (`docs/plans/2026-05-21-cognitive-loop-uplift.md`).** Maps every
+  hardcoded model/harness selection point in the self-improving loop
+  (Tier A-E matrix from the 2026-05-21 audit) and the six cognitive
+  enhancement directives (CognitiveState, reflection node, episodic
+  action-outcome memory, causal attribution, policy mutation
+  extension, cognitive loop telemetry) into 10 work items across
+  6 PRs with Socratic gates, verification metrics, and Codex MCP
+  review checkpoints. PR-1 (this commit) closes the five paperclip-
+  style abstraction gaps (G-A through G-E).
+
+- **PR-1 G-A — ``[self_improving_loop.mutator]`` manifest section +
+  mutator routed through ``core.llm.router.call_with_retry``.** Pre-
+  fix ``core/self_improving_loop/runner.py:_default_llm_call``
+  instantiated ``anthropic.Anthropic()`` directly and pinned
+  ``model="claude-opus-4-7"`` as a literal, so the self-improving
+  loop's mutation step bypassed the credential rotator every other
+  GEODE caller shares. New ``MutatorConfig`` (``default_model`` /
+  ``allowed_models`` / ``source`` / ``role_contract`` /
+  ``max_tokens``) lives under ``[self_improving_loop.mutator]`` —
+  same shape as ``[seed_generation.role.<X>]`` and
+  ``[petri.role.<X>]``. ``_default_llm_call`` now reads the model id
+  from the config, resolves the provider via ``_resolve_provider``,
+  dispatches through ``resolve_agentic_adapter`` +
+  ``call_with_retry`` (so the M5 single-model retry + the credential
+  rotator both apply), and concatenates the normalised
+  ``AgenticResponse`` text blocks.
+
+- **PR-1 G-D — ``settings.learning_extract_model`` knob.** The GLM
+  free-tier hook in ``core/hooks/llm_extract_learning.py`` no longer
+  hardcodes ``model="glm-4.7-flash"``; it reads the new settings
+  field (default ``glm-4.7-flash``, overridable via
+  ``GEODE_LEARNING_EXTRACT_MODEL`` env var or
+  ``[llm] learning_extract_model`` in ``config.toml``).
+
+### Changed
+
+- **PR-1 G-E — ``settings.model`` / ``settings.router_model``
+  defaults bumped from ``claude-opus-4-6`` to ``claude-opus-4-7`` to
+  match ``routing.toml [model.defaults] anthropic``
+  (``ANTHROPIC_PRIMARY`` constant). Operators with ``GEODE_MODEL`` /
+  ``[llm] primary_model`` overrides are unaffected; this fixes the
+  silent default drift only.
+
+### Fixed
+
+- **PR-1 G-C — invariant test pins ``autoresearch/program.md``
+  example log to ``AutoresearchConfig`` defaults.** The example
+  audit-log block in the program doc (lines ~180-181) hardcodes
+  ``target_model: geode/gpt-5.5`` and ``judge_model: claude-code/opus``;
+  the new
+  ``tests/test_self_improving_loop_gap_fill.py::test_program_md_example_log_matches_config_defaults``
+  fails CI if the doc and the config default ever drift apart, so a
+  config change forces a doc refresh in the same PR.
+
+- **PR-1 G-B (invariant pin)** —
+  ``tests/test_self_improving_loop_gap_fill.py`` pins that
+  ``autoresearch.train._build_audit_command`` reads
+  ``cfg.target_model`` / ``cfg.judge_model`` from
+  ``AutoresearchConfig`` (PR-δ1 wiring); a regression that
+  re-introduces the module-constant path would fail the test.
+
 ## [0.99.23] — 2026-05-20
 
 Model-UX governance gap closure — final slice covering the items deferred

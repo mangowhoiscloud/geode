@@ -100,10 +100,18 @@ def _call_budget_llm(prompt: str) -> str | None:
 
 
 def _call_glm_flash(prompt: str, api_key: str) -> str | None:
-    """Call GLM-4.7-flash (free tier)."""
+    """Call the GLM free-tier model picked by ``settings.learning_extract_model``.
+
+    PR-1 G-D — pre-fix the model id was a ``"glm-4.7-flash"`` literal,
+    so an operator who wanted to flip to a different free model had to
+    edit this hook. The literal is now wired through the settings so a
+    ``GEODE_LEARNING_EXTRACT_MODEL=glm-5-flash`` env var (or
+    ``config.toml [llm] learning_extract_model``) flips it without
+    touching code.
+    """
     import openai
 
-    from core.config import GLM_BASE_URL
+    from core.config import GLM_BASE_URL, settings
 
     client = openai.OpenAI(
         api_key=api_key,
@@ -111,7 +119,7 @@ def _call_glm_flash(prompt: str, api_key: str) -> str | None:
     )
     try:
         resp = client.chat.completions.create(
-            model="glm-4.7-flash",
+            model=settings.learning_extract_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.0,

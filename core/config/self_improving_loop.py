@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "AutoresearchConfig",
+    "MutatorConfig",
     "PetriRoleConfig",
     "SeedGenerationConfig",
     "SelfImprovingLoopBindings",
@@ -106,6 +107,43 @@ class AutoresearchConfig(BaseModel):
     fallback_to_payg: bool | None = None
 
 
+class MutatorConfig(BaseModel):
+    """Mutator-role binding for ``core/self_improving_loop/runner.py``.
+
+    PR-1 G-A — pre-fix the runner instantiated ``anthropic.Anthropic()``
+    directly and pinned ``model="claude-opus-4-7"`` as a literal, so
+    every self-improving loop mutation was bound to one provider and
+    one model regardless of operator intent. The new manifest section
+    follows the same shape as ``[seed_generation.role.<X>]`` and
+    ``[petri.role.<X>]`` — default model + allowed model set + optional
+    role contract — so the mutator is a first-class role in the
+    paperclip-style abstraction.
+
+    ``source`` mirrors the same enum the petri source resolver uses
+    (``auto`` / ``api_key`` / ``claude-cli`` / ``openai-codex``); the
+    runner dispatches through ``core.llm.router.call_with_retry`` and
+    the source decides which credential row of
+    ``plugins/petri_audit/petri.plugin.toml`` applies.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_model: str = "claude-opus-4-7"
+    allowed_models: list[str] = Field(
+        default_factory=lambda: [
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "gpt-5.5",
+            "gpt-5.4",
+        ]
+    )
+    source: Literal["auto", "api_key", "claude-cli", "openai-codex"] = "auto"
+    role_contract: str = ".claude/agents/self_improving_loop_mutator.md"
+    max_tokens: Annotated[int, Field(ge=128, le=200_000)] = 1024
+    fallback_to_payg: bool | None = None
+
+
 class SeedGenerationConfig(BaseModel):
     """seed-generation runtime knobs.
 
@@ -150,6 +188,10 @@ class SelfImprovingLoopConfig(BaseModel):
     """Map of role name → PetriRoleConfig. Expected keys: auditor /
     target / judge."""
     seed_generation: SeedGenerationConfig = Field(default_factory=SeedGenerationConfig)
+    mutator: MutatorConfig = Field(default_factory=MutatorConfig)
+    """PR-1 G-A — mutator role manifest. Closes the hardcoded
+    ``model="claude-opus-4-7"`` + direct ``anthropic.Anthropic()``
+    call in ``core/self_improving_loop/runner.py``."""
 
     @model_validator(mode="after")
     def _abort_above_warn(self) -> SelfImprovingLoopConfig:
