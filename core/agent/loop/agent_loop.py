@@ -499,6 +499,39 @@ class AgenticLoop:
 
         return None
 
+    def _check_round_guards(self, round_idx: int) -> str | None:
+        """PR-D Phase 2a — round-entry guards extracted from ``arun``.
+
+        Returns ``None`` if both guards pass (proceed with the
+        round). Returns a short string identifying the triggered
+        guard otherwise — ``arun`` breaks the while-loop on a
+        non-None response, deferring the result-construction to the
+        loop's existing wrap-up code below (mirrors the pre-refactor
+        ``break`` semantics).
+
+        Guards (Karpathy P3):
+          * ``round_limit`` — ``max_rounds > 0`` enforces; ``0`` =
+            unlimited. Round indices are 0-based, so we break when
+            ``round_idx >= max_rounds``.
+          * ``time_budget`` — ``time_budget_s > 0`` enforces;
+            ``0.0`` = no time limit. Wall clock measured against
+            ``self._loop_start_time``.
+
+        Behaviour preserved exactly from the pre-refactor inline
+        ``Guard 1`` + ``Guard 2`` blocks — this helper is a
+        *structural* extraction. PR-D Phase 2b/2c will continue
+        chipping at the god-method.
+        """
+        import time as _time
+
+        if self.max_rounds > 0 and round_idx >= self.max_rounds:
+            return "round_limit"
+        if self._time_budget_s > 0:
+            elapsed = _time.monotonic() - self._loop_start_time
+            if elapsed >= self._time_budget_s:
+                return "time_budget"
+        return None
+
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
 
@@ -678,14 +711,15 @@ class AgenticLoop:
         self._usage_snapshot = _get_tracker().snapshot()
         round_idx = 0
         while True:
-            # Guard 1: Round limit (max_rounds > 0 enforces; 0 = unlimited)
-            if self.max_rounds > 0 and round_idx >= self.max_rounds:
+            # PR-D Phase 2a — round-entry guards extracted to a helper
+            # so ``arun``'s while-loop body shrinks toward the Claude
+            # Code declarative shape. Returning ``None`` means "no
+            # guard triggered, proceed"; a non-None reason means
+            # "break the loop and finalize". Behaviour preserved
+            # exactly — both guards still ``break`` (not return) so
+            # the loop's downstream wrap-up paths run.
+            if self._check_round_guards(round_idx) is not None:
                 break
-            # Guard 2: Time budget (Karpathy P3)
-            if self._time_budget_s > 0:
-                elapsed = _time.monotonic() - self._loop_start_time
-                if elapsed >= self._time_budget_s:
-                    break
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")

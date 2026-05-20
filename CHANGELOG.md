@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-D Phase 2a — ``_check_round_guards`` extraction from
+  ``arun``.** Continues the god-method decomposition started in
+  v0.99.24 (PR-D Phase 1 extracted session-start signals). Phase
+  2a takes the smallest, lowest-risk slice from the while-loop
+  body: the two round-entry guards (round limit + time budget /
+  Karpathy P3). Both moved into ``AgenticLoop._check_round_guards``
+  returning ``"round_limit" | "time_budget" | None`` — ``arun``
+  ``break``s the loop when the helper returns non-None, so the
+  loop's downstream wrap-up code (final ``AgenticResult``
+  construction + ``finalize_and_return``) runs identically to
+  pre-refactor. Round-limit precedence over time-budget preserved
+  exactly. 12 invariant tests pin the helper signature, both
+  guards firing at expected boundaries, precedence ordering, no
+  spurious trigger on defaults, ``arun`` delegation with
+  ``break``-not-``return`` semantics, anti-residue (inline
+  ``Guard 1`` / ``Guard 2`` blocks gone), and reason-string
+  spellings. Phase 2b/2c will continue chipping at model-drift
+  sync, LLM-call dispatch, and response handling so the full
+  Claude Code declarative ``while + structured stop_reason``
+  pattern emerges incrementally.
+
 ## [0.99.25] — 2026-05-21
 
 > **Cognitive Loop Uplift — Phase 2 sprint.** 6 PRs (#1380-#1385)
