@@ -294,9 +294,7 @@ class AgenticLoop:
             observation=head or "(empty text)",
         )
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
-        await self._emit_cognitive(
-            HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1
-        )
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
     async def _run_cognitive_act_observe_cycle(
         self, response: Any, round_idx: int
@@ -340,9 +338,7 @@ class AgenticLoop:
         )
 
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
-        await self._emit_cognitive(
-            HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1
-        )
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
         return tool_results
 
@@ -1025,9 +1021,7 @@ class AgenticLoop:
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-            tool_results = await self._run_cognitive_act_observe_cycle(
-                response, round_idx
-            )
+            tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
 
             # Feature 5: Backpressure on consecutive tool failures
             # Feature 6: Convergence detection (stuck loop)
