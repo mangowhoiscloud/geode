@@ -60,7 +60,13 @@ functional change.
   (3-codebase consensus: OpenClaw ``Session.context.state``, Hermes
   ``AgentMemory``, autoresearch ``RunState``). ``AgenticLoop.__init__``
   instantiates it; ``arun`` sets ``goal`` on the first turn and calls
-  ``record_round(action, observation)`` at every round end. Rolling
+  ``record_round(action, observation)`` at every *normal* round exit
+  — tool-use completion via ``_run_cognitive_act_observe_cycle`` and
+  text-only completion via ``_record_text_only_round``. Abnormal
+  exits (billing error, context exhausted, convergence break,
+  model_action_required) intentionally skip the bookkeeping so
+  ``round_count`` reflects fully-executed rounds, not aborted ones;
+  PR-3+ may add error-handling cognitive state if needed. Rolling
   cap of 32 observations keeps the snapshot bounded. ``to_snapshot()``
   returns a *defensive-copy* dict so telemetry consumers cannot mutate
   the live state through the snapshot. 4 fields (``subgoals`` /
