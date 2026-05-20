@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.26] — 2026-05-21
+
+> **arun god-method decomposition — Phase 2 trilogy.** 3 PRs
+> (#1387/#1388/#1389) continue PR-D Phase 1 (v0.99.25 — session-start
+> signals). Phase 2a extracted round-entry guards (round limit +
+> time budget). Phase 2b extracted model-drift sync +
+> ``system_prompt`` rebuild. Phase 2c extracted LLM-call dispatch
+> + ``BillingError`` / ``UserCancelledError`` handlers via the
+> discriminator-return pattern. All three pure structural refactors
+> with zero behavior change, Codex MCP verified end-to-end. Tests
+> 5346 → 5386 (+40 invariant tests across Phase 2a/2b/2c). Modules
+> unchanged (314 core + 48 plugins = 362). Phase 3 (response handler
+> + overthinking + convergence ~210 LOC) deferred — needs
+> sub-splitting before the next slice.
+
 ### Changed
 
 - **PR-D Phase 2c — ``_dispatch_llm_call`` extraction from
