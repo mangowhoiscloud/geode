@@ -111,25 +111,80 @@ def _parse_reflection(text: str) -> dict[str, Any]:
     """Parse the reflection LLM output into a structured dict.
 
     The LLM is instructed to return only JSON. In practice models
-    sometimes wrap it in a ```json``` fence or prose; strip those
-    cases. Anything that cannot be parsed raises ``ValueError`` so
-    the caller can fall back to keeping the previous state.
+    emit it wrapped in ``"Here is the JSON: {...}"`` prose, a
+    ```json``` fence (often with trailing text after the closing
+    fence), or other decoration. The parser is intentionally
+    forgiving:
+
+      1. Strip fence wrappers if present (opening fence with or
+         without language tag; trailing fence even if more prose
+         follows).
+      2. Otherwise extract the first balanced ``{...}`` block by
+         scanning for the first ``{`` and matching ``}``, with
+         string-aware brace counting so a ``}`` inside a string
+         value doesn't close the object early.
+      3. Parse the extracted block; non-object results raise
+         ``ValueError`` so the caller falls back to previous state.
     """
-    stripped = text.strip()
-    # Tolerate ```json fences
-    if stripped.startswith("```"):
-        # drop the opening fence (with or without language tag)
-        first_newline = stripped.find("\n")
+    candidate = text.strip()
+
+    if candidate.startswith("```"):
+        # drop opening fence (with or without language tag)
+        first_newline = candidate.find("\n")
         if first_newline != -1:
-            stripped = stripped[first_newline + 1 :]
-        # drop trailing fence
-        if stripped.rstrip().endswith("```"):
-            stripped = stripped.rstrip()[: -len("```")]
-        stripped = stripped.strip()
-    parsed = json.loads(stripped)
+            candidate = candidate[first_newline + 1 :]
+        # drop closing fence — anywhere in the remaining text, then
+        # trim any prose after it (models sometimes append
+        # "this should help" or similar).
+        closing = candidate.find("```")
+        if closing != -1:
+            candidate = candidate[:closing]
+        candidate = candidate.strip()
+
+    if not candidate.startswith("{"):
+        # Extract the first balanced {...} block, ignoring braces
+        # inside strings. Returns the substring if found.
+        candidate = _extract_first_json_object(candidate)
+
+    parsed = json.loads(candidate)
     if not isinstance(parsed, dict):
         raise ValueError(f"reflection output is not a JSON object: {type(parsed).__name__}")
     return parsed
+
+
+def _extract_first_json_object(text: str) -> str:
+    """Return the first balanced ``{...}`` block in ``text``.
+
+    Brace counting is string-aware: a ``}`` inside a JSON string
+    value does not close the outer object. Raises ``ValueError`` if
+    no balanced object is found.
+    """
+    depth = 0
+    in_string = False
+    escape_next = False
+    start = -1
+    for index, char in enumerate(text):
+        if escape_next:
+            escape_next = False
+            continue
+        if in_string:
+            if char == "\\":
+                escape_next = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0 and start != -1:
+                return text[start : index + 1]
+    raise ValueError("no balanced JSON object found in reflection output")
 
 
 def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
@@ -183,34 +238,41 @@ async def reflect_async(
     the call shares the credential rotator with the rest of GEODE
     (paperclip-style abstraction established by PR-1 G-A).
     """
-    provider = _resolve_provider(model)
-    adapter = resolve_agentic_adapter(provider)
-    tool_summary = _summarise_tool_results(tool_results)
-    user_prompt = _build_user_prompt(state, tool_summary)
+    # The try block wraps the ENTIRE LLM path including provider /
+    # adapter resolution (Codex MCP fix-up — setup failures used to
+    # escape and break the agentic loop, violating the "errors
+    # swallowed at WARN" guarantee).
+    try:
+        provider = _resolve_provider(model)
+        adapter = resolve_agentic_adapter(provider)
+        tool_summary = _summarise_tool_results(tool_results)
+        user_prompt = _build_user_prompt(state, tool_summary)
 
-    log.info(
-        "reflection dispatch: model=%s provider=%s round=%d max_tokens=%d",
-        model,
-        provider,
-        state.round_count,
-        max_tokens,
-    )
-
-    async def _do_call(m: str) -> object:
-        return await adapter.agentic_call(
-            model=m,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-            tools=[],
-            tool_choice={"type": "auto"},
-            max_tokens=max_tokens,
-            temperature=0.2,
+        log.info(
+            "reflection dispatch: model=%s provider=%s round=%d max_tokens=%d",
+            model,
+            provider,
+            state.round_count,
+            max_tokens,
         )
 
-    try:
+        async def _do_call(m: str) -> object:
+            return await adapter.agentic_call(
+                model=m,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+                tools=[],
+                tool_choice={"type": "auto"},
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception:
-        log.warning("reflection LLM call raised; keeping previous state", exc_info=True)
+        log.warning(
+            "reflection setup/LLM call raised; keeping previous state",
+            exc_info=True,
+        )
         return
 
     if response is None:

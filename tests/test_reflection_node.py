@@ -69,6 +69,36 @@ def test_parse_reflection_raises_on_non_object() -> None:
         _reflection._parse_reflection('["not", "an", "object"]')
 
 
+def test_parse_reflection_strips_prose_prefix() -> None:
+    """Codex MCP review #1 catch — models often emit
+    ``"Here is the JSON: {...}"`` and the original fence-only parser
+    rejected those. The robust parser extracts the first balanced
+    ``{...}`` block."""
+    parsed = _reflection._parse_reflection(
+        'Here is the JSON: {"hypotheses": ["a"], "confidence": 0.5}'
+    )
+    assert parsed == {"hypotheses": ["a"], "confidence": 0.5}
+
+
+def test_parse_reflection_handles_text_after_closing_fence() -> None:
+    """Models sometimes emit ```json\\n{...}\\n```\\nhope this helps.
+    The original parser kept the trailing prose and failed to parse."""
+    parsed = _reflection._parse_reflection('```json\n{"hypotheses": ["a"]}\n```\nhope this helps')
+    assert parsed == {"hypotheses": ["a"]}
+
+
+def test_parse_reflection_brace_in_string_value() -> None:
+    """String-aware brace counting — a ``}`` inside a string value
+    must not close the outer object."""
+    parsed = _reflection._parse_reflection('{"hypotheses": ["a } with brace"], "confidence": 0.5}')
+    assert parsed == {"hypotheses": ["a } with brace"], "confidence": 0.5}
+
+
+def test_parse_reflection_no_object_raises() -> None:
+    with pytest.raises(ValueError):
+        _reflection._parse_reflection("definitely not json")
+
+
 def test_apply_reflection_populates_hypotheses() -> None:
     state = CognitiveState(goal="x")
     _reflection._apply_reflection(state, {"hypotheses": ["h1", "h2"]})
@@ -272,3 +302,20 @@ def test_reflect_async_swallows_invalid_json(monkeypatch: pytest.MonkeyPatch) ->
     )
     asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
     assert state.hypotheses == ["keep"]
+
+
+def test_reflect_async_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Codex MCP review #1 catch — provider / adapter resolution used
+    to escape the try block, breaking the agentic loop. Pin that even
+    setup-time errors (unknown model, missing adapter, importable
+    chain) keep the loop alive."""
+    state = CognitiveState(hypotheses=["keep"], confidence=0.4)
+
+    def _boom_resolve(_model: str) -> str:
+        raise RuntimeError("unknown model")
+
+    monkeypatch.setattr(_reflection, "_resolve_provider", _boom_resolve, raising=False)
+    asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
+    # state preserved
+    assert state.hypotheses == ["keep"]
+    assert state.confidence == 0.4
