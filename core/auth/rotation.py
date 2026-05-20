@@ -106,25 +106,37 @@ class ProfileRotator:
                 log.warning("No profiles registered for provider=%s", provider)
             return None
 
-        # X1 — honour user-pinned active profile first. Pre-fix the
-        # sort key alone decided the order (type priority → LRU), so
-        # operators with multiple eligible profiles for a provider could
-        # not pin a preferred one without removing the others. When
-        # ``ProfileStore.set_active(name)`` has named an eligible
-        # profile for this provider, surface it as the first
-        # candidate; remaining profiles fall back to the legacy
-        # sort_key tiebreak so an ineligible pin gracefully steps
-        # aside.
-        active = self._store.get_pinned_active(provider)
-        active_pinned: AuthProfile | None = None
-        if active is not None:
-            for p in eligible_profiles:
-                if p.name == active.name:
-                    active_pinned = p
-                    break
-        others = [p for p in eligible_profiles if p is not active_pinned]
+        # X1.1 — honour the multi-rank ``set_auth_order`` list first.
+        # When populated, the rotator tries the listed profiles in
+        # exactly the operator-supplied order before falling back to
+        # the legacy ``sort_key`` tail. Missing / ineligible entries
+        # in the list gracefully step aside (rotator does not starve
+        # the tail).
+        #
+        # X1 single-active pin is now the head of any multi-rank list
+        # (``set_auth_order`` keeps the two surfaces in sync), so the
+        # rotator only needs to consult ``get_auth_order``.
+        order = self._store.get_auth_order(provider)
+        ranked: list[AuthProfile] = []
+        ranked_set: set[str] = set()
+        eligible_by_name = {p.name: p for p in eligible_profiles}
+        for name in order:
+            profile = eligible_by_name.get(name)
+            if profile is not None and name not in ranked_set:
+                ranked.append(profile)
+                ranked_set.add(name)
+        # Back-compat: single-active pin (legacy X1 surface) is
+        # respected when ``set_auth_order`` has *not* been used.
+        if not ranked:
+            active = self._store.get_pinned_active(provider)
+            if active is not None:
+                profile = eligible_by_name.get(active.name)
+                if profile is not None:
+                    ranked.append(profile)
+                    ranked_set.add(profile.name)
+        others = [p for p in eligible_profiles if p.name not in ranked_set]
         others.sort(key=lambda p: p.sort_key())
-        ordered = ([active_pinned] if active_pinned is not None else []) + others
+        ordered = ranked + others
         selected = ordered[0]
 
         # Proactive refresh: re-read if managed + expiring within skew

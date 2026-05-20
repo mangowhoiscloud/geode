@@ -174,8 +174,47 @@ def cmd_login(args: str) -> None:
                 log.info("auth.toml reload: + plan %s", plan_id)
             for profile_name in sorted(new_profiles):
                 log.info("auth.toml reload: + profile %s", profile_name)
+            # L2 — pre-fix this branch logged via ``log.info`` only, so
+            # the operator running ``/login refresh`` from the REPL saw
+            # nothing on stdout and could not tell whether the daemon
+            # had picked up the new plan/profile. Surface the same
+            # counts to the console so the success path is visible.
+            from core.cli import commands as _pkg
+
+            if not ok:
+                _pkg.console.print(
+                    f"  [warning]auth.toml reload failed[/warning]  "
+                    f"[muted]({auth_toml_path()})[/muted]\n"
+                )
+            elif new_plans or new_profiles:
+                added = []
+                if new_plans:
+                    added.append(f"{len(new_plans)} plan{'s' if len(new_plans) != 1 else ''}")
+                if new_profiles:
+                    added.append(
+                        f"{len(new_profiles)} profile{'s' if len(new_profiles) != 1 else ''}"
+                    )
+                _pkg.console.print(
+                    f"  [success]auth.toml reloaded[/success]  [muted]+{' · +'.join(added)}[/muted]"
+                )
+                for plan_id in sorted(new_plans):
+                    _pkg.console.print(f"    [muted]+ plan {plan_id}[/muted]")
+                for profile_name in sorted(new_profiles):
+                    _pkg.console.print(f"    [muted]+ profile {profile_name}[/muted]")
+                _pkg.console.print()
+            else:
+                _pkg.console.print(
+                    f"  [muted]auth.toml reloaded — no new plans or profiles "
+                    f"(total: {len(plans_after)} plans, {len(profiles_after)} profiles)[/muted]\n"
+                )
         except Exception:
             log.warning("auth.toml reload failed", exc_info=True)
+            from core.cli import commands as _pkg
+
+            _pkg.console.print(
+                "  [warning]auth.toml reload failed[/warning]  "
+                "[muted](see daemon log for traceback)[/muted]\n"
+            )
         return
     if sub in ("help", "?"):
         _login_help()
@@ -207,6 +246,8 @@ def _login_help() -> None:
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
         "  [label]/login use-profile[/label] <name>    Pin a profile as active for its provider\n"
         "  [label]/login order[/label] [<provider>]    Show effective profile order per provider\n"
+        "  [label]/login order set[/label] <prov> <n1> <n2>…  Pin multi-rank auth order\n"
+        "  [label]/login order clear[/label] <prov>    Drop the multi-rank pin\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
         "  [label]/login quota[/label]                 Per-plan quota / usage\n"
@@ -945,19 +986,66 @@ def _login_use_profile(rest: str) -> None:
 
 
 def _login_order(rest: str) -> None:
-    """Show the effective profile order per provider.
+    """Show or mutate the effective profile order per provider.
 
-    X1 — answers "which profile will the next call use?" for each
-    registered provider. The first row is the pinned active profile
-    (when set) or the legacy sort_key winner; subsequent rows are the
-    siblings in the order the rotator would try them after the pin.
-    Ineligible profiles surface with their reject reason so the
-    operator sees why a pin might be ignored.
+    Subcommands::
+
+        /login order                       — show every provider's order
+        /login order <provider>            — show one provider's order
+        /login order set <provider> <n1> <n2> …   — pin multi-rank
+        /login order clear <provider>      — drop the pin (back to LRU)
+
+    X1.1 — the rotator tries the listed profiles in order before
+    falling back to ``sort_key`` (legacy LRU/type-priority). The
+    first list element is also written to the single-active pin
+    (``ProfileStore.set_active`` parity) so X1's ``/login`` ``(active)``
+    badge stays accurate.
     """
     from core.cli import commands as _pkg
     from core.wiring.container import ensure_profile_store
 
     store = ensure_profile_store()
+
+    # X1.1 mutating subcommands.
+    parts = rest.split()
+    if parts and parts[0].lower() in ("set", "clear"):
+        action = parts[0].lower()
+        if len(parts) < 2:
+            _pkg.console.print(
+                "  [warning]Usage: /login order set <provider> <name1> <name2> …[/warning]\n"
+                "  [warning]       /login order clear <provider>[/warning]\n"
+            )
+            return
+        provider = parts[1]
+        if action == "clear":
+            store.clear_auth_order(provider)
+            _pkg._persist_auth_state()
+            _pkg.console.print(
+                f"  [success]Cleared auth order[/success]  {provider}  "
+                "[muted](rotator falls back to LRU/type-priority)[/muted]\n"
+            )
+            return
+        names = parts[2:]
+        if not names:
+            _pkg.console.print(
+                "  [warning]Usage: /login order set <provider> <name1> "
+                "[<name2> …][/warning]\n"
+                "  [muted]Pass at least one profile name; use "
+                "`/login order clear <provider>` to drop a pin.[/muted]\n"
+            )
+            return
+        try:
+            store.set_auth_order(provider, names)
+        except (KeyError, ValueError) as exc:
+            _pkg.console.print(f"  [warning]{exc}[/warning]\n")
+            return
+        _pkg._persist_auth_state()
+        _pkg.console.print(
+            f"  [success]Pinned auth order[/success]  {provider}  "
+            f"[muted]({' → '.join(names)})[/muted]\n"
+        )
+        return
+
     profiles = store.list_all()
     if not profiles:
         _pkg.console.print(
@@ -978,32 +1066,45 @@ def _login_order(rest: str) -> None:
 
     _pkg.console.print("\n  [header]Profile order[/header]")
     for provider in sorted(by_provider.keys()):
-        active = store.get_pinned_active(provider)
-        active_name = active.name if active is not None else None
+        # X1.1 — full multi-rank order if set; else fall back to X1
+        # single-active pin (head of the implicit one-element list).
+        ranked_names = store.get_auth_order(provider)
+        if not ranked_names:
+            pinned_profile = store.get_pinned_active(provider)
+            if pinned_profile is not None:
+                ranked_names = [pinned_profile.name]
         verdicts = {v.profile_name: v for v in store.evaluate_eligibility(provider)}
-        # Same ordering as ProfileRotator.resolve: active pin first
-        # (when eligible), then sort_key for the rest. Ineligible
-        # profiles trail with their reason.
         eligible = [
             p
             for p in by_provider[provider]
             if (v := verdicts.get(p.name)) is not None and v.eligible
         ]
         ineligible = [p for p in by_provider[provider] if p not in eligible]
-        pinned: AuthProfile | None = None
-        for p in eligible:
-            if p.name == active_name:
-                pinned = p
-                break
-        others = [p for p in eligible if p is not pinned]
+        # Pull the ranked entries first (preserve operator order),
+        # then sort the remaining eligible by sort_key.
+        ranked_eligible: list[AuthProfile] = []
+        ranked_set: set[str] = set()
+        eligible_by_name = {p.name: p for p in eligible}
+        for name in ranked_names:
+            profile = eligible_by_name.get(name)
+            if profile is not None and name not in ranked_set:
+                ranked_eligible.append(profile)
+                ranked_set.add(name)
+        others = [p for p in eligible if p.name not in ranked_set]
         others.sort(key=lambda p: p.sort_key())
-        ordered = ([pinned] if pinned is not None else []) + others
+        ordered = ranked_eligible + others
         _pkg.console.print(f"  [bold]{provider}[/bold]")
         if not ordered and not ineligible:
             _pkg.console.print("    [muted](no profiles)[/muted]")
             continue
         for idx, p in enumerate(ordered, 1):
-            badge = "[success]active[/success]" if pinned is p else "[muted]queued[/muted]"
+            # X1.1 — every entry from ``ranked_eligible`` is part of the
+            # operator-supplied auth order ("active" / "rank 1+"); the
+            # ``others`` tail rides on the legacy LRU sort ("queued").
+            if p in ranked_eligible:
+                badge = "[success]active[/success]" if idx == 1 else "[success]ranked[/success]"
+            else:
+                badge = "[muted]queued[/muted]"
             _pkg.console.print(f"    {idx}. {badge}  {p.name}")
         for p in ineligible:
             v = verdicts.get(p.name)

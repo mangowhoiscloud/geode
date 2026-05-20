@@ -24,7 +24,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.22 — Long-running Autonomous Execution Harness
+# GEODE v0.99.23 — Long-running Autonomous Execution Harness
 
 A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
 
@@ -342,7 +342,7 @@ geode update                  # source checkout
 
 ## How GEODE compares
 
-Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.22**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
+Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.23**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
 <details>
 <summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>

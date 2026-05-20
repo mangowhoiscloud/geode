@@ -32,9 +32,31 @@ def cmd_key(args: str) -> bool:
 
     parts = args.split(None, 1) if args else []
 
-    # /key (no args) → defer to the unified /login dashboard
+    # /key (no args) → defer to the unified /login dashboard.
+    # L4 — pre-fix the redirect printed a single muted line with no
+    # migration guide; an operator who'd just typed ``/key`` had no
+    # way to learn the new command surface short of running ``/login``
+    # and inferring it. Surface the migration table inline so the
+    # legacy command becomes self-documenting.
     if not parts:
         _pkg.console.print("\n  [muted]/key now redirects to the unified /login dashboard.[/muted]")
+        _pkg.console.print("\n  [header]Migration guide[/header]")
+        _pkg.console.print(
+            "  [muted]Legacy[/muted]                      → [muted]Replacement[/muted]\n"
+            "  [label]/key <sk-...>[/label]               → [label]/login add[/label]  "
+            "[muted](interactive — picks provider by prefix)[/muted]\n"
+            "  [label]/key openai <key>[/label]           → "
+            "[label]/login set-key openai-payg <key>[/label]\n"
+            "  [label]/key glm <key>[/label]              → "
+            "[label]/login set-key glm-payg <key>[/label]\n"
+            "\n"
+            "  [muted]The legacy forms above still work — they shim into the unified\n"
+            "  Plan/Profile model, but `/login add` registers richer metadata\n"
+            "  (subscription tier, expiry, quota) that `/key` cannot express.\n"
+            "  Run `/login providers` to see every provider variant the dashboard\n"
+            "  supports; `/login` (bare) to see plans + profiles + routing.[/muted]"
+        )
+        _pkg.console.print()
         _pkg.cmd_login("")
         return False
 

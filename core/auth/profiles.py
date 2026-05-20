@@ -143,6 +143,12 @@ class ProfileStore:
         # only honours the *manual* pin so the legacy LRU/type-priority sort
         # still wins when no operator has explicitly chosen a profile.
         self._pinned_active: dict[str, str] = {}  # provider → profile name
+        # X1.1 — full multi-rank ordering: when populated, the rotator
+        # tries the listed profiles in order before falling back to the
+        # legacy ``sort_key`` tail. The single-active ``_pinned_active``
+        # entry from X1 is automatically the first element of any list
+        # set here (``set_auth_order`` keeps the two surfaces in sync).
+        self._auth_order: dict[str, list[str]] = {}  # provider → ordered profile names
 
     def add(self, profile: AuthProfile) -> None:
         """Add a profile. If no active profile exists for the provider, set it."""
@@ -310,10 +316,58 @@ class ProfileStore:
             return None
         return self._profiles.get(name)
 
+    def set_auth_order(self, provider: str, names: list[str]) -> None:
+        """Pin a *multi-rank* auth order for `provider` (X1.1).
+
+        ``ProfileRotator.resolve`` tries the listed profiles in order
+        before falling back to the legacy ``sort_key`` tail; missing /
+        ineligible entries gracefully step aside. Setting ``names=[]``
+        is equivalent to ``clear_auth_order(provider)``.
+
+        Every name must already exist in the store — KeyError
+        otherwise so the operator notices the typo immediately
+        instead of seeing the rotator silently skip the bad entry.
+
+        The first element is also written to ``_pinned_active`` so
+        ``get_pinned_active`` (X1) stays in sync with the head of
+        the order list.
+        """
+        if not names:
+            self.clear_auth_order(provider)
+            return
+        for name in names:
+            profile = self._profiles.get(name)
+            if profile is None:
+                raise KeyError(f"Profile '{name}' not found")
+            if profile.provider != provider:
+                raise ValueError(
+                    f"Profile '{name}' belongs to provider {profile.provider!r}, not {provider!r}"
+                )
+        self._auth_order[provider] = list(names)
+        # Head of the list is the manual pin too — keep X1 parity.
+        self._pinned_active[provider] = names[0]
+        self._active[provider] = names[0]
+
+    def get_auth_order(self, provider: str) -> list[str]:
+        """Return the multi-rank auth order for `provider` (X1.1).
+
+        Empty list when nothing has been pinned via ``set_auth_order``.
+        The rotator treats an empty list as "no override" and falls
+        back to the legacy ``sort_key`` order.
+        """
+        return list(self._auth_order.get(provider, []))
+
+    def clear_auth_order(self, provider: str) -> None:
+        """Remove the multi-rank pin for `provider`. Also clears the
+        single-active pin (X1) so the rotator returns to pure sort_key."""
+        self._auth_order.pop(provider, None)
+        self._pinned_active.pop(provider, None)
+
     def clear(self) -> None:
         self._profiles.clear()
         self._active.clear()
         self._pinned_active.clear()
+        self._auth_order.clear()
 
     def __len__(self) -> int:
         return len(self._profiles)
