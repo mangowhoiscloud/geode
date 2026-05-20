@@ -112,19 +112,27 @@ T: dict[str, dict[str, str]] = {
         "glossary_title": "Glossary",
         "glossary_terms": (
             ("Co-Scientist", "DeepMind multi-agent hypothesis generation (2025-02)"),
-            ("seed-generation", "GEODE 7-agent candidate seed pipeline"),
-            ("generator / proximity / critic", "S1 / S2 / S3 agents"),
-            ("pilot / ranker / evolver", "S4 / S6 / S6.5 agents"),
-            ("meta_reviewer", "S7 — cross-run priors generator"),
-            ("Petri", "geode audit subprocess (measurement)"),
-            ("dim (× 20)", "rubric axis — 5 critical / 12 auxiliary / 3 info"),
-            ("dim_means / dim_stderr", "per-dim mean + standard error (1–10, lower better)"),
+            (
+                "critical floor",
+                "when a critical dim regresses past baseline + stderr, fitness collapses to 0.0",
+            ),
+            ("seed-generation", "GEODE candidate-seed pipeline — generate / critique / evolve"),
+            ("generator", "initial candidate writer"),
+            ("proximity", "dedup + diverse-bracket informant for the tournament"),
+            ("critic", "per-candidate critique and target-dim grounding"),
+            ("pilot", "lightweight per-dim scoring before the full tournament"),
+            ("ranker", "Elo tournament; emits top-K survivors"),
+            ("evolver", "survivor refinement and re-mutation"),
+            ("meta_reviewer", "cross-run priors generator"),
+            ("Petri", "geode audit subprocess — produces the rubric measurement"),
+            ("dim", "rubric axis — 20 total (5 critical / 12 auxiliary / 3 info)"),
+            ("dim_means / dim_stderr", "per-dim mean and standard error (1-10, lower is better)"),
             ("fitness", "17-dim weighted aggregate + stability axis"),
-            ("baseline.json", "promoted state snapshot"),
+            ("baseline.json", "promoted state snapshot — the new generation's reference"),
             ("autoresearch", "self-improving loop driver"),
             ("wrapper-prompt", "mutation target — system-prompt sections"),
-            ("promote", "replace baseline when gain > max(stderr, 0.05)"),
-            ("ratchet", "monotonically increasing fitness over generations"),
+            ("promote", "replace baseline when gain exceeds max(stderr, 0.05)"),
+            ("ratchet", "monotonically increasing fitness across generations"),
         ),
         "bit_1": "Engineer specifies a research goal",
         "bit_2": "GEODE seed-generation: 7 specialist agents",
@@ -163,19 +171,27 @@ T: dict[str, dict[str, str]] = {
         "glossary_title": "용어집",
         "glossary_terms": (
             ("Co-Scientist", "DeepMind 의 다중 agent 가설 생성 (2025-02)"),
-            ("seed-generation", "GEODE 7-agent 후보 seed 파이프라인"),
-            ("generator / proximity / critic", "S1 / S2 / S3 agents"),
-            ("pilot / ranker / evolver", "S4 / S6 / S6.5 agents"),
-            ("meta_reviewer", "S7 — 세대 간 priors 생성"),
-            ("Petri", "geode audit subprocess (측정)"),
-            ("dim (× 20)", "rubric 축 — critical 5 / auxiliary 12 / info 3"),
-            ("dim_means / dim_stderr", "dim 별 평균 + 표준오차 (1–10, 낮을수록 좋음)"),
+            (
+                "critical floor",
+                "critical dim 이 baseline + stderr 를 넘으면 fitness 가 0.0 으로 붕괴",
+            ),
+            ("seed-generation", "GEODE 후보 seed 파이프라인 — 생성 / 비평 / 진화"),
+            ("generator", "초기 후보 작성"),
+            ("proximity", "중복 제거 + 토너먼트에 diverse-bracket informant 제공"),
+            ("critic", "후보별 비평과 target-dim grounding"),
+            ("pilot", "본 토너먼트 전의 경량 dim 별 점수"),
+            ("ranker", "Elo 토너먼트 — top-K survivors 도출"),
+            ("evolver", "survivor 정제와 재 mutation"),
+            ("meta_reviewer", "세대 간 priors 생성"),
+            ("Petri", "geode audit subprocess — rubric 측정값 산출"),
+            ("dim", "rubric 축 — 총 20개 (critical 5 / auxiliary 12 / info 3)"),
+            ("dim_means / dim_stderr", "dim 별 평균과 표준오차 (1-10, 낮을수록 좋음)"),
             ("fitness", "17-dim 가중 합산 + stability axis"),
-            ("baseline.json", "promoted state snapshot"),
+            ("baseline.json", "promoted state snapshot — 다음 세대의 기준"),
             ("autoresearch", "자기 개선 루프 driver"),
             ("wrapper-prompt", "mutation 대상 — system-prompt sections"),
             ("promote", "gain > max(stderr, 0.05) 시 baseline 교체"),
-            ("ratchet", "세대 간 단조 증가하는 fitness"),
+            ("ratchet", "세대를 거듭하며 단조 증가하는 fitness"),
         ),
         "bit_1": "엔지니어가 연구 목표를 명세",
         "bit_2": "GEODE seed-generation — 7 전문 agent",
@@ -1011,18 +1027,25 @@ class GeodeSelfImprovingHero(Scene):
 
         rows: list[VGroup] = []
         terms = _t_glossary_terms()
-        # Two columns: term (left, accented) + definition (right, gray).
-        # 14 terms; vertical band y = 2.7 → -2.7. 14 rows → step 0.39.
-        top_y = 2.7
-        step = (top_y - (-2.7)) / max(len(terms) - 1, 1)
+        # Two columns: term (left, black) + definition (right, gray).
+        # Vertical band 2.9 → -2.9 to fit ~19 expanded-natural-language
+        # rows. Font shrunk from 16/14 to 13/11 (term/def) for the same
+        # reason. Slight buff between rows kept by the step calculation.
+        top_y = 2.9
+        bottom_y = -2.9
+        step = (top_y - bottom_y) / max(len(terms) - 1, 1)
         for i, (term, definition) in enumerate(terms):
             y = top_y - step * i
-            term_text = _make_text(
-                term, font_size=16, color=COLOR_TEXT
-            ).move_to(LEFT * 4.0 + UP * y).align_to(LEFT * 6.0, LEFT)
-            def_text = _make_text(
-                definition, font_size=14, color=COLOR_TEXT_ACCENT
-            ).move_to(RIGHT * 0.5 + UP * y).align_to(LEFT * 1.0, LEFT)
+            term_text = (
+                _make_text(term, font_size=13, color=COLOR_TEXT)
+                .move_to(LEFT * 4.5 + UP * y)
+                .align_to(LEFT * 6.5, LEFT)
+            )
+            def_text = (
+                _make_text(definition, font_size=11, color=COLOR_TEXT_ACCENT)
+                .move_to(RIGHT * 0.0 + UP * y)
+                .align_to(LEFT * 1.5, LEFT)
+            )
             rows.append(VGroup(term_text, def_text))
 
         self.play(
