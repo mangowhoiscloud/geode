@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.20] — 2026-05-20
+
+Self-improving-loop wiring sprint G1-G5b + 5 fix-ups + CLAUDE.md immune-system
+update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#1357).
+~120 new tests; 5069 non-live + 5 live; 308 core + 48 plugins.
+
 ### Added
 
 - **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
@@ -297,6 +303,13 @@ functional change.
   scenarios + 4 baseline I/O roundtrips + 2 audit summary parsing
   paths + 3 G1 test alias diffs. Quality gates: ruff / mypy / 93+
   evidence-touched tests green.
+
+## [0.99.19] — 2026-05-20
+
+Detailed backfill of v0.99.19 — the squash `a6012e02` (PR #1345) actually
+landed **4 PRs** on main: ε1 + P2 + autoresearch deforking + PR-G1
+`latest_seed_pool` symlink (#1344). The original v0.99.19 release body
+omitted PR-G1; this section restores the full entry list.
 
 ### Changed
 
