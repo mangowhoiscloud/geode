@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-S1 — `ux_means` fitness 축 신설 (ADR-012 단기).** ADR-012
+  §Decision.2 의 fitness 다축화 첫 단계 — Petri 17-dim 의 음의 압력
+  (안 망가지기) 편향 risk 를 차단하기 위한 **양의 압력 축**.
+  **`autoresearch/ux_means.py` 신설** — 4-field schema (`success_rate`
+  / `token_cost_norm` / `revert_ratio_norm` / `latency_norm`) + 가중치
+  (0.40 / 0.30 / 0.20 / 0.10, 합 1.0) + `normalize_ux_field`
+  (lower-is-better metric 의 invert 처리) + `compute_ux_aggregate`
+  (`None` → 0.5 neutral) + `validate_ux_schema` + `collect_ux_means_from_sources`
+  (S1b placeholder, 현재 `None` 반환). **`autoresearch/train.py:compute_fitness`
+  다축화** — `ux_means` optional 인자 추가. `None` 이면 dim-only
+  fallback (no-op, 현재 행동 보존). 주어지면 `dim_part * 0.7 + ux_part
+  * 0.3` 가중 합 (admire_means 신설 S2 후 0.4/0.3/0.3 재배분 예정).
+  Critical gate (regress 시 `0.0`) 는 ux_means 와 무관하게 보존 —
+  strict-reject 정책. **27 invariant test** — schema 가중치 합 / 4-field
+  exact set / normalize invert 의 lower-is-better / aggregate
+  weighted-sum / validate 5 reject 케이스 / compute_fitness multi-axis
+  4 케이스 (ux=None dim-only / perfect ux 증가 / zero ux 감소 / critical
+  gate strict-reject). 4 source 의 실제 wiring (RunLog / LLMUsageAccumulator
+  / git history / OTel trace) 은 S1b (별도 PR) — schema 안정성 검증 후
+  분리 진행. ADR-012 단기 시퀀스의 G2 게이트 (음의 압력 90%+ 편향
+  4주 측정) 가 비로소 측정 가능해짐.
+
 ### Changed
 
 - **PR-S0d — `retrieval` slot deprecate (ADR-012 단기 시퀀스 종료).**
