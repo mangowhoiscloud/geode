@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-G5b — program.md-driven self-improving loop runner.** Final PR
+  of the 2026-05-20 self-improving-loop wiring sprint (G1-G5). New
+  `core/self_improving_loop/` package composes the G1-G5a upstream:
+  `build_runner_context()` gathers baseline (G3) + meta-review priors
+  (G4) + current wrapper sections (G5a). `SelfImprovingLoopRunner.run_once()`
+  packs the context into a system + user prompt, dispatches to an
+  injected `llm_call` (default: `claude-opus-4-7` via anthropic SDK),
+  parses the response as a typed `Mutation` (schema-validated:
+  non-empty target/value, ≤600 char value, JSON-only response with
+  optional code-fence tolerance), applies it to the SoT via
+  `write_wrapper_prompt_sections`, appends a row to the git-tracked
+  `autoresearch/state/mutations.jsonl` audit log, commits the row
+  (best-effort — non-fatal on git failure), and optionally re-runs
+  `autoresearch/train.py` (default off to keep loops cheap). The
+  audit log is the git-as-optimiser ledger — each row is one
+  committed mutation event with target_section / previous_value /
+  new_value / rationale / target_dim / baseline_fitness so the
+  lineage of wrapper-prompt evolution is replayable from `git log`.
+  Side-effect: appends a `component: self-improving-loop-mutator` row
+  to the shared `~/.geode/self-improving-loop/sessions.jsonl`
+  registry. 21 new tests (9 parse_mutation + 2 apply_mutation + 3
+  append_audit_log + 2 build_runner_context + 3 run_once end-to-end +
+  2 dataclass) — quality gates: ruff / format / mypy / 442 tests
+  green. Real autoresearch re-run still BLOCKED on Anthropic credit;
+  scaffold is ready for the next budget window.
+
 - **PR-G5a — wrapper sections file-backed SoT + env-less daily-run
   fallback.** First half of the 2026-05-20 self-improving-loop wiring
   sprint's final PR (G5). Splits the static
