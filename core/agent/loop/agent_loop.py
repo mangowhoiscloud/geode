@@ -451,10 +451,27 @@ class AgenticLoop:
         # overwrite idempotently. No explicit reset is needed since
         # the next ``arun`` overwrites and out-of-loop hook firings
         # in the same task are not a documented use case.
-        from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
+        from core.agent.cognitive_state_ctx import (
+            set_cognitive_state,
+            set_parent_session_key,
+            set_session_id,
+        )
 
         set_cognitive_state(self.cognitive_state)
         set_session_id(self._session_id)
+        # PR-F (2026-05-21) — sub-agent lineage. When this loop was
+        # spawned via the OpenClaw in-process spawn pattern,
+        # ``_parent_session_key`` holds the parent's routing key
+        # (e.g. ``"subject:foo:bar"`` — NOT the parent's
+        # ``_session_id`` uuid). Bind it to the ContextVar so the
+        # episodic recorder can stamp ``Episode.parent_session_key``
+        # for cross-session attribution. Empty for top-level loops.
+        # TODO(PR-F-followup): subprocess sub-agents (SubAgentManager
+        # → WorkerRequest → worker.py path) don't forward this value;
+        # child Episodes record empty. WorkerRequest needs a
+        # ``parent_session_key`` field + worker.py needs to honour it
+        # before spawning the child AgenticLoop.
+        set_parent_session_key(self._parent_session_key)
         await self._emit_cognitive(
             HookEvent.COGNITIVE_PERCEIVE,
             user_input=user_input,
