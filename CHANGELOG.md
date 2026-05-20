@@ -49,6 +49,25 @@ functional change.
 
 ### Added
 
+- **L3 — ``/login`` Profiles section surfaces full Plan binding
+  detail.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L3: *OAuth status 가 plan
+  바인딩 안 보여줌*). Pre-fix the Profiles table printed the bare
+  ``plan=<id>`` next to each profile; a user looking at ``glm:work``
+  saw ``plan=glm-coding-lite`` and had no way to know it was a
+  subscription plan (vs PAYG) or what tier it sat in. New
+  ``_format_plan_binding(registry, plan_id)`` resolves the binding
+  through ``PlanRegistry.get`` and renders ``<id> (<kind>·<tier> ·
+  <display_name>)`` — so the same row now reads
+  ``plan=glm-coding-lite (subscription·Lite · GLM Coding Lite)``.
+  Falls back to ``(none)`` on an empty ``plan_id`` and to
+  ``<id> (unbound)`` when the Plan vanished after the AuthProfile
+  was created (so the operator notices the dangling reference instead
+  of seeing an opaque id). 5 new tests in
+  ``tests/test_login_plan_binding.py`` cover the full label, the
+  no-tier PAYG path, the two fallbacks, and the end-to-end dashboard
+  render.
+
 - **PR-Π3 — Proximity embedding conditions on the research goal
   (`state.target_dim`).** Closes the third P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison; completes the
