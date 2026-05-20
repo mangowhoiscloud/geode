@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **L5 — ``/login help`` carries the eligibility-verdict legend; new
+  ``/login health [<profile>]`` walks the verdict per profile with an
+  actionable suggestion.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (L5: *Help text 에
+  eligibility verdict 부재*). Pre-fix the ``/login`` status dashboard
+  already rendered each profile with an inline reject badge (cooldown
+  / expired / disabled / missing_key / provider_mismatch / ok), but
+  the reason codes were opaque to first-time readers and there was no
+  per-profile health view. ``_login_help`` now documents every
+  ``ProfileRejectReason`` code; ``cmd_login`` routes the new
+  ``health`` subcommand to ``_login_health``, which walks
+  ``ProfileStore.evaluate_eligibility`` and prints, per profile, the
+  badge (``ok`` / reason_code), the detail string, and an actionable
+  ``→ suggestion`` row pulled from the ``_HEALTH_SUGGESTIONS`` table
+  ("re-run ``claude``", "wait <cooldown>", …). ``/login health
+  <unknown>`` warns + points back at bare ``/login``; the empty-store
+  path prints the "no profiles" hint without crashing. 7 new tests in
+  ``tests/test_login_health.py`` pin the legend, the router, the
+  no-arg / narrowed / unknown / empty-store cases, and the suggestion
+  surfacing.
+
 - **PR-Π3 — Proximity embedding conditions on the research goal
   (`state.target_dim`).** Closes the third P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison; completes the
