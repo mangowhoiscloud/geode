@@ -408,9 +408,7 @@ class TestEvidence:
         missing_archive = tmp_path / "absent.eval"
         assert extract_evidence(missing_archive, top_k=3) == {}
 
-    def test_read_failure_swallowed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_read_failure_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Broken archive → empty evidence, no exception bubbled up."""
         archive_path = tmp_path / "fake.eval"
         archive_path.write_bytes(b"placeholder")
