@@ -407,7 +407,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 |---|-----|----------|--------|---------------|
 | X1 | per-provider user-tunable auth order 부재 | S1 | M | OpenClaw `models auth-order set <provider> <profile-list>` |
 | X2 | system prompt model identity injection (v0.52.8) — reference 와 어긋남 | S2 | S | Decision: 유지 / 약화 / Codex-only 中 택 |
-| X3 | Provider equivalence map (`openai ↔ openai-codex`) 사용자 가시성 0 | S2 | S | OpenClaw `models providers` shows |
+| X3 | Provider equivalence map view | Done (v0.99.19) | S | `/login providers` (alias `provider`) 가 PROVIDER_VARIANTS + base_url + multi-member equivalence class (openai ↔ openai-codex, glm ↔ glm-coding) 출력. de-dup 으로 같은 class 가 sibling key 마다 중복 표시되지 않음. |
 
 ### 종합 priority
 

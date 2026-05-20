@@ -112,6 +112,9 @@ def cmd_login(args: str) -> None:
     if sub == "health":
         _login_health(rest)
         return
+    if sub in ("providers", "provider"):
+        _login_providers()
+        return
     if sub == "source":
         _login_source(rest)
         return
@@ -199,6 +202,7 @@ def _login_help() -> None:
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
         "  [label]/login quota[/label]                 Per-plan quota / usage\n"
         "  [label]/login health[/label] [<profile>]    Eligibility verdict per profile\n"
+        "  [label]/login providers[/label]             Provider variants + equivalence map\n"
         "\n"
         "  [muted]Eligibility verdicts (shown next to each profile in /login):[/muted]\n"
         "  [muted]  ok               — profile passes every check, ready to dispatch[/muted]\n"
@@ -1005,4 +1009,67 @@ def _login_health(rest: str) -> None:
         suggestion = _HEALTH_SUGGESTIONS.get(code, "")
         if suggestion:
             _pkg.console.print(f"    → {suggestion}")
+    _pkg.console.print()
+
+
+# ---------------------------------------------------------------------------
+# /login providers — variant registry + equivalence map view
+# ---------------------------------------------------------------------------
+
+
+def _login_providers() -> None:
+    """Render provider variants + which providers share a model family.
+
+    X3 — pre-fix the equivalence map (``openai ↔ openai-codex``,
+    ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users
+    saw the ``provider`` label in ``/login`` / ``/model`` and had no way
+    to discover that a Codex Plus token and an OpenAI PAYG key both
+    serve a ``gpt-5.x`` request, or that a GLM Coding key shadows the
+    PAYG endpoint. Surfacing the table makes the policy auditable
+    without grep'ing ``PROVIDER_EQUIVALENCE`` in code.
+    """
+    from core.cli import commands as _pkg
+    from core.llm.registry import PROVIDER_EQUIVALENCE, PROVIDER_VARIANTS
+    from core.llm.routing.plan_registry import get_plan_registry
+
+    registry = get_plan_registry()
+    plans = registry.list_all()
+    plans_by_provider: dict[str, int] = {}
+    for plan in plans:
+        plans_by_provider[plan.provider] = plans_by_provider.get(plan.provider, 0) + 1
+
+    _pkg.console.print("\n  [header]Provider variants[/header]")
+    # Stable order: registry insertion order, which mirrors the chain user
+    # would see in /login status.
+    for spec in PROVIDER_VARIANTS.values():
+        plan_count = plans_by_provider.get(spec.id, 0)
+        plan_badge = f"  [muted]{plan_count} plan{'s' if plan_count != 1 else ''}[/muted]"
+        _pkg.console.print(
+            f"  [bold]{spec.id:<16}[/bold] "
+            f"[muted]{spec.auth_type:<16}[/muted] "
+            f"{spec.display_name}"
+            f"{plan_badge}"
+        )
+        _pkg.console.print(f"    [muted]{spec.default_base_url}[/muted]")
+
+    _pkg.console.print("\n  [header]Equivalence map[/header]")
+    _pkg.console.print(
+        "  [muted]Resolving to the left key tries the right list in order; "
+        "a credential from any sibling can serve the request.[/muted]"
+    )
+    # Singletons (only the provider itself) are noise — show only true
+    # equivalence classes with ≥ 2 members.
+    multi_member = {k: v for k, v in PROVIDER_EQUIVALENCE.items() if len(v) > 1}
+    if not multi_member:
+        _pkg.console.print("  [muted]No equivalence classes registered.[/muted]")
+    else:
+        # Render each class once (de-dup by tuple of members, preserve
+        # the dict-insertion entry-point as the key shown).
+        seen: set[tuple[str, ...]] = set()
+        for base in multi_member:
+            members = tuple(PROVIDER_EQUIVALENCE[base])
+            if members in seen:
+                continue
+            seen.add(members)
+            _pkg.console.print(f"  [bold]{base:<16}[/bold] → " + " · ".join(members))
     _pkg.console.print()
