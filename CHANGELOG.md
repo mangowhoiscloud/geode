@@ -47,6 +47,25 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Scaffold: CLAUDE.md gains 2 new wiring rules + 1 deception rule + a
+  `DONT — Real Incidents` table (Karpathy program.md style).** Sprint
+  immune-system update after Codex MCP LLM-as-Judge caught 6 issues in
+  the just-merged G1-G5b sprint (3 PASS / 2 FLAG / 1 FAIL on PR-G5b).
+  New "Wiring Verification" rows: `Conditional read parity` (one-sided
+  context loading across CLI branches) + `Writer destination tracked`
+  (`git check-ignore` on every "audit / history / ledger" path). New
+  "Refactoring Deception Prevention" row: `CHANGELOG/PR-body parity`
+  (verbs/adjectives in PR title + CHANGELOG must be grep-provable in
+  code). The `DONT — Real Incidents` table is append-only — 5 frozen
+  rows from 2026-05-20 documenting exactly what was claimed vs what
+  the code did (PR-G5b "git-tracked audit log" vs `.gitignore`, PR-G5b
+  "program.md-driven" vs hardcoded prompt, PR-G3 conditional read,
+  PR-G3 graceful-contract, PR-G2 promoted-vs-latest evidence). Pair
+  with the `karpathy-patterns` skill's abstract Anti-patterns table:
+  abstract principle ↔ concrete case study.
+
 ### Added
 
 - **PR-G5b — program.md-driven self-improving loop runner.** Final PR
