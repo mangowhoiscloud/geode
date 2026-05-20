@@ -299,10 +299,11 @@ assert abs(FITNESS_DIM_WEIGHT + FITNESS_UX_WEIGHT + FITNESS_ADMIRE_WEIGHT - 1.0)
 )
 
 # ADR-012 S6 (2026-05-21) — bench_means fitness 축 신설로 4축 다축화
-# (Path C inspect_ai federation). bench 는 ground-truth capability 평가
-# (SWE-bench / TAU-bench / HumanEval / GAIA) 라 dim 과 동등한 권위 부여.
-# 가중치 합 1.0. dim 비중이 0.40 → 0.30 으로 추가 감소 — 양의 압력 비율
-# 30.4% → 46% 로 확장 (frontier 합의 + Petri 의 1/17 한계 돌파).
+# (Path C inspect_ai federation, S6b 에서 wiring 예정). bench 는 ground-
+# truth capability 평가 (SWE-bench / TAU-bench / HumanEval / GAIA) 라
+# dim 과 동등한 권위 부여. 가중치 합 1.0. dim 비중이 0.40 → 0.30 으로
+# 추가 감소 — 양의 압력 비율 7/23 = 30.4% → 11/27 = 40.7% 로 확장
+# (Petri 의 1/17 한계 돌파, frontier 합의 능가).
 FITNESS_DIM_4AX: float = 0.30
 FITNESS_UX_4AX: float = 0.25
 FITNESS_ADMIRE_4AX: float = 0.20

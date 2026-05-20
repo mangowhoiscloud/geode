@@ -66,7 +66,8 @@ functional change.
   에 `bench_means` + `baseline_bench_means` 인자 추가. 분기 로직 —
   셋 다 None / ux only / admire 활성 (3축) / bench 활성 (4축 +
   cross-validation gate). Conflict 검출 시 0.0 strict-reject. **양의
-  압력 coverage 30.4% → 46% 확장** (frontier 합의 능가). 28 invariant
+  압력 coverage 7/23 = 30.4% → 11/27 = 40.7% 확장** (Petri 의 1/17 한계
+  돌파, frontier 합의 능가). 28 invariant
   test (S6) + 30 (S2) + 27 (S1) = **85/85 통과**. inspect_ai federation
   의 실제 multi-eval wiring (Petri scenario + SWE/TAU task 동시 실행)
   은 S6b (별도 PR).

@@ -4,13 +4,17 @@ S1 의 ``ux_means`` (행동) + S2 의 ``admire_means`` (체감) 옆에 추가되
 **capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기)
 인 반면, bench 는 real task completion (제대로 함) 의 ground-truth 평가.
 
-**inspect_ai federation** (Path C, ADR-012 §S6 결정):
+**inspect_ai federation** (Path C, ADR-012 §S6 결정 — **S6b 에서 wiring 예정**):
 - Petri 의 alignment scenario + frontier capability bench (SWE-bench /
   TAU-bench / HumanEval / GAIA) 가 **같은 inspect_ai run** 안에서 federated
-  실행. 두 평가 모두 Anthropic 의 inspect_ai framework 사용 → 단일
-  subprocess 로 통합 가능.
-- ``baseline.json`` schema 확장 — ``dim_means`` (Petri) + ``bench_means``
-  (capability) 별도 field. 두 시스템의 schema 충돌 회피.
+  실행하는 설계. 두 평가 모두 Anthropic 의 inspect_ai framework 기반 →
+  단일 subprocess 통합 가능. (S6 본 PR 은 schema + math + gate 만, 실제
+  federation wiring 은 S6b 별도 PR.)
+- ``baseline.json`` schema 확장 (S6b 예정) — ``dim_means`` (Petri) +
+  ``bench_means`` (capability) 별도 field. 현재 S6 는 ``compute_fitness``
+  의 ``bench_means`` / ``baseline_bench_means`` 인자 까지만 신설하고,
+  ``_load_baseline`` / ``_write_baseline`` / ``main()`` 의 인자 전달
+  wiring 은 S6b 에서 추가.
 
 **Schema** (4 field, 0.0-1.0 normalized):
 
@@ -37,7 +41,8 @@ S1 의 ``ux_means`` (행동) + S2 의 ``admire_means`` (체감) 옆에 추가되
 - ``bench_means`` (capability 4-field, S6) — 가중치 0.25
 
 bench 비중이 0.25 — ground-truth 평가라 dim 과 동등한 권위. dim 비중이
-0.40 → 0.30 으로 추가 감소 (양의 압력 면적이 30.4% → 46% 로 확장).
+0.40 → 0.30 으로 추가 감소 (양의 압력 면적이 7/23 = 30.4% → 11/27 = 40.7%
+로 확장 — 4 bench axis 추가).
 
 S6 (이 PR) 은 **schema + math + cross-validation gate** 만 신설. 실제
 inspect_ai federation 의 multi-eval wiring 은 S6b (별도 PR).
