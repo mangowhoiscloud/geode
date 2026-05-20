@@ -41,21 +41,26 @@ from __future__ import annotations
 
 import os
 
+import math
+
 from manim import (
     DOWN,
     LEFT,
     ORIGIN,
     RIGHT,
     UP,
+    ArcBetweenPoints,
     Circle,
     Create,
     DashedLine,
+    DashedVMobject,
     FadeIn,
     FadeOut,
     Flash,
     LaggedStart,
     Line,
     NumberLine,
+    Polygon,
     Rectangle,
     Scene,
     Square,
@@ -64,6 +69,7 @@ from manim import (
     Write,
     config,
 )
+import numpy as np
 
 # ───────────────────────────────────────────────────────────────────────
 # Configuration
@@ -103,6 +109,23 @@ STAGE_X = {"s1": -4.5, "s2": 0.0, "s3": 4.5}
 
 T: dict[str, dict[str, str]] = {
     "en": {
+        "glossary_title": "Glossary",
+        "glossary_terms": (
+            ("Co-Scientist", "DeepMind multi-agent hypothesis generation (2025-02)"),
+            ("seed-generation", "GEODE 7-agent candidate seed pipeline"),
+            ("generator / proximity / critic", "S1 / S2 / S3 agents"),
+            ("pilot / ranker / evolver", "S4 / S6 / S6.5 agents"),
+            ("meta_reviewer", "S7 — cross-run priors generator"),
+            ("Petri", "geode audit subprocess (measurement)"),
+            ("dim (× 20)", "rubric axis — 5 critical / 12 auxiliary / 3 info"),
+            ("dim_means / dim_stderr", "per-dim mean + standard error (1–10, lower better)"),
+            ("fitness", "17-dim weighted aggregate + stability axis"),
+            ("baseline.json", "promoted state snapshot"),
+            ("autoresearch", "self-improving loop driver"),
+            ("wrapper-prompt", "mutation target — system-prompt sections"),
+            ("promote", "replace baseline when gain > max(stderr, 0.05)"),
+            ("ratchet", "monotonically increasing fitness over generations"),
+        ),
         "bit_1": "Engineer specifies a research goal",
         "bit_2": "GEODE seed-generation: 7 specialist agents",
         "bit_3": "Generate → Critique → Evolve",
@@ -137,6 +160,23 @@ T: dict[str, dict[str, str]] = {
         "gen_n_plus_1": "gen N+1",
     },
     "ko": {
+        "glossary_title": "용어집",
+        "glossary_terms": (
+            ("Co-Scientist", "DeepMind 의 다중 agent 가설 생성 (2025-02)"),
+            ("seed-generation", "GEODE 7-agent 후보 seed 파이프라인"),
+            ("generator / proximity / critic", "S1 / S2 / S3 agents"),
+            ("pilot / ranker / evolver", "S4 / S6 / S6.5 agents"),
+            ("meta_reviewer", "S7 — 세대 간 priors 생성"),
+            ("Petri", "geode audit subprocess (측정)"),
+            ("dim (× 20)", "rubric 축 — critical 5 / auxiliary 12 / info 3"),
+            ("dim_means / dim_stderr", "dim 별 평균 + 표준오차 (1–10, 낮을수록 좋음)"),
+            ("fitness", "17-dim 가중 합산 + stability axis"),
+            ("baseline.json", "promoted state snapshot"),
+            ("autoresearch", "자기 개선 루프 driver"),
+            ("wrapper-prompt", "mutation 대상 — system-prompt sections"),
+            ("promote", "gain > max(stderr, 0.05) 시 baseline 교체"),
+            ("ratchet", "세대 간 단조 증가하는 fitness"),
+        ),
         "bit_1": "엔지니어가 연구 목표를 명세",
         "bit_2": "GEODE seed-generation — 7 전문 agent",
         "bit_3": "생성 → 비평 → 진화",
@@ -174,7 +214,15 @@ T: dict[str, dict[str, str]] = {
 
 
 def _t(key: str) -> str:
-    return T.get(LANG, T["en"]).get(key, T["en"].get(key, key))
+    val = T.get(LANG, T["en"]).get(key, T["en"].get(key, key))
+    return val if isinstance(val, str) else str(val)
+
+
+def _t_glossary_terms() -> tuple[tuple[str, str], ...]:
+    """Return the active-language glossary list (term, definition) pairs."""
+    val = T.get(LANG, T["en"]).get("glossary_terms", T["en"]["glossary_terms"])
+    assert isinstance(val, tuple)
+    return val  # type: ignore[return-value]
 
 
 def _make_text(text: str, **kw) -> Text:
@@ -190,16 +238,18 @@ def _make_text(text: str, **kw) -> Text:
 # ───────────────────────────────────────────────────────────────────────
 
 
-def _agent_box(label_key: str, *, color: str = COLOR_AGENT, width: float = 1.6) -> VGroup:
+def _agent_box(label_key: str, *, color: str = COLOR_AGENT, width: float = 1.05) -> VGroup:
+    """Pink agent box. Label uses pure black for high contrast over the
+    light-pink fill (O10 in text-overflow-map.md)."""
     body = Rectangle(
         width=width,
-        height=0.55,
+        height=0.5,
         stroke_color=COLOR_ARROW,
         stroke_width=1.2,
         fill_color=color,
         fill_opacity=0.85,
     )
-    label = _make_text(_t(label_key), color=COLOR_TEXT, font_size=16)
+    label = _make_text(_t(label_key), color=COLOR_TEXT, font_size=14)
     label.move_to(body.get_center())
     return VGroup(body, label)
 
@@ -221,8 +271,76 @@ def _scientist_icon(scale: float = 1.0) -> VGroup:
     return VGroup(icon, label)
 
 
-def _dashed_arrow(start, end, *, color: str = COLOR_ARROW) -> DashedLine:
-    return DashedLine(start, end, color=color, stroke_width=2, dash_length=0.12)
+def _dashed_arrow_with_head(
+    start,
+    end,
+    *,
+    color: str = COLOR_ARROW,
+    head_color: str | None = None,
+    head_size: float = 0.18,
+    curve_angle: float = 0.0,
+) -> VGroup:
+    """Dashed body + filled triangle head at ``end`` — replaces plain
+    ``DashedLine`` so direction is unmistakable (O3 / O7 in
+    text-overflow-map.md).
+
+    Args:
+        start, end: endpoints (np.ndarray or array-like).
+        color: body + head fallback color.
+        head_color: optional head-only color for stage-coupled flow tinting
+            (Co-Scientist → Petri uses yellow, Petri → autoresearch uses
+            blue, cycle uses green).
+        head_size: triangle edge length in scene units.
+        curve_angle: when non-zero, body is an arc instead of a straight
+            line — used by the Bit 12 cycle arrow to avoid passing over
+            the dimmed STAGE 2 boxes (O6).
+    """
+    start_v = np.asarray(start, dtype=float)
+    end_v = np.asarray(end, dtype=float)
+
+    if abs(curve_angle) > 1e-6:
+        arc = ArcBetweenPoints(
+            start_v, end_v, angle=curve_angle, color=color, stroke_width=2
+        )
+        body = DashedVMobject(arc, num_dashes=24)
+        # Tangent at the arc end — approximate by sampling the last
+        # point - the one just before it.
+        tail_pt = arc.point_from_proportion(0.96)
+        head_anchor = end_v
+    else:
+        body = DashedLine(
+            start_v, end_v, color=color, stroke_width=2, dash_length=0.12
+        )
+        tail_pt = start_v + (end_v - start_v) * 0.92
+        head_anchor = end_v
+
+    direction = head_anchor - tail_pt
+    norm = float(np.linalg.norm(direction))
+    if norm < 1e-6:
+        unit = np.array([1.0, 0.0, 0.0])
+    else:
+        unit = direction / norm
+    # Perpendicular (rotate 90° in the xy plane).
+    perp = np.array([-unit[1], unit[0], 0.0])
+    base_center = head_anchor - unit * head_size
+    p1 = head_anchor
+    p2 = base_center + perp * (head_size * 0.55)
+    p3 = base_center - perp * (head_size * 0.55)
+
+    tip_color = head_color or color
+    head = Polygon(
+        p1, p2, p3,
+        color=tip_color,
+        fill_color=tip_color,
+        fill_opacity=1.0,
+        stroke_width=1.0,
+    )
+    return VGroup(body, head)
+
+
+# Backwards-compat alias — old callers in this file's stage methods.
+def _dashed_arrow(start, end, *, color: str = COLOR_ARROW) -> VGroup:
+    return _dashed_arrow_with_head(start, end, color=color)
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -258,6 +376,7 @@ class GeodeSelfImprovingHero(Scene):
         self._bit_11_auto_promote()
         self._bit_12_next_generation()
         self._outro_ratchet_summary()
+        self._final_glossary()
 
     # ──────────────────────────────────────────────────────────────────
     # Layout helpers
@@ -341,10 +460,12 @@ class GeodeSelfImprovingHero(Scene):
         """7-agent grid inside the STAGE 1 LEFT zone (upper sub-region)."""
         self._set_title("bit_2")
 
-        # Compact the agent box so the Survivors leaderboard (bit 4) has
-        # its own clean band below — no overlap.
+        # Outer box enlarged to 3.7 so the agent grid (3 cols × 1.05
+        # wide × 1.15 spacing = ~4.4 width effective) doesn't overflow
+        # — agent boxes are now compact enough (width 1.05) to sit
+        # cleanly inside (O1 in text-overflow-map.md).
         outer_box = Rectangle(
-            width=3.4,
+            width=3.7,
             height=2.7,
             stroke_color=COLOR_ARROW,
             stroke_width=1.5,
@@ -365,20 +486,21 @@ class GeodeSelfImprovingHero(Scene):
             "agent_evolver",
             "agent_meta_reviewer",
         )
-        # 3 columns × 3 rows, last row only the center cell. Spacing
-        # tightened so the 7 agents fit inside the shrunk outer_box.
+        # 3 columns × 3 rows, last row only the center cell. Col spacing
+        # 1.15 + agent width 1.05 → ~0.10 visible gap between boxes,
+        # no overlap (O1 in text-overflow-map.md).
         layout_offsets = (
-            LEFT * 1.0 + UP * 0.8,
+            LEFT * 1.15 + UP * 0.8,
             ORIGIN + UP * 0.8,
-            RIGHT * 1.0 + UP * 0.8,
-            LEFT * 1.0,
+            RIGHT * 1.15 + UP * 0.8,
+            LEFT * 1.15,
             ORIGIN,
-            RIGHT * 1.0,
+            RIGHT * 1.15,
             ORIGIN + DOWN * 0.8,
         )
         agents = []
         for key, offset in zip(agent_keys, layout_offsets):
-            box = _agent_box(key, width=1.4)
+            box = _agent_box(key, width=1.05)
             box.move_to(outer_box.get_center() + offset)
             agents.append(box)
         self.agents = VGroup(*agents)
@@ -407,10 +529,13 @@ class GeodeSelfImprovingHero(Scene):
         """Survivors leaderboard appears below the agent grid (still STAGE 1)."""
         self._set_title("bit_4")
 
+        # Width 1.6 (was 1.4) — comfortably wider than the "Survivors"
+        # label so it always sits centered above without visual cut
+        # (O2 in text-overflow-map.md).
         leaderboard = VGroup(
             *[
                 Rectangle(
-                    width=1.4,
+                    width=1.6,
                     height=0.22,
                     stroke_color=COLOR_ARROW,
                     stroke_width=1.0,
@@ -464,9 +589,11 @@ class GeodeSelfImprovingHero(Scene):
         ).move_to(petri_box.get_center())
         self.petri_box = VGroup(petri_box, petri_label)
 
-        survivors_to_petri = _dashed_arrow(
+        # Yellow head = Petri-bound flow (O8 stage-coupled coloring).
+        survivors_to_petri = _dashed_arrow_with_head(
             self.leaderboard.get_right() + RIGHT * 0.1,
             petri_box.get_left() + LEFT * 0.1,
+            head_color=COLOR_PETRI,
         )
         self.survivors_to_petri = survivors_to_petri
 
@@ -525,9 +652,12 @@ class GeodeSelfImprovingHero(Scene):
         """Grid collapses; two dict-shaped boxes appear below it (still STAGE 2)."""
         self._set_title("bit_8")
 
+        # Width 3.4 (was 3.0) + font 10 (was 11) — the per-dim dict
+        # literal now has 0.2 unit padding on each side, no left/right
+        # edge contact (O4 in text-overflow-map.md).
         means_box = Rectangle(
-            width=3.0,
-            height=0.5,
+            width=3.4,
+            height=0.45,
             stroke_color=COLOR_ARROW,
             stroke_width=1.0,
             fill_color=COLOR_PETRI,
@@ -535,20 +665,20 @@ class GeodeSelfImprovingHero(Scene):
         ).move_to(RIGHT * STAGE_X["s2"] + DOWN * 0.6)
         means_label = _make_text(
             "dim_means: {broken_tool_use: 2.5, …}",
-            font_size=11,
+            font_size=10,
             color=COLOR_TEXT,
         ).move_to(means_box.get_center())
         stderr_box = Rectangle(
-            width=3.0,
-            height=0.5,
+            width=3.4,
+            height=0.45,
             stroke_color=COLOR_ARROW,
             stroke_width=1.0,
             fill_color=COLOR_PETRI,
             fill_opacity=0.4,
-        ).move_to(RIGHT * STAGE_X["s2"] + DOWN * 1.2)
+        ).move_to(RIGHT * STAGE_X["s2"] + DOWN * 1.15)
         stderr_label = _make_text(
             "dim_stderr: {broken_tool_use: 0.4, …}",
-            font_size=11,
+            font_size=10,
             color=COLOR_TEXT,
         ).move_to(stderr_box.get_center())
 
@@ -571,10 +701,11 @@ class GeodeSelfImprovingHero(Scene):
         self._dim(VGroup(self.petri_box, self.dim_boxes, self.survivors_to_petri), opacity=0.35)
         self._set_active_stage("s3")
 
-        # Arrow STAGE 2 → STAGE 3.
-        s2_to_s3 = _dashed_arrow(
+        # Blue head = autoresearch-bound flow.
+        s2_to_s3 = _dashed_arrow_with_head(
             self.dim_boxes.get_right() + RIGHT * 0.1,
             RIGHT * (STAGE_X["s3"] - 1.6) + UP * (CONTENT_TOP - 1.2),
+            head_color=COLOR_WINNER,
         )
         self.s2_to_s3 = s2_to_s3
         self.play(Create(s2_to_s3), run_time=0.4)
@@ -734,11 +865,15 @@ class GeodeSelfImprovingHero(Scene):
         """Cycle-closure arrow: STAGE 3 baseline.json → STAGE 1 agent grid."""
         self._set_title("bit_12")
 
-        # Cycle arrow sweeps right→bottom→left to close the loop.
-        cycle_arrow = _dashed_arrow(
+        # Cycle arrow sweeps right→bottom→left as a downward arc so it
+        # doesn't pass over the dimmed STAGE 2 elements (O6 in
+        # text-overflow-map.md). Green head = promote-driven cycle.
+        cycle_arrow = _dashed_arrow_with_head(
             self.baseline_box.get_bottom() + DOWN * 0.05,
             RIGHT * STAGE_X["s1"] + UP * (FOOTER_Y + 0.6),
             color=COLOR_PROMOTED,
+            head_color=COLOR_PROMOTED,
+            curve_angle=math.pi / 3,
         )
         gen_label = _make_text(
             f"{_t('gen_n')} → {_t('gen_n_plus_1')}",
@@ -852,3 +987,46 @@ class GeodeSelfImprovingHero(Scene):
         )
         self.play(Create(connectors), run_time=0.6)
         self.wait(2.0)
+
+        # Stash for the glossary transition.
+        self._outro_artifacts = VGroup(
+            outro_title, x_axis, y_axis, x_label, y_label, dots, commits, connectors
+        )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Final — Glossary
+    # ──────────────────────────────────────────────────────────────────
+
+    def _final_glossary(self) -> None:
+        """Two-column term/definition table — closes the video (O9 in
+        text-overflow-map.md). Holds 5s so viewers can read."""
+        # Fade outro chart so the glossary owns the canvas.
+        if hasattr(self, "_outro_artifacts"):
+            self.play(FadeOut(self._outro_artifacts), run_time=0.5)
+
+        title = _make_text(_t("glossary_title"), font_size=34, color=COLOR_TEXT).move_to(
+            UP * TITLE_Y
+        )
+        self.play(FadeIn(title), run_time=0.5)
+
+        rows: list[VGroup] = []
+        terms = _t_glossary_terms()
+        # Two columns: term (left, accented) + definition (right, gray).
+        # 14 terms; vertical band y = 2.7 → -2.7. 14 rows → step 0.39.
+        top_y = 2.7
+        step = (top_y - (-2.7)) / max(len(terms) - 1, 1)
+        for i, (term, definition) in enumerate(terms):
+            y = top_y - step * i
+            term_text = _make_text(
+                term, font_size=16, color=COLOR_TEXT
+            ).move_to(LEFT * 4.0 + UP * y).align_to(LEFT * 6.0, LEFT)
+            def_text = _make_text(
+                definition, font_size=14, color=COLOR_TEXT_ACCENT
+            ).move_to(RIGHT * 0.5 + UP * y).align_to(LEFT * 1.0, LEFT)
+            rows.append(VGroup(term_text, def_text))
+
+        self.play(
+            LaggedStart(*[FadeIn(r) for r in rows], lag_ratio=0.08),
+            run_time=2.0,
+        )
+        self.wait(5.0)
