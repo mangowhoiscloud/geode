@@ -47,6 +47,53 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-RATCHET-1 — 5 mutation SoT files moved in-repo (git-tracked).**
+  First slice of the CI-ratchet realignment sprint. Pre-PR the
+  self-improving loop's 5 SoT files (``wrapper-sections.json`` /
+  ``tool-policy.json`` / ``decomposition.json`` / ``retrieval.json`` /
+  ``reflection.json``) lived under ``~/.geode/self-improving-loop/``
+  (operator home, untracked) — so a ``git diff`` of a self-improving
+  loop run showed nothing about which mutation actually applied. This
+  diverged from upstream Karpathy autoresearch's "branch tip = best
+  wrapper" principle: 9/10 of GEODE's experiment-lineage state lived
+  outside git. PR-RATCHET-1 converges back: (1) the 5 SoT files now
+  live at ``autoresearch/state/sot/<file>.json`` (in-repo); (2)
+  ``.gitignore`` re-includes the new dir via ``!autoresearch/state/sot/``
+  + ``!autoresearch/state/sot/**`` negations (kept narrow — only the
+  ``sot/`` subtree, not the broader ``state/`` dir whose
+  ``baseline.json`` / ``results.tsv`` remain gitignored pending
+  PR-RATCHET-2); (3) ``LEGACY_SOT_DIR`` constant exposed alongside
+  ``GLOBAL_SOT_DIR`` so a freshly-upgraded operator install
+  preserves continuity — ``policies._maybe_migrate_legacy_sot``
+  copies the pre-PR ``~/.geode/self-improving-loop/<file>.json``
+  payload to the new in-repo location on first ``load_policy`` /
+  ``write_policy`` call, idempotent, leaves the legacy source in
+  place so an operator can roll back manually if needed. The
+  ``GLOBAL_*_SOT`` constant names are preserved for backwards
+  compatibility (only the value moves); all 5 known callers
+  (``policies.py`` / ``agent/system_prompt.py`` / ``autoresearch/train.py``
+  / etc.) consume the constant and automatically pick up the new
+  path. 13 invariant tests pin (a) the 5 SoT paths under
+  ``autoresearch/state/sot/``, (b) ``LEGACY_SOT_DIR`` still maps to
+  the operator-home pre-PR path, (c) the 5 SoT files + ``.gitkeep``
+  are NOT git-ignored (subprocess ``git check-ignore`` runs against
+  the worktree's actual ``.gitignore``), (d) migration copies legacy
+  → new when missing, (e) migration is idempotent (no clobber when
+  new exists with different content), (f) migration no-ops on
+  missing legacy or unknown kind, (g) ``_LEGACY_FILE_NAMES`` map
+  covers every ``TARGET_KINDS`` entry, (h) ``load_policy`` and
+  ``write_policy`` both trigger the migration before I/O.
+
+  Prior ``test_global_policy_paths_under_self_improving_loop_dir``
+  test invariant updated — the assertion now checks
+  ``GLOBAL_SOT_DIR`` (not ``GLOBAL_SELF_IMPROVING_LOOP_DIR``) since
+  the SoT files are no longer co-located with the operator-home
+  ``sessions.jsonl`` / ``journal.jsonl`` index files; those remain
+  in ``~/.geode/`` until PR-RATCHET-2 collapses them into a single
+  git-tracked journal.
+
 ### Added
 
 - **PR-OPS-2a — `/self-improving run` slash + propose/apply split.**

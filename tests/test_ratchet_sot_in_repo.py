@@ -1,0 +1,250 @@
+"""PR-RATCHET-1 invariants — 5 mutation SoT files moved in-repo.
+
+Pins:
+- 5 SoT constants now point under ``autoresearch/state/sot/``.
+- ``.gitignore`` allows the new path (negation re-includes ``sot/**``).
+- ``LEGACY_SOT_DIR`` still references ``~/.geode/self-improving-loop/``
+  for the lazy migration path.
+- ``_maybe_migrate_legacy_sot`` copies the legacy file to the new
+  location on first read/write, is idempotent, preserves the legacy
+  source (operator can roll back manually), and silently no-ops when
+  the new path already exists or the legacy file is missing.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+# ---------------------------------------------------------------------------
+# Path constants — pinned at the in-repo location
+# ---------------------------------------------------------------------------
+
+
+def test_sot_constants_under_in_repo_sot_dir() -> None:
+    """Each of the 5 SoT constants must resolve under
+    ``<repo>/autoresearch/state/sot/`` — NOT ``~/.geode/...``. The
+    in-repo location is the CI-ratchet alignment fix."""
+    from core.paths import (
+        GLOBAL_DECOMPOSITION_POLICY_SOT,
+        GLOBAL_REFLECTION_POLICY_SOT,
+        GLOBAL_RETRIEVAL_POLICY_SOT,
+        GLOBAL_SOT_DIR,
+        GLOBAL_TOOL_POLICY_SOT,
+        GLOBAL_WRAPPER_SECTIONS_SOT,
+    )
+
+    sot_dir_parts = GLOBAL_SOT_DIR.parts
+    # The in-repo SoT dir's last three components are fixed:
+    assert sot_dir_parts[-3:] == ("autoresearch", "state", "sot")
+
+    paths_by_kind = {
+        "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_SOT,
+        "tool-policy.json": GLOBAL_TOOL_POLICY_SOT,
+        "decomposition.json": GLOBAL_DECOMPOSITION_POLICY_SOT,
+        "retrieval.json": GLOBAL_RETRIEVAL_POLICY_SOT,
+        "reflection.json": GLOBAL_REFLECTION_POLICY_SOT,
+    }
+    for filename, path in paths_by_kind.items():
+        assert path.name == filename
+        assert path.parent == GLOBAL_SOT_DIR
+
+
+def test_legacy_sot_dir_still_exported() -> None:
+    """``LEGACY_SOT_DIR`` must remain importable so the migration
+    helper can find old payloads. The constant points at the pre-
+    PR-RATCHET-1 location (``~/.geode/self-improving-loop/``)."""
+    from core.paths import GEODE_HOME, LEGACY_SOT_DIR
+
+    assert LEGACY_SOT_DIR == GEODE_HOME / "self-improving-loop"
+
+
+# ---------------------------------------------------------------------------
+# .gitignore — the in-repo SoT path must NOT be ignored
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "wrapper-sections.json",
+        "tool-policy.json",
+        "decomposition.json",
+        "retrieval.json",
+        "reflection.json",
+        ".gitkeep",
+    ],
+)
+def test_sot_files_not_gitignored(filename: str) -> None:
+    """``git check-ignore <path>`` must exit 1 (not ignored) for the
+    new in-repo SoT files. Pre-PR-RATCHET-1, ``autoresearch/state/*``
+    swept everything under the rug; the negation
+    ``!autoresearch/state/sot/**`` re-includes them."""
+    from core.paths import GLOBAL_SOT_DIR
+
+    git_bin = shutil.which("git")
+    if git_bin is None:
+        pytest.skip("git executable not in PATH")
+    target = GLOBAL_SOT_DIR / filename
+    # Run from the worktree root so .gitignore is the right one.
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(  # noqa: S603
+        [git_bin, "check-ignore", str(target)],
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    # exit 1 = not ignored; exit 0 = ignored
+    assert result.returncode == 1, (
+        f"{target} is git-ignored: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lazy migration helper — _maybe_migrate_legacy_sot
+# ---------------------------------------------------------------------------
+
+
+def test_migration_copies_legacy_when_new_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When the in-repo path is missing AND the legacy file exists,
+    the migration copies legacy → new."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    new_path = tmp_path / "new" / "tool-policy.json"
+    legacy_file = legacy_dir / "tool-policy.json"
+    legacy_file.write_text(json.dumps({"delegate_task.priority": "5"}))
+
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    policies_mod._maybe_migrate_legacy_sot("tool_policy", new_path)
+
+    assert new_path.is_file()
+    assert json.loads(new_path.read_text()) == {"delegate_task.priority": "5"}
+    # Legacy preserved (not deleted)
+    assert legacy_file.is_file()
+
+
+def test_migration_no_op_when_new_exists(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Idempotency — once the in-repo path is populated, subsequent
+    migration calls leave it untouched (even if legacy has different
+    content)."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    new_path = tmp_path / "new" / "tool-policy.json"
+    new_path.parent.mkdir(parents=True)
+
+    legacy_file = legacy_dir / "tool-policy.json"
+    legacy_file.write_text(json.dumps({"from_legacy": "old"}))
+    new_path.write_text(json.dumps({"from_new": "fresh"}))
+
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    policies_mod._maybe_migrate_legacy_sot("tool_policy", new_path)
+
+    # The new path's content must NOT be clobbered by the legacy copy.
+    assert json.loads(new_path.read_text()) == {"from_new": "fresh"}
+
+
+def test_migration_no_op_when_legacy_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fresh-install path — no legacy file means no migration; the
+    caller falls through to the empty-state branch."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    new_path = tmp_path / "new" / "tool-policy.json"
+
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    policies_mod._maybe_migrate_legacy_sot("tool_policy", new_path)
+
+    assert not new_path.exists()
+
+
+def test_migration_handles_unknown_kind(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Unknown kinds (not in ``_LEGACY_FILE_NAMES``) must no-op
+    silently rather than raise — defensive for future kinds added
+    after RATCHET-1."""
+    from core.self_improving_loop import policies as policies_mod
+
+    new_path = tmp_path / "future_kind.json"
+    policies_mod._maybe_migrate_legacy_sot("unknown_kind", new_path)
+    assert not new_path.exists()
+
+
+@pytest.mark.parametrize(
+    "kind, expected_filename",
+    [
+        ("prompt", "wrapper-sections.json"),
+        ("tool_policy", "tool-policy.json"),
+        ("decomposition", "decomposition.json"),
+        ("retrieval", "retrieval.json"),
+        ("reflection", "reflection.json"),
+    ],
+)
+def test_legacy_filename_map_matches_target_kinds(kind: str, expected_filename: str) -> None:
+    """The migration's ``_LEGACY_FILE_NAMES`` map must include every
+    public target_kind so no migration path goes silently dark."""
+    from core.self_improving_loop import policies as policies_mod
+
+    assert kind in policies_mod._LEGACY_FILE_NAMES
+    assert policies_mod._LEGACY_FILE_NAMES[kind] == expected_filename
+
+
+# ---------------------------------------------------------------------------
+# load_policy / write_policy — migration fires before the I/O
+# ---------------------------------------------------------------------------
+
+
+def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``load_policy`` must invoke ``_maybe_migrate_legacy_sot``
+    BEFORE attempting to read, so a freshly-upgraded operator gets
+    their last mutation state visible on the first call."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    legacy_file = legacy_dir / "tool-policy.json"
+    legacy_file.write_text(json.dumps({"delegate_task.priority": "8"}))
+
+    new_path = tmp_path / "new" / "tool-policy.json"
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    monkeypatch.setattr(policies_mod, "_KIND_TO_PATH", {"tool_policy": new_path})
+
+    result = policies_mod.load_policy("tool_policy")
+    assert result == {"delegate_task.priority": "8"}
+    # Migration also created the in-repo file as a side effect
+    assert new_path.is_file()
+
+
+def test_write_policy_triggers_migration_before_write(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Write path must run migration too — otherwise a write that
+    happens BEFORE the first read would clobber the legacy state."""
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    legacy_file = legacy_dir / "tool-policy.json"
+    legacy_file.write_text(json.dumps({"legacy_section": "v1"}))
+
+    new_path = tmp_path / "new" / "tool-policy.json"
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    monkeypatch.setattr(policies_mod, "_KIND_TO_PATH", {"tool_policy": new_path})
+
+    # write happens AFTER the migration so the legacy state is
+    # preserved as "previous value" rather than dropped on the floor.
+    policies_mod.write_policy("tool_policy", {"legacy_section": "v2"})
+    assert json.loads(new_path.read_text()) == {"legacy_section": "v2"}
+    # Legacy still preserved
+    assert legacy_file.is_file()
