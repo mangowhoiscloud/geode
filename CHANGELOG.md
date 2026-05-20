@@ -47,6 +47,60 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-MINIMAL-1 — `/self-improving history` + `/rollback` wired to git delegation; DONT-table guard codification; design doc cleanup.**
+  Post-PR-RATCHET-1, the mutation ledger (``autoresearch/state/mutations.jsonl``)
+  + 5 policy SoT files (``autoresearch/state/policies/``) are all
+  git-tracked, so ``git log`` IS the canonical history view and
+  ``git revert <sha>`` IS the canonical rollback verb. Re-implementing
+  either in a slash would duplicate git semantics. PR-MINIMAL-1 wires
+  the two slash actions as *delegation*: ``/self-improving history``
+  prints the exact ``git log -p autoresearch/state/mutations.jsonl``
+  + ``git log --stat autoresearch/state/policies/`` recipes;
+  ``/self-improving rollback`` (bare) prints the discovery + revert
+  recipe; ``/self-improving rollback <mutation_id>`` injects a
+  ``git log --all --grep=<id>`` SHA-finder line. Operator stays
+  inside one tool surface without re-implementing what git does
+  natively. ``_RUN_DEFERRED_ACTIONS`` shrinks to ``{"config"}``;
+  history + rollback removed from the design-doc-pointer fallback;
+  ``_KNOWN_ACTIONS`` expands; the unknown-action help line updates
+  to list both as available now.
+
+  H4 anti-deception regression guard: CLAUDE.md DONT table 2026-05-20
+  PR-G5b #1350 row noted ``_SYSTEM_PROMPT`` was a hardcoded f-string
+  while the PR title claimed "program.md-driven". The G5b.fix1.b
+  commit later introduced ``runner._load_program_md`` that reads
+  ``autoresearch/program.md`` from disk. PR-MINIMAL-1 pins that
+  behavior in ``tests/test_self_improving_minimal_1.py``
+  (``test_load_program_md_actually_reads_disk_file`` +
+  ``test_build_system_prompt_includes_program_md_content``) so a
+  future refactor that regresses to a hardcoded prompt surfaces
+  here. CLAUDE.md DONT rows updated with cross-references to the
+  test files that now codify each lesson as a guard
+  (``test_ratchet_policies_in_repo.py`` for the git-tracked claim,
+  ``test_self_improving_minimal_1.py`` for the program.md-driven
+  claim).
+
+  Design doc (``docs/plans/2026-05-21-self-improving-loop-ux.md``)
+  rewritten to drop the deferred ``/history`` + ``/rollback`` items
+  (now wired), remove the 7-profile preset bundle (deferred
+  indefinitely — toml overrides cover the same need with one less
+  concept), de-prioritise Tier 2 drill-down sub-pickers, and
+  collapse the 4-harness picker to a single default ``autoresearch``
+  with ``--harness=<name>`` as a power-user opt-in flag rather than
+  surfaced UI. New "Mode A vs Mode B" matrix doc-only — CLI surface
+  triggers Mode B only; Mode A (Karpathy external agent reading
+  ``program.md``) stays a parallel manual workflow documented in
+  ``autoresearch/README.md``. 7 new invariant tests pin the slash
+  delegation, the KNOWN_ACTIONS set, the unknown-action help, and
+  the two program.md regression guards. Tests
+  ``test_reserved_actions_emit_design_doc_hint`` (parametrized over
+  history/rollback/config) + ``test_history_still_deferred`` are
+  collapsed into single-action ``test_config_action_emits_design_doc_hint``
+  + ``test_run_history_rollback_no_longer_in_deferred_actions`` to
+  reflect the new shape.
+
 ### Changed
 
 - **PR-RATCHET-1 — 5 mutation SoT files moved in-repo (git-tracked).**

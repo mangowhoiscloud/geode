@@ -403,9 +403,10 @@ def test_run_action_dispatches_to_cmd_run(
     assert called == [["--dry-run", "--n", "2"]]
 
 
-def test_run_no_longer_in_deferred_actions() -> None:
-    """``/self-improving run`` is wired now — must NOT appear in the
-    deferred-action help hint."""
+def test_run_history_rollback_no_longer_in_deferred_actions() -> None:
+    """``/self-improving run`` was wired in PR-OPS-2a; ``history``
+    and ``rollback`` were wired in PR-MINIMAL-1 (git log/revert
+    delegation). Only ``config`` stays in the deferred set."""
     from core.cli.commands.self_improving import (
         _RUN_DEFAULT_ITERATIONS,
         _RUN_DEFERRED_ACTIONS,
@@ -413,14 +414,8 @@ def test_run_no_longer_in_deferred_actions() -> None:
     )
 
     assert "run" not in _RUN_DEFERRED_ACTIONS
+    assert "history" not in _RUN_DEFERRED_ACTIONS
+    assert "rollback" not in _RUN_DEFERRED_ACTIONS
+    assert "config" in _RUN_DEFERRED_ACTIONS
     assert _RUN_DEFAULT_ITERATIONS == 1
     assert _RUN_MAX_ITERATIONS == 10
-
-
-def test_history_still_deferred(capsys: pytest.CaptureFixture[str]) -> None:
-    """The other reserved actions still print the design-doc hint."""
-    from core.cli.commands.self_improving import cmd_self_improving
-
-    cmd_self_improving("history")
-    out = capsys.readouterr().out
-    assert "PR-OPS-2b/3" in out
