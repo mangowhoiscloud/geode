@@ -196,6 +196,8 @@ COMMAND_MAP: dict[str, str] = {
     "/audit": "audit",
     "/audit-seeds": "audit-seeds",
     "/petri": "petri",
+    "/self-improving": "self-improving",
+    "/sil": "self-improving",
 }
 
 

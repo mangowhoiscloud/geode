@@ -159,6 +159,10 @@ def _handle_command(
         from plugins.petri_audit.cli_audit import cmd_audit_slash
 
         cmd_audit_slash(args)
+    elif action == "self-improving":
+        from core.cli.commands.self_improving import cmd_self_improving
+
+        cmd_self_improving(args)
     elif action == "stop":
         # v0.63.0 — Hermes-style daemon shutdown (`hermes stop`).
         # Args: ``/stop --force`` for SIGKILL, optional ``--timeout=N``.
