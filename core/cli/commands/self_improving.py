@@ -330,9 +330,7 @@ def _resolve_run_summary_telemetry() -> tuple[str, str]:
     except Exception:
         import logging
 
-        logging.getLogger(__name__).debug(
-            "run-summary telemetry resolve failed", exc_info=True
-        )
+        logging.getLogger(__name__).debug("run-summary telemetry resolve failed", exc_info=True)
         return ("?", "?")
 
 
