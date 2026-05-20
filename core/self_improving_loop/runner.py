@@ -15,7 +15,9 @@ What the runner adds:
 2. **Prompt rendering** — pack the context into the program.md system
    prompt + a structured user message asking for ONE mutation.
 3. **LLM dispatch** — call the injected ``llm_call`` callable; the
-   default binding hits ``claude-opus-4-7`` via the anthropic SDK.
+   default binding reads ``[self_improving_loop.mutator]`` from
+   ``~/.geode/config.toml`` and dispatches through
+   ``core.llm.router.call_with_failover``.
 4. **Response parsing** — extract a :class:`Mutation` from the LLM's
    JSON, validate against the SoT schema.
 5. **Apply + audit log** — call ``write_wrapper_prompt_sections`` and
@@ -39,6 +41,7 @@ import json
 import logging
 import subprocess
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,6 +74,13 @@ class Mutation:
     Schema mirrors the LLM response contract (see :func:`_build_user_prompt`).
     ``target_section`` may be new (insert) or existing (rewrite); the
     runner enforces non-empty strings at apply time.
+
+    PR-5 C-4 (2026-05-21) — added ``mutation_id`` / ``expected_dim`` /
+    ``rollback_condition`` so the runner can pair each apply row with
+    a follow-up attribution row keyed by ``mutation_id``. Existing
+    callers that don't populate the new fields get safe defaults
+    (uuid auto-generated, empty dict, empty string) so the older
+    audit history stays parseable.
     """
 
     target_section: str
@@ -79,6 +89,23 @@ class Mutation:
     target_dim: str = ""
     """The regression dim the mutation is aimed at — informational, may
     be empty when the LLM declines to commit to one."""
+    target_kind: str = "prompt"
+    """PR-6 C-5 — which policy SoT this mutation edits. One of:
+    ``prompt`` (legacy wrapper-sections, default) / ``tool_policy`` /
+    ``decomposition`` / ``retrieval`` / ``reflection``. Unknown kinds
+    are rejected by :func:`apply_mutation` so the loop fails closed."""
+    mutation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    """Stable identifier paired with the attribution row written after
+    the next audit. Auto-generated when the LLM doesn't supply one."""
+    expected_dim: dict[str, float] = field(default_factory=dict)
+    """Per-dim expected delta the LLM commits to (e.g.
+    ``{"safety": +0.3, "helpfulness": -0.05}``). PR-5 attribution
+    computes ``observed - expected`` after the next audit so a wrong-
+    direction mutation can be flagged."""
+    rollback_condition: str = ""
+    """Free-text condition under which the mutation should be reverted
+    (e.g. ``"any dim drops more than 0.5"``). Recorded for auditability;
+    enforcement is a follow-up."""
 
     def to_audit_row(
         self,
@@ -90,11 +117,16 @@ class Mutation:
         """Render the mutation as one audit-log row."""
         return {
             "ts": timestamp if timestamp is not None else time.time(),
+            "kind": "applied",
+            "mutation_id": self.mutation_id,
+            "target_kind": self.target_kind,
             "target_section": self.target_section,
             "previous_value": previous_value,
             "new_value": self.new_value,
             "rationale": self.rationale,
             "target_dim": self.target_dim,
+            "expected_dim": dict(self.expected_dim),
+            "rollback_condition": self.rollback_condition,
             "baseline_fitness": baseline_fitness,
         }
 
@@ -212,13 +244,30 @@ _MUTATION_CONTRACT_SUFFIX = (
     "For THIS invocation, ignore the broader autoresearch loop instructions "
     "in program.md and act as a single-shot mutator with these constraints:\n"
     "\n"
-    "- Change exactly ONE section of WRAPPER_PROMPT_SECTIONS. Adding a new "
-    "section key counts as a change; deleting does NOT (the runner ignores "
-    "deletions).\n"
+    "- Change exactly ONE section of the chosen policy SoT (the dict "
+    "selected by ``target_kind`` — defaults to WRAPPER_PROMPT_SECTIONS "
+    "when omitted). Adding a new section key counts as a change; "
+    "deleting does NOT (the runner ignores deletions).\n"
+    '- Default to ``target_kind = "prompt"`` unless the regression '
+    "evidence specifically points at tool / decomposition / retrieval / "
+    "reflection policy. The current user message only shows wrapper-"
+    "prompt sections; non-prompt SoTs start empty until populated, so "
+    "explicit operator signal should drive non-prompt mutations.\n"
     "- ``new_value`` must be a non-empty single-paragraph string under 600 "
     "characters.\n"
     "- ``rationale`` must cite the specific regression evidence or "
     "meta-review prior that motivates the change.\n"
+    "- ``expected_dim`` is a small dict mapping dim name → expected delta "
+    "(float in [-1, 1]); commit to which dims should move and by how much "
+    "so PR-5 attribution can compute ``observed - expected`` after the "
+    "next audit.\n"
+    "- ``rollback_condition`` is a one-line predicate describing when this "
+    'mutation should be reverted (e.g. ``"helpfulness drops below 0.4"``).\n'
+    "- ``target_kind`` selects the policy SoT to mutate. One of "
+    "``prompt`` (default, wrapper-sections.json), ``tool_policy`` "
+    "(tool-policy.json), ``decomposition`` (decomposition.json), "
+    "``retrieval`` (retrieval.json), ``reflection`` (reflection.json). "
+    "Omit for prompt-level mutations.\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -226,7 +275,10 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_section": "<section key>",\n'
     '  "new_value": "<replacement text>",\n'
     '  "rationale": "<= 200 chars, citing the evidence>",\n'
-    '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
+    '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
+    '  "target_kind": "<prompt|tool_policy|decomposition|retrieval|reflection>",\n'
+    '  "expected_dim": {"<dim>": 0.0, ...},\n'
+    '  "rollback_condition": "<one-line predicate, or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -312,35 +364,124 @@ LLMCallable = Callable[[str, str], str]
 
 
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
-    """Anthropic SDK call to ``claude-opus-4-7``.
+    """Mutator LLM call routed through ``core.llm.router`` (PR-1 G-A).
 
-    Imported lazily so the runner module stays importable without the
-    anthropic SDK in test environments. Tests inject a mock callable
-    via ``SelfImprovingLoopRunner(llm_call=...)``.
+    Pre-PR-1 (v0.99.22) this body instantiated ``anthropic.Anthropic()``
+    directly and pinned ``model="claude-opus-4-7"`` as a literal —
+    paperclip-style abstraction goal: route through the same
+    ``call_with_failover`` path every other provider-aware caller uses,
+    and read the model id from ``[self_improving_loop.mutator]`` so the
+    operator can flip provider/model without editing this file.
+
+    Resolution order:
+
+    1. ``~/.geode/config.toml [self_improving_loop.mutator] default_model``
+       (user override).
+    2. ``MutatorConfig.default_model`` ship default (``claude-opus-4-7``).
+
+    The model id is routed through ``core.llm.router.call_with_failover``
+    so the same credential / provider rotator the agentic loop uses
+    also serves the mutator — no second SDK client, no second key
+    store.
+
+    Tests inject a mock callable via
+    ``SelfImprovingLoopRunner(llm_call=...)`` and skip this code path
+    entirely; the lazy SDK imports keep the test cold-start free of
+    anthropic.
     """
-    try:
-        import anthropic
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "self-improving-loop runner requires the anthropic SDK "
-            "(install with `uv sync` or pass a mock llm_call)"
-        ) from exc
+    import asyncio
+    import logging as _logging
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+    from core.config import _resolve_provider
+    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.llm.adapters import resolve_agentic_adapter
+    from core.llm.router import call_with_failover
+
+    cfg = load_self_improving_loop_config()
+    model = cfg.mutator.default_model
+    max_tokens = cfg.mutator.max_tokens
+    source = cfg.mutator.source
+    role_contract = cfg.mutator.role_contract
+
+    # PR-1 G-A — defensive check kept here even though MutatorConfig's
+    # pydantic validator also enforces it: allowed_models is a paperclip-
+    # style allow-list (matches petri.role.<X>.allowed_models). A drift
+    # between config and validator would fail closed instead of silently
+    # calling an unlisted model.
+    if cfg.mutator.allowed_models and model not in cfg.mutator.allowed_models:
+        raise RuntimeError(
+            f"mutator default_model {model!r} is not in MutatorConfig.allowed_models "
+            f"{cfg.mutator.allowed_models!r}"
+        )
+
+    provider = _resolve_provider(model)
+    adapter = resolve_agentic_adapter(provider)
+
+    # PR-1 G-A fix-up — `source` and `role_contract` must affect *something*
+    # observable, otherwise they're silent declarative knobs (Codex MCP
+    # 2nd-pass review flagged this as a knob-vs-deletion violation).
+    # Surface: every mutator call logs (model, provider, source,
+    # role_contract, max_tokens) so a downstream Petri / Inspect viewer
+    # can group runs by operator intent. Same shape as
+    # `core.llm.router._hooks` emit but recorded at the mutator
+    # boundary (the router doesn't know it's serving the mutator role
+    # specifically).
+    #
+    # A planned future surface — credential-source forcing — would
+    # require a downstream reader in the adapter / router credential
+    # chain; that reader does not exist on main yet, so PR-1 stops at
+    # the telemetry surface and the C-5 (policy mutation expansion) PR
+    # will wire the second half once the reader lands.
+    _logging.getLogger("core.self_improving_loop.runner").info(
+        "mutator dispatch: model=%s provider=%s source=%s role_contract=%s max_tokens=%d",
+        model,
+        provider,
+        source,
+        role_contract,
+        max_tokens,
     )
-    # Concatenate text blocks defensively — the SDK can return a list
-    # of content blocks even for a single text response.
+
+    async def _do_call(m: str) -> object:
+        return await adapter.agentic_call(
+            model=m,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[],
+            tool_choice={"type": "auto"},
+            max_tokens=max_tokens,
+            temperature=0.3,
+        )
+
+    # ``call_with_failover`` is the router's async dispatcher (transport
+    # layer) — accepts an ordered model list. PR-1 keeps it single-
+    # element so the M5 silent-fallback knob default is preserved; an
+    # operator who wants the mutator to fall through to alternate models
+    # populates ``MutatorConfig.allowed_models`` and the dispatcher's
+    # ``models`` list is expanded in a follow-up PR.
+    response, _used_model = asyncio.run(call_with_failover([model], _do_call))
+    if response is None:
+        last_err = getattr(adapter, "last_error", None)
+        raise RuntimeError(
+            f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
+        )
+
+    # Adapter normalises to AgenticResponse — concatenate text blocks.
     text_chunks: list[str] = []
-    for block in response.content:
+    for block in getattr(response, "content", []):
         text = getattr(block, "text", "")
         if text:
             text_chunks.append(text)
-    return "".join(text_chunks)
+    text = "".join(text_chunks)
+    if not text:
+        # Empty text is a known anti-pattern surface (``parse_mutation``
+        # raises ValueError downstream); callers that catch it can retry,
+        # but failing fast here keeps the error message targeted instead
+        # of letting JSON parsing carry the blame.
+        raise RuntimeError(
+            f"mutator LLM call returned empty text "
+            f"(model={model}, provider={provider}, used={_used_model!r})"
+        )
+    return text
 
 
 def parse_mutation(raw: str) -> Mutation:
@@ -383,11 +524,56 @@ def parse_mutation(raw: str) -> Mutation:
         raise ValueError("target_dim must be a string")
     if len(new_value) > 600:
         raise ValueError(f"new_value length {len(new_value)} exceeds 600 char cap")
+    # PR-5 C-4 — optional attribution fields. The LLM is *encouraged* to
+    # supply them via the system prompt, but missing fields fall through
+    # to safe defaults (uuid auto-generated, empty expectation dict,
+    # empty rollback condition) so older LLM responses + tests that
+    # don't construct the new schema still parse.
+    expected_raw = payload.get("expected_dim", {})
+    expected_dim: dict[str, float] = {}
+    if isinstance(expected_raw, dict):
+        for k, v in expected_raw.items():
+            # ``bool`` is an ``int`` subclass — exclude it explicitly so
+            # ``{"safety": true}`` doesn't silently become ``1.0`` (Codex
+            # MCP review #1 catch — "float expected delta" must be a
+            # genuine numeric, not a coerced bool).
+            if isinstance(k, str) and isinstance(v, int | float) and not isinstance(v, bool):
+                expected_dim[k] = float(v)
+    rollback_raw = payload.get("rollback_condition", "")
+    rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
+    # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
+    # ``prompt`` keeps the legacy wrapper-sections behaviour so older
+    # mutation rows replay unchanged. Unknown kinds raise ValueError so
+    # the loop fails closed (caught and logged by SelfImprovingLoopRunner).
+    from core.self_improving_loop.policies import TARGET_KINDS
+
+    kind_raw = payload.get("target_kind", "prompt")
+    if not isinstance(kind_raw, str):
+        raise ValueError(f"target_kind must be a string, got {type(kind_raw).__name__}")
+    target_kind = kind_raw.strip() or "prompt"
+    if target_kind not in TARGET_KINDS:
+        raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
+    mutation_id_raw = payload.get("mutation_id")
+    # Mutation has a default_factory; pass only when the LLM supplied one.
+    if isinstance(mutation_id_raw, str) and mutation_id_raw.strip():
+        return Mutation(
+            target_section=target_section.strip(),
+            new_value=new_value,
+            rationale=rationale.strip(),
+            target_dim=target_dim.strip(),
+            target_kind=target_kind,
+            mutation_id=mutation_id_raw.strip(),
+            expected_dim=expected_dim,
+            rollback_condition=rollback_condition,
+        )
     return Mutation(
         target_section=target_section.strip(),
         new_value=new_value,
         rationale=rationale.strip(),
         target_dim=target_dim.strip(),
+        target_kind=target_kind,
+        expected_dim=expected_dim,
+        rollback_condition=rollback_condition,
     )
 
 
@@ -407,17 +593,40 @@ def apply_mutation(
     the string the mutation replaced (empty for insertions) — captured
     so the audit log can record the diff.
 
-    The SoT write is strict: schema failures raise
-    :class:`ValueError` via ``write_wrapper_prompt_sections``.
+    PR-6 C-5 — dispatches on ``mutation.target_kind``. The
+    ``prompt`` kind uses the legacy
+    ``autoresearch.train.write_wrapper_prompt_sections`` writer so
+    schema enforcement (single-paragraph 600-char cap) is preserved.
+    The other four kinds go through
+    :func:`core.self_improving_loop.policies.write_policy` which is
+    a generic ``dict[str, str]`` writer with atomic temp-file rewrite.
     """
     from autoresearch.train import load_wrapper_prompt_sections, write_wrapper_prompt_sections
 
+    from core.self_improving_loop.policies import load_policy, write_policy
+
+    if mutation.target_kind == "prompt":
+        sections = (
+            dict(current_sections)
+            if current_sections is not None
+            else load_wrapper_prompt_sections()
+        )
+        previous_value = sections.get(mutation.target_section, "")
+        sections[mutation.target_section] = mutation.new_value
+        write_wrapper_prompt_sections(sections)
+        return sections, previous_value
+
+    # PR-6 policy kinds — tool_policy / decomposition / retrieval /
+    # reflection. ``current_sections`` override is honoured for symmetry
+    # with the prompt branch (tests inject pre-populated dicts).
     sections = (
-        dict(current_sections) if current_sections is not None else load_wrapper_prompt_sections()
+        dict(current_sections)
+        if current_sections is not None
+        else load_policy(mutation.target_kind)
     )
     previous_value = sections.get(mutation.target_section, "")
     sections[mutation.target_section] = mutation.new_value
-    write_wrapper_prompt_sections(sections)
+    write_policy(mutation.target_kind, sections)
     return sections, previous_value
 
 
@@ -525,7 +734,8 @@ class SelfImprovingLoopRunner:
     Construction parameters:
 
     * ``llm_call`` — injected callable. Defaults to
-      :func:`_default_llm_call` (anthropic SDK); tests pass a mock.
+      :func:`_default_llm_call` (reads ``MutatorConfig`` + dispatches
+      through ``core.llm.router.call_with_failover``); tests pass a mock.
     * ``audit_log_path`` — override for the audit jsonl location
       (tests).
     * ``commit_enabled`` — when ``False``, skip the git step
@@ -562,13 +772,25 @@ class SelfImprovingLoopRunner:
         the caller can decide whether to retry.
         """
         ctx = build_runner_context()
-        original_sections = dict(ctx.current_sections)
         user_prompt = _build_user_prompt(ctx)
         raw_response = self.llm_call(_build_system_prompt(), user_prompt)
         mutation = parse_mutation(raw_response)
-        _new_sections, previous_value = apply_mutation(
-            mutation, current_sections=ctx.current_sections
-        )
+        # PR-6 C-5 (Codex MCP catch) — apply_mutation dispatches by
+        # target_kind, but ctx.current_sections is *always* the wrapper-
+        # prompt sections (built by build_runner_context). Passing those
+        # into a non-prompt apply would write wrapper-prompt contents
+        # into the wrong SoT file. Load the *correct* starting policy
+        # based on the parsed mutation's kind so the dispatcher writes
+        # the right destination. ``original_sections`` is captured AFTER
+        # the kind-aware load so rollback restores the matching SoT.
+        from core.self_improving_loop.policies import load_policy
+
+        if mutation.target_kind == "prompt":
+            target_sections = dict(ctx.current_sections)
+        else:
+            target_sections = load_policy(mutation.target_kind)
+        original_sections = dict(target_sections)
+        _new_sections, previous_value = apply_mutation(mutation, current_sections=target_sections)
         # G5b.fix3 (2026-05-20) — atomicity boundary: if the audit log
         # write fails after the SoT mutation lands, the in-disk state is
         # silently divergent (SoT advanced, history missing). Roll the
@@ -613,15 +835,27 @@ class SelfImprovingLoopRunner:
         Rollback failure is itself logged but never raised in place of
         the original ``exc`` — the caller already has the more useful
         signal (audit-log write failed).
+
+        PR-6 C-5 (Codex MCP catch) — rollback dispatches on
+        ``mutation.target_kind``. The prompt kind still writes through
+        ``autoresearch.train.write_wrapper_prompt_sections`` (legacy
+        schema enforcement); the four policy kinds go through
+        ``write_policy`` so the right SoT is restored.
         """
         try:
-            from autoresearch.train import write_wrapper_prompt_sections
+            if mutation.target_kind == "prompt":
+                from autoresearch.train import write_wrapper_prompt_sections
 
-            write_wrapper_prompt_sections(original_sections)
+                write_wrapper_prompt_sections(original_sections)
+            else:
+                from core.self_improving_loop.policies import write_policy
+
+                write_policy(mutation.target_kind, original_sections)
             log.error(
                 "self-improving-loop runner: audit-log write failed (%s); "
-                "SoT rolled back to pre-mutation state for section %r",
+                "SoT rolled back to pre-mutation state for kind %r section %r",
                 exc,
+                mutation.target_kind,
                 mutation.target_section,
             )
         except Exception:  # pragma: no cover — defensive

@@ -34,7 +34,84 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
     )
-    model: str = "claude-opus-4-6"  # overridden by GEODE_MODEL env var; see ANTHROPIC_PRIMARY
+    # PR-1 G-E (2026-05-21) — bumped from claude-opus-4-6 to match
+    # routing.toml [model.defaults] anthropic. ANTHROPIC_PRIMARY constant
+    # is the source of truth; this default mirrors it.
+    model: str = "claude-opus-4-7"
+    learning_extract_model: str = Field(
+        default="glm-4.7-flash",
+        validation_alias=AliasChoices("learning_extract_model", "GEODE_LEARNING_EXTRACT_MODEL"),
+        description=(
+            "Free-tier GLM model used by ``core.hooks.llm_extract_learning`` "
+            "(PR-1 G-D). Pre-fix this was a hardcoded literal inside the "
+            "hook; the field surfaces the knob so operators can flip to "
+            "a different free model without editing the hook."
+        ),
+    )
+    # PR-3 C-2 (2026-05-21) — Reflection node knobs. The reflection
+    # step runs one extra LLM call per tool-use round to populate
+    # ``CognitiveState.hypotheses`` / ``confidence``, so operators
+    # who want the loop to stay zero-extra-cost can flip the toggle.
+    # Default model is Haiku 4.5 — cheapest current Claude that
+    # still follows the JSON schema reliably; operators who want
+    # higher quality reflection can switch to opus / sonnet.
+    cognitive_reflection_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_enabled",
+            "GEODE_COGNITIVE_REFLECTION_ENABLED",
+        ),
+        description=(
+            "When True (default) the agentic loop calls the reflection "
+            "node after every tool-use round to derive hypotheses + "
+            "confidence. When False the cognitive cycle stays "
+            "PERCEIVE → PLAN → ACT → OBSERVE → REFLECT (deterministic) "
+            "with no extra LLM call. PR-3 C-2."
+        ),
+    )
+    cognitive_reflection_model: str = Field(
+        default="claude-haiku-4-5-20251001",
+        validation_alias=AliasChoices(
+            "cognitive_reflection_model",
+            "GEODE_COGNITIVE_REFLECTION_MODEL",
+        ),
+        description=(
+            "Model used by the reflection node. Default is Haiku 4.5 "
+            "(cheapest Claude family that still follows the JSON "
+            "schema). Operators wanting higher-fidelity reflection can "
+            "set this to opus / sonnet. PR-3 C-2."
+        ),
+    )
+    cognitive_reflection_max_tokens: int = Field(
+        default=512,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_max_tokens",
+            "GEODE_COGNITIVE_REFLECTION_MAX_TOKENS",
+        ),
+        description=(
+            "Max tokens for the reflection LLM call. The output is a "
+            "small JSON object (hypotheses[<=5] + confidence + "
+            "next_action_hint); 512 leaves headroom without bloating "
+            "cost. PR-3 C-2."
+        ),
+    )
+    cognitive_reflection_interval: int = Field(
+        default=1,
+        ge=1,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_interval",
+            "GEODE_COGNITIVE_REFLECTION_INTERVAL",
+        ),
+        description=(
+            "Reflection fires every Nth tool-use round. ``1`` (default) "
+            "= every round (current PR-3 behaviour, zero regression). "
+            "``3`` = round 1, 4, 7, 10... (skip 2 rounds between calls). "
+            "Higher values cut the extra-LLM-call overhead at the cost "
+            "of staler hypotheses + confidence. The first round always "
+            "runs so the loop sees an LLM-derived belief snapshot "
+            "before any throttling kicks in. PR-C (2026-05-21)."
+        ),
+    )
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 
@@ -94,7 +171,8 @@ class Settings(BaseSettings):
     interrupt_nodes: str = ""  # comma-separated node names, e.g. "verification,scoring"
 
     # LLM — Router & Verification
-    router_model: str = "claude-opus-4-6"  # see ANTHROPIC_PRIMARY
+    # PR-1 G-E — same bump as ``model`` field above.
+    router_model: str = "claude-opus-4-7"
     default_secondary_model: str = "gpt-5.4"  # see OPENAI_PRIMARY
     agreement_threshold: float = 0.67
 

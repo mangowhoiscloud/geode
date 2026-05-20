@@ -195,6 +195,16 @@ class AgenticLoop:
         except Exception:
             log.warning("SessionCheckpoint init failed", exc_info=True)
 
+        # PR-2 C-1 — explicit cognitive state container. ``goal`` is set on
+        # the first ``arun()`` call (user input becomes the session goal);
+        # ``round_count`` / ``last_action`` / ``last_observation`` /
+        # ``observations`` are updated at each round end. Hypotheses +
+        # confidence are PR-3 territory (the reflection node will populate
+        # them). See ``core/agent/cognitive_state.py`` for the rationale.
+        from core.agent.cognitive_state import CognitiveState
+
+        self.cognitive_state = CognitiveState()
+
     # ------------------------------------------------------------------
     # Lifecycle / metrics — delegate to ``_lifecycle``
     # ------------------------------------------------------------------
@@ -240,6 +250,366 @@ class AgenticLoop:
     def _inject_credential_breadcrumb(self) -> None:
         """Delegates to :func:`_lifecycle.inject_credential_breadcrumb`."""
         return _lifecycle.inject_credential_breadcrumb(self)
+
+    async def _emit_cognitive(self, event: HookEvent, **payload: Any) -> None:
+        """PR-2 C-6 — emit a cognitive-cycle event with the state
+        snapshot attached.
+
+        Centralises the (a) hook-system None-guard, (b) session_id
+        injection, (c) ``cognitive_state`` snapshot embedding so each
+        call site stays a one-liner and ``arun`` doesn't balloon past
+        the ruff complexity gates.
+        """
+        if not self._hooks:
+            return
+        await self._hooks.trigger_async(
+            event,
+            {
+                "session_id": self._session_id,
+                "cognitive_state": self.cognitive_state.to_snapshot(),
+                **payload,
+            },
+        )
+
+    async def _record_text_only_round(self, round_idx: int, *, text: str) -> None:
+        """PR-2 C-6 — record round end + emit REFLECT/UPDATE_MEMORY for
+        text-only completions (``stop_reason != "tool_use"``).
+
+        Codex MCP review #1 catch — without this, ``record_round`` only
+        ran on tool-use rounds, violating the conditional-read-parity
+        rule. ACT/OBSERVE are intentionally NOT emitted here: the loop
+        took no action and observed no tool result this round, so the
+        cognitive cycle on a text-only turn is PERCEIVE → PLAN →
+        REFLECT (the LLM "thought aloud" then ended the turn).
+        ``last_action`` is recorded as ``"text-only"`` and
+        ``last_observation`` as a 80-char head of the emitted text so
+        downstream readers can distinguish *no-action* turns from
+        *failed-tool* turns.
+        """
+        head = text.strip().replace("\n", " ")
+        if len(head) > 80:
+            head = head[:80] + "…"
+        self.cognitive_state.record_round(
+            action="text-only",
+            observation=head or "(empty text)",
+        )
+        await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
+
+    async def _run_cognitive_act_observe_cycle(
+        self, response: Any, round_idx: int
+    ) -> list[dict[str, Any]]:
+        """PR-2 C-6 — emit ACT before the tool batch, run the batch,
+        emit OBSERVE after, update :attr:`cognitive_state` round-end
+        fields, emit REFLECT + UPDATE_MEMORY.
+
+        Extracted from ``arun`` to keep the run-loop within the ruff
+        complexity gates while preserving the cognitive-cycle event
+        ordering (PERCEIVE -> PLAN -> ACT -> OBSERVE -> REFLECT ->
+        UPDATE_MEMORY).
+        """
+        tool_names: list[str] = []
+        for block in getattr(response, "content", None) or []:
+            if getattr(block, "type", None) == "tool_use":
+                tool_names.append(getattr(block, "name", "unknown"))
+
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_ACT,
+            round=round_idx + 1,
+            tool_names=tool_names,
+        )
+
+        tool_results = await self._tool_processor.process(response)
+
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_OBSERVE,
+            round=round_idx + 1,
+            tool_names=tool_names,
+            result_count=len(tool_results),
+        )
+
+        # Deterministic round-end state update. Action = tool names (or
+        # "text-only"); observation = result-count summary. PR-3
+        # replaces the deterministic summary with an LLM-derived
+        # belief update from the reflection node.
+        self.cognitive_state.record_round(
+            action=("tools: " + ", ".join(tool_names)) if tool_names else "text-only",
+            observation=f"{len(tool_results)} tool result(s)",
+        )
+
+        # PR-3 C-2 — reflection node. One extra LLM call (opt-out via
+        # ``settings.cognitive_reflection_enabled = False``) populates
+        # ``hypotheses`` / ``confidence`` / appends a hint to
+        # ``subgoals``. The REFLECT hook fires *after* the LLM call so
+        # downstream listeners see the LLM-derived belief update, not
+        # the deterministic post-record_round snapshot.
+        await self._maybe_reflect(tool_results)
+
+        await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
+        await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
+
+        return tool_results
+
+    async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
+        """PR-3 C-2 — call the reflection node if enabled.
+
+        Reads ``settings.cognitive_reflection_enabled`` lazily so an
+        operator flipping the toggle via ``GEODE_COGNITIVE_REFLECTION_ENABLED``
+        or ``[cognitive] reflection_enabled = false`` takes effect at
+        the next round (no restart needed). Errors are swallowed inside
+        ``reflect_async`` — the loop must stay robust to a flaky
+        reflection model.
+
+        PR-C (2026-05-21) — every-N rounds gate. The 1 LLM call per
+        tool-use round was the dominant overhead for long-running
+        sessions (30 rounds ⇒ 30 extra Haiku calls). Operators can
+        set ``cognitive_reflection_interval=N`` (1 = current
+        behaviour) to thin the reflection cadence. The first round
+        always runs so the loop sees an LLM-derived belief snapshot
+        before any throttling kicks in.
+        """
+        from core.config import settings
+
+        if not settings.cognitive_reflection_enabled:
+            return
+        interval = max(1, int(settings.cognitive_reflection_interval))
+        # ``record_round`` ran immediately before ``_maybe_reflect`` in
+        # ``_run_cognitive_act_observe_cycle`` so ``round_count`` is
+        # already the *current* round's number (1-based: 1, 2, 3...).
+        # ``(round_count - 1) % interval == 0`` runs on rounds
+        # 1, 1+N, 1+2N, ... — first round always reflects, then every
+        # Nth thereafter.
+        round_count = self.cognitive_state.round_count
+        if interval > 1 and (round_count - 1) % interval != 0:
+            log.debug(
+                "reflection skipped: round=%d interval=%d (next at round %d)",
+                round_count,
+                interval,
+                round_count + (interval - (round_count - 1) % interval),
+            )
+            return
+        from core.agent.loop._reflection import reflect_async
+
+        await reflect_async(
+            self.cognitive_state,
+            tool_results,
+            model=settings.cognitive_reflection_model,
+            max_tokens=settings.cognitive_reflection_max_tokens,
+        )
+
+    async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
+        """PR-D Phase 1 — extracted session-start signal block from
+        ``arun``. Owns the USER_INPUT_RECEIVED interceptor, cognitive-
+        state goal init + ContextVar bind, COGNITIVE_PERCEIVE emit,
+        conversation-context append, transcript ``record_session_start``
+        / ``record_user_message``, and the SESSION_STARTED hook.
+
+        Returns ``None`` on the happy path. Returns an
+        :class:`AgenticResult` (with ``termination_reason="input_blocked"``)
+        when the USER_INPUT_RECEIVED interceptor blocks the input —
+        ``arun`` surfaces that result back to the caller verbatim.
+
+        Behaviour preserved exactly from the pre-refactor inline
+        block — this helper is a *structural* extraction so the god-
+        method's per-round body can be reasoned about without
+        intervening session-bootstrap code. Future phases will
+        extract the per-round body itself.
+        """
+        # Hook: USER_INPUT_RECEIVED (interceptor — can block input).
+        # First and only early-exit in this helper; if the input
+        # passes the interceptor we proceed to the cognitive-state
+        # bind + transcript + SESSION_STARTED sequence.
+        if self._hooks:
+            intercept = await self._hooks.trigger_interceptor_async(
+                HookEvent.USER_INPUT_RECEIVED,
+                {"user_input": user_input, "session_id": self._session_id},
+            )
+            if intercept.blocked:
+                return AgenticResult(
+                    text=intercept.reason,
+                    rounds=0,
+                    termination_reason="input_blocked",
+                )
+
+        # PR-2 C-1 + C-6 — set the cognitive-state goal to the user
+        # input of the first arun() call (subsequent calls in the
+        # same session keep the original goal so observations
+        # accumulate against it). Then fire PERCEIVE with the state
+        # snapshot so a downstream viewer can segment the session by
+        # cognitive cycle step.
+        if not self.cognitive_state.goal:
+            self.cognitive_state.goal = user_input
+        # PR-4 C-3 — bind the CognitiveState to the ContextVar so
+        # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
+        # → episodic memory recorder) can read the live state without
+        # being coupled to AgenticLoop directly.
+        #
+        # Lifetime: the binding is asyncio-task-scoped. Each top-level
+        # task gets its own ``contextvars.Context`` copy, so two
+        # concurrent AgenticLoops in different tasks each see their
+        # own bind. Within the same task multiple ``arun`` calls
+        # overwrite idempotently. No explicit reset is needed since
+        # the next ``arun`` overwrites and out-of-loop hook firings
+        # in the same task are not a documented use case.
+        from core.agent.cognitive_state_ctx import (
+            set_cognitive_state,
+            set_parent_session_key,
+            set_session_id,
+        )
+
+        set_cognitive_state(self.cognitive_state)
+        set_session_id(self._session_id)
+        # PR-F (2026-05-21) — sub-agent lineage. When this loop was
+        # spawned via the OpenClaw in-process spawn pattern,
+        # ``_parent_session_key`` holds the parent's routing key
+        # (e.g. ``"subject:foo:bar"`` — NOT the parent's
+        # ``_session_id`` uuid). Bind it to the ContextVar so the
+        # episodic recorder can stamp ``Episode.parent_session_key``
+        # for cross-session attribution. Empty for top-level loops.
+        # TODO(PR-F-followup): subprocess sub-agents (SubAgentManager
+        # → WorkerRequest → worker.py path) don't forward this value;
+        # child Episodes record empty. WorkerRequest needs a
+        # ``parent_session_key`` field + worker.py needs to honour it
+        # before spawning the child AgenticLoop.
+        set_parent_session_key(self._parent_session_key)
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_PERCEIVE,
+            user_input=user_input,
+        )
+
+        # Add user message to conversation context
+        self.context.add_user_message(user_input)
+
+        # Transcript: session start + user message
+        if self._transcript is not None:
+            self._transcript.record_session_start(model=self.model, provider=self._provider)
+            self._transcript.record_user_message(user_input)
+
+        # Hook: SESSION_START
+        if self._hooks:
+            await self._hooks.trigger_async(
+                HookEvent.SESSION_STARTED,
+                {
+                    "model": self.model,
+                    "provider": self._provider,
+                    "session_id": self._session_id,
+                    "resumed": len(self.context.messages) > 1,
+                },
+            )
+
+        return None
+
+    async def _dispatch_llm_call(
+        self,
+        system_prompt: str,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+        spinner: TextSpinner,
+    ) -> AgenticResponse | AgenticResult | None:
+        """PR-D Phase 2c — LLM-call dispatch + simple-exception
+        handlers extracted from ``arun``'s while-loop body.
+
+        Returns:
+          * ``AgenticResponse`` on a successful call (caller proceeds
+            with response processing).
+          * ``AgenticResult`` on ``BillingError`` or
+            ``UserCancelledError`` (caller ``return``s this verbatim).
+          * ``None`` when ``_call_llm`` returns ``None`` (caller's
+            existing error-classification path handles it).
+
+        ``_ContextExhaustedError`` is NOT caught — propagates to the
+        caller so the inline aggressive-recovery path runs with its
+        ``continue``/``finalize_and_return`` branches intact.
+
+        Side effect: stops ``spinner`` BEFORE calling
+        ``_emit_quota_panel`` (BillingError) or ``log.info``
+        (UserCancelledError) so terminal output stays clean. The
+        caller's outer ``finally`` block also stops the spinner — this
+        is the same defensive duplication the pre-refactor code had.
+        Behaviour preserved exactly.
+        """
+        try:
+            return await self._call_llm(system_prompt, messages, round_idx=round_idx)
+        except BillingError as exc:
+            spinner.stop()
+            self._emit_quota_panel(exc)
+            return AgenticResult(
+                text=exc.user_message(),
+                rounds=round_idx + 1,
+                termination_reason="billing_error",
+            )
+        except UserCancelledError:
+            spinner.stop()
+            log.info("LLM call interrupted by user")
+            return AgenticResult(
+                text="Interrupted.",
+                rounds=round_idx + 1,
+                termination_reason="user_cancelled",
+            )
+
+    async def _sync_model_and_rebuild_prompt(
+        self, system_prompt: str, decomposition_hint: str | None
+    ) -> str:
+        """PR-D Phase 2b — model-drift sync + system_prompt rebuild
+        extracted from ``arun``'s while-loop body.
+
+        Between rounds the ``settings.model`` field may have changed
+        (via the ``switch_model`` tool, the ``/model`` slash command,
+        or a config hot-reload). The drift sync detects the change
+        and rebuilds the system prompt so the next LLM call sees the
+        updated model card.
+
+        ``v0.52.5`` — ``_prompt_dirty`` catches any direct
+        ``update_model_async`` call that bypasses the drift sync;
+        without it the system_prompt model card would stay pinned to
+        the previous model after a switch.
+        ``v0.90.0`` — auto-escalation paths removed; the only such
+        callers now are user-initiated ``/model`` switches.
+
+        Returns the (possibly-rebuilt) ``system_prompt`` so ``arun``
+        can rebind its local. Side-effect: clears ``_prompt_dirty``
+        after a rebuild. Behaviour preserved exactly from the
+        pre-refactor inline block.
+        """
+        if await self._sync_model_from_settings_async() or self._prompt_dirty:
+            system_prompt = self._build_system_prompt()
+            if decomposition_hint:
+                system_prompt += "\n\n" + decomposition_hint
+            self._prompt_dirty = False
+        return system_prompt
+
+    def _check_round_guards(self, round_idx: int) -> str | None:
+        """PR-D Phase 2a — round-entry guards extracted from ``arun``.
+
+        Returns ``None`` if both guards pass (proceed with the
+        round). Returns a short string identifying the triggered
+        guard otherwise — ``arun`` breaks the while-loop on a
+        non-None response, deferring the result-construction to the
+        loop's existing wrap-up code below (mirrors the pre-refactor
+        ``break`` semantics).
+
+        Guards (Karpathy P3):
+          * ``round_limit`` — ``max_rounds > 0`` enforces; ``0`` =
+            unlimited. Round indices are 0-based, so we break when
+            ``round_idx >= max_rounds``.
+          * ``time_budget`` — ``time_budget_s > 0`` enforces;
+            ``0.0`` = no time limit. Wall clock measured against
+            ``self._loop_start_time``.
+
+        Behaviour preserved exactly from the pre-refactor inline
+        ``Guard 1`` + ``Guard 2`` blocks — this helper is a
+        *structural* extraction. PR-D Phase 2b/2c will continue
+        chipping at the god-method.
+        """
+        import time as _time
+
+        if self.max_rounds > 0 and round_idx >= self.max_rounds:
+            return "round_limit"
+        if self._time_budget_s > 0:
+            elapsed = _time.monotonic() - self._loop_start_time
+            if elapsed >= self._time_budget_s:
+                return "time_budget"
+        return None
 
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
@@ -389,36 +759,15 @@ class AgenticLoop:
                 termination_reason="billing_error",
             )
 
-        # Hook: USER_INPUT_RECEIVED (interceptor — can block input)
-        if self._hooks:
-            intercept = await self._hooks.trigger_interceptor_async(
-                HookEvent.USER_INPUT_RECEIVED,
-                {"user_input": user_input, "session_id": self._session_id},
-            )
-            if intercept.blocked:
-                return AgenticResult(
-                    text=intercept.reason, rounds=0, termination_reason="input_blocked"
-                )
-
-        # Add user message to conversation context
-        self.context.add_user_message(user_input)
-
-        # Transcript: session start + user message
-        if self._transcript is not None:
-            self._transcript.record_session_start(model=self.model, provider=self._provider)
-            self._transcript.record_user_message(user_input)
-
-        # Hook: SESSION_START
-        if self._hooks:
-            await self._hooks.trigger_async(
-                HookEvent.SESSION_STARTED,
-                {
-                    "model": self.model,
-                    "provider": self._provider,
-                    "session_id": self._session_id,
-                    "resumed": len(self.context.messages) > 1,
-                },
-            )
+        # PR-D Phase 1 — extracted session-start signals (hook
+        # interceptor / cognitive bind / transcript / SESSION_STARTED)
+        # into a single helper. Lets ``arun`` stay focused on the
+        # while-loop body. Behaviour preserved exactly — the helper
+        # returns the first ``AgenticResult`` to surface on a blocked
+        # interceptor (sole early-exit), or ``None`` on the happy path.
+        intercept_result = await self._emit_session_start_signals(user_input)
+        if intercept_result is not None:
+            return intercept_result
 
         messages = self.context.get_messages()
 
@@ -441,31 +790,27 @@ class AgenticLoop:
         self._usage_snapshot = _get_tracker().snapshot()
         round_idx = 0
         while True:
-            # Guard 1: Round limit (max_rounds > 0 enforces; 0 = unlimited)
-            if self.max_rounds > 0 and round_idx >= self.max_rounds:
+            # PR-D Phase 2a — round-entry guards extracted to a helper
+            # so ``arun``'s while-loop body shrinks toward the Claude
+            # Code declarative shape. Returning ``None`` means "no
+            # guard triggered, proceed"; a non-None reason means
+            # "break the loop and finalize". Behaviour preserved
+            # exactly — both guards still ``break`` (not return) so
+            # the loop's downstream wrap-up paths run.
+            if self._check_round_guards(round_idx) is not None:
                 break
-            # Guard 2: Time budget (Karpathy P3)
-            if self._time_budget_s > 0:
-                elapsed = _time.monotonic() - self._loop_start_time
-                if elapsed >= self._time_budget_s:
-                    break
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
-            # Model drift check: settings may have changed via switch_model tool
-            # or /model command between rounds. Apply safely before next LLM call.
-            #
-            # v0.52.5 — _prompt_dirty catches any direct ``update_model`` call
-            # that bypasses the drift sync; without it the system_prompt model
-            # card would stay pinned to the previous model after a switch.
-            # v0.90.0 — auto-escalation paths were removed; the only such
-            # callers now are user-initiated /model switches.
-            if await self._sync_model_from_settings_async() or self._prompt_dirty:
-                system_prompt = self._build_system_prompt()
-                if decomposition_hint:
-                    system_prompt += "\n\n" + decomposition_hint
-                self._prompt_dirty = False
+            # PR-D Phase 2b — model-drift sync extracted to a helper.
+            # The helper returns the possibly-rebuilt system_prompt;
+            # ``arun`` rebinds the local so the next LLM call sees the
+            # updated model card. Behaviour preserved exactly — the
+            # _prompt_dirty side-effect reset still happens inside.
+            system_prompt = await self._sync_model_and_rebuild_prompt(
+                system_prompt, decomposition_hint
+            )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)
@@ -499,6 +844,13 @@ class AgenticLoop:
                     )
                     return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
+            # PR-2 C-6 — pre-LLM-call PLAN event. See ``_emit_cognitive``.
+            await self._emit_cognitive(
+                HookEvent.COGNITIVE_PLAN,
+                round=round_idx + 1,
+                model=self.model,
+            )
+
             # Show spinner while waiting for LLM response
             # IPC mode: send structured event; direct mode: TextSpinner
             from core.ui.agentic_ui import _ipc_writer_local
@@ -512,23 +864,20 @@ class AgenticLoop:
                 _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
             _spinner.start()
             try:
-                response = await self._call_llm(system_prompt, messages, round_idx=round_idx)
-            except BillingError as exc:
-                _spinner.stop()
-                self._emit_quota_panel(exc)
-                return AgenticResult(
-                    text=exc.user_message(),
-                    rounds=round_idx + 1,
-                    termination_reason="billing_error",
+                # PR-D Phase 2c — BillingError + UserCancelledError
+                # paths extracted into a helper. The helper stops the
+                # spinner before its side-effects (emit_quota_panel,
+                # log.info) so terminal output stays clean. Returns
+                # ``AgenticResponse`` on success or ``AgenticResult``
+                # on early-exit; ``_ContextExhaustedError`` is NOT
+                # caught (keeps its complex recovery path inline
+                # because of the ``continue`` semantics).
+                _llm_outcome = await self._dispatch_llm_call(
+                    system_prompt, messages, round_idx, _spinner
                 )
-            except UserCancelledError:
-                _spinner.stop()
-                log.info("LLM call interrupted by user")
-                return AgenticResult(
-                    text="Interrupted.",
-                    rounds=round_idx + 1,
-                    termination_reason="user_cancelled",
-                )
+                if isinstance(_llm_outcome, AgenticResult):
+                    return _llm_outcome
+                response = _llm_outcome
             except _ContextExhaustedError as exc:
                 _spinner.stop()
                 log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
@@ -861,6 +1210,7 @@ class AgenticLoop:
                         "behaviour, or step you want me to focus on next?\n\n"
                         f"Most recent reasoning (truncated):\n{summary}"
                     )
+                    await self._record_text_only_round(round_idx, text=last_text)
                     result = AgenticResult(
                         text=clarification,
                         tool_calls=self._tool_processor.tool_log,
@@ -890,6 +1240,7 @@ class AgenticLoop:
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
                 messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
+                await self._record_text_only_round(round_idx, text=text)
                 reason = "forced_text" if is_last_round else "natural"
                 result = AgenticResult(
                     text=text,
@@ -899,7 +1250,7 @@ class AgenticLoop:
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-            tool_results = await self._tool_processor.process(response)
+            tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
 
             # Feature 5: Backpressure on consecutive tool failures
             # Feature 6: Convergence detection (stuck loop)

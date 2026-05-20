@@ -47,6 +47,631 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.26] — 2026-05-21
+
+> **arun god-method decomposition — Phase 2 trilogy.** 3 PRs
+> (#1387/#1388/#1389) continue PR-D Phase 1 (v0.99.25 — session-start
+> signals). Phase 2a extracted round-entry guards (round limit +
+> time budget). Phase 2b extracted model-drift sync +
+> ``system_prompt`` rebuild. Phase 2c extracted LLM-call dispatch
+> + ``BillingError`` / ``UserCancelledError`` handlers via the
+> discriminator-return pattern. All three pure structural refactors
+> with zero behavior change, Codex MCP verified end-to-end. Tests
+> 5346 → 5386 (+40 invariant tests across Phase 2a/2b/2c). Modules
+> unchanged (314 core + 48 plugins = 362). Phase 3 (response handler
+> + overthinking + convergence ~210 LOC) deferred — needs
+> sub-splitting before the next slice.
+
+### Changed
+
+- **PR-D Phase 2c — ``_dispatch_llm_call`` extraction from
+  ``arun``.** Continues the god-method decomposition (Phase 1
+  session-start / 2a round guards / 2b model-drift sync already
+  merged). Phase 2c takes the LLM-call dispatch + two simple
+  exception handlers (``BillingError`` / ``UserCancelledError``)
+  from the round body into
+  ``AgenticLoop._dispatch_llm_call(system_prompt, messages,
+  round_idx, spinner) -> AgenticResponse | AgenticResult | None``.
+  Discriminator-return pattern: ``AgenticResponse`` on success,
+  ``AgenticResult`` on early-exit (caller ``return``s verbatim),
+  ``None`` when ``_call_llm`` returned ``None`` (caller's existing
+  error-classification handles it). ``_ContextExhaustedError`` is
+  *intentionally* not caught — it propagates so the inline
+  aggressive-recovery path (``continue`` retry vs
+  ``finalize_and_return`` give-up) stays exactly where it was
+  with its complex multi-branch control flow. Spinner stop runs
+  BEFORE the side-effect calls (``_emit_quota_panel`` /
+  ``log.info``) inside the helper so terminal output stays clean
+  — same defensive duplication the pre-refactor code had (the
+  outer ``finally`` also stops the spinner). 14 invariant tests
+  pin the helper signature, all 4 outcomes (response / billing /
+  cancelled / context-exhausted-propagates), spinner-stop ordering
+  before side effects, ``arun`` discriminator return-on-AgenticResult,
+  anti-residue (per-round inline ``BillingError`` /
+  ``UserCancelledError`` handlers gone, but the session-start
+  ``_try_decompose`` BillingError handler — separate from the
+  LLM-call path — preserved), and cross-phase regression (Phase 1 /
+  2a / 2b helpers still intact). Phase 3 (response handler /
+  overthinking / convergence detection) is the larger remaining
+  slice; planned after Phase 2c lands.
+
+### Changed
+
+- **PR-D Phase 2b — ``_sync_model_and_rebuild_prompt`` extraction
+  from ``arun``.** Continues the god-method decomposition. Phase 1
+  (v0.99.24) extracted session-start signals; Phase 2a (v0.99.25)
+  extracted round-entry guards. Phase 2b takes the model-drift
+  sync + ``system_prompt`` rebuild block from the top of each
+  round (pre-refactor lines ~727-739):
+  ``_sync_model_from_settings_async()`` OR-chained with
+  ``_prompt_dirty`` → ``_build_system_prompt()`` rebuild +
+  ``decomposition_hint`` append + ``_prompt_dirty = False`` reset.
+  All of it now lives in
+  ``AgenticLoop._sync_model_and_rebuild_prompt(system_prompt,
+  decomposition_hint) -> str``. ``arun`` rebinds the local from the
+  helper's return value, preserving the exact pre-refactor
+  semantics (drift sync + dirty-flag OR-chain, rebuild path, hint
+  append with ``\n\n`` separator, dirty flag clear). 14 invariant
+  tests pin the helper signature, all 4 trigger combinations
+  (drift / dirty / both / neither — both-case verifies OR
+  short-circuit + single rebuild), rebuild side-effect, hint
+  append/skip/ignore-when-not-rebuilding, ``arun`` delegation +
+  anti-residue, and cross-phase regression (Phase 1 + 2a helpers
+  still intact). Phase 2c (LLM-call dispatch + retry budget) will
+  continue.
+
+### Changed
+
+- **PR-D Phase 2a — ``_check_round_guards`` extraction from
+  ``arun``.** Continues the god-method decomposition started in
+  v0.99.24 (PR-D Phase 1 extracted session-start signals). Phase
+  2a takes the smallest, lowest-risk slice from the while-loop
+  body: the two round-entry guards (round limit + time budget /
+  Karpathy P3). Both moved into ``AgenticLoop._check_round_guards``
+  returning ``"round_limit" | "time_budget" | None`` — ``arun``
+  ``break``s the loop when the helper returns non-None, so the
+  loop's downstream wrap-up code (final ``AgenticResult``
+  construction + ``finalize_and_return``) runs identically to
+  pre-refactor. Round-limit precedence over time-budget preserved
+  exactly. 12 invariant tests pin the helper signature, both
+  guards firing at expected boundaries, precedence ordering, no
+  spurious trigger on defaults, ``arun`` delegation with
+  ``break``-not-``return`` semantics, anti-residue (inline
+  ``Guard 1`` / ``Guard 2`` blocks gone), and reason-string
+  spellings. Phase 2b/2c will continue chipping at model-drift
+  sync, LLM-call dispatch, and response handling so the full
+  Claude Code declarative ``while + structured stop_reason``
+  pattern emerges incrementally.
+
+## [0.99.25] — 2026-05-21
+
+> **Cognitive Loop Uplift — Phase 2 sprint.** 6 PRs (#1380-#1385)
+> close the 5 concerns the post-v0.99.24 frontier matrix (Task #36)
+> identified against Hermes / Claude Code / OpenClaw:
+> **PR-A** (#1380) — `/model` role tab so operators can pick the
+> reflection-node model alongside the primary loop model.
+> **PR-B** (#1381) — reflection node migrated from free-form JSON to
+> Anthropic `tool_use` structured output (concern #4 — eliminates the
+> 5-stage forgiving parser Codex MCP caught 3× during PR-3 review).
+> **PR-C** (#1382) — `cognitive_reflection_interval` every-N-rounds
+> gate (concern #2 — 30-round session can drop 29 LLM calls).
+> **PR-D Phase 1** (#1383) — `arun` god-method decomposition starts;
+> session-start signal block extracted into a dedicated helper
+> (concern #1; zero behavior change, ~49 LOC shrink). Phase 2/3
+> follow-ups planned.
+> **PR-E** (#1384) — causal attribution × CognitiveState confidence-
+> stability term (concern #5 — joins dim-delta + belief-trajectory
+> signals; attribution_score intentionally unchanged so PR-6
+> aggregators can weight independently).
+> **PR-F** (#1385) — sub-agent `parent_session_key` lineage
+> (concern #3 — in-process spawn path wired; subprocess WorkerRequest
+> plumbing explicitly deferred per Codex MCP review).
+> Tests 5280 → 5346 (+66). Modules unchanged (314 + 48 = 362).
+
+### Added
+
+- **PR-F — sub-agent state propagation via
+  ``parent_session_key`` lineage.** Concern #3 from the post-sprint
+  frontier matrix: PR-4 bound ``CognitiveState`` + ``session_id``
+  per-task via ContextVar, but sub-agents (OpenClaw spawn pattern)
+  inherited a *fresh* cognitive context with no link back to the
+  parent. Episode rows from child loops had ``session_id=child``
+  but no record of the spawning parent, so the PR-E confidence-
+  trajectory aggregator couldn't group sub-agent rounds under the
+  parent for cross-session attribution. PR-F closes the in-process
+  spawn half of the loop. New ``get_parent_session_key`` /
+  ``set_parent_session_key`` ContextVar pair in
+  ``core/agent/cognitive_state_ctx.py`` (matches CLAUDE.md
+  reader/writer parity rule). ``AgenticLoop._emit_session_start_signals``
+  binds ``self._parent_session_key`` (already plumbed through the
+  constructor for the OpenClaw spawn pattern) into the ContextVar
+  alongside the existing ``set_cognitive_state`` /
+  ``set_session_id`` calls. ``Episode`` gains a
+  ``parent_session_key`` field (default ``""``, so older readers +
+  hand-constructed fixtures still work). The bootstrap
+  ``TOOL_EXEC_ENDED`` handler reads
+  ``get_parent_session_key()`` and stamps the value onto every
+  Episode row. Legacy JSONL rows without the field load with the
+  default empty string. 10 invariant tests pin: ContextVar default
+  + roundtrip + ``__all__`` surface; Episode field + JSONL
+  roundtrip + persistence + legacy-row tolerance; bootstrap
+  reader; AgenticLoop bind site; constructor signature
+  preservation.
+
+  Naming caveat (Codex MCP PR-F review #1 catch): the propagated
+  value is the OpenClaw *routing key* (e.g. ``"subject:foo:bar"``),
+  not the parent's ``_session_id`` uuid. The field is named
+  ``parent_session_key`` to match the data shape — an aggregator
+  that wants uuid-based linkage needs a separate
+  ``parent_session_id`` ContextVar populated from the parent's
+  ``_session_id``. Two scope-deferred follow-ups: (a) plumb
+  ``parent_session_id`` from the in-process spawner, (b) extend
+  ``WorkerRequest`` so subprocess sub-agents
+  (``SubAgentManager → worker.py`` path) also carry the parent
+  lineage — today their child Episodes record ``""``.
+
+### Added
+
+- **PR-E — causal attribution × CognitiveState confidence-stability
+  term.** Concern #5 from the post-sprint frontier matrix: PR-5's
+  ``compute_attribution`` only consumed baseline dim deltas + the
+  LLM's ``expected_dim`` commitment, ignoring the per-round
+  ``confidence`` trajectory the PR-3 reflection node produced and
+  PR-4's episodic memory persisted. Two mutations with identical
+  dim deltas but wildly different belief stability looked identical.
+  PR-E plugs the gap. ``compute_attribution`` gains an optional
+  ``confidence_trajectory`` kwarg; when supplied with ≥ 2 samples
+  the payload gains ``confidence_stability ∈ [0,1]`` (formula
+  ``1.0 - clamp(sample_stddev, 0, 1)``: 1.0 = rock-steady,
+  0.0 = wild oscillation). New helper
+  ``confidence_trajectory_from_episodes`` pulls the trajectory from
+  a list of PR-4 ``Episode`` rows (filters non-numeric / bool /
+  out-of-range entries, mirroring PR-3's bool-exclusion guard).
+  ``write_attribution`` forwards the trajectory through.
+  ``attribution_score`` is intentionally unchanged so PR-6 policy-
+  mutation aggregators can weight dim-deltas vs belief stability
+  independently. 17 invariant tests pin the stability math + the
+  episodic adapter + payload integration + write-forwarding +
+  ``__all__`` surface (42/42 with PR-5's existing causal-attribution
+  tests).
+
+### Changed
+
+- **PR-D Phase 1 — ``arun`` god-method decomposition (session-start
+  signals).** ``AgenticLoop.arun`` is 728 lines with 20+ early-exit
+  return paths — the frontier matrix (Task #36) flagged this as
+  concern #1 vs the Claude Code declarative ``while + structured
+  stop_reason`` pattern. Phase 1 extracts the *session-start signal
+  block* (USER_INPUT_RECEIVED interceptor / cognitive-state goal
+  init / ContextVar bind / COGNITIVE_PERCEIVE emit / transcript
+  ``record_session_start`` + ``record_user_message`` / SESSION_STARTED
+  hook) into a single ``_emit_session_start_signals`` helper that
+  returns ``AgenticResult | None`` — ``None`` on the happy path, the
+  ``input_blocked`` result on the sole early-exit. ``arun``'s setup
+  phase shrinks 707 → 658 AST lines (~49 LOC); control flow
+  preserved exactly (pure refactor, zero behaviour change verified
+  by Codex MCP review #1 against the pre-refactor commit). 10
+  invariant tests pin the
+  extracted ownership + verify ``arun`` no longer inlines the same
+  block (anti-residue guard). Subsequent phases will extract the
+  per-round body so the full declarative pattern emerges
+  incrementally; Phase 1 stops at the lowest-risk extraction so
+  Codex MCP can confirm zero behaviour change before larger surgery.
+
+### Added
+
+- **PR-C — ``cognitive_reflection_interval`` every-N-rounds gate.** PR-3
+  fires one extra LLM call per tool-use round (default Haiku 4.5), so
+  30-round sessions paid 30 extra calls. PR-C adds the
+  ``cognitive_reflection_interval`` settings field (default ``1`` =
+  every round, zero regression). When set to ``N > 1`` the reflection
+  node runs on rounds 1, 1+N, 1+2N, ... — the first round always
+  reflects so the loop sees an LLM-derived belief snapshot before any
+  throttling, and subsequent calls are thinned to every Nth round.
+  Operators flip via ``GEODE_COGNITIVE_REFLECTION_INTERVAL`` env var
+  or ``[cognitive] reflection_interval = N`` in ``config.toml``
+  (mapped in ``_TOML_TO_SETTINGS``). Pydantic ``ge=1`` validator
+  rejects ``0`` / negatives so the interval knob can't accidentally
+  disable reflection (operators should use the explicit
+  ``cognitive_reflection_enabled`` toggle instead).
+  ``_maybe_reflect`` clamps to 1 as defence-in-depth in case a
+  downstream bypasses the validator via ``object.__setattr__``.
+  10 invariant tests pin the field / TOML map / validator + 5
+  behavioural scenarios (interval=1/3/5/30, disabled-toggle
+  short-circuit).
+
+### Changed
+
+- **PR-B — reflection node uses ``tool_use`` structured output.** Pre-
+  PR-B ``core/agent/loop/_reflection.py`` told the LLM "Return ONLY
+  this JSON, no prose" and ran a 5-stage forgiving parser
+  (``_parse_reflection`` + ``_extract_first_json_object`` with
+  fence strip + prose-prefix extraction + string-aware brace counting)
+  to recover from the contract drift the LLM inevitably caused.
+  Codex MCP caught parser gaps three times during the PR-3 review
+  rounds. PR-B replaces the entire fragile path with the same
+  ``tool_use`` contract every provider-aware GEODE caller already
+  uses: declare a ``record_reflection`` tool with a JSON
+  ``input_schema`` (``hypotheses[<=5]`` / ``confidence ∈ [0,1]`` /
+  ``next_action_hint``) + ``strict: True`` opt-in for the Anthropic
+  strict-tool-input validator, dispatch with the canonical
+  ``tool_choice="any"`` (= must use SOME declared tool; with only
+  one declared this effectively forces ``record_reflection`` while
+  staying compatible with Anthropic adaptive thinking on Opus 4.7),
+  and read the parsed ``input`` dict directly off the
+  ``ToolUseBlock``. ``_apply_reflection`` keeps its schema-typed
+  casts (incl. the ``bool``-exclusion guard mirroring PR-5's
+  mutator fix) so a non-Anthropic provider in the dispatcher fork
+  can't poison state. Eliminates ~80 lines of parsing fallback + 4
+  parser-edge-case tests; replaces them with 4
+  ``_extract_reflection_input`` resolver tests and 1 wire-up
+  invariant test pinning that ``reflect_async`` passes the tool
+  schema + ``tool_choice="any"`` to the adapter. Public surface
+  exposes ``REFLECTION_TOOL_NAME`` so transcript renderers / debug
+  tools can grep without importing the private dict.
+
+- **PR-B fix-up — Codex provider routes ``tool_choice`` through
+  the cross-provider normaliser.** Pre-fix
+  ``core/llm/providers/codex.py:309`` grabbed
+  ``tool_choice.get("type")`` and passed the literal value straight
+  through to the Responses API, dropping the forced-tool name
+  (``{"type": "tool", "name": "X"}`` → ``"tool"``) and rejecting
+  canonical aliases like ``"any"``. Any forced-tool caller (the
+  PR-B reflection node was the first) hit silent no-ops on the
+  ``openai-codex`` provider. Codex MCP review #1 caught the gap.
+  Fix routes through :func:`core.llm.tool_choice.normalize` (same
+  as the OpenAI/GLM adapters) so ``"auto"`` / ``"any"`` /
+  named-tool forcing translate to the right OpenAI/Responses
+  shapes.
+
+- **PR-B fix-up — Anthropic ``_API_ALLOWED_KEYS`` adds ``strict``;
+  reflection drops to ``tool_choice="auto"``.** Codex MCP review #2
+  caught: (a) ``strict: True`` was being stripped from the tool
+  definition before the Anthropic API call because the allow-list
+  filter omitted ``"strict"``; (b) ``tool_choice="any"`` (and any
+  named-tool forcing) is *also* incompatible with Anthropic
+  extended/adaptive thinking, not just the ``{"type": "tool"}``
+  shape — only ``"auto"`` works across every model + thinking
+  regime. Reflection now passes ``tool_choice="auto"``; with one
+  tool declared and a strong system prompt the LLM still calls it
+  on the happy path, and the rare decline is handled by
+  ``_extract_reflection_input`` returning ``None`` + WARN.
+
+### Added
+
+- **PR-A — ``/model`` role tab for reflection-model selection.** Pre-
+  PR-A the picker only set ``settings.model`` (primary agentic loop).
+  The PR-3 C-2 reflection node had a knob
+  (``settings.cognitive_reflection_model``) but no runtime UI —
+  operators had to edit ``~/.geode/config.toml`` or
+  ``GEODE_COGNITIVE_REFLECTION_MODEL`` and restart. New
+  ``AGENT_ROLES`` registry in ``core/cli/commands/_state.py``
+  declares each LLM-driven role (currently ``primary`` +
+  ``reflection``; mutator/judge are follow-ups) with its settings
+  field, env var, and ``config.toml (section, key)``. ``/model``
+  interactive picker draws a Tab-cyclable tab strip at the top so a
+  single Enter persists to the focused role's knob.
+  ``/model reflection <name>`` (or ``/model reflection`` for the
+  picker focused on that tab) is the explicit non-interactive path.
+  The non-tty fallback list now annotates each model with per-role
+  markers (``P←`` primary, ``R←`` reflection) so curl-driven callers
+  see both selections at once. ``PickerResult`` gains a ``role``
+  field (default ``"primary"`` for backward compat). The
+  context-window guard runs only for primary (reflection's clean-
+  context discipline from PR-3 sidesteps the main loop's context
+  size). 14 invariant tests pin registry / signature / dispatcher /
+  reflection-branch persistence / role-prefix parsing.
+
+## [0.99.24] — 2026-05-21
+
+> **Cognitive Loop Uplift Sprint** — 6 PRs (#1373 / #1374 / #1375 /
+> #1376 / #1377 / #1378) close the gap between the self-improving
+> loop's *prompt-only* mutation surface and a full PERCEIVE → PLAN →
+> ACT → OBSERVE → REFLECT → UPDATE_MEMORY cognitive cycle. PR-1 fills
+> the paperclip-style abstraction gap so the mutator shares the
+> credential rotator. PR-2 introduces the `CognitiveState` container
+> and 6 cognitive `HookEvent` taxa. PR-3 wires an LLM-driven
+> reflection node that populates hypotheses + confidence. PR-4
+> persists action → outcome triples to a rolling episodic ledger.
+> PR-5 adds paired-baseline 95% CI causal attribution per applied
+> mutation. PR-6 expands the mutation target from "wrapper prompt
+> only" to five policy SoTs (prompt / tool_policy / decomposition /
+> retrieval / reflection). Modules 356 → 362 (+6), tests 5082 →
+> 5280 (+198).
+
+### Added
+
+- **PR-6 C-5 — policy mutation expansion (5 target kinds).** Pre-PR-6
+  the self-improving loop's mutation target was only the wrapper
+  prompt (``wrapper-sections.json``); tool selection, decomposition,
+  retrieval, and reflection policies were hard-coded and never
+  participated in self-improvement. New
+  ``core/self_improving_loop/policies.py`` introduces four sibling
+  ``dict[str, str]`` SoT files under
+  ``~/.geode/self-improving-loop/``: ``tool-policy.json`` /
+  ``decomposition.json`` / ``retrieval.json`` / ``reflection.json``.
+  The ``Mutation`` dataclass gains a ``target_kind`` field
+  (default ``"prompt"`` for backward compatibility); ``apply_mutation``
+  dispatches by kind — ``prompt`` still uses
+  ``autoresearch.train.write_wrapper_prompt_sections`` (schema
+  enforcement preserved), the other four kinds go through the new
+  ``write_policy`` (atomic temp-file rewrite, dir auto-created).
+  ``parse_mutation`` extracts the field with graceful fallback
+  (missing → ``prompt``, whitespace-only → ``prompt``, unknown →
+  ``ValueError``). Mutation contract suffix in the system prompt
+  documents the new field. ``to_audit_row`` carries ``target_kind``
+  so attribution downstream can group rows by policy family. Voyager-
+  style execution of the four new SoTs (curriculum + skill library
+  + critic) lands as a follow-up; PR-6 stops at the file format +
+  dispatcher so the infrastructure is committed first.
+
+- **PR-5 C-4 — causal attribution for applied mutations.** Pre-PR-5
+  ``mutations.jsonl`` recorded *what* changed (target section, new
+  value, rationale) but not *what happened next* — only the binary
+  ``audit_failed → rollback`` signal. The ``Mutation`` dataclass now
+  carries three new fields: ``mutation_id`` (uuid hex, auto-generated
+  when the LLM doesn't supply one), ``expected_dim`` (per-dim
+  expected delta the LLM commits to, e.g. ``{"safety": +0.3,
+  "helpfulness": -0.05}``), and ``rollback_condition`` (free-text
+  predicate for revert eligibility). ``parse_mutation`` extracts the
+  new fields with schema-typed casts (non-numeric ``expected_dim``
+  entries silently dropped, missing fields fall through to defaults
+  so older LLM responses still parse). The mutation-contract suffix
+  in the system prompt documents the new fields so the LLM knows to
+  emit them. ``Mutation.to_audit_row`` now tags each applied row
+  with ``kind="applied"`` so attribution rows can sit alongside in
+  the same JSONL.
+
+- **PR-5 C-4 — attribution module.** New
+  ``core/self_improving_loop/attribution.py`` computes per-dim
+  ``observed_dim`` (signed delta = ``after.dim_means -
+  before.dim_means``), per-dim 95% CI half-width using the paired-
+  baseline formula ``1.96 * sqrt(stderr_before² + stderr_after²)``
+  (Karpathy autoresearch §5 ratchet pattern), per-dim
+  ``significant`` flag (``abs(delta) > ci95``), and a scalar
+  ``attribution_score ∈ [-1, 1]`` aggregating
+  ``sign(expected) * observed`` across the operator's expected dims.
+  Missing baseline (autoresearch can drop the snapshot mid-loop, or
+  the first audit has no "before") returns a complete-shape payload
+  with ``missing_baseline=True`` and empty per-dim dicts — the row is
+  still written to record the *absence* of signal.
+  ``write_attribution`` is the one-call convenience wrapper that
+  computes + appends to ``mutations.jsonl`` as a separate row with
+  ``kind="attribution"`` and the same ``mutation_id`` as the applied
+  row. Aggregation by ``mutation_id`` lets PR-6 (policy mutation)
+  compute long-term success rates without changing the file format.
+
+- **PR-4 C-3 — episodic action-outcome memory.** Pre-PR-4
+  ``core.memory`` carried four memory types (user / project /
+  feedback / reference) but had no place to record action → outcome
+  triples. New ``core/memory/episodic.py`` introduces an append-only
+  JSONL ledger at ``~/.geode/memory/episodes.jsonl`` (constants
+  ``GLOBAL_MEMORY_DIR`` + ``GLOBAL_EPISODES_LOG`` in ``core/paths.py``)
+  with one row per tool execution: ``timestamp_ns / session_id /
+  round / tool_name / tool_input_head (200 chars) / success / error
+  (200 chars) / duration_ms / cognitive_state`` snapshot. Rolling
+  cap of 1000 rows with 25%-overshoot rotation tolerance (atomic
+  temp-file rewrite so concurrent readers never see a partial file).
+  Retrieval API ``EpisodicStore.recent(*, tool_name, session_id,
+  limit)`` returns newest-first, defensively skips malformed rows
+  with a WARN. Process-global singleton via ``get_episodic_store`` /
+  ``set_episodic_store`` (test seam).
+
+- **PR-4 C-3 — ContextVar bridge for the active cognitive state.**
+  Hooks fired from inside the tool executor (TOOL_EXEC_ENDED → the
+  episodic recorder) need both ``CognitiveState`` and ``session_id``
+  but the executor knows neither. New
+  ``core/agent/cognitive_state_ctx.py`` exposes paired get/set
+  accessors (CLAUDE.md "ContextVar injection" rule — every
+  ``get_*()`` has a corresponding ``set_*()``). ``AgenticLoop.arun``
+  binds both at session start; the bootstrap hook reads them when
+  recording each episode.
+
+- **PR-4 C-3 — bootstrap TOOL_EXEC_ENDED handler.**
+  ``core/wiring/bootstrap.py`` registers the
+  ``episodic_memory_recorder`` plugin (priority 70, observer) — fires
+  after the interceptor chain but before audit loggers. Writes one
+  Episode per tool execution including the cognitive-state snapshot
+  read from the ContextVar. ``OSError`` during append is swallowed
+  with a WARN so a full disk can't crash the agentic loop.
+
+- **PR-3 C-2 — reflection node (LLM-driven belief update after the
+  tool batch).** Pre-PR-3 the loop went tool result → next action with
+  no explicit belief-update step; ``CognitiveState.hypotheses`` and
+  ``CognitiveState.confidence`` were declared in PR-2 but never
+  populated. New ``core/agent/loop/_reflection.py`` runs one LLM call
+  after every tool-use round (skipped on text-only rounds — nothing to
+  reflect on). The call sees only a compact state snapshot + tool-
+  result summary (clean-context discipline) and returns a small JSON
+  object: ``hypotheses[<=5]`` (each <= 120 chars), ``confidence ∈
+  [0,1]``, and ``next_action_hint`` (pushed into ``subgoals``, rolling
+  cap 5). Errors are swallowed inside ``reflect_async`` — the loop
+  stays robust to a flaky reflection model. Dispatch goes through
+  ``core.llm.router.call_with_failover`` so the credential rotator is
+  shared with every other provider-aware caller (paperclip-style
+  abstraction from PR-1 G-A). Three new settings knobs control the
+  node: ``cognitive_reflection_enabled`` (bool, default True),
+  ``cognitive_reflection_model`` (default
+  ``claude-haiku-4-5-20251001`` — cheapest Claude that still follows
+  the JSON schema), ``cognitive_reflection_max_tokens`` (int, default
+  512). All three accept env-var (``GEODE_COGNITIVE_REFLECTION_*``) and
+  ``config.toml`` (``[cognitive] reflection_*``) overrides via
+  ``_TOML_TO_SETTINGS``. The reflection step fires between
+  ``record_round`` and the ``COGNITIVE_REFLECT`` hook event so
+  downstream listeners see the LLM-derived belief update, not the
+  deterministic post-record_round snapshot.
+
+- **PR-2 C-1 — explicit ``CognitiveState`` container attached to the
+  agentic loop.** Pre-PR-2 the loop kept cognitive state implicit
+  inside ``ConversationContext.messages`` — there was no named place
+  for *goal*, *subgoals*, *observations*, *hypotheses*, *confidence*,
+  *last_action*, *last_observation*, or *round_count*, so downstream
+  cognitive features (reflection / episodic memory / causal
+  attribution) had nowhere to read from. New
+  ``core/agent/cognitive_state.py`` introduces an 8-field dataclass
+  (3-codebase consensus: OpenClaw ``Session.context.state``, Hermes
+  ``AgentMemory``, autoresearch ``RunState``). ``AgenticLoop.__init__``
+  instantiates it; ``arun`` sets ``goal`` on the first turn and calls
+  ``record_round(action, observation)`` at every *normal* round exit
+  — tool-use completion via ``_run_cognitive_act_observe_cycle`` and
+  text-only completion via ``_record_text_only_round``. Abnormal
+  exits (billing error, context exhausted, convergence break,
+  model_action_required) intentionally skip the bookkeeping so
+  ``round_count`` reflects fully-executed rounds, not aborted ones;
+  PR-3+ may add error-handling cognitive state if needed. Rolling
+  cap of 32 observations keeps the snapshot bounded. ``to_snapshot()``
+  returns a *defensive-copy* dict so telemetry consumers cannot mutate
+  the live state through the snapshot. 4 fields (``subgoals`` /
+  ``hypotheses`` / ``confidence`` + the LLM-summary form of
+  ``observations``) stay empty until PR-3 wires the reflection node;
+  this is intentional scope split, not stub disguise — the field set
+  is pinned at 8 by an invariant test so a future PR can't add a 9th
+  without an explicit plan amendment.
+
+- **PR-2 C-6 — 6 cognitive-cycle ``HookEvent`` members + emit sites
+  in the agentic loop.** ``COGNITIVE_PERCEIVE`` /
+  ``COGNITIVE_PLAN`` / ``COGNITIVE_ACT`` / ``COGNITIVE_OBSERVE`` /
+  ``COGNITIVE_REFLECT`` / ``COGNITIVE_UPDATE_MEMORY`` are now first-
+  class hook events (string values prefixed ``cognitive_`` so log
+  filters / transcript renderers / Petri dashboards group them with a
+  single match). ``AgenticLoop._emit_cognitive`` is the shared
+  emitter — it injects ``session_id`` and embeds a fresh
+  ``cognitive_state.to_snapshot()`` in every payload so a downstream
+  viewer can replay state evolution without re-parsing the
+  transcript. ``_run_cognitive_act_observe_cycle`` extracts the
+  ACT → process → OBSERVE → ``record_round`` → REFLECT →
+  UPDATE_MEMORY block from ``arun`` so the run-loop stays within the
+  ruff complexity gates while preserving the cognitive-cycle event
+  ordering. Text-only rounds (``stop_reason != "tool_use"`` —
+  natural / forced_text / user_clarification_needed) go through
+  ``_record_text_only_round`` instead: ACT/OBSERVE are intentionally
+  skipped (no tool ran), only REFLECT + UPDATE_MEMORY fire, and
+  ``last_action`` is tagged ``"text-only"`` so a downstream viewer
+  can distinguish no-action turns from failed-tool turns.
+
+- **Cognitive loop uplift sprint plan
+  (`docs/plans/2026-05-21-cognitive-loop-uplift.md`).** Maps every
+  hardcoded model/harness selection point in the self-improving loop
+  (Tier A-E matrix from the 2026-05-21 audit) and the six cognitive
+  enhancement directives (CognitiveState, reflection node, episodic
+  action-outcome memory, causal attribution, policy mutation
+  extension, cognitive loop telemetry) into 10 work items across
+  6 PRs with Socratic gates, verification metrics, and Codex MCP
+  review checkpoints. PR-1 (this commit) closes the five paperclip-
+  style abstraction gaps (G-A through G-E).
+
+- **PR-1 G-A — ``[self_improving_loop.mutator]`` manifest section +
+  mutator routed through ``core.llm.router.call_with_failover``.**
+  Pre-fix ``core/self_improving_loop/runner.py:_default_llm_call``
+  instantiated ``anthropic.Anthropic()`` directly and pinned
+  ``model="claude-opus-4-7"`` as a literal, so the self-improving
+  loop's mutation step bypassed the credential rotator every other
+  GEODE caller shares. New ``MutatorConfig`` (``default_model`` /
+  ``allowed_models`` / ``source`` / ``role_contract`` /
+  ``max_tokens``) lives under ``[self_improving_loop.mutator]`` —
+  same shape as ``[seed_generation.role.<X>]`` and
+  ``[petri.role.<X>]``. A pydantic ``model_validator`` rejects a
+  ``default_model`` outside ``allowed_models`` at load time so the
+  allow-list is enforced before the runner sees the config.
+  ``_default_llm_call`` reads the model id from ``MutatorConfig``,
+  validates it against ``allowed_models`` again as a defence-in-
+  depth, resolves the provider via ``_resolve_provider``, dispatches
+  through ``resolve_agentic_adapter`` +
+  ``core.llm.router.call_with_failover`` (single-element model list
+  for now — opt-in chain expansion is a follow-up), concatenates the
+  normalised ``AgenticResponse`` text blocks, and raises explicitly
+  on empty text so ``parse_mutation`` doesn't surface the failure as
+  a confusing JSON error.
+
+- **PR-1 G-D — ``settings.learning_extract_model`` knob.** The GLM
+  free-tier hook in ``core/hooks/llm_extract_learning.py`` no longer
+  hardcodes ``model="glm-4.7-flash"``; it reads the new settings
+  field (default ``glm-4.7-flash``, overridable via
+  ``GEODE_LEARNING_EXTRACT_MODEL`` env var or
+  ``[llm] learning_extract_model`` in ``config.toml``).
+
+### Changed
+
+- **PR-1 G-E — ``settings.model`` / ``settings.router_model``
+  defaults bumped from ``claude-opus-4-6`` to ``claude-opus-4-7`` to
+  match ``routing.toml [model.defaults] anthropic``
+  (``ANTHROPIC_PRIMARY`` constant). Operators with ``GEODE_MODEL`` /
+  ``[llm] primary_model`` overrides are unaffected; this fixes the
+  silent default drift only.
+
+### Fixed
+
+- **PR-1 G-C — invariant test pins ``autoresearch/program.md``
+  example log to ``AutoresearchConfig`` defaults.** The example
+  audit-log block in the program doc (lines ~180-181) hardcodes
+  ``target_model: geode/gpt-5.5`` and ``judge_model: claude-code/opus``;
+  the new
+  ``tests/test_self_improving_loop_gap_fill.py::test_program_md_example_log_matches_config_defaults``
+  fails CI if the doc and the config default ever drift apart, so a
+  config change forces a doc refresh in the same PR.
+
+- **PR-1 G-B (invariant pin)** —
+  ``tests/test_self_improving_loop_gap_fill.py`` pins that
+  ``autoresearch.train._build_audit_command`` reads
+  ``cfg.target_model`` / ``cfg.judge_model`` from
+  ``AutoresearchConfig`` (PR-δ1 wiring); a regression that
+  re-introduces the module-constant path would fail the test.
+
+## [0.99.23] — 2026-05-20
+
+Model-UX governance gap closure — final slice covering the items deferred
+from v0.99.22 (M3 / L1 already done in earlier versions; L2 / L4 / X1.1
+new in this release; X2 stays deferred pending operator decision).
+
+### Added
+
+- **X1.1 — full multi-rank auth ordering on top of X1's single-active
+  pin.** Closes the deferred slice of the X1 governance gap. New
+  ``ProfileStore.set_auth_order(provider, names)`` /
+  ``get_auth_order`` / ``clear_auth_order`` carry an ordered list of
+  profile names; ``ProfileRotator.resolve`` walks them in order before
+  falling back to the legacy ``sort_key`` tail. Missing or ineligible
+  entries gracefully step aside without starving lower ranks.
+  ``set_auth_order`` writes the head element to ``_pinned_active`` so
+  X1's ``/login`` ``(active)`` badge stays in sync. CLI:
+  ``/login order set <provider> <name1> [<name2> …]`` registers the
+  list; ``/login order clear <provider>`` drops it (back to LRU);
+  ``/login order [<provider>]`` now annotates ``active`` (rank 1) /
+  ``ranked`` (rank 2+) / ``queued`` (tail) / ``<reject_reason>``
+  (ineligible) per row. 13 new tests in
+  ``tests/test_login_auth_order_multi.py`` pin the store API
+  (set/get/clear + KeyError/ValueError surfaces), the rotator's
+  multi-rank walk + step-aside contract, and the CLI command paths.
+
+- **L2 — ``/login refresh`` console output.** Closes the governance
+  gap noted in ``docs/research/model-ux-governance.md`` (L2: *success
+  silent (logged but no console)*). Pre-fix the refresh branch only
+  emitted ``log.info`` records, so a REPL operator running
+  ``/login refresh`` saw nothing on stdout and could not tell whether
+  the daemon had picked up the new plan / profile. The success branch
+  now surfaces an ``auth.toml reloaded +N plan / +M profile`` line
+  with per-entry muted bullets; the no-change path prints a muted
+  "no new plans or profiles" line; the failure path prints a warning
+  pointing at the daemon log for the traceback. Logs preserved
+  (``log.info`` still records the same counts).
+
+- **L4 — ``/key`` (no args) inline migration guide.** Closes the
+  governance gap noted in ``docs/research/model-ux-governance.md``
+  (L4: *redirect msg 만, 가이드 부재*). Pre-fix ``/key`` (no args)
+  printed a single muted line and redirected to ``/login``, leaving
+  the operator without a learning surface for the new commands. The
+  redirect now carries a small migration table — ``/key <sk-...>`` →
+  ``/login add``, ``/key openai <key>`` → ``/login set-key openai-payg
+  <key>``, ``/key glm <key>`` → ``/login set-key glm-payg <key>`` —
+  plus a pointer to ``/login providers`` for the full variant table.
+
+### Notes — X2 still deferred
+
+X2 (system prompt model identity injection, v0.52.8) remains pending an
+operator decision among (A) keep as-is, (B) weaken to align with
+reference harnesses, (C) Codex-only assertion. The v0.52.5 incident's
+fix-2 (stale ack purge) is independent of this knob and stays.
+
 ## [0.99.22] — 2026-05-20
 
 ### Added

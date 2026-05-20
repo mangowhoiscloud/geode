@@ -61,7 +61,26 @@ GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs
 # (no env var required).
 GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "wrapper-sections.json"
+# PR-6 C-5 (2026-05-21) — policy mutation SoT files. Each
+# ``target_kind`` (tool_policy / decomposition / retrieval /
+# reflection) gets its own ``dict[str, str]`` JSON file alongside
+# ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
+# sections path so older mutation rows replay correctly; the others
+# land in fresh files because they evolve independently. Read /
+# written by :mod:`core.self_improving_loop.policies`.
+GLOBAL_TOOL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
+GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
+GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "retrieval.json"
+GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
+# PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
+# (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per
+# tool execution with (timestamp, session_id, tool_name, tool_input,
+# success/error, cognitive_state snapshot). Rolling cap of
+# ``EPISODE_LOG_MAX_ROWS`` keeps the file bounded. Read by
+# :class:`core.memory.episodic.EpisodicStore` retrieval API.
+GLOBAL_MEMORY_DIR = GEODE_HOME / "memory"
+GLOBAL_EPISODES_LOG = GLOBAL_MEMORY_DIR / "episodes.jsonl"
 # P1-F (2026-05-17) — per-user Petri audit role × model × source override.
 # Read by ``plugins.petri_audit.user_overrides`` and merged into the
 # binding resolver. Kept as a separate TOML (rather than wedged into
