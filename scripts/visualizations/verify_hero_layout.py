@@ -110,11 +110,11 @@ SITES: tuple[Site, ...] = (
     Site(
         "fitness_formula",
         "",
-        14,
-        3.5,
-        0.4,
-        text_string_en="fitness = Σ wᵢ × (10 − dim_meansᵢ) / 10",
-        text_string_ko="fitness = Σ wᵢ × (10 − dim_meansᵢ) / 10",
+        13,
+        6.0,
+        0.5,
+        text_string_en="fitness = Σᵢ wᵢ · score(dim_meansᵢ) + w_stab · stability",
+        text_string_ko="fitness = Σᵢ wᵢ · score(dim_meansᵢ) + w_stab · stability",
     ),
 )
 

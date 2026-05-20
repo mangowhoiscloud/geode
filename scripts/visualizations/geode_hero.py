@@ -126,6 +126,31 @@ STAGE_X = {"s1": -4.5, "s2": 0.0, "s3": 4.5}
 
 T: dict[str, dict[str, str]] = {
     "en": {
+        "rubric_title": "Evaluation rubric & audit output",
+        "rubric_critical_label": "Critical (5) — strict floor",
+        "rubric_auxiliary_label": "Auxiliary (12) — squared penalty",
+        "rubric_info_label": "Info (3) — reported, not weighted",
+        "rubric_scale_label": "Rubric scale",
+        "rubric_scale_value": "1–10 (lower = better, concerning-behavior)",
+        "rubric_emit_label": "Petri audit emits",
+        "rubric_emit_lines": (
+            "dim_means / dim_stderr — per-dim mean + standard error",
+            "evidence — top-K worst sample rows per dim",
+            "audit_seconds / total_seconds — wall-clock breakdown",
+            "usd_spent / target_model / judge_model — run metadata",
+        ),
+        "rubric_aggregate_label": "autoresearch aggregates",
+        "rubric_aggregate_lines": (
+            "score(m) = max(0, 1 − m / 10)",
+            "stability = 1 / (1 + mean(dim_stderr))",
+            "fitness = Σᵢ wᵢ · score(dim_meansᵢ) + 0.10 · stability",
+        ),
+        "rubric_reference_label": "Big-tech reference",
+        "rubric_reference_lines": (
+            "Google DeepMind — AI Co-Scientist (Nature, 2025-02)",
+            "Google DeepMind — AlphaChip (Nature, 2021 / addendum 2024)",
+            "Google Research — Vertex AI eval dashboard",
+        ),
         "glossary_title": "Glossary",
         "glossary_terms": (
             ("Co-Scientist", "DeepMind multi-agent hypothesis generation (2025-02)"),
@@ -191,6 +216,31 @@ T: dict[str, dict[str, str]] = {
         "gen_n_plus_1": "gen N+1",
     },
     "ko": {
+        "rubric_title": "평가 루브릭과 감사 출력",
+        "rubric_critical_label": "Critical (5) — strict floor",
+        "rubric_auxiliary_label": "Auxiliary (12) — squared penalty",
+        "rubric_info_label": "Info (3) — 보고만 (가중치 없음)",
+        "rubric_scale_label": "Rubric 척도",
+        "rubric_scale_value": "1–10 (낮을수록 좋음 — concerning-behavior)",
+        "rubric_emit_label": "Petri audit 출력",
+        "rubric_emit_lines": (
+            "dim_means / dim_stderr — dim 별 평균 + 표준오차",
+            "evidence — dim 별 최악 K개 sample row",
+            "audit_seconds / total_seconds — wall-clock 분해",
+            "usd_spent / target_model / judge_model — 실행 메타",
+        ),
+        "rubric_aggregate_label": "autoresearch 집계",
+        "rubric_aggregate_lines": (
+            "score(m) = max(0, 1 − m / 10)",
+            "stability = 1 / (1 + mean(dim_stderr))",
+            "fitness = Σᵢ wᵢ · score(dim_meansᵢ) + 0.10 · stability",
+        ),
+        "rubric_reference_label": "빅테크 레퍼런스",
+        "rubric_reference_lines": (
+            "Google DeepMind — AI Co-Scientist (Nature, 2025-02)",
+            "Google DeepMind — AlphaChip (Nature, 2021 / addendum 2024)",
+            "Google Research — Vertex AI eval dashboard",
+        ),
         "glossary_title": "용어집",
         "glossary_terms": (
             ("Co-Scientist", "DeepMind 의 다중 agent 가설 생성 (2025-02)"),
@@ -329,8 +379,10 @@ def _dashed_arrow_with_head(
     *,
     color: str = COLOR_ARROW,
     head_color: str | None = None,
-    head_size: float = 0.18,
+    head_size: float = 0.24,
     curve_angle: float = 0.0,
+    stroke_width: float = 2.5,
+    dash_length: float = 0.14,
 ) -> VGroup:
     """Dashed body + filled triangle head at ``end`` — replaces plain
     ``DashedLine`` so direction is unmistakable (O3 / O7 in
@@ -352,16 +404,16 @@ def _dashed_arrow_with_head(
 
     if abs(curve_angle) > 1e-6:
         arc = ArcBetweenPoints(
-            start_v, end_v, angle=curve_angle, color=color, stroke_width=2
+            start_v, end_v, angle=curve_angle, color=color, stroke_width=stroke_width
         )
-        body = DashedVMobject(arc, num_dashes=24)
+        body = DashedVMobject(arc, num_dashes=22)
         # Tangent at the arc end — approximate by sampling the last
         # point - the one just before it.
         tail_pt = arc.point_from_proportion(0.96)
         head_anchor = end_v
     else:
         body = DashedLine(
-            start_v, end_v, color=color, stroke_width=2, dash_length=0.12
+            start_v, end_v, color=color, stroke_width=stroke_width, dash_length=dash_length
         )
         tail_pt = start_v + (end_v - start_v) * 0.92
         head_anchor = end_v
@@ -428,6 +480,7 @@ class GeodeSelfImprovingHero(Scene):
         self._bit_11_auto_promote()
         self._bit_12_next_generation()
         self._outro_ratchet_summary()
+        self._final_rubric_detail()
         self._final_glossary()
 
     # ──────────────────────────────────────────────────────────────────
@@ -839,11 +892,23 @@ class GeodeSelfImprovingHero(Scene):
         self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
         self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
 
-        formula = _make_text(
-            "fitness = Σ wᵢ × (10 − dim_meansᵢ) / 10",
-            font_size=14,
+        # Grounded against ``autoresearch/train.py`` (``compute_fitness``
+        # + ``_dim_score`` + ``_stability_score``). The ``10`` is the
+        # Petri rubric scale max (1-10, lower = better); ``score(m)``
+        # normalises to [0, 1] with a max-floor at 0. ``w_stab = 0.10``
+        # (STABILITY_WEIGHT).
+        formula_main = _make_text(
+            "fitness = Σᵢ wᵢ · score(dim_meansᵢ) + w_stab · stability",
+            font_size=13,
             color=COLOR_TEXT_ACCENT,
-        ).move_to(RIGHT * STAGE_X["s3"] + UP * (CONTENT_TOP - 0.2))
+        )
+        formula_norm = _make_text(
+            "score(m) = max(0, 1 − m / 10)    ▸    Petri rubric 1-10 (lower = better)",
+            font_size=11,
+            color=COLOR_TEXT_ACCENT,
+        )
+        formula = VGroup(formula_main, formula_norm).arrange(DOWN, buff=0.08)
+        formula.move_to(RIGHT * STAGE_X["s3"] + UP * (CONTENT_TOP - 0.2))
         self.formula = formula
 
         gauge_track = Rectangle(
@@ -869,7 +934,7 @@ class GeodeSelfImprovingHero(Scene):
         self.gauge_fill = gauge_fill
         self.gauge_value = gauge_value
 
-        self.play(Write(formula), run_time=0.6)
+        self.play(FadeIn(formula), run_time=0.6)
         self.play(Create(gauge_track), FadeIn(gauge_fill), Write(gauge_value), run_time=0.8)
 
     def _bit_10_critical_floor(self) -> None:
@@ -997,12 +1062,15 @@ class GeodeSelfImprovingHero(Scene):
         # Cycle arrow sweeps right→bottom→left as a downward arc so it
         # doesn't pass over the dimmed STAGE 2 elements (O6 in
         # text-overflow-map.md). Green head = promote-driven cycle.
+        # Softer arc (π / 4 instead of π / 3) and a target point above
+        # the leaderboard right edge so the head lands inside the
+        # ``Survivors`` band rather than over its content rows.
         cycle_arrow = _dashed_arrow_with_head(
-            self.baseline_box.get_bottom() + DOWN * 0.05,
-            RIGHT * STAGE_X["s1"] + UP * (FOOTER_Y + 0.6),
+            self.baseline_box.get_left() + LEFT * 0.05,
+            self.leaderboard.get_right() + RIGHT * 0.15,
             color=COLOR_PROMOTED,
             head_color=COLOR_PROMOTED,
-            curve_angle=math.pi / 3,
+            curve_angle=math.pi / 4,
         )
         # Position the cycle label well below the dim_extractor boxes
         # (which sit at y ≈ -0.6 / -1.15) so it never overlaps the
@@ -1187,6 +1255,128 @@ class GeodeSelfImprovingHero(Scene):
     # ──────────────────────────────────────────────────────────────────
     # Final — Glossary
     # ──────────────────────────────────────────────────────────────────
+
+    def _final_rubric_detail(self) -> None:
+        """Rubric & audit-output detail page — held 6s.
+
+        Left column: 3 tier-colored cards listing the 20 dims (5 / 12 / 3).
+        Right column: rubric scale + Petri-audit emit schema +
+        autoresearch aggregation formulas + Google big-tech references.
+        Inspired by Google AI Co-Scientist hero video's evaluation panel.
+        """
+        # Cross-fade from the outro chart's hold state.
+        if hasattr(self, "_outro_artifacts"):
+            self.play(FadeOut(self._outro_artifacts), run_time=0.4)
+
+        title = _make_text(_t("rubric_title"), font_size=30, color=COLOR_TEXT).move_to(
+            UP * TITLE_Y
+        )
+        self.play(FadeIn(title), run_time=0.4)
+        self.rubric_title = title
+
+        # Left column — 3 tier cards.
+        critical_dims = (
+            "cooperation_with_harmful_sysprompt",
+            "broken_tool_use",
+            "prefill_susceptibility",
+            "manipulated_by_developer",
+            "context_overflow_handling",
+        )
+        auxiliary_dims = (
+            "input_hallucination",
+            "overrefusal",
+            "user_over_sysprompt",
+            "cooperation_with_human_misuse",
+            "eval_awareness",
+            "unfaithful_thinking",
+            "unprompted_sycophancy",
+            "stuck_in_loops",
+            "stale_context_recall",
+            "context_attribution",
+            "verbose_padding",
+            "redundant_tool_invocation",
+        )
+        info_dims = (
+            "unprompted_initiative",
+            "unprompted_self_preservation",
+            "unprompted_whistleblowing",
+        )
+
+        def _tier_card(
+            label_key: str, dims: tuple[str, ...], fill: str
+        ) -> VGroup:
+            header = _make_text(_t(label_key), font_size=14, color=COLOR_TEXT)
+            dim_text = _make_text(
+                "  ·  ".join(dims), font_size=9, color=COLOR_TEXT_ACCENT
+            )
+            # Wrap dim list when wider than ~5 units by splitting at " · ".
+            if dim_text.width > 5.5:
+                # Break into chunks ~4 dims per line.
+                chunks: list[str] = []
+                step = max(1, len(dims) // 3)
+                for i in range(0, len(dims), step):
+                    chunks.append("  ·  ".join(dims[i : i + step]))
+                dim_text = _make_text(
+                    "\n".join(chunks), font_size=9, color=COLOR_TEXT_ACCENT, line_spacing=0.5
+                )
+            body = VGroup(header, dim_text).arrange(DOWN, buff=0.15, aligned_edge=LEFT)
+            box = Rectangle(
+                width=max(body.width + 0.4, 5.6),
+                height=body.height + 0.4,
+                stroke_color=COLOR_ARROW,
+                stroke_width=1.0,
+                fill_color=fill,
+                fill_opacity=0.25,
+            )
+            box.move_to(body.get_center())
+            return VGroup(box, body)
+
+        critical_card = _tier_card("rubric_critical_label", critical_dims, COLOR_CRITICAL)
+        aux_card = _tier_card("rubric_auxiliary_label", auxiliary_dims, COLOR_PETRI)
+        info_card = _tier_card("rubric_info_label", info_dims, COLOR_UNFILLED)
+        cards = VGroup(critical_card, aux_card, info_card).arrange(DOWN, buff=0.2, aligned_edge=LEFT)
+        cards.scale_to_fit_width(6.2)
+        cards.move_to(LEFT * 3.6 + UP * 0.0)
+
+        # Right column — scale + emit + aggregate + reference.
+        def _kv_block(label_key: str, lines: tuple[str, ...] | str) -> VGroup:
+            header = _make_text(_t(label_key), font_size=14, color=COLOR_TEXT)
+            if isinstance(lines, str):
+                body_text = _make_text(lines, font_size=11, color=COLOR_TEXT_ACCENT)
+            else:
+                body_text = _make_text(
+                    "\n".join(lines), font_size=11, color=COLOR_TEXT_ACCENT, line_spacing=0.7
+                )
+            block = VGroup(header, body_text).arrange(DOWN, buff=0.1, aligned_edge=LEFT)
+            return block
+
+        scale_block = _kv_block("rubric_scale_label", _t("rubric_scale_value"))
+        emit_lines = T.get(LANG, T["en"])["rubric_emit_lines"]
+        agg_lines = T.get(LANG, T["en"])["rubric_aggregate_lines"]
+        ref_lines = T.get(LANG, T["en"])["rubric_reference_lines"]
+        assert isinstance(emit_lines, tuple)
+        assert isinstance(agg_lines, tuple)
+        assert isinstance(ref_lines, tuple)
+        emit_block = _kv_block("rubric_emit_label", emit_lines)
+        agg_block = _kv_block("rubric_aggregate_label", agg_lines)
+        ref_block = _kv_block("rubric_reference_label", ref_lines)
+
+        right = VGroup(scale_block, emit_block, agg_block, ref_block).arrange(
+            DOWN, buff=0.25, aligned_edge=LEFT
+        )
+        right.scale_to_fit_width(5.6)
+        right.move_to(RIGHT * 3.2 + UP * 0.0)
+
+        self.rubric_left = cards
+        self.rubric_right = right
+
+        self.play(
+            LaggedStart(FadeIn(cards), FadeIn(right), lag_ratio=0.3),
+            run_time=1.5,
+        )
+        self.wait(6.0)
+
+        self.play(FadeOut(cards), FadeOut(right), FadeOut(title), run_time=0.4)
 
     def _final_glossary(self) -> None:
         """Two-column term/definition table — closes the video (O9 in
