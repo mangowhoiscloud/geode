@@ -87,9 +87,22 @@ functional change.
   PR-B reflection node was the first) hit silent no-ops on the
   ``openai-codex`` provider. Codex MCP review #1 caught the gap.
   Fix routes through :func:`core.llm.tool_choice.normalize` (same
-  as the OpenAI/GLM adapters) so ``"any"`` becomes ``"required"``
-  and named-tool forcing translates to the OpenAI ``{"type":
-  "function", "name": "X"}`` shape.
+  as the OpenAI/GLM adapters) so ``"auto"`` / ``"any"`` /
+  named-tool forcing translate to the right OpenAI/Responses
+  shapes.
+
+- **PR-B fix-up — Anthropic ``_API_ALLOWED_KEYS`` adds ``strict``;
+  reflection drops to ``tool_choice="auto"``.** Codex MCP review #2
+  caught: (a) ``strict: True`` was being stripped from the tool
+  definition before the Anthropic API call because the allow-list
+  filter omitted ``"strict"``; (b) ``tool_choice="any"`` (and any
+  named-tool forcing) is *also* incompatible with Anthropic
+  extended/adaptive thinking, not just the ``{"type": "tool"}``
+  shape — only ``"auto"`` works across every model + thinking
+  regime. Reflection now passes ``tool_choice="auto"``; with one
+  tool declared and a strong system prompt the LLM still calls it
+  on the happy path, and the rare decline is handled by
+  ``_extract_reflection_input`` returning ``None`` + WARN.
 
 ### Added
 

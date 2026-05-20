@@ -255,22 +255,24 @@ async def reflect_async(
         )
 
         async def _do_call(m: str) -> object:
-            # PR-B fix-up #1 — canonical ``"any"`` (= must use SOME
-            # declared tool). Since only one tool is declared this
-            # effectively forces ``record_reflection``. ``{"type":
-            # "tool", "name": ...}`` would be more explicit but
-            # conflicts with Anthropic adaptive thinking (Opus 4.7 /
-            # Sonnet 4.6) per the Anthropic tool-use docs — the API
-            # returns 400 when forced-tool + extended-thinking
-            # combine. ``"any"`` is compatible with both regimes and
-            # cleanly translates to ``required`` for OpenAI / Codex
-            # via :func:`core.llm.tool_choice.normalize`.
+            # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs
+            # mark *both* ``"any"`` and named-tool forcing as
+            # incompatible with extended/adaptive thinking, so
+            # operators who pick Opus 4.7 / Sonnet 4.6 via
+            # ``/model reflection`` would otherwise hit a 400. Only
+            # ``"auto"`` works across every model + thinking regime.
+            # With one tool declared + a strong "invoke the tool"
+            # system prompt the LLM still calls the tool on the
+            # happy path; the rare decline is handled gracefully by
+            # ``_extract_reflection_input → None → keep previous
+            # state``. Cross-provider: ``"auto"`` normalises to
+            # ``"auto"`` on OpenAI/Codex via the shared normaliser.
             return await adapter.agentic_call(
                 model=m,
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
                 tools=[_REFLECTION_TOOL],
-                tool_choice="any",
+                tool_choice="auto",
                 max_tokens=max_tokens,
                 temperature=0.2,
             )

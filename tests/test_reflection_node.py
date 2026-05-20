@@ -82,6 +82,16 @@ def test_reflection_tool_schema_declares_required_shape() -> None:
     assert set(schema["required"]) == {"hypotheses", "confidence"}
 
 
+def test_anthropic_adapter_passes_strict_flag_through() -> None:
+    """Codex MCP review #2 catch — ``strict: True`` was being stripped
+    by ``_API_ALLOWED_KEYS`` filter on the Anthropic adapter so the
+    schema flag never reached the API. Pin that ``strict`` is in the
+    allowlist."""
+    from core.llm.providers.anthropic import _API_ALLOWED_KEYS
+
+    assert "strict" in _API_ALLOWED_KEYS
+
+
 def test_reflection_module_exports_tool_name_for_other_callers() -> None:
     """Re-exported so downstream (transcript renderer, debug tools) can
     grep for the tool name without importing the private dict."""
@@ -389,11 +399,11 @@ def test_reflect_async_passes_tool_schema_to_adapter(
     assert isinstance(tools, list) and len(tools) == 1
     assert tools[0]["name"] == REFLECTION_TOOL_NAME
     assert tools[0].get("strict") is True
-    # PR-B fix-up #1 — canonical ``"any"`` instead of the forced-named
-    # ``{"type": "tool", "name": ...}``. With only one tool declared,
-    # ``"any"`` effectively forces it AND stays compatible with
-    # Anthropic adaptive thinking.
-    assert adapter.last_kwargs.get("tool_choice") == "any"
+    # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs mark
+    # both ``"any"`` and named-tool forcing as incompatible with
+    # adaptive/extended thinking, so only ``"auto"`` is safe across
+    # every reflection-model setting.
+    assert adapter.last_kwargs.get("tool_choice") == "auto"
 
 
 def test_reflect_async_swallows_setup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
