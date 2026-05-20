@@ -67,8 +67,10 @@ functional change.
   ``write_attribution`` forwards the trajectory through.
   ``attribution_score`` is intentionally unchanged so PR-6 policy-
   mutation aggregators can weight dim-deltas vs belief stability
-  independently. 18 invariant tests pin the stability math + the
-  episodic adapter + payload integration + write-forwarding.
+  independently. 17 invariant tests pin the stability math + the
+  episodic adapter + payload integration + write-forwarding +
+  ``__all__`` surface (42/42 with PR-5's existing causal-attribution
+  tests).
 
 ### Changed
 
