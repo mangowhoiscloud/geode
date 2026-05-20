@@ -279,13 +279,24 @@ STABILITY_WEIGHT: float = 0.10
 """Stability axis weight — kept outside DIM_WEIGHTS because the value
 is derived from ``dim_stderr`` aggregate, not from a per-dim mean."""
 
-# ADR-012 S1 (2026-05-21) — ux_means fitness 축 가중치. ``compute_fitness``
-# 가 ``ux_means`` 인자를 받을 때 ``dim_part * UX_FITNESS_DIM_WEIGHT +
-# ux_part * UX_FITNESS_UX_WEIGHT`` 로 다축화. admire_means (S2) 신설 시
-# 가중치 재배분 예정 (dim 0.4 + ux 0.3 + admire 0.3).
+# ADR-012 S1 (2026-05-21) — ux_means fitness 축 가중치 (admire_means
+# 부재 시의 2축 fallback). ``compute_fitness`` 가 ``ux_means`` 만 받을
+# 때 ``dim_part * UX_FITNESS_DIM_WEIGHT + ux_part * UX_FITNESS_UX_WEIGHT``.
 UX_FITNESS_DIM_WEIGHT: float = 0.70
 UX_FITNESS_UX_WEIGHT: float = 0.30
 assert abs(UX_FITNESS_DIM_WEIGHT + UX_FITNESS_UX_WEIGHT - 1.0) < 1e-9
+
+# ADR-012 S2 (2026-05-21) — admire_means fitness 축 신설로 3축 다축화.
+# ``compute_fitness`` 가 ``ux_means`` 와 ``admire_means`` 모두 받을 때
+# ``dim*FITNESS_DIM + ux*FITNESS_UX + admire*FITNESS_ADMIRE`` 로 재배분.
+# 가중치 합 1.0. dim 비중이 0.70 → 0.40 으로 감소 — 양의 압력 두 축 추가
+# 로 alignment 마이크로-튜닝 risk 추가 차단 (ADR-012 §Decision.2).
+FITNESS_DIM_WEIGHT: float = 0.40
+FITNESS_UX_WEIGHT: float = 0.30
+FITNESS_ADMIRE_WEIGHT: float = 0.30
+assert abs(FITNESS_DIM_WEIGHT + FITNESS_UX_WEIGHT + FITNESS_ADMIRE_WEIGHT - 1.0) < 1e-9, (
+    "3-axis fitness weights must sum to 1.0"
+)
 
 CRITICAL_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")
 AUXILIARY_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "auxiliary")
@@ -776,6 +787,7 @@ def compute_fitness(
     critical_margin: float = 0.0,
     auxiliary_penalty_lambda: float = 0.5,
     ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
 ) -> float:
     """17-dim weighted aggregate + stability axis + optional ux_means axis.
 
@@ -800,10 +812,20 @@ def compute_fitness(
 
     ``ux_means`` (ADR-012 S1, 2026-05-21) — 양의 압력 4-field
     (success_rate / token_cost_norm / revert_ratio_norm / latency_norm).
-    ``None`` 이면 dim-only fallback (no-op). 주어지면 fitness =
-    ``DIM_WEIGHT_TOTAL × dim_part + UX_WEIGHT × ux_aggregate`` 의 가중
-    합 (운영 권장 가중치: dim 0.7 + ux 0.3). admire_means 신설 (S2) 시
-    3축 다축화.
+    ``admire_means`` (ADR-012 S2, 2026-05-21) — 양의 압력 2-field
+    (pairwise_win_rate / human_calibration_corr).
+
+    분기 로직:
+    - ``ux_means is None and admire_means is None`` → dim-only fallback
+      (현재 behavior 보존, S1 전 caller 와 호환)
+    - ``admire_means is None`` (ux 만) → 2축 (UX_FITNESS_DIM_WEIGHT 0.7
+      + UX_FITNESS_UX_WEIGHT 0.3) — S1 backwards compat
+    - ``admire_means`` 활성 (or 둘 다) → 3축 재배분 (FITNESS_DIM_WEIGHT
+      0.4 + FITNESS_UX_WEIGHT 0.3 + FITNESS_ADMIRE_WEIGHT 0.3). ``ux``
+      누락 시 neutral 0.5 으로 처리.
+
+    Critical gate (regress 시 ``0.0``) 는 ux/admire 와 무관하게 strict-
+    reject — ADR-012 §Decision.2 의 multi-axis strict-reject 보존.
     """
     aggregate = 0.0
     for dim, weight in DIM_WEIGHTS.items():
@@ -833,16 +855,29 @@ def compute_fitness(
                 penalty += auxiliary_penalty_lambda * (delta / 10.0) ** 2
         dim_part = aggregate - penalty
 
-    # ADR-012 S1 (2026-05-21) — ux_means 양의 압력 축. ``None`` 이면
-    # dim-only fallback (baseline_means 와 무관). 주어지면 (dim 0.7 +
-    # ux 0.3) 가중 합. admire_means (S2) 신설 시 3축 다축화 — 그때
-    # 가중치 재배분 (dim 0.4 + ux 0.3 + admire 0.3).
-    if ux_means is None:
+    # ADR-012 S1+S2 (2026-05-21) — 양의 압력 두 축 다축화.
+    # - 둘 다 None: dim-only fallback (현재 behavior 보존)
+    # - ux 만: 2축 (dim 0.7 + ux 0.3, S1)
+    # - admire 만 또는 둘 다: 3축 재배분 (dim 0.4 + ux 0.3 + admire 0.3)
+    #   admire 만 주어진 경우 ux 는 neutral 0.5 로 처리.
+    if ux_means is None and admire_means is None:
         return dim_part
+    if admire_means is None:
+        from autoresearch.ux_means import compute_ux_aggregate
+
+        ux_part = compute_ux_aggregate(ux_means)
+        return UX_FITNESS_DIM_WEIGHT * dim_part + UX_FITNESS_UX_WEIGHT * ux_part
+
+    from autoresearch.admire_means import compute_admire_aggregate
     from autoresearch.ux_means import compute_ux_aggregate
 
-    ux_part = compute_ux_aggregate(ux_means)
-    return UX_FITNESS_DIM_WEIGHT * dim_part + UX_FITNESS_UX_WEIGHT * ux_part
+    ux_part = compute_ux_aggregate(ux_means)  # None → 0.5 neutral
+    admire_part = compute_admire_aggregate(admire_means)
+    return (
+        FITNESS_DIM_WEIGHT * dim_part
+        + FITNESS_UX_WEIGHT * ux_part
+        + FITNESS_ADMIRE_WEIGHT * admire_part
+    )
 
 
 # ---------------------------------------------------------------------------
