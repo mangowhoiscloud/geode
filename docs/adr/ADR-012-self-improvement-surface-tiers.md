@@ -14,13 +14,13 @@ GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Refle
 
 Petri 17-dim 중 **양의 압력 (성능 향상) 으로 작동하는 dim 은 사실상 `broken_tool_use` 1개** 뿐이고 나머지는 alignment / safety evaluation 축으로 음의 압력 ("안 망가지기") 이다. 17-dim 의 가중치가 동일 차원에 압축돼 fitness 의 정의역이 "에이전트가 망가지지 않는지" 에 쏠려 있다. seed pool 의 정교화 + skill 진화의 노력 대부분이 alignment dim 의 마이크로-튜닝으로 흡수되는 구조적 누수.
 
-### 발견 2 — Mutation 표면의 wiring 누수 (audit 시점 1/5, S0a/S0b/S0c 이후 4/5)
+### 발견 2 — Mutation 표면의 wiring 누수 (audit 시점 1/5, S0a-d 이후 명시적 4축으로 안정화)
 
 PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`) 가 진단한 audit 시점 결과 — mutator 가 mutate 할 수 있다고 명세된 5 slot 중 인퍼런스 reader 가 살아있는 slot 은 `prompt` 하나뿐. 나머지 4 (`tool_policy` / `decomposition` / `retrieval` / `reflection`) 는 SoT 파일 + mutation dispatcher 는 있지만 **인퍼런스 경로에서 정책을 읽어 행동에 반영하는 reader 가 부재** — `core/self_improving_loop/policies.py:29-37` 의 docstring 이 직접 자백한다 (PR-6 의 의도적 follow-up 미완 + 잊혀짐).
 
-**S0a + S0b + S0c (2026-05-21 머지) 이후 상태**: `tool_policy` + `reflection` + `decomposition` 이 ALIVE 로 전환. reader 위치 — `tool_policy`: `core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`. `reflection`: `core/agent/reflection_policy.py` → `_reflection.py` LLM 호출 직전. `decomposition`: `core/agent/decomposition_policy.py` → `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt("decomposer", "system")` 호출 직후. 따라서 audit 시점 1/5 → 현재 4/5 ALIVE. 남은 dead slot 은 `retrieval` (S0d 처치 결정 — deprecate 또는 RAG 인프라 신설).
+**S0a/S0b/S0c/S0d (2026-05-21 머지) 이후 상태**: `tool_policy` + `reflection` + `decomposition` 이 ALIVE 로 전환. `retrieval` 은 **명시적 deprecate** (S0d) — `TARGET_KINDS` 에서 제거되어 5축 → **4축으로 명시 축소** (path constant + dict 매핑은 미래 복원을 위해 보존). reader 위치 — `tool_policy`: `core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`. `reflection`: `core/agent/reflection_policy.py` → `_reflection.py` LLM 호출 직전. `decomposition`: `core/agent/decomposition_policy.py` → `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt("decomposer", "system")` 호출 직후. 따라서 audit 시점 1/5 → **현재 4/4 ALIVE** (deprecate 한 retrieval 제외).
 
-→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 audit 시점 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이었다 (1/40~1/85 누수). S0a + S0b + S0c 이후 4축 × 1-2dim = 4-8 면적으로 회복. S0d 의 retrieval 처치 결정 후 최대 5축 또는 deprecate 시 4축으로 안정화.
+→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 audit 시점 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이었다 (1/40~1/85 누수). S0a-d 후 4축 × 1-2dim = 4-8 면적으로 회복, 5축 → 4축 명시 축소로 정직성 안정화. (`retrieval` 의 deprecate 근거는 §Decision.3a — Boris Cherny / arXiv 2605.15184 / Anthropic 공식 blog 의 3-source 합의 참조.)
 
 ### 발견 3 — Fine-tune 표면의 채널 제약
 
@@ -46,7 +46,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 | 5축 SoT `prompt` | `wrapper-sections.json` | **가동 중** | **ALIVE** — `system_prompt.py:57` chain |
 | 5축 SoT `tool_policy` | `tool-policy.json` | **가동 중** (S0a, 2026-05-21) | **ALIVE** — `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` |
 | 5축 SoT `decomposition` | `decomposition.json` | **가동 중** (S0c, 2026-05-21) | **ALIVE** — `core/agent/decomposition_policy.py` (`_load_decomposition_policy_override` + `apply_decomposition_policy`) → `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt("decomposer", "system")` 호출 직후 적용 (override / prefix / suffix 3-mode) |
-| 5축 SoT `retrieval` | `retrieval.json` | mutation target 정의만 | **DEAD** — RAG 인프라 부재. S0d 에서 deprecate 또는 보류 |
+| ~~5축 SoT `retrieval`~~ | `retrieval.json` | **Deprecated (S0d, 2026-05-21)** — `TARGET_KINDS` 에서 제거. path constant + dict 매핑은 보존 (미래 복원 가능) | **DEPRECATED** — 근거: §Decision.3a (Boris Cherny + arXiv 2605.15184 + Anthropic blog) |
 | 5축 SoT `reflection` | `reflection.json` | **가동 중** (S0b, 2026-05-21) | **ALIVE** — `core/agent/reflection_policy.py` (`_load_reflection_policy_override` + `apply_reflection_policy`) → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 |
 | Skill 정의 | `.claude/skills/<name>/` (20+개) | 수동 (mutation 채널 밖) | n/a (M1 에서 6번째 target_kind 로 개통) |
 | Agent contract | `.claude/agents/seed_*.md` (7-role) | 수동 (mutation 채널 밖) | n/a (M2 에서 7번째 target_kind, 좁게 — mutator 자신 제외) |
@@ -128,6 +128,78 @@ mutations.jsonl  →  dpo_pairs.jsonl  ┐
 
 **weight 권한이 열리는 시점** (Anthropic Opus/Sonnet fine-tune 공개 / Bedrock Haiku 보조 라우팅 도입 / open-weight self-hosted 전환) 에는 DPO dataset 그대로 fine-tune publisher 에 emit — 동일 dataset 의 옵션 가치가 inference-only 채널에서부터 누적된다.
 
+### 3a. Retrieval slot deprecate 결정 (S0d, 2026-05-21)
+
+5축 mutation 중 마지막 dead slot `retrieval` 의 처치 — 3가지 옵션을 frontier evidence 로 평가했다.
+
+| 옵션 | 의미 | 비용 | 채택? |
+|---|---|---|---|
+| A. **Deprecate** | `TARGET_KINDS` 에서 제거 + path constant 보존 (미래 복원 가능) | 매우 낮음 | **채택** |
+| B. RAG 인프라 신설 | sqlite-vec/chromadb + 로컬 embedding (BGE/e5) + reader 신설 | 중-高 | 보류 |
+| C. 보류 | 결정 미루기 | 0 | 거부 |
+
+#### 옵션 A 의 frontier 3-source 합의
+
+**1. Boris Cherny (Claude Code architect at Anthropic)** — *Latent Space podcast, 2025-05*:
+
+> "Originally, we tried very, very early versions of Claude actually used RAG. So we, like, indexed the code base... **It outperformed everything. By a lot. By a lot.** And this was surprising."
+>
+> "There's this whole indexing step that you have to do for RAG. And there's a lot of complexity that comes with that because **the code drifts out of sync**."
+>
+> "There's **security issues** because this index has to live somewhere. And then, what if that provider gets hacked? And so it's just a lot of liability."
+>
+> "Agentic search just sidesteps all of that. So essentially, **at the cost of latency and tokens, you now have really awesome search without security downsides**."
+>
+> — https://www.latent.space/p/claude-code
+
+**2. arXiv 2605.15184 ("Is Grep All You Need? How Agent Harnesses Reshape Agentic Search", PwC US, 2026-05-14)**:
+
+- 116-Q LongMemEval × Claude Code / Codex / Gemini CLI / Chronos 4-harness 교차 평가
+- 결론: **"grep generally yields higher accuracy than vector retrieval"** + "agents fail or win through their harness"
+- 학술 peer-style empirical study 로서 단일-시스템 bias 없음
+- https://arxiv.org/abs/2605.15184
+
+**3. Anthropic 공식 blog** — *"How Claude Code Works in Large Codebases"*:
+
+> "navigates a codebase the way a software engineer would: **it traverses the file system, reads files, uses grep to find exactly what it needs**"
+
+Staleness 의 구체적 예시: "RAG returns a function the team renamed two weeks ago". Claude Code FAQ 도 "no RAG, no embeddings, no vector DB" 공식 확인.
+- https://claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start
+
+#### Frontier embedding 사용 히트맵 (S0d 결정의 codebase-level 근거)
+
+| 시스템 | 도메인 | 임베딩 | 추세 |
+|---|---|---|---|
+| Hermes-Agent | Long-term memory | ✅ YES (적극, sqlite-vec + Hindsight + Holographic HRR) | 활발 |
+| OpenClaw | Agent memory + retrieval | ✅ YES (sqlite-vec + FTS5 + MMR + temporal decay) | 활발 |
+| Claude Code | Code/agent | ❌ NO (의도적 회피, Glob+Grep+Read+Agent) | LLM-native zero-index |
+| Cursor (2023) | IDE | ✅ YES (indexing-first) | 1세대 |
+| Cursor (2026) | IDE | ⚪ Hybrid (자체 학습 embedding + Turbopuffer, agent-first 재설계 — embedding 은 background) | agentic-first 로 이동 |
+| OpenAI Codex CLI | Code/agent | ❌ NO | LLM-native (사용자 요구로 검토 중 #609/#5181) |
+| Devin | Code/agent | ❌ NO | agentic-only |
+
+→ Code/agent 도메인 frontier 3/3 (Claude Code / Codex CLI / Devin) 이 embedding 회피. memory 도메인 (Hermes / OpenClaw) 은 적극 사용 — 두 도메인이 정반대 결정. **GEODE 의 self-improving loop 정책 진화는 code/agent 도메인** — Claude Code 라인.
+
+#### Cursor 의 embedding 약화 4-축 원인 (왜 frontier 합의가 옅어지는가)
+
+1. **Long context 확장** (Claude 200K→1M) — 중소 repo 통째 주입 가능
+2. **Prompt caching 경제성** — Claude Code 의 92% prefix reuse + 81% 비용 절감으로 agentic 반복 호출이 cache 로 거의 무료화
+3. **Agentic search 의 경험적 우세** (Boris 의 가장 강한 근거) — precision / freshness / cite-ability / AST 보존
+4. **Tool use 성숙도** — Bitter Lesson 패턴 (model 이 retrieval scaffold 흡수)
+
+#### GEODE-specific 적용 검증 (5축 wiring 분석)
+
+Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 적용:
+
+| Boris 근거 | GEODE 의 retrieval slot 에서 |
+|---|---|
+| Performance ("outperformed by a lot") | Petri 17-dim 이 fitness 평가 — vector lookup 불필요 |
+| Index staleness | 5축 정책 SoT 가 mutation 마다 변함 — stale 위험 동일 |
+| Precision (exact match) | 다른 4 slot (`tool_policy` / `reflection` / `decomposition` / `prompt`) 이 in-context 정책 진화로 fuzzy match 회피 |
+| Bitter Lesson | M4 surrogate ① few-shot pool + ③ mutator reference 가 in-context 자료 흐름을 이미 처리 |
+
+→ **결론: 옵션 A 채택**. `TARGET_KINDS` 에서 `retrieval` 제거, 5축 → 4축 명시 축소. path constant + dict 매핑 보존 (별도 ADR 로 복원 가능). 정직성 회복 — "되는 것만 명세" 가 self-improving loop 의 ratchet 정신과 일치.
+
 ### 4. 단기 → 중기 → 장기 성장 곡선
 
 #### S0 — Audit + Dead Slot 처치 (이미 진행 시작)
@@ -139,7 +211,7 @@ PR-AUDIT-5SLOT 으로 진단 완료. dead slot 별 reader 신설:
 | S0a | `tool_policy` reader 신설 — `core/agent/loop/AgenticLoop._select_tools()` 또는 동등 진입점에서 `tool-policy.json` 의 allowed/forbidden/priority 정책 읽어 도구 후보 필터 (~30 line) | **단기 1순위** — `broken_tool_use` dim 직접 영향 (17-dim 중 유일한 양의 압력 dim) |
 | S0b | `reflection` reader 신설 (머지 완료, #1408) — `_REFLECTION_TOOL["description"]` + `_SYSTEM_PROMPT` 를 `reflection.json` 의 `description` / `system_prompt` field 로 override. `input_schema` 는 mutate 대상 아님 (typed payload contract 보존). | **단기 2순위** — `admire_means` + `ux_means` 동시 영향 |
 | S0c | `decomposition` reader 신설 — `load_prompt("decomposer", "system")` 과 `decomposition.json` 의 sections 연결 (또는 `_load_decomposition_policy()` 신설) | 단기 3순위 — `task_success_rate` 영향 |
-| S0d | `retrieval` 처치 결정 — RAG 인프라 신설 여부 결정 후 (a) reader 신설 (b) `TARGET_KINDS` 에서 제거 5축 → 4축 축소 (c) 보류 | 단기 4순위 또는 deprecate |
+| S0d | `retrieval` 처치 — **deprecate 채택** (§Decision.3a). `TARGET_KINDS` 에서 제거, path constant + dict 매핑 보존. 머지 완료 (2026-05-21) | 완료 |
 
 #### S1-S5 — Fitness 다축화 + 공동 ratchet + In-context wiring
 

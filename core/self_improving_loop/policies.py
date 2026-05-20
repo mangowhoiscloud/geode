@@ -115,16 +115,35 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 
 # Canonical list of target kinds. Order matters for the type-hint enum
 # only — apply dispatch is by string key.
+#
+# ADR-012 S0d (2026-05-21) — ``retrieval`` 은 명시적 deprecate. 사유:
+# (a) Claude Code architect Boris Cherny (Latent Space, 2025-05): "Originally
+#     we tried RAG... agentic search outperformed everything. By a lot...
+#     at the cost of latency and tokens, you now have really awesome search
+#     without security downsides."
+# (b) arXiv 2605.15184 (PwC, 2026-05): "grep generally yields higher accuracy
+#     than vector retrieval" (Claude Code/Codex/Gemini CLI 3-harness 교차).
+# (c) Anthropic 공식 blog: "navigates a codebase the way a software engineer
+#     would: traverses file system, reads files, uses grep" + staleness
+#     예시 ("RAG returns a function the team renamed two weeks ago").
+# (d) GEODE 의 retrieval slot 은 audit 시점부터 reader 부재 (PR-AUDIT-5SLOT).
+#     reader 신설은 외부 vector store 인프라 (sqlite-vec/chromadb + 로컬
+#     embedding) 도입 비용 대비 ROI 불명확.
+# 보존: ``GLOBAL_RETRIEVAL_POLICY_PATH`` 와 ``_KIND_TO_PATH`` 의 ``retrieval``
+# 매핑은 그대로 둠 — 미래 RAG 인프라 신설 시 별도 ADR 로 ``TARGET_KINDS``
+# 에 재추가 가능하도록 path-literal guard 유지.
 TARGET_KINDS: tuple[str, ...] = (
     "prompt",
     "tool_policy",
     "decomposition",
-    "retrieval",
     "reflection",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
 # wrapper-sections SoT so older mutations replay unchanged.
+#
+# ``retrieval`` 매핑은 S0d 이후 deprecated 상태 — ``TARGET_KINDS`` 에서
+# 제외돼 mutation dispatch 가 발생하지 않지만 path constant 는 보존.
 _KIND_TO_PATH: dict[str, Path] = {
     "prompt": GLOBAL_WRAPPER_SECTIONS_PATH,
     "tool_policy": GLOBAL_TOOL_POLICY_PATH,
