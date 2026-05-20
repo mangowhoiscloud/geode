@@ -71,15 +71,63 @@ def test_runner_default_llm_call_routes_through_call_with_retry() -> None:
     assert "client = anthropic.Anthropic()" not in body, (
         "runner._default_llm_call body must NOT instantiate "
         "anthropic.Anthropic() directly — PR-1 G-A routes the mutator "
-        "through core.llm.router.call_with_retry so it shares the "
+        "through core.llm.router.call_with_failover so it shares the "
         "credential rotator with every other provider-aware caller."
     )
-    assert "call_with_retry" in body, (
-        "runner._default_llm_call must dispatch through core.llm.router.call_with_retry"
+    assert "call_with_failover" in body, (
+        "runner._default_llm_call must dispatch through core.llm.router.call_with_failover"
     )
     assert 'model="claude-opus-4-7"' not in body, (
         "model id must come from MutatorConfig, not a literal in the body."
     )
+
+
+def test_runner_default_llm_call_import_resolves() -> None:
+    """Codex MCP catch — the prior draft imported a router symbol
+    (``call_with_retry``) that does not exist on main, so the mutator
+    default path would have crashed at import time. Pin the contract:
+    every symbol the runner imports must resolve."""
+    from core.llm.router import call_with_failover  # noqa: F401
+    from core.self_improving_loop.runner import _default_llm_call
+
+    assert callable(_default_llm_call)
+
+
+def test_mutator_config_validator_rejects_default_outside_allowed() -> None:
+    """Allow-list invariant — the validator must fail closed if the
+    operator sets ``default_model`` outside ``allowed_models``."""
+    import pytest as _pytest
+    from core.config.self_improving_loop import MutatorConfig
+    from pydantic import ValidationError
+
+    with _pytest.raises(ValidationError):
+        MutatorConfig(
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-sonnet-4-6"],
+        )
+
+
+def test_runner_default_llm_call_guards_empty_text() -> None:
+    """Codex MCP catch — non-None ``AgenticResponse`` with no text
+    blocks was silently returning an empty string and letting
+    ``parse_mutation`` raise a confusing JSON error. Pin the explicit
+    guard."""
+    from core.self_improving_loop import runner
+
+    src = inspect.getsource(runner._default_llm_call)
+    assert "returned empty text" in src, (
+        "_default_llm_call must raise RuntimeError on empty text instead "
+        "of letting parse_mutation surface the failure as a JSON error."
+    )
+
+
+def test_config_toml_maps_learning_extract_model() -> None:
+    """Codex MCP catch — CHANGELOG claimed
+    ``[llm] learning_extract_model`` works in ``config.toml`` but the
+    parser table didn't carry the entry. Pin it explicitly."""
+    from core.config import _TOML_TO_SETTINGS
+
+    assert _TOML_TO_SETTINGS.get("llm.learning_extract_model") == "learning_extract_model"
 
 
 def test_runner_reads_default_model_from_config() -> None:

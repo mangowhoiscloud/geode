@@ -61,8 +61,8 @@ functional change.
   style abstraction gaps (G-A through G-E).
 
 - **PR-1 G-A — ``[self_improving_loop.mutator]`` manifest section +
-  mutator routed through ``core.llm.router.call_with_retry``.** Pre-
-  fix ``core/self_improving_loop/runner.py:_default_llm_call``
+  mutator routed through ``core.llm.router.call_with_failover``.**
+  Pre-fix ``core/self_improving_loop/runner.py:_default_llm_call``
   instantiated ``anthropic.Anthropic()`` directly and pinned
   ``model="claude-opus-4-7"`` as a literal, so the self-improving
   loop's mutation step bypassed the credential rotator every other
@@ -70,12 +70,18 @@ functional change.
   ``allowed_models`` / ``source`` / ``role_contract`` /
   ``max_tokens``) lives under ``[self_improving_loop.mutator]`` —
   same shape as ``[seed_generation.role.<X>]`` and
-  ``[petri.role.<X>]``. ``_default_llm_call`` now reads the model id
-  from the config, resolves the provider via ``_resolve_provider``,
-  dispatches through ``resolve_agentic_adapter`` +
-  ``call_with_retry`` (so the M5 single-model retry + the credential
-  rotator both apply), and concatenates the normalised
-  ``AgenticResponse`` text blocks.
+  ``[petri.role.<X>]``. A pydantic ``model_validator`` rejects a
+  ``default_model`` outside ``allowed_models`` at load time so the
+  allow-list is enforced before the runner sees the config.
+  ``_default_llm_call`` reads the model id from ``MutatorConfig``,
+  validates it against ``allowed_models`` again as a defence-in-
+  depth, resolves the provider via ``_resolve_provider``, dispatches
+  through ``resolve_agentic_adapter`` +
+  ``core.llm.router.call_with_failover`` (single-element model list
+  for now — opt-in chain expansion is a follow-up), concatenates the
+  normalised ``AgenticResponse`` text blocks, and raises explicitly
+  on empty text so ``parse_mutation`` doesn't surface the failure as
+  a confusing JSON error.
 
 - **PR-1 G-D — ``settings.learning_extract_model`` knob.** The GLM
   free-tier hook in ``core/hooks/llm_extract_learning.py`` no longer

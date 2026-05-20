@@ -53,6 +53,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.primary_model": "model",
     "llm.secondary_model": "default_secondary_model",
     "llm.router_model": "router_model",
+    "llm.learning_extract_model": "learning_extract_model",
     "output.verbose": "verbose",
     "pipeline.confidence_threshold": "confidence_threshold",
     "pipeline.max_iterations": "max_iterations",
