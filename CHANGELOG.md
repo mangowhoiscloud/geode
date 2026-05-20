@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.25] — 2026-05-21
+
+> **Cognitive Loop Uplift — Phase 2 sprint.** 6 PRs (#1380-#1385)
+> close the 5 concerns the post-v0.99.24 frontier matrix (Task #36)
+> identified against Hermes / Claude Code / OpenClaw:
+> **PR-A** (#1380) — `/model` role tab so operators can pick the
+> reflection-node model alongside the primary loop model.
+> **PR-B** (#1381) — reflection node migrated from free-form JSON to
+> Anthropic `tool_use` structured output (concern #4 — eliminates the
+> 5-stage forgiving parser Codex MCP caught 3× during PR-3 review).
+> **PR-C** (#1382) — `cognitive_reflection_interval` every-N-rounds
+> gate (concern #2 — 30-round session can drop 29 LLM calls).
+> **PR-D Phase 1** (#1383) — `arun` god-method decomposition starts;
+> session-start signal block extracted into a dedicated helper
+> (concern #1; zero behavior change, ~49 LOC shrink). Phase 2/3
+> follow-ups planned.
+> **PR-E** (#1384) — causal attribution × CognitiveState confidence-
+> stability term (concern #5 — joins dim-delta + belief-trajectory
+> signals; attribution_score intentionally unchanged so PR-6
+> aggregators can weight independently).
+> **PR-F** (#1385) — sub-agent `parent_session_key` lineage
+> (concern #3 — in-process spawn path wired; subprocess WorkerRequest
+> plumbing explicitly deferred per Codex MCP review).
+> Tests 5280 → 5346 (+66). Modules unchanged (314 + 48 = 362).
+
 ### Added
 
 - **PR-F — sub-agent state propagation via
