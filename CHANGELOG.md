@@ -49,6 +49,30 @@ functional change.
 
 ### Added
 
+- **PR-6 C-5 — policy mutation expansion (5 target kinds).** Pre-PR-6
+  the self-improving loop's mutation target was only the wrapper
+  prompt (``wrapper-sections.json``); tool selection, decomposition,
+  retrieval, and reflection policies were hard-coded and never
+  participated in self-improvement. New
+  ``core/self_improving_loop/policies.py`` introduces four sibling
+  ``dict[str, str]`` SoT files under
+  ``~/.geode/self-improving-loop/``: ``tool-policy.json`` /
+  ``decomposition.json`` / ``retrieval.json`` / ``reflection.json``.
+  The ``Mutation`` dataclass gains a ``target_kind`` field
+  (default ``"prompt"`` for backward compatibility); ``apply_mutation``
+  dispatches by kind — ``prompt`` still uses
+  ``autoresearch.train.write_wrapper_prompt_sections`` (schema
+  enforcement preserved), the other four kinds go through the new
+  ``write_policy`` (atomic temp-file rewrite, dir auto-created).
+  ``parse_mutation`` extracts the field with graceful fallback
+  (missing → ``prompt``, whitespace-only → ``prompt``, unknown →
+  ``ValueError``). Mutation contract suffix in the system prompt
+  documents the new field. ``to_audit_row`` carries ``target_kind``
+  so attribution downstream can group rows by policy family. Voyager-
+  style execution of the four new SoTs (curriculum + skill library
+  + critic) lands as a follow-up; PR-6 stops at the file format +
+  dispatcher so the infrastructure is committed first.
+
 - **PR-5 C-4 — causal attribution for applied mutations.** Pre-PR-5
   ``mutations.jsonl`` recorded *what* changed (target section, new
   value, rationale) but not *what happened next* — only the binary
