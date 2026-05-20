@@ -467,14 +467,16 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
     assert written == [{"role": "original"}]
 
 
-def test_global_policy_paths_under_self_improving_loop_dir() -> None:
-    """All 5 SoT paths live under the same dir as wrapper-sections —
-    operators expect them co-located."""
+def test_global_policy_paths_under_policies_dir() -> None:
+    """All 5 SoT paths live under the same in-repo dir
+    (``autoresearch/state/policies/``) — operators expect them
+    co-located, and the in-repo location is git-tracked so ``git diff``
+    shows the current mutation state (PR-RATCHET-1, 2026-05-21)."""
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_SOT,
+        GLOBAL_POLICIES_DIR,
         GLOBAL_REFLECTION_POLICY_SOT,
         GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_SELF_IMPROVING_LOOP_DIR,
         GLOBAL_TOOL_POLICY_SOT,
         GLOBAL_WRAPPER_SECTIONS_SOT,
     )
@@ -486,4 +488,4 @@ def test_global_policy_paths_under_self_improving_loop_dir() -> None:
         GLOBAL_RETRIEVAL_POLICY_SOT,
         GLOBAL_REFLECTION_POLICY_SOT,
     ):
-        assert path.parent == GLOBAL_SELF_IMPROVING_LOOP_DIR
+        assert path.parent == GLOBAL_POLICIES_DIR

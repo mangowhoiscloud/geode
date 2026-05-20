@@ -55,23 +55,42 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
 GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
+# PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
+# the in-repo ``autoresearch/state/policies/`` directory rather than
+# the operator's ``~/.geode/self-improving-loop/``. The rename converges
+# on upstream Karpathy's "branch tip = current best" principle: each
+# policy is git-tracked, so ``git diff`` shows the current mutation
+# state and ``git revert`` discards a hypothesis. The directory name
+# matches the existing module/function/constant naming
+# (``policies.py`` / ``load_policy`` / ``GLOBAL_*_POLICY_SOT``); the
+# constants below keep their ``GLOBAL_*_SOT`` names for backwards
+# compatibility with existing callers; only the value moves. Lazy
+# migration of any legacy ``~/.geode/self-improving-loop/<file>.json``
+# payload is handled by :mod:`core.self_improving_loop.policies`.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_AUTORESEARCH_STATE_DIR = _REPO_ROOT / "autoresearch" / "state"
+GLOBAL_POLICIES_DIR = _AUTORESEARCH_STATE_DIR / "policies"
+LEGACY_SOT_DIR = GLOBAL_SELF_IMPROVING_LOOP_DIR
+"""Pre-RATCHET-1 policy dir under ``~/.geode/self-improving-loop/``.
+Kept for the lazy migration path so an upgrade of an existing
+operator install copies their last-known wrapper/policy state into
+the new in-repo location on first read/write."""
 # G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
 # sections. Written by ``autoresearch.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
-# ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs
-# (no env var required).
-GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "wrapper-sections.json"
+# ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
+GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # PR-6 C-5 (2026-05-21) — policy mutation SoT files. Each
 # ``target_kind`` (tool_policy / decomposition / retrieval /
 # reflection) gets its own ``dict[str, str]`` JSON file alongside
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
-# sections path so older mutation rows replay correctly; the others
+# sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
 # written by :mod:`core.self_improving_loop.policies`.
-GLOBAL_TOOL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
-GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
-GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "retrieval.json"
-GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
+GLOBAL_TOOL_POLICY_SOT = GLOBAL_POLICIES_DIR / "tool-policy.json"
+GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_POLICIES_DIR / "decomposition.json"
+GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_POLICIES_DIR / "retrieval.json"
+GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_POLICIES_DIR / "reflection.json"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per

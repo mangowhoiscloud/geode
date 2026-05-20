@@ -380,10 +380,19 @@ try:
     from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT as _CORE_WRAPPER_SECTIONS_SOT
 except ImportError:
     # ``autoresearch.train`` is importable from environments where ``core``
-    # isn't installed (legacy fixture path) — fall back to the literal so the
+    # isn't installed (legacy fixture path) — fall back to a literal so the
     # module still loads. Tests pin parity via ``test_sot_path_parity_with_autoresearch``.
+    # PR-RATCHET-1 (2026-05-21) — fallback path follows the in-repo
+    # ``autoresearch/state/policies/`` location, not the pre-PR
+    # ``~/.geode/self-improving-loop/``, so a degraded import does not
+    # silently re-introduce the legacy out-of-repo location and bypass
+    # the git-as-optimiser invariant.
     _CORE_WRAPPER_SECTIONS_SOT = (
-        Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
+        Path(__file__).resolve().parents[1]
+        / "autoresearch"
+        / "state"
+        / "policies"
+        / "wrapper-sections.json"
     )
 WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
 
