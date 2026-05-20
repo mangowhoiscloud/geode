@@ -101,6 +101,12 @@ def cmd_login(args: str) -> None:
     if sub == "use":
         _login_use(rest)
         return
+    if sub in ("use-profile", "useprofile", "profile-use"):
+        _login_use_profile(rest)
+        return
+    if sub == "order":
+        _login_order(rest)
+        return
     if sub in ("remove", "rm", "delete"):
         _login_remove(rest)
         return
@@ -199,6 +205,8 @@ def _login_help() -> None:
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
         "  [label]/login use[/label] <plan>            Pin a plan as active for its provider\n"
+        "  [label]/login use-profile[/label] <name>    Pin a profile as active for its provider\n"
+        "  [label]/login order[/label] [<provider>]    Show effective profile order per provider\n"
         "  [label]/login route[/label] <model> <plan>… Bind a model to plan(s) in priority order\n"
         "  [label]/login remove[/label] <plan>         Delete a plan\n"
         "  [label]/login quota[/label]                 Per-plan quota / usage\n"
@@ -311,7 +319,20 @@ def _login_show_status() -> None:
             for v in store.evaluate_eligibility(prov):
                 verdicts_by_name[v.profile_name] = v.reason_code
                 details_by_name[v.profile_name] = v.detail
+        # X1 — surface the user-pinned active profile per provider so
+        # the operator sees which one ``ProfileRotator.resolve`` will
+        # pick first. The pin lives in ``ProfileStore.set_active`` and
+        # is read through ``get_pinned_active`` (excludes the auto-set
+        # legacy active so the badge tracks operator intent, not the
+        # first-registered side effect).
+        active_by_provider: dict[str, str] = {}
+        for prov in by_provider:
+            active = store.get_pinned_active(prov)
+            if active is not None:
+                active_by_provider[prov] = active.name
+
         for provider in sorted(by_provider.keys()):
+            active_name = active_by_provider.get(provider)
             for p in by_provider[provider]:
                 badge = {
                     CredentialType.OAUTH: "oauth",
@@ -340,8 +361,12 @@ def _login_show_status() -> None:
                     badge_str = f"[warning]✗ {reason}[/warning]"
                     if detail:
                         badge_str += f" [muted]({detail})[/muted]"
+                # X1 — mark the active row so ``/login`` shows which
+                # profile a call will pick first when multiple are
+                # eligible for the same provider.
+                active_suffix = " [success](active)[/success]" if p.name == active_name else ""
                 _pkg.console.print(
-                    f"  {badge_str}  {p.name:<28} "
+                    f"  {badge_str}  {p.name:<28}{active_suffix} "
                     f"[muted]{badge:<7}[/muted] {p.masked_key} "
                     f"plan={plan_label}{managed}{expiry}"
                 )
@@ -886,6 +911,105 @@ def _login_use(rest: str) -> None:
     _pkg.console.print(
         f"  [success]Activated[/success] {plan.display_name} for {plan.provider} models.\n"
     )
+
+
+def _login_use_profile(rest: str) -> None:
+    """Pin a specific profile as the active credential for its provider.
+
+    X1 — pre-fix the rotator chose the first eligible profile by
+    type-priority + LRU sort key, so an operator with multiple OAuth
+    profiles for the same provider could not pin a preferred one
+    without removing the others. This command wraps
+    ``ProfileStore.set_active`` so the next ``ProfileRotator.resolve``
+    surfaces the pinned profile first (legacy sort applies to the
+    remaining candidates so an ineligible pin gracefully steps aside).
+    """
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
+    name = rest.strip()
+    if not name:
+        _pkg.console.print("  [warning]Usage: /login use-profile <profile-name>[/warning]\n")
+        return
+    store = ensure_profile_store()
+    profile = store.get(name)
+    if profile is None:
+        _pkg.console.print(
+            f"  [warning]Unknown profile: {name}[/warning]"
+            "  [muted](run /login to list all profiles)[/muted]\n"
+        )
+        return
+    store.set_active(name)
+    _pkg._persist_auth_state()
+    _pkg.console.print(f"  [success]Pinned[/success] {name} as active for {profile.provider}.\n")
+
+
+def _login_order(rest: str) -> None:
+    """Show the effective profile order per provider.
+
+    X1 — answers "which profile will the next call use?" for each
+    registered provider. The first row is the pinned active profile
+    (when set) or the legacy sort_key winner; subsequent rows are the
+    siblings in the order the rotator would try them after the pin.
+    Ineligible profiles surface with their reject reason so the
+    operator sees why a pin might be ignored.
+    """
+    from core.cli import commands as _pkg
+    from core.wiring.container import ensure_profile_store
+
+    store = ensure_profile_store()
+    profiles = store.list_all()
+    if not profiles:
+        _pkg.console.print(
+            "  [muted]No profiles registered. Run /login add to create one.[/muted]\n"
+        )
+        return
+
+    target_provider = rest.strip() or None
+    by_provider: dict[str, list[AuthProfile]] = {}
+    for p in profiles:
+        if target_provider and p.provider != target_provider:
+            continue
+        by_provider.setdefault(p.provider, []).append(p)
+
+    if not by_provider:
+        _pkg.console.print(f"  [warning]No profiles for provider {target_provider!r}.[/warning]\n")
+        return
+
+    _pkg.console.print("\n  [header]Profile order[/header]")
+    for provider in sorted(by_provider.keys()):
+        active = store.get_pinned_active(provider)
+        active_name = active.name if active is not None else None
+        verdicts = {v.profile_name: v for v in store.evaluate_eligibility(provider)}
+        # Same ordering as ProfileRotator.resolve: active pin first
+        # (when eligible), then sort_key for the rest. Ineligible
+        # profiles trail with their reason.
+        eligible = [
+            p
+            for p in by_provider[provider]
+            if (v := verdicts.get(p.name)) is not None and v.eligible
+        ]
+        ineligible = [p for p in by_provider[provider] if p not in eligible]
+        pinned: AuthProfile | None = None
+        for p in eligible:
+            if p.name == active_name:
+                pinned = p
+                break
+        others = [p for p in eligible if p is not pinned]
+        others.sort(key=lambda p: p.sort_key())
+        ordered = ([pinned] if pinned is not None else []) + others
+        _pkg.console.print(f"  [bold]{provider}[/bold]")
+        if not ordered and not ineligible:
+            _pkg.console.print("    [muted](no profiles)[/muted]")
+            continue
+        for idx, p in enumerate(ordered, 1):
+            badge = "[success]active[/success]" if pinned is p else "[muted]queued[/muted]"
+            _pkg.console.print(f"    {idx}. {badge}  {p.name}")
+        for p in ineligible:
+            v = verdicts.get(p.name)
+            reason = v.reason_code if v is not None else "?"
+            _pkg.console.print(f"    -. [warning]{reason}[/warning]  {p.name}")
+    _pkg.console.print()
 
 
 def _login_remove(rest: str) -> None:

@@ -137,7 +137,12 @@ class ProfileStore:
 
     def __init__(self) -> None:
         self._profiles: dict[str, AuthProfile] = {}
-        self._active: dict[str, str] = {}  # provider → profile name
+        self._active: dict[str, str] = {}  # provider → profile name (auto + manual)
+        # X1 — track manual pins separately from the auto-set ``_active`` that
+        # ``add()`` writes for the first profile per provider. The rotator
+        # only honours the *manual* pin so the legacy LRU/type-priority sort
+        # still wins when no operator has explicitly chosen a profile.
+        self._pinned_active: dict[str, str] = {}  # provider → profile name
 
     def add(self, profile: AuthProfile) -> None:
         """Add a profile. If no active profile exists for the provider, set it."""
@@ -267,15 +272,40 @@ class ProfileStore:
         return groups
 
     def set_active(self, name: str) -> None:
-        """Set the active profile by name. Raises KeyError if not found."""
+        """Set the active profile by name. Raises KeyError if not found.
+
+        Records the choice as a *manual pin* (X1) — ``get_pinned_active``
+        returns it so ``ProfileRotator.resolve`` surfaces the pinned
+        profile first. The legacy ``_active`` map is also updated for
+        ``get_active`` parity with the v0.51.0 dashboard.
+        """
         profile = self._profiles.get(name)
         if profile is None:
             raise KeyError(f"Profile '{name}' not found")
         self._active[profile.provider] = name
+        self._pinned_active[profile.provider] = name
 
     def get_active(self, provider: str) -> AuthProfile | None:
-        """Get the active profile for a provider."""
+        """Get the active profile for a provider.
+
+        Includes both manually pinned (X1) and auto-set (legacy) entries,
+        matching the pre-X1 behaviour the dashboard depends on.
+        """
         name = self._active.get(provider)
+        if name is None:
+            return None
+        return self._profiles.get(name)
+
+    def get_pinned_active(self, provider: str) -> AuthProfile | None:
+        """Return ONLY the manually pinned profile for `provider` (X1).
+
+        Unlike ``get_active``, this excludes the auto-set entry that
+        ``add()`` writes for the first profile per provider. The
+        rotator uses this to honour explicit operator intent while
+        the v0.51.0 LRU/type-priority sort still wins when no manual
+        pin exists.
+        """
+        name = self._pinned_active.get(provider)
         if name is None:
             return None
         return self._profiles.get(name)
@@ -283,6 +313,7 @@ class ProfileStore:
     def clear(self) -> None:
         self._profiles.clear()
         self._active.clear()
+        self._pinned_active.clear()
 
     def __len__(self) -> int:
         return len(self._profiles)
