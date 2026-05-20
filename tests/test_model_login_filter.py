@@ -74,9 +74,9 @@ def test_picker_unavailable_enter_returns_cancelled(monkeypatch: pytest.MonkeyPa
     return cancelled=True so the caller surfaces a login hint."""
     from core.cli import effort_picker
 
-    profiles: list[tuple[str, str, str, str, bool]] = [
-        ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True),
-        ("gpt-5.5", "openai-codex", "GPT-5.5", "$$", False),  # unavailable
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True, None),
+        ("gpt-5.5", "openai-codex", "GPT-5.5", "$$", False, None),  # unavailable
     ]
 
     keys = iter([effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])
@@ -104,9 +104,9 @@ def test_picker_available_enter_returns_choice(monkeypatch: pytest.MonkeyPatch) 
     """Sanity — Enter on an available row still works."""
     from core.cli import effort_picker
 
-    profiles: list[tuple[str, str, str, str, bool]] = [
-        ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True),
-        ("claude-sonnet-4-6", "anthropic", "Sonnet 4.6", "$$", True),
+    profiles: list[tuple[str, str, str, str, bool, str | None]] = [
+        ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True, None),
+        ("claude-sonnet-4-6", "anthropic", "Sonnet 4.6", "$$", True, None),
     ]
 
     keys = iter([effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])

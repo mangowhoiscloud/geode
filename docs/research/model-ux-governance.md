@@ -386,7 +386,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 | # | Gap | Severity | Effort | Reference fix |
 |---|-----|----------|--------|---------------|
 | M1 | Provider label vs ID 불일치 (`"Codex (Plus)"` vs `openai-codex`) | S2 | S | OpenClaw uses single canonical key |
-| M2 | `forced_login_method` 가 `/model` UX 에 안 보임 | S2 | M | OpenClaw `models auth order get <provider>` shows |
+| M2 | `forced_login_method` visible in `/model` picker | Done (v0.99.19) | M | `commands._state.forced_login_method_for(provider)` + 6-tuple picker — non-default override (`apikey` / `api` / etc.) renders `(forced: <method>)` badge in interactive + non-tty list. Alias map mirrors `plan_registry._apply_forced_login_method`. |
 | M3 | `gpt-5.5` static `_resolve_provider` → `"openai"` (실제는 Codex-only) | S1 | M | Hermes 의 PROVIDER_REGISTRY 모델 매핑 |
 | M4 | Silent credential fallback (~~breadcrumb 추가~~ → v0.99.19 elimination) | Done (v0.99.19) | — | 본 doc Addendum 의 Phase F1 + F3 (옵션 C). silent fallback 자체를 제거; breadcrumb 도 dead code. |
 | M5 | `MODEL_PROFILES` login-state 필터링 | Done (v0.99.19) | S | `commands._state.model_available()` + 5-tuple picker — un-credentialed rows dim + `(login required)` suffix; Enter cancels instead of mutating settings; `/model <name>` emits `/login` hint before applying. |
