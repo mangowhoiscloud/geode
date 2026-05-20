@@ -37,7 +37,7 @@ infrastructure is committed before the policies that consume them.
 |---|---|---|---|---|
 | `prompt` | `wrapper-sections.json` | ✓ | `core/agent/system_prompt.py:57` (`_load_wrapper_override`) → `:79-80` (SoT fallback read) → `:194` (`build_system_prompt` 호출) → `:198/:210` (audit/normal mode inject) → `core/agent/loop/_context.py:103` → `core/agent/loop/agent_loop.py` (LLM 호출 경로) | **ALIVE** |
 | `tool_policy` | `tool-policy.json` | ✓ | **audit 시점 없음** — `paths.py:92`, `policies.py:130` 정의만. **S0a 이후** `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` | **DEAD → ALIVE (S0a, 2026-05-21 머지)** |
-| `decomposition` | `decomposition.json` | ✓ | **없음** — `_decomposition.py:31` 의 `GoalDecomposer` 는 prompt 를 `core.llm.prompts.load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드. 즉 hardcoded 가 아니지만 어느 경로도 `decomposition.json` 을 읽지 않음 — 그게 dead 사유 | **DEAD** |
+| `decomposition` | `decomposition.json` | ✓ | **audit 시점 없음** — `GoalDecomposer` 는 prompt 를 `load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드, `decomposition.json` 미연결. **S0c 이후** `core/agent/decomposition_policy.py` (`_load_decomposition_policy_override` + `apply_decomposition_policy`) → `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt` 호출 직후 적용 | **DEAD → ALIVE (S0c, 2026-05-21 머지)** |
 | `retrieval` | `retrieval.json` | ✓ | **없음** — `paths.py:94`, `policies.py:132` 정의만 | **DEAD** |
 | `reflection` | `reflection.json` | ✓ | **audit 시점 없음** — `_REFLECTION_TOOL` + `_SYSTEM_PROMPT` 가 module-level constant. **S0b 이후** `core/agent/reflection_policy.py` (`_load_reflection_policy_override` + `apply_reflection_policy`) → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 | **DEAD → ALIVE (S0b, 2026-05-21 머지)** |
 
@@ -61,9 +61,19 @@ ADR-012 S0b (`reflection` reader 신설) 머지 후 상태:
 |---|---|---|
 | `reflection` | **DEAD → ALIVE** | `core/agent/reflection_policy.py` 의 `_load_reflection_policy_override` + `apply_reflection_policy` → `core/agent/loop/_reflection.py` 의 reflection LLM 호출 직전 적용 |
 
-**현재 상태**: 3/5 ALIVE, 2/5 DEAD. 남은 dead slot: `decomposition` (S0c 예정) / `retrieval` (S0d 처치 결정 예정).
+**S0b 직후 상태**: 3/5 ALIVE, 2/5 DEAD.
 
-## 4. 인과 체인의 끊김 (audit 시점 사실, Post-S0a/S0b 갱신은 §3 참고)
+### Post-S0c (2026-05-21 오후 3차) update
+
+ADR-012 S0c (`decomposition` reader 신설) 머지 후 상태:
+
+| Slot | 변동 | 새 reader 위치 |
+|---|---|---|
+| `decomposition` | **DEAD → ALIVE** | `core/agent/decomposition_policy.py` 의 `_load_decomposition_policy_override` + `apply_decomposition_policy` (override / prefix / suffix 3-mode) → `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt("decomposer", "system")` 호출 직후 적용 |
+
+**현재 상태**: 4/5 ALIVE, 1/5 DEAD. 남은 dead slot: `retrieval` (S0d 처치 결정 예정 — deprecate or RAG 신설).
+
+## 4. 인과 체인의 끊김 (audit 시점 사실, Post-S0a/S0b/S0c 갱신은 §3 참고)
 
 ```
 mutator LLM
@@ -83,7 +93,7 @@ mutator LLM
 
 ## 5. ALIVE slot 의 상세 — `prompt` (audit 시점)
 
-audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일한 slot. **Post-S0a/S0b 머지 (오후) 이후 `tool_policy` + `reflection` 추가 ALIVE** — §3 의 Post-S0* update 섹션 참고. 인퍼런스 경로 도식은 audit 시점 사실로 보존:
+audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일한 slot. **Post-S0a/S0b/S0c 머지 (오후) 이후 `tool_policy` + `reflection` + `decomposition` 추가 ALIVE** — §3 의 Post-S0* update 섹션 참고. 인퍼런스 경로 도식은 audit 시점 사실로 보존:
 
 | 단계 | 코드 위치 | 동작 |
 |---|---|---|
@@ -94,7 +104,7 @@ audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일
 | 5 | `core/agent/loop/agent_loop.py` | 구성된 system prompt 가 LLM 호출 경로로 흘러들어감 |
 | 6 | Petri eval | 변경된 system prompt 로 응답 → dim_means 변동 → fitness gate 작동 |
 
-이게 audit 시점 (2026-05-21 오전) 의 사실 — 5축 중 유일하게 닫힌 루프, 나머지 4축은 (1)→(2) 사이에서 끊김. **Post-S0a/S0b 머지 후**: `tool_policy` (`core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`) 와 `reflection` (`core/agent/reflection_policy.py` → `_reflection.py` LLM 호출 직전) 도 동일하게 닫힌 루프로 회복.
+이게 audit 시점 (2026-05-21 오전) 의 사실 — 5축 중 유일하게 닫힌 루프, 나머지 4축은 (1)→(2) 사이에서 끊김. **Post-S0a/S0b/S0c 머지 후**: `tool_policy` (`core/agent/tool_policy.py` → `_helpers.py:get_agentic_tools`), `reflection` (`core/agent/reflection_policy.py` → `_reflection.py`), `decomposition` (`core/agent/decomposition_policy.py` → `goal_decomposer.py:_llm_decompose`) 모두 동일하게 닫힌 루프로 회복.
 
 ## 6. DEAD slot 별 권고
 
@@ -108,13 +118,13 @@ audit 시점 (2026-05-21 오전) 에 `prompt` 가 진화 압력에 닿는 유일
 | 권고 B (deprecate) | `TARGET_KINDS` 에서 제거. 5축 → 4축으로 축소 명시 |
 | ROI 추정 | **권고 A** — `broken_tool_use` dim 직접 영향. 5축 중 가장 양의 압력 우호적인 dim 이라 ROI 높음 |
 
-### 6b. `decomposition`
+### 6b. `decomposition` (S0c 머지 완료, 2026-05-21)
 
 | 항목 | 내용 |
 |---|---|
 | 의도 | 작업 분해 (multi-step plan) 의 진화 |
-| 현재 | `GoalDecomposer` (`core/orchestration/goal_decomposer.py`) 의 분해 prompt 가 hardcoded — `decomposition.json` 무관 |
-| 권고 A (살리기) | `GoalDecomposer` 의 prompt 가 현재 `core.llm.prompts.load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드되므로, `decomposition.json` 과 그 SoT 의 연결 (load_prompt 가 `decomposition.json` 의 sections override 를 우선 적용) 또는 `_load_decomposition_policy()` 신설로 `wrapper-sections` 패턴 재사용 |
+| audit 시점 | `GoalDecomposer` 의 prompt 가 `load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드, `decomposition.json` 미연결 |
+| S0c 머지 후 | `core/agent/decomposition_policy.py` 신설 (`_load_decomposition_policy_override` + `apply_decomposition_policy`), `core/orchestration/goal_decomposer.py:_llm_decompose` 의 `load_prompt` 호출 직후 적용. schema: `system_prompt` (전체 override) / `prefix` (앞에 추가) / `suffix` (뒤에 추가) 3-mode |
 | 권고 B (deprecate) | 같음 |
 | ROI 추정 | **권고 A** — 작업 분해 품질이 `task_success_rate` (단기 S1 의 `ux_means` 의 한 축) 직접 영향 |
 
@@ -165,10 +175,10 @@ grep -n "_REFLECTION_TOOL" core/agent/loop/_reflection.py
 grep -n "PR-6 stops at the" core/self_improving_loop/policies.py
 # Reader 부재 — 현재 DEAD slot 의 SoT 파일명이 인퍼런스 디렉토리 어디에서도
 # 참조되지 않는지 확인 (self_improving_loop 의 mutation 정의/디스패처는 제외).
-# Post-S0a/S0b 머지 후: 4 DEAD → 2 DEAD (decomposition + retrieval).
-# tool-policy.json (S0a 머지) / reflection.json (S0b 머지) 는 audit-only
-# 시점 historical 검색에서만 사용:
-for slot in decomposition.json retrieval.json; do
+# Post-S0a/S0b/S0c 머지 후: 4 DEAD → 1 DEAD (retrieval).
+# tool-policy.json (S0a) / reflection.json (S0b) / decomposition.json (S0c)
+# 는 audit-only 시점 historical 검색에서만 사용:
+for slot in retrieval.json; do
   grep -rn "$slot" core/agent core/orchestration core/skills core/llm plugins autoresearch \
     | grep -v "self_improving_loop/policies.py" \
     | grep -v "self_improving_loop/runner.py" \

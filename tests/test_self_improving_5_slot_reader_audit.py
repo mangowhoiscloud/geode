@@ -95,13 +95,14 @@ def test_audit_doc_exists() -> None:
 def test_audit_doc_pins_1_alive_4_dead() -> None:
     """결론 한 줄 anchor."""
     text = _read(AUDIT_DOC)
-    # ADR-012 S0a/S0b (2026-05-21) 머지 이후 `tool_policy`/`reflection` 이 ALIVE.
-    # audit 시점 의 사실은 1/5 — 그 줄을 유지하면서 post-S0* update 섹션
-    # 들이 함께 등장하는지 확인.
+    # ADR-012 S0a/S0b/S0c (2026-05-21) 머지 이후 `tool_policy`/`reflection`/
+    # `decomposition` 이 ALIVE. audit 시점 의 사실은 1/5 — 그 줄을 유지하면서
+    # post-S0* update 섹션들이 함께 등장하는지 확인.
     assert "1/5 ALIVE, 4/5 DEAD" in text  # 원본 audit 시점 사실
-    assert "Post-S0a" in text  # S0a 후속 갱신 섹션
-    assert "Post-S0b" in text  # S0b 후속 갱신 섹션
-    assert "3/5 ALIVE, 2/5 DEAD" in text  # 현재 상태 (S0b 후)
+    assert "Post-S0a" in text
+    assert "Post-S0b" in text
+    assert "Post-S0c" in text
+    assert "4/5 ALIVE, 1/5 DEAD" in text  # 현재 상태 (S0c 후)
 
 
 def test_audit_doc_names_all_5_slots() -> None:
@@ -146,11 +147,10 @@ def test_prompt_reader_is_called_in_agentic_loop() -> None:
 @pytest.mark.parametrize(
     "sot_filename",
     [
-        # ADR-012 S0a/S0b (2026-05-21) 머지 이후 ``tool-policy.json`` 과
-        # ``reflection.json`` 이 ALIVE — 각각의 reader 가
-        # ``core/agent/{tool_policy,reflection_policy}.py`` 에 존재. 이
-        # parametrize 에서 제거됨.
-        "decomposition.json",
+        # ADR-012 S0a/S0b/S0c (2026-05-21) 머지 이후 ``tool-policy.json``,
+        # ``reflection.json``, ``decomposition.json`` 이 ALIVE — 각각의
+        # reader 가 ``core/agent/{tool_policy,reflection_policy,decomposition_policy}.py``
+        # 에 존재. 이 parametrize 에서 제거됨.
         "retrieval.json",
     ],
 )
@@ -190,18 +190,22 @@ def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
     )
 
 
-def test_decomposition_slot_not_wired_to_decomposition_json() -> None:
-    """decomposition slot 의 dead 사유 — ``_decomposition.py`` 는
-    ``GoalDecomposer`` 를 호출하고 ``GoalDecomposer`` 의 prompt 는
-    ``core.llm.prompts.load_prompt("decomposer", "system")`` 으로
-    별도 prompt SoT 에서 로드 (즉 hardcoded 가 아님). 다만 어느 경로도
-    ``decomposition.json`` 을 읽지 않음 — 그게 decomposition slot 의
-    dead 사유. (Codex MCP 검증 결과 반영 — `hardcoded` 표현은 부정확,
-    `decomposition.json 미연결` 이 정확.)"""
-    src = _read("core/agent/loop/_decomposition.py")
-    assert "GoalDecomposer" in src
-    # decomposition.json 을 읽는 reader 없음 (loop 진입 지점)
-    assert "decomposition.json" not in src
+def test_decomposition_slot_is_now_alive_post_s0c() -> None:
+    """ADR-012 S0c 머지 이후 ``decomposition.json`` 은 ALIVE — reader 가
+    ``core/agent/decomposition_policy.py`` 에 존재 + ``goal_decomposer.py``
+    의 ``_llm_decompose`` 에서 실제로 호출됨."""
+    hits = _grep_inference_dirs("decomposition.json")
+    assert any("decomposition_policy.py" in h for h in hits), (
+        f"decomposition.json 이 core/agent/decomposition_policy.py 에서 발견되어야 함. hits={hits}"
+    )
+    # Call chain 검증 — goal_decomposer.py 가 reader 를 호출.
+    src = _read("core/orchestration/goal_decomposer.py")
+    assert "_load_decomposition_policy_override" in src, (
+        "goal_decomposer.py 가 _load_decomposition_policy_override 를 호출해야 함."
+    )
+    assert "apply_decomposition_policy" in src, (
+        "goal_decomposer.py 가 apply_decomposition_policy 를 호출해야 함."
+    )
 
 
 def test_reflection_slot_is_now_alive_post_s0b() -> None:

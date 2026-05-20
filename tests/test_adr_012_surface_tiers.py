@@ -56,15 +56,14 @@ def test_tier_1_lists_all_5_slots_with_alive_dead_status() -> None:
     text = _read_adr()
     for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
         assert f"`{slot}`" in text, f"slot missing in Tier 1: {slot}"
-    # ALIVE/DEAD count — S0a + S0b 머지 (2026-05-21) 후 `tool_policy` +
-    # `reflection` ALIVE 로 전환. 현재 상태: 3 ALIVE (prompt + tool_policy +
-    # reflection) / 2 DEAD (decomposition + retrieval). S0c/d 머지 시마다
-    # 이 count 와 ADR Tier 1 표를 함께 갱신.
-    assert text.count("**ALIVE**") == 3, (
-        f"S0a+S0b 후 ALIVE slot 은 정확히 3 개여야 함. count={text.count('**ALIVE**')}"
+    # ALIVE/DEAD count — S0a/S0b/S0c 머지 (2026-05-21) 후 `tool_policy` +
+    # `reflection` + `decomposition` ALIVE 로 전환. 현재 상태: 4 ALIVE /
+    # 1 DEAD (retrieval). S0d 머지 (deprecate or RAG 신설) 후 다시 갱신.
+    assert text.count("**ALIVE**") == 4, (
+        f"S0a/S0b/S0c 후 ALIVE slot 은 정확히 4 개여야 함. count={text.count('**ALIVE**')}"
     )
-    assert text.count("**DEAD**") == 2, (
-        f"S0a+S0b 후 DEAD slot 은 정확히 2 개 (decomposition + retrieval) 여야 함. "
+    assert text.count("**DEAD**") == 1, (
+        f"S0a/S0b/S0c 후 DEAD slot 은 정확히 1 개 (retrieval) 여야 함. "
         f"count={text.count('**DEAD**')}"
     )
 

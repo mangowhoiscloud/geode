@@ -235,10 +235,18 @@ class GoalDecomposer:
     ) -> DecompositionResult | None:
         """Call LLM to decompose the request into sub-goals."""
         try:
+            from core.agent.decomposition_policy import (
+                _load_decomposition_policy_override,
+                apply_decomposition_policy,
+            )
             from core.llm.prompts import load_prompt
             from core.llm.router import call_llm_parsed
 
             system = load_prompt("decomposer", "system")
+            # ADR-012 S0c — 5축의 ``decomposition`` SoT 가 인퍼런스 경로에서
+            # 실제로 적용되는 단일 지점. 정책이 부재하면 ``apply_decomposition_policy``
+            # 는 system 그대로 반환 (현재 행동 보존).
+            system = apply_decomposition_policy(system, _load_decomposition_policy_override())
 
             # Build tool summary for the prompt
             tool_summary = self._build_tool_summary(tools)
