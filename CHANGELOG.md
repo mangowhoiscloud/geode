@@ -47,6 +47,53 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-012 — Self-Improvement Surface Tiers (Proposed).** GEODE 의
+  self-improving loop 가 직면한 두 가지 직교 누수를 명시적으로
+  진단하고, 단기 → 중기 → 장기 성장 곡선 + 의사결정 게이트
+  G1-G6 + 후속 PR 시퀀스 (S0a-d / S1-S5 / M1-M5) 를 ADR 로
+  정착. 두 누수: (a) **면적 누수 1/17** — Petri 17-dim 중 양의
+  압력으로 작동하는 dim 은 `broken_tool_use` 1개뿐, 나머지는
+  alignment evaluation 의 음의 압력 (`autoresearch/train.py:220-250`).
+  (b) **wiring 누수 1/5** — mutator 가 mutate 가능한 5 slot 중
+  reader 가 살아있는 slot 은 `prompt` 1개뿐, 나머지 4 는 SoT 파일은
+  있지만 인퍼런스 reader 부재 (PR-AUDIT-5SLOT 진단,
+  `policies.py:29-37` 자백). 둘을 곱하면 GEODE 의 self-improving
+  loop 가 명세상 5축 × 17-dim = 85 면적이지만 실제 진화 압력은
+  1축 × 1-2dim = **1-2 면적** (1/40~1/85 누수). 또한 (c) **fine-tune
+  표면의 채널 제약** — Anthropic/Claude Code/Codex 구독 채널에선
+  weight fine-tune 표면이 사실상 닫혀 있고 (Bedrock Haiku SFT 만
+  부분 가능), 진화의 본체는 inference-only **surrogate fine-tune**
+  으로 가야 함. ADR 의 4가지 결정 축: (1) **Tier 1 (mutation 허용)
+  / Tier 2 (mutation 금지)** 명시적 분리 — Tier 2 보호로 mutator
+  의 재귀 자기수정 회피. (2) **Fitness 다축화** — 현재
+  `dim_means` 1축에 `ux_means` (행동 — RunLog success / token
+  cost / revert ratio / latency) + `admire_means` (체감 — LLM-judge
+  3-voter cross-provider panel + 분기 human L4 calibration) 두
+  양의 압력 축 추가, multi-axis strict-reject ratchet (한 축이라도
+  regress 면 reject). `admire_means` 는 `plugins/seed_generation/agents/ranker.py`
+  의 ELO + 3-voter panel 인프라 재사용. (3) **Surrogate fine-tune
+  4 경로** — `mutations.jsonl` → `dpo_pairs.jsonl` → ① few-shot
+  pool (prompt cache) + ③ mutator candidate reference + ④ judge
+  calibration corpus + ⑤ reflection bad-pattern anchor. ② RAG
+  vector store 는 `retrieval` slot reader 부재 + 외부 인프라 비용
+  대비 효과 불명확으로 명시 drop, retrieval reader 신설 후
+  reconsider. (4) **단기 → 중기 → 장기 성장 곡선** — S0 (dead
+  slot 처치: S0a tool_policy / S0b reflection / S0c decomposition
+  / S0d retrieval deprecate-or-defer) → S1-S5 (fitness 다축화 +
+  공동 ratchet + in-context slot schema) → M1-M5 (Tier 1 확장 +
+  DPO pipeline) → 장기 weight 시나리오 (a/b/c) 대비. 43개 invariant
+  test — 18 surface tier anchor (3축 / Tier 1·2 / surrogate 4 경로 /
+  RAG drop / G1-G6 / cross-reference) + 25 Tier 2 deny-list
+  (mutation 금지 영역의 SoT 매핑 충돌 방지 + path 존재 검증 + ADR
+  본문의 정확한 path 인용 cross-check). Codex MCP LLM-as-Judge 검증
+  으로 catch 된 3건 정정: (i) HookSystem path 정확화
+  (`core/observability/hook_system.py` → `core/hooks/system.py`)
+  (ii) import-linter 위치 명시 (`pyproject.toml [tool.importlinter]`
+  L173-233) (iii) 게이트 G2-G5 의 측정 임계값 데이터-기반화 (stderr /
+  상관계수 / 측정 window 명시 + S1 metric 정착 후 재평가).
+
 ### Changed
 
 - **PR-AUDIT-5SLOT — self-improving loop 5 slot reader-wiring audit.**
