@@ -38,8 +38,11 @@ __all__ = ["cmd_self_improving"]
 
 
 _HISTORY_DEFAULT_N = 5
-_KNOWN_ACTIONS = frozenset({"status", "run", "history", "rollback", "config"})
+_RUN_DEFERRED_ACTIONS = frozenset({"history", "rollback", "config"})
+_KNOWN_ACTIONS = frozenset({"status", "run"}) | _RUN_DEFERRED_ACTIONS
 _DESIGN_DOC = "docs/plans/2026-05-21-self-improving-loop-ux.md"
+_RUN_DEFAULT_ITERATIONS = 1
+_RUN_MAX_ITERATIONS = 10
 
 
 def cmd_self_improving(args: str) -> None:
@@ -55,10 +58,14 @@ def cmd_self_improving(args: str) -> None:
         _cmd_status()
         return
 
-    if action in _KNOWN_ACTIONS:
+    if action == "run":
+        _cmd_run(parts[1:])
+        return
+
+    if action in _RUN_DEFERRED_ACTIONS:
         console.print()
         console.print(
-            f"  [warning]/{action} is reserved for PR-OPS-2/3[/warning] — "
+            f"  [warning]/{action} is reserved for PR-OPS-2b/3[/warning] — "
             f"see [muted]{_DESIGN_DOC}[/muted]"
         )
         console.print()
@@ -67,8 +74,8 @@ def cmd_self_improving(args: str) -> None:
     console.print()
     console.print(f"  [warning]Unknown action: /self-improving {action}[/warning]")
     console.print(
-        "  [muted]Available now: [/muted]status   "
-        "[muted]Coming PR-OPS-2/3:[/muted] run / history / rollback / config"
+        "  [muted]Available now: [/muted]status / run   "
+        "[muted]Coming PR-OPS-2b/3:[/muted] history / rollback / config"
     )
     console.print()
 
@@ -187,3 +194,305 @@ def _print_audit_row(row: dict[str, Any]) -> None:
         f"{target_kind}.{target_section}  "
         f"[muted]id={mutation_id}[/muted]"
     )
+
+
+# ---------------------------------------------------------------------------
+# ``/self-improving run`` — PR-OPS-2a
+# ---------------------------------------------------------------------------
+
+
+def _cmd_run(opts: list[str]) -> None:
+    """Drive one or more propose/confirm/apply iterations.
+
+    Flags:
+      --dry-run        propose only — show the mutation, NO write
+      --n N            run up to N iterations (default 1, max 10)
+      --target-kind X  filter — abort iteration if the LLM proposes a
+                       different kind; useful when the operator wants
+                       to constrain mutation scope to one SoT
+    """
+    flags = _parse_run_opts(opts)
+    if flags is None:
+        return
+
+    runner = _build_runner()
+    if runner is None:
+        return
+
+    console.print()
+    console.print("  [header]Self-improving loop — run[/header]")
+    _render_preflight(flags)
+    console.print()
+
+    applied = 0
+    rejected = 0
+    for i in range(1, flags["iterations"] + 1):
+        try:
+            proposal = runner.propose()
+        except Exception as exc:
+            console.print(
+                f"  [warning]iteration {i}/{flags['iterations']} — propose failed:[/warning] {exc}"
+            )
+            break
+        if flags["target_kind"] and proposal.mutation.target_kind != flags["target_kind"]:
+            console.print(
+                f"  [warning]iteration {i}/{flags['iterations']} — "
+                f"LLM proposed {proposal.mutation.target_kind!r}, "
+                f"requested {flags['target_kind']!r}; skipping[/warning]"
+            )
+            continue
+
+        _render_proposal(proposal, index=i, total=flags["iterations"])
+
+        if flags["dry_run"]:
+            console.print(
+                "  [muted]--dry-run: proposal NOT applied. "
+                "Re-run without --dry-run to confirm interactively.[/muted]"
+            )
+            console.print()
+            continue
+
+        decision = _prompt_confirmation(proposal)
+        if decision == "apply":
+            try:
+                runner.apply_proposal(proposal)
+                applied += 1
+                console.print(
+                    f"  [success]applied[/success]  id={proposal.mutation.mutation_id[:12]}"
+                )
+            except Exception as exc:
+                console.print(f"  [warning]apply failed:[/warning] {exc}")
+        elif decision == "reject":
+            _record_rejection(runner, proposal)
+            rejected += 1
+            console.print(f"  [muted]rejected[/muted]  id={proposal.mutation.mutation_id[:12]}")
+        else:  # "abort"
+            console.print("  [muted]aborted by user[/muted]")
+            break
+
+        console.print()
+
+    console.print(f"  [muted]summary:[/muted] applied={applied}  rejected={rejected}")
+    console.print()
+
+
+def _parse_run_opts(opts: list[str]) -> dict[str, Any] | None:
+    """Parse the ``--dry-run`` / ``--n`` / ``--target-kind`` flags.
+
+    Returns ``None`` (after printing an error) on invalid input so
+    the slash exits cleanly. Defaults: ``iterations=1``,
+    ``target_kind=""`` (no filter), ``dry_run=False``.
+    """
+    dry_run = False
+    iterations = _RUN_DEFAULT_ITERATIONS
+    target_kind = ""
+    i = 0
+    while i < len(opts):
+        tok = opts[i]
+        if tok == "--dry-run":
+            dry_run = True
+        elif tok == "--n":
+            if i + 1 >= len(opts):
+                console.print("  [warning]--n requires a value[/warning]")
+                return None
+            try:
+                iterations = int(opts[i + 1])
+            except ValueError:
+                console.print(f"  [warning]--n: not an int: {opts[i + 1]!r}[/warning]")
+                return None
+            i += 1
+        elif tok.startswith("--n="):
+            try:
+                iterations = int(tok.split("=", 1)[1])
+            except ValueError:
+                console.print(f"  [warning]--n: not an int: {tok!r}[/warning]")
+                return None
+        elif tok == "--target-kind":
+            if i + 1 >= len(opts):
+                console.print("  [warning]--target-kind requires a value[/warning]")
+                return None
+            target_kind = opts[i + 1]
+            i += 1
+        elif tok.startswith("--target-kind="):
+            target_kind = tok.split("=", 1)[1]
+        else:
+            console.print(f"  [warning]unknown flag: {tok!r}[/warning]")
+            return None
+        i += 1
+    if iterations < 1 or iterations > _RUN_MAX_ITERATIONS:
+        console.print(f"  [warning]--n must be 1 ~ {_RUN_MAX_ITERATIONS}[/warning]")
+        return None
+    if target_kind and target_kind not in {
+        "prompt",
+        "tool_policy",
+        "decomposition",
+        "retrieval",
+        "reflection",
+    }:
+        console.print(
+            "  [warning]--target-kind must be one of "
+            "prompt|tool_policy|decomposition|retrieval|reflection[/warning]"
+        )
+        return None
+    return {
+        "dry_run": dry_run,
+        "iterations": iterations,
+        "target_kind": target_kind,
+    }
+
+
+def _build_runner() -> Any | None:
+    """Construct ``SelfImprovingLoopRunner`` with safe defaults.
+
+    Returns ``None`` (after printing an error) on construction
+    failure so the slash exits cleanly. ``rerun_enabled=False``
+    keeps the slash cheap by default — the operator must explicitly
+    run autoresearch separately for a measurement.
+    """
+    try:
+        from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+        return SelfImprovingLoopRunner(
+            rerun_enabled=False,
+            commit_enabled=True,
+        )
+    except Exception as exc:
+        console.print(f"  [warning]runner init failed:[/warning] {exc}")
+        return None
+
+
+def _render_preflight(flags: dict[str, Any]) -> None:
+    """Render the static text pre-flight block.
+
+    PR-OPS-2a (no Rich Panel yet — interactive dashboard lands in
+    PR-OPS-2b). Surfaces the slice of knobs an operator needs to
+    sanity-check before approving a mutation.
+    """
+    target_kind = flags["target_kind"] or "any"
+    mode = "dry-run (no write)" if flags["dry_run"] else "interactive (per-iter confirm)"
+    mutator_model: str = "?"
+    mutator_source: str = "?"
+    try:
+        from core.config.self_improving_loop import load_self_improving_loop_config
+
+        cfg = load_self_improving_loop_config()
+        mutator_model = cfg.mutator.default_model
+        mutator_source = cfg.mutator.source
+    except Exception:
+        # Best-effort UI: missing config falls through to the "?" placeholders.
+        import logging
+
+        logging.getLogger(__name__).debug("mutator config read failed", exc_info=True)
+    console.print()
+    console.print("  [bold]Pre-flight[/bold]")
+    console.print(f"    mutator      [bold]{mutator_model}[/bold]  source={mutator_source}")
+    console.print(f"    target_kind  {target_kind}")
+    console.print(f"    iterations   {flags['iterations']}")
+    console.print(f"    mode         {mode}")
+    console.print("    harness      [muted]no-op (PR-OPS-2b wires autoresearch/petri_raw)[/muted]")
+
+
+def _render_proposal(proposal: Any, *, index: int, total: int) -> None:
+    """Render one Mutation as a confirmation block."""
+    mut = proposal.mutation
+    prev = proposal.target_sections.get(mut.target_section, "")
+    console.print(f"  [header][Self-improving loop — proposal {index}/{total}][/header]")
+    console.print(f"    target_kind     {mut.target_kind}")
+    console.print(f"    target_section  {mut.target_section}")
+    console.print(
+        f"    previous_value  {_clip(prev, 80) if prev else '[muted](new section)[/muted]'}"
+    )
+    console.print(f"    new_value       {_clip(mut.new_value, 80)}")
+    if mut.rationale:
+        console.print(f"    rationale       {_clip(mut.rationale, 200)}")
+    if proposal.baseline_fitness is not None:
+        console.print(f"    baseline_fitness {proposal.baseline_fitness:.4f}  [muted](SoT)[/muted]")
+    if mut.expected_dim:
+        console.print(f"    expected_dim    {dict(mut.expected_dim)}")
+    if mut.rollback_condition:
+        console.print(f"    rollback_cond   {_clip(mut.rollback_condition, 120)}")
+
+
+def _prompt_confirmation(proposal: Any) -> str:
+    """Read one y/N/d/s response. Loops on d/s (auxiliary outputs).
+
+    Returns one of ``"apply"`` / ``"reject"`` / ``"abort"``. EOF /
+    Ctrl-D returns ``"abort"`` so the slash exits cleanly.
+    """
+    while True:
+        try:
+            raw = console.input(
+                "  Apply this mutation? "
+                "[bold]y[/bold]=apply / [bold]N[/bold]=reject / "
+                "d=show-diff / s=show-rationale: "
+            )
+        except (EOFError, KeyboardInterrupt):
+            return "abort"
+        ans = raw.strip().lower()
+        if ans in {"y", "yes"}:
+            return "apply"
+        if ans in {"", "n", "no"}:
+            return "reject"
+        if ans == "d":
+            console.print("    [muted]diff (truncated):[/muted]")
+            prev_val = proposal.target_sections.get(proposal.mutation.target_section, "")
+            console.print(f"      - {_clip(prev_val, 240)}")
+            console.print(f"      + {_clip(proposal.mutation.new_value, 240)}")
+            continue
+        if ans == "s":
+            console.print("    [muted]rationale:[/muted]")
+            console.print(f"      {_clip(proposal.mutation.rationale, 600)}")
+            continue
+        console.print("  [muted]please answer y / N / d / s[/muted]")
+
+
+def _record_rejection(runner: Any, proposal: Any) -> None:
+    """Append a ``kind=rejected`` row to the audit log.
+
+    The operator chose not to apply, but the rejection itself is
+    signal — record it so the mutator LLM can learn (via the next
+    iteration's context) which proposals get rejected and why.
+    Best-effort: failure logged but not surfaced.
+
+    Codex MCP catch (2026-05-21, PR #1395): the runner's
+    ``audit_log_path`` defaults to ``None`` (lazy resolution — the
+    ``append_audit_log`` helper falls back to
+    ``MUTATION_AUDIT_LOG_PATH``). Mirror that resolution here so
+    ``Path(None)`` never trips on the real slash path where the
+    operator constructs the runner via ``_build_runner`` without
+    passing an audit_log_path.
+    """
+    import logging
+    import time
+
+    from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
+
+    log = logging.getLogger(__name__)
+    raw_path = runner.audit_log_path or MUTATION_AUDIT_LOG_PATH
+    audit_path = Path(raw_path)
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": time.time(),
+        "kind": "rejected",
+        "mutation_id": proposal.mutation.mutation_id,
+        "target_kind": proposal.mutation.target_kind,
+        "target_section": proposal.mutation.target_section,
+        "previous_value": proposal.target_sections.get(proposal.mutation.target_section, ""),
+        "new_value": proposal.mutation.new_value,
+        "rationale": proposal.mutation.rationale,
+        "target_dim": proposal.mutation.target_dim,
+        "expected_dim": dict(proposal.mutation.expected_dim),
+        "rollback_condition": proposal.mutation.rollback_condition,
+        "baseline_fitness": proposal.baseline_fitness,
+    }
+    try:
+        with audit_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        log.warning("audit-log rejection write failed", exc_info=True)
+
+
+def _clip(s: str, n: int) -> str:
+    if len(s) <= n:
+        return s
+    return s[: n - 1] + "…"

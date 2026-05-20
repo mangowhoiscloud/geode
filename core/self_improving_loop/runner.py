@@ -54,6 +54,7 @@ log = logging.getLogger(__name__)
 __all__ = [
     "MUTATION_AUDIT_LOG_PATH",
     "Mutation",
+    "Proposal",
     "RunnerContext",
     "SelfImprovingLoopRunner",
     "apply_mutation",
@@ -129,6 +130,39 @@ class Mutation:
             "rollback_condition": self.rollback_condition,
             "baseline_fitness": baseline_fitness,
         }
+
+
+@dataclass
+class Proposal:
+    """One propose-only result — `propose()` returns this, the caller
+    decides whether to call `apply_proposal()` afterwards.
+
+    PR-OPS-2a (2026-05-21) — splits ``run_once`` into propose/apply
+    halves so the ``/self-improving run`` slash can show the operator
+    the LLM's mutation candidate, wait for ``y/N`` confirmation, then
+    either apply or record a ``kind=rejected`` audit row. Pre-split
+    the only entry was ``run_once`` which built context, called the
+    LLM, AND wrote the SoT in one shot — no confirmation seam.
+    """
+
+    mutation: Mutation
+    """The LLM-proposed mutation."""
+
+    target_sections: dict[str, str] = field(default_factory=dict)
+    """Current SoT contents for ``mutation.target_kind`` — what
+    ``apply_mutation`` mutates. Distinct from ``original_sections``
+    only in identity; both carry the same key/value pairs at propose
+    time, and ``apply_mutation`` mutates ``target_sections`` in place."""
+
+    original_sections: dict[str, str] = field(default_factory=dict)
+    """Frozen pre-apply snapshot for the rollback path. Captured at
+    propose time so a subsequent ``apply_proposal`` failure can
+    restore exactly the pre-mutation state."""
+
+    baseline_fitness: float | None = None
+    """The current baseline.json fitness scalar (if any), surfaced as
+    a convenience for UI rendering — operator wants to see what they
+    are comparing against before approving the mutation."""
 
 
 @dataclass
@@ -754,22 +788,27 @@ class SelfImprovingLoopRunner:
     rerun_enabled: bool = False
     rerun_dry_run: bool = True
 
-    def run_once(self) -> Mutation:
-        """Execute one mutation iteration and return the applied :class:`Mutation`.
+    def propose(self) -> Proposal:
+        """Build context, call the mutator LLM, parse one Mutation.
 
-        The function is the single-iteration unit; callers wrap it in
-        a loop (or schedule it via ``geode schedule``) when they want
-        a multi-round campaign. Each call:
+        Stops BEFORE any SoT write. Returns a :class:`Proposal` the
+        caller can show the operator for confirmation; calling
+        :meth:`apply_proposal` afterwards persists the mutation.
 
-        1. Builds context (baseline + meta-review + current sections).
-        2. Calls the LLM with the system + user prompt.
-        3. Parses + validates the mutation.
-        4. Applies it to the SoT.
-        5. Appends + (optionally) commits the audit log row.
-        6. (Optionally) re-runs autoresearch.
+        Raises :class:`ValueError` on parse / validation failure.
 
-        Raises :class:`ValueError` on parse / validation failure so
-        the caller can decide whether to retry.
+        Steps:
+
+        1. Build context (baseline + meta-review + current sections).
+        2. Call the LLM with the system + user prompt.
+        3. Parse + validate the mutation.
+        4. Load the correct SoT for the parsed ``target_kind`` (kind-
+           aware so a tool_policy mutation reads tool-policy.json, not
+           wrapper-sections.json).
+
+        ``target_sections`` and ``original_sections`` carry identical
+        contents at this point; the latter is the rollback snapshot,
+        the former is what :func:`apply_mutation` mutates in place.
         """
         ctx = build_runner_context()
         user_prompt = _build_user_prompt(ctx)
@@ -790,30 +829,64 @@ class SelfImprovingLoopRunner:
         else:
             target_sections = load_policy(mutation.target_kind)
         original_sections = dict(target_sections)
-        _new_sections, previous_value = apply_mutation(mutation, current_sections=target_sections)
-        # G5b.fix3 (2026-05-20) — atomicity boundary: if the audit log
-        # write fails after the SoT mutation lands, the in-disk state is
-        # silently divergent (SoT advanced, history missing). Roll the
-        # SoT back to ``original_sections`` so the next iteration sees a
-        # consistent state. Best-effort: rollback can itself fail (rare
-        # filesystem outage); we log + re-raise the original exception
-        # so the caller knows the iteration failed.
+        baseline_fitness: float | None = None
+        snapshot = ctx.baseline_snapshot
+        if snapshot is not None:
+            raw_fitness = getattr(snapshot, "fitness", None)
+            if isinstance(raw_fitness, int | float):
+                baseline_fitness = float(raw_fitness)
+        return Proposal(
+            mutation=mutation,
+            target_sections=target_sections,
+            original_sections=original_sections,
+            baseline_fitness=baseline_fitness,
+        )
+
+    def apply_proposal(self, proposal: Proposal) -> Mutation:
+        """Apply a previously-proposed mutation — write SoT, audit
+        log, (optional) git commit, (optional) autoresearch rerun.
+
+        Steps 4-6 of the original ``run_once``. The caller (slash
+        handler / tool / scheduler) is responsible for showing the
+        operator the proposal and gating this method on consent.
+
+        ``proposal.target_sections`` is mutated in place by
+        :func:`apply_mutation`. The G5b.fix3 atomicity boundary stays
+        intact: if the audit-log write fails after the SoT mutation
+        lands, the SoT is rolled back to
+        ``proposal.original_sections`` and the original exception
+        propagates so the caller can retry.
+        """
+        _new_sections, previous_value = apply_mutation(
+            proposal.mutation, current_sections=proposal.target_sections
+        )
         try:
             log_path = append_audit_log(
-                mutation,
+                proposal.mutation,
                 previous_value=previous_value,
                 log_path=self.audit_log_path,
             )
         except OSError as exc:
-            self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+            self._rollback_sot(proposal.original_sections, mutation=proposal.mutation, exc=exc)
             raise
         if self.commit_enabled:
-            _git_commit_audit_log(log_path, mutation=mutation)
+            _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             repo_root = log_path.resolve().parents[1]
             self._invoke_autoresearch(repo_root)
-        self._append_self_improving_loop_index(mutation, previous_value)
-        return mutation
+        self._append_self_improving_loop_index(proposal.mutation, previous_value)
+        return proposal.mutation
+
+    def run_once(self) -> Mutation:
+        """Execute one full propose+apply iteration. Backwards-compat
+        wrapper around :meth:`propose` + :meth:`apply_proposal` so
+        existing callers (and the autoresearch self-improving loop)
+        keep working unchanged.
+
+        Raises :class:`ValueError` on parse / validation failure so
+        the caller can decide whether to retry.
+        """
+        return self.apply_proposal(self.propose())
 
     @staticmethod
     def _rollback_sot(

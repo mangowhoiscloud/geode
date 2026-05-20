@@ -49,6 +49,48 @@ functional change.
 
 ### Added
 
+- **PR-OPS-2a — `/self-improving run` slash + propose/apply split.**
+  Second slice of the self-improving-loop UX foundation. PR-OPS-1
+  wired the read-only `/self-improving status` surface; PR-OPS-2a
+  adds the *write* surface — operators can now drive one or more
+  mutation iterations from the REPL with per-iteration confirmation,
+  WITHOUT knowing internal module paths. Changes: (1) splits the
+  monolithic `SelfImprovingLoopRunner.run_once()` into `propose()`
+  (build context + LLM call + parse, no SoT write) and
+  `apply_proposal(proposal)` (write SoT + audit log + optional
+  rerun) — `run_once()` becomes a backward-compat wrapper composing
+  the two so existing callers (autoresearch self-improving loop)
+  see no change. The new `Proposal` dataclass exports
+  `mutation` + `target_sections` + `original_sections` (rollback
+  snapshot) + `baseline_fitness` (UI convenience). (2) Wires
+  `/self-improving run` with three flags: `--dry-run` (propose
+  only — show the mutation, NO write), `--n N` (1–10 iterations,
+  default 1), `--target-kind X` (filter — skip iteration if the LLM
+  proposes a different SoT kind than requested). (3) Per-iteration
+  confirmation prompt — `y` apply, `N`/empty reject (writes a
+  `kind=rejected` audit row for mutator-LLM learning signal), `d`
+  show diff and re-prompt, `s` show full rationale and re-prompt,
+  EOF/Ctrl-D/KeyboardInterrupt → abort breaks the iteration loop
+  cleanly *without* writing a rejection row (the abort is the
+  operator's intent to stop, not a verdict on the proposal).
+  (4) Static text pre-flight block surfaces mutator model + source +
+  target_kind filter + iterations + mode + harness label
+  (no-op for now — PR-OPS-2b wires autoresearch/petri_raw harness
+  selection). (5) `run` removed from the deferred-action hint;
+  remaining `history`/`rollback`/`config` still print the design-
+  doc pointer with the updated `PR-OPS-2b/3` tag. 27 invariant tests
+  pin propose/apply split (propose() does NOT write SoT or audit
+  log, apply_proposal() does both, run_once() composes them
+  observationally), Proposal in `__all__`, full flag-parser surface
+  (defaults / --dry-run / --n parsing both `--n N` and `--n=N` /
+  --n out-of-range / 5 valid --target-kind values / invalid
+  --target-kind / unknown flag), dispatcher routing (`run` →
+  `_cmd_run` with the trailing tokens), --dry-run skips
+  apply_proposal, --target-kind=tool_policy + prompt-kind LLM →
+  skip iteration with warning, y/N/abort decisions, abort during
+  multi-iteration breaks the loop, propose-failure breaks the
+  loop, and rejection writes a kind=rejected audit row.
+
 - **PR-OPS-1 — self-improving loop operator-facing surface (slash
   `status` + design doc + frontmatter parity fix).** First slice of
   the multi-PR self-improving-loop UX foundation. Pre-PR the closed

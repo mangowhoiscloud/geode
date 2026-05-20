@@ -95,15 +95,17 @@ def test_status_action_dispatches_to_status(monkeypatch: pytest.MonkeyPatch) -> 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("action", ["run", "history", "rollback", "config"])
+@pytest.mark.parametrize("action", ["history", "rollback", "config"])
 def test_reserved_actions_emit_design_doc_hint(
     action: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """``run`` action was wired in PR-OPS-2a; the remaining three
+    (history/rollback/config) still print the design-doc pointer."""
     from core.cli.commands.self_improving import cmd_self_improving
 
     cmd_self_improving(action)
     out = capsys.readouterr().out
-    assert "PR-OPS-2/3" in out
+    assert "PR-OPS-2b/3" in out
     assert "self-improving-loop-ux.md" in out
 
 
