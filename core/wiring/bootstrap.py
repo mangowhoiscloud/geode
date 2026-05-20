@@ -408,7 +408,11 @@ def build_hooks(
     def _reg_episodic_memory() -> None:
         import time
 
-        from core.agent.cognitive_state_ctx import get_cognitive_state, get_session_id
+        from core.agent.cognitive_state_ctx import (
+            get_cognitive_state,
+            get_parent_session_id,
+            get_session_id,
+        )
         from core.memory.episodic import Episode, _summarise_tool_input, get_episodic_store
 
         store = get_episodic_store()
@@ -426,6 +430,13 @@ def build_hooks(
             state = get_cognitive_state()
             snapshot = state.to_snapshot() if state is not None else {}
             session_id = get_session_id()
+            # PR-F (2026-05-21) — sub-agent lineage. Empty string for
+            # top-level loops; non-empty when the active loop was
+            # spawned via the OpenClaw spawn pattern. Reader for the
+            # PR-E confidence-trajectory aggregator: an Episode's
+            # ``parent_session_id`` lets cross-session attribution
+            # group child rows under the parent's session_id.
+            parent_session_id = get_parent_session_id()
             round_raw = snapshot.get("round_count", 0)
             round_count = round_raw if isinstance(round_raw, int) else 0
             input_head_arg = tool_input if isinstance(tool_input, dict | str) else None
@@ -439,6 +450,7 @@ def build_hooks(
                 error=error,
                 duration_ms=float(data.get("duration_ms", 0.0)),
                 cognitive_state=snapshot,
+                parent_session_id=parent_session_id,
             )
             try:
                 store.append(episode)

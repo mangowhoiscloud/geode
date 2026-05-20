@@ -34,6 +34,14 @@ _active_state: ContextVar[CognitiveState | None] = ContextVar(
     "geode_active_cognitive_state", default=None
 )
 _active_session_id: ContextVar[str] = ContextVar("geode_active_session_id", default="")
+# PR-F (2026-05-21) — sub-agent lineage. When the active loop is a
+# child spawned via the OpenClaw spawn pattern, this carries the
+# *parent* loop's ``session_id`` so the episodic recorder can stamp
+# the child's Episode rows with the parent reference for cross-
+# session attribution. Empty string = top-level loop, no parent.
+_active_parent_session_id: ContextVar[str] = ContextVar(
+    "geode_active_parent_session_id", default=""
+)
 
 
 def get_cognitive_state() -> CognitiveState | None:
@@ -61,9 +69,25 @@ def set_session_id(session_id: str) -> None:
     _active_session_id.set(session_id)
 
 
+def get_parent_session_id() -> str:
+    """PR-F (2026-05-21) — return the active loop's *parent* session
+    id, or ``""`` for a top-level loop. Read by the episodic recorder
+    so cross-session attribution can group child Episode rows under
+    the parent."""
+    return _active_parent_session_id.get()
+
+
+def set_parent_session_id(parent_session_id: str) -> None:
+    """Bind ``parent_session_id`` to the current context. Empty
+    string clears the binding (top-level loop)."""
+    _active_parent_session_id.set(parent_session_id)
+
+
 __all__ = [
     "get_cognitive_state",
+    "get_parent_session_id",
     "get_session_id",
     "set_cognitive_state",
+    "set_parent_session_id",
     "set_session_id",
 ]

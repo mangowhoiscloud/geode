@@ -56,7 +56,14 @@ EPISODE_LOG_MAX_ROWS = 1000
 
 @dataclass
 class Episode:
-    """One row in the episodic ledger."""
+    """One row in the episodic ledger.
+
+    PR-F (2026-05-21) — added ``parent_session_id`` for sub-agent
+    lineage. Empty string = top-level loop; otherwise the parent
+    AgenticLoop's ``session_id`` so cross-session attribution can
+    group child rows under the parent. Defaulted (not required) so
+    older readers + tests that hand-construct Episodes still work.
+    """
 
     timestamp_ns: int
     session_id: str
@@ -67,6 +74,7 @@ class Episode:
     error: str | None
     duration_ms: float
     cognitive_state: dict[str, Any] = field(default_factory=dict)
+    parent_session_id: str = ""
 
     def to_jsonl(self) -> str:
         """Serialize to a single JSONL line (no trailing newline)."""

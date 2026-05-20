@@ -49,6 +49,33 @@ functional change.
 
 ### Added
 
+- **PR-F — sub-agent state propagation via ``parent_session_id``
+  lineage.** Concern #3 from the post-sprint frontier matrix: PR-4
+  bound ``CognitiveState`` + ``session_id`` per-task via ContextVar,
+  but sub-agents (OpenClaw spawn pattern) inherited a *fresh*
+  cognitive context with no link back to the parent. Episode rows
+  from child loops had ``session_id=child`` but no record of the
+  spawning parent, so the PR-E confidence-trajectory aggregator
+  couldn't group sub-agent rounds under the parent for cross-
+  session attribution. PR-F closes the loop. New
+  ``get_parent_session_id`` / ``set_parent_session_id`` ContextVar
+  pair in ``core/agent/cognitive_state_ctx.py`` (matches CLAUDE.md
+  reader/writer parity rule). ``AgenticLoop._emit_session_start_signals``
+  binds ``self._parent_session_key`` (already plumbed through the
+  constructor for the OpenClaw spawn pattern) into the ContextVar
+  alongside the existing ``set_cognitive_state`` /
+  ``set_session_id`` calls. ``Episode`` gains a ``parent_session_id``
+  field (default ``""``, so older readers + hand-constructed
+  fixtures still work). The bootstrap ``TOOL_EXEC_ENDED`` handler
+  reads ``get_parent_session_id()`` and stamps the value onto every
+  Episode row. Legacy JSONL rows without the field load with the
+  default empty string. 8 invariant tests pin: ContextVar default
+  + roundtrip + ``__all__`` surface; Episode field + JSONL
+  roundtrip + persistence + legacy-row tolerance; bootstrap
+  reader; AgenticLoop bind site; constructor signature preservation.
+
+### Added
+
 - **PR-E — causal attribution × CognitiveState confidence-stability
   term.** Concern #5 from the post-sprint frontier matrix: PR-5's
   ``compute_attribution`` only consumed baseline dim deltas + the
