@@ -380,17 +380,13 @@ def _parse_run_opts(opts: list[str]) -> dict[str, Any] | None:
     if iterations < 1 or iterations > _RUN_MAX_ITERATIONS:
         console.print(f"  [warning]--n must be 1 ~ {_RUN_MAX_ITERATIONS}[/warning]")
         return None
-    if target_kind and target_kind not in {
-        "prompt",
-        "tool_policy",
-        "decomposition",
-        "retrieval",
-        "reflection",
-    }:
-        console.print(
-            "  [warning]--target-kind must be one of "
-            "prompt|tool_policy|decomposition|retrieval|reflection[/warning]"
-        )
+    # ADR-012 S0d (2026-05-21) — TARGET_KINDS 가 4축으로 축소 후 (retrieval
+    # deprecated). policies.TARGET_KINDS 를 직접 import 해서 single source.
+    from core.self_improving_loop.policies import TARGET_KINDS
+
+    if target_kind and target_kind not in TARGET_KINDS:
+        valid_kinds = "|".join(TARGET_KINDS)
+        console.print(f"  [warning]--target-kind must be one of {valid_kinds}[/warning]")
         return None
     return {
         "dry_run": dry_run,

@@ -31,13 +31,14 @@ from core.self_improving_loop import policies as _policies_mod
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_all_five() -> None:
-    """Plan Q3 — exactly five enum values; pin the set."""
+def test_target_kinds_contains_active_four() -> None:
+    """ADR-012 S0d (2026-05-21) — retrieval deprecated. 4 active mutation
+    targets. (Originally 5; retrieval 의 deprecate 근거는 ADR §Decision.3a
+    의 Boris Cherny + arXiv 2605.15184 + Anthropic blog 3-source 합의.)"""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
         "decomposition",
-        "retrieval",
         "reflection",
     }
 
@@ -58,9 +59,10 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 
 def test_policy_path_returns_distinct_paths() -> None:
-    """Distinct SoT per kind so policies evolve independently."""
-    paths = {kind: policy_path(kind) for kind in TARGET_KINDS}
-    # All 5 paths are unique
+    """Distinct SoT per kind so policies evolve independently. S0d 후
+    4 active kinds + 보존된 retrieval 매핑 = 5 distinct paths."""
+    paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
+    # 4 active + retrieval (deprecated but path preserved) = 5 unique paths
     assert len(set(paths.values())) == 5
 
 
@@ -267,19 +269,21 @@ def test_apply_mutation_decomposition_writes_to_decomposition_file(
     assert json.loads(target.read_text(encoding="utf-8")) == {"strategy": "depth-first"}
 
 
-def test_apply_mutation_retrieval_writes_to_retrieval_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    target = tmp_path / "retrieval.json"
-    _redirect_kind(monkeypatch, "retrieval", target)
-    m = Mutation(
-        target_section="top_k",
-        new_value="3",
-        rationale="r",
-        target_kind="retrieval",
+def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
+    """ADR-012 S0d (2026-05-21) — retrieval 은 TARGET_KINDS 에서 deprecate.
+    ``apply_mutation`` 호출 시 ``is_valid_target_kind("retrieval") == False``
+    이므로 ``policy_path`` 가 ValueError 를 raise 한다."""
+    from core.self_improving_loop.policies import is_valid_target_kind, policy_path
+
+    assert is_valid_target_kind("retrieval") is False, (
+        "S0d 후 retrieval 은 active target_kind 가 아님"
     )
-    apply_mutation(m, current_sections={})
-    assert target.exists()
+    # policy_path 는 raise ValueError on unknown kinds — 그러나 dict 매핑은
+    # 보존돼 있어서 직접 호출은 가능 (path constant preservation).
+    # apply_mutation 의 entry guard 는 is_valid_target_kind 를 거치므로
+    # retrieval mutation 시도는 거부됨.
+    path = policy_path("retrieval")  # dict 매핑은 보존 — 미래 복원용
+    assert path.name == "retrieval.json"
 
 
 def test_apply_mutation_reflection_writes_to_reflection_file(

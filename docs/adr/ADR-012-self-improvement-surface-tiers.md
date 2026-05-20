@@ -170,7 +170,7 @@ Staleness 의 구체적 예시: "RAG returns a function the team renamed two wee
 
 | 시스템 | 도메인 | 임베딩 | 추세 |
 |---|---|---|---|
-| Hermes-Agent | Long-term memory | ✅ YES (적극, sqlite-vec + Hindsight + Holographic HRR) | 활발 |
+| Hermes-Agent | Long-term memory | ✅ YES (적극, Hindsight Cloud/Local + Holographic HRR + 자체 SQLite native + opt. Chroma — sqlite-vec 는 미사용) | 활발 |
 | OpenClaw | Agent memory + retrieval | ✅ YES (sqlite-vec + FTS5 + MMR + temporal decay) | 활발 |
 | Claude Code | Code/agent | ❌ NO (의도적 회피, Glob+Grep+Read+Agent) | LLM-native zero-index |
 | Cursor (2023) | IDE | ✅ YES (indexing-first) | 1세대 |

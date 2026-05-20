@@ -328,8 +328,9 @@ _MUTATION_CONTRACT_SUFFIX = (
     "- ``target_kind`` selects the policy SoT to mutate. One of "
     "``prompt`` (default, wrapper-sections.json), ``tool_policy`` "
     "(tool-policy.json), ``decomposition`` (decomposition.json), "
-    "``retrieval`` (retrieval.json), ``reflection`` (reflection.json). "
-    "Omit for prompt-level mutations.\n"
+    "``reflection`` (reflection.json). "
+    "Omit for prompt-level mutations. (``retrieval`` was deprecated "
+    "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -338,7 +339,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "new_value": "<replacement text>",\n'
     '  "rationale": "<= 200 chars, citing the evidence>",\n'
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
-    '  "target_kind": "<prompt|tool_policy|decomposition|retrieval|reflection>",\n'
+    '  "target_kind": "<prompt|tool_policy|decomposition|reflection>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
     '  "rollback_condition": "<one-line predicate, or empty>"\n'
     "}\n"
