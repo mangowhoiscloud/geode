@@ -420,6 +420,101 @@ def test_runner_context_defaults() -> None:
 
 
 # ---------------------------------------------------------------------------
+# G5b.fix2 (2026-05-20) — program.md is actually loaded as the system prompt
+# ---------------------------------------------------------------------------
+
+
+def test_system_prompt_loads_program_md_when_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When program.md is readable, _build_system_prompt prepends its body."""
+    from core.self_improving_loop import runner
+
+    monkeypatch.setattr(
+        runner,
+        "_load_program_md",
+        lambda: "## CUSTOM PROGRAM MD BODY\n\nThis text must reach the LLM.",
+    )
+    prompt = runner._build_system_prompt()
+    assert "## CUSTOM PROGRAM MD BODY" in prompt
+    assert "This text must reach the LLM." in prompt
+    # The mutation-contract suffix is appended so the JSON contract is still
+    # present alongside the program.md body.
+    assert "Response schema:" in prompt
+    assert "target_section" in prompt
+
+
+def test_system_prompt_falls_back_when_program_md_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When _load_program_md returns None (missing/OSError), use fallback."""
+    from core.self_improving_loop import runner
+
+    monkeypatch.setattr(runner, "_load_program_md", lambda: None)
+    prompt = runner._build_system_prompt()
+    # Fallback content (the pre-G5b.fix2 inline prompt) is returned verbatim.
+    assert prompt == runner._FALLBACK_SYSTEM_PROMPT
+    assert "Response schema:" in prompt
+
+
+def test_load_program_md_reads_real_file_in_repo() -> None:
+    """The real ``autoresearch/program.md`` file is reachable from the runner."""
+    from core.self_improving_loop.runner import _load_program_md
+
+    program_md = _load_program_md()
+    assert program_md is not None, (
+        "autoresearch/program.md was not reachable from the runner. "
+        "Check the path resolution in _load_program_md if the runner "
+        "module moved."
+    )
+    assert "autoresearch" in program_md.lower()
+
+
+def test_run_once_uses_program_md_in_system_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: SelfImprovingLoopRunner.run_once passes program.md body to LLM."""
+    from autoresearch import train as auto_train
+
+    from core.self_improving_loop import runner
+
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_baseline",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        runner,
+        "_load_program_md",
+        lambda: "## CUSTOM PROGRAM MD\n\nThe runner must surface this.",
+    )
+    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+
+    captured: dict[str, str] = {}
+
+    def _capture_llm(system: str, _user: str) -> str:
+        captured["system"] = system
+        return json.dumps({"target_section": "role", "new_value": "new", "rationale": "r"})
+
+    runner.SelfImprovingLoopRunner(
+        llm_call=_capture_llm,
+        audit_log_path=tmp_path / "mutations.jsonl",
+        commit_enabled=False,
+        rerun_enabled=False,
+    ).run_once()
+    assert "CUSTOM PROGRAM MD" in captured["system"]
+    assert "The runner must surface this." in captured["system"]
+    # And the mutation contract suffix is still appended.
+    assert "Response schema:" in captured["system"]
+
+
+# ---------------------------------------------------------------------------
 # G5b.fix3 (2026-05-20) — atomicity: SoT rolls back on audit-log OSError
 # ---------------------------------------------------------------------------
 

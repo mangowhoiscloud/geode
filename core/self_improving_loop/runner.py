@@ -173,7 +173,7 @@ def build_runner_context() -> RunnerContext:
 # ---------------------------------------------------------------------------
 
 
-_SYSTEM_PROMPT = (
+_FALLBACK_SYSTEM_PROMPT = (
     "You are the self-improving-loop mutator for GEODE, an autonomous "
     "execution agent. Your job: read the audit baseline, meta-review "
     "priors, and the current WRAPPER_PROMPT_SECTIONS dict, then propose "
@@ -197,6 +197,83 @@ _SYSTEM_PROMPT = (
     '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
     "}\n"
 )
+"""Inline fallback prompt used when ``autoresearch/program.md`` is unreadable.
+
+Kept as a complete, self-contained string so a `program.md` outage (missing
+file, OSError) doesn't take the runner offline. Tests that don't need the
+program.md content monkeypatch :func:`_load_program_md` to skip the disk read.
+"""
+
+
+_MUTATION_CONTRACT_SUFFIX = (
+    "\n\n"
+    "## Mutation Contract (runner-specific, on top of program.md)\n"
+    "\n"
+    "For THIS invocation, ignore the broader autoresearch loop instructions "
+    "in program.md and act as a single-shot mutator with these constraints:\n"
+    "\n"
+    "- Change exactly ONE section of WRAPPER_PROMPT_SECTIONS. Adding a new "
+    "section key counts as a change; deleting does NOT (the runner ignores "
+    "deletions).\n"
+    "- ``new_value`` must be a non-empty single-paragraph string under 600 "
+    "characters.\n"
+    "- ``rationale`` must cite the specific regression evidence or "
+    "meta-review prior that motivates the change.\n"
+    "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
+    "\n"
+    "Response schema:\n"
+    "{\n"
+    '  "target_section": "<section key>",\n'
+    '  "new_value": "<replacement text>",\n'
+    '  "rationale": "<= 200 chars, citing the evidence>",\n'
+    '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
+    "}\n"
+)
+"""Appended to program.md so the runner can scope it to a single mutation step.
+
+program.md (Karpathy P7 — the agent instruction document) describes the
+*overall* self-improving loop: branch creation, multi-iteration ratchet,
+fitness measurement etc. This runner is a single-shot step inside that loop
+that proposes ONE mutation per invocation. The suffix narrows the broader
+contract to the JSON output the parser expects.
+"""
+
+
+def _load_program_md() -> str | None:
+    """Read ``autoresearch/program.md`` from disk; return ``None`` on failure.
+
+    Resolves the path relative to the runner module so the lookup works in
+    worktrees / installs where ``cwd`` doesn't match the repo root.
+    Returns ``None`` (not a raised exception) on missing file / OSError so
+    the runner can fall back to the inline prompt without breaking the loop.
+    Tests monkeypatch this function to inject canned content.
+    """
+    program_md_path = Path(__file__).resolve().parents[2] / "autoresearch" / "program.md"
+    try:
+        return program_md_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        log.warning(
+            "self-improving-loop runner: could not read %s (%s); using fallback prompt",
+            program_md_path,
+            exc,
+        )
+        return None
+
+
+def _build_system_prompt() -> str:
+    """Compose the system prompt: program.md body + single-mutation contract.
+
+    G5b.fix1.b (2026-05-20) — closes the second of the Codex MCP findings on
+    PR-G5b: the runner is now genuinely "program.md-driven" because the
+    document is loaded and used at every invocation. When program.md is
+    unreadable, the runner falls back to :data:`_FALLBACK_SYSTEM_PROMPT`
+    (the previous hardcoded prompt) so the loop never goes offline due to
+    a missing/corrupt instruction file.
+    """
+    program_md = _load_program_md()
+    if program_md is None:
+        return _FALLBACK_SYSTEM_PROMPT
+    return program_md.rstrip() + _MUTATION_CONTRACT_SUFFIX
 
 
 def _build_user_prompt(ctx: RunnerContext) -> str:
@@ -487,7 +564,7 @@ class SelfImprovingLoopRunner:
         ctx = build_runner_context()
         original_sections = dict(ctx.current_sections)
         user_prompt = _build_user_prompt(ctx)
-        raw_response = self.llm_call(_SYSTEM_PROMPT, user_prompt)
+        raw_response = self.llm_call(_build_system_prompt(), user_prompt)
         mutation = parse_mutation(raw_response)
         _new_sections, previous_value = apply_mutation(
             mutation, current_sections=ctx.current_sections
