@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.21] — 2026-05-20
+
+Co-Scientist parity sprint closure — 3 PRs (#1357 + #1360 + #1361)
+landing Π1 (proximity graph emit + diverse-bracket Elo seeding) +
+Π2 (`all_duplicates` → partial-survive fallback) + Π3 (embedding
+goal-conditioning). 23 new tests; 5082 non-live + 5 live; 308 core
++ 48 plugins.
+
 ### Added
 
 - **PR-Π3 — Proximity embedding conditions on the research goal
