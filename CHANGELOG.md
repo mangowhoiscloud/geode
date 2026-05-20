@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.19] — 2026-05-20
+
 ### Added
 
 - **X1 (first slice) — per-provider auth-order: pinned profile wins
