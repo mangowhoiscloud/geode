@@ -406,10 +406,10 @@ AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 # autoresearch (writer when the G5b runner promotes a mutation),
 # ``core.agent.system_prompt`` (reader for daily GEODE runs), and the
 # audit subprocess (reader via the GEODE_WRAPPER_OVERRIDE env hook).
-# Sourced from ``core.paths.GLOBAL_WRAPPER_SECTIONS_SOT`` so the ``.geode``
+# Sourced from ``core.paths.GLOBAL_WRAPPER_SECTIONS_PATH`` so the ``.geode``
 # literal lives in exactly one place (path-literal guard contract).
 try:
-    from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT as _CORE_WRAPPER_SECTIONS_SOT
+    from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
 except ImportError:
     # ``autoresearch.train`` is importable from environments where ``core``
     # isn't installed (legacy fixture path) — fall back to a literal so the

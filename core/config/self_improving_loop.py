@@ -139,22 +139,22 @@ class MutatorConfig(BaseModel):
     PR-1 G-A introduced this so the mutator was a first-class role
     alongside ``[seed_generation.role.<X>]`` and ``[petri.role.<X>]``.
 
-    PR-MINIMAL-2 (2026-05-21) — three trimmings:
+    PR-MINIMAL-2 (2026-05-21) — four trimmings:
 
     1. ``default_model`` default flipped to ``None`` so it inherits
        ``Settings.model`` when unset (G1a). Operator's ``/model`` choice
        follows automatically; explicit override still wins.
-    2. ``allowed_models`` allow-list deleted. The pre-PR validator's
-       motivation (PR-1 G-A's *direct* ``anthropic.Anthropic()`` call
-       drift) is now obsolete since the runner dispatches through
-       ``core.llm.router.call_with_failover``; the router already
-       guards model existence per provider. Removing the list also
-       removes the matching ``_default_in_allowed`` pydantic validator.
-    3. ``role_contract`` field deleted — was logged in telemetry but
-       never injected into the system prompt (operator-facing docs
-       only). The file ``.claude/agents/self_improving_loop_mutator.md``
-       still exists as operator reference; the config field that
-       pointed at it added noise without operational effect.
+    2. The 5-model allow-list field (and its pydantic validator) was
+       removed (C1). The pre-PR motivation — PR-1 G-A's *direct*
+       ``anthropic.Anthropic()`` call drift — is now obsolete since
+       the runner dispatches through ``core.llm.router.call_with_failover``
+       which already guards model existence per provider.
+    3. The role-contract path field was removed (A1) — it was logged
+       in telemetry but never injected into the system prompt
+       (operator-facing docs only). The file
+       ``.claude/agents/self_improving_loop_mutator.md`` still
+       exists as operator reference; the config field that pointed
+       at it added noise without operational effect.
     4. ``fallback_to_payg`` per-component override removed (use global).
     """
 

@@ -62,11 +62,13 @@ GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 # policy is git-tracked, so ``git diff`` shows the current mutation
 # state and ``git revert`` discards a hypothesis. The directory name
 # matches the existing module/function/constant naming
-# (``policies.py`` / ``load_policy`` / ``GLOBAL_*_POLICY_SOT``); the
-# constants below keep their ``GLOBAL_*_SOT`` names for backwards
-# compatibility with existing callers; only the value moves. Lazy
-# migration of any legacy ``~/.geode/self-improving-loop/<file>.json``
-# payload is handled by :mod:`core.self_improving_loop.policies`.
+# (``policies.py`` / ``load_policy`` / ``GLOBAL_*_POLICY_PATH``).
+# PR-MINIMAL-2 (2026-05-21, H2) — constant names also dropped the
+# ``_SOT`` suffix (``GLOBAL_*_SOT`` → ``GLOBAL_*_PATH``) so the
+# names match the new directory's "policies" semantics rather than
+# the legacy "source of truth" label. Lazy migration of any legacy
+# ``~/.geode/self-improving-loop/<file>.json`` payload is handled
+# by :mod:`core.self_improving_loop.policies`.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _AUTORESEARCH_STATE_DIR = _REPO_ROOT / "autoresearch" / "state"
 GLOBAL_POLICIES_DIR = _AUTORESEARCH_STATE_DIR / "policies"
@@ -79,7 +81,7 @@ the new in-repo location on first read/write."""
 # sections. Written by ``autoresearch.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
-GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
+GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # PR-6 C-5 (2026-05-21) — policy mutation SoT files. Each
 # ``target_kind`` (tool_policy / decomposition / retrieval /
 # reflection) gets its own ``dict[str, str]`` JSON file alongside
@@ -87,10 +89,10 @@ GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
 # written by :mod:`core.self_improving_loop.policies`.
-GLOBAL_TOOL_POLICY_SOT = GLOBAL_POLICIES_DIR / "tool-policy.json"
-GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_POLICIES_DIR / "decomposition.json"
-GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_POLICIES_DIR / "retrieval.json"
-GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_POLICIES_DIR / "reflection.json"
+GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
+GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
+GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
+GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are

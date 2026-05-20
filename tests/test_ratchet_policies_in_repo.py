@@ -32,12 +32,12 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
     ``<repo>/autoresearch/state/policies/`` — NOT ``~/.geode/...``.
     The in-repo location is the CI-ratchet alignment fix."""
     from core.paths import (
-        GLOBAL_DECOMPOSITION_POLICY_SOT,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_POLICIES_DIR,
-        GLOBAL_REFLECTION_POLICY_SOT,
-        GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_TOOL_POLICY_SOT,
-        GLOBAL_WRAPPER_SECTIONS_SOT,
+        GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_RETRIEVAL_POLICY_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+        GLOBAL_WRAPPER_SECTIONS_PATH,
     )
 
     policies_dir_parts = GLOBAL_POLICIES_DIR.parts
@@ -45,11 +45,11 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
     assert policies_dir_parts[-3:] == ("autoresearch", "state", "policies")
 
     paths_by_kind = {
-        "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_SOT,
-        "tool-policy.json": GLOBAL_TOOL_POLICY_SOT,
-        "decomposition.json": GLOBAL_DECOMPOSITION_POLICY_SOT,
-        "retrieval.json": GLOBAL_RETRIEVAL_POLICY_SOT,
-        "reflection.json": GLOBAL_REFLECTION_POLICY_SOT,
+        "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_PATH,
+        "tool-policy.json": GLOBAL_TOOL_POLICY_PATH,
+        "decomposition.json": GLOBAL_DECOMPOSITION_POLICY_PATH,
+        "retrieval.json": GLOBAL_RETRIEVAL_POLICY_PATH,
+        "reflection.json": GLOBAL_REFLECTION_POLICY_PATH,
     }
     for filename, path in paths_by_kind.items():
         assert path.name == filename

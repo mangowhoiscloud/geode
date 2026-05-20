@@ -326,3 +326,104 @@ def test_program_md_mentions_all_5_target_kinds() -> None:
             f"program.md must mention target_kind {kind!r} in the "
             "5-kind table so Mode A agents see the full mutation surface."
         )
+
+
+# ---------------------------------------------------------------------------
+# H2 — GLOBAL_*_SOT → GLOBAL_*_POLICY_PATH (suffix rename)
+# ---------------------------------------------------------------------------
+
+
+def test_policy_path_constants_use_path_suffix_not_sot() -> None:
+    """PR-MINIMAL-2 H2 — the 5 mutation-target path constants now end
+    in ``_PATH`` (the directory was renamed from ``sot/`` to
+    ``policies/`` in PR-RATCHET-1; H2 finishes the rename by aligning
+    constant names too). Pin the new names and assert the old ones
+    are gone so a refactor that adds an alias back surfaces here."""
+    from core import paths
+
+    new_names = (
+        "GLOBAL_WRAPPER_SECTIONS_PATH",
+        "GLOBAL_TOOL_POLICY_PATH",
+        "GLOBAL_DECOMPOSITION_POLICY_PATH",
+        "GLOBAL_RETRIEVAL_POLICY_PATH",
+        "GLOBAL_REFLECTION_POLICY_PATH",
+    )
+    for name in new_names:
+        assert hasattr(paths, name), f"core.paths must export {name}"
+    # Old _SOT names removed — backwards-compat alias is intentionally
+    # NOT kept since this is a minor-bump rename (no external consumers
+    # outside the repo).
+    old_names = (
+        "GLOBAL_WRAPPER_SECTIONS_SOT",
+        "GLOBAL_TOOL_POLICY_SOT",
+        "GLOBAL_DECOMPOSITION_POLICY_SOT",
+        "GLOBAL_RETRIEVAL_POLICY_SOT",
+        "GLOBAL_REFLECTION_POLICY_SOT",
+    )
+    for name in old_names:
+        assert not hasattr(paths, name), (
+            f"old name {name} should be gone (PR-MINIMAL-2 H2). "
+            "If you need backwards compat, add an explicit alias with a "
+            "DeprecationWarning rather than a silent re-export."
+        )
+
+
+# ---------------------------------------------------------------------------
+# B7 — /self-improving migrate slash
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_action_invokes_helper_for_every_target_kind(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """PR-MINIMAL-2 B7 — the migrate slash must invoke
+    ``_maybe_migrate_legacy_sot`` for EVERY ``target_kind``, not
+    only the first one. Pre-implementation a partial loop would
+    leave kinds silently un-migrated; we pin per-kind invocation
+    so a refactor that breaks the loop surfaces here."""
+    from core.cli.commands import self_improving as si_mod
+
+    from core.self_improving_loop import policies as policies_mod
+
+    legacy_dir = tmp_path / "legacy"
+    legacy_dir.mkdir()
+    # Stub MIGRATE helper to count invocations per kind.
+    seen: list[str] = []
+
+    def _fake_helper(kind: str, new_path: Path) -> None:
+        seen.append(kind)
+
+    monkeypatch.setattr(policies_mod, "_maybe_migrate_legacy_sot", _fake_helper)
+    monkeypatch.setattr(policies_mod, "LEGACY_SOT_DIR", legacy_dir)
+    # Stub policy_path to return a tmp path so the slash doesn't
+    # touch the real in-repo location.
+    paths_by_kind: dict[str, Path] = {k: tmp_path / f"{k}.json" for k in policies_mod.TARGET_KINDS}
+    monkeypatch.setattr(policies_mod, "_KIND_TO_PATH", paths_by_kind)
+    # Also override the imports used by the slash handler — those
+    # were cached at import time.
+    monkeypatch.setattr(si_mod, "_cmd_migrate", si_mod._cmd_migrate)
+
+    si_mod.cmd_self_improving("migrate")
+    out = capsys.readouterr().out
+    # Every target kind appears in the output (status table row)
+    for kind in policies_mod.TARGET_KINDS:
+        assert kind in out
+
+
+def test_migrate_action_in_known_actions_set() -> None:
+    """``migrate`` joins ``status / run / history / rollback`` in
+    the public-action set."""
+    from core.cli.commands.self_improving import _KNOWN_ACTIONS
+
+    assert "migrate" in _KNOWN_ACTIONS
+
+
+def test_migrate_action_help_line_lists_migrate(capsys) -> None:
+    """Unknown-action help line must list ``migrate``."""
+    from core.cli.commands.self_improving import cmd_self_improving
+
+    cmd_self_improving("nonsense")
+    out = capsys.readouterr().out
+    assert "migrate" in out

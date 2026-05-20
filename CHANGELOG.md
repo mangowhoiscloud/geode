@@ -49,13 +49,15 @@ functional change.
 
 ### Changed
 
-- **PR-MINIMAL-2 — 11-item alignment / pruning bundle for the
+- **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
   self-improving loop config + runner.** Post-MINIMAL-1, surface
   audits caught a cluster of config / wiring loose ends — silent
   knobs, type-shape mismatches, missing context for the mutator
   LLM, and a CLAUDE.md DONT-table candidate (program.md ↔
   fallback prompt drift). PR-MINIMAL-2 bundles them in one PR per
-  user directive (single PR for the whole audit).
+  user directive (single PR for the whole audit). User follow-up
+  directive added the two initially-deferred items (B7, H2) so
+  the actual scope landed at 13/13 items.
 
   **Config trim** (5 items):
   - **G1a** — ``MutatorConfig.default_model`` /
@@ -96,6 +98,35 @@ functional change.
     ``_build_audit_command`` adds ``--use-oauth`` when source is
     anything except ``"api_key"`` (auto / claude-cli / openai-codex
     all use subscription credentials).
+
+  **Constant-name alignment** (1 item):
+  - **H2** — ``GLOBAL_*_SOT`` constant suffix renamed to
+    ``GLOBAL_*_PATH`` so the constant names match the directory
+    rename from PR-RATCHET-1 (``sot/`` → ``policies/``). 5 constants
+    renamed: ``GLOBAL_WRAPPER_SECTIONS_SOT`` →
+    ``GLOBAL_WRAPPER_SECTIONS_PATH``, ``GLOBAL_TOOL_POLICY_SOT`` →
+    ``GLOBAL_TOOL_POLICY_PATH``, ``GLOBAL_DECOMPOSITION_POLICY_SOT``
+    → ``GLOBAL_DECOMPOSITION_POLICY_PATH``, ``GLOBAL_RETRIEVAL_POLICY_SOT``
+    → ``GLOBAL_RETRIEVAL_POLICY_PATH``,
+    ``GLOBAL_REFLECTION_POLICY_SOT`` → ``GLOBAL_REFLECTION_POLICY_PATH``.
+    Updated across 6 files (``core/paths.py`` definitions,
+    ``core/agent/system_prompt.py``,
+    ``core/self_improving_loop/policies.py``, ``autoresearch/train.py``,
+    ``tests/test_policy_mutation.py``,
+    ``tests/test_ratchet_policies_in_repo.py``). No backwards-compat
+    alias kept — minor-bump rename, internal-only consumers.
+
+  **Migration UX** (1 item):
+  - **B7** — ``/self-improving migrate`` slash added as an explicit
+    one-shot trigger for the lazy migration helper PR-RATCHET-1
+    introduced. Iterates every ``TARGET_KINDS`` entry, invokes
+    ``_maybe_migrate_legacy_sot`` for each, prints a per-kind status
+    table: ``migrated`` (legacy file existed + new path was missing,
+    copy succeeded), ``up-to-date`` (new path already present, no-op),
+    ``no-legacy`` (no pre-PR file to migrate from), or ``error: <...>``
+    (best-effort copy raised — never crashes the slash). Once every
+    install has run this slash the ``_maybe_migrate_legacy_sot`` lazy
+    code path can be removed in a future minor release.
 
   **Path consolidation** (1 item):
   - **B5** — ``MUTATION_AUDIT_LOG_PATH`` canonical definition

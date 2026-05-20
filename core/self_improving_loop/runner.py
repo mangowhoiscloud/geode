@@ -482,10 +482,10 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     max_tokens = cfg.mutator.max_tokens
     source = cfg.mutator.source
 
-    # PR-MINIMAL-2 — MutatorConfig.allowed_models removed (C1). The
+    # PR-MINIMAL-2 — model allow-list field removed (C1). The
     # router's provider routing already guards model existence per
-    # provider; the dedicated allow-list added more config surface
-    # than it caught. The (formerly logged-only) contract path field
+    # provider; the dedicated 5-model list added more config surface
+    # than it caught. The (formerly logged-only) contract-path field
     # was also removed (A1) since the dispatch log line below already
     # carries the configured model + provider + source for telemetry
     # grouping — operator-facing contract docs at
@@ -520,8 +520,9 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # layer) — accepts an ordered model list. PR-1 keeps it single-
     # element so the M5 silent-fallback knob default is preserved; an
     # operator who wants the mutator to fall through to alternate models
-    # populates ``MutatorConfig.allowed_models`` and the dispatcher's
-    # ``models`` list is expanded in a follow-up PR.
+    # can set per-provider fallback chains in the router config
+    # (the dispatcher's ``models`` list is expanded in a follow-up PR
+    # once the operator-facing surface for that exists).
     response, _used_model = asyncio.run(call_with_failover([model], _do_call))
     if response is None:
         last_err = getattr(adapter, "last_error", None)
