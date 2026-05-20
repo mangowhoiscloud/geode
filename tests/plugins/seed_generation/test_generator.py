@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
 from plugins.seed_generation.agents.generator import Generator
@@ -175,3 +176,111 @@ def test_generator_orchestrator_registry_accepts_generator(tmp_path: Path) -> No
     registry.register(Generator(manager=manager))  # type: ignore[arg-type]
     assert registry.has("generator")
     assert registry.get("generator") is not None
+
+
+def test_generator_injects_baseline_evidence_into_description(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """G3 — when state.baseline_snapshot is set and format_evidence_block
+    returns a non-empty block, the per-candidate sub-task description
+    embeds it as a prefix above the original instructions.
+
+    G2.fix (2026-05-20) — the snapshot no longer carries evidence directly;
+    ``format_evidence_block`` extracts from petri's latest .eval on demand.
+    The test monkeypatches ``format_evidence_block`` so the agent layer
+    can be exercised independently of the on-disk archive.
+    """
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=2)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 7.0},
+        dim_stderr={"broken_tool_use": 0.3},
+    )
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        lambda _snap, _dim, **_kw: (
+            "Recent audit evidence (latest .eval, on demand)\n"
+            "- dim: broken_tool_use\n"
+            "  1. seed-anchor — target hallucinated tool result\n"
+            "     highlights: - [M9] worst quote"
+        ),
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    for task in manager.received_tasks:
+        assert "Recent audit evidence" in task.description
+        assert "seed-anchor" in task.description
+        assert "hallucinated" in task.description
+        # Original generator instructions still present.
+        assert "Generate ONE Petri audit seed" in task.description
+
+
+def test_generator_skips_evidence_when_snapshot_is_none(tmp_path: Path) -> None:
+    """No baseline snapshot → no evidence prefix, prompts identical to legacy."""
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.baseline_snapshot = None
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Recent audit evidence" not in task.description
+    assert task.description.startswith("Generate ONE Petri audit seed")
+
+
+def test_generator_skips_evidence_when_block_is_empty(tmp_path: Path, monkeypatch: Any) -> None:
+    """Snapshot present but format_evidence_block returns "" (no .eval, no rows
+    for target_dim) → no prefix."""
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.baseline_snapshot = BaselineSnapshot(dim_means={"other_dim": 5.0})
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        lambda _snap, _dim, **_kw: "",
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Recent audit evidence" not in manager.received_tasks[0].description
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review priors injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_generator_injects_priors_block_when_snapshot_present(tmp_path: Path) -> None:
+    """meta_review_snapshot → priors block prepended ABOVE baseline evidence."""
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.meta_review_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {
+                "target_dim": "broken_tool_use",
+                "weight": 0.7,
+                "rationale": "previous run missed tool error mode",
+            }
+        ],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Previous-generation meta-review" in task.description
+    assert "broken_tool_use" in task.description
+    assert "missed tool error mode" in task.description
+    # Original generator instructions still after the block.
+    assert "Generate ONE Petri audit seed" in task.description
+
+
+def test_generator_priors_block_skipped_without_snapshot(tmp_path: Path) -> None:
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.meta_review_snapshot = None
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Previous-generation meta-review" not in manager.received_tasks[0].description

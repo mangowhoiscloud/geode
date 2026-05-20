@@ -641,3 +641,209 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
     assert result.exit_code == 0, result.output
     assert captured["gen_tag"] == "gen9"
     assert captured["candidates"] == 20
+
+
+# ---------------------------------------------------------------------------
+# G3 — --target-dim auto-pick from baseline.json + snapshot propagation
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_target_dim_explicit_returns_loaded_snapshot() -> None:
+    """G3.fix1 (2026-05-20) — explicit `--target-dim` still loads the
+    baseline so generator/critic/evolver receive evidence injection.
+
+    Pre-fix the explicit branch returned ``(dim, None)`` and downstream
+    sub-agents saw no evidence — Codex MCP LLM-as-Judge flagged this
+    as a Conditional-read-parity violation. The explicit-dim case must
+    now also load `baseline.json`; the auto-pick log line stays absent
+    so the caller knows the dim was operator-supplied, not auto-picked.
+    """
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from plugins.seed_generation.cli import _resolve_target_dim
+
+    fake_snapshot = BaselineSnapshot(dim_means={"broken_tool_use": 6.0})
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_baseline",
+        return_value=fake_snapshot,
+    ):
+        dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
+    assert dim == "broken_tool_use"
+    assert snapshot is fake_snapshot
+    # No auto-pick log line when operator supplied an explicit dim.
+    assert "auto" not in err.getvalue()
+
+
+def test_resolve_target_dim_explicit_returns_none_when_no_baseline() -> None:
+    """Explicit dim + missing baseline → ``(dim, None)`` (graceful, no error).
+
+    Bootstrap runs (no audit yet) with an explicit ``--target-dim`` are
+    valid; the runner just doesn't get evidence to inject.
+    """
+    from plugins.seed_generation.cli import _resolve_target_dim
+
+    err = io.StringIO()
+    with patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None):
+        dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
+    assert dim == "broken_tool_use"
+    assert snapshot is None
+    assert "auto" not in err.getvalue()
+
+
+def test_resolve_target_dim_auto_picks_from_baseline() -> None:
+    """--target-dim auto / unset → reader.pick_regression_target_dim."""
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from plugins.seed_generation.cli import _resolve_target_dim
+
+    fake_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 4.0, "input_hallucination": 8.0},
+    )
+    err = io.StringIO()
+    with (
+        patch("plugins.seed_generation.cli.load_baseline", return_value=fake_snapshot)
+        if False
+        else patch(
+            "plugins.seed_generation.baseline_reader.load_baseline",
+            return_value=fake_snapshot,
+        ),
+        patch(
+            "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+            return_value="input_hallucination",
+        ),
+    ):
+        dim, snapshot = _resolve_target_dim(None, err=err)
+    assert dim == "input_hallucination"
+    assert snapshot is fake_snapshot
+    assert "auto" in err.getvalue()
+    assert "input_hallucination" in err.getvalue()
+
+
+def test_resolve_target_dim_no_baseline_returns_none() -> None:
+    """Auto-pick without baseline → (None, None), actionable error msg."""
+    from plugins.seed_generation.cli import _resolve_target_dim
+
+    err = io.StringIO()
+    with patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None):
+        dim, snapshot = _resolve_target_dim(None, err=err)
+    assert dim is None
+    assert snapshot is None
+    assert "no autoresearch baseline" in err.getvalue()
+
+
+def test_run_audit_seeds_auto_picks_target_dim() -> None:
+    """End-to-end: bare --target-dim → baseline auto-pick → dispatch with picked dim."""
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    out, err = io.StringIO(), io.StringIO()
+    dispatched: dict[str, Any] = {}
+
+    def _capture_dispatch(**kwargs: Any) -> None:
+        dispatched.update(kwargs)
+
+    fake_snapshot = BaselineSnapshot(dim_means={"broken_tool_use": 6.0})
+    with (
+        patch(
+            "plugins.seed_generation.baseline_reader.load_baseline",
+            return_value=fake_snapshot,
+        ),
+        patch(
+            "plugins.seed_generation.baseline_reader.pick_regression_target_dim",
+            return_value="broken_tool_use",
+        ),
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+    ):
+        code = run_audit_seeds(
+            target_dim=None,
+            yes=True,
+            stdout=out,
+            stderr=err,
+        )
+    assert code == 0
+    assert dispatched["target_dim"] == "broken_tool_use"
+    assert dispatched["baseline_snapshot"] is fake_snapshot
+
+
+def test_run_audit_seeds_no_baseline_returns_1() -> None:
+    """Auto-pick fails → exit 1 before any pipeline / picker work."""
+    out, err = io.StringIO(), io.StringIO()
+    with (
+        patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None),
+        patch("plugins.seed_generation.cli.pick_bindings") as mock_pick,
+    ):
+        code = run_audit_seeds(target_dim=None, yes=True, stdout=out, stderr=err)
+    assert code == 1
+    # picker not even invoked because the gate fired before.
+    mock_pick.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# G4 — _load_priors_snapshot + meta_review_snapshot propagation
+# ---------------------------------------------------------------------------
+
+
+def test_load_priors_returns_none_for_bootstrap() -> None:
+    """No prior meta_review → snapshot None, helper returns None silently."""
+    from plugins.seed_generation.cli import _load_priors_snapshot
+
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        return_value=None,
+    ):
+        snapshot = _load_priors_snapshot(err=err)
+    assert snapshot is None
+    assert err.getvalue() == ""  # silent on bootstrap
+
+
+def test_load_priors_logs_summary_on_hit() -> None:
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from plugins.seed_generation.cli import _load_priors_snapshot
+
+    fake_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[{"target_dim": "d1", "weight": 0.5}],
+        underrepresented_dims=["d2", "d3"],
+    )
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        return_value=fake_snapshot,
+    ):
+        snapshot = _load_priors_snapshot(err=err)
+    assert snapshot is fake_snapshot
+    assert "1 priors" in err.getvalue()
+    assert "2 underrepresented" in err.getvalue()
+
+
+def test_run_audit_seeds_passes_meta_review_snapshot_to_dispatch() -> None:
+    """End-to-end: priors loaded → meta_review_snapshot reaches _dispatch_pipeline."""
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    out, err = io.StringIO(), io.StringIO()
+    dispatched: dict[str, Any] = {}
+
+    def _capture_dispatch(**kwargs: Any) -> None:
+        dispatched.update(kwargs)
+
+    fake_priors = MetaReviewSnapshot(
+        next_gen_priors=[{"target_dim": "broken_tool_use", "weight": 0.5}],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    with (
+        patch(
+            "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+            return_value=fake_priors,
+        ),
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+    ):
+        code = run_audit_seeds(
+            target_dim="broken_tool_use",
+            yes=True,
+            stdout=out,
+            stderr=err,
+        )
+    assert code == 0
+    assert dispatched["meta_review_snapshot"] is fake_priors

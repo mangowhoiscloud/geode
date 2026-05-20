@@ -85,11 +85,16 @@ def _get_seed_generation_config() -> Any:
 
 @audit_seeds_app.command("generate")
 def audit_seeds_generate(
-    target_dim: str = typer.Option(
-        ...,
+    target_dim: str | None = typer.Option(
+        None,
         "--target-dim",
         "-d",
-        help="Target Petri dim for this generation (e.g. broken_tool_use).",
+        help=(
+            "Target Petri dim for this generation (e.g. broken_tool_use). "
+            "Omit / pass 'auto' to let G3 pick the worst-regressed dim from "
+            "``autoresearch/state/baseline.json``. Required only when no "
+            "baseline exists yet."
+        ),
     ),
     gen_tag: str | None = typer.Option(
         None,
@@ -144,9 +149,90 @@ def audit_seeds_generate(
     raise typer.Exit(code=exit_code)
 
 
+def _resolve_target_dim(
+    target_dim: str | None,
+    *,
+    err: IO[str],
+) -> tuple[str | None, Any]:
+    """Resolve --target-dim, falling back to G3 auto-pick from baseline.json.
+
+    Returns ``(dim, snapshot)``. ``dim`` is the resolved target dim
+    name; ``snapshot`` is the loaded baseline (or ``None`` when the
+    operator supplied an explicit dim — auto-pick stays opt-in).
+
+    When ``target_dim`` is ``None`` / ``"auto"``:
+    1. Load ``autoresearch/state/baseline.json``.
+    2. Pick the worst-regressed dim via
+       :func:`plugins.seed_generation.baseline_reader.pick_regression_target_dim`.
+    3. On no baseline / no operational dim → print actionable error and
+       return ``(None, None)``; the caller surfaces an exit code.
+
+    Lazy import so the import graph stays:
+    cli → baseline_reader (only when needed) → autoresearch.train (lazy
+    inside baseline_reader).
+    """
+    from plugins.seed_generation.baseline_reader import (
+        load_baseline,
+        pick_regression_target_dim,
+    )
+
+    if target_dim and target_dim.lower() != "auto":
+        # G3.fix1 (2026-05-20) — Conditional read parity (Codex finding):
+        # the explicit-dim branch previously returned ``(dim, None)`` so
+        # generator/critic/evolver never saw baseline evidence even when
+        # baseline.json was populated. Load the snapshot here too so the
+        # operator-specified dim still gets G2 evidence injection.
+        snapshot = load_baseline()
+        return target_dim, snapshot
+    snapshot = load_baseline()
+    if snapshot is None:
+        err.write(
+            "seed-generation: --target-dim required (no autoresearch baseline "
+            "found at autoresearch/state/baseline.json yet; run an audit + "
+            "promote first, or pass --target-dim <dim> explicitly).\n"
+        )
+        return None, None
+    picked = pick_regression_target_dim(snapshot)
+    if picked is None:
+        err.write(
+            "seed-generation: --target-dim required (baseline has no operational "
+            "dim_means — every entry is in the info tier or unrecognised).\n"
+        )
+        return None, snapshot
+    err.write(
+        f"seed-generation: --target-dim auto → {picked!r} "
+        f"(baseline mean {snapshot.dim_means[picked]:.2f})\n"
+    )
+    return picked, snapshot
+
+
+def _load_priors_snapshot(*, err: IO[str]) -> Any:
+    """Load ``latest_meta_review.json`` priors for the next run.
+
+    Returns the :class:`MetaReviewSnapshot` (or ``None`` for bootstrap /
+    unparseable). Best-effort — never raises; the run proceeds without
+    priors when the symlink is missing or the payload has no signal.
+
+    Lazy import keeps the cold start free of baseline_reader machinery
+    when the operator never touches the meta-review wiring.
+    """
+    from plugins.seed_generation.baseline_reader import load_latest_meta_review
+
+    snapshot = load_latest_meta_review()
+    if snapshot is None:
+        return None
+    priors_count = len(snapshot.next_gen_priors)
+    underrep_count = len(snapshot.underrepresented_dims)
+    err.write(
+        f"seed-generation: loaded previous meta-review "
+        f"({priors_count} priors, {underrep_count} underrepresented dims)\n"
+    )
+    return snapshot
+
+
 def run_audit_seeds(
     *,
-    target_dim: str,
+    target_dim: str | None = None,
     gen_tag: str = "gen1",
     candidates: int = 15,
     yes: bool = False,
@@ -173,9 +259,18 @@ def run_audit_seeds(
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
 
+    resolved_dim, baseline_snapshot = _resolve_target_dim(target_dim, err=err)
+    if resolved_dim is None:
+        return 1
+
+    # G4 — best-effort load of the previous run's meta_review.json (priors).
+    # Bootstrap runs (no prior) get None and skip the priors block in
+    # generator / critic prompts.
+    meta_review_snapshot = _load_priors_snapshot(err=err)
+
     from core.observability import SessionJournal, session_journal_scope
 
-    run_id = f"{gen_tag}-{target_dim}"
+    run_id = f"{gen_tag}-{resolved_dim}"
     journal = SessionJournal(
         session_id=run_id,
         gen_tag=gen_tag,
@@ -240,12 +335,14 @@ def run_audit_seeds(
         try:
             _dispatch_pipeline(
                 picker_result=picker_result,
-                target_dim=target_dim,
+                target_dim=resolved_dim,
                 gen_tag=gen_tag,
                 candidates_requested=candidates,
                 cost=cost,
                 out=out,
                 err=err,
+                baseline_snapshot=baseline_snapshot,
+                meta_review_snapshot=meta_review_snapshot,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -275,6 +372,8 @@ def _dispatch_pipeline(
     cost: CostEstimate,
     out: IO[str],
     err: IO[str],
+    baseline_snapshot: Any = None,
+    meta_review_snapshot: Any = None,
 ) -> None:
     """Build orchestrator + run.
 
@@ -307,6 +406,8 @@ def _dispatch_pipeline(
         gen_tag=gen_tag,
         candidates_requested=candidates_requested,
         run_dir=run_dir,
+        baseline_snapshot=baseline_snapshot,
+        meta_review_snapshot=meta_review_snapshot,
     )
     registry = PipelineRegistry()
     # NOTE: real registry population happens in S11-wire / S12 (per

@@ -154,6 +154,76 @@ def test_plan_matches_respects_target_matches() -> None:
     assert len(plans) == 2
 
 
+# ── PR-Π1 — diverse-bracket policy ──
+
+
+def _canonical(plan_a: str, plan_b: str) -> tuple[str, str]:
+    return (plan_a, plan_b) if plan_a < plan_b else (plan_b, plan_a)
+
+
+def test_plan_matches_diverse_policy_prefers_far_pairs() -> None:
+    """When ``proximity_graph`` is provided, the ``target_matches`` slots go
+    to the lowest-proximity pairs first (Co-Scientist diverse bracket)."""
+    candidates = ["a", "b", "c", "d"]
+    # 6 candidate-candidate pairs. Configure 3 pairs as "very near" so they
+    # should be dropped from a 3-match budget.
+    proximity = {
+        ("a", "b"): 0.90,  # near
+        ("a", "c"): 0.05,  # far
+        ("a", "d"): 0.10,  # far
+        ("b", "c"): 0.95,  # near
+        ("b", "d"): 0.85,  # near
+        ("c", "d"): 0.15,  # far
+    }
+    plans = plan_matches(
+        candidates,
+        target_matches=3,
+        rng=random.Random(0),
+        proximity_graph=proximity,
+    )
+    selected = {_canonical(p.a, p.b) for p in plans}
+    # The 3 lowest-proximity pairs must win the 3 slots.
+    assert selected == {("a", "c"), ("a", "d"), ("c", "d")}
+
+
+def test_plan_matches_no_proximity_graph_uses_random_shuffle() -> None:
+    """Default (no graph) behaviour is preserved — random shuffle on rng."""
+    candidates = ["a", "b", "c", "d"]
+    plans = plan_matches(candidates, target_matches=3, rng=random.Random(0))
+    # With rng seed 0 the order is shuffled; we only assert count + pair
+    # uniqueness (no proximity-policy ordering check).
+    assert len(plans) == 3
+    canonical = {_canonical(p.a, p.b) for p in plans}
+    assert len(canonical) == 3
+
+
+def test_plan_matches_empty_proximity_graph_falls_back_to_random() -> None:
+    """Empty dict is treated as "no graph" — legacy random policy applies."""
+    candidates = ["a", "b", "c"]
+    plans_none = plan_matches(candidates, rng=random.Random(0))
+    plans_empty = plan_matches(candidates, rng=random.Random(0), proximity_graph={})
+    # Both produce identical schedules (same rng seed + empty graph branches
+    # to the random-shuffle path).
+    assert [(p.a, p.b) for p in plans_none] == [(p.a, p.b) for p in plans_empty]
+
+
+def test_plan_matches_missing_graph_entries_treated_as_distant() -> None:
+    """Pairs absent from the graph default to 0.0 proximity (sort to front)."""
+    candidates = ["a", "b", "c"]
+    # Only one pair has a score; the other two are missing → 0.0.
+    proximity = {("a", "b"): 0.95}
+    plans = plan_matches(
+        candidates,
+        target_matches=2,
+        rng=random.Random(0),
+        proximity_graph=proximity,
+    )
+    selected = {_canonical(p.a, p.b) for p in plans}
+    # The (a, b) high-proximity pair must NOT be in the selected 2 slots —
+    # the two pairs with default 0.0 score win.
+    assert ("a", "b") not in selected
+
+
 def test_top_k_orders_by_rating_descending() -> None:
     ratings = {"a": 1100.0, "b": 1050.0, "c": 1200.0, "d": 1000.0}
     assert top_k(ratings, k=2) == ["c", "a"]

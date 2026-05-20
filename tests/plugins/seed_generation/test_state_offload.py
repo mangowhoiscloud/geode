@@ -232,6 +232,82 @@ def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# G1 — latest_seed_pool symlink (closed-loop wiring sprint, 2026-05-20)
+# ---------------------------------------------------------------------------
+
+
+def test_persist_survivors_updates_latest_seed_pool_symlink(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """``~/.geode/self-improving-loop/latest_seed_pool`` is stamped to this run."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    cand_path = _seed_candidate_md(run_dir, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_dir / "survivors").resolve()
+
+
+def test_persist_survivors_latest_symlink_moves_forward(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """A second run replaces the symlink target rather than failing on EEXIST."""
+    run_root = tmp_path
+    fake_home = run_root / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    run_a = run_root / "runA"
+    run_a.mkdir()
+    state_a = _populated_state(run_a)
+    cand_a = _seed_candidate_md(run_a, "c-00")
+    state_a.candidates = [{"id": "c-00", "path": str(cand_a), "target_dim": "broken_tool_use"}]
+    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+
+    run_b = run_root / "runB"
+    run_b.mkdir()
+    state_b = _populated_state(run_b)
+    cand_b = _seed_candidate_md(run_b, "c-00")
+    state_b.candidates = [{"id": "c-00", "path": str(cand_b), "target_dim": "broken_tool_use"}]
+    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_b / "survivors").resolve()
+
+
+def test_persist_survivors_latest_symlink_swallows_oserror(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Symlink-update failure must not break the run (handoff is best-effort)."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    original_symlink = Path.symlink_to
+
+    def _selective_symlink(self: Path, target: Any, *a: Any, **kw: Any) -> None:
+        if self.name == "latest_seed_pool":
+            raise OSError("simulated symlink failure")
+        return original_symlink(self, target, *a, **kw)
+
+    monkeypatch.setattr(Path, "symlink_to", _selective_symlink)
+    state = _populated_state(run_dir)
+    cand_path = _seed_candidate_md(run_dir, "c-00")
+    state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
+    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
+    pipeline.run()  # must not raise
+    # state.pool_path_out is still stamped — canonical handoff remains intact.
+    assert state.pool_path_out == run_dir / "survivors"
+
+
+# ---------------------------------------------------------------------------
 # P1a — cross-loop session index (defects #2, #3 from 2026-05-19 plan)
 # ---------------------------------------------------------------------------
 
@@ -280,3 +356,78 @@ def test_pipeline_session_index_swallows_oserror(
     pipeline.run()  # Must NOT raise.
     # State persistence (other paths) still works.
     assert (tmp_path / "state.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review persist + latest_meta_review.json symlink (2026-05-20)
+# ---------------------------------------------------------------------------
+
+
+def test_persist_meta_review_writes_standalone_json(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Pipeline.run() emits ``<run_dir>/meta_review.json`` when state.meta_review is set."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    meta_review_path = run_dir / "meta_review.json"
+    assert meta_review_path.is_file()
+    blob = json.loads(meta_review_path.read_text(encoding="utf-8"))
+    assert blob == state.meta_review
+
+
+def test_persist_meta_review_skipped_when_empty(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """No meta_review → no standalone file (bootstrap / failed meta phase)."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    state.meta_review = {}
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    assert not (run_dir / "meta_review.json").exists()
+
+
+def test_persist_meta_review_updates_latest_symlink(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """latest_meta_review.json symlink points at this run's meta_review.json."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_dir / "meta_review.json").resolve()
+
+
+def test_persist_meta_review_symlink_moves_forward(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """A second run replaces the latest_meta_review symlink target."""
+    run_root = tmp_path
+    fake_home = run_root / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    run_a = run_root / "runA"
+    run_a.mkdir()
+    state_a = _populated_state(run_a)
+    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+
+    run_b = run_root / "runB"
+    run_b.mkdir()
+    state_b = _populated_state(run_b)
+    state_b.meta_review = {"coverage": {"d2": 1}, "next_gen_priors": []}
+    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_b / "meta_review.json").resolve()

@@ -87,6 +87,18 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
         return
     if not report.archived_raw:
         return
+    # G2.fix (2026-05-20) — Codex caught a reader-assumption drift:
+    # ``baseline.json`` carried an ``evidence`` cache that was a verbatim
+    # copy of what already exists in the petri ``.eval`` archive. The
+    # cache was only refreshed on PROMOTED audits, leaving downstream
+    # consumers with stale evidence after every rejected regression.
+    # Fix: stop emitting ``evidence`` on stdout (so it never reaches
+    # ``baseline.json``), and stamp the master archive path into
+    # ``~/.geode/petri/logs/latest.eval`` so downstream readers
+    # (``baseline_reader.format_evidence_block``) can call
+    # ``extract_evidence`` on the *latest* archive on demand. Petri's
+    # ``.eval`` is now the single SoT for evidence.
+    _update_latest_petri_eval_symlink(report.archived_raw)
     try:
         from core.audit.dim_extractor import extract_dim_aggregates
 
@@ -101,6 +113,31 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
     if not aggregates.get("dim_means"):
         return
     print(json.dumps(aggregates, separators=(",", ":")))
+
+
+def _update_latest_petri_eval_symlink(archive_path: str) -> None:
+    """Point ``~/.geode/petri/logs/latest.eval`` at the just-archived run.
+
+    G2.fix companion (2026-05-20): downstream readers
+    (``plugins.seed_generation.baseline_reader.format_evidence_block``,
+    ``core.self_improving_loop.runner``) call ``extract_evidence`` on
+    this symlink so the evidence they consume is *always* the most
+    recent audit's, not whichever audit happened to be promoted last.
+
+    Best-effort: I/O failures log a WARNING but never raise — the
+    canonical archive at ``archive_path`` is the SoT; the symlink is a
+    convenience accelerator (mirrors the ``latest_seed_pool`` pattern
+    from G1).
+    """
+    target = Path(archive_path).resolve()
+    latest = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"
+    try:
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        latest.symlink_to(target)
+    except OSError as exc:
+        log.warning("petri_audit: latest.eval symlink update failed at %s: %s", latest, exc)
 
 
 def audit(

@@ -273,3 +273,78 @@ def test_critic_pins_candidate_id_from_task() -> None:
     assert "gen2-000-cand" in reflections
     assert reflections["gen2-000-cand"]["candidate_id"] == "gen2-000-cand"
     assert "WRONG-id-from-llm" not in reflections
+
+
+# ---------------------------------------------------------------------------
+# G3 — baseline evidence injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_critic_injects_baseline_evidence_into_description(monkeypatch: Any) -> None:
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    state = _make_state(n=2)
+    _seed_candidates(state, 2)
+    state.baseline_snapshot = BaselineSnapshot(
+        dim_means={"broken_tool_use": 7.0},
+        dim_stderr={"broken_tool_use": 0.3},
+    )
+    # G2.fix (2026-05-20) — evidence pulled from latest .eval on demand;
+    # mock the block renderer so this test stays agent-focused.
+    monkeypatch.setattr(
+        "plugins.seed_generation.baseline_reader.format_evidence_block",
+        lambda _snap, _dim, **_kw: (
+            "Recent audit evidence (latest .eval, on demand)\n  1. seed-z — ignored tool failure"
+        ),
+    )
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    for task in manager.received_tasks:
+        assert "Recent audit evidence" in task.description
+        assert "seed-z" in task.description
+        assert "Critique ONE Petri audit seed candidate" in task.description
+
+
+def test_critic_no_evidence_block_without_snapshot() -> None:
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.baseline_snapshot = None
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Recent audit evidence" not in manager.received_tasks[0].description
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review priors injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_critic_injects_priors_block_when_snapshot_present() -> None:
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.meta_review_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {
+                "target_dim": "broken_tool_use",
+                "weight": 0.5,
+                "rationale": "underrepresented in prior generation",
+            }
+        ],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Previous-generation meta-review" in task.description
+    assert "underrepresented in prior generation" in task.description
+
+
+def test_critic_priors_block_skipped_without_snapshot() -> None:
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.meta_review_snapshot = None
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Previous-generation meta-review" not in manager.received_tasks[0].description

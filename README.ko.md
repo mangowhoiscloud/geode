@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.99.19 — Long-running Autonomous Execution Harness
+# GEODE v0.99.20 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -335,7 +335,7 @@ geode update                  # 소스 체크아웃
 
 ## GEODE 비교
 
-각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.19**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.20**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
 
 <details>
 <summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>

@@ -47,13 +47,269 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.20] — 2026-05-20
+
+Self-improving-loop wiring sprint G1-G5b + 5 fix-ups + CLAUDE.md immune-system
+update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#1357).
+~120 new tests; 5069 non-live + 5 live; 308 core + 48 plugins.
+
+### Added
+
+- **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
+  diverse-bracket Elo seeding.** Closes the first P0 gap from the
+  Co-Scientist ↔ GEODE proximity-agent comparison: pre-Π1 the Proximity
+  phase discarded all pair-wise similarity information after the
+  3-track dedup vote (binary keep/drop only), leaving the Ranker (S6)
+  blind to candidate spatial structure. PR-Π1 adds
+  `PipelineState.proximity_graph: dict[tuple[str, str], float]`
+  populated by `Proximity.execute` with the weighted composite
+  `0.6 × embedding_cosine + 0.4 × lexical_jaccard` (role overlap stays
+  in the dedup vote, not the graph). `tournament.plan_matches` accepts
+  a new `proximity_graph` kwarg — when non-empty it switches the
+  pair-selection policy from random shuffle to **diverse-bracket**
+  (ascending proximity → far pairs scheduled first), realising
+  Co-Scientist §3.3.4 "the Proximity agent assists the Ranking agent
+  in organizing tournament matches". `Ranker.execute` forwards
+  `state.proximity_graph` through. Backwards compatible — empty graph
+  (current production wiring before downstream rollout) falls back to
+  the legacy random shuffle exactly as before. 10 new tests cover the
+  graph emission (full pairs, near-vs-far ordering, embedding-failure
+  graceful fallback), the diverse-bracket policy (lowest-proximity
+  pairs win the budget, missing entries default to 0.0, empty graph
+  falls back to random), and the Ranker integration.
+
+### Fixed
+
+- **G2.fix — remove autoresearch evidence cache; petri ``.eval`` is the
+  single SoT.** Codex MCP LLM-as-Judge on PR-G2 (#1346) flagged a
+  reader-assumption drift: ``baseline.json`` carried an ``evidence``
+  key that was a verbatim copy of what petri's ``.eval`` archive
+  already held, refreshed only on *promoted* audits — every rejected
+  regression left downstream consumers reading stale evidence. The
+  cache was unnecessary duplication of the master signal.
+  Per the user's "전자를 지우는 게 견지" principle, autoresearch's
+  cache is gone: (a) ``cli_audit._emit_dim_aggregates`` no longer
+  emits ``evidence`` in the stdout summary, and now stamps
+  ``~/.geode/petri/logs/latest.eval`` as a symlink to the just-archived
+  ``.eval`` (mirrors the G1 ``latest_seed_pool`` pattern). (b)
+  ``autoresearch.train._write_baseline`` / ``_load_baseline`` revert
+  to ``{dim_means, dim_stderr}`` only; ``run_audit`` returns a
+  4-tuple instead of 5-tuple. (c) ``BaselineSnapshot.evidence``
+  field removed; ``format_evidence_block`` now extracts on demand
+  from the latest ``.eval`` via ``core.audit.dim_extractor.extract_evidence``,
+  with an ``eval_path`` override for fixtures. Architecturally: petri
+  is the measurement-layer SoT; autoresearch's baseline becomes a
+  pure numeric snapshot. 5 evidence-cache tests deleted, 4 evidence
+  rendering tests rewritten against fake ``.eval`` archives via
+  ``inspect_ai.log.read_eval_log`` monkeypatch. 445 tests green.
+
+- **G3.fix1 + G3.fix2 — symmetric `--target-dim` evidence + graceful
+  schema coercion in `baseline_reader.load_baseline`.** Two Codex
+  findings on PR-G3 (#1347) folded into one fix-up PR.
+  **fix1 (Conditional read parity):** `_resolve_target_dim` previously
+  returned `(dim, None)` when the operator supplied an explicit
+  `--target-dim`, so generator/critic/evolver received no baseline
+  evidence even when `baseline.json` was populated. Now the explicit
+  branch also calls `load_baseline()` and returns
+  `(dim, loaded_snapshot)`. Bootstrap (no baseline) still returns
+  `(dim, None)` gracefully — operator-supplied dim is always valid.
+  **fix2 (Graceful-contract):** `load_baseline` cast `float(v)` on
+  every `dim_means` value, raising `ValueError` on non-numeric input
+  and breaking the docstring promise of "None on unparseable JSON".
+  New `_coerce_dim_dict()` per-entry try/except + boolean rejection
+  (Python's `isinstance(True, int)` quirk) so one bad dim drops just
+  that dim, not the whole baseline. If every numeric value is bad,
+  the loader returns `None` (same as empty payload). 5 new tests:
+  explicit-dim loads snapshot / explicit-dim returns None on bootstrap
+  / partial-bad dim_means drops bad rows / all-bad means returns None
+  / boolean rejection.
+
+- **G5b.fix3 — SoT rolls back when audit-log write fails (atomicity
+  fix for the mutation runner).** Codex MCP LLM-as-Judge on PR-G5b
+  (#1350) caught the third finding: `apply_mutation` writes the
+  wrapper-sections SoT to disk *before* `append_audit_log` records
+  the mutation. If the audit log write raised `OSError`, the SoT had
+  already advanced and the ledger had no record — the next iteration
+  would build on a mutation with no history. Fix: wrap
+  `append_audit_log` in `try/except OSError` inside `run_once`; on
+  failure, `_rollback_sot` restores the SoT to the pre-mutation
+  `original_sections` and the original `OSError` is re-raised so the
+  caller knows the iteration failed. Rollback failure itself logs but
+  doesn't shadow the original error. 2 new tests: rollback restores
+  SoT on audit-log failure / success path unchanged when audit-log
+  works.
+
+- **G5b.fix2 — `core/self_improving_loop/runner.py` actually loads
+  `autoresearch/program.md` so "program.md-driven" is no longer fiction.**
+  Codex MCP LLM-as-Judge on PR-G5b (#1350) caught the second
+  anti-deception case: the PR title claimed "program.md-driven
+  self-improving loop runner" but `_SYSTEM_PROMPT` was a hardcoded
+  f-string and `grep -rn "program.md" core/ autoresearch/` returned
+  zero reads. Fix: replace the constant with `_build_system_prompt()`
+  which calls `_load_program_md()` (path resolved relative to the
+  runner module so worktrees work) and concatenates the file body with
+  a runner-specific `_MUTATION_CONTRACT_SUFFIX` (the single-shot JSON
+  contract). When program.md is unreadable (missing / OSError), the
+  function logs WARNING and returns `_FALLBACK_SYSTEM_PROMPT` — the
+  pre-fix inline prompt — so the loop never goes offline. 4 new tests:
+  (a) program.md body reaches the LLM, (b) fallback when load returns
+  None, (c) real in-repo program.md is reachable from the runner's
+  path resolution (refactor-canary), (d) end-to-end `run_once`
+  surfaces program.md to the captured LLM call.
+
+- **G5b.fix1 — unignore `autoresearch/state/mutations.jsonl` so the
+  self-improving-loop audit ledger really enters git.** Codex MCP
+  LLM-as-Judge on PR-G5b (#1350) caught the contradiction: the
+  CHANGELOG promised a "git-tracked audit log" but `.gitignore`'s
+  `autoresearch/state/*` glob silently ignored the file —
+  `_git_commit_audit_log`'s `git add` would no-op and the
+  git-as-optimiser ledger would never persist. Add a negation entry
+  (`!autoresearch/state/mutations.jsonl`) immediately after the base
+  glob, leaving the rest of `state/` (run.log, baseline.json,
+  audit_logs/) still ignored. 4 new tests pin the fix:
+  (a) `.gitignore` carries the negation line,
+  (b) base ignore still present,
+  (c) `git check-ignore` exits 1 for mutations.jsonl,
+  (d) sanity — baseline.json still exit 0.
+
+### Changed
+
+- **Scaffold: CLAUDE.md gains 2 new wiring rules + 1 deception rule + a
+  `DONT — Real Incidents` table (Karpathy program.md style).** Sprint
+  immune-system update after Codex MCP LLM-as-Judge caught 6 issues in
+  the just-merged G1-G5b sprint (3 PASS / 2 FLAG / 1 FAIL on PR-G5b).
+  New "Wiring Verification" rows: `Conditional read parity` (one-sided
+  context loading across CLI branches) + `Writer destination tracked`
+  (`git check-ignore` on every "audit / history / ledger" path). New
+  "Refactoring Deception Prevention" row: `CHANGELOG/PR-body parity`
+  (verbs/adjectives in PR title + CHANGELOG must be grep-provable in
+  code). The `DONT — Real Incidents` table is append-only — 5 frozen
+  rows from 2026-05-20 documenting exactly what was claimed vs what
+  the code did (PR-G5b "git-tracked audit log" vs `.gitignore`, PR-G5b
+  "program.md-driven" vs hardcoded prompt, PR-G3 conditional read,
+  PR-G3 graceful-contract, PR-G2 promoted-vs-latest evidence). Pair
+  with the `karpathy-patterns` skill's abstract Anti-patterns table:
+  abstract principle ↔ concrete case study.
+
+### Added
+
+- **PR-G5b — program.md-driven self-improving loop runner.** Final PR
+  of the 2026-05-20 self-improving-loop wiring sprint (G1-G5). New
+  `core/self_improving_loop/` package composes the G1-G5a upstream:
+  `build_runner_context()` gathers baseline (G3) + meta-review priors
+  (G4) + current wrapper sections (G5a). `SelfImprovingLoopRunner.run_once()`
+  packs the context into a system + user prompt, dispatches to an
+  injected `llm_call` (default: `claude-opus-4-7` via anthropic SDK),
+  parses the response as a typed `Mutation` (schema-validated:
+  non-empty target/value, ≤600 char value, JSON-only response with
+  optional code-fence tolerance), applies it to the SoT via
+  `write_wrapper_prompt_sections`, appends a row to the git-tracked
+  `autoresearch/state/mutations.jsonl` audit log, commits the row
+  (best-effort — non-fatal on git failure), and optionally re-runs
+  `autoresearch/train.py` (default off to keep loops cheap). The
+  audit log is the git-as-optimiser ledger — each row is one
+  committed mutation event with target_section / previous_value /
+  new_value / rationale / target_dim / baseline_fitness so the
+  lineage of wrapper-prompt evolution is replayable from `git log`.
+  Side-effect: appends a `component: self-improving-loop-mutator` row
+  to the shared `~/.geode/self-improving-loop/sessions.jsonl`
+  registry. 21 new tests (9 parse_mutation + 2 apply_mutation + 3
+  append_audit_log + 2 build_runner_context + 3 run_once end-to-end +
+  2 dataclass) — quality gates: ruff / format / mypy / 442 tests
+  green. Real autoresearch re-run still BLOCKED on Anthropic credit;
+  scaffold is ready for the next budget window.
+
+- **PR-G5a — wrapper sections file-backed SoT + env-less daily-run
+  fallback.** First half of the 2026-05-20 self-improving-loop wiring
+  sprint's final PR (G5). Splits the static
+  `WRAPPER_PROMPT_SECTIONS` dict in `autoresearch/train.py` into:
+  (a) a hardcoded `_WRAPPER_PROMPT_SECTIONS_FALLBACK` bootstrap default
+  and (b) a cross-process file SoT at
+  `~/.geode/self-improving-loop/wrapper-sections.json` which the
+  upcoming G5b runner edits when it promotes a mutation. New
+  `load_wrapper_prompt_sections()` + `write_wrapper_prompt_sections()`
+  helpers; module-level `WRAPPER_PROMPT_SECTIONS` is now derived from
+  the SoT-first resolution. `core/agent/system_prompt._load_wrapper_override`
+  gains a 2-tier resolution: env var (strict-fail) → daily-run SoT
+  (graceful-degrade on schema failure). The asymmetric error handling
+  is intentional — audit subprocesses must hard-fail rather than spend
+  quota on the wrong wrapper, daily GEODE runs must never crash from a
+  corrupted self-improving-loop artifact. The two SoT path constants
+  are duplicated (autoresearch + core/agent) to keep the import-linter
+  "Agent stays pure" contract intact; parity pinned by
+  `test_sot_path_parity_with_autoresearch`. 15 new tests (8
+  system_prompt SoT + 7 autoresearch load/write + 1 parity) — quality
+  gates: ruff / format / mypy / 432 tests green. G5b (LLM-driven
+  mutation runner) lands in a follow-up PR.
+
+- **PR-G4 — `next_gen_priors` persist + next-run reader.** Fourth PR
+  of the 2026-05-20 self-improving-loop wiring sprint (G1-G5).
+  `Pipeline._persist_meta_review` writes a first-class
+  `<run_dir>/meta_review.json` after `_persist_state` fires and updates
+  the cross-run `~/.geode/self-improving-loop/latest_meta_review.json`
+  symlink. `baseline_reader` gains `MetaReviewSnapshot` +
+  `load_latest_meta_review()` + `format_priors_block()` — the dual
+  contracts that complement the G3 baseline trio.
+  `PipelineState.meta_review_snapshot` field; CLI `_load_priors_snapshot`
+  helper loads priors at run start (silent on bootstrap, summary log on
+  hit). Generator + Critic `_build_description` prepend the priors
+  block ABOVE the baseline evidence block (priors → evidence → original
+  instructions) so the sub-agent sees the cross-run "what did the last
+  meta-reviewer flag" signal first, then the per-dim regression
+  evidence. Evolver intentionally skipped — its in-run pilot
+  `dim_means` signal is stronger than the cross-run priors for the
+  rewrite phase. 18 new tests (8 reader + 4 orchestrator persist +
+  2 generator + 2 critic + 3 CLI) — quality gates: ruff / format /
+  mypy / 411 tests green.
+
+- **PR-G3 — seed-generation reads `baseline.json` evidence + auto target
+  dim.** Third PR of the 2026-05-20 self-improving-loop wiring sprint
+  (G1-G5). New `plugins/seed_generation/baseline_reader.py` exposes
+  `load_baseline()` (typed snapshot of autoresearch's `baseline.json`),
+  `pick_regression_target_dim()` (critical-tier preference + alphabetical
+  tiebreak), and `format_evidence_block()` (prompt-ready string per dim).
+  CLI `--target-dim` is now optional (`None` / `"auto"` → reader picks
+  the worst-regressed dim from baseline.json; falls through to an
+  actionable "no baseline" error when none exists). `PipelineState`
+  gains a `baseline_snapshot` field carried through to generator /
+  critic / evolver sub-agent `_build_description`; the evidence block
+  prepends the existing instructions only when the snapshot has rows
+  for `target_dim`, so legacy bootstrap runs (no audit yet) stay
+  byte-identical. Lazy `from autoresearch.train import BASELINE_PATH`
+  keeps the seed-gen cold start free of autoresearch imports until the
+  reader is actually called. 31 new tests (16 baseline_reader + 4 CLI
+  auto-pick + 3 generator + 2 critic + 2 evolver) — quality gates:
+  ruff / format / mypy / 415 tests green.
+
+- **PR-G2 — Petri evidence schema in `baseline.json` + audit-summary
+  pipe.** Second PR of the 2026-05-20 self-improving-loop wiring
+  sprint (G1-G5). `core/audit/dim_extractor.extract_evidence(eval_path,
+  top_k=3)` extracts per-dim worst-K sample rows (`{sample_id, value,
+  explanation, highlights}`) from the petri `.eval` archive — the
+  "engineering evidence" the G5 self-improving-loop runner needs to
+  rewrite prompts with anchored grounding (not just scalar drift).
+  `plugins/petri_audit/cli_audit._emit_dim_aggregates` bundles
+  evidence into the same stdout JSON line autoresearch already
+  grep-parses. `autoresearch/train.py` `_load_baseline` /
+  `_write_baseline` schema extended to `{dim_means, dim_stderr,
+  evidence}`; `run_audit` 5-tuple return adds `evidence` as the third
+  element. Backward compat: missing `evidence` key in summary or
+  legacy baseline.json → empty dict, no behavior change.
+  **Naming hygiene companion** (per `feedback_no_naive_variable_names`):
+  PR-G1 의 3 G1 test 들에서 `tmp_path` 통째 흘림 정리 — `run_dir` /
+  `run_root` alias 도입. PR-G2 자체 신규 코드는 처음부터 의미 부여
+  (`evidence_by_dim`, `archive_path`, `baseline_payload`,
+  `summary_payload`). 18 new tests cover 7 evidence extractor
+  scenarios + 4 baseline I/O roundtrips + 2 audit summary parsing
+  paths + 3 G1 test alias diffs. Quality gates: ruff / mypy / 93+
+  evidence-touched tests green.
+
 ## [0.99.19] — 2026-05-20
 
-3 develop PRs landed since v0.99.18: PR-ε1 (#1341) config migrate CLI +
-sample fixture, PR-P2 (#1342) observability journal events
-(config-default + cost-divergence + pre-flight), and the autoresearch
-self-positioning rewrite (#1343, role split with petri made explicit).
-20 new tests; 4956 non-live + 5 live; 306 core + 47 plugins.
+Detailed backfill of v0.99.19 — the squash `a6012e02` (PR #1345) actually
+landed **4 PRs** on main: ε1 + P2 + autoresearch deforking + PR-G1
+`latest_seed_pool` symlink (#1344). The original v0.99.19 release body
+omitted PR-G1; this section restores the full entry list.
 
 ### Changed
 
@@ -75,6 +331,21 @@ self-positioning rewrite (#1343, role split with petri made explicit).
   the only string outputs that move.
 
 ### Added
+
+- **PR-G1 — `latest_seed_pool` symlink closes the seed-generation →
+  autoresearch handoff.** First PR of the 2026-05-20 self-improving-loop
+  wiring sprint (5 PRs, G1-G5). `Pipeline._persist_survivors` now
+  stamps `~/.geode/self-improving-loop/latest_seed_pool` to the current
+  run's `survivors/` directory after the cross-loop handoff fires;
+  `autoresearch/train.py::_resolve_seed_select` gains a 4-tier
+  precedence (env > latest_seed_pool symlink > config seed_select >
+  module constant) so the next audit auto-picks the freshest survivor
+  pool without a manual `AUTORESEARCH_SEED_SELECT=…` export. Dead
+  symlinks (target removed) fall through to config — clean install
+  with no prior seed-generation run still works. 6 new tests cover
+  symlink creation + forward-move on second run + OSError tolerance +
+  4-tier precedence + dead-symlink fallback. Quality gates: ruff /
+  mypy / 376 seed-gen+autoresearch tests all green.
 
 - **PR-P2 — config-default + cost-divergence + pre-flight SessionJournal
   events (3 events × 3 sites).** Closes the residual §7 items #9/#10/#11

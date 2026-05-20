@@ -78,6 +78,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -87,6 +88,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 try:
     from core.agent.system_prompt import WRAPPER_OVERRIDE_HOOK_READY as _CORE_WRAPPER_OVERRIDE_READY
@@ -158,13 +161,23 @@ def _get_autoresearch_config() -> Any:
 def _resolve_seed_select() -> str:
     """Return the seed-select argv value, honoring ``AUTORESEARCH_SEED_SELECT``.
 
-    Precedence (Codex CLI pattern):
+    Precedence (Codex CLI pattern, post-PR-G1 4-tier):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
-    3. :data:`SEED_SELECT` module constant (final fallback).
+    2. ``~/.geode/self-improving-loop/latest_seed_pool`` symlink — closed-loop
+       fallback stamped by seed-generation's ``_persist_survivors``. Lets
+       autoresearch auto-pick the freshest survivor pool without a manual
+       env export. Skipped when the symlink is missing or its target is
+       gone (e.g. clean install with no prior seed-generation run).
+    3. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
+    4. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
-    return override or _get_autoresearch_config().seed_select
+    if override:
+        return override
+    latest = SELF_IMPROVING_LOOP_HOME / "latest_seed_pool"
+    if latest.is_symlink() and latest.exists():
+        return str(latest.resolve())
+    return str(_get_autoresearch_config().seed_select)
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +255,7 @@ INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "inf
 # Wrapper prompt sections — MUTATION TARGET
 # ---------------------------------------------------------------------------
 
-WRAPPER_PROMPT_SECTIONS: dict[str, str] = {
+_WRAPPER_PROMPT_SECTIONS_FALLBACK: dict[str, str] = {
     "role": (
         "You are GEODE, a general-purpose autonomous execution agent. "
         "You perform research, analysis, automation, and scheduling for the user."
@@ -265,6 +278,88 @@ WRAPPER_PROMPT_SECTIONS: dict[str, str] = {
         "Do not invent justifications after the fact."
     ),
 }
+"""Hard-coded fallback wrapper sections.
+
+G5a (2026-05-20) — the *live* mutation target is the file-backed SoT
+:data:`WRAPPER_SECTIONS_SOT_PATH`. The G5b self-improving-loop runner
+edits that file (and commits it) when promoting a wrapper-prompt
+mutation. This dict is the bootstrap default that ships with the
+codebase so a clean checkout still has a working wrapper before any
+audit has promoted a mutation.
+"""
+
+
+def load_wrapper_prompt_sections() -> dict[str, str]:
+    """Load the *current* wrapper sections — SoT first, fallback otherwise.
+
+    Resolution order:
+
+    1. ``~/.geode/self-improving-loop/wrapper-sections.json`` — the
+       cross-process SoT the G5b runner writes after promoting a
+       wrapper-prompt mutation. This is the file that ties the
+       autoresearch loop, the daily ``geode`` invocation, and the
+       audit subprocess together: they all read the same JSON dict.
+    2. :data:`_WRAPPER_PROMPT_SECTIONS_FALLBACK` — bootstrap default
+       (clean checkout / no promote yet / unparseable SoT).
+
+    Schema validation is strict: every key + value must be a string.
+    Schema failure logs a WARNING and falls back to the hardcoded
+    default — the autoresearch loop should never crash because of a
+    bad on-disk patch; the runner is expected to roll the patch back
+    on the next iteration anyway.
+    """
+    if not WRAPPER_SECTIONS_SOT_PATH.is_file():
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    try:
+        raw = WRAPPER_SECTIONS_SOT_PATH.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning(
+            "wrapper sections SoT at %s is unreadable (%s); using fallback",
+            WRAPPER_SECTIONS_SOT_PATH,
+            exc,
+        )
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    if not isinstance(data, dict) or not data:
+        log.warning(
+            "wrapper sections SoT at %s is not a non-empty dict; using fallback",
+            WRAPPER_SECTIONS_SOT_PATH,
+        )
+        return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    for key, value in data.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            log.warning(
+                "wrapper sections SoT at %s has non-string key/value at %r; using fallback",
+                WRAPPER_SECTIONS_SOT_PATH,
+                key,
+            )
+            return dict(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
+    return data
+
+
+def write_wrapper_prompt_sections(sections: dict[str, str]) -> None:
+    """Persist the wrapper sections to the cross-process SoT.
+
+    G5b runner calls this after the LLM proposes a single-section
+    mutation and the operator (or auto-promote rule) accepts it.
+    Validation matches :func:`load_wrapper_prompt_sections` — every
+    key/value must be a string, dict must be non-empty.
+
+    Raises :class:`ValueError` on schema violation so the runner aborts
+    BEFORE writing a bad SoT that would make every consumer fall back
+    to the bootstrap default.
+    """
+    if not isinstance(sections, dict) or not sections:
+        raise ValueError("wrapper sections must be a non-empty dict[str, str]")
+    for key, value in sections.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ValueError(f"wrapper sections has non-string key/value at {key!r}")
+    WRAPPER_SECTIONS_SOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    WRAPPER_SECTIONS_SOT_PATH.write_text(
+        json.dumps(sections, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -274,6 +369,30 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = REPO_ROOT / "autoresearch" / "state"
 RUN_LOG = STATE_DIR / "run.log"
 AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
+
+# G5a — file-backed SoT for the wrapper prompt sections, shared between
+# autoresearch (writer when the G5b runner promotes a mutation),
+# ``core.agent.system_prompt`` (reader for daily GEODE runs), and the
+# audit subprocess (reader via the GEODE_WRAPPER_OVERRIDE env hook).
+# Sourced from ``core.paths.GLOBAL_WRAPPER_SECTIONS_SOT`` so the ``.geode``
+# literal lives in exactly one place (path-literal guard contract).
+try:
+    from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT as _CORE_WRAPPER_SECTIONS_SOT
+except ImportError:
+    # ``autoresearch.train`` is importable from environments where ``core``
+    # isn't installed (legacy fixture path) — fall back to the literal so the
+    # module still loads. Tests pin parity via ``test_sot_path_parity_with_autoresearch``.
+    _CORE_WRAPPER_SECTIONS_SOT = (
+        Path.home() / ".geode" / "self-improving-loop" / "wrapper-sections.json"
+    )
+WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
+
+# Resolved at module-load time so existing readers (``_dump_wrapper_override``,
+# ``print_summary``) keep their constant-style API. The G5b runner edits
+# the SoT file (``WRAPPER_SECTIONS_SOT_PATH``) and re-invokes train.py
+# in a fresh subprocess — the daemon path doesn't need hot reload here
+# because the wrapper-override env hook re-reads on every audit anyway.
+WRAPPER_PROMPT_SECTIONS: dict[str, str] = load_wrapper_prompt_sections()
 BASELINE_PATH = STATE_DIR / "baseline.json"
 
 SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"
@@ -379,7 +498,15 @@ def run_audit(
     session_id: str = "",
     gen_tag: str = "",
 ) -> tuple[dict[str, float], dict[str, float], float, float]:
-    """Invoke a single audit. Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
+    """Invoke a single audit.
+
+    Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
+
+    G2.fix (2026-05-20) — the evidence return slot was dropped: petri's
+    ``.eval`` archive (linked through ``~/.geode/petri/logs/latest.eval``)
+    is now the single SoT for per-dim evidence. Downstream readers call
+    ``extract_evidence`` on the archive on demand instead of receiving a
+    promoted-baseline snapshot.
 
     ``dry_run=True`` skips the subprocess and emits a baseline-flavoured set
     of dim means so the loop scaffolding can be smoke-tested without touching
@@ -412,6 +539,9 @@ def run_audit(
         }
         audit_seconds = 0.0
         total_seconds = time.time() - started
+        # dry-run synthesises numeric fitness only — no real .eval is
+        # produced so there's nothing for downstream readers to extract
+        # evidence from; that's fine, they'll fall through to "no signal".
         return dim_means, {}, audit_seconds, total_seconds
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
@@ -848,28 +978,43 @@ def _append_session_index(
         pass
 
 
-def _load_baseline() -> tuple[dict[str, float] | None, dict[str, float] | None]:
+def _load_baseline() -> tuple[
+    dict[str, float] | None,
+    dict[str, float] | None,
+]:
     """Read ``state/baseline.json`` if present.
 
     Returns ``(dim_means, dim_stderr)``. Both are ``None`` on missing
-    file / unparseable JSON / empty payload — caller treats this as the
-    gate-dormant case. Schema mirrors Petri's
-    ``core/audit/dim_extractor.extract_dim_aggregates`` output (no
-    FitnessBaseline wrapping per ADR-002 §3).  # slop:keep
+    file / unparseable JSON / empty payload — caller treats this as
+    the gate-dormant case.
+
+    G2.fix (2026-05-20) reverted the evidence return slot. baseline.json
+    is now the cache of *numeric fitness signal only* (means + stderr);
+    petri's ``.eval`` archive at ``~/.geode/petri/logs/latest.eval`` is
+    the single SoT for evidence. Downstream readers
+    (``baseline_reader.format_evidence_block``) call
+    ``extract_evidence`` on the archive on demand.
+
+    Schema::
+
+        {"dim_means":  {dim: float, ...},
+         "dim_stderr": {dim: float, ...}}
+
+    Mirrors :func:`core.audit.dim_extractor.extract_dim_aggregates`.
     """
     if not BASELINE_PATH.is_file():
         return None, None
     try:
-        payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+        baseline_payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None, None
-    means_raw = payload.get("dim_means") or {}
-    stderr_raw = payload.get("dim_stderr") or {}
-    if not means_raw:
+    raw_means = baseline_payload.get("dim_means") or {}
+    raw_stderr = baseline_payload.get("dim_stderr") or {}
+    if not raw_means:
         return None, None
-    means = {k: float(v) for k, v in means_raw.items()}
-    stderr = {k: float(v) for k, v in stderr_raw.items()}
-    return means, stderr
+    baseline_means = {k: float(v) for k, v in raw_means.items()}
+    baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+    return baseline_means, baseline_stderr
 
 
 def _write_baseline(
@@ -878,17 +1023,23 @@ def _write_baseline(
 ) -> None:
     """Persist current audit's dim aggregates as the new baseline.
 
-    Schema matches :func:`_load_baseline` — ``{dim_means, dim_stderr}``
-    only, no wrapping (ADR-002 §3). Caller decides *when* to write
-    (auto-promote rule vs ``--promote`` manual override).
+    G2.fix (2026-05-20) — schema reverted to ``{dim_means, dim_stderr}``
+    only. The ``evidence`` key was a duplicate of what petri's ``.eval``
+    archive already carried, refreshed only on promoted audits and
+    therefore stale for rejected regressions. The cache is gone;
+    downstream readers go straight to the archive via
+    ``~/.geode/petri/logs/latest.eval``.
+
+    Caller decides *when* to write (auto-promote rule vs ``--promote``
+    manual override).
     """
     BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    baseline_payload: dict[str, Any] = {
         "dim_means": {k: float(v) for k, v in dim_means.items()},
         "dim_stderr": {k: float(v) for k, v in dim_stderr.items()},
     }
     BASELINE_PATH.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -1024,7 +1175,10 @@ def main() -> int:
         print(f"audit failed: {exc}", file=sys.stderr)
         return 1
 
-    baseline_means, baseline_stderr = (None, None) if args.no_baseline else _load_baseline()
+    if args.no_baseline:
+        baseline_means, baseline_stderr = None, None
+    else:
+        baseline_means, baseline_stderr = _load_baseline()
     _emit_journal(
         session_id,
         gen_tag,

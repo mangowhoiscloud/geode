@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.19
+- **Version**: 0.99.20
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 306 core + 47 plugins = 353
-- **Tests**: 4956 (+5 live)
+- **Modules**: 308 core + 48 plugins = 356
+- **Tests**: 5069 (+5 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -107,6 +107,8 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | **Hook registration** | Every hook handler must be registered in bootstrap.py. Handler exists ≠ handler fires. |
 | **ContextVar injection** | Every `get_*()` accessor must have a corresponding `set_*()` call in bootstrap. Unset ContextVar → None → silent skip. |
 | **Singleton lifecycle** | Singleton created at startup may use stale data. Verify refresh/invalidation path exists for mutable state (OAuth tokens, config). |
+| **Conditional read parity** | A reader that loads context in ONE branch (e.g. auto-pick) must load it in the SYMMETRIC branch (explicit input) too — otherwise the feature half-disconnects depending on call shape. |
+| **Writer destination tracked** | Every file the code writes for "audit / history / ledger" must be `git check-ignore`-clean. An ignored path silently breaks `git add`; the writer thinks it persisted, history doesn't. |
 
 ### Refactoring Deception Prevention
 
@@ -116,6 +118,25 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | **Stub disguise** | No claiming extraction is complete with empty modules (`pass` only) |
 | **Original residue** | No marking "extraction complete" while code remains in the original (re-export only is allowed) |
 | **Zero-context verification** | Independent agent cross-checks plan document + diff → confirms all items implemented → FAIL on any omission |
+| **CHANGELOG/PR-body parity** | Every verb/adjective in the PR title + CHANGELOG ("git-tracked", "X-driven", "automatic", "committed") must be grep-provable in code. Run `git check-ignore`, `grep -rn "<source-doc>"`, and "is there a caller?" before push. |
+
+### DONT — Real Incidents (case studies)
+
+Karpathy program.md style: paste the failure verbatim so future-you doesn't repeat it.
+Append (don't rotate) — each row is a *frozen* lesson.
+
+| Date | Anti-pattern | What you said | What the code did | Lesson |
+|------|--------------|---------------|-------------------|--------|
+| 2026-05-20 PR-G5b #1350 | CHANGELOG/PR-body parity violation | "git-tracked audit log of every applied mutation" | `MUTATION_AUDIT_LOG_PATH = autoresearch/state/mutations.jsonl`, but `.gitignore` matches `autoresearch/state/*`. `git add` fails silently; `_git_commit_audit_log` returns False; ledger never enters git. | Run `git check-ignore <path>` on every path the PR claims is "tracked / committed / persisted". Caught by Codex MCP, missed by ruff/mypy/pytest/CI 8-of-8. |
+| 2026-05-20 PR-G5b #1350 | CHANGELOG/PR-body parity violation | "program.md-driven self-improving loop runner" | `_SYSTEM_PROMPT` is a hardcoded f-string; `grep -rn "program.md" core/ autoresearch/` shows zero reads. PR title overstates implementation. | Any "X-driven" claim → `grep` for X. If the file isn't loaded, the claim is fiction. |
+| 2026-05-20 PR-G3 #1347 | Conditional read parity | "seed-generation reads baseline.json evidence" | `_resolve_target_dim` loads baseline ONLY in the `--target-dim auto` branch; explicit `--target-dim <name>` returns `(dim, None)`. Half the call sites get no evidence. | A new context-loading feature must work for ALL call shapes that touch the same downstream prompt. Symmetric branches > one-sided wiring. |
+| 2026-05-20 PR-G3 #1347 | Graceful-contract violation | "`load_baseline` returns `None` on unparseable JSON" | True for malformed JSON, but `float(v)` on non-numeric `dim_means` raises `ValueError` before the contract kicks in. | "Graceful" must be defined at every input boundary, not just the outer try. Schema-typed casts need their own try. |
+| 2026-05-20 PR-G2 #1346 | Reader-assumption drift | "evidence in baseline.json reaches downstream" | Evidence only persists when the audit PROMOTES the baseline. A failing/regressed audit never updates `baseline.json` → downstream reads stale evidence forever. | "Latest" and "promoted" are different SoTs. Document which one each reader assumes; persist both if the loop needs them. |
+
+**How to use this table**:
+1. Before every PR push, scan the table for an analogous pattern. If your PR could match a row, it probably does.
+2. When a new incident lands, append (don't rewrite). The table is the project's accumulated immune system.
+3. The `karpathy-patterns` skill's "Anti-patterns" table is the abstract counterpart; this table holds the concrete sprint-level evidence.
 
 ### CAN — Permitted Freedoms
 

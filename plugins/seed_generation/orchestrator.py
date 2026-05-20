@@ -157,6 +157,15 @@ class PipelineState:
     survivors: list[str] = field(default_factory=list)
     evolved_candidates: list[dict[str, Any]] = field(default_factory=list)
     meta_review: dict[str, Any] = field(default_factory=dict)
+    # PR-Π1 — pair-wise similarity scores emitted by the Proximity phase
+    # (PR-Π1 §A). Key is the sorted ``(cid_a, cid_b)`` tuple (a < b);
+    # value is the composite similarity in ``[0.0, 1.0]`` (1.0 = identical).
+    # The Ranker (S6) consumes this in its ``plan_matches`` call to seed
+    # the Elo bracket toward diverse pairings — Co-Scientist §3.3.4
+    # "showcasing a diverse range of ideas". Sparse — only candidate
+    # pairs the Proximity phase scored are present; missing pairs are
+    # treated as maximally distant (proximity = 0.0).
+    proximity_graph: dict[tuple[str, str], float] = field(default_factory=dict)
     # cost rollup
     usd_spent: float = 0.0
     prompt_tokens: int = 0
@@ -164,6 +173,20 @@ class PipelineState:
     # baseline (None on first generation — bootstrap)
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
+    # G3 — full BaselineSnapshot (dim_means + dim_stderr + evidence) loaded
+    # from ``autoresearch/state/baseline.json`` when the CLI flow auto-picks
+    # or the operator explicitly opts into baseline-grounded generation. The
+    # generator / critic / evolver agents read ``snapshot.evidence[target_dim]``
+    # via :func:`plugins.seed_generation.baseline_reader.format_evidence_block`.
+    # ``None`` = bootstrap run (no audit baseline yet) — agents fall through
+    # to their non-baseline prompts.
+    baseline_snapshot: Any = None
+    # G4 — MetaReviewSnapshot loaded from the *previous* seed-generation
+    # run's ``latest_meta_review.json``. Carries ``next_gen_priors`` +
+    # ``underrepresented_dims`` so the current run's generator / critic
+    # can attend to the gaps the prior run's meta-reviewer flagged.
+    # ``None`` = no prior run (bootstrap) — agents skip the priors block.
+    meta_review_snapshot: Any = None
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -272,6 +295,10 @@ class Pipeline:
         # follow-up CLI invocation (S11) can resume the meta-review +
         # survivor pool without re-reading every candidate body.
         self._persist_state()
+        # G4 — persist meta_review.json as a first-class artifact AND
+        # update the cross-run ``latest_meta_review.json`` symlink so the
+        # next seed-generation run reads it as priors.
+        self._persist_meta_review()
         # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
         log.info(
@@ -391,6 +418,7 @@ class Pipeline:
                 dst = survivors_dir / src.name
                 dst.symlink_to(src.resolve())
             self.state.pool_path_out = survivors_dir
+            self._update_latest_seed_pool_symlink(survivors_dir)
             log.info(
                 "seed-generation cross-loop handoff: %d survivors → %s (metadata at %s)",
                 len(rows),
@@ -401,6 +429,94 @@ class Pipeline:
             log.warning(
                 "seed-generation survivors export failed at %s: %s",
                 self.state.run_dir,
+                exc,
+            )
+
+    @staticmethod
+    def _update_latest_seed_pool_symlink(survivors_dir: Path) -> None:
+        """Point ``~/.geode/self-improving-loop/latest_seed_pool`` at this run's survivors.
+
+        G1 closed-loop wiring: autoresearch ``_resolve_seed_select`` reads
+        this symlink as the env-less fallback so the next audit
+        automatically consumes the freshest survivor pool without a
+        manual ``AUTORESEARCH_SEED_SELECT=…`` export. Older runs stay
+        addressable by their ``<run_dir>/survivors/`` path; only the
+        symlink target moves forward.
+
+        Failures are logged but never raise — the canonical handoff is
+        ``state.pool_path_out`` + ``sessions.jsonl``; the symlink is a
+        convenience accelerator, not a correctness boundary.
+        """
+        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_seed_pool"
+        try:
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(survivors_dir.resolve())
+        except OSError as exc:
+            log.warning(
+                "seed-generation latest_seed_pool symlink update failed at %s: %s",
+                latest,
+                exc,
+            )
+
+    def _persist_meta_review(self) -> None:
+        """Persist ``state.meta_review`` as a standalone JSON + cross-run symlink.
+
+        G4 closed-loop wiring (2026-05-20 self-improving-loop sprint).
+        Two artifacts:
+
+        1. ``<run_dir>/meta_review.json`` — first-class file for this
+           run's meta-review report. Already serialised inside
+           ``state.json``; the standalone copy lets a downstream tool
+           (or the next CLI invocation's priors reader) load just the
+           meta-review without re-parsing the entire state blob.
+        2. ``~/.geode/self-improving-loop/latest_meta_review.json``
+           symlink — atomic forward pointer to the most-recent run's
+           ``meta_review.json``. The next ``geode audit-seeds generate``
+           reads this symlink to seed the generator / critic prompts
+           with the previous round's ``next_gen_priors`` +
+           ``underrepresented_dims`` hints.
+
+        Skipped (silently) when:
+        - ``state.run_dir`` is None (test fixtures), or
+        - ``state.meta_review`` is empty (bootstrap run / failed meta
+          phase).
+
+        I/O failures log WARNING but never raise — observability must
+        not break the run it observes.
+        """
+        if self.state.run_dir is None:
+            return
+        if not self.state.meta_review:
+            return
+        meta_review_path = self.state.run_dir / "meta_review.json"
+        try:
+            self.state.run_dir.mkdir(parents=True, exist_ok=True)
+            meta_review_path.write_text(
+                json.dumps(self.state.meta_review, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            log.warning(
+                "seed-generation meta_review persist failed at %s: %s",
+                meta_review_path,
+                exc,
+            )
+            return
+        # Symlink update is best-effort — survivor handoff already
+        # writes state.pool_path_out + sessions.jsonl row, so a stale
+        # latest_meta_review never makes the run incorrect.
+        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+        try:
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(meta_review_path.resolve())
+        except OSError as exc:
+            log.warning(
+                "seed-generation latest_meta_review symlink update failed at %s: %s",
+                latest,
                 exc,
             )
 

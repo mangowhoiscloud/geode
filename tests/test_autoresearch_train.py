@@ -176,11 +176,14 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
     assert "--use-oauth" not in argv
 
 
-def test_resolve_seed_select_falls_back_to_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without env override, resolver reads config.seed_select."""
+def test_resolve_seed_select_falls_back_to_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without env override + no latest symlink, resolver reads config.seed_select."""
     from types import SimpleNamespace
 
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",
@@ -190,12 +193,13 @@ def test_resolve_seed_select_falls_back_to_config(monkeypatch: pytest.MonkeyPatc
 
 
 def test_resolve_seed_select_env_wins_over_config(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """AUTORESEARCH_SEED_SELECT env var still trumps config.seed_select."""
     from types import SimpleNamespace
 
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "env/seeds")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",
@@ -210,10 +214,11 @@ def test_resolve_seed_select_env_wins_over_config(
 
 
 def test_resolve_seed_select_returns_default_when_env_unset(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Unset AUTORESEARCH_SEED_SELECT falls back to the hierarchical default."""
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
 
 
@@ -224,15 +229,77 @@ def test_resolve_seed_select_honors_env_override(
     """A populated env var redirects seed-select to the seed-generation survivors."""
     override = str(tmp_path / "survivors.json")
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == override
 
 
 def test_resolve_seed_select_treats_whitespace_as_unset(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Whitespace-only env value is treated as unset to avoid breaking argv."""
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "   ")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
+
+
+# ---------------------------------------------------------------------------
+# G1 — latest_seed_pool symlink fallback (closed-loop wiring sprint)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_seed_select_reads_latest_seed_pool_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When env is unset, resolver reads ``latest_seed_pool`` symlink target."""
+    from types import SimpleNamespace
+
+    sil_home = tmp_path / "sil"
+    sil_home.mkdir()
+    survivors_dir = tmp_path / "run123" / "survivors"
+    survivors_dir.mkdir(parents=True)
+    (sil_home / "latest_seed_pool").symlink_to(survivors_dir.resolve())
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(seed_select="config/should/not/win"),
+    )
+    assert auto_train._resolve_seed_select() == str(survivors_dir.resolve())
+
+
+def test_resolve_seed_select_env_wins_over_latest_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Env var override beats the latest_seed_pool symlink."""
+    sil_home = tmp_path / "sil"
+    sil_home.mkdir()
+    survivors_dir = tmp_path / "survivors"
+    survivors_dir.mkdir()
+    (sil_home / "latest_seed_pool").symlink_to(survivors_dir.resolve())
+    monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "env/wins")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
+    assert auto_train._resolve_seed_select() == "env/wins"
+
+
+def test_resolve_seed_select_skips_dead_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A symlink whose target was removed falls through to config."""
+    from types import SimpleNamespace
+
+    sil_home = tmp_path / "sil"
+    sil_home.mkdir()
+    dead_target = tmp_path / "deleted"
+    (sil_home / "latest_seed_pool").symlink_to(dead_target)  # never created
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(seed_select="config/fallback"),
+    )
+    assert auto_train._resolve_seed_select() == "config/fallback"
 
 
 def test_build_audit_command_uses_resolved_seed_select(
@@ -453,7 +520,7 @@ def test_cross_axis_gate_no_penalty_on_monotone_improvement() -> None:
 
 
 def test_load_baseline_missing_file_returns_none() -> None:
-    """Absent baseline.json → (None, None)."""
+    """Absent baseline.json → (None, None, {}) — 3-tuple post-G2."""
     saved = auto_train.BASELINE_PATH
     try:
         # Point at a definitely-missing path
@@ -467,10 +534,11 @@ def test_load_baseline_missing_file_returns_none() -> None:
 
 def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
     """S9 schema — `baseline.json` carries `{dim_means, dim_stderr}` raw."""
+    state_dir = tmp_path
     saved = auto_train.BASELINE_PATH
     try:
-        path = tmp_path / "baseline.json"
-        path.write_text(
+        baseline_path = state_dir / "baseline.json"
+        baseline_path.write_text(
             json.dumps(
                 {
                     "dim_means": {"broken_tool_use": 3.4},
@@ -479,7 +547,7 @@ def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
             ),
             encoding="utf-8",
         )
-        auto_train.BASELINE_PATH = path
+        auto_train.BASELINE_PATH = baseline_path
         means, stderr = auto_train._load_baseline()
         assert means == {"broken_tool_use": pytest.approx(3.4)}
         assert stderr == {"broken_tool_use": pytest.approx(0.4)}
@@ -488,11 +556,12 @@ def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
 
 
 def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
+    state_dir = tmp_path
     saved = auto_train.BASELINE_PATH
     try:
-        path = tmp_path / "baseline.json"
-        path.write_text("{}", encoding="utf-8")
-        auto_train.BASELINE_PATH = path
+        baseline_path = state_dir / "baseline.json"
+        baseline_path.write_text("{}", encoding="utf-8")
+        auto_train.BASELINE_PATH = baseline_path
         means, stderr = auto_train._load_baseline()
         assert means is None
         assert stderr is None
@@ -501,11 +570,12 @@ def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
 
 
 def test_load_baseline_unparseable_json_returns_none(tmp_path: Path) -> None:
+    state_dir = tmp_path
     saved = auto_train.BASELINE_PATH
     try:
-        path = tmp_path / "baseline.json"
-        path.write_text("{not valid json", encoding="utf-8")
-        auto_train.BASELINE_PATH = path
+        baseline_path = state_dir / "baseline.json"
+        baseline_path.write_text("{not valid json", encoding="utf-8")
+        auto_train.BASELINE_PATH = baseline_path
         means, stderr = auto_train._load_baseline()
         assert means is None
         assert stderr is None
@@ -752,7 +822,8 @@ def test_write_baseline_round_trip_matches_load_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``_write_baseline`` output must be readable by ``_load_baseline``."""
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    state_dir = tmp_path
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
     dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
     _write_baseline(dim_means, dim_stderr)
@@ -766,10 +837,10 @@ def test_write_baseline_creates_parent_dirs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``_write_baseline`` mkdirs nested missing directories."""
-    target = tmp_path / "nested" / "deeper" / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", target)
+    nested_baseline_path = tmp_path / "nested" / "deeper" / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", nested_baseline_path)
     _write_baseline({"broken_tool_use": 3.4}, {"broken_tool_use": 0.4})
-    assert target.is_file()
+    assert nested_baseline_path.is_file()
 
 
 def test_should_promote_bootstraps_when_no_prior_baseline() -> None:
@@ -1230,3 +1301,98 @@ def test_run_audit_subprocess_timeout_emits_event(
     # subprocess_timeout payload carries the configured timeout, nothing else.
     to_row = next(r for r in rows if r["event"] == "subprocess_timeout")
     assert set(to_row["payload"].keys()) == {"timeout_sec"}
+
+
+# ---------------------------------------------------------------------------
+# G5a — wrapper sections SoT (load + write + roundtrip)
+# ---------------------------------------------------------------------------
+
+
+def test_load_wrapper_prompt_sections_uses_fallback_when_no_sot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No SoT file → hardcoded fallback."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+    # Must be a fresh dict (defensive copy) so caller mutations don't
+    # leak into the module-level fallback.
+    sections["mutated"] = "x"
+    assert "mutated" not in auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_reads_sot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SoT file with valid schema → loaded verbatim."""
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(
+        json.dumps({"role": "evolved role", "tools": "evolved tools"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == {"role": "evolved role", "tools": "evolved tools"}
+
+
+def test_load_wrapper_prompt_sections_unparseable_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text("{ not valid json", encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    sections = auto_train.load_wrapper_prompt_sections()
+    assert sections == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_non_dict_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    assert auto_train.load_wrapper_prompt_sections() == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_load_wrapper_prompt_sections_non_string_value_falls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    sot_path.write_text(json.dumps({"role": 42}), encoding="utf-8")
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    assert auto_train.load_wrapper_prompt_sections() == auto_train._WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+
+def test_write_wrapper_prompt_sections_roundtrip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "subdir" / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    payload = {"role": "rev2", "tools": "rev2 tools"}
+    auto_train.write_wrapper_prompt_sections(payload)
+    assert sot_path.is_file()
+    persisted = json.loads(sot_path.read_text(encoding="utf-8"))
+    assert persisted == payload
+    # Roundtrip via loader.
+    assert auto_train.load_wrapper_prompt_sections() == payload
+
+
+def test_write_wrapper_prompt_sections_rejects_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    with pytest.raises(ValueError, match="non-empty dict"):
+        auto_train.write_wrapper_prompt_sections({})
+    assert not sot_path.exists()
+
+
+def test_write_wrapper_prompt_sections_rejects_non_string(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sot_path = tmp_path / "wrapper-sections.json"
+    monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
+    with pytest.raises(ValueError, match="non-string"):
+        auto_train.write_wrapper_prompt_sections({"role": 42})  # type: ignore[dict-item]
+    assert not sot_path.exists()
