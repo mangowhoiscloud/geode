@@ -48,7 +48,6 @@ if TYPE_CHECKING:
 # name on the package. ``calls._route_provider`` calls the leaf binding from
 # ``core.config`` directly, so the supported test path is the leaf module.
 from core.config import _resolve_provider as _resolve_provider
-from core.llm.adapters import CROSS_PROVIDER_FALLBACK as CROSS_PROVIDER_FALLBACK
 from core.llm.adapters import AgenticLLMPort as AgenticLLMPort
 from core.llm.adapters import ClaudeAdapter as ClaudeAdapter
 from core.llm.adapters import LLMClientPort as LLMClientPort
