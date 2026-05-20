@@ -314,3 +314,39 @@ def test_critic_no_evidence_block_without_snapshot() -> None:
     manager = _StubManager()
     Critic(manager=manager).execute(state)  # type: ignore[arg-type]
     assert "Recent audit baseline" not in manager.received_tasks[0].description
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review priors injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_critic_injects_priors_block_when_snapshot_present() -> None:
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.meta_review_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {
+                "target_dim": "broken_tool_use",
+                "weight": 0.5,
+                "rationale": "underrepresented in prior generation",
+            }
+        ],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Previous-generation meta-review" in task.description
+    assert "underrepresented in prior generation" in task.description
+
+
+def test_critic_priors_block_skipped_without_snapshot() -> None:
+    state = _make_state(n=1)
+    _seed_candidates(state, 1)
+    state.meta_review_snapshot = None
+    manager = _StubManager()
+    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Previous-generation meta-review" not in manager.received_tasks[0].description

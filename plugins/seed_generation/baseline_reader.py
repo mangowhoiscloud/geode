@@ -44,8 +44,11 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "BaselineSnapshot",
+    "MetaReviewSnapshot",
     "format_evidence_block",
+    "format_priors_block",
     "load_baseline",
+    "load_latest_meta_review",
     "pick_regression_target_dim",
 ]
 
@@ -267,4 +270,156 @@ def format_evidence_block(
         lines.append(first_line)
         if highlights:
             lines.append(f"     highlights: {highlights[:240].splitlines()[0]}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review priors (cross-run signal from the previous generation)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MetaReviewSnapshot:
+    """Frozen view of one run's ``meta_review.json``.
+
+    Mirrors the seed_meta_reviewer sub-agent's output contract
+    (``plugins.seed_generation.agents.meta_reviewer``). Only the fields
+    the generator / critic actually consume as priors are typed; the
+    rest stays in ``raw`` for runner inspection.
+
+    G4 schema slice::
+
+        {
+          "next_gen_priors": [
+            {"target_dim": "<dim>", "weight": 0.0..1.0,
+             "rationale": "<= 80 tokens"}
+          ],
+          "underrepresented_dims": ["<dim>", ...],
+          "overrepresented_dims": ["<dim>", ...],
+          "session_summary": "<= 300 tokens"
+        }
+
+    Other keys (``coverage``, ``elo_distribution``, ``evolution_yield``)
+    stay in ``raw`` since they are reporting-only.
+    """
+
+    next_gen_priors: list[dict[str, Any]] = field(default_factory=list)
+    underrepresented_dims: list[str] = field(default_factory=list)
+    overrepresented_dims: list[str] = field(default_factory=list)
+    session_summary: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+def _default_latest_meta_review_path() -> Path:
+    """``~/.geode/self-improving-loop/latest_meta_review.json`` symlink.
+
+    The orchestrator's ``_persist_meta_review`` stamps this on every
+    run; the reader treats a missing / dead symlink as "bootstrap"
+    (no priors).
+    """
+    return Path.home() / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+
+
+def load_latest_meta_review(path: Path | str | None = None) -> MetaReviewSnapshot | None:
+    """Read ``latest_meta_review.json`` into a :class:`MetaReviewSnapshot`.
+
+    Returns ``None`` (signals "no prior run") when:
+
+    - the symlink / file does not exist (bootstrap), or
+    - the JSON is unparseable, or
+    - the payload has no ``next_gen_priors`` AND no ``underrepresented_dims``
+      (degenerate report — no usable signal).
+
+    The ``path`` arg overrides the default symlink so tests can point
+    the reader at a fixture.
+    """
+    review_path = Path(path) if path is not None else _default_latest_meta_review_path()
+    if not review_path.exists():
+        return None
+    try:
+        meta_review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        log.warning("baseline_reader: could not parse %s", review_path, exc_info=True)
+        return None
+    if not isinstance(meta_review_payload, dict):
+        return None
+    raw_priors = meta_review_payload.get("next_gen_priors") or []
+    next_gen_priors: list[dict[str, Any]] = []
+    if isinstance(raw_priors, list):
+        next_gen_priors = [p for p in raw_priors if isinstance(p, dict)]
+    underrepresented = meta_review_payload.get("underrepresented_dims") or []
+    overrepresented = meta_review_payload.get("overrepresented_dims") or []
+    summary = str(meta_review_payload.get("session_summary") or "")
+    if not next_gen_priors and not underrepresented:
+        # No actionable signal — let the caller fall through to its
+        # non-priors prompt rather than emit a near-empty block.
+        return None
+    return MetaReviewSnapshot(
+        next_gen_priors=next_gen_priors,
+        underrepresented_dims=[str(d) for d in underrepresented if isinstance(d, str)],
+        overrepresented_dims=[str(d) for d in overrepresented if isinstance(d, str)],
+        session_summary=summary,
+        raw=meta_review_payload,
+    )
+
+
+def format_priors_block(
+    snapshot: MetaReviewSnapshot | None,
+    *,
+    target_dim: str | None = None,
+    max_priors: int = 3,
+    header: str = "Previous-generation meta-review (priors)",
+) -> str:
+    """Render ``snapshot.next_gen_priors`` as a prompt-ready string.
+
+    Returns an empty string when ``snapshot`` is ``None`` or carries no
+    priors / underrepresented dims.
+
+    When ``target_dim`` is given, priors matching that dim are listed
+    first (the rest follow); the rationale is what the generator /
+    critic should attend to. Without ``target_dim``, the priors are
+    rendered in their original weight-ordered sequence.
+
+    Layout::
+
+        Previous-generation meta-review (priors)
+        - underrepresented_dims: [d1, d2]
+        - overrepresented_dims:  [d3]
+        - priors:
+          1. d1 (weight=0.7) — rationale text
+          2. d2 (weight=0.4) — rationale text
+        - session_summary: …
+    """
+    if snapshot is None:
+        return ""
+    priors = snapshot.next_gen_priors
+    if not priors and not snapshot.underrepresented_dims:
+        return ""
+
+    lines: list[str] = [header]
+    if snapshot.underrepresented_dims:
+        lines.append(f"- underrepresented_dims: {snapshot.underrepresented_dims}")
+    if snapshot.overrepresented_dims:
+        lines.append(f"- overrepresented_dims: {snapshot.overrepresented_dims}")
+    if priors:
+        ordered = priors
+        if target_dim:
+            matched = [p for p in priors if str(p.get("target_dim", "")) == target_dim]
+            others = [p for p in priors if str(p.get("target_dim", "")) != target_dim]
+            ordered = matched + others
+        lines.append("- priors:")
+        for idx, prior in enumerate(ordered[:max_priors], start=1):
+            dim_name = str(prior.get("target_dim", "?"))
+            weight = prior.get("weight")
+            rationale = str(prior.get("rationale", "")).strip()
+            first_line = f"  {idx}. {dim_name}"
+            if weight is not None:
+                first_line += f" (weight={weight})"
+            if rationale:
+                first_line += f" — {rationale[:240]}"
+            lines.append(first_line)
+    if snapshot.session_summary:
+        summary = snapshot.session_summary.strip().splitlines()
+        if summary:
+            lines.append(f"- session_summary: {summary[0][:240]}")
     return "\n".join(lines)

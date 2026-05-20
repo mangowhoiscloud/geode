@@ -49,6 +49,26 @@ functional change.
 
 ### Added
 
+- **PR-G4 — `next_gen_priors` persist + next-run reader.** Fourth PR
+  of the 2026-05-20 self-improving-loop wiring sprint (G1-G5).
+  `Pipeline._persist_meta_review` writes a first-class
+  `<run_dir>/meta_review.json` after `_persist_state` fires and updates
+  the cross-run `~/.geode/self-improving-loop/latest_meta_review.json`
+  symlink. `baseline_reader` gains `MetaReviewSnapshot` +
+  `load_latest_meta_review()` + `format_priors_block()` — the dual
+  contracts that complement the G3 baseline trio.
+  `PipelineState.meta_review_snapshot` field; CLI `_load_priors_snapshot`
+  helper loads priors at run start (silent on bootstrap, summary log on
+  hit). Generator + Critic `_build_description` prepend the priors
+  block ABOVE the baseline evidence block (priors → evidence → original
+  instructions) so the sub-agent sees the cross-run "what did the last
+  meta-reviewer flag" signal first, then the per-dim regression
+  evidence. Evolver intentionally skipped — its in-run pilot
+  `dim_means` signal is stronger than the cross-run priors for the
+  rewrite phase. 18 new tests (8 reader + 4 orchestrator persist +
+  2 generator + 2 critic + 3 CLI) — quality gates: ruff / format /
+  mypy / 411 tests green.
+
 - **PR-G3 — seed-generation reads `baseline.json` evidence + auto target
   dim.** Third PR of the 2026-05-20 self-improving-loop wiring sprint
   (G1-G5). New `plugins/seed_generation/baseline_reader.py` exposes

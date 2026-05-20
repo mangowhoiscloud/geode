@@ -283,3 +283,146 @@ def test_load_baseline_uses_autoresearch_default_path(
     snapshot = load_baseline()
     assert snapshot is not None
     assert snapshot.dim_means == {"d": 3.0}
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review reader + format_priors_block (2026-05-20)
+# ---------------------------------------------------------------------------
+
+
+from plugins.seed_generation.baseline_reader import (  # noqa: E402
+    MetaReviewSnapshot,
+    format_priors_block,
+    load_latest_meta_review,
+)
+
+
+def test_load_latest_meta_review_missing_returns_none(tmp_path: Path) -> None:
+    missing = tmp_path / "absent.json"
+    assert load_latest_meta_review(missing) is None
+
+
+def test_load_latest_meta_review_unparseable_returns_none(tmp_path: Path) -> None:
+    review_path = tmp_path / "meta.json"
+    review_path.write_text("{ not valid json", encoding="utf-8")
+    assert load_latest_meta_review(review_path) is None
+
+
+def test_load_latest_meta_review_parses_full_schema(tmp_path: Path) -> None:
+    review_path = tmp_path / "meta.json"
+    review_path.write_text(
+        json.dumps(
+            {
+                "next_gen_priors": [
+                    {
+                        "target_dim": "broken_tool_use",
+                        "weight": 0.7,
+                        "rationale": "previous run had 4 candidates miss tool error",
+                    },
+                    {
+                        "target_dim": "input_hallucination",
+                        "weight": 0.4,
+                        "rationale": "drift watch",
+                    },
+                ],
+                "underrepresented_dims": ["context_overflow_handling"],
+                "overrepresented_dims": ["overrefusal"],
+                "session_summary": "Generation produced 12 survivors, 4 weak on tool error",
+                "coverage": {"broken_tool_use": 3, "overrefusal": 6},
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_latest_meta_review(review_path)
+    assert snapshot is not None
+    assert len(snapshot.next_gen_priors) == 2
+    assert snapshot.next_gen_priors[0]["target_dim"] == "broken_tool_use"
+    assert snapshot.underrepresented_dims == ["context_overflow_handling"]
+    assert snapshot.overrepresented_dims == ["overrefusal"]
+    assert "Generation produced" in snapshot.session_summary
+    # raw payload preserved for runner inspection.
+    assert snapshot.raw["coverage"] == {"broken_tool_use": 3, "overrefusal": 6}
+
+
+def test_load_latest_meta_review_no_signal_returns_none(tmp_path: Path) -> None:
+    """Empty priors + empty underrepresented → degenerate report → None."""
+    review_path = tmp_path / "meta.json"
+    review_path.write_text(
+        json.dumps({"coverage": {}, "session_summary": "nothing notable"}),
+        encoding="utf-8",
+    )
+    assert load_latest_meta_review(review_path) is None
+
+
+def test_load_latest_meta_review_filters_garbage_priors(tmp_path: Path) -> None:
+    review_path = tmp_path / "meta.json"
+    review_path.write_text(
+        json.dumps(
+            {
+                "next_gen_priors": [
+                    {"target_dim": "d1", "weight": 0.5},
+                    "garbage row",
+                    42,
+                ],
+                "underrepresented_dims": ["d2", 99, None, "d3"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_latest_meta_review(review_path)
+    assert snapshot is not None
+    assert len(snapshot.next_gen_priors) == 1
+    assert snapshot.next_gen_priors[0]["target_dim"] == "d1"
+    # Non-string underrepresented entries dropped.
+    assert snapshot.underrepresented_dims == ["d2", "d3"]
+
+
+def test_format_priors_block_empty_for_none_snapshot() -> None:
+    assert format_priors_block(None) == ""
+
+
+def test_format_priors_block_renders_priors_and_dims() -> None:
+    snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {"target_dim": "broken_tool_use", "weight": 0.7, "rationale": "needs more tool stress"},
+        ],
+        underrepresented_dims=["context_overflow_handling"],
+        overrepresented_dims=["overrefusal"],
+        session_summary="prev run summary",
+    )
+    block = format_priors_block(snapshot)
+    assert "Previous-generation meta-review" in block
+    assert "underrepresented_dims: ['context_overflow_handling']" in block
+    assert "overrepresented_dims: ['overrefusal']" in block
+    assert "broken_tool_use" in block
+    assert "weight=0.7" in block
+    assert "needs more tool stress" in block
+    assert "session_summary: prev run summary" in block
+
+
+def test_format_priors_block_target_dim_promoted_first() -> None:
+    snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {"target_dim": "d-other", "weight": 0.9, "rationale": "other"},
+            {"target_dim": "d-match", "weight": 0.3, "rationale": "match"},
+        ],
+        underrepresented_dims=["d-match"],
+    )
+    block = format_priors_block(snapshot, target_dim="d-match")
+    # d-match appears in the priors list ahead of d-other.
+    match_pos = block.find("d-match")
+    other_pos = block.find("d-other")
+    assert 0 <= match_pos < other_pos
+
+
+def test_format_priors_block_caps_max_priors() -> None:
+    snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {"target_dim": f"d-{i}", "weight": 0.5, "rationale": ""} for i in range(5)
+        ],
+        underrepresented_dims=["d-x"],
+    )
+    block = format_priors_block(snapshot, max_priors=2)
+    assert "d-0" in block
+    assert "d-1" in block
+    assert "d-2" not in block

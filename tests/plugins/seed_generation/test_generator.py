@@ -234,3 +234,43 @@ def test_generator_skips_evidence_when_dim_missing(tmp_path: Path) -> None:
     manager = _StubManager()
     Generator(manager=manager).execute(state)  # type: ignore[arg-type]
     assert "Recent audit baseline" not in manager.received_tasks[0].description
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review priors injection (2026-05-20 self-improving-loop wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_generator_injects_priors_block_when_snapshot_present(tmp_path: Path) -> None:
+    """meta_review_snapshot → priors block prepended ABOVE baseline evidence."""
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.meta_review_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[
+            {
+                "target_dim": "broken_tool_use",
+                "weight": 0.7,
+                "rationale": "previous run missed tool error mode",
+            }
+        ],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "Previous-generation meta-review" in task.description
+    assert "broken_tool_use" in task.description
+    assert "missed tool error mode" in task.description
+    # Original generator instructions still after the block.
+    assert "Generate ONE Petri audit seed" in task.description
+
+
+def test_generator_priors_block_skipped_without_snapshot(tmp_path: Path) -> None:
+    run_dir = tmp_path
+    state = _make_state(run_dir, n=1)
+    state.meta_review_snapshot = None
+    manager = _StubManager()
+    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    assert "Previous-generation meta-review" not in manager.received_tasks[0].description
