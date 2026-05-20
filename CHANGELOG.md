@@ -60,8 +60,10 @@ functional change.
   hook) into a single ``_emit_session_start_signals`` helper that
   returns ``AgenticResult | None`` — ``None`` on the happy path, the
   ``input_blocked`` result on the sole early-exit. ``arun``'s setup
-  phase shrinks ~70 LOC; control flow preserved exactly (pure
-  refactor, zero behaviour change). 10 invariant tests pin the
+  phase shrinks 707 → 658 AST lines (~49 LOC); control flow
+  preserved exactly (pure refactor, zero behaviour change verified
+  by Codex MCP review #1 against the pre-refactor commit). 10
+  invariant tests pin the
   extracted ownership + verify ``arun`` no longer inlines the same
   block (anti-residue guard). Subsequent phases will extract the
   per-round body so the full declarative pattern emerges
