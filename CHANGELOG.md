@@ -49,6 +49,22 @@ functional change.
 
 ### Added
 
+- **PR-C6 — `docs/operator-mode-a.md` Mode A operator manual.**
+  Wave 2 / pure docs. Documents the Karpathy-idiom path for
+  running the self-improving loop via an external Claude Code or
+  Codex CLI session (vs the GEODE CLI's `/self-improving run`
+  Mode B path). Covers boot recipes for both clients, the agent
+  contract pointer at ``autoresearch/program.md``, the shared
+  SoT inventory (5 policy files + audit ledger + baseline +
+  results), a Mode A vs Mode B comparison matrix with 8
+  dimensions (boot effort / iterations / confirmation / mutator
+  LLM / audit log / rollback / quota / cost gate), and decision
+  guidance for when each mode is the right choice. 7 invariant
+  tests pin the doc's presence, the all-5-SoT references, both
+  boot recipes, the design-doc cross-reference, the slash command
+  reference, the ledger reference, and the Karpathy minimal boot
+  prompt anchor.
+
 - **PR-G2 — `/model` mutator role-tab.** Wave 1 / 3 PRs.
   Extends the ``AGENT_ROLES`` registry (PR-A pattern: primary +
   reflection) with a third entry: ``mutator``. Pre-PR operators
