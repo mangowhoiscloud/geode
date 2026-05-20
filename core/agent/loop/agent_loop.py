@@ -359,10 +359,34 @@ class AgenticLoop:
         the next round (no restart needed). Errors are swallowed inside
         ``reflect_async`` — the loop must stay robust to a flaky
         reflection model.
+
+        PR-C (2026-05-21) — every-N rounds gate. The 1 LLM call per
+        tool-use round was the dominant overhead for long-running
+        sessions (30 rounds ⇒ 30 extra Haiku calls). Operators can
+        set ``cognitive_reflection_interval=N`` (1 = current
+        behaviour) to thin the reflection cadence. The first round
+        always runs so the loop sees an LLM-derived belief snapshot
+        before any throttling kicks in.
         """
         from core.config import settings
 
         if not settings.cognitive_reflection_enabled:
+            return
+        interval = max(1, int(settings.cognitive_reflection_interval))
+        # ``record_round`` ran immediately before ``_maybe_reflect`` in
+        # ``_run_cognitive_act_observe_cycle`` so ``round_count`` is
+        # already the *current* round's number (1-based: 1, 2, 3...).
+        # ``(round_count - 1) % interval == 0`` runs on rounds
+        # 1, 1+N, 1+2N, ... — first round always reflects, then every
+        # Nth thereafter.
+        round_count = self.cognitive_state.round_count
+        if interval > 1 and (round_count - 1) % interval != 0:
+            log.debug(
+                "reflection skipped: round=%d interval=%d (next at round %d)",
+                round_count,
+                interval,
+                round_count + (interval - (round_count - 1) % interval),
+            )
             return
         from core.agent.loop._reflection import reflect_async
 
