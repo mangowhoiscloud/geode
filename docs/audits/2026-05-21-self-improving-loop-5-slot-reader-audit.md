@@ -36,7 +36,7 @@ infrastructure is committed before the policies that consume them.
 | Slot | SoT 파일 | Mutation target? | **인퍼런스 reader 위치** | 상태 |
 |---|---|---|---|---|
 | `prompt` | `wrapper-sections.json` | ✓ | `core/agent/system_prompt.py:57` (`_load_wrapper_override`) → `:79-80` (SoT fallback read) → `:194` (`build_system_prompt` 호출) → `:198/:210` (audit/normal mode inject) → `core/agent/loop/_context.py:103` → `core/agent/loop/agent_loop.py` (LLM 호출 경로) | **ALIVE** |
-| `tool_policy` | `tool-policy.json` | ✓ | **없음** — `paths.py:92`, `policies.py:130` 정의만 | **DEAD** |
+| `tool_policy` | `tool-policy.json` | ✓ | **audit 시점 없음** — `paths.py:92`, `policies.py:130` 정의만. **S0a 이후** `core/agent/tool_policy.py` (`_load_tool_policy_override` + `apply_tool_policy`) → `core/agent/loop/_helpers.py:get_agentic_tools` | **DEAD → ALIVE (S0a, 2026-05-21 머지)** |
 | `decomposition` | `decomposition.json` | ✓ | **없음** — `_decomposition.py:31` 의 `GoalDecomposer` 는 prompt 를 `core.llm.prompts.load_prompt("decomposer", "system")` 로 별도 SoT 에서 로드. 즉 hardcoded 가 아니지만 어느 경로도 `decomposition.json` 을 읽지 않음 — 그게 dead 사유 | **DEAD** |
 | `retrieval` | `retrieval.json` | ✓ | **없음** — `paths.py:94`, `policies.py:132` 정의만 | **DEAD** |
 | `reflection` | `reflection.json` | ✓ | **없음** — `core/agent/loop/_reflection.py:65-160` 의 `_REFLECTION_TOOL` schema + reflection prompt 가 module-level constant. `reflection.json` 미연결 | **DEAD** |
@@ -88,13 +88,13 @@ mutator LLM
 
 ## 6. DEAD slot 별 권고
 
-### 6a. `tool_policy`
+### 6a. `tool_policy` (S0a 머지 완료, 2026-05-21)
 
 | 항목 | 내용 |
 |---|---|
 | 의도 | 도구 선택/허용/우선순위 정책의 진화 (Voyager 의 tool selection 학습) |
-| 현재 | `tool-policy.json` 파일은 mutate 가능하지만 어떤 도구 호출 경로도 이걸 읽지 않음 |
-| 권고 A (살리기) | `core/agent/loop/AgenticLoop._select_tools()` 같은 진입 지점에서 `tool-policy.json` 의 정책 (e.g. allowed_tools / forbidden_tools / priority_order) 을 읽어 도구 후보를 필터. ~30 line 의 reader 추가로 가능 |
+| audit 시점 | `tool-policy.json` 파일은 mutate 가능하지만 어떤 도구 호출 경로도 이걸 읽지 않음 |
+| S0a 머지 후 | `core/agent/tool_policy.py` 신설 (`_load_tool_policy_override` + `apply_tool_policy`), `core/agent/loop/_helpers.py:get_agentic_tools` 의 단일 적용 지점에서 호출. schema: `allowed_tools` / `forbidden_tools` / `priority_order` (list[str] 또는 mutation 의 string payload 정규화) |
 | 권고 B (deprecate) | `TARGET_KINDS` 에서 제거. 5축 → 4축으로 축소 명시 |
 | ROI 추정 | **권고 A** — `broken_tool_use` dim 직접 영향. 5축 중 가장 양의 압력 우호적인 dim 이라 ROI 높음 |
 

@@ -14,11 +14,13 @@ GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Refle
 
 Petri 17-dim 중 **양의 압력 (성능 향상) 으로 작동하는 dim 은 사실상 `broken_tool_use` 1개** 뿐이고 나머지는 alignment / safety evaluation 축으로 음의 압력 ("안 망가지기") 이다. 17-dim 의 가중치가 동일 차원에 압축돼 fitness 의 정의역이 "에이전트가 망가지지 않는지" 에 쏠려 있다. seed pool 의 정교화 + skill 진화의 노력 대부분이 alignment dim 의 마이크로-튜닝으로 흡수되는 구조적 누수.
 
-### 발견 2 — Mutation 표면의 wiring 누수 (1/5)
+### 발견 2 — Mutation 표면의 wiring 누수 (audit 시점 1/5, S0a 이후 2/5)
 
-PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`) 가 진단한 결과 — mutator 가 mutate 할 수 있다고 명세된 5 slot 중 인퍼런스 reader 가 살아있는 slot 은 `prompt` 하나뿐. 나머지 4 (`tool_policy` / `decomposition` / `retrieval` / `reflection`) 는 SoT 파일 + mutation dispatcher 는 있지만 **인퍼런스 경로에서 정책을 읽어 행동에 반영하는 reader 가 부재** — `core/self_improving_loop/policies.py:29-37` 의 docstring 이 직접 자백한다 (PR-6 의 의도적 follow-up 미완 + 잊혀짐).
+PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`) 가 진단한 audit 시점 결과 — mutator 가 mutate 할 수 있다고 명세된 5 slot 중 인퍼런스 reader 가 살아있는 slot 은 `prompt` 하나뿐. 나머지 4 (`tool_policy` / `decomposition` / `retrieval` / `reflection`) 는 SoT 파일 + mutation dispatcher 는 있지만 **인퍼런스 경로에서 정책을 읽어 행동에 반영하는 reader 가 부재** — `core/self_improving_loop/policies.py:29-37` 의 docstring 이 직접 자백한다 (PR-6 의 의도적 follow-up 미완 + 잊혀짐).
 
-→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이다. 누수 대비 1/40 ~ 1/85 의 진화 효율.
+**S0a (2026-05-21 머지) 이후 상태**: `tool_policy` 가 ALIVE 로 전환 — `core/agent/tool_policy.py` 의 reader 가 `core/agent/loop/_helpers.py:get_agentic_tools` 에서 호출된다. 따라서 audit 시점 1/5 → 현재 2/5 ALIVE. 남은 dead slot 은 `decomposition` (S0c) / `retrieval` (S0d 처치 결정) / `reflection` (S0b).
+
+→ 두 누수가 곱해지면 GEODE 의 self-improving loop 는 **명세상 5축 × 17-dim = 85 면적이지만 audit 시점 실제 진화 압력은 1축 × 1-2dim = 1-2 면적**으로 운영 중이었다 (1/40~1/85 누수). S0a 이후 2축 × 1-2dim = 2-4 면적으로 회복 중이고 S0b/c 완료 시 4축까지 회복 예정.
 
 ### 발견 3 — Fine-tune 표면의 채널 제약
 

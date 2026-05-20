@@ -55,9 +55,17 @@ def test_load_returns_none_when_sot_unreadable_json(isolated_sot: Path) -> None:
     assert _load_tool_policy_override() is None
 
 
-def test_load_returns_none_when_sot_schema_violation(isolated_sot: Path) -> None:
-    """``allowed_tools`` 가 list[str] 가 아니면 ``None`` (graceful)."""
-    _write(isolated_sot, {"allowed_tools": "not-a-list"})
+def test_load_string_payload_normalizes_to_list(isolated_sot: Path) -> None:
+    """Producer parity (Codex MCP) — string payload 는 schema violation 이
+    아니라 정규화 대상. ``"bash, read"`` → ``["bash", "read"]``."""
+    _write(isolated_sot, {"allowed_tools": "bash, read"})
+    result = _load_tool_policy_override()
+    assert result == {"allowed_tools": ["bash", "read"]}
+
+
+def test_load_returns_none_when_sot_type_violation(isolated_sot: Path) -> None:
+    """list 도 string 도 아닌 type (e.g. dict, int) → graceful ``None``."""
+    _write(isolated_sot, {"allowed_tools": {"nested": "dict"}})
     assert _load_tool_policy_override() is None
 
 
@@ -90,12 +98,13 @@ def test_strict_load_via_env_var_raises_on_missing(
         _load_tool_policy_override()
 
 
-def test_strict_load_via_env_var_raises_on_schema_violation(
+def test_strict_load_via_env_var_raises_on_type_violation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """audit subprocess 는 schema 위반 시 RuntimeError (fail-fast)."""
+    """audit subprocess 는 type 위반 (list 도 string 도 아님) 시 RuntimeError (fail-fast).
+    Producer parity 확장 후 string 은 valid → dict/int 등 다른 type 만 violation."""
     bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps({"forbidden_tools": "not-a-list"}), encoding="utf-8")
+    bad.write_text(json.dumps({"forbidden_tools": {"nested": "dict"}}), encoding="utf-8")
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(bad))
     with pytest.raises(RuntimeError, match="forbidden_tools"):
         _load_tool_policy_override()
@@ -169,6 +178,18 @@ def test_apply_full_policy_filter_and_reorder() -> None:
     assert [t["name"] for t in result] == ["d", "a"]
 
 
+def test_apply_zero_tool_self_lock_emits_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Self-lock guard (Codex MCP catch) — 정책이 모든 도구 제거 시 WARNING.
+    의도된 동작 (정책으로 완전 차단) 일 수 있으나 silent 가 아니어야 함."""
+    tools = _tools("a", "b")
+    with caplog.at_level("WARNING"):
+        result = apply_tool_policy(tools, {"allowed_tools": []})
+    assert result == []
+    assert any("zero tools available" in r.message for r in caplog.records), (
+        "self-lock 발생 시 WARNING log 필수 — 운영자 실수 catch 용."
+    )
+
+
 def test_apply_unnamed_tool_passes_through() -> None:
     """``name`` 이 없는 도구는 정책 영향 없이 통과."""
     tools: list[dict[str, Any]] = [{"name": "a"}, {"description": "unnamed"}]
@@ -223,7 +244,74 @@ def test_get_agentic_tools_forbidden_filter_round_trip(
 
 
 # ---------------------------------------------------------------------------
-# 4. ALIVE slot 신호 — `tool-policy.json` 이 인퍼런스 경로에서 참조됨
+# 4. Producer → Reader round trip (Codex MCP catch, 2026-05-21)
+#    write_policy() 가 dict[str, str] 만 직렬화하므로 mutation 의 string
+#    payload 가 reader 의 list[str] schema 와 호환되는지 검증.
+# ---------------------------------------------------------------------------
+
+
+def test_producer_string_payload_normalized_by_reader(
+    isolated_sot: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``write_policy("tool_policy", {...string...})`` → reader 가 정규화.
+
+    Producer ``core/self_improving_loop/policies.py:write_policy`` 는
+    ``dict[str, str]`` 만 직렬화한다 (mutation 의 ``new_value`` 가 string).
+    Reader 가 그 string payload (comma/newline-separated) 를 list 로
+    정규화해야 read-write parity 가 성립."""
+    from core.self_improving_loop import policies as policies_mod
+
+    monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
+    # Producer 처럼 dict[str, str] 로 직렬화 — mutation 시뮬레이션
+    policies_mod.write_policy("tool_policy", {"forbidden_tools": "bash, write"})
+
+    result = _load_tool_policy_override()
+    assert result is not None, "string payload 가 reader 에서 graceful 무시되면 parity 깨짐"
+    assert result.get("forbidden_tools") == ["bash", "write"], (
+        f"comma-separated string 이 list 로 정규화돼야 함. got={result}"
+    )
+
+
+def test_producer_newline_separated_payload(
+    isolated_sot: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Newline-separated string payload 도 list 로 정규화."""
+    from core.self_improving_loop import policies as policies_mod
+
+    monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
+    policies_mod.write_policy("tool_policy", {"allowed_tools": "bash\nread\ngrep"})
+
+    result = _load_tool_policy_override()
+    assert result is not None
+    assert result.get("allowed_tools") == ["bash", "read", "grep"]
+
+
+def test_producer_reader_e2e_filters_get_agentic_tools(
+    isolated_sot: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end — producer (string payload) → reader → get_agentic_tools.
+
+    이게 통과해야 mutation 이 실제 fitness 압력을 만들 수 있음."""
+    from core.self_improving_loop import policies as policies_mod
+
+    monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
+    base = get_agentic_tools()
+    assert base, "base tools must exist for this E2E test"
+
+    target = base[0]["name"]
+    # producer 가 string 으로 mutation 출력 (실제 시나리오)
+    policies_mod.write_policy("tool_policy", {"forbidden_tools": target})
+
+    after = get_agentic_tools()
+    names = [t["name"] for t in after]
+    assert target not in names, (
+        f"E2E parity 깨짐 — producer 의 string payload 가 reader 를 통과해 "
+        f"get_agentic_tools 에서 {target} 가 필터되어야 함. names={names[:5]}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. ALIVE slot 신호 — `tool-policy.json` 이 인퍼런스 경로에서 참조됨
 # ---------------------------------------------------------------------------
 
 

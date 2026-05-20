@@ -170,12 +170,22 @@ def test_dead_slot_has_no_inference_reader(sot_filename: str) -> None:
 
 def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
     """ADR-012 S0a 머지 이후 ``tool-policy.json`` 은 ALIVE — reader 가
-    ``core/agent/tool_policy.py`` 에 존재. PR-AUDIT-5SLOT 의 의도된
-    회귀 marker 의 발화 결과."""
+    ``core/agent/tool_policy.py`` 에 존재 + ``_helpers.py`` 의 도구 통합
+    경로에서 실제로 호출됨. PR-AUDIT-5SLOT 의 의도된 회귀 marker 의
+    발화 결과 (Codex MCP catch — cosmetic 검증 → call chain 검증)."""
     hits = _grep_inference_dirs("tool-policy.json")
     # tool_policy.py 의 path constant alias 위치 + _helpers.py 의 호출 위치
     assert any("tool_policy.py" in h for h in hits), (
         f"tool-policy.json 이 core/agent/tool_policy.py 에서 발견되어야 함. hits={hits}"
+    )
+    # Call chain 검증 — _helpers.get_agentic_tools 가 _load_tool_policy_override 를 호출.
+    helpers_src = (REPO_ROOT / "core/agent/loop/_helpers.py").read_text(encoding="utf-8")
+    assert "_load_tool_policy_override" in helpers_src, (
+        "_helpers.py 가 _load_tool_policy_override 를 import/호출해야 함 — "
+        "reader 가 inference 경로에 실제로 wired 됐는지 검증."
+    )
+    assert "apply_tool_policy" in helpers_src, (
+        "_helpers.py 가 apply_tool_policy 를 호출해야 함 — 정책이 도구 목록에 적용되는지."
     )
 
 
