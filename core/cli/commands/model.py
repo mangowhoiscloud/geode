@@ -29,16 +29,57 @@ log = logging.getLogger(__name__)
 
 
 def _current_model_for_role(role: AgentRole) -> str:
-    """Read the current model id for ``role`` from ``settings``.
+    """Read the current model id for ``role`` from ``settings`` (or the
+    role-specific toml section when the role has no Settings attr).
 
     Centralised reader so the picker, non-tty fallback, and post-apply
     confirmation all consult the same source. Falls back to an empty
-    string if the field is unset (shouldn't happen — every registered
-    role's settings field has a default — but defensive against config
-    drift)."""
+    string if the field is unset.
+
+    PR-G2 (2026-05-21) — roles with ``settings_field=""`` (e.g.
+    mutator) don't live on Settings; their durable SoT is the toml
+    section + key. Read it lazily so the picker shows what the
+    runner will actually invoke at dispatch time. Returns ``""`` when
+    the toml key is absent — caller renders this as "(inherits
+    Settings.model)".
+    """
     from core.config import settings
 
+    if not role.settings_field:
+        return _read_toml_value(role.toml_section, role.toml_key)
     return getattr(settings, role.settings_field, "") or ""
+
+
+def _read_toml_value(section: str, key: str) -> str:
+    """Read ``[<section>] <key>`` from ``~/.geode/config.toml``.
+
+    Returns ``""`` when the file is missing, the section is missing,
+    the key is missing, or any parse error occurs — the picker
+    renders empty as "(inherits Settings.model)" so a silent miss
+    falls back to the global model rather than crashing the slash.
+    Used by the PR-G2 mutator role (and any future role with
+    ``settings_field=""``)."""
+    import tomllib
+
+    from core.paths import GLOBAL_CONFIG_TOML
+
+    if not GLOBAL_CONFIG_TOML.is_file():
+        return ""
+    try:
+        data = tomllib.loads(GLOBAL_CONFIG_TOML.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    cursor: object = data
+    for part in section.split("."):
+        if not isinstance(cursor, dict):
+            return ""
+        cursor = cursor.get(part)
+        if cursor is None:
+            return ""
+    if not isinstance(cursor, dict):
+        return ""
+    value = cursor.get(key)
+    return str(value) if value else ""
 
 
 def _apply_model(
@@ -123,10 +164,21 @@ def _apply_model(
         # field but not for arbitrary new fields. ``object.__setattr__``
         # bypasses validation so the picker's choice lands regardless
         # of the field's pydantic descriptor type.
-        try:
-            object.__setattr__(settings, role_def.settings_field, selected.id)
-        except Exception:
-            log.debug("Could not persist %s to settings", role_def.settings_field, exc_info=True)
+        #
+        # PR-G2 (2026-05-21) — roles with ``settings_field=""`` (e.g.
+        # mutator) don't live on Settings; skip the attribute write
+        # and persist via env + toml only. The runner's lazy
+        # ``load_self_improving_loop_config()`` will pick up the new
+        # toml value on the next dispatch.
+        if role_def.settings_field:
+            try:
+                object.__setattr__(settings, role_def.settings_field, selected.id)
+            except Exception:
+                log.debug(
+                    "Could not persist %s to settings",
+                    role_def.settings_field,
+                    exc_info=True,
+                )
         _pkg._upsert_env(role_def.env_var, selected.id)
         upsert_config_toml(role_def.toml_section, role_def.toml_key, selected.id)
     if role_def.has_effort and effort is not None and effort != old_effort:

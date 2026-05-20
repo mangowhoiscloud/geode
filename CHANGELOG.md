@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-G2 — `/model` mutator role-tab.** Wave 1 / 3 PRs.
+  Extends the ``AGENT_ROLES`` registry (PR-A pattern: primary +
+  reflection) with a third entry: ``mutator``. Pre-PR operators
+  had to edit ``~/.geode/config.toml [self_improving_loop.mutator]
+  default_model`` manually; PR-G2 wires the same role-tab UI that
+  primary + reflection already use. The mutator role differs in
+  one respect — its model knob lives in ``MutatorConfig.default_model``
+  (toml-only, post-PR-MINIMAL-2 G1a defaults to ``None`` for
+  Settings.model inherit), not on ``Settings``. The
+  ``AgentRole.settings_field=""`` sentinel signals "no Settings
+  attribute to write"; ``_current_model_for_role`` reads the toml
+  value directly via the new ``_read_toml_value`` helper (tomllib +
+  defensive empty-on-malformed-or-missing), and ``_apply_model``
+  guards the ``object.__setattr__(settings, ...)`` call behind an
+  ``if role_def.settings_field:`` check so the picker's choice
+  persists via env var + ``upsert_config_toml`` only — exactly the
+  SoT path the runner's lazy ``load_self_improving_loop_config()``
+  reads at dispatch time. 7 invariant tests pin role registration,
+  empty-settings-field sentinel, toml read paths (set / unset /
+  malformed / missing file), and the apply-time settings write
+  guard.
+
 ### Changed
 
 - **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
