@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **G5b.fix2 — `core/self_improving_loop/runner.py` actually loads
+  `autoresearch/program.md` so "program.md-driven" is no longer fiction.**
+  Codex MCP LLM-as-Judge on PR-G5b (#1350) caught the second
+  anti-deception case: the PR title claimed "program.md-driven
+  self-improving loop runner" but `_SYSTEM_PROMPT` was a hardcoded
+  f-string and `grep -rn "program.md" core/ autoresearch/` returned
+  zero reads. Fix: replace the constant with `_build_system_prompt()`
+  which calls `_load_program_md()` (path resolved relative to the
+  runner module so worktrees work) and concatenates the file body with
+  a runner-specific `_MUTATION_CONTRACT_SUFFIX` (the single-shot JSON
+  contract). When program.md is unreadable (missing / OSError), the
+  function logs WARNING and returns `_FALLBACK_SYSTEM_PROMPT` — the
+  pre-fix inline prompt — so the loop never goes offline. 4 new tests:
+  (a) program.md body reaches the LLM, (b) fallback when load returns
+  None, (c) real in-repo program.md is reachable from the runner's
+  path resolution (refactor-canary), (d) end-to-end `run_once`
+  surfaces program.md to the captured LLM call.
+
 ### Changed
 
 - **Scaffold: CLAUDE.md gains 2 new wiring rules + 1 deception rule + a
