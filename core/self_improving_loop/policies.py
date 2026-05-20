@@ -46,11 +46,11 @@ import logging
 from pathlib import Path
 
 from core.paths import (
-    GLOBAL_DECOMPOSITION_POLICY_SOT,
-    GLOBAL_REFLECTION_POLICY_SOT,
-    GLOBAL_RETRIEVAL_POLICY_SOT,
-    GLOBAL_TOOL_POLICY_SOT,
-    GLOBAL_WRAPPER_SECTIONS_SOT,
+    GLOBAL_DECOMPOSITION_POLICY_PATH,
+    GLOBAL_REFLECTION_POLICY_PATH,
+    GLOBAL_RETRIEVAL_POLICY_PATH,
+    GLOBAL_TOOL_POLICY_PATH,
+    GLOBAL_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
 )
 
@@ -126,11 +126,11 @@ TARGET_KINDS: tuple[str, ...] = (
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
 # wrapper-sections SoT so older mutations replay unchanged.
 _KIND_TO_PATH: dict[str, Path] = {
-    "prompt": GLOBAL_WRAPPER_SECTIONS_SOT,
-    "tool_policy": GLOBAL_TOOL_POLICY_SOT,
-    "decomposition": GLOBAL_DECOMPOSITION_POLICY_SOT,
-    "retrieval": GLOBAL_RETRIEVAL_POLICY_SOT,
-    "reflection": GLOBAL_REFLECTION_POLICY_SOT,
+    "prompt": GLOBAL_WRAPPER_SECTIONS_PATH,
+    "tool_policy": GLOBAL_TOOL_POLICY_PATH,
+    "decomposition": GLOBAL_DECOMPOSITION_POLICY_PATH,
+    "retrieval": GLOBAL_RETRIEVAL_POLICY_PATH,
+    "reflection": GLOBAL_REFLECTION_POLICY_PATH,
 }
 
 

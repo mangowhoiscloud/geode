@@ -65,9 +65,9 @@ def test_policy_path_returns_distinct_paths() -> None:
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:
-    from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT
+    from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH
 
-    assert policy_path("prompt") == GLOBAL_WRAPPER_SECTIONS_SOT
+    assert policy_path("prompt") == GLOBAL_WRAPPER_SECTIONS_PATH
 
 
 def test_policy_path_raises_on_unknown() -> None:
@@ -473,19 +473,19 @@ def test_global_policy_paths_under_policies_dir() -> None:
     co-located, and the in-repo location is git-tracked so ``git diff``
     shows the current mutation state (PR-RATCHET-1, 2026-05-21)."""
     from core.paths import (
-        GLOBAL_DECOMPOSITION_POLICY_SOT,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_POLICIES_DIR,
-        GLOBAL_REFLECTION_POLICY_SOT,
-        GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_TOOL_POLICY_SOT,
-        GLOBAL_WRAPPER_SECTIONS_SOT,
+        GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_RETRIEVAL_POLICY_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+        GLOBAL_WRAPPER_SECTIONS_PATH,
     )
 
     for path in (
-        GLOBAL_WRAPPER_SECTIONS_SOT,
-        GLOBAL_TOOL_POLICY_SOT,
-        GLOBAL_DECOMPOSITION_POLICY_SOT,
-        GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_REFLECTION_POLICY_SOT,
+        GLOBAL_WRAPPER_SECTIONS_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_RETRIEVAL_POLICY_PATH,
+        GLOBAL_REFLECTION_POLICY_PATH,
     ):
         assert path.parent == GLOBAL_POLICIES_DIR

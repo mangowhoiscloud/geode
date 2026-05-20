@@ -47,7 +47,9 @@ _HISTORY_DEFAULT_N = 5
 # operator inside one tool surface without re-implementing what
 # git does natively.
 _RUN_DEFERRED_ACTIONS = frozenset({"config"})
-_KNOWN_ACTIONS = frozenset({"status", "run", "history", "rollback"}) | _RUN_DEFERRED_ACTIONS
+_KNOWN_ACTIONS = (
+    frozenset({"status", "run", "history", "rollback", "migrate"}) | _RUN_DEFERRED_ACTIONS
+)
 _DESIGN_DOC = "docs/plans/2026-05-21-self-improving-loop-ux.md"
 _RUN_DEFAULT_ITERATIONS = 1
 _RUN_MAX_ITERATIONS = 10
@@ -78,6 +80,10 @@ def cmd_self_improving(args: str) -> None:
         _cmd_rollback(parts[1:])
         return
 
+    if action == "migrate":
+        _cmd_migrate()
+        return
+
     if action in _RUN_DEFERRED_ACTIONS:
         console.print()
         console.print(
@@ -90,7 +96,8 @@ def cmd_self_improving(args: str) -> None:
     console.print()
     console.print(f"  [warning]Unknown action: /self-improving {action}[/warning]")
     console.print(
-        "  [muted]Available now: [/muted]status / run / history / rollback   "
+        "  [muted]Available now: [/muted]"
+        "status / run / history / rollback / migrate   "
         "[muted]Coming PR-OPS-3:[/muted] config"
     )
     console.print()
@@ -389,10 +396,17 @@ def _render_preflight(flags: dict[str, Any]) -> None:
     mutator_model: str = "?"
     mutator_source: str = "?"
     try:
+        from core.config import settings
         from core.config.self_improving_loop import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
-        mutator_model = cfg.mutator.default_model
+        # PR-MINIMAL-2 (2026-05-21) — G1a inherit: when
+        # MutatorConfig.default_model is None (the new default), fall
+        # back to Settings.model so the pre-flight display reflects
+        # what the runner will actually invoke. Explicit override
+        # (operator set ``[self_improving_loop.mutator] default_model``
+        # in config.toml) still wins.
+        mutator_model = cfg.mutator.default_model or settings.model
         mutator_source = cfg.mutator.source
     except Exception:
         # Best-effort UI: missing config falls through to the "?" placeholders.
@@ -604,4 +618,86 @@ def _cmd_rollback(opts: list[str]) -> None:
             "form, e.g.[/muted] [bold]/self-improving rollback "
             "<mutation_id>[/bold]"
         )
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# ``/self-improving migrate`` — PR-MINIMAL-2 (B7)
+# ---------------------------------------------------------------------------
+#
+# PR-RATCHET-1 introduced a *lazy* migration helper that copies
+# pre-PR ``~/.geode/self-improving-loop/<file>.json`` payloads to
+# the new in-repo ``autoresearch/state/policies/`` location on the
+# first ``load_policy`` / ``write_policy`` call. The lazy path is
+# operator-invisible — they don't see a "migration in progress"
+# signal, so they can't confirm the move happened. PR-MINIMAL-2's
+# ``/self-improving migrate`` slash invokes the helper explicitly
+# for every target_kind so the operator sees a per-kind status
+# table and can verify the in-repo location now carries their
+# pre-PR policy state.
+
+
+def _cmd_migrate() -> None:
+    """Explicit one-shot migration from ``~/.geode/self-improving-loop/``
+    to the in-repo ``autoresearch/state/policies/`` directory.
+
+    Iterates every ``TARGET_KINDS`` entry, calls
+    ``_maybe_migrate_legacy_sot`` for each, and renders a per-kind
+    status table: ``migrated`` (legacy file existed + new path was
+    missing, copy succeeded), ``up-to-date`` (new path already
+    present, no-op), ``no-legacy`` (no pre-PR file to migrate from),
+    or ``error`` (best-effort copy raised — never crashes the slash).
+
+    Lifetime: this slash is the operator's escape hatch from the
+    lazy-migration code path. Once every install has run it the
+    ``_maybe_migrate_legacy_sot`` helper can be removed in a future
+    minor release.
+    """
+    from core.paths import LEGACY_SOT_DIR
+    from core.self_improving_loop.policies import (
+        _LEGACY_FILE_NAMES,
+        TARGET_KINDS,
+        _maybe_migrate_legacy_sot,
+        policy_path,
+    )
+
+    console.print()
+    console.print("  [header]Self-improving loop — migrate[/header]")
+    console.print()
+    console.print(f"  [muted]Legacy dir:[/muted] {LEGACY_SOT_DIR}")
+    console.print()
+
+    rows: list[tuple[str, str, str]] = []
+    for kind in TARGET_KINDS:
+        new_path = policy_path(kind)
+        legacy_name = _LEGACY_FILE_NAMES.get(kind, "?")
+        legacy_path = LEGACY_SOT_DIR / legacy_name
+        if new_path.is_file():
+            rows.append((kind, "up-to-date", str(new_path)))
+            continue
+        if not legacy_path.is_file():
+            rows.append((kind, "no-legacy", str(legacy_path)))
+            continue
+        try:
+            _maybe_migrate_legacy_sot(kind, new_path)
+        except Exception as exc:
+            rows.append((kind, f"error: {exc}", str(new_path)))
+            continue
+        if new_path.is_file():
+            rows.append((kind, "migrated", str(new_path)))
+        else:
+            rows.append((kind, "error: helper no-op", str(new_path)))
+
+    for kind, status, path in rows:
+        style = {
+            "migrated": "success",
+            "up-to-date": "muted",
+            "no-legacy": "muted",
+        }.get(status, "warning")
+        console.print(f"    [{style}]{status:14}[/{style}] {kind:14} {path}")
+    console.print()
+    console.print(
+        "  [muted]Legacy files are PRESERVED (not deleted) so you "
+        "can manually roll back. Remove them yourself when ready.[/muted]"
+    )
     console.print()
