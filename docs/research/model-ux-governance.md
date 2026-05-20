@@ -83,7 +83,7 @@ MODEL_PROFILES = [
 | 1 | "Codex (Plus)" label vs `openai-codex` provider ID 불일치 | `commands.py:60` |
 | 2 | `forced_login_method` 가 `/model` UX 에 안 보임 | `_apply_model` 분리 |
 | 3 | `gpt-5.5` 가 static `_resolve_provider` 에서 `"openai"` 로 매핑되지만 실제 Codex-only | `core/config.py:_resolve_provider` |
-| 4 | Silent credential fallback 중 user-facing signal 없음 | `resolve_routing` chain |
+| 4 | ~~Silent credential fallback 중 user-facing signal 없음~~ → v0.99.19 에서 silent fallback 자체 제거 (Phase F1 + F3 옵션 C, 본 doc Addendum). | `resolve_routing` chain |
 | 5 | `MODEL_PROFILES` 가 login state 필터링 없음 | `commands.py:50` |
 
 ### v0.52.8 system prompt assertion 재검토 필요
@@ -388,7 +388,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 | M1 | Provider label vs ID 불일치 (`"Codex (Plus)"` vs `openai-codex`) | S2 | S | OpenClaw uses single canonical key |
 | M2 | `forced_login_method` 가 `/model` UX 에 안 보임 | S2 | M | OpenClaw `models auth order get <provider>` shows |
 | M3 | `gpt-5.5` static `_resolve_provider` → `"openai"` (실제는 Codex-only) | S1 | M | Hermes 의 PROVIDER_REGISTRY 모델 매핑 |
-| M4 | Silent credential fallback 중 user signal 없음 | S2 | S | OpenClaw breadcrumb event |
+| M4 | Silent credential fallback (~~breadcrumb 추가~~ → v0.99.19 elimination) | Done (v0.99.19) | — | 본 doc Addendum 의 Phase F1 + F3 (옵션 C). silent fallback 자체를 제거; breadcrumb 도 dead code. |
 | M5 | `MODEL_PROFILES` 가 login-state 필터링 안 됨 | S3 | S | Hermes `list_authenticated_providers()` |
 
 ### `/login` UX gaps
@@ -443,21 +443,11 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 
 ---
 
-## Addendum — Fallback chain redesign (fail-fast on quota)
+## Addendum — Fallback chain redesign (silent default off, opt-in knob)
 
 > **사용자 결정 사항 (2026-04-27)**: 현재 fallback 체인 (same-provider model fallback → cross-provider fallback) 은 사용 경험 향상보다 시스템 불확실성 (cost surprise, model behavior drift, silent provider switch) 을 더 키운다. **API/구독 quota 초과 시 친절한 안내 + 시스템 정지** 가 안정적.
-
-### 현재 fallback 코드 surface (검증된 file:line)
-
-| Layer | 위치 | 동작 |
-|-------|------|------|
-| **per-provider chain** | `core/config.py:372-390` — `ANTHROPIC_FALLBACK_CHAIN`, `OPENAI_FALLBACK_CHAIN`, `CODEX_FALLBACK_CHAIN`, `GLM_FALLBACK_CHAIN` | 같은 provider 안에서 다음 모델 시도 |
-| **router-level retry** | `core/llm/fallback.py:retry_with_backoff_generic` (~228줄) | per-model 재시도 + 모델 chain iteration |
-| **agentic loop escalation** | `core/agent/loop.py:_try_model_escalation` (line 1563) | 모든 retry 실패 시 chain 의 다음 모델로 swap |
-| **cross-provider escalation** | `core/agent/loop.py:_try_cross_provider_escalation` (line 1637) + `core/llm/adapters.py:215 CROSS_PROVIDER_FALLBACK` | provider chain 도 exhausted 시 다른 provider 로 점프 |
-| **deleted opt-in flag** | `core/config/_settings.py` — `llm_cross_provider_failover` / `llm_cross_provider_order` 제거 완료 (`#TBD`) | cross-provider auto-failover toggle 삭제. provider-internal fallback chain 은 유지 |
-| **billing fail-fast** | `core/llm/errors.py:is_billing_fatal` + `core/llm/fallback.py:267` (v0.52.3) | quota=billing 에러 시 retry 즉시 중단 (BillingError raise) — **이미 구현됨** |
-| **request-fatal fail-fast** | `core/llm/errors.py:is_request_fatal` + `fallback.py` (v0.52.6) | 400 Unsupported parameter 등 즉시 중단 — **이미 구현됨** |
+>
+> **사용자 결정 사항 (2026-05-21)** — *옵션 (D) Knob*: "FALLBACK 체인과 레이어를 제거해. Self-improving Loop + Agentic Loop(GEODE) 스코프에 전역으로 지켜야할 사안이야." 후속: "model fallback을 남겨두는 이유에 대해 파악하자. 사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성이야." → silent fallback 의 *default* 는 off, 코드 path 는 *유지* 해서 사용자가 `~/.geode/routing.toml` 의 `[model.fallbacks]` 로 *명시적 opt-in* 가능.
 
 ### 사용자 직관 검증 (incident 근거)
 
@@ -469,64 +459,35 @@ v0.52.5 incident (provider-switch session):
 
 → **둘 다 cross-model / cross-provider fallback 이 root cause 의 일부.** 사용자 직관 정확.
 
-### 제안 governance — fail-fast on quota
+### Phase F 진행 상태 (v0.99.19 기준)
 
-**Phase F1 — Cross-provider failover 제거 완료 (`#TBD`)**
-- `llm_cross_provider_failover` / `llm_cross_provider_order` settings fields 삭제 완료.
-- `_cross_provider_dispatch` 삭제 및 `call_llm` / `call_llm_parsed` wrapper 경로 제거 완료.
-- `call_llm_with_tools_async` 의 inline cross-provider loop 제거 완료.
-- 기존 `_try_cross_provider_escalation` / `CROSS_PROVIDER_FALLBACK` auto-swap 경로는 v0.90.0 계열에서 이미 제거 또는 empty back-compat 상태.
-- 영향: provider 가 exhausted 됐을 때 silent 다른 provider 점프 사라짐. 명시적 에러 raise.
+**Phase F1 — Cross-provider failover 완전 제거 (Done)**
+- `llm_cross_provider_failover` / `llm_cross_provider_order` settings fields 삭제됨 (v0.53.0).
+- `_try_cross_provider_escalation` 메서드 + `CROSS_PROVIDER_FALLBACK` empty-dict shim 모두 삭제됨 (v0.99.19, 본 plan).
+- 영향: provider 가 exhausted 됐을 때 silent 다른 provider 점프 *불가능*. ``BillingError`` 만 raise.
 
-**Phase F2 — Quota-exhausted 친절한 안내**
-- `is_billing_fatal()` 가 잡는 에러 (GLM 1113, OpenAI insufficient_quota, Anthropic permission_error) 시:
-  - 현재: `BillingError` raise → router 가 catch → 사용자에게 "billing exhausted" 단순 메시지
-  - 개선: provider/plan-aware 안내
-    ```
-    ⚠ GLM Coding Plan quota exhausted
-      Plan: glm-coding-lite (80 prompts/5h)
-      Used: 80/80 · Resets in 2h 14m
+**Phase F2 — Quota-exhausted 친절한 안내 (Done in v0.53.0)**
+- `BillingError.user_message()` 가 multi-line plan-aware panel 렌더 (`core/llm/errors.py:155-186`).
+- Provider / Plan / resets-in / 3-옵션 메시지 — 코드 명세 일치 확인.
 
-    Options:
-      1. Wait for reset (resets at 17:42 KST)
-      2. Switch to PAYG: /login set-key glm <api-key>
-      3. Switch to another provider: /model claude-opus-4-7
-    ```
-- 위치: `core/llm/errors.py` 에 `BillingError.user_message()` method 추가 + `core/cli/ipc_client.py` 의 billing event renderer 강화.
+**Phase F3 — Same-provider fallback chain (Knob in v0.99.19)**
+- 사용자가 2026-05-21 에 *옵션 (D) Knob* 으로 확정 — *shipped default off + user opt-in 가능*.
+- 결과 (본 plan PR 에서 적용):
+  - `core/config/routing.toml` `[model.fallbacks]` 의 4개 list 를 `[]` 로 변경 + 섹션 헤더에 knob 설명 주석 추가
+  - `core/config/routing_manifest.py:_consistency` — *non-empty 일 때만* drift 검증; empty chain 은 정상 opt-out 으로 허용
+  - chain code path (constants / Protocol property / ``retry_with_backoff_generic`` 의 ``fallback_models`` / ``call_with_failover`` / system prompt hint block 등) 는 *모두 유지* — user override 가 의도대로 작동하는 path
+- 사용자가 `~/.geode/routing.toml` 에 `[model.fallbacks] anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]` 를 적으면 그 chain 대로 작동. shipped default 만 비어 있어 기본 사용자는 chain 없이 fail-fast.
 
-**Phase F3 — Same-provider fallback 정책 재검토**
-- 현재 `_try_model_escalation` (`loop.py:1563`) 는 per-provider chain 내 next model 자동 swap.
-- 사용자 의도: cost/behavior surprise 제거.
-- 옵션:
-  - **(A) 유지**: 같은 provider 내 fallback 은 cost 증가 적음, model behavior 도 비슷 (e.g. gpt-5.5 → gpt-5.4). incident 의 root cause 는 cross-provider 였지 same-provider 가 아님.
-  - **(B) 단순화**: chain 깊이를 1로 (primary → secondary 만, tertiary 제거).
-  - **(C) 완전 제거**: model 실패 시 즉시 user 안내. agentic loop 가 stop.
-- 권장: **(B) 단순화** — same-provider fallback 의 1단계는 transient error 대응 가치 있음, 그 이상은 user surprise.
+**Phase F4 — Stop-on-quota IPC event (Done in v0.53.0)**
+- `quota_exhausted` IPC event type 추가 + `EventRenderer._handle_quota_exhausted` 구현됨.
+- thin-client allowlist 등재됨 (`tests/test_quota_fail_fast.py` Contract 3/4 검증).
+- v0.99.19 의 knob 전환 후에도 이 경로는 무변경 — default state 에서 primary 모델 호출이 `BillingError` 를 raise 하면 동일 panel 렌더.
 
-**Phase F4 — Stop-on-quota IPC event**
-- 새 event type: `quota_exhausted` (BillingError 시 emit)
-  - thin client 가 위 친절한 안내 panel 렌더링
-  - 다음 LLM call 시도 차단 (사용자가 명시적 `/login` 또는 `/model` 후에만 unblock)
-- v0.52.3 cross-provider breadcrumb (B5) 와 별개 — 이건 **system-stop event**, 그건 **LLM-context hint**.
+### Migration impact (v0.99.19)
 
-### Implementation 영향 매트릭스
-
-| File | 변경 | Breaking? | Effort |
-|------|------|-----------|--------|
-| `core/llm/adapters.py:215` `CROSS_PROVIDER_FALLBACK` | 제거/empty back-compat 완료 | Yes — 과거 `llm_cross_provider_failover=True` 사용자에게 영향 (default False 라 거의 0명) | Done |
-| `core/agent/loop.py:1637` `_try_cross_provider_escalation` | 제거 완료 | 위와 동일 | Done |
-| `core/llm/provider_dispatch.py` `_cross_provider_dispatch` | 제거 완료 (`#TBD`) | 위와 동일 | Done |
-| `core/config/_settings.py` `llm_cross_provider_failover/order` | 제거 완료 (`#TBD`) | 사용자 config/env var 무효화 | Done |
-| `core/agent/loop.py:1563` `_try_model_escalation` | F3-(B) 적용: chain 깊이 1로 | 일부 동작 변경 | M |
-| `core/llm/errors.py:BillingError` | `user_message(plan, provider)` method 추가 | 추가 only | S |
-| `core/cli/ipc_client.py` + `core/ui/agentic_ui.py` | `quota_exhausted` event + renderer | 추가 only | M |
-| 신규 `tests/test_quota_fail_fast.py` | invariant: cross-provider escalation NEVER fires; billing-fatal triggers stop event | — | M |
-
-### Migration impact
-
-- **사용자 visible 변화**: cross-provider auto-switch 제거. 삭제 전 `llm_cross_provider_failover=False` 가 default 였으므로 대부분 사용자 영향 0. 이제 해당 env var / settings field 는 존재하지 않음.
-- **breadcrumb (B5, v0.52.3) 보존**: LLM 이 다른 provider 알 수 있게 hint 주는 건 유지 (정보 ≠ 자동 swap).
-- **same-provider chain 단순화 (F3-B)**: incident 의 5×4 storm 이 5×2 로 감소. timing 도 ~40s → ~16s.
+- **사용자 visible 변화 (default state)**: primary 모델이 실패해도 자동으로 다음 모델로 swap 되지 않음. `/model <id>` 로 사용자가 직접 다음 모델 선택. v0.52.3 의 5×4 retry storm (~40s) 이 5×1 (~8s, primary 만 retry) 로 감소.
+- **opt-in 사용자**: `~/.geode/routing.toml` 의 `[model.fallbacks]` 를 채우면 *예전 동작 그대로* (chain 시도). silent fallback 의 책임이 user-config 에 명시적으로 옮겨감.
+- **schema breakage 없음**: 빈 list 가 더 이상 ValueError 를 raise 하지 않음 — legacy user file 의 `[model.fallbacks]` 와도 호환.
 
 ### v0.53.0 통합 plan 에서의 위치
 

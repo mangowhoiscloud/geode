@@ -114,6 +114,51 @@ functional change.
   pairs win the budget, missing entries default to 0.0, empty graph
   falls back to random), and the Ranker integration.
 
+### Changed
+
+- **Silent same-provider model fallback off by default (opt-in knob).**
+  Per user direction 2026-05-21 ("FALLBACK 체인과 레이어를 제거해 …
+  사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성"), the shipped
+  ``[model.fallbacks]`` section in ``core/config/routing.toml`` now
+  carries empty lists for every provider; primary-model failure no
+  longer silently retries against secondary / tertiary models for the
+  default user. ``RoutingManifest._consistency`` accepts an empty
+  fallback chain as valid (opt-out) and runs the drift-check only when
+  the chain is populated. The chain code path itself (``*_FALLBACK_
+  CHAIN`` constants, ``RoutingManifest.fallbacks``,
+  ``retry_with_backoff_generic(fallback_models=...)``,
+  ``AgenticLLMPort.fallback_chain``, provider adapters'
+  ``fallback_chain`` properties, ``call_with_failover``, system-prompt
+  hint block) stays intact so users who *explicitly* want transient-
+  error coverage can opt in by editing ``~/.geode/routing.toml``:
+
+      [model.fallbacks]
+      anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]
+
+  Plan: ``docs/plans/2026-05-21-silent-fallback-elimination.md``.
+  Pre-change the v0.52.3 GLM incident triggered a 5×4 retry storm
+  (~40s); the new default raises ``BillingError`` / the last exception
+  after the per-model retry budget exhausts (~8s) and fires
+  ``quota_exhausted`` (BillingError → IPC event → thin-client panel,
+  unchanged from v0.53.0). Users on the opt-in knob see the previous
+  chain behaviour.
+
+### Removed
+
+- **``CROSS_PROVIDER_FALLBACK`` empty-dict back-compat shim removed.**
+  The cross-provider auto-swap path was deleted in v0.53.0 (the
+  ``llm_cross_provider_failover`` setting + ``_try_cross_provider_
+  escalation`` method gone); only the empty-dict sentinel
+  ``CROSS_PROVIDER_FALLBACK: dict[str, list[tuple[str, str]]]`` lingered
+  in ``core/llm/adapters.py`` + re-exported from ``core/llm/router/
+  __init__.py``. Keeping a tombstone symbol invites accidental re-
+  introduction of cross-provider chains, so the symbol + its re-export
+  are now deleted outright. Three tests
+  (``test_quota_fail_fast.py::test_cross_provider_fallback_map_is_empty_for_all_providers``,
+  ``test_codex_provider.py::TestAdapterMap::test_codex_cross_provider_fallback``,
+  ``test_provider_label_consistency.py::TestCrossProviderFallbackSafety``)
+  rewritten to assert the symbol stays *deleted* (``not hasattr``).
+
 ### Fixed
 
 - **G2.fix — remove autoresearch evidence cache; petri ``.eval`` is the
