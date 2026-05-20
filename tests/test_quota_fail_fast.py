@@ -52,16 +52,17 @@ from core.llm.errors import BillingError
 # ---------------------------------------------------------------------------
 
 
-def test_cross_provider_fallback_map_is_empty_for_all_providers() -> None:
-    """v0.53.0 invariant: no provider may auto-swap to another. Pre-fix
-    GLM → OpenAI / OpenAI → Anthropic was wired here, masking quota
-    issues with cost surprise."""
-    for provider, fallbacks in _adapters_mod.CROSS_PROVIDER_FALLBACK.items():
-        assert fallbacks == [], (
-            f"{provider} still has cross-provider fallbacks {fallbacks} — "
-            "v0.53.0 governance redesign requires empty list. Silent "
-            "provider swap creates cost surprise + behavior drift."
-        )
+def test_cross_provider_fallback_symbol_removed() -> None:
+    """v0.99.19 — the empty-dict ``CROSS_PROVIDER_FALLBACK`` shim is
+    deleted, not merely empty. Pre-fix GLM → OpenAI / OpenAI → Anthropic
+    was wired here, masking quota issues with cost surprise; v0.53.0
+    stubbed it to an empty dict; v0.99.19 removes the symbol entirely so
+    no caller can re-introduce the silent swap by patching values in."""
+    assert not hasattr(_adapters_mod, "CROSS_PROVIDER_FALLBACK"), (
+        "CROSS_PROVIDER_FALLBACK resurfaced — silent provider swap is "
+        "globally forbidden. Quota exhaustion fires ``quota_exhausted`` "
+        "and the user picks the next model via /model."
+    )
 
 
 def test_provider_dispatch_has_no_cross_provider_dispatcher() -> None:

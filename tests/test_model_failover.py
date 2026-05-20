@@ -319,19 +319,30 @@ class TestCallWithFailover:
 
 
 class TestFallbackChainConfig:
-    """Verify that fallback chain constants are properly defined."""
+    """Verify that the fallback chain constants are a *type-safe knob*.
 
-    def test_anthropic_chain_has_primary(self) -> None:
-        assert ANTHROPIC_PRIMARY in ANTHROPIC_FALLBACK_CHAIN
+    v0.99.19 — the shipped default is an empty list (no silent fallback
+    chain). User can opt in via ``~/.geode/routing.toml`` ``[model.fallbacks]``.
+    The constant must still be ``list[str]`` so call sites that iterate
+    ``[m for m in FALLBACK_CHAIN if m != model]`` keep working when the
+    user populates it.
+    """
 
-    def test_anthropic_chain_has_secondary(self) -> None:
-        assert ANTHROPIC_SECONDARY in ANTHROPIC_FALLBACK_CHAIN
+    def test_anthropic_chain_is_list(self) -> None:
+        assert isinstance(ANTHROPIC_FALLBACK_CHAIN, list)
 
-    def test_anthropic_chain_primary_is_first(self) -> None:
-        assert ANTHROPIC_FALLBACK_CHAIN[0] == ANTHROPIC_PRIMARY
+    def test_anthropic_chain_default_empty(self) -> None:
+        """Shipped default = no silent fallback (knob is opt-in)."""
+        assert ANTHROPIC_FALLBACK_CHAIN == [], (
+            "Shipped default for ANTHROPIC_FALLBACK_CHAIN must be an empty "
+            "list. v0.99.19 removed silent same-provider model fallback; "
+            "users opt in via ``~/.geode/routing.toml`` [model.fallbacks]."
+        )
 
-    def test_anthropic_chain_minimum_length(self) -> None:
-        assert len(ANTHROPIC_FALLBACK_CHAIN) >= 2
+    def test_anthropic_primary_secondary_still_defined(self) -> None:
+        """The defaults survive — only the chain is empty by default."""
+        assert ANTHROPIC_PRIMARY  # non-empty string
+        assert ANTHROPIC_SECONDARY  # non-empty string
 
 
 # ---------------------------------------------------------------------------
@@ -411,8 +422,17 @@ class TestAgenticLoopFailover:
         assert result is None
 
     def test_failover_chain_available_on_adapter(self) -> None:
-        """The adapter exposes a fallback_chain property starting with primary model."""
+        """The adapter exposes a ``fallback_chain`` knob (opt-in).
+
+        v0.99.19 — shipped default is an empty list (no silent fallback).
+        The property must still exist on the adapter so user-tuned chains
+        from ``~/.geode/routing.toml`` propagate; verify type only.
+        """
         loop = self._make_loop(model=ANTHROPIC_PRIMARY)
         chain = loop._adapter.fallback_chain
-        assert chain[0] == ANTHROPIC_PRIMARY
-        assert len(chain) == len(set(chain))
+        assert isinstance(chain, list)
+        # If the user opts in, the chain must be unique and start with primary.
+        # If the default (empty list) holds, both checks are trivially true.
+        if chain:
+            assert chain[0] == ANTHROPIC_PRIMARY
+            assert len(chain) == len(set(chain))
