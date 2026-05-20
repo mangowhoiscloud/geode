@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-S6-UPDATE — `bench_means` schema 2026 frontier 갱신 (4 outdated → 7).**
+  2026-05-21 frontier bench audit 결과 4 채택 bench 모두 outdated 판정:
+  (a) **SWE-bench** — OpenAI 2026-02-23 공식 **retire** (saturated +
+  contaminated). (b) **HumanEval** — Top-4 93-95% **saturated**
+  (qualification bar 만 의미). (c) **TAU-bench** — Claude Opus 4.6
+  telecom 0.993 saturated, Sierra τ²-bench 가 dual-control 후속.
+  (d) **GAIA** — DeepAgent 91.69% saturated, HLE (Nature 2026-01) +
+  OSWorld 로 분리 권고.
+  **갱신 schema (7 field)** — Anthropic Claude Opus 4.5 + OpenAI GPT-5
+  system card 공통 채택: `swe_bench_pro_pass` (0.25, Scale AI contam-free
+  real PR), `livecodebench_pass1` (0.15, contam-free algo),
+  `tau2_bench_success` (0.20, Sierra dual-control), `gpqa_diamond`
+  (0.15, NYU PhD), `hle_accuracy` (0.10, Humanity's Last Exam Nature
+  2026-01), `osworld_success` (0.10, computer-use agent),
+  `mle_bench_medal` (0.05, OpenAI ML engineering — self-improving loop
+  도메인 정합).
+  **양의 압력 coverage 30.4% → 46.7%** (14/30 axis — 4 bench → 7 bench
+  교체). compute_fitness 의 4축 가중치 (dim 0.30 / ux 0.25 / admire 0.20 /
+  bench 0.25) 그대로 유지 — schema 변경만으로 frontier alignment 회복.
+  29 invariant test (기존 28 → 29) — `exact_4_fields` → `exact_7_fields_2026_frontier`,
+  missing-fields expected 수식 generic 화 (4 → 7 field 자동 적용).
+  실제 inspect_ai federation 의 multi-eval wiring 은 S6b 별도 PR.
+
 ### Added
 
 - **ADR-013 — Mutation Surface Expansion via JSON Schema Pattern (Proposed).**

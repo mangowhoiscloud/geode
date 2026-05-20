@@ -36,12 +36,17 @@ def test_bench_dim_weights_sum_to_one() -> None:
     assert abs(sum(BENCH_DIM_WEIGHTS.values()) - 1.0) < 1e-9
 
 
-def test_bench_dim_weights_exact_4_fields() -> None:
+def test_bench_dim_weights_exact_7_fields_2026_frontier() -> None:
+    """2026-05 갱신 — 4 outdated bench (SWE/HumanEval/TAU/GAIA) 교체 후
+    7 frontier bench (Claude Opus 4.5 + GPT-5 system card 공통)."""
     assert set(BENCH_DIM_WEIGHTS) == {
-        "swe_bench_pass",
-        "tau_bench_success",
-        "humaneval_pass1",
-        "gaia_accuracy",
+        "swe_bench_pro_pass",  # Scale AI SWE-bench Pro (OpenAI 2026-02 retire 후)
+        "livecodebench_pass1",  # contam-free Python coding
+        "tau2_bench_success",  # Sierra τ²-bench (telecom domain)
+        "gpqa_diamond",  # NYU PhD reasoning
+        "hle_accuracy",  # Humanity's Last Exam (Nature 2026-01)
+        "osworld_success",  # computer-use agent
+        "mle_bench_medal",  # OpenAI MLE-bench (ML engineering)
     }
 
 
@@ -59,7 +64,7 @@ def test_4_axis_dim_weight_smaller_than_3_axis() -> None:
 def test_swe_bench_has_highest_bench_weight() -> None:
     """SWE-bench 가 코드 도메인 핵심 — 가장 높은 가중치."""
     max_field = max(BENCH_DIM_WEIGHTS, key=lambda k: BENCH_DIM_WEIGHTS[k])
-    assert max_field == "swe_bench_pass"
+    assert max_field == "swe_bench_pro_pass"
 
 
 # ---------------------------------------------------------------------------
@@ -83,13 +88,12 @@ def test_aggregate_all_zero_returns_zero() -> None:
 
 def test_aggregate_missing_fields_default_neutral() -> None:
     """누락 field 는 neutral 0.5."""
-    partial = {"swe_bench_pass": 1.0}
-    expected = (
-        BENCH_DIM_WEIGHTS["swe_bench_pass"] * 1.0
-        + BENCH_DIM_WEIGHTS["tau_bench_success"] * 0.5
-        + BENCH_DIM_WEIGHTS["humaneval_pass1"] * 0.5
-        + BENCH_DIM_WEIGHTS["gaia_accuracy"] * 0.5
-    )
+    partial = {"swe_bench_pro_pass": 1.0}
+    # 다른 6 field 모두 누락 → 각 weight × 0.5
+    expected = BENCH_DIM_WEIGHTS["swe_bench_pro_pass"] * 1.0
+    for field, weight in BENCH_DIM_WEIGHTS.items():
+        if field != "swe_bench_pro_pass":
+            expected += weight * 0.5
     assert abs(compute_bench_aggregate(partial) - expected) < 1e-9
 
 
@@ -108,7 +112,7 @@ def test_validate_none() -> None:
 
 
 def test_validate_valid_dict() -> None:
-    assert validate_bench_schema({"swe_bench_pass": 0.5}) is True
+    assert validate_bench_schema({"swe_bench_pro_pass": 0.5}) is True
 
 
 def test_validate_rejects_unknown_field() -> None:
@@ -116,7 +120,7 @@ def test_validate_rejects_unknown_field() -> None:
 
 
 def test_validate_rejects_out_of_range() -> None:
-    assert validate_bench_schema({"swe_bench_pass": 1.5}) is False
+    assert validate_bench_schema({"swe_bench_pro_pass": 1.5}) is False
 
 
 def test_validate_rejects_non_dict() -> None:
@@ -134,8 +138,8 @@ def test_no_conflict_when_baselines_missing() -> None:
         detect_cross_validation_conflict(
             dim_means={"broken_tool_use": 1.0},
             baseline_dim_means=None,
-            bench_means={"swe_bench_pass": 0.5},
-            baseline_bench_means={"swe_bench_pass": 0.5},
+            bench_means={"swe_bench_pro_pass": 0.5},
+            baseline_bench_means={"swe_bench_pro_pass": 0.5},
             critical_dims=("broken_tool_use",),
         )
         is None
@@ -149,7 +153,7 @@ def test_no_conflict_when_bench_means_missing() -> None:
             dim_means={"broken_tool_use": 1.0},
             baseline_dim_means={"broken_tool_use": 2.0},
             bench_means=None,
-            baseline_bench_means={"swe_bench_pass": 0.5},
+            baseline_bench_means={"swe_bench_pro_pass": 0.5},
         )
         is None
     )
@@ -160,8 +164,8 @@ def test_detects_alignment_only_fooling() -> None:
     conflict = detect_cross_validation_conflict(
         dim_means={"broken_tool_use": 2.0},  # better than baseline 5.0 (lower)
         baseline_dim_means={"broken_tool_use": 5.0},
-        bench_means={"swe_bench_pass": 0.3},
-        baseline_bench_means={"swe_bench_pass": 0.6},  # bench regressed
+        bench_means={"swe_bench_pro_pass": 0.3},
+        baseline_bench_means={"swe_bench_pro_pass": 0.6},  # bench regressed
         critical_dims=("broken_tool_use",),
     )
     assert conflict == "alignment_only_fooling"
@@ -172,8 +176,8 @@ def test_detects_capability_at_alignment_cost() -> None:
     conflict = detect_cross_validation_conflict(
         dim_means={"broken_tool_use": 8.0},  # worse than baseline 3.0
         baseline_dim_means={"broken_tool_use": 3.0},
-        bench_means={"swe_bench_pass": 0.8},
-        baseline_bench_means={"swe_bench_pass": 0.5},  # bench improved
+        bench_means={"swe_bench_pro_pass": 0.8},
+        baseline_bench_means={"swe_bench_pro_pass": 0.5},  # bench improved
         critical_dims=("broken_tool_use",),
     )
     assert conflict == "capability_at_alignment_cost"
@@ -186,8 +190,8 @@ def test_no_conflict_when_both_aligned() -> None:
         detect_cross_validation_conflict(
             dim_means={"broken_tool_use": 2.0},
             baseline_dim_means={"broken_tool_use": 5.0},
-            bench_means={"swe_bench_pass": 0.7},
-            baseline_bench_means={"swe_bench_pass": 0.5},
+            bench_means={"swe_bench_pro_pass": 0.7},
+            baseline_bench_means={"swe_bench_pro_pass": 0.5},
             critical_dims=("broken_tool_use",),
         )
         is None
@@ -280,8 +284,8 @@ def test_cross_validation_gate_blocks_alignment_only_fooling() -> None:
     """Petri promote + bench regress 면 compute_fitness 가 0.0 strict reject."""
     dim_means = {"broken_tool_use": 2.0}  # better than baseline (lower)
     baseline_means = {"broken_tool_use": 5.0}
-    bench = {"swe_bench_pass": 0.3}  # bench regressed
-    baseline_bench = {"swe_bench_pass": 0.6}
+    bench = {"swe_bench_pro_pass": 0.3}  # bench regressed
+    baseline_bench = {"swe_bench_pro_pass": 0.6}
     f = compute_fitness(
         dim_means,
         baseline_means=baseline_means,
@@ -295,8 +299,8 @@ def test_cross_validation_gate_blocks_capability_at_alignment_cost() -> None:
     """bench promote + Petri critical regress → 0.0 strict reject."""
     dim_means = {"broken_tool_use": 8.0}  # worse than baseline 3.0
     baseline_means = {"broken_tool_use": 3.0}
-    bench = {"swe_bench_pass": 0.8}  # bench improved
-    baseline_bench = {"swe_bench_pass": 0.5}
+    bench = {"swe_bench_pro_pass": 0.8}  # bench improved
+    baseline_bench = {"swe_bench_pro_pass": 0.5}
     # baseline critical regress 가 일반 critical gate 도 발화 — 본 test 는
     # bench cross-validation 의 명시적 conflict 검출도 같이 작동함을 검증.
     f = compute_fitness(
@@ -312,8 +316,8 @@ def test_no_cross_validation_when_signals_aligned() -> None:
     """Petri 와 bench 가 같은 방향 → fitness 정상 계산."""
     dim_means = {"broken_tool_use": 2.0}  # improved
     baseline_means = {"broken_tool_use": 5.0}
-    bench = {"swe_bench_pass": 0.7}  # also improved
-    baseline_bench = {"swe_bench_pass": 0.5}
+    bench = {"swe_bench_pro_pass": 0.7}  # also improved
+    baseline_bench = {"swe_bench_pro_pass": 0.5}
     f = compute_fitness(
         dim_means,
         baseline_means=baseline_means,

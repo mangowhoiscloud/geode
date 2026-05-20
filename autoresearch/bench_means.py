@@ -4,68 +4,105 @@ S1 의 ``ux_means`` (행동) + S2 의 ``admire_means`` (체감) 옆에 추가되
 **capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기)
 인 반면, bench 는 real task completion (제대로 함) 의 ground-truth 평가.
 
-**inspect_ai federation** (Path C, ADR-012 §S6 결정 — **S6b 에서 wiring 예정**):
-- Petri 의 alignment scenario + frontier capability bench (SWE-bench /
-  TAU-bench / HumanEval / GAIA) 가 **같은 inspect_ai run** 안에서 federated
-  실행하는 설계. 두 평가 모두 Anthropic 의 inspect_ai framework 기반 →
-  단일 subprocess 통합 가능. (S6 본 PR 은 schema + math + gate 만, 실제
-  federation wiring 은 S6b 별도 PR.)
-- ``baseline.json`` schema 확장 (S6b 예정) — ``dim_means`` (Petri) +
-  ``bench_means`` (capability) 별도 field. 현재 S6 는 ``compute_fitness``
-  의 ``bench_means`` / ``baseline_bench_means`` 인자 까지만 신설하고,
-  ``_load_baseline`` / ``_write_baseline`` / ``main()`` 의 인자 전달
-  wiring 은 S6b 에서 추가.
+**2026-05-21 갱신 — 4 outdated bench 교체 (4 → 7 frontier)**:
 
-**Schema** (4 field, 0.0-1.0 normalized):
+원본 S6 (2026-05-21 오전, #1413) 의 4 bench 는 모두 saturated / OpenAI
+retire / contamination 으로 outdated. 2026 frontier (Claude Opus 4.5
+system card + GPT-5 system card 공통 채택) 으로 7-field schema 갱신.
+
+- SWE-bench → **SWE-bench Pro** (Scale AI): OpenAI 2026-02-23 공식
+  retire, saturated + contaminated.
+- HumanEval → **제거 + LiveCodeBench**: Top-4 93-95% saturated,
+  contamination-free 신규.
+- TAU-bench → **τ²-bench** (Sierra 2025): telecom domain 0.993
+  saturated, dual-control 후속.
+- GAIA → **HLE + OSWorld 분할**: DeepAgent 91.69% saturated. HLE
+  (Nature 2026-01) + OSWorld (computer-use) 로 도메인 분리.
+- (신규) **GPQA Diamond**: Anthropic + OpenAI 카드 공통 PhD reasoning.
+- (신규) **MLE-bench**: self-improving loop 도메인 정합 (ML engineering).
+
+**inspect_ai federation** (Path C, ADR-012 §S6 결정 — **S6b 에서 wiring 예정**):
+- Petri 의 alignment scenario + frontier capability bench (7-field) 가
+  **같은 inspect_ai run** 안에서 federated 실행하는 설계. Anthropic
+  inspect_ai framework 기반 — 단일 subprocess 통합 가능. (S6 본 PR 은
+  schema + math + gate 만, 실제 federation wiring 은 S6b 별도 PR.)
+- ``baseline.json`` schema 확장 (S6b 예정) — ``dim_means`` (Petri) +
+  ``bench_means`` (capability) 별도 field.
+
+**Schema** (7 field, 모두 0.0-1.0 normalized — 2026-05 갱신):
 
 .. code-block:: python
 
     {
-      "swe_bench_pass":    0.45,  # Stanford SWE-bench pass@1
-      "tau_bench_success": 0.62,  # Anthropic TAU-bench task success
-      "humaneval_pass1":   0.85,  # OpenAI HumanEval pass@1
-      "gaia_accuracy":     0.38,  # Meta GAIA overall accuracy
+      "swe_bench_pro_pass":   0.45,  # Scale AI SWE-bench Pro pass@1
+      "livecodebench_pass1":  0.70,  # LiveCodeBench contam-free
+      "tau2_bench_success":   0.85,  # Sierra τ²-bench (telecom)
+      "gpqa_diamond":         0.60,  # GPQA Diamond PhD reasoning
+      "hle_accuracy":         0.30,  # Humanity's Last Exam
+      "osworld_success":      0.35,  # OSWorld computer-use
+      "mle_bench_medal":      0.40,  # OpenAI MLE-bench medal rate
     }
 
 **Cross-validation gate** (Goodhart 양방향 방어):
-- Petri promote (dim 개선) + bench regress → fooling 의심 (alignment-only
-  fooling 가능)
-- bench promote + Petri critical regress → capability gain at alignment
-  cost (안전성 손상)
+- Petri promote (dim 개선) + bench regress → fooling 의심
+- bench promote + Petri critical regress → capability gain at alignment cost
 - 두 conflict 모두 ``compute_fitness`` 의 strict-reject (0.0) 발화
 
 **ADR-012 §Decision.2 의 fitness 4축 다축화** (S6 후):
 - ``dim_means`` (Petri 17-dim, 음의 압력) — 가중치 0.30
 - ``ux_means`` (행동 4-field, S1) — 가중치 0.25
 - ``admire_means`` (체감 2-field, S2) — 가중치 0.20
-- ``bench_means`` (capability 4-field, S6) — 가중치 0.25
+- ``bench_means`` (capability 7-field, S6 — 2026-05 갱신) — 가중치 0.25
 
 bench 비중이 0.25 — ground-truth 평가라 dim 과 동등한 권위. dim 비중이
-0.40 → 0.30 으로 추가 감소 (양의 압력 면적이 7/23 = 30.4% → 11/27 = 40.7%
-로 확장 — 4 bench axis 추가).
+0.40 → 0.30 으로 추가 감소 (양의 압력 면적이 7/23 = 30.4% → 14/30 = 46.7%
+로 확장 — 4 outdated bench → 7 frontier bench 교체).
 
-S6 (이 PR) 은 **schema + math + cross-validation gate** 만 신설. 실제
-inspect_ai federation 의 multi-eval wiring 은 S6b (별도 PR).
+S6 (이 갱신 PR) 은 **schema + math + cross-validation gate** + **2026
+frontier 갱신**. 실제 inspect_ai federation 의 multi-eval wiring 은 S6b
+(별도 PR).
+
+**Frontier sources** (2026-05):
+
+- OpenAI SWE-bench retire 공지: https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/
+- Scale AI SWE-bench Pro: https://labs.scale.com/leaderboard/swe_bench_pro_public
+- Sierra τ²-bench: https://sierra.ai/resources/research/tau-squared-bench
+- Humanity's Last Exam (Nature 2026-01): https://agi.safe.ai/
+- LiveCodeBench (contam-free Python coding)
+- GPQA Diamond (NYU 2024)
+- OSWorld (2024 frontier computer-use agent benchmark)
+- MLE-bench (OpenAI 2024 ML engineering)
+- Claude Opus 4.5 system card: https://www.anthropic.com/claude-opus-4-5-system-card
+- GPT-5 system card: https://cdn.openai.com/gpt-5-system-card.pdf
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# Bench field 별 가중치 — 합 1.0. SWE-bench 가 주력 (코드 도메인 핵심),
-# TAU-bench 가 보조 (tool-use 정교화), HumanEval/GAIA 가 보충.
+# Bench field 별 가중치 — 합 1.0. 2026-05 갱신:
+# - SWE-bench Pro (Scale AI, contam-free real PR) 가 frontier 코딩 표준 — 0.25
+# - LiveCodeBench (algo, contam-free) — 0.15
+# - τ²-bench (Sierra dual-control + telecom) — 0.20
+# - GPQA Diamond (PhD reasoning) — 0.15
+# - HLE (Humanity's Last Exam, frontier ceiling) — 0.10
+# - OSWorld (computer-use agent) — 0.10
+# - MLE-bench (ML engineering, self-improving 도메인 정합) — 0.05
 BENCH_DIM_WEIGHTS: dict[str, float] = {
-    "swe_bench_pass": 0.40,
-    "tau_bench_success": 0.30,
-    "humaneval_pass1": 0.15,
-    "gaia_accuracy": 0.15,
+    "swe_bench_pro_pass": 0.25,
+    "livecodebench_pass1": 0.15,
+    "tau2_bench_success": 0.20,
+    "gpqa_diamond": 0.15,
+    "hle_accuracy": 0.10,
+    "osworld_success": 0.10,
+    "mle_bench_medal": 0.05,
 }
 
 assert abs(sum(BENCH_DIM_WEIGHTS.values()) - 1.0) < 1e-9, "BENCH_DIM_WEIGHTS must sum to 1.0"
 
 
 def compute_bench_aggregate(bench_means: dict[str, float] | None) -> float:
-    """4-field weighted sum → 0-1 scalar. ``None`` → 0.5 (neutral, S1/S2 패턴)."""
+    """7-field weighted sum → 0-1 scalar. ``None`` → 0.5 (neutral, S1/S2 패턴)."""
     if bench_means is None:
         return 0.5
     total = 0.0
@@ -106,57 +143,33 @@ def detect_cross_validation_conflict(
 
     두 conflict 시나리오 검출:
 
-    1. **Petri promote + bench regress** ("alignment-only fooling"):
-       mutation 이 Petri dim 을 개선했지만 bench 점수는 하락 — alignment
-       dim 만 마이크로-튜닝하면서 capability 를 손상시켰을 가능성.
-
-    2. **bench promote + Petri critical regress** ("capability at alignment cost"):
-       mutation 이 bench 점수를 올렸지만 critical alignment dim 이 악화 —
-       capability 향상이 안전성을 손상시켰을 가능성.
+    1. **Petri promote + bench regress** ("alignment-only fooling")
+    2. **bench promote + Petri critical regress** ("capability at alignment cost")
 
     Returns:
-        conflict 종류의 문자열 (e.g. "alignment_only_fooling") 또는 ``None``.
-        ``None`` 이면 conflict 없음 — fitness 정상 계산.
-
-    Args:
-        dim_means: 현재 Petri dim_means
-        baseline_dim_means: baseline Petri dim_means (없으면 conflict 감지 skip)
-        bench_means: 현재 bench_means
-        baseline_bench_means: baseline bench_means
-        critical_dims: Petri critical tier 5 dim (autoresearch.train 의 CRITICAL_DIMS)
-        critical_margin: critical dim 의 regress 임계값 margin
-
-    Conflict 감지 조건:
-    - Petri 개선 = aggregate dim_score 가 baseline 보다 좋음 (낮은 mean 이 좋음)
-    - bench 개선 = bench_aggregate 가 baseline 보다 높음
-    - 두 신호가 반대면 conflict
+        conflict 종류의 문자열 또는 ``None`` (conflict 없음).
     """
     if baseline_dim_means is None or baseline_bench_means is None:
-        return None  # baseline 없으면 비교 불가
+        return None
     if bench_means is None:
-        return None  # bench 신호 없으면 cross-validation 불가
+        return None
 
-    # bench 신호 변화
     bench_now = compute_bench_aggregate(bench_means)
     bench_base = compute_bench_aggregate(baseline_bench_means)
     bench_improved = bench_now > bench_base
     bench_regressed = bench_now < bench_base
 
-    # Petri 신호 변화 — aggregate dim_means 의 mean 비교 (낮을수록 좋음)
-    # critical regress 는 별도 detect
     dim_aggregate_now = sum(dim_means.values()) / max(1, len(dim_means))
     dim_aggregate_base = sum(baseline_dim_means.values()) / max(1, len(baseline_dim_means))
-    petri_improved = dim_aggregate_now < dim_aggregate_base  # lower mean = better
+    petri_improved = dim_aggregate_now < dim_aggregate_base
     critical_regressed = any(
         dim_means.get(dim, 0.0) > baseline_dim_means.get(dim, 0.0) + critical_margin
         for dim in critical_dims
     )
 
-    # Scenario 1: Petri 개선 + bench 악화
     if petri_improved and bench_regressed:
         return "alignment_only_fooling"
 
-    # Scenario 2: bench 개선 + Petri critical 악화
     if bench_improved and critical_regressed:
         return "capability_at_alignment_cost"
 
@@ -168,14 +181,12 @@ def collect_bench_means_from_inspect_ai(*, _placeholder: bool = True) -> dict[st
 
     S6 (이 PR) 는 schema + math + cross-validation gate 만 신설. 실제
     inspect_ai 의 multi-eval API 호출 wiring 은 S6b (별도 PR) — Petri
-    scenario set + bench task set 을 한 inspect_ai run 안에서 federated
+    scenario set + 7 bench task set 을 한 inspect_ai run 안에서 federated
     실행, 각각의 결과를 별도 field 로 수집.
 
-    이 함수는 placeholder — S6b 전까지는 ``None`` 반환 (compute_fitness
-    가 4축 비활성, S2 의 3축 fallback 으로 작동).
-
-    Args:
-        _placeholder: S6b 전까지 ``None`` 반환 강제. test 에서 override 가능.
+    2026-05 갱신 후 7 bench 모두 inspect_ai 기반 또는 inspect_ai-compatible
+    (SWE-bench Pro / LiveCodeBench / τ²-bench / GPQA / HLE / OSWorld /
+    MLE-bench).
     """
     if _placeholder:
         return None
