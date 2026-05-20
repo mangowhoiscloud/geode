@@ -389,7 +389,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 | M2 | `forced_login_method` 가 `/model` UX 에 안 보임 | S2 | M | OpenClaw `models auth order get <provider>` shows |
 | M3 | `gpt-5.5` static `_resolve_provider` → `"openai"` (실제는 Codex-only) | S1 | M | Hermes 의 PROVIDER_REGISTRY 모델 매핑 |
 | M4 | Silent credential fallback 중 user signal 없음 | S2 | S | OpenClaw breadcrumb event |
-| M5 | `MODEL_PROFILES` 가 login-state 필터링 안 됨 | S3 | S | Hermes `list_authenticated_providers()` |
+| M5 | `MODEL_PROFILES` login-state 필터링 | Done (v0.99.19) | S | `commands._state.model_available()` + 5-tuple picker — un-credentialed rows dim + `(login required)` suffix; Enter cancels instead of mutating settings; `/model <name>` emits `/login` hint before applying. |
 
 ### `/login` UX gaps
 

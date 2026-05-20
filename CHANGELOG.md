@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **M5 — ``/model`` picker now surfaces login-state per row.** Closes the
+  governance gap noted in ``docs/research/model-ux-governance.md`` (M5:
+  *MODEL_PROFILES 가 login-state 필터링 안 됨*). Pre-fix the picker
+  rendered every entry in ``MODEL_PROFILES`` regardless of whether the
+  user had registered a credential for that provider; selecting an
+  unauthenticated model bounced off the ``_check_provider_key`` warning
+  on the next LLM call — by then ``settings.model`` had already shifted,
+  producing the confusing "switched but doesn't work" state. New
+  ``core.cli.commands._state.model_available(model_id)`` delegates to
+  ``resolve_routing(model_id)`` (the same path ``AgenticLoop`` walks at
+  call time) and is False when no credential route exists. The
+  interactive picker tuple gained a 5th ``available`` element so
+  ``effort_picker.pick_model_and_effort`` can (a) dim un-credentialed
+  rows + append ``(login required)`` and (b) return ``cancelled=True``
+  when Enter lands on an unavailable entry, leaving settings untouched.
+  ``/model <name>`` for an unauthenticated provider now prints the
+  ``/login`` hint *before* ``_apply_model`` runs, and the non-tty list
+  (``/model`` piped) appends ``(login required)`` so curl-driven callers
+  see the same status. 6 new tests in ``tests/test_model_login_filter.py``
+  cover the helper (True/False/exception swallowing), the picker's
+  blocked-Enter contract, and the explicit-name hint path.
+
+
 - **PR-Π2 — Proximity `all_duplicates` partial-survive fallback (was: hard
   abort).** Closes the second P0 gap from the Co-Scientist ↔ GEODE
   proximity-agent comparison. Pre-Π2 the `Proximity.execute` returned
