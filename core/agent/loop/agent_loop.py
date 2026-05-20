@@ -499,6 +499,37 @@ class AgenticLoop:
 
         return None
 
+    async def _sync_model_and_rebuild_prompt(
+        self, system_prompt: str, decomposition_hint: str | None
+    ) -> str:
+        """PR-D Phase 2b — model-drift sync + system_prompt rebuild
+        extracted from ``arun``'s while-loop body.
+
+        Between rounds the ``settings.model`` field may have changed
+        (via the ``switch_model`` tool, the ``/model`` slash command,
+        or a config hot-reload). The drift sync detects the change
+        and rebuilds the system prompt so the next LLM call sees the
+        updated model card.
+
+        ``v0.52.5`` — ``_prompt_dirty`` catches any direct
+        ``update_model_async`` call that bypasses the drift sync;
+        without it the system_prompt model card would stay pinned to
+        the previous model after a switch.
+        ``v0.90.0`` — auto-escalation paths removed; the only such
+        callers now are user-initiated ``/model`` switches.
+
+        Returns the (possibly-rebuilt) ``system_prompt`` so ``arun``
+        can rebind its local. Side-effect: clears ``_prompt_dirty``
+        after a rebuild. Behaviour preserved exactly from the
+        pre-refactor inline block.
+        """
+        if await self._sync_model_from_settings_async() or self._prompt_dirty:
+            system_prompt = self._build_system_prompt()
+            if decomposition_hint:
+                system_prompt += "\n\n" + decomposition_hint
+            self._prompt_dirty = False
+        return system_prompt
+
     def _check_round_guards(self, round_idx: int) -> str | None:
         """PR-D Phase 2a — round-entry guards extracted from ``arun``.
 
@@ -724,19 +755,14 @@ class AgenticLoop:
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
-            # Model drift check: settings may have changed via switch_model tool
-            # or /model command between rounds. Apply safely before next LLM call.
-            #
-            # v0.52.5 — _prompt_dirty catches any direct ``update_model`` call
-            # that bypasses the drift sync; without it the system_prompt model
-            # card would stay pinned to the previous model after a switch.
-            # v0.90.0 — auto-escalation paths were removed; the only such
-            # callers now are user-initiated /model switches.
-            if await self._sync_model_from_settings_async() or self._prompt_dirty:
-                system_prompt = self._build_system_prompt()
-                if decomposition_hint:
-                    system_prompt += "\n\n" + decomposition_hint
-                self._prompt_dirty = False
+            # PR-D Phase 2b — model-drift sync extracted to a helper.
+            # The helper returns the possibly-rebuilt system_prompt;
+            # ``arun`` rebinds the local so the next LLM call sees the
+            # updated model card. Behaviour preserved exactly — the
+            # _prompt_dirty side-effect reset still happens inside.
+            system_prompt = await self._sync_model_and_rebuild_prompt(
+                system_prompt, decomposition_hint
+            )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
             self._check_announced_results(messages)

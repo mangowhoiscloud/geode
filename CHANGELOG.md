@@ -49,6 +49,31 @@ functional change.
 
 ### Changed
 
+- **PR-D Phase 2b — ``_sync_model_and_rebuild_prompt`` extraction
+  from ``arun``.** Continues the god-method decomposition. Phase 1
+  (v0.99.24) extracted session-start signals; Phase 2a (v0.99.25)
+  extracted round-entry guards. Phase 2b takes the model-drift
+  sync + ``system_prompt`` rebuild block from the top of each
+  round (pre-refactor lines ~727-739):
+  ``_sync_model_from_settings_async()`` OR-chained with
+  ``_prompt_dirty`` → ``_build_system_prompt()`` rebuild +
+  ``decomposition_hint`` append + ``_prompt_dirty = False`` reset.
+  All of it now lives in
+  ``AgenticLoop._sync_model_and_rebuild_prompt(system_prompt,
+  decomposition_hint) -> str``. ``arun`` rebinds the local from the
+  helper's return value, preserving the exact pre-refactor
+  semantics (drift sync + dirty-flag OR-chain, rebuild path, hint
+  append with ``\n\n`` separator, dirty flag clear). 14 invariant
+  tests pin the helper signature, all 4 trigger combinations
+  (drift / dirty / both / neither — both-case verifies OR
+  short-circuit + single rebuild), rebuild side-effect, hint
+  append/skip/ignore-when-not-rebuilding, ``arun`` delegation +
+  anti-residue, and cross-phase regression (Phase 1 + 2a helpers
+  still intact). Phase 2c (LLM-call dispatch + retry budget) will
+  continue.
+
+### Changed
+
 - **PR-D Phase 2a — ``_check_round_guards`` extraction from
   ``arun``.** Continues the god-method decomposition started in
   v0.99.24 (PR-D Phase 1 extracted session-start signals). Phase
