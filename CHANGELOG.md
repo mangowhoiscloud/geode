@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **Hero visualization — Manim scene of the GEODE outer self-improving
+  loop (Co-Scientist → Petri → autoresearch).** New
+  `scripts/visualizations/geode_hero.py` (Manim Community v0.20.1)
+  walks the full cycle in 12 bits + a ratchet outro (~33s total):
+  Stage 1 (GEODE seed-generation 7-agent grid, Generate/Critique/Evolve
+  flash, tournament survivors), Stage 2 (Petri audit subprocess, 20-dim
+  rubric tier-colored grid, judge scoring, dim_extractor →
+  `dim_means`/`dim_stderr` dict boxes), Stage 3 (autoresearch
+  `compute_fitness` formula + gauge, critical-axis floor with collapse
+  + recovery demo, auto-promote DISCARD/PROMOTE 2-cycle,
+  `baseline.json` + wrapper-prompt mutation closing the cycle).
+  Renders to two outputs (`GEODE_HERO_LANG=en|ko`) at 1080p60. EN uses
+  Helvetica; KO uses Apple SD Gothic Neo so Korean glyphs render
+  natively. Co-Scientist hero-video aesthetic preserved — light pink
+  agents, light blue winners, soft yellow Petri, red critical floor,
+  green promoted, dashed grey connectors. New
+  `docs/visualizations/geode-hero-storyboard.md` is the single SoT —
+  12-bit table + EN/KO text lookup + Co-Scientist↔GEODE mapping +
+  build commands. Thumbnail at `docs/visualizations/geode-hero-thumbnail.png`.
+  `media/` added to `.gitignore` (rendered MP4s are distribution
+  assets, not source). Manim added as `--dev` dep — install requires
+  `brew install pkg-config cmake` on macOS hosts.
+
 - **PR-Π3 — Proximity embedding conditions on the research goal
   (`state.target_dim`).** Closes the third P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison; completes the

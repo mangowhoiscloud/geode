@@ -164,6 +164,7 @@ dev = [
     # can open Petri .eval archives without the heavy [audit] extra.
     # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
     "zipfile-zstd>=0.0.4",
+    "manim>=0.20.1",
 ]
 
 
