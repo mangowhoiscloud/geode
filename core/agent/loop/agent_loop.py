@@ -543,6 +543,14 @@ class AgenticLoop:
         # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
         # → episodic memory recorder) can read the live state without
         # being coupled to AgenticLoop directly.
+        #
+        # Lifetime: the binding is asyncio-task-scoped. Each top-level
+        # task gets its own ``contextvars.Context`` copy, so two
+        # concurrent AgenticLoops in different tasks each see their
+        # own bind. Within the same task multiple ``arun`` calls
+        # overwrite idempotently. No explicit reset is needed since
+        # the next ``arun`` overwrites and out-of-loop hook firings
+        # in the same task are not a documented use case.
         from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
 
         set_cognitive_state(self.cognitive_state)
