@@ -49,6 +49,27 @@ functional change.
 
 ### Fixed
 
+- **G3.fix1 + G3.fix2 — symmetric `--target-dim` evidence + graceful
+  schema coercion in `baseline_reader.load_baseline`.** Two Codex
+  findings on PR-G3 (#1347) folded into one fix-up PR.
+  **fix1 (Conditional read parity):** `_resolve_target_dim` previously
+  returned `(dim, None)` when the operator supplied an explicit
+  `--target-dim`, so generator/critic/evolver received no baseline
+  evidence even when `baseline.json` was populated. Now the explicit
+  branch also calls `load_baseline()` and returns
+  `(dim, loaded_snapshot)`. Bootstrap (no baseline) still returns
+  `(dim, None)` gracefully — operator-supplied dim is always valid.
+  **fix2 (Graceful-contract):** `load_baseline` cast `float(v)` on
+  every `dim_means` value, raising `ValueError` on non-numeric input
+  and breaking the docstring promise of "None on unparseable JSON".
+  New `_coerce_dim_dict()` per-entry try/except + boolean rejection
+  (Python's `isinstance(True, int)` quirk) so one bad dim drops just
+  that dim, not the whole baseline. If every numeric value is bad,
+  the loader returns `None` (same as empty payload). 5 new tests:
+  explicit-dim loads snapshot / explicit-dim returns None on bootstrap
+  / partial-bad dim_means drops bad rows / all-bad means returns None
+  / boolean rejection.
+
 - **G5b.fix3 — SoT rolls back when audit-log write fails (atomicity
   fix for the mutation runner).** Codex MCP LLM-as-Judge on PR-G5b
   (#1350) caught the third finding: `apply_mutation` writes the

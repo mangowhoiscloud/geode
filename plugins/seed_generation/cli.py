@@ -177,7 +177,13 @@ def _resolve_target_dim(
     )
 
     if target_dim and target_dim.lower() != "auto":
-        return target_dim, None
+        # G3.fix1 (2026-05-20) — Conditional read parity (Codex finding):
+        # the explicit-dim branch previously returned ``(dim, None)`` so
+        # generator/critic/evolver never saw baseline evidence even when
+        # baseline.json was populated. Load the snapshot here too so the
+        # operator-specified dim still gets G2 evidence injection.
+        snapshot = load_baseline()
+        return target_dim, snapshot
     snapshot = load_baseline()
     if snapshot is None:
         err.write(

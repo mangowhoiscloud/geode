@@ -648,15 +648,45 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_target_dim_explicit_returns_unchanged() -> None:
-    """Explicit dim → returned verbatim with no baseline read."""
+def test_resolve_target_dim_explicit_returns_loaded_snapshot() -> None:
+    """G3.fix1 (2026-05-20) — explicit `--target-dim` still loads the
+    baseline so generator/critic/evolver receive evidence injection.
+
+    Pre-fix the explicit branch returned ``(dim, None)`` and downstream
+    sub-agents saw no evidence — Codex MCP LLM-as-Judge flagged this
+    as a Conditional-read-parity violation. The explicit-dim case must
+    now also load `baseline.json`; the auto-pick log line stays absent
+    so the caller knows the dim was operator-supplied, not auto-picked.
+    """
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
+    from plugins.seed_generation.cli import _resolve_target_dim
+
+    fake_snapshot = BaselineSnapshot(dim_means={"broken_tool_use": 6.0})
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_baseline",
+        return_value=fake_snapshot,
+    ):
+        dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
+    assert dim == "broken_tool_use"
+    assert snapshot is fake_snapshot
+    # No auto-pick log line when operator supplied an explicit dim.
+    assert "auto" not in err.getvalue()
+
+
+def test_resolve_target_dim_explicit_returns_none_when_no_baseline() -> None:
+    """Explicit dim + missing baseline → ``(dim, None)`` (graceful, no error).
+
+    Bootstrap runs (no audit yet) with an explicit ``--target-dim`` are
+    valid; the runner just doesn't get evidence to inject.
+    """
     from plugins.seed_generation.cli import _resolve_target_dim
 
     err = io.StringIO()
-    dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
+    with patch("plugins.seed_generation.baseline_reader.load_baseline", return_value=None):
+        dim, snapshot = _resolve_target_dim("broken_tool_use", err=err)
     assert dim == "broken_tool_use"
     assert snapshot is None
-    # No auto-pick log line when operator supplied an explicit dim.
     assert "auto" not in err.getvalue()
 
 

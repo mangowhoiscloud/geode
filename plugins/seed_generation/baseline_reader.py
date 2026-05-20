@@ -123,8 +123,22 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
     raw_stderr = baseline_payload.get("dim_stderr") or {}
     raw_evidence = baseline_payload.get("evidence") or {}
 
-    dim_means = {str(k): float(v) for k, v in raw_means.items()}
-    dim_stderr = {str(k): float(v) for k, v in raw_stderr.items() if v is not None}
+    # G3.fix2 (2026-05-20) — Codex caught a graceful-contract violation:
+    # ``float(v)`` raised ``ValueError`` on non-numeric values, breaking
+    # the docstring promise that ``load_baseline`` returns ``None`` on
+    # any unparseable input. Coerce per-entry with try/except so a single
+    # bad value drops just that dim, not the whole baseline.
+    dim_means = _coerce_dim_dict(raw_means)
+    if not dim_means:
+        # Every numeric value was bad → no usable signal, same outcome
+        # as an empty ``raw_means`` payload above.
+        log.warning(
+            "baseline_reader: all dim_means values at %s are non-numeric; "
+            "treating as gate-dormant baseline",
+            baseline_path,
+        )
+        return None
+    dim_stderr = _coerce_dim_dict(raw_stderr)
     evidence: dict[str, list[dict[str, Any]]] = {}
     if isinstance(raw_evidence, dict):
         for dim, dim_rows in raw_evidence.items():
@@ -132,6 +146,29 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
                 continue
             evidence[str(dim)] = [r for r in dim_rows if isinstance(r, dict)]
     return BaselineSnapshot(dim_means=dim_means, dim_stderr=dim_stderr, evidence=evidence)
+
+
+def _coerce_dim_dict(raw: Any) -> dict[str, float]:
+    """Best-effort ``dict[str, float]`` coercion.
+
+    Drops keys whose value is missing / non-numeric / boolean / NaN —
+    each schema violation logs at DEBUG (verbose for the loop, silent
+    by default). Returning a possibly-empty dict lets the caller decide
+    whether "no usable values" is fatal (true for ``dim_means``,
+    tolerable for ``dim_stderr``).
+    """
+    if not isinstance(raw, dict):
+        return {}
+    coerced: dict[str, float] = {}
+    for key, value in raw.items():
+        if value is None or isinstance(value, bool):
+            log.debug("baseline_reader: skipping non-numeric value at %r=%r", key, value)
+            continue
+        try:
+            coerced[str(key)] = float(value)
+        except (TypeError, ValueError):
+            log.debug("baseline_reader: skipping non-numeric value at %r=%r", key, value)
+    return coerced
 
 
 def _operational_dim_set() -> frozenset[str]:
