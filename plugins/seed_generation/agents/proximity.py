@@ -46,6 +46,7 @@ __all__ = [
     "GRAPH_WEIGHT_EMBED",
     "GRAPH_WEIGHT_LEXICAL",
     "LEXICAL_JACCARD_THRESHOLD",
+    "PARTIAL_SURVIVE_FLOOR",
     "Proximity",
 ]
 
@@ -54,6 +55,16 @@ EMBED_SIMILARITY_THRESHOLD = 0.85
 LEXICAL_JACCARD_THRESHOLD = 0.40
 NGRAM_SIZE = 5
 MAJORITY_VOTE_THRESHOLD = 2  # of 3 tracks
+
+# PR-Π2 — partial-survive floor. When the 2-of-3 dedup vote would drop
+# every candidate (Generator emitted a fully homogeneous batch), the
+# phase keeps the K most-diverse candidates (lowest average proximity
+# in the graph) instead of aborting the pipeline. Co-Scientist §3.3.4
+# guarantees spread automatically because its proximity graph is the
+# Ranker's input; GEODE's pre-Π2 behaviour was a hard abort, which let
+# a single bad Generator batch kill the whole run. K=3 is enough for
+# the Ranker (S6) to schedule ≥ C(3, 2) = 3 matches.
+PARTIAL_SURVIVE_FLOOR = 3
 
 # PR-Π1 — proximity graph composite-score weights. The graph emitted to
 # ``state.proximity_graph`` is the weighted sum of the embedding cosine
@@ -116,7 +127,16 @@ class Proximity(BaseSeedAgent):
         pool_texts = self._load_pool_texts(state)
 
         # 3. Compute per-track duplicate votes + pair-wise similarity scores.
-        embed_dupes, embed_scores = self._embedding_track(candidate_texts, pool_texts)
+        # PR-Π3 — the embedding track conditions on ``state.target_dim`` so
+        # the same candidate text against two different research goals
+        # produces different vectors. Co-Scientist §3.3.4 calls this
+        # "calculates similarity ... taking into account the specific
+        # research goal". Lexical / role tracks stay goal-agnostic — role
+        # already encodes the dim, and lexical 5-gram similarity is
+        # surface-form only.
+        embed_dupes, embed_scores = self._embedding_track(
+            candidate_texts, pool_texts, target_dim=state.target_dim
+        )
         lexical_dupes, lexical_scores = self._lexical_track(candidate_texts, pool_texts)
         role_dupes = self._role_track(state)
 
@@ -144,15 +164,31 @@ class Proximity(BaseSeedAgent):
                 survivors.append(cand)
 
         if not survivors:
-            return SeedAgentResult(
-                role=self.role,
-                status="error",
-                error_category="all_duplicates",
-                error_message=(
-                    f"all {len(state.candidates)} candidates marked as "
-                    "duplicates by 2-of-3 vote — Generator batch is "
-                    "homogeneous; consider raising temperature or seed pool"
-                ),
+            # PR-Π2 — partial-survive fallback (was: hard abort). The
+            # Generator emitted a fully homogeneous batch; rather than
+            # killing the whole pipeline, keep the ``PARTIAL_SURVIVE_FLOOR``
+            # most-diverse candidates (lowest average proximity in the
+            # graph) so the Ranker / Evolution can still observe at least
+            # one round. Downstream phases see a smaller-than-requested
+            # batch but the run completes; the operator gets a WARN log
+            # + a structured ``proximity_all_duplicates_fallback`` journal
+            # event so the degraded path is never silent.
+            survivors = self._partial_survive(state.candidates, graph)
+            log.warning(
+                "seed-generation proximity: all-duplicates fallback — "
+                "partial-survive with %d most-diverse candidates "
+                "(was: hard abort). embed=%d lexical=%d role=%d",
+                len(survivors),
+                len(embed_dupes),
+                len(lexical_dupes),
+                len(role_dupes),
+            )
+            self._emit_fallback_event(
+                original_count=len(state.candidates),
+                survivor_count=len(survivors),
+                embed_dupes=len(embed_dupes),
+                lexical_dupes=len(lexical_dupes),
+                role_dupes=len(role_dupes),
             )
 
         if removed:
@@ -180,6 +216,80 @@ class Proximity(BaseSeedAgent):
         )
 
     # ────────────────────────────────────────────────────────────────────
+    # PR-Π2 — partial-survive fallback
+    # ────────────────────────────────────────────────────────────────────
+
+    def _partial_survive(
+        self,
+        candidates: list[dict[str, Any]],
+        graph: dict[tuple[str, str], float],
+    ) -> list[dict[str, Any]]:
+        """Return the K most-diverse candidates from ``candidates``.
+
+        Diversity score per candidate = mean of its proximity-graph
+        weights (lower = more diverse). Candidates without any graph
+        entry default to 0.0 (treated as maximally distant, sorted to
+        the front). Ties broken by candidate id (lexicographic) for
+        deterministic survival under the same proximity profile.
+
+        K = :data:`PARTIAL_SURVIVE_FLOOR` (3 — enough for the Ranker to
+        schedule ≥ 3 matches). When ``len(candidates) <= K`` every
+        candidate survives (no point dropping when the batch is already
+        smaller than the floor).
+        """
+        cids = [c["id"] for c in candidates]
+        if len(cids) <= PARTIAL_SURVIVE_FLOOR:
+            return list(candidates)
+
+        sums = dict.fromkeys(cids, 0.0)
+        counts = dict.fromkeys(cids, 0)
+        for (a, b), score in graph.items():
+            for cid in (a, b):
+                if cid in sums:
+                    sums[cid] += score
+                    counts[cid] += 1
+        avg_prox = {cid: (sums[cid] / counts[cid]) if counts[cid] > 0 else 0.0 for cid in cids}
+        ranked = sorted(cids, key=lambda cid: (avg_prox[cid], cid))
+        keep = set(ranked[:PARTIAL_SURVIVE_FLOOR])
+        return [c for c in candidates if c["id"] in keep]
+
+    def _emit_fallback_event(
+        self,
+        *,
+        original_count: int,
+        survivor_count: int,
+        embed_dupes: int,
+        lexical_dupes: int,
+        role_dupes: int,
+    ) -> None:
+        """Emit a ``proximity_all_duplicates_fallback`` warn event when active.
+
+        No-op outside an :func:`session_journal_scope`. Failure to emit
+        is swallowed (observability must never break the run it
+        observes) — the WARN log line above the call site is the
+        backup signal.
+        """
+        try:
+            from core.observability import current_session_journal
+
+            journal = current_session_journal()
+            if journal is None:
+                return
+            journal.append(
+                "proximity_all_duplicates_fallback",
+                level="warn",
+                payload={
+                    "original_count": original_count,
+                    "survivor_count": survivor_count,
+                    "embed_dupes": embed_dupes,
+                    "lexical_dupes": lexical_dupes,
+                    "role_dupes": role_dupes,
+                },
+            )
+        except Exception:  # pragma: no cover - defensive
+            log.debug("proximity: fallback journal emit failed", exc_info=True)
+
+    # ────────────────────────────────────────────────────────────────────
     # Track 1 — embedding similarity
     # ────────────────────────────────────────────────────────────────────
 
@@ -187,6 +297,8 @@ class Proximity(BaseSeedAgent):
         self,
         candidate_texts: dict[str, str],
         pool_texts: list[str],
+        *,
+        target_dim: str = "",
     ) -> tuple[set[str], dict[tuple[str, str], float]]:
         """Mark candidates whose embedding cosine vs sibling/pool ≥ 0.85.
 
@@ -198,13 +310,25 @@ class Proximity(BaseSeedAgent):
         are not in the graph since the Ranker only ever schedules
         candidate-vs-candidate matches.
 
+        PR-Π3 — ``target_dim`` is prepended as ``[goal: <dim>] \\n`` to
+        every embedding input when non-empty. Co-Scientist §3.3.4
+        specifies similarity should "take into account the specific
+        research goal"; the prefix conditions the embedding output so
+        the same candidate text against two different research goals
+        produces different vectors. When ``target_dim`` is empty (legacy
+        call sites or tests that don't populate ``state.target_dim``)
+        the prefix is dropped and behavior is byte-identical to the
+        pre-Π3 path.
+
         On embedding-tool failure: both return values are empty (caller
         falls back to the 2-track lexical + role dedup vote).
         """
         from core.tools.text_embed import cosine_similarity, embed_texts
 
         cids = list(candidate_texts)
-        all_texts = [candidate_texts[c] for c in cids] + pool_texts
+        cand_inputs = [_goal_condition(candidate_texts[c], target_dim) for c in cids]
+        pool_inputs = [_goal_condition(t, target_dim) for t in pool_texts]
+        all_texts = cand_inputs + pool_inputs
         try:
             vectors = embed_texts(all_texts, client=self._embed_client)
         except Exception:
@@ -346,6 +470,22 @@ class Proximity(BaseSeedAgent):
 # ────────────────────────────────────────────────────────────────────────
 # Shared helpers — module-level so tests can import directly
 # ────────────────────────────────────────────────────────────────────────
+
+
+def _goal_condition(text: str, target_dim: str) -> str:
+    """Prepend a research-goal prefix when ``target_dim`` is non-empty.
+
+    PR-Π3 — Co-Scientist §3.3.4 requires similarity to be "taking into
+    account the specific research goal". For GEODE the goal is the
+    Petri target dim that the audit is being engineered against
+    (``state.target_dim``); the prefix shifts the embedding output so
+    the same candidate body against two different dims doesn't collapse
+    into the same vector. Empty ``target_dim`` returns the text
+    unchanged — every pre-Π3 call site keeps byte-identical behavior.
+    """
+    if not target_dim:
+        return text
+    return f"[goal: {target_dim}]\n{text}"
 
 
 def _pair_key(a: str, b: str) -> tuple[str, str]:

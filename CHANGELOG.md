@@ -47,6 +47,60 @@ functional change.
 
 ## [Unreleased]
 
+<<<<<<< HEAD
+## [0.99.21] — 2026-05-20
+
+Co-Scientist parity sprint closure — 3 PRs (#1357 + #1360 + #1361)
+landing Π1 (proximity graph emit + diverse-bracket Elo seeding) +
+Π2 (`all_duplicates` → partial-survive fallback) + Π3 (embedding
+goal-conditioning). 23 new tests; 5082 non-live + 5 live; 308 core
++ 48 plugins.
+
+### Added
+
+- **PR-Π3 — Proximity embedding conditions on the research goal
+  (`state.target_dim`).** Closes the third P0 gap from the
+  Co-Scientist ↔ GEODE proximity-agent comparison; completes the
+  3-PR proximity sprint (Π1 graph + Π2 partial-survive + Π3
+  goal-conditioning). `_embedding_track` now accepts a
+  `target_dim` kwarg; when non-empty, every candidate / pool text
+  is prefixed with `[goal: <dim>]\n` before the embedding call so
+  the same candidate body against two different research goals
+  produces different vectors. `Proximity.execute` forwards
+  `state.target_dim`. Backwards-compatible — empty `target_dim`
+  (legacy bootstrap path) returns the raw text unchanged; every
+  pre-Π3 call site behaves byte-identically. The lexical and role
+  tracks stay goal-agnostic (role already encodes the dim;
+  5-gram surface similarity isn't goal-sensitive). Matches
+  Co-Scientist §3.3.4: "similarity ... taking into account the
+  specific research goal". 6 new tests cover the helper
+  `_goal_condition` (empty / non-empty), the `_embedding_track`
+  forwarding (prefix attached / no prefix when empty), and the
+  end-to-end `execute` path (`state.target_dim` reaches the
+  embedding inputs / `state.target_dim = ""` legacy parity).
+
+- **PR-Π2 — Proximity `all_duplicates` partial-survive fallback (was: hard
+  abort).** Closes the second P0 gap from the Co-Scientist ↔ GEODE
+  proximity-agent comparison. Pre-Π2 the `Proximity.execute` returned
+  `status="error"` / `error_category="all_duplicates"` whenever the
+  3-track majority vote dropped every candidate — a single bad Generator
+  batch (or pool-vs-candidate full overlap) killed the whole pipeline.
+  Post-Π2 the phase keeps the `PARTIAL_SURVIVE_FLOOR=3` most-diverse
+  candidates (lowest average proximity in the PR-Π1 graph; absent entries
+  default to 0.0 = maximally distant; lexicographic candidate-id tiebreak
+  for determinism). When the batch is already ≤ K every candidate
+  survives. A WARN log + a structured
+  `proximity_all_duplicates_fallback` SessionJournal event (payload
+  carries `original_count` / `survivor_count` / per-track dup counts)
+  surface the degraded path so it is never silent — outside an active
+  scope the emit is a no-op. 7 new tests cover the floor pin, the
+  `_partial_survive` helper (≤-floor returns all / lowest-avg wins /
+  tiebreak deterministic), end-to-end pool-vs-candidate trigger,
+  journal event emit, and silent-outside-scope. Matches Co-Scientist
+  §3.3.4's implicit guarantee that the proximity graph keeps the
+  hypothesis pool diverse without requiring upstream resampling.
+
+=======
 ## [0.99.20] — 2026-05-20
 
 Self-improving-loop wiring sprint G1-G5b + 5 fix-ups + CLAUDE.md immune-system
@@ -55,6 +109,7 @@ update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#135
 
 ### Added
 
+>>>>>>> origin/main
 - **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
   diverse-bracket Elo seeding.** Closes the first P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison: pre-Π1 the Proximity
@@ -304,6 +359,8 @@ update + PR-Π1 (Co-Scientist proximity-graph parity). 13 PRs (#1344, #1346-#135
   paths + 3 G1 test alias diffs. Quality gates: ruff / mypy / 93+
   evidence-touched tests green.
 
+<<<<<<< HEAD
+=======
 ## [0.99.19] — 2026-05-20
 
 Detailed backfill of v0.99.19 — the squash `a6012e02` (PR #1345) actually
@@ -311,6 +368,7 @@ landed **4 PRs** on main: ε1 + P2 + autoresearch deforking + PR-G1
 `latest_seed_pool` symlink (#1344). The original v0.99.19 release body
 omitted PR-G1; this section restores the full entry list.
 
+>>>>>>> origin/main
 ### Changed
 
 - **autoresearch self-positioning rewrite — drop "fork" framing, name the

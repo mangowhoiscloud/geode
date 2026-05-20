@@ -18,7 +18,9 @@ from plugins.seed_generation.agents.proximity import (
     GRAPH_WEIGHT_EMBED,
     GRAPH_WEIGHT_LEXICAL,
     LEXICAL_JACCARD_THRESHOLD,
+    PARTIAL_SURVIVE_FLOOR,
     Proximity,
+    _goal_condition,
     _jaccard,
     _pair_key,
     _shingles,
@@ -280,6 +282,252 @@ def test_proximity_graph_empty_on_embedding_failure_but_lexical_filled(
     assert pair in state.proximity_graph
     # Embed weight × 0 + lexical weight × jaccard — bounded above by lexical weight.
     assert state.proximity_graph[pair] <= GRAPH_WEIGHT_LEXICAL
+
+
+# ── PR-Π2 — partial-survive fallback ──
+
+
+def _journal_rows(journal_path: Path) -> list[dict]:
+    import json
+
+    if not journal_path.exists():
+        return []
+    return [
+        json.loads(line)
+        for line in journal_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_partial_survive_floor_pinned() -> None:
+    """K = 3 — Ranker needs ≥ C(3, 2) = 3 matches to be meaningful."""
+    assert PARTIAL_SURVIVE_FLOOR == 3
+
+
+def test_partial_survive_unit_returns_all_when_count_le_floor(tmp_path: Path) -> None:
+    """``_partial_survive`` returns every candidate when the input batch is
+    already at or below the floor — no point dropping below K."""
+    cands = [_make_candidate(f"c{i}", tmp_path / f"c{i}.md", body="x") for i in range(3)]
+    out = Proximity()._partial_survive(cands, graph={})
+    assert len(out) == 3
+    assert [c["id"] for c in out] == ["c0", "c1", "c2"]
+
+
+def test_partial_survive_unit_picks_lowest_avg_proximity(tmp_path: Path) -> None:
+    """Diversity score = mean of pair-wise proximities incident on a candidate;
+    K lowest-avg candidates survive. c_far is orthogonal to the c0/c1/c2
+    cluster so its avg is 0 → guaranteed survivor."""
+    cands = [
+        _make_candidate("c0", tmp_path / "c0.md", body="x"),
+        _make_candidate("c1", tmp_path / "c1.md", body="x"),
+        _make_candidate("c2", tmp_path / "c2.md", body="x"),
+        _make_candidate("c_far", tmp_path / "c_far.md", body="x"),
+    ]
+    # c0/c1/c2 mutual high proximity; c_far never appears in the graph
+    # (defaults to 0.0 avg via the counts-0 branch).
+    graph = {
+        ("c0", "c1"): 0.9,
+        ("c0", "c2"): 0.9,
+        ("c1", "c2"): 0.9,
+    }
+    out = Proximity()._partial_survive(cands, graph=graph)
+    assert len(out) == PARTIAL_SURVIVE_FLOOR
+    ids = {c["id"] for c in out}
+    assert "c_far" in ids
+
+
+def test_partial_survive_unit_tie_breaks_by_candidate_id(tmp_path: Path) -> None:
+    """When proximities tie (e.g. empty graph), survivors are deterministic
+    by lexicographic candidate id."""
+    cands = [_make_candidate(f"c{i}", tmp_path / f"c{i}.md", body="x") for i in range(5)]
+    out = Proximity()._partial_survive(cands, graph={})
+    assert [c["id"] for c in out] == ["c0", "c1", "c2"]
+
+
+def test_proximity_all_duplicates_falls_back_to_partial_survive(tmp_path: Path) -> None:
+    """End-to-end — pool-vs-candidate dedup marks every candidate as a dup
+    on 2 of 3 tracks, triggering partial-survive instead of the pre-Π2
+    hard abort."""
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    pool_body = " ".join(["foo bar baz qux qaz wxy abc def"] * 5)
+    (pool_dir / "pool_seed.md").write_text(pool_body, encoding="utf-8")
+
+    state = _make_state(tmp_path)
+    state.pool_path_in = pool_dir
+    state.candidates = [
+        _make_candidate(f"c{i}", tmp_path / f"c{i}.md", body=pool_body) for i in range(5)
+    ]
+    state.reflections = {}  # role track stays silent (only 2-track vote)
+    # All candidates + 1 pool entry → embedding marks every candidate as
+    # a pool-match; lexical track marks them via shingled overlap.
+    fake_vectors = [[1.0, 0.0, 0.0, 0.0]] * 6  # 5 candidates + 1 pool
+    with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
+        result = Proximity().execute(state)
+    # Pre-Π2: would have been status="error" / error_category="all_duplicates".
+    assert result.success
+    assert len(state.candidates) == PARTIAL_SURVIVE_FLOOR
+
+
+def test_proximity_emits_fallback_journal_event(tmp_path: Path) -> None:
+    """The fallback path emits a ``proximity_all_duplicates_fallback`` warn
+    event into the active SessionJournal."""
+    from core.observability import SessionJournal, session_journal_scope
+
+    journal_path = tmp_path / "journal.jsonl"
+    journal = SessionJournal(
+        session_id="t-prox", gen_tag="t", component="seed-generation", path=journal_path
+    )
+
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    pool_body = " ".join(["foo bar baz qux qaz wxy abc def"] * 5)
+    (pool_dir / "pool_seed.md").write_text(pool_body, encoding="utf-8")
+
+    state = _make_state(tmp_path)
+    state.pool_path_in = pool_dir
+    state.candidates = [
+        _make_candidate(f"c{i}", tmp_path / f"c{i}.md", body=pool_body) for i in range(5)
+    ]
+    state.reflections = {}
+    fake_vectors = [[1.0, 0.0, 0.0]] * 6
+    with (
+        session_journal_scope(journal),
+        patch("core.tools.text_embed.embed_texts", return_value=fake_vectors),
+    ):
+        result = Proximity().execute(state)
+    assert result.success
+    rows = _journal_rows(journal_path)
+    fallback = [r for r in rows if r["event"] == "proximity_all_duplicates_fallback"]
+    assert len(fallback) == 1
+    payload = fallback[0]["payload"]
+    assert payload["original_count"] == 5
+    assert payload["survivor_count"] == PARTIAL_SURVIVE_FLOOR
+    assert fallback[0]["level"] == "warn"
+
+
+def test_proximity_partial_survive_silent_when_no_journal_scope(
+    tmp_path: Path,
+) -> None:
+    """Fallback path must not raise when no SessionJournal scope is active."""
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    pool_body = " ".join(["foo bar baz qux qaz wxy abc def"] * 5)
+    (pool_dir / "pool_seed.md").write_text(pool_body, encoding="utf-8")
+
+    state = _make_state(tmp_path)
+    state.pool_path_in = pool_dir
+    state.candidates = [
+        _make_candidate(f"c{i}", tmp_path / f"c{i}.md", body=pool_body) for i in range(5)
+    ]
+    state.reflections = {}
+    fake_vectors = [[1.0, 0.0, 0.0]] * 6
+    with patch("core.tools.text_embed.embed_texts", return_value=fake_vectors):
+        result = Proximity().execute(state)
+    assert result.success
+    assert len(state.candidates) == PARTIAL_SURVIVE_FLOOR
+
+
+# ── PR-Π3 — research-goal context inject ──
+
+
+def test_goal_condition_returns_text_unchanged_when_empty_dim() -> None:
+    """Empty ``target_dim`` → no prefix; pre-Π3 byte-identical path."""
+    assert _goal_condition("alpha beta", target_dim="") == "alpha beta"
+    assert _goal_condition("", target_dim="") == ""
+
+
+def test_goal_condition_prepends_goal_prefix_when_dim_provided() -> None:
+    """Non-empty ``target_dim`` → ``[goal: <dim>]\\n<text>`` prefix."""
+    out = _goal_condition("alpha beta", target_dim="broken_tool_use")
+    assert out == "[goal: broken_tool_use]\nalpha beta"
+
+
+def test_embedding_track_passes_goal_prefix_to_embed_texts(tmp_path: Path) -> None:
+    """``_embedding_track`` forwards ``target_dim`` to the embedding call —
+    every input string carries the ``[goal: <dim>]\\n`` prefix."""
+    state = _make_state(tmp_path)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha beta"),
+        _make_candidate("c2", tmp_path / "c2.md", body="gamma delta"),
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        proximity._embedding_track(candidate_texts, [], target_dim="broken_tool_use")
+
+    assert "texts" in captured
+    assert all(t.startswith("[goal: broken_tool_use]\n") for t in captured["texts"])
+
+
+def test_embedding_track_no_prefix_when_target_dim_empty(tmp_path: Path) -> None:
+    """Default (no ``target_dim``) → embed inputs equal raw candidate text."""
+    state = _make_state(tmp_path)
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha beta"),
+    ]
+    proximity = Proximity()
+    candidate_texts = proximity._load_candidate_texts(state)
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        proximity._embedding_track(candidate_texts, [], target_dim="")
+
+    assert captured["texts"] == ["alpha beta"]
+
+
+def test_execute_forwards_state_target_dim_to_embedding_track(tmp_path: Path) -> None:
+    """End-to-end — ``state.target_dim`` (set by orchestrator) reaches the
+    embedding inputs as a prefix. Pre-Π3 the dim was a state-only field
+    with no effect on the proximity track."""
+    state = _make_state(tmp_path)
+    # _make_state defaults state.target_dim = "broken_tool_use".
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha"),
+        _make_candidate("c2", tmp_path / "c2.md", body="alpha"),
+    ]
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        Proximity().execute(state)
+
+    assert "texts" in captured
+    assert all(t.startswith("[goal: broken_tool_use]\n") for t in captured["texts"])
+
+
+def test_execute_no_prefix_when_target_dim_empty(tmp_path: Path) -> None:
+    """``state.target_dim = ""`` (legacy bootstrap path) → embed inputs
+    unchanged. Backwards-compatible — every pre-Π3 call site behaves
+    byte-identically."""
+    state = _make_state(tmp_path)
+    state.target_dim = ""
+    state.candidates = [
+        _make_candidate("c1", tmp_path / "c1.md", body="alpha"),
+    ]
+    captured: dict[str, list[str]] = {}
+
+    def _capture(texts: list[str], *, client: object | None = None) -> list[list[float]]:
+        captured["texts"] = list(texts)
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    with patch("core.tools.text_embed.embed_texts", side_effect=_capture):
+        Proximity().execute(state)
+
+    assert captured["texts"] == ["alpha"]
 
 
 def test_proximity_pool_dedup_lexical(tmp_path: Path) -> None:
