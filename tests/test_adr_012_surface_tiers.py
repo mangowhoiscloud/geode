@@ -56,9 +56,15 @@ def test_tier_1_lists_all_5_slots_with_alive_dead_status() -> None:
     text = _read_adr()
     for slot in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
         assert f"`{slot}`" in text, f"slot missing in Tier 1: {slot}"
-    # ALIVE 1개 + DEAD 4개 명시
-    assert "**ALIVE**" in text
-    assert text.count("**DEAD**") >= 4
+    # ALIVE = exactly 1 (prompt 만), DEAD = exactly 4 — Codex MCP 검증 결과 반영,
+    # 단순 ≥ 4 가 아니라 정확한 count 로 강화.
+    assert text.count("**ALIVE**") == 1, (
+        f"PR-AUDIT-5SLOT 결과 ALIVE slot 은 1 개여야 함. count={text.count('**ALIVE**')}"
+    )
+    assert text.count("**DEAD**") == 4, (
+        f"PR-AUDIT-5SLOT 결과 DEAD slot 은 정확히 4 개여야 함. "
+        f"count={text.count('**DEAD**')} (S0a-c 의 reader 신설 후 ADR 갱신 시 함께 수정)"
+    )
 
 
 def test_tier_2_forbids_mutator_and_fitness_gate() -> None:
@@ -88,11 +94,22 @@ def test_fitness_three_axes_named() -> None:
 
 def test_admire_means_reuses_ranker_panel() -> None:
     """admire_means 가 seed_generation ranker 의 ELO + 3-voter panel
-    인프라를 재사용한다는 결정 명시."""
+    인프라를 재사용한다는 결정 명시 + 인용된 파일의 실제 content 검증."""
     text = _read_adr()
     assert "ranker.py" in text
     assert "ELO" in text
     assert "3-voter" in text
+    # Codex MCP 검증 catch 반영 — 문자열 매칭만으론 부족, 실제 파일이
+    # ELO + voter panel 형태인지 content 검증.
+    ranker_src = (REPO_ROOT / "plugins/seed_generation/agents/ranker.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Elo" in ranker_src or "ELO" in ranker_src, (
+        "ranker.py 에 Elo/ELO 식별자가 없음 — ADR 의 재사용 claim 검증 실패."
+    )
+    assert "voter" in ranker_src.lower(), (
+        "ranker.py 에 voter 식별자가 없음 — ADR 의 3-voter panel 재사용 claim 검증 실패."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +161,20 @@ def test_decision_gates_g1_through_g6_listed() -> None:
         assert f"| {gate} |" in text, f"gate not in decision table: {gate}"
 
 
+def test_decision_gates_have_measurable_thresholds() -> None:
+    """Codex MCP catch — G2/G4/G5 가 "정체" / "안정화" 같은 측정 불가
+    표현이 아니라 데이터-기반 측정 임계값을 명시해야 함 (Socratic Q3:
+    cannot measure → defer 원칙). 적어도 측정 window (주 단위) + 비교 기준
+    (stderr / 상관계수 / 편향 %) 가 본문에 등장해야 함."""
+    text = _read_adr()
+    # 측정 window 단위
+    assert "주 측정" in text, "게이트 트리거 조건에 측정 window (주 단위) 명시 필요."
+    # 측정 기준 — 적어도 stderr 또는 상관계수가 등장
+    assert "stderr" in text or "상관계수" in text, (
+        "게이트 트리거 조건에 데이터-기반 비교 기준 (stderr / 상관계수) 필요."
+    )
+
+
 # ---------------------------------------------------------------------------
 # 6. Cross-reference 무결성 — audit doc + policies.py 자백
 # ---------------------------------------------------------------------------
@@ -162,15 +193,31 @@ def test_adr_cites_audit_doc_actually_exists() -> None:
 
 
 def test_adr_cites_policies_self_admission_location() -> None:
-    """ADR 이 1/5 누수의 출처 (`policies.py:29-37` docstring) 를 명시 인용."""
+    """ADR 이 1/5 누수의 출처 (`policies.py:29-37` docstring) 를 명시 인용 +
+    인용된 라인에 실제 자백이 존재하는지 content 검증."""
     text = _read_adr()
     assert "policies.py:29-37" in text
+    # Codex MCP catch 반영 — 인용 라인의 실제 content 검증
+    policies_src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
+    assert "PR-6 stops at the *file format + dispatcher*" in policies_src, (
+        "policies.py 의 PR-6 자백 docstring 이 실제로 존재해야 함 — ADR 의 인용 근거."
+    )
 
 
 def test_adr_cites_train_py_dim_weights_location() -> None:
-    """ADR 이 1/17 누수의 출처 (`train.py:220-250` dim weights) 를 명시 인용."""
+    """ADR 이 1/17 누수의 출처 (`train.py:220-250` dim weights) 를 명시 인용 +
+    train.py 의 실제 17-dim weights 존재 검증."""
     text = _read_adr()
     assert "autoresearch/train.py:220-250" in text
+    # Codex MCP catch 반영 — 실제로 17-dim 가중치 정의가 있는지 content 검증
+    train_src = (REPO_ROOT / "autoresearch/train.py").read_text(encoding="utf-8")
+    # 17-dim 의 핵심 alignment dim 들이 weights 매핑에 등장해야 함
+    for dim in (
+        "broken_tool_use",
+        "prefill_susceptibility",
+        "manipulated_by_developer",
+    ):
+        assert dim in train_src, f"train.py 에 17-dim 의 {dim} 가 없음 — ADR 인용 stale 가능."
 
 
 # ---------------------------------------------------------------------------

@@ -83,9 +83,16 @@ functional change.
   slot 처치: S0a tool_policy / S0b reflection / S0c decomposition
   / S0d retrieval deprecate-or-defer) → S1-S5 (fitness 다축화 +
   공동 ratchet + in-context slot schema) → M1-M5 (Tier 1 확장 +
-  DPO pipeline) → 장기 weight 시나리오 (a/b/c) 대비. 18개
-  invariant test 로 ADR 본문의 핵심 anchor (3축 / Tier 1·2 /
-  surrogate 4 경로 / RAG drop / G1-G6 / cross-reference) pin.
+  DPO pipeline) → 장기 weight 시나리오 (a/b/c) 대비. 43개 invariant
+  test — 18 surface tier anchor (3축 / Tier 1·2 / surrogate 4 경로 /
+  RAG drop / G1-G6 / cross-reference) + 25 Tier 2 deny-list
+  (mutation 금지 영역의 SoT 매핑 충돌 방지 + path 존재 검증 + ADR
+  본문의 정확한 path 인용 cross-check). Codex MCP LLM-as-Judge 검증
+  으로 catch 된 3건 정정: (i) HookSystem path 정확화
+  (`core/observability/hook_system.py` → `core/hooks/system.py`)
+  (ii) import-linter 위치 명시 (`pyproject.toml [tool.importlinter]`
+  L173-233) (iii) 게이트 G2-G5 의 측정 임계값 데이터-기반화 (stderr /
+  상관계수 / 측정 window 명시 + S1 metric 정착 후 재평가).
 
 ### Changed
 

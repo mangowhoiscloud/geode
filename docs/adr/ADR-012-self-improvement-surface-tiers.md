@@ -58,12 +58,13 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 | Bootstrap | `core/runtime.py`, `core/agent/loop/` | 자기 호출 경로 → 무한루프/자기파괴 |
 | Self-improving runner | `core/self_improving_loop/runner.py` | mutator 자기 수정 → ratchet 우회 |
 | Fitness gate | `autoresearch/train.py`, `compute_fitness`, `baseline.json` 평가 코드 | 평가 기준 mutate → monotonic 보장 무력화 |
-| CI ratchet | `tests/test_ratchet_policies_in_repo.py` 등 | guard 자체 mutate → CANNOT 우회 |
-| HookSystem | `core/observability/hook_system.py` | policy chain 우회 |
+| CI ratchet | `tests/test_ratchet_policies_in_repo.py` | guard 자체 mutate → CANNOT 우회 |
+| HookSystem | `core/hooks/system.py` | policy chain 우회 |
 | Mutator agent contract | mutator 자신의 system prompt | 재귀 자기수정 |
-| 4-layer 의존성 룰 | `lint-imports` 설정 | 아키텍처 contract 우회 |
+| 4-layer 의존성 룰 | `pyproject.toml [tool.importlinter]` (line 173-233 — 3 contracts) | 아키텍처 contract 우회 |
+| Version stamp | `CLAUDE.md` / `README.md` / `pyproject.toml` / `CHANGELOG.md` 의 version 동기화 | mutation 으로 version drift → release discipline 우회 |
 
-CI ratchet (`tests/test_ratchet_policies_in_repo.py`) 가 Tier 2 경로의 화이트리스트를 보유한다 — Tier 2 파일이 mutation 의 git-tracked 영역에 등장하면 즉시 CI 실패.
+`tests/test_adr_012_tier_2_deny_list.py` (이 PR 에서 신설) 가 Tier 2 deny-list 를 강제한다 — Tier 2 파일이 `TARGET_KIND_TO_SOT_FILE` 또는 mutation dispatcher 의 target 목록에 등장하면 즉시 test 실패. PR-AUDIT-5SLOT 의 ratchet 패턴 (`test_ratchet_policies_in_repo.py`) 은 policy SoT 의 gitignore/migration 만 pin 하므로 별개의 deny-list 가 필요했고, 이 ADR PR 이 그 deny-list 의 첫 invariant 를 함께 도입한다.
 
 ### 2. Fitness 다축화 — 3축 multi-axis strict-reject ratchet
 
@@ -175,11 +176,13 @@ PR-AUDIT-5SLOT 으로 진단 완료. dead slot 별 reader 신설:
 | Gate | 트리거 | 결정 | 단계 |
 |---|---|---|---|
 | G1 | 5축 reader audit 완료 (PR-AUDIT-5SLOT) | dead slot 별 처치 시퀀스 (S0a-d) 진입 | **완료** |
-| G2 | seed/policy mutation 이 1/17 면적으로 빠지는 risk 확인 | `ux_means` + `admire_means` 두 양의 축 신설 (S1+S2) | 단기 |
-| G3 | seed 진화 ↔ 정책 fitness 디커플링 관측 | 공동 ratchet (S3) — baseline.json 4-묶음 monotonic | 단기 |
-| G4 | 5축 (S0 후) 으로 `broken_tool_use` dim 정체 | Skill mutation 슬롯 (M1) | 중기 |
-| G5 | Tier 1 의 G1-G4 안정화 | Plugin mutation 진입 (M5) | 중기 |
-| G6 | (a)/(b)/(c) 중 하나 충족 | 해당 시나리오 pipeline 활성 | 장기 |
+| G2 | S0a-c 머지 후 5축 mutation 의 fitness delta 가 음의 압력 dim 에 90%+ 편향 (4 주 측정 window) | `ux_means` + `admire_means` 두 양의 축 신설 (S1+S2) | 단기 |
+| G3 | seed 진화 promote 율과 정책 fitness promote 율의 시간 상관계수 < 0.1 (4 주 측정) | 공동 ratchet (S3) — baseline.json 4-묶음 monotonic | 단기 |
+| G4 | S0+S1-S5 후에도 `broken_tool_use` dim 의 baseline 개선폭 < stderr (8 주 측정) | Skill mutation 슬롯 (M1) | 중기 |
+| G5 | Tier 1 의 G1-G4 안정화 + 4 주 연속 monotonic promote | Plugin mutation 진입 (M5) | 중기 |
+| G6 | (a)/(b)/(c) 중 하나 충족 (외부 트리거) | 해당 시나리오 pipeline 활성 | 장기 |
+
+각 게이트의 측정 임계값은 S1 의 `ux_means` metric 정착 후 한 번 더 재평가한다 — S1 가 cost/latency/success-rate 의 baseline 분포를 확립하면 G2-G5 의 stderr / 상관계수 임계값을 데이터-기반으로 정밀화 가능.
 
 ## Consequences
 
