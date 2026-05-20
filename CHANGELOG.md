@@ -49,6 +49,42 @@ functional change.
 
 ### Added
 
+- **PR-5 C-4 — causal attribution for applied mutations.** Pre-PR-5
+  ``mutations.jsonl`` recorded *what* changed (target section, new
+  value, rationale) but not *what happened next* — only the binary
+  ``audit_failed → rollback`` signal. The ``Mutation`` dataclass now
+  carries three new fields: ``mutation_id`` (uuid hex, auto-generated
+  when the LLM doesn't supply one), ``expected_dim`` (per-dim
+  expected delta the LLM commits to, e.g. ``{"safety": +0.3,
+  "helpfulness": -0.05}``), and ``rollback_condition`` (free-text
+  predicate for revert eligibility). ``parse_mutation`` extracts the
+  new fields with schema-typed casts (non-numeric ``expected_dim``
+  entries silently dropped, missing fields fall through to defaults
+  so older LLM responses still parse). The mutation-contract suffix
+  in the system prompt documents the new fields so the LLM knows to
+  emit them. ``Mutation.to_audit_row`` now tags each applied row
+  with ``kind="applied"`` so attribution rows can sit alongside in
+  the same JSONL.
+
+- **PR-5 C-4 — attribution module.** New
+  ``core/self_improving_loop/attribution.py`` computes per-dim
+  ``observed_dim`` (signed delta = ``after.dim_means -
+  before.dim_means``), per-dim 95% CI half-width using the paired-
+  baseline formula ``1.96 * sqrt(stderr_before² + stderr_after²)``
+  (Karpathy autoresearch §5 ratchet pattern), per-dim
+  ``significant`` flag (``abs(delta) > ci95``), and a scalar
+  ``attribution_score ∈ [-1, 1]`` aggregating
+  ``sign(expected) * observed`` across the operator's expected dims.
+  Missing baseline (autoresearch can drop the snapshot mid-loop, or
+  the first audit has no "before") returns a complete-shape payload
+  with ``missing_baseline=True`` and empty per-dim dicts — the row is
+  still written to record the *absence* of signal.
+  ``write_attribution`` is the one-call convenience wrapper that
+  computes + appends to ``mutations.jsonl`` as a separate row with
+  ``kind="attribution"`` and the same ``mutation_id`` as the applied
+  row. Aggregation by ``mutation_id`` lets PR-6 (policy mutation)
+  compute long-term success rates without changing the file format.
+
 - **PR-4 C-3 — episodic action-outcome memory.** Pre-PR-4
   ``core.memory`` carried four memory types (user / project /
   feedback / reference) but had no place to record action → outcome
