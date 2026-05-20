@@ -95,6 +95,23 @@ class Settings(BaseSettings):
             "cost. PR-3 C-2."
         ),
     )
+    cognitive_reflection_interval: int = Field(
+        default=1,
+        ge=1,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_interval",
+            "GEODE_COGNITIVE_REFLECTION_INTERVAL",
+        ),
+        description=(
+            "Reflection fires every Nth tool-use round. ``1`` (default) "
+            "= every round (current PR-3 behaviour, zero regression). "
+            "``3`` = round 1, 4, 7, 10... (skip 2 rounds between calls). "
+            "Higher values cut the extra-LLM-call overhead at the cost "
+            "of staler hypotheses + confidence. The first round always "
+            "runs so the loop sees an LLM-derived belief snapshot "
+            "before any throttling kicks in. PR-C (2026-05-21)."
+        ),
+    )
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 

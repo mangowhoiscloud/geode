@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-C — ``cognitive_reflection_interval`` every-N-rounds gate.** PR-3
+  fires one extra LLM call per tool-use round (default Haiku 4.5), so
+  30-round sessions paid 30 extra calls. PR-C adds the
+  ``cognitive_reflection_interval`` settings field (default ``1`` =
+  every round, zero regression). When set to ``N > 1`` the reflection
+  node runs on rounds 1, 1+N, 1+2N, ... — the first round always
+  reflects so the loop sees an LLM-derived belief snapshot before any
+  throttling, and subsequent calls are thinned to every Nth round.
+  Operators flip via ``GEODE_COGNITIVE_REFLECTION_INTERVAL`` env var
+  or ``[cognitive] reflection_interval = N`` in ``config.toml``
+  (mapped in ``_TOML_TO_SETTINGS``). Pydantic ``ge=1`` validator
+  rejects ``0`` / negatives so the interval knob can't accidentally
+  disable reflection (operators should use the explicit
+  ``cognitive_reflection_enabled`` toggle instead).
+  ``_maybe_reflect`` clamps to 1 as defence-in-depth in case a
+  downstream bypasses the validator via ``object.__setattr__``.
+  10 invariant tests pin the field / TOML map / validator + 5
+  behavioural scenarios (interval=1/3/5/30, disabled-toggle
+  short-circuit).
+
 ### Changed
 
 - **PR-B — reflection node uses ``tool_use`` structured output.** Pre-

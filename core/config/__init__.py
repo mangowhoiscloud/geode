@@ -57,6 +57,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "cognitive.reflection_enabled": "cognitive_reflection_enabled",
     "cognitive.reflection_model": "cognitive_reflection_model",
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",
+    "cognitive.reflection_interval": "cognitive_reflection_interval",
     "output.verbose": "verbose",
     "pipeline.confidence_threshold": "confidence_threshold",
     "pipeline.max_iterations": "max_iterations",
