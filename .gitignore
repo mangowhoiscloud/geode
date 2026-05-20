@@ -144,4 +144,8 @@ site/tsconfig.tsbuildinfo
 # autoresearch outer-loop runtime artifact (results.tsv, audit_logs/, failure_log)
 autoresearch/state/*
 !autoresearch/state/.gitkeep
+# G5b.fix1 (2026-05-20) — mutation audit ledger is the git-as-optimiser SoT;
+# every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
+# The trailing negation lets `git add autoresearch/state/mutations.jsonl` succeed.
+!autoresearch/state/mutations.jsonl
 .claude/scratch/
