@@ -47,6 +47,23 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **G5b.fix1 — unignore `autoresearch/state/mutations.jsonl` so the
+  self-improving-loop audit ledger really enters git.** Codex MCP
+  LLM-as-Judge on PR-G5b (#1350) caught the contradiction: the
+  CHANGELOG promised a "git-tracked audit log" but `.gitignore`'s
+  `autoresearch/state/*` glob silently ignored the file —
+  `_git_commit_audit_log`'s `git add` would no-op and the
+  git-as-optimiser ledger would never persist. Add a negation entry
+  (`!autoresearch/state/mutations.jsonl`) immediately after the base
+  glob, leaving the rest of `state/` (run.log, baseline.json,
+  audit_logs/) still ignored. 4 new tests pin the fix:
+  (a) `.gitignore` carries the negation line,
+  (b) base ignore still present,
+  (c) `git check-ignore` exits 1 for mutations.jsonl,
+  (d) sanity — baseline.json still exit 0.
+
 ### Added
 
 - **PR-G5b — program.md-driven self-improving loop runner.** Final PR
