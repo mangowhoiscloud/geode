@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-B — reflection node uses ``tool_use`` structured output.** Pre-
+  PR-B ``core/agent/loop/_reflection.py`` told the LLM "Return ONLY
+  this JSON, no prose" and ran a 5-stage forgiving parser
+  (``_parse_reflection`` + ``_extract_first_json_object`` with
+  fence strip + prose-prefix extraction + string-aware brace counting)
+  to recover from the contract drift the LLM inevitably caused.
+  Codex MCP caught parser gaps three times during the PR-3 review
+  rounds. PR-B replaces the entire fragile path with the same
+  ``tool_use`` contract every provider-aware GEODE caller already
+  uses: declare a ``record_reflection`` tool with a JSON
+  ``input_schema`` (``hypotheses[<=5]`` / ``confidence ∈ [0,1]`` /
+  ``next_action_hint``), force its invocation via
+  ``tool_choice={"type": "tool", "name": "record_reflection"}``,
+  and read the parsed ``input`` dict directly off the
+  ``ToolUseBlock``. The Anthropic SDK enforces the schema server-
+  side, so the shape is guaranteed by the time the dispatcher sees
+  it. ``_apply_reflection`` keeps its schema-typed casts (incl. the
+  ``bool``-exclusion guard mirroring PR-5's mutator fix) so a
+  non-Anthropic provider in the dispatcher fork can't poison state.
+  Eliminates ~80 lines of parsing fallback + 4 parser-edge-case
+  tests; replaces them with 4 ``_extract_reflection_input``
+  resolver tests and 1 wire-up invariant test pinning that
+  ``reflect_async`` passes the tool schema + forced choice to the
+  adapter. Public surface exposes ``REFLECTION_TOOL_NAME`` so
+  transcript renderers / debug tools can grep without importing
+  the private dict.
+
 ### Added
 
 - **PR-A — ``/model`` role tab for reflection-model selection.** Pre-

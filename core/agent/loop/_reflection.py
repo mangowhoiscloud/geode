@@ -3,6 +3,20 @@
 PR-3 C-2 of the cognitive-loop-uplift sprint
 (``docs/plans/2026-05-21-cognitive-loop-uplift.md``).
 
+PR-B (2026-05-21) — migrated the reflection call from free-form
+JSON-in-text to Anthropic ``tool_use`` structured output. Pre-PR-B
+the system prompt asked the LLM to "Return ONLY this JSON, no
+prose" but models frequently disobeyed (wrapped in ``"Here is the
+JSON: {...}"``, ``` ```json``` fences, trailing prose, etc.), and
+a 5-stage forgiving parser handled the drift. Codex MCP caught
+parser gaps 3 times during PR-3. The fix is to use the structured-
+output contract every other GEODE provider-aware caller already
+uses: declare a tool with a JSON schema, force its invocation, and
+read the parsed ``input`` dict directly off the ``ToolUseBlock``.
+The Anthropic SDK enforces the schema server-side, so the
+``hypotheses[]`` / ``confidence`` / ``next_action_hint`` shape is
+guaranteed by the time it reaches us.
+
 Pre-PR-3 the agentic loop went tool result → next action with no
 explicit belief-update step. ``CognitiveState.hypotheses`` and
 ``CognitiveState.confidence`` were declared in PR-2 but never
@@ -13,7 +27,7 @@ signal to record against an outcome.
 The reflection node runs ONE LLM call after every tool-use round.
 It sees only the cognitive-state snapshot + a compact tool-result
 summary (NOT the full conversation — clean-context discipline) and
-returns a small JSON object with:
+invokes the ``record_reflection`` tool which carries:
 
   hypotheses[<=5]   — short claims about the task state
   confidence ∈ [0,1] — overall confidence the goal will be achieved
@@ -32,7 +46,6 @@ established by PR-1).
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
@@ -44,20 +57,49 @@ from core.llm.router import call_with_failover
 log = logging.getLogger(__name__)
 
 
+REFLECTION_TOOL_NAME = "record_reflection"
+
+
+_REFLECTION_TOOL: dict[str, Any] = {
+    "name": REFLECTION_TOOL_NAME,
+    "description": (
+        "Record the agent's updated beliefs after the round that just finished. "
+        "Prefer pruning stale hypotheses over piling new ones — the loop tracks "
+        "evolution not history. If the round produced no useful signal, keep "
+        "the previous hypotheses and lower confidence."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "hypotheses": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 5,
+                "description": "Short claims about the task state (each <= 120 chars).",
+            },
+            "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": "Overall confidence the goal will be achieved.",
+            },
+            "next_action_hint": {
+                "type": "string",
+                "description": "Single-line hint for what to try next (<= 120 chars).",
+            },
+        },
+        "required": ["hypotheses", "confidence"],
+    },
+}
+
+
 _SYSTEM_PROMPT = (
     "You are the reflection node of an autonomous execution agent. "
     "Given the agent's current cognitive state and a compact summary "
-    "of the round that just finished, produce a JSON object that "
-    "updates the agent's beliefs.\n\n"
-    "Output schema (return ONLY this JSON, no prose):\n"
-    "{\n"
-    '  "hypotheses": ["short claim 1", ...],  // <= 5 entries, each <= 120 chars\n'
-    '  "confidence": 0.0,                      // float in [0,1]\n'
-    '  "next_action_hint": "..."               // <= 120 chars, what to try next\n'
-    "}\n\n"
-    "Prefer pruning stale hypotheses over piling new ones; the loop "
-    "tracks evolution not history. If the round produced no useful "
-    "signal, keep the previous hypotheses and lower confidence."
+    "of the round that just finished, invoke the "
+    f"``{REFLECTION_TOOL_NAME}`` tool to update the agent's beliefs. "
+    "Do NOT emit free-form prose; the tool call is the only required "
+    "output."
 )
 
 
@@ -103,98 +145,35 @@ def _build_user_prompt(state: CognitiveState, tool_summary: str) -> str:
         f"Previous hypotheses: {state.hypotheses!r}\n"
         f"Previous confidence: {state.confidence!r}\n\n"
         f"Tool batch results:\n{tool_summary}\n\n"
-        "Return ONLY the JSON object specified in the system prompt."
+        f"Invoke the {REFLECTION_TOOL_NAME} tool now."
     )
 
 
-def _parse_reflection(text: str) -> dict[str, Any]:
-    """Parse the reflection LLM output into a structured dict.
+def _extract_reflection_input(response: Any) -> dict[str, Any] | None:
+    """Find the ``record_reflection`` tool_use block in the response.
 
-    The LLM is instructed to return only JSON. In practice models
-    emit it wrapped in ``"Here is the JSON: {...}"`` prose, a
-    ```json``` fence (often with trailing text after the closing
-    fence), or other decoration. The parser is intentionally
-    forgiving:
-
-      1. Strip fence wrappers if present (opening fence with or
-         without language tag; trailing fence even if more prose
-         follows).
-      2. Otherwise extract the first balanced ``{...}`` block by
-         scanning for the first ``{`` and matching ``}``, with
-         string-aware brace counting so a ``}`` inside a string
-         value doesn't close the object early.
-      3. Parse the extracted block; non-object results raise
-         ``ValueError`` so the caller falls back to previous state.
+    Returns the tool's ``input`` dict (already parsed by the adapter
+    normalizer — see :class:`core.llm.agentic_response.ToolUseBlock`).
+    Returns ``None`` when the model declined to invoke the tool;
+    callers swallow this case with a WARN.
     """
-    candidate = text.strip()
-
-    if candidate.startswith("```"):
-        # drop opening fence (with or without language tag)
-        first_newline = candidate.find("\n")
-        if first_newline != -1:
-            candidate = candidate[first_newline + 1 :]
-        # drop closing fence — anywhere in the remaining text, then
-        # trim any prose after it (models sometimes append
-        # "this should help" or similar).
-        closing = candidate.find("```")
-        if closing != -1:
-            candidate = candidate[:closing]
-        candidate = candidate.strip()
-
-    # Always extract the first balanced {...} block — handles bare
-    # JSON followed by prose ("{...}\\nthanks"), prose prefix
-    # ("Here is the JSON: {...}"), and the happy path (returns the
-    # input unchanged when it's already a clean JSON object).
-    # Brace counting is string-aware so a ``}`` inside a value
-    # doesn't close the outer object early.
-    candidate = _extract_first_json_object(candidate)
-
-    parsed = json.loads(candidate)
-    if not isinstance(parsed, dict):
-        raise ValueError(f"reflection output is not a JSON object: {type(parsed).__name__}")
-    return parsed
-
-
-def _extract_first_json_object(text: str) -> str:
-    """Return the first balanced ``{...}`` block in ``text``.
-
-    Brace counting is string-aware: a ``}`` inside a JSON string
-    value does not close the outer object. Raises ``ValueError`` if
-    no balanced object is found.
-    """
-    depth = 0
-    in_string = False
-    escape_next = False
-    start = -1
-    for index, char in enumerate(text):
-        if escape_next:
-            escape_next = False
-            continue
-        if in_string:
-            if char == "\\":
-                escape_next = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-            continue
-        if char == "{":
-            if depth == 0:
-                start = index
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0 and start != -1:
-                return text[start : index + 1]
-    raise ValueError("no balanced JSON object found in reflection output")
+    for block in getattr(response, "content", []) or []:
+        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == (
+            REFLECTION_TOOL_NAME
+        ):
+            payload = getattr(block, "input", None)
+            if isinstance(payload, dict):
+                return payload
+    return None
 
 
 def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
     """Update ``state`` in-place with reflection output.
 
-    Schema-typed casts — invalid types per field silently drop that
-    field rather than poisoning the entire state. PR-3 prefers
+    Schema-typed casts — even though the Anthropic schema validator
+    enforces field types server-side, the dispatcher fork (GLM /
+    OpenAI / Codex) may not. Drop fields with the wrong type
+    silently rather than poisoning the entire state. PR-3 prefers
     *partial* belief update over complete rejection so a flaky
     reflection model still moves the needle.
     """
@@ -209,7 +188,11 @@ def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
         state.hypotheses = cleaned
 
     confidence_raw = parsed.get("confidence")
-    if isinstance(confidence_raw, int | float):
+    # ``bool`` is an ``int`` subclass — exclude explicitly so
+    # ``True``/``False`` doesn't collapse to ``1.0``/``0.0`` and
+    # mute a real confidence signal (Codex MCP review of PR-5
+    # caught the same anti-pattern in the mutator schema).
+    if isinstance(confidence_raw, int | float) and not isinstance(confidence_raw, bool):
         state.confidence = max(0.0, min(1.0, float(confidence_raw)))
 
     hint_raw = parsed.get("next_action_hint")
@@ -232,10 +215,15 @@ async def reflect_async(
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
-    Errors (LLM failure, JSON parse failure, schema mismatch) are
-    logged at WARN and swallowed — the loop must remain robust to a
-    flaky reflection model. The next round just re-runs reflection
-    with the same previous state.
+    PR-B (2026-05-21) — uses ``tool_use`` structured output (the
+    ``record_reflection`` tool with a forced ``tool_choice``). The
+    Anthropic SDK enforces the JSON schema, so we read ``input``
+    directly off the returned ``ToolUseBlock``.
+
+    Errors (LLM failure, model declined the tool, schema mismatch
+    on a non-Anthropic provider) are logged at WARN and swallowed —
+    the loop must remain robust to a flaky reflection model. The
+    next round just re-runs reflection with the same previous state.
 
     Dispatch goes through ``core.llm.router.call_with_failover`` so
     the call shares the credential rotator with the rest of GEODE
@@ -264,8 +252,8 @@ async def reflect_async(
                 model=m,
                 system=_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
-                tools=[],
-                tool_choice={"type": "auto"},
+                tools=[_REFLECTION_TOOL],
+                tool_choice={"type": "tool", "name": REFLECTION_TOOL_NAME},
                 max_tokens=max_tokens,
                 temperature=0.2,
             )
@@ -282,23 +270,15 @@ async def reflect_async(
         log.warning("reflection LLM call returned None (model=%s); keeping previous state", model)
         return
 
-    text_chunks: list[str] = []
-    for block in getattr(response, "content", []):
-        block_text = getattr(block, "text", "")
-        if block_text:
-            text_chunks.append(block_text)
-    raw = "".join(text_chunks)
-    if not raw:
-        log.warning("reflection LLM returned empty text; keeping previous state")
-        return
-
-    try:
-        parsed = _parse_reflection(raw)
-    except (ValueError, json.JSONDecodeError):
-        log.warning("reflection output not valid JSON; keeping previous state. raw=%r", raw[:200])
+    parsed = _extract_reflection_input(response)
+    if parsed is None:
+        log.warning(
+            "reflection response did not include a %s tool_use block; keeping previous state",
+            REFLECTION_TOOL_NAME,
+        )
         return
 
     _apply_reflection(state, parsed)
 
 
-__all__ = ["reflect_async"]
+__all__ = ["REFLECTION_TOOL_NAME", "reflect_async"]
