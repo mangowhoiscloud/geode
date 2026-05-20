@@ -63,6 +63,11 @@ class WorkerRequest:
     agent_name: str = ""
     agent_system_prompt: str = ""
     agent_allowed_tools: list[str] = field(default_factory=list)
+    # Sub-agent lineage (2026-05-21) — parent's routing key + uuid
+    # threaded into the child loop so its Episodes carry both for
+    # cross-session attribution. Empty strings = top-level spawn.
+    parent_session_key: str = ""
+    parent_session_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -91,6 +96,8 @@ class WorkerRequest:
             agent_name=data.get("agent_name", ""),
             agent_system_prompt=data.get("agent_system_prompt", ""),
             agent_allowed_tools=data.get("agent_allowed_tools", []),
+            parent_session_key=data.get("parent_session_key", ""),
+            parent_session_id=data.get("parent_session_id", ""),
         )
 
 
@@ -236,6 +243,8 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         effort=request.effort,
         time_budget_s=request.time_budget_s,
         system_prompt_override=system_prompt_override,
+        parent_session_key=request.parent_session_key,
+        parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
     )
 

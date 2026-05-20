@@ -530,6 +530,17 @@ class SubAgentManager:
             if agent_ctx.get("model"):
                 worker_model = str(agent_ctx["model"])
 
+        # Sub-agent lineage (2026-05-21) — capture the calling parent
+        # loop's session_id from the ContextVar bound in
+        # ``AgenticLoop._emit_session_start_signals``. Falls back to
+        # empty for top-level / test contexts where no loop is bound.
+        # ``parent_session_key`` is the SubAgentManager construction
+        # kwarg (or empty when the manager was built at gateway
+        # startup without a parent context).
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        parent_uuid = get_session_id()
+
         return WorkerRequest(
             task_id=task.task_id,
             task_type=task.task_type,
@@ -545,6 +556,8 @@ class SubAgentManager:
             agent_name=agent_name,
             agent_system_prompt=agent_system_prompt,
             agent_allowed_tools=agent_allowed_tools,
+            parent_session_key=self._parent_session_key,
+            parent_session_id=parent_uuid,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

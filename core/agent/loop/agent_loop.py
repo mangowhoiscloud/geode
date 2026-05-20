@@ -84,6 +84,7 @@ class AgenticLoop:
         hooks: HookSystem | None = None,
         enable_goal_decomposition: bool = True,
         parent_session_key: str = "",
+        parent_session_id: str = "",
         system_suffix: str = "",
         system_prompt_override: str | None = None,
         quiet: bool = False,
@@ -92,6 +93,7 @@ class AgenticLoop:
         self.context = context
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
+        self._parent_session_id = parent_session_id
         self._system_suffix = system_suffix
         # S2-wire (2026-05-18): when set, _build_system_prompt uses this
         # string as the entire role/instruction body, replacing the
@@ -453,25 +455,23 @@ class AgenticLoop:
         # in the same task are not a documented use case.
         from core.agent.cognitive_state_ctx import (
             set_cognitive_state,
+            set_parent_session_id,
             set_parent_session_key,
             set_session_id,
         )
 
         set_cognitive_state(self.cognitive_state)
         set_session_id(self._session_id)
-        # PR-F (2026-05-21) — sub-agent lineage. When this loop was
-        # spawned via the OpenClaw in-process spawn pattern,
+        # Sub-agent lineage. When this loop was spawned via the
+        # OpenClaw spawn pattern (in-process or subprocess),
         # ``_parent_session_key`` holds the parent's routing key
-        # (e.g. ``"subject:foo:bar"`` — NOT the parent's
-        # ``_session_id`` uuid). Bind it to the ContextVar so the
-        # episodic recorder can stamp ``Episode.parent_session_key``
-        # for cross-session attribution. Empty for top-level loops.
-        # TODO(PR-F-followup): subprocess sub-agents (SubAgentManager
-        # → WorkerRequest → worker.py path) don't forward this value;
-        # child Episodes record empty. WorkerRequest needs a
-        # ``parent_session_key`` field + worker.py needs to honour it
-        # before spawning the child AgenticLoop.
+        # (``"subject:foo:bar"``) and ``_parent_session_id`` holds the
+        # parent's ``_session_id`` uuid. Both flow through to
+        # ``Episode`` rows so cross-session attribution can group by
+        # routing key AND attribute back to a single parent run.
+        # Empty strings for top-level loops.
         set_parent_session_key(self._parent_session_key)
+        set_parent_session_id(self._parent_session_id)
         await self._emit_cognitive(
             HookEvent.COGNITIVE_PERCEIVE,
             user_input=user_input,

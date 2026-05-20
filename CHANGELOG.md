@@ -47,6 +47,44 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Sub-agent lineage — subprocess WorkerRequest threading.** Closes
+  the PR-F follow-up gap. Pre-fix subprocess sub-agents spawned via
+  ``SubAgentManager → WorkerRequest → worker.py`` recorded
+  ``parent_session_key=""`` in their Episodes and had no notion of
+  the parent's ``_session_id`` uuid at all — only the in-process
+  spawn path carried lineage. This wires both fields end-to-end so
+  the PR-E confidence-trajectory aggregator can group child
+  Episodes by routing key (``parent_session_key``) AND attribute
+  each row back to a concrete parent run (``parent_session_id``
+  uuid). Changes: (1) new ``parent_session_id`` ContextVar pair in
+  ``core/agent/cognitive_state_ctx.py``; (2) AgenticLoop accepts a
+  ``parent_session_id`` constructor kwarg and binds it via
+  ``set_parent_session_id`` inside ``_emit_session_start_signals``
+  alongside the existing parent_session_key bind; (3) ``Episode``
+  dataclass gains ``parent_session_id`` (defaulted) so JSONL rows
+  carry both fields; (4) bootstrap's ``TOOL_EXEC_ENDED`` handler
+  reads ``get_parent_session_id`` and stamps the Episode;
+  (5) ``WorkerRequest`` gains ``parent_session_key`` +
+  ``parent_session_id`` fields (both defaulted for backwards-
+  compatible deserialisation); (6) ``SubAgentManager._build_worker_request``
+  populates both — ``parent_session_key`` from the manager's
+  construction kwarg, ``parent_session_id`` from the calling
+  parent's ContextVar (the AgenticLoop binds its own session_id
+  at session-start, so the manager reads it cleanly via
+  ``get_session_id`` at delegate-time); (7) ``worker._run_agentic``
+  threads both kwargs into the spawned child AgenticLoop. 17
+  invariant tests pin the new ContextVar pair + ``__all__``,
+  the Episode field + JSONL round-trip, the WorkerRequest schema +
+  default-empty backwards compat, the SubAgentManager wiring under
+  both kwarg-set and ContextVar-bound parent scenarios, the
+  AgenticLoop kwarg signature + ContextVar bind during
+  session-start, the worker.py call-site, and the bootstrap reader.
+  The same-task A→B→A Token reset (``TODO(PR-F-followup)`` line in
+  ``cognitive_state_ctx.py``) remains deferred as a separate small
+  PR.
+
 ## [0.99.26] — 2026-05-21
 
 > **arun god-method decomposition — Phase 2 trilogy.** 3 PRs
