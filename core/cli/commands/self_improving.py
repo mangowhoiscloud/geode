@@ -534,9 +534,13 @@ def _cmd_history() -> None:
 
     The mutation ledger (``autoresearch/state/mutations.jsonl``) +
     the 5 policy SoT JSONs (``autoresearch/state/policies/``) are
-    all git-tracked, so ``git log`` over either path is the
-    canonical history view. We print the exact recipes here so the
-    operator doesn't have to remember syntax.
+    git-trackable (``.gitignore`` negation lets them be added);
+    after the first applied mutation lands a commit, ``git log``
+    over either path is the canonical history view. Codex MCP
+    catch on PR-MINIMAL-1: until that first commit, the files are
+    NOT YET tracked (``git ls-files`` returns only the ``.gitkeep``
+    placeholders), so we print an empty-state caveat alongside the
+    recipes.
     """
     console.print()
     console.print("  [header]Self-improving loop — history[/header]")
@@ -546,6 +550,10 @@ def _cmd_history() -> None:
         "target_kind / target_section / rationale):[/muted]"
     )
     console.print("    [bold]git log -p autoresearch/state/mutations.jsonl[/bold]")
+    console.print(
+        "    [muted]→ empty when no mutation has been applied yet "
+        "(first /self-improving run apply seeds the ledger).[/muted]"
+    )
     console.print()
     console.print("  [muted]Compact form (commit message + 1-line ledger row):[/muted]")
     console.print("    [bold]git log --oneline autoresearch/state/mutations.jsonl[/bold]")

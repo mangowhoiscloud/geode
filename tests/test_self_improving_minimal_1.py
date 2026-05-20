@@ -23,8 +23,10 @@ def test_history_action_prints_git_log_recipes(
 ) -> None:
     """The action must point at ``git log`` over the mutation ledger
     + the policies dir, NOT print a deferred-design-doc pointer.
-    PR-RATCHET-1 made both git-tracked so this delegation is now
-    valid; PR-MINIMAL-1 wires the slash to that path."""
+    PR-RATCHET-1 made both git-trackable so this delegation is now
+    valid; PR-MINIMAL-1 wires the slash to that path. Codex MCP
+    catch (PR-MINIMAL-1) — pin the empty-state caveat so a future
+    refactor that drops it surfaces here."""
     from core.cli.commands.self_improving import cmd_self_improving
 
     cmd_self_improving("history")
@@ -36,6 +38,8 @@ def test_history_action_prints_git_log_recipes(
     assert "git log --stat autoresearch/state/policies/" in out
     # Cross-reference back to status for the quick path
     assert "/self-improving status" in out
+    # Empty-state caveat for the not-yet-committed state
+    assert "empty when no mutation has been applied yet" in out
 
 
 # ---------------------------------------------------------------------------

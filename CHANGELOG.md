@@ -51,9 +51,11 @@ functional change.
 
 - **PR-MINIMAL-1 — `/self-improving history` + `/rollback` wired to git delegation; DONT-table guard codification; design doc cleanup.**
   Post-PR-RATCHET-1, the mutation ledger (``autoresearch/state/mutations.jsonl``)
-  + 5 policy SoT files (``autoresearch/state/policies/``) are all
-  git-tracked, so ``git log`` IS the canonical history view and
-  ``git revert <sha>`` IS the canonical rollback verb. Re-implementing
+  + 5 policy SoT files (``autoresearch/state/policies/``) are
+  git-trackable (``.gitignore`` negation re-includes both); after
+  the first applied mutation lands a commit, ``git log`` becomes
+  the canonical history view and ``git revert <sha>`` the canonical
+  rollback verb. Re-implementing
   either in a slash would duplicate git semantics. PR-MINIMAL-1 wires
   the two slash actions as *delegation*: ``/self-improving history``
   prints the exact ``git log -p autoresearch/state/mutations.jsonl``

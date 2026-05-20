@@ -455,8 +455,8 @@ Petri-only 블록에 남는 것 (정합 유지):
 | `/self-improving` (no action) | = `status` (default) | OPS-1 |
 | `/self-improving status` | recent baseline + last N mutations | OPS-1 |
 | `/self-improving run [--n N] [--profile=…]` | N iterations with per-iteration confirmation prompt | OPS-2 |
-| `/self-improving history [--n N]` | last N audit rows tabular | OPS-3 |
-| `/self-improving rollback <mutation_id>` | restore previous_value to SoT + audit row | OPS-3 |
+| `/self-improving history` | git log recipes over mutations.jsonl + policies/ | MINIMAL-1 |
+| `/self-improving rollback [<mutation_id>]` | git revert recipe (+ git log --grep helper) | MINIMAL-1 |
 | `/self-improving config` | show/edit `[self_improving_loop.*]` toml | OPS-3 |
 | `/sil <action>` | alias | OPS-1 (registered for forward compat) |
 
