@@ -106,9 +106,26 @@ class ProfileRotator:
                 log.warning("No profiles registered for provider=%s", provider)
             return None
 
-        # Sort: type priority first, then LRU
-        eligible_profiles.sort(key=lambda p: p.sort_key())
-        selected = eligible_profiles[0]
+        # X1 — honour user-pinned active profile first. Pre-fix the
+        # sort key alone decided the order (type priority → LRU), so
+        # operators with multiple eligible profiles for a provider could
+        # not pin a preferred one without removing the others. When
+        # ``ProfileStore.set_active(name)`` has named an eligible
+        # profile for this provider, surface it as the first
+        # candidate; remaining profiles fall back to the legacy
+        # sort_key tiebreak so an ineligible pin gracefully steps
+        # aside.
+        active = self._store.get_pinned_active(provider)
+        active_pinned: AuthProfile | None = None
+        if active is not None:
+            for p in eligible_profiles:
+                if p.name == active.name:
+                    active_pinned = p
+                    break
+        others = [p for p in eligible_profiles if p is not active_pinned]
+        others.sort(key=lambda p: p.sort_key())
+        ordered = ([active_pinned] if active_pinned is not None else []) + others
+        selected = ordered[0]
 
         # Proactive refresh: re-read if managed + expiring within skew
         if selected.managed_by and selected.expires_at > 0:

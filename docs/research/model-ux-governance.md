@@ -405,7 +405,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 
 | # | Gap | Severity | Effort | Reference fix |
 |---|-----|----------|--------|---------------|
-| X1 | per-provider user-tunable auth order 부재 | S1 | M | OpenClaw `models auth-order set <provider> <profile-list>` |
+| X1 | Per-provider user-tunable auth order (first slice) | Done (v0.99.19) | M | `ProfileStore.set_active` → `_pinned_active` 분리, `ProfileRotator.resolve` 가 manual pin 을 sort_key 보다 우선. CLI: `/login use-profile <name>` (set), `/login order [<provider>]` (show). `/login` Profiles row 에 `(active)` badge. Ineligible pin 은 graceful step-aside. Full list ordering 은 후속 PR (X1.1). |
 | X2 | system prompt model identity injection (v0.52.8) — reference 와 어긋남 | S2 | S | Decision: 유지 / 약화 / Codex-only 中 택 |
 | X3 | Provider equivalence map (`openai ↔ openai-codex`) 사용자 가시성 0 | S2 | S | OpenClaw `models providers` shows |
 

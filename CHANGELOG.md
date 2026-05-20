@@ -49,6 +49,34 @@ functional change.
 
 ### Added
 
+- **X1 (first slice) — per-provider auth-order: pinned profile wins
+  in ``ProfileRotator.resolve``; new ``/login use-profile`` +
+  ``/login order`` surface.** Closes the governance gap noted in
+  ``docs/research/model-ux-governance.md`` (X1: *per-provider
+  user-tunable auth order 부재*). Pre-fix ``ProfileRotator.resolve``
+  sorted eligible profiles solely by type-priority + LRU, so an
+  operator with multiple OAuth profiles for the same provider could
+  not pin a preferred one without removing the others —
+  ``ProfileStore.set_active(name)`` existed but the rotator ignored
+  it. ``ProfileStore`` gained a ``_pinned_active`` map (separate from
+  the auto-set legacy ``_active`` that ``add()`` writes for the first
+  profile per provider) and a ``get_pinned_active(provider)``
+  accessor; ``set_active`` writes both. ``ProfileRotator.resolve``
+  now surfaces the pinned profile first when it is eligible, falling
+  back to the legacy ``sort_key`` order otherwise so the LRU/type-
+  priority tests still pass and an ineligible pin gracefully steps
+  aside. CLI: ``/login use-profile <name>`` (set), ``/login order
+  [<provider>]`` (show effective order per provider with
+  ``active`` / ``queued`` / ``<reject_reason>`` rows). The
+  ``/login`` Profiles dashboard appends ``(active)`` to the pinned
+  row so the rotator's priority surfaces alongside the eligibility
+  badge. 10 new tests in ``tests/test_login_auth_order.py`` cover
+  the rotator pin/fallback/ineligible-step-aside contracts and the
+  CLI command paths (success / unknown name / missing arg / per-
+  provider narrowing / empty store). Full list ordering (multi-rank
+  per provider) is deferred to a follow-up slice — this PR pins the
+  *first* candidate.
+
 - **PR-Π3 — Proximity embedding conditions on the research goal
   (`state.target_dim`).** Closes the third P0 gap from the
   Co-Scientist ↔ GEODE proximity-agent comparison; completes the
