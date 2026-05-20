@@ -397,7 +397,7 @@ All three harnesses successfully decouple login (/login / auth / models auth) fr
 |---|-----|----------|--------|---------------|
 | L1 | `/login list` shortcut 없음 (bare `/login` 만) | S3 | S | OpenClaw `models auth list` |
 | L2 | `/login refresh` success silent (logged but no console) | S3 | S | Hermes `auth login --refresh` |
-| L3 | OAuth status 가 plan 바인딩 안 보여줌 | S2 | M | OpenClaw `auth show <profile>` shows plan link |
+| L3 | OAuth status plan binding | Done (v0.99.19) | M | `/login` Profiles 섹션의 `plan=<id>` 가 `<id> (<kind>·<tier> · <display_name>)` 로 확장. `_format_plan_binding` helper 가 PlanRegistry.get 결과로 라벨 합성; 사라진 plan 은 `(unbound)` 로 표시. |
 | L4 | `/key` 마이그레이션 UX 부족 (redirect msg 만, 가이드 부재) | S3 | S | Hermes `auth migrate` |
 | L5 | Eligibility verdict legend + `/login health` | Done (v0.99.19) | S | `/login help` 이 reason_code 6개 모두 의미 설명 + `/login health [<profile>]` 가 단일/전체 profile 의 verdict + actionable suggestion 출력. |
 

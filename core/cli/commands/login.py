@@ -16,6 +16,7 @@ _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from simple_term_menu import TerminalMenu
 
@@ -216,6 +217,30 @@ def _login_help() -> None:
     )
 
 
+def _format_plan_binding(registry: Any, plan_id: str) -> str:
+    """Render a profile's plan binding as ``<id> (<kind>·<tier or display>)``.
+
+    L3 — pre-fix the ``Profiles`` table only printed ``plan=<id>``, so a
+    user looking at ``glm:work`` saw ``plan=glm-coding-lite`` without
+    knowing it was a subscription plan vs PAYG, or what tier it belonged
+    to. This helper resolves the binding through ``PlanRegistry.get``
+    and appends ``kind``, ``display_name`` (when meaningful), and
+    ``subscription_tier`` so the row carries the full link.
+    Falls back to the bare ``id`` if the plan vanished and to
+    ``(none)`` when the profile has no ``plan_id`` set.
+    """
+    if not plan_id:
+        return "[muted](none)[/muted]"
+    plan = registry.get(plan_id)
+    if plan is None:
+        return f"{plan_id} [muted](unbound)[/muted]"
+    kind = plan.kind.value
+    tier = getattr(plan, "subscription_tier", None)
+    tier_suffix = f"·{tier}" if tier else ""
+    display = getattr(plan, "display_name", "") or plan_id
+    return f"[bold]{plan_id}[/bold] [muted]({kind}{tier_suffix} · {display})[/muted]"
+
+
 def _login_show_status() -> None:
     """Render the unified plans + profiles + routing dashboard.
 
@@ -293,7 +318,12 @@ def _login_show_status() -> None:
                     CredentialType.TOKEN: "token",
                     CredentialType.API_KEY: "api-key",
                 }.get(p.credential_type, "?")
-                plan_id = p.plan_id or "[muted](none)[/muted]"
+                # L3 — surface Plan binding detail (display_name + kind +
+                # subscription_tier) so an OAuth profile row actually
+                # says *what subscription* it talks to instead of just an
+                # opaque plan id. Falls back to ``(none)`` when the
+                # profile is PAYG / unmanaged.
+                plan_label = _format_plan_binding(registry, p.plan_id)
                 managed = f" · managed:{p.managed_by}" if p.managed_by else ""
                 expiry = ""
                 if p.expires_at:
@@ -313,7 +343,7 @@ def _login_show_status() -> None:
                 _pkg.console.print(
                     f"  {badge_str}  {p.name:<28} "
                     f"[muted]{badge:<7}[/muted] {p.masked_key} "
-                    f"plan={plan_id}{managed}{expiry}"
+                    f"plan={plan_label}{managed}{expiry}"
                 )
     _pkg.console.print()
 
