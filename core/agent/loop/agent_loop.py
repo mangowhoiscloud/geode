@@ -397,6 +397,91 @@ class AgenticLoop:
             max_tokens=settings.cognitive_reflection_max_tokens,
         )
 
+    async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
+        """PR-D Phase 1 — extracted session-start signal block from
+        ``arun``. Owns the USER_INPUT_RECEIVED interceptor, cognitive-
+        state goal init + ContextVar bind, COGNITIVE_PERCEIVE emit,
+        conversation-context append, transcript ``record_session_start``
+        / ``record_user_message``, and the SESSION_STARTED hook.
+
+        Returns ``None`` on the happy path. Returns an
+        :class:`AgenticResult` (with ``termination_reason="input_blocked"``)
+        when the USER_INPUT_RECEIVED interceptor blocks the input —
+        ``arun`` surfaces that result back to the caller verbatim.
+
+        Behaviour preserved exactly from the pre-refactor inline
+        block — this helper is a *structural* extraction so the god-
+        method's per-round body can be reasoned about without
+        intervening session-bootstrap code. Future phases will
+        extract the per-round body itself.
+        """
+        # Hook: USER_INPUT_RECEIVED (interceptor — can block input).
+        # First and only early-exit in this helper; if the input
+        # passes the interceptor we proceed to the cognitive-state
+        # bind + transcript + SESSION_STARTED sequence.
+        if self._hooks:
+            intercept = await self._hooks.trigger_interceptor_async(
+                HookEvent.USER_INPUT_RECEIVED,
+                {"user_input": user_input, "session_id": self._session_id},
+            )
+            if intercept.blocked:
+                return AgenticResult(
+                    text=intercept.reason,
+                    rounds=0,
+                    termination_reason="input_blocked",
+                )
+
+        # PR-2 C-1 + C-6 — set the cognitive-state goal to the user
+        # input of the first arun() call (subsequent calls in the
+        # same session keep the original goal so observations
+        # accumulate against it). Then fire PERCEIVE with the state
+        # snapshot so a downstream viewer can segment the session by
+        # cognitive cycle step.
+        if not self.cognitive_state.goal:
+            self.cognitive_state.goal = user_input
+        # PR-4 C-3 — bind the CognitiveState to the ContextVar so
+        # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
+        # → episodic memory recorder) can read the live state without
+        # being coupled to AgenticLoop directly.
+        #
+        # Lifetime: the binding is asyncio-task-scoped. Each top-level
+        # task gets its own ``contextvars.Context`` copy, so two
+        # concurrent AgenticLoops in different tasks each see their
+        # own bind. Within the same task multiple ``arun`` calls
+        # overwrite idempotently. No explicit reset is needed since
+        # the next ``arun`` overwrites and out-of-loop hook firings
+        # in the same task are not a documented use case.
+        from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
+
+        set_cognitive_state(self.cognitive_state)
+        set_session_id(self._session_id)
+        await self._emit_cognitive(
+            HookEvent.COGNITIVE_PERCEIVE,
+            user_input=user_input,
+        )
+
+        # Add user message to conversation context
+        self.context.add_user_message(user_input)
+
+        # Transcript: session start + user message
+        if self._transcript is not None:
+            self._transcript.record_session_start(model=self.model, provider=self._provider)
+            self._transcript.record_user_message(user_input)
+
+        # Hook: SESSION_START
+        if self._hooks:
+            await self._hooks.trigger_async(
+                HookEvent.SESSION_STARTED,
+                {
+                    "model": self.model,
+                    "provider": self._provider,
+                    "session_id": self._session_id,
+                    "resumed": len(self.context.messages) > 1,
+                },
+            )
+
+        return None
+
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
 
@@ -545,64 +630,15 @@ class AgenticLoop:
                 termination_reason="billing_error",
             )
 
-        # Hook: USER_INPUT_RECEIVED (interceptor — can block input)
-        if self._hooks:
-            intercept = await self._hooks.trigger_interceptor_async(
-                HookEvent.USER_INPUT_RECEIVED,
-                {"user_input": user_input, "session_id": self._session_id},
-            )
-            if intercept.blocked:
-                return AgenticResult(
-                    text=intercept.reason, rounds=0, termination_reason="input_blocked"
-                )
-
-        # PR-2 C-1 + C-6 — set the cognitive-state goal to the user input
-        # of the first arun() call (subsequent calls in the same session
-        # keep the original goal so observations accumulate against it).
-        # Then fire PERCEIVE with the state snapshot so a downstream
-        # viewer can segment the session by cognitive cycle step.
-        if not self.cognitive_state.goal:
-            self.cognitive_state.goal = user_input
-        # PR-4 C-3 — bind the CognitiveState to the ContextVar so
-        # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
-        # → episodic memory recorder) can read the live state without
-        # being coupled to AgenticLoop directly.
-        #
-        # Lifetime: the binding is asyncio-task-scoped. Each top-level
-        # task gets its own ``contextvars.Context`` copy, so two
-        # concurrent AgenticLoops in different tasks each see their
-        # own bind. Within the same task multiple ``arun`` calls
-        # overwrite idempotently. No explicit reset is needed since
-        # the next ``arun`` overwrites and out-of-loop hook firings
-        # in the same task are not a documented use case.
-        from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
-
-        set_cognitive_state(self.cognitive_state)
-        set_session_id(self._session_id)
-        await self._emit_cognitive(
-            HookEvent.COGNITIVE_PERCEIVE,
-            user_input=user_input,
-        )
-
-        # Add user message to conversation context
-        self.context.add_user_message(user_input)
-
-        # Transcript: session start + user message
-        if self._transcript is not None:
-            self._transcript.record_session_start(model=self.model, provider=self._provider)
-            self._transcript.record_user_message(user_input)
-
-        # Hook: SESSION_START
-        if self._hooks:
-            await self._hooks.trigger_async(
-                HookEvent.SESSION_STARTED,
-                {
-                    "model": self.model,
-                    "provider": self._provider,
-                    "session_id": self._session_id,
-                    "resumed": len(self.context.messages) > 1,
-                },
-            )
+        # PR-D Phase 1 — extracted session-start signals (hook
+        # interceptor / cognitive bind / transcript / SESSION_STARTED)
+        # into a single helper. Lets ``arun`` stay focused on the
+        # while-loop body. Behaviour preserved exactly — the helper
+        # returns the first ``AgenticResult`` to surface on a blocked
+        # interceptor (sole early-exit), or ``None`` on the happy path.
+        intercept_result = await self._emit_session_start_signals(user_input)
+        if intercept_result is not None:
+            return intercept_result
 
         messages = self.context.get_messages()
 
