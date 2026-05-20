@@ -233,6 +233,7 @@ def _render(
     roles: list[tuple[str, str, str]] | None = None,
     role_cursor: int = 0,
     role_initials: dict[str, str] | None = None,
+    show_effort: bool = True,
 ) -> int:
     """Render the picker. Returns lines written so the caller can rewind.
 
@@ -305,9 +306,19 @@ def _render(
             )
         lines += 1
 
-    # Effort line for the focused model
+    # Effort line for the focused model. PR-A fix-up #1 — when the
+    # focused role has ``has_effort=False`` (e.g. reflection) we
+    # render an explicit "no effort knob" hint instead of the disc +
+    # ← → adjuster, which the dispatcher would silently ignore.
     out.write("\n")
     lines += 1
+    if not show_effort:
+        out.write("  \033[2m· No effort knob for this role · ←→ disabled\033[0m\n")
+        lines += 1
+        out.write("\n  \033[2mEnter to confirm · Esc to exit\033[0m\n")
+        lines += 2
+        out.flush()
+        return lines
     cur_mid, cur_prov, _cur_label, _cur_cost, _cur_avail, _cur_forced = profiles[cursor]
     levels = supported_efforts(cur_mid, cur_prov)
     current = effort_per_model.get(cur_mid)
@@ -345,6 +356,7 @@ def pick_model_and_effort(
     roles: list[tuple[str, str, str]] | None = None,
     initial_role: str = "primary",
     role_initial_models: dict[str, str] | None = None,
+    role_has_effort: dict[str, bool] | None = None,
 ) -> PickerResult:
     """Run the interactive picker.
 
@@ -406,7 +418,9 @@ def pick_model_and_effort(
         else:
             effort_per_model[mid] = default_effort(mid, prov)
 
+    role_has_effort = dict(role_has_effort or {})
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
+    show_effort = role_has_effort.get(role_names[role_cursor], True)
     line_count = _render(
         profiles,
         cursor,
@@ -415,6 +429,7 @@ def pick_model_and_effort(
         roles=role_tabs or None,
         role_cursor=role_cursor,
         role_initials=role_initial_models,
+        show_effort=show_effort,
     )
     while True:
         try:
@@ -471,6 +486,11 @@ def pick_model_and_effort(
         elif key == _KEY_DOWN:
             cursor = (cursor + 1) % len(profiles)
         elif key in (_KEY_LEFT, _KEY_RIGHT):
+            # PR-A fix-up #1 — block ←→ entirely for roles whose
+            # has_effort=False so the user gets no false signal that
+            # they're tuning anything.
+            if not role_has_effort.get(role_names[role_cursor], True):
+                continue
             mid, prov, *_rest = profiles[cursor]
             levels = supported_efforts(mid, prov)
             if not levels:
@@ -482,6 +502,7 @@ def pick_model_and_effort(
             continue
         _clear_lines(line_count)
         initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
+        show_effort = role_has_effort.get(role_names[role_cursor], True)
         line_count = _render(
             profiles,
             cursor,
@@ -490,4 +511,5 @@ def pick_model_and_effort(
             roles=role_tabs or None,
             role_cursor=role_cursor,
             role_initials=role_initial_models,
+            show_effort=show_effort,
         )

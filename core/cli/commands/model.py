@@ -195,6 +195,7 @@ def _interactive_model_picker() -> None:
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
     current_effort = getattr(settings, "agentic_effort", "high")
     result = pick_model_and_effort(
         profiles,
@@ -203,6 +204,7 @@ def _interactive_model_picker() -> None:
         roles=role_tabs,
         initial_role="primary",
         role_initial_models=role_initial_models,
+        role_has_effort=role_has_effort,
     )
     if result.cancelled:
         # M5 — surface the "login first" path explicitly when the user
@@ -248,6 +250,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
+    role_has_effort = {r.name: r.has_effort for r in AGENT_ROLES}
     current_for_focus = role_initial_models.get(role_def.name) or settings.model
     current_effort = getattr(settings, "agentic_effort", "high")
     result = pick_model_and_effort(
@@ -257,6 +260,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         roles=role_tabs,
         initial_role=role_def.name,
         role_initial_models=role_initial_models,
+        role_has_effort=role_has_effort,
     )
     if result.cancelled:
         _pkg.console.print("  [muted]Cancelled[/muted]")

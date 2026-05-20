@@ -227,3 +227,56 @@ def test_picker_without_roles_runs_in_single_axis_mode() -> None:
     sig = inspect.signature(effort_picker.pick_model_and_effort)
     # Default = None so callers can omit
     assert sig.parameters["roles"].default is None
+
+
+def test_picker_render_accepts_show_effort_flag() -> None:
+    """Codex MCP #1 catch — picker must hide effort controls when the
+    focused role has ``has_effort=False`` so the user can't move ←→
+    expecting a no-op write. Pin the show_effort parameter."""
+    sig = inspect.signature(effort_picker._render)
+    assert "show_effort" in sig.parameters
+    assert sig.parameters["show_effort"].default is True
+
+
+def test_picker_pass_role_has_effort_dict() -> None:
+    """The model.py picker entry must pass ``role_has_effort`` so the
+    picker knows which roles support effort. Without this kwarg,
+    show_effort defaults to True and the bug remains."""
+    sig = inspect.signature(effort_picker.pick_model_and_effort)
+    assert "role_has_effort" in sig.parameters
+
+    from core.cli.commands import model as _model_mod
+
+    src = inspect.getsource(_model_mod._interactive_model_picker)
+    assert "role_has_effort=role_has_effort" in src
+    src_role = inspect.getsource(_model_mod._interactive_model_picker_for_role)
+    assert "role_has_effort=role_has_effort" in src_role
+
+
+def test_picker_render_show_effort_false_emits_no_knob_hint() -> None:
+    """Behavioural check — when show_effort=False the render writes
+    the 'No effort knob for this role' hint so the user gets
+    explicit feedback instead of an absent line."""
+    import io
+    import sys
+
+    profiles = [
+        ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "$", True, None),
+    ]
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
+    try:
+        effort_picker._render(
+            profiles,
+            cursor=0,
+            effort_per_model={"claude-haiku-4-5-20251001": None},
+            initial_model="claude-haiku-4-5-20251001",
+            show_effort=False,
+        )
+    finally:
+        sys.stdout = old_stdout
+    out = buf.getvalue()
+    assert "No effort knob for this role" in out
+    # And it does NOT render the disc + ←→ adjuster
+    assert "← → to adjust" not in out
