@@ -47,6 +47,38 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-COSCI-1 — co-scientist 3-item fix-up.** Wave-parallel
+  audit caught three issues in the seed_generation pipeline:
+  (HIGH) `.claude/agents/seed_ranker.md` diversity-guard sentence
+  referenced ``required_diversity_families = 2`` and ``Voters'
+  `family` must span ≥ 2`` — but the actual manifest field at
+  ``plugins/seed_generation/manifest.py:122`` is
+  ``required_diversity_providers`` (and ``VoterSpec`` carries
+  ``provider``, not ``family``). Contract reworded to match.
+  (MEDIUM) `.claude/agents/seed_evolver.md` "preserve frontmatter
+  unchanged" rule did not explicitly call out the ``tags`` field
+  that PR-OPS-1 added to ``seed_generator.md`` for Petri
+  compatibility — an evolved seed that strips ``tags`` during
+  rewrite would silently lose dim attribution on the Petri side
+  via ``flatten_for_inspect_petri``. Contract amended to mandate
+  ``tags`` preservation alongside ``target_dims``.
+  (MEDIUM) ``plugins/seed_generation/orchestrator.Pipeline.run``
+  walked all 7 phases unconditionally; pre-fix a generator that
+  produced 0 candidates (or a proximity phase that filtered all
+  candidates as duplicates) would silently run critic/pilot/
+  ranker against an empty pool, emit empty ``elo_ratings`` /
+  ``pilot_scores`` / ``survivors``, and finish "successfully"
+  with no signal. Added an empty-``state.candidates`` abort gate
+  after generator + proximity that logs a WARNING, emits an
+  ``empty_candidates_abort`` (error-level) SessionJournal event,
+  and breaks the phase loop so the operator sees the root cause.
+  5 invariant tests pin the ranker naming fix (positive +
+  negative grep), the evolver ``tags`` requirement, the
+  orchestrator abort gate source-grep, and the observability
+  event presence.
+
 ### Added
 
 - **PR-MINIMAL-4 — `subprocess_failed` SessionJournal event.**

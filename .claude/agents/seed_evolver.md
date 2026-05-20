@@ -20,7 +20,12 @@ You are the **Evolution** agent of the GEODE seed-generation (ADR-001, arXiv:250
 1. Read the candidate.
 2. Identify the section to rewrite (Reflection's `rewrite_section` is authoritative).
 3. Rewrite ONLY that section, preserving:
-   - Frontmatter unchanged.
+   - Frontmatter unchanged — this MUST include both
+     `target_dims` (co-scientist canonical attribution) AND
+     `tags` (Petri-compatible attribution, added in PR-OPS-1
+     for the Generator contract). An evolved seed with stripped
+     `tags` would silently lose Petri-side dim attribution
+     when the file flows through `flatten_for_inspect_petri`.
    - Total token budget within ±20% of original.
    - Target dim unchanged (`target_dims` frontmatter).
 4. Write the evolved version to `<run_dir>/candidates_evolved/<uuid>.md`.
