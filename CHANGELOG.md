@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-Π1 — proximity graph emitted into `PipelineState`; Ranker uses it for
+  diverse-bracket Elo seeding.** Closes the first P0 gap from the
+  Co-Scientist ↔ GEODE proximity-agent comparison: pre-Π1 the Proximity
+  phase discarded all pair-wise similarity information after the
+  3-track dedup vote (binary keep/drop only), leaving the Ranker (S6)
+  blind to candidate spatial structure. PR-Π1 adds
+  `PipelineState.proximity_graph: dict[tuple[str, str], float]`
+  populated by `Proximity.execute` with the weighted composite
+  `0.6 × embedding_cosine + 0.4 × lexical_jaccard` (role overlap stays
+  in the dedup vote, not the graph). `tournament.plan_matches` accepts
+  a new `proximity_graph` kwarg — when non-empty it switches the
+  pair-selection policy from random shuffle to **diverse-bracket**
+  (ascending proximity → far pairs scheduled first), realising
+  Co-Scientist §3.3.4 "the Proximity agent assists the Ranking agent
+  in organizing tournament matches". `Ranker.execute` forwards
+  `state.proximity_graph` through. Backwards compatible — empty graph
+  (current production wiring before downstream rollout) falls back to
+  the legacy random shuffle exactly as before. 10 new tests cover the
+  graph emission (full pairs, near-vs-far ordering, embedding-failure
+  graceful fallback), the diverse-bracket policy (lowest-proximity
+  pairs win the budget, missing entries default to 0.0, empty graph
+  falls back to random), and the Ranker integration.
+
 ### Fixed
 
 - **G2.fix — remove autoresearch evidence cache; petri ``.eval`` is the

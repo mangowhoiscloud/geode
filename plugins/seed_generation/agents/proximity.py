@@ -41,13 +41,31 @@ from plugins.seed_generation.orchestrator import PipelineState
 
 log = logging.getLogger(__name__)
 
-__all__ = ["EMBED_SIMILARITY_THRESHOLD", "LEXICAL_JACCARD_THRESHOLD", "Proximity"]
+__all__ = [
+    "EMBED_SIMILARITY_THRESHOLD",
+    "GRAPH_WEIGHT_EMBED",
+    "GRAPH_WEIGHT_LEXICAL",
+    "LEXICAL_JACCARD_THRESHOLD",
+    "Proximity",
+]
 
 
 EMBED_SIMILARITY_THRESHOLD = 0.85
 LEXICAL_JACCARD_THRESHOLD = 0.40
 NGRAM_SIZE = 5
 MAJORITY_VOTE_THRESHOLD = 2  # of 3 tracks
+
+# PR-Π1 — proximity graph composite-score weights. The graph emitted to
+# ``state.proximity_graph`` is the weighted sum of the embedding cosine
+# (already in [0, 1] when both vectors are normalised) and the lexical
+# 5-gram Jaccard (in [0, 1] by construction). Role overlap is a binary
+# signal (used for the dedup vote but not the graph score) so it stays
+# out of the weight. Weights sum to 1.0 so the graph value is itself
+# in [0, 1] — 1.0 = identical, 0.0 = maximally distant. Co-Scientist
+# §3.3.4 "proximity graph for generated hypotheses" downstream-consumed
+# by the Ranker (PR-Π1 §B).
+GRAPH_WEIGHT_EMBED: float = 0.6
+GRAPH_WEIGHT_LEXICAL: float = 0.4
 
 
 class Proximity(BaseSeedAgent):
@@ -97,10 +115,22 @@ class Proximity(BaseSeedAgent):
         # 2. Load optional pool texts.
         pool_texts = self._load_pool_texts(state)
 
-        # 3. Compute per-track duplicate votes.
-        embed_dupes = self._embedding_track(candidate_texts, pool_texts)
-        lexical_dupes = self._lexical_track(candidate_texts, pool_texts)
+        # 3. Compute per-track duplicate votes + pair-wise similarity scores.
+        embed_dupes, embed_scores = self._embedding_track(candidate_texts, pool_texts)
+        lexical_dupes, lexical_scores = self._lexical_track(candidate_texts, pool_texts)
         role_dupes = self._role_track(state)
+
+        # 3b. PR-Π1 — emit the proximity graph into state. Sparse over
+        # candidate-candidate pairs only (pool members aren't tracked
+        # in the graph since the Ranker only schedules matches between
+        # surviving candidates). Pairs with neither track signal default
+        # to 0.0 (maximally distant) when consumers query missing keys.
+        graph: dict[tuple[str, str], float] = {}
+        for pair in set(embed_scores) | set(lexical_scores):
+            graph[pair] = GRAPH_WEIGHT_EMBED * embed_scores.get(
+                pair, 0.0
+            ) + GRAPH_WEIGHT_LEXICAL * lexical_scores.get(pair, 0.0)
+        state.proximity_graph.update(graph)
 
         # 4. Majority vote.
         removed: list[str] = []
@@ -157,8 +187,20 @@ class Proximity(BaseSeedAgent):
         self,
         candidate_texts: dict[str, str],
         pool_texts: list[str],
-    ) -> set[str]:
-        """Mark candidates whose embedding cosine vs sibling/pool ≥ 0.85."""
+    ) -> tuple[set[str], dict[tuple[str, str], float]]:
+        """Mark candidates whose embedding cosine vs sibling/pool ≥ 0.85.
+
+        Returns ``(dupes, scores)`` where ``scores`` is the candidate-
+        candidate cosine map (sorted ``(a, b)`` key, value in ``[0, 1]``).
+        ``scores`` is populated for every candidate-candidate pair the
+        embedding call succeeded for — used by the caller to build
+        :attr:`PipelineState.proximity_graph`. Pool-comparison cosines
+        are not in the graph since the Ranker only ever schedules
+        candidate-vs-candidate matches.
+
+        On embedding-tool failure: both return values are empty (caller
+        falls back to the 2-track lexical + role dedup vote).
+        """
         from core.tools.text_embed import cosine_similarity, embed_texts
 
         cids = list(candidate_texts)
@@ -171,17 +213,17 @@ class Proximity(BaseSeedAgent):
                 "with 2-track fallback)",
                 exc_info=True,
             )
-            return set()
+            return set(), {}
         cand_vectors = vectors[: len(cids)]
         pool_vectors = vectors[len(cids) :]
         dupes: set[str] = set()
+        scores: dict[tuple[str, str], float] = {}
         # Pairwise within candidates.
         for i in range(len(cids)):
             for j in range(i + 1, len(cids)):
-                if (
-                    cosine_similarity(cand_vectors[i], cand_vectors[j])
-                    >= EMBED_SIMILARITY_THRESHOLD
-                ):
+                cos = cosine_similarity(cand_vectors[i], cand_vectors[j])
+                scores[_pair_key(cids[i], cids[j])] = cos
+                if cos >= EMBED_SIMILARITY_THRESHOLD:
                     # Mark the LATER candidate as duplicate (keep first).
                     dupes.add(cids[j])
         # Each candidate vs every pool member.
@@ -190,7 +232,7 @@ class Proximity(BaseSeedAgent):
                 if cosine_similarity(cand_vectors[i], pv) >= EMBED_SIMILARITY_THRESHOLD:
                     dupes.add(ci)
                     break  # one pool match is enough
-        return dupes
+        return dupes, scores
 
     # ────────────────────────────────────────────────────────────────────
     # Track 2 — lexical 5-gram Jaccard
@@ -200,21 +242,31 @@ class Proximity(BaseSeedAgent):
         self,
         candidate_texts: dict[str, str],
         pool_texts: list[str],
-    ) -> set[str]:
+    ) -> tuple[set[str], dict[tuple[str, str], float]]:
+        """Mark candidates with 5-gram Jaccard ≥ 0.40 against sibling/pool.
+
+        Returns ``(dupes, scores)`` — same contract as
+        :meth:`_embedding_track` but for the lexical track. ``scores``
+        covers every candidate-candidate pair (Jaccard never fails like
+        an embedding API does, so the map is dense).
+        """
         cids = list(candidate_texts)
         cand_shingles = {c: _shingles(candidate_texts[c]) for c in cids}
         pool_shingles = [_shingles(t) for t in pool_texts]
         dupes: set[str] = set()
+        scores: dict[tuple[str, str], float] = {}
         for i, ci in enumerate(cids):
             for j in range(i + 1, len(cids)):
-                if _jaccard(cand_shingles[ci], cand_shingles[cids[j]]) >= LEXICAL_JACCARD_THRESHOLD:
+                jac = _jaccard(cand_shingles[ci], cand_shingles[cids[j]])
+                scores[_pair_key(ci, cids[j])] = jac
+                if jac >= LEXICAL_JACCARD_THRESHOLD:
                     dupes.add(cids[j])
         for ci in cids:
             for ps in pool_shingles:
                 if _jaccard(cand_shingles[ci], ps) >= LEXICAL_JACCARD_THRESHOLD:
                     dupes.add(ci)
                     break
-        return dupes
+        return dupes, scores
 
     # ────────────────────────────────────────────────────────────────────
     # Track 3 — semantic role (Reflection's target_dims_actual)
@@ -294,6 +346,16 @@ class Proximity(BaseSeedAgent):
 # ────────────────────────────────────────────────────────────────────────
 # Shared helpers — module-level so tests can import directly
 # ────────────────────────────────────────────────────────────────────────
+
+
+def _pair_key(a: str, b: str) -> tuple[str, str]:
+    """Sort ``(a, b)`` lexicographically — the proximity graph's canonical key.
+
+    The Ranker / Evolution consumers query ``state.proximity_graph`` by
+    ``_pair_key(cid_a, cid_b)``; storing both orderings would double the
+    memory + risk drift, so we standardise on ``a < b``.
+    """
+    return (a, b) if a < b else (b, a)
 
 
 def _shingles(text: str, n: int = NGRAM_SIZE) -> set[str]:
