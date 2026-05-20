@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-S2 — `admire_means` fitness 축 + 3축 다축화 (ADR-012 단기).**
+  S1 의 `ux_means` 옆에 추가되는 **체감 품질** 양의 압력 축.
+  `plugins/seed_generation/agents/ranker.py` 의 ELO + 3-voter
+  cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 —
+  mutation before/after 응답을 동일 panel 이 pairwise 평가, win-rate
+  를 fitness 신호로 변환. **`autoresearch/admire_means.py` 신설** —
+  2-field schema (`pairwise_win_rate` 0.70 + `human_calibration_corr`
+  0.30, 합 1.0) + `compute_admire_aggregate` (None → 0.5 neutral,
+  calibration dampening 으로 Goodhart fooling 방어) +
+  `CALIBRATION_THRESHOLD = 0.7` (corr 미만 시 win_rate 비례 감쇠) +
+  `validate_admire_schema` + `collect_admire_means_from_ranker` (S2b
+  placeholder, 현재 None 반환). **`autoresearch/train.py` 3축 다축화** —
+  `FITNESS_DIM_WEIGHT = 0.40` + `FITNESS_UX_WEIGHT = 0.30` +
+  `FITNESS_ADMIRE_WEIGHT = 0.30` 신설 (합 1.0). `compute_fitness` 에
+  `admire_means` optional 인자 추가. 분기 로직: (a) ux + admire 둘 다
+  None → dim-only fallback (현재 behavior 보존) (b) ux 만 → S1 의
+  0.7/0.3 (backwards compat) (c) admire 만 또는 둘 다 → 3축 재배분
+  0.4/0.3/0.3 (ux 누락 시 neutral 0.5). critical gate strict-reject 는
+  admire 와 무관 보존. **Goodhart 방어**: judge model 주기 교체 + 3-voter
+  cross-provider panel (PR-COSCI-1 의 `required_diversity_providers`
+  규약 재사용) + calibration dampening (corr < threshold 시 win_rate
+  비례 감쇠) + 분기 human L4 batch refresh (S2b). **28 invariant test
+  (S2)** + 27 invariant test (S1 backwards compat) = **55/55 통과**.
+  ranker.py 의 실제 ELO + voter panel 호출 wiring 은 S2b 분리 —
+  schema 안정성 검증 후 진행.
+
 - **PR-S1 — `ux_means` fitness 축 신설 (ADR-012 단기).** ADR-012
   §Decision.2 의 fitness 다축화 첫 단계 — Petri 17-dim 의 음의 압력
   (안 망가지기) 편향 risk 를 차단하기 위한 **양의 압력 축**.
