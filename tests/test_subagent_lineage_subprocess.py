@@ -17,6 +17,7 @@ recorded ``parent_session_key=""`` and had no notion of
 from __future__ import annotations
 
 import inspect
+from typing import Any
 
 from core.agent.cognitive_state_ctx import (
     get_parent_session_id,
@@ -156,11 +157,13 @@ def test_worker_request_lineage_from_dict_missing_keys_default_empty() -> None:
 def test_build_worker_request_threads_parent_session_key_from_kwarg() -> None:
     """SubAgentManager carries ``parent_session_key`` from its
     constructor kwarg into every WorkerRequest it emits."""
+    from typing import cast as _cast
+
     from core.agent.sub_agent import SubAgentManager, SubTask
 
-    runner = object()  # _build_worker_request does not touch the runner
+    runner = _cast(Any, object())  # _build_worker_request does not touch it
     mgr = SubAgentManager(
-        runner,  # type: ignore[arg-type]
+        runner,
         parent_session_key="subject:foo:bar",
         action_handlers={},  # enable subprocess routing path
     )
@@ -172,11 +175,13 @@ def test_build_worker_request_threads_parent_session_key_from_kwarg() -> None:
 def test_build_worker_request_reads_parent_session_id_from_contextvar() -> None:
     """SubAgentManager reads the parent's ``_session_id`` uuid from
     the ContextVar bound by the calling AgenticLoop."""
+    from typing import cast as _cast
+
     from core.agent.sub_agent import SubAgentManager, SubTask
 
-    runner = object()
+    runner = _cast(Any, object())
     mgr = SubAgentManager(
-        runner,  # type: ignore[arg-type]
+        runner,
         action_handlers={},
     )
     task = SubTask(task_id="t1", description="d", task_type="analyze")
@@ -191,11 +196,13 @@ def test_build_worker_request_reads_parent_session_id_from_contextvar() -> None:
 def test_build_worker_request_lineage_defaults_when_no_loop_bound() -> None:
     """Outside an agentic loop the ContextVar is empty, so the
     WorkerRequest records ``parent_session_id=""`` rather than raising."""
+    from typing import cast as _cast
+
     from core.agent.sub_agent import SubAgentManager, SubTask
 
-    runner = object()
+    runner = _cast(Any, object())
     mgr = SubAgentManager(
-        runner,  # type: ignore[arg-type]
+        runner,
         action_handlers={},
     )
     task = SubTask(task_id="t1", description="d", task_type="analyze")
@@ -223,6 +230,7 @@ def test_session_start_signals_bind_parent_session_id() -> None:
     constructor's ``parent_session_id`` into the ContextVar so the
     episodic recorder sees it on TOOL_EXEC_ENDED."""
     import asyncio
+    from typing import cast as _cast
 
     from core.agent.cognitive_state import CognitiveState
     from core.agent.cognitive_state_ctx import get_parent_session_id
@@ -237,17 +245,17 @@ def test_session_start_signals_bind_parent_session_id() -> None:
     async def _fake_emit_cognitive(self: AgenticLoop, _event, **_kwargs) -> None:
         captured["parent_session_id"] = get_parent_session_id()
 
-    loop_obj = AgenticLoop.__new__(AgenticLoop)
-    loop_obj.context = _StubCtx()  # type: ignore[assignment]
-    loop_obj.cognitive_state = CognitiveState()  # type: ignore[assignment]
-    loop_obj._session_id = "s-child-uuid"  # type: ignore[assignment]
-    loop_obj._parent_session_key = "subject:foo:bar"  # type: ignore[assignment]
-    loop_obj._parent_session_id = "s-parent-uuid-bound"  # type: ignore[assignment]
-    loop_obj._transcript = None  # type: ignore[assignment]
-    loop_obj._hooks = None  # type: ignore[assignment]
-    loop_obj.model = "claude-opus-4-7"  # type: ignore[assignment]
-    loop_obj._provider = "anthropic"  # type: ignore[assignment]
-    loop_obj._emit_cognitive = _fake_emit_cognitive.__get__(loop_obj, AgenticLoop)  # type: ignore[method-assign]
+    loop_obj = _cast(Any, AgenticLoop.__new__(AgenticLoop))
+    loop_obj.context = _StubCtx()
+    loop_obj.cognitive_state = CognitiveState()
+    loop_obj._session_id = "s-child-uuid"
+    loop_obj._parent_session_key = "subject:foo:bar"
+    loop_obj._parent_session_id = "s-parent-uuid-bound"
+    loop_obj._transcript = None
+    loop_obj._hooks = None
+    loop_obj.model = "claude-opus-4-7"
+    loop_obj._provider = "anthropic"
+    loop_obj._emit_cognitive = _fake_emit_cognitive.__get__(loop_obj, AgenticLoop)
 
     async def _run() -> None:
         result = await AgenticLoop._emit_session_start_signals(loop_obj, "hello")
