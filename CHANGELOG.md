@@ -49,6 +49,28 @@ functional change.
 
 ### Added
 
+- **PR-S0c — `decomposition` reader 신설 (ADR-012 dead slot 살리기 #3).**
+  PR-S0a/S0b 의 패턴 그대로 차용. **schema** (3 field 모두 optional,
+  string): `system_prompt` (전체 override — prefix/suffix 무시) /
+  `prefix` (default 앞에 추가) / `suffix` (default 뒤에 추가). 3-mode
+  정책으로 `load_prompt` 결과를 변형. **Resolution order**: ①
+  `GEODE_DECOMPOSITION_POLICY_OVERRIDE` (audit, strict) ②
+  `~/.geode/self-improving-loop/decomposition.json` (daily, graceful)
+  ③ `None`. 단일 적용 지점: `core/orchestration/goal_decomposer.py:_llm_decompose`
+  의 `load_prompt("decomposer", "system")` 호출 직후 —
+  `apply_decomposition_policy` 로 system prompt 정규화 후 `call_llm_parsed`
+  에 전달. **회귀 marker**: PR-AUDIT-5SLOT
+  `test_dead_slot_has_no_inference_reader` parametrize 에서
+  `decomposition.json` 제거 + 새 `test_decomposition_slot_is_now_alive_post_s0c`.
+  audit doc Post-S0c update 섹션 + 4/5 ALIVE anchor. ADR-012 Tier 1
+  표 + invariant test ALIVE/DEAD count (`==3/==2` → `==4/==1`) 동기화.
+  `autoresearch/train.py` env wiring 에 `GEODE_DECOMPOSITION_POLICY_OVERRIDE`
+  추가. ROI: `task_success_rate` (S1 의 `ux_means` 한 축) 영향 — 작업
+  분해 품질이 task 완수율로 직결. 18 new invariant + 기존 test 함께
+  통과 (총 91 test 그린). **ADR-012 단기 시퀀스의 S0a/S0b/S0c 완료**
+  → 5축 진화 면적 1축 → 4축 회복. 남은 dead slot 은 `retrieval` (S0d
+  처치 결정 예정 — deprecate or RAG 신설).
+
 - **PR-S0b — `reflection` reader 신설 (ADR-012 dead slot 살리기 #2).**
   PR-S0a (#1407) 의 패턴을 그대로 차용해 두 번째 dead slot
   (`reflection`) 을 살림. **schema** (두 field 모두 optional, string):
