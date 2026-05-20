@@ -41,6 +41,7 @@ import json
 import logging
 import subprocess
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,6 +74,13 @@ class Mutation:
     Schema mirrors the LLM response contract (see :func:`_build_user_prompt`).
     ``target_section`` may be new (insert) or existing (rewrite); the
     runner enforces non-empty strings at apply time.
+
+    PR-5 C-4 (2026-05-21) — added ``mutation_id`` / ``expected_dim`` /
+    ``rollback_condition`` so the runner can pair each apply row with
+    a follow-up attribution row keyed by ``mutation_id``. Existing
+    callers that don't populate the new fields get safe defaults
+    (uuid auto-generated, empty dict, empty string) so the older
+    audit history stays parseable.
     """
 
     target_section: str
@@ -81,6 +89,18 @@ class Mutation:
     target_dim: str = ""
     """The regression dim the mutation is aimed at — informational, may
     be empty when the LLM declines to commit to one."""
+    mutation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    """Stable identifier paired with the attribution row written after
+    the next audit. Auto-generated when the LLM doesn't supply one."""
+    expected_dim: dict[str, float] = field(default_factory=dict)
+    """Per-dim expected delta the LLM commits to (e.g.
+    ``{"safety": +0.3, "helpfulness": -0.05}``). PR-5 attribution
+    computes ``observed - expected`` after the next audit so a wrong-
+    direction mutation can be flagged."""
+    rollback_condition: str = ""
+    """Free-text condition under which the mutation should be reverted
+    (e.g. ``"any dim drops more than 0.5"``). Recorded for auditability;
+    enforcement is a follow-up."""
 
     def to_audit_row(
         self,
@@ -92,11 +112,15 @@ class Mutation:
         """Render the mutation as one audit-log row."""
         return {
             "ts": timestamp if timestamp is not None else time.time(),
+            "kind": "applied",
+            "mutation_id": self.mutation_id,
             "target_section": self.target_section,
             "previous_value": previous_value,
             "new_value": self.new_value,
             "rationale": self.rationale,
             "target_dim": self.target_dim,
+            "expected_dim": dict(self.expected_dim),
+            "rollback_condition": self.rollback_condition,
             "baseline_fitness": baseline_fitness,
         }
 
@@ -221,6 +245,12 @@ _MUTATION_CONTRACT_SUFFIX = (
     "characters.\n"
     "- ``rationale`` must cite the specific regression evidence or "
     "meta-review prior that motivates the change.\n"
+    "- ``expected_dim`` is a small dict mapping dim name → expected delta "
+    "(float in [-1, 1]); commit to which dims should move and by how much "
+    "so PR-5 attribution can compute ``observed - expected`` after the "
+    "next audit.\n"
+    "- ``rollback_condition`` is a one-line predicate describing when this "
+    'mutation should be reverted (e.g. ``"helpfulness drops below 0.4"``).\n'
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -228,7 +258,9 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_section": "<section key>",\n'
     '  "new_value": "<replacement text>",\n'
     '  "rationale": "<= 200 chars, citing the evidence>",\n'
-    '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
+    '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
+    '  "expected_dim": {"<dim>": 0.0, ...},\n'
+    '  "rollback_condition": "<one-line predicate, or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -474,11 +506,42 @@ def parse_mutation(raw: str) -> Mutation:
         raise ValueError("target_dim must be a string")
     if len(new_value) > 600:
         raise ValueError(f"new_value length {len(new_value)} exceeds 600 char cap")
+    # PR-5 C-4 — optional attribution fields. The LLM is *encouraged* to
+    # supply them via the system prompt, but missing fields fall through
+    # to safe defaults (uuid auto-generated, empty expectation dict,
+    # empty rollback condition) so older LLM responses + tests that
+    # don't construct the new schema still parse.
+    expected_raw = payload.get("expected_dim", {})
+    expected_dim: dict[str, float] = {}
+    if isinstance(expected_raw, dict):
+        for k, v in expected_raw.items():
+            # ``bool`` is an ``int`` subclass — exclude it explicitly so
+            # ``{"safety": true}`` doesn't silently become ``1.0`` (Codex
+            # MCP review #1 catch — "float expected delta" must be a
+            # genuine numeric, not a coerced bool).
+            if isinstance(k, str) and isinstance(v, int | float) and not isinstance(v, bool):
+                expected_dim[k] = float(v)
+    rollback_raw = payload.get("rollback_condition", "")
+    rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
+    mutation_id_raw = payload.get("mutation_id")
+    # Mutation has a default_factory; pass only when the LLM supplied one.
+    if isinstance(mutation_id_raw, str) and mutation_id_raw.strip():
+        return Mutation(
+            target_section=target_section.strip(),
+            new_value=new_value,
+            rationale=rationale.strip(),
+            target_dim=target_dim.strip(),
+            mutation_id=mutation_id_raw.strip(),
+            expected_dim=expected_dim,
+            rollback_condition=rollback_condition,
+        )
     return Mutation(
         target_section=target_section.strip(),
         new_value=new_value,
         rationale=rationale.strip(),
         target_dim=target_dim.strip(),
+        expected_dim=expected_dim,
+        rollback_condition=rollback_condition,
     )
 
 

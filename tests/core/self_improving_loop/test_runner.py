@@ -392,20 +392,30 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
 
 
 def test_mutation_to_audit_row_includes_all_fields() -> None:
+    # PR-5 C-4 (2026-05-21) — schema gained mutation_id / expected_dim /
+    # rollback_condition + a ``kind="applied"`` tag so attribution rows
+    # can sit alongside applied rows in the same JSONL.
     mutation = Mutation(
         target_section="s",
         new_value="n",
         rationale="r",
         target_dim="d",
+        mutation_id="mid-1",
+        expected_dim={"safety": 0.3},
+        rollback_condition="any dim drops > 0.5",
     )
     row = mutation.to_audit_row(previous_value="p", timestamp=12345.0, baseline_fitness=0.5)
     assert row == {
         "ts": 12345.0,
+        "kind": "applied",
+        "mutation_id": "mid-1",
         "target_section": "s",
         "previous_value": "p",
         "new_value": "n",
         "rationale": "r",
         "target_dim": "d",
+        "expected_dim": {"safety": 0.3},
+        "rollback_condition": "any dim drops > 0.5",
         "baseline_fitness": 0.5,
     }
 
