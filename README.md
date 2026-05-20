@@ -17,8 +17,6 @@
 </p>
 
 <p align="center">
-  <a href="https://mangowhoiscloud.github.io/geode/portfolio">Portfolio</a>
-  ·
   <a href="https://mangowhoiscloud.github.io/geode/docs">Docs</a>
   ·
   <a href="README.ko.md">한국어</a>
