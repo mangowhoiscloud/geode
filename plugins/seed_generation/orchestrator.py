@@ -286,6 +286,40 @@ class Pipeline:
         started_at = time.time()
         for phase in _PHASE_ORDER:
             self._run_phase(phase)
+            # PR-COSCI-1 (2026-05-21) — abort early when the
+            # candidates pool is empty after a phase that should
+            # have populated or filtered it. Pre-fix the
+            # downstream phases (critic / pilot / ranker) would
+            # silently run with zero candidates and emit empty
+            # ``elo_ratings`` / ``pilot_scores`` / ``survivors``,
+            # making the operator chase a "successful but empty
+            # run" rather than the actual root cause. Phases
+            # AFTER generator must see candidates; ``meta_reviewer``
+            # is the only exception (operates on the run record,
+            # not the candidates pool).
+            if (
+                phase in {"generator", "proximity"}
+                and not self.state.candidates
+            ):
+                log.warning(
+                    "seed-generation aborting: phase %r left state.candidates empty "
+                    "(target_dim=%s, run_id=%s). Downstream phases would emit "
+                    "empty survivors/elo_ratings — abort early so the operator "
+                    "sees the root cause rather than a 'successful but empty' run.",
+                    phase,
+                    self.state.target_dim,
+                    self.state.run_id,
+                )
+                _emit_orchestrator_event(
+                    "empty_candidates_abort",
+                    level="error",
+                    payload={
+                        "after_phase": phase,
+                        "target_dim": self.state.target_dim,
+                        "run_id": self.state.run_id,
+                    },
+                )
+                break
         # P0b — cross-loop handoff runs FIRST so ``state.pool_path_out``
         # is stamped before ``_persist_state`` snapshots state.json.
         # Otherwise the offload would freeze a stale ``null`` for
