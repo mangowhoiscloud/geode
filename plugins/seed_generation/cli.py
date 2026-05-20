@@ -200,6 +200,30 @@ def _resolve_target_dim(
     return picked, snapshot
 
 
+def _load_priors_snapshot(*, err: IO[str]) -> Any:
+    """Load ``latest_meta_review.json`` priors for the next run.
+
+    Returns the :class:`MetaReviewSnapshot` (or ``None`` for bootstrap /
+    unparseable). Best-effort — never raises; the run proceeds without
+    priors when the symlink is missing or the payload has no signal.
+
+    Lazy import keeps the cold start free of baseline_reader machinery
+    when the operator never touches the meta-review wiring.
+    """
+    from plugins.seed_generation.baseline_reader import load_latest_meta_review
+
+    snapshot = load_latest_meta_review()
+    if snapshot is None:
+        return None
+    priors_count = len(snapshot.next_gen_priors)
+    underrep_count = len(snapshot.underrepresented_dims)
+    err.write(
+        f"seed-generation: loaded previous meta-review "
+        f"({priors_count} priors, {underrep_count} underrepresented dims)\n"
+    )
+    return snapshot
+
+
 def run_audit_seeds(
     *,
     target_dim: str | None = None,
@@ -232,6 +256,11 @@ def run_audit_seeds(
     resolved_dim, baseline_snapshot = _resolve_target_dim(target_dim, err=err)
     if resolved_dim is None:
         return 1
+
+    # G4 — best-effort load of the previous run's meta_review.json (priors).
+    # Bootstrap runs (no prior) get None and skip the priors block in
+    # generator / critic prompts.
+    meta_review_snapshot = _load_priors_snapshot(err=err)
 
     from core.observability import SessionJournal, session_journal_scope
 
@@ -307,6 +336,7 @@ def run_audit_seeds(
                 out=out,
                 err=err,
                 baseline_snapshot=baseline_snapshot,
+                meta_review_snapshot=meta_review_snapshot,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -337,6 +367,7 @@ def _dispatch_pipeline(
     out: IO[str],
     err: IO[str],
     baseline_snapshot: Any = None,
+    meta_review_snapshot: Any = None,
 ) -> None:
     """Build orchestrator + run.
 
@@ -370,6 +401,7 @@ def _dispatch_pipeline(
         candidates_requested=candidates_requested,
         run_dir=run_dir,
         baseline_snapshot=baseline_snapshot,
+        meta_review_snapshot=meta_review_snapshot,
     )
     registry = PipelineRegistry()
     # NOTE: real registry population happens in S11-wire / S12 (per

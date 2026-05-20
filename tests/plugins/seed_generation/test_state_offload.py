@@ -356,3 +356,78 @@ def test_pipeline_session_index_swallows_oserror(
     pipeline.run()  # Must NOT raise.
     # State persistence (other paths) still works.
     assert (tmp_path / "state.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# G4 — meta_review persist + latest_meta_review.json symlink (2026-05-20)
+# ---------------------------------------------------------------------------
+
+
+def test_persist_meta_review_writes_standalone_json(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """Pipeline.run() emits ``<run_dir>/meta_review.json`` when state.meta_review is set."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    meta_review_path = run_dir / "meta_review.json"
+    assert meta_review_path.is_file()
+    blob = json.loads(meta_review_path.read_text(encoding="utf-8"))
+    assert blob == state.meta_review
+
+
+def test_persist_meta_review_skipped_when_empty(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """No meta_review → no standalone file (bootstrap / failed meta phase)."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    state.meta_review = {}
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    assert not (run_dir / "meta_review.json").exists()
+
+
+def test_persist_meta_review_updates_latest_symlink(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """latest_meta_review.json symlink points at this run's meta_review.json."""
+    run_dir = tmp_path
+    fake_home = run_dir / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    state = _populated_state(run_dir)
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_dir / "meta_review.json").resolve()
+
+
+def test_persist_meta_review_symlink_moves_forward(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """A second run replaces the latest_meta_review symlink target."""
+    run_root = tmp_path
+    fake_home = run_root / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+
+    run_a = run_root / "runA"
+    run_a.mkdir()
+    state_a = _populated_state(run_a)
+    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+
+    run_b = run_root / "runB"
+    run_b.mkdir()
+    state_b = _populated_state(run_b)
+    state_b.meta_review = {"coverage": {"d2": 1}, "next_gen_priors": []}
+    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+
+    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+    assert latest.is_symlink()
+    assert latest.resolve() == (run_b / "meta_review.json").resolve()

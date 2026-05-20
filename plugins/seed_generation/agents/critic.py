@@ -191,6 +191,7 @@ class Critic(BaseSeedAgent):
                 candidate_path=candidate_path,
                 target_dim=target_dim,
                 baseline_snapshot=state.baseline_snapshot,
+                meta_review_snapshot=state.meta_review_snapshot,
             )
             tasks.append(
                 SubTask(
@@ -214,6 +215,7 @@ class Critic(BaseSeedAgent):
         candidate_path: str,
         target_dim: str,
         baseline_snapshot: Any = None,
+        meta_review_snapshot: Any = None,
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
@@ -226,18 +228,35 @@ class Critic(BaseSeedAgent):
         audit are prepended so the critic can flag candidates that
         miss the actual regression mode (not just any generic dim
         weakness).
+
+        G4 — when ``meta_review_snapshot`` carries priors from the
+        previous run, the underrepresented / overrepresented dim
+        summary + ranked priors are also prepended (above the baseline
+        evidence block) so the critic can flag candidates that retread
+        an overrepresented surface.
         """
-        evidence_block = ""
+        prefix_blocks: list[str] = []
+        if meta_review_snapshot is not None:
+            try:
+                from plugins.seed_generation.baseline_reader import format_priors_block
+
+                priors_block = format_priors_block(meta_review_snapshot, target_dim=target_dim)
+                if priors_block:
+                    prefix_blocks.append(priors_block)
+            except ImportError:  # pragma: no cover — defensive
+                pass
         if baseline_snapshot is not None:
             try:
                 from plugins.seed_generation.baseline_reader import format_evidence_block
 
                 evidence_block = format_evidence_block(baseline_snapshot, target_dim)
+                if evidence_block:
+                    prefix_blocks.append(evidence_block)
             except ImportError:  # pragma: no cover — defensive
-                evidence_block = ""
-        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
+                pass
+        prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
-            f"{evidence_prefix}"
+            f"{prompt_prefix}"
             f"Critique ONE Petri audit seed candidate at path "
             f"{candidate_path!r}. Candidate id: {candidate_id}. "
             f"Intended target dim: {target_dim!r}. "

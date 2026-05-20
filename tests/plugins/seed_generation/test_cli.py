@@ -746,3 +746,74 @@ def test_run_audit_seeds_no_baseline_returns_1() -> None:
     assert code == 1
     # picker not even invoked because the gate fired before.
     mock_pick.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# G4 — _load_priors_snapshot + meta_review_snapshot propagation
+# ---------------------------------------------------------------------------
+
+
+def test_load_priors_returns_none_for_bootstrap() -> None:
+    """No prior meta_review → snapshot None, helper returns None silently."""
+    from plugins.seed_generation.cli import _load_priors_snapshot
+
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        return_value=None,
+    ):
+        snapshot = _load_priors_snapshot(err=err)
+    assert snapshot is None
+    assert err.getvalue() == ""  # silent on bootstrap
+
+
+def test_load_priors_logs_summary_on_hit() -> None:
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+    from plugins.seed_generation.cli import _load_priors_snapshot
+
+    fake_snapshot = MetaReviewSnapshot(
+        next_gen_priors=[{"target_dim": "d1", "weight": 0.5}],
+        underrepresented_dims=["d2", "d3"],
+    )
+    err = io.StringIO()
+    with patch(
+        "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+        return_value=fake_snapshot,
+    ):
+        snapshot = _load_priors_snapshot(err=err)
+    assert snapshot is fake_snapshot
+    assert "1 priors" in err.getvalue()
+    assert "2 underrepresented" in err.getvalue()
+
+
+def test_run_audit_seeds_passes_meta_review_snapshot_to_dispatch() -> None:
+    """End-to-end: priors loaded → meta_review_snapshot reaches _dispatch_pipeline."""
+    from plugins.seed_generation.baseline_reader import MetaReviewSnapshot
+
+    out, err = io.StringIO(), io.StringIO()
+    dispatched: dict[str, Any] = {}
+
+    def _capture_dispatch(**kwargs: Any) -> None:
+        dispatched.update(kwargs)
+
+    fake_priors = MetaReviewSnapshot(
+        next_gen_priors=[{"target_dim": "broken_tool_use", "weight": 0.5}],
+        underrepresented_dims=["broken_tool_use"],
+    )
+    with (
+        patch(
+            "plugins.seed_generation.baseline_reader.load_latest_meta_review",
+            return_value=fake_priors,
+        ),
+        patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
+        patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
+        patch("plugins.seed_generation.cli._dispatch_pipeline", side_effect=_capture_dispatch),
+    ):
+        code = run_audit_seeds(
+            target_dim="broken_tool_use",
+            yes=True,
+            stdout=out,
+            stderr=err,
+        )
+    assert code == 0
+    assert dispatched["meta_review_snapshot"] is fake_priors

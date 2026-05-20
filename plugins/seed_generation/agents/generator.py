@@ -243,9 +243,11 @@ class Generator(BaseSeedAgent):
             else "No existing pool provided; generate from scratch."
         )
         evidence_block = _format_baseline_evidence(state)
-        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
+        priors_block = _format_priors(state)
+        prefix_blocks = [b for b in (priors_block, evidence_block) if b]
+        prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
-            f"{evidence_prefix}"
+            f"{prompt_prefix}"
             f"Generate ONE Petri audit seed targeting dim {state.target_dim!r}. "
             f"Generation tag: {state.gen_tag}. Candidate id: {candidate_id}. "
             f"Write the seed markdown to: {output_path}. "
@@ -275,3 +277,21 @@ def _format_baseline_evidence(state: PipelineState) -> str:
     except ImportError:  # pragma: no cover — defensive
         return ""
     return format_evidence_block(snapshot, state.target_dim)
+
+
+def _format_priors(state: PipelineState) -> str:
+    """Return the G4 previous-meta-review priors block.
+
+    No-op when ``state.meta_review_snapshot`` is None (bootstrap / no
+    prior run). When present, the block summarises the previous run's
+    ``next_gen_priors`` + ``underrepresented_dims`` so the generator
+    attends to gaps the meta-reviewer flagged.
+    """
+    snapshot = getattr(state, "meta_review_snapshot", None)
+    if snapshot is None:
+        return ""
+    try:
+        from plugins.seed_generation.baseline_reader import format_priors_block
+    except ImportError:  # pragma: no cover — defensive
+        return ""
+    return format_priors_block(snapshot, target_dim=state.target_dim)

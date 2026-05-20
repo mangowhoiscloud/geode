@@ -172,6 +172,12 @@ class PipelineState:
     # ``None`` = bootstrap run (no audit baseline yet) — agents fall through
     # to their non-baseline prompts.
     baseline_snapshot: Any = None
+    # G4 — MetaReviewSnapshot loaded from the *previous* seed-generation
+    # run's ``latest_meta_review.json``. Carries ``next_gen_priors`` +
+    # ``underrepresented_dims`` so the current run's generator / critic
+    # can attend to the gaps the prior run's meta-reviewer flagged.
+    # ``None`` = no prior run (bootstrap) — agents skip the priors block.
+    meta_review_snapshot: Any = None
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -280,6 +286,10 @@ class Pipeline:
         # follow-up CLI invocation (S11) can resume the meta-review +
         # survivor pool without re-reading every candidate body.
         self._persist_state()
+        # G4 — persist meta_review.json as a first-class artifact AND
+        # update the cross-run ``latest_meta_review.json`` symlink so the
+        # next seed-generation run reads it as priors.
+        self._persist_meta_review()
         # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
         log.info(
@@ -437,6 +447,66 @@ class Pipeline:
         except OSError as exc:
             log.warning(
                 "seed-generation latest_seed_pool symlink update failed at %s: %s",
+                latest,
+                exc,
+            )
+
+    def _persist_meta_review(self) -> None:
+        """Persist ``state.meta_review`` as a standalone JSON + cross-run symlink.
+
+        G4 closed-loop wiring (2026-05-20 self-improving-loop sprint).
+        Two artifacts:
+
+        1. ``<run_dir>/meta_review.json`` — first-class file for this
+           run's meta-review report. Already serialised inside
+           ``state.json``; the standalone copy lets a downstream tool
+           (or the next CLI invocation's priors reader) load just the
+           meta-review without re-parsing the entire state blob.
+        2. ``~/.geode/self-improving-loop/latest_meta_review.json``
+           symlink — atomic forward pointer to the most-recent run's
+           ``meta_review.json``. The next ``geode audit-seeds generate``
+           reads this symlink to seed the generator / critic prompts
+           with the previous round's ``next_gen_priors`` +
+           ``underrepresented_dims`` hints.
+
+        Skipped (silently) when:
+        - ``state.run_dir`` is None (test fixtures), or
+        - ``state.meta_review`` is empty (bootstrap run / failed meta
+          phase).
+
+        I/O failures log WARNING but never raise — observability must
+        not break the run it observes.
+        """
+        if self.state.run_dir is None:
+            return
+        if not self.state.meta_review:
+            return
+        meta_review_path = self.state.run_dir / "meta_review.json"
+        try:
+            self.state.run_dir.mkdir(parents=True, exist_ok=True)
+            meta_review_path.write_text(
+                json.dumps(self.state.meta_review, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            log.warning(
+                "seed-generation meta_review persist failed at %s: %s",
+                meta_review_path,
+                exc,
+            )
+            return
+        # Symlink update is best-effort — survivor handoff already
+        # writes state.pool_path_out + sessions.jsonl row, so a stale
+        # latest_meta_review never makes the run incorrect.
+        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+        try:
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(meta_review_path.resolve())
+        except OSError as exc:
+            log.warning(
+                "seed-generation latest_meta_review symlink update failed at %s: %s",
                 latest,
                 exc,
             )
