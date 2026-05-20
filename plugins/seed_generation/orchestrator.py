@@ -157,6 +157,15 @@ class PipelineState:
     survivors: list[str] = field(default_factory=list)
     evolved_candidates: list[dict[str, Any]] = field(default_factory=list)
     meta_review: dict[str, Any] = field(default_factory=dict)
+    # PR-Π1 — pair-wise similarity scores emitted by the Proximity phase
+    # (PR-Π1 §A). Key is the sorted ``(cid_a, cid_b)`` tuple (a < b);
+    # value is the composite similarity in ``[0.0, 1.0]`` (1.0 = identical).
+    # The Ranker (S6) consumes this in its ``plan_matches`` call to seed
+    # the Elo bracket toward diverse pairings — Co-Scientist §3.3.4
+    # "showcasing a diverse range of ideas". Sparse — only candidate
+    # pairs the Proximity phase scored are present; missing pairs are
+    # treated as maximally distant (proximity = 0.0).
+    proximity_graph: dict[tuple[str, str], float] = field(default_factory=dict)
     # cost rollup
     usd_spent: float = 0.0
     prompt_tokens: int = 0
