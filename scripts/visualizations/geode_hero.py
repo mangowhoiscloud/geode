@@ -46,6 +46,7 @@ import math
 from manim import (
     DOWN,
     LEFT,
+    NORMAL,
     ORIGIN,
     RIGHT,
     UP,
@@ -164,8 +165,14 @@ T: dict[str, dict[str, str]] = {
         "bit_12": "Next generation: wrapper-prompt mutation",
         "outro": "Self-improving over generations",
         "stage_1": "seed-generation",
+        "stage_1_role": "scenario generation",
         "stage_2": "Petri audit",
+        "stage_2_role": "evaluation",
         "stage_3": "autoresearch",
+        "stage_3_role": "auto-improvement",
+        "arrow_to_audit": "→ evaluate",
+        "arrow_to_promote": "→ auto-improve",
+        "arrow_cycle": "→ generate new scenarios",
         "agent_generator": "generator",
         "agent_proximity": "proximity",
         "agent_critic": "critic",
@@ -223,8 +230,14 @@ T: dict[str, dict[str, str]] = {
         "bit_12": "다음 세대 — wrapper-prompt mutation",
         "outro": "세대를 거듭한 자기 개선",
         "stage_1": "seed-generation",
+        "stage_1_role": "시나리오 생성",
         "stage_2": "Petri audit",
+        "stage_2_role": "평가",
         "stage_3": "autoresearch",
+        "stage_3_role": "자동 개선",
+        "arrow_to_audit": "→ 평가",
+        "arrow_to_promote": "→ 자동 개선",
+        "arrow_cycle": "→ 새 시나리오 생성",
         "agent_generator": "generator",
         "agent_proximity": "proximity",
         "agent_critic": "critic",
@@ -258,10 +271,17 @@ def _t_glossary_terms() -> tuple[tuple[str, str], ...]:
 
 
 def _make_text(text: str, **kw) -> Text:
+    """Construct a Text mobject with consistent font + weight so kerning
+    stays uniform across every label in the video (no Petri-zone visual
+    drift). Pango picks the ``Regular`` face of the requested family
+    when no other weight is in scope; we lock that explicitly via
+    ``weight=NORMAL`` so a stray heavier metric doesn't slip in.
+    """
     font = kw.pop("font", None)
     if font is None:
         font = KOR_FONT if LANG == "ko" else EN_FONT
-    kw["color"] = kw.get("color", COLOR_TEXT)
+    kw.setdefault("color", COLOR_TEXT)
+    kw.setdefault("weight", NORMAL)
     return Text(text, font=font, **kw)
 
 
@@ -441,12 +461,16 @@ class GeodeSelfImprovingHero(Scene):
         (triangle + "HEAD" text) hovers over the active commit.
         """
         dots: dict[str, Circle] = {}
-        labels: dict[str, Text] = {}
+        labels: dict[str, VGroup] = {}
         hashes: dict[str, Text] = {}
         connectors: list[Line] = []
-        positions = (("s1", "stage_1", "a3f"), ("s2", "stage_2", "b7c"), ("s3", "stage_3", "d92"))
+        positions = (
+            ("s1", "stage_1", "stage_1_role", "a3f"),
+            ("s2", "stage_2", "stage_2_role", "b7c"),
+            ("s3", "stage_3", "stage_3_role", "d92"),
+        )
 
-        for i, (key, label_key, commit_hash) in enumerate(positions):
+        for i, (key, label_key, role_key, commit_hash) in enumerate(positions):
             x = -3.5 + i * 3.5
             dot = Circle(
                 radius=0.11,
@@ -457,12 +481,20 @@ class GeodeSelfImprovingHero(Scene):
             hash_text = _make_text(
                 commit_hash, font_size=12, color=COLOR_TEXT_ACCENT
             ).next_to(dot, UP, buff=0.05)
-            label = _make_text(
-                _t(label_key), font_size=14, color=COLOR_TEXT_ACCENT
-            ).next_to(dot, DOWN, buff=0.12)
+            # 2-line label: module name (top) + narrative role (bottom,
+            # smaller + accent). Brings the "scenario → evaluate →
+            # auto-improve" cycle vocabulary into the footer itself.
+            module_text = _make_text(
+                _t(label_key), font_size=13, color=COLOR_TEXT
+            )
+            role_text = _make_text(
+                _t(role_key), font_size=11, color=COLOR_TEXT_ACCENT
+            )
+            label_group = VGroup(module_text, role_text).arrange(DOWN, buff=0.04)
+            label_group.next_to(dot, DOWN, buff=0.12)
             dots[key] = dot
             hashes[key] = hash_text
-            labels[key] = label
+            labels[key] = label_group
 
         # Horizontal connectors between adjacent dots (commit graph edge).
         for left_key, right_key in (("s1", "s2"), ("s2", "s3")):
@@ -685,8 +717,8 @@ class GeodeSelfImprovingHero(Scene):
         )
         # Next-step label above the arrow head.
         arrow_label_s1_to_s2 = _make_text(
-            "→ audit", font_size=12, color=COLOR_TEXT_ACCENT
-        ).move_to(survivors_to_petri.get_center() + UP * 0.2)
+            _t("arrow_to_audit"), font_size=12, color=COLOR_TEXT_ACCENT
+        ).move_to(survivors_to_petri.get_center() + UP * 0.25)
         self.survivors_to_petri = survivors_to_petri
         self.arrow_label_s1_to_s2 = arrow_label_s1_to_s2
 
@@ -801,8 +833,8 @@ class GeodeSelfImprovingHero(Scene):
             head_color=COLOR_WINNER,
         )
         arrow_label_s2_to_s3 = _make_text(
-            "→ select", font_size=12, color=COLOR_TEXT_ACCENT
-        ).move_to(s2_to_s3.get_center() + UP * 0.2)
+            _t("arrow_to_promote"), font_size=12, color=COLOR_TEXT_ACCENT
+        ).move_to(s2_to_s3.get_center() + UP * 0.25)
         self.s2_to_s3 = s2_to_s3
         self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
         self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
@@ -972,9 +1004,12 @@ class GeodeSelfImprovingHero(Scene):
             head_color=COLOR_PROMOTED,
             curve_angle=math.pi / 3,
         )
+        # Position the cycle label well below the dim_extractor boxes
+        # (which sit at y ≈ -0.6 / -1.15) so it never overlaps the
+        # dict-literal text. STAGE 1's leaderboard ends at ~y = -2.85.
         cycle_label = _make_text(
-            "→ next gen", font_size=12, color=COLOR_PROMOTED
-        ).move_to(DOWN * 1.6)
+            _t("arrow_cycle"), font_size=12, color=COLOR_PROMOTED
+        ).move_to(DOWN * 2.45)
         gen_label = _make_text(
             f"{_t('gen_n')} → {_t('gen_n_plus_1')}",
             font_size=18,
@@ -987,12 +1022,14 @@ class GeodeSelfImprovingHero(Scene):
         self.play(Create(cycle_arrow), FadeIn(cycle_label), run_time=0.7)
         self.play(Write(gen_label), run_time=0.5)
 
-        # Git-commit cycle closure — append a fourth commit dot
-        # (next-generation seed-generation) to the footer chain and move
-        # the HEAD pointer onto it. Mirrors `git commit` after a merge.
+        # Git-commit cycle closure — branch upward from the last commit
+        # (d92) so the new ``e15`` node lives at the top-right corner of
+        # the chain rather than falling off the right canvas edge. This
+        # also matches git's natural visual idiom: a new generation
+        # opens a fresh branch off the promoted commit.
         assert self.stage_dots is not None
         s3_dot = self.stage_dots["s3"]
-        new_dot_pos = s3_dot.get_center() + RIGHT * 3.5
+        new_dot_pos = s3_dot.get_center() + UP * 0.85
         new_dot = Circle(
             radius=0.11,
             color=COLOR_PROMOTED,
@@ -1000,14 +1037,14 @@ class GeodeSelfImprovingHero(Scene):
             fill_opacity=1.0,
         ).move_to(new_dot_pos)
         new_hash = _make_text(
-            "e15", font_size=12, color=COLOR_PROMOTED
-        ).next_to(new_dot, UP, buff=0.05)
+            "e15", font_size=11, color=COLOR_PROMOTED
+        ).next_to(new_dot, RIGHT, buff=0.1)
         new_label = _make_text(
-            _t("stage_1"), font_size=14, color=COLOR_PROMOTED
-        ).next_to(new_dot, DOWN, buff=0.12)
+            _t("gen_n_plus_1"), font_size=11, color=COLOR_PROMOTED
+        ).next_to(new_dot, LEFT, buff=0.12)
         new_conn = Line(
-            s3_dot.get_right() + RIGHT * 0.02,
-            new_dot.get_left() + LEFT * 0.02,
+            s3_dot.get_top() + UP * 0.02,
+            new_dot.get_bottom() + DOWN * 0.02,
             color=COLOR_PROMOTED,
             stroke_width=2,
         )
