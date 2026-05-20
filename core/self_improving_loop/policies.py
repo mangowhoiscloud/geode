@@ -91,9 +91,7 @@ def policy_path(kind: str) -> Path:
     try:
         return _KIND_TO_PATH[kind]
     except KeyError as exc:
-        raise ValueError(
-            f"unknown target_kind {kind!r}; expected one of {TARGET_KINDS!r}"
-        ) from exc
+        raise ValueError(f"unknown target_kind {kind!r}; expected one of {TARGET_KINDS!r}") from exc
 
 
 def load_policy(kind: str) -> dict[str, str]:
