@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-T3 — Response style guide JSON mutation surface (ADR-013).** mutator
+  가 4 typed enum field (`tone` ∈ concise/balanced/verbose, `verbosity_level`
+  ∈ low/medium/high, `response_format` ∈ markdown/plain/structured,
+  `code_style` ∈ show-first/explain-first) 을 JSON 으로 mutate. wrapper-
+  sections.json (G5a/G5b) 의 free-form 텍스트 mutation 과 분리 — T3 는
+  **constrained typed 선택지** 라 작은 expressive style space 를 효율적으로
+  탐색 가능. fitness 4축의 `ux_means` (success_rate + revert_ratio) 직접
+  영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/style-guide.json` (in-repo, ratchet-tracked) +
+  `~/.geode/self-improving-loop/style-guide.json` (operator-local) /
+  `GLOBAL_STYLE_GUIDE_PATH` + `OPERATOR_LOCAL_STYLE_GUIDE_PATH`
+  `core/paths.py` 추가 / `core/agent/style_guide_policy.py` reader
+  (`_load_style_guide_override` + `apply_style_guide_policy`, schema
+  `{tone, verbosity_level, response_format, code_style}` enum-typed) /
+  `core/agent/system_prompt.py:build_system_prompt` 가 `static =
+  apply_style_guide_policy(static, _load_style_guide_override())` 로
+  static 영역 (cache-eligible) 에 `<response_style>` 블록 append (정책
+  부재 시 static 그대로 — no behavior change) / `GEODE_STYLE_GUIDE_OVERRIDE`
+  + `GEODE_STYLE_GUIDE_STRICT=1` env pair (`autoresearch/train.py` audit
+  subprocess). `_coerce` 가 unknown field + unknown enum value 둘 다
+  graceful drop — forward-compat + per-axis isolation (한 axis 가 깨져도
+  다른 axes 는 유효). **22 invariant test** — reader graceful/strict 10 +
+  apply 7 케이스 (none / empty / single / all / unknown-enum / empty-base /
+  field order) + wiring + path + env + ALIVE marker. Frontier: OpenAI /
+  Anthropic system prompt guides converge on enum-based response constraints.
+
 - **PR-T2 — Skill catalog JSON mutation surface (ADR-013).** mutator
   가 skill `description` (LLM 라우팅 키) + `user_invocable` (가시성) 을
   per-skill 단위로 JSON 으로 mutate → agent 의 skill 선택 정확도 ↑
