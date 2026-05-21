@@ -155,6 +155,14 @@ OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "agent-co
 # ``exemplars`` slot 의 실제 *적재 메커니즘*.
 GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
 OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "few-shot-pool.jsonl"
+# ADR-012 M4.1 (2026-05-21) — DPO canonical preference-pack JSONL.
+# Consumes ``eval_response_recorded`` events (M4.0) and emits one row
+# per ``(prompt, chosen, rejected)`` tuple. Format-agnostic — M4.2
+# adapts this to per-provider publishers (OpenAI fine-tuning / Bedrock
+# DPO / HuggingFace TRL). Operator-local, NOT git-tracked: preference
+# data may include user-private prompts until an explicit redaction
+# step (M4.3) ships a sanitized copy.
+GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
