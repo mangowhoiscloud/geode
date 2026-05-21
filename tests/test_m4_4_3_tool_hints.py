@@ -185,6 +185,34 @@ def test_find_truncates_long_error_strings() -> None:
     assert len(hints[0].recent_error) <= 80
 
 
+def test_find_error_trim_preserves_first_79_chars() -> None:
+    """Trim shape is exactly first 79 chars + ellipsis (Codex FLAG #3 pin)."""
+    from core.self_improving_loop.tool_hints import find_failing_tools
+
+    error = "abc" * 50  # 150 chars
+    episodes = [_StubEpisode("X", False, error)] * 3
+    hints = find_failing_tools(episodes, top_k=5)
+    assert hints[0].recent_error == error[:79] + "…"
+    assert len(hints[0].recent_error) == 80
+
+
+def test_find_skips_non_bool_success() -> None:
+    """Defensive: episode with non-bool ``success`` field → skipped
+    (Codex FLAG #4 pin). Mirrors the non-str tool_name guard."""
+    from core.self_improving_loop.tool_hints import find_failing_tools
+
+    @dataclass
+    class _BadEpisode:
+        tool_name: str = "WeirdTool"
+        success: object = None  # not a bool
+        error: str | None = "e"
+
+    good = [_StubEpisode("Good", False, "e")] * 3
+    bad = [_BadEpisode()] * 3
+    hints = find_failing_tools(good + bad, top_k=5)
+    assert [h.tool_name for h in hints] == ["Good"]
+
+
 # format_tool_hints_block ---------------------------------------------------
 
 
