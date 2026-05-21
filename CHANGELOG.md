@@ -83,14 +83,17 @@ functional change.
   verdict.lower() in {"reject", "regression"}`** (chosen pile = 양호한
   mutation, rejected pile = critical regression 또는 명시 reject).
   Emit 전체가 try/except 로 감싸져 audit cycle 자체는 절대 break 안 됨.
-  **DPO 파이프라인 deception 해소** — M4.1 build_dpo_pack 의 journal
-  walker 가 드디어 *non-empty* stream 을 읽음 → M4.2 publisher 가
-  실제 TRL / OpenAI / Bedrock 학습 데이터 생성 가능. 같은 commit 두 번
-  audit 시 chosen/rejected pair 자동 형성. **14 invariant test** —
-  chosen pile + rejected pile + no-scope no-op + train.py source 검증 4종
-  (import 존재 / main 내부 / rollback heuristic 정확 / try/except wrap) +
-  rollback heuristic matrix 7 case. **OL-C1.2 (Petri per-turn emit) 는
-  후속** — `.eval` log walker API 가 stable 한 후 진입.
+  Response payload 는 `verdict=<v> fitness=<f> promoted=<p>
+  dim_means_count=<N> bench_means_count=<M>` 5 필드. **DPO 파이프라인
+  deception 해소** — M4.1 build_dpo_pack 의 journal walker 가 드디어
+  *non-empty* stream 을 읽음 → M4.2 publisher 가 실제 TRL / OpenAI /
+  Bedrock 학습 데이터 생성 가능. 같은 commit 두 번 audit 시
+  chosen/rejected pair 자동 형성. **8 def / 14 runtime case invariant
+  test** — chosen pile + rejected pile + no-scope no-op + train.py
+  source 검증 4종 (import 존재 / main 내부 / rollback heuristic 정확 /
+  try/except wrap) + rollback heuristic matrix 1 def × 7 parametrize.
+  **OL-C1.2 (Petri per-turn emit) 는 후속** — `.eval` log walker API
+  가 stable 한 후 진입.
 
 - **PR-Hermes-1d — `session_search` LLM tool (Hermes absorption Phase 1d, minimal).**
   Phase 1c (#1439) 의 FTS5 인덱스 위에 LLM-노출 도구 추가. 신규 모듈
