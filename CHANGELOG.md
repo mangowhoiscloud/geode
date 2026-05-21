@@ -47,6 +47,63 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.28] - 2026-05-22
+
+> Tier 1 (Outer Loop) closure stamp. 2 PRs:
+> OL-A3 (#1451) `geode outer-bundle` viewer + OL-P2 (#1452) Petri quota
+> actual enforcement. Tier 1 *coding* slices are now 100% closed — all
+> remaining items (OL-A2-data / OL-P1) blocked by Anthropic credit;
+> OL-C3.2 ADR-gated (selection policy / cost ceiling / disk cap).
+
+### Added
+
+- **PR-OL-P2 — Petri quota actual enforcement (auto-trip + opt-in call gate).**
+  Pre-OL-P2 의 `SubscriptionQuotaBanner.abort_threshold` 가 *display-only*
+  — `tier()` 가 red 반환 → 시각만 빨개지지만 실제 abort 는 credential
+  resolver 의 strict-mode 만 발화. 자연 usage 가 threshold 를 넘어도
+  enforcement 없음. **신규 2 wiring**: (1) `set_state` 가 새 ratio 가
+  `abort_threshold` 를 cross 하면 자동으로 `aborted=True` + 정보성
+  `abort_reason` 채움. 이미 abort 된 상태면 기존 reason 보존 (credential
+  issue 가 usage issue 보다 우선 신호). `clear_abort` 후 다시 breach 하면
+  재-trip. (2) **`enforce_or_raise()` 신규 메서드** — `QuotaAbortError`
+  (RuntimeError 하위) 를 banner aborted 상태일 때 raise. 운영자가 호출
+  지점에 opt-in 으로 wrapping → fail-fast. **신규 example caller**:
+  `autoresearch/train.py::run_audit(dry_run=False)` 가 `_build_audit_command`
+  직전에 `current_banner() and current_banner().enforce_or_raise()` 호출
+  → quota 가 trip 되면 audit subprocess 자체를 spawn 안 함 (가장 비싼
+  caller 이므로 first wiring). 기존 caller 들은 unchanged (backwards-compat
+  preserved). **신규 export**: `QuotaAbortError` 추가, `__all__` 갱신.
+  **기존 test 1 개 갱신** (`test_render_red_when_at_abort_threshold` 가
+  pre-OL-P2 의 "95% used" 출력 대신 새 "aborted" 출력 검증). **12 신규
+  invariant test** (`tests/test_ol_p2_quota_enforcement.py`) — auto-trip
+  x6 + enforce_or_raise x4 + autoresearch wiring x2. Quality gates clean
+  (ruff + ruff format --check + mypy + 12/12 OL-P2 + 69 regression on
+  adjacent quota tests).
+
+- **PR-OL-A3 — `geode outer-bundle` viewer (Tier 1 closure).**
+  OL-A1.5 (#1446) 가 `auto_trigger_history.jsonl` 을 신규 산출하면서
+  outer-loop 가 만드는 3 streams (`auto_trigger_history.jsonl` /
+  `mutations.jsonl` / `baseline.json`) 가 모두 매겨졌는데, 운영자가 셋
+  중 어느 파일을 grep 해야 할지 모르는 surface gap 잔존 — 본 PR 가
+  closure. **신규 모듈** `core/cli/outer_bundle.py` (~280 LOC) — Typer
+  command `geode outer-bundle [--limit N] [--json]` 가 3 source 를
+  chronologically merge → Rich table (default) 또는 JSONL (--json) 출력.
+  `BundleEvent` dataclass (`ts: float`, `source: str`, `detail: str`)
+  + `load_bundle_events()` public loader + `_parse_iso_or_epoch` (float/
+  ISO-8601 dual-format) + `_tail_jsonl` (graceful partial-line skip).
+  Source discriminator 3-값: `auto_trigger` / `mutation` / `baseline`
+  (마지막은 synthetic 1-row from current promoted baseline.json). 누락
+  파일 → empty bundle (raise 없음). **CLI 등록**: `core/cli/__init__.py`
+  의 `app.command(name="outer-bundle")` 로 entry point. **15 invariant
+  test** (`tests/test_ol_a3_outer_bundle.py`) — BundleEvent round-trip
+  + parse helpers x3 (float / ISO / garbage) + _tail_jsonl x3 (last-N /
+  malformed skip / missing path) + load_bundle_events x5 (auto-trigger
+  only / mutation row / baseline synthetic / 3-source chronological
+  sort / all-missing empty) + CLI x3 (Typer registration / no-data
+  callable / --json output). Quality gates clean (ruff + ruff format
+  --check + mypy + 15/15 pytest). CLI smoke (`geode outer-bundle
+  --help`) renders.
+
 ## [0.99.27] - 2026-05-22
 
 > 51 PRs accumulated since v0.99.26. Headline arcs:
