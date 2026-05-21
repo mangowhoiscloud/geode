@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **PR-M1 — Skill mutation slot 개통 (ADR-012).** T2 (#1418) 의
+  `skill-catalog.json` reader 를 mutator 의 mutation contract 가
+  실제로 mutate 할 수 있도록 dispatcher 확장. `core/self_improving_loop/
+  policies.py:TARGET_KINDS` 가 4 → 5 (prompt / tool_policy /
+  decomposition / reflection + **skill_catalog**). retrieval 은 S0d
+  deprecation 유지 (현 5-slot 에 포함 X). 다른 4 kind 와 달리
+  skill_catalog 의 disk shape 는 **nested**
+  (`{skill_name: {description, user_invocable}}`) — mutation row 의
+  `target_section` 은 string 만 허용하므로 **dotted-key flat ↔ nested**
+  변환 layer 추가:
+  - `_flatten_nested(disk_dict) → flat dotted-key dict`: load_policy
+    가 runner 에 flat shape 반환 (다른 4 kind 와 동일 contract).
+  - `_unflatten_nested(flat) → nested dict`: write_policy 가 T2-reader
+    호환 shape 로 저장. `user_invocable` 등 bool field 는 `"true"`/
+    `"false"` → bool coerce.
+  **End-to-end consistency invariant** — `M1 write_policy` 가 쓴 file
+  을 `T2 reader (_validate_schema + _coerce)` 가 그대로 parse 해야
+  함. 16 invariant test 가 round-trip + BC + dispatcher state 모두
+  검증. tests/test_self_improving_5_slot_reader_audit.py 의 4-slot
+  expected set 도 5-slot 로 갱신 (M1 합류).
+
 - **PR-S5 — 4종 in-context slot 명시적 schema (ADR-012).** GEODE 의
   agent 가 매 turn 마다 system prompt + tool messages 에 주입하는
   dynamic context 의 **4 canonical slot category** 를 explicit JSON

@@ -49,6 +49,7 @@ from core.paths import (
     GLOBAL_DECOMPOSITION_POLICY_PATH,
     GLOBAL_REFLECTION_POLICY_PATH,
     GLOBAL_RETRIEVAL_POLICY_PATH,
+    GLOBAL_SKILL_CATALOG_PATH,
     GLOBAL_TOOL_POLICY_PATH,
     GLOBAL_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
@@ -137,6 +138,13 @@ TARGET_KINDS: tuple[str, ...] = (
     "tool_policy",
     "decomposition",
     "reflection",
+    # ADR-012 M1 (2026-05-21) — skill catalog mutation slot 개통.
+    # T2 (#1418) 이 신설한 ``skill-catalog.json`` reader 를 mutator 가
+    # mutate 할 수 있도록 contract 확장. 다른 4 kind 와 달리 disk
+    # shape 가 nested (``{skill_name: {description, user_invocable}}``)
+    # 이므로 ``load_policy`` / ``write_policy`` 가 dotted-key flat 표현
+    # 으로 변환 (mutation row 의 ``target_section`` 은 string 만 허용).
+    "skill_catalog",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -150,6 +158,7 @@ _KIND_TO_PATH: dict[str, Path] = {
     "decomposition": GLOBAL_DECOMPOSITION_POLICY_PATH,
     "retrieval": GLOBAL_RETRIEVAL_POLICY_PATH,
     "reflection": GLOBAL_REFLECTION_POLICY_PATH,
+    "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
 }
 
 
@@ -186,6 +195,12 @@ def load_policy(kind: str) -> dict[str, str]:
     PR-RATCHET-1 (2026-05-21) — lazy migration from the pre-PR
     ``~/.geode/self-improving-loop/`` location to the in-repo
     ``autoresearch/state/policies/`` location runs before the read.
+
+    M1 (2026-05-21) — ``skill_catalog`` kind 는 disk 상 nested
+    ``{skill_name: {description, user_invocable}}`` 이지만 mutation
+    row 의 contract 가 flat string-keyed 이므로 ``_flatten_nested``
+    가 dotted-key flat 표현 (``"skill-name.description"`` 등) 으로
+    변환해 반환.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
@@ -209,6 +224,9 @@ def load_policy(kind: str) -> dict[str, str]:
             type(payload).__name__,
         )
         return {}
+    if kind == "skill_catalog":
+        # Disk shape = nested dict; runner contract = flat dotted-key.
+        return _flatten_nested(payload)
     # Coerce values to strings — same schema as wrapper-sections so
     # the contract is "string-keyed dict of string sections".
     return {k: str(v) for k, v in payload.items() if isinstance(k, str)}
@@ -225,12 +243,26 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     ``~/.geode/self-improving-loop/`` is captured in the in-repo
     location as the *previous* value of this kind, rather than being
     overwritten on the first mutation after upgrade.
+
+    M1 (2026-05-21) — ``skill_catalog`` kind 는 flat dotted-key flat
+    ``sections`` 을 ``_unflatten_nested`` 가 nested
+    ``{skill_name: {description, user_invocable}}`` shape 로 변환 후
+    저장. ``user_invocable`` field 는 ``"true"``/``"false"`` 문자열을
+    bool 로 coerce — T2 reader 의 schema 요구 충족.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    serializable: dict[str, object]
+    if kind == "skill_catalog":
+        # ``_unflatten_nested`` returns ``dict[str, dict[str, object]]`` —
+        # widen to ``dict[str, object]`` so the type matches the legacy
+        # ``dict[str, str]`` branch under a common annotation.
+        serializable = dict(_unflatten_nested(sections))
+    else:
+        serializable = {k: v for k, v in sections.items() if isinstance(k, str)}
     payload = json.dumps(
-        {k: v for k, v in sections.items() if isinstance(k, str)},
+        serializable,
         ensure_ascii=False,
         indent=2,
         sort_keys=True,
@@ -239,6 +271,62 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     tmp.write_text(payload + "\n", encoding="utf-8")
     tmp.replace(path)
     return path
+
+
+# ---------------------------------------------------------------------------
+# M1 — skill_catalog flat / nested 변환 (ADR-012 M1, 2026-05-21)
+# ---------------------------------------------------------------------------
+
+# T2 의 ``user_invocable`` field 는 bool — mutation row 의 ``new_value`` 가
+# string 이므로 write 시 ``"true"``/``"false"`` → bool 으로 coerce 한다.
+_SKILL_CATALOG_BOOL_FIELDS = frozenset({"user_invocable"})
+
+
+def _flatten_nested(payload: dict[object, object]) -> dict[str, str]:
+    """Convert nested ``{skill: {field: value}}`` → flat ``{"skill.field": "value"}``.
+
+    Used by :func:`load_policy` when ``kind == "skill_catalog"`` so the
+    runner sees the same string-keyed flat shape as the other 4 kinds.
+    Non-dict entries are skipped (forward-compat — future fields could
+    grow nested arbitrarily).
+    """
+    flat: dict[str, str] = {}
+    for skill, entry in payload.items():
+        if not isinstance(skill, str):
+            continue
+        if not isinstance(entry, dict):
+            continue
+        for field, value in entry.items():
+            if not isinstance(field, str):
+                continue
+            flat[f"{skill}.{field}"] = (
+                "true" if value is True else ("false" if value is False else str(value))
+            )
+    return flat
+
+
+def _unflatten_nested(sections: dict[str, str]) -> dict[str, dict[str, object]]:
+    """Convert flat ``{"skill.field": "value"}`` → nested ``{skill: {field: value}}``.
+
+    Used by :func:`write_policy` when ``kind == "skill_catalog"`` so the
+    disk shape stays the T2-reader-compatible nested dict. Keys without
+    a ``.`` are dropped (mutation contract requires dotted form for
+    nested kinds). Known bool fields (``user_invocable``) get coerced
+    so T2's schema validator accepts the value.
+    """
+    nested: dict[str, dict[str, object]] = {}
+    for flat_key, value in sections.items():
+        if not isinstance(flat_key, str) or "." not in flat_key:
+            continue
+        skill, _, field = flat_key.partition(".")
+        if not skill or not field:
+            continue
+        if field in _SKILL_CATALOG_BOOL_FIELDS:
+            coerced: object = value == "true"
+        else:
+            coerced = value
+        nested.setdefault(skill, {})[field] = coerced
+    return nested
 
 
 __all__ = [
