@@ -121,6 +121,13 @@ OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "style-guide.
 # explicit routing — fitness 4축의 ux_means.token_cost_norm 직접 영향.
 GLOBAL_PROVIDER_ROUTING_PATH = GLOBAL_POLICIES_DIR / "provider-routing.json"
 OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "provider-routing.json"
+# ADR-013 T5 (2026-05-21) — Cache breakpoint policy mutation SoT. Mutator
+# picks how many trailing-message cache_control breakpoints to apply
+# (Anthropic의 4-breakpoint cap 중 messages 가 가져갈 수). 0-3 사이.
+# trade-off: ↑ → cache hit ↑ but per-call overhead ↑ (각 breakpoint 가
+# $0.10/MTok 오버헤드). ↓ → cache hit ↓ but per-call cost ↓.
+GLOBAL_CACHE_POLICY_PATH = GLOBAL_POLICIES_DIR / "cache-policy.json"
+OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-policy.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
