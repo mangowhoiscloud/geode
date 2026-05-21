@@ -136,6 +136,13 @@ OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-polic
 # rate ↑.
 GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
 OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.json"
+# ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares
+# the 4 canonical slot categories (exemplars / memory_recall /
+# rubric_excerpts / tool_hints) and their per-slot top-K / rank_by /
+# injection_point. M4.4 후속 PR 이 이 schema 를 실제 inference path 에서
+# 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
+GLOBAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_POLICIES_DIR / "in-context-slots.json"
+OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "in-context-slots.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
