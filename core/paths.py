@@ -128,6 +128,14 @@ OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "provide
 # $0.10/MTok 오버헤드). ↓ → cache hit ↓ but per-call cost ↓.
 GLOBAL_CACHE_POLICY_PATH = GLOBAL_POLICIES_DIR / "cache-policy.json"
 OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-policy.json"
+# ADR-013 T6 (2026-05-21) — Heuristic indicators mutation SoT. Mutator
+# evolves the keyword/phrase list that primes the LLM's task-triage
+# heuristics — complexity / risk / time-pressure markers injected into
+# the system prompt static block. Promptbreeder-식 evolution: agent
+# uses indicators to classify task → better triage → ux_means success
+# rate ↑.
+GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
+OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are

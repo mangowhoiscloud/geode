@@ -23,6 +23,10 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
+from core.agent.heuristics_policy import (
+    _load_heuristics_override,
+    apply_heuristics_policy,
+)
 from core.agent.style_guide_policy import (
     _load_style_guide_override,
     apply_style_guide_policy,
@@ -218,6 +222,10 @@ def build_system_prompt(model: str = "") -> str:
     # <response_style> 블록 append — static 영역 이므로 cache-eligible
     # (정책 변경 시에만 cache miss).
     static = apply_style_guide_policy(static, _load_style_guide_override())
+
+    # ADR-013 T6 (2026-05-21) — heuristic indicators append to static.
+    # Promptbreeder-식 phrase library — agent 가 task-triage 시 매칭.
+    static = apply_heuristics_policy(static, _load_heuristics_override())
 
     # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
     # GEODE behaves as a thin wrapper around the base model).

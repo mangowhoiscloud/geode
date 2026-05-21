@@ -649,6 +649,7 @@ def run_audit(
     from core.paths import (
         GLOBAL_CACHE_POLICY_PATH,
         GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_HEURISTICS_PATH,
         GLOBAL_PROVIDER_ROUTING_PATH,
         GLOBAL_REFLECTION_POLICY_PATH,
         GLOBAL_SKILL_CATALOG_PATH,
@@ -686,6 +687,9 @@ def run_audit(
     if GLOBAL_CACHE_POLICY_PATH.is_file():
         env["GEODE_CACHE_POLICY_OVERRIDE"] = str(GLOBAL_CACHE_POLICY_PATH)
         env["GEODE_CACHE_POLICY_STRICT"] = "1"
+    if GLOBAL_HEURISTICS_PATH.is_file():
+        env["GEODE_HEURISTICS_OVERRIDE"] = str(GLOBAL_HEURISTICS_PATH)
+        env["GEODE_HEURISTICS_STRICT"] = "1"
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
