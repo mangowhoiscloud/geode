@@ -88,11 +88,13 @@ functional change.
   ranking 의 query 로 사용. **Per-file graceful** — frontmatter 누락 /
   unreadable file / 잘못된 YAML 은 silent skip. **No-op fast path**
   유지 — recall dir 미존재 시 `resolve_recall_dir()` 가 None 반환 →
-  reader 가 `[]` 반환 → orchestrator 가 system 미변경. **14 invariant
+  reader 가 `[]` 반환 → orchestrator 가 system 미변경. **16 invariant
   test** — resolve x3 (env override / env-missing-graceful / default-missing) +
   load x3 (no-dir / frontmatter parse / malformed skip) + rank x4 (overlap /
-  recency tiebreak / top_k=0 / top_k cap) + format x2 (empty / type-tag
-  render) + orchestrator 통합 x2 (block prepend / no-dir no-op).
+  recency tiebreak / top_k=0 / top_k cap) + format x4 (empty / type-tag
+  render / **description-only with empty body** / **body-only fallback** —
+  Codex MCP 가 잡은 ternary precedence regression) + orchestrator 통합 x2
+  (block prepend / no-dir no-op).
 
 - **PR-M4.4 — In-context slot wiring orchestrator + provider wiring (ADR-012).**
   M4 DPO pipeline 의 closing piece — S5 (#1425) 의 4-slot schema 와 M3
