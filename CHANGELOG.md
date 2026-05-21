@@ -71,6 +71,35 @@ functional change.
 
 ### Added
 
+- **PR-M4.4 — In-context slot wiring orchestrator + provider wiring (ADR-012).**
+  M4 DPO pipeline 의 closing piece — S5 (#1425) 의 4-slot schema 와 M3
+  (#1426/#1428) 의 few-shot pool substrate 를 실제 inference path 에
+  연결. **신규 모듈** `core/self_improving_loop/in_context_wiring.py`
+  의 `apply_in_context_slots(messages, system="")` orchestrator —
+  S5 `_load_in_context_slots_override()` 가 None 이면 input 객체
+  **identity** 반환 (zero-allocation no-op fast path; default GEODE
+  operator 는 추가 비용 0). slot 활성 시 per-slot try/except 로 각
+  reader/apply 가 독립 graceful. **exemplars 슬롯 = 실제 활성** —
+  M3 의 `_load_few_shot_pool_override` + `apply_few_shot_pool` 을
+  호출, top-K (user, assistant) 쌍을 messages head 에 prepend.
+  fitness_delta desc rank. **memory_recall / rubric_excerpts /
+  tool_hints 3 슬롯 = 명시적 stub** — orchestrator 이 SoT 에서 그
+  존재를 인식하지만 reader 미구현이라 no-op; 후속 PR (M4.4.1+) 이
+  reader 1개씩 추가 시 한 함수 wiring 만으로 활성화. **Provider
+  wiring 2지점** — `core/llm/providers/anthropic.py::ClaudeAgenticAdapter.agentic_call`
+  + `core/llm/providers/openai.py::OpenAIAgenticAdapter.agentic_call`
+  의 api-key/circuit-breaker 체크 직후 orchestrator 호출, 결과로
+  `(messages, system)` 갱신. 두 path 모두 inspect.getsource grep
+  assertion 으로 wiring 보증. **11 invariant test** — no-op
+  identity 3 (no SoT / 빈 dict / reader exception) + exemplars
+  prepend 1 + exemplars 빈 pool no-op + exemplars 실패 graceful +
+  system passthrough + 3 stub slot non-error + provider import
+  smoke 2 + __all__ minimal export. ContextVar / hook 미사용 —
+  매 LLM call 마다 ContextVar lookup 한 번도 없는 stateless
+  orchestrator. Frontier 비교: Claude Code system prompt /
+  Codex CLI `<system-reminder>` 의 4 layer wiring 을 mutator-target
+  화 한 explicit schema.
+
 - **PR-M4.3 — DPO pack PII redaction + stats (ADR-012).**
   M4.1 canonical pack (`~/.geode/self-improving-loop/dpo/pack.jsonl`) 가
   user prompts + assistant responses 를 verbatim 으로 가지므로 M4.2
