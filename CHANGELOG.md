@@ -49,6 +49,24 @@ functional change.
 
 ### Added
 
+- **PR-M4.0 — `eval_response_recorded` SessionJournal event (ADR-012).**
+  DPO pipeline (M4.x) 의 첫 piece — 각 (prompt, response) turn 마다
+  fitness 측정값 + 평가 metadata 를 active SessionJournal 에 emit.
+  M4.1 의 DPO canonical pack JSONL writer 가 이 stream 을 따라가며
+  chosen/rejected pile 라벨링. **신규 모듈**
+  `core/self_improving_loop/eval_journaling.py` — `EVENT_NAME` constant +
+  `emit_eval_response_recorded(prompt, response, fitness_score,
+  axis_scores, source, rollback_flag)` helper. Active scope 외에서
+  graceful no-op (False 반환) — 호출자 try/except 불필요. `rollback_flag`
+  가 True 면 user revert 신호 (M4.1 rejected 라벨). `axis_scores` 가
+  None / 빈 dict 면 payload key omit (forward-compat). int / bool 값은
+  float coerce. 본 PR 은 emit 함수 + payload schema 만; emit 호출 site
+  (Petri audit / live session / replay test 등) 는 후속 PR 에서 wiring.
+  **11 invariant test** — event name + no-scope no-op + minimal payload +
+  full payload + rollback flag (true/default) + axis_scores omit (None /
+  empty) + float coerce 2 + multi-event append. Voyager / STaR 의
+  successful-trajectory journaling 패턴 그대로.
+
 - **PR-M3 — Few-shot exemplar pool 자동 적재 (ADR-012).** S5 (#1425)
   에서 declared 만 됐던 `exemplars` slot 의 실제 *적재 메커니즘* 신설.
   fitness gate 통과한 task-completion candidate 의 `(user_msg,
