@@ -636,6 +636,24 @@ def run_audit(
             "use --dry-run until the runtime hook lands"
         )
 
+    # OL-P2 (2026-05-22) — opt-in quota gate. When the operator-level
+    # quota banner is in aborted state (either via credential-resolver
+    # trip or via auto-trip on `abort_threshold` breach), refuse to
+    # spawn the audit subprocess at all. Cost saving > audit usefulness
+    # when quota is exhausted. Graceful: if no banner is installed
+    # (non-REPL execution, e.g., CI run), the gate is a no-op.
+    try:
+        from core.cli.quota_banner import QuotaAbortError, current_banner
+
+        banner = current_banner()
+        if banner is not None:
+            banner.enforce_or_raise()
+    except QuotaAbortError as exc:
+        raise RuntimeError(f"autoresearch audit aborted: quota gate tripped — {exc}") from exc
+    except ImportError:
+        # core.cli is not present in some packaged distros; silent skip.
+        pass
+
     argv = _build_audit_command()
     env = os.environ.copy()
     env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
