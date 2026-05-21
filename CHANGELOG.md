@@ -71,6 +71,62 @@ functional change.
 
 ### Added
 
+- **PR-OL-A1 — self-improving loop mutator auto-trigger (cron + 4-backend grounded).**
+  Pre-OL-A1 의 `SelfImprovingLoopRunner` 는 *manual* 발화만 지원 (operator
+  가 `geode self-improve mutate` 호출, 혹은 autoresearch sprint runner
+  안에서 sync invoke). OL-A1 가 GEODE daemon scheduler 위에 cron-가능한
+  auto-trigger 를 얹어 operator 부재 상태에서도 wrapper-prompt / 정책
+  진화가 계속되게 함. **신규 모듈** `core/self_improving_loop/auto_trigger.py`
+  — pure 유틸 `auto_trigger_mutator(*, enabled, min_interval_minutes,
+  runner_factory=None, lock_path=None, timestamp_path=None, now=None)`
+  가 6 terminal state 중 하나 (`fired` / `lock_busy` /
+  `interval_blocked` / `runner_error` / `parse_error` / `disabled`) 의
+  `AutoTriggerStatus` dataclass 반환. 발화 중 발생 가능한 모든 예외
+  (factory raise / runner __init__ raise / `run_once()` raise)는 try/except
+  로 잡혀 `runner_error` 또는 `parse_error` state 로 환원 — scheduler loop
+  crash 방지 (Codex MCP fix-up). **2-layer 동시성 가드**: (1) `fcntl.flock`
+  LOCK_EX | LOCK_NB advisory lock (`~/.geode/self-improving-loop/auto_trigger.lock`)
+  — 두 cron-fire 혹은 cron + manual `geode self-improve mutate` race 차단,
+  kernel crash 시 자동 해제. (2) `min_interval_minutes` 타임스탬프 게이트
+  (`auto_trigger_last_run.txt`) — clock-skew / restart re-fire 흡수. 게이트는
+  lock 획득 *전후* 모두 평가 (TOCTOU 방어 — Codex MCP fix-up). **4-backend
+  source 라우팅 검증**: wrapper 가 자체 source vocabulary 를 가지지 않고
+  `SelfImprovingLoopRunner.run_once()` 에 dispatch. Runner 는 PR-PAPERCLIP
+  (#1433) 의 `[self_improving_loop.mutator].source` 4-enum (`auto` /
+  `api_key` / `claude-cli` / `openai-codex`) 을 이미 honour. Dispatch
+  topology 는 *두 경로*: (a) `claude-cli` / `openai-codex` 는
+  `core/self_improving_loop/cli_subprocess.py` 의 subprocess 로 라우팅
+  (Claude Code Max / ChatGPT Plus subscription 청구 — `_ADAPTER_MAP` 우회),
+  (b) `auto` / `api_key` 는 `core/llm/adapters.py::_ADAPTER_MAP` 의 3-provider
+  (`anthropic` / `openai` / `glm`) + `openai-codex` 어댑터 경유. 총 4 backend
+  (Claude Code subscription / Codex CLI subscription / Anthropic PAYG / OpenAI
+  PAYG) 모두 추가 코드 없이 작동.
+  **신규 config** `[self_improving_loop.scheduler]` (`SchedulerConfig` in
+  `core/config/self_improving_loop.py`) — `enabled: bool = False` (opt-in
+  default), `cron: str = "0 */6 * * *"` (5-field cron, every 6 hours),
+  `min_interval_minutes: Annotated[int, Field(ge=1, le=1440)] = 60`.
+  Pydantic v2 `extra="forbid"` — 오타 운영자가 발견 가능. **Wiring** —
+  `core/wiring/automation.py::build_automation` 의 scheduler_service.start
+  직후에 `register_auto_trigger(trigger_manager, enabled, cron,
+  min_interval_minutes)` 호출. Default `enabled=False` 이면 `TriggerConfig`
+  등록 자체를 건너뜀 — 즉 운영자가 `config.toml` 에 `enabled = true` 명시
+  안 하면 *코드 path 가 dormant*. `try/except` 로 wiring 오류가 startup
+  block 하지 않게 가드. **26 invariant test** (`tests/test_ol_a1_auto_trigger.py`)
+  — SchedulerConfig defaults x4 (off / 6-hour cron / 60-min interval +
+  range validation + extra forbid + top-level config carries scheduler) +
+  lock semantics x3 (acquire fd / contention rejection / parent dir
+  creation) + timestamp x3 (missing → None / round-trip / unparseable →
+  None) + min-interval x3 (no prior / recent blocks / old satisfies) +
+  auto_trigger_mutator terminal states x9 (disabled / interval_blocked /
+  lock_busy / fired / runner_error / parse_error / lock-released-after-
+  raise / runner-factory-raises → runner_error / post-lock interval re-check
+  blocks fresh timestamp) + lazy runner import x1 + register_auto_trigger
+  wiring x3 (disabled skip / enabled registers SCHEDULED TriggerConfig /
+  closure forwards into `auto_trigger_mutator`). Quality gates clean (ruff +
+  mypy + 26/26 pytest + 403 adjacent scheduler/wiring/trigger/automation
+  regression). **Telemetry deferred** (`HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*`
+  + outer-loop bundle viewer) — OL-A2/OL-A3 scope.
+
 - **PR-OL-C3 — `memory_recall` MD writer (close M4.4.1 reader's write-side).**
   M4.4.1 (#1436) 가 `core/self_improving_loop/memory_recall.load_memory_entries`
   + `in_context_wiring.py:123` 로 reader 만 출시 → 운영자가 직접 `.md`
