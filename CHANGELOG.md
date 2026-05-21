@@ -68,9 +68,10 @@ functional change.
   comma-separated string 으로 flat ↔ list[str] 변환. `_coerce` 가
   `model` field 명시적 drop (Tier 2 guardrail in code). **18 invariant
   test** — dispatcher 4 + reader 8 + apply 5 + dispatcher round-trip 2
-  + M1 BC 1 + model preservation 1. M1 의 invariant test 도 5→≥5 으로
-  완화 (count grow forward-compat). M2 합류 후 3 stale test set 갱신
-  (test_policy_mutation / test_adr_012_surface_tiers / test_self_improving_5_slot_reader_audit).
+  + M1 BC 1 + model preservation 1. **22 신규 test** (재집계 — Codex
+  MCP correction). M1 의 invariant test 도 5→≥5 으로 완화 (count grow
+  forward-compat). M2 합류 후 **4 stale test set 갱신** (m1 +
+  policy_mutation + adr_012 + 5_slot_audit).
 
 - **PR-M1 — Skill mutation slot 개통 (ADR-012).** T2 (#1418) 의
   `skill-catalog.json` reader 를 mutator 의 mutation contract 가
