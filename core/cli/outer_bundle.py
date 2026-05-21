@@ -189,6 +189,16 @@ def _load_baseline_event() -> BundleEvent | None:
 
     The baseline file only updates on PROMOTE — see PR-G2 #1346 — so
     this is the "last successful audit" marker in the timeline.
+
+    Codex MCP catch (PR-OL-A3 fix-up): real `baseline.json` (written by
+    ``autoresearch/train.py:_persist_baseline``) carries only aggregate
+    payload (``dim_means`` / ``dim_stderr`` + optional ``ux_means`` /
+    ``admire_means`` / ``bench_means``) — NO ``timestamp`` or
+    ``fitness`` scalar fields. We therefore derive the event timestamp
+    from the file's mtime (the moment of promotion) and synthesise the
+    detail from the dim count + a "promoted" marker. Tests can still
+    inject an explicit ``timestamp`` field (which takes precedence) so
+    historical fixture data with the legacy schema keeps working.
     """
     try:
         from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
@@ -204,13 +214,26 @@ def _load_baseline_event() -> BundleEvent | None:
         return None
     if not isinstance(data, dict):
         return None
+    # Prefer explicit timestamp / ts when present (legacy schema / test
+    # fixtures). Otherwise fall back to file mtime — the actual
+    # baseline writer does not emit a timestamp field.
     ts = _parse_iso_or_epoch(data.get("timestamp") or data.get("ts"))
     if ts is None:
-        return None
+        try:
+            ts = baseline_path.stat().st_mtime
+        except OSError:
+            return None
+    # `fitness` scalar may or may not be present; if not, summarise
+    # dim_means count instead so the event still renders informatively.
     fitness = data.get("fitness")
-    fitness_str = f"{fitness:.4f}" if isinstance(fitness, int | float) else "?"
-    reason = data.get("promote_reason") or data.get("reason") or "?"
-    detail = f"promoted fitness={fitness_str} ({reason})"
+    if isinstance(fitness, int | float):
+        body_detail = f"fitness={fitness:.4f}"
+    else:
+        dim_means = data.get("dim_means") or {}
+        dim_count = len(dim_means) if isinstance(dim_means, dict) else 0
+        body_detail = f"dim_means[{dim_count}]"
+    reason = data.get("promote_reason") or data.get("reason") or "promoted"
+    detail = f"baseline {body_detail} ({reason})"
     return BundleEvent(ts=ts, source="baseline", detail=detail)
 
 
@@ -304,8 +327,13 @@ def outer_bundle_command(
     """
     events = load_bundle_events(limit=limit)
     if json_output:
+        # Codex MCP catch (PR-OL-A3 fix-up): `console.print_json` pretty-
+        # prints with indentation across multiple lines per object, which
+        # is NOT JSONL. Downstream tools (jq, awk, line-based readers)
+        # need exactly one JSON object per line. Use json.dumps + plain
+        # print to satisfy the JSONL contract.
         for ev in events:
-            console.print_json(data=ev.as_dict())
+            print(json.dumps(ev.as_dict(), ensure_ascii=False))
         return
     if not events:
         console.print(

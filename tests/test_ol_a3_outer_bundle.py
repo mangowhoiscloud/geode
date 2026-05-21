@@ -251,14 +251,20 @@ def test_outer_bundle_command_callable_with_no_data(
 def test_outer_bundle_command_json_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """--json mode emits one JSON object per event."""
+    """--json mode emits ONE JSON object PER LINE (true JSONL).
+
+    Codex MCP catch (PR-OL-A3 fix-up): `console.print_json` pretty-prints
+    across multiple lines per object, which breaks downstream jq /
+    line-based readers. Pin the JSONL contract here.
+    """
     from core.cli import outer_bundle as ob
 
     hist = tmp_path / "auto_trigger_history.jsonl"
-    hist.write_text(
-        json.dumps({"ts": 1000.0, "state": "fired", "detail": "y"}) + "\n",
-        encoding="utf-8",
-    )
+    rows = [
+        {"ts": 1000.0, "state": "fired", "detail": "alpha"},
+        {"ts": 2000.0, "state": "lock_busy", "detail": ""},
+    ]
+    hist.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
     monkeypatch.setattr(
         "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
@@ -266,7 +272,53 @@ def test_outer_bundle_command_json_output(
     )
     ob.outer_bundle_command(limit=10, json_output=True)
     out = capsys.readouterr().out
-    # Should contain the JSON encoding of the event we wrote
-    assert '"source"' in out
-    assert '"auto_trigger"' in out
-    assert '"fired' in out
+    # Exactly 2 non-empty lines → 2 events
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert len(lines) == 2, f"Expected JSONL output, got {out!r}"
+    # Each line must parse as valid JSON dict
+    parsed = [json.loads(ln) for ln in lines]
+    assert all(isinstance(p, dict) for p in parsed)
+    assert {p["detail"][:5] for p in parsed} == {"fired", "lock_"}
+
+
+def test_baseline_uses_file_mtime_when_no_timestamp_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex MCP catch (PR-OL-A3 fix-up): the real `baseline.json` writer
+    (`autoresearch/train.py:_persist_baseline`) does NOT emit ``timestamp``
+    or ``fitness`` fields — only ``dim_means`` / ``dim_stderr`` /
+    optional axis-specific means. The viewer must fall back to file
+    mtime + synthesise the detail from dim count.
+    """
+    import os
+    import time
+
+    from core.cli import outer_bundle as ob
+
+    mut = tmp_path / "state" / "mutations.jsonl"
+    mut.parent.mkdir(parents=True)
+    baseline = mut.parent / "baseline.json"
+    # Production schema — only aggregate payload, NO timestamp/fitness.
+    baseline.write_text(
+        json.dumps(
+            {
+                "dim_means": {"correctness": 0.85, "safety": 0.92, "depth": 0.78},
+                "dim_stderr": {"correctness": 0.02, "safety": 0.01, "depth": 0.03},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Stamp a known mtime so the test is deterministic.
+    fixed_mtime = time.time() - 3600  # 1 hour ago
+    os.utime(baseline, (fixed_mtime, fixed_mtime))
+    monkeypatch.setattr("core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
+    events = ob.load_bundle_events(limit=10)
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.source == "baseline"
+    # mtime fallback worked
+    assert abs(ev.ts - fixed_mtime) < 1.0
+    # detail uses dim_means count (3 axes) since no fitness scalar
+    assert "dim_means[3]" in ev.detail
+    assert "promoted" in ev.detail
