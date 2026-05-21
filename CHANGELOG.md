@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-M3 — Few-shot exemplar pool 자동 적재 (ADR-012).** S5 (#1425)
+  에서 declared 만 됐던 `exemplars` slot 의 실제 *적재 메커니즘* 신설.
+  fitness gate 통과한 task-completion candidate 의 `(user_msg,
+  assistant_msg, fitness_delta, source)` triple 을 JSONL append-only
+  로 축적; runtime 에 top-K 선별해 messages 앞에 in-context exemplar
+  pair 로 삽입. **5-element 패턴**: SoT
+  `autoresearch/state/policies/few-shot-pool.jsonl` + operator-local /
+  `GLOBAL_FEW_SHOT_POOL_PATH` + `OPERATOR_LOCAL_FEW_SHOT_POOL_PATH`
+  추가 / `core/llm/few_shot_pool.py` reader (`FewShotExemplar` frozen
+  dataclass + `_load_few_shot_pool_override` + `apply_few_shot_pool`) /
+  inference entry 는 M4.4 deferred (현 PR 은 SoT + reader + apply
+  함수만, anthropic.py / openai.py 의 message 조립부 wiring 은
+  후속 PR) / `GEODE_FEW_SHOT_POOL_OVERRIDE` + `_STRICT=1` env pair.
+  **Per-line graceful** — JSONL 한 줄이 broken 이어도 나머지 줄은
+  유지 (`_parse_jsonl` 단위). bool fitness_delta 등 type trap →
+  0.0 coerce. missing/empty user_msg/assistant_msg → skip. T5 (cache
+  policy) 와 호환 — exemplar prefix 가 Anthropic cache breakpoint
+  의 stable prefix 로 자연스럽게 정렬. **23 invariant test** —
+  reader 11 (None / empty / blank / valid / per-line graceful /
+  missing field / non-dict / fitness coerce / bool trap / strict /
+  operator-local) + apply 6 (None / empty / max=0 / single insert /
+  top-K rank / cap / no-mutate) + 3-layer wiring + path const +
+  env wiring + ALIVE marker. Voyager / STaR 의 *successful trajectory
+  pool* 패턴 그대로 — 자기 성공 사례를 다음 cycle 의 in-context
+  exemplar 로 재투입.
+
 - **PR-M2 — Agent contract mutation slot (ADR-012).** AgentDefinition
   의 `role` / `system_prompt` / `tools` 를 mutator 가 evolve. `model`
   field 는 Tier 2 (안전성 invariants root) — 본 surface 에서 명시적

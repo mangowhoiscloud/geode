@@ -149,6 +149,12 @@ OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "in-cont
 # 있어 mutation surface 에서 제외.
 GLOBAL_AGENT_CONTRACTS_PATH = GLOBAL_POLICIES_DIR / "agent-contracts.json"
 OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "agent-contracts.json"
+# ADR-012 M3 (2026-05-21) — Few-shot exemplar pool (JSONL append-only).
+# fitness gate 통과한 task-completion candidate 를 누적; runtime 에
+# top-K 선별해 system prompt 직후 in-context exemplar 로 적재. S5 의
+# ``exemplars`` slot 의 실제 *적재 메커니즘*.
+GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
+OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "few-shot-pool.jsonl"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
