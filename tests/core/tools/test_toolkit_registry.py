@@ -31,9 +31,7 @@ class TestFromDict:
 
     def test_flat_dict_shape_accepted(self) -> None:
         """Tests can pass a flat dict without the ``toolkits`` wrapper."""
-        reg = ToolkitRegistry.from_dict(
-            {"kit_b": {"tools": ["read_document"]}}
-        )
+        reg = ToolkitRegistry.from_dict({"kit_b": {"tools": ["read_document"]}})
         assert reg.has("kit_b")
         assert reg.resolve("kit_b") == frozenset({"read_document"})
 
@@ -56,9 +54,7 @@ class TestComposition:
                 "compound": {"includes": ["common_read", "common_write"]},
             }
         )
-        assert reg.resolve("compound") == frozenset(
-            {"read_document", "grep_files", "write_file"}
-        )
+        assert reg.resolve("compound") == frozenset({"read_document", "grep_files", "write_file"})
 
     def test_nested_includes(self) -> None:
         """Includes chain follows transitively."""
@@ -87,9 +83,7 @@ class TestComposition:
             reg.resolve("self_ref")
 
     def test_missing_include_target(self) -> None:
-        reg = ToolkitRegistry.from_dict(
-            {"a": {"includes": ["nonexistent"]}}
-        )
+        reg = ToolkitRegistry.from_dict({"a": {"includes": ["nonexistent"]}})
         with pytest.raises(ToolkitCompositionError, match="not declared"):
             reg.resolve("a")
 
@@ -116,9 +110,7 @@ class TestFallback:
         assert reg.resolve_with_fallback("typo_name") == frozenset({"read_document"})
 
     def test_none_uses_default(self) -> None:
-        reg = ToolkitRegistry.from_dict(
-            {"_default": {"tools": ["read_document"]}}
-        )
+        reg = ToolkitRegistry.from_dict({"_default": {"tools": ["read_document"]}})
         assert reg.resolve_with_fallback(None) == frozenset({"read_document"})
 
     def test_no_default_returns_empty(self) -> None:
@@ -192,8 +184,14 @@ class TestDefaultRegistry:
         assert "write_file" not in analysis  # read-only
         # general_purpose — broad-surface orchestrator kit.
         general = reg.resolve("general_purpose")
-        assert {"general_web_search", "web_fetch", "memory_save",
-                "note_save", "read_document", "write_file"} <= general
+        assert {
+            "general_web_search",
+            "web_fetch",
+            "memory_save",
+            "note_save",
+            "read_document",
+            "write_file",
+        } <= general
 
     def test_default_agents_resolve_their_toolkits(self) -> None:
         """The bundled ``_DEFAULT_AGENTS`` declare toolkits that resolve."""
