@@ -49,6 +49,33 @@ functional change.
 
 ### Added
 
+- **PR-T6 — Heuristic indicators JSON mutation surface (ADR-013).**
+  mutator 가 keyword/phrase library 를 evolve — task-triage 시 매칭되는
+  complexity / high_risk / time_pressure 표지어. Promptbreeder-식
+  진화: 3 group 의 phrase list 가 JSON 에서 mutate → agent 의 task
+  classification 정확도 → 적절한 strategy 선택 (careful/fast,
+  confirm-first/proceed) → ux_means.success_rate 영향. **T3 (style
+  guide enum)** 과 분리: T3 는 fixed style 선택, T6 는 concrete phrase
+  library. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/heuristics.json` (in-repo) +
+  `~/.geode/self-improving-loop/heuristics.json` (operator-local) /
+  `GLOBAL_HEURISTICS_PATH` + `OPERATOR_LOCAL_HEURISTICS_PATH`
+  `core/paths.py` 추가 / `core/agent/heuristics_policy.py` reader
+  (`_load_heuristics_override` + `apply_heuristics_policy`, schema
+  `{complexity_indicators / high_risk_indicators / time_pressure_indicators:
+  list[str]}`) / `core/agent/system_prompt.py:build_system_prompt` 가
+  T3 style-guide apply 직후 `static = apply_heuristics_policy(static,
+  _load_heuristics_override())` 호출 → static (cache-eligible) 영역에
+  `<heuristic_indicators>` 블록 append (정책 부재 시 static 그대로 —
+  no behavior change) / `GEODE_HEURISTICS_OVERRIDE` +
+  `GEODE_HEURISTICS_STRICT=1` env pair. `_coerce` 가 unknown group +
+  empty string + duplicate phrase 셋 다 graceful drop (forward-compat +
+  order-preserving dedupe). XML escape 로 `<`, `&`, `"` 안전 처리.
+  **25 invariant test** — reader graceful/strict 13 + apply 7 + wiring +
+  path + env + ALIVE marker. Frontier: Promptbreeder (Fernando et al.,
+  2023) curriculum loop. **T6 머지 시 ADR-013 6 surface 시퀀스 종결**
+  (T1 #1416 + T2 #1418 + T3 #1419 + T4 #1420 + T5 #1421 + T6 #1422).
+
 - **PR-T5 — Cache breakpoint policy JSON mutation surface (ADR-013).**
   mutator 가 Anthropic API 의 `apply_messages_cache_control(messages,
   n_breakpoints=N)` 의 N 값을 JSON 으로 mutate (0..3, Anthropic cap 의
