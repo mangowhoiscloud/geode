@@ -63,10 +63,11 @@ functional change.
   메서드 신설 — state="closed" + failures=0 + last_failure=0 force-clear.
   (b) `tests/conftest.py` autouse fixture `_reset_circuit_breakers` 가 매
   test pre/post 6 singleton 모두 reset. ImportError / AttributeError tolerate
-  (vendored SDK 없는 stripped env / 향후 rename 내성). **9 regression test**
-  `tests/test_circuit_breaker_isolation.py` — reset 메서드 존재 + part1/part2
-  cross-test reset 입증 (deliberately OPEN → 다음 test 에 CLOSED) +
-  parametrize 로 6 singleton 각각 test entry 에 CLOSED 검증.
+  (vendored SDK 없는 stripped env / 향후 rename 내성). **4 def / 9 runtime
+  case** `tests/test_circuit_breaker_isolation.py` — reset 메서드 존재 +
+  part1/part2 cross-test reset 입증 (deliberately OPEN → 다음 test 에
+  CLOSED) + parametrize 1 def × 6 singleton = 6 case (각 singleton 의
+  test entry CLOSED 검증).
 
 ### Added
 
