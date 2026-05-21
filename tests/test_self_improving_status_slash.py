@@ -91,22 +91,33 @@ def test_status_action_dispatches_to_status(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # ---------------------------------------------------------------------------
-# Reserved sub-actions — print deferred-to-PR-OPS-2/3 hint
+# ``config`` and ``source`` sub-actions — PR-PAPERCLIP
 # ---------------------------------------------------------------------------
 
 
-def test_config_action_emits_design_doc_hint(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """``run`` was wired in PR-OPS-2a; ``history`` + ``rollback``
-    were wired in PR-MINIMAL-1 (git log/revert delegation). Only
-    ``config`` remains reserved with the design-doc pointer."""
-    from core.cli.commands.self_improving import cmd_self_improving
+def test_config_action_dispatches_to_cmd_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-PAPERCLIP wired ``config`` from the design-doc placeholder to
+    the interactive settings form. The dispatcher must route to
+    ``_cmd_config``; the form itself is exercised in
+    ``tests/test_paperclip_wiring.py``."""
+    from core.cli.commands import self_improving
 
-    cmd_self_improving("config")
-    out = capsys.readouterr().out
-    assert "PR-OPS-2b/3" in out
-    assert "self-improving-loop-ux.md" in out
+    called: list[bool] = []
+    monkeypatch.setattr(self_improving, "_cmd_config", lambda: called.append(True))
+    self_improving.cmd_self_improving("config")
+    assert called == [True]
+
+
+def test_source_action_dispatches_to_cmd_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``source`` (no args) and ``source set <key>=<value>`` both route
+    through ``_cmd_source`` which then sub-dispatches."""
+    from core.cli.commands import self_improving
+
+    called: list[list[str]] = []
+    monkeypatch.setattr(self_improving, "_cmd_source", lambda opts: called.append(opts))
+    self_improving.cmd_self_improving("source")
+    self_improving.cmd_self_improving("source set source=claude-cli")
+    assert called == [[], ["set", "source=claude-cli"]]
 
 
 def test_unknown_action_emits_help_hint(capsys: pytest.CaptureFixture[str]) -> None:
