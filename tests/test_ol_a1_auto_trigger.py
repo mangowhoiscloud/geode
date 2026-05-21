@@ -375,6 +375,76 @@ def test_parse_error_distinct_from_runner_error(
     assert "missing target_section" in status.detail
 
 
+def test_runner_factory_raising_yields_runner_error(
+    trigger_paths: tuple[Path, Path],
+) -> None:
+    """Codex MCP catch (PR-OL-A1 fix-up). If the *factory itself* raises
+    (e.g., lazy import fails, runner __init__ side-effect), the function
+    must still return ``runner_error`` — not propagate. Otherwise the
+    'never raises' contract is violated and the scheduler loop crashes."""
+    from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+
+    lock_path, ts_path = trigger_paths
+
+    def _broken_factory() -> Any:
+        raise RuntimeError("factory exploded")
+
+    status = auto_trigger_mutator(
+        enabled=True,
+        min_interval_minutes=60,
+        runner_factory=_broken_factory,
+        lock_path=lock_path,
+        timestamp_path=ts_path,
+    )
+    assert status.state == "runner_error"
+    assert "factory exploded" in status.detail
+
+
+def test_post_lock_interval_recheck_blocks_when_timestamp_freshens(
+    trigger_paths: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex MCP catch (PR-OL-A1 fix-up). TOCTOU defence: the pre-lock
+    interval check can be passed using a stale timestamp; a second
+    process can then acquire the lock right after the first holder
+    writes a fresh timestamp and releases — both fires land
+    < ``min_interval`` apart.
+
+    The post-lock re-check closes that gap. We simulate the race by
+    patching ``acquire_auto_trigger_lock`` to write a fresh timestamp
+    as a side effect (peer landed a fire just before we acquired).
+    """
+    from core.self_improving_loop.auto_trigger import (
+        auto_trigger_mutator,
+        write_last_run_timestamp,
+    )
+
+    from core.self_improving_loop import auto_trigger as at_module
+
+    lock_path, ts_path = trigger_paths
+    now = 3000000.0
+    runner = _FakeRunner()
+    real_acquire = at_module.acquire_auto_trigger_lock
+
+    def _acquire_with_peer_side_effect(path: Any = None) -> Any:
+        # Peer landed a fresh fire 5 minutes ago BEFORE we acquired.
+        write_last_run_timestamp(now - 5 * 60, ts_path)
+        return real_acquire(path)
+
+    monkeypatch.setattr(at_module, "acquire_auto_trigger_lock", _acquire_with_peer_side_effect)
+    status = auto_trigger_mutator(
+        enabled=True,
+        min_interval_minutes=60,
+        runner_factory=lambda: runner,
+        lock_path=lock_path,
+        timestamp_path=ts_path,
+        now=now,
+    )
+    assert status.state == "interval_blocked"
+    assert "post-lock" in status.detail
+    assert runner.run_once_count == 0
+
+
 def test_lock_released_even_after_runner_raises(
     trigger_paths: tuple[Path, Path],
 ) -> None:

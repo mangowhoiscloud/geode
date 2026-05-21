@@ -233,7 +233,31 @@ def auto_trigger_mutator(
         return AutoTriggerStatus(state="lock_busy")
 
     try:
-        runner = _resolve_runner(runner_factory)
+        # Codex MCP catch (PR-OL-A1 fix-up): re-check interval AFTER
+        # acquiring the lock. Otherwise a second process can pass the
+        # pre-lock interval check using a stale timestamp, then acquire
+        # the lock right after the first holder writes a fresh
+        # timestamp and releases — both fires land < min_interval apart.
+        if not is_min_interval_satisfied(
+            min_interval_minutes=min_interval_minutes,
+            now=now,
+            timestamp_path=timestamp_path,
+        ):
+            return AutoTriggerStatus(
+                state="interval_blocked",
+                detail=f"min_interval_minutes={min_interval_minutes} (post-lock re-check)",
+            )
+
+        # Codex MCP catch (PR-OL-A1 fix-up): runner construction itself
+        # can raise (lazy import failure, runner __init__ side-effects).
+        # Catch here so the "never raises" contract holds — the lock is
+        # still released by the outer finally.
+        try:
+            runner = _resolve_runner(runner_factory)
+        except Exception as exc:
+            log.exception("auto_trigger: runner factory raised")
+            return AutoTriggerStatus(state="runner_error", detail=repr(exc))
+
         try:
             mutation = runner.run_once()
         except ValueError as exc:
