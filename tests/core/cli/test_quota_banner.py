@@ -114,11 +114,18 @@ def test_render_yellow_format() -> None:
 
 
 def test_render_red_when_at_abort_threshold() -> None:
+    """OL-P2 (2026-05-22) — crossing abort_threshold now auto-trips the
+    ``aborted`` flag (set_state has actual enforcement, not just display).
+    The render path therefore takes the aborted branch, not the raw-
+    percentage branch. Pre-OL-P2 this test asserted "95%" in the output;
+    now it asserts the abort message.
+    """
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
     banner.set_state(provider="openai", used_tokens=95, total_tokens=100)
+    assert banner.state.aborted is True  # OL-P2 auto-trip
     out = banner.render()
     assert "red" in out
-    assert "95%" in out
+    assert "aborted" in out
 
 
 def test_render_red_when_aborted_carries_resolution_hint() -> None:

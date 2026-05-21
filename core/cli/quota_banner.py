@@ -43,12 +43,30 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "AbortDialog",
+    "QuotaAbortError",
     "QuotaBannerRefresher",
     "QuotaState",
     "SubscriptionQuotaBanner",
     "current_banner",
     "render_abort_message",
 ]
+
+
+class QuotaAbortError(RuntimeError):
+    """Raised by :meth:`SubscriptionQuotaBanner.enforce_or_raise` when the
+    banner is in aborted state — either from a credential-resolver trip
+    or from automatic threshold breach (OL-P2).
+
+    Callers that opt into the gate (`enforce_or_raise()` before the LLM
+    call) get this exception; the existing call sites that do NOT call
+    it stay backwards-compat. Keeps OL-P2 surface tight — operators flip
+    enforcement on per-caller rather than getting a system-wide hard gate.
+    """
+
+    def __init__(self, *, provider: str, reason: str) -> None:
+        super().__init__(f"quota aborted ({provider}): {reason}")
+        self.provider = provider
+        self.reason = reason
 
 
 Tier = Literal["green", "yellow", "red"]
@@ -121,15 +139,36 @@ class SubscriptionQuotaBanner:
         used_tokens: int,
         total_tokens: int,
     ) -> None:
-        """Replace the quota counters. Does not touch the ``aborted`` flag."""
+        """Replace the quota counters. Auto-trips ``trip_abort`` when the
+        new ratio crosses ``abort_threshold`` (OL-P2 — enforcement
+        wiring). Otherwise preserves the existing ``aborted`` flag.
+        """
         with self._lock:
-            self._state = QuotaState(
+            new_state = QuotaState(
                 provider=provider,
                 used_tokens=used_tokens,
                 total_tokens=total_tokens,
                 aborted=self._state.aborted,
                 abort_reason=self._state.abort_reason,
             )
+            # OL-P2 (2026-05-22) — actual enforcement on threshold
+            # breach. Pre-OL-P2 the banner only DISPLAYED red when usage
+            # crossed abort_threshold; the abort flag itself was only
+            # set by credential-resolver. Now an actual usage breach
+            # auto-trips so downstream call gates (and the bottom_toolbar
+            # render) reflect the policy without operator intervention.
+            ratio = new_state.usage_ratio
+            if not new_state.aborted and ratio >= self._abort:
+                new_state = QuotaState(
+                    provider=provider,
+                    used_tokens=used_tokens,
+                    total_tokens=total_tokens,
+                    aborted=True,
+                    abort_reason=(
+                        f"quota usage {ratio:.1%} >= abort_threshold {self._abort:.1%} ({provider})"
+                    ),
+                )
+            self._state = new_state
 
     def trip_abort(self, *, reason: str) -> None:
         """Lock the banner to red until :meth:`clear_abort` is called.
@@ -158,6 +197,31 @@ class SubscriptionQuotaBanner:
                 total_tokens=self._state.total_tokens,
                 aborted=False,
                 abort_reason="",
+            )
+
+    def enforce_or_raise(self) -> None:
+        """OL-P2 opt-in call gate — raise :class:`QuotaAbortError` when
+        the banner is in aborted state.
+
+        Callers wrap the LLM call entry-point::
+
+            try:
+                current_banner() and current_banner().enforce_or_raise()
+            except QuotaAbortError as exc:
+                # surface the abort to the operator + skip the call
+                ...
+
+        Backwards-compat: existing call sites that do NOT call this gate
+        continue working unchanged. The banner state stays purely
+        visual for them. OL-P2 ships the gate as opt-in so per-channel
+        rollout is possible (e.g., Petri auditor first, daemon REPL
+        last, OAuth flow exempt).
+        """
+        state = self.state
+        if state.aborted:
+            raise QuotaAbortError(
+                provider=state.provider or "unknown",
+                reason=state.abort_reason or "no reason given",
             )
 
     def tier(self) -> Tier:

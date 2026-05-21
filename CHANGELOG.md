@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **PR-OL-P2 — Petri quota actual enforcement (auto-trip + opt-in call gate).**
+  Pre-OL-P2 의 `SubscriptionQuotaBanner.abort_threshold` 가 *display-only*
+  — `tier()` 가 red 반환 → 시각만 빨개지지만 실제 abort 는 credential
+  resolver 의 strict-mode 만 발화. 자연 usage 가 threshold 를 넘어도
+  enforcement 없음. **신규 2 wiring**: (1) `set_state` 가 새 ratio 가
+  `abort_threshold` 를 cross 하면 자동으로 `aborted=True` + 정보성
+  `abort_reason` 채움. 이미 abort 된 상태면 기존 reason 보존 (credential
+  issue 가 usage issue 보다 우선 신호). `clear_abort` 후 다시 breach 하면
+  재-trip. (2) **`enforce_or_raise()` 신규 메서드** — `QuotaAbortError`
+  (RuntimeError 하위) 를 banner aborted 상태일 때 raise. 운영자가 호출
+  지점에 opt-in 으로 wrapping → fail-fast. **신규 example caller**:
+  `autoresearch/train.py::run_audit(dry_run=False)` 가 `_build_audit_command`
+  직전에 `current_banner() and current_banner().enforce_or_raise()` 호출
+  → quota 가 trip 되면 audit subprocess 자체를 spawn 안 함 (가장 비싼
+  caller 이므로 first wiring). 기존 caller 들은 unchanged (backwards-compat
+  preserved). **신규 export**: `QuotaAbortError` 추가, `__all__` 갱신.
+  **기존 test 1 개 갱신** (`test_render_red_when_at_abort_threshold` 가
+  pre-OL-P2 의 "95% used" 출력 대신 새 "aborted" 출력 검증). **12 신규
+  invariant test** (`tests/test_ol_p2_quota_enforcement.py`) — auto-trip
+  x6 + enforce_or_raise x4 + autoresearch wiring x2. Quality gates clean
+  (ruff + ruff format --check + mypy + 12/12 OL-P2 + 69 regression on
+  adjacent quota tests).
+
 - **PR-OL-A3 — `geode outer-bundle` viewer (Tier 1 closure).**
   OL-A1.5 (#1446) 가 `auto_trigger_history.jsonl` 을 신규 산출하면서
   outer-loop 가 만드는 3 streams (`auto_trigger_history.jsonl` /
