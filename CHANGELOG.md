@@ -91,6 +91,8 @@ functional change.
   desc sort / top_k cap / missing means / non-numeric skip / DIM_RUBRIC
   attach) + `format_rubric_block` x2 (empty / render with unknown-dim
   fallback) + orchestrator x2 (prepend / no-baseline no-op).
+  **Remaining stub count after this PR: 1** (tool_hints only,
+  M4.4.3 follow-up).
 
 - **PR-M4.4.1 — `memory_recall` slot reader 활성화 (ADR-012).**
   M4.4 (#1435) 의 4 슬롯 중 첫 번째 stub 을 활성화. 신규 모듈
@@ -129,9 +131,10 @@ functional change.
   M3 의 `_load_few_shot_pool_override` + `apply_few_shot_pool` 을
   호출, top-K (user, assistant) 쌍을 messages head 에 prepend.
   fitness_delta desc rank. **memory_recall / rubric_excerpts /
-  tool_hints 3 슬롯 = 명시적 stub** — orchestrator 이 SoT 에서 그
-  존재를 인식하지만 reader 미구현이라 no-op; 후속 PR (M4.4.1+) 이
-  reader 1개씩 추가 시 한 함수 wiring 만으로 활성화. **Provider
+  tool_hints 3 슬롯 = 명시적 stub at PR-M4.4 merge time** —
+  orchestrator 이 SoT 에서 그 존재를 인식하지만 reader 미구현이라
+  no-op; 후속 PR 가 1개씩 활성화 (PR-M4.4.1 #1436 → memory_recall,
+  PR-M4.4.2 → rubric_excerpts; tool_hints 만 PR-M4.4.3 대기). **Provider
   wiring 2지점** — `core/llm/providers/anthropic.py::ClaudeAgenticAdapter.agentic_call`
   + `core/llm/providers/openai.py::OpenAIAgenticAdapter.agentic_call`
   의 api-key/circuit-breaker 체크 직후 orchestrator 호출, 결과로
