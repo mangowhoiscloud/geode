@@ -104,6 +104,11 @@ OPERATOR_LOCAL_TOOL_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.
 OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
 OPERATOR_LOCAL_REFLECTION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
 OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-descriptions.json"
+# ADR-013 T2 (2026-05-21) — Skill catalog mutation SoT. Mutator overrides
+# per-skill description text + user_invocable visibility for the LLM's
+# skill-routing context block.
+GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
+OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-catalog.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are

@@ -49,6 +49,34 @@ functional change.
 
 ### Added
 
+- **PR-T2 — Skill catalog JSON mutation surface (ADR-013).** mutator
+  가 skill `description` (LLM 라우팅 키) + `user_invocable` (가시성) 을
+  per-skill 단위로 JSON 으로 mutate → agent 의 skill 선택 정확도 ↑
+  (Voyager 식 curriculum 진화 패턴). **5-element 패턴** (S0a 검증):
+  SoT `autoresearch/state/policies/skill-catalog.json` (in-repo,
+  ratchet-tracked) + `~/.geode/self-improving-loop/skill-catalog.json`
+  (operator-local) / `GLOBAL_SKILL_CATALOG_PATH` + `OPERATOR_LOCAL_SKILL_
+  CATALOG_PATH` `core/paths.py` 추가 / `core/skills/skill_catalog_policy.py`
+  reader (`_load_skill_catalog_override` + `apply_skill_catalog_policy`,
+  schema `{skill_name: {description: str, user_invocable: bool}}`) /
+  `core/agent/loop/_context.py` 의 `_build_system_prompt` 가 기존
+  `registry.get_context_block()` 호출 자리에 `apply_skill_catalog_policy(
+  registry, _load_skill_catalog_override())` 호출 (정책 부재 시 base
+  registry 의 `get_context_block` 으로 위임 — no behavior change) /
+  `GEODE_SKILL_CATALOG_OVERRIDE` + `GEODE_SKILL_CATALOG_STRICT=1` env
+  pair (`autoresearch/train.py` 의 audit subprocess 가 SoT 존재 시 둘
+  다 inject — strict-fail 옵트인). `apply_skill_catalog_policy` 는
+  registry 의 base XML 렌더링 로직을 재사용하면서 per-skill override
+  를 우선 적용 — base registry 가 authoritative (unknown skill name 은
+  무시). Forward-compat: entry 내 unknown field 자동 drop. **23
+  invariant test** — reader graceful/strict + apply 9 케이스 (none /
+  empty / desc / visibility true/false / unknown skill / empty registry /
+  max_chars 절단 / XML escape) + context.py wiring source-grep + path
+  상수 2 + env wiring + ALIVE marker. Frontier: Voyager (Wang et al.,
+  2023) curriculum loop — agent 가 자체 skill library + description 을
+  loop 으로 갱신. AlphaEvolve-식 코드 mutation 배제 (skill body=SKILL.md
+  는 Tier 2, 본 surface 미접근).
+
 - **PR-BACKFILL-SOT — Operator-local SoT layer + env-as-SoT for 4 mutation
   surface readers (post-PR-T1 #1416 fix).** PR #1416 의 Codex MCP FAIL #5
   (CHANGELOG/PR-body parity 위반 — `~/.geode/self-improving-loop/...`

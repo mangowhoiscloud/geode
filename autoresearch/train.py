@@ -649,6 +649,7 @@ def run_audit(
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_SKILL_CATALOG_PATH,
         GLOBAL_TOOL_DESCRIPTIONS_PATH,
         GLOBAL_TOOL_POLICY_PATH,
     )
@@ -670,6 +671,9 @@ def run_audit(
     if GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
         env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
         env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+    if GLOBAL_SKILL_CATALOG_PATH.is_file():
+        env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
+        env["GEODE_SKILL_CATALOG_STRICT"] = "1"
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
