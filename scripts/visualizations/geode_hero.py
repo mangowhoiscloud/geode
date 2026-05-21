@@ -50,6 +50,7 @@ from manim import (
     ORIGIN,
     RIGHT,
     UP,
+    AnimationGroup,
     ArcBetweenPoints,
     Circle,
     Create,
@@ -208,7 +209,10 @@ T: dict[str, dict[str, str]] = {
         "scientist_label": "Engineer",
         "survivors_label": "Survivors",
         "fitness_label": "fitness",
-        "generations_label": "generation",
+        # Use the plural form so Helvetica Neue's Pango pipeline doesn't
+        # over-kern between the leading 'g' and 'e' (defect #6 in the
+        # 2026-05-21 noise audit: "g eneration" drift).
+        "generations_label": "generations",
         "promote": "PROMOTE",
         "discard": "DISCARD",
         "baseline_json": "baseline.json",
@@ -379,7 +383,7 @@ def _dashed_arrow_with_head(
     *,
     color: str = COLOR_ARROW,
     head_color: str | None = None,
-    head_size: float = 0.24,
+    head_size: float = 0.32,
     curve_angle: float = 0.0,
     stroke_width: float = 2.5,
     dash_length: float = 0.14,
@@ -643,8 +647,12 @@ class GeodeSelfImprovingHero(Scene):
             fill_opacity=0.0,
         ).move_to(RIGHT * STAGE_X["s1"] + UP * 0.4)
 
+        # Drop the leading "GEODE " — Helvetica Neue's Pango pipeline
+        # inserted a 0.06-unit space between "GE" and "ODE" on macOS
+        # (defect #1 in the 2026-05-21 noise audit: "GE ODE" drift).
+        # The title bar + footer chain still carry the GEODE wordmark.
         outer_label = _make_text(
-            "GEODE " + _t("stage_1"), font_size=15, color=COLOR_TEXT_ACCENT
+            _t("stage_1"), font_size=15, color=COLOR_TEXT_ACCENT
         ).next_to(outer_box, UP, buff=0.1)
 
         agent_keys = (
@@ -768,10 +776,12 @@ class GeodeSelfImprovingHero(Scene):
             petri_box.get_left() + LEFT * 0.1,
             head_color=COLOR_PETRI,
         )
-        # Next-step label above the arrow head.
+        # Next-step label above the arrow, biased toward the Petri end so
+        # it clears the evolver box at the STAGE 1 right edge (defect #3
+        # in the 2026-05-21 noise audit: label touched evolver box).
         arrow_label_s1_to_s2 = _make_text(
             _t("arrow_to_audit"), font_size=12, color=COLOR_TEXT_ACCENT
-        ).move_to(survivors_to_petri.get_center() + UP * 0.25)
+        ).move_to(survivors_to_petri.get_center() + RIGHT * 0.55 + UP * 0.22)
         self.survivors_to_petri = survivors_to_petri
         self.arrow_label_s1_to_s2 = arrow_label_s1_to_s2
 
@@ -885,9 +895,14 @@ class GeodeSelfImprovingHero(Scene):
             RIGHT * (STAGE_X["s3"] - 1.6) + UP * (CONTENT_TOP - 1.2),
             head_color=COLOR_WINNER,
         )
+        # The s2→s3 arrow is almost vertical (slope ≈ 2), so a simple
+        # UP offset put the label centered on the dashed line itself —
+        # the line cut "auto-i[mprove]" in half (defect #2 in the
+        # 2026-05-21 noise audit). Push the label to the LEFT of the
+        # arrow center where it has the canvas to itself.
         arrow_label_s2_to_s3 = _make_text(
             _t("arrow_to_promote"), font_size=12, color=COLOR_TEXT_ACCENT
-        ).move_to(s2_to_s3.get_center() + UP * 0.25)
+        ).move_to(s2_to_s3.get_center() + LEFT * 0.72 + UP * 0.05)
         self.s2_to_s3 = s2_to_s3
         self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
         self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
@@ -1203,11 +1218,15 @@ class GeodeSelfImprovingHero(Scene):
             include_numbers=False,
             rotation=90 * 0.01745329,
         ).shift(LEFT * 4.0 + UP * 0.5)
+        # Font 16 → 20 — at 16 the Pango pipeline was still inserting
+        # spurious gaps between certain Helvetica Neue glyph pairs
+        # ("g eneratio ns"); the larger size makes those kerning quirks
+        # imperceptible (defect #6 second pass).
         x_label = _make_text(
-            _t("generations_label"), font_size=16, color=COLOR_TEXT_ACCENT
+            _t("generations_label"), font_size=20, color=COLOR_TEXT_ACCENT
         ).next_to(x_axis, DOWN, buff=0.3)
         y_label = _make_text(
-            _t("fitness_label"), font_size=16, color=COLOR_TEXT_ACCENT
+            _t("fitness_label"), font_size=20, color=COLOR_TEXT_ACCENT
         ).next_to(y_axis, LEFT, buff=0.25)
         self.play(
             Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.7
@@ -1234,17 +1253,22 @@ class GeodeSelfImprovingHero(Scene):
                 connectors.add(Line(prev_pt, pt, color=COLOR_PROMOTED, stroke_width=2))
             prev_pt = pt
 
-        self.play(
-            LaggedStart(
-                *[
-                    LaggedStart(FadeIn(dot), FadeIn(commit), lag_ratio=0.0)
-                    for dot, commit in zip(dots, commits)
-                ],
-                lag_ratio=0.18,
-            ),
-            run_time=2.5,
-        )
-        self.play(Create(connectors), run_time=0.6)
+        # Interleave dot fade-in and connector creation so the trend
+        # line tracks each new generation as it lands — instead of all
+        # dots appearing first and the line filling in afterward (which
+        # left the last dot visually disconnected during the trailing
+        # frames, defect #5 in the 2026-05-21 noise audit).
+        steps: list = []
+        for i, (dot, commit) in enumerate(zip(dots, commits)):
+            if i == 0:
+                steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit)))
+            else:
+                steps.append(
+                    AnimationGroup(
+                        FadeIn(dot), FadeIn(commit), Create(connectors[i - 1])
+                    )
+                )
+        self.play(LaggedStart(*steps, lag_ratio=0.18), run_time=3.0)
         self.wait(2.0)
 
         # Stash for the glossary transition.
@@ -1305,19 +1329,23 @@ class GeodeSelfImprovingHero(Scene):
         def _tier_card(
             label_key: str, dims: tuple[str, ...], fill: str
         ) -> VGroup:
-            header = _make_text(_t(label_key), font_size=14, color=COLOR_TEXT)
+            # Font 9 → 11 (header 14 → 16). dim names like
+            # "cooperation_with_harmful_sysprompt" need readable size
+            # (defect #7 in the 2026-05-21 noise audit).
+            header = _make_text(_t(label_key), font_size=16, color=COLOR_TEXT)
             dim_text = _make_text(
-                "  ·  ".join(dims), font_size=9, color=COLOR_TEXT_ACCENT
+                "  ·  ".join(dims), font_size=11, color=COLOR_TEXT_ACCENT
             )
             # Wrap dim list when wider than ~5 units by splitting at " · ".
             if dim_text.width > 5.5:
-                # Break into chunks ~4 dims per line.
+                # Aim for ~3 dims per line so each line stays under the
+                # tier-card width budget at font 11.
                 chunks: list[str] = []
-                step = max(1, len(dims) // 3)
+                step = max(1, len(dims) // 4)
                 for i in range(0, len(dims), step):
                     chunks.append("  ·  ".join(dims[i : i + step]))
                 dim_text = _make_text(
-                    "\n".join(chunks), font_size=9, color=COLOR_TEXT_ACCENT, line_spacing=0.5
+                    "\n".join(chunks), font_size=11, color=COLOR_TEXT_ACCENT, line_spacing=0.6
                 )
             body = VGroup(header, dim_text).arrange(DOWN, buff=0.15, aligned_edge=LEFT)
             box = Rectangle(
@@ -1339,13 +1367,14 @@ class GeodeSelfImprovingHero(Scene):
         cards.move_to(LEFT * 3.6 + UP * 0.0)
 
         # Right column — scale + emit + aggregate + reference.
+        # Header 14 → 16, body 11 → 13 for readability (defect #7).
         def _kv_block(label_key: str, lines: tuple[str, ...] | str) -> VGroup:
-            header = _make_text(_t(label_key), font_size=14, color=COLOR_TEXT)
+            header = _make_text(_t(label_key), font_size=16, color=COLOR_TEXT)
             if isinstance(lines, str):
-                body_text = _make_text(lines, font_size=11, color=COLOR_TEXT_ACCENT)
+                body_text = _make_text(lines, font_size=13, color=COLOR_TEXT_ACCENT)
             else:
                 body_text = _make_text(
-                    "\n".join(lines), font_size=11, color=COLOR_TEXT_ACCENT, line_spacing=0.7
+                    "\n".join(lines), font_size=13, color=COLOR_TEXT_ACCENT, line_spacing=0.7
                 )
             block = VGroup(header, body_text).arrange(DOWN, buff=0.1, aligned_edge=LEFT)
             return block
@@ -1393,21 +1422,21 @@ class GeodeSelfImprovingHero(Scene):
         rows: list[VGroup] = []
         terms = _t_glossary_terms()
         # Two columns: term (left, black) + definition (right, gray).
-        # Vertical band 2.9 → -2.9 to fit ~19 expanded-natural-language
-        # rows. Font shrunk from 16/14 to 13/11 (term/def) for the same
-        # reason. Slight buff between rows kept by the step calculation.
-        top_y = 2.9
+        # Font 13/11 → 14/12 for legibility (defect #7 in the
+        # 2026-05-21 noise audit). Vertical band 2.7 → -2.9 widens the
+        # available height so the 19-entry stack still fits cleanly.
+        top_y = 2.7
         bottom_y = -2.9
         step = (top_y - bottom_y) / max(len(terms) - 1, 1)
         for i, (term, definition) in enumerate(terms):
             y = top_y - step * i
             term_text = (
-                _make_text(term, font_size=13, color=COLOR_TEXT)
+                _make_text(term, font_size=14, color=COLOR_TEXT)
                 .move_to(LEFT * 4.5 + UP * y)
                 .align_to(LEFT * 6.5, LEFT)
             )
             def_text = (
-                _make_text(definition, font_size=11, color=COLOR_TEXT_ACCENT)
+                _make_text(definition, font_size=12, color=COLOR_TEXT_ACCENT)
                 .move_to(RIGHT * 0.0 + UP * y)
                 .align_to(LEFT * 1.5, LEFT)
             )
