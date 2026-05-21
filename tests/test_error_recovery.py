@@ -436,7 +436,7 @@ class TestRecoveryHookEvents:
 
     def test_total_hook_event_count(self) -> None:
         """Verify total hook event count after H6 orphan pruning."""
-        assert len(HookEvent) == 64  # +6 PR-2 cognitive cycle members
+        assert len(HookEvent) == 69  # +6 PR-2 cognitive + 5 PR-OL-A1.5 auto-trigger
 
 
 # ---------------------------------------------------------------------------

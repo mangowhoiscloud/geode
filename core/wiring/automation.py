@@ -114,6 +114,7 @@ def build_automation(
             enabled=sil_cfg.scheduler.enabled,
             cron=sil_cfg.scheduler.cron,
             min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
+            hooks=hooks,
         )
     except Exception:
         log.exception("auto_trigger wiring failed; scheduler continues without it")
