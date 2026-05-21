@@ -520,12 +520,22 @@ class SubAgentManager:
         agent_name = ""
         agent_system_prompt = ""
         agent_allowed_tools: list[str] = []
+        # CSP-1 (2026-05-22) — propagate the AgentDefinition's
+        # ``toolkit:`` frontmatter into the worker so
+        # ``filter_handlers`` can expand it via
+        # ``core/tools/toolkits.toml``. Empty string when the agent
+        # didn't declare one — the worker falls back to
+        # ``agent_allowed_tools`` (legacy) or the ``_default`` toolkit.
+        agent_toolkit = ""
         worker_model = settings.model
         if agent_ctx is not None:
             agent_name = str(agent_ctx.get("agent_name", ""))
             agent_system_prompt = str(agent_ctx.get("system_prompt", ""))
             tools_raw = agent_ctx.get("tools") or []
             agent_allowed_tools = [str(t) for t in tools_raw]
+            toolkit_raw = agent_ctx.get("toolkit")
+            if toolkit_raw:
+                agent_toolkit = str(toolkit_raw)
             # AgentDefinition model override wins over settings default.
             if agent_ctx.get("model"):
                 worker_model = str(agent_ctx["model"])
@@ -556,6 +566,7 @@ class SubAgentManager:
             agent_name=agent_name,
             agent_system_prompt=agent_system_prompt,
             agent_allowed_tools=agent_allowed_tools,
+            toolkit=agent_toolkit,
             parent_session_key=self._parent_session_key,
             parent_session_id=parent_uuid,
         )
@@ -588,6 +599,7 @@ class SubAgentManager:
             "role": agent_def.role,
             "system_prompt": agent_def.system_prompt,
             "tools": agent_def.tools,
+            "toolkit": agent_def.toolkit,
             "model": agent_def.model,
         }
 

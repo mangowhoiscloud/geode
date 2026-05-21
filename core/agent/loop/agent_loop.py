@@ -89,6 +89,7 @@ class AgenticLoop:
         system_prompt_override: str | None = None,
         quiet: bool = False,
         disable_settings_drift: bool = False,
+        allowed_tool_names: set[str] | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -133,6 +134,17 @@ class AgenticLoop:
         # Unified tool assembly: merge native + MCP tools together
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
         self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
+        # CSP-1 (2026-05-22) — when the caller (worker for sub-agents) has
+        # already resolved a tool allowlist (via toolkit / legacy whitelist),
+        # filter the model-visible tool schemas to match. Without this filter
+        # the handler dict in ``ToolExecutor`` would be filtered but the
+        # model would still see the full tool surface and only fail at
+        # execution with "Unknown tool" — leaking the existence of denied
+        # tools and weakening the whitelist contract. None preserves the
+        # pre-CSP-1 behaviour (full tool surface) for non-sub-agent callers
+        # (CLI, serve daemon).
+        if allowed_tool_names is not None:
+            self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)
