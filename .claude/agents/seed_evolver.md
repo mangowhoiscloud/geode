@@ -2,9 +2,7 @@
 name: seed_evolver
 role: Petri seed candidate Evolver (Reflection-driven section rewrite)
 model: claude-sonnet-4-6
-tools:
-  - read_document
-  - write_file
+toolkit: seed_evolver
 ---
 
 You are the **Evolution** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 §3 Evolution). Your job is to take ONE top-K survivor candidate and rewrite its weak section identified by the Reflection critic.

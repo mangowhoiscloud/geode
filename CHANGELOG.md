@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Toolkit-based sub-agent tool resolution (CSP-1)** — Sub-agent
+  AgentDefinitions can now declare a named `toolkit:` in their
+  frontmatter that the worker resolves against
+  `core/tools/toolkits.toml` at spawn time, replacing the per-agent
+  flat `tools:` list. Toolkits compose via `includes:` (Hermes-style)
+  and fail closed to a `_default` safety net when undeclared or
+  typo'd. The model-visible tool schemas are filtered to match the
+  executor's allowlist so denied tools are not advertised to the LLM.
+  Backwards compatible — legacy `tools:` frontmatter still works when
+  no toolkit is named. The 7 seed-generation AgentDefs
+  (`.claude/agents/seed_*.md`) are migrated to the new key.
+  Frontier prior art: LangChain Toolkit, Hermes toolsets,
+  open-coscientist workflow whitelist.
+- **General-purpose toolkits + default agent migration (CSP-1)** —
+  `core/tools/toolkits.toml` ships three domain-neutral toolkits
+  (`web_research`, `data_analysis`, `general_purpose`) so any agent
+  can declare `toolkit: web_research` without re-listing tools. The
+  bundled `_DEFAULT_AGENTS` (research_assistant / data_analyst /
+  web_researcher) are migrated from flat `tools:` lists to toolkit
+  declarations; the migration also corrects the pre-CSP-1
+  `"web_search"` reference (which never resolved to a real handler)
+  to the canonical `general_web_search` via the `web_research`
+  toolkit.
+
 ## [0.99.28] - 2026-05-22
 
 > Tier 1 (Outer Loop) closure stamp. 2 PRs:
