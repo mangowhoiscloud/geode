@@ -71,6 +71,27 @@ functional change.
 
 ### Added
 
+- **PR-OL-C1 — `eval_response_recorded` 호출자 wiring (autoresearch audit cycle 단위).**
+  M4.0 (#1429) 이 "deferred to caller wiring" 으로 남긴 emit 함수가
+  드디어 production 에 첫 호출자 획득. `autoresearch/train.py::main()`
+  의 audit_finished journal emit 직후 `emit_eval_response_recorded(...)`
+  호출 추가. 매 audit cycle 마다 1 event 생성 — prompt = "audit cycle
+  on commit X (seed_select=Y, description=Z)", response = "verdict=W
+  fitness=F promoted=P dim_means_count=N", fitness_score = aggregate
+  fitness, axis_scores = `{dim_means_aggregate, bench_means_aggregate}`,
+  source = `"autoresearch_audit"`, **rollback_flag = `fitness == 0.0 OR
+  verdict.lower() in {"reject", "regression"}`** (chosen pile = 양호한
+  mutation, rejected pile = critical regression 또는 명시 reject).
+  Emit 전체가 try/except 로 감싸져 audit cycle 자체는 절대 break 안 됨.
+  **DPO 파이프라인 deception 해소** — M4.1 build_dpo_pack 의 journal
+  walker 가 드디어 *non-empty* stream 을 읽음 → M4.2 publisher 가
+  실제 TRL / OpenAI / Bedrock 학습 데이터 생성 가능. 같은 commit 두 번
+  audit 시 chosen/rejected pair 자동 형성. **14 invariant test** —
+  chosen pile + rejected pile + no-scope no-op + train.py source 검증 4종
+  (import 존재 / main 내부 / rollback heuristic 정확 / try/except wrap) +
+  rollback heuristic matrix 7 case. **OL-C1.2 (Petri per-turn emit) 는
+  후속** — `.eval` log walker API 가 stable 한 후 진입.
+
 - **PR-Hermes-1d — `session_search` LLM tool (Hermes absorption Phase 1d, minimal).**
   Phase 1c (#1439) 의 FTS5 인덱스 위에 LLM-노출 도구 추가. 신규 모듈
   `core/tools/session_search.py` — `SessionSearchTool` 이

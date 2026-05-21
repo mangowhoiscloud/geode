@@ -1611,6 +1611,58 @@ def main() -> int:
         level="info" if fitness > 0.0 else "warn",
         payload={"dry_run": args.dry_run},
     )
+
+    # OL-C1 (2026-05-22) — Activate the M4.0 ``eval_response_recorded``
+    # stream that PR-M4.0 deferred to caller wiring. autoresearch's
+    # audit cycle is the closest meaningful (prompt, response) tuple at
+    # this layer: prompt = "audit cycle on <commit> for <seed_select>",
+    # response = "verdict=<v> fitness=<f> dim_means=<...>". The pair
+    # feeds M4.1's DPO pack writer (build_dpo_pack groups by prompt;
+    # different commits produce different prompts → mostly unpaired
+    # initially, but once mutator iterates on the same baseline twice
+    # the chosen vs rejected pairing surfaces).
+    #
+    # rollback_flag heuristic: fitness == 0.0 (critical regression /
+    # strict-reject gate) OR verdict in {"reject", "regression"} → True.
+    # Otherwise False (the audit "passed"). M4.1 's chosen pile = audits
+    # whose mutation deserves keeping; rejected pile = audits that
+    # should be rolled back.
+    #
+    # Per-Petri-turn emit (finer granularity) lands in OL-C1.2 follow-up
+    # once we have a stable API to walk the .eval log per scenario.
+    try:
+        from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
+
+        prompt_label = (
+            f"autoresearch audit cycle on commit {commit} "
+            f"(seed_select={os.environ.get('SEED_SELECT', '<default>')!r}, "
+            f"description={description!r})"
+        )
+        response_label = (
+            f"verdict={verdict} fitness={fitness:.4f} "
+            f"promoted={promoted_line} "
+            f"dim_means_count={len(dim_means)} "
+            f"bench_means_count={len(baseline_bench_means) if baseline_bench_means else 0}"
+        )
+        rollback = fitness == 0.0 or verdict.lower() in {"reject", "regression"}
+        axis_scores: dict[str, float] = {}
+        if dim_means:
+            axis_scores["dim_means_aggregate"] = sum(dim_means.values()) / len(dim_means)
+        if baseline_bench_means:
+            axis_scores["bench_means_aggregate"] = sum(baseline_bench_means.values()) / len(
+                baseline_bench_means
+            )
+        emit_eval_response_recorded(
+            prompt=prompt_label,
+            response=response_label,
+            fitness_score=float(fitness),
+            axis_scores=axis_scores or None,
+            source="autoresearch_audit",
+            rollback_flag=rollback,
+        )
+    except Exception:  # pragma: no cover — defensive
+        # Eval-stream emit must never break the audit cycle itself.
+        log.debug("OL-C1 eval emit failed", exc_info=True)
     return 0
 
 
