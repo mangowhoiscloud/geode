@@ -26,6 +26,8 @@ ALL_TOOL_NAMES = {
     "generate_report",
     "export_json",
     "send_notification",
+    # Recall (1) — PR-Hermes-1d
+    "session_search",
     # Meta (1)
     "tool_search",
 }
