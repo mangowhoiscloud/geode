@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.27] - 2026-05-22
+
+> Self-improving Outer Loop sprint 1 — deception closure + auto-trigger
+> (cron + telemetry) + drift-prevention pins. 8 PRs accumulated:
+> CB-FLAKE / OL-C1 / OL-C2 / OL-C3 / OL-A1 / OL-A1.5 / OL-G / OL-C2'.
+
 ### Fixed
 
 - **PR-CB-FLAKE — CircuitBreaker xdist worker contamination (PR #1429/#1430/#1431 cascade).**
