@@ -49,6 +49,31 @@ functional change.
 
 ### Added
 
+- **PR-T5 — Cache breakpoint policy JSON mutation surface (ADR-013).**
+  mutator 가 Anthropic API 의 `apply_messages_cache_control(messages,
+  n_breakpoints=N)` 의 N 값을 JSON 으로 mutate (0..3, Anthropic cap 의
+  messages-block 점유분). **trade-off**: ↑ → cache hit rate ↑ but
+  per-call overhead ↑ (각 breakpoint 가 $0.10/MTok overhead); ↓ → cache
+  hit ↓ but per-call cost ↓. ux_means.token_cost_norm + latency_norm
+  둘 다 영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/cache-policy.json` (in-repo) +
+  `~/.geode/self-improving-loop/cache-policy.json` (operator-local) /
+  `GLOBAL_CACHE_POLICY_PATH` + `OPERATOR_LOCAL_CACHE_POLICY_PATH`
+  `core/paths.py` 추가 / `core/llm/cache_policy.py` reader
+  (`_load_cache_policy_override` + `apply_cache_policy_breakpoints`,
+  schema `{messages_breakpoints: int 0..3}`) / `core/llm/providers/
+  anthropic.py` 의 streaming 경로 (현재 활성 single consumer) 에서
+  `n_breakpoints = apply_cache_policy_breakpoints(MAX_MESSAGE_CACHE_BREAKPOINTS,
+  _load_cache_policy_override())` 호출 → `apply_messages_cache_control(
+  messages, n_breakpoints=n_breakpoints)` 로 wire (정책 부재 시 default
+  3 — no behavior change) / `GEODE_CACHE_POLICY_OVERRIDE` +
+  `GEODE_CACHE_POLICY_STRICT=1` env pair. `_validate_schema` 가 Python
+  `bool` 을 명시적으로 int 에서 제외 (Python 의 bool-is-int subclass
+  함정 방어). out-of-range 값 (4, -1, ...) 은 `_coerce` 에서 per-axis
+  graceful drop. **20 invariant test** — reader graceful/strict 10 +
+  apply 5 + wiring + path + env + ALIVE marker. Frontier: Anthropic
+  prompt caching docs — `cache_control` count 가 canonical knob.
+
 - **PR-T4 — Provider routing JSON mutation surface (ADR-013).** mutator
   가 per-model preferred plan-chain 을 JSON 으로 mutate. `resolve_routing(
   model)` 의 explicit-chain branch 가 registry's `set_routing` 결과 대신
