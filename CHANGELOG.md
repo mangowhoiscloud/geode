@@ -71,6 +71,31 @@ functional change.
 
 ### Added
 
+- **PR-Hermes-1c — FTS5 + 트리그램 인덱스 (Hermes absorption Phase 1c).**
+  Phase 1a (#1338) 의 messages 테이블 + Phase 1b 의 SoT flip 위에 full-text
+  search 인덱스 신설. **신규 모듈** `core/storage/fts_helpers.py` —
+  `sanitize_fts5_query` (Hermes `hermes_state.py:1796` 패턴 absorb — 하이픈/
+  도트/콜론 포함 토큰을 double-quote escape, pure-meta 토큰 drop, Unicode
+  letter bare 유지) + `has_trigram_support` (SQLite 3.34+ trigram tokenize
+  capability probe; graceful False on `OperationalError`). **`session_manager.py`
+  확장** — `__init__` 가 `messages_fts` (unicode61 tokenizer) 와 3 트리거
+  (insert/delete/update) 를 항상 생성, trigram 가능 시 `messages_fts_trigram`
+  + 트리거 3개 추가 (graceful degrade). 트리거는 generator `_fts_trigger_block`
+  으로 단일 SoT — unicode/trigram 두 테이블 간 drift 차단. 신규 method
+  `search_messages(query, session_id=, limit=, prefer_trigram=)` 가 sanitize →
+  FTS5 `MATCH ?` 쿼리 → `bm25` 점수 + `snippet()` highlight 반환. **18
+  invariant test** — sanitize 7개 (empty / bare alnum / hyphenated / dotted /
+  internal quote escape / pure-meta drop / Unicode letter bare) + capability
+  probe 2개 (modern OK / bad-conn graceful) + FTS schema 2개 (tables 생성 /
+  triggers 생성) + sync 4개 (insert → index / round-trip search / session_id
+  scope / hyphen query via sanitizer) + trigram 1개 (Korean 부분문자열
+  recall) + delete cascade 1개 + empty query 1개. 5 critical guarantees:
+  default 동작 byte-equal (기존 sessions/messages 행위 미변경 — 신규 FTS
+  table 만 추가) / trigram 없는 SQLite 빌드에서도 graceful (unicode61 만
+  활성) / 쿼리 산티타이저가 FTS5 grammar 사고 차단 / contentless FTS
+  (`content='messages'`) 라 디스크 사용 최소 / 트리거가 인덱스 자동
+  동기화 (operator 수동 reindex 불필요).
+
 - **PR-M4.4.3 — `tool_hints` slot reader 활성화 + M4 sprint 종료 (ADR-012).**
   M4.4 (#1435) 의 마지막 stub 활성화 — **모든 4 in-context slot 이제
   완전 wired**. 신규 모듈 `core/self_improving_loop/tool_hints.py` —
