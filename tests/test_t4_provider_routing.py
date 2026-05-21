@@ -114,6 +114,14 @@ def test_apply_none_returns_default_chain_unchanged() -> None:
     assert apply_provider_routing_policy("gpt-5", default, None) == default
 
 
+def test_apply_none_with_empty_default_returns_empty(
+    # Codex MCP FLAG #3 fix-up (PR #1420) — explicit empty-default identity.
+) -> None:
+    """`apply(..., [], None)` must return ``[]`` — no spurious chain on
+    missing SoT + empty registry routing (the most-common production case)."""
+    assert apply_provider_routing_policy("gpt-5", [], None) == []
+
+
 def test_apply_empty_policy_returns_default() -> None:
     default = ["plan-a"]
     assert apply_provider_routing_policy("gpt-5", default, {}) == default
