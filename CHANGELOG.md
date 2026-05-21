@@ -49,31 +49,19 @@ functional change.
 
 ## [0.99.27] - 2026-05-22
 
-> Self-improving Outer Loop sprint 1 — deception closure + auto-trigger
-> (cron + telemetry) + drift-prevention pins. 8 PRs accumulated:
-> CB-FLAKE / OL-C1 / OL-C2 / OL-C3 / OL-A1 / OL-A1.5 / OL-G / OL-C2'.
-
-### Fixed
-
-- **PR-CB-FLAKE — CircuitBreaker xdist worker contamination (PR #1429/#1430/#1431 cascade).**
-  Test 의 module-level `CircuitBreaker` singleton (anthropic / openai / glm /
-  codex 4 provider + `provider_dispatch._openai_cb` / `_glm_cb` 2 dispatcher
-  = 총 6개) 가 *failure-injecting* test 와 같은 xdist worker 에서 콜로케이션
-  될 때 OPEN 상태로 leak — 후속 test 의 첫 `can_execute()` 가 즉시
-  False 반환하며 `RuntimeError("Circuit breaker is open …")` cascade.
-  PR #1429 → #1431 sprint 에서 4회 발생 ([feedback_circuit_breaker_flake](#)).
-  **Root cause**: `test_failover.py::test_no_silent_fallback_to_other_models`
-  가 `MAX_RETRIES` 회 `RateLimitError` side_effect 로 `_circuit_breaker.record_failure()`
-  threshold (5) 도달 → state="open". 같은 worker 에 분배된 `test_tool_use.py`
-  의 mocked 호출이 breaker 게이트에서 차단. **Fix**: (a) `CircuitBreaker.reset()`
-  메서드 신설 — state="closed" + failures=0 + last_failure=0 force-clear.
-  (b) `tests/conftest.py` autouse fixture `_reset_circuit_breakers` 가 매
-  test pre/post 6 singleton 모두 reset. ImportError / AttributeError tolerate
-  (vendored SDK 없는 stripped env / 향후 rename 내성). **4 def / 9 runtime
-  case** `tests/test_circuit_breaker_isolation.py` — reset 메서드 존재 +
-  part1/part2 cross-test reset 입증 (deliberately OPEN → 다음 test 에
-  CLOSED) + parametrize 1 def × 6 singleton = 6 case (각 singleton 의
-  test entry CLOSED 검증).
+> 51 PRs accumulated since v0.99.26. Headline arcs:
+>
+> - **Self-improving Outer Loop sprint 1** (8 PR, this session) —
+>   deception closure (OL-C1/C2/C3) + auto-trigger (OL-A1/A1.5) +
+>   drift-prevention pins (OL-G/C2') + CB-FLAKE flake cleanup.
+> - **Hermes absorption Phase 1** — FTS5 + 트리그램 indexer (Hermes-1c)
+>   + `session_search` LLM tool (Hermes-1d).
+> - **M-sprint in-context wiring** — M1-M4.4.3 (skill / agent contract /
+>   few-shot pool / DPO publisher trilogy / 4-slot reader trilogy).
+> - **PAPERCLIP** — subscription billing pattern for self-improving
+>   loop mutator (`claude-cli` / `openai-codex` subprocess dispatch).
+> - **S3-S6 + T6** — 4축 baseline.json ratchet + heuristic indicators
+>   JSON mutation surface.
 
 ### Added
 
@@ -1690,6 +1678,28 @@ functional change.
   The same-task A→B→A Token reset (``TODO(PR-F-followup)`` line in
   ``cognitive_state_ctx.py``) remains deferred as a separate small
   PR.
+
+### Fixed
+
+- **PR-CB-FLAKE — CircuitBreaker xdist worker contamination (PR #1429/#1430/#1431 cascade).**
+  Test 의 module-level `CircuitBreaker` singleton (anthropic / openai / glm /
+  codex 4 provider + `provider_dispatch._openai_cb` / `_glm_cb` 2 dispatcher
+  = 총 6개) 가 *failure-injecting* test 와 같은 xdist worker 에서 콜로케이션
+  될 때 OPEN 상태로 leak — 후속 test 의 첫 `can_execute()` 가 즉시
+  False 반환하며 `RuntimeError("Circuit breaker is open …")` cascade.
+  PR #1429 → #1431 sprint 에서 4회 발생 ([feedback_circuit_breaker_flake](#)).
+  **Root cause**: `test_failover.py::test_no_silent_fallback_to_other_models`
+  가 `MAX_RETRIES` 회 `RateLimitError` side_effect 로 `_circuit_breaker.record_failure()`
+  threshold (5) 도달 → state="open". 같은 worker 에 분배된 `test_tool_use.py`
+  의 mocked 호출이 breaker 게이트에서 차단. **Fix**: (a) `CircuitBreaker.reset()`
+  메서드 신설 — state="closed" + failures=0 + last_failure=0 force-clear.
+  (b) `tests/conftest.py` autouse fixture `_reset_circuit_breakers` 가 매
+  test pre/post 6 singleton 모두 reset. ImportError / AttributeError tolerate
+  (vendored SDK 없는 stripped env / 향후 rename 내성). **4 def / 9 runtime
+  case** `tests/test_circuit_breaker_isolation.py` — reset 메서드 존재 +
+  part1/part2 cross-test reset 입증 (deliberately OPEN → 다음 test 에
+  CLOSED) + parametrize 1 def × 6 singleton = 6 case (각 singleton 의
+  test entry CLOSED 검증).
 
 ## [0.99.26] — 2026-05-21
 
