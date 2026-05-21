@@ -71,6 +71,22 @@ functional change.
 
 ### Added
 
+- **PR-OL-G — Config drift invariant pins (G-B / G-D / G-E).**
+  PR-1 G-B/G-D/G-E (2026-05-21) 가 3건의 config drift 를 닫았지만 invariant
+  test 가 없어 회귀 위험 존재 — 본 PR 가 5개의 pin test 추가.
+  - **G-B**: `AutoresearchConfig.target_model` / `judge_model` 필드 +
+    `autoresearch/train.py` 의 `TARGET_MODEL` / `JUDGE_MODEL` fallback
+    상수 + `_get_autoresearch_config` 로더 존재 (2 test).
+  - **G-D**: `settings.learning_extract_model` 설정 필드 +
+    `core/hooks/llm_extract_learning.py` 가 해당 필드 grep-확인 (1 test).
+  - **G-E**: `Settings.model` 클래스-기본값 ↔ `routing.toml [model.defaults]
+    anthropic` 매치 + claude-opus-4-7 family pin (2 test). G-E 는 *runtime*
+    값 (`settings.model` — env var 영향) 대신 *class-level default* 를
+    비교 — 운영자 env override 는 drift 가 아님.
+  **GAP audit 발견**: roadmap 의 G-B/D/E 본 작업 자체는 이미 PR-1 에
+  의해 완료 상태. drift-prevention invariant 만 본 PR 가 추가. 5/5 pytest
+  pass, ruff + ruff format --check + mypy clean.
+
 - **PR-OL-A1 — self-improving loop mutator auto-trigger (cron + 4-backend grounded).**
   Pre-OL-A1 의 `SelfImprovingLoopRunner` 는 *manual* 발화만 지원 (operator
   가 `geode self-improve mutate` 호출, 혹은 autoresearch sprint runner
