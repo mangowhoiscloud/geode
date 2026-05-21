@@ -1,1432 +1,1139 @@
 [
-  {
-    "name": "show_help",
-    "description": "Displays the list of slash commands. Use ONLY when the user explicitly requests a command list or help menu. Do NOT use for general questions (about analysis methods, roles, opinions, etc.) — respond with text directly in those cases.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "generate_report",
-    "description": "Generates a report from structured runtime results. Use when the user requests a report or document generation.",
-    "category": "analysis",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subject": {
-          "type": "string",
-          "description": "Report subject or title"
-        },
-        "analysis_data": {
-          "type": "object",
-          "description": "Structured analysis results to include in the report"
-        },
-        "format": {
-          "type": "string",
-          "enum": [
-            "markdown",
-            "json",
-            "html"
-          ],
-          "description": "Output format for the report. Defaults to markdown."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "export_json",
-    "description": "Exports structured data as a JSON artifact. Use when the user asks to save results, export structured output, or create a machine-readable artifact.",
-    "category": "analysis",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "data": {
-          "type": "object",
-          "description": "Data to export as JSON"
-        },
-        "filename": {
-          "type": "string",
-          "description": "Output filename. Defaults to a timestamped GEODE export name."
-        },
-        "output_dir": {
-          "type": "string",
-          "description": "Output directory path. Defaults to the current directory."
-        }
-      },
-      "required": [
-        "data"
-      ]
-    }
-  },
-  {
-    "name": "check_status",
-    "description": "Checks the GEODE system status, MCP server connections, and available tools. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration. Also useful to verify which MCP tools (playwright, steam, etc.) are currently available.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "switch_model",
-    "description": "Switches the LLM model or ensemble mode. Use when the user requests a model change or ensemble mode switch.",
-    "category": "model",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "model_hint": {
-          "type": "string",
-          "description": "Desired model or mode hint (e.g. 'opus', 'haiku', 'gpt', 'cross', 'ensemble'). If omitted, displays the model selection menu."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "session_search",
-    "description": "Searches past conversation messages in the current project's session history via SQLite FTS5 index (Hermes Phase 1d). Returns matching messages with snippets and bm25 relevance scores. Use this to recall prior conversation context the LLM cannot remember from earlier turns — especially when the operator references something said in a previous session. Supports substring / partial-word recall via prefer_trigram=true for Korean / identifier fragments.",
-    "category": "memory",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Search query. Hyphens / dots / special chars are auto-sanitised; pass natural text or identifiers."
-        },
-        "session_id": {
-          "type": "string",
-          "description": "Optional — restrict search to a single session by id. Omit to search across all sessions in the current project."
-        },
-        "limit": {
-          "type": "integer",
-          "description": "Maximum results to return. Default 20.",
-          "default": 20
-        },
-        "prefer_trigram": {
-          "type": "boolean",
-          "description": "When true, query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. Default false.",
-          "default": false
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
-  {
-    "name": "memory_search",
-    "description": "Searches memory for past analysis results, insights, and rules. Use when the user asks about previous analysis records or learned patterns.",
-    "category": "memory",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Search keyword (subject, topic, pattern, etc.)"
-        },
-        "tier": {
-          "type": "string",
-          "enum": [
-            "session",
-            "project",
-            "organization",
-            "all"
-          ],
-          "description": "Memory tier to search. Default: all"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
-  {
-    "name": "memory_save",
-    "description": "Saves information to memory. Use when the user requests 'remember this', 'save this', etc.",
-    "category": "memory",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string",
-          "description": "Identifier key for the data to save (e.g. 'project_insight')"
-        },
-        "content": {
-          "type": "string",
-          "description": "Content to save"
-        }
-      },
-      "required": [
-        "key",
-        "content"
-      ]
-    }
-  },
-  {
-    "name": "manage_rule",
-    "description": "Creates, updates, deletes, or lists analysis rules. Use when the user wants to manage analysis rules or train patterns.",
-    "category": "memory",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "action": {
-          "type": "string",
-          "enum": [
-            "create",
-            "update",
-            "delete",
-            "list"
-          ],
-          "description": "Action to perform"
-        },
-        "name": {
-          "type": "string",
-          "description": "Rule name (required for create/update/delete)"
-        },
-        "paths": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Subject or file patterns the rule applies to."
-        },
-        "content": {
-          "type": "string",
-          "description": "Rule content (for create/update)"
-        }
-      },
-      "required": [
-        "action"
-      ]
-    }
-  },
-  {
-    "name": "set_api_key",
-    "description": "Sets a single PAYG API key. Prefer manage_login for richer flows (subscription plans, OAuth, routing). Use this only when the user pastes a raw key without context.",
-    "category": "model",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "key_value": {
-          "type": "string",
-          "description": "API key value (if omitted, displays current status)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "manage_auth",
-    "description": "Legacy auth-profile manager. Prefer manage_login. Retained for the existing /auth interactive add path.",
-    "category": "model",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "sub_action": {
-          "type": "string",
-          "description": "Action to perform (add, remove, list). If omitted, displays status."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "manage_login",
-    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a subscription (GLM Coding Lite/Pro/Max, ChatGPT Plus, Claude Pro), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. Mirrors the /login slash command (see `core.cli.commands.cmd_login`).",
-    "category": "model",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subcommand": {
-          "type": "string",
-          "description": "One of: status (default — show plans/profiles/routing/quota), openai (Codex OAuth), anthropic (Claude subscription OAuth), add (interactive wizard), set-key, use, route, remove, quota, help.",
-          "enum": [
-            "status",
-            "openai",
-            "anthropic",
-            "add",
-            "set-key",
-            "use",
-            "route",
-            "remove",
-            "quota",
-            "help"
-          ]
-        },
-        "args": {
-          "type": "string",
-          "description": "Optional positional arguments for the subcommand. Examples: openai → ''; anthropic → ''; set-key → 'glm-coding-lite zai-xxxx'; use → 'glm-coding-lite'; route → 'glm-5.1 glm-coding-lite glm-payg'; remove → 'glm-coding-lite'."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "generate_data",
-    "description": "Generates synthetic data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
-    "category": "data",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "count": {
-          "type": "integer",
-          "description": "Number of subjects to generate (default: 5, max: 20)"
-        },
-        "genre": {
-          "type": "string",
-          "description": "Genre filter (e.g. 'mecha', 'dark_fantasy')"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "schedule_job",
-    "description": "Manage scheduled jobs. For create: MUST provide both expression (WHEN) and action (WHAT). The action is a natural language prompt that AgenticLoop will execute at the scheduled time.",
-    "category": "scheduling",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "sub_action": {
-          "type": "string",
-          "enum": [
-            "list",
-            "create",
-            "delete",
-            "status",
-            "enable",
-            "disable",
-            "run"
-          ],
-          "description": "Action to perform."
-        },
-        "target_id": {
-          "type": "string",
-          "description": "Job ID for delete/enable/disable/run/status."
-        },
-        "expression": {
-          "type": "string",
-          "description": "Schedule expression in English. Examples: 'every 5 minutes', 'daily at 9:00', 'every monday at 9:00'. Required for create."
-        },
-        "action": {
-          "type": "string",
-          "description": "What to do when fired — a natural language prompt. Example: 'Search AI papers and create digest'. REQUIRED for create."
-        }
-      },
-      "required": [
-        "sub_action"
-      ]
-    }
-  },
-  {
-    "name": "trigger_event",
-    "description": "Manages event or cron triggers, or fires them manually. Use when the user requests trigger management, event firing, or manual execution.",
-    "category": "scheduling",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "sub_action": {
-          "type": "string",
-          "description": "Action to perform (list, fire). If omitted, displays list."
-        },
-        "event_name": {
-          "type": "string",
-          "description": "Name of the event to fire (for fire action)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "run_bash",
-    "description": "Execute a shell command on the user's local machine. REQUIRES user approval before execution. Use for: system checks, package installs, process management, git operations. PREFER dedicated tools over bash: file search → glob_files, content search → grep_files, read files → read_document, edit files → edit_file, open URLs → playwright MCP (browser_navigate). DO NOT use for: destructive operations, privilege escalation, or finding/launching browsers (use playwright MCP instead).",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "command": {
-          "type": "string",
-          "description": "Shell command to execute"
-        },
-        "reason": {
-          "type": "string",
-          "description": "Why this command is needed"
-        },
-        "timeout": {
-          "type": "integer",
-          "description": "Timeout in seconds. Default 30, maximum 600."
-        }
-      },
-      "required": [
-        "command",
-        "reason"
-      ]
-    }
-  },
-  {
-    "name": "delegate_task",
-    "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple subjects simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
-    "category": "planning",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "task_description": {
-          "type": "string",
-          "description": "Description of the task to execute (single task mode)"
-        },
-        "task_type": {
-          "type": "string",
-          "enum": [
-            "analyze",
-            "search",
-            "compare"
-          ],
-          "description": "Type of task to delegate"
-        },
-        "args": {
-          "type": "object",
-          "description": "Arguments for the delegated task"
-        },
-        "tasks": {
-          "type": "array",
-          "description": "Batch mode: array of tasks to run in parallel",
-          "items": {
+    {
+        "name": "show_help",
+        "description": "Displays the list of slash commands. Use ONLY when the user explicitly requests a command list or help menu. Do NOT use for general questions (about analysis methods, roles, opinions, etc.) — respond with text directly in those cases.",
+        "category": "discovery",
+        "cost_tier": "free",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "generate_report",
+        "description": "Generates a report from structured runtime results. Use when the user requests a report or document generation.",
+        "category": "analysis",
+        "cost_tier": "free",
+        "input_schema": {
             "type": "object",
             "properties": {
-              "task_description": {
-                "type": "string"
-              },
-              "task_type": {
-                "type": "string",
-                "enum": [
-                  "analyze",
-                  "search",
-                  "compare"
-                ]
-              },
-              "args": {
-                "type": "object"
-              }
+                "subject": {"type": "string", "description": "Report subject or title"},
+                "analysis_data": {
+                    "type": "object",
+                    "description": "Structured analysis results to include in the report",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json", "html"],
+                    "description": "Output format for the report. Defaults to markdown.",
+                },
             },
-            "required": [
-              "task_description",
-              "task_type",
-              "args"
-            ]
-          }
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "create_plan",
-    "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). Put the user-facing objective in the goal field.",
-    "category": "planning",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "goal": {
-          "type": "string",
-          "description": "Execution goal (e.g. 'Research AI trends and write a report')"
-        },
-        "steps": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted."
-        },
-        "subject": {
-          "type": "string",
-          "description": "Optional subject label for the plan"
-        },
-        "template": {
-          "type": "string",
-          "enum": [
-            "agentic"
-          ],
-          "description": "Plan template."
-        }
-      },
-      "required": [
-        "goal"
-      ]
-    }
-  },
-  {
-    "name": "approve_plan",
-    "description": "Approves a generated analysis plan and executes it. Use after first creating a plan with create_plan.",
-    "category": "planning",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "ID of the plan to approve (from create_plan result)"
-        }
-      },
-      "required": [
-        "plan_id"
-      ]
-    }
-  },
-  {
-    "name": "web_fetch",
-    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "url": {
-          "type": "string",
-          "description": "URL to fetch content from"
-        },
-        "max_chars": {
-          "type": "integer",
-          "description": "Maximum characters to return (default: 8000, max: 10000). Do not exceed 10000."
-        }
-      },
-      "required": [
-        "url"
-      ]
-    }
-  },
-  {
-    "name": "general_web_search",
-    "description": "Searches the web for up-to-date information. Uses a 3-provider native web search fallback chain (Anthropic -> OpenAI -> GLM) for reliable results. Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
-    "category": "external",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Search query"
-        },
-        "max_results": {
-          "type": "integer",
-          "description": "Maximum number of results (default: 5)"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
-  {
-    "name": "read_document",
-    "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view local file contents. For remote URLs, use web_fetch instead. For file discovery, use glob_files first.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "file_path": {
-          "type": "string",
-          "description": "Path to the file to read. Symlinks allowed if they resolve within the project directory."
-        },
-        "offset": {
-          "type": "integer",
-          "description": "Line number to start reading from, 1-indexed (default: 1)"
-        },
-        "limit": {
-          "type": "integer",
-          "description": "Number of lines to read. Omit for full file (subject to 256KB size limit)."
-        },
-        "max_lines": {
-          "type": "integer",
-          "description": "Deprecated — use 'limit' instead. Maximum lines to read."
-        }
-      },
-      "required": [
-        "file_path"
-      ]
-    }
-  },
-  {
-    "name": "glob_files",
-    "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. ALWAYS prefer this over run_bash for file discovery (ls, find). To search file contents, use grep_files instead.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pattern": {
-          "type": "string",
-          "description": "Glob pattern (e.g. '**/*.py', 'src/**/*.ts')"
-        },
-        "path": {
-          "type": "string",
-          "description": "Directory to search in (default: project root) Must be within the project directory — absolute paths outside the project are blocked."
-        }
-      },
-      "required": [
-        "pattern"
-      ]
-    }
-  },
-  {
-    "name": "grep_files",
-    "description": "Search file contents using regex patterns. Returns matching files and optionally matching lines. ALWAYS prefer this over run_bash for content search (grep, rg, awk). To find files by name, use glob_files instead.",
-    "category": "discovery",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pattern": {
-          "type": "string",
-          "description": "Regex pattern to search for"
-        },
-        "path": {
-          "type": "string",
-          "description": "File or directory to search (default: project root) Must be within the project directory — absolute paths outside the project are blocked."
-        },
-        "glob": {
-          "type": "string",
-          "description": "File pattern filter (e.g. '*.py', '*.ts')"
-        },
-        "include_content": {
-          "type": "boolean",
-          "description": "Include matching lines in output (default: false)"
-        },
-        "max_results": {
-          "type": "integer",
-          "description": "Max files to return (default: 50)"
-        }
-      },
-      "required": [
-        "pattern"
-      ]
-    }
-  },
-  {
-    "name": "edit_file",
-    "description": "Edit a file by exact string replacement. Provide old_string and new_string. ALWAYS prefer this over run_bash (sed, awk) for file modifications. For creating new files from scratch, use write_file instead. Requires HITL approval.",
-    "category": "external",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "file_path": {
-          "type": "string",
-          "description": "Path to the file to edit Must be within the project directory."
-        },
-        "old_string": {
-          "type": "string",
-          "description": "Exact string to find and replace"
-        },
-        "new_string": {
-          "type": "string",
-          "description": "Replacement text"
-        },
-        "replace_all": {
-          "type": "boolean",
-          "description": "Replace all occurrences (default: false)"
-        }
-      },
-      "required": [
-        "file_path",
-        "old_string",
-        "new_string"
-      ]
-    }
-  },
-  {
-    "name": "write_file",
-    "description": "Create a new file or overwrite an existing file. Parent directories created automatically. For partial edits to existing files, use edit_file instead (safer, sends only the diff). Requires HITL approval.",
-    "category": "external",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "file_path": {
-          "type": "string",
-          "description": "Path to the file to create or overwrite Must be within the project directory."
-        },
-        "content": {
-          "type": "string",
-          "description": "Complete file content"
-        }
-      },
-      "required": [
-        "file_path",
-        "content"
-      ]
-    }
-  },
-  {
-    "name": "note_save",
-    "description": "Permanently saves a user note. Use when the user says 'remember this', 'save this', etc.",
-    "category": "memory",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string",
-          "description": "Note identifier (e.g. 'meeting_schedule', 'preference')"
-        },
-        "content": {
-          "type": "string",
-          "description": "Note content to save"
-        }
-      },
-      "required": [
-        "key",
-        "content"
-      ]
-    }
-  },
-  {
-    "name": "note_read",
-    "description": "Reads saved notes. Use when the user asks about previously saved information.",
-    "category": "memory",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Optional search query to filter notes"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "reject_plan",
-    "description": "Rejects a generated analysis plan. Use when the plan is not satisfactory.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "Plan ID to reject"
-        },
-        "reason": {
-          "type": "string",
-          "description": "Rejection reason (optional)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "modify_plan",
-    "description": "Modifies a generated analysis plan. Supports template changes and step removal.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "plan_id": {
-          "type": "string",
-          "description": "Plan ID to modify"
-        },
-        "template": {
-          "type": "string",
-          "enum": [
-            "full_pipeline",
-            "prospect"
-          ],
-          "description": "Template to change to"
-        },
-        "remove_steps": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of step IDs to remove"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "list_plans",
-    "description": "Lists all generated analysis plans.",
-    "category": "planning",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "rate_result",
-    "description": "Rates an analysis result. Used for collecting user feedback.",
-    "category": "analysis",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subject": {
-          "type": "string",
-          "description": "Subject or result name to rate"
-        },
-        "rating": {
-          "type": "integer",
-          "description": "Rating (1-5)"
-        },
-        "comment": {
-          "type": "string",
-          "description": "Rating comment (optional)"
-        }
-      },
-      "required": [
-        "subject",
-        "rating"
-      ]
-    }
-  },
-  {
-    "name": "accept_result",
-    "description": "Accepts an analysis result.",
-    "category": "analysis",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subject": {
-          "type": "string",
-          "description": "Subject or result name to accept"
-        }
-      },
-      "required": [
-        "subject"
-      ]
-    }
-  },
-  {
-    "name": "reject_result",
-    "description": "Rejects an analysis result. Use when re-analysis is needed.",
-    "category": "analysis",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subject": {
-          "type": "string",
-          "description": "Subject or result name to reject"
-        },
-        "reason": {
-          "type": "string",
-          "description": "Rejection reason"
-        }
-      },
-      "required": [
-        "subject"
-      ]
-    }
-  },
-  {
-    "name": "rerun_node",
-    "description": "Re-runs a specific pipeline node when rerun support is available.",
-    "category": "analysis",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "node_name": {
-          "type": "string",
-          "enum": [
-            "scoring",
-            "verification",
-            "synthesizer"
-          ],
-          "description": "Name of the node to re-run"
-        },
-        "subject": {
-          "type": "string",
-          "description": "Target subject name"
-        }
-      },
-      "required": [
-        "node_name",
-        "subject"
-      ]
-    }
-  },
-  {
-    "name": "install_mcp_server",
-    "description": "Searches the Anthropic MCP registry for available servers. Returns server info and setup instructions. Use when the user wants to find or add an MCP server.",
-    "category": "model",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Search query for the MCP server to install (e.g. 'linkedin', 'steam', 'web search', 'memory')"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
-  {
-    "name": "profile_show",
-    "description": "Displays the user profile. Use when the user asks about their profile, personal info, or assigned roles.",
-    "category": "profile",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  {
-    "name": "profile_update",
-    "description": "Updates the user profile. Use when the user wants to set or change their role, expertise, name, or team info.",
-    "category": "profile",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "role": {
-          "type": "string",
-          "description": "Role (e.g. 'AI Engineer', 'Data Scientist')"
-        },
-        "expertise": {
-          "type": "string",
-          "description": "Area of expertise (e.g. 'ML, NLP, Game Analytics')"
-        },
-        "name": {
-          "type": "string",
-          "description": "Name"
-        },
-        "team": {
-          "type": "string",
-          "description": "Team/department"
-        },
-        "bio": {
-          "type": "string",
-          "description": "Free-form bio"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "profile_preference",
-    "description": "Views or changes user preference settings. Includes language, output format, domains of interest, etc.",
-    "category": "profile",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string",
-          "description": "Setting key (e.g. 'language', 'output_format', 'domains_of_interest')"
-        },
-        "value": {
-          "type": "string",
-          "description": "Value to set (if omitted, returns current value)"
-        }
-      },
-      "required": [
-        "key"
-      ]
-    }
-  },
-  {
-    "name": "profile_learn",
-    "description": "Learns user patterns and insights. Use to automatically remember recurring preferences, workflow patterns, and domain interests.",
-    "category": "profile",
-    "cost_tier": "cheap",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pattern": {
-          "type": "string",
-          "description": "Pattern/insight to remember"
-        },
-        "category": {
-          "type": "string",
-          "enum": [
-            "general",
-            "domain",
-            "workflow",
-            "preference",
-            "tool_usage"
-          ],
-          "description": "Pattern category (default: general)"
-        }
-      },
-      "required": [
-        "pattern"
-      ]
-    }
-  },
-  {
-    "name": "send_notification",
-    "description": "Sends a notification via an external messaging service. Delivers messages to Slack, Discord, or Telegram channels.",
-    "category": "notification",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "channel": {
-          "type": "string",
-          "enum": [
-            "slack",
-            "discord",
-            "telegram",
-            "email",
-            "webhook"
-          ],
-          "description": "Notification channel"
-        },
-        "message": {
-          "type": "string",
-          "description": "Message body text"
-        },
-        "severity": {
-          "type": "string",
-          "enum": [
-            "info",
-            "warning",
-            "critical"
-          ],
-          "description": "Severity level (default: info)"
-        },
-        "recipient": {
-          "type": "string",
-          "description": "Target recipient (channel name, chat ID, URL)"
-        }
-      },
-      "required": [
-        "channel",
-        "message"
-      ]
-    }
-  },
-  {
-    "name": "calendar_list_events",
-    "description": "Lists calendar events. Retrieves events from Google Calendar or Apple Calendar.",
-    "category": "calendar",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "start_date": {
-          "type": "string",
-          "description": "Start date in ISO format (YYYY-MM-DD). Defaults to now."
-        },
-        "end_date": {
-          "type": "string",
-          "description": "End date in ISO format. Defaults to +7 days."
-        },
-        "calendar_name": {
-          "type": "string",
-          "description": "Filter by calendar name (optional)"
-        },
-        "max_results": {
-          "type": "integer",
-          "description": "Maximum events to return (default: 20)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "calendar_create_event",
-    "description": "Creates a new calendar event. Adds an event to Google Calendar or Apple Calendar.",
-    "category": "calendar",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "title": {
-          "type": "string",
-          "description": "Event title"
-        },
-        "start_datetime": {
-          "type": "string",
-          "description": "Start datetime in ISO format (YYYY-MM-DDTHH:MM:SS)"
-        },
-        "end_datetime": {
-          "type": "string",
-          "description": "End datetime in ISO format (defaults to +1 hour)"
-        },
-        "description": {
-          "type": "string",
-          "description": "Event description (optional)"
-        },
-        "location": {
-          "type": "string",
-          "description": "Event location (optional)"
-        },
-        "calendar_name": {
-          "type": "string",
-          "description": "Target calendar name (optional)"
-        }
-      },
-      "required": [
-        "title",
-        "start_datetime"
-      ]
-    }
-  },
-  {
-    "name": "calendar_sync_scheduler",
-    "description": "Synchronizes the GEODE scheduler with an external calendar. Pushes scheduler jobs to the calendar, or imports calendar events into the scheduler.",
-    "category": "calendar",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "direction": {
-          "type": "string",
-          "enum": [
-            "push",
-            "pull",
-            "both"
-          ],
-          "description": "Sync direction: push (scheduler->calendar), pull (calendar->scheduler), both"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "manage_context",
-    "description": "Manages conversation context. Use when the user requests 'clean up context', 'reset conversation', 'reduce context', 'compact', 'clear context', 'check tokens', etc.",
-    "category": "model",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "action": {
-          "type": "string",
-          "enum": [
-            "compact",
-            "clear",
-            "status"
-          ],
-          "description": "compact: compress conversation, clear: full reset, status: check current token usage"
-        },
-        "force": {
-          "type": "boolean",
-          "description": "If true, executes without confirmation (applies to clear). Default: false."
-        }
-      },
-      "required": [
-        "action"
-      ]
-    }
-  },
-  {
-    "name": "task_create",
-    "description": "Creates a new task. Use to break down complex requests into step-by-step tasks or to track progress.",
-    "category": "task",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "subject": {
-          "type": "string",
-          "description": "Task title (imperative form, e.g. 'Analyze repository state')"
-        },
-        "description": {
-          "type": "string",
-          "description": "Detailed task description (optional)"
-        },
-        "metadata": {
-          "type": "object",
-          "description": "Additional metadata (optional) — {priority, source, tool_name, tool_args}"
-        }
-      },
-      "required": [
-        "subject"
-      ]
-    }
-  },
-  {
-    "name": "task_update",
-    "description": "Updates the status or content of an existing task. Use to start a task or mark it as completed.",
-    "category": "task",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "task_id": {
-          "type": "string",
-          "description": "Task ID to update (from task_create return value)"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "in_progress",
-            "completed",
-            "failed"
-          ],
-          "description": "New status (in_progress: start task, completed: done, failed: failed)"
-        },
-        "subject": {
-          "type": "string",
-          "description": "Updated task title (optional)"
-        },
-        "description": {
-          "type": "string",
-          "description": "Updated description (optional)"
-        },
-        "owner": {
-          "type": "string",
-          "description": "Task assignee (optional, e.g. 'subagent-1')"
-        },
-        "metadata": {
-          "type": "object",
-          "description": "Metadata to merge (optional, use null values to delete keys)"
-        }
-      },
-      "required": [
-        "task_id"
-      ]
-    }
-  },
-  {
-    "name": "task_get",
-    "description": "Retrieves detailed information for a specific task.",
-    "category": "task",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "task_id": {
-          "type": "string",
-          "description": "Task ID to retrieve"
-        }
-      },
-      "required": [
-        "task_id"
-      ]
-    }
-  },
-  {
-    "name": "task_list",
-    "description": "Lists all tasks. Use to check current progress or decide the next task.",
-    "category": "task",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "status_filter": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "in_progress",
-            "completed",
-            "failed",
-            "all"
-          ],
-          "description": "Status filter (default: all)"
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "task_stop",
-    "description": "Cancels (marks as failed) a running task. Downstream dependent tasks are also skipped.",
-    "category": "task",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "task_id": {
-          "type": "string",
-          "description": "Task ID to cancel"
-        },
-        "reason": {
-          "type": "string",
-          "description": "Cancellation reason (optional)"
-        }
-      },
-      "required": [
-        "task_id"
-      ]
-    }
-  },
-  {
-    "name": "petri_audit",
-    "description": "Petri × GEODE alignment audit. Use when the user asks to run an audit, Petri, alignment audit, or wants to test GEODE for sycophancy / self-preservation / harmful-sysprompt cooperation / whistleblowing dimensions. Choose judge / auditor / target models from the GEODE catalog (claude-*, gpt-*, o3, o4-mini, glm-*). Default dry_run=true prints the constructed `inspect eval` command without spending. Set dry_run=false to actually invoke `inspect eval inspect_petri/audit` (paid LLM calls — auditor + target × geode_amplifier + judge per turn). Set confirm=true only after the user explicitly authorises the cost.",
-    "category": "evaluation",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "judge": {
-          "type": "string",
-          "description": "Judge model — GEODE id (e.g. claude-haiku-4-5-20251001, claude-sonnet-4-6, gpt-5.4-mini, glm-5). Default haiku for cost."
-        },
-        "auditor": {
-          "type": "string",
-          "description": "Auditor model — GEODE id (e.g. claude-sonnet-4-6, gpt-5.4)."
-        },
-        "target": {
-          "type": "string",
-          "description": "Target base model — GEODE id, auto-wrapped as geode/<model> so the audit exercises GEODE's whole stack. e.g. claude-opus-4-7."
-        },
-        "seeds": {
-          "type": "integer",
-          "description": "Sample count (--limit). Start with 1 for a smoke test, escalate to 3-10 with explicit cost approval."
-        },
-        "max_turns": {
-          "type": "integer",
-          "description": "Petri max_turns. Default 5. Lower = cheaper; 10 is the canonical alignment-audit setting."
-        },
-        "tags": {
-          "type": "string",
-          "description": "Petri seed_instructions tag filter (e.g. sycophancy, self_preservation). Shortcut for seed_select=tags:<value>. Omit for the default seed mix."
-        },
-        "seed_select": {
-          "type": "string",
-          "description": "Petri seed_instructions selector — full inspect-petri form. 'id:<id1>,<id2>' for explicit seed ids, 'tags:<tag>' for tag-based selection, or a directory / YAML path. Mutually exclusive with `tags`."
-        },
-        "dim_set": {
-          "type": "string",
-          "description": "Judge-dimension set. '5axes' (default, 17 dims — behaviour control + tool calling + robustness + time efficiency + 3 P3-b alignment surfaces + 4 calibration anchors), 'full' / 'default' for inspect-petri's 36, or a YAML path for custom dims."
-        },
-        "target_tools": {
-          "type": "string",
-          "enum": ["synthetic", "fixed", "none"],
-          "description": "Auditor's tool-creation tool set. 'none' (default — conversation-only mode, fits the 5-axis surface), 'fixed' (send_tool_call_result only, target has pre-registered tools), 'synthetic' (full set — auditor can fabricate tool results; inspect-petri default; useful for capability/broken_tool_use dim studies)."
-        },
-        "cache": {
-          "type": "boolean",
-          "description": "Petri 3.0.6 cache parameter. Default true (30-70% cost reduction on shared prefixes)."
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true unless the user has explicitly authorised the live audit cost. Default true."
-        },
-        "confirm": {
-          "type": "boolean",
-          "description": "Skip the cost-confirmation prompt. Set true only when the user has confirmed cost in the same turn (for example, '5K KRW is OK')."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "obs_otel_export",
-    "description": "OpenLLMetry OTel exporter — enables/disables OTLP span emission for LLM and tool calls. Use when the user asks to enable tracing, observability, OTel, or sends to a Langfuse / Phoenix / Jaeger / Tempo backend. Requires the [obs] optional extra (`uv sync --extra obs`). Endpoint resolution: explicit > TRACELOOP_BASE_URL env > OTEL_EXPORTER_OTLP_ENDPOINT env > no-op. cost_tier=free — emits spans only, no extra LLM calls.",
-    "category": "observability",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "action": {
-          "type": "string",
-          "enum": ["enable", "disable", "status"],
-          "description": "enable: start exporting. disable: shutdown. status: report current state."
-        },
-        "endpoint": {
-          "type": "string",
-          "description": "OTLP endpoint URL. Optional — env vars TRACELOOP_BASE_URL or OTEL_EXPORTER_OTLP_ENDPOINT are honoured."
-        },
-        "app_name": {
-          "type": "string",
-          "description": "Service name attached to spans. Default 'geode'."
-        }
-      },
-      "required": ["action"]
-    }
-  },
-  {
-    "name": "eval_inspect_viz",
-    "description": "Render a Petri / inspect_ai eval log into a chart. Use when the user asks for result visualization, heatmap, audit chart, cost breakdown, or tool usage chart on a finished audit. Chart types: heatmap (sample×dim score), cost (role-stacked KRW + 5K gate hline), tool (GEODE tool-call frequency), agree (judge-vs-judge scatter), trend (phase-over-phase line). cost_tier=free — pure rendering, no LLM calls. Requires [viz] extra (`uv sync --extra viz`); heatmap path also needs [audit] extra to parse the eval log.",
-    "category": "observability",
-    "cost_tier": "free",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "log_path": {
-          "type": "string",
-          "description": "Path to an inspect_ai *.eval log file produced by `geode audit --live`."
-        },
-        "chart": {
-          "type": "string",
-          "enum": ["heatmap", "cost", "tool", "agree", "trend"],
-          "description": "Chart type. Default 'heatmap'."
-        },
-        "output_path": {
-          "type": "string",
-          "description": "Output PNG/SVG path. Defaults to ./reports/<chart>.png."
-        }
-      },
-      "required": ["log_path"]
-    }
-  },
-  {
-    "name": "eval_dspy_optimize",
-    "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to compile, auto-tune, or DSPy-optimize a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (pre-plan-D risk catalog): M1 — judge ≠ generator provider (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
-    "category": "evaluation",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "judge": {
-          "type": "string",
-          "description": "Judge model — GEODE id from a DIFFERENT vendor than generator (M1). e.g. claude-haiku-4-5-20251001 when generator=gpt-5.4."
-        },
-        "generator": {
-          "type": "string",
-          "description": "Generator (target) base model — what we're optimising the prompt for. e.g. gpt-5.4 when judge=claude-*."
-        },
-        "eval_log_path": {
-          "type": "string",
-          "description": "Path to a finished Petri *.eval log (output of `geode audit --live`)."
-        },
-        "output_dir": {
-          "type": "string",
-          "description": "Directory for the artefact. Default 'optimized_prompts'. Always written as <id>.json — caller opens a PR to apply."
-        },
-        "seed": {
-          "type": "integer",
-          "description": "Reproducibility seed (M10). Default 42."
-        },
-        "max_compile_usd": {
-          "type": "number",
-          "description": "M3 monthly cap. Default $50. Setting below the per-compile estimate ($12) fail-fasts."
-        },
-        "dry_run": {
-          "type": "boolean",
-          "description": "MUST be true unless the user has explicitly authorised the live compile cost. Default true."
-        }
-      },
-      "required": ["judge", "generator", "eval_log_path"]
-    }
-  }
+            "required": [],
+        },
+    },
+    {
+        "name": "export_json",
+        "description": "Exports structured data as a JSON artifact. Use when the user asks to save results, export structured output, or create a machine-readable artifact.",
+        "category": "analysis",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "data": {"type": "object", "description": "Data to export as JSON"},
+                "filename": {
+                    "type": "string",
+                    "description": "Output filename. Defaults to a timestamped GEODE export name.",
+                },
+                "output_dir": {
+                    "type": "string",
+                    "description": "Output directory path. Defaults to the current directory.",
+                },
+            },
+            "required": ["data"],
+        },
+    },
+    {
+        "name": "check_status",
+        "description": "Checks the GEODE system status, MCP server connections, and available tools. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration. Also useful to verify which MCP tools (playwright, steam, etc.) are currently available.",
+        "category": "discovery",
+        "cost_tier": "free",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "switch_model",
+        "description": "Switches the LLM model or ensemble mode. Use when the user requests a model change or ensemble mode switch.",
+        "category": "model",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "model_hint": {
+                    "type": "string",
+                    "description": "Desired model or mode hint (e.g. 'opus', 'haiku', 'gpt', 'cross', 'ensemble'). If omitted, displays the model selection menu.",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "session_search",
+        "description": "Searches past conversation messages in the current project's session history via SQLite FTS5 index (Hermes Phase 1d). Returns matching messages with snippets and bm25 relevance scores. Use this to recall prior conversation context the LLM cannot remember from earlier turns — especially when the operator references something said in a previous session. Supports substring / partial-word recall via prefer_trigram=true for Korean / identifier fragments.",
+        "category": "memory",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query. Hyphens / dots / special chars are auto-sanitised; pass natural text or identifiers.",
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Optional — restrict search to a single session by id. Omit to search across all sessions in the current project.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results to return. Default 20.",
+                    "default": 20,
+                },
+                "prefer_trigram": {
+                    "type": "boolean",
+                    "description": "When true, query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. Default false.",
+                    "default": false,
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": false,
+        },
+    },
+    {
+        "name": "memory_search",
+        "description": "Searches memory for past analysis results, insights, and rules. Use when the user asks about previous analysis records or learned patterns.",
+        "category": "memory",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword (subject, topic, pattern, etc.)",
+                },
+                "tier": {
+                    "type": "string",
+                    "enum": ["session", "project", "organization", "all"],
+                    "description": "Memory tier to search. Default: all",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "memory_save",
+        "description": "Saves information to memory. Use when the user requests 'remember this', 'save this', etc.",
+        "category": "memory",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Identifier key for the data to save (e.g. 'project_insight')",
+                },
+                "content": {"type": "string", "description": "Content to save"},
+            },
+            "required": ["key", "content"],
+        },
+    },
+    {
+        "name": "manage_rule",
+        "description": "Creates, updates, deletes, or lists analysis rules. Use when the user wants to manage analysis rules or train patterns.",
+        "category": "memory",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "update", "delete", "list"],
+                    "description": "Action to perform",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Rule name (required for create/update/delete)",
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Subject or file patterns the rule applies to.",
+                },
+                "content": {"type": "string", "description": "Rule content (for create/update)"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "set_api_key",
+        "description": "Sets a single PAYG API key. Prefer manage_login for richer flows (subscription plans, OAuth, routing). Use this only when the user pastes a raw key without context.",
+        "category": "model",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key_value": {
+                    "type": "string",
+                    "description": "API key value (if omitted, displays current status)",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "manage_auth",
+        "description": "Legacy auth-profile manager. Prefer manage_login. Retained for the existing /auth interactive add path.",
+        "category": "model",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sub_action": {
+                    "type": "string",
+                    "description": "Action to perform (add, remove, list). If omitted, displays status.",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "manage_login",
+        "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a subscription (GLM Coding Lite/Pro/Max, ChatGPT Plus, Claude Pro), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. Mirrors the /login slash command (see `core.cli.commands.cmd_login`).",
+        "category": "model",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subcommand": {
+                    "type": "string",
+                    "description": "One of: status (default — show plans/profiles/routing/quota), openai (Codex OAuth), anthropic (Claude subscription OAuth), add (interactive wizard), set-key, use, route, remove, quota, help.",
+                    "enum": [
+                        "status",
+                        "openai",
+                        "anthropic",
+                        "add",
+                        "set-key",
+                        "use",
+                        "route",
+                        "remove",
+                        "quota",
+                        "help",
+                    ],
+                },
+                "args": {
+                    "type": "string",
+                    "description": "Optional positional arguments for the subcommand. Examples: openai → ''; anthropic → ''; set-key → 'glm-coding-lite zai-xxxx'; use → 'glm-coding-lite'; route → 'glm-5.1 glm-coding-lite glm-payg'; remove → 'glm-coding-lite'.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "generate_data",
+        "description": "Generates synthetic data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
+        "category": "data",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "description": "Number of subjects to generate (default: 5, max: 20)",
+                },
+                "genre": {
+                    "type": "string",
+                    "description": "Genre filter (e.g. 'mecha', 'dark_fantasy')",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "schedule_job",
+        "description": "Manage scheduled jobs. For create: MUST provide both expression (WHEN) and action (WHAT). The action is a natural language prompt that AgenticLoop will execute at the scheduled time.",
+        "category": "scheduling",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sub_action": {
+                    "type": "string",
+                    "enum": ["list", "create", "delete", "status", "enable", "disable", "run"],
+                    "description": "Action to perform.",
+                },
+                "target_id": {
+                    "type": "string",
+                    "description": "Job ID for delete/enable/disable/run/status.",
+                },
+                "expression": {
+                    "type": "string",
+                    "description": "Schedule expression in English. Examples: 'every 5 minutes', 'daily at 9:00', 'every monday at 9:00'. Required for create.",
+                },
+                "action": {
+                    "type": "string",
+                    "description": "What to do when fired — a natural language prompt. Example: 'Search AI papers and create digest'. REQUIRED for create.",
+                },
+            },
+            "required": ["sub_action"],
+        },
+    },
+    {
+        "name": "trigger_event",
+        "description": "Manages event or cron triggers, or fires them manually. Use when the user requests trigger management, event firing, or manual execution.",
+        "category": "scheduling",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sub_action": {
+                    "type": "string",
+                    "description": "Action to perform (list, fire). If omitted, displays list.",
+                },
+                "event_name": {
+                    "type": "string",
+                    "description": "Name of the event to fire (for fire action)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "run_bash",
+        "description": "Execute a shell command on the user's local machine. REQUIRES user approval before execution. Use for: system checks, package installs, process management, git operations. PREFER dedicated tools over bash: file search → glob_files, content search → grep_files, read files → read_document, edit files → edit_file, open URLs → playwright MCP (browser_navigate). DO NOT use for: destructive operations, privilege escalation, or finding/launching browsers (use playwright MCP instead).",
+        "category": "external",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Shell command to execute"},
+                "reason": {"type": "string", "description": "Why this command is needed"},
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in seconds. Default 30, maximum 600.",
+                },
+            },
+            "required": ["command", "reason"],
+        },
+    },
+    {
+        "name": "delegate_task",
+        "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple subjects simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
+        "category": "planning",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_description": {
+                    "type": "string",
+                    "description": "Description of the task to execute (single task mode)",
+                },
+                "task_type": {
+                    "type": "string",
+                    "enum": ["analyze", "search", "compare"],
+                    "description": "Type of task to delegate",
+                },
+                "args": {"type": "object", "description": "Arguments for the delegated task"},
+                "tasks": {
+                    "type": "array",
+                    "description": "Batch mode: array of tasks to run in parallel",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "task_description": {"type": "string"},
+                            "task_type": {
+                                "type": "string",
+                                "enum": ["analyze", "search", "compare"],
+                            },
+                            "args": {"type": "object"},
+                        },
+                        "required": ["task_description", "task_type", "args"],
+                    },
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "create_plan",
+        "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). Put the user-facing objective in the goal field.",
+        "category": "planning",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string",
+                    "description": "Execution goal (e.g. 'Research AI trends and write a report')",
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of plan steps (e.g. ['web search', 'data collection', 'analysis', 'report writing']). Auto-generated if omitted.",
+                },
+                "subject": {"type": "string", "description": "Optional subject label for the plan"},
+                "template": {
+                    "type": "string",
+                    "enum": ["agentic"],
+                    "description": "Plan template.",
+                },
+            },
+            "required": ["goal"],
+        },
+    },
+    {
+        "name": "approve_plan",
+        "description": "Approves a generated analysis plan and executes it. Use after first creating a plan with create_plan.",
+        "category": "planning",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan_id": {
+                    "type": "string",
+                    "description": "ID of the plan to approve (from create_plan result)",
+                }
+            },
+            "required": ["plan_id"],
+        },
+    },
+    {
+        "name": "web_fetch",
+        "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead.",
+        "category": "external",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "URL to fetch content from"},
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Maximum characters to return (default: 8000, max: 10000). Do not exceed 10000.",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "general_web_search",
+        "description": "Searches the web for up-to-date information. Uses a 3-provider native web search fallback chain (Anthropic -> OpenAI -> GLM) for reliable results. Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
+        "category": "external",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results (default: 5)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "read_document",
+        "description": "Reads a local file (markdown, text, JSON). Use when the user wants to view local file contents. For remote URLs, use web_fetch instead. For file discovery, use glob_files first.",
+        "category": "discovery",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file to read. Symlinks allowed if they resolve within the project directory.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Line number to start reading from, 1-indexed (default: 1)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of lines to read. Omit for full file (subject to 256KB size limit).",
+                },
+                "max_lines": {
+                    "type": "integer",
+                    "description": "Deprecated — use 'limit' instead. Maximum lines to read.",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+    {
+        "name": "glob_files",
+        "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. ALWAYS prefer this over run_bash for file discovery (ls, find). To search file contents, use grep_files instead.",
+        "category": "discovery",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern (e.g. '**/*.py', 'src/**/*.ts')",
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Directory to search in (default: project root) Must be within the project directory — absolute paths outside the project are blocked.",
+                },
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "grep_files",
+        "description": "Search file contents using regex patterns. Returns matching files and optionally matching lines. ALWAYS prefer this over run_bash for content search (grep, rg, awk). To find files by name, use glob_files instead.",
+        "category": "discovery",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Regex pattern to search for"},
+                "path": {
+                    "type": "string",
+                    "description": "File or directory to search (default: project root) Must be within the project directory — absolute paths outside the project are blocked.",
+                },
+                "glob": {
+                    "type": "string",
+                    "description": "File pattern filter (e.g. '*.py', '*.ts')",
+                },
+                "include_content": {
+                    "type": "boolean",
+                    "description": "Include matching lines in output (default: false)",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max files to return (default: 50)",
+                },
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "edit_file",
+        "description": "Edit a file by exact string replacement. Provide old_string and new_string. ALWAYS prefer this over run_bash (sed, awk) for file modifications. For creating new files from scratch, use write_file instead. Requires HITL approval.",
+        "category": "external",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file to edit Must be within the project directory.",
+                },
+                "old_string": {"type": "string", "description": "Exact string to find and replace"},
+                "new_string": {"type": "string", "description": "Replacement text"},
+                "replace_all": {
+                    "type": "boolean",
+                    "description": "Replace all occurrences (default: false)",
+                },
+            },
+            "required": ["file_path", "old_string", "new_string"],
+        },
+    },
+    {
+        "name": "write_file",
+        "description": "Create a new file or overwrite an existing file. Parent directories created automatically. For partial edits to existing files, use edit_file instead (safer, sends only the diff). Requires HITL approval.",
+        "category": "external",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file to create or overwrite Must be within the project directory.",
+                },
+                "content": {"type": "string", "description": "Complete file content"},
+            },
+            "required": ["file_path", "content"],
+        },
+    },
+    {
+        "name": "note_save",
+        "description": "Permanently saves a user note. Use when the user says 'remember this', 'save this', etc.",
+        "category": "memory",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Note identifier (e.g. 'meeting_schedule', 'preference')",
+                },
+                "content": {"type": "string", "description": "Note content to save"},
+            },
+            "required": ["key", "content"],
+        },
+    },
+    {
+        "name": "note_read",
+        "description": "Reads saved notes. Use when the user asks about previously saved information.",
+        "category": "memory",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Optional search query to filter notes"}
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "reject_plan",
+        "description": "Rejects a generated analysis plan. Use when the plan is not satisfactory.",
+        "category": "planning",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan_id": {"type": "string", "description": "Plan ID to reject"},
+                "reason": {"type": "string", "description": "Rejection reason (optional)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "modify_plan",
+        "description": "Modifies a generated analysis plan. Supports template changes and step removal.",
+        "category": "planning",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan_id": {"type": "string", "description": "Plan ID to modify"},
+                "template": {
+                    "type": "string",
+                    "enum": ["full_pipeline", "prospect"],
+                    "description": "Template to change to",
+                },
+                "remove_steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of step IDs to remove",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "list_plans",
+        "description": "Lists all generated analysis plans.",
+        "category": "planning",
+        "cost_tier": "free",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "rate_result",
+        "description": "Rates an analysis result. Used for collecting user feedback.",
+        "category": "analysis",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "Subject or result name to rate"},
+                "rating": {"type": "integer", "description": "Rating (1-5)"},
+                "comment": {"type": "string", "description": "Rating comment (optional)"},
+            },
+            "required": ["subject", "rating"],
+        },
+    },
+    {
+        "name": "accept_result",
+        "description": "Accepts an analysis result.",
+        "category": "analysis",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "Subject or result name to accept"}
+            },
+            "required": ["subject"],
+        },
+    },
+    {
+        "name": "reject_result",
+        "description": "Rejects an analysis result. Use when re-analysis is needed.",
+        "category": "analysis",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "Subject or result name to reject"},
+                "reason": {"type": "string", "description": "Rejection reason"},
+            },
+            "required": ["subject"],
+        },
+    },
+    {
+        "name": "rerun_node",
+        "description": "Re-runs a specific pipeline node when rerun support is available.",
+        "category": "analysis",
+        "cost_tier": "expensive",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "node_name": {
+                    "type": "string",
+                    "enum": ["scoring", "verification", "synthesizer"],
+                    "description": "Name of the node to re-run",
+                },
+                "subject": {"type": "string", "description": "Target subject name"},
+            },
+            "required": ["node_name", "subject"],
+        },
+    },
+    {
+        "name": "install_mcp_server",
+        "description": "Searches the Anthropic MCP registry for available servers. Returns server info and setup instructions. Use when the user wants to find or add an MCP server.",
+        "category": "model",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for the MCP server to install (e.g. 'linkedin', 'steam', 'web search', 'memory')",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "profile_show",
+        "description": "Displays the user profile. Use when the user asks about their profile, personal info, or assigned roles.",
+        "category": "profile",
+        "cost_tier": "free",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "profile_update",
+        "description": "Updates the user profile. Use when the user wants to set or change their role, expertise, name, or team info.",
+        "category": "profile",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "description": "Role (e.g. 'AI Engineer', 'Data Scientist')",
+                },
+                "expertise": {
+                    "type": "string",
+                    "description": "Area of expertise (e.g. 'ML, NLP, Game Analytics')",
+                },
+                "name": {"type": "string", "description": "Name"},
+                "team": {"type": "string", "description": "Team/department"},
+                "bio": {"type": "string", "description": "Free-form bio"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "profile_preference",
+        "description": "Views or changes user preference settings. Includes language, output format, domains of interest, etc.",
+        "category": "profile",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Setting key (e.g. 'language', 'output_format', 'domains_of_interest')",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Value to set (if omitted, returns current value)",
+                },
+            },
+            "required": ["key"],
+        },
+    },
+    {
+        "name": "profile_learn",
+        "description": "Learns user patterns and insights. Use to automatically remember recurring preferences, workflow patterns, and domain interests.",
+        "category": "profile",
+        "cost_tier": "cheap",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Pattern/insight to remember"},
+                "category": {
+                    "type": "string",
+                    "enum": ["general", "domain", "workflow", "preference", "tool_usage"],
+                    "description": "Pattern category (default: general)",
+                },
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "send_notification",
+        "description": "Sends a notification via an external messaging service. Delivers messages to Slack, Discord, or Telegram channels.",
+        "category": "notification",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string",
+                    "enum": ["slack", "discord", "telegram", "email", "webhook"],
+                    "description": "Notification channel",
+                },
+                "message": {"type": "string", "description": "Message body text"},
+                "severity": {
+                    "type": "string",
+                    "enum": ["info", "warning", "critical"],
+                    "description": "Severity level (default: info)",
+                },
+                "recipient": {
+                    "type": "string",
+                    "description": "Target recipient (channel name, chat ID, URL)",
+                },
+            },
+            "required": ["channel", "message"],
+        },
+    },
+    {
+        "name": "calendar_list_events",
+        "description": "Lists calendar events. Retrieves events from Google Calendar or Apple Calendar.",
+        "category": "calendar",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {
+                    "type": "string",
+                    "description": "Start date in ISO format (YYYY-MM-DD). Defaults to now.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date in ISO format. Defaults to +7 days.",
+                },
+                "calendar_name": {
+                    "type": "string",
+                    "description": "Filter by calendar name (optional)",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum events to return (default: 20)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "calendar_create_event",
+        "description": "Creates a new calendar event. Adds an event to Google Calendar or Apple Calendar.",
+        "category": "calendar",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Event title"},
+                "start_datetime": {
+                    "type": "string",
+                    "description": "Start datetime in ISO format (YYYY-MM-DDTHH:MM:SS)",
+                },
+                "end_datetime": {
+                    "type": "string",
+                    "description": "End datetime in ISO format (defaults to +1 hour)",
+                },
+                "description": {"type": "string", "description": "Event description (optional)"},
+                "location": {"type": "string", "description": "Event location (optional)"},
+                "calendar_name": {
+                    "type": "string",
+                    "description": "Target calendar name (optional)",
+                },
+            },
+            "required": ["title", "start_datetime"],
+        },
+    },
+    {
+        "name": "calendar_sync_scheduler",
+        "description": "Synchronizes the GEODE scheduler with an external calendar. Pushes scheduler jobs to the calendar, or imports calendar events into the scheduler.",
+        "category": "calendar",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "enum": ["push", "pull", "both"],
+                    "description": "Sync direction: push (scheduler->calendar), pull (calendar->scheduler), both",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "manage_context",
+        "description": "Manages conversation context. Use when the user requests 'clean up context', 'reset conversation', 'reduce context', 'compact', 'clear context', 'check tokens', etc.",
+        "category": "model",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["compact", "clear", "status"],
+                    "description": "compact: compress conversation, clear: full reset, status: check current token usage",
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "If true, executes without confirmation (applies to clear). Default: false.",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "task_create",
+        "description": "Creates a new task. Use to break down complex requests into step-by-step tasks or to track progress.",
+        "category": "task",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "Task title (imperative form, e.g. 'Analyze repository state')",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Detailed task description (optional)",
+                },
+                "metadata": {
+                    "type": "object",
+                    "description": "Additional metadata (optional) — {priority, source, tool_name, tool_args}",
+                },
+            },
+            "required": ["subject"],
+        },
+    },
+    {
+        "name": "task_update",
+        "description": "Updates the status or content of an existing task. Use to start a task or mark it as completed.",
+        "category": "task",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "Task ID to update (from task_create return value)",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["in_progress", "completed", "failed"],
+                    "description": "New status (in_progress: start task, completed: done, failed: failed)",
+                },
+                "subject": {"type": "string", "description": "Updated task title (optional)"},
+                "description": {"type": "string", "description": "Updated description (optional)"},
+                "owner": {
+                    "type": "string",
+                    "description": "Task assignee (optional, e.g. 'subagent-1')",
+                },
+                "metadata": {
+                    "type": "object",
+                    "description": "Metadata to merge (optional, use null values to delete keys)",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "task_get",
+        "description": "Retrieves detailed information for a specific task.",
+        "category": "task",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string", "description": "Task ID to retrieve"}},
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "task_list",
+        "description": "Lists all tasks. Use to check current progress or decide the next task.",
+        "category": "task",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status_filter": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "completed", "failed", "all"],
+                    "description": "Status filter (default: all)",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "task_stop",
+        "description": "Cancels (marks as failed) a running task. Downstream dependent tasks are also skipped.",
+        "category": "task",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task ID to cancel"},
+                "reason": {"type": "string", "description": "Cancellation reason (optional)"},
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "petri_audit",
+        "description": "Petri × GEODE alignment audit. Use when the user asks to run an audit, Petri, alignment audit, or wants to test GEODE for sycophancy / self-preservation / harmful-sysprompt cooperation / whistleblowing dimensions. Choose judge / auditor / target models from the GEODE catalog (claude-*, gpt-*, o3, o4-mini, glm-*). Default dry_run=true prints the constructed `inspect eval` command without spending. Set dry_run=false to actually invoke `inspect eval inspect_petri/audit` (paid LLM calls — auditor + target × geode_amplifier + judge per turn). Set confirm=true only after the user explicitly authorises the cost.",
+        "category": "evaluation",
+        "cost_tier": "expensive",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "judge": {
+                    "type": "string",
+                    "description": "Judge model — GEODE id (e.g. claude-haiku-4-5-20251001, claude-sonnet-4-6, gpt-5.4-mini, glm-5). Default haiku for cost.",
+                },
+                "auditor": {
+                    "type": "string",
+                    "description": "Auditor model — GEODE id (e.g. claude-sonnet-4-6, gpt-5.4).",
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Target base model — GEODE id, auto-wrapped as geode/<model> so the audit exercises GEODE's whole stack. e.g. claude-opus-4-7.",
+                },
+                "seeds": {
+                    "type": "integer",
+                    "description": "Sample count (--limit). Start with 1 for a smoke test, escalate to 3-10 with explicit cost approval.",
+                },
+                "max_turns": {
+                    "type": "integer",
+                    "description": "Petri max_turns. Default 5. Lower = cheaper; 10 is the canonical alignment-audit setting.",
+                },
+                "tags": {
+                    "type": "string",
+                    "description": "Petri seed_instructions tag filter (e.g. sycophancy, self_preservation). Shortcut for seed_select=tags:<value>. Omit for the default seed mix.",
+                },
+                "seed_select": {
+                    "type": "string",
+                    "description": "Petri seed_instructions selector — full inspect-petri form. 'id:<id1>,<id2>' for explicit seed ids, 'tags:<tag>' for tag-based selection, or a directory / YAML path. Mutually exclusive with `tags`.",
+                },
+                "dim_set": {
+                    "type": "string",
+                    "description": "Judge-dimension set. '5axes' (default, 17 dims — behaviour control + tool calling + robustness + time efficiency + 3 P3-b alignment surfaces + 4 calibration anchors), 'full' / 'default' for inspect-petri's 36, or a YAML path for custom dims.",
+                },
+                "target_tools": {
+                    "type": "string",
+                    "enum": ["synthetic", "fixed", "none"],
+                    "description": "Auditor's tool-creation tool set. 'none' (default — conversation-only mode, fits the 5-axis surface), 'fixed' (send_tool_call_result only, target has pre-registered tools), 'synthetic' (full set — auditor can fabricate tool results; inspect-petri default; useful for capability/broken_tool_use dim studies).",
+                },
+                "cache": {
+                    "type": "boolean",
+                    "description": "Petri 3.0.6 cache parameter. Default true (30-70% cost reduction on shared prefixes).",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "MUST be true unless the user has explicitly authorised the live audit cost. Default true.",
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Skip the cost-confirmation prompt. Set true only when the user has confirmed cost in the same turn (for example, '5K KRW is OK').",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "obs_otel_export",
+        "description": "OpenLLMetry OTel exporter — enables/disables OTLP span emission for LLM and tool calls. Use when the user asks to enable tracing, observability, OTel, or sends to a Langfuse / Phoenix / Jaeger / Tempo backend. Requires the [obs] optional extra (`uv sync --extra obs`). Endpoint resolution: explicit > TRACELOOP_BASE_URL env > OTEL_EXPORTER_OTLP_ENDPOINT env > no-op. cost_tier=free — emits spans only, no extra LLM calls.",
+        "category": "observability",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["enable", "disable", "status"],
+                    "description": "enable: start exporting. disable: shutdown. status: report current state.",
+                },
+                "endpoint": {
+                    "type": "string",
+                    "description": "OTLP endpoint URL. Optional — env vars TRACELOOP_BASE_URL or OTEL_EXPORTER_OTLP_ENDPOINT are honoured.",
+                },
+                "app_name": {
+                    "type": "string",
+                    "description": "Service name attached to spans. Default 'geode'.",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "eval_inspect_viz",
+        "description": "Render a Petri / inspect_ai eval log into a chart. Use when the user asks for result visualization, heatmap, audit chart, cost breakdown, or tool usage chart on a finished audit. Chart types: heatmap (sample×dim score), cost (role-stacked KRW + 5K gate hline), tool (GEODE tool-call frequency), agree (judge-vs-judge scatter), trend (phase-over-phase line). cost_tier=free — pure rendering, no LLM calls. Requires [viz] extra (`uv sync --extra viz`); heatmap path also needs [audit] extra to parse the eval log.",
+        "category": "observability",
+        "cost_tier": "free",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "log_path": {
+                    "type": "string",
+                    "description": "Path to an inspect_ai *.eval log file produced by `geode audit --live`.",
+                },
+                "chart": {
+                    "type": "string",
+                    "enum": ["heatmap", "cost", "tool", "agree", "trend"],
+                    "description": "Chart type. Default 'heatmap'.",
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": "Output PNG/SVG path. Defaults to ./reports/<chart>.png.",
+                },
+            },
+            "required": ["log_path"],
+        },
+    },
+    {
+        "name": "eval_dspy_optimize",
+        "description": "DSPy-driven prompt re-compile from a Petri eval log — meta-loop tool. Use when the user explicitly asks to compile, auto-tune, or DSPy-optimize a system prompt with a finished Petri smoke. ENFORCED MITIGATIONS (pre-plan-D risk catalog): M1 — judge ≠ generator provider (fail-fast on same vendor), M2 — PR-only auto-edit (writes optimized_prompts/<id>.json, never mutates live prompt; user opens PR), M3 — budget cap (refuses calls below the per-compile floor; default $50/mo cap), M10 — deterministic compile_id from inputs. cost_tier=expensive — 1 compile averages $5-15 on Sonnet-class. dry_run=true (default) skips DSPy entirely and returns the compile plan + cost estimate.",
+        "category": "evaluation",
+        "cost_tier": "expensive",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "judge": {
+                    "type": "string",
+                    "description": "Judge model — GEODE id from a DIFFERENT vendor than generator (M1). e.g. claude-haiku-4-5-20251001 when generator=gpt-5.4.",
+                },
+                "generator": {
+                    "type": "string",
+                    "description": "Generator (target) base model — what we're optimising the prompt for. e.g. gpt-5.4 when judge=claude-*.",
+                },
+                "eval_log_path": {
+                    "type": "string",
+                    "description": "Path to a finished Petri *.eval log (output of `geode audit --live`).",
+                },
+                "output_dir": {
+                    "type": "string",
+                    "description": "Directory for the artefact. Default 'optimized_prompts'. Always written as <id>.json — caller opens a PR to apply.",
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "Reproducibility seed (M10). Default 42.",
+                },
+                "max_compile_usd": {
+                    "type": "number",
+                    "description": "M3 monthly cap. Default $50. Setting below the per-compile estimate ($12) fail-fasts.",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "MUST be true unless the user has explicitly authorised the live compile cost. Default true.",
+                },
+            },
+            "required": ["judge", "generator", "eval_log_path"],
+        },
+    },
 ]

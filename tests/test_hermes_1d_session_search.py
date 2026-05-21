@@ -257,12 +257,24 @@ def test_tool_registered_in_default_registry() -> None:
 
 def test_definitions_json_has_session_search_entry() -> None:
     """``core/tools/definitions.json`` lists session_search with the
-    documented required field."""
+    documented required field + matches the runtime tool's schema."""
+    from core.tools.session_search import SessionSearchTool
+
     defs_path = Path("core/tools/definitions.json")
     raw = defs_path.read_text(encoding="utf-8")
     data = json.loads(raw)
     entries = {e["name"]: e for e in data if isinstance(e, dict) and "name" in e}
     assert "session_search" in entries
     entry = entries["session_search"]
-    assert "query" in entry["input_schema"]["required"]
+    runtime_schema = SessionSearchTool().parameters
+    # Pin parity — required fields + additionalProperties match (Codex
+    # MCP catch on PR-1440: runtime schema had additionalProperties=False
+    # but definitions.json had omitted it).
+    assert entry["input_schema"]["required"] == runtime_schema["required"]
+    assert entry["input_schema"].get("additionalProperties") == runtime_schema.get(
+        "additionalProperties"
+    )
+    assert set(entry["input_schema"]["properties"].keys()) == set(
+        runtime_schema["properties"].keys()
+    )
     assert entry.get("cost_tier") == "free"
