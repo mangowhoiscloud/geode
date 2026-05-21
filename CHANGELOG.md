@@ -71,10 +71,10 @@ functional change.
   env 모두 `_OVERRIDE` + `_STRICT=1` 동반 set — 기존 fail-fast 보존.
   4 reader 의 docstring 에서 stale `operator-local` 주장 (S0a/b/c 의
   Codex MCP catch 와 동일 inheritance) 도 함께 정합화 — 실제 3-layer
-  chain 으로 갱신. 27 신규 invariant test (shared resolver 8 + 4 reader 별
-  graceful/priority 19) + 5 기존 strict test 갱신 (`_STRICT=1` 명시).
-  Read-write parity 보존 — `apply_*_policy` 의 deep-copy 패턴 (S0b)
-  여전히 유효.
+  chain 으로 갱신. **19 신규 invariant test** (shared resolver 9 +
+  reader 별 env-graceful/operator-local 10) + **8 기존 strict test
+  갱신** (`_STRICT=1` 명시). Read-write parity 보존 — `apply_*_policy`
+  의 deep-copy 패턴 (S0b) 여전히 유효.
 
 ### Changed
 
