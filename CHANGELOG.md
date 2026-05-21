@@ -87,6 +87,41 @@ functional change.
   의해 완료 상태. drift-prevention invariant 만 본 PR 가 추가. 5/5 pytest
   pass, ruff + ruff format --check + mypy clean.
 
+- **PR-OL-A1.5 — auto-trigger telemetry events + JSONL audit log.**
+  PR-OL-A1 (#1445) 가 cron-driven mutator firing 을 도입하면서 `state`
+  값을 INFO log 로만 출력 — Petri/Inspect viewer 같은 다운스트림이
+  세션을 통계로 그릴 수 없는 deception 잔존. 본 PR 가 닫기. **HookEvent
+  5종 추가** (`core/hooks/system.py`) — `SELF_IMPROVING_AUTO_TRIGGER_{FIRED,
+  LOCK_BUSY, INTERVAL_BLOCKED, RUNNER_ERROR, PARSE_ERROR}` 로 각 terminal
+  state 1:1 매핑. `disabled` 는 의도적으로 enum 미포함 (운영자가 명시적
+  off → 매 cron tick 마다 무의미 event 발생 방지, wiring 의 startup log
+  가 SoT). 매핑 테이블 `STATE_TO_HOOK_EVENT` 노출 — runtime resolution
+  은 `getattr(HookEvent, name)`. **JSONL audit log** 신규 writer
+  `append_history_entry(*, state, detail, ts, trigger_id, history_path)`
+  가 `~/.geode/self-improving-loop/auto_trigger_history.jsonl` 에 append-
+  only 한 줄당 `{ts, state, detail, trigger_id}`. `ensure_ascii=False` 로
+  한글 detail (`섹션=한글`) 보존. `mkdir + write_text` 단일 try (PR-OL-C2
+  Codex MCP lesson). OSError 시 `False` 반환 + WARNING log — telemetry
+  실패가 state machine 영향 못 줌. Path 는 ``~/.geode/`` 하위 — 레포
+  외부, gitignore N/A (PR-G5b #1350 "git-tracked but isn't" 사례 회피).
+  **`auto_trigger_mutator` 리팩토링** — 매 `return AutoTriggerStatus(...)`
+  를 `_finalize_status` helper 로 단일 출구점 통과: hook emit + history
+  append + status 반환 3가지 부수효과가 drift 없이 같은 분기에서 fire.
+  `hooks: Any = None` 기본값 — REPL/CLI 직접 호출 graceful (telemetry
+  sink 없어도 작동). `_BrokenHooks` 시뮬레이션 test 로 hook handler
+  raise 가 state machine crash 못 시킨다는 invariant 검증. **wiring**:
+  `core/wiring/automation.py::build_automation` 의 `register_auto_trigger`
+  호출에 `hooks=hooks` 인자 추가 — daemon 의 HookSystem instance 가
+  callback closure 로 캡쳐돼 cron fire 마다 자동 emit. **17 invariant test**
+  (`tests/test_ol_a15_telemetry.py`) — HookEvent enum x3 (5 variant value /
+  STATE_TO_HOOK_EVENT 5-state coverage + disabled 부재 / getattr resolve)
+  + append_history_entry x5 (1 row write / multi-append / parent dir 생성
+  / Unicode preserve / OSError graceful) + auto_trigger_mutator end-to-end
+  x9 (fired/lock_busy/interval_blocked/runner_error/parse_error 각각 hook+
+  history 발생 / disabled 가 hook+history 둘 다 skip / hooks=None graceful /
+  multi-call append-only / hook handler raise 격리). Quality gates clean
+  (ruff + format-check + mypy + 43/43 pytest 누적 OL-A1+A1.5).
+
 - **PR-OL-A1 — self-improving loop mutator auto-trigger (cron + 4-backend grounded).**
   Pre-OL-A1 의 `SelfImprovingLoopRunner` 는 *manual* 발화만 지원 (operator
   가 `geode self-improve mutate` 호출, 혹은 autoresearch sprint runner

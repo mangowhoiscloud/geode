@@ -31,6 +31,7 @@ for OL-A1 — added in OL-A2).
 from __future__ import annotations
 
 import fcntl
+import json
 import logging
 import os
 import time
@@ -44,11 +45,14 @@ from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "AUTO_TRIGGER_HISTORY_PATH",
     "AUTO_TRIGGER_LOCK_PATH",
     "AUTO_TRIGGER_TIMESTAMP_PATH",
     "AUTO_TRIGGER_TRIGGER_ID",
+    "STATE_TO_HOOK_EVENT",
     "AutoTriggerStatus",
     "acquire_auto_trigger_lock",
+    "append_history_entry",
     "auto_trigger_mutator",
     "is_min_interval_satisfied",
     "read_last_run_timestamp",
@@ -71,6 +75,39 @@ AUTO_TRIGGER_TIMESTAMP_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigg
 firings (lock-blocked, interval-blocked, run_once raised) deliberately
 do NOT update this — only a successful mutation cycle counts so a
 flapping config doesn't lock the schedule out for hours."""
+
+AUTO_TRIGGER_HISTORY_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger_history.jsonl"
+"""Append-only JSONL audit log — one row per firing (terminal state).
+
+Schema: ``{"ts": float, "state": str, "detail": str, "trigger_id": str}``.
+
+Unlike :data:`AUTO_TRIGGER_TIMESTAMP_PATH` which records only
+*successful* fires for the interval gate, the history log captures
+**every** firing including no-ops (``lock_busy`` / ``interval_blocked``
+/ ``disabled``) and errors. OL-A3 ``geode self-improve audit`` viewer
+consumes this file to render the auto-trigger timeline.
+
+Stored under ``~/.geode/self-improving-loop/`` (outside the repo) so
+the file is operator-private and not subject to the repo's
+``.gitignore`` rules — no "claims to be git-tracked but isn't" risk."""
+
+
+STATE_TO_HOOK_EVENT: dict[str, str] = {
+    "fired": "SELF_IMPROVING_AUTO_TRIGGER_FIRED",
+    "lock_busy": "SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY",
+    "interval_blocked": "SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED",
+    "runner_error": "SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR",
+    "parse_error": "SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR",
+}
+"""Maps terminal :class:`AutoTriggerStatus.state` → HookEvent enum name.
+
+The ``disabled`` state is intentionally NOT in this map — when the
+defensive guard at the top of :func:`auto_trigger_mutator` returns
+early, the wiring layer should have already prevented registration
+(``enabled=False`` skips ``trigger_manager.register``). Emitting
+``disabled`` would generate a useless event on every cron tick from
+some misconfigured caller. The wiring's own startup log line is the
+SoT for "trigger was registered or skipped"."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +222,94 @@ def is_min_interval_satisfied(
     return elapsed_minutes >= min_interval_minutes
 
 
+def append_history_entry(
+    *,
+    state: str,
+    detail: str,
+    ts: float,
+    trigger_id: str = AUTO_TRIGGER_TRIGGER_ID,
+    history_path: Path | None = None,
+) -> bool:
+    """Append one JSONL row to the auto-trigger history log.
+
+    Best-effort: any OSError (parent missing, disk full, permission
+    denied) is logged at WARNING and the function returns False. The
+    caller (:func:`auto_trigger_mutator`) ignores the return value
+    because telemetry failure must not affect the state machine.
+
+    Codex MCP PR-OL-C2 lesson applied — mkdir + write_text inside the
+    same try block.
+    """
+    target = history_path if history_path is not None else AUTO_TRIGGER_HISTORY_PATH
+    row = {"ts": ts, "state": state, "detail": detail, "trigger_id": trigger_id}
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        log.warning("auto_trigger: history append failed: %s", exc)
+        return False
+    return True
+
+
+def _emit_state_event(
+    hooks: Any,
+    *,
+    state: str,
+    detail: str,
+    ts: float,
+    trigger_id: str,
+) -> None:
+    """Emit the HookEvent variant for the given terminal state.
+
+    ``hooks`` is the :class:`core.hooks.HookSystem` instance (typed as
+    Any to avoid the import cost at module load — telemetry must not
+    drag the hook system into the cold path of the manual REPL caller).
+    When ``hooks`` is None, the function is a no-op so unit tests and
+    one-off CLI invocations can use the auto-trigger without wiring
+    the hook system.
+
+    Exception isolation: a misbehaving hook handler must NOT crash the
+    auto-trigger. We swallow any exception and log at WARNING — same
+    contract as :meth:`HookSystem.trigger` itself, which also isolates,
+    but defending against a buggy custom hook injection.
+    """
+    if hooks is None:
+        return
+    hook_event_name = STATE_TO_HOOK_EVENT.get(state)
+    if hook_event_name is None:
+        return  # "disabled" — intentionally not telemetry-emitted
+    try:
+        from core.hooks import HookEvent
+
+        event = getattr(HookEvent, hook_event_name)
+        hooks.trigger(event, {"trigger_id": trigger_id, "ts": ts, "detail": detail})
+    except Exception:
+        log.exception("auto_trigger: hook emit failed for state=%s", state)
+
+
+def _finalize_status(
+    state: str,
+    detail: str,
+    *,
+    hooks: Any,
+    history_path: Path | None,
+    ts: float,
+    trigger_id: str = AUTO_TRIGGER_TRIGGER_ID,
+) -> AutoTriggerStatus:
+    """Single exit point — emit HookEvent + append history + return status.
+
+    Every ``return AutoTriggerStatus(...)`` in :func:`auto_trigger_mutator`
+    goes through this helper so the three side-effects (hook, audit
+    log, return value) cannot drift apart.
+    """
+    _emit_state_event(hooks, state=state, detail=detail, ts=ts, trigger_id=trigger_id)
+    append_history_entry(
+        state=state, detail=detail, ts=ts, trigger_id=trigger_id, history_path=history_path
+    )
+    return AutoTriggerStatus(state=state, detail=detail)
+
+
 def auto_trigger_mutator(
     *,
     enabled: bool,
@@ -192,6 +317,8 @@ def auto_trigger_mutator(
     runner_factory: Callable[[], Any] | None = None,
     lock_path: Path | None = None,
     timestamp_path: Path | None = None,
+    history_path: Path | None = None,
+    hooks: Any = None,
     now: float | None = None,
 ) -> AutoTriggerStatus:
     """One mutator firing — guarded by lockfile + min-interval.
@@ -208,6 +335,11 @@ def auto_trigger_mutator(
             Tests inject mocks; production wires the real runner.
         lock_path: Lockfile path override (tests).
         timestamp_path: Timestamp path override (tests).
+        history_path: JSONL audit log path override (tests).
+        hooks: :class:`HookSystem` instance. When provided, every
+            terminal state (except ``disabled``) emits a
+            ``SELF_IMPROVING_AUTO_TRIGGER_*`` event. None → no telemetry
+            (graceful for unit tests / manual CLI use).
         now: Wall-clock override (tests).
 
     Returns:
@@ -215,7 +347,10 @@ def auto_trigger_mutator(
         raises — exceptions inside ``run_once`` are caught and packed
         into the ``runner_error`` / ``parse_error`` states.
     """
+    ts_now = now if now is not None else time.time()
     if not enabled:
+        # ``disabled`` is the only state that skips telemetry + history
+        # (see STATE_TO_HOOK_EVENT docstring for rationale).
         return AutoTriggerStatus(state="disabled")
 
     if not is_min_interval_satisfied(
@@ -223,14 +358,23 @@ def auto_trigger_mutator(
         now=now,
         timestamp_path=timestamp_path,
     ):
-        return AutoTriggerStatus(
-            state="interval_blocked",
-            detail=f"min_interval_minutes={min_interval_minutes}",
+        return _finalize_status(
+            "interval_blocked",
+            f"min_interval_minutes={min_interval_minutes}",
+            hooks=hooks,
+            history_path=history_path,
+            ts=ts_now,
         )
 
     fd = acquire_auto_trigger_lock(lock_path)
     if fd is None:
-        return AutoTriggerStatus(state="lock_busy")
+        return _finalize_status(
+            "lock_busy",
+            "",
+            hooks=hooks,
+            history_path=history_path,
+            ts=ts_now,
+        )
 
     try:
         # Codex MCP catch (PR-OL-A1 fix-up): re-check interval AFTER
@@ -243,34 +387,58 @@ def auto_trigger_mutator(
             now=now,
             timestamp_path=timestamp_path,
         ):
-            return AutoTriggerStatus(
-                state="interval_blocked",
-                detail=f"min_interval_minutes={min_interval_minutes} (post-lock re-check)",
+            return _finalize_status(
+                "interval_blocked",
+                f"min_interval_minutes={min_interval_minutes} (post-lock re-check)",
+                hooks=hooks,
+                history_path=history_path,
+                ts=ts_now,
             )
 
         # Codex MCP catch (PR-OL-A1 fix-up): runner construction itself
         # can raise (lazy import failure, runner __init__ side-effects).
-        # Catch here so the "never raises" contract holds — the lock is
-        # still released by the outer finally.
         try:
             runner = _resolve_runner(runner_factory)
         except Exception as exc:
             log.exception("auto_trigger: runner factory raised")
-            return AutoTriggerStatus(state="runner_error", detail=repr(exc))
+            return _finalize_status(
+                "runner_error",
+                repr(exc),
+                hooks=hooks,
+                history_path=history_path,
+                ts=ts_now,
+            )
 
         try:
             mutation = runner.run_once()
         except ValueError as exc:
             log.warning("auto_trigger: mutator parse/validation failure: %s", exc)
-            return AutoTriggerStatus(state="parse_error", detail=str(exc))
+            return _finalize_status(
+                "parse_error",
+                str(exc),
+                hooks=hooks,
+                history_path=history_path,
+                ts=ts_now,
+            )
         except Exception as exc:
             log.exception("auto_trigger: runner.run_once raised")
-            return AutoTriggerStatus(state="runner_error", detail=repr(exc))
+            return _finalize_status(
+                "runner_error",
+                repr(exc),
+                hooks=hooks,
+                history_path=history_path,
+                ts=ts_now,
+            )
 
-        current = now if now is not None else time.time()
-        write_last_run_timestamp(current, timestamp_path)
+        write_last_run_timestamp(ts_now, timestamp_path)
         target_section = getattr(mutation, "target_section", "<unknown>")
-        return AutoTriggerStatus(state="fired", detail=f"target_section={target_section}")
+        return _finalize_status(
+            "fired",
+            f"target_section={target_section}",
+            hooks=hooks,
+            history_path=history_path,
+            ts=ts_now,
+        )
     finally:
         release_auto_trigger_lock(fd)
 
@@ -293,6 +461,7 @@ def register_auto_trigger(
     cron: str,
     min_interval_minutes: int,
     runner_factory: Callable[[], Any] | None = None,
+    hooks: Any = None,
 ) -> bool:
     """Register the auto-trigger with the scheduler. No-op when disabled.
 
@@ -301,10 +470,11 @@ def register_auto_trigger(
     when ``enabled=False`` (so the wiring layer can log the skip).
 
     The callback closes over ``min_interval_minutes`` + ``runner_factory``
-    so the scheduler's bare ``callback(data)`` invocation forwards into
-    :func:`auto_trigger_mutator` with the right config. The callback
-    swallows every exception (logs at WARNING) — `TriggerManager`'s own
-    error isolation is the second layer of defense.
+    + ``hooks`` so the scheduler's bare ``callback(data)`` invocation
+    forwards into :func:`auto_trigger_mutator` with the right config
+    and telemetry sink. The callback swallows every exception (logs at
+    WARNING) — `TriggerManager`'s own error isolation is the second
+    layer of defense.
     """
     if not enabled:
         log.info("auto_trigger: [self_improving_loop.scheduler] enabled=False; skip register")
@@ -318,6 +488,7 @@ def register_auto_trigger(
                 enabled=True,
                 min_interval_minutes=min_interval_minutes,
                 runner_factory=runner_factory,
+                hooks=hooks,
             )
             log.info(
                 "auto_trigger fired: state=%s detail=%s",
