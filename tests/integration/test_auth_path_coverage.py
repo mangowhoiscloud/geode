@@ -134,19 +134,22 @@ def test_petri_manifest_supports_cell(cell: AuthCell) -> None:
 def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     """`autoresearch/train.py`'s flags can drive each cell's provider.
 
-    Subscription paths (`claude-cli` / `openai-codex`) ride the
-    `USE_OAUTH=True` branch; `api_key` rides the explicit env-var
+    PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH: bool`` module constant
+    replaced by ``SOURCE: str`` (B1: aligns shape with
+    ``MutatorConfig.source`` + ``PetriRoleConfig.source``).
+    Subscription paths (``claude-cli`` / ``openai-codex``) ride any
+    SOURCE except ``"api_key"``; ``api_key`` rides the env-var
     branch. The test just confirms the constants + flag plumbing
     exist; live OAuth probing is out of scope here.
     """
     from autoresearch import train
 
-    assert hasattr(train, "USE_OAUTH")
+    assert hasattr(train, "SOURCE")
     assert hasattr(train, "TARGET_MODEL")
-    # Subscription path needs OAuth; PAYG needs an env key field.
+    # Subscription path needs a non-api_key SOURCE; PAYG needs an env key field.
     if cell.path.source in {"claude-cli", "openai-codex"}:
-        # The flag must be a bool the agent can set/clear.
-        assert isinstance(train.USE_OAUTH, bool)
+        # SOURCE must be a string in the 4-enum the agent can set.
+        assert train.SOURCE in {"auto", "api_key", "claude-cli", "openai-codex"}
     else:
         from core.config import _settings as settings_module
 

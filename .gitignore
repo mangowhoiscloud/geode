@@ -148,4 +148,13 @@ autoresearch/state/*
 # every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
 # The trailing negation lets `git add autoresearch/state/mutations.jsonl` succeed.
 !autoresearch/state/mutations.jsonl
+# PR-RATCHET-1 (2026-05-21) — 5 mutation-target JSONs (wrapper-sections /
+# tool-policy / decomposition / retrieval / reflection) moved in-repo
+# from ~/.geode/self-improving-loop/ so `git diff` shows the current
+# mutation state and `git revert` discards a hypothesis. The directory
+# name matches the existing module/function/constant naming
+# (policies.py / load_policy / GLOBAL_*_POLICY_SOT). The trailing
+# negation re-includes the whole policies/ subtree under git tracking.
+!autoresearch/state/policies/
+!autoresearch/state/policies/**
 .claude/scratch/

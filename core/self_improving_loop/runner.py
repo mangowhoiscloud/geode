@@ -48,12 +48,16 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+from core.paths import (
+    MUTATION_AUDIT_LOG_PATH as MUTATION_AUDIT_LOG_PATH,
+)
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     "MUTATION_AUDIT_LOG_PATH",
     "Mutation",
+    "Proposal",
     "RunnerContext",
     "SelfImprovingLoopRunner",
     "apply_mutation",
@@ -132,16 +136,65 @@ class Mutation:
 
 
 @dataclass
+class Proposal:
+    """One propose-only result — `propose()` returns this, the caller
+    decides whether to call `apply_proposal()` afterwards.
+
+    PR-OPS-2a (2026-05-21) — splits ``run_once`` into propose/apply
+    halves so the ``/self-improving run`` slash can show the operator
+    the LLM's mutation candidate, wait for ``y/N`` confirmation, then
+    either apply or record a ``kind=rejected`` audit row. Pre-split
+    the only entry was ``run_once`` which built context, called the
+    LLM, AND wrote the SoT in one shot — no confirmation seam.
+    """
+
+    mutation: Mutation
+    """The LLM-proposed mutation."""
+
+    target_sections: dict[str, str] = field(default_factory=dict)
+    """Current SoT contents for ``mutation.target_kind`` — what
+    ``apply_mutation`` mutates. Distinct from ``original_sections``
+    only in identity; both carry the same key/value pairs at propose
+    time, and ``apply_mutation`` mutates ``target_sections`` in place."""
+
+    original_sections: dict[str, str] = field(default_factory=dict)
+    """Frozen pre-apply snapshot for the rollback path. Captured at
+    propose time so a subsequent ``apply_proposal`` failure can
+    restore exactly the pre-mutation state."""
+
+    baseline_fitness: float | None = None
+    """The current baseline.json fitness scalar (if any), surfaced as
+    a convenience for UI rendering — operator wants to see what they
+    are comparing against before approving the mutation."""
+
+
+@dataclass
 class RunnerContext:
     """Inputs gathered from G2-G4 readers + autoresearch state.
 
     Held as a plain dataclass (not frozen) so the runner can carry
     additional debug fields without breaking the call site contract.
+
+    PR-MINIMAL-2 (2026-05-21) — B2 fix-up: ``current_policies`` carries
+    the *current state* of ALL 5 mutation targets
+    (prompt / tool_policy / decomposition / retrieval / reflection)
+    so the mutator LLM sees the full policy surface, not just the
+    wrapper prompt. Pre-PR ``current_sections`` was wrapper-only —
+    the LLM could "blind mutate" tool_policy / decomposition /
+    retrieval / reflection without ever seeing their current values.
+    ``current_sections`` is kept as an alias of
+    ``current_policies["prompt"]`` for backwards compat with the
+    existing readers (``_build_user_prompt``).
     """
 
     baseline_snapshot: Any = None
     meta_review_snapshot: Any = None
     current_sections: dict[str, str] = field(default_factory=dict)
+    current_policies: dict[str, dict[str, str]] = field(default_factory=dict)
+    """Map of ``target_kind`` → current policy dict. Filled by
+    :func:`build_runner_context` from all 5 policy SoT files. The
+    legacy ``current_sections`` field stays as a shortcut to
+    ``current_policies["prompt"]``."""
     target_dim: str = ""
     """The dim the runner will focus the mutation on. Picked from
     baseline via ``pick_regression_target_dim`` when present."""
@@ -150,19 +203,12 @@ class RunnerContext:
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-
-
-MUTATION_AUDIT_LOG_PATH = (
-    Path(__file__).resolve().parents[2] / "autoresearch" / "state" / "mutations.jsonl"
-)
-"""Git-tracked audit log of every applied mutation.
-
-Lives in-repo (not in ``~/.geode``) because the audit log IS the
-git-as-optimiser ledger — each row is committed so the lineage of
-wrapper-prompt evolution is replayable from ``git log``. The SoT file
-(``~/.geode/self-improving-loop/wrapper-sections.json``) only ever
-holds the *current* state; this log holds the *history*.
-"""
+#
+# PR-MINIMAL-2 (2026-05-21) — canonical definition for
+# ``MUTATION_AUDIT_LOG_PATH`` moved to ``core/paths.py`` alongside
+# the other path constants. The top-of-file re-export keeps this
+# module's existing 5+ callers (tests + production) importing the
+# name unchanged.
 
 
 # ---------------------------------------------------------------------------
@@ -171,13 +217,20 @@ holds the *current* state; this log holds the *history*.
 
 
 def build_runner_context() -> RunnerContext:
-    """Gather baseline + meta-review + current wrapper sections.
+    """Gather baseline + meta-review + ALL 5 current policy SoTs.
 
-    All three lookups are best-effort — a missing baseline or
-    meta-review just means the runner has less context to work with;
-    the LLM call can still propose a mutation based on the current
-    wrapper sections alone. The auto target_dim picker fires only
-    when the baseline is present.
+    All lookups are best-effort — a missing baseline / meta-review /
+    SoT file just means the runner has less context to work with;
+    the LLM call can still propose a mutation based on the policies
+    that DID load. The auto target_dim picker fires only when the
+    baseline is present.
+
+    PR-MINIMAL-2 (2026-05-21) — B2 fix-up: loads all 5 policy SoT
+    files (prompt / tool_policy / decomposition / retrieval /
+    reflection) so the mutator LLM sees the full policy surface in
+    its prompt. Pre-PR only ``prompt`` (wrapper-sections) was loaded;
+    mutating the other 4 kinds was blind. The wrapper-only
+    ``current_sections`` field stays populated for backwards compat.
     """
     from autoresearch.train import load_wrapper_prompt_sections
     from plugins.seed_generation.baseline_reader import (
@@ -186,9 +239,17 @@ def build_runner_context() -> RunnerContext:
         pick_regression_target_dim,
     )
 
+    from core.self_improving_loop.policies import TARGET_KINDS, load_policy
+
     baseline_snapshot = load_baseline()
     meta_review_snapshot = load_latest_meta_review()
     current_sections = load_wrapper_prompt_sections()
+    current_policies: dict[str, dict[str, str]] = {}
+    for kind in TARGET_KINDS:
+        if kind == "prompt":
+            current_policies[kind] = dict(current_sections)
+        else:
+            current_policies[kind] = load_policy(kind)
     target_dim = ""
     if baseline_snapshot is not None:
         target_dim = pick_regression_target_dim(baseline_snapshot) or ""
@@ -196,6 +257,7 @@ def build_runner_context() -> RunnerContext:
         baseline_snapshot=baseline_snapshot,
         meta_review_snapshot=meta_review_snapshot,
         current_sections=current_sections,
+        current_policies=current_policies,
         target_dim=target_dim,
     )
 
@@ -266,8 +328,9 @@ _MUTATION_CONTRACT_SUFFIX = (
     "- ``target_kind`` selects the policy SoT to mutate. One of "
     "``prompt`` (default, wrapper-sections.json), ``tool_policy`` "
     "(tool-policy.json), ``decomposition`` (decomposition.json), "
-    "``retrieval`` (retrieval.json), ``reflection`` (reflection.json). "
-    "Omit for prompt-level mutations.\n"
+    "``reflection`` (reflection.json). "
+    "Omit for prompt-level mutations. (``retrieval`` was deprecated "
+    "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -276,7 +339,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "new_value": "<replacement text>",\n'
     '  "rationale": "<= 200 chars, citing the evidence>",\n'
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
-    '  "target_kind": "<prompt|tool_policy|decomposition|retrieval|reflection>",\n'
+    '  "target_kind": "<prompt|tool_policy|decomposition|reflection>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
     '  "rollback_condition": "<one-line predicate, or empty>"\n'
     "}\n"
@@ -344,10 +407,20 @@ def _build_user_prompt(ctx: RunnerContext) -> str:
         priors = format_priors_block(ctx.meta_review_snapshot, target_dim=ctx.target_dim)
         if priors:
             blocks.append(priors)
-    sections_block = "Current WRAPPER_PROMPT_SECTIONS:\n" + json.dumps(
-        ctx.current_sections, indent=2, ensure_ascii=False
-    )
-    blocks.append(sections_block)
+    # PR-MINIMAL-2 (2026-05-21) — surface ALL 5 current policy SoTs
+    # so the mutator LLM sees the full surface before proposing a
+    # mutation. Falls back to wrapper-only (the legacy shape) when
+    # ``current_policies`` is empty (older callers that built the
+    # RunnerContext by hand without filling the new field).
+    if ctx.current_policies:
+        policies_block = "Current policy SoT (5 kinds):\n" + json.dumps(
+            ctx.current_policies, indent=2, ensure_ascii=False, sort_keys=True
+        )
+    else:
+        policies_block = "Current WRAPPER_PROMPT_SECTIONS:\n" + json.dumps(
+            ctx.current_sections, indent=2, ensure_ascii=False
+        )
+    blocks.append(policies_block)
     if ctx.target_dim:
         blocks.append(f"Focus your mutation on improving dim: {ctx.target_dim!r}.")
     blocks.append("Return the JSON mutation object now.")
@@ -398,48 +471,56 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     from core.llm.router import call_with_failover
 
     cfg = load_self_improving_loop_config()
-    model = cfg.mutator.default_model
+    # PR-MINIMAL-2 (2026-05-21) — G1a inherit: MutatorConfig.default_model
+    # defaults to None, fall back to Settings.model so the operator's
+    # ``/model`` choice flows through. Explicit override still wins.
+    if cfg.mutator.default_model:
+        model = cfg.mutator.default_model
+    else:
+        from core.config import settings
+
+        model = settings.model
     max_tokens = cfg.mutator.max_tokens
     source = cfg.mutator.source
-    role_contract = cfg.mutator.role_contract
 
-    # PR-1 G-A — defensive check kept here even though MutatorConfig's
-    # pydantic validator also enforces it: allowed_models is a paperclip-
-    # style allow-list (matches petri.role.<X>.allowed_models). A drift
-    # between config and validator would fail closed instead of silently
-    # calling an unlisted model.
-    if cfg.mutator.allowed_models and model not in cfg.mutator.allowed_models:
-        raise RuntimeError(
-            f"mutator default_model {model!r} is not in MutatorConfig.allowed_models "
-            f"{cfg.mutator.allowed_models!r}"
-        )
+    # PR-MINIMAL-2 — model allow-list field removed (C1). The
+    # router's provider routing already guards model existence per
+    # provider; the dedicated 5-model list added more config surface
+    # than it caught. The (formerly logged-only) contract-path field
+    # was also removed (A1) since the dispatch log line below already
+    # carries the configured model + provider + source for telemetry
+    # grouping — operator-facing contract docs at
+    # ``.claude/agents/self_improving_loop_mutator.md`` remain on
+    # disk as reference.
 
     provider = _resolve_provider(model)
     adapter = resolve_agentic_adapter(provider)
 
-    # PR-1 G-A fix-up — `source` and `role_contract` must affect *something*
-    # observable, otherwise they're silent declarative knobs (Codex MCP
-    # 2nd-pass review flagged this as a knob-vs-deletion violation).
-    # Surface: every mutator call logs (model, provider, source,
-    # role_contract, max_tokens) so a downstream Petri / Inspect viewer
-    # can group runs by operator intent. Same shape as
-    # `core.llm.router._hooks` emit but recorded at the mutator
-    # boundary (the router doesn't know it's serving the mutator role
-    # specifically).
-    #
-    # A planned future surface — credential-source forcing — would
-    # require a downstream reader in the adapter / router credential
-    # chain; that reader does not exist on main yet, so PR-1 stops at
-    # the telemetry surface and the C-5 (policy mutation expansion) PR
-    # will wire the second half once the reader lands.
+    # Mutator dispatch telemetry (one line per call) so downstream
+    # Petri / Inspect viewers can group runs by operator intent.
     _logging.getLogger("core.self_improving_loop.runner").info(
-        "mutator dispatch: model=%s provider=%s source=%s role_contract=%s max_tokens=%d",
+        "mutator dispatch: model=%s provider=%s source=%s max_tokens=%d",
         model,
         provider,
         source,
-        role_contract,
         max_tokens,
     )
+
+    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. When the
+    # operator opted into "claude-cli" / "openai-codex" via
+    # ``[self_improving_loop.mutator] source = "..."`` in config.toml,
+    # route the mutator call through the local CLI binary so the
+    # subscription (Claude Code Max / ChatGPT Plus) is billed instead
+    # of the API. The default "auto" / "api_key" path remains
+    # unchanged — existing operators see zero behavior diff.
+    if source == "claude-cli":
+        from core.self_improving_loop.cli_subprocess import invoke_claude_cli
+
+        return invoke_claude_cli(system_prompt=system_prompt, user_prompt=user_prompt)
+    if source == "openai-codex":
+        from core.self_improving_loop.cli_subprocess import invoke_codex_cli
+
+        return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
 
     async def _do_call(m: str) -> object:
         return await adapter.agentic_call(
@@ -456,8 +537,9 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # layer) — accepts an ordered model list. PR-1 keeps it single-
     # element so the M5 silent-fallback knob default is preserved; an
     # operator who wants the mutator to fall through to alternate models
-    # populates ``MutatorConfig.allowed_models`` and the dispatcher's
-    # ``models`` list is expanded in a follow-up PR.
+    # can set per-provider fallback chains in the router config
+    # (the dispatcher's ``models`` list is expanded in a follow-up PR
+    # once the operator-facing surface for that exists).
     response, _used_model = asyncio.run(call_with_failover([model], _do_call))
     if response is None:
         last_err = getattr(adapter, "last_error", None)
@@ -754,22 +836,27 @@ class SelfImprovingLoopRunner:
     rerun_enabled: bool = False
     rerun_dry_run: bool = True
 
-    def run_once(self) -> Mutation:
-        """Execute one mutation iteration and return the applied :class:`Mutation`.
+    def propose(self) -> Proposal:
+        """Build context, call the mutator LLM, parse one Mutation.
 
-        The function is the single-iteration unit; callers wrap it in
-        a loop (or schedule it via ``geode schedule``) when they want
-        a multi-round campaign. Each call:
+        Stops BEFORE any SoT write. Returns a :class:`Proposal` the
+        caller can show the operator for confirmation; calling
+        :meth:`apply_proposal` afterwards persists the mutation.
 
-        1. Builds context (baseline + meta-review + current sections).
-        2. Calls the LLM with the system + user prompt.
-        3. Parses + validates the mutation.
-        4. Applies it to the SoT.
-        5. Appends + (optionally) commits the audit log row.
-        6. (Optionally) re-runs autoresearch.
+        Raises :class:`ValueError` on parse / validation failure.
 
-        Raises :class:`ValueError` on parse / validation failure so
-        the caller can decide whether to retry.
+        Steps:
+
+        1. Build context (baseline + meta-review + current sections).
+        2. Call the LLM with the system + user prompt.
+        3. Parse + validate the mutation.
+        4. Load the correct SoT for the parsed ``target_kind`` (kind-
+           aware so a tool_policy mutation reads tool-policy.json, not
+           wrapper-sections.json).
+
+        ``target_sections`` and ``original_sections`` carry identical
+        contents at this point; the latter is the rollback snapshot,
+        the former is what :func:`apply_mutation` mutates in place.
         """
         ctx = build_runner_context()
         user_prompt = _build_user_prompt(ctx)
@@ -790,30 +877,64 @@ class SelfImprovingLoopRunner:
         else:
             target_sections = load_policy(mutation.target_kind)
         original_sections = dict(target_sections)
-        _new_sections, previous_value = apply_mutation(mutation, current_sections=target_sections)
-        # G5b.fix3 (2026-05-20) — atomicity boundary: if the audit log
-        # write fails after the SoT mutation lands, the in-disk state is
-        # silently divergent (SoT advanced, history missing). Roll the
-        # SoT back to ``original_sections`` so the next iteration sees a
-        # consistent state. Best-effort: rollback can itself fail (rare
-        # filesystem outage); we log + re-raise the original exception
-        # so the caller knows the iteration failed.
+        baseline_fitness: float | None = None
+        snapshot = ctx.baseline_snapshot
+        if snapshot is not None:
+            raw_fitness = getattr(snapshot, "fitness", None)
+            if isinstance(raw_fitness, int | float):
+                baseline_fitness = float(raw_fitness)
+        return Proposal(
+            mutation=mutation,
+            target_sections=target_sections,
+            original_sections=original_sections,
+            baseline_fitness=baseline_fitness,
+        )
+
+    def apply_proposal(self, proposal: Proposal) -> Mutation:
+        """Apply a previously-proposed mutation — write SoT, audit
+        log, (optional) git commit, (optional) autoresearch rerun.
+
+        Steps 4-6 of the original ``run_once``. The caller (slash
+        handler / tool / scheduler) is responsible for showing the
+        operator the proposal and gating this method on consent.
+
+        ``proposal.target_sections`` is mutated in place by
+        :func:`apply_mutation`. The G5b.fix3 atomicity boundary stays
+        intact: if the audit-log write fails after the SoT mutation
+        lands, the SoT is rolled back to
+        ``proposal.original_sections`` and the original exception
+        propagates so the caller can retry.
+        """
+        _new_sections, previous_value = apply_mutation(
+            proposal.mutation, current_sections=proposal.target_sections
+        )
         try:
             log_path = append_audit_log(
-                mutation,
+                proposal.mutation,
                 previous_value=previous_value,
                 log_path=self.audit_log_path,
             )
         except OSError as exc:
-            self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+            self._rollback_sot(proposal.original_sections, mutation=proposal.mutation, exc=exc)
             raise
         if self.commit_enabled:
-            _git_commit_audit_log(log_path, mutation=mutation)
+            _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             repo_root = log_path.resolve().parents[1]
             self._invoke_autoresearch(repo_root)
-        self._append_self_improving_loop_index(mutation, previous_value)
-        return mutation
+        self._append_self_improving_loop_index(proposal.mutation, previous_value)
+        return proposal.mutation
+
+    def run_once(self) -> Mutation:
+        """Execute one full propose+apply iteration. Backwards-compat
+        wrapper around :meth:`propose` + :meth:`apply_proposal` so
+        existing callers (and the autoresearch self-improving loop)
+        keep working unchanged.
+
+        Raises :class:`ValueError` on parse / validation failure so
+        the caller can decide whether to retry.
+        """
+        return self.apply_proposal(self.propose())
 
     @staticmethod
     def _rollback_sot(

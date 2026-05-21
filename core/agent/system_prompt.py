@@ -23,9 +23,17 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
+from core.agent.heuristics_policy import (
+    _load_heuristics_override,
+    apply_heuristics_policy,
+)
+from core.agent.style_guide_policy import (
+    _load_style_guide_override,
+    apply_style_guide_policy,
+)
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
-from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT, get_project_root
+from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH, get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -43,10 +51,10 @@ WRAPPER_OVERRIDE_HOOK_READY = True
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
-_WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_SOT
+_WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_PATH
 """G5a — cross-process SoT path shared with :mod:`autoresearch.train`.
 
-Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_SOT` so the
+Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_PATH` so the
 ``.geode`` literal lives in exactly one place (path-literal guard
 contract); the module-local alias is kept so tests can monkeypatch
 ``core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH`` without
@@ -208,6 +216,16 @@ def build_system_prompt(model: str = "") -> str:
         return dynamic
 
     static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
+
+    # ADR-013 T3 (2026-05-21) — response style guide append to static prompt.
+    # policy 가 부재면 static 그대로 (no behavior change). 정책이 있으면
+    # <response_style> 블록 append — static 영역 이므로 cache-eligible
+    # (정책 변경 시에만 cache miss).
+    static = apply_style_guide_policy(static, _load_style_guide_override())
+
+    # ADR-013 T6 (2026-05-21) — heuristic indicators append to static.
+    # Promptbreeder-식 phrase library — agent 가 task-triage 시 매칭.
+    static = apply_heuristics_policy(static, _load_heuristics_override())
 
     # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
     # GEODE behaves as a thin wrapper around the base model).

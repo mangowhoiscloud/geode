@@ -55,23 +55,122 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
 GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
+# PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
+# the in-repo ``autoresearch/state/policies/`` directory rather than
+# the operator's ``~/.geode/self-improving-loop/``. The rename converges
+# on upstream Karpathy's "branch tip = current best" principle: each
+# policy is git-tracked, so ``git diff`` shows the current mutation
+# state and ``git revert`` discards a hypothesis. The directory name
+# matches the existing module/function/constant naming
+# (``policies.py`` / ``load_policy`` / ``GLOBAL_*_POLICY_PATH``).
+# PR-MINIMAL-2 (2026-05-21, H2) — constant names also dropped the
+# ``_SOT`` suffix (``GLOBAL_*_SOT`` → ``GLOBAL_*_PATH``) so the
+# names match the new directory's "policies" semantics rather than
+# the legacy "source of truth" label. Lazy migration of any legacy
+# ``~/.geode/self-improving-loop/<file>.json`` payload is handled
+# by :mod:`core.self_improving_loop.policies`.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_AUTORESEARCH_STATE_DIR = _REPO_ROOT / "autoresearch" / "state"
+GLOBAL_POLICIES_DIR = _AUTORESEARCH_STATE_DIR / "policies"
+LEGACY_SOT_DIR = GLOBAL_SELF_IMPROVING_LOOP_DIR
+"""Pre-RATCHET-1 policy dir under ``~/.geode/self-improving-loop/``.
+Kept for the lazy migration path so an upgrade of an existing
+operator install copies their last-known wrapper/policy state into
+the new in-repo location on first read/write."""
 # G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
 # sections. Written by ``autoresearch.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
-# ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs
-# (no env var required).
-GLOBAL_WRAPPER_SECTIONS_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "wrapper-sections.json"
+# ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
+GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # PR-6 C-5 (2026-05-21) — policy mutation SoT files. Each
 # ``target_kind`` (tool_policy / decomposition / retrieval /
 # reflection) gets its own ``dict[str, str]`` JSON file alongside
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
-# sections path so older mutation rows replay correctly; the others
+# sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
 # written by :mod:`core.self_improving_loop.policies`.
-GLOBAL_TOOL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
-GLOBAL_DECOMPOSITION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
-GLOBAL_RETRIEVAL_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "retrieval.json"
-GLOBAL_REFLECTION_POLICY_SOT = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
+GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
+GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
+GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
+GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
+# ADR-013 T1 (2026-05-21) — Tool descriptions mutation SoT.
+GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
+# PR-BACKFILL-SOT (2026-05-21) — operator-local SoT layer for the 4 active
+# mutation surface readers (tool_policy / reflection / decomposition /
+# tool_descriptions). Per-machine overrides without touching in-repo
+# ratchet-tracked files. Resolution order: env-override (strict/graceful)
+# → operator-local (graceful) → in-repo (graceful) → None.
+OPERATOR_LOCAL_TOOL_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
+OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
+OPERATOR_LOCAL_REFLECTION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
+OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-descriptions.json"
+# ADR-013 T2 (2026-05-21) — Skill catalog mutation SoT. Mutator overrides
+# per-skill description text + user_invocable visibility for the LLM's
+# skill-routing context block.
+GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
+OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-catalog.json"
+# ADR-013 T3 (2026-05-21) — Response style guide mutation SoT. Typed enum
+# schema (tone / verbosity_level / response_format / code_style) — mutator
+# picks from constrained alternatives → ux_means 의 success_rate +
+# revert_ratio 직접 영향. wrapper-sections.json (G5a/G5b) 의 free-form
+# 텍스트 mutation 과 분리: T3 는 constrained typed 선택지.
+GLOBAL_STYLE_GUIDE_PATH = GLOBAL_POLICIES_DIR / "style-guide.json"
+OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "style-guide.json"
+# ADR-013 T4 (2026-05-21) — Provider routing mutation SoT. Mutator picks
+# per-model preferred plan chain (plan_id ordered list). OpenRouter-style
+# explicit routing — fitness 4축의 ux_means.token_cost_norm 직접 영향.
+GLOBAL_PROVIDER_ROUTING_PATH = GLOBAL_POLICIES_DIR / "provider-routing.json"
+OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "provider-routing.json"
+# ADR-013 T5 (2026-05-21) — Cache breakpoint policy mutation SoT. Mutator
+# picks how many trailing-message cache_control breakpoints to apply
+# (Anthropic의 4-breakpoint cap 중 messages 가 가져갈 수). 0-3 사이.
+# trade-off: ↑ → cache hit ↑ but per-call overhead ↑ (각 breakpoint 가
+# $0.10/MTok 오버헤드). ↓ → cache hit ↓ but per-call cost ↓.
+GLOBAL_CACHE_POLICY_PATH = GLOBAL_POLICIES_DIR / "cache-policy.json"
+OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-policy.json"
+# ADR-013 T6 (2026-05-21) — Heuristic indicators mutation SoT. Mutator
+# evolves the keyword/phrase list that primes the LLM's task-triage
+# heuristics — complexity / risk / time-pressure markers injected into
+# the system prompt static block. Promptbreeder-식 evolution: agent
+# uses indicators to classify task → better triage → ux_means success
+# rate ↑.
+GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
+OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.json"
+# ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares
+# the 4 canonical slot categories (exemplars / memory_recall /
+# rubric_excerpts / tool_hints) and their per-slot top-K / rank_by /
+# injection_point. M4.4 후속 PR 이 이 schema 를 실제 inference path 에서
+# 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
+GLOBAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_POLICIES_DIR / "in-context-slots.json"
+OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "in-context-slots.json"
+# ADR-012 M2 (2026-05-21) — AgentDefinition contract mutation SoT.
+# Mutator overrides per-agent role / system_prompt / tools. ``model``
+# field 은 Tier 2 — 변경 시 안전성 invariants 가 단번에 무효화될 수
+# 있어 mutation surface 에서 제외.
+GLOBAL_AGENT_CONTRACTS_PATH = GLOBAL_POLICIES_DIR / "agent-contracts.json"
+OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "agent-contracts.json"
+# ADR-012 M3 (2026-05-21) — Few-shot exemplar pool (JSONL append-only).
+# fitness gate 통과한 task-completion candidate 를 누적; runtime 에
+# top-K 선별해 system prompt 직후 in-context exemplar 로 적재. S5 의
+# ``exemplars`` slot 의 실제 *적재 메커니즘*.
+GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
+OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "few-shot-pool.jsonl"
+# ADR-012 M4.1 (2026-05-21) — DPO canonical preference-pack JSONL.
+# Consumes ``eval_response_recorded`` events (M4.0) and emits one row
+# per ``(prompt, chosen, rejected)`` tuple. Format-agnostic — M4.2
+# adapts this to per-provider publishers (OpenAI fine-tuning / Bedrock
+# DPO / HuggingFace TRL). Operator-local, NOT git-tracked: preference
+# data may include user-private prompts until an explicit redaction
+# step (M4.3) ships a sanitized copy.
+GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
+# PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
+# applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
+# so the git-as-optimiser ledger and the current-state files are
+# co-located. Previously declared in
+# ``core/self_improving_loop/runner.py``; moved here for consistency
+# with the other path constants. The runner re-exports the constant
+# for backwards compat with existing callers.
+MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per

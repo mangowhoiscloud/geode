@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any
 
 from core.agent.system_prompt import build_system_prompt as _build_system_prompt
 from core.llm.prompts import AGENTIC_SUFFIX
+from core.skills.skill_catalog_policy import (
+    _load_skill_catalog_override,
+    apply_skill_catalog_policy,
+)
 
 if TYPE_CHECKING:
     from .agent_loop import AgenticLoop
@@ -79,7 +83,11 @@ def build_system_prompt(loop: AgenticLoop) -> str:
     override = getattr(loop, "_system_prompt_override", None)
     skill_ctx = ""
     if loop._skill_registry is not None:
-        skill_ctx = loop._skill_registry.get_context_block()
+        # ADR-013 T2 (2026-05-21) — skill catalog mutation surface. policy
+        # SoT 가 부재면 apply_*_policy 는 registry.get_context_block() 에
+        # 위임 (no behavior change). 정책이 있으면 per-skill description /
+        # user_invocable override 적용.
+        skill_ctx = apply_skill_catalog_policy(loop._skill_registry, _load_skill_catalog_override())
     # Skills enter the active prompt path here: the loop-level registry renders
     # one context block, then ``{skill_context}`` in the system wrapper is
     # substituted below. The legacy PromptAssembler Phase 2 injection path was

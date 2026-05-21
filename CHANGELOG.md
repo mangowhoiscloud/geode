@@ -47,6 +47,1660 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.27] - 2026-05-22
+
+> 51 PRs accumulated since v0.99.26. Headline arcs:
+>
+> - **Self-improving Outer Loop sprint 1** (8 PR, this session) —
+>   deception closure (OL-C1/C2/C3) + auto-trigger (OL-A1/A1.5) +
+>   drift-prevention pins (OL-G/C2') + CB-FLAKE flake cleanup.
+> - **Hermes absorption Phase 1** — FTS5 + 트리그램 indexer (Hermes-1c)
+>   + `session_search` LLM tool (Hermes-1d).
+> - **M-sprint in-context wiring** — M1-M4.4.3 (skill / agent contract /
+>   few-shot pool / DPO publisher trilogy / 4-slot reader trilogy).
+> - **PAPERCLIP** — subscription billing pattern for self-improving
+>   loop mutator (`claude-cli` / `openai-codex` subprocess dispatch).
+> - **S3-S6 + T6** — 4축 baseline.json ratchet + heuristic indicators
+>   JSON mutation surface.
+
+### Added
+
+- **PR-OL-C2' — Reflection node canonical-path pins (drift prevention).**
+  Roadmap (2026-05-22) 의 OL-C2' 가 `core/agent/reflection.py` 신규 모듈을
+  요구했으나 GAP audit 결과 reflection node 가 **이미** `core/agent/loop/
+  _reflection.py` (321 LOC, PR-3 C-2 cognitive-loop-uplift) 에 존재 + 3 개의
+  test file (`tests/test_reflection_node.py` / `test_reflection_cost_gate.py`
+  / `test_s0b_reflection_reader.py`) 가 커버. 본 PR 가 OL-G 패턴 차용 —
+  4 개의 drift-prevention invariant pin 추가. (1) canonical path 가
+  `core/agent/loop/_reflection.py` 임을 못 박음. (2) parallel duplicate 가
+  `core/agent/reflection.py` 에 생기지 못하게 anti-presence assert (운영자가
+  stale roadmap 보고 재구현 시도하면 RED). (3) load-bearing surface
+  (`reflect_async` / `REFLECTION_TOOL_NAME = "record_reflection"` /
+  `_REFLECTION_TOOL` schema 의 hypotheses/confidence/next_action_hint
+  3 필드) 노출 검증. (4) `HookEvent.COGNITIVE_REFLECT` enum entry +
+  value 매치. **사이드 노트**: `core/agent/reflection_policy.py` (S0a-
+  style policy reader for operator-local `reflection.json` overrides)
+  는 *별개 모듈* — 같은 디렉토리에 공존 허용 (역할 분리: policy reader
+  vs reflection-node implementation). 4/4 pytest pass, ruff + ruff
+  format --check clean.
+
+- **PR-OL-G — Config drift invariant pins (G-B / G-D / G-E).**
+  PR-1 G-B/G-D/G-E (2026-05-21) 가 3건의 config drift 를 닫았지만 invariant
+  test 가 없어 회귀 위험 존재 — 본 PR 가 5개의 pin test 추가.
+  - **G-B**: `AutoresearchConfig.target_model` / `judge_model` 필드 +
+    `autoresearch/train.py` 의 `TARGET_MODEL` / `JUDGE_MODEL` fallback
+    상수 + `_get_autoresearch_config` 로더 존재 (2 test).
+  - **G-D**: `settings.learning_extract_model` 설정 필드 +
+    `core/hooks/llm_extract_learning.py` 가 해당 필드 grep-확인 (1 test).
+  - **G-E**: `Settings.model` 클래스-기본값 ↔ `routing.toml [model.defaults]
+    anthropic` 매치 + claude-opus-4-7 family pin (2 test). G-E 는 *runtime*
+    값 (`settings.model` — env var 영향) 대신 *class-level default* 를
+    비교 — 운영자 env override 는 drift 가 아님.
+  **GAP audit 발견**: roadmap 의 G-B/D/E 본 작업 자체는 이미 PR-1 에
+  의해 완료 상태. drift-prevention invariant 만 본 PR 가 추가. 5/5 pytest
+  pass, ruff + ruff format --check + mypy clean.
+
+- **PR-OL-A1.5 — auto-trigger telemetry events + JSONL audit log.**
+  PR-OL-A1 (#1445) 가 cron-driven mutator firing 을 도입하면서 `state`
+  값을 INFO log 로만 출력 — Petri/Inspect viewer 같은 다운스트림이
+  세션을 통계로 그릴 수 없는 deception 잔존. 본 PR 가 닫기. **HookEvent
+  5종 추가** (`core/hooks/system.py`) — `SELF_IMPROVING_AUTO_TRIGGER_{FIRED,
+  LOCK_BUSY, INTERVAL_BLOCKED, RUNNER_ERROR, PARSE_ERROR}` 로 각 terminal
+  state 1:1 매핑. `disabled` 는 의도적으로 enum 미포함 (운영자가 명시적
+  off → 매 cron tick 마다 무의미 event 발생 방지, wiring 의 startup log
+  가 SoT). 매핑 테이블 `STATE_TO_HOOK_EVENT` 노출 — runtime resolution
+  은 `getattr(HookEvent, name)`. **JSONL audit log** 신규 writer
+  `append_history_entry(*, state, detail, ts, trigger_id, history_path)`
+  가 `~/.geode/self-improving-loop/auto_trigger_history.jsonl` 에 append-
+  only 한 줄당 `{ts, state, detail, trigger_id}`. `ensure_ascii=False` 로
+  한글 detail (`섹션=한글`) 보존. `mkdir + write_text` 단일 try (PR-OL-C2
+  Codex MCP lesson). OSError 시 `False` 반환 + WARNING log — telemetry
+  실패가 state machine 영향 못 줌. Path 는 ``~/.geode/`` 하위 — 레포
+  외부, gitignore N/A (PR-G5b #1350 "git-tracked but isn't" 사례 회피).
+  **`auto_trigger_mutator` 리팩토링** — 매 `return AutoTriggerStatus(...)`
+  를 `_finalize_status` helper 로 단일 출구점 통과: hook emit + history
+  append + status 반환 3가지 부수효과가 drift 없이 같은 분기에서 fire.
+  `hooks: Any = None` 기본값 — REPL/CLI 직접 호출 graceful (telemetry
+  sink 없어도 작동). `_BrokenHooks` 시뮬레이션 test 로 hook handler
+  raise 가 state machine crash 못 시킨다는 invariant 검증. **wiring**:
+  `core/wiring/automation.py::build_automation` 의 `register_auto_trigger`
+  호출에 `hooks=hooks` 인자 추가 — daemon 의 HookSystem instance 가
+  callback closure 로 캡쳐돼 cron fire 마다 자동 emit. **17 invariant test**
+  (`tests/test_ol_a15_telemetry.py`) — HookEvent enum x3 (5 variant value /
+  STATE_TO_HOOK_EVENT 5-state coverage + disabled 부재 / getattr resolve)
+  + append_history_entry x5 (1 row write / multi-append / parent dir 생성
+  / Unicode preserve / OSError graceful) + auto_trigger_mutator end-to-end
+  x9 (fired/lock_busy/interval_blocked/runner_error/parse_error 각각 hook+
+  history 발생 / disabled 가 hook+history 둘 다 skip / hooks=None graceful /
+  multi-call append-only / hook handler raise 격리). Quality gates clean
+  (ruff + format-check + mypy + 43/43 pytest 누적 OL-A1+A1.5).
+
+- **PR-OL-A1 — self-improving loop mutator auto-trigger (cron + 4-backend grounded).**
+  Pre-OL-A1 의 `SelfImprovingLoopRunner` 는 *manual* 발화만 지원 (operator
+  가 `geode self-improve mutate` 호출, 혹은 autoresearch sprint runner
+  안에서 sync invoke). OL-A1 가 GEODE daemon scheduler 위에 cron-가능한
+  auto-trigger 를 얹어 operator 부재 상태에서도 wrapper-prompt / 정책
+  진화가 계속되게 함. **신규 모듈** `core/self_improving_loop/auto_trigger.py`
+  — pure 유틸 `auto_trigger_mutator(*, enabled, min_interval_minutes,
+  runner_factory=None, lock_path=None, timestamp_path=None, now=None)`
+  가 6 terminal state 중 하나 (`fired` / `lock_busy` /
+  `interval_blocked` / `runner_error` / `parse_error` / `disabled`) 의
+  `AutoTriggerStatus` dataclass 반환. 발화 중 발생 가능한 모든 예외
+  (factory raise / runner __init__ raise / `run_once()` raise)는 try/except
+  로 잡혀 `runner_error` 또는 `parse_error` state 로 환원 — scheduler loop
+  crash 방지 (Codex MCP fix-up). **2-layer 동시성 가드**: (1) `fcntl.flock`
+  LOCK_EX | LOCK_NB advisory lock (`~/.geode/self-improving-loop/auto_trigger.lock`)
+  — 두 cron-fire 혹은 cron + manual `geode self-improve mutate` race 차단,
+  kernel crash 시 자동 해제. (2) `min_interval_minutes` 타임스탬프 게이트
+  (`auto_trigger_last_run.txt`) — clock-skew / restart re-fire 흡수. 게이트는
+  lock 획득 *전후* 모두 평가 (TOCTOU 방어 — Codex MCP fix-up). **4-backend
+  source 라우팅 검증**: wrapper 가 자체 source vocabulary 를 가지지 않고
+  `SelfImprovingLoopRunner.run_once()` 에 dispatch. Runner 는 PR-PAPERCLIP
+  (#1433) 의 `[self_improving_loop.mutator].source` 4-enum (`auto` /
+  `api_key` / `claude-cli` / `openai-codex`) 을 이미 honour. Dispatch
+  topology 는 *두 경로*: (a) `claude-cli` / `openai-codex` 는
+  `core/self_improving_loop/cli_subprocess.py` 의 subprocess 로 라우팅
+  (Claude Code Max / ChatGPT Plus subscription 청구 — `_ADAPTER_MAP` 우회),
+  (b) `auto` / `api_key` 는 `core/llm/adapters.py::_ADAPTER_MAP` 의 3-provider
+  (`anthropic` / `openai` / `glm`) + `openai-codex` 어댑터 경유. 총 4 backend
+  (Claude Code subscription / Codex CLI subscription / Anthropic PAYG / OpenAI
+  PAYG) 모두 추가 코드 없이 작동.
+  **신규 config** `[self_improving_loop.scheduler]` (`SchedulerConfig` in
+  `core/config/self_improving_loop.py`) — `enabled: bool = False` (opt-in
+  default), `cron: str = "0 */6 * * *"` (5-field cron, every 6 hours),
+  `min_interval_minutes: Annotated[int, Field(ge=1, le=1440)] = 60`.
+  Pydantic v2 `extra="forbid"` — 오타 운영자가 발견 가능. **Wiring** —
+  `core/wiring/automation.py::build_automation` 의 scheduler_service.start
+  직후에 `register_auto_trigger(trigger_manager, enabled, cron,
+  min_interval_minutes)` 호출. Default `enabled=False` 이면 `TriggerConfig`
+  등록 자체를 건너뜀 — 즉 운영자가 `config.toml` 에 `enabled = true` 명시
+  안 하면 *코드 path 가 dormant*. `try/except` 로 wiring 오류가 startup
+  block 하지 않게 가드. **26 invariant test** (`tests/test_ol_a1_auto_trigger.py`)
+  — SchedulerConfig defaults x4 (off / 6-hour cron / 60-min interval +
+  range validation + extra forbid + top-level config carries scheduler) +
+  lock semantics x3 (acquire fd / contention rejection / parent dir
+  creation) + timestamp x3 (missing → None / round-trip / unparseable →
+  None) + min-interval x3 (no prior / recent blocks / old satisfies) +
+  auto_trigger_mutator terminal states x9 (disabled / interval_blocked /
+  lock_busy / fired / runner_error / parse_error / lock-released-after-
+  raise / runner-factory-raises → runner_error / post-lock interval re-check
+  blocks fresh timestamp) + lazy runner import x1 + register_auto_trigger
+  wiring x3 (disabled skip / enabled registers SCHEDULED TriggerConfig /
+  closure forwards into `auto_trigger_mutator`). Quality gates clean (ruff +
+  mypy + 26/26 pytest + 403 adjacent scheduler/wiring/trigger/automation
+  regression). **Telemetry deferred** (`HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*`
+  + outer-loop bundle viewer) — OL-A2/OL-A3 scope.
+
+- **PR-OL-C3 — `memory_recall` MD writer (close M4.4.1 reader's write-side).**
+  M4.4.1 (#1436) 가 `core/self_improving_loop/memory_recall.load_memory_entries`
+  + `in_context_wiring.py:123` 로 reader 만 출시 → 운영자가 직접 `.md`
+  파일을 손으로 채우지 않는 한 `memory_recall` in-context slot 이 영구
+  empty list 위에 ranking 작동 (PR-OL-C2 의 few-shot pool 과 동일한
+  reader-without-writer deception). **신규 모듈**
+  `core/memory/recall_writer.py` — pure 유틸 `write_recall_entry(*, name,
+  description, body, type_label, recall_dir=None, overwrite=False)` 가
+  M4.4.1 frontmatter parser 가 기대하는 정확한 schema
+  (`---\nname: …\ndescription: …\nmetadata:\n  type: …\n---\n\n{body}\n`)
+  로 한 줄당 `.md` 를 작성. `_slugify_name` 으로 alnum+hyphen+underscore
+  파일명 보장, `_escape_frontmatter_value` 로 multi-line name/description/
+  type_label 단일 라인 강제 (YAML-light parser 의 line-per-key 규약 —
+  type_label 까지 escape 하는 건 Codex MCP fix-up 후 추가, frontmatter
+  injection 방지). `mkdir(parents=True,
+  exist_ok=True)` + `write_text` 단일 try (Codex MCP PR-OL-C2 의 mkdir-
+  outside-try 사례 적용). Idempotent — `overwrite=False` (default) 가
+  기존 슬러그 파일 보존, `True` 시 대체. `resolve_recall_dir()` 가
+  `$GEODE_MEMORY_RECALL_DIR` 운영자 override > `~/.geode/memory/recall/`
+  default — reader 와 *같은* env var 를 honour 해서 운영자가 dir 한
+  곳만 옮기면 read+write 둘 다 따라옴. 4 canonical type 상수
+  (`RECALL_TYPE_{USER,FEEDBACK,PROJECT,REFERENCE}`) + `VALID_RECALL_TYPES`
+  frozenset 노출 — Claude Code 의 auto-memory schema 와 parity. Non-
+  canonical type 도 작성 자체는 허용 (DEBUG log) → 운영자 도메인 별
+  custom type 막지 않음. **Auto-trigger 부재 (의도)** — `SESSION_ENDED`
+  hook 에서 자동 발화 / LLM-curator 는 OL-C3.2 follow-up 으로 deferred,
+  근거: (1) ADR 부재 (every session 채택? promoted-only? curator?),
+  (2) cost ceiling 미합의, (3) disk usage cap 미합의. 현재 entry-point
+  은 운영자가 CLI/REPL slash 로 `write_recall_entry` 직접 호출. **17
+  invariant test** (`tests/test_ol_c3_recall_writer.py`) — resolve x2
+  (env override / 기본 path), slugify x3 (canonical / 공백+punct /
+  empty→untitled), writer x7 (파일 생성 / M4.4.1 reader round-trip /
+  idempotent skip / overwrite=True / multi-line frontmatter strip /
+  parent dir 생성 / non-canonical type 작성 / type_label newline-escape
+  injection 방지), list x2 (정렬 / 없는 dir empty), batch x2 (전체 작성
+  / 기존 slug skip). Reader-writer schema drift 방지의 핵심은
+  `test_write_round_trips_with_m4_4_1_reader` 가 *실제* reader 를 import
+  해서 동일 파일을 parsing — 한 쪽이 schema 변경하면 즉시 RED. Quality
+  gates clean (ruff + mypy + 17/17 pytest).
+
+- **PR-OL-C2 — few-shot pool writer + autoresearch promote 호출자.**
+  M3 (#1426/#1428) 이 reader (`_load_few_shot_pool_override` +
+  `apply_few_shot_pool`) 만 출시하고 writer 부재로 exemplars in-context
+  slot (M4.4 #1435) 가 영구 empty pool 위에 작동했던 deception 해소.
+  **신규 함수** `core/llm/few_shot_pool.append_exemplar(user_msg,
+  assistant_msg, fitness_delta, source, pool_path, max_size)` —
+  16-hex SHA256 signature idempotent dedup + FIFO eviction
+  (`MAX_EXEMPLAR_POOL_SIZE = 1000`). 모듈 `__all__` 에
+  `append_exemplar` + `MAX_EXEMPLAR_POOL_SIZE` 노출. **autoresearch
+  caller** — `autoresearch/train.py::main()` 의 OL-C1 eval emit 직후
+  `args.dry_run is False` AND `"true" in promoted_line.lower()` 시
+  `append_exemplar(source="autoresearch_audit_promote", fitness_delta=
+  fitness - mean(baseline_means))` 호출 (rejected pile 은 in-context
+  exemplars 채널에 들어가지 않게 gate). 전체 try/except 로 감싸져
+  audit cycle 보호. **mkdir + write_text 모두 단일 try 안** (Codex MCP
+  FLAG fix — mkdir OSError 도 graceful False 반환, raise 안 함).
+  **14 invariant test** — signature x2 (determinism + field sensitivity)
+  + writer x4 (one row / idempotent / multi-pair / round-trip with
+  `_parse_jsonl`) + FIFO x2 (eviction at over-cap + cap constant
+  exposed) + graceful x2 (parent dir creation + Unicode preserve) +
+  train.py source 검증 4종 (import 존재 / promote gate /
+  try/except wrap / OL-C1 emit 후 위치 — order pin). **메타-level exemplar caveat**:
+  audit cycle 의 `(prompt, response)` 는 meta-level — 향후 OL-C2.2
+  follow-up 에서 AgenticLoop-turn-level + Petri-per-turn writer 추가.
+
+- **PR-OL-C1 — `eval_response_recorded` 호출자 wiring (autoresearch audit cycle 단위).**
+  M4.0 (#1429) 이 "deferred to caller wiring" 으로 남긴 emit 함수가
+  드디어 production 에 첫 호출자 획득. `autoresearch/train.py::main()`
+  의 audit_finished journal emit 직후 `emit_eval_response_recorded(...)`
+  호출 추가. 매 audit cycle 마다 1 event 생성 — prompt = "audit cycle
+  on commit X (seed_select=Y, description=Z)", response = "verdict=W
+  fitness=F promoted=P dim_means_count=N", fitness_score = aggregate
+  fitness, axis_scores = `{dim_means_aggregate, bench_means_aggregate}`,
+  source = `"autoresearch_audit"`, **rollback_flag = `fitness == 0.0 OR
+  verdict.lower() in {"reject", "regression"}`** (chosen pile = 양호한
+  mutation, rejected pile = critical regression 또는 명시 reject).
+  Emit 전체가 try/except 로 감싸져 audit cycle 자체는 절대 break 안 됨.
+  Response payload 는 `verdict=<v> fitness=<f> promoted=<p>
+  dim_means_count=<N> bench_means_count=<M>` 5 필드. **DPO 파이프라인
+  deception 해소** — M4.1 build_dpo_pack 의 journal walker 가 드디어
+  *non-empty* stream 을 읽음 → M4.2 publisher 가 실제 TRL / OpenAI /
+  Bedrock 학습 데이터 생성 가능. 같은 commit 두 번 audit 시
+  chosen/rejected pair 자동 형성. **8 def / 14 runtime case invariant
+  test** — chosen pile + rejected pile + no-scope no-op + train.py
+  source 검증 4종 (import 존재 / main 내부 / rollback heuristic 정확 /
+  try/except wrap) + rollback heuristic matrix 1 def × 7 parametrize.
+  **OL-C1.2 (Petri per-turn emit) 는 후속** — `.eval` log walker API
+  가 stable 한 후 진입.
+
+- **PR-Hermes-1d — `session_search` LLM tool (Hermes absorption Phase 1d, minimal).**
+  Phase 1c (#1439) 의 FTS5 인덱스 위에 LLM-노출 도구 추가. 신규 모듈
+  `core/tools/session_search.py` — `SessionSearchTool` 이
+  `SessionManager.search_messages` (1c 신설) 호출, 결과를 `matched` /
+  `count` / `hits[{session_id, message_id, seq, role, timestamp, snippet,
+  score}]` 형태로 반환. **5 input field**: `query` (필수, sanitizer 통과) +
+  `session_id` (선택 — 단일 세션 scope) + `limit` (default 20, max 100
+  clamp) + `prefer_trigram` (CJK / 부분 문자열 recall). 도구는
+  `core/wiring/container.py::build_default_registry` 에 등록 +
+  `core/tools/definitions.json` 의 `memory_search` 직전에 schema entry
+  추가. **운영자 흐름**: 매 turn M4.4.1 의 memory_recall 슬롯이
+  *passive* 로 `<memory-recall>` 블록 주입. agent 가 더 구체적인 *active*
+  recall 이 필요할 때 `session_search(query="DPO training",
+  prefer_trigram=False)` 직접 호출 가능. 두 채널 보완 — passive 는 매
+  turn 자동, active 는 LLM 의도 명시적. **Scope (1d-minimal)**: 현재
+  프로젝트 `sessions.db` 만; cross-project (`global.db`) + async
+  `SearchIndexer` thread + `geode reindex` CLI 는 PR-Hermes-1d.2 로
+  defer. **14 invariant test** — surface 2 (name + schema 필수 필드) +
+  입력 validation 3 (empty / whitespace / non-str query) + round-trip 1
+  + scope filter 1 + trigram CJK recall 1 + empty DB no-hit 1 + limit 2
+  (honored / clamped) + invalid limit fallback 1 + registry 등록 1 +
+  definitions.json schema 1.
+
+- **PR-Hermes-1c — FTS5 + 트리그램 인덱스 (Hermes absorption Phase 1c).**
+  Phase 1a (#1338) 의 messages 테이블 + Phase 1b 의 SoT flip 위에 full-text
+  search 인덱스 신설. **신규 모듈** `core/storage/fts_helpers.py` —
+  `sanitize_fts5_query` (Hermes `hermes_state.py:1796` 패턴 absorb — 하이픈/
+  도트/콜론 포함 토큰을 double-quote escape, pure-meta 토큰 drop, Unicode
+  letter bare 유지) + `has_trigram_support` (SQLite 3.34+ trigram tokenize
+  capability probe; graceful False on `OperationalError`). **`session_manager.py`
+  확장** — `__init__` 가 `messages_fts` (unicode61 tokenizer) 와 3 트리거
+  (insert/delete/update) 를 항상 생성, trigram 가능 시 `messages_fts_trigram`
+  + 트리거 3개 추가 (graceful degrade). 트리거는 generator `_fts_trigger_block`
+  으로 단일 SoT — unicode/trigram 두 테이블 간 drift 차단. 신규 method
+  `search_messages(query, session_id=, limit=, prefer_trigram=)` 가 sanitize →
+  FTS5 `MATCH ?` 쿼리 → `bm25` 점수 + `snippet()` highlight 반환. **18
+  invariant test** — sanitize 7개 (empty / bare alnum / hyphenated / dotted /
+  internal quote escape / pure-meta drop / Unicode letter bare) + capability
+  probe 2개 (modern OK / bad-conn graceful) + FTS schema 2개 (tables 생성 /
+  triggers 생성) + sync 4개 (insert → index / round-trip search / session_id
+  scope / hyphen query via sanitizer) + trigram 1개 (Korean 부분문자열
+  recall) + delete cascade 1개 + empty query 1개. 5 critical guarantees:
+  default 동작 byte-equal (기존 sessions/messages 행위 미변경 — 신규 FTS
+  table 만 추가) / trigram 없는 SQLite 빌드에서도 graceful (unicode61 만
+  활성) / 쿼리 산티타이저가 FTS5 grammar 사고 차단 / contentless FTS
+  (`content='messages'`) 라 디스크 사용 최소 / 트리거가 인덱스 자동
+  동기화 (operator 수동 reindex 불필요).
+
+- **PR-M4.4.3 — `tool_hints` slot reader 활성화 + M4 sprint 종료 (ADR-012).**
+  M4.4 (#1435) 의 마지막 stub 활성화 — **모든 4 in-context slot 이제
+  완전 wired**. 신규 모듈 `core/self_improving_loop/tool_hints.py` —
+  `~/.geode/memory/episodes.jsonl` (episodic ledger, `core.memory.episodic.EpisodicStore`
+  populates) 를 `RECENT_WINDOW=200` 범위로 읽어 per-tool 집계 →
+  `MIN_INVOCATIONS=3` + `FAIL_RATE_THRESHOLD=0.34` 동시 통과 tool 만
+  surface → `fail_rate desc, total desc` 정렬 → top-K → `<tool-hints>`
+  block 으로 system prompt 앞에 prepend. 각 tool 의 *가장 최근*
+  non-empty error 캡쳐 (episodes 가 newest-first 이라 dict 첫 진입이
+  recent), 80자 + ellipsis trim. **Frontier signal**: `stuck_in_loops`
+  / `redundant_tool_invocation` 라벨이 punish 하는 패턴을 *그 자체로
+  in-context prevention* — agent 가 "Bash 가 최근 3번 실패했네" 보고
+  다른 전략 선택 가능. **Graceful** — `EpisodicStore` import 실패 /
+  ledger 없음 / read error / non-str tool_name 모두 silent skip.
+  **18 invariant test** — `load_recent_episodes` x2 (store 실패 /
+  성공) + `find_failing_tools` x8 (top_k=0 / min_invocations cap /
+  fail_rate threshold / surface / most-recent-error 캡쳐 / desc sort
+  + tiebreak / top_k cap / non-str tool_name skip / 80-char trim) +
+  `format_tool_hints_block` x3 (empty / with-error / without-error) +
+  orchestrator x2 (block prepend / no-failing no-op). **M4 sprint
+  종료** — M4.0 (#1429 event) → M4.1 (#1430 pack) → M4.2 (#1431
+  publisher) → M4.3 (#1434 redaction/stats) → M4.4 (#1435 orchestrator) →
+  M4.4.1 (#1436 memory_recall) → M4.4.2 (#1437 rubric_excerpts) →
+  **M4.4.3 본 PR (tool_hints + closure)**.
+
+- **PR-M4.4.2 — `rubric_excerpts` slot reader 활성화 (ADR-012).**
+  M4.4 (#1435) 의 두 번째 stub 슬롯 활성화. 신규 모듈
+  `core/self_improving_loop/rubric_excerpts.py` —
+  `autoresearch/state/baseline.json` 읽어 `dim_means` vs
+  `baseline_means` 차이 계산 → `baseline_means[d] - dim_means[d] > 0`
+  인 dim 만 (regression positive) top-K desc 정렬 → 내장 17-dim
+  `DIM_RUBRIC` 의 directive 와 join → `<rubric-warning>` 블록 render →
+  orchestrator 가 system prompt 앞에 prepend. `DIM_RUBRIC` 은 5
+  critical + 12 auxiliary = 17개 fitness dim 모두 cover (테스트가
+  `autoresearch.train.AXIS_TIERS` 와 동기 검증). **Graceful** — missing
+  / malformed / non-dict baseline 모두 silent no-op. **Per-axis
+  type-guard** — `dim_means[d]` 가 non-numeric 이면 그 dim 만 skip,
+  나머지는 통과. **Frontier parity** — Claude Code 의
+  `<system-reminder>` + Codex CLI 의 `<important_reminders>` 와 동일
+  pattern. **17 invariant test** — `DIM_RUBRIC` 17 cover + 모든 entry
+  non-empty + `load_baseline` x4 (missing / malformed / non-dict /
+  valid) + `find_worst_regressions` x7 (top_k=0 / improving skip /
+  desc sort / top_k cap / missing means / non-numeric skip / DIM_RUBRIC
+  attach) + `format_rubric_block` x2 (empty / render with unknown-dim
+  fallback) + orchestrator x2 (prepend / no-baseline no-op).
+  **Remaining stub count after this PR: 1** (tool_hints only,
+  M4.4.3 follow-up).
+
+- **PR-M4.4.1 — `memory_recall` slot reader 활성화 (ADR-012).**
+  M4.4 (#1435) 의 4 슬롯 중 첫 번째 stub 을 활성화. 신규 모듈
+  `core/self_improving_loop/memory_recall.py` — frontmatter-style MD
+  파일 (Claude Code 의 auto-memory 와 동일 schema) 을
+  `~/.geode/memory/recall/` (또는 `GEODE_MEMORY_RECALL_DIR` env
+  override) 에서 walk → `MemoryEntry(name, type, description, body,
+  mtime)` 로 parse → `rank_memory_entries(entries, query, top_k)` 가
+  keyword overlap × recency_weight (`1 / (1 + age_days)`) 로 정렬 →
+  `format_memory_block` 이 `<memory-recall>\n- [type] description\n
+  ...\n</memory-recall>` 블록 render. **Orchestrator wiring** —
+  `in_context_wiring.apply_in_context_slots` 가 `SLOT_MEMORY_RECALL`
+  cfg 발견 시 위 3단계 호출, 결과 블록을 system prompt 앞에
+  prepend (per-slot try/except 로 실패 시 graceful). `_latest_user_query`
+  helper 가 messages 의 마지막 user-role string content 추출 → similarity
+  ranking 의 query 로 사용. **Per-file graceful** — frontmatter 누락 /
+  unreadable file / 잘못된 YAML 은 silent skip. **No-op fast path**
+  유지 — recall dir 미존재 시 `resolve_recall_dir()` 가 None 반환 →
+  reader 가 `[]` 반환 → orchestrator 가 system 미변경. **16 invariant
+  test** — resolve x3 (env override / env-missing-graceful / default-missing) +
+  load x3 (no-dir / frontmatter parse / malformed skip) + rank x4 (overlap /
+  recency tiebreak / top_k=0 / top_k cap) + format x4 (empty / type-tag
+  render / **description-only with empty body** / **body-only fallback** —
+  Codex MCP 가 잡은 ternary precedence regression) + orchestrator 통합 x2
+  (block prepend / no-dir no-op).
+
+- **PR-M4.4 — In-context slot wiring orchestrator + provider wiring (ADR-012).**
+  M4 DPO pipeline 의 closing piece — S5 (#1425) 의 4-slot schema 와 M3
+  (#1426/#1428) 의 few-shot pool substrate 를 실제 inference path 에
+  연결. **신규 모듈** `core/self_improving_loop/in_context_wiring.py`
+  의 `apply_in_context_slots(messages, system="")` orchestrator —
+  S5 `_load_in_context_slots_override()` 가 None 이면 input 객체
+  **identity** 반환 (zero-allocation no-op fast path; default GEODE
+  operator 는 추가 비용 0). slot 활성 시 per-slot try/except 로 각
+  reader/apply 가 독립 graceful. **exemplars 슬롯 = 실제 활성** —
+  M3 의 `_load_few_shot_pool_override` + `apply_few_shot_pool` 을
+  호출, top-K (user, assistant) 쌍을 messages head 에 prepend.
+  fitness_delta desc rank. **memory_recall / rubric_excerpts /
+  tool_hints 3 슬롯 = 명시적 stub at PR-M4.4 merge time** —
+  orchestrator 이 SoT 에서 그 존재를 인식하지만 reader 미구현이라
+  no-op; 후속 PR 가 1개씩 활성화 (PR-M4.4.1 #1436 → memory_recall,
+  PR-M4.4.2 → rubric_excerpts; tool_hints 만 PR-M4.4.3 대기). **Provider
+  wiring 2지점** — `core/llm/providers/anthropic.py::ClaudeAgenticAdapter.agentic_call`
+  + `core/llm/providers/openai.py::OpenAIAgenticAdapter.agentic_call`
+  의 api-key/circuit-breaker 체크 직후 orchestrator 호출, 결과로
+  `(messages, system)` 갱신. 두 path 모두 inspect.getsource grep
+  assertion 으로 wiring 보증. **11 invariant test** — no-op
+  identity 3 (no SoT / 빈 dict / reader exception) + exemplars
+  prepend 1 + exemplars 빈 pool no-op + exemplars 실패 graceful +
+  system passthrough + 3 stub slot non-error + provider import
+  smoke 2 + __all__ minimal export. ContextVar / hook 미사용 —
+  매 LLM call 마다 ContextVar lookup 한 번도 없는 stateless
+  orchestrator. Frontier 비교: Claude Code system prompt /
+  Codex CLI `<system-reminder>` 의 4 layer wiring 을 mutator-target
+  화 한 explicit schema.
+
+- **PR-M4.3 — DPO pack PII redaction + stats (ADR-012).**
+  M4.1 canonical pack (`~/.geode/self-improving-loop/dpo/pack.jsonl`) 가
+  user prompts + assistant responses 를 verbatim 으로 가지므로 M4.2
+  publish 전 PII / secret 스크럽이 필수. **신규 모듈**
+  `core/self_improving_loop/dpo_redaction.py` — `redact_text(text)` 가 7
+  카테고리 패턴 적용: API key (Anthropic / OpenAI / Slack / GitHub /
+  ZhipuAI — `core/utils/redaction.py` 의 기존 `_SECRET_PATTERNS` 재활용)
+  + AWS access key (AKIA / ASIA) + Bearer token + Email + Phone (E.164 /
+  dashed / parenthesised) + URL credentials (`https://u:p@host`) + POSIX
+  home path (`/Users/<name>/` + `/home/<name>/`). `redact_pack_row(row)`
+  가 5 텍스트 필드 (`prompt` / `chosen` / `rejected` / `source_chosen` /
+  `source_rejected`) 만 스크럽, 숫자 / signature 필드는 passthrough.
+  `redact_pack(src, dst) -> int` 가 read → scrub → write JSONL — missing
+  src → empty dst 파일 (graceful), malformed line silent drop, re-run
+  byte-equal 결정성 보장. **신규 모듈** `core/self_improving_loop/dpo_stats.py`
+  — `pack_stats(path) -> dict` 가 pair_count / unique_prompts /
+  fitness_delta {min,max,mean,median} / source_{chosen,rejected}_histogram
+  반환. missing / empty / all-malformed → 빈 dict (graceful).
+  **redaction layer 는 효과적 7 카테고리** — API key 는 `redact_secrets`
+  delegate 이므로 모듈의 `PII_PATTERNS` table 자체는 6 entry (URL
+  cred / AWS / Bearer / Email / home / Phone) + 1 delegate. **19 + 8
+  = 27 invariant test** — redaction 19 (패턴별 9 scrub + empty 통과 +
+  no-match unchanged + composed multi-secret + pattern table sanity +
+  pack_row field-scope 2 + redact_pack 4) + stats 8 (missing / empty /
+  malformed → 빈 dict + 기본 aggregate / unique_prompts / required
+  field 누락 drop / int coerce / missing source histogram). 본 PR 은
+  변환 + 통계만; M4.2 publisher 와 합쳐서 운영자가
+  `redact_pack → publish` 파이프라인 수동 엮어 사용. CLI integration 은
+  M4.4 후속.
+
+- **PR-PAPERCLIP — Paperclip pattern wiring for self-improving loop mutator.**
+  사전 PR (PR-1 G-A) 가 `MutatorConfig.source = Literal["auto", "api_key",
+  "claude-cli", "openai-codex"]` knob 만 도입했고 runner 는 source 를 *로그만*
+  찍었다. 본 PR 이 실제 dispatch 를 연결. **신규 모듈**
+  `core/self_improving_loop/cli_subprocess.py` — `invoke_claude_cli` /
+  `invoke_codex_cli` subprocess wrapper. `claude --print --output-format text
+  --append-system-prompt <SYS> <USR>` / `codex exec --skip-git-repo-check
+  <SYS+USR>` argv shape. binary path 는 `$PATH` 의 `claude`/`codex` 또는 env
+  override (`GEODE_CLAUDE_CLI_BIN` / `GEODE_CODEX_CLI_BIN`). missing →
+  `CliInvocationError` (설치 hint 동봉). 180s timeout. **runner 변경** —
+  `_default_llm_call` 가 `cfg.mutator.source` 검사 후 paperclip 일 때
+  subprocess wrapper 호출, else 기존 API path 유지 (zero-diff for default
+  operators). **UI/UX** — `/self-improving config` (interactive 설정창,
+  mutator + petri.<role> + seed_generation.<role> 컴포넌트별 provider /
+  model / source 입력, Enter 로 현재값 유지, 완료 후 `/self-improving run`
+  체이닝 옵션 — 입력 필드 *model + source*) + `/self-improving source`
+  (현재 상태 테이블) + `/self-improving source set <key>=<value>`
+  (non-interactive mutator setter). **TOML 쓰기** — `_splice_section`
+  헬퍼가 `~/.geode/config.toml` 의 section header 를 찾아 in-place key
+  갱신, 누락 section 은 append, sibling section 보존. seed-generation
+  role 쓰기는 **plural `roles.<X>`** path 사용 (loader schema 와 동기
+  — Codex MCP catch). `atomic_write_text` + `_toml_escape_basic_string`
+  (기존 `cmd_config.py` 패턴). **18 invariant test** — argv shape 2 /
+  missing binary / env override / 비정상 exit / **timeout** / runner
+  dispatch 3 (claude-cli + codex + api_key 무변경) / TOML splice 5
+  (append + replace + insert + sibling 보존 + 이스케이프) + source set
+  3 + **seed-generation roles plural-path round-trip**
+  (writer → loader validate). 영향 범위 — paperclip 은 self-improving
+  loop **mutator only** (Q1 응답). Agentic Loop 일상 호출은 기존 API
+  path 그대로.
+
+- **PR-M4.2 — DPO publisher adapters (TRL / OpenAI / Bedrock, ADR-012).**
+  M4.1 canonical pack 을 per-provider DPO 학습 입력 포맷으로 변환.
+  **신규 모듈** `core/self_improving_loop/dpo_publisher.py` — 3 adapter
+  함수 (`to_trl_format` / `to_openai_format` / `to_bedrock_format`) +
+  `publish_pack(target, pack_path, out_path) -> int` dispatcher. 모든
+  변환은 **pure transform** — network call / SDK import / API key
+  read 일체 없음. 운영자는 결과 JSONL 을 provider 의 upload tool
+  (`openai files create` / `aws s3 cp` / `hf datasets push`) 에 전달.
+  **Idempotency** — `publish_pack` 가 destination 을 매번 overwrite
+  하므로 동일 (pack, target) 입력은 byte-equal output 생성.
+  **Adapter 별 row schema**: TRL = 최소 triple `{prompt, chosen,
+  rejected}` (TRL DPOTrainer 직접 소비). OpenAI = messages 스타일
+  `{input.messages, preferred_output, non_preferred_output}` (OpenAI
+  preference fine-tuning guide 의 schema). Bedrock = generic
+  passthrough `{prompt, chosen, rejected, signature, fitness_chosen,
+  fitness_rejected, fitness_delta}` (base model family 별 schema
+  편차가 커서 운영자가 후처리하도록 audit metadata 유지). **Graceful**
+  — missing pack file → 0 rows + empty out file. Malformed JSONL line
+  + 비 dict + prompt/chosen/rejected str 누락 row 는 silently drop.
+  **ValueError** — `SUPPORTED_TARGETS = ("trl", "openai", "bedrock")`
+  외 target. 본 PR 은 transform 만; CLI integration + network upload
+  + PII redaction (M4.3) 은 후속. **14 invariant test** — TRL minimal
+  triple / OpenAI messages schema / Bedrock fitness 보존 + 누락 graceful
+  / SUPPORTED_TARGETS manifest / publish_pack one-row-per-pack-row /
+  overwrite / byte-equal rerun / missing pack empty file / invalid
+  target ValueError / malformed line drop / openai+bedrock dispatch /
+  no-network import guard (forbidden SDK 8종 stdlib 외 미적재).
+
+- **PR-M4.1 — DPO canonical preference-pack JSONL writer (ADR-012).**
+  Consumes M4.0 의 `eval_response_recorded` event stream → 각 unique
+  `prompt` group 을 chosen pile (`rollback_flag=False`) + rejected pile
+  (`rollback_flag=True`) 로 분할 → **top-fitness chosen × bottom-fitness
+  rejected** 1 pair 를 emit (가장 선명한 fitness margin = DPO 학습 신호
+  최대). **신규 모듈** `core/self_improving_loop/dpo_pack.py` —
+  `build_dpo_pack(journal_paths, pack_path) -> BuildResult` (appended /
+  duplicate / events_seen / unpaired count) + `pair_signature(prompt,
+  chosen, rejected)` 16-hex 식별자 + `BuildResult` frozen dataclass.
+  **Idempotency** — signature-keyed dedup 으로 재실행 시 신규 pair 만
+  append; 기존 pack rows 보존. **Graceful** — missing journal file →
+  empty 처리, malformed JSONL line 은 silently drop (per-line parse
+  guard). Pack 경로 `GLOBAL_DPO_PACK_PATH = ~/.geode/self-improving-loop/dpo/pack.jsonl`
+  (operator-local, NOT git-tracked — preference data 는 M4.3 redaction
+  까지 사용자-사적). **Pack schema** — `signature` / `prompt` /
+  `chosen` / `rejected` / `fitness_chosen` / `fitness_rejected` /
+  `fitness_delta` / `ts_chosen` / `ts_rejected` / `session_id_chosen` /
+  `session_id_rejected` / `source_chosen` / `source_rejected` (13
+  field). 본 PR 은 transform 만; M4.2 publisher (OpenAI / Bedrock /
+  HuggingFace TRL adapter) 는 후속. **12 invariant test** — signature
+  determinism + field-sensitivity / empty journal / missing-file
+  graceful / pair-selection top×bottom / chosen-only + rejected-only
+  unpaired / idempotency 재실행 zero append / 신규 prompt 만 append /
+  multi-journal cross-session merge / malformed line drop. Rafailov
+  2023 DPO formulation 의 `(x, y_w, y_l)` triple 과 직접 정합.
+
+- **PR-M4.0 — `eval_response_recorded` SessionJournal event (ADR-012).**
+  DPO pipeline (M4.x) 의 첫 piece — 각 (prompt, response) turn 마다
+  fitness 측정값 + 평가 metadata 를 active SessionJournal 에 emit.
+  M4.1 의 DPO canonical pack JSONL writer 가 이 stream 을 따라가며
+  chosen/rejected pile 라벨링. **신규 모듈**
+  `core/self_improving_loop/eval_journaling.py` — `EVENT_NAME` constant +
+  `emit_eval_response_recorded(prompt, response, fitness_score,
+  axis_scores, source, rollback_flag)` helper. Active scope 외에서
+  graceful no-op (False 반환) — 호출자 try/except 불필요. `rollback_flag`
+  가 True 면 user revert 신호 (M4.1 rejected 라벨). `axis_scores` 가
+  None / 빈 dict 면 payload key omit (forward-compat). int / bool 값은
+  float coerce. 본 PR 은 emit 함수 + payload schema 만; emit 호출 site
+  (Petri audit / live session / replay test 등) 는 후속 PR 에서 wiring.
+  **11 invariant test** — event name + no-scope no-op + minimal payload +
+  full payload + rollback flag (true/default) + axis_scores omit (None /
+  empty) + float coerce 2 + multi-event append. Voyager / STaR 의
+  successful-trajectory journaling 패턴 그대로.
+
+- **PR-M3 — Few-shot exemplar pool 자동 적재 (ADR-012).** S5 (#1425)
+  에서 declared 만 됐던 `exemplars` slot 의 실제 *적재 메커니즘* 신설.
+  fitness gate 통과한 task-completion candidate 의 `(user_msg,
+  assistant_msg, fitness_delta, source)` triple 을 JSONL append-only
+  로 축적; runtime 에 top-K 선별해 messages 앞에 in-context exemplar
+  pair 로 삽입. **5-element 패턴**: SoT
+  `autoresearch/state/policies/few-shot-pool.jsonl` + operator-local /
+  `GLOBAL_FEW_SHOT_POOL_PATH` + `OPERATOR_LOCAL_FEW_SHOT_POOL_PATH`
+  추가 / `core/llm/few_shot_pool.py` reader (`FewShotExemplar` frozen
+  dataclass + `_load_few_shot_pool_override` + `apply_few_shot_pool`) /
+  inference entry 는 M4.4 deferred (현 PR 은 SoT + reader + apply
+  함수만, anthropic.py / openai.py 의 message 조립부 wiring 은
+  후속 PR) / `GEODE_FEW_SHOT_POOL_OVERRIDE` + `_STRICT=1` env pair.
+  **Per-line graceful** — JSONL 한 줄이 broken 이어도 나머지 줄은
+  유지 (`_parse_jsonl` 단위). bool fitness_delta 등 type trap →
+  0.0 coerce. missing/empty user_msg/assistant_msg → skip. T5 (cache
+  policy) 와 호환 — exemplar prefix 가 Anthropic cache breakpoint
+  의 stable prefix 로 자연스럽게 정렬. **23 invariant test** —
+  reader 11 (None / empty / blank / valid / per-line graceful /
+  missing field / non-dict / fitness coerce / bool trap / strict /
+  operator-local) + apply 6 (None / empty / max=0 / single insert /
+  top-K rank / cap / no-mutate) + 3-layer wiring + path const +
+  env wiring + ALIVE marker. Voyager / STaR 의 *successful trajectory
+  pool* 패턴 그대로 — 자기 성공 사례를 다음 cycle 의 in-context
+  exemplar 로 재투입.
+
+- **PR-M2 — Agent contract mutation slot (ADR-012).** AgentDefinition
+  의 `role` / `system_prompt` / `tools` 를 mutator 가 evolve. `model`
+  field 는 Tier 2 (안전성 invariants root) — 본 surface 에서 명시적
+  제외 (mutator 가 provider 임의 변경으로 safety guardrail 우회 방지).
+  5-element 패턴: SoT `autoresearch/state/policies/agent-contracts.json`
+  (+ operator-local) / `GLOBAL_AGENT_CONTRACTS_PATH` +
+  `OPERATOR_LOCAL_AGENT_CONTRACTS_PATH` 추가 /
+  `core/agent/agent_contracts_policy.py` reader (`_load_agent_contracts_override`
+  + `apply_agent_contracts_policy(agent_def, policy)` — `model_copy(update=...)`
+  로 새 instance 반환, 원본 immutable) /
+  `core/agent/sub_agent.py:resolve_agent` 가 `_agent_registry.get()` 직후
+  `apply_agent_contracts_policy(...)` 호출 / `autoresearch/train.py`
+  env wiring + `core/self_improving_loop/policies.py:TARGET_KINDS`
+  5 → 6 (skill_catalog 뒤 agent_contract 추가). M1 의 nested ↔ flat
+  변환 helper 를 일반화 (`_BOOL_FIELDS_BY_KIND` / `_LIST_FIELDS_BY_KIND`
+  / `_NESTED_KINDS` frozenset) — `tools` field 는 list[str] 이므로
+  comma-separated string 으로 flat ↔ list[str] 변환. `_coerce` 가
+  `model` field 명시적 drop (Tier 2 guardrail in code). **18 invariant
+  test** — dispatcher 4 + reader 8 + apply 5 + dispatcher round-trip 2
+  + M1 BC 1 + model preservation 1. **22 신규 test** (재집계 — Codex
+  MCP correction). M1 의 invariant test 도 5→≥5 으로 완화 (count grow
+  forward-compat). M2 합류 후 **4 stale test set 갱신** (m1 +
+  policy_mutation + adr_012 + 5_slot_audit).
+
+- **PR-M1 — Skill mutation slot 개통 (ADR-012).** T2 (#1418) 의
+  `skill-catalog.json` reader 를 mutator 의 mutation contract 가
+  실제로 mutate 할 수 있도록 dispatcher 확장. `core/self_improving_loop/
+  policies.py:TARGET_KINDS` 가 4 → 5 (prompt / tool_policy /
+  decomposition / reflection + **skill_catalog**). retrieval 은 S0d
+  deprecation 유지 (현 5-slot 에 포함 X). 다른 4 kind 와 달리
+  skill_catalog 의 disk shape 는 **nested**
+  (`{skill_name: {description, user_invocable}}`) — mutation row 의
+  `target_section` 은 string 만 허용하므로 **dotted-key flat ↔ nested**
+  변환 layer 추가:
+  - `_flatten_nested(disk_dict) → flat dotted-key dict`: load_policy
+    가 runner 에 flat shape 반환 (다른 4 kind 와 동일 contract).
+  - `_unflatten_nested(flat) → nested dict`: write_policy 가 T2-reader
+    호환 shape 로 저장. `user_invocable` 등 bool field 는 `"true"`/
+    `"false"` → bool coerce.
+  **End-to-end consistency invariant** — `M1 write_policy` 가 쓴 file
+  을 `T2 reader (_validate_schema + _coerce)` 가 그대로 parse 해야
+  함. 16 invariant test 가 round-trip + BC + dispatcher state 모두
+  검증. tests/test_self_improving_5_slot_reader_audit.py +
+  test_adr_012_surface_tiers.py + test_policy_mutation.py 의 4-slot
+  expected set 도 5-slot 로 갱신 (M1 합류). 신규 18 invariant test
+  (test_m1_skill_mutation_slot.py) + 3 stale set 갱신.
+
+- **PR-S5 — 4종 in-context slot 명시적 schema (ADR-012).** GEODE 의
+  agent 가 매 turn 마다 system prompt + tool messages 에 주입하는
+  dynamic context 의 **4 canonical slot category** 를 explicit JSON
+  schema 로 표면화. M4.4 후속 PR 이 이 schema 를 inference path 에서
+  소비할 wiring 을 담당; 본 PR 은 schema + reader + validation 만
+  (no inference wiring — explicit 의도). **4 slot**: `exemplars`
+  (Elo top-K), `memory_recall` (~/.geode/memory/), `rubric_excerpts`
+  (Petri worst-dim rubric), `tool_hints` (RunLog 의 tool-specific 힌트).
+  **5-element 패턴**: SoT `autoresearch/state/policies/in-context-slots.json`
+  + operator-local / `GLOBAL_IN_CONTEXT_SLOTS_PATH` +
+  `OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH` 추가 /
+  `core/self_improving_loop/in_context_slots.py` reader
+  (`_load_in_context_slots_override` + frozen `InContextSlot`
+  dataclass) / inference entry M4.4 deferred /
+  `GEODE_IN_CONTEXT_SLOTS_OVERRIDE` + `_STRICT=1` env pair. Per-slot
+  `injection_point` 은 enum (`system_prompt` / `tool_descriptions`)
+  — mutator 의 typo 가 silent injection 으로 가지 않도록 graceful
+  drop. `_coerce` 가 unknown slot + invalid max_entries (negative /
+  bool) + unknown injection_point 셋 다 per-axis graceful drop.
+  **20 invariant test** — canonical schema 4 + loader 11 + path 1 +
+  env wiring 1 + ALIVE marker 1 + frozen dataclass 1 + operator-local
+  priority 1. Frontier: Claude Code / Codex CLI 의 hardcoded layout
+  을 mutator-optimizable JSON schema 로 표면화.
+
+- **PR-S4 — task-completion seed cohort (ADR-012).** seed-generation 에
+  cohort 개념 도입 — 어떤 *axis* 의 regression 을 다음 generation 이 공격할지
+  결정. `petri_17dim` (default, BC) 와 `task_completion` (S4 신설) 2 cohort
+  로 시작, 추후 `admire_routing` / `bench_capability` 확장 forward-compat.
+  **`plugins/seed_generation/baseline_reader.py`**: (a) 3 신규 constant
+  `PETRI_17DIM_COHORT` / `TASK_COMPLETION_COHORT` / `SEED_COHORTS` export,
+  (b) 신규 picker `pick_regression_target(snapshot, cohort)` — cohort 별
+  signal direction 처리: petri 는 MAX (높을수록 concerning, rubric
+  invariant), task_completion 은 MIN (ux_means 의 normalized-higher-is-better
+  contract 따라 lowest 가 worst). Tie-break alphabetical. Unknown cohort
+  → `ValueError`. **`plugins/seed_generation/orchestrator.py:PipelineState`**:
+  `cohort: str = "petri_17dim"` field 추가 (BC). **기존
+  `pick_regression_target_dim` unchanged** — pre-S4 caller 그대로.
+  **13 invariant test** — cohort enum 3 + petri picker 2 +
+  task_completion picker 3 + validation 2 + BC 2 + export 1.
+  Generator/critic/evolver 의 cohort-specific prompt + CLI `--cohort`
+  flag 은 S4b 후속 PR (이 PR 은 picker + state schema 만).
+
+- **PR-S3 — 공동 ratchet: 4축 baseline.json (ADR-012).** `baseline.json`
+  schema 가 pre-S3 `{dim_means, dim_stderr}` 에서 S3 의 **5-field 4축
+  schema** `{dim_means, dim_stderr, ux_means, admire_means, bench_means}`
+  로 확장. compute_fitness 는 이미 4축 signature 였으나 `_write_baseline`
+  / `_load_baseline` 가 dim 만 persist 했던 GAP 을 closure. seed-generation
+  의 `BaselineSnapshot` 도 3 신규 field 추가 (`ux_means` / `admire_means`
+  / `bench_means`) — 모두 default `{}` 로 pre-S3 baseline 그대로 graceful
+  로딩. `autoresearch/train.py`: (a) `_write_baseline` 가 3 신규 axis
+  kwarg-optional (`None`/`{}` 은 payload omit, backwards compat),
+  (b) `_load_baseline` 5-tuple 반환 + 신규 `_coerce_axis_dict` helper
+  로 per-axis graceful drop (단일 axis 손상이 load-bearing dim 부분을
+  invalidate 못함), (c) main 의 `compute_fitness` 호출이 baseline_bench_means
+  도 전달 → S6 cross-validation gate 의 baseline 측은 disk 통합 완료
+  (current `bench_means`/`ux_means`/`admire_means` collector wiring 은
+  S1b/S2b/S6b 후속 PR — 그 PR 가 main() 에 current axis 만 추가하면
+  S6 gate 즉시 발화),
+  (d) `baseline_decision` journal event 에 `baseline_axis_coverage`
+  (ux/admire/bench 의 entry 갯수) surface — partial baseline 가시성.
+  `plugins/seed_generation/baseline_reader.py`: `BaselineSnapshot` 에
+  ux/admire/bench 3 field 추가, `load_baseline` 가 3 axis 도 `_coerce_dim_dict`
+  통해 graceful 로딩. **14 invariant test** — loader 6 (5-tuple shape +
+  missing file + pre-S3 BC + full S3 + per-axis corruption isolation +
+  missing dim_means) + writer 3 (default omit + full 4-axis + empty-axis
+  omit) + round-trip 1 + snapshot 3 (3 new fields + populated + pre-S3
+  empty) + main wiring source-grep 1. ADR-012 S1/S2/S6 의 in-memory 4축
+  fitness 가 이제 disk 까지 통합 — joint ratchet 완성.
+
+- **PR-T6 — Heuristic indicators JSON mutation surface (ADR-013).**
+  mutator 가 keyword/phrase library 를 evolve — task-triage 시 매칭되는
+  complexity / high_risk / time_pressure 표지어. Promptbreeder-식
+  진화: 3 group 의 phrase list 가 JSON 에서 mutate → agent 의 task
+  classification 정확도 → 적절한 strategy 선택 (careful/fast,
+  confirm-first/proceed) → ux_means.success_rate 영향. **T3 (style
+  guide enum)** 과 분리: T3 는 fixed style 선택, T6 는 concrete phrase
+  library. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/heuristics.json` (in-repo) +
+  `~/.geode/self-improving-loop/heuristics.json` (operator-local) /
+  `GLOBAL_HEURISTICS_PATH` + `OPERATOR_LOCAL_HEURISTICS_PATH`
+  `core/paths.py` 추가 / `core/agent/heuristics_policy.py` reader
+  (`_load_heuristics_override` + `apply_heuristics_policy`, schema
+  `{complexity_indicators / high_risk_indicators / time_pressure_indicators:
+  list[str]}`) / `core/agent/system_prompt.py:build_system_prompt` 가
+  T3 style-guide apply 직후 `static = apply_heuristics_policy(static,
+  _load_heuristics_override())` 호출 → static (cache-eligible) 영역에
+  `<heuristic_indicators>` 블록 append (정책 부재 시 static 그대로 —
+  no behavior change) / `GEODE_HEURISTICS_OVERRIDE` +
+  `GEODE_HEURISTICS_STRICT=1` env pair. `_coerce` 가 unknown group +
+  empty string + duplicate phrase 셋 다 graceful drop (forward-compat +
+  order-preserving dedupe). XML escape 로 `<`, `&`, `"` 안전 처리.
+  **25 invariant test** — reader graceful/strict 13 + apply 7 + wiring +
+  path + env + ALIVE marker. Frontier: Promptbreeder (Fernando et al.,
+  2023) curriculum loop. **T6 머지 시 ADR-013 6 surface 시퀀스 종결**
+  (T1 #1416 + T2 #1418 + T3 #1419 + T4 #1420 + T5 #1421 + T6 #1422).
+
+- **PR-T5 — Cache breakpoint policy JSON mutation surface (ADR-013).**
+  mutator 가 Anthropic API 의 `apply_messages_cache_control(messages,
+  n_breakpoints=N)` 의 N 값을 JSON 으로 mutate (0..3, Anthropic cap 의
+  messages-block 점유분). **trade-off**: ↑ → cache hit rate ↑ but
+  per-call overhead ↑ (각 breakpoint 가 $0.10/MTok overhead); ↓ → cache
+  hit ↓ but per-call cost ↓. ux_means.token_cost_norm + latency_norm
+  둘 다 영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/cache-policy.json` (in-repo) +
+  `~/.geode/self-improving-loop/cache-policy.json` (operator-local) /
+  `GLOBAL_CACHE_POLICY_PATH` + `OPERATOR_LOCAL_CACHE_POLICY_PATH`
+  `core/paths.py` 추가 / `core/llm/cache_policy.py` reader
+  (`_load_cache_policy_override` + `apply_cache_policy_breakpoints`,
+  schema `{messages_breakpoints: int 0..3}`) / `core/llm/providers/
+  anthropic.py` 의 streaming 경로 (현재 활성 single consumer) 에서
+  `n_breakpoints = apply_cache_policy_breakpoints(MAX_MESSAGE_CACHE_BREAKPOINTS,
+  _load_cache_policy_override())` 호출 → `apply_messages_cache_control(
+  messages, n_breakpoints=n_breakpoints)` 로 wire (정책 부재 시 default
+  3 — no behavior change) / `GEODE_CACHE_POLICY_OVERRIDE` +
+  `GEODE_CACHE_POLICY_STRICT=1` env pair. `_validate_schema` 가 Python
+  `bool` 을 명시적으로 int 에서 제외 (Python 의 bool-is-int subclass
+  함정 방어). out-of-range 값 (4, -1, ...) 은 `_coerce` 에서 per-axis
+  graceful drop. **20 invariant test** — reader graceful/strict 10 +
+  apply 5 + wiring + path + env + ALIVE marker. Frontier: Anthropic
+  prompt caching docs — `cache_control` count 가 canonical knob.
+
+- **PR-T4 — Provider routing JSON mutation surface (ADR-013).** mutator
+  가 per-model preferred plan-chain 을 JSON 으로 mutate. `resolve_routing(
+  model)` 의 explicit-chain branch 가 registry's `set_routing` 결과 대신
+  policy override 의 chain 을 iterate → ux_means.token_cost_norm 직접
+  영향 (같은 model 을 PAYG 대신 SUBSCRIPTION 으로 route 하면 per-call
+  cost 감소). **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/provider-routing.json` (in-repo) +
+  `~/.geode/self-improving-loop/provider-routing.json` (operator-local) /
+  `GLOBAL_PROVIDER_ROUTING_PATH` + `OPERATOR_LOCAL_PROVIDER_ROUTING_PATH`
+  `core/paths.py` 추가 / `core/llm/routing/provider_routing_policy.py`
+  reader (`_load_provider_routing_override` +
+  `apply_provider_routing_policy`, schema `{model_name: [plan_id_chain]}`) /
+  `core/llm/routing/plan_registry.py:resolve_routing` explicit-chain branch
+  가 `apply_provider_routing_policy(model, registry.get_routing(model),
+  _load_provider_routing_override())` 결과 iterate (정책 부재 시 default
+  chain — no behavior change) / `GEODE_PROVIDER_ROUTING_OVERRIDE` +
+  `GEODE_PROVIDER_ROUTING_STRICT=1` env pair. `_coerce` 가 empty chain +
+  empty string entry 제거. 등록되지 않은 plan_id 는 `resolve_routing` 이
+  자동으로 건너뜀 (registry.get 결과 None 일 때 skip). **21 invariant
+  test** — reader graceful/strict 10 + apply 6 케이스 (none / empty /
+  model-not-in-policy / override / empty-chain-fallthrough / return-copy)
+  + wiring + path + env + ALIVE marker. Frontier: OpenRouter의 explicit
+  per-model plan ordering + Anthropic/OpenAI multi-tier credential
+  (subscription/PAYG/batch) 의 cost lever.
+
+- **PR-T3 — Response style guide JSON mutation surface (ADR-013).** mutator
+  가 4 typed enum field (`tone` ∈ concise/balanced/verbose, `verbosity_level`
+  ∈ low/medium/high, `response_format` ∈ markdown/plain/structured,
+  `code_style` ∈ show-first/explain-first) 을 JSON 으로 mutate. wrapper-
+  sections.json (G5a/G5b) 의 free-form 텍스트 mutation 과 분리 — T3 는
+  **constrained typed 선택지** 라 작은 expressive style space 를 효율적으로
+  탐색 가능. fitness 4축의 `ux_means` (success_rate + revert_ratio) 직접
+  영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/style-guide.json` (in-repo, ratchet-tracked) +
+  `~/.geode/self-improving-loop/style-guide.json` (operator-local) /
+  `GLOBAL_STYLE_GUIDE_PATH` + `OPERATOR_LOCAL_STYLE_GUIDE_PATH`
+  `core/paths.py` 추가 / `core/agent/style_guide_policy.py` reader
+  (`_load_style_guide_override` + `apply_style_guide_policy`, schema
+  `{tone, verbosity_level, response_format, code_style}` enum-typed) /
+  `core/agent/system_prompt.py:build_system_prompt` 가 `static =
+  apply_style_guide_policy(static, _load_style_guide_override())` 로
+  static 영역 (cache-eligible) 에 `<response_style>` 블록 append (정책
+  부재 시 static 그대로 — no behavior change) / `GEODE_STYLE_GUIDE_OVERRIDE`
+  + `GEODE_STYLE_GUIDE_STRICT=1` env pair (`autoresearch/train.py` audit
+  subprocess). `_coerce` 가 unknown field + unknown enum value 둘 다
+  graceful drop — forward-compat + per-axis isolation (한 axis 가 깨져도
+  다른 axes 는 유효). **22 invariant test** — reader graceful/strict 10 +
+  apply 7 케이스 (none / empty / single / all / unknown-enum / empty-base /
+  field order) + wiring + path + env + ALIVE marker. Frontier: OpenAI /
+  Anthropic system prompt guides converge on enum-based response constraints.
+
+- **PR-T2 — Skill catalog JSON mutation surface (ADR-013).** mutator
+  가 skill `description` (LLM 라우팅 키) + `user_invocable` (가시성) 을
+  per-skill 단위로 JSON 으로 mutate → agent 의 skill 선택 정확도 ↑
+  (Voyager 식 curriculum 진화 패턴). **5-element 패턴** (S0a 검증):
+  SoT `autoresearch/state/policies/skill-catalog.json` (in-repo,
+  ratchet-tracked) + `~/.geode/self-improving-loop/skill-catalog.json`
+  (operator-local) / `GLOBAL_SKILL_CATALOG_PATH` + `OPERATOR_LOCAL_SKILL_
+  CATALOG_PATH` `core/paths.py` 추가 / `core/skills/skill_catalog_policy.py`
+  reader (`_load_skill_catalog_override` + `apply_skill_catalog_policy`,
+  schema `{skill_name: {description: str, user_invocable: bool}}`) /
+  `core/agent/loop/_context.py` 의 `_build_system_prompt` 가 기존
+  `registry.get_context_block()` 호출 자리에 `apply_skill_catalog_policy(
+  registry, _load_skill_catalog_override())` 호출 (정책 부재 시 base
+  registry 의 `get_context_block` 으로 위임 — no behavior change) /
+  `GEODE_SKILL_CATALOG_OVERRIDE` + `GEODE_SKILL_CATALOG_STRICT=1` env
+  pair (`autoresearch/train.py` 의 audit subprocess 가 SoT 존재 시 둘
+  다 inject — strict-fail 옵트인). `apply_skill_catalog_policy` 는
+  registry 의 base XML 렌더링 로직을 재사용하면서 per-skill override
+  를 우선 적용 — base registry 가 authoritative (unknown skill name 은
+  무시). Forward-compat: entry 내 unknown field 자동 drop. **23
+  invariant test** — reader graceful/strict + apply 9 케이스 (none /
+  empty / desc / visibility true/false / unknown skill / empty registry /
+  max_chars 절단 / XML escape) + context.py wiring source-grep + path
+  상수 2 + env wiring + ALIVE marker. Frontier: Voyager (Wang et al.,
+  2023) curriculum loop — agent 가 자체 skill library + description 을
+  loop 으로 갱신. AlphaEvolve-식 코드 mutation 배제 (skill body=SKILL.md
+  는 Tier 2, 본 surface 미접근).
+
+- **PR-BACKFILL-SOT — Operator-local SoT layer + env-as-SoT for 4 mutation
+  surface readers (post-PR-T1 #1416 fix).** PR #1416 의 Codex MCP FAIL #5
+  (CHANGELOG/PR-body parity 위반 — `~/.geode/self-improving-loop/...`
+  operator-local fallback 을 주장했으나 reader 코드 부재) 의 근원 GAP 을
+  메움. 4 reader (tool_policy / reflection / decomposition / tool_descriptions)
+  가 **3-layer SoT chain** 으로 전환 — 운영자 가 env 만 set 해도 SoT 처럼
+  graceful 로 다룰 수 있고, audit subprocess 는 명시적 STRICT flag opt-in.
+  **신규 helper** `core/self_improving_loop/sot_resolution.py` —
+  `resolve_sot(env_var, operator_local, in_repo) → SoTSelection(path,
+  strict) | None` 단일 함수, 4 reader 가 공유. `<X>_STRICT` env name 은
+  `<X>_OVERRIDE` 에서 `removesuffix("_OVERRIDE") + "_STRICT"` 로 자동
+  파생 — per-reader 등록 불필요. **resolution order**: (1) env var
+  `GEODE_<X>_OVERRIDE` — `GEODE_<X>_STRICT=1` 동반 시 strict-fail, 그렇지
+  않으면 graceful (no fall-through, env 가 authoritative). (2)
+  operator-local `~/.geode/self-improving-loop/<file>.json` (graceful).
+  (3) in-repo `autoresearch/state/policies/<file>.json` (graceful,
+  ratchet-tracked). (4) `None` → no-op. **`core/paths.py`** 에 4
+  `OPERATOR_LOCAL_*_PATH` 상수 추가 (`GLOBAL_SELF_IMPROVING_LOOP_DIR /
+  <file>.json`). **`autoresearch/train.py`** 의 audit subprocess 가 4
+  env 모두 `_OVERRIDE` + `_STRICT=1` 동반 set — 기존 fail-fast 보존.
+  4 reader 의 docstring 에서 stale `operator-local` 주장 (S0a/b/c 의
+  Codex MCP catch 와 동일 inheritance) 도 함께 정합화 — 실제 3-layer
+  chain 으로 갱신. **19 신규 invariant test** (shared resolver 9 +
+  reader 별 env-graceful/operator-local 10) + **8 기존 strict test
+  갱신** (`_STRICT=1` 명시). Read-write parity 보존 — `apply_*_policy`
+  의 deep-copy 패턴 (S0b) 여전히 유효.
+
+### Changed
+
+- **PR-S6-UPDATE — `bench_means` schema 2026 frontier 갱신 (4 outdated → 7).**
+  2026-05-21 frontier bench audit 결과 4 채택 bench 모두 outdated 판정:
+  (a) **SWE-bench** — OpenAI 2026-02-23 공식 **retire** (saturated +
+  contaminated). (b) **HumanEval** — Top-4 93-95% **saturated**
+  (qualification bar 만 의미). (c) **TAU-bench** — Claude Opus 4.6
+  telecom 0.993 saturated, Sierra τ²-bench 가 dual-control 후속.
+  (d) **GAIA** — DeepAgent 91.69% saturated, HLE (Nature 2026-01) +
+  OSWorld 로 분리 권고.
+  **갱신 schema (7 field)** — Anthropic Claude Opus 4.5 + OpenAI GPT-5
+  system card 공통 채택: `swe_bench_pro_pass` (0.25, Scale AI contam-free
+  real PR), `livecodebench_pass1` (0.15, contam-free algo),
+  `tau2_bench_success` (0.20, Sierra dual-control), `gpqa_diamond`
+  (0.15, NYU PhD), `hle_accuracy` (0.10, Humanity's Last Exam Nature
+  2026-01), `osworld_success` (0.10, computer-use agent),
+  `mle_bench_medal` (0.05, OpenAI ML engineering — self-improving loop
+  도메인 정합).
+  **양의 압력 coverage 30.4% → 46.7%** (14/30 axis — 4 bench → 7 bench
+  교체). compute_fitness 의 4축 가중치 (dim 0.30 / ux 0.25 / admire 0.20 /
+  bench 0.25) 그대로 유지 — schema 변경만으로 frontier alignment 회복.
+  29 invariant test (기존 28 → 29) — `exact_4_fields` → `exact_7_fields_2026_frontier`,
+  missing-fields expected 수식 generic 화 (4 → 7 field 자동 적용).
+  실제 inspect_ai federation 의 multi-eval wiring 은 S6b 별도 PR.
+
+### Added
+
+- **PR-T1 — Tool descriptions JSON mutation surface (ADR-013).** ADR-013 의
+  첫 신규 표면 — mutator 가 도구 description + hint 만 JSON 으로 mutate →
+  도구 후보 선택 정확도 ↑ → Petri 17-dim 의 `broken_tool_use` (유일한 양의
+  압력 dim) 직접 영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/tool-descriptions.json` (in-repo,
+  ratchet-tracked) / `GLOBAL_TOOL_DESCRIPTIONS_PATH` `core/paths.py` 추가 /
+  `core/agent/tool_descriptions_policy.py` reader (`_load_tool_descriptions_override`
+  + `apply_tool_descriptions_policy`, schema `{tool_name: {description: str,
+  hints: [str]}}`) / `core/agent/loop/_helpers.py:get_agentic_tools` 진입점
+  (base+registry+MCP merge 직후, `apply_tool_policy` 의 forbidden/priority
+  filter **직전** — description override 가 먼저 적용돼야 policy 가 갱신된
+  description 기반으로 판단) / `GEODE_TOOL_DESCRIPTIONS_OVERRIDE` env var
+  (`autoresearch/train.py` 의 audit subprocess 가 SoT 존재 시 inject —
+  strict-fail). `apply_tool_descriptions_policy` 는 `copy.deepcopy` 후
+  mutate (caller 의 module-level `_BASE_TOOLS` 오염 방지, S0b 패턴).
+  hints 가 있으면 description 끝에 `Hints:\n- …\n- …` 줄바꿈 append.
+  Forward-compat: entry 내 unknown field 무시. 19 invariant test —
+  reader graceful/strict + apply none/empty/override/hints/deepcopy +
+  helpers wiring (descriptions before tool_policy 순서 검증) + path
+  constant + train.py env wiring + ALIVE marker (`tool-descriptions.json`
+  이 `core/agent/tool_descriptions_policy.py` 에서 grep 양성). Frontier:
+  OpenAI function calling docs + Anthropic tool-use guide ("clearer
+  descriptions yield more accurate selection").
+
+- **ADR-013 — Mutation Surface Expansion via JSON Schema Pattern (Proposed).**
+  ADR-012 의 S0a 검증된 패턴 (JSON SoT + reader + dispatcher) 을 6 신규
+  표면 (T1-T6) 으로 확장. **AlphaEvolve 식 코드 자체 mutation 은 명시적
+  배제** (자기수정 재귀 / silent breakage / Goodhart on benchmark /
+  dependency chain 4 risk). 모든 6 표면이 JSON mutation only — 코드
+  변경 0. **6 표면**: (T1) Tool descriptions (`tool-descriptions.json`,
+  OpenAI/Anthropic 검증) → broken_tool_use dim 직접. (T2) Skill registry
+  catalog (`skill-catalog.json`, Voyager 식) → routing 진화. (T3) Response
+  style guide (`style-guide.json`) → ux_means 의 success_rate + revert_ratio.
+  (T4) Provider routing (`provider-routing.json`, OpenRouter) → ux_means
+  의 token_cost_norm. (T5) Cache breakpoint policy (`cache-policy.json`,
+  Anthropic prompt caching) → M3 와 결합. (T6) Heuristic indicators
+  (`heuristics.json`, Promptbreeder 식) → gaia_accuracy 영향. **5-element
+  패턴**: SoT 파일 / Path constant / Reader 모듈 / Inference 진입점 /
+  Env var override (S0a 검증). **4-step lifecycle**: operator/mutator
+  JSON write → reader graceful load → apply_*_policy default+override
+  결합 → 에이전트 응답 시 정책 반영. 16 invariant test — ADR 본문의
+  Status/Context/Decision/Consequences/Reference + 6 T-surface 명세
+  + 5-element 패턴 + AlphaEvolve 배제 4 risk + frontier reference 6
+  + ADR-012 cross-reference + 우선순위 6 + 후속 PR 시퀀스 + fitness 축
+  영향 cross-check. 후속 PR T1-T6 task 등록 (#78-#83).
+
+- **PR-S6 — `bench_means` + Petri/bench cross-validation gate (Path C
+  inspect_ai federation).** ADR-012 §S6 — frontier capability evaluation
+  통합으로 fitness 4축 다축화. Petri (alignment) + bench (capability)
+  의 **양방향 cross-validation gate** 로 Goodhart fooling 방어.
+  **`autoresearch/bench_means.py` 신설** — 4-field schema (swe_bench_pass
+  0.40 + tau_bench_success 0.30 + humaneval_pass1 0.15 + gaia_accuracy
+  0.15, 합 1.0) + `compute_bench_aggregate` (None → 0.5 neutral) +
+  `validate_bench_schema` + `detect_cross_validation_conflict` (Petri
+  promote + bench regress = "alignment_only_fooling", bench promote +
+  Petri critical regress = "capability_at_alignment_cost") +
+  `collect_bench_means_from_inspect_ai` (S6b placeholder).
+  **`autoresearch/train.py` 4축 다축화** — FITNESS_DIM_4AX (0.30) +
+  FITNESS_UX_4AX (0.25) + FITNESS_ADMIRE_4AX (0.20) + FITNESS_BENCH_4AX
+  (0.25, 합 1.0). dim 비중이 0.40 → 0.30 으로 추가 감소. `compute_fitness`
+  에 `bench_means` + `baseline_bench_means` 인자 추가. 분기 로직 —
+  셋 다 None / ux only / admire 활성 (3축) / bench 활성 (4축 +
+  cross-validation gate). Conflict 검출 시 0.0 strict-reject. **양의
+  압력 coverage 7/23 = 30.4% → 11/27 = 40.7% 확장** (Petri 의 1/17 한계
+  돌파, frontier 합의 능가). 28 invariant
+  test (S6) + 30 (S2) + 27 (S1) = **85/85 통과**. inspect_ai federation
+  의 실제 multi-eval wiring (Petri scenario + SWE/TAU task 동시 실행)
+  은 S6b (별도 PR).
+
+- **PR-S2 — `admire_means` fitness 축 + 3축 다축화 (ADR-012 단기).**
+  S1 의 `ux_means` 옆에 추가되는 **체감 품질** 양의 압력 축의
+  **schema + math + hook interface** 신설. 실제 `plugins/seed_generation/agents/ranker.py`
+  의 ELO + 3-voter panel 호출 wiring 은 S2b (별도 PR) — 본 PR 에서는
+  hook (`collect_admire_means_from_ranker`) 가 placeholder (None 반환)
+  로 ranker 호출 자리를 명시만 함. **`autoresearch/admire_means.py` 신설** —
+  2-field schema (`pairwise_win_rate` 0.70 + `human_calibration_corr`
+  0.30, 합 1.0) + `compute_admire_aggregate` (None → 0.5 neutral,
+  calibration dampening 으로 Goodhart fooling 방어) +
+  `CALIBRATION_THRESHOLD = 0.7` (corr 미만 시 win_rate 비례 감쇠) +
+  `validate_admire_schema` + `collect_admire_means_from_ranker` (S2b
+  placeholder, 현재 None 반환). **`autoresearch/train.py` 3축 다축화** —
+  `FITNESS_DIM_WEIGHT = 0.40` + `FITNESS_UX_WEIGHT = 0.30` +
+  `FITNESS_ADMIRE_WEIGHT = 0.30` 신설 (합 1.0). `compute_fitness` 에
+  `admire_means` optional 인자 추가. 분기 로직: (a) ux + admire 둘 다
+  None → dim-only fallback (현재 behavior 보존) (b) ux 만 → S1 의
+  0.7/0.3 (backwards compat) (c) admire 만 또는 둘 다 → 3축 재배분
+  0.4/0.3/0.3 (ux 누락 시 neutral 0.5). critical gate strict-reject 는
+  admire 와 무관 보존. **Goodhart 방어**: judge model 주기 교체 + 3-voter
+  cross-provider panel (PR-COSCI-1 의 `required_diversity_providers`
+  규약 재사용) + calibration dampening (corr < threshold 시 win_rate
+  비례 감쇠) + 분기 human L4 batch refresh (S2b). **28 invariant test
+  (S2)** + 27 invariant test (S1 backwards compat) = **55/55 통과**.
+  ranker.py 의 실제 ELO + voter panel 호출 wiring 은 S2b 분리 —
+  schema 안정성 검증 후 진행.
+
+- **PR-S1 — `ux_means` fitness 축 신설 (ADR-012 단기).** ADR-012
+  §Decision.2 의 fitness 다축화 첫 단계 — Petri 17-dim 의 음의 압력
+  (안 망가지기) 편향 risk 를 차단하기 위한 **양의 압력 축**.
+  **`autoresearch/ux_means.py` 신설** — 4-field schema (`success_rate`
+  / `token_cost_norm` / `revert_ratio_norm` / `latency_norm`) + 가중치
+  (0.40 / 0.30 / 0.20 / 0.10, 합 1.0) + `normalize_ux_field`
+  (lower-is-better metric 의 invert 처리) + `compute_ux_aggregate`
+  (`None` → 0.5 neutral) + `validate_ux_schema` + `collect_ux_means_from_sources`
+  (S1b placeholder, 현재 `None` 반환). **`autoresearch/train.py:compute_fitness`
+  다축화** — `ux_means` optional 인자 추가. `None` 이면 dim-only
+  fallback (no-op, 현재 행동 보존). 주어지면 `dim_part * 0.7 + ux_part
+  * 0.3` 가중 합 (admire_means 신설 S2 후 0.4/0.3/0.3 재배분 예정).
+  Critical gate (regress 시 `0.0`) 는 ux_means 와 무관하게 보존 —
+  strict-reject 정책. **27 invariant test** — schema 가중치 합 / 4-field
+  exact set / normalize invert 의 lower-is-better / aggregate
+  weighted-sum / validate 5 reject 케이스 / compute_fitness multi-axis
+  4 케이스 (ux=None dim-only / perfect ux 증가 / zero ux 감소 / critical
+  gate strict-reject). 4 source 의 실제 wiring (RunLog / LLMUsageAccumulator
+  / git history / OTel trace) 은 S1b (별도 PR) — schema 안정성 검증 후
+  분리 진행. ADR-012 단기 시퀀스의 G2 게이트 (음의 압력 90%+ 편향
+  4주 측정) 가 비로소 측정 가능해짐.
+
+### Changed
+
+- **PR-S0d — `retrieval` slot deprecate (ADR-012 단기 시퀀스 종료).**
+  PR-AUDIT-5SLOT 의 4 dead slot 중 마지막 처치 — `TARGET_KINDS` 에서
+  `retrieval` 제거 → **5축 → 4축 명시 축소**. `GLOBAL_RETRIEVAL_POLICY_PATH`
+  + `_KIND_TO_PATH` 의 `retrieval` 매핑은 보존 (별도 ADR 로 미래 RAG
+  인프라 신설 시 복원 가능).
+  **결정 근거** — frontier 3-source 합의 Wiki injection (ADR-012
+  §Decision.3a):
+  (1) **Boris Cherny** (Claude Code architect) *Latent Space 2025-05*:
+  "Originally we tried RAG... **agentic search outperformed everything.
+  By a lot. By a lot**. At the cost of latency and tokens, you now have
+  really awesome search **without security downsides**"
+  (https://www.latent.space/p/claude-code).
+  (2) **arXiv 2605.15184** (PwC, 2026-05): 116-Q LongMemEval × Claude
+  Code/Codex/Gemini CLI/Chronos 4-harness 교차 — "**grep generally
+  yields higher accuracy than vector retrieval**".
+  (3) **Anthropic 공식 blog**: "navigates the way a software engineer
+  would: traverses file system, reads files, uses grep" + staleness
+  예시 ("RAG returns a function the team renamed two weeks ago").
+  **Frontier embedding 히트맵** (ADR §Decision.3a) — code/agent 도메인
+  3/3 (Claude Code / Codex CLI / Devin) 이 embedding 회피, memory
+  도메인 (Hermes-Agent / OpenClaw) 만 적극 사용. GEODE 의 self-improving
+  loop 정책 진화는 code/agent 도메인 → Claude Code 라인.
+  **Cursor 약화 4-축 원인**: long context 확장 / prompt caching 92%
+  prefix reuse + 81% 비용 절감 / agentic search 의 경험적 우세 / Bitter
+  Lesson tool use 성숙도.
+  Boris 의 6 근거 중 4개 (Performance / Index staleness / Precision /
+  Bitter Lesson) 가 GEODE 의 retrieval slot 에 직접 적용.
+  **invariant test 갱신**: ADR ALIVE/DEAD/DEPRECATED count
+  (`==4/==0/>=1`), `TARGET_KINDS` exact set 검증
+  (`{prompt, tool_policy, decomposition, reflection}`), path constant
+  보존 검증, DEAD parametrize placeholder 화. audit doc Post-S0d update
+  섹션 + `4/4 ALIVE` anchor.
+  **ADR-012 단기 S0 시퀀스 종료** — 5축 진화 면적 1축 → 4축 명시 안정화.
+  다음 PR: S1 (`ux_means` fitness 축 신설).
+
+### Added
+
+- **PR-S0c — `decomposition` reader 신설 (ADR-012 dead slot 살리기 #3).**
+  PR-S0a/S0b 의 패턴 그대로 차용. **schema** (3 field 모두 optional,
+  string): `system_prompt` (전체 override — prefix/suffix 무시) /
+  `prefix` (default 앞에 추가) / `suffix` (default 뒤에 추가). 3-mode
+  정책으로 `load_prompt` 결과를 변형. **Resolution order**: ①
+  `GEODE_DECOMPOSITION_POLICY_OVERRIDE` (audit, strict) ②
+  `~/.geode/self-improving-loop/decomposition.json` (daily, graceful)
+  ③ `None`. 단일 적용 지점: `core/orchestration/goal_decomposer.py:_llm_decompose`
+  의 `load_prompt("decomposer", "system")` 호출 직후 —
+  `apply_decomposition_policy` 로 system prompt 정규화 후 `call_llm_parsed`
+  에 전달. **회귀 marker**: PR-AUDIT-5SLOT
+  `test_dead_slot_has_no_inference_reader` parametrize 에서
+  `decomposition.json` 제거 + 새 `test_decomposition_slot_is_now_alive_post_s0c`.
+  audit doc Post-S0c update 섹션 + 4/5 ALIVE anchor. ADR-012 Tier 1
+  표 + invariant test ALIVE/DEAD count (`==3/==2` → `==4/==1`) 동기화.
+  `autoresearch/train.py` env wiring 에 `GEODE_DECOMPOSITION_POLICY_OVERRIDE`
+  추가. ROI: `task_success_rate` (S1 의 `ux_means` 한 축) 영향 — 작업
+  분해 품질이 task 완수율로 직결. 18 new invariant + 기존 test 함께
+  통과 (총 91 test 그린). **ADR-012 단기 시퀀스의 S0a/S0b/S0c 완료**
+  → 5축 진화 면적 1축 → 4축 회복. 남은 dead slot 은 `retrieval` (S0d
+  처치 결정 예정 — deprecate or RAG 신설).
+
+- **PR-S0b — `reflection` reader 신설 (ADR-012 dead slot 살리기 #2).**
+  PR-S0a (#1407) 의 패턴을 그대로 차용해 두 번째 dead slot
+  (`reflection`) 을 살림. **schema** (두 field 모두 optional, string):
+  `description` (`_REFLECTION_TOOL["description"]` override) /
+  `system_prompt` (`_SYSTEM_PROMPT` override). `input_schema` 와 `name`
+  은 mutate 대상 아님 — `record_reflection` 의 typed payload contract
+  (`hypotheses` / `confidence` / `next_action_hint`) 보존. **Resolution
+  order**: ① `GEODE_REFLECTION_POLICY_OVERRIDE` env var (audit
+  subprocess, strict — schema 실패 시 RuntimeError) ②
+  `~/.geode/self-improving-loop/reflection.json` (daily-run, graceful)
+  ③ `None`. 단일 적용 지점: `core/agent/loop/_reflection.py` 의
+  reflection LLM `agentic_call` 직전 — `apply_reflection_policy` 가
+  `(tool, system_prompt)` 튜플 정규화 후 `tools=[active_tool]` +
+  `system=active_system` 으로 전달. Tool dict 은 deep-copy 후 mutate 해서
+  module-level constant `_REFLECTION_TOOL` 의 오염 방지. **Read-Write
+  parity**: `write_policy()` 가 `dict[str, str]` 만 직렬화하므로 reader
+  도 string payload 그대로 수용 (S0a 의 list/string 두 형태 정규화는
+  reflection 에서는 본질 string 이라 split 불필요). **회귀 marker
+  의 의도된 발화**: PR-AUDIT-5SLOT 의 `test_dead_slot_has_no_inference_reader`
+  parametrize 에서 `reflection.json` 제거 + 새
+  `test_reflection_slot_is_now_alive_post_s0b` 추가. audit doc 의
+  상태표에 `reflection` 행 ALIVE 갱신 + Post-S0b update 섹션 + 3/5 ALIVE
+  anchor. ADR-012 본문의 Tier 1 표 + invariant test 의 ALIVE/DEAD count
+  (`== 2/== 3` → `== 3/== 2`) 동기화. `autoresearch/train.py` 의 audit
+  subprocess env wiring 에 `GEODE_REFLECTION_POLICY_OVERRIDE` 추가 (S0a
+  의 wrapper + tool_policy 옆에). ROI: `admire_means` (S2 신설 예정) +
+  `ux_means` (S1 신설 예정) 양쪽에 영향 — reflection 품질이 응답 품질로
+  직결되는 fitness 경로. 18 new invariant test + 기존 PR-AUDIT-5SLOT +
+  ADR-012 test 함께 통과 (총 73 test 그린).
+
+- **PR-S0a — `tool_policy` reader 신설 (ADR-012 dead slot 살리기 #1).**
+  PR-AUDIT-5SLOT (#1405) 의 진단 — 5축 mutation 중 4축이 dead policy
+  (인퍼런스 reader 부재) — 의 첫 처치. `tool-policy.json` 정책이
+  실제 도구 후보 필터링에 적용되는 단일 진입점 신설. `wrapper-sections.json`
+  reader 패턴 (`system_prompt.py:_load_wrapper_override` +
+  `_strict_load`/`_graceful_load`) 그대로 차용. **schema** (3 field
+  모두 optional, forward-compatible): `allowed_tools` (whitelist) /
+  `forbidden_tools` (blacklist) / `priority_order` (호출 순서).
+  정책 부재 → no-op (현재 행동 보존). **Resolution order**:
+  ① `GEODE_TOOL_POLICY_OVERRIDE` env var (audit subprocess, strict —
+  schema 실패 시 RuntimeError) ② `~/.geode/self-improving-loop/tool-policy.json`
+  (daily-run SoT, graceful — schema 실패 시 WARNING + no-op) ③ `None`.
+  단일 적용 지점: `core/agent/loop/_helpers.py:get_agentic_tools` 의
+  마지막 단계 — base tools + ToolRegistry extras + MCP tools 가
+  모두 합쳐진 직후 정책 필터/재정렬 적용. ADR-012 의 G2 (5축 mutation
+  의 fitness delta 가 음의 압력 dim 에 편향 측정) 가 비로소 의미를
+  가지려면 이 reader 가 필수 — `broken_tool_use` dim 이 Petri 17-dim
+  중 유일한 양의 압력 dim 이라 `tool_policy` 진화 압력이 가장 직접
+  닿는 자리. **회귀 marker 의 의도된 발화**: PR-AUDIT-5SLOT 의 invariant
+  test `test_dead_slot_has_no_inference_reader` 의 parametrize 에서
+  `tool-policy.json` 제거 + 새 `test_tool_policy_slot_is_now_alive_post_s0a`
+  추가. audit doc 의 상태표에 Post-S0a (2026-05-21 오후) update
+  섹션 추가하여 2/5 ALIVE, 3/5 DEAD 명시. ADR-012 본문의 Tier 1 표
+  와 invariant test 의 ALIVE/DEAD exact count (`== 1` / `== 4` →
+  `== 2` / `== 3`) 동기화. 19개 new invariant test + 기존 PR-AUDIT-5SLOT
+  + ADR-012 test 함께 통과 (총 51 test 그린).
+
+- **ADR-012 — Self-Improvement Surface Tiers (Proposed).** GEODE 의
+  self-improving loop 가 직면한 두 가지 직교 누수를 명시적으로
+  진단하고, 단기 → 중기 → 장기 성장 곡선 + 의사결정 게이트
+  G1-G6 + 후속 PR 시퀀스 (S0a-d / S1-S5 / M1-M5) 를 ADR 로
+  정착. 두 누수: (a) **면적 누수 1/17** — Petri 17-dim 중 양의
+  압력으로 작동하는 dim 은 `broken_tool_use` 1개뿐, 나머지는
+  alignment evaluation 의 음의 압력 (`autoresearch/train.py:220-250`).
+  (b) **wiring 누수 1/5** — mutator 가 mutate 가능한 5 slot 중
+  reader 가 살아있는 slot 은 `prompt` 1개뿐, 나머지 4 는 SoT 파일은
+  있지만 인퍼런스 reader 부재 (PR-AUDIT-5SLOT 진단,
+  `policies.py:29-37` 자백). 둘을 곱하면 GEODE 의 self-improving
+  loop 가 명세상 5축 × 17-dim = 85 면적이지만 실제 진화 압력은
+  1축 × 1-2dim = **1-2 면적** (1/40~1/85 누수). 또한 (c) **fine-tune
+  표면의 채널 제약** — Anthropic/Claude Code/Codex 구독 채널에선
+  weight fine-tune 표면이 사실상 닫혀 있고 (Bedrock Haiku SFT 만
+  부분 가능), 진화의 본체는 inference-only **surrogate fine-tune**
+  으로 가야 함. ADR 의 4가지 결정 축: (1) **Tier 1 (mutation 허용)
+  / Tier 2 (mutation 금지)** 명시적 분리 — Tier 2 보호로 mutator
+  의 재귀 자기수정 회피. (2) **Fitness 다축화** — 현재
+  `dim_means` 1축에 `ux_means` (행동 — RunLog success / token
+  cost / revert ratio / latency) + `admire_means` (체감 — LLM-judge
+  3-voter cross-provider panel + 분기 human L4 calibration) 두
+  양의 압력 축 추가, multi-axis strict-reject ratchet (한 축이라도
+  regress 면 reject). `admire_means` 는 `plugins/seed_generation/agents/ranker.py`
+  의 ELO + 3-voter panel 인프라 재사용. (3) **Surrogate fine-tune
+  4 경로** — `mutations.jsonl` → `dpo_pairs.jsonl` → ① few-shot
+  pool (prompt cache) + ③ mutator candidate reference + ④ judge
+  calibration corpus + ⑤ reflection bad-pattern anchor. ② RAG
+  vector store 는 `retrieval` slot reader 부재 + 외부 인프라 비용
+  대비 효과 불명확으로 명시 drop, retrieval reader 신설 후
+  reconsider. (4) **단기 → 중기 → 장기 성장 곡선** — S0 (dead
+  slot 처치: S0a tool_policy / S0b reflection / S0c decomposition
+  / S0d retrieval deprecate-or-defer) → S1-S5 (fitness 다축화 +
+  공동 ratchet + in-context slot schema) → M1-M5 (Tier 1 확장 +
+  DPO pipeline) → 장기 weight 시나리오 (a/b/c) 대비. 43개 invariant
+  test — 18 surface tier anchor (3축 / Tier 1·2 / surrogate 4 경로 /
+  RAG drop / G1-G6 / cross-reference) + 25 Tier 2 deny-list
+  (mutation 금지 영역의 SoT 매핑 충돌 방지 + path 존재 검증 + ADR
+  본문의 정확한 path 인용 cross-check). Codex MCP LLM-as-Judge 검증
+  으로 catch 된 3건 정정: (i) HookSystem path 정확화
+  (`core/observability/hook_system.py` → `core/hooks/system.py`)
+  (ii) import-linter 위치 명시 (`pyproject.toml [tool.importlinter]`
+  L173-233) (iii) 게이트 G2-G5 의 측정 임계값 데이터-기반화 (stderr /
+  상관계수 / 측정 window 명시 + S1 metric 정착 후 재평가).
+
+### Changed
+
+- **PR-AUDIT-5SLOT — self-improving loop 5 slot reader-wiring audit.**
+  ADR-012 (self-improvement surface tiers) 작성 도중 발견한 wiring
+  누수의 정직한 진단. mutator 가 mutate 할 수 있는 5 slot
+  (`prompt` / `tool_policy` / `decomposition` / `retrieval` /
+  `reflection`) 중 인퍼런스 경로에서 실제로 정책을 읽어 행동에
+  반영하는 reader 가 살아있는 slot 은 `prompt` 1개 뿐. 나머지 4
+  slot 은 mutation target 으로 정의돼 있지만 reader 가 부재하거나
+  hardcoded constant 로 우회되어 있어 mutation 의 fitness 압력이
+  닿지 못함 (**dead policy**). `core/self_improving_loop/policies.py:29-37`
+  의 docstring 이 직접 자백 — "PR-6 stops at the *file format +
+  dispatcher*. The Voyager-style learning loops that actually
+  exercise the new SoTs land as follow-ups". 그 follow-up 이 잊혀진
+  상태로 현재까지 운영 중. 결과적으로 GEODE 의 self-improving
+  loop 가 명세상 5축 진화지만 실제로는 **1축 진화** 였음. 진단
+  결과를 `docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md`
+  에 정직히 기록 + invariant test 13개로 ALIVE slot (`prompt`)
+  reader 경로 보장 + DEAD slot 4개의 reader 부재 anchor (S0a/b/c
+  PR 에서 reader 신설되면 test 가 실패해서 함께 갱신되도록
+  의도된 회귀 marker). dead slot 별 권고 (살리기 / deprecate)
+  는 ADR-012 의 S0 sub-PR 시퀀스로 분리.
+
+### Fixed
+
+- **PR-COSCI-1 — co-scientist 3-item fix-up.** Wave-parallel
+  audit caught three issues in the seed_generation pipeline:
+  (HIGH) `.claude/agents/seed_ranker.md` diversity-guard sentence
+  referenced ``required_diversity_families = 2`` and ``Voters'
+  `family` must span ≥ 2`` — but the actual manifest field at
+  ``plugins/seed_generation/manifest.py:122`` is
+  ``required_diversity_providers`` (and ``VoterSpec`` carries
+  ``provider``, not ``family``). Contract reworded to match.
+  (MEDIUM) `.claude/agents/seed_evolver.md` "preserve frontmatter
+  unchanged" rule did not explicitly call out the ``tags`` field
+  that PR-OPS-1 added to ``seed_generator.md`` for Petri
+  compatibility — an evolved seed that strips ``tags`` during
+  rewrite would silently lose dim attribution on the Petri side
+  via ``flatten_for_inspect_petri``. Contract amended to mandate
+  ``tags`` preservation alongside ``target_dims``.
+  (MEDIUM) ``plugins/seed_generation/orchestrator.Pipeline.run``
+  walked all 7 phases unconditionally; pre-fix a generator that
+  produced 0 candidates (or a proximity phase that filtered all
+  candidates as duplicates) would silently run critic/pilot/
+  ranker against an empty pool, emit empty ``elo_ratings`` /
+  ``pilot_scores`` / ``survivors``, and finish "successfully"
+  with no signal. Added an empty-``state.candidates`` abort gate
+  after generator + proximity that logs a WARNING, emits an
+  ``empty_candidates_abort`` (error-level) SessionJournal event,
+  and breaks the phase loop so the operator sees the root cause.
+  5 invariant tests pin the ranker naming fix (positive +
+  negative grep), the evolver ``tags`` requirement, the
+  orchestrator abort gate source-grep, and the observability
+  event presence.
+
+### Added
+
+- **PR-MINIMAL-4 — `subprocess_failed` SessionJournal event.**
+  Wave 1 / 3 PRs. Closes one of the two PR-MINIMAL-2 A3-deferred
+  observability gaps. ``autoresearch.train.run_audit`` pre-PR
+  only emitted ``subprocess_finished`` on every subprocess return;
+  the top-level ``audit_failed`` event caught the ``RuntimeError``
+  for non-zero exits but downstream consumers grouping by event
+  name lost subprocess-specific context. PR-MINIMAL-4 adds a
+  dedicated ``subprocess_failed`` (error level) event BEFORE the
+  ``raise RuntimeError`` so the typed event lands in the journal
+  even when the exception unwinds the stack. Payload carries
+  ``exit_code`` / ``run_log`` / ``stderr_tail`` (last 5 lines) for
+  at-a-glance triage. 4 invariant tests pin the new event, payload
+  shape, emit-before-raise ordering, and the preserved siblings.
+  D1 full 9→3 event collapse remains deferred — pure naming churn
+  with downstream consumer risk.
+
+- **PR-C6 — `docs/operator-mode-a.md` Mode A operator manual.**
+  Wave 2 / pure docs. Documents the Karpathy-idiom path for
+  running the self-improving loop via an external Claude Code or
+  Codex CLI session (vs the GEODE CLI's `/self-improving run`
+  Mode B path). Covers boot recipes for both clients, the agent
+  contract pointer at ``autoresearch/program.md``, the shared
+  SoT inventory (5 policy files + audit ledger + baseline +
+  results), a Mode A vs Mode B comparison matrix with 8
+  dimensions (boot effort / iterations / confirmation / mutator
+  LLM / audit log / rollback / quota / cost gate), and decision
+  guidance for when each mode is the right choice. 7 invariant
+  tests pin the doc's presence, the all-5-SoT references, both
+  boot recipes, the design-doc cross-reference, the slash command
+  reference, the ledger reference, and the Karpathy minimal boot
+  prompt anchor.
+
+- **PR-G2 — `/model` mutator role-tab.** Wave 1 / 3 PRs.
+  Extends the ``AGENT_ROLES`` registry (PR-A pattern: primary +
+  reflection) with a third entry: ``mutator``. Pre-PR operators
+  had to edit ``~/.geode/config.toml [self_improving_loop.mutator]
+  default_model`` manually; PR-G2 wires the same role-tab UI that
+  primary + reflection already use. The mutator role differs in
+  one respect — its model knob lives in ``MutatorConfig.default_model``
+  (toml-only, post-PR-MINIMAL-2 G1a defaults to ``None`` for
+  Settings.model inherit), not on ``Settings``. The
+  ``AgentRole.settings_field=""`` sentinel signals "no Settings
+  attribute to write"; ``_current_model_for_role`` reads the toml
+  value directly via the new ``_read_toml_value`` helper (tomllib +
+  defensive empty-on-malformed-or-missing), and ``_apply_model``
+  guards the ``object.__setattr__(settings, ...)`` call behind an
+  ``if role_def.settings_field:`` check so the picker's choice
+  persists via env var + ``upsert_config_toml`` only — exactly the
+  SoT path the runner's lazy ``load_self_improving_loop_config()``
+  reads at dispatch time. 7 invariant tests pin role registration,
+  empty-settings-field sentinel, toml read paths (set / unset /
+  malformed / missing file), and the apply-time settings write
+  guard.
+
+- **PR-G4 — `/self-improving run` summary now carries source
+  telemetry.** Wave 1 / 3 PRs. Adds ``model=...`` and ``source=...``
+  to the per-run summary line so the operator can verify which
+  channel was billed at the end of a confirmation cycle. New
+  ``_resolve_run_summary_telemetry`` helper mirrors the runner's
+  ``_default_llm_call`` resolution (G1a inherit: ``None`` default
+  → ``Settings.model``). Defensive — config-import failure returns
+  ``("?", "?")`` placeholders rather than crashing the slash.
+  4 invariant tests pin the summary-line shape, the inherit path,
+  explicit-default override, and the placeholder fallback.
+
+### Changed
+
+- **PR-MINIMAL-2 — 13-item alignment / pruning bundle for the
+  self-improving loop config + runner.** Post-MINIMAL-1, surface
+  audits caught a cluster of config / wiring loose ends — silent
+  knobs, type-shape mismatches, missing context for the mutator
+  LLM, and a CLAUDE.md DONT-table candidate (program.md ↔
+  fallback prompt drift). PR-MINIMAL-2 bundles them in one PR per
+  user directive (single PR for the whole audit). User follow-up
+  directive added the two initially-deferred items (B7, H2) so
+  the actual scope landed at 13/13 items.
+
+  **Config trim** (5 items):
+  - **G1a** — ``MutatorConfig.default_model`` /
+    ``AutoresearchConfig.target_model`` / ``AutoresearchConfig.judge_model``
+    defaults flipped from string literals (``"claude-opus-4-7"`` /
+    ``"geode/gpt-5.5"`` / ``"claude-code/opus"``) to ``None``.
+    Both readers (``runner._default_llm_call`` and
+    ``train._build_audit_command``) fall back to ``Settings.model``
+    when the field is unset, so operator's ``/model`` choice flows
+    through both the mutator LLM and the audit subprocess
+    automatically. Explicit toml override
+    (``[self_improving_loop.mutator] default_model = "..."``) still
+    wins. New helper ``train._settings_model()`` reads
+    ``Settings.model`` with a defensive ``TARGET_MODEL`` fallback
+    for environments without ``core.config``.
+  - **C1** — ``MutatorConfig.allowed_models`` (5-model allow-list)
+    + matching ``_default_in_allowed`` pydantic validator removed.
+    The router's provider routing already guards model existence
+    per provider; the dedicated allow-list was extra surface that
+    caught nothing in practice.
+  - **C2 / A2** — ``fallback_to_payg`` per-component overrides
+    removed from ``SelfImprovingLoopBindings`` /
+    ``PetriRoleConfig`` / ``AutoresearchConfig`` / ``MutatorConfig``
+    / ``SeedGenerationConfig``. Only the global flag at
+    ``[self_improving_loop] fallback_to_payg`` survives — per-
+    component fields had NO downstream reader (dead config field).
+  - **A1** — ``MutatorConfig.role_contract`` field removed. Was
+    logged in the dispatch telemetry but never injected into the
+    LLM system prompt (operator-facing reference only). The file
+    ``.claude/agents/self_improving_loop_mutator.md`` stays on
+    disk as reference; the config field that pointed at it added
+    noise without operational effect.
+  - **B1** — ``AutoresearchConfig.use_oauth: bool`` (legacy bool)
+    replaced with ``source: Source`` (4-enum: ``auto`` / ``api_key``
+    / ``claude-cli`` / ``openai-codex``). Aligns shape with
+    ``MutatorConfig.source`` + ``PetriRoleConfig.source`` — one
+    credential vocabulary across the loop. The argv translator in
+    ``_build_audit_command`` adds ``--use-oauth`` when source is
+    anything except ``"api_key"`` (auto / claude-cli / openai-codex
+    all use subscription credentials).
+
+  **Constant-name alignment** (1 item):
+  - **H2** — ``GLOBAL_*_SOT`` constant suffix renamed to
+    ``GLOBAL_*_PATH`` so the constant names match the directory
+    rename from PR-RATCHET-1 (``sot/`` → ``policies/``). 5 constants
+    renamed: ``GLOBAL_WRAPPER_SECTIONS_SOT`` →
+    ``GLOBAL_WRAPPER_SECTIONS_PATH``, ``GLOBAL_TOOL_POLICY_SOT`` →
+    ``GLOBAL_TOOL_POLICY_PATH``, ``GLOBAL_DECOMPOSITION_POLICY_SOT``
+    → ``GLOBAL_DECOMPOSITION_POLICY_PATH``, ``GLOBAL_RETRIEVAL_POLICY_SOT``
+    → ``GLOBAL_RETRIEVAL_POLICY_PATH``,
+    ``GLOBAL_REFLECTION_POLICY_SOT`` → ``GLOBAL_REFLECTION_POLICY_PATH``.
+    Updated across 6 files (``core/paths.py`` definitions,
+    ``core/agent/system_prompt.py``,
+    ``core/self_improving_loop/policies.py``, ``autoresearch/train.py``,
+    ``tests/test_policy_mutation.py``,
+    ``tests/test_ratchet_policies_in_repo.py``). No backwards-compat
+    alias kept — minor-bump rename, internal-only consumers.
+
+  **Migration UX** (1 item):
+  - **B7** — ``/self-improving migrate`` slash added as an explicit
+    one-shot trigger for the lazy migration helper PR-RATCHET-1
+    introduced. Iterates every ``TARGET_KINDS`` entry, invokes
+    ``_maybe_migrate_legacy_sot`` for each, prints a per-kind status
+    table: ``migrated`` (legacy file existed + new path was missing,
+    copy succeeded), ``up-to-date`` (new path already present, no-op),
+    ``no-legacy`` (no pre-PR file to migrate from), or ``error: <...>``
+    (best-effort copy raised — never crashes the slash). Once every
+    install has run this slash the ``_maybe_migrate_legacy_sot`` lazy
+    code path can be removed in a future minor release.
+
+  **Path consolidation** (1 item):
+  - **B5** — ``MUTATION_AUDIT_LOG_PATH`` canonical definition
+    moved from ``core/self_improving_loop/runner.py:189`` to
+    ``core/paths.py`` alongside the other path constants. The
+    runner re-exports the name for backwards compat with the 5+
+    callers that import it from this module rather than from
+    ``core.paths``.
+
+  **Mutator context expansion** (1 item):
+  - **B2** — ``RunnerContext`` gains a ``current_policies: dict[str,
+    dict[str, str]]`` field carrying the *current state* of ALL 5
+    mutation targets (prompt / tool_policy / decomposition /
+    retrieval / reflection). ``build_runner_context`` loads all 5
+    policy SoT files; ``_build_user_prompt`` surfaces them under
+    ``"Current policy SoT (5 kinds):"`` so the mutator LLM sees
+    the full surface. Pre-PR the prompt only included
+    ``current_sections`` (wrapper-only), letting the LLM blind-
+    mutate the other 4 kinds without ever seeing their current
+    values. ``current_sections`` is preserved as a backwards-
+    compat alias of ``current_policies["prompt"]`` for the legacy
+    callers + the fallback rendering branch when
+    ``current_policies`` is empty.
+
+  **Drift guards + docs** (4 items):
+  - **B8** — ``_FALLBACK_SYSTEM_PROMPT`` ↔ ``autoresearch/program.md``
+    drift invariant: ``test_fallback_prompt_shares_setup_anchor_with_program_md``
+    pins the stable section anchor (``## Setup``) on the program.md
+    side AND the shared mutation-contract schema fields
+    (``target_section`` / ``new_value`` / ``rationale``) on the
+    fallback side, so an operator who edits one without the other
+    surfaces a CI hit.
+  - **A3 (partial)** — runner / train.py SessionJournal events
+    audited. The 9 documented events all fire; the 2 documented
+    "missing" events (``baseline_decision`` actual emit +
+    ``subprocess_failed``) are deferred to a future PR — full
+    9 → 3 collapse risks downstream consumers without explicit
+    migration. PR-MINIMAL-2 stops at the audit.
+  - **C5** — ``autoresearch/program.md`` agent contract updated
+    with a 5-row table listing every ``target_kind`` (prompt /
+    tool_policy / decomposition / retrieval / reflection) + the
+    file each one writes + a one-line "what it controls" column.
+    Mode A agents now know the full mutation surface, not just
+    the legacy wrapper-prompt slot.
+  - **Test invariants** — 17 new tests in
+    ``tests/test_self_improving_minimal_2.py`` pin every item
+    above (None-default reads, allow-list absence,
+    per-component fallback_to_payg absence, role_contract
+    absence, ``source`` enum + ``--use-oauth`` argv translator,
+    ``current_policies`` field + 5-kind population + LLM-prompt
+    surface, ``MUTATION_AUDIT_LOG_PATH`` location + re-export,
+    fallback-prompt drift anchors, program.md 5-kind table).
+
+  **Prior tests updated**:
+  - ``test_autoresearch_defaults_match_train_module`` — asserts
+    None defaults for target_model / judge_model + ``source ==
+    "auto"`` + no ``fallback_to_payg`` attr.
+  - ``test_load_reads_autoresearch_subsection`` — checks
+    ``source`` default instead of ``use_oauth``.
+  - ``test_bindings_dataclass_round_trip`` — drops
+    ``fallback_to_payg`` from the bindings construction call.
+  - ``test_mutator_config_exists_with_default_model`` — asserts
+    None default + absence of allow_list / role_contract /
+    fallback_to_payg.
+  - ``test_self_improving_loop_config_carries_mutator_section``
+    — asserts None default for mutator.default_model.
+  - ``test_runner_default_llm_call_consumes_source`` (renamed
+    from ``_consumes_source_and_role_contract``) — narrowed to
+    just ``source`` since ``role_contract`` is gone.
+  - ``test_program_md_example_log_matches_train_module_constants``
+    (renamed from ``_matches_config_defaults``) — compares
+    against ``train.TARGET_MODEL`` / ``JUDGE_MODEL`` module
+    constants since the config dataclass defaults are now None.
+  - ``test_runner_run_once_end_to_end`` — checks the new
+    ``"Current policy SoT"`` header instead of the legacy
+    ``"WRAPPER_PROMPT_SECTIONS"``.
+  - ``test_mutator_config_validator_rejects_default_outside_allowed``
+    + ``test_mutator_default_model_inherits_settings`` — old
+    validator-rejection test replaced with the new G1a
+    inherit-path pin (the validator was tied to the removed
+    allow-list).
+
+### Added
+
+- **PR-MINIMAL-1 — `/self-improving history` + `/rollback` wired to git delegation; DONT-table guard codification; design doc cleanup.**
+  Post-PR-RATCHET-1, the mutation ledger (``autoresearch/state/mutations.jsonl``)
+  + 5 policy SoT files (``autoresearch/state/policies/``) are
+  git-trackable (``.gitignore`` negation re-includes both); after
+  the first applied mutation lands a commit, ``git log`` becomes
+  the canonical history view and ``git revert <sha>`` the canonical
+  rollback verb. Re-implementing
+  either in a slash would duplicate git semantics. PR-MINIMAL-1 wires
+  the two slash actions as *delegation*: ``/self-improving history``
+  prints the exact ``git log -p autoresearch/state/mutations.jsonl``
+  + ``git log --stat autoresearch/state/policies/`` recipes;
+  ``/self-improving rollback`` (bare) prints the discovery + revert
+  recipe; ``/self-improving rollback <mutation_id>`` injects a
+  ``git log --all --grep=<id>`` SHA-finder line. Operator stays
+  inside one tool surface without re-implementing what git does
+  natively. ``_RUN_DEFERRED_ACTIONS`` shrinks to ``{"config"}``;
+  history + rollback removed from the design-doc-pointer fallback;
+  ``_KNOWN_ACTIONS`` expands; the unknown-action help line updates
+  to list both as available now.
+
+  H4 anti-deception regression guard: CLAUDE.md DONT table 2026-05-20
+  PR-G5b #1350 row noted ``_SYSTEM_PROMPT`` was a hardcoded f-string
+  while the PR title claimed "program.md-driven". The G5b.fix1.b
+  commit later introduced ``runner._load_program_md`` that reads
+  ``autoresearch/program.md`` from disk. PR-MINIMAL-1 pins that
+  behavior in ``tests/test_self_improving_minimal_1.py``
+  (``test_load_program_md_actually_reads_disk_file`` +
+  ``test_build_system_prompt_includes_program_md_content``) so a
+  future refactor that regresses to a hardcoded prompt surfaces
+  here. CLAUDE.md DONT rows updated with cross-references to the
+  test files that now codify each lesson as a guard
+  (``test_ratchet_policies_in_repo.py`` for the git-tracked claim,
+  ``test_self_improving_minimal_1.py`` for the program.md-driven
+  claim).
+
+  Design doc (``docs/plans/2026-05-21-self-improving-loop-ux.md``)
+  rewritten to drop the deferred ``/history`` + ``/rollback`` items
+  (now wired), remove the 7-profile preset bundle (deferred
+  indefinitely — toml overrides cover the same need with one less
+  concept), de-prioritise Tier 2 drill-down sub-pickers, and
+  collapse the 4-harness picker to a single default ``autoresearch``
+  with ``--harness=<name>`` as a power-user opt-in flag rather than
+  surfaced UI. New "Mode A vs Mode B" matrix doc-only — CLI surface
+  triggers Mode B only; Mode A (Karpathy external agent reading
+  ``program.md``) stays a parallel manual workflow documented in
+  ``autoresearch/README.md``. 7 new invariant tests pin the slash
+  delegation, the KNOWN_ACTIONS set, the unknown-action help, and
+  the two program.md regression guards. Tests
+  ``test_reserved_actions_emit_design_doc_hint`` (parametrized over
+  history/rollback/config) + ``test_history_still_deferred`` are
+  collapsed into single-action ``test_config_action_emits_design_doc_hint``
+  + ``test_run_history_rollback_no_longer_in_deferred_actions`` to
+  reflect the new shape.
+
+### Changed
+
+- **PR-RATCHET-1 — 5 mutation SoT files moved in-repo (git-tracked).**
+  First slice of the CI-ratchet realignment sprint. Pre-PR the
+  self-improving loop's 5 SoT files (``wrapper-sections.json`` /
+  ``tool-policy.json`` / ``decomposition.json`` / ``retrieval.json`` /
+  ``reflection.json``) lived under ``~/.geode/self-improving-loop/``
+  (operator home, untracked) — so a ``git diff`` of a self-improving
+  loop run showed nothing about which mutation actually applied. This
+  diverged from upstream Karpathy autoresearch's "branch tip = best
+  wrapper" principle: 9/10 of GEODE's experiment-lineage state lived
+  outside git. PR-RATCHET-1 converges back: (1) the 5 SoT files now
+  live at ``autoresearch/state/policies/<file>.json`` (in-repo); (2)
+  ``.gitignore`` re-includes the new dir via ``!autoresearch/state/policies/``
+  + ``!autoresearch/state/policies/**`` negations (kept narrow — only the
+  ``policies/`` subtree, not the broader ``state/`` dir whose
+  ``baseline.json`` / ``results.tsv`` remain gitignored pending
+  PR-RATCHET-2); (3) ``LEGACY_SOT_DIR`` constant exposed alongside
+  ``GLOBAL_POLICIES_DIR`` so a freshly-upgraded operator install
+  preserves continuity — ``policies._maybe_migrate_legacy_sot``
+  copies the pre-PR ``~/.geode/self-improving-loop/<file>.json``
+  payload to the new in-repo location on first ``load_policy`` /
+  ``write_policy`` call, idempotent, leaves the legacy source in
+  place so an operator can roll back manually if needed. The
+  ``GLOBAL_*_SOT`` constant names are preserved for backwards
+  compatibility (only the value moves); all 5 known callers
+  (``policies.py`` / ``agent/system_prompt.py`` / ``autoresearch/train.py``
+  / etc.) consume the constant and automatically pick up the new
+  path. 13 invariant tests pin (a) the 5 SoT paths under
+  ``autoresearch/state/policies/``, (b) ``LEGACY_SOT_DIR`` still maps to
+  the operator-home pre-PR path, (c) the 5 SoT files + ``.gitkeep``
+  are NOT git-ignored (subprocess ``git check-ignore`` runs against
+  the worktree's actual ``.gitignore``), (d) migration copies legacy
+  → new when missing, (e) migration is idempotent (no clobber when
+  new exists with different content), (f) migration no-ops on
+  missing legacy or unknown kind, (g) ``_LEGACY_FILE_NAMES`` map
+  covers every ``TARGET_KINDS`` entry, (h) ``load_policy`` and
+  ``write_policy`` both trigger the migration before I/O.
+
+  Prior ``test_global_policy_paths_under_self_improving_loop_dir``
+  test invariant updated — the assertion now checks
+  ``GLOBAL_POLICIES_DIR`` (not ``GLOBAL_SELF_IMPROVING_LOOP_DIR``) since
+  the SoT files are no longer co-located with the operator-home
+  ``sessions.jsonl`` / ``journal.jsonl`` index files; those remain
+  in ``~/.geode/`` until PR-RATCHET-2 collapses them into a single
+  git-tracked journal.
+
+### Added
+
+- **PR-OPS-2a — `/self-improving run` slash + propose/apply split.**
+  Second slice of the self-improving-loop UX foundation. PR-OPS-1
+  wired the read-only `/self-improving status` surface; PR-OPS-2a
+  adds the *write* surface — operators can now drive one or more
+  mutation iterations from the REPL with per-iteration confirmation,
+  WITHOUT knowing internal module paths. Changes: (1) splits the
+  monolithic `SelfImprovingLoopRunner.run_once()` into `propose()`
+  (build context + LLM call + parse, no SoT write) and
+  `apply_proposal(proposal)` (write SoT + audit log + optional
+  rerun) — `run_once()` becomes a backward-compat wrapper composing
+  the two so existing callers (autoresearch self-improving loop)
+  see no change. The new `Proposal` dataclass exports
+  `mutation` + `target_sections` + `original_sections` (rollback
+  snapshot) + `baseline_fitness` (UI convenience). (2) Wires
+  `/self-improving run` with three flags: `--dry-run` (propose
+  only — show the mutation, NO write), `--n N` (1–10 iterations,
+  default 1), `--target-kind X` (filter — skip iteration if the LLM
+  proposes a different SoT kind than requested). (3) Per-iteration
+  confirmation prompt — `y` apply, `N`/empty reject (writes a
+  `kind=rejected` audit row for mutator-LLM learning signal), `d`
+  show diff and re-prompt, `s` show full rationale and re-prompt,
+  EOF/Ctrl-D/KeyboardInterrupt → abort breaks the iteration loop
+  cleanly *without* writing a rejection row (the abort is the
+  operator's intent to stop, not a verdict on the proposal).
+  (4) Static text pre-flight block surfaces mutator model + source +
+  target_kind filter + iterations + mode + harness label
+  (no-op for now — PR-OPS-2b wires autoresearch/petri_raw harness
+  selection). (5) `run` removed from the deferred-action hint;
+  remaining `history`/`rollback`/`config` still print the design-
+  doc pointer with the updated `PR-OPS-2b/3` tag. 27 invariant tests
+  pin propose/apply split (propose() does NOT write SoT or audit
+  log, apply_proposal() does both, run_once() composes them
+  observationally), Proposal in `__all__`, full flag-parser surface
+  (defaults / --dry-run / --n parsing both `--n N` and `--n=N` /
+  --n out-of-range / 5 valid --target-kind values / invalid
+  --target-kind / unknown flag), dispatcher routing (`run` →
+  `_cmd_run` with the trailing tokens), --dry-run skips
+  apply_proposal, --target-kind=tool_policy + prompt-kind LLM →
+  skip iteration with warning, y/N/abort decisions, abort during
+  multi-iteration breaks the loop, propose-failure breaks the
+  loop, and rejection writes a kind=rejected audit row.
+
+- **PR-OPS-1 — self-improving loop operator-facing surface (slash
+  `status` + design doc + frontmatter parity fix).** First slice of
+  the multi-PR self-improving-loop UX foundation. Pre-PR the closed
+  loop (co-scientist → Petri → autoresearch → mutator LLM → SoT
+  write) was fully wired in code but had zero operator entry point;
+  running it required ``python -c "from core.self_improving_loop
+  import SelfImprovingLoopRunner; …"``. PR-OPS-1 ships: (1) a new
+  ``docs/plans/2026-05-21-self-improving-loop-ux.md`` design doc
+  capturing the full inventory (35+ knobs across 5 components), the
+  3-tier UX hierarchy, the 7-profile preset bundle, the slash/NL
+  surfaces, the Mode A (Karpathy idiom — external agent reads
+  ``program.md``) vs Mode B (programmatic ``SelfImprovingLoopRunner``
+  single-call) distinction, and the 4-stage pipeline diagram
+  (seed-gen / mutate / measure / aggregate) with Petri promoted to a
+  first-class stage; (2) ``/self-improving`` slash (alias ``/sil``)
+  registered as a THIN ``CommandSpec`` with a ``status`` sub-action
+  that renders current baseline (fitness + promote_reason + ts)
+  plus the last 5 mutation audit rows — tolerant of missing/
+  malformed files so a fresh clone can call it without raising;
+  reserved sub-actions (``run``/``history``/``rollback``/``config``)
+  print a design-doc pointer for PR-OPS-2/3; (3) the seed_generator
+  agent contract (``.claude/agents/seed_generator.md``) amended to
+  require BOTH the co-scientist canonical ``target_dims`` field AND
+  a Petri-compatible ``tags: [<target_dim>, "geode_specific"]`` list
+  so downstream consumers reading either schema (Petri's
+  ``<tier>/<dim>/01_base.md`` shape uses ``tags``, co-scientist's
+  flat-dir survivors used ``target_dims`` only) keep dim attribution
+  intact when a mixed pool flows through ``flatten_for_inspect_petri``;
+  the per-spawn description prompt in
+  ``plugins/seed_generation/agents/generator.py`` mirrors the
+  contract reminder. 17 invariant tests pin the registry wiring
+  (``COMMAND_REGISTRY`` + ``COMMAND_MAP`` + dispatcher route +
+  ``/sil`` alias), the status sub-action output (baseline block +
+  mutations block + applied/rejected/rolled_back colourisation),
+  malformed-input tolerance (truncated JSON / partial JSONL row),
+  the reserved-action design-doc hint, the unknown-action help, and
+  the frontmatter schema parity (contract grep + generator source
+  grep for ``tags`` + ``geode_specific``).
+
+### Changed
+
+- **Sub-agent lineage — subprocess WorkerRequest threading.** Closes
+  the PR-F follow-up gap. Pre-fix subprocess sub-agents spawned via
+  ``SubAgentManager → WorkerRequest → worker.py`` recorded
+  ``parent_session_key=""`` in their Episodes and had no notion of
+  the parent's ``_session_id`` uuid at all — only the in-process
+  spawn path carried lineage. This wires both fields end-to-end so
+  the PR-E confidence-trajectory aggregator can group child
+  Episodes by routing key (``parent_session_key``) AND attribute
+  each row back to a concrete parent run (``parent_session_id``
+  uuid). Changes: (1) new ``parent_session_id`` ContextVar pair in
+  ``core/agent/cognitive_state_ctx.py``; (2) AgenticLoop accepts a
+  ``parent_session_id`` constructor kwarg and binds it via
+  ``set_parent_session_id`` inside ``_emit_session_start_signals``
+  alongside the existing parent_session_key bind; (3) ``Episode``
+  dataclass gains ``parent_session_id`` (defaulted) so JSONL rows
+  carry both fields; (4) bootstrap's ``TOOL_EXEC_ENDED`` handler
+  reads ``get_parent_session_id`` and stamps the Episode;
+  (5) ``WorkerRequest`` gains ``parent_session_key`` +
+  ``parent_session_id`` fields (both defaulted for backwards-
+  compatible deserialisation); (6) ``SubAgentManager._build_worker_request``
+  populates both — ``parent_session_key`` from the manager's
+  construction kwarg, ``parent_session_id`` from the calling
+  parent's ContextVar (the AgenticLoop binds its own session_id
+  at session-start, so the manager reads it cleanly via
+  ``get_session_id`` at delegate-time); (7) ``worker._run_agentic``
+  threads both kwargs into the spawned child AgenticLoop. 17
+  invariant tests pin the new ContextVar pair + ``__all__``,
+  the Episode field + JSONL round-trip, the WorkerRequest schema +
+  default-empty backwards compat, the SubAgentManager wiring under
+  both kwarg-set and ContextVar-bound parent scenarios, the
+  AgenticLoop kwarg signature + ContextVar bind during
+  session-start, the worker.py call-site, and the bootstrap reader.
+  The same-task A→B→A Token reset (``TODO(PR-F-followup)`` line in
+  ``cognitive_state_ctx.py``) remains deferred as a separate small
+  PR.
+
+### Fixed
+
+- **PR-CB-FLAKE — CircuitBreaker xdist worker contamination (PR #1429/#1430/#1431 cascade).**
+  Test 의 module-level `CircuitBreaker` singleton (anthropic / openai / glm /
+  codex 4 provider + `provider_dispatch._openai_cb` / `_glm_cb` 2 dispatcher
+  = 총 6개) 가 *failure-injecting* test 와 같은 xdist worker 에서 콜로케이션
+  될 때 OPEN 상태로 leak — 후속 test 의 첫 `can_execute()` 가 즉시
+  False 반환하며 `RuntimeError("Circuit breaker is open …")` cascade.
+  PR #1429 → #1431 sprint 에서 4회 발생 ([feedback_circuit_breaker_flake](#)).
+  **Root cause**: `test_failover.py::test_no_silent_fallback_to_other_models`
+  가 `MAX_RETRIES` 회 `RateLimitError` side_effect 로 `_circuit_breaker.record_failure()`
+  threshold (5) 도달 → state="open". 같은 worker 에 분배된 `test_tool_use.py`
+  의 mocked 호출이 breaker 게이트에서 차단. **Fix**: (a) `CircuitBreaker.reset()`
+  메서드 신설 — state="closed" + failures=0 + last_failure=0 force-clear.
+  (b) `tests/conftest.py` autouse fixture `_reset_circuit_breakers` 가 매
+  test pre/post 6 singleton 모두 reset. ImportError / AttributeError tolerate
+  (vendored SDK 없는 stripped env / 향후 rename 내성). **4 def / 9 runtime
+  case** `tests/test_circuit_breaker_isolation.py` — reset 메서드 존재 +
+  part1/part2 cross-test reset 입증 (deliberately OPEN → 다음 test 에
+  CLOSED) + parametrize 1 def × 6 singleton = 6 case (각 singleton 의
+  test entry CLOSED 검증).
+
 ## [0.99.26] — 2026-05-21
 
 > **arun god-method decomposition — Phase 2 trilogy.** 3 PRs

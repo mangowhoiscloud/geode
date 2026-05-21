@@ -154,8 +154,18 @@ def resolve_routing(model: str) -> RoutingTarget | None:
         return None
 
     # 1) explicit per-model routing
+    # ADR-013 T4 (2026-05-21) — JSON SoT 가 model 별 plan-chain override.
+    # 정책 부재 시 registry.get_routing(model) 그대로 (no behavior change).
+    from core.llm.routing.provider_routing_policy import (
+        _load_provider_routing_override,
+        apply_provider_routing_policy,
+    )
+
+    routed_plan_ids = apply_provider_routing_policy(
+        model, registry.get_routing(model), _load_provider_routing_override()
+    )
     explicit_chain: list[Plan] = []
-    for plan_id in registry.get_routing(model):
+    for plan_id in routed_plan_ids:
         plan = registry.get(plan_id)
         if plan is not None:
             explicit_chain.append(plan)

@@ -187,6 +187,22 @@ class CircuitBreaker:
                 return False
             return True  # half-open: allow one attempt
 
+    def reset(self) -> None:
+        """Force-clear breaker state. Test-only — drops all accumulated failure history.
+
+        Production code should rely on natural recovery via the
+        ``recovery_timeout`` half-open path. The pytest autouse fixture
+        in ``tests/conftest.py`` calls this between tests so module-level
+        breaker singletons don't leak failure counters across unrelated
+        suites when xdist's ``loadfile`` distribution puts a
+        failure-injecting test (e.g. ``test_failover``) on the same
+        worker as a downstream consumer (e.g. ``test_tool_use``).
+        """
+        with self._lock:
+            self._failures = 0
+            self._state = "closed"
+            self._last_failure = 0.0
+
 
 def retry_with_backoff_generic(
     fn: Any,

@@ -99,6 +99,69 @@ _CREATE_MESSAGES_TOOL_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_messages_tool_name ON messages (tool_name)
 """
 
+# Phase 1c (Hermes absorption, 2026-05-22) — full-text search indices over
+# the messages table. ``content``, ``tool_name``, and ``tool_calls`` are
+# all indexed so a single query surfaces text matches AND tool-name
+# filters. ``content='messages'`` makes both FTS tables *external-content*
+# (FTS5 fetches the indexed columns from the source table by rowid)
+# so the underlying TEXT data isn't duplicated; the
+# triggers below keep them in sync with the source messages table.
+#
+# unicode61 = baseline tokenizer (case + diacritic fold). Always
+# created.
+# trigram = substring-recall booster (Korean / Japanese partial words,
+# identifier fragments). Requires SQLite 3.34+; gated by
+# ``has_trigram_support`` at runtime.
+
+_CREATE_MESSAGES_FTS_UNICODE_SQL = """\
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    content, tool_name, tool_calls,
+    content='messages',
+    content_rowid='id',
+    tokenize='unicode61'
+)
+"""
+
+_CREATE_MESSAGES_FTS_TRIGRAM_SQL = """\
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts_trigram USING fts5(
+    content, tool_name, tool_calls,
+    content='messages',
+    content_rowid='id',
+    tokenize='trigram'
+)
+"""
+
+
+def _fts_trigger_block(fts_name: str) -> str:
+    """Build the 3 INSERT/DELETE/UPDATE triggers for one FTS table.
+
+    Generated rather than literal so the unicode61 and trigram tables
+    share one source-of-truth without copy-paste drift. The trigger
+    names embed ``fts_name`` for unambiguous SQL error messages.
+    ``fts_name`` is sourced from a fixed allowlist (``messages_fts`` /
+    ``messages_fts_trigram``); never operator input.
+    """
+    # fts_name is a hardcoded literal, not user input — S608/B608 safe to ignore.
+    sql = f"""CREATE TRIGGER IF NOT EXISTS {fts_name}_after_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO {fts_name}(rowid, content, tool_name, tool_calls)
+    VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+END;
+CREATE TRIGGER IF NOT EXISTS {fts_name}_after_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO {fts_name}({fts_name}, rowid, content, tool_name, tool_calls)
+    VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+END;
+CREATE TRIGGER IF NOT EXISTS {fts_name}_after_update AFTER UPDATE ON messages BEGIN
+    INSERT INTO {fts_name}({fts_name}, rowid, content, tool_name, tool_calls)
+    VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
+    INSERT INTO {fts_name}(rowid, content, tool_name, tool_calls)
+    VALUES (new.id, new.content, new.tool_name, new.tool_calls);
+END;"""  # noqa: S608  # nosec B608
+    return sql
+
+
+_FTS_TRIGGERS_UNICODE_SQL = _fts_trigger_block("messages_fts")
+_FTS_TRIGGERS_TRIGRAM_SQL = _fts_trigger_block("messages_fts_trigram")
+
 
 def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
     """Extract structured columns from a chat message dict.
@@ -223,6 +286,25 @@ class SessionManager:
         self._conn.execute(_CREATE_MESSAGES_TABLE_SQL)
         self._conn.execute(_CREATE_MESSAGES_SESSION_INDEX_SQL)
         self._conn.execute(_CREATE_MESSAGES_TOOL_INDEX_SQL)
+        # Phase 1c (Hermes absorption, 2026-05-22) — FTS5 indices.
+        # unicode61 is always created. trigram is probed at runtime and
+        # skipped on SQLite builds that don't ship it; ``self._has_trigram``
+        # records the outcome so ``search_messages`` can skip the trigram
+        # branch instead of crashing.
+        from core.storage.fts_helpers import has_trigram_support
+
+        self._conn.executescript(_CREATE_MESSAGES_FTS_UNICODE_SQL)
+        self._conn.executescript(_FTS_TRIGGERS_UNICODE_SQL)
+        self._has_trigram = has_trigram_support(self._conn)
+        if self._has_trigram:
+            self._conn.executescript(_CREATE_MESSAGES_FTS_TRIGRAM_SQL)
+            self._conn.executescript(_FTS_TRIGGERS_TRIGRAM_SQL)
+        else:
+            log.warning(
+                "SQLite build lacks FTS5 trigram support; falling back to "
+                "unicode61-only search. Substring recall (e.g. partial Korean "
+                "words / identifier fragments) will be limited."
+            )
         self._conn.commit()
 
     def upsert(self, meta: SessionMeta) -> None:
@@ -434,6 +516,83 @@ class SessionManager:
             )
             self._conn.commit()
             return cursor.rowcount
+
+    def search_messages(
+        self,
+        query: str,
+        *,
+        session_id: str | None = None,
+        limit: int = 20,
+        prefer_trigram: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Full-text search across mirrored messages. Returns row dicts.
+
+        Args:
+            query: Raw operator query string. Sanitised via
+                :func:`core.storage.fts_helpers.sanitize_fts5_query` so
+                hyphens / dots / quotes don't blow up FTS5's grammar.
+            session_id: Optional scope filter — restrict to messages from
+                a single session.
+            limit: Cap on rows returned (default 20).
+            prefer_trigram: When ``True`` AND the trigram index exists,
+                query ``messages_fts_trigram`` instead of the unicode61
+                index. Useful for substring-recall scenarios (partial
+                Korean words, identifier fragments). Silently falls back
+                to unicode61 when trigram isn't supported.
+
+        Returns:
+            Newest-first list of ``{seq, role, content, timestamp,
+            session_id, message_id, snippet, score}`` dicts. ``snippet``
+            is FTS5's highlighted context window. Empty list when the
+            sanitised query is empty.
+        """
+        from core.storage.fts_helpers import sanitize_fts5_query
+
+        clean = sanitize_fts5_query(query)
+        if not clean:
+            return []
+        table = "messages_fts_trigram" if prefer_trigram and self._has_trigram else "messages_fts"
+        # ``table`` is one of two hardcoded literals (no user input) so the
+        # f-string composition is safe — S608/B608 false positive.
+        sql = (
+            f"SELECT m.session_id, m.id, m.seq, m.role, m.content, m.timestamp, "  # noqa: S608  # nosec B608
+            f"snippet({table}, 0, '[', ']', '…', 16), bm25({table}) "
+            f"FROM {table} JOIN messages m ON m.id = {table}.rowid "
+            f"WHERE {table} MATCH ?"
+        )
+        params: list[Any] = [clean]
+        if session_id is not None:
+            sql += " AND m.session_id = ?"
+            params.append(session_id)
+        sql += " ORDER BY m.timestamp DESC LIMIT ?"
+        params.append(limit)
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as exc:
+            log.warning("search_messages FTS5 query failed: %s", exc)
+            return []
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            session_id_val, msg_id, seq, role, content_raw, ts, snippet, score = r
+            content: Any = None
+            if content_raw is not None:
+                try:
+                    content = json.loads(content_raw)
+                except json.JSONDecodeError:
+                    content = content_raw
+            out.append(
+                {
+                    "session_id": session_id_val,
+                    "message_id": msg_id,
+                    "seq": seq,
+                    "role": role,
+                    "content": content,
+                    "timestamp": ts,
+                    "snippet": snippet,
+                    "score": score,
+                }
+            )
+        return out
 
     @staticmethod
     def _row_to_message(row: tuple) -> dict[str, Any]:  # type: ignore[type-arg]

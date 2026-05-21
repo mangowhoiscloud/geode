@@ -127,6 +127,29 @@ AGENT_ROLES: list[AgentRole] = [
         description="Belief-update node (PR-3 C-2) — runs after each tool batch",
         has_effort=False,
     ),
+    # PR-G2 (2026-05-21) — self-improving loop mutator role. Unlike
+    # primary / reflection (which live on ``Settings``), the mutator's
+    # model knob lives in ``MutatorConfig.default_model``
+    # (``[self_improving_loop.mutator] default_model`` in config.toml).
+    # When ``default_model`` is ``None`` (the new G1a default from
+    # PR-MINIMAL-2) the runner inherits ``Settings.model``. The
+    # ``settings_field=""`` sentinel signals "no Settings attribute to
+    # write" — the picker persists via ``upsert_config_toml`` only,
+    # which is exactly the SoT path ``_default_llm_call`` reads at
+    # dispatch time.
+    AgentRole(
+        name="mutator",
+        label="Mutator",
+        settings_field="",
+        env_var="GEODE_SELF_IMPROVING_LOOP_MUTATOR_MODEL",
+        toml_section="self_improving_loop.mutator",
+        toml_key="default_model",
+        description=(
+            "Self-improving loop mutator — proposes wrapper/policy mutations "
+            "(set to '' to inherit Settings.model)"
+        ),
+        has_effort=False,
+    ),
 ]
 
 _ROLE_INDEX: dict[str, AgentRole] = {r.name: r for r in AGENT_ROLES}
@@ -196,6 +219,8 @@ COMMAND_MAP: dict[str, str] = {
     "/audit": "audit",
     "/audit-seeds": "audit-seeds",
     "/petri": "petri",
+    "/self-improving": "self-improving",
+    "/sil": "self-improving",
 }
 
 

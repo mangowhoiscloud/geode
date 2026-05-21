@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from core.agent.tool_descriptions_policy import (
+    _load_tool_descriptions_override,
+    apply_tool_descriptions_policy,
+)
+from core.agent.tool_policy import _load_tool_policy_override, apply_tool_policy
 from core.tools.base import load_all_tool_definitions
 
 if TYPE_CHECKING:
@@ -50,7 +55,16 @@ def get_agentic_tools(
             if name and name not in existing_names:
                 existing_names.add(name)
                 tools.append(mcp_tool)
-    return tools
+    # ADR-013 T1 (2026-05-21) — tool descriptions override 적용.
+    # base + registry + MCP merge 직후 + tool_policy filter/order 직전.
+    # description override 가 먼저 적용돼야 tool_policy 가 갱신된 description
+    # 기반의 forbidden/priority 판단 가능.
+    tools = apply_tool_descriptions_policy(tools, _load_tool_descriptions_override())
+
+    # ADR-012 S0a — 5축의 ``tool_policy`` SoT 가 인퍼런스 경로에서
+    # 실제로 적용되는 단일 지점. 정책이 부재하면 ``apply_tool_policy``
+    # 는 no-op (현재 행동 보존).
+    return apply_tool_policy(tools, _load_tool_policy_override())
 
 
 # ---------------------------------------------------------------------------

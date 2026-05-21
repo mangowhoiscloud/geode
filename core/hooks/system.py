@@ -168,6 +168,22 @@ class HookEvent(Enum):
     COGNITIVE_REFLECT = "cognitive_reflect"
     COGNITIVE_UPDATE_MEMORY = "cognitive_update_memory"
 
+    # Self-improving loop auto-trigger telemetry (OL-A1.5 — 2026-05-22).
+    # One event per terminal state of ``auto_trigger_mutator`` so a
+    # downstream subscriber (audit log writer, Inspect viewer, FE) can
+    # count firings, distinguish lock contention from interval gating,
+    # and surface runner failures without parsing the daemon log.
+    # Payload schema (every variant):
+    #   {"trigger_id": str, "ts": float, "detail": str}
+    # The ``trigger_id`` is the canonical id from
+    # ``AUTO_TRIGGER_TRIGGER_ID`` so subscribers can filter by id when
+    # multiple trigger families coexist in the same scheduler.
+    SELF_IMPROVING_AUTO_TRIGGER_FIRED = "self_improving_auto_trigger_fired"
+    SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY = "self_improving_auto_trigger_lock_busy"
+    SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED = "self_improving_auto_trigger_interval_blocked"
+    SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR = "self_improving_auto_trigger_runner_error"
+    SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR = "self_improving_auto_trigger_parse_error"
+
 
 @dataclass
 class HookResult:

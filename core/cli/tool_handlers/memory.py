@@ -67,8 +67,15 @@ def _build_memory_handlers() -> dict[str, Any]:
         except Exception:
             return {"status": "ok", "action": "manage_rule", "sub_action": rule_action}
 
+    def handle_session_search(**kwargs: Any) -> dict[str, Any]:
+        """PR-Hermes-1d — delegate to ``SessionSearchTool`` (FTS5 message recall)."""
+        from core.tools.session_search import SessionSearchTool
+
+        return SessionSearchTool()._execute_sync(**kwargs)
+
     return {
         "memory_search": handle_memory_search,
         "memory_save": handle_memory_save,
         "manage_rule": handle_manage_rule,
+        "session_search": handle_session_search,
     }

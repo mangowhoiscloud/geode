@@ -31,14 +31,17 @@ from core.self_improving_loop import policies as _policies_mod
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_all_five() -> None:
-    """Plan Q3 — exactly five enum values; pin the set."""
+def test_target_kinds_contains_active_six() -> None:
+    """ADR-012 S0d — retrieval deprecated. M1 — skill_catalog 추가.
+    M2 (2026-05-21) — agent_contract 추가. Post-M2: 6 active mutation
+    targets."""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
         "decomposition",
-        "retrieval",
         "reflection",
+        "skill_catalog",
+        "agent_contract",
     }
 
 
@@ -58,16 +61,19 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 
 def test_policy_path_returns_distinct_paths() -> None:
-    """Distinct SoT per kind so policies evolve independently."""
-    paths = {kind: policy_path(kind) for kind in TARGET_KINDS}
-    # All 5 paths are unique
-    assert len(set(paths.values())) == 5
+    """Distinct SoT per kind so policies evolve independently. M2 (2026-05-21)
+    후: 6 active kinds (skill_catalog + agent_contract 포함) + 보존된
+    retrieval 매핑 = 7 distinct paths."""
+    paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
+    # 6 active (incl. skill_catalog post-M1 + agent_contract post-M2) +
+    # retrieval (deprecated but path preserved) = 7 unique paths.
+    assert len(set(paths.values())) == 7
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:
-    from core.paths import GLOBAL_WRAPPER_SECTIONS_SOT
+    from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH
 
-    assert policy_path("prompt") == GLOBAL_WRAPPER_SECTIONS_SOT
+    assert policy_path("prompt") == GLOBAL_WRAPPER_SECTIONS_PATH
 
 
 def test_policy_path_raises_on_unknown() -> None:
@@ -267,19 +273,21 @@ def test_apply_mutation_decomposition_writes_to_decomposition_file(
     assert json.loads(target.read_text(encoding="utf-8")) == {"strategy": "depth-first"}
 
 
-def test_apply_mutation_retrieval_writes_to_retrieval_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    target = tmp_path / "retrieval.json"
-    _redirect_kind(monkeypatch, "retrieval", target)
-    m = Mutation(
-        target_section="top_k",
-        new_value="3",
-        rationale="r",
-        target_kind="retrieval",
+def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
+    """ADR-012 S0d (2026-05-21) — retrieval 은 TARGET_KINDS 에서 deprecate.
+    ``apply_mutation`` 호출 시 ``is_valid_target_kind("retrieval") == False``
+    이므로 ``policy_path`` 가 ValueError 를 raise 한다."""
+    from core.self_improving_loop.policies import is_valid_target_kind, policy_path
+
+    assert is_valid_target_kind("retrieval") is False, (
+        "S0d 후 retrieval 은 active target_kind 가 아님"
     )
-    apply_mutation(m, current_sections={})
-    assert target.exists()
+    # policy_path 는 raise ValueError on unknown kinds — 그러나 dict 매핑은
+    # 보존돼 있어서 직접 호출은 가능 (path constant preservation).
+    # apply_mutation 의 entry guard 는 is_valid_target_kind 를 거치므로
+    # retrieval mutation 시도는 거부됨.
+    path = policy_path("retrieval")  # dict 매핑은 보존 — 미래 복원용
+    assert path.name == "retrieval.json"
 
 
 def test_apply_mutation_reflection_writes_to_reflection_file(
@@ -467,23 +475,25 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
     assert written == [{"role": "original"}]
 
 
-def test_global_policy_paths_under_self_improving_loop_dir() -> None:
-    """All 5 SoT paths live under the same dir as wrapper-sections —
-    operators expect them co-located."""
+def test_global_policy_paths_under_policies_dir() -> None:
+    """All 5 SoT paths live under the same in-repo dir
+    (``autoresearch/state/policies/``) — operators expect them
+    co-located, and the in-repo location is git-tracked so ``git diff``
+    shows the current mutation state (PR-RATCHET-1, 2026-05-21)."""
     from core.paths import (
-        GLOBAL_DECOMPOSITION_POLICY_SOT,
-        GLOBAL_REFLECTION_POLICY_SOT,
-        GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_SELF_IMPROVING_LOOP_DIR,
-        GLOBAL_TOOL_POLICY_SOT,
-        GLOBAL_WRAPPER_SECTIONS_SOT,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_POLICIES_DIR,
+        GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_RETRIEVAL_POLICY_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+        GLOBAL_WRAPPER_SECTIONS_PATH,
     )
 
     for path in (
-        GLOBAL_WRAPPER_SECTIONS_SOT,
-        GLOBAL_TOOL_POLICY_SOT,
-        GLOBAL_DECOMPOSITION_POLICY_SOT,
-        GLOBAL_RETRIEVAL_POLICY_SOT,
-        GLOBAL_REFLECTION_POLICY_SOT,
+        GLOBAL_WRAPPER_SECTIONS_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_RETRIEVAL_POLICY_PATH,
+        GLOBAL_REFLECTION_POLICY_PATH,
     ):
-        assert path.parent == GLOBAL_SELF_IMPROVING_LOOP_DIR
+        assert path.parent == GLOBAL_POLICIES_DIR

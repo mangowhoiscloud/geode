@@ -93,6 +93,39 @@
     }
   },
   {
+    "name": "session_search",
+    "description": "Searches past conversation messages in the current project's session history via SQLite FTS5 index (Hermes Phase 1d). Returns matching messages with snippets and bm25 relevance scores. Use this to recall prior conversation context the LLM cannot remember from earlier turns — especially when the operator references something said in a previous session. Supports substring / partial-word recall via prefer_trigram=true for Korean / identifier fragments.",
+    "category": "memory",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query. Hyphens / dots / special chars are auto-sanitised; pass natural text or identifiers."
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Optional — restrict search to a single session by id. Omit to search across all sessions in the current project."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum results to return. Default 20.",
+          "default": 20
+        },
+        "prefer_trigram": {
+          "type": "boolean",
+          "description": "When true, query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. Default false.",
+          "default": false
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "memory_search",
     "description": "Searches memory for past analysis results, insights, and rules. Use when the user asks about previous analysis records or learned patterns.",
     "category": "memory",

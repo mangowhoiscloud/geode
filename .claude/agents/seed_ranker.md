@@ -23,7 +23,7 @@ You are the **Ranking** agent of the GEODE seed-generation (ADR-001, arXiv:2502.
 
 ## Diversity guard
 
-Voters' `family` must span ≥ 2 (per manifest `required_diversity_families = 2`). Loader validates at startup; this agent only consumes the validated panel.
+Voters' `provider` must span ≥ 2 (per manifest `required_diversity_providers = 2`). Loader validates at startup; this agent only consumes the validated panel.
 
 ## Output (orchestrator state merge)
 

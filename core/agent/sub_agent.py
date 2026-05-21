@@ -530,6 +530,17 @@ class SubAgentManager:
             if agent_ctx.get("model"):
                 worker_model = str(agent_ctx["model"])
 
+        # Sub-agent lineage (2026-05-21) — capture the calling parent
+        # loop's session_id from the ContextVar bound in
+        # ``AgenticLoop._emit_session_start_signals``. Falls back to
+        # empty for top-level / test contexts where no loop is bound.
+        # ``parent_session_key`` is the SubAgentManager construction
+        # kwarg (or empty when the manager was built at gateway
+        # startup without a parent context).
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        parent_uuid = get_session_id()
+
         return WorkerRequest(
             task_id=task.task_id,
             task_type=task.task_type,
@@ -545,6 +556,8 @@ class SubAgentManager:
             agent_name=agent_name,
             agent_system_prompt=agent_system_prompt,
             agent_allowed_tools=agent_allowed_tools,
+            parent_session_key=self._parent_session_key,
+            parent_session_id=parent_uuid,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:
@@ -561,6 +574,15 @@ class SubAgentManager:
         if agent_def is None:
             log.debug("Agent '%s' not found in registry", agent_name)
             return None
+        # ADR-012 M2 (2026-05-21) — agent-contracts.json policy override.
+        # role / system_prompt / tools 만 mutate 가능 (model 은 Tier 2).
+        # 정책 부재 시 agent_def 그대로 — no behavior change.
+        from core.agent.agent_contracts_policy import (
+            _load_agent_contracts_override,
+            apply_agent_contracts_policy,
+        )
+
+        agent_def = apply_agent_contracts_policy(agent_def, _load_agent_contracts_override())
         return {
             "agent_name": agent_def.name,
             "role": agent_def.role,

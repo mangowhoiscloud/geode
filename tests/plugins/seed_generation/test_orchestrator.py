@@ -15,7 +15,15 @@ from plugins.seed_generation.orchestrator import (
 class _StubAgent(BaseSeedAgent):
     def __init__(self, role: str, output: dict[str, object] | None = None) -> None:
         super().__init__(role=role, model="stub-model")
-        self._output = output or {}
+        if output is None:
+            # PR-COSCI-1: the orchestrator now aborts the phase loop when
+            # generator/proximity leave ``state.candidates`` empty. Stubs
+            # that don't override ``output`` default to a single placeholder
+            # candidate so realistic full-7-phase fixtures still flow past
+            # the abort gate. Tests that explicitly pass ``output={...}``
+            # (including ``candidates=[]``) keep their precise semantics.
+            output = {"candidates": [{"id": f"stub-{role}-c"}]} if role == "generator" else {}
+        self._output = output
         self.invocations = 0
 
     def execute(self, state: PipelineState) -> SeedAgentResult:

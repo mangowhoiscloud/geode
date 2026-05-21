@@ -43,22 +43,45 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "PETRI_17DIM_COHORT",
+    "SEED_COHORTS",
+    "TASK_COMPLETION_COHORT",
     "BaselineSnapshot",
     "MetaReviewSnapshot",
     "format_evidence_block",
     "format_priors_block",
     "load_baseline",
     "load_latest_meta_review",
+    "pick_regression_target",
     "pick_regression_target_dim",
 ]
+
+# ADR-012 S4 (2026-05-21) — seed cohort enum. A cohort labels what
+# *kind* of regression the next generation should attack:
+#
+# - ``petri_17dim`` (default, pre-S4 behaviour) — picks the worst dim
+#   from Petri's 17-dim universe (critical / auxiliary tiers). The
+#   resulting seed teaches Petri's auditor to elicit that vulnerability
+#   on the next audit.
+# - ``task_completion`` (S4 new) — picks the worst ux_means field
+#   (success_rate is the strongest signal; token_cost / latency /
+#   revert_ratio rotate in as success_rate saturates). The seed asks
+#   the agent to complete a task the prior generation failed.
+#
+# Picking happens through :func:`pick_regression_target`. The two-cohort
+# space is forward-compatible: adding ``admire_routing`` or
+# ``bench_capability`` is a single tuple entry + branch.
+PETRI_17DIM_COHORT = "petri_17dim"
+TASK_COMPLETION_COHORT = "task_completion"
+SEED_COHORTS: tuple[str, ...] = (PETRI_17DIM_COHORT, TASK_COMPLETION_COHORT)
 
 
 @dataclass(frozen=True)
 class BaselineSnapshot:
     """Frozen view of one ``autoresearch/state/baseline.json``.
 
-    Both fields are always present (empty dict when the underlying JSON
-    omits the key). Frozen so the snapshot is safe to pass through
+    All five fields are always present (empty dict when the underlying
+    JSON omits the key). Frozen so the snapshot is safe to pass through
     sub-agent prompt builders without aliasing risk.
 
     G2.fix (2026-05-20) — the ``evidence`` field was removed. The
@@ -66,10 +89,20 @@ class BaselineSnapshot:
     per-dim explanation/highlights live in petri's ``.eval`` archive
     (``~/.geode/petri/logs/latest.eval``) and are extracted on demand
     by :func:`format_evidence_block`.
+
+    S3 (2026-05-21, ADR-012) — three additional axis aggregate dicts
+    parallel ``dim_means`` so the joint ratchet can promote / regress
+    across all four fitness axes (Petri 17-dim + ux + admire + bench).
+    Pre-S3 ``baseline.json`` payloads omit them, so the loader presents
+    them as empty dicts; an empty axis is treated as "no cross-axis
+    lever yet" by downstream consumers.
     """
 
     dim_means: dict[str, float] = field(default_factory=dict)
     dim_stderr: dict[str, float] = field(default_factory=dict)
+    ux_means: dict[str, float] = field(default_factory=dict)
+    admire_means: dict[str, float] = field(default_factory=dict)
+    bench_means: dict[str, float] = field(default_factory=dict)
 
 
 def _default_baseline_path() -> Path | None:
@@ -146,7 +179,19 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
     # G2.fix (2026-05-20) — evidence cache removed from baseline.json.
     # Petri's ``.eval`` is the SoT; readers go through
     # ``format_evidence_block`` which extracts on demand.
-    return BaselineSnapshot(dim_means=dim_means, dim_stderr=dim_stderr)
+    # S3 (2026-05-21) — the 3 additional axes are graceful per-axis
+    # (each defaults to ``{}`` when absent / malformed) so a single
+    # broken axis can't invalidate the dim baseline.
+    ux_means = _coerce_dim_dict(baseline_payload.get("ux_means"))
+    admire_means = _coerce_dim_dict(baseline_payload.get("admire_means"))
+    bench_means = _coerce_dim_dict(baseline_payload.get("bench_means"))
+    return BaselineSnapshot(
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        ux_means=ux_means,
+        admire_means=admire_means,
+        bench_means=bench_means,
+    )
 
 
 def _coerce_dim_dict(raw: Any) -> dict[str, float]:
@@ -250,6 +295,44 @@ def pick_regression_target_dim(
 
     top_value = max(candidates.values())
     return min((d for d, v in candidates.items() if v == top_value), default=None)
+
+
+def pick_regression_target(
+    snapshot: BaselineSnapshot,
+    cohort: str = PETRI_17DIM_COHORT,
+    *,
+    prefer_critical: bool = True,
+) -> str | None:
+    """Return the worst-regressed signal name for ``cohort`` (ADR-012 S4).
+
+    Cohort-aware target picker:
+
+    - ``petri_17dim`` (default) — delegates to
+      :func:`pick_regression_target_dim` (worst dim from the operational
+      Petri tier). ``prefer_critical`` is honoured.
+    - ``task_completion`` — picks the worst ux_means field. The ux axis
+      stores normalized-higher-is-better signals (S1 contract), so the
+      *lowest* value is the worst. ``prefer_critical`` is ignored because
+      ux fields don't carry a tier (each is treated equally; the loop's
+      weight schedule lives in :data:`autoresearch.ux_means.UX_DIM_WEIGHTS`).
+
+    Returns ``None`` when the relevant axis on the snapshot is empty —
+    the caller then prompts for an explicit target or falls back to
+    cohort-specific defaults (e.g. ``"success_rate"`` for task_completion).
+
+    Unknown cohort raises ``ValueError`` — the cohort space is small and
+    enumerated, so a typo is more likely a bug than a forward-compat
+    expectation.
+    """
+    if cohort == PETRI_17DIM_COHORT:
+        return pick_regression_target_dim(snapshot, prefer_critical=prefer_critical)
+    if cohort == TASK_COMPLETION_COHORT:
+        candidates = snapshot.ux_means
+        if not candidates:
+            return None
+        bottom = min(candidates.values())
+        return min((k for k, v in candidates.items() if v == bottom), default=None)
+    raise ValueError(f"unknown seed-generation cohort {cohort!r}; expected one of {SEED_COHORTS}")
 
 
 LATEST_PETRI_EVAL_PATH = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"

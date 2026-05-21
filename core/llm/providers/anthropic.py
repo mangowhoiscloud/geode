@@ -718,6 +718,16 @@ class ClaudeAgenticAdapter:
         if self._client is None:
             self._client = get_async_anthropic_client(api_key)
 
+        # PR-M4.4 (2026-05-21) — 4-slot in-context wiring. No-op fast
+        # path inside ``apply_in_context_slots`` when no SoT is
+        # configured (the GEODE default), so this call adds zero
+        # overhead for operators who have not opted in. Per-slot
+        # graceful: any reader/apply failure is logged at DEBUG and
+        # the original ``messages`` / ``system`` flow through unchanged.
+        from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+
+        messages, system = apply_in_context_slots(messages, system=system)
+
         # GAP-T1 — normalize cross-provider tool_choice into the Anthropic
         # dict shape ({"type": "auto"|"any"|"tool"|"none", "name"?: ...}).
         from core.llm.tool_choice import normalize as _normalize_tool_choice
@@ -862,7 +872,18 @@ class ClaudeAgenticAdapter:
             # Combined with the system block above, this fills up to 4 of
             # Anthropic's cache_control slots and caches the long history
             # window in multi-turn agentic loops.
-            cached_messages = apply_messages_cache_control(messages)
+            # ADR-013 T5 (2026-05-21) — cache-policy.json mutation SoT.
+            # Default 3 (Anthropic cap minus 1 for system). Policy 가 부재면
+            # default 그대로 (no behavior change).
+            from core.llm.cache_policy import (
+                _load_cache_policy_override,
+                apply_cache_policy_breakpoints,
+            )
+
+            n_breakpoints = apply_cache_policy_breakpoints(
+                MAX_MESSAGE_CACHE_BREAKPOINTS, _load_cache_policy_override()
+            )
+            cached_messages = apply_messages_cache_control(messages, n_breakpoints=n_breakpoints)
 
             create_kwargs: dict[str, Any] = {
                 "model": m,

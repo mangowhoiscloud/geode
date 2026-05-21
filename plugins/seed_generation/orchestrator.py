@@ -72,6 +72,9 @@ def _state_to_json(state: PipelineState) -> str:
     payload: dict[str, Any] = {
         "run_id": state.run_id,
         "target_dim": state.target_dim,
+        # ADR-012 S4 (2026-05-21) — persist cohort so a state.json
+        # replay re-hydrates the same picker semantics.
+        "cohort": state.cohort,
         "gen_tag": state.gen_tag,
         "candidates_requested": state.candidates_requested,
         "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,
@@ -145,6 +148,12 @@ class PipelineState:
     run_id: str
     target_dim: str
     gen_tag: str
+    # ADR-012 S4 (2026-05-21) — seed cohort label. Default preserves
+    # the pre-S4 contract (Petri 17-dim). Switching to ``"task_completion"``
+    # tells the picker + downstream agents to interpret ``target_dim``
+    # as a ux_means field (e.g. ``"success_rate"``).
+    # See :mod:`plugins.seed_generation.baseline_reader.SEED_COHORTS`.
+    cohort: str = "petri_17dim"
     candidates_requested: int = 15
     pool_path_in: Path | None = None
     pool_path_out: Path | None = None
@@ -286,6 +295,37 @@ class Pipeline:
         started_at = time.time()
         for phase in _PHASE_ORDER:
             self._run_phase(phase)
+            # PR-COSCI-1 (2026-05-21) — abort early when the
+            # candidates pool is empty after a phase that should
+            # have populated or filtered it. Pre-fix the
+            # downstream phases (critic / pilot / ranker) would
+            # silently run with zero candidates and emit empty
+            # ``elo_ratings`` / ``pilot_scores`` / ``survivors``,
+            # making the operator chase a "successful but empty
+            # run" rather than the actual root cause. Phases
+            # AFTER generator must see candidates; ``meta_reviewer``
+            # is the only exception (operates on the run record,
+            # not the candidates pool).
+            if phase in {"generator", "proximity"} and not self.state.candidates:
+                log.warning(
+                    "seed-generation aborting: phase %r left state.candidates empty "
+                    "(target_dim=%s, run_id=%s). Downstream phases would emit "
+                    "empty survivors/elo_ratings — abort early so the operator "
+                    "sees the root cause rather than a 'successful but empty' run.",
+                    phase,
+                    self.state.target_dim,
+                    self.state.run_id,
+                )
+                _emit_orchestrator_event(
+                    "empty_candidates_abort",
+                    level="error",
+                    payload={
+                        "after_phase": phase,
+                        "target_dim": self.state.target_dim,
+                        "run_id": self.state.run_id,
+                    },
+                )
+                break
         # P0b — cross-loop handoff runs FIRST so ``state.pool_path_out``
         # is stamped before ``_persist_state`` snapshots state.json.
         # Otherwise the offload would freeze a stale ``null`` for
