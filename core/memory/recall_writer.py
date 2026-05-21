@@ -156,13 +156,14 @@ def write_recall_entry(
         )
     safe_name = _escape_frontmatter_value(name)
     safe_desc = _escape_frontmatter_value(description)
+    safe_type = _escape_frontmatter_value(type_label)
     file_path = target_dir / f"{slug}.md"
     if file_path.exists() and not overwrite:
         log.debug("recall_writer: %s already exists; skip (overwrite=False)", file_path)
         return None
     content = (
         f"---\nname: {safe_name}\ndescription: {safe_desc}\n"
-        f"metadata:\n  type: {type_label}\n---\n\n{body.rstrip()}\n"
+        f"metadata:\n  type: {safe_type}\n---\n\n{body.rstrip()}\n"
     )
     try:
         target_dir.mkdir(parents=True, exist_ok=True)

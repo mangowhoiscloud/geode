@@ -191,6 +191,37 @@ def test_write_unknown_type_label_still_writes(recall_dir: Path) -> None:
     assert "type: custom_operator_type" in path.read_text(encoding="utf-8")
 
 
+def test_write_escapes_newlines_in_type_label(recall_dir: Path) -> None:
+    """type_label with embedded newlines must NOT inject frontmatter keys.
+
+    Codex MCP catch (PR-OL-C3 fix-up). Without escaping,
+    ``type_label="user\\nname: hijack"`` would write::
+
+        metadata:
+          type: user
+        name: hijack
+        ---
+
+    and the reader would override the original ``name`` field.
+    The escape collapses the newline so the injected key never reaches
+    the reader's parser.
+    """
+    from core.memory.recall_writer import write_recall_entry
+    from core.self_improving_loop.memory_recall import load_memory_entries
+
+    write_recall_entry(
+        name="original-name",
+        description="d",
+        body="b",
+        type_label="user\nname: hijack",
+    )
+    entries = load_memory_entries()
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.name == "original-name"
+    assert "hijack" not in entry.name
+
+
 # list_recall_entries -------------------------------------------------------
 
 
