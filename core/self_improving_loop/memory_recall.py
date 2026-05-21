@@ -190,7 +190,15 @@ def format_memory_block(entries: list[MemoryEntry]) -> str:
     lines = ["<memory-recall>"]
     for entry in entries:
         type_tag = f"[{entry.type}]" if entry.type else "[memory]"
-        desc = entry.description or entry.body.splitlines()[0] if entry.body else ""
+        # Explicit branches — earlier ``desc = a or b.splitlines()[0] if b else ""``
+        # had wrong precedence (ternary binds looser than ``or``), dropping a
+        # valid description when ``body == ""``. (Codex MCP catch.)
+        if entry.description:
+            desc = entry.description
+        elif entry.body:
+            desc = entry.body.splitlines()[0]
+        else:
+            desc = ""
         lines.append(f"- {type_tag} {desc}".rstrip())
     lines.append("</memory-recall>")
     return "\n".join(lines)

@@ -221,6 +221,46 @@ def test_format_empty_returns_empty_string() -> None:
     assert format_memory_block([]) == ""
 
 
+def test_format_preserves_description_when_body_empty() -> None:
+    """Regression — earlier ``desc = a or b.splitlines()[0] if b else ""`` had
+    wrong precedence (ternary binds looser than ``or``), dropping a valid
+    description when ``body == ""``. Pin the explicit-branches form."""
+    from core.self_improving_loop.memory_recall import (
+        MemoryEntry,
+        format_memory_block,
+    )
+
+    entry = MemoryEntry(
+        name="desc-only",
+        type="feedback",
+        description="kept even though body is empty",
+        body="",
+        mtime=0.0,
+    )
+    block = format_memory_block([entry])
+    assert "kept even though body is empty" in block
+    assert "[feedback]" in block
+
+
+def test_format_falls_back_to_body_first_line_when_no_description() -> None:
+    """No description but non-empty body → first body line surfaces."""
+    from core.self_improving_loop.memory_recall import (
+        MemoryEntry,
+        format_memory_block,
+    )
+
+    entry = MemoryEntry(
+        name="body-only",
+        type="project",
+        description="",
+        body="first body line\nsecond ignored",
+        mtime=0.0,
+    )
+    block = format_memory_block([entry])
+    assert "first body line" in block
+    assert "second ignored" not in block
+
+
 def test_format_renders_block_with_type_tags(recall_dir: Path) -> None:
     from core.self_improving_loop.memory_recall import (
         format_memory_block,
