@@ -29,9 +29,7 @@ def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     sot = tmp_path / "skill-catalog.json"
     operator_local = tmp_path / "operator-local-skill-catalog.json"
     monkeypatch.setattr(skill_catalog_policy, "_SKILL_CATALOG_SOT_PATH", sot)
-    monkeypatch.setattr(
-        skill_catalog_policy, "_OPERATOR_LOCAL_SKILL_CATALOG_PATH", operator_local
-    )
+    monkeypatch.setattr(skill_catalog_policy, "_OPERATOR_LOCAL_SKILL_CATALOG_PATH", operator_local)
     monkeypatch.delenv("GEODE_SKILL_CATALOG_OVERRIDE", raising=False)
     monkeypatch.delenv("GEODE_SKILL_CATALOG_STRICT", raising=False)
     yield sot
@@ -44,9 +42,7 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 def _make_registry(*skills: tuple[str, str, bool]) -> SkillRegistry:
     reg = SkillRegistry()
     for name, desc, user_invocable in skills:
-        reg.register(
-            SkillDefinition(name=name, description=desc, user_invocable=user_invocable)
-        )
+        reg.register(SkillDefinition(name=name, description=desc, user_invocable=user_invocable))
     return reg
 
 
@@ -83,9 +79,7 @@ def test_load_unknown_field_ignored(isolated_sot: Path) -> None:
     assert _load_skill_catalog_override() == {"sk": {"description": "x"}}
 
 
-def test_strict_env_var_raises_on_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_SKILL_CATALOG_OVERRIDE", str(tmp_path / "nope.json"))
     monkeypatch.setenv("GEODE_SKILL_CATALOG_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_SKILL_CATALOG_OVERRIDE"):
@@ -102,9 +96,7 @@ def test_env_var_without_strict_is_graceful(
 
 def test_operator_local_layer_priority(isolated_sot: Path) -> None:
     operator_local = isolated_sot.parent / "operator-local-skill-catalog.json"
-    operator_local.write_text(
-        json.dumps({"sk": {"description": "from-ops"}}), encoding="utf-8"
-    )
+    operator_local.write_text(json.dumps({"sk": {"description": "from-ops"}}), encoding="utf-8")
     _write(isolated_sot, {"sk": {"description": "from-repo"}})
     assert _load_skill_catalog_override() == {"sk": {"description": "from-ops"}}
 
@@ -113,16 +105,23 @@ def test_operator_local_layer_priority(isolated_sot: Path) -> None:
 
 
 def test_apply_none_delegates_to_registry() -> None:
-    reg = _make_registry(("sk1", "default desc", True))
+    """No behavior change contract — exact XML equality vs registry's own renderer."""
+    reg = _make_registry(
+        ("sk1", "default desc", True),
+        ("sk2", "another desc", False),
+    )
     out = apply_skill_catalog_policy(reg, None)
-    assert "default desc" in out
-    assert "sk1" in out
+    assert out == reg.get_context_block()
 
 
 def test_apply_empty_dict_delegates_to_registry() -> None:
-    reg = _make_registry(("sk1", "default desc", True))
+    """Empty dict same as None — exact XML equality (Codex MCP catch, PR #1418)."""
+    reg = _make_registry(
+        ("sk1", "default desc", True),
+        ("sk2", "another desc", False),
+    )
     out = apply_skill_catalog_policy(reg, {})
-    assert "default desc" in out
+    assert out == reg.get_context_block()
 
 
 def test_apply_description_override() -> None:
@@ -172,9 +171,7 @@ def test_apply_respects_max_chars_truncation() -> None:
 def test_apply_xml_escapes_special_chars() -> None:
     """XML escape (S0b deep-copy 식 안전성) — `<` 등이 raw 로 새지 않음."""
     reg = _make_registry(("sk1", "default", True))
-    out = apply_skill_catalog_policy(
-        reg, {"sk1": {"description": "has <html> & quotes \""}}
-    )
+    out = apply_skill_catalog_policy(reg, {"sk1": {"description": 'has <html> & quotes "'}})
     assert "&lt;html&gt;" in out
     assert "&amp;" in out
 

@@ -99,9 +99,7 @@ def _strict_load(path: Path) -> dict[str, dict[str, Any]]:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(
-            f"{_SKILL_CATALOG_OVERRIDE_ENV}={path} load failed: {exc}"
-        ) from exc
+        raise RuntimeError(f"{_SKILL_CATALOG_OVERRIDE_ENV}={path} load failed: {exc}") from exc
     _validate_schema(data, path)
     return _coerce(data)
 
@@ -130,18 +128,14 @@ def _validate_schema(data: Any, path: Path) -> None:
     for skill_name, entry in data.items():
         if not isinstance(skill_name, str):
             type_name = type(skill_name).__name__
-            raise RuntimeError(
-                f"skill-catalog at {path} key must be str, got {type_name}"
-            )
+            raise RuntimeError(f"skill-catalog at {path} key must be str, got {type_name}")
         if not isinstance(entry, dict):
             type_name = type(entry).__name__
             raise RuntimeError(
                 f"skill-catalog at {path}[{skill_name!r}] must be dict, got {type_name}"
             )
         if _FIELD_DESCRIPTION in entry and not isinstance(entry[_FIELD_DESCRIPTION], str):
-            raise RuntimeError(
-                f"skill-catalog at {path}[{skill_name!r}].description must be str"
-            )
+            raise RuntimeError(f"skill-catalog at {path}[{skill_name!r}].description must be str")
         if _FIELD_USER_INVOCABLE in entry and not isinstance(entry[_FIELD_USER_INVOCABLE], bool):
             raise RuntimeError(
                 f"skill-catalog at {path}[{skill_name!r}].user_invocable must be bool"
