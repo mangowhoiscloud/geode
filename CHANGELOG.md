@@ -49,6 +49,24 @@ functional change.
 
 ### Added
 
+- **PR-S4 — task-completion seed cohort (ADR-012).** seed-generation 에
+  cohort 개념 도입 — 어떤 *axis* 의 regression 을 다음 generation 이 공격할지
+  결정. `petri_17dim` (default, BC) 와 `task_completion` (S4 신설) 2 cohort
+  로 시작, 추후 `admire_routing` / `bench_capability` 확장 forward-compat.
+  **`plugins/seed_generation/baseline_reader.py`**: (a) 3 신규 constant
+  `PETRI_17DIM_COHORT` / `TASK_COMPLETION_COHORT` / `SEED_COHORTS` export,
+  (b) 신규 picker `pick_regression_target(snapshot, cohort)` — cohort 별
+  signal direction 처리: petri 는 MAX (높을수록 concerning, rubric
+  invariant), task_completion 은 MIN (ux_means 의 normalized-higher-is-better
+  contract 따라 lowest 가 worst). Tie-break alphabetical. Unknown cohort
+  → `ValueError`. **`plugins/seed_generation/orchestrator.py:PipelineState`**:
+  `cohort: str = "petri_17dim"` field 추가 (BC). **기존
+  `pick_regression_target_dim` unchanged** — pre-S4 caller 그대로.
+  **13 invariant test** — cohort enum 3 + petri picker 2 +
+  task_completion picker 3 + validation 2 + BC 2 + export 1.
+  Generator/critic/evolver 의 cohort-specific prompt + CLI `--cohort`
+  flag 은 S4b 후속 PR (이 PR 은 picker + state schema 만).
+
 - **PR-S3 — 공동 ratchet: 4축 baseline.json (ADR-012).** `baseline.json`
   schema 가 pre-S3 `{dim_means, dim_stderr}` 에서 S3 의 **5-field 4축
   schema** `{dim_means, dim_stderr, ux_means, admire_means, bench_means}`

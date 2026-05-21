@@ -72,6 +72,9 @@ def _state_to_json(state: PipelineState) -> str:
     payload: dict[str, Any] = {
         "run_id": state.run_id,
         "target_dim": state.target_dim,
+        # ADR-012 S4 (2026-05-21) — persist cohort so a state.json
+        # replay re-hydrates the same picker semantics.
+        "cohort": state.cohort,
         "gen_tag": state.gen_tag,
         "candidates_requested": state.candidates_requested,
         "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,
@@ -145,6 +148,12 @@ class PipelineState:
     run_id: str
     target_dim: str
     gen_tag: str
+    # ADR-012 S4 (2026-05-21) — seed cohort label. Default preserves
+    # the pre-S4 contract (Petri 17-dim). Switching to ``"task_completion"``
+    # tells the picker + downstream agents to interpret ``target_dim``
+    # as a ux_means field (e.g. ``"success_rate"``).
+    # See :mod:`plugins.seed_generation.baseline_reader.SEED_COHORTS`.
+    cohort: str = "petri_17dim"
     candidates_requested: int = 15
     pool_path_in: Path | None = None
     pool_path_out: Path | None = None
