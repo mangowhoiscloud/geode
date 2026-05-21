@@ -21,9 +21,15 @@ from core.agent import decomposition_policy
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Isolate all 3 SoT layers to tmp_path."""
     sot = tmp_path / "decomposition.json"
+    operator_local = tmp_path / "operator-local-decomposition.json"
     monkeypatch.setattr(decomposition_policy, "_DECOMPOSITION_POLICY_SOT_PATH", sot)
+    monkeypatch.setattr(
+        decomposition_policy, "_OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH", operator_local
+    )
     monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", raising=False)
+    monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_STRICT", raising=False)
     yield sot
 
 
@@ -68,7 +74,9 @@ def test_load_empty_string_dropped(isolated_sot: Path) -> None:
 
 
 def test_strict_load_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """audit subprocess (``_OVERRIDE`` + ``_STRICT=1``) — missing → RuntimeError."""
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
+    monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_DECOMPOSITION_POLICY_OVERRIDE"):
         _load_decomposition_policy_override()
 
@@ -77,8 +85,26 @@ def test_strict_load_raises_on_type(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"prefix": ["list"]}), encoding="utf-8")
     monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(bad))
+    monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="prefix"):
         _load_decomposition_policy_override()
+
+
+def test_env_var_without_strict_flag_is_graceful_on_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-BACKFILL-SOT (2026-05-21) — env var alone treats env path graceful."""
+    monkeypatch.setenv("GEODE_DECOMPOSITION_POLICY_OVERRIDE", str(tmp_path / "nope.json"))
+    monkeypatch.delenv("GEODE_DECOMPOSITION_POLICY_STRICT", raising=False)
+    assert _load_decomposition_policy_override() is None
+
+
+def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
+    """3-layer chain — operator-local > in-repo when both present."""
+    operator_local = isolated_sot.parent / "operator-local-decomposition.json"
+    operator_local.write_text(json.dumps({"prefix": "from-ops"}), encoding="utf-8")
+    _write(isolated_sot, {"prefix": "from-repo"})
+    assert _load_decomposition_policy_override() == {"prefix": "from-ops"}
 
 
 # Apply -----------------------------------------------------------------------

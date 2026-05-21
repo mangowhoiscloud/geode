@@ -21,10 +21,13 @@ from core.agent import reflection_policy
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Monkeypatch ``_REFLECTION_POLICY_SOT_PATH`` to tmp_path."""
+    """Isolate all 3 SoT layers (env / operator-local / in-repo) to tmp_path."""
     sot = tmp_path / "reflection.json"
+    operator_local = tmp_path / "operator-local-reflection.json"
     monkeypatch.setattr(reflection_policy, "_REFLECTION_POLICY_SOT_PATH", sot)
+    monkeypatch.setattr(reflection_policy, "_OPERATOR_LOCAL_REFLECTION_POLICY_PATH", operator_local)
     monkeypatch.delenv("GEODE_REFLECTION_POLICY_OVERRIDE", raising=False)
+    monkeypatch.delenv("GEODE_REFLECTION_POLICY_STRICT", raising=False)
     yield sot
 
 
@@ -81,8 +84,10 @@ def test_load_empty_string_fields_dropped(isolated_sot: Path) -> None:
 def test_strict_load_via_env_var_raises_on_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """audit subprocess (``_OVERRIDE`` + ``_STRICT=1``) — missing → RuntimeError."""
     missing = tmp_path / "nope.json"
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(missing))
+    monkeypatch.setenv("GEODE_REFLECTION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_REFLECTION_POLICY_OVERRIDE"):
         _load_reflection_policy_override()
 
@@ -93,8 +98,27 @@ def test_strict_load_via_env_var_raises_on_type_violation(
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"description": ["list", "not", "str"]}), encoding="utf-8")
     monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(bad))
+    monkeypatch.setenv("GEODE_REFLECTION_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="description"):
         _load_reflection_policy_override()
+
+
+def test_env_var_without_strict_flag_is_graceful_on_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-BACKFILL-SOT (2026-05-21) — env var alone treats env path graceful."""
+    missing = tmp_path / "nope.json"
+    monkeypatch.setenv("GEODE_REFLECTION_POLICY_OVERRIDE", str(missing))
+    monkeypatch.delenv("GEODE_REFLECTION_POLICY_STRICT", raising=False)
+    assert _load_reflection_policy_override() is None
+
+
+def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
+    """3-layer chain — operator-local > in-repo when both present."""
+    operator_local = isolated_sot.parent / "operator-local-reflection.json"
+    operator_local.write_text(json.dumps({"system_prompt": "from-ops"}), encoding="utf-8")
+    _write(isolated_sot, {"system_prompt": "from-repo"})
+    assert _load_reflection_policy_override() == {"system_prompt": "from-ops"}
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-BACKFILL-SOT — Operator-local SoT layer + env-as-SoT for 4 mutation
+  surface readers (post-PR-T1 #1416 fix).** PR #1416 의 Codex MCP FAIL #5
+  (CHANGELOG/PR-body parity 위반 — `~/.geode/self-improving-loop/...`
+  operator-local fallback 을 주장했으나 reader 코드 부재) 의 근원 GAP 을
+  메움. 4 reader (tool_policy / reflection / decomposition / tool_descriptions)
+  가 **3-layer SoT chain** 으로 전환 — 운영자 가 env 만 set 해도 SoT 처럼
+  graceful 로 다룰 수 있고, audit subprocess 는 명시적 STRICT flag opt-in.
+  **신규 helper** `core/self_improving_loop/sot_resolution.py` —
+  `resolve_sot(env_var, operator_local, in_repo) → SoTSelection(path,
+  strict) | None` 단일 함수, 4 reader 가 공유. `<X>_STRICT` env name 은
+  `<X>_OVERRIDE` 에서 `removesuffix("_OVERRIDE") + "_STRICT"` 로 자동
+  파생 — per-reader 등록 불필요. **resolution order**: (1) env var
+  `GEODE_<X>_OVERRIDE` — `GEODE_<X>_STRICT=1` 동반 시 strict-fail, 그렇지
+  않으면 graceful (no fall-through, env 가 authoritative). (2)
+  operator-local `~/.geode/self-improving-loop/<file>.json` (graceful).
+  (3) in-repo `autoresearch/state/policies/<file>.json` (graceful,
+  ratchet-tracked). (4) `None` → no-op. **`core/paths.py`** 에 4
+  `OPERATOR_LOCAL_*_PATH` 상수 추가 (`GLOBAL_SELF_IMPROVING_LOOP_DIR /
+  <file>.json`). **`autoresearch/train.py`** 의 audit subprocess 가 4
+  env 모두 `_OVERRIDE` + `_STRICT=1` 동반 set — 기존 fail-fast 보존.
+  4 reader 의 docstring 에서 stale `operator-local` 주장 (S0a/b/c 의
+  Codex MCP catch 와 동일 inheritance) 도 함께 정합화 — 실제 3-layer
+  chain 으로 갱신. 27 신규 invariant test (shared resolver 8 + 4 reader 별
+  graceful/priority 19) + 5 기존 strict test 갱신 (`_STRICT=1` 명시).
+  Read-write parity 보존 — `apply_*_policy` 의 deep-copy 패턴 (S0b)
+  여전히 유효.
+
 ### Changed
 
 - **PR-S6-UPDATE — `bench_means` schema 2026 frontier 갱신 (4 outdated → 7).**

@@ -22,11 +22,17 @@
 는 mutate 대상이 아님 — record_reflection 의 typed payload contract 는
 유지 (`hypotheses` / `confidence` / `next_action_hint`).
 
-**Resolution order** (`wrapper-sections.json` + `tool_policy.py` 와 동일):
+**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
+:mod:`core.self_improving_loop.sot_resolution`):
 
-1. ``GEODE_REFLECTION_POLICY_OVERRIDE`` env var — audit subprocess, strict.
-2. ``~/.geode/self-improving-loop/reflection.json`` — daily-run, graceful.
-3. ``None`` — no-op.
+1. ``GEODE_REFLECTION_POLICY_OVERRIDE`` env var — explicit override.
+
+   - With ``GEODE_REFLECTION_POLICY_STRICT=1`` (audit subprocess): strict.
+   - Without strict flag (operator daily): graceful (no fall-through).
+
+2. ``~/.geode/self-improving-loop/reflection.json`` — operator-local, graceful.
+3. ``autoresearch/state/policies/reflection.json`` — in-repo, graceful.
+4. ``None`` — no-op.
 
 **Read-Write parity** (S0a Codex MCP lesson): ``write_policy()`` 가
 ``dict[str, str]`` 만 직렬화하므로 reader 는 string payload 그대로 수용.
@@ -39,19 +45,23 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_REFLECTION_POLICY_PATH
+from core.paths import GLOBAL_REFLECTION_POLICY_PATH, OPERATOR_LOCAL_REFLECTION_POLICY_PATH
+from core.self_improving_loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
 _REFLECTION_POLICY_OVERRIDE_ENV = "GEODE_REFLECTION_POLICY_OVERRIDE"
 
 _REFLECTION_POLICY_SOT_PATH = GLOBAL_REFLECTION_POLICY_PATH
-"""Cross-process SoT path (S0b, 2026-05-21). module-local alias 로 테스트
-가 monkeypatch 가능 (path-literal guard contract)."""
+"""Cross-process in-repo SoT path (S0b, 2026-05-21). module-local alias 로
+테스트가 monkeypatch 가능 (path-literal guard contract)."""
+
+_OPERATOR_LOCAL_REFLECTION_POLICY_PATH = OPERATOR_LOCAL_REFLECTION_POLICY_PATH
+"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
+alias kept for monkeypatch in tests."""
 
 
 _FIELD_DESCRIPTION = "description"
@@ -60,20 +70,20 @@ _ALL_FIELDS = frozenset({_FIELD_DESCRIPTION, _FIELD_SYSTEM_PROMPT})
 
 
 def _load_reflection_policy_override() -> dict[str, str] | None:
-    """Return active reflection policy, or ``None`` when no override applies.
+    """Return active reflection policy, or ``None`` when no SoT applies.
 
-    Resolution order:
-
-    1. ``GEODE_REFLECTION_POLICY_OVERRIDE`` env var (audit subprocess) — strict.
-    2. ``~/.geode/self-improving-loop/reflection.json`` (daily run) — graceful.
-    3. ``None`` — no policy.
+    Resolution order — see module docstring (3-layer chain).
     """
-    override_path = os.environ.get(_REFLECTION_POLICY_OVERRIDE_ENV)
-    if override_path:
-        return _strict_load(Path(override_path))
-    if _REFLECTION_POLICY_SOT_PATH.is_file():
-        return _graceful_load(_REFLECTION_POLICY_SOT_PATH)
-    return None
+    selection = resolve_sot(
+        env_var=_REFLECTION_POLICY_OVERRIDE_ENV,
+        operator_local=_OPERATOR_LOCAL_REFLECTION_POLICY_PATH,
+        in_repo=_REFLECTION_POLICY_SOT_PATH,
+    )
+    if selection is None:
+        return None
+    if selection.strict:
+        return _strict_load(selection.path)
+    return _graceful_load(selection.path)
 
 
 def _strict_load(path: Path) -> dict[str, str]:
