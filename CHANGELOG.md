@@ -49,6 +49,30 @@ functional change.
 
 ### Added
 
+- **PR-S5 — 4종 in-context slot 명시적 schema (ADR-012).** GEODE 의
+  agent 가 매 turn 마다 system prompt + tool messages 에 주입하는
+  dynamic context 의 **4 canonical slot category** 를 explicit JSON
+  schema 로 표면화. M4.4 후속 PR 이 이 schema 를 inference path 에서
+  소비할 wiring 을 담당; 본 PR 은 schema + reader + validation 만
+  (no inference wiring — explicit 의도). **4 slot**: `exemplars`
+  (Elo top-K), `memory_recall` (~/.geode/memory/), `rubric_excerpts`
+  (Petri worst-dim rubric), `tool_hints` (RunLog 의 tool-specific 힌트).
+  **5-element 패턴**: SoT `autoresearch/state/policies/in-context-slots.json`
+  + operator-local / `GLOBAL_IN_CONTEXT_SLOTS_PATH` +
+  `OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH` 추가 /
+  `core/self_improving_loop/in_context_slots.py` reader
+  (`_load_in_context_slots_override` + frozen `InContextSlot`
+  dataclass) / inference entry M4.4 deferred /
+  `GEODE_IN_CONTEXT_SLOTS_OVERRIDE` + `_STRICT=1` env pair. Per-slot
+  `injection_point` 은 enum (`system_prompt` / `tool_descriptions`)
+  — mutator 의 typo 가 silent injection 으로 가지 않도록 graceful
+  drop. `_coerce` 가 unknown slot + invalid max_entries (negative /
+  bool) + unknown injection_point 셋 다 per-axis graceful drop.
+  **20 invariant test** — canonical schema 4 + loader 11 + path 1 +
+  env wiring 1 + ALIVE marker 1 + frozen dataclass 1 + operator-local
+  priority 1. Frontier: Claude Code / Codex CLI 의 hardcoded layout
+  을 mutator-optimizable JSON schema 로 표면화.
+
 - **PR-S4 — task-completion seed cohort (ADR-012).** seed-generation 에
   cohort 개념 도입 — 어떤 *axis* 의 regression 을 다음 generation 이 공격할지
   결정. `petri_17dim` (default, BC) 와 `task_completion` (S4 신설) 2 cohort
