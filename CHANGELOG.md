@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-OL-A3 — `geode outer-bundle` viewer (Tier 1 closure).**
+  OL-A1.5 (#1446) 가 `auto_trigger_history.jsonl` 을 신규 산출하면서
+  outer-loop 가 만드는 3 streams (`auto_trigger_history.jsonl` /
+  `mutations.jsonl` / `baseline.json`) 가 모두 매겨졌는데, 운영자가 셋
+  중 어느 파일을 grep 해야 할지 모르는 surface gap 잔존 — 본 PR 가
+  closure. **신규 모듈** `core/cli/outer_bundle.py` (~280 LOC) — Typer
+  command `geode outer-bundle [--limit N] [--json]` 가 3 source 를
+  chronologically merge → Rich table (default) 또는 JSONL (--json) 출력.
+  `BundleEvent` dataclass (`ts: float`, `source: str`, `detail: str`)
+  + `load_bundle_events()` public loader + `_parse_iso_or_epoch` (float/
+  ISO-8601 dual-format) + `_tail_jsonl` (graceful partial-line skip).
+  Source discriminator 3-값: `auto_trigger` / `mutation` / `baseline`
+  (마지막은 synthetic 1-row from current promoted baseline.json). 누락
+  파일 → empty bundle (raise 없음). **CLI 등록**: `core/cli/__init__.py`
+  의 `app.command(name="outer-bundle")` 로 entry point. **15 invariant
+  test** (`tests/test_ol_a3_outer_bundle.py`) — BundleEvent round-trip
+  + parse helpers x3 (float / ISO / garbage) + _tail_jsonl x3 (last-N /
+  malformed skip / missing path) + load_bundle_events x5 (auto-trigger
+  only / mutation row / baseline synthetic / 3-source chronological
+  sort / all-missing empty) + CLI x3 (Typer registration / no-data
+  callable / --json output). Quality gates clean (ruff + ruff format
+  --check + mypy + 15/15 pytest). CLI smoke (`geode outer-bundle
+  --help`) renders.
+
 ## [0.99.27] - 2026-05-22
 
 > 51 PRs accumulated since v0.99.26. Headline arcs:
