@@ -78,9 +78,8 @@ functional change.
   첫 신규 표면 — mutator 가 도구 description + hint 만 JSON 으로 mutate →
   도구 후보 선택 정확도 ↑ → Petri 17-dim 의 `broken_tool_use` (유일한 양의
   압력 dim) 직접 영향. **5-element 패턴** (S0a 검증): SoT
-  `autoresearch/state/policies/tool-descriptions.json` (in-repo) +
-  `~/.geode/self-improving-loop/tool-descriptions.json` (operator-local) /
-  `GLOBAL_TOOL_DESCRIPTIONS_PATH` `core/paths.py` 추가 /
+  `autoresearch/state/policies/tool-descriptions.json` (in-repo,
+  ratchet-tracked) / `GLOBAL_TOOL_DESCRIPTIONS_PATH` `core/paths.py` 추가 /
   `core/agent/tool_descriptions_policy.py` reader (`_load_tool_descriptions_override`
   + `apply_tool_descriptions_policy`, schema `{tool_name: {description: str,
   hints: [str]}}`) / `core/agent/loop/_helpers.py:get_agentic_tools` 진입점

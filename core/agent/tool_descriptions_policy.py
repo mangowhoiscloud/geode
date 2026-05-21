@@ -26,9 +26,8 @@ dim) 직접 영향.
 **Resolution order** (``wrapper-sections.json`` 패턴 동일):
 
 1. ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` env var — audit subprocess, strict.
-2. ``autoresearch/state/policies/tool-descriptions.json`` (in-repo).
-3. ``~/.geode/self-improving-loop/tool-descriptions.json`` (operator-local).
-4. ``None`` — no-op (default description 사용).
+2. ``autoresearch/state/policies/tool-descriptions.json`` (in-repo, ratchet-tracked).
+3. ``None`` — no-op (default description 사용).
 
 **Frontier**: OpenAI function calling docs — "clearer descriptions yield
 more accurate selection" + Anthropic tool-use guide.
