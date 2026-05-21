@@ -16,8 +16,11 @@ reach the provider.
   memory files from ``~/.geode/memory/recall/`` (or
   ``GEODE_MEMORY_RECALL_DIR`` env override), ranks by keyword overlap
   × recency, prepends a ``<memory-recall>`` block to the system prompt.
-* ``rubric_excerpts`` — **stub**. Reader (Petri 17-dim worst-regressed
-  rubric) is a follow-up PR (M4.4.2).
+* ``rubric_excerpts`` — **wired (M4.4.2)**. Reads ``baseline.json``,
+  computes the worst-regressed dims (where ``baseline_means -
+  dim_means > 0``), formats a ``<rubric-warning>`` block with the
+  built-in 17-dim ``DIM_RUBRIC`` directive for each, and prepends to
+  the system prompt.
 * ``tool_hints`` — **stub**. Reader (RunLog + episodic memory
   success_rate ranked) is a follow-up PR (M4.4.3).
 
@@ -74,6 +77,7 @@ def apply_in_context_slots(
         from core.self_improving_loop.in_context_slots import (
             SLOT_EXEMPLARS,
             SLOT_MEMORY_RECALL,
+            SLOT_RUBRIC_EXCERPTS,
             _load_in_context_slots_override,
         )
 
@@ -128,10 +132,30 @@ def apply_in_context_slots(
         except Exception as exc:
             log.debug("memory_recall slot apply failed: %s", exc, exc_info=True)
 
-    # rubric_excerpts / tool_hints — readers deferred to follow-up PRs
-    # (M4.4.2 / M4.4.3). Wiring framework is in place; each becomes
-    # active by mirroring the memory_recall block above with its own
-    # reader + format helpers.
+    # rubric_excerpts — M4.4.2 reader active. Reads autoresearch's
+    # ``baseline.json``, finds the worst-regressed dims, formats a
+    # ``<rubric-warning>`` block and prepends it to the system prompt.
+    rubric_cfg = slots.get(SLOT_RUBRIC_EXCERPTS)
+    if rubric_cfg is not None:
+        try:
+            from core.self_improving_loop.rubric_excerpts import (
+                find_worst_regressions,
+                format_rubric_block,
+                load_baseline,
+            )
+
+            baseline = load_baseline()
+            if baseline is not None:
+                rows = find_worst_regressions(baseline, top_k=rubric_cfg.max_entries)
+                block = format_rubric_block(rows)
+                if block:
+                    new_system = block + "\n\n" + new_system if new_system else block
+        except Exception as exc:
+            log.debug("rubric_excerpts slot apply failed: %s", exc, exc_info=True)
+
+    # tool_hints — reader deferred to follow-up PR (M4.4.3). Wiring
+    # framework is in place; activation mirrors the rubric_excerpts
+    # block above.
 
     return new_messages, new_system
 

@@ -71,6 +71,29 @@ functional change.
 
 ### Added
 
+- **PR-M4.4.2 — `rubric_excerpts` slot reader 활성화 (ADR-012).**
+  M4.4 (#1435) 의 두 번째 stub 슬롯 활성화. 신규 모듈
+  `core/self_improving_loop/rubric_excerpts.py` —
+  `autoresearch/state/baseline.json` 읽어 `dim_means` vs
+  `baseline_means` 차이 계산 → `baseline_means[d] - dim_means[d] > 0`
+  인 dim 만 (regression positive) top-K desc 정렬 → 내장 17-dim
+  `DIM_RUBRIC` 의 directive 와 join → `<rubric-warning>` 블록 render →
+  orchestrator 가 system prompt 앞에 prepend. `DIM_RUBRIC` 은 5
+  critical + 12 auxiliary = 17개 fitness dim 모두 cover (테스트가
+  `autoresearch.train.AXIS_TIERS` 와 동기 검증). **Graceful** — missing
+  / malformed / non-dict baseline 모두 silent no-op. **Per-axis
+  type-guard** — `dim_means[d]` 가 non-numeric 이면 그 dim 만 skip,
+  나머지는 통과. **Frontier parity** — Claude Code 의
+  `<system-reminder>` + Codex CLI 의 `<important_reminders>` 와 동일
+  pattern. **17 invariant test** — `DIM_RUBRIC` 17 cover + 모든 entry
+  non-empty + `load_baseline` x4 (missing / malformed / non-dict /
+  valid) + `find_worst_regressions` x7 (top_k=0 / improving skip /
+  desc sort / top_k cap / missing means / non-numeric skip / DIM_RUBRIC
+  attach) + `format_rubric_block` x2 (empty / render with unknown-dim
+  fallback) + orchestrator x2 (prepend / no-baseline no-op).
+  **Remaining stub count after this PR: 1** (tool_hints only,
+  M4.4.3 follow-up).
+
 - **PR-M4.4.1 — `memory_recall` slot reader 활성화 (ADR-012).**
   M4.4 (#1435) 의 4 슬롯 중 첫 번째 stub 을 활성화. 신규 모듈
   `core/self_improving_loop/memory_recall.py` — frontmatter-style MD
@@ -108,9 +131,10 @@ functional change.
   M3 의 `_load_few_shot_pool_override` + `apply_few_shot_pool` 을
   호출, top-K (user, assistant) 쌍을 messages head 에 prepend.
   fitness_delta desc rank. **memory_recall / rubric_excerpts /
-  tool_hints 3 슬롯 = 명시적 stub** — orchestrator 이 SoT 에서 그
-  존재를 인식하지만 reader 미구현이라 no-op; 후속 PR (M4.4.1+) 이
-  reader 1개씩 추가 시 한 함수 wiring 만으로 활성화. **Provider
+  tool_hints 3 슬롯 = 명시적 stub at PR-M4.4 merge time** —
+  orchestrator 이 SoT 에서 그 존재를 인식하지만 reader 미구현이라
+  no-op; 후속 PR 가 1개씩 활성화 (PR-M4.4.1 #1436 → memory_recall,
+  PR-M4.4.2 → rubric_excerpts; tool_hints 만 PR-M4.4.3 대기). **Provider
   wiring 2지점** — `core/llm/providers/anthropic.py::ClaudeAgenticAdapter.agentic_call`
   + `core/llm/providers/openai.py::OpenAIAgenticAdapter.agentic_call`
   의 api-key/circuit-breaker 체크 직후 orchestrator 호출, 결과로
