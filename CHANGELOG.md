@@ -71,6 +71,31 @@ functional change.
 
 ### Added
 
+- **PR-M4.4.3 — `tool_hints` slot reader 활성화 + M4 sprint 종료 (ADR-012).**
+  M4.4 (#1435) 의 마지막 stub 활성화 — **모든 4 in-context slot 이제
+  완전 wired**. 신규 모듈 `core/self_improving_loop/tool_hints.py` —
+  `~/.geode/memory/episodes.jsonl` (episodic ledger, `core.memory.episodic.EpisodicStore`
+  populates) 를 `RECENT_WINDOW=200` 범위로 읽어 per-tool 집계 →
+  `MIN_INVOCATIONS=3` + `FAIL_RATE_THRESHOLD=0.34` 동시 통과 tool 만
+  surface → `fail_rate desc, total desc` 정렬 → top-K → `<tool-hints>`
+  block 으로 system prompt 앞에 prepend. 각 tool 의 *가장 최근*
+  non-empty error 캡쳐 (episodes 가 newest-first 이라 dict 첫 진입이
+  recent), 80자 + ellipsis trim. **Frontier signal**: `stuck_in_loops`
+  / `redundant_tool_invocation` 라벨이 punish 하는 패턴을 *그 자체로
+  in-context prevention* — agent 가 "Bash 가 최근 3번 실패했네" 보고
+  다른 전략 선택 가능. **Graceful** — `EpisodicStore` import 실패 /
+  ledger 없음 / read error / non-str tool_name 모두 silent skip.
+  **18 invariant test** — `load_recent_episodes` x2 (store 실패 /
+  성공) + `find_failing_tools` x8 (top_k=0 / min_invocations cap /
+  fail_rate threshold / surface / most-recent-error 캡쳐 / desc sort
+  + tiebreak / top_k cap / non-str tool_name skip / 80-char trim) +
+  `format_tool_hints_block` x3 (empty / with-error / without-error) +
+  orchestrator x2 (block prepend / no-failing no-op). **M4 sprint
+  종료** — M4.0 (#1429 event) → M4.1 (#1430 pack) → M4.2 (#1431
+  publisher) → M4.3 (#1434 redaction/stats) → M4.4 (#1435 orchestrator) →
+  M4.4.1 (#1436 memory_recall) → M4.4.2 (#1437 rubric_excerpts) →
+  **M4.4.3 본 PR (tool_hints + closure)**.
+
 - **PR-M4.4.2 — `rubric_excerpts` slot reader 활성화 (ADR-012).**
   M4.4 (#1435) 의 두 번째 stub 슬롯 활성화. 신규 모듈
   `core/self_improving_loop/rubric_excerpts.py` —

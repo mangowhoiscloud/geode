@@ -21,8 +21,11 @@ reach the provider.
   dim_means > 0``), formats a ``<rubric-warning>`` block with the
   built-in 17-dim ``DIM_RUBRIC`` directive for each, and prepends to
   the system prompt.
-* ``tool_hints`` — **stub**. Reader (RunLog + episodic memory
-  success_rate ranked) is a follow-up PR (M4.4.3).
+* ``tool_hints`` — **wired (M4.4.3)**. Reads the episodic ledger
+  (``~/.geode/memory/episodes.jsonl``), aggregates per-tool fail
+  rate over a rolling window, and prepends a ``<tool-hints>`` block
+  for tools whose recent calls have been failing above the threshold.
+  Closes the M4 sprint — all 4 in-context slots now active.
 
 **No-op fast path**: when ``_load_in_context_slots_override`` returns
 ``None`` (no SoT configured, the GEODE default), the orchestrator
@@ -78,6 +81,7 @@ def apply_in_context_slots(
             SLOT_EXEMPLARS,
             SLOT_MEMORY_RECALL,
             SLOT_RUBRIC_EXCERPTS,
+            SLOT_TOOL_HINTS,
             _load_in_context_slots_override,
         )
 
@@ -153,9 +157,27 @@ def apply_in_context_slots(
         except Exception as exc:
             log.debug("rubric_excerpts slot apply failed: %s", exc, exc_info=True)
 
-    # tool_hints — reader deferred to follow-up PR (M4.4.3). Wiring
-    # framework is in place; activation mirrors the rubric_excerpts
-    # block above.
+    # tool_hints — M4.4.3 reader active. Reads episodic ledger,
+    # aggregates per-tool fail_rate, prepends a ``<tool-hints>`` block
+    # for tools failing above the threshold. Closes the M4 sprint —
+    # all 4 in-context slots now wired.
+    tool_hints_cfg = slots.get(SLOT_TOOL_HINTS)
+    if tool_hints_cfg is not None:
+        try:
+            from core.self_improving_loop.tool_hints import (
+                find_failing_tools,
+                format_tool_hints_block,
+                load_recent_episodes,
+            )
+
+            episodes = load_recent_episodes()
+            if episodes:
+                hints = find_failing_tools(episodes, top_k=tool_hints_cfg.max_entries)
+                block = format_tool_hints_block(hints)
+                if block:
+                    new_system = block + "\n\n" + new_system if new_system else block
+        except Exception as exc:
+            log.debug("tool_hints slot apply failed: %s", exc, exc_info=True)
 
     return new_messages, new_system
 
