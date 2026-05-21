@@ -650,6 +650,7 @@ def run_audit(
         GLOBAL_AGENT_CONTRACTS_PATH,
         GLOBAL_CACHE_POLICY_PATH,
         GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_FEW_SHOT_POOL_PATH,
         GLOBAL_HEURISTICS_PATH,
         GLOBAL_IN_CONTEXT_SLOTS_PATH,
         GLOBAL_PROVIDER_ROUTING_PATH,
@@ -698,6 +699,9 @@ def run_audit(
     if GLOBAL_AGENT_CONTRACTS_PATH.is_file():
         env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(GLOBAL_AGENT_CONTRACTS_PATH)
         env["GEODE_AGENT_CONTRACTS_STRICT"] = "1"
+    if GLOBAL_FEW_SHOT_POOL_PATH.is_file():
+        env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(GLOBAL_FEW_SHOT_POOL_PATH)
+        env["GEODE_FEW_SHOT_POOL_STRICT"] = "1"
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
