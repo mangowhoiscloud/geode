@@ -71,6 +71,29 @@ functional change.
 
 ### Added
 
+- **PR-Hermes-1d — `session_search` LLM tool (Hermes absorption Phase 1d, minimal).**
+  Phase 1c (#1439) 의 FTS5 인덱스 위에 LLM-노출 도구 추가. 신규 모듈
+  `core/tools/session_search.py` — `SessionSearchTool` 이
+  `SessionManager.search_messages` (1c 신설) 호출, 결과를 `matched` /
+  `count` / `hits[{session_id, message_id, seq, role, timestamp, snippet,
+  score}]` 형태로 반환. **5 input field**: `query` (필수, sanitizer 통과) +
+  `session_id` (선택 — 단일 세션 scope) + `limit` (default 20, max 100
+  clamp) + `prefer_trigram` (CJK / 부분 문자열 recall). 도구는
+  `core/wiring/container.py::build_default_registry` 에 등록 +
+  `core/tools/definitions.json` 의 `memory_search` 직전에 schema entry
+  추가. **운영자 흐름**: 매 turn M4.4.1 의 memory_recall 슬롯이
+  *passive* 로 `<memory-recall>` 블록 주입. agent 가 더 구체적인 *active*
+  recall 이 필요할 때 `session_search(query="DPO training",
+  prefer_trigram=False)` 직접 호출 가능. 두 채널 보완 — passive 는 매
+  turn 자동, active 는 LLM 의도 명시적. **Scope (1d-minimal)**: 현재
+  프로젝트 `sessions.db` 만; cross-project (`global.db`) + async
+  `SearchIndexer` thread + `geode reindex` CLI 는 PR-Hermes-1d.2 로
+  defer. **14 invariant test** — surface 2 (name + schema 필수 필드) +
+  입력 validation 3 (empty / whitespace / non-str query) + round-trip 1
+  + scope filter 1 + trigram CJK recall 1 + empty DB no-hit 1 + limit 2
+  (honored / clamped) + invalid limit fallback 1 + registry 등록 1 +
+  definitions.json schema 1.
+
 - **PR-Hermes-1c — FTS5 + 트리그램 인덱스 (Hermes absorption Phase 1c).**
   Phase 1a (#1338) 의 messages 테이블 + Phase 1b 의 SoT flip 위에 full-text
   search 인덱스 신설. **신규 모듈** `core/storage/fts_helpers.py` —

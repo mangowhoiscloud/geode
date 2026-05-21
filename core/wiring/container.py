@@ -138,6 +138,11 @@ def build_default_registry() -> ToolRegistry:
     registry.register(GenerateReportTool())
     registry.register(ExportJsonTool())
     registry.register(SendNotificationTool())
+    # Recall (1) — PR-Hermes-1d (2026-05-22). FTS5-backed search over
+    # the current project's session messages (Phase 1c index).
+    from core.tools.session_search import SessionSearchTool
+
+    registry.register(SessionSearchTool())
     # Meta-tool: tool_search (enables deferred loading)
     registry.register(ToolSearchTool(registry))
     return registry
