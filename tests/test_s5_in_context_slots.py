@@ -101,9 +101,31 @@ def test_load_returns_none_when_max_entries_not_int(isolated_sot: Path) -> None:
     assert _load_in_context_slots_override() is None
 
 
-def test_load_returns_none_when_max_entries_negative(isolated_sot: Path) -> None:
+def test_load_drops_slot_when_max_entries_negative(isolated_sot: Path) -> None:
+    """Per-axis graceful — negative max_entries drops THAT slot only,
+    sibling slots stay valid (Codex MCP catch on PR #1425 FAIL #2)."""
+    _write(
+        isolated_sot,
+        {
+            "exemplars": {"max_entries": -1},
+            "memory_recall": {
+                "max_entries": 5,
+                "rank_by": "recency",
+                "injection_point": "system_prompt",
+            },
+        },
+    )
+    result = _load_in_context_slots_override()
+    assert result is not None
+    assert "exemplars" not in result
+    assert "memory_recall" in result
+
+
+def test_load_single_negative_slot_returns_empty_dict(isolated_sot: Path) -> None:
+    """Single slot with negative max_entries → empty dict (not None) —
+    the SoT was parseable, just nothing qualified for inclusion."""
     _write(isolated_sot, {"exemplars": {"max_entries": -1}})
-    assert _load_in_context_slots_override() is None
+    assert _load_in_context_slots_override() == {}
 
 
 def test_load_rejects_bool_as_max_entries(isolated_sot: Path) -> None:

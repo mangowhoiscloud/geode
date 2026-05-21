@@ -184,8 +184,11 @@ def _validate_schema(data: Any, path: Path) -> None:
             v = entry["max_entries"]
             if not isinstance(v, int) or isinstance(v, bool):
                 raise RuntimeError(f"in-context-slots at {path}[{slot!r}].max_entries must be int")
-            if v < 0:
-                raise RuntimeError(f"in-context-slots at {path}[{slot!r}].max_entries must be >= 0")
+            # Negative range check is intentionally deferred to ``_coerce``
+            # (per-axis graceful drop). Raising here would let one slot's
+            # negative value discard the entire SoT via ``_graceful_load``
+            # — contradicts the per-axis graceful claim. (Codex MCP catch,
+            # PR #1425 FAIL #2.)
         if "rank_by" in entry and not isinstance(entry["rank_by"], str):
             raise RuntimeError(f"in-context-slots at {path}[{slot!r}].rank_by must be str")
         if "injection_point" in entry and not isinstance(entry["injection_point"], str):
