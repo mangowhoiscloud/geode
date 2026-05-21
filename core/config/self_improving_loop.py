@@ -51,6 +51,7 @@ __all__ = [
     "AutoresearchConfig",
     "MutatorConfig",
     "PetriRoleConfig",
+    "SchedulerConfig",
     "SeedGenerationConfig",
     "SelfImprovingLoopBindings",
     "SelfImprovingLoopConfig",
@@ -188,6 +189,56 @@ class SeedGenerationConfig(BaseModel):
     roles: dict[str, SelfImprovingLoopBindings] = Field(default_factory=dict)
 
 
+class SchedulerConfig(BaseModel):
+    """Auto-trigger schedule for the mutator (OL-A1, 2026-05-22).
+
+    Pre-OL-A1 the self-improving loop only fired *manually* — operator
+    ran ``geode self-improve mutate`` or the autoresearch sprint runner
+    invoked ``SelfImprovingLoopRunner.run_once`` synchronously. With
+    OL-A1 the loop can fire on a cron schedule, so the GEODE daemon
+    keeps improving the wrapper-prompt / policies even when no operator
+    is at the keyboard. **Default off** — opt-in via
+    ``[self_improving_loop.scheduler] enabled = true``.
+
+    Concurrency is bounded by a filesystem lock
+    (``~/.geode/self-improving-loop/auto_trigger.lock`` via
+    :mod:`fcntl`), so even an over-eager cron and a manual invocation
+    cannot race. The min-interval gate is the *complementary* knob: it
+    prevents two cron-fires within ``min_interval_minutes`` of each
+    other from doing redundant work when the lock itself would let
+    them through. Together they implement Codex CLI's
+    ``forced_single_instance`` semantics for this loop role.
+
+    Operator override of the four backends (subscription Claude Code /
+    Codex CLI / Anthropic PAYG / OpenAI PAYG) flows through the
+    *existing* :class:`MutatorConfig.source` field — the auto-trigger
+    invokes :func:`SelfImprovingLoopRunner.run_once` which honours that
+    setting via the PAPERCLIP dispatch path (#1433). The scheduler does
+    NOT introduce a second source vocabulary.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    """When False (default), the runtime never registers the trigger.
+    Operators flip to True after they've verified the mutator role
+    binding + budget. The flag is checked at wiring time, so toggling
+    requires a process restart (matches scheduler service semantics)."""
+
+    cron: str = "0 */6 * * *"
+    """5-field cron expression (min hour day month weekday). Default
+    fires every 6 hours starting at minute 0 — gives the autoresearch
+    audit cycle enough headroom to settle between runs."""
+
+    min_interval_minutes: Annotated[int, Field(ge=1, le=1440)] = 60
+    """Floor between successive mutator firings (timestamp-based gate
+    on ``~/.geode/self-improving-loop/auto_trigger_last_run.txt``).
+    Cron firings closer together than this are silently skipped — the
+    lockfile already prevents concurrent runs, this knob prevents
+    *back-to-back* runs. Must satisfy ``min_interval_minutes <= cron
+    period`` for the schedule to actually fire."""
+
+
 class SelfImprovingLoopConfig(BaseModel):
     """Top-level [self_improving_loop.*] config root.
 
@@ -221,6 +272,11 @@ class SelfImprovingLoopConfig(BaseModel):
     """PR-1 G-A — mutator role manifest. Closes the hardcoded
     ``model="claude-opus-4-7"`` + direct ``anthropic.Anthropic()``
     call in ``core/self_improving_loop/runner.py``."""
+
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    """PR-OL-A1 — auto-trigger schedule. Default off; operator opts in
+    via ``[self_improving_loop.scheduler] enabled = true``. The cron
+    fires the mutator runner with lockfile + min-interval guards."""
 
     @model_validator(mode="after")
     def _abort_above_warn(self) -> SelfImprovingLoopConfig:

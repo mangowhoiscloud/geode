@@ -101,6 +101,23 @@ def build_automation(
             interval_s=settings.scheduler_interval_s,
         )
 
+    # OL-A1 (2026-05-22) — self-improving-loop auto-trigger. Opt-in:
+    # only fires when [self_improving_loop.scheduler] enabled=true in
+    # ~/.geode/config.toml. Default off → register_auto_trigger no-ops.
+    try:
+        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.self_improving_loop.auto_trigger import register_auto_trigger
+
+        sil_cfg = load_self_improving_loop_config()
+        register_auto_trigger(
+            trigger_manager,
+            enabled=sil_cfg.scheduler.enabled,
+            cron=sil_cfg.scheduler.cron,
+            min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
+        )
+    except Exception:
+        log.exception("auto_trigger wiring failed; scheduler continues without it")
+
     # Feedback loop (wires all L4.5 components + hooks)
     feedback_loop = FeedbackLoop(
         model_registry=model_registry,
