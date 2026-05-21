@@ -49,6 +49,43 @@ functional change.
 
 ### Fixed
 
+- **PR-OL-AUDIT-BURST-FIX — autoresearch audit 가 OAuth subscription 위에서
+  실제 완료 (FIX-1/2/3, paperclip burst pattern 매칭).**
+  Pattern B subscription routing 도입 후 첫 real audit 시도 17 분 timeout +
+  0 sample 완료. trace 추적 결과 inspect_ai 가 `DEFAULT_MAX_CONNECTIONS = 10`
+  (.venv/.../inspect_ai/_util/constants.py:9) 으로 auditor + judge + target
+  3 provider 각각 10 concurrent = **최대 30 inflight** 발사. Anthropic Max
+  OAuth tier 의 "interactive coding" soft limit (~5 req/sec) 의 6배 →
+  즉시 429 → exponential backoff (마지막 retry 769초 대기) → timeout.
+  **Paperclip GAP audit**: paperclip 이 single Anthropic account 로 multi-
+  agent 운영해도 429 안 만나는 이유는 (1) agent ≡ subprocess (process
+  boundary), (2) agent 내부 turn-by-turn serial (1 inflight/agent), (3)
+  active agent 수 ~2-5 → 누적 ~5 req/sec, (4) invoke-dedup 5-sec window
+  + circuit-breaker 가 burst 추가 차단. GEODE audit 는 (1)-(4) 모두 없이
+  inspect_ai default 가 즉시 burst → 환경 불일치. **3 fix**:
+  - **FIX-1** `autoresearch/train.py::_build_audit_command` argv 에
+    `--max-connections 1` 추가 — inspect_ai per-provider connection pool
+    10 → 1.
+  - **FIX-2** 같은 argv 에 `--max-samples 1` — per-sample parallelism 도
+    직렬화.
+  - **FIX-3** 신규 `core/llm/audit_lane.py` (module-level `Lane(max_
+    concurrent=1, timeout_s=900)`, `core.orchestration.lane_queue.Lane`
+    재사용) + `run_audit` 의 `subprocess.run` 을 `with acquire_audit_lane
+    (session_id):` 로 감싸서 inter-process 직렬화 (cron + manual 충돌 차단).
+    LaneQueue container 가 standalone CLI 실행시엔 build 안 되므로 module-
+    level singleton 패턴 채택.
+  Lane timeout (900s) 도달 시 `audit_lane_timeout` journal event 발화 +
+  `RuntimeError("audit lane busy beyond timeout: …")` raise. **9 invariant
+  test** (`tests/test_ol_audit_burst_fix.py`) — argv 4 (max-connections /
+  max-samples / 순서 / source=api_key 시 use-oauth skip 하지만 burst fix
+  유지) + lane 5 (singleton 안정성 / capacity / sequential 직렬화 / 동시
+  acquire blocking 시간 측정 / source-level integration grep). Quality
+  gates clean (ruff + ruff format --check + mypy + 9/9 pytest). Cost:
+  audit wall time 늘어남 (10x parallel → serial). 거래 가치: 429 storm
+  zero + 실제 sample 완료. multi-account AccountPool 도입시 lane capacity
+  knob 으로 ramp 가능.
+
+
 - **PR-OL-OAUTH-COUNT-TOKENS — Claude OAuth count_tokens 401 fallback.**
   Pattern-B subscription-routed Petri audit (Claude Max OAuth, OL-A2-data
   + OL-P1 unblock path) was aborting before any sample ran with

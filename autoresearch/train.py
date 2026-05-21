@@ -562,6 +562,30 @@ def _build_audit_command() -> list[str]:
         "--live",
         "--yes",
     ]
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) — inspect_ai's default
+    # `DEFAULT_MAX_CONNECTIONS = 10` (.venv/.../inspect_ai/_util/
+    # constants.py:9) means each provider can fire up to 10 concurrent
+    # `/v1/messages` POSTs. With auditor + judge both on
+    # ``claude-code/...`` provider, peak inflight reaches ~30 — 6x
+    # what Claude Max OAuth tier's "interactive coding" assumption
+    # (~5 req/sec soft limit) tolerates → instant 429 storm.
+    #
+    # Paperclip's multi-agent-on-single-account success pattern is
+    # *serial-per-agent + ~5 active agents* = ~5 req/sec peak. We mirror
+    # that pattern here: serialise inspect_ai's per-provider connection
+    # pool to 1 and limit parallel samples to 1. Total audit wall time
+    # increases proportionally but the audit actually COMPLETES instead
+    # of hitting 17-min timeout with 0 samples.
+    #
+    # Operators with a multi-account pool (future AccountPool work) can
+    # bump these via env overrides; for the single-OAuth common case
+    # (this default) serial matches the subscription's billing model.
+    argv += [
+        "--max-connections",
+        "1",
+        "--max-samples",
+        "1",
+    ]
     if getattr(cfg, "source", "auto") != "api_key":
         argv.append("--use-oauth")
     return argv
@@ -729,26 +753,47 @@ def run_audit(
         payload={"argv_len": len(argv), "timeout_sec": timeout_sec},
     )
 
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-3 — inter-process audit
+    # lane. Prevents two `geode audit` subprocesses from overlapping
+    # on the host (cron-driven + manual collision, REPL + scheduled,
+    # etc.). Lane=1 also matches Anthropic Max OAuth's "interactive
+    # coding" rate budget when the operator is also using their host
+    # Claude Code session.
+    from core.llm.audit_lane import acquire_audit_lane
+
     audit_started = time.time()
+    lane_key = session_id or "anonymous-audit"
     try:
-        proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
-            argv,
-            env=env,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
+        with acquire_audit_lane(lane_key):
+            try:
+                proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
+                    argv,
+                    env=env,
+                    cwd=str(REPO_ROOT),
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_sec,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                _emit_journal(
+                    session_id,
+                    gen_tag,
+                    "subprocess_timeout",
+                    level="error",
+                    payload={"timeout_sec": timeout_sec},
+                )
+                raise
+    except TimeoutError as exc:
+        # Audit lane itself timed out (another audit hogged the lane).
         _emit_journal(
             session_id,
             gen_tag,
-            "subprocess_timeout",
+            "audit_lane_timeout",
             level="error",
-            payload={"timeout_sec": timeout_sec},
+            payload={"reason": str(exc)},
         )
-        raise
+        raise RuntimeError(f"audit lane busy beyond timeout: {exc}") from exc
     audit_seconds = time.time() - audit_started
 
     _emit_journal(
