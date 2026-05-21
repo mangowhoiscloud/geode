@@ -102,8 +102,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_tool_name ON messages (tool_name)
 # Phase 1c (Hermes absorption, 2026-05-22) — full-text search indices over
 # the messages table. ``content``, ``tool_name``, and ``tool_calls`` are
 # all indexed so a single query surfaces text matches AND tool-name
-# filters. ``content='messages'`` makes both FTS tables *contentless*
-# (rowid-only) so the underlying TEXT data isn't duplicated; the
+# filters. ``content='messages'`` makes both FTS tables *external-content*
+# (FTS5 fetches the indexed columns from the source table by rowid)
+# so the underlying TEXT data isn't duplicated; the
 # triggers below keep them in sync with the source messages table.
 #
 # unicode61 = baseline tokenizer (case + diacritic fold). Always
@@ -140,8 +141,8 @@ def _fts_trigger_block(fts_name: str) -> str:
     ``fts_name`` is sourced from a fixed allowlist (``messages_fts`` /
     ``messages_fts_trigram``); never operator input.
     """
-    # fts_name is a hardcoded literal, not user input — S608 safe to ignore.
-    return f"""CREATE TRIGGER IF NOT EXISTS {fts_name}_after_insert AFTER INSERT ON messages BEGIN
+    # fts_name is a hardcoded literal, not user input — S608/B608 safe to ignore.
+    sql = f"""CREATE TRIGGER IF NOT EXISTS {fts_name}_after_insert AFTER INSERT ON messages BEGIN
     INSERT INTO {fts_name}(rowid, content, tool_name, tool_calls)
     VALUES (new.id, new.content, new.tool_name, new.tool_calls);
 END;
@@ -154,7 +155,8 @@ CREATE TRIGGER IF NOT EXISTS {fts_name}_after_update AFTER UPDATE ON messages BE
     VALUES ('delete', old.id, old.content, old.tool_name, old.tool_calls);
     INSERT INTO {fts_name}(rowid, content, tool_name, tool_calls)
     VALUES (new.id, new.content, new.tool_name, new.tool_calls);
-END;"""  # noqa: S608
+END;"""  # noqa: S608  # nosec B608
+    return sql
 
 
 _FTS_TRIGGERS_UNICODE_SQL = _fts_trigger_block("messages_fts")
@@ -551,9 +553,9 @@ class SessionManager:
             return []
         table = "messages_fts_trigram" if prefer_trigram and self._has_trigram else "messages_fts"
         # ``table`` is one of two hardcoded literals (no user input) so the
-        # f-string composition is safe — S608 false positive.
+        # f-string composition is safe — S608/B608 false positive.
         sql = (
-            f"SELECT m.session_id, m.id, m.seq, m.role, m.content, m.timestamp, "  # noqa: S608
+            f"SELECT m.session_id, m.id, m.seq, m.role, m.content, m.timestamp, "  # noqa: S608  # nosec B608
             f"snippet({table}, 0, '[', ']', '…', 16), bm25({table}) "
             f"FROM {table} JOIN messages m ON m.id = {table}.rowid "
             f"WHERE {table} MATCH ?"
