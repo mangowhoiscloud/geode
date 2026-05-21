@@ -229,23 +229,25 @@ def test_reflection_slot_is_now_alive_post_s0b() -> None:
 
 
 def test_active_slots_registered_as_mutation_targets() -> None:
-    """S0d (2026-05-21) 후 ``TARGET_KINDS`` 의 핵심 4축 + M1 (2026-05-21)
-    의 skill_catalog 추가. retrieval 은 명시적 deprecate 유지; path
-    constant + dict 매핑은 보존 (별도 ADR 로 RAG 인프라 신설 시 복원 가능)."""
+    """S0d (2026-05-21) — retrieval deprecated.
+    M1 (2026-05-21) — skill_catalog 추가.
+    M2 (2026-05-21) — agent_contract 추가 → 6 active slot.
+    retrieval 은 명시적 deprecate 유지; path constant + dict 매핑은
+    보존 (별도 ADR 로 RAG 인프라 신설 시 복원 가능)."""
     import importlib
 
     mod = importlib.import_module("core.self_improving_loop.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
-    # M1 (2026-05-21) — skill_catalog 추가, retrieval 은 여전히 제외.
     expected = {
         "prompt",
         "tool_policy",
         "decomposition",
         "reflection",
         "skill_catalog",
+        "agent_contract",
     }
     assert target_kinds == expected, (
-        f"TARGET_KINDS 는 정확히 {expected} (post-M1). got={target_kinds}"
+        f"TARGET_KINDS 는 정확히 {expected} (post-M2). got={target_kinds}"
     )
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
     # path constant 보존 — 미래 복원용

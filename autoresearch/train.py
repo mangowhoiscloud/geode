@@ -647,6 +647,7 @@ def run_audit(
     # 은 "SoT 가 디스크에 있는데도 subprocess 가 못 읽는 경우" 만 발화 —
     # mutation 이 진행 중인 audit 의 quota 절약 목적.
     from core.paths import (
+        GLOBAL_AGENT_CONTRACTS_PATH,
         GLOBAL_CACHE_POLICY_PATH,
         GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_HEURISTICS_PATH,
@@ -694,6 +695,9 @@ def run_audit(
     if GLOBAL_IN_CONTEXT_SLOTS_PATH.is_file():
         env["GEODE_IN_CONTEXT_SLOTS_OVERRIDE"] = str(GLOBAL_IN_CONTEXT_SLOTS_PATH)
         env["GEODE_IN_CONTEXT_SLOTS_STRICT"] = "1"
+    if GLOBAL_AGENT_CONTRACTS_PATH.is_file():
+        env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(GLOBAL_AGENT_CONTRACTS_PATH)
+        env["GEODE_AGENT_CONTRACTS_STRICT"] = "1"
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
