@@ -49,6 +49,32 @@ functional change.
 
 ### Added
 
+- **PR-M4.1 — DPO canonical preference-pack JSONL writer (ADR-012).**
+  Consumes M4.0 의 `eval_response_recorded` event stream → 각 unique
+  `prompt` group 을 chosen pile (`rollback_flag=False`) + rejected pile
+  (`rollback_flag=True`) 로 분할 → **top-fitness chosen × bottom-fitness
+  rejected** 1 pair 를 emit (가장 선명한 fitness margin = DPO 학습 신호
+  최대). **신규 모듈** `core/self_improving_loop/dpo_pack.py` —
+  `build_dpo_pack(journal_paths, pack_path) -> BuildResult` (appended /
+  duplicate / events_seen / unpaired count) + `pair_signature(prompt,
+  chosen, rejected)` 16-hex 식별자 + `BuildResult` frozen dataclass.
+  **Idempotency** — signature-keyed dedup 으로 재실행 시 신규 pair 만
+  append; 기존 pack rows 보존. **Graceful** — missing journal file →
+  empty 처리, malformed JSONL line 은 silently drop (per-line parse
+  guard). Pack 경로 `GLOBAL_DPO_PACK_PATH = ~/.geode/self-improving-loop/dpo/pack.jsonl`
+  (operator-local, NOT git-tracked — preference data 는 M4.3 redaction
+  까지 사용자-사적). **Pack schema** — `signature` / `prompt` /
+  `chosen` / `rejected` / `fitness_chosen` / `fitness_rejected` /
+  `fitness_delta` / `ts_chosen` / `ts_rejected` / `session_id_chosen` /
+  `session_id_rejected` / `source_chosen` / `source_rejected` (13
+  field). 본 PR 은 transform 만; M4.2 publisher (OpenAI / Bedrock /
+  HuggingFace TRL adapter) 는 후속. **12 invariant test** — signature
+  determinism + field-sensitivity / empty journal / missing-file
+  graceful / pair-selection top×bottom / chosen-only + rejected-only
+  unpaired / idempotency 재실행 zero append / 신규 prompt 만 append /
+  multi-journal cross-session merge / malformed line drop. Rafailov
+  2023 DPO formulation 의 `(x, y_w, y_l)` triple 과 직접 정합.
+
 - **PR-M4.0 — `eval_response_recorded` SessionJournal event (ADR-012).**
   DPO pipeline (M4.x) 의 첫 piece — 각 (prompt, response) turn 마다
   fitness 측정값 + 평가 metadata 를 active SessionJournal 에 emit.
