@@ -72,6 +72,9 @@ def _state_to_json(state: PipelineState) -> str:
     payload: dict[str, Any] = {
         "run_id": state.run_id,
         "target_dim": state.target_dim,
+        # ADR-012 S4 (2026-05-21) — persist cohort so a state.json
+        # replay re-hydrates the same picker semantics.
+        "cohort": state.cohort,
         "gen_tag": state.gen_tag,
         "candidates_requested": state.candidates_requested,
         "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,

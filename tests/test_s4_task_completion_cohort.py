@@ -136,3 +136,22 @@ def test_baseline_reader_exports_cohort_constants() -> None:
     assert "PETRI_17DIM_COHORT" in br.__all__
     assert "TASK_COMPLETION_COHORT" in br.__all__
     assert "pick_regression_target" in br.__all__
+
+
+def test_state_to_json_persists_cohort_field() -> None:
+    """S4 fix-up (Codex MCP FLAG, PR #1424) — ``_state_to_json`` must
+    include ``cohort`` so a state.json replay re-hydrates the same picker
+    semantics. Without persistence the field is effectively only an
+    in-memory hint."""
+    import json as _json
+
+    from plugins.seed_generation.orchestrator import PipelineState, _state_to_json
+
+    state = PipelineState(
+        run_id="r1",
+        target_dim="success_rate",
+        gen_tag="auto-HEAD",
+        cohort="task_completion",
+    )
+    payload = _json.loads(_state_to_json(state))
+    assert payload["cohort"] == "task_completion"
