@@ -336,6 +336,11 @@ app.command()(audit)
 app.command(name="petri-archive")(petri_archive)
 app.add_typer(audit_seeds_app, name="audit-seeds")
 
+# OL-A3 (2026-05-22) — outer-loop bundle viewer
+from core.cli.outer_bundle import outer_bundle_command  # noqa: E402
+
+app.command(name="outer-bundle")(outer_bundle_command)
+
 
 def _version_option(value: bool) -> None:
     if value:
