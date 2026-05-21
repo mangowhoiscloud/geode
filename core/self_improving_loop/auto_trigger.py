@@ -66,9 +66,7 @@ AUTO_TRIGGER_LOCK_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger.lo
 so a kernel-level crash releases it automatically — no stale-lock
 manual cleanup needed."""
 
-AUTO_TRIGGER_TIMESTAMP_PATH: Path = (
-    GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger_last_run.txt"
-)
+AUTO_TRIGGER_TIMESTAMP_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger_last_run.txt"
 """Plain-text Unix timestamp of the last *successful* firing. Failed
 firings (lock-blocked, interval-blocked, run_once raised) deliberately
 do NOT update this — only a successful mutation cycle counts so a
@@ -155,9 +153,7 @@ def read_last_run_timestamp(timestamp_path: Path | None = None) -> float | None:
         return None
 
 
-def write_last_run_timestamp(
-    timestamp: float, timestamp_path: Path | None = None
-) -> bool:
+def write_last_run_timestamp(timestamp: float, timestamp_path: Path | None = None) -> bool:
     """Persist the timestamp atomically. Returns True on success,
     False when the write fails (logged at WARNING — not raised, the
     firing already succeeded)."""

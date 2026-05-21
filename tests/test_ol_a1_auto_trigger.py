@@ -179,9 +179,7 @@ def test_min_interval_satisfied_when_no_prior_run(
     from core.self_improving_loop.auto_trigger import is_min_interval_satisfied
 
     _, ts_path = trigger_paths
-    assert is_min_interval_satisfied(
-        min_interval_minutes=60, timestamp_path=ts_path
-    )
+    assert is_min_interval_satisfied(min_interval_minutes=60, timestamp_path=ts_path)
 
 
 def test_min_interval_blocked_when_recent(trigger_paths: tuple[Path, Path]) -> None:
@@ -193,9 +191,7 @@ def test_min_interval_blocked_when_recent(trigger_paths: tuple[Path, Path]) -> N
     _, ts_path = trigger_paths
     now = 1000000.0
     write_last_run_timestamp(now - 30 * 60, ts_path)  # 30 minutes ago
-    assert not is_min_interval_satisfied(
-        min_interval_minutes=60, now=now, timestamp_path=ts_path
-    )
+    assert not is_min_interval_satisfied(min_interval_minutes=60, now=now, timestamp_path=ts_path)
 
 
 def test_min_interval_satisfied_when_old_enough(
@@ -209,9 +205,7 @@ def test_min_interval_satisfied_when_old_enough(
     _, ts_path = trigger_paths
     now = 1000000.0
     write_last_run_timestamp(now - 90 * 60, ts_path)  # 90 minutes ago
-    assert is_min_interval_satisfied(
-        min_interval_minutes=60, now=now, timestamp_path=ts_path
-    )
+    assert is_min_interval_satisfied(min_interval_minutes=60, now=now, timestamp_path=ts_path)
 
 
 # ---------------------------------------------------------------------------
@@ -413,9 +407,7 @@ def test_register_auto_trigger_skips_when_disabled() -> None:
     from core.self_improving_loop.auto_trigger import register_auto_trigger
 
     mgr = MagicMock()
-    result = register_auto_trigger(
-        mgr, enabled=False, cron="0 */6 * * *", min_interval_minutes=60
-    )
+    result = register_auto_trigger(mgr, enabled=False, cron="0 */6 * * *", min_interval_minutes=60)
     assert result is False
     mgr.register.assert_not_called()
 
@@ -432,9 +424,7 @@ def test_register_auto_trigger_registers_when_enabled() -> None:
     )
 
     mgr = MagicMock()
-    result = register_auto_trigger(
-        mgr, enabled=True, cron="*/15 * * * *", min_interval_minutes=10
-    )
+    result = register_auto_trigger(mgr, enabled=True, cron="*/15 * * * *", min_interval_minutes=10)
     assert result is True
     mgr.register.assert_called_once()
     config = mgr.register.call_args[0][0]
