@@ -49,6 +49,33 @@ functional change.
 
 ### Added
 
+- **PR-S3 — 공동 ratchet: 4축 baseline.json (ADR-012).** `baseline.json`
+  schema 가 pre-S3 `{dim_means, dim_stderr}` 에서 S3 의 **5-field 4축
+  schema** `{dim_means, dim_stderr, ux_means, admire_means, bench_means}`
+  로 확장. compute_fitness 는 이미 4축 signature 였으나 `_write_baseline`
+  / `_load_baseline` 가 dim 만 persist 했던 GAP 을 closure. seed-generation
+  의 `BaselineSnapshot` 도 3 신규 field 추가 (`ux_means` / `admire_means`
+  / `bench_means`) — 모두 default `{}` 로 pre-S3 baseline 그대로 graceful
+  로딩. `autoresearch/train.py`: (a) `_write_baseline` 가 3 신규 axis
+  kwarg-optional (`None`/`{}` 은 payload omit, backwards compat),
+  (b) `_load_baseline` 5-tuple 반환 + 신규 `_coerce_axis_dict` helper
+  로 per-axis graceful drop (단일 axis 손상이 load-bearing dim 부분을
+  invalidate 못함), (c) main 의 `compute_fitness` 호출이 baseline_bench_means
+  도 전달 → S6 cross-validation gate 의 baseline 측은 disk 통합 완료
+  (current `bench_means`/`ux_means`/`admire_means` collector wiring 은
+  S1b/S2b/S6b 후속 PR — 그 PR 가 main() 에 current axis 만 추가하면
+  S6 gate 즉시 발화),
+  (d) `baseline_decision` journal event 에 `baseline_axis_coverage`
+  (ux/admire/bench 의 entry 갯수) surface — partial baseline 가시성.
+  `plugins/seed_generation/baseline_reader.py`: `BaselineSnapshot` 에
+  ux/admire/bench 3 field 추가, `load_baseline` 가 3 axis 도 `_coerce_dim_dict`
+  통해 graceful 로딩. **14 invariant test** — loader 6 (5-tuple shape +
+  missing file + pre-S3 BC + full S3 + per-axis corruption isolation +
+  missing dim_means) + writer 3 (default omit + full 4-axis + empty-axis
+  omit) + round-trip 1 + snapshot 3 (3 new fields + populated + pre-S3
+  empty) + main wiring source-grep 1. ADR-012 S1/S2/S6 의 in-memory 4축
+  fitness 가 이제 disk 까지 통합 — joint ratchet 완성.
+
 - **PR-T6 — Heuristic indicators JSON mutation surface (ADR-013).**
   mutator 가 keyword/phrase library 를 evolve — task-triage 시 매칭되는
   complexity / high_risk / time_pressure 표지어. Promptbreeder-식
