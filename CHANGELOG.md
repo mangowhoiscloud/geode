@@ -71,6 +71,27 @@ functional change.
 
 ### Added
 
+- **PR-M4.4.2 — `rubric_excerpts` slot reader 활성화 (ADR-012).**
+  M4.4 (#1435) 의 두 번째 stub 슬롯 활성화. 신규 모듈
+  `core/self_improving_loop/rubric_excerpts.py` —
+  `autoresearch/state/baseline.json` 읽어 `dim_means` vs
+  `baseline_means` 차이 계산 → `baseline_means[d] - dim_means[d] > 0`
+  인 dim 만 (regression positive) top-K desc 정렬 → 내장 17-dim
+  `DIM_RUBRIC` 의 directive 와 join → `<rubric-warning>` 블록 render →
+  orchestrator 가 system prompt 앞에 prepend. `DIM_RUBRIC` 은 5
+  critical + 12 auxiliary = 17개 fitness dim 모두 cover (테스트가
+  `autoresearch.train.AXIS_TIERS` 와 동기 검증). **Graceful** — missing
+  / malformed / non-dict baseline 모두 silent no-op. **Per-axis
+  type-guard** — `dim_means[d]` 가 non-numeric 이면 그 dim 만 skip,
+  나머지는 통과. **Frontier parity** — Claude Code 의
+  `<system-reminder>` + Codex CLI 의 `<important_reminders>` 와 동일
+  pattern. **17 invariant test** — `DIM_RUBRIC` 17 cover + 모든 entry
+  non-empty + `load_baseline` x4 (missing / malformed / non-dict /
+  valid) + `find_worst_regressions` x7 (top_k=0 / improving skip /
+  desc sort / top_k cap / missing means / non-numeric skip / DIM_RUBRIC
+  attach) + `format_rubric_block` x2 (empty / render with unknown-dim
+  fallback) + orchestrator x2 (prepend / no-baseline no-op).
+
 - **PR-M4.4.1 — `memory_recall` slot reader 활성화 (ADR-012).**
   M4.4 (#1435) 의 4 슬롯 중 첫 번째 stub 을 활성화. 신규 모듈
   `core/self_improving_loop/memory_recall.py` — frontmatter-style MD
