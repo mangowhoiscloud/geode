@@ -49,6 +49,34 @@ functional change.
 
 ### Added
 
+- **PR-M4.2 — DPO publisher adapters (TRL / OpenAI / Bedrock, ADR-012).**
+  M4.1 canonical pack 을 per-provider DPO 학습 입력 포맷으로 변환.
+  **신규 모듈** `core/self_improving_loop/dpo_publisher.py` — 3 adapter
+  함수 (`to_trl_format` / `to_openai_format` / `to_bedrock_format`) +
+  `publish_pack(target, pack_path, out_path) -> int` dispatcher. 모든
+  변환은 **pure transform** — network call / SDK import / API key
+  read 일체 없음. 운영자는 결과 JSONL 을 provider 의 upload tool
+  (`openai files create` / `aws s3 cp` / `hf datasets push`) 에 전달.
+  **Idempotency** — `publish_pack` 가 destination 을 매번 overwrite
+  하므로 동일 (pack, target) 입력은 byte-equal output 생성.
+  **Adapter 별 row schema**: TRL = 최소 triple `{prompt, chosen,
+  rejected}` (TRL DPOTrainer 직접 소비). OpenAI = messages 스타일
+  `{input.messages, preferred_output, non_preferred_output}` (OpenAI
+  preference fine-tuning guide 의 schema). Bedrock = generic
+  passthrough `{prompt, chosen, rejected, signature, fitness_chosen,
+  fitness_rejected, fitness_delta}` (base model family 별 schema
+  편차가 커서 운영자가 후처리하도록 audit metadata 유지). **Graceful**
+  — missing pack file → 0 rows + empty out file. Malformed JSONL line
+  + 비 dict + prompt/chosen/rejected str 누락 row 는 silently drop.
+  **ValueError** — `SUPPORTED_TARGETS = ("trl", "openai", "bedrock")`
+  외 target. 본 PR 은 transform 만; CLI integration + network upload
+  + PII redaction (M4.3) 은 후속. **14 invariant test** — TRL minimal
+  triple / OpenAI messages schema / Bedrock fitness 보존 + 누락 graceful
+  / SUPPORTED_TARGETS manifest / publish_pack one-row-per-pack-row /
+  overwrite / byte-equal rerun / missing pack empty file / invalid
+  target ValueError / malformed line drop / openai+bedrock dispatch /
+  no-network import guard (forbidden SDK 8종 stdlib 외 미적재).
+
 - **PR-M4.1 — DPO canonical preference-pack JSONL writer (ADR-012).**
   Consumes M4.0 의 `eval_response_recorded` event stream → 각 unique
   `prompt` group 을 chosen pile (`rollback_flag=False`) + rejected pile
