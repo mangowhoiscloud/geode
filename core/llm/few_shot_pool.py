@@ -164,6 +164,106 @@ def _coerce_entry(entry: Any, path: Path, lineno: int, *, strict: bool) -> FewSh
     )
 
 
+_DEDUP_SIG_CHARS = 16
+MAX_EXEMPLAR_POOL_SIZE = 1000
+"""Hard cap on pool size — FIFO eviction (oldest drop) when ``append_exemplar``
+makes the count exceed this. 1000 covers months of audit cycles in typical
+operator usage while keeping JSONL scan times sub-millisecond."""
+
+
+def _exemplar_signature(user_msg: str, assistant_msg: str) -> str:
+    """Idempotency key — appending the same ``(user, assistant)`` twice is no-op.
+
+    16-hex SHA256 prefix — collision risk ~2^-64 per pair; negligible at
+    1000-entry pool scale.
+    """
+    import hashlib
+
+    blob = f"{user_msg}\x1f{assistant_msg}".encode()
+    return hashlib.sha256(blob).hexdigest()[:_DEDUP_SIG_CHARS]
+
+
+def append_exemplar(
+    *,
+    user_msg: str,
+    assistant_msg: str,
+    fitness_delta: float = 0.0,
+    source: str = "",
+    pool_path: Path | None = None,
+    max_size: int = MAX_EXEMPLAR_POOL_SIZE,
+) -> bool:
+    """Append a ``(user, assistant)`` pair to the few-shot pool. Idempotent.
+
+    PR-OL-C2 (2026-05-22) — M3 (PR #1426/#1428) shipped the *reader* +
+    ``apply_few_shot_pool`` but no writer existed. The ``exemplars``
+    in-context slot (M4.4 #1435) was thus permanently empty in
+    production. This writer closes the loop.
+
+    Args:
+        user_msg: The verbatim user-side prompt for the exemplar.
+        assistant_msg: The verbatim assistant response.
+        fitness_delta: Promote-vs-baseline fitness delta (or any ranking
+            signal). ``apply_few_shot_pool`` sorts by this desc.
+        source: Provenance tag (``"autoresearch_audit_promote"`` /
+            ``"petri_per_turn"`` / ``"live_session"``).
+        pool_path: Optional override of the SoT path
+            (:data:`GLOBAL_FEW_SHOT_POOL_PATH`). Tests pass ``tmp_path``.
+        max_size: Cap; older entries (top of file) are evicted FIFO when
+            the new pool would exceed this.
+
+    Returns:
+        ``True`` if the exemplar was appended.
+        ``False`` if (a) the signature already exists (idempotent no-op),
+        or (b) the read / write failed silently (logged at WARNING).
+    """
+    target = pool_path or _FEW_SHOT_POOL_SOT_PATH
+    new_sig = _exemplar_signature(user_msg, assistant_msg)
+    existing_lines: list[str] = []
+    if target.is_file():
+        try:
+            existing_lines = target.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            log.warning("few-shot-pool read failed at %s: %s", target, exc)
+            return False
+    # Dedup — scan existing lines for the signature.
+    for line in existing_lines:
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+        try:
+            entry = json.loads(line_clean)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        existing_user = entry.get("user_msg")
+        existing_assist = entry.get("assistant_msg")
+        if (
+            isinstance(existing_user, str)
+            and isinstance(existing_assist, str)
+            and _exemplar_signature(existing_user, existing_assist) == new_sig
+        ):
+            return False  # already present
+    # Build new line + FIFO evict.
+    new_row = {
+        "user_msg": user_msg,
+        "assistant_msg": assistant_msg,
+        "fitness_delta": float(fitness_delta),
+        "source": source,
+    }
+    new_line = json.dumps(new_row, ensure_ascii=False)
+    next_lines = [line for line in existing_lines if line.strip()] + [new_line]
+    if len(next_lines) > max_size:
+        next_lines = next_lines[-max_size:]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.write_text("\n".join(next_lines) + "\n", encoding="utf-8")
+    except OSError as exc:
+        log.warning("few-shot-pool write failed at %s: %s", target, exc)
+        return False
+    return True
+
+
 def apply_few_shot_pool(
     messages: list[dict[str, Any]],
     pool: list[FewShotExemplar] | None,
@@ -190,4 +290,9 @@ def apply_few_shot_pool(
     return prefix + list(messages)
 
 
-__all__ = ["FewShotExemplar", "apply_few_shot_pool"]
+__all__ = [
+    "MAX_EXEMPLAR_POOL_SIZE",
+    "FewShotExemplar",
+    "append_exemplar",
+    "apply_few_shot_pool",
+]

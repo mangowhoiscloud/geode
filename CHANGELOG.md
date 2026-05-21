@@ -71,6 +71,29 @@ functional change.
 
 ### Added
 
+- **PR-OL-C2 — few-shot pool writer + autoresearch promote 호출자.**
+  M3 (#1426/#1428) 이 reader (`_load_few_shot_pool_override` +
+  `apply_few_shot_pool`) 만 출시하고 writer 부재로 exemplars in-context
+  slot (M4.4 #1435) 가 영구 empty pool 위에 작동했던 deception 해소.
+  **신규 함수** `core/llm/few_shot_pool.append_exemplar(user_msg,
+  assistant_msg, fitness_delta, source, pool_path, max_size)` —
+  16-hex SHA256 signature idempotent dedup + FIFO eviction
+  (`MAX_EXEMPLAR_POOL_SIZE = 1000`). 모듈 `__all__` 에
+  `append_exemplar` + `MAX_EXEMPLAR_POOL_SIZE` 노출. **autoresearch
+  caller** — `autoresearch/train.py::main()` 의 OL-C1 eval emit 직후
+  `args.dry_run is False` AND `"true" in promoted_line.lower()` 시
+  `append_exemplar(source="autoresearch_audit_promote", fitness_delta=
+  fitness - mean(baseline_means))` 호출 (rejected pile 은 in-context
+  exemplars 채널에 들어가지 않게 gate). 전체 try/except 로 감싸져
+  audit cycle 보호. **8 def / 14 invariant test** — signature
+  determinism + field sensitivity / writer x4 (one row / idempotent /
+  multi-pair / round-trip with `_parse_jsonl`) / FIFO eviction 1 +
+  cap constant 1 / graceful 2 (parent dir creation, Unicode preserve)
+  / train.py source 검증 4종 (import 존재 / promote gate / try/except
+  / OL-C1 emit 후 위치 — order pin). **메타-level exemplar caveat**:
+  audit cycle 의 `(prompt, response)` 는 meta-level — 향후 OL-C2.2
+  follow-up 에서 AgenticLoop-turn-level + Petri-per-turn writer 추가.
+
 - **PR-OL-C1 — `eval_response_recorded` 호출자 wiring (autoresearch audit cycle 단위).**
   M4.0 (#1429) 이 "deferred to caller wiring" 으로 남긴 emit 함수가
   드디어 production 에 첫 호출자 획득. `autoresearch/train.py::main()`
