@@ -211,8 +211,19 @@ def test_publish_pack_dispatches_to_bedrock_adapter(pack_path: Path, out_path: P
 
 
 def test_no_network_imports_in_module() -> None:
-    """Pure transform — no openai/boto3/transformers/requests at import time."""
-    import sys
+    """Pure transform — no SDK imports in module source (static AST check).
+
+    A runtime ``sys.modules`` check is fragile because the test file
+    itself imports the publisher at top level, so any forbidden SDK
+    pulled in transitively would already be loaded before the test
+    captures its baseline. An AST walk of the module source is the
+    definitive check: if the import statement isn't there, the SDK
+    cannot have been loaded by this module.
+    """
+    import ast
+    import inspect
+
+    import core.self_improving_loop.dpo_publisher as pub
 
     forbidden = {
         "openai",
@@ -224,15 +235,14 @@ def test_no_network_imports_in_module() -> None:
         "urllib3",
         "anthropic",
     }
-    loaded_via_publisher = {
-        name for name in sys.modules if any(name.startswith(f) for f in forbidden)
-    }
-    # If any of the forbidden SDKs are loaded, they must have come from
-    # elsewhere in the test harness — not from importing dpo_publisher.
-    # The module itself only imports stdlib (json/logging/pathlib/typing).
-    import core.self_improving_loop.dpo_publisher as pub  # noqa: F401
-
-    after = {name for name in sys.modules if any(name.startswith(f) for f in forbidden)}
-    assert after == loaded_via_publisher, (
-        f"dpo_publisher must not import network SDKs at import time; new: {after - loaded_via_publisher}"
-    )
+    source = inspect.getsource(pub)
+    tree = ast.parse(source)
+    imported_top_level: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_top_level.add(alias.name.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_top_level.add(node.module.split(".", 1)[0])
+    bad = imported_top_level & forbidden
+    assert not bad, f"dpo_publisher must not import network SDKs; found: {bad}"
