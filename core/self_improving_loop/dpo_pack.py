@@ -139,11 +139,15 @@ def _iter_eval_events(journal_path: Path) -> list[_EvalEvent]:
         fitness = payload.get("fitness_score")
         if not isinstance(prompt, str) or not isinstance(response, str):
             continue
+        if not isinstance(fitness, (int, float, str)):
+            continue
         try:
-            fitness_f = float(fitness)  # type: ignore[arg-type]
+            fitness_f = float(fitness)
         except (TypeError, ValueError):
             continue
         ts_raw = row.get("ts", 0.0)
+        if not isinstance(ts_raw, (int, float, str)):
+            ts_raw = 0.0
         try:
             ts_f = float(ts_raw)
         except (TypeError, ValueError):
