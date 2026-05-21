@@ -67,8 +67,10 @@ functional change.
   **End-to-end consistency invariant** — `M1 write_policy` 가 쓴 file
   을 `T2 reader (_validate_schema + _coerce)` 가 그대로 parse 해야
   함. 16 invariant test 가 round-trip + BC + dispatcher state 모두
-  검증. tests/test_self_improving_5_slot_reader_audit.py 의 4-slot
-  expected set 도 5-slot 로 갱신 (M1 합류).
+  검증. tests/test_self_improving_5_slot_reader_audit.py +
+  test_adr_012_surface_tiers.py + test_policy_mutation.py 의 4-slot
+  expected set 도 5-slot 로 갱신 (M1 합류). 신규 18 invariant test
+  (test_m1_skill_mutation_slot.py) + 3 stale set 갱신.
 
 - **PR-S5 — 4종 in-context slot 명시적 schema (ADR-012).** GEODE 의
   agent 가 매 turn 마다 system prompt + tool messages 에 주입하는
