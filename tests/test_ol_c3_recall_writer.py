@@ -172,9 +172,7 @@ def test_write_creates_parent_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     nested = tmp_path / "subdir" / "deeper" / "recall"
     monkeypatch.setenv("GEODE_MEMORY_RECALL_DIR", str(nested))
     assert not nested.exists()
-    path = write_recall_entry(
-        name="nested-test", description="d", body="b", type_label="user"
-    )
+    path = write_recall_entry(name="nested-test", description="d", body="b", type_label="user")
     assert path is not None
     assert nested.is_dir()
 
