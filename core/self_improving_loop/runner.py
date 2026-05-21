@@ -506,6 +506,22 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
         max_tokens,
     )
 
+    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. When the
+    # operator opted into "claude-cli" / "openai-codex" via
+    # ``[self_improving_loop.mutator] source = "..."`` in config.toml,
+    # route the mutator call through the local CLI binary so the
+    # subscription (Claude Code Max / ChatGPT Plus) is billed instead
+    # of the API. The default "auto" / "api_key" path remains
+    # unchanged — existing operators see zero behavior diff.
+    if source == "claude-cli":
+        from core.self_improving_loop.cli_subprocess import invoke_claude_cli
+
+        return invoke_claude_cli(system_prompt=system_prompt, user_prompt=user_prompt)
+    if source == "openai-codex":
+        from core.self_improving_loop.cli_subprocess import invoke_codex_cli
+
+        return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
+
     async def _do_call(m: str) -> object:
         return await adapter.agentic_call(
             model=m,

@@ -71,6 +71,37 @@ functional change.
 
 ### Added
 
+- **PR-PAPERCLIP — Paperclip pattern wiring for self-improving loop mutator.**
+  사전 PR (PR-1 G-A) 가 `MutatorConfig.source = Literal["auto", "api_key",
+  "claude-cli", "openai-codex"]` knob 만 도입했고 runner 는 source 를 *로그만*
+  찍었다. 본 PR 이 실제 dispatch 를 연결. **신규 모듈**
+  `core/self_improving_loop/cli_subprocess.py` — `invoke_claude_cli` /
+  `invoke_codex_cli` subprocess wrapper. `claude --print --output-format text
+  --append-system-prompt <SYS> <USR>` / `codex exec --skip-git-repo-check
+  <SYS+USR>` argv shape. binary path 는 `$PATH` 의 `claude`/`codex` 또는 env
+  override (`GEODE_CLAUDE_CLI_BIN` / `GEODE_CODEX_CLI_BIN`). missing →
+  `CliInvocationError` (설치 hint 동봉). 180s timeout. **runner 변경** —
+  `_default_llm_call` 가 `cfg.mutator.source` 검사 후 paperclip 일 때
+  subprocess wrapper 호출, else 기존 API path 유지 (zero-diff for default
+  operators). **UI/UX** — `/self-improving config` (interactive 설정창,
+  mutator + petri.<role> + seed_generation.<role> 컴포넌트별 provider /
+  model / source 입력, Enter 로 현재값 유지, 완료 후 `/self-improving run`
+  체이닝 옵션 — 입력 필드 *model + source*) + `/self-improving source`
+  (현재 상태 테이블) + `/self-improving source set <key>=<value>`
+  (non-interactive mutator setter). **TOML 쓰기** — `_splice_section`
+  헬퍼가 `~/.geode/config.toml` 의 section header 를 찾아 in-place key
+  갱신, 누락 section 은 append, sibling section 보존. seed-generation
+  role 쓰기는 **plural `roles.<X>`** path 사용 (loader schema 와 동기
+  — Codex MCP catch). `atomic_write_text` + `_toml_escape_basic_string`
+  (기존 `cmd_config.py` 패턴). **18 invariant test** — argv shape 2 /
+  missing binary / env override / 비정상 exit / **timeout** / runner
+  dispatch 3 (claude-cli + codex + api_key 무변경) / TOML splice 5
+  (append + replace + insert + sibling 보존 + 이스케이프) + source set
+  3 + **seed-generation roles plural-path round-trip**
+  (writer → loader validate). 영향 범위 — paperclip 은 self-improving
+  loop **mutator only** (Q1 응답). Agentic Loop 일상 호출은 기존 API
+  path 그대로.
+
 - **PR-M4.2 — DPO publisher adapters (TRL / OpenAI / Bedrock, ADR-012).**
   M4.1 canonical pack 을 per-provider DPO 학습 입력 포맷으로 변환.
   **신규 모듈** `core/self_improving_loop/dpo_publisher.py` — 3 adapter
