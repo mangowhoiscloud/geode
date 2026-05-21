@@ -71,6 +71,25 @@ functional change.
 
 ### Added
 
+- **PR-OL-C2' — Reflection node canonical-path pins (drift prevention).**
+  Roadmap (2026-05-22) 의 OL-C2' 가 `core/agent/reflection.py` 신규 모듈을
+  요구했으나 GAP audit 결과 reflection node 가 **이미** `core/agent/loop/
+  _reflection.py` (321 LOC, PR-3 C-2 cognitive-loop-uplift) 에 존재 + 3 개의
+  test file (`tests/test_reflection_node.py` / `test_reflection_cost_gate.py`
+  / `test_s0b_reflection_reader.py`) 가 커버. 본 PR 가 OL-G 패턴 차용 —
+  4 개의 drift-prevention invariant pin 추가. (1) canonical path 가
+  `core/agent/loop/_reflection.py` 임을 못 박음. (2) parallel duplicate 가
+  `core/agent/reflection.py` 에 생기지 못하게 anti-presence assert (운영자가
+  stale roadmap 보고 재구현 시도하면 RED). (3) load-bearing surface
+  (`reflect_async` / `REFLECTION_TOOL_NAME = "record_reflection"` /
+  `_REFLECTION_TOOL` schema 의 hypotheses/confidence/next_action_hint
+  3 필드) 노출 검증. (4) `HookEvent.COGNITIVE_REFLECT` enum entry +
+  value 매치. **사이드 노트**: `core/agent/reflection_policy.py` (S0a-
+  style policy reader for operator-local `reflection.json` overrides)
+  는 *별개 모듈* — 같은 디렉토리에 공존 허용 (역할 분리: policy reader
+  vs reflection-node implementation). 4/4 pytest pass, ruff + ruff
+  format --check clean.
+
 - **PR-OL-G — Config drift invariant pins (G-B / G-D / G-E).**
   PR-1 G-B/G-D/G-E (2026-05-21) 가 3건의 config drift 를 닫았지만 invariant
   test 가 없어 회귀 위험 존재 — 본 PR 가 5개의 pin test 추가.
