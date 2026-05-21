@@ -574,6 +574,15 @@ class SubAgentManager:
         if agent_def is None:
             log.debug("Agent '%s' not found in registry", agent_name)
             return None
+        # ADR-012 M2 (2026-05-21) — agent-contracts.json policy override.
+        # role / system_prompt / tools 만 mutate 가능 (model 은 Tier 2).
+        # 정책 부재 시 agent_def 그대로 — no behavior change.
+        from core.agent.agent_contracts_policy import (
+            _load_agent_contracts_override,
+            apply_agent_contracts_policy,
+        )
+
+        agent_def = apply_agent_contracts_policy(agent_def, _load_agent_contracts_override())
         return {
             "agent_name": agent_def.name,
             "role": agent_def.role,

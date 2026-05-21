@@ -29,16 +29,12 @@ def test_target_kinds_includes_skill_catalog() -> None:
     assert "skill_catalog" in pol.TARGET_KINDS
 
 
-def test_target_kinds_count_is_5() -> None:
-    """4 prior (prompt / tool_policy / decomposition / reflection) + 1 new (skill_catalog)."""
-    assert len(pol.TARGET_KINDS) == 5
-    assert pol.TARGET_KINDS == (
-        "prompt",
-        "tool_policy",
-        "decomposition",
-        "reflection",
-        "skill_catalog",
-    )
+def test_target_kinds_count_grows_with_each_m_pr() -> None:
+    """M1 (skill_catalog) 합류 ≥ 5. 이후 M2/M3... 추가 시 grow.
+    M1 의 invariant 는 skill_catalog 가 등록되었음 + retrieval 제외."""
+    assert "skill_catalog" in pol.TARGET_KINDS
+    assert "retrieval" not in pol.TARGET_KINDS
+    assert len(pol.TARGET_KINDS) >= 5
 
 
 def test_is_valid_target_kind_accepts_skill_catalog() -> None:

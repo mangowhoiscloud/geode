@@ -31,18 +31,17 @@ from core.self_improving_loop import policies as _policies_mod
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_active_five() -> None:
-    """ADR-012 S0d (2026-05-21) — retrieval deprecated.
-    ADR-012 M1 (2026-05-21) — skill_catalog 추가 → 5 active mutation targets.
-    (retrieval 의 deprecate 근거는 ADR §Decision.3a 의 Boris Cherny +
-    arXiv 2605.15184 + Anthropic blog 3-source 합의. M1 의 skill_catalog
-    합류는 T2 reader 와의 round-trip.)"""
+def test_target_kinds_contains_active_six() -> None:
+    """ADR-012 S0d — retrieval deprecated. M1 — skill_catalog 추가.
+    M2 (2026-05-21) — agent_contract 추가. Post-M2: 6 active mutation
+    targets."""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
         "decomposition",
         "reflection",
         "skill_catalog",
+        "agent_contract",
     }
 
 
@@ -62,13 +61,13 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 
 def test_policy_path_returns_distinct_paths() -> None:
-    """Distinct SoT per kind so policies evolve independently. M1 (2026-05-21)
-    후: 5 active kinds (skill_catalog 포함) + 보존된 retrieval 매핑 = 6
-    distinct paths."""
+    """Distinct SoT per kind so policies evolve independently. M2 (2026-05-21)
+    후: 6 active kinds (skill_catalog + agent_contract 포함) + 보존된
+    retrieval 매핑 = 7 distinct paths."""
     paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
-    # 5 active (incl. skill_catalog post-M1) + retrieval (deprecated but
-    # path preserved) = 6 unique paths.
-    assert len(set(paths.values())) == 6
+    # 6 active (incl. skill_catalog post-M1 + agent_contract post-M2) +
+    # retrieval (deprecated but path preserved) = 7 unique paths.
+    assert len(set(paths.values())) == 7
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:

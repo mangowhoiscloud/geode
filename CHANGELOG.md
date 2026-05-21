@@ -49,6 +49,29 @@ functional change.
 
 ### Added
 
+- **PR-M2 — Agent contract mutation slot (ADR-012).** AgentDefinition
+  의 `role` / `system_prompt` / `tools` 를 mutator 가 evolve. `model`
+  field 는 Tier 2 (안전성 invariants root) — 본 surface 에서 명시적
+  제외 (mutator 가 provider 임의 변경으로 safety guardrail 우회 방지).
+  5-element 패턴: SoT `autoresearch/state/policies/agent-contracts.json`
+  (+ operator-local) / `GLOBAL_AGENT_CONTRACTS_PATH` +
+  `OPERATOR_LOCAL_AGENT_CONTRACTS_PATH` 추가 /
+  `core/agent/agent_contracts_policy.py` reader (`_load_agent_contracts_override`
+  + `apply_agent_contracts_policy(agent_def, policy)` — `model_copy(update=...)`
+  로 새 instance 반환, 원본 immutable) /
+  `core/agent/sub_agent.py:resolve_agent` 가 `_agent_registry.get()` 직후
+  `apply_agent_contracts_policy(...)` 호출 / `autoresearch/train.py`
+  env wiring + `core/self_improving_loop/policies.py:TARGET_KINDS`
+  5 → 6 (skill_catalog 뒤 agent_contract 추가). M1 의 nested ↔ flat
+  변환 helper 를 일반화 (`_BOOL_FIELDS_BY_KIND` / `_LIST_FIELDS_BY_KIND`
+  / `_NESTED_KINDS` frozenset) — `tools` field 는 list[str] 이므로
+  comma-separated string 으로 flat ↔ list[str] 변환. `_coerce` 가
+  `model` field 명시적 drop (Tier 2 guardrail in code). **18 invariant
+  test** — dispatcher 4 + reader 8 + apply 5 + dispatcher round-trip 2
+  + M1 BC 1 + model preservation 1. M1 의 invariant test 도 5→≥5 으로
+  완화 (count grow forward-compat). M2 합류 후 3 stale test set 갱신
+  (test_policy_mutation / test_adr_012_surface_tiers / test_self_improving_5_slot_reader_audit).
+
 - **PR-M1 — Skill mutation slot 개통 (ADR-012).** T2 (#1418) 의
   `skill-catalog.json` reader 를 mutator 의 mutation contract 가
   실제로 mutate 할 수 있도록 dispatcher 확장. `core/self_improving_loop/

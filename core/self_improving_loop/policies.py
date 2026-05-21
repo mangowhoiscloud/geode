@@ -46,6 +46,7 @@ import logging
 from pathlib import Path
 
 from core.paths import (
+    GLOBAL_AGENT_CONTRACTS_PATH,
     GLOBAL_DECOMPOSITION_POLICY_PATH,
     GLOBAL_REFLECTION_POLICY_PATH,
     GLOBAL_RETRIEVAL_POLICY_PATH,
@@ -145,6 +146,11 @@ TARGET_KINDS: tuple[str, ...] = (
     # 이므로 ``load_policy`` / ``write_policy`` 가 dotted-key flat 표현
     # 으로 변환 (mutation row 의 ``target_section`` 은 string 만 허용).
     "skill_catalog",
+    # ADR-012 M2 (2026-05-21) — agent contract mutation slot 개통.
+    # AgentDefinition.role / system_prompt / tools 의 mutation surface.
+    # ``model`` field 는 Tier 2 (안전성 invariants) — 본 slot 에서 명시적
+    # 제외. skill_catalog 와 동일 nested ↔ flat 변환 적용.
+    "agent_contract",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -159,7 +165,12 @@ _KIND_TO_PATH: dict[str, Path] = {
     "retrieval": GLOBAL_RETRIEVAL_POLICY_PATH,
     "reflection": GLOBAL_REFLECTION_POLICY_PATH,
     "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
+    "agent_contract": GLOBAL_AGENT_CONTRACTS_PATH,
 }
+
+# M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /
+# ``write_policy`` 의 flat ↔ nested 변환 dispatch 분기 키.
+_NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
 
 
 def is_valid_target_kind(kind: str) -> bool:
@@ -224,7 +235,7 @@ def load_policy(kind: str) -> dict[str, str]:
             type(payload).__name__,
         )
         return {}
-    if kind == "skill_catalog":
+    if kind in _NESTED_KINDS:
         # Disk shape = nested dict; runner contract = flat dotted-key.
         return _flatten_nested(payload)
     # Coerce values to strings — same schema as wrapper-sections so
@@ -254,11 +265,11 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     _maybe_migrate_legacy_sot(kind, path)
     path.parent.mkdir(parents=True, exist_ok=True)
     serializable: dict[str, object]
-    if kind == "skill_catalog":
+    if kind in _NESTED_KINDS:
         # ``_unflatten_nested`` returns ``dict[str, dict[str, object]]`` —
         # widen to ``dict[str, object]`` so the type matches the legacy
         # ``dict[str, str]`` branch under a common annotation.
-        serializable = dict(_unflatten_nested(sections))
+        serializable = dict(_unflatten_nested(sections, kind=kind))
     else:
         serializable = {k: v for k, v in sections.items() if isinstance(k, str)}
     payload = json.dumps(
@@ -274,58 +285,87 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# M1 — skill_catalog flat / nested 변환 (ADR-012 M1, 2026-05-21)
+# M1 + M2 — nested ↔ flat 변환 (ADR-012 M1/M2, 2026-05-21)
 # ---------------------------------------------------------------------------
 
-# T2 의 ``user_invocable`` field 는 bool — mutation row 의 ``new_value`` 가
-# string 이므로 write 시 ``"true"``/``"false"`` → bool 으로 coerce 한다.
-_SKILL_CATALOG_BOOL_FIELDS = frozenset({"user_invocable"})
+# Mutation row 의 ``new_value`` 는 string-only. nested-schema kinds 의
+# 비-string field 는 변환 시 정규화 — bool / list 두 카테고리.
+#
+# M1 (skill_catalog): ``user_invocable`` (bool) 만 비-string.
+# M2 (agent_contract): ``tools`` (list[str]) 만 비-string.
+_BOOL_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
+    "skill_catalog": frozenset({"user_invocable"}),
+    "agent_contract": frozenset(),
+}
+_LIST_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
+    "skill_catalog": frozenset(),
+    "agent_contract": frozenset({"tools"}),
+}
 
 
 def _flatten_nested(payload: dict[object, object]) -> dict[str, str]:
-    """Convert nested ``{skill: {field: value}}`` → flat ``{"skill.field": "value"}``.
+    """Convert nested ``{name: {field: value}}`` → flat ``{"name.field": "value"}``.
 
-    Used by :func:`load_policy` when ``kind == "skill_catalog"`` so the
-    runner sees the same string-keyed flat shape as the other 4 kinds.
-    Non-dict entries are skipped (forward-compat — future fields could
-    grow nested arbitrarily).
+    Used by :func:`load_policy` when ``kind`` is a nested-schema kind
+    (skill_catalog / agent_contract) so the runner sees the same
+    string-keyed flat shape as the legacy 4 kinds. Non-dict entries
+    skipped. Lists are joined with ``", "`` (mutation row → list split
+    on the write path).
     """
     flat: dict[str, str] = {}
-    for skill, entry in payload.items():
-        if not isinstance(skill, str):
+    for name, entry in payload.items():
+        if not isinstance(name, str):
             continue
         if not isinstance(entry, dict):
             continue
         for field, value in entry.items():
             if not isinstance(field, str):
                 continue
-            flat[f"{skill}.{field}"] = (
-                "true" if value is True else ("false" if value is False else str(value))
-            )
+            if value is True:
+                str_value = "true"
+            elif value is False:
+                str_value = "false"
+            elif isinstance(value, list):
+                str_value = ", ".join(str(x) for x in value)
+            else:
+                str_value = str(value)
+            flat[f"{name}.{field}"] = str_value
     return flat
 
 
-def _unflatten_nested(sections: dict[str, str]) -> dict[str, dict[str, object]]:
-    """Convert flat ``{"skill.field": "value"}`` → nested ``{skill: {field: value}}``.
+def _unflatten_nested(
+    sections: dict[str, str],
+    *,
+    kind: str = "skill_catalog",
+) -> dict[str, dict[str, object]]:
+    """Convert flat ``{"name.field": "value"}`` → nested
+    ``{name: {field: value}}``.
 
-    Used by :func:`write_policy` when ``kind == "skill_catalog"`` so the
-    disk shape stays the T2-reader-compatible nested dict. Keys without
-    a ``.`` are dropped (mutation contract requires dotted form for
-    nested kinds). Known bool fields (``user_invocable``) get coerced
-    so T2's schema validator accepts the value.
+    ``kind`` controls per-field coercion:
+      - ``skill_catalog``: ``user_invocable`` (bool) coerced from
+        ``"true"``/``"false"``.
+      - ``agent_contract``: ``tools`` (list[str]) coerced by
+        comma-separated split + strip.
+
+    Keys without a ``.`` are dropped (mutation contract requires dotted
+    form for nested kinds).
     """
+    bool_fields = _BOOL_FIELDS_BY_KIND.get(kind, frozenset())
+    list_fields = _LIST_FIELDS_BY_KIND.get(kind, frozenset())
     nested: dict[str, dict[str, object]] = {}
     for flat_key, value in sections.items():
         if not isinstance(flat_key, str) or "." not in flat_key:
             continue
-        skill, _, field = flat_key.partition(".")
-        if not skill or not field:
+        name, _, field = flat_key.partition(".")
+        if not name or not field:
             continue
-        if field in _SKILL_CATALOG_BOOL_FIELDS:
+        if field in bool_fields:
             coerced: object = value == "true"
+        elif field in list_fields:
+            coerced = [t.strip() for t in value.split(",") if t.strip()]
         else:
             coerced = value
-        nested.setdefault(skill, {})[field] = coerced
+        nested.setdefault(name, {})[field] = coerced
     return nested
 
 

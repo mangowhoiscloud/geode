@@ -229,9 +229,8 @@ def test_adr_cites_train_py_dim_weights_location() -> None:
 
 
 def test_active_slots_registered_as_mutation_targets() -> None:
-    """S0d (2026-05-21) 머지 후 retrieval 은 TARGET_KINDS 에서 제거.
-    M1 (2026-05-21) 머지 후 skill_catalog 가 추가되어 5 active slot.
-    retrieval 은 여전히 deprecate 유지."""
+    """S0d (2026-05-21) — retrieval deprecated; M1 — skill_catalog 추가;
+    M2 (2026-05-21) — agent_contract 추가 → 6 active slot."""
     import importlib
 
     mod = importlib.import_module("core.self_improving_loop.policies")
@@ -242,8 +241,9 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "decomposition",
         "reflection",
         "skill_catalog",
+        "agent_contract",
     }
-    assert target_kinds == expected, f"TARGET_KINDS 는 {expected} (post-M1). got={target_kinds}"
+    assert target_kinds == expected, f"TARGET_KINDS 는 {expected} (post-M2). got={target_kinds}"
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
 
 

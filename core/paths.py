@@ -143,6 +143,12 @@ OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.js
 # 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
 GLOBAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_POLICIES_DIR / "in-context-slots.json"
 OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "in-context-slots.json"
+# ADR-012 M2 (2026-05-21) — AgentDefinition contract mutation SoT.
+# Mutator overrides per-agent role / system_prompt / tools. ``model``
+# field 은 Tier 2 — 변경 시 안전성 invariants 가 단번에 무효화될 수
+# 있어 mutation surface 에서 제외.
+GLOBAL_AGENT_CONTRACTS_PATH = GLOBAL_POLICIES_DIR / "agent-contracts.json"
+OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "agent-contracts.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
