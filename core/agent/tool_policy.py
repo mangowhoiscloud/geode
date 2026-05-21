@@ -19,35 +19,44 @@ reader 의 패턴을 그대로 차용해 ``tool-policy.json`` 의 정책을 도�
 빈 정책 / 누락 / 부적합 schema → no-op (현재 행동 유지). 정책이 ALIVE
 신호를 내려면 셋 중 하나라도 비어 있지 않아야 한다.
 
-**Resolution order** (``_load_wrapper_override`` 와 동일):
+**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
+:mod:`core.self_improving_loop.sot_resolution`):
 
-1. ``GEODE_TOOL_POLICY_OVERRIDE`` env var — audit subprocess hook,
-   strict load (schema 실패 시 RuntimeError 로 fail-fast).
-2. ``~/.geode/self-improving-loop/tool-policy.json`` — daily-run SoT,
-   graceful load (schema 실패 시 WARNING + ``None`` 반환).
-3. ``None`` — no-op (도구 목록 그대로).
+1. ``GEODE_TOOL_POLICY_OVERRIDE`` env var — explicit override.
+
+   - With ``GEODE_TOOL_POLICY_STRICT=1`` (audit subprocess): strict load,
+     RuntimeError on missing/unparseable (fail-fast for mutation audit).
+   - Without strict flag (operator daily): graceful load, returns ``None``
+     on issue (no fall-through to lower layers; env is authoritative).
+
+2. ``~/.geode/self-improving-loop/tool-policy.json`` — operator-local SoT,
+   graceful load (per-machine override outside the in-repo ratchet).
+3. ``autoresearch/state/policies/tool-policy.json`` — in-repo,
+   ratchet-tracked, graceful load (default policy site).
+4. ``None`` — no-op (도구 목록 그대로).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_TOOL_POLICY_PATH
+from core.paths import GLOBAL_TOOL_POLICY_PATH, OPERATOR_LOCAL_TOOL_POLICY_PATH
+from core.self_improving_loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
 _TOOL_POLICY_OVERRIDE_ENV = "GEODE_TOOL_POLICY_OVERRIDE"
 
 _TOOL_POLICY_SOT_PATH = GLOBAL_TOOL_POLICY_PATH
-"""Cross-process SoT path shared with :mod:`autoresearch.train` (S0a, 2026-05-21).
+"""Cross-process in-repo SoT path shared with :mod:`autoresearch.train`
+(S0a, 2026-05-21). Module-local alias kept for monkeypatch in tests."""
 
-``wrapper-sections.json`` reader 와 동일하게 module-local alias 를 둬서
-테스트가 ``core.agent.tool_policy._TOOL_POLICY_SOT_PATH`` 를 monkeypatch
-할 수 있도록 한다 (path-literal guard contract)."""
+_OPERATOR_LOCAL_TOOL_POLICY_PATH = OPERATOR_LOCAL_TOOL_POLICY_PATH
+"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
+alias kept for monkeypatch in tests."""
 
 
 # Schema field 이름들 — 외부 정책 파일과 1:1 mapping.
@@ -58,20 +67,20 @@ _ALL_FIELDS = frozenset({_FIELD_ALLOWED, _FIELD_FORBIDDEN, _FIELD_PRIORITY})
 
 
 def _load_tool_policy_override() -> dict[str, list[str]] | None:
-    """Return the active tool policy dict, or ``None`` when no override applies.
+    """Return the active tool policy dict, or ``None`` when no SoT applies.
 
-    Resolution order:
-
-    1. ``GEODE_TOOL_POLICY_OVERRIDE`` env var (audit subprocess) — strict.
-    2. ``~/.geode/self-improving-loop/tool-policy.json`` (daily run) — graceful.
-    3. ``None`` — no policy active.
+    Resolution order — see module docstring (3-layer chain).
     """
-    override_path = os.environ.get(_TOOL_POLICY_OVERRIDE_ENV)
-    if override_path:
-        return _strict_load(Path(override_path))
-    if _TOOL_POLICY_SOT_PATH.is_file():
-        return _graceful_load(_TOOL_POLICY_SOT_PATH)
-    return None
+    selection = resolve_sot(
+        env_var=_TOOL_POLICY_OVERRIDE_ENV,
+        operator_local=_OPERATOR_LOCAL_TOOL_POLICY_PATH,
+        in_repo=_TOOL_POLICY_SOT_PATH,
+    )
+    if selection is None:
+        return None
+    if selection.strict:
+        return _strict_load(selection.path)
+    return _graceful_load(selection.path)
 
 
 def _strict_load(path: Path) -> dict[str, list[str]]:

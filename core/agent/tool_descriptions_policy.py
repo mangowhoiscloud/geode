@@ -23,11 +23,17 @@ dim) 직접 영향.
 
 빈 entry / 누락 tool / 부적합 schema → no-op (default description 유지).
 
-**Resolution order** (``wrapper-sections.json`` 패턴 동일):
+**Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
+:mod:`core.self_improving_loop.sot_resolution`):
 
-1. ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` env var — audit subprocess, strict.
-2. ``autoresearch/state/policies/tool-descriptions.json`` (in-repo, ratchet-tracked).
-3. ``None`` — no-op (default description 사용).
+1. ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` env var — explicit override.
+
+   - With ``GEODE_TOOL_DESCRIPTIONS_STRICT=1`` (audit subprocess): strict.
+   - Without strict flag (operator daily): graceful (no fall-through).
+
+2. ``~/.geode/self-improving-loop/tool-descriptions.json`` — operator-local, graceful.
+3. ``autoresearch/state/policies/tool-descriptions.json`` — in-repo, graceful.
+4. ``None`` — no-op (default description 사용).
 
 **Frontier**: OpenAI function calling docs — "clearer descriptions yield
 more accurate selection" + Anthropic tool-use guide.
@@ -38,19 +44,22 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH
+from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH, OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+from core.self_improving_loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
 _TOOL_DESCRIPTIONS_OVERRIDE_ENV = "GEODE_TOOL_DESCRIPTIONS_OVERRIDE"
 
 _TOOL_DESCRIPTIONS_SOT_PATH = GLOBAL_TOOL_DESCRIPTIONS_PATH
-"""Cross-process SoT path (T1, 2026-05-21). module-local alias 로 테스트
-가 monkeypatch 가능."""
+"""Cross-process in-repo SoT path (T1, 2026-05-21). module-local alias."""
+
+_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+"""Operator-local SoT path (PR-BACKFILL-SOT, 2026-05-21). Module-local
+alias kept for monkeypatch in tests."""
 
 
 _FIELD_DESCRIPTION = "description"
@@ -58,13 +67,20 @@ _FIELD_HINTS = "hints"
 
 
 def _load_tool_descriptions_override() -> dict[str, dict[str, Any]] | None:
-    """Return active tool-descriptions override, or ``None`` if no SoT."""
-    override_path = os.environ.get(_TOOL_DESCRIPTIONS_OVERRIDE_ENV)
-    if override_path:
-        return _strict_load(Path(override_path))
-    if _TOOL_DESCRIPTIONS_SOT_PATH.is_file():
-        return _graceful_load(_TOOL_DESCRIPTIONS_SOT_PATH)
-    return None
+    """Return active tool-descriptions override, or ``None`` if no SoT.
+
+    Resolution order — see module docstring (3-layer chain).
+    """
+    selection = resolve_sot(
+        env_var=_TOOL_DESCRIPTIONS_OVERRIDE_ENV,
+        operator_local=_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
+        in_repo=_TOOL_DESCRIPTIONS_SOT_PATH,
+    )
+    if selection is None:
+        return None
+    if selection.strict:
+        return _strict_load(selection.path)
+    return _graceful_load(selection.path)
 
 
 def _strict_load(path: Path) -> dict[str, dict[str, Any]]:

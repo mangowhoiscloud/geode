@@ -95,6 +95,15 @@ GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
 GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
 # ADR-013 T1 (2026-05-21) — Tool descriptions mutation SoT.
 GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
+# PR-BACKFILL-SOT (2026-05-21) — operator-local SoT layer for the 4 active
+# mutation surface readers (tool_policy / reflection / decomposition /
+# tool_descriptions). Per-machine overrides without touching in-repo
+# ratchet-tracked files. Resolution order: env-override (strict/graceful)
+# → operator-local (graceful) → in-repo (graceful) → None.
+OPERATOR_LOCAL_TOOL_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
+OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
+OPERATOR_LOCAL_REFLECTION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
+OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-descriptions.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are

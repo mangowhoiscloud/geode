@@ -26,11 +26,14 @@ from core.agent import tool_policy
 
 @pytest.fixture
 def isolated_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Monkeypatch ``_TOOL_POLICY_SOT_PATH`` to tmp_path so tests don't read
-    or pollute the operator's real SoT at ``~/.geode/self-improving-loop/``."""
+    """Isolate all 3 SoT layers (env / operator-local / in-repo) to tmp_path
+    so tests don't read or pollute the operator's real artefacts."""
     sot = tmp_path / "tool-policy.json"
+    operator_local = tmp_path / "operator-local-tool-policy.json"
     monkeypatch.setattr(tool_policy, "_TOOL_POLICY_SOT_PATH", sot)
+    monkeypatch.setattr(tool_policy, "_OPERATOR_LOCAL_TOOL_POLICY_PATH", operator_local)
     monkeypatch.delenv("GEODE_TOOL_POLICY_OVERRIDE", raising=False)
+    monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
     yield sot
 
 
@@ -91,9 +94,10 @@ def test_load_unknown_fields_ignored(isolated_sot: Path) -> None:
 def test_strict_load_via_env_var_raises_on_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``GEODE_TOOL_POLICY_OVERRIDE`` 가 가리키는 파일이 없으면 RuntimeError."""
+    """audit subprocess (``_OVERRIDE`` + ``_STRICT=1``) — missing file → RuntimeError."""
     missing = tmp_path / "nope.json"
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(missing))
+    monkeypatch.setenv("GEODE_TOOL_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="GEODE_TOOL_POLICY_OVERRIDE"):
         _load_tool_policy_override()
 
@@ -101,13 +105,54 @@ def test_strict_load_via_env_var_raises_on_missing(
 def test_strict_load_via_env_var_raises_on_type_violation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """audit subprocess 는 type 위반 (list 도 string 도 아님) 시 RuntimeError (fail-fast).
+    """audit subprocess (``_OVERRIDE`` + ``_STRICT=1``) — type 위반 RuntimeError (fail-fast).
     Producer parity 확장 후 string 은 valid → dict/int 등 다른 type 만 violation."""
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"forbidden_tools": {"nested": "dict"}}), encoding="utf-8")
     monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(bad))
+    monkeypatch.setenv("GEODE_TOOL_POLICY_STRICT", "1")
     with pytest.raises(RuntimeError, match="forbidden_tools"):
         _load_tool_policy_override()
+
+
+def test_env_var_without_strict_flag_is_graceful_on_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-BACKFILL-SOT (2026-05-21) — env var alone (no ``_STRICT=1``)
+    treats env path graceful: missing file → ``None`` (no fall-through)."""
+    missing = tmp_path / "nope.json"
+    monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(missing))
+    monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
+    assert _load_tool_policy_override() is None
+
+
+def test_env_var_without_strict_flag_is_graceful_on_invalid_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Operator daily use — broken JSON in env-pointed file → ``None`` + WARNING."""
+    bad = tmp_path / "bad.json"
+    bad.write_text("not json {", encoding="utf-8")
+    monkeypatch.setenv("GEODE_TOOL_POLICY_OVERRIDE", str(bad))
+    monkeypatch.delenv("GEODE_TOOL_POLICY_STRICT", raising=False)
+    assert _load_tool_policy_override() is None
+
+
+def test_operator_local_layer_read_when_in_repo_absent(isolated_sot: Path) -> None:
+    """PR-BACKFILL-SOT (2026-05-21) — ``~/.geode/self-improving-loop/tool-policy.json``
+    (operator-local) layer is read when env unset + in-repo absent."""
+    operator_local = isolated_sot.parent / "operator-local-tool-policy.json"
+    operator_local.write_text(json.dumps({"allowed_tools": ["bash"]}), encoding="utf-8")
+    assert not isolated_sot.exists()
+    assert _load_tool_policy_override() == {"allowed_tools": ["bash"]}
+
+
+def test_operator_local_layer_takes_priority_over_in_repo(isolated_sot: Path) -> None:
+    """3-layer chain — operator-local > in-repo when both present."""
+    operator_local = isolated_sot.parent / "operator-local-tool-policy.json"
+    operator_local.write_text(json.dumps({"allowed_tools": ["from-ops"]}), encoding="utf-8")
+    _write(isolated_sot, {"allowed_tools": ["from-repo"]})
+    result = _load_tool_policy_override()
+    assert result == {"allowed_tools": ["from-ops"]}
 
 
 # ---------------------------------------------------------------------------
