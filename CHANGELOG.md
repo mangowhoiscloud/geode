@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-OL-OAUTH-COUNT-TOKENS — Claude OAuth count_tokens 401 fallback.**
+  Pattern-B subscription-routed Petri audit (Claude Max OAuth, OL-A2-data
+  + OL-P1 unblock path) was aborting before any sample ran with
+  `AuthenticationError 401 invalid x-api-key` on
+  `/v1/messages/count_tokens`. Root cause: Claude OAuth tokens carry
+  scope `user:inference` — Anthropic gateway accepts for `/v1/messages`
+  but rejects for `/v1/messages/count_tokens`. inspect_ai's class-method
+  `count_tokens` (`AnthropicAPI` line 532+) propagates the 401 with no
+  try/except → `Task interrupted (no samples completed)`. **Fix**:
+  override `count_tokens` in `plugins/petri_audit/claude_code_provider.py
+  ::ClaudeOAuthAPI` to skip the API call and return inspect_ai's own
+  documented fallback heuristic (`max(1, len(text) // 4)`). Heuristic
+  extracted to module-level pure function `estimate_tokens_for_oauth(input)`
+  so it is testable without instantiating the inspect_ai-wrapped class.
+  Accuracy degrades from "exact" to "Anthropic-standard heuristic" —
+  operators needing exact pre-flight cost numbers should use PAYG path
+  (`api_key` source). **9 invariant test** (`tests/test_ol_oauth_count_tokens_fallback.py`)
+  — string/empty/None input + list-of-msg with str-content + list-of-msg
+  with block-content (tool_use shape) + mixed shapes + skip-non-text-blocks
+  + source-level pin on override+delegation + inspect_ai-gated class
+  presence check. Quality gates clean (ruff + ruff format --check + mypy
+  + 9/9 pytest).
+
 ## [0.99.28] - 2026-05-22
 
 > Tier 1 (Outer Loop) closure stamp. 2 PRs:
