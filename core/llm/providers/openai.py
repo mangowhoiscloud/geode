@@ -589,6 +589,13 @@ class OpenAIAgenticAdapter:
             log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
+        # PR-M4.4 (2026-05-21) — 4-slot in-context wiring. No-op fast
+        # path when no SoT configured (zero overhead for default
+        # operators). See ``core.self_improving_loop.in_context_wiring``.
+        from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+
+        messages, system = apply_in_context_slots(messages, system=system)
+
         # GAP-T1 — normalize cross-provider tool_choice into the Responses API
         # shape (string or {"type": "function", "name": "..."}).
         from core.llm.tool_choice import normalize as _normalize_tool_choice
