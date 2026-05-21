@@ -539,7 +539,7 @@ def test_load_baseline_missing_file_returns_none() -> None:
     try:
         # Point at a definitely-missing path
         auto_train.BASELINE_PATH = Path("/nonexistent/path/baseline.json")
-        means, stderr = auto_train._load_baseline()
+        means, stderr, *_ = auto_train._load_baseline()
         assert means is None
         assert stderr is None
     finally:
@@ -562,7 +562,7 @@ def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
             encoding="utf-8",
         )
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr = auto_train._load_baseline()
+        means, stderr, *_ = auto_train._load_baseline()
         assert means == {"broken_tool_use": pytest.approx(3.4)}
         assert stderr == {"broken_tool_use": pytest.approx(0.4)}
     finally:
@@ -576,7 +576,7 @@ def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{}", encoding="utf-8")
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr = auto_train._load_baseline()
+        means, stderr, *_ = auto_train._load_baseline()
         assert means is None
         assert stderr is None
     finally:
@@ -590,7 +590,7 @@ def test_load_baseline_unparseable_json_returns_none(tmp_path: Path) -> None:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{not valid json", encoding="utf-8")
         auto_train.BASELINE_PATH = baseline_path
-        means, stderr = auto_train._load_baseline()
+        means, stderr, *_ = auto_train._load_baseline()
         assert means is None
         assert stderr is None
     finally:
@@ -841,7 +841,7 @@ def test_write_baseline_round_trip_matches_load_schema(
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
     dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
     _write_baseline(dim_means, dim_stderr)
-    loaded_means, loaded_stderr = auto_train._load_baseline()
+    loaded_means, loaded_stderr, *_ = auto_train._load_baseline()
     assert loaded_means == dim_means
     assert loaded_stderr == dim_stderr
 
@@ -1251,6 +1251,8 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         "baseline_present",
         "baseline_active",
         "no_baseline_flag",
+        # S3 (ADR-012, 2026-05-21) — partial baseline visibility.
+        "baseline_axis_coverage",
     }
     assert set(by_event["per_dim_scores"].keys()) == {"dim_scores"}
     assert set(by_event["audit_finished"].keys()) == {"dry_run"}

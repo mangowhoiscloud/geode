@@ -61,7 +61,10 @@ functional change.
   (b) `_load_baseline` 5-tuple 반환 + 신규 `_coerce_axis_dict` helper
   로 per-axis graceful drop (단일 axis 손상이 load-bearing dim 부분을
   invalidate 못함), (c) main 의 `compute_fitness` 호출이 baseline_bench_means
-  도 함께 전달 → S6 cross-validation gate 가 실제로 발화 가능,
+  도 전달 → S6 cross-validation gate 의 baseline 측은 disk 통합 완료
+  (current `bench_means`/`ux_means`/`admire_means` collector wiring 은
+  S1b/S2b/S6b 후속 PR — 그 PR 가 main() 에 current axis 만 추가하면
+  S6 gate 즉시 발화),
   (d) `baseline_decision` journal event 에 `baseline_axis_coverage`
   (ux/admire/bench 의 entry 갯수) surface — partial baseline 가시성.
   `plugins/seed_generation/baseline_reader.py`: `BaselineSnapshot` 에
