@@ -422,6 +422,72 @@ def register() -> None:
             kwargs["api_key"] = token
             super().__init__(*args, **kwargs)
 
+        async def count_tokens(
+            self,
+            input: _Any,
+            config: _Any = None,
+        ) -> int:
+            """Override that skips the ``/v1/messages/count_tokens``
+            endpoint — see :func:`estimate_tokens_for_oauth` for the
+            full rationale. The override is a thin shim so the
+            heuristic logic is testable as a pure function without
+            instantiating the inspect_ai-wrapped class.
+            """
+            return estimate_tokens_for_oauth(input)
+
     # Expose the class at module level for callers that need an
     # ``isinstance`` check or want to introspect the subclass.
     globals()["ClaudeOAuthAPI"] = ClaudeOAuthAPI
+
+
+def estimate_tokens_for_oauth(input: Any) -> int:
+    """Heuristic char-based token estimate for OAuth-routed callers.
+
+    OL-OAUTH-COUNT-TOKENS (2026-05-22) — Claude OAuth tokens carry
+    scope ``user:inference`` which Anthropic's gateway accepts for
+    ``/v1/messages`` but rejects with ``401 invalid x-api-key`` on
+    ``/v1/messages/count_tokens``.
+
+    inspect_ai's class-method ``count_tokens`` (in its stock
+    ``AnthropicAPI`` at lines 532+) propagates the 401 with no
+    try/except — a single pre-audit token-counting call kills the
+    entire audit task with ``Task interrupted (no samples completed)``.
+    Subscription-routed Petri audits (OL-A2-data / OL-P1 unblock path)
+    never reach any real sample.
+
+    Fix: ``ClaudeOAuthAPI.count_tokens`` delegates here, skipping the
+    API call entirely. Returns ``max(1, len(text) // 4)`` — the same
+    heuristic inspect_ai's module-level fallback uses on exception.
+    We just take the fallback up-front.
+
+    Accepted input shapes
+    ---------------------
+    * ``str`` — counted as-is.
+    * Iterable of message-like objects with ``content`` attribute,
+      where ``content`` is either a string or a list of block-like
+      objects with ``.text`` attribute (tool_use / thinking shapes).
+    * ``None`` — treated as empty (returns 1).
+
+    Risk surface
+    ------------
+    The heuristic is less accurate for tool_use / thinking-heavy
+    messages (where the real endpoint would account for the structured
+    block overhead). Operators who need exact pre-flight cost numbers
+    should use the PAYG path (``api_key`` source) where the stock
+    client + real API key handle ``count_tokens`` correctly.
+    """
+    text_parts: list[str] = []
+    if isinstance(input, str):
+        text_parts.append(input)
+    elif input is not None:
+        for msg in input:
+            content = getattr(msg, "content", "")
+            if isinstance(content, str):
+                text_parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    block_text = getattr(block, "text", "")
+                    if isinstance(block_text, str):
+                        text_parts.append(block_text)
+    text = " ".join(text_parts)
+    return max(1, len(text) // 4)
