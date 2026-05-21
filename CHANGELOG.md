@@ -62,7 +62,7 @@ functional change.
   `core/paths.py` 추가 / `core/llm/cache_policy.py` reader
   (`_load_cache_policy_override` + `apply_cache_policy_breakpoints`,
   schema `{messages_breakpoints: int 0..3}`) / `core/llm/providers/
-  anthropic.py` 의 Anthropic streaming/non-streaming 분기 둘 다에서
+  anthropic.py` 의 streaming 경로 (현재 활성 single consumer) 에서
   `n_breakpoints = apply_cache_policy_breakpoints(MAX_MESSAGE_CACHE_BREAKPOINTS,
   _load_cache_policy_override())` 호출 → `apply_messages_cache_control(
   messages, n_breakpoints=n_breakpoints)` 로 wire (정책 부재 시 default

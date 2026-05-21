@@ -149,9 +149,7 @@ def test_anthropic_provider_uses_apply_before_cache_control() -> None:
     call_idx = src.find("n_breakpoints=n_breakpoints")
     assert apply_idx > 0, "apply_cache_policy_breakpoints must be invoked"
     assert call_idx > 0, "apply_messages_cache_control must use n_breakpoints kwarg"
-    assert apply_idx < call_idx, (
-        "apply_cache_policy_breakpoints must precede its consumer"
-    )
+    assert apply_idx < call_idx, "apply_cache_policy_breakpoints must precede its consumer"
 
 
 # Path constants --------------------------------------------------------------
