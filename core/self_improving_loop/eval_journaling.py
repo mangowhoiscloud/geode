@@ -5,7 +5,9 @@ M4.1 의 DPO canonical pack JSONL writer 의 *source* 가 되는 단일 event.
 SessionJournal 에 emit — M4.1 이 journal stream 을 따라가며 pack
 candidate 를 누적.
 
-**Event schema** (record.payload):
+**Event schema** — ``record.payload`` only (``session_id`` / ``gen_tag`` /
+``ts`` / ``component`` / ``event`` / ``level`` are top-level SessionJournal
+record fields, not payload fields):
 
 .. code-block:: json
 
@@ -20,9 +22,7 @@ candidate 를 누적.
         "bench_means_aggregate": 0.75
       },
       "source": "petri_audit" | "live_session" | "...",
-      "rollback_flag": false,
-      "session_id": "...",
-      "gen_tag": "auto-HEAD"
+      "rollback_flag": false
     }
 
 ``rollback_flag`` 는 사용자가 그 응답을 revert 했는지 — M4.1 의
