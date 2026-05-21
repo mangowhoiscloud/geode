@@ -1216,54 +1216,95 @@ def _append_session_index(
 def _load_baseline() -> tuple[
     dict[str, float] | None,
     dict[str, float] | None,
+    dict[str, float],
+    dict[str, float],
+    dict[str, float],
 ]:
     """Read ``state/baseline.json`` if present.
 
-    Returns ``(dim_means, dim_stderr)``. Both are ``None`` on missing
-    file / unparseable JSON / empty payload — caller treats this as
-    the gate-dormant case.
+    Returns ``(dim_means, dim_stderr, ux_means, admire_means, bench_means)``.
+
+    - ``dim_means`` / ``dim_stderr`` — ``None`` on missing file / unparseable
+      JSON / empty payload (caller treats this as the gate-dormant case).
+    - ``ux_means`` / ``admire_means`` / ``bench_means`` — empty ``dict``
+      when not present in the payload (S3 backwards compat: a pre-S3
+      baseline.json with only ``dim_*`` is still a valid baseline; the
+      3 newer axes simply have no cross-axis lever yet).
 
     G2.fix (2026-05-20) reverted the evidence return slot. baseline.json
-    is now the cache of *numeric fitness signal only* (means + stderr);
-    petri's ``.eval`` archive at ``~/.geode/petri/logs/latest.eval`` is
-    the single SoT for evidence. Downstream readers
-    (``baseline_reader.format_evidence_block``) call
-    ``extract_evidence`` on the archive on demand.
+    is the cache of *numeric fitness signal only* (means + stderr +
+    multi-axis aggregates); petri's ``.eval`` archive at
+    ``~/.geode/petri/logs/latest.eval`` is the single SoT for evidence.
 
-    Schema::
+    S3 schema (2026-05-21)::
 
-        {"dim_means":  {dim: float, ...},
-         "dim_stderr": {dim: float, ...}}
+        {"dim_means":     {dim: float, ...},
+         "dim_stderr":    {dim: float, ...},
+         "ux_means":      {field: float, ...},     # S1, ADR-012
+         "admire_means":  {field: float, ...},     # S2, ADR-012
+         "bench_means":   {field: float, ...}}     # S6, ADR-012
 
-    Mirrors :func:`core.audit.dim_extractor.extract_dim_aggregates`.
+    Mirrors :func:`core.audit.dim_extractor.extract_dim_aggregates` for
+    ``dim_*`` and :mod:`autoresearch.{ux,admire,bench}_means` for the
+    multi-axis fields.
     """
     if not BASELINE_PATH.is_file():
-        return None, None
+        return None, None, {}, {}, {}
     try:
         baseline_payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None, None
+        return None, None, {}, {}, {}
     raw_means = baseline_payload.get("dim_means") or {}
     raw_stderr = baseline_payload.get("dim_stderr") or {}
     if not raw_means:
-        return None, None
+        return None, None, {}, {}, {}
     baseline_means = {k: float(v) for k, v in raw_means.items()}
     baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
-    return baseline_means, baseline_stderr
+    # S3 (2026-05-21) — 3 new axes are optional + graceful: pre-S3 baselines
+    # don't have them, and a corrupted field on a single axis must not
+    # discard the whole baseline (dim part stays load-bearing).
+    ux_means = _coerce_axis_dict(baseline_payload.get("ux_means"))
+    admire_means = _coerce_axis_dict(baseline_payload.get("admire_means"))
+    bench_means = _coerce_axis_dict(baseline_payload.get("bench_means"))
+    return baseline_means, baseline_stderr, ux_means, admire_means, bench_means
+
+
+def _coerce_axis_dict(raw: Any) -> dict[str, float]:
+    """Best-effort coerce a baseline axis dict — graceful per-axis (S3).
+
+    Returns ``{}`` whenever ``raw`` is not a dict, or whenever any value
+    is non-numeric. The ``dim_*`` baseline already exists as a
+    load-bearing fallback, so each of the 3 newer axes can fail in
+    isolation without invalidating the audit's promotion gate.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for k, v in raw.items():
+        if not isinstance(k, str):
+            return {}
+        try:
+            out[k] = float(v)
+        except (TypeError, ValueError):
+            return {}
+    return out
 
 
 def _write_baseline(
     dim_means: dict[str, float],
     dim_stderr: dict[str, float],
+    *,
+    ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    bench_means: dict[str, float] | None = None,
 ) -> None:
-    """Persist current audit's dim aggregates as the new baseline.
+    """Persist current audit's aggregates as the new baseline (S3, 2026-05-21).
 
-    G2.fix (2026-05-20) — schema reverted to ``{dim_means, dim_stderr}``
-    only. The ``evidence`` key was a duplicate of what petri's ``.eval``
-    archive already carried, refreshed only on promoted audits and
-    therefore stale for rejected regressions. The cache is gone;
-    downstream readers go straight to the archive via
-    ``~/.geode/petri/logs/latest.eval``.
+    Schema (post-S3) extends the legacy ``{dim_means, dim_stderr}`` with
+    optional ``{ux_means, admire_means, bench_means}`` axes from ADR-012
+    §Decision.2 fitness 다축화. ``None`` axes are omitted from the
+    serialized payload — backwards compat for callers that haven't yet
+    wired the collectors (S1b/S2b/S6b).
 
     Caller decides *when* to write (auto-promote rule vs ``--promote``
     manual override).
@@ -1273,6 +1314,12 @@ def _write_baseline(
         "dim_means": {k: float(v) for k, v in dim_means.items()},
         "dim_stderr": {k: float(v) for k, v in dim_stderr.items()},
     }
+    if ux_means:
+        baseline_payload["ux_means"] = {k: float(v) for k, v in ux_means.items()}
+    if admire_means:
+        baseline_payload["admire_means"] = {k: float(v) for k, v in admire_means.items()}
+    if bench_means:
+        baseline_payload["bench_means"] = {k: float(v) for k, v in bench_means.items()}
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1412,8 +1459,15 @@ def main() -> int:
 
     if args.no_baseline:
         baseline_means, baseline_stderr = None, None
+        baseline_bench_means: dict[str, float] = {}
     else:
-        baseline_means, baseline_stderr = _load_baseline()
+        (
+            baseline_means,
+            baseline_stderr,
+            _baseline_ux_means,
+            _baseline_admire_means,
+            baseline_bench_means,
+        ) = _load_baseline()
     _emit_journal(
         session_id,
         gen_tag,
@@ -1422,6 +1476,14 @@ def main() -> int:
             "baseline_present": baseline_means is not None,
             "baseline_active": baseline_means is not None and not args.no_baseline,
             "no_baseline_flag": args.no_baseline,
+            # S3 (2026-05-21) — surface 4-axis coverage so the journal makes
+            # the partial-baseline state visible (e.g. pre-S3 baseline has
+            # 0 ux/admire/bench axes; S3 onward grows incrementally).
+            "baseline_axis_coverage": {
+                "ux": len(_baseline_ux_means) if not args.no_baseline else 0,
+                "admire": len(_baseline_admire_means) if not args.no_baseline else 0,
+                "bench": len(baseline_bench_means) if not args.no_baseline else 0,
+            },
         },
     )
     dim_scores = compute_dim_scores(dim_means, dim_stderr)
@@ -1430,6 +1492,7 @@ def main() -> int:
         dim_stderr,
         baseline_means=baseline_means,
         baseline_stderr=baseline_stderr,
+        baseline_bench_means=baseline_bench_means or None,
     )
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the

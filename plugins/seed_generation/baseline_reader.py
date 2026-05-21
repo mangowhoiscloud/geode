@@ -57,8 +57,8 @@ __all__ = [
 class BaselineSnapshot:
     """Frozen view of one ``autoresearch/state/baseline.json``.
 
-    Both fields are always present (empty dict when the underlying JSON
-    omits the key). Frozen so the snapshot is safe to pass through
+    All five fields are always present (empty dict when the underlying
+    JSON omits the key). Frozen so the snapshot is safe to pass through
     sub-agent prompt builders without aliasing risk.
 
     G2.fix (2026-05-20) — the ``evidence`` field was removed. The
@@ -66,10 +66,20 @@ class BaselineSnapshot:
     per-dim explanation/highlights live in petri's ``.eval`` archive
     (``~/.geode/petri/logs/latest.eval``) and are extracted on demand
     by :func:`format_evidence_block`.
+
+    S3 (2026-05-21, ADR-012) — three additional axis aggregate dicts
+    parallel ``dim_means`` so the joint ratchet can promote / regress
+    across all four fitness axes (Petri 17-dim + ux + admire + bench).
+    Pre-S3 ``baseline.json`` payloads omit them, so the loader presents
+    them as empty dicts; an empty axis is treated as "no cross-axis
+    lever yet" by downstream consumers.
     """
 
     dim_means: dict[str, float] = field(default_factory=dict)
     dim_stderr: dict[str, float] = field(default_factory=dict)
+    ux_means: dict[str, float] = field(default_factory=dict)
+    admire_means: dict[str, float] = field(default_factory=dict)
+    bench_means: dict[str, float] = field(default_factory=dict)
 
 
 def _default_baseline_path() -> Path | None:
@@ -146,7 +156,19 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
     # G2.fix (2026-05-20) — evidence cache removed from baseline.json.
     # Petri's ``.eval`` is the SoT; readers go through
     # ``format_evidence_block`` which extracts on demand.
-    return BaselineSnapshot(dim_means=dim_means, dim_stderr=dim_stderr)
+    # S3 (2026-05-21) — the 3 additional axes are graceful per-axis
+    # (each defaults to ``{}`` when absent / malformed) so a single
+    # broken axis can't invalidate the dim baseline.
+    ux_means = _coerce_dim_dict(baseline_payload.get("ux_means"))
+    admire_means = _coerce_dim_dict(baseline_payload.get("admire_means"))
+    bench_means = _coerce_dim_dict(baseline_payload.get("bench_means"))
+    return BaselineSnapshot(
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        ux_means=ux_means,
+        admire_means=admire_means,
+        bench_means=bench_means,
+    )
 
 
 def _coerce_dim_dict(raw: Any) -> dict[str, float]:
