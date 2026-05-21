@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.28] - 2026-05-22
+
+> Tier 1 (Outer Loop) closure stamp. 2 PRs:
+> OL-A3 (#1451) `geode outer-bundle` viewer + OL-P2 (#1452) Petri quota
+> actual enforcement. Tier 1 *coding* slices are now 100% closed — all
+> remaining items (OL-A2-data / OL-P1) blocked by Anthropic credit;
+> OL-C3.2 ADR-gated (selection policy / cost ceiling / disk cap).
+
 ### Added
 
 - **PR-OL-P2 — Petri quota actual enforcement (auto-trip + opt-in call gate).**
