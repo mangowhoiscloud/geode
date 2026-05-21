@@ -243,9 +243,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "reflection",
         "skill_catalog",
     }
-    assert target_kinds == expected, (
-        f"TARGET_KINDS 는 {expected} (post-M1). got={target_kinds}"
-    )
+    assert target_kinds == expected, f"TARGET_KINDS 는 {expected} (post-M1). got={target_kinds}"
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
 
 
