@@ -187,6 +187,13 @@ dev = [
     # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
     "zipfile-zstd>=0.0.4",
     "manim>=0.20.1",
+    # Step 2 typography drift gate — `verify_hero_layout.py` shapes every
+    # ratchet site's text via HarfBuzz and stores the glyph cluster
+    # sequence in `layout_baseline.json`, catching Helvetica Neue + Pango
+    # kerning drift ("GE ODE", "g eneration") at compile time instead of
+    # post-render audit. See .claude/skills/viz-frame-audit/rules/
+    # typography-drift-gate.md.
+    "uharfbuzz>=0.54.1",
 ]
 
 

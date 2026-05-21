@@ -1,4 +1,8 @@
-# Typography drift gate — Step 2 integration plan
+# Typography drift gate — Step 2 (shipped 2026-05-21)
+
+> **Status**: implemented in `scripts/visualizations/verify_hero_layout.py`
+> (`_resolve_font`, `_shape_glyph_clusters`, `_glyph_clusters_for_site`).
+> Test coverage: `tests/test_verify_hero_layout.py` (6 cases).
 
 ## Goal
 
@@ -34,7 +38,7 @@ scripts/visualizations/
 └── layout_baseline.json             # extend with `glyph_clusters` per site/lang
 ```
 
-## Sample integration (Step 2 PR)
+## Shipped integration
 
 ```python
 import uharfbuzz as hb
