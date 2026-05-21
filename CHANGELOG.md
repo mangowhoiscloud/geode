@@ -71,6 +71,43 @@ functional change.
 
 ### Added
 
+- **PR-OL-C3 — `memory_recall` MD writer (close M4.4.1 reader's write-side).**
+  M4.4.1 (#1436) 가 `core/self_improving_loop/memory_recall.load_memory_entries`
+  + `in_context_wiring.py:123` 로 reader 만 출시 → 운영자가 직접 `.md`
+  파일을 손으로 채우지 않는 한 `memory_recall` in-context slot 이 영구
+  empty list 위에 ranking 작동 (PR-OL-C2 의 few-shot pool 과 동일한
+  reader-without-writer deception). **신규 모듈**
+  `core/memory/recall_writer.py` — pure 유틸 `write_recall_entry(*, name,
+  description, body, type_label, recall_dir=None, overwrite=False)` 가
+  M4.4.1 frontmatter parser 가 기대하는 정확한 schema
+  (`---\nname: …\ndescription: …\nmetadata:\n  type: …\n---\n\n{body}\n`)
+  로 한 줄당 `.md` 를 작성. `_slugify_name` 으로 alnum+hyphen 파일명 보장,
+  `_escape_frontmatter_value` 로 multi-line name/description 단일 라인
+  강제 (YAML-light parser 의 line-per-key 규약). `mkdir(parents=True,
+  exist_ok=True)` + `write_text` 단일 try (Codex MCP PR-OL-C2 의 mkdir-
+  outside-try 사례 적용). Idempotent — `overwrite=False` (default) 가
+  기존 슬러그 파일 보존, `True` 시 대체. `resolve_recall_dir()` 가
+  `$GEODE_MEMORY_RECALL_DIR` 운영자 override > `~/.geode/memory/recall/`
+  default — reader 와 *같은* env var 를 honour 해서 운영자가 dir 한
+  곳만 옮기면 read+write 둘 다 따라옴. 4 canonical type 상수
+  (`RECALL_TYPE_{USER,FEEDBACK,PROJECT,REFERENCE}`) + `VALID_RECALL_TYPES`
+  frozenset 노출 — Claude Code 의 auto-memory schema 와 parity. Non-
+  canonical type 도 작성 자체는 허용 (DEBUG log) → 운영자 도메인 별
+  custom type 막지 않음. **Auto-trigger 부재 (의도)** — `SESSION_ENDED`
+  hook 에서 자동 발화 / LLM-curator 는 OL-C3.2 follow-up 으로 deferred,
+  근거: (1) ADR 부재 (every session 채택? promoted-only? curator?),
+  (2) cost ceiling 미합의, (3) disk usage cap 미합의. 현재 entry-point
+  은 운영자가 CLI/REPL slash 로 `write_recall_entry` 직접 호출. **16
+  invariant test** (`tests/test_ol_c3_recall_writer.py`) — resolve x2
+  (env override / 기본 path), slugify x3 (canonical / 공백+punct /
+  empty→untitled), writer x6 (파일 생성 / M4.4.1 reader round-trip /
+  idempotent skip / overwrite=True / multi-line frontmatter strip /
+  parent dir 생성 / non-canonical type 작성), list x2 (정렬 / 없는 dir
+  empty), batch x2 (전체 작성 / 기존 slug skip). Reader-writer schema
+  drift 방지의 핵심은 `test_write_round_trips_with_m4_4_1_reader` 가
+  *실제* reader 를 import 해서 동일 파일을 parsing — 한 쪽이 schema
+  변경하면 즉시 RED. Quality gates clean (ruff + mypy + 16/16 pytest).
+
 - **PR-OL-C2 — few-shot pool writer + autoresearch promote 호출자.**
   M3 (#1426/#1428) 이 reader (`_load_few_shot_pool_override` +
   `apply_few_shot_pool`) 만 출시하고 writer 부재로 exemplars in-context
