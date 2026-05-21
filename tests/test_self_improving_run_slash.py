@@ -423,6 +423,6 @@ def test_deferred_actions_set_now_empty() -> None:
         _RUN_MAX_ITERATIONS,
     )
 
-    assert _RUN_DEFERRED_ACTIONS == frozenset()
+    assert frozenset() == _RUN_DEFERRED_ACTIONS
     assert _RUN_DEFAULT_ITERATIONS == 1
     assert _RUN_MAX_ITERATIONS == 10
