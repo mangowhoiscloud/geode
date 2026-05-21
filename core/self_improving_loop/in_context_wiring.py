@@ -12,14 +12,14 @@ reach the provider.
   (`core/llm/few_shot_pool.py`) via ``_load_few_shot_pool_override`` →
   applies via ``apply_few_shot_pool`` (top-K by fitness_delta desc).
   Prepends ``(user, assistant)`` pairs at the head of ``messages``.
-* ``memory_recall`` — **stub**. Reader (``~/.geode/memory/`` recency ×
-  cosine similarity) is a follow-up PR. Orchestrator iterates this
-  slot today as a no-op so the wiring path is in place; activating it
-  is a single function injection.
+* ``memory_recall`` — **wired (M4.4.1)**. Reads frontmatter-style
+  memory files from ``~/.geode/memory/recall/`` (or
+  ``GEODE_MEMORY_RECALL_DIR`` env override), ranks by keyword overlap
+  × recency, prepends a ``<memory-recall>`` block to the system prompt.
 * ``rubric_excerpts`` — **stub**. Reader (Petri 17-dim worst-regressed
-  rubric) is a follow-up PR.
+  rubric) is a follow-up PR (M4.4.2).
 * ``tool_hints`` — **stub**. Reader (RunLog + episodic memory
-  success_rate ranked) is a follow-up PR.
+  success_rate ranked) is a follow-up PR (M4.4.3).
 
 **No-op fast path**: when ``_load_in_context_slots_override`` returns
 ``None`` (no SoT configured, the GEODE default), the orchestrator
@@ -73,6 +73,7 @@ def apply_in_context_slots(
     try:
         from core.self_improving_loop.in_context_slots import (
             SLOT_EXEMPLARS,
+            SLOT_MEMORY_RECALL,
             _load_in_context_slots_override,
         )
 
@@ -104,11 +105,48 @@ def apply_in_context_slots(
         except Exception as exc:
             log.debug("exemplars slot apply failed: %s", exc, exc_info=True)
 
-    # memory_recall / rubric_excerpts / tool_hints — readers deferred to
-    # follow-up PRs (M4.4.1+). The orchestrator iterates them here so
-    # the wiring path is in place; each becomes active by wiring in its
-    # reader + apply function inside its own try / except block, exactly
-    # mirroring the exemplars path above. No iteration today because
-    # zero-cost no-op is preferable to a per-slot loop that does nothing.
+    # memory_recall — M4.4.1 reader active. Frontmatter MD files from
+    # ``~/.geode/memory/recall/`` (or env override) ranked by keyword
+    # overlap × recency, formatted as a ``<memory-recall>`` block and
+    # prepended to the system prompt.
+    memory_cfg = slots.get(SLOT_MEMORY_RECALL)
+    if memory_cfg is not None:
+        try:
+            from core.self_improving_loop.memory_recall import (
+                format_memory_block,
+                load_memory_entries,
+                rank_memory_entries,
+            )
+
+            entries = load_memory_entries()
+            if entries:
+                query = _latest_user_query(new_messages)
+                ranked = rank_memory_entries(entries, query, top_k=memory_cfg.max_entries)
+                block = format_memory_block(ranked)
+                if block:
+                    new_system = block + "\n\n" + new_system if new_system else block
+        except Exception as exc:
+            log.debug("memory_recall slot apply failed: %s", exc, exc_info=True)
+
+    # rubric_excerpts / tool_hints — readers deferred to follow-up PRs
+    # (M4.4.2 / M4.4.3). Wiring framework is in place; each becomes
+    # active by mirroring the memory_recall block above with its own
+    # reader + format helpers.
 
     return new_messages, new_system
+
+
+def _latest_user_query(messages: list[dict[str, Any]]) -> str:
+    """Return the most recent user-role string content, or ``""`` if absent.
+
+    Used by ``memory_recall`` (and future similarity-ranked slots) to
+    score memory entries against the operator's current task. Tolerates
+    tool-result / non-string content shapes by skipping them.
+    """
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            return content
+    return ""

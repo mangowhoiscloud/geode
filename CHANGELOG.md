@@ -71,6 +71,31 @@ functional change.
 
 ### Added
 
+- **PR-M4.4.1 — `memory_recall` slot reader 활성화 (ADR-012).**
+  M4.4 (#1435) 의 4 슬롯 중 첫 번째 stub 을 활성화. 신규 모듈
+  `core/self_improving_loop/memory_recall.py` — frontmatter-style MD
+  파일 (Claude Code 의 auto-memory 와 동일 schema) 을
+  `~/.geode/memory/recall/` (또는 `GEODE_MEMORY_RECALL_DIR` env
+  override) 에서 walk → `MemoryEntry(name, type, description, body,
+  mtime)` 로 parse → `rank_memory_entries(entries, query, top_k)` 가
+  keyword overlap × recency_weight (`1 / (1 + age_days)`) 로 정렬 →
+  `format_memory_block` 이 `<memory-recall>\n- [type] description\n
+  ...\n</memory-recall>` 블록 render. **Orchestrator wiring** —
+  `in_context_wiring.apply_in_context_slots` 가 `SLOT_MEMORY_RECALL`
+  cfg 발견 시 위 3단계 호출, 결과 블록을 system prompt 앞에
+  prepend (per-slot try/except 로 실패 시 graceful). `_latest_user_query`
+  helper 가 messages 의 마지막 user-role string content 추출 → similarity
+  ranking 의 query 로 사용. **Per-file graceful** — frontmatter 누락 /
+  unreadable file / 잘못된 YAML 은 silent skip. **No-op fast path**
+  유지 — recall dir 미존재 시 `resolve_recall_dir()` 가 None 반환 →
+  reader 가 `[]` 반환 → orchestrator 가 system 미변경. **16 invariant
+  test** — resolve x3 (env override / env-missing-graceful / default-missing) +
+  load x3 (no-dir / frontmatter parse / malformed skip) + rank x4 (overlap /
+  recency tiebreak / top_k=0 / top_k cap) + format x4 (empty / type-tag
+  render / **description-only with empty body** / **body-only fallback** —
+  Codex MCP 가 잡은 ternary precedence regression) + orchestrator 통합 x2
+  (block prepend / no-dir no-op).
+
 - **PR-M4.4 — In-context slot wiring orchestrator + provider wiring (ADR-012).**
   M4 DPO pipeline 의 closing piece — S5 (#1425) 의 4-slot schema 와 M3
   (#1426/#1428) 의 few-shot pool substrate 를 실제 inference path 에
