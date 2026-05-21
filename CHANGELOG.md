@@ -49,6 +49,31 @@ functional change.
 
 ### Added
 
+- **PR-T4 — Provider routing JSON mutation surface (ADR-013).** mutator
+  가 per-model preferred plan-chain 을 JSON 으로 mutate. `resolve_routing(
+  model)` 의 explicit-chain branch 가 registry's `set_routing` 결과 대신
+  policy override 의 chain 을 iterate → ux_means.token_cost_norm 직접
+  영향 (같은 model 을 PAYG 대신 SUBSCRIPTION 으로 route 하면 per-call
+  cost 감소). **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/provider-routing.json` (in-repo) +
+  `~/.geode/self-improving-loop/provider-routing.json` (operator-local) /
+  `GLOBAL_PROVIDER_ROUTING_PATH` + `OPERATOR_LOCAL_PROVIDER_ROUTING_PATH`
+  `core/paths.py` 추가 / `core/llm/routing/provider_routing_policy.py`
+  reader (`_load_provider_routing_override` +
+  `apply_provider_routing_policy`, schema `{model_name: [plan_id_chain]}`) /
+  `core/llm/routing/plan_registry.py:resolve_routing` explicit-chain branch
+  가 `apply_provider_routing_policy(model, registry.get_routing(model),
+  _load_provider_routing_override())` 결과 iterate (정책 부재 시 default
+  chain — no behavior change) / `GEODE_PROVIDER_ROUTING_OVERRIDE` +
+  `GEODE_PROVIDER_ROUTING_STRICT=1` env pair. `_coerce` 가 empty chain +
+  empty string entry 제거. 등록되지 않은 plan_id 는 `resolve_routing` 이
+  자동으로 건너뜀 (registry.get 결과 None 일 때 skip). **21 invariant
+  test** — reader graceful/strict 10 + apply 6 케이스 (none / empty /
+  model-not-in-policy / override / empty-chain-fallthrough / return-copy)
+  + wiring + path + env + ALIVE marker. Frontier: OpenRouter의 explicit
+  per-model plan ordering + Anthropic/OpenAI multi-tier credential
+  (subscription/PAYG/batch) 의 cost lever.
+
 - **PR-T3 — Response style guide JSON mutation surface (ADR-013).** mutator
   가 4 typed enum field (`tone` ∈ concise/balanced/verbose, `verbosity_level`
   ∈ low/medium/high, `response_format` ∈ markdown/plain/structured,
