@@ -74,6 +74,30 @@ functional change.
 
 ### Added
 
+- **PR-T1 — Tool descriptions JSON mutation surface (ADR-013).** ADR-013 의
+  첫 신규 표면 — mutator 가 도구 description + hint 만 JSON 으로 mutate →
+  도구 후보 선택 정확도 ↑ → Petri 17-dim 의 `broken_tool_use` (유일한 양의
+  압력 dim) 직접 영향. **5-element 패턴** (S0a 검증): SoT
+  `autoresearch/state/policies/tool-descriptions.json` (in-repo,
+  ratchet-tracked) / `GLOBAL_TOOL_DESCRIPTIONS_PATH` `core/paths.py` 추가 /
+  `core/agent/tool_descriptions_policy.py` reader (`_load_tool_descriptions_override`
+  + `apply_tool_descriptions_policy`, schema `{tool_name: {description: str,
+  hints: [str]}}`) / `core/agent/loop/_helpers.py:get_agentic_tools` 진입점
+  (base+registry+MCP merge 직후, `apply_tool_policy` 의 forbidden/priority
+  filter **직전** — description override 가 먼저 적용돼야 policy 가 갱신된
+  description 기반으로 판단) / `GEODE_TOOL_DESCRIPTIONS_OVERRIDE` env var
+  (`autoresearch/train.py` 의 audit subprocess 가 SoT 존재 시 inject —
+  strict-fail). `apply_tool_descriptions_policy` 는 `copy.deepcopy` 후
+  mutate (caller 의 module-level `_BASE_TOOLS` 오염 방지, S0b 패턴).
+  hints 가 있으면 description 끝에 `Hints:\n- …\n- …` 줄바꿈 append.
+  Forward-compat: entry 내 unknown field 무시. 19 invariant test —
+  reader graceful/strict + apply none/empty/override/hints/deepcopy +
+  helpers wiring (descriptions before tool_policy 순서 검증) + path
+  constant + train.py env wiring + ALIVE marker (`tool-descriptions.json`
+  이 `core/agent/tool_descriptions_policy.py` 에서 grep 양성). Frontier:
+  OpenAI function calling docs + Anthropic tool-use guide ("clearer
+  descriptions yield more accurate selection").
+
 - **ADR-013 — Mutation Surface Expansion via JSON Schema Pattern (Proposed).**
   ADR-012 의 S0a 검증된 패턴 (JSON SoT + reader + dispatcher) 을 6 신규
   표면 (T1-T6) 으로 확장. **AlphaEvolve 식 코드 자체 mutation 은 명시적

@@ -93,6 +93,8 @@ GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
 GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
 GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
 GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
+# ADR-013 T1 (2026-05-21) — Tool descriptions mutation SoT.
+GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are

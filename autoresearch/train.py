@@ -649,6 +649,7 @@ def run_audit(
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_TOOL_DESCRIPTIONS_PATH,
         GLOBAL_TOOL_POLICY_PATH,
     )
 
@@ -658,6 +659,9 @@ def run_audit(
         env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(GLOBAL_REFLECTION_POLICY_PATH)
     if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
         env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
+    # ADR-013 T1 (2026-05-21) — tool descriptions override env wiring.
+    if GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
+        env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
