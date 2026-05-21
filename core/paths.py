@@ -109,6 +109,13 @@ OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-d
 # skill-routing context block.
 GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
 OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-catalog.json"
+# ADR-013 T3 (2026-05-21) — Response style guide mutation SoT. Typed enum
+# schema (tone / verbosity_level / response_format / code_style) — mutator
+# picks from constrained alternatives → ux_means 의 success_rate +
+# revert_ratio 직접 영향. wrapper-sections.json (G5a/G5b) 의 free-form
+# 텍스트 mutation 과 분리: T3 는 constrained typed 선택지.
+GLOBAL_STYLE_GUIDE_PATH = GLOBAL_POLICIES_DIR / "style-guide.json"
+OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "style-guide.json"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
