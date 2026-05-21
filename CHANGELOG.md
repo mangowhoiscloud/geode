@@ -71,6 +71,36 @@ functional change.
 
 ### Added
 
+- **PR-M4.3 — DPO pack PII redaction + stats (ADR-012).**
+  M4.1 canonical pack (`~/.geode/self-improving-loop/dpo/pack.jsonl`) 가
+  user prompts + assistant responses 를 verbatim 으로 가지므로 M4.2
+  publish 전 PII / secret 스크럽이 필수. **신규 모듈**
+  `core/self_improving_loop/dpo_redaction.py` — `redact_text(text)` 가 7
+  카테고리 패턴 적용: API key (Anthropic / OpenAI / Slack / GitHub /
+  ZhipuAI — `core/utils/redaction.py` 의 기존 `_SECRET_PATTERNS` 재활용)
+  + AWS access key (AKIA / ASIA) + Bearer token + Email + Phone (E.164 /
+  dashed / parenthesised) + URL credentials (`https://u:p@host`) + POSIX
+  home path (`/Users/<name>/` + `/home/<name>/`). `redact_pack_row(row)`
+  가 5 텍스트 필드 (`prompt` / `chosen` / `rejected` / `source_chosen` /
+  `source_rejected`) 만 스크럽, 숫자 / signature 필드는 passthrough.
+  `redact_pack(src, dst) -> int` 가 read → scrub → write JSONL — missing
+  src → empty dst 파일 (graceful), malformed line silent drop, re-run
+  byte-equal 결정성 보장. **신규 모듈** `core/self_improving_loop/dpo_stats.py`
+  — `pack_stats(path) -> dict` 가 pair_count / unique_prompts /
+  fitness_delta {min,max,mean,median} / source_{chosen,rejected}_histogram
+  반환. missing / empty / all-malformed → 빈 dict (graceful).
+  **redaction layer 는 효과적 7 카테고리** — API key 는 `redact_secrets`
+  delegate 이므로 모듈의 `PII_PATTERNS` table 자체는 6 entry (URL
+  cred / AWS / Bearer / Email / home / Phone) + 1 delegate. **19 + 8
+  = 27 invariant test** — redaction 19 (패턴별 9 scrub + empty 통과 +
+  no-match unchanged + composed multi-secret + pattern table sanity +
+  pack_row field-scope 2 + redact_pack 4) + stats 8 (missing / empty /
+  malformed → 빈 dict + 기본 aggregate / unique_prompts / required
+  field 누락 drop / int coerce / missing source histogram). 본 PR 은
+  변환 + 통계만; M4.2 publisher 와 합쳐서 운영자가
+  `redact_pack → publish` 파이프라인 수동 엮어 사용. CLI integration 은
+  M4.4 후속.
+
 - **PR-PAPERCLIP — Paperclip pattern wiring for self-improving loop mutator.**
   사전 PR (PR-1 G-A) 가 `MutatorConfig.source = Literal["auto", "api_key",
   "claude-cli", "openai-codex"]` knob 만 도입했고 runner 는 source 를 *로그만*
