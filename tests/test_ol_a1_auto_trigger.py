@@ -445,8 +445,9 @@ def test_registered_callback_invokes_auto_trigger_mutator(
     operator's real ``~/.geode/self-improving-loop/`` state."""
     from unittest.mock import MagicMock
 
-    from core.self_improving_loop import auto_trigger as at_module
     from core.self_improving_loop.auto_trigger import register_auto_trigger
+
+    from core.self_improving_loop import auto_trigger as at_module
 
     lock_path, ts_path = trigger_paths
     monkeypatch.setattr(at_module, "AUTO_TRIGGER_LOCK_PATH", lock_path)
