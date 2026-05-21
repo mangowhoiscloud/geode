@@ -255,8 +255,12 @@ def append_exemplar(
     next_lines = [line for line in existing_lines if line.strip()] + [new_line]
     if len(next_lines) > max_size:
         next_lines = next_lines[-max_size:]
-    target.parent.mkdir(parents=True, exist_ok=True)
     try:
+        # mkdir + write_text both inside try — Codex MCP FLAG (PR-OL-C2):
+        # mkdir OSError must also yield ``False`` per the function contract,
+        # not raise. Keeping both calls in the same try keeps the "graceful
+        # on any I/O failure" guarantee honest.
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("\n".join(next_lines) + "\n", encoding="utf-8")
     except OSError as exc:
         log.warning("few-shot-pool write failed at %s: %s", target, exc)

@@ -85,12 +85,14 @@ functional change.
   `append_exemplar(source="autoresearch_audit_promote", fitness_delta=
   fitness - mean(baseline_means))` 호출 (rejected pile 은 in-context
   exemplars 채널에 들어가지 않게 gate). 전체 try/except 로 감싸져
-  audit cycle 보호. **8 def / 14 invariant test** — signature
-  determinism + field sensitivity / writer x4 (one row / idempotent /
-  multi-pair / round-trip with `_parse_jsonl`) / FIFO eviction 1 +
-  cap constant 1 / graceful 2 (parent dir creation, Unicode preserve)
-  / train.py source 검증 4종 (import 존재 / promote gate / try/except
-  / OL-C1 emit 후 위치 — order pin). **메타-level exemplar caveat**:
+  audit cycle 보호. **mkdir + write_text 모두 단일 try 안** (Codex MCP
+  FLAG fix — mkdir OSError 도 graceful False 반환, raise 안 함).
+  **14 invariant test** — signature x2 (determinism + field sensitivity)
+  + writer x4 (one row / idempotent / multi-pair / round-trip with
+  `_parse_jsonl`) + FIFO x2 (eviction at over-cap + cap constant
+  exposed) + graceful x2 (parent dir creation + Unicode preserve) +
+  train.py source 검증 4종 (import 존재 / promote gate /
+  try/except wrap / OL-C1 emit 후 위치 — order pin). **메타-level exemplar caveat**:
   audit cycle 의 `(prompt, response)` 는 meta-level — 향후 OL-C2.2
   follow-up 에서 AgenticLoop-turn-level + Petri-per-turn writer 추가.
 
