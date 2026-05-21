@@ -825,9 +825,7 @@ def _cmd_source_set(opts: list[str]) -> None:
             return
         if key == "source" and val not in _VALID_SOURCES:
             valid = " / ".join(_VALID_SOURCES)
-            console.print(
-                f"  [warning]invalid source: {val!r} (valid: {valid})[/warning]"
-            )
+            console.print(f"  [warning]invalid source: {val!r} (valid: {valid})[/warning]")
             return
         updates[key] = val
     try:
@@ -1019,7 +1017,11 @@ def _persist_full_config(
     for role, diff in petri.items():
         _persist_section_updates(f"self_improving_loop.petri.{role}", diff)
     for role, diff in seed_generation.items():
-        _persist_section_updates(f"self_improving_loop.seed_generation.role.{role}", diff)
+        # Note: loader uses ``[self_improving_loop.seed_generation.roles.<role>]``
+        # (plural ``roles``) — see ``SeedGenerationConfig.roles`` field. Singular
+        # would land outside the schema's ``extra="forbid"`` allowlist and break
+        # the next config load. Codex MCP catch on PR-PAPERCLIP.
+        _persist_section_updates(f"self_improving_loop.seed_generation.roles.{role}", diff)
 
 
 def _persist_section_updates(section: str, updates: dict[str, str]) -> None:

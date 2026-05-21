@@ -64,18 +64,21 @@ functional change.
   operators). **UI/UX** — `/self-improving config` (interactive 설정창,
   mutator + petri.<role> + seed_generation.<role> 컴포넌트별 provider /
   model / source 입력, Enter 로 현재값 유지, 완료 후 `/self-improving run`
-  체이닝 옵션) + `/self-improving source` (현재 상태 테이블) +
-  `/self-improving source set <key>=<value>` (non-interactive mutator
-  setter). **TOML 쓰기** — `_splice_section` 헬퍼가 `~/.geode/config.toml`
-  의 section header 를 찾아 in-place key 갱신, 누락 section 은 append,
-  sibling section 보존. `atomic_write_text` 사용 (기존
-  `cmd_config.py` 의 `_toml_escape_basic_string` 패턴 동일). **16 invariant
-  test** — argv shape 2 / missing binary / env override / 비정상 exit /
-  runner dispatch 3 (claude-cli + codex + api_key 무변경) / TOML splice 5
-  (append + replace + insert + sibling 보존 + 이스케이프) + source set 3
-  (invalid 거부 / persist / SUPPORTED_TARGETS sync). 영향 범위 —
-  paperclip 은 self-improving loop **mutator only** (Q1 응답). Agentic
-  Loop 일상 호출은 기존 API path 그대로.
+  체이닝 옵션 — 입력 필드 *model + source*) + `/self-improving source`
+  (현재 상태 테이블) + `/self-improving source set <key>=<value>`
+  (non-interactive mutator setter). **TOML 쓰기** — `_splice_section`
+  헬퍼가 `~/.geode/config.toml` 의 section header 를 찾아 in-place key
+  갱신, 누락 section 은 append, sibling section 보존. seed-generation
+  role 쓰기는 **plural `roles.<X>`** path 사용 (loader schema 와 동기
+  — Codex MCP catch). `atomic_write_text` + `_toml_escape_basic_string`
+  (기존 `cmd_config.py` 패턴). **18 invariant test** — argv shape 2 /
+  missing binary / env override / 비정상 exit / **timeout** / runner
+  dispatch 3 (claude-cli + codex + api_key 무변경) / TOML splice 5
+  (append + replace + insert + sibling 보존 + 이스케이프) + source set
+  3 + **seed-generation roles plural-path round-trip**
+  (writer → loader validate). 영향 범위 — paperclip 은 self-improving
+  loop **mutator only** (Q1 응답). Agentic Loop 일상 호출은 기존 API
+  path 그대로.
 
 - **PR-M4.2 — DPO publisher adapters (TRL / OpenAI / Bedrock, ADR-012).**
   M4.1 canonical pack 을 per-provider DPO 학습 입력 포맷으로 변환.

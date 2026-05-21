@@ -116,6 +116,20 @@ def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
 
 
+def test_invoke_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``subprocess.TimeoutExpired`` → ``CliInvocationError`` with timeout hint."""
+    from core.self_improving_loop import cli_subprocess
+
+    monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
+
+    def _fake_run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=180)
+
+    monkeypatch.setattr(cli_subprocess.subprocess, "run", _fake_run)
+    with pytest.raises(cli_subprocess.CliInvocationError, match="timed out"):
+        cli_subprocess.invoke_claude_cli(system_prompt="s", user_prompt="u")
+
+
 # runner dispatch -----------------------------------------------------------
 
 
@@ -319,3 +333,33 @@ def test_valid_sources_constant_matches_config_enum() -> None:
     from core.cli.commands.self_improving import _VALID_SOURCES
 
     assert set(_VALID_SOURCES) == {"auto", "api_key", "claude-cli", "openai-codex"}
+
+
+def test_persist_full_config_uses_plural_roles_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seed-generation writes MUST land under ``...seed_generation.roles.<X>`` (plural).
+
+    Pre-fix the writer used singular ``role.<X>`` which falls outside
+    ``SeedGenerationConfig`` schema's ``extra="forbid"`` allowlist —
+    next config load raises ``ValidationError``. Codex MCP catch on
+    PR-PAPERCLIP.
+    """
+    from core.cli.commands import self_improving
+    from core.config.self_improving_loop import load_self_improving_loop_config
+
+    fake_toml = tmp_path / "config.toml"
+    monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
+    self_improving._persist_full_config(
+        mutator={},
+        petri={},
+        seed_generation={"miner": {"model": "claude-haiku-4-5", "source": "claude-cli"}},
+    )
+    text = fake_toml.read_text(encoding="utf-8")
+    assert "[self_improving_loop.seed_generation.roles.miner]" in text
+    assert "[self_improving_loop.seed_generation.role.miner]" not in text  # singular forbidden
+    # Round-trip: the loader must accept what the writer produced.
+    cfg = load_self_improving_loop_config()
+    assert "miner" in cfg.seed_generation.roles
+    assert cfg.seed_generation.roles["miner"].source == "claude-cli"
