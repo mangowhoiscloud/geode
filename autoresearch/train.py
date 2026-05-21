@@ -1663,6 +1663,31 @@ def main() -> int:
     except Exception:  # pragma: no cover — defensive
         # Eval-stream emit must never break the audit cycle itself.
         log.debug("OL-C1 eval emit failed", exc_info=True)
+
+    # OL-C2 (2026-05-22) — Activate the M3 ``few_shot_pool`` writer that
+    # PR-M3 (#1426/#1428) deferred. Only PROMOTED audits contribute to
+    # the pool (rejected piles stay out of the in-context exemplars
+    # channel). Audit-level ``(prompt, response)`` is a *meta-level*
+    # exemplar — same caveat as OL-C1: agent-loop-turn-level + Petri-
+    # per-turn callers land as OL-C2.2 follow-up after we have a clean
+    # API to extract per-turn pairs.
+    try:
+        if not args.dry_run and "true" in promoted_line.lower():
+            from core.llm.few_shot_pool import append_exemplar
+
+            fitness_delta = (
+                fitness - (sum(baseline_means.values()) / len(baseline_means))
+                if baseline_means
+                else fitness
+            )
+            append_exemplar(
+                user_msg=prompt_label,
+                assistant_msg=response_label,
+                fitness_delta=float(fitness_delta),
+                source="autoresearch_audit_promote",
+            )
+    except Exception:  # pragma: no cover — defensive
+        log.debug("OL-C2 few-shot pool append failed", exc_info=True)
     return 0
 
 
