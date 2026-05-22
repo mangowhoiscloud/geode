@@ -473,12 +473,20 @@ def register() -> None:
     from inspect_ai.model._model_output import ChatCompletionChoice, ModelUsage
 
     @modelapi(name="claude-cli")
-    class ClaudeCliAPI(ModelAPI):
+    class ClaudeCliAPI(ModelAPI):  # type: ignore[misc, unused-ignore]
         """inspect_ai provider that delegates to ``claude --print``.
 
         Identifier shape: ``claude-cli/<model-id>``. inspect_ai's
         router strips the ``claude-cli/`` prefix and instantiates this
         class with ``model_name=<model-id>``.
+
+        ``# type: ignore[misc, unused-ignore]`` mirrors the sibling
+        providers (``GeodeModelAPI`` / ``ClaudeOAuthAPI`` /
+        ``OpenAICodexAPI``): inspect_ai ships without type stubs, so
+        in the default ``uv sync`` (no ``[audit]`` extra) environment
+        ``ModelAPI`` resolves to ``Any`` and strict mypy rejects the
+        subclass; with the extra installed, the suppression is unused
+        (hence ``unused-ignore`` flag).
         """
 
         def __init__(
