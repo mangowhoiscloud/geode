@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.31] - 2026-05-22
+
+> LaneQueue 5-phase plan landing 4 of 5 phases (Phase 1 hierarchy fix,
+> Phase 2 ``claude-cli-subagent`` lane, Phase 4 claude-cli error parser
+> + tiered backoff, Phase 5 observability boost). Phase 3 (paperclip
+> OAuth-usage polling) requires live operator OAuth credentials and is
+> deferred to a follow-up sprint — see
+> [[project_lanequeue_handoff_2026_05_22]].
+
 ### Added
 
 - **LaneQueue Phase 5 — observability boost**. ``LaneQueue.status()``
