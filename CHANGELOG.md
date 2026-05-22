@@ -49,6 +49,37 @@ functional change.
 
 ### Added
 
+- **LQ-Codex-WHAM — Codex OAuth usage polling (paperclip ``fetchCodexQuota`` port)**.
+  Replaces the placeholder ``fetch_codex_usage`` from Phase 3 with a
+  Python 1:1 port of paperclip's
+  ``packages/adapters/codex-local/src/server/quota.ts:226-279``.
+  Path B (HTTP) of the 2-path quota scheme: stdlib ``urllib`` GET
+  against ``https://chatgpt.com/backend-api/wham/usage`` with
+  ``Authorization: Bearer <tokens.access_token>`` and optional
+  ``ChatGPT-Account-Id: <tokens.account_id>``. Path A (Codex
+  ``app-server`` JSON-RPC) is explicitly out of scope — left for a
+  future PR if the stateful subprocess proves worth the cost.
+
+  Schema: ``rate_limit.primary_window`` maps to ``CodexUsage.five_hour``
+  (admission gate), ``secondary_window`` maps to ``weekly`` (dashboard
+  only), ``credits`` + ``plan_type`` carried raw. ``reset_at`` is
+  normalised to ISO-8601 regardless of WHAM's number-vs-string
+  shape. ``used_percent`` accepts both 0-100 (current API) and 0-1
+  (legacy) per paperclip's ``normalizeCodexUsedPercent``.
+
+  New :class:`CodexAuthCredentials` dataclass threads the
+  ``(token, account_id)`` pair through the poller →
+  ``fetch_codex_usage`` chain. Both modern (``tokens.access_token``)
+  and legacy (top-level ``accessToken``) auth.json layouts are
+  accepted by :func:`read_codex_oauth_credentials`. The compat shim
+  :func:`read_codex_oauth_token` stays for callers that don't need
+  the account id.
+
+  Same fail-open default as the Anthropic side — a single WHAM
+  hiccup never hardens the lane. ``GEODE_CODEX_OAUTH_POLL_REQUIRED``
+  flips to fail-closed for strict operators;
+  ``GEODE_CODEX_OAUTH_POLL_DISABLED`` bypasses polling entirely.
+
 - **PR-CSA-2 — MCP bridge for paperclip-pattern `claude-cli` provider
   (auditor tool_use enabled).** Lifts the CSA-1 boundary
   (`NotImplementedError("tool_use deferred to CSA-2 MCP bridge")`) so
