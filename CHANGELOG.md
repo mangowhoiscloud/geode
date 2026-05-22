@@ -47,7 +47,6 @@ functional change.
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ## [0.99.37] - 2026-05-23
 
 > Multiple parallel sprints land in one release window:
