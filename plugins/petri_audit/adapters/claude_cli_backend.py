@@ -1,42 +1,54 @@
 """Claude OAuth (subscription quota) adapter — manifest-bound facade.
 
-Maps the manifest binding ``[petri.adapter.anthropic.claude-cli]`` to
-the existing :mod:`plugins.petri_audit.claude_code_provider`. The
-provider already implements the inspect_ai ``claude-code`` ``ModelAPI``
-subclass (OAuth token resolved from the local ``claude`` CLI keychain
-+ GEODE auth.toml fallback); this module is a thin re-export so the
-adapter registry has a stable import target and so a future P1-G
-refactor can collapse the call sites onto the manifest contract
-without re-shuffling exports.
+CSA-3 (2026-05-22) — flipped to route through the paperclip-style
+:mod:`plugins.petri_audit.claude_cli_provider` (``claude-cli``
+``ModelAPI``, subprocess-based) instead of the raw-SDK
+:mod:`plugins.petri_audit.claude_code_provider` (``claude-code``
+``ModelAPI``). The raw-SDK path empirically hits 100% 429 enforcement
+on Claude Max OAuth tokens (verified 2026-05-22 trace-68931.log:
+27/27 requests rejected, retry-after 770 sec) while the CLI
+subprocess path consumes full subscription quota without throttling.
 
-The original :mod:`plugins.petri_audit.claude_code_provider` stays the
-authoritative implementation for now — P1-G will migrate the routing
-in :mod:`plugins.petri_audit.models.to_inspect_model` onto the
-manifest, at which point we can decide whether to fold the provider
-into this file or keep the indirection. Either way the public surface
-documented here is the long-term contract.
+CSA-1 + CSA-2 together close the auditor + judge tool surface on the
+subprocess path — text-only judge via CSA-1, tool_use auditor via
+the CSA-2 MCP bridge. CSA-3 is the routing flip that makes
+``source="claude-cli"`` in operator config actually pick the new
+provider.
+
+Claude OAuth metadata + availability probes still live on
+``claude_code_provider`` because the auth.toml / keychain resolution
+is independent of which inspect_ai ``ModelAPI`` runs the inference.
+We re-export those helpers so the adapter registry's
+``is_available`` / ``metadata`` calls keep working.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from plugins.petri_audit.claude_cli_provider import (
+    register as _register_claude_cli,
+)
 from plugins.petri_audit.claude_code_provider import (
     get_claude_oauth_metadata,
     is_claude_oauth_available,
 )
-from plugins.petri_audit.claude_code_provider import (
-    register as _register_claude_code,
-)
 
 __all__ = ["INSPECT_PREFIX", "is_available", "metadata", "register"]
 
-INSPECT_PREFIX = "claude-code"
+INSPECT_PREFIX = "claude-cli"
+"""CSA-3 flip — was previously ``claude-code``. The CSA-1 provider
+registers ``@modelapi(name="claude-cli")`` so the manifest +
+``to_inspect_model`` router both land on the subprocess path."""
 
 
 def register() -> None:
-    """Register the ``claude-code`` ``ModelAPI`` with inspect_ai."""
-    _register_claude_code()
+    """Register the ``claude-cli`` ``ModelAPI`` with inspect_ai.
+
+    CSA-3 flip — was previously ``claude-code``. The subprocess path
+    is now the canonical Claude OAuth route.
+    """
+    _register_claude_cli()
 
 
 def is_available() -> bool:

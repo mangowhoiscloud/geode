@@ -83,10 +83,14 @@ auth_env_vars = ["ANTHROPIC_API_KEY"]
 endpoint = "https://api.anthropic.com"
 
 [petri.adapter.anthropic.claude-cli]
-# OAuth via Claude CLI keychain entry — ClaudeMaxAPI subclass of stock
-# AnthropicAPI; calls land on api.anthropic.com with subscription quota.
+# CSA-3 (2026-05-22) — flipped from the raw-SDK `claude-code` path
+# to the paperclip-style `claude-cli` subprocess provider. The raw-SDK
+# path hit 100% 429 enforcement on Claude Max OAuth tokens; the
+# subprocess path consumes full subscription quota. CSA-1 (judge,
+# text-only) + CSA-2 (auditor, tool_use via MCP bridge) together
+# close both inspect_petri roles.
 module = "plugins.petri_audit.adapters.claude_cli_backend"
-inspect_prefix = "claude-code"
+inspect_prefix = "claude-cli"
 auth_env_vars = ["ANTHROPIC_OAUTH_TOKEN"]
 binary = "claude"
 
@@ -97,10 +101,13 @@ auth_env_vars = ["OPENAI_API_KEY"]
 endpoint = "https://api.openai.com"
 
 [petri.adapter.openai.openai-codex]
-# OAuth via Codex CLI — re-routes through OpenAICodexAPI (registered ModelAPI
-# `openai-codex`) so calls consume ChatGPT Plus quota instead of PAYG.
+# CSA-3 (2026-05-22) — flipped from the raw-SDK `openai-codex` path
+# to the paperclip-style `codex-cli` subprocess provider (CSA-1b).
+# Sibling of the anthropic flip above. Tool_use through codex's
+# native `codex mcp` is the CSA-2c follow-up; CSA-3 covers the
+# text-only judge path for now.
 module = "plugins.petri_audit.adapters.openai_codex_oauth"
-inspect_prefix = "openai-codex"
+inspect_prefix = "codex-cli"
 auth_env_vars = ["OPENAI_OAUTH_TOKEN"]
 
 [petri.adapter.zhipuai.api_key]

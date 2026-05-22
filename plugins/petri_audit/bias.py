@@ -158,9 +158,14 @@ def detect_same_provider(auditor: str, target: str, judge: str) -> bool:
             if inner.startswith("glm"):
                 return "glm"
             return "geode"
-        if root == "openai-codex":
-            # OAuth-routed gpt-5.x is still "openai" for self-preference.
+        if root in ("openai-codex", "codex-cli"):
+            # OAuth-routed gpt-5.x (raw-SDK or CSA-3 paperclip) is
+            # still "openai" for self-preference detection.
             return "openai"
+        if root in ("claude-code", "claude-cli"):
+            # OAuth-routed claude-* (raw-SDK or CSA-3 paperclip) is
+            # still "anthropic" for self-preference detection.
+            return "anthropic"
         if root.startswith("openai"):
             return "openai"
         if root.startswith("anthropic"):

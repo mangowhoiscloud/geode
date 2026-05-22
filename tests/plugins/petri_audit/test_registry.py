@@ -147,7 +147,9 @@ def test_get_binding_source_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     binding = get_binding("auditor", source="claude-cli")
     assert binding.source == "claude-cli"
-    assert binding.inspect_prefix == "claude-code"
+    # CSA-3 (2026-05-22) — flipped from "claude-code" to "claude-cli"
+    # so source="claude-cli" now lands on the paperclip provider.
+    assert binding.inspect_prefix == "claude-cli"
 
 
 def test_get_binding_model_not_in_allowed_raises() -> None:
@@ -184,8 +186,9 @@ def test_get_binding_oauth_priority(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
     binding = get_binding("auditor")
     assert binding.source == "claude-cli"
-    assert binding.inspect_prefix == "claude-code"
-    assert binding.inspect_id == "claude-code/claude-sonnet-4-6"
+    # CSA-3 flip — was claude-code/, now claude-cli/.
+    assert binding.inspect_prefix == "claude-cli"
+    assert binding.inspect_id == "claude-cli/claude-sonnet-4-6"
 
 
 def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:
