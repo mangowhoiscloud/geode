@@ -26,6 +26,11 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "arxiv_search": ("core.tools.arxiv", "ArxivSearchTool"),
     "paper_fetch_arxiv": ("core.tools.arxiv", "ArxivFetchTool"),
     "geode_seed_pool_search": ("core.tools.seed_pool_search", "SeedPoolSearchTool"),
+    # CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the seed-generation
+    # 3-loop port. Records one debate turn to a per-candidate sidecar
+    # JSONL and signals continue/synthesize so the sub-agent's
+    # AgenticLoop completes the N-turn budget before writing the seed.
+    "seed_debate_turn": ("core.tools.seed_debate", "SeedDebateTurnTool"),
     # profile
     "profile_show": ("core.tools.profile_tools", "ProfileShowTool"),
     "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),

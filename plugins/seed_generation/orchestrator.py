@@ -105,6 +105,12 @@ def _state_to_json(state: PipelineState) -> str:
         # as a coverage signal (replaces the pre-CSP-8 proximity_graph).
         "similarity_clusters": state.similarity_clusters,
         "removed_duplicates": state.removed_duplicates,
+        # CSP-13 (2026-05-23) — Loop 2 debate transcripts per candidate.
+        # Codex MCP MEDIUM fix-up: persist so state.json replay shows
+        # the multi-turn evidence the generator's debate produced, and
+        # downstream meta_reviewer / operator inspection can audit
+        # the per-candidate reasoning trail.
+        "debate_transcripts": state.debate_transcripts,
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -251,6 +257,20 @@ class PipelineState:
     # ``_build_description`` so each spawn shares one canonical reading
     # of the run's priors.
     supervisor_guidance: dict[str, Any] = field(default_factory=dict)
+    # CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the 3-loop port.
+    # Maps ``candidate_id`` → ``[{turn, speaker, content, ts}, ...]``
+    # parsed from the per-candidate ``.debate.jsonl`` sidecar the
+    # ``seed_debate_turn`` tool writes inside each Generator sub-agent.
+    # Empty dict when:
+    #   - the manifest's ``[seed_generation.role.generator] num_turns``
+    #     is 0 (single-shot path, debate disabled), OR
+    #   - operator override at
+    #     ``[self_improving_loop.seed_generation.roles.generator] num_turns = 0``
+    #     overrides the manifest, OR
+    #   - the sub-agent failed before emitting any turn (tool error
+    #     budget exhausted etc.)
+    # Downstream meta_reviewer reads this for coverage analysis.
+    debate_transcripts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -277,6 +297,13 @@ class PipelineState:
             # so a single extend is the steady state).
             "similarity_clusters",
             "removed_duplicates",
+            # CSP-13 (2026-05-23) — Loop 2 debate transcripts (dict
+            # keyed by candidate_id). Generator emits this only when
+            # ``num_turns >= 2`` and the candidate sub-agent actually
+            # ran turns; empty dict otherwise. Merge semantics: dict
+            # update so iteration cycles can re-evolve the same
+            # candidate ids without losing earlier transcripts.
+            "debate_transcripts",
         }
         unknown = set(output) - known
         if unknown:

@@ -73,19 +73,42 @@ Source = Literal["claude-cli", "openai-codex", "api_key", "auto"]
 
 
 class SelfImprovingLoopBindings(BaseModel):
-    """Generic per-role binding (model + source).
+    """Per-seed-generation-role binding (model + source [+ num_turns]).
 
     PR-MINIMAL-2 (2026-05-21) — ``fallback_to_payg`` per-component
     override removed; only the global flag at
     ``[self_improving_loop] fallback_to_payg`` survives. Pre-PR the
     per-component override had no downstream consumer, just config
     surface noise.
+
+    CSP-13 (2026-05-23) — adds the optional ``num_turns`` knob for the
+    Loop 2 (debate-turn) port. Only the ``generator`` role consults
+    it; other roles ignore it. 0 = off (single-shot, back-compat
+    default). 2-6 = active multi-turn debate inside the candidate
+    sub-agent's AgenticLoop, recorded via ``seed_debate_turn``.
+    Operator surface lives at
+    ``[self_improving_loop.seed_generation.roles.generator] num_turns``
+    in ``~/.geode/config.toml``; manifest default flows through when
+    omitted.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     model: str
     source: Source
+    num_turns: int = 0
+
+    @model_validator(mode="after")
+    def _num_turns_in_range(self) -> SelfImprovingLoopBindings:
+        # CSP-13 (Codex MCP MEDIUM fix-up) — operator override path
+        # must enforce the same ``{0} ∪ [2, 6]`` window as the
+        # manifest-side ``SeedRoleSpec`` validator. Otherwise an
+        # operator could pin num_turns=1 in ``~/.geode/config.toml``
+        # (meaningless debate-of-one) or num_turns=99 (runaway cost
+        # per candidate) without any guardrail catching it.
+        if self.num_turns != 0 and not (2 <= self.num_turns <= 6):
+            raise ValueError(f"num_turns={self.num_turns} invalid; must be 0 (off) or in [2, 6]")
+        return self
 
 
 class PetriRoleConfig(BaseModel):
