@@ -562,6 +562,13 @@ def _build_audit_command() -> list[str]:
         "--live",
         "--yes",
     ]
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-1+2 — burst caps are
+    # plumbed via ``plugins/petri_audit/runner.py::build_command``
+    # (the actual ``inspect eval`` command assembly site). The
+    # ``geode audit`` Typer wrapper does NOT accept these flags
+    # directly — see plugins/petri_audit/cli_audit.py for the surface.
+    # This argv stays unchanged; the inspect_ai connection / sample
+    # caps live one layer down.
     if getattr(cfg, "source", "auto") != "api_key":
         argv.append("--use-oauth")
     return argv
@@ -729,26 +736,47 @@ def run_audit(
         payload={"argv_len": len(argv), "timeout_sec": timeout_sec},
     )
 
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-3 — inter-process audit
+    # lane. Prevents two `geode audit` subprocesses from overlapping
+    # on the host (cron-driven + manual collision, REPL + scheduled,
+    # etc.). Lane=1 also matches Anthropic Max OAuth's "interactive
+    # coding" rate budget when the operator is also using their host
+    # Claude Code session.
+    from core.llm.audit_lane import acquire_audit_lane
+
     audit_started = time.time()
+    lane_key = session_id or "anonymous-audit"
     try:
-        proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
-            argv,
-            env=env,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
+        with acquire_audit_lane(lane_key):
+            try:
+                proc = subprocess.run(  # noqa: S603  # nosec B603 — argv built from module constants + shutil.which
+                    argv,
+                    env=env,
+                    cwd=str(REPO_ROOT),
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_sec,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                _emit_journal(
+                    session_id,
+                    gen_tag,
+                    "subprocess_timeout",
+                    level="error",
+                    payload={"timeout_sec": timeout_sec},
+                )
+                raise
+    except TimeoutError as exc:
+        # Audit lane itself timed out (another audit hogged the lane).
         _emit_journal(
             session_id,
             gen_tag,
-            "subprocess_timeout",
+            "audit_lane_timeout",
             level="error",
-            payload={"timeout_sec": timeout_sec},
+            payload={"reason": str(exc)},
         )
-        raise
+        raise RuntimeError(f"audit lane busy beyond timeout: {exc}") from exc
     audit_seconds = time.time() - audit_started
 
     _emit_journal(
