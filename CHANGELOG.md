@@ -49,6 +49,31 @@ functional change.
 
 ### Added
 
+- **LaneQueue Phase 4 — ``claude-cli`` error parser + tiered backoff**.
+  New ``core/llm/claude_cli_errors.py`` module ports paperclip's
+  ``parse.ts`` regex patterns (``CLAUDE_TRANSIENT_UPSTREAM_RE`` +
+  ``CLAUDE_EXTRA_USAGE_RESET_RE``) plus the 4-tier
+  ``heartbeat.ts:217-226`` backoff schedule to Python. Public surface:
+  :func:`is_transient_upstream` (paperclip parity boolean classifier),
+  :func:`classify_transient` (5-way label ``burst`` / ``quota`` /
+  ``auth`` / ``deterministic`` / ``unknown``),
+  :func:`extract_reset_clock_time` (parse "resets at 3:00pm
+  (Pacific)" into a tz-aware ``datetime``), and :func:`next_retry_at`
+  (combines the three into a single suggested retry timestamp).
+  Schedules :data:`BURST_BACKOFF_SECONDS` (1/2/4/8/16s) and
+  :data:`QUOTA_BACKOFF_SECONDS` (2m/10m/30m/2h) ship as module
+  constants so callers (mutator runner / inspect_ai bridge / future
+  Anthropic provider retry hook) can choose how to weave them into
+  their own retry path. Quota failures honour an explicit
+  ``resets at …`` time when it lies AFTER the schedule wait — a
+  server-promised reset overrides the schedule's lower bound but
+  never shortens the wait below it. Unknown / non-transient stderr
+  short-circuits ``next_retry_at`` to ``None`` so callers don't burn
+  retries on deterministic failures (auth-required, model-not-found,
+  max-turns). Pin tests at ``tests/core/llm/test_claude_cli_errors.py``
+  (5 classes, ~30 cases). Wiring into the two spawn sites + the
+  Anthropic provider's retry journal is scoped to a follow-up PR.
+
 - **LaneQueue Phase 2 — ``claude-cli-subagent`` lane**. New module-
   level :class:`~core.orchestration.lane_queue.Lane` at
   ``core/orchestration/claude_cli_lane.py`` (same pattern as
