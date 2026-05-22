@@ -92,6 +92,10 @@ def _state_to_json(state: PipelineState) -> str:
         "completion_tokens": state.completion_tokens,
         "baseline_means": state.baseline_means,
         "baseline_stderr": state.baseline_stderr,
+        # CSP-4 (2026-05-22) — persist the Supervisor's run-level
+        # guidance so a state.json replay carries the same strategy
+        # the live run consumed (audit trail + reproducibility).
+        "supervisor_guidance": state.supervisor_guidance,
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -125,6 +129,13 @@ def _emit_orchestrator_event(
 
 
 _PHASE_ORDER: tuple[str, ...] = (
+    # CSP-4 (2026-05-22) — Supervisor runs FIRST so its strategy
+    # synthesis lands in ``state.supervisor_guidance`` before any
+    # per-candidate phase prefixes the relevant ``phase_guidance.*``
+    # entry into its own prompt. The phase short-circuits when no
+    # Supervisor agent is registered (test fixtures that mock a
+    # subset of roles) — see ``Pipeline._run_phase``.
+    "supervisor",
     "generator",
     "proximity",
     "critic",
@@ -196,6 +207,16 @@ class PipelineState:
     # can attend to the gaps the prior run's meta-reviewer flagged.
     # ``None`` = no prior run (bootstrap) — agents skip the priors block.
     meta_review_snapshot: Any = None
+    # CSP-4 (2026-05-22) — run-level strategy synthesis emitted by the
+    # Supervisor phase (paper §3 Supervisor). Empty dict before
+    # Supervisor runs OR when the role isn't registered (test fixtures).
+    # Structure mirrors ``.claude/agents/seed_supervisor.md`` contract:
+    # ``research_goal_analysis`` + ``phase_guidance`` (keys: generation,
+    # critique, evolution) + ``session_summary``. Downstream sub-agents
+    # prefix the relevant ``phase_guidance.*`` value into their own
+    # ``_build_description`` so each spawn shares one canonical reading
+    # of the run's priors.
+    supervisor_guidance: dict[str, Any] = field(default_factory=dict)
 
     def merge(self, role: str, output: dict[str, Any]) -> None:
         """Merge a phase agent's ``output`` payload into state.
@@ -212,6 +233,9 @@ class PipelineState:
             "survivors",
             "evolved_candidates",
             "meta_review",
+            # CSP-4 (2026-05-22) — Supervisor phase output. Dict-typed
+            # so ``merge`` overlays the new payload via ``dict.update``.
+            "supervisor_guidance",
         }
         unknown = set(output) - known
         if unknown:
@@ -612,6 +636,23 @@ class Pipeline:
         """
         agent = self.registry.get(role)
         if agent is None:
+            # CSP-4 (2026-05-22) — Supervisor is OPTIONAL. Test
+            # fixtures that mock a subset of roles, or pre-CSP-4
+            # callers that haven't been migrated, may skip it.
+            # ``state.supervisor_guidance`` stays at its default
+            # (empty dict) and downstream sub-agents detect "no
+            # guidance" via that empty check rather than KeyError.
+            if role == "supervisor":
+                log.info(
+                    "seed-generation supervisor role not registered — "
+                    "skipping (state.supervisor_guidance stays empty)."
+                )
+                _emit_orchestrator_event(
+                    "phase_skipped",
+                    level="info",
+                    payload={"role": role, "reason": "agent_not_registered"},
+                )
+                return SeedAgentResult(role=role, status="skipped")
             raise RuntimeError(
                 f"seed-generation phase {role!r} has no registered agent — "
                 f"expected one of {_PHASE_ORDER}. Did the S2-S8 PR for "

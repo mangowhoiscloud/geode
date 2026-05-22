@@ -220,6 +220,7 @@ class Evolver(BaseSeedAgent):
                 weaknesses=reflection.get("weaknesses", []),
                 dim_means=pilot.get("dim_means", {}) if isinstance(pilot, dict) else {},
                 baseline_snapshot=state.baseline_snapshot,
+                supervisor_guidance=state.supervisor_guidance,
             )
             tasks.append(
                 SubTask(
@@ -246,6 +247,7 @@ class Evolver(BaseSeedAgent):
         weaknesses: list[Any],
         dim_means: dict[str, Any],
         baseline_snapshot: Any = None,
+        supervisor_guidance: dict[str, Any] | None = None,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -259,17 +261,30 @@ class Evolver(BaseSeedAgent):
         weakness_summary = "; ".join(str(w) for w in weaknesses) or "n/a"
         means_summary = ", ".join(f"{k}={v}" for k, v in dim_means.items()) or "n/a"
         target_dim = candidate.get("target_dim", "unknown")
-        evidence_block = ""
+        prefix_blocks: list[str] = []
+        # CSP-4 (2026-05-22) — Supervisor's evolution guidance at the
+        # top of the prefix stack, above per-dim baseline evidence.
+        if supervisor_guidance:
+            try:
+                from plugins.seed_generation.baseline_reader import format_supervisor_block
+
+                supervisor_block = format_supervisor_block(supervisor_guidance, phase="evolution")
+                if supervisor_block:
+                    prefix_blocks.append(supervisor_block)
+            except ImportError:  # pragma: no cover — defensive
+                pass
         if baseline_snapshot is not None:
             try:
                 from plugins.seed_generation.baseline_reader import format_evidence_block
 
                 evidence_block = format_evidence_block(baseline_snapshot, target_dim)
+                if evidence_block:
+                    prefix_blocks.append(evidence_block)
             except ImportError:  # pragma: no cover — defensive
-                evidence_block = ""
-        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
+                pass
+        prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
-            f"{evidence_prefix}"
+            f"{prefix}"
             f"Evolve ONE Petri seed candidate. Parent id: {candidate['id']!r}. "
             f"Parent path: {candidate['path']!r}. Target dim: "
             f"{target_dim!r}. Rewrite section: "
