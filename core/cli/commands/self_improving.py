@@ -1054,7 +1054,17 @@ def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
 
 
 def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
-    """Return ``text`` with ``[section]`` updated to carry every ``updates`` entry."""
+    """Return ``text`` with ``[section]`` updated to carry every ``updates`` entry.
+
+    Empty-string values (``key == ""``) signal "delete this key": the
+    matching ``key = "..."`` line is dropped instead of replaced, and a
+    fresh section never picks up a delete request (no point writing a
+    blank key). This is the line-removal contract the single-SoT
+    consolidation needs so ``/petri source <role> auto`` (which sets
+    ``source=""`` to fall back to the manifest default) can clear a
+    stale ``source`` line in ``[self_improving_loop.petri.<role>]``
+    without touching the legacy ``~/.geode/petri.toml``.
+    """
     header = f"[{section}]"
     lines = text.splitlines(keepends=False)
     # Locate the section header line; -1 means absent.
@@ -1064,9 +1074,13 @@ def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
             header_idx = i
             break
     if header_idx == -1:
-        # Append a fresh section block.
+        # Append a fresh section block. Skip delete requests — they
+        # only matter when an existing line is being removed.
+        materialised = {k: v for k, v in updates.items() if v != ""}
+        if not materialised:
+            return text
         block = [header]
-        for key, val in updates.items():
+        for key, val in materialised.items():
             block.append(f'{key} = "{_toml_escape(val)}"')
         suffix = "" if text.endswith("\n") or text == "" else "\n"
         sep = "\n" if text and not text.endswith("\n\n") else ""
@@ -1079,21 +1093,34 @@ def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
             end_idx = j
             break
     # Replace existing key=value lines in place; collect remaining keys.
+    # ``key == ""`` signals delete — drop the line entirely.
     remaining = dict(updates)
+    keep_lines: list[str] = []
     for k in range(header_idx + 1, end_idx):
         line = lines[k]
+        matched_key: str | None = None
         for key in list(remaining):
             if line.lstrip().startswith(f"{key} ") or line.lstrip().startswith(f"{key}="):
-                lines[k] = f'{key} = "{_toml_escape(remaining[key])}"'
-                del remaining[key]
+                matched_key = key
                 break
+        if matched_key is None:
+            keep_lines.append(line)
+            continue
+        val = remaining.pop(matched_key)
+        if val == "":
+            # Skip — line dropped (delete-key path).
+            continue
+        keep_lines.append(f'{matched_key} = "{_toml_escape(val)}"')
+
     # Append remaining keys just before the section ends. Skip trailing
-    # blank lines so the section stays visually tight.
-    insert_at = end_idx
-    while insert_at > header_idx + 1 and lines[insert_at - 1].strip() == "":
-        insert_at -= 1
-    new_kv_lines = [f'{key} = "{_toml_escape(val)}"' for key, val in remaining.items()]
-    out_lines = lines[:insert_at] + new_kv_lines + lines[insert_at:]
+    # blank lines so the section stays visually tight. Delete requests
+    # for absent keys are no-ops.
+    new_kv_lines = [f'{key} = "{_toml_escape(val)}"' for key, val in remaining.items() if val != ""]
+    insert_at_keep = len(keep_lines)
+    while insert_at_keep > 0 and keep_lines[insert_at_keep - 1].strip() == "":
+        insert_at_keep -= 1
+    rebuilt = keep_lines[:insert_at_keep] + new_kv_lines + keep_lines[insert_at_keep:]
+    out_lines = lines[: header_idx + 1] + rebuilt + lines[end_idx:]
     result = "\n".join(out_lines)
     if not result.endswith("\n"):
         result += "\n"

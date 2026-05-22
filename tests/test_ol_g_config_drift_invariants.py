@@ -2,10 +2,14 @@
 
 PR-1 G-B/G-D/G-E (2026-05-21) closed three config drift surfaces:
 
-- **G-B**: ``autoresearch/train.py`` 의 `TARGET_MODEL` / `JUDGE_MODEL`
-  module constants → `[self_improving_loop.autoresearch] target_model
-  / judge_model` config knob (with None default → inherit
-  ``Settings.model``).
+- **G-B**: Petri role models → ``[self_improving_loop.petri.<role>]``
+  config knob. PR-CSP-12 (2026-05-22) consolidated to single-SoT
+  semantics — the legacy ``TARGET_MODEL`` / ``JUDGE_MODEL`` module
+  constants and ``AutoresearchConfig.target_model`` /
+  ``judge_model`` fields are deprecated no-ops; the real SoT is the
+  ``[self_improving_loop.petri.<role>].model`` section consulted by
+  ``autoresearch.train._petri_role_model`` and
+  ``plugins.petri_audit.registry.get_binding``.
 - **G-D**: ``core/hooks/llm_extract_learning.py`` 의 ``"glm-4.7-flash"``
   literal → ``settings.learning_extract_model`` config-overridable.
 - **G-E**: ``settings.model`` (was ``claude-opus-4-6``) vs
@@ -25,36 +29,60 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_g_b_autoresearch_target_judge_have_config_knob() -> None:
-    """`AutoresearchConfig` must expose `target_model` + `judge_model`
-    fields. The defaults are None (inherit Settings.model per PR-MINIMAL-2)
-    but the *fields must exist* so operators can override via
-    ``[self_improving_loop.autoresearch] target_model = "..."``.
+def test_g_b_autoresearch_petri_role_is_canonical_sot() -> None:
+    """Petri role models resolve through ``[self_improving_loop.petri.<role>]``.
+
+    Single-SoT (2026-05-22, PR-CSP-12) — ``AutoresearchConfig.target_model``
+    and ``judge_model`` survive as **deprecated no-op slots** for
+    back-compat config load (so an old config.toml doesn't break parse),
+    but the canonical SoT is the petri-role section. The fields must
+    accept any string round-trip, but runtime resolution does NOT
+    consult them — that path runs through ``_petri_role_model``.
     """
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving_loop import (
+        AutoresearchConfig,
+        SelfImprovingLoopConfig,
+    )
 
     cfg = AutoresearchConfig()
-    assert hasattr(cfg, "target_model"), "G-B regressed: target_model field missing"
-    assert hasattr(cfg, "judge_model"), "G-B regressed: judge_model field missing"
-    # Operator override path: explicit value must round-trip.
-    cfg_with_override = AutoresearchConfig(target_model="custom-target", judge_model="custom-judge")
-    assert cfg_with_override.target_model == "custom-target"
-    assert cfg_with_override.judge_model == "custom-judge"
+    # Deprecated fields survive on AutoresearchConfig — default None
+    # signals "not set" (back-compat: an old config.toml carrying
+    # these keys won't fail to parse).
+    assert getattr(cfg, "target_model", "MISSING") is None, (
+        "G-B regressed: target_model deprecated slot removed before back-compat window"
+    )
+    assert getattr(cfg, "judge_model", "MISSING") is None, (
+        "G-B regressed: judge_model deprecated slot removed before back-compat window"
+    )
+    # The petri section lives on the top-level config — it's the
+    # real SoT for per-role model selection.
+    loop_cfg = SelfImprovingLoopConfig()
+    assert hasattr(loop_cfg, "petri"), (
+        "G-B regressed: SelfImprovingLoopConfig.petri role-config section missing"
+    )
 
 
-def test_g_b_autoresearch_module_constants_are_fallbacks_not_canon() -> None:
-    """`autoresearch.train.TARGET_MODEL` / `JUDGE_MODEL` are FALLBACK
-    defaults — they exist so the module is importable without a config
-    file, but the config knob is the canonical SoT. If a future PR
-    deletes the fallbacks, the import would break in CI environments
-    that stub out ``core.config``; this test pins them as present.
+def test_g_b_autoresearch_resolves_role_model_through_helper() -> None:
+    """``autoresearch.train`` resolves per-role models via the helper —
+    no surviving module-constant SoT.
+
+    Single-SoT (2026-05-22) — the legacy ``TARGET_MODEL`` /
+    ``JUDGE_MODEL`` constants were removed because they shadowed the
+    petri-role config section (operator-facing SoT). The remaining
+    surface is ``_petri_role_model(role)`` which consults the manifest
+    + ``[self_improving_loop.petri.<role>]`` overrides.
     """
     from autoresearch import train
 
-    assert hasattr(train, "TARGET_MODEL"), "G-B regressed: TARGET_MODEL fallback removed"
-    assert hasattr(train, "JUDGE_MODEL"), "G-B regressed: JUDGE_MODEL fallback removed"
-    # _get_autoresearch_config is the lazy-load entry point — its
-    # existence is the load-bearing API surface.
+    assert callable(getattr(train, "_petri_role_model", None)), (
+        "G-B regressed: _petri_role_model helper removed — role resolution path broken"
+    )
+    assert not hasattr(train, "TARGET_MODEL"), (
+        "G-B regressed: TARGET_MODEL re-introduced — must stay removed (single-SoT)"
+    )
+    assert not hasattr(train, "JUDGE_MODEL"), (
+        "G-B regressed: JUDGE_MODEL re-introduced — must stay removed (single-SoT)"
+    )
     assert callable(getattr(train, "_get_autoresearch_config", None)), (
         "G-B regressed: _get_autoresearch_config loader missing"
     )

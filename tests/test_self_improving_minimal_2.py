@@ -59,28 +59,34 @@ def test_runner_default_llm_call_inherits_settings_model() -> None:
     assert "cfg.mutator.default_model" in src
 
 
-def test_build_audit_command_omits_argv_when_target_judge_unpinned() -> None:
-    """SoT-flip (2026-05-22) — when ``cfg.target_model`` /
-    ``cfg.judge_model`` are unset (the operator hasn't pinned an
-    autoresearch-specific override), ``_build_audit_command`` must
-    OMIT the ``--target`` / ``--judge`` argv slots so the runner
-    falls through to ``[self_improving_loop.petri.<role>].model`` via
-    the binding registry. The PR-MINIMAL-2 (2026-05-21) inherit via
-    ``cfg.target_model or _settings_model()`` was the asymmetric path
-    that silently bypassed the per-role config: the
-    ``Settings.model`` fallback now lives one layer down (manifest
-    default + credential cascade inside ``registry.get_binding``)."""
+def test_build_audit_command_never_pins_role_models_on_argv() -> None:
+    """Single-SoT (2026-05-22) — ``_build_audit_command`` must NEVER
+    emit ``--target`` / ``--judge`` / ``--auditor`` argv. The role
+    models live in ``[self_improving_loop.petri.<role>].model`` and
+    the runner resolves them via the binding registry when argv slots
+    are absent. Earlier revisions:
+
+    * PR-MINIMAL-2 (2026-05-21) — inherited via
+      ``cfg.target_model or _settings_model()`` (Settings.model
+      bypass)
+    * 2026-05-22 first cut — emitted ``if cfg.target_model:`` argv
+      (override-only knob) — still a second SoT layer
+
+    Both paths created a duplicate-SoT race with ``[petri.<role>]``.
+    Pin the no-argv contract so a future refactor doesn't silently
+    re-introduce the bypass."""
     from autoresearch import train
 
     src = inspect.getsource(train._build_audit_command)
-    # Conditional argv emission — present only when cfg pinned a value
-    assert "if cfg.target_model:" in src
-    assert "if cfg.judge_model:" in src
-    # The legacy inherit-via-Settings.model wiring is gone from this
-    # function — verify it stays removed so a future refactor doesn't
-    # silently re-introduce the bypass.
-    assert "cfg.target_model or _settings_model()" not in src
-    assert "cfg.judge_model or _settings_model()" not in src
+    # No ``--target`` / ``--judge`` / ``--auditor`` argv emission
+    assert '"--target"' not in src
+    assert '"--judge"' not in src
+    assert '"--auditor"' not in src
+    # And no model-axis cfg reads inside the builder
+    assert "cfg.target_model" not in src
+    assert "cfg.judge_model" not in src
+    # The legacy inherit-via-Settings.model wiring is gone too
+    assert "_settings_model" not in src
 
 
 # ---------------------------------------------------------------------------

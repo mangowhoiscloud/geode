@@ -360,7 +360,7 @@ def test_get_role_contract_default_model_mismatch(tmp_path: Path) -> None:
         """---
 role: auditor
 description: drifted default_model
-default_model: claude-opus-4-7
+default_model: claude-sonnet-4-6
 default_source: auto
 ---
 """,
@@ -372,7 +372,7 @@ default_source: auto
         enabled_roles=["auditor"],
         roles={
             "auditor": RoleSpec(
-                default_model=auditor_spec.default_model,  # claude-sonnet-4-6
+                default_model=auditor_spec.default_model,  # claude-opus-4-7
                 allowed_models=auditor_spec.allowed_models,
                 role_contract="auditor.md",
             )

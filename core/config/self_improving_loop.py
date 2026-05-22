@@ -119,36 +119,42 @@ class PetriRoleConfig(BaseModel):
 class AutoresearchConfig(BaseModel):
     """autoresearch/train.py runtime knobs.
 
-    SoT-flip (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
-    in ``~/.geode/config.toml`` is the canonical model SoT for every
-    audit role. The fields below survive as **override-only knobs**: set
-    them when the outer-loop run needs a different model than the
-    operator-pinned ``[petri.<role>]`` baseline (e.g. a one-shot
-    cross-model run while keeping ``geode audit`` standalone defaults
-    intact); leave them ``None`` for the common case and the autoresearch
-    argv builder simply omits ``--target`` / ``--judge``, letting the
-    registry fall through to the per-role config.
+    Single-SoT (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
+    in ``~/.geode/config.toml`` is the **sole** model SoT for every audit
+    role (auditor / target / judge). The autoresearch outer loop reads
+    the role models through that section indirectly: it omits
+    ``--target`` / ``--judge`` / ``--auditor`` from the ``geode audit``
+    argv entirely, and the runner resolves each role via the binding
+    registry (which reads ``[petri.<role>]``).
 
-    PR-MINIMAL-2 (2026-05-21) shipped these as inherit-from-``Settings.model``
-    fields; this revision narrows their role to ``[petri.<role>]``
-    override only, removing the asymmetry where the autoresearch path
-    silently bypassed the operator's role config while standalone
-    ``geode audit`` respected it.
+    The ``target_model`` / ``judge_model`` fields survive as
+    **deprecated no-op slots** — silently accepted at load time so
+    existing ``~/.geode/config.toml`` files don't ``extra="forbid"``
+    on the loader, but never consulted at runtime. ``_build_audit_command``
+    no longer reads them; the next release will drop the fields
+    entirely after operators have migrated to ``[petri.<role>].model``.
+
+    Operators who want an autoresearch-only model now edit
+    ``[petri.target].model`` / ``[petri.judge].model`` directly;
+    standalone ``geode audit`` and the outer loop share the same
+    bindings end-to-end.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
     target_model: str | None = None
-    """``None`` → defer to ``[self_improving_loop.petri.target].model``
-    in the operator config (or the manifest default when neither is
-    set). Operators set this here only when the autoresearch run must
-    use a different target than the standalone-audit baseline — e.g.
-    a temporary cross-model probe without editing the per-role config."""
+    """**Deprecated** — surviving slot for back-compat config file load.
+    The runtime always resolves the target through
+    ``[self_improving_loop.petri.target].model`` via the binding
+    registry; this field is silently ignored. Will be dropped in a
+    future release once operator configs are migrated."""
     judge_model: str | None = None
-    """``None`` → defer to ``[self_improving_loop.petri.judge].model``.
-    Operators set this here only when the autoresearch judge must
-    differ from the per-role baseline."""
+    """**Deprecated** — surviving slot for back-compat config file load.
+    The runtime resolves the judge through
+    ``[self_improving_loop.petri.judge].model`` via the binding
+    registry; this field is silently ignored. Will be dropped in a
+    future release once operator configs are migrated."""
     source: Source = "auto"
     """Credential source for the audit subprocess. ``auto`` =
     subscription-first with PAYG fallback per the global

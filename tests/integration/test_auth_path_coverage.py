@@ -145,7 +145,12 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     from autoresearch import train
 
     assert hasattr(train, "SOURCE")
-    assert hasattr(train, "TARGET_MODEL")
+    # Single-SoT (2026-05-22) — ``TARGET_MODEL`` / ``JUDGE_MODEL``
+    # module constants removed; role models now resolve through the
+    # ``_petri_role_model`` helper which consults
+    # ``[self_improving_loop.petri.<role>]`` then the manifest.
+    assert hasattr(train, "_petri_role_model")
+    assert callable(train._petri_role_model)
     # Subscription path needs a non-api_key SOURCE; PAYG needs an env key field.
     if cell.path.source in {"claude-cli", "openai-codex"}:
         # SOURCE must be a string in the 4-enum the agent can set.
