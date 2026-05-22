@@ -22,6 +22,10 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "write_file": ("core.tools.file_tools", "WriteFileTool"),
     "note_save": ("core.tools.memory_tools", "NoteSaveTool"),
     "note_read": ("core.tools.memory_tools", "NoteReadTool"),
+    # CSP-2 (2026-05-22) — literature research surface
+    "arxiv_search": ("core.tools.arxiv", "ArxivSearchTool"),
+    "paper_fetch_arxiv": ("core.tools.arxiv", "ArxivFetchTool"),
+    "geode_seed_pool_search": ("core.tools.seed_pool_search", "SeedPoolSearchTool"),
     # profile
     "profile_show": ("core.tools.profile_tools", "ProfileShowTool"),
     "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),

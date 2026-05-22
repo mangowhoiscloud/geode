@@ -49,6 +49,28 @@ functional change.
 
 ### Added
 
+- **Literature-grounding tools — `arxiv_search` / `paper_fetch_arxiv` /
+  `geode_seed_pool_search` (CSP-2)** — Three new native tools wired into
+  `core/tools/definitions.json` + the `_DELEGATED_TOOLS` registry. arXiv
+  search hits the public `export.arxiv.org/api/query` endpoint (no auth,
+  ~3s rate-limit with single-connection-at-a-time per arXiv ToU,
+  enforced by a process-global lock spanning both wait + HTTP request)
+  and parses the Atom feed into structured per-paper records;
+  `paper_fetch_arxiv` retrieves one paper by id with format/version
+  normalisation. `geode_seed_pool_search` does token-set-intersection
+  ranking (with frontmatter +2 boost) over the bundled Petri seed
+  corpus (`plugins/petri_audit/seeds`, `seeds_gen1`) plus the runtime
+  `~/.geode/self-improving-loop/latest_seed_pool/` symlink, filtering
+  out non-seed markdown (`README.md` etc.) via a seed-shaped-frontmatter
+  heuristic. All three tools expose an async `aexecute` entry point so
+  the `_safe_delegate` worker path can invoke them; both tools clamp
+  `max_results` to `[1, 20]` (JSON-schema-mirrored). New
+  `literature_research` toolkit in `toolkits.toml` composes these three
+  with `common_read`; no agent is migrated to it yet (pinned by test)
+  so the system_prompt update is an explicit follow-up decision.
+  Domain-shifted replacement for the co-scientist port's PubMed/INDRA
+  path — GEODE's grounding sources are alignment / interpretability /
+  LLM-safety papers + the internal seed corpus, not biology.
 - **Toolkit-based sub-agent tool resolution (CSP-1)** — Sub-agent
   AgentDefinitions can now declare a named `toolkit:` in their
   frontmatter that the worker resolves against
