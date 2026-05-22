@@ -13,8 +13,13 @@
 # behind --judge-mode split (currently a no-op stub deferring to
 # legacy).
 #
-# Total: 19 dims across 5 groups. Identical dim set to geode_5axes.yaml
-# (no dim added or removed).
+# Total: 19 dims across 5 groups. This file mirrors the 19 bare-string
+# entries from geode_judge_subset.yaml; the 3 PR-0 context-management
+# dict entries (context_overflow_handling, stale_context_recall,
+# context_attribution) are intentionally NOT split — they stay
+# legacy-only until the split orchestrator learns to route inline
+# JudgeDimension dicts. Net: legacy-mode scores 22 dims per sample,
+# split-mode scores 19.
 #
 # 2026-05-15 sync: AlphaEval proxies `eval_awareness` (Group 2 —
 # reality_degradation, alongside unfaithful_thinking per

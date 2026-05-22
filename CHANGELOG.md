@@ -47,6 +47,52 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **judge-dims rename + 7-axis metric drift sync.** Renamed
+  ``plugins/petri_audit/judge_dims/geode_5axes.yaml`` →
+  ``geode_judge_subset.yaml`` and ``geode_5axes_split.yaml`` →
+  ``geode_judge_subset_split.yaml``. The old name "5axes" suggested a
+  dim count of 5; the file actually carries 22 dims (5 *operational
+  axes* × multiple dims per axis). The new name reflects role: a
+  GEODE-curated subset of inspect-petri's default-38 dim catalog.
+  CLI flag default flipped from ``--dim-set 5axes`` to
+  ``--dim-set subset`` (clean break — no alias kept; muscle memory
+  ratchets to the new name in one step). ``BUILTIN_DIM_SETS`` key,
+  ``DEFAULT_DIM_SET``, ``AutoresearchConfig.dim_set`` default,
+  ``DIM_SET_NAME`` constant, and the typer + argparse + slash
+  parsers all flipped in lockstep. Six metric drift fixes ride
+  along on the same sweep so reader-facing surfaces stop lying:
+  ``HookEvent`` count ``58 → 69`` (GEODE.md ×2, CLAUDE.md, AGENTS.md,
+  README ×2 [body + shield URL], README.ko ×2, hook-system.md +
+  .en.md, domain-free-core-audit.md ×3 — measured via
+  ``len(list(HookEvent))``); ``ToolRegistry`` ``61 → 57`` and
+  README badge ``53 → 57`` (GEODE.md ×3, AGENTS.md, README +
+  README.ko body + shield URL — measured via
+  ``len(load_all_tool_definitions())``); judge-dim count
+  ``17 → 22`` (judge_dims/__init__.py, cli_audit.py typer help,
+  runner.py docstring + comment ×2, bias.py, test_runner.py
+  assertion, scripts/petri_analyze.py, autoresearch/program.md ×4,
+  README.md auto-research line, critic.md / pilot.md prompts);
+  inspect-petri default count ``36 → 38`` (runner.py ×5,
+  judge_dims/__init__.py ×2, test_runner.py — measured via
+  ``find inspect_petri/_judge/dimensions -name '*.md' | wc -l``);
+  seed count ``13 → 22`` (AGENTS.md — measured via ``find
+  plugins/petri_audit/seeds -type f | wc -l``); memory-tier
+  docstring ``3-tier → 5-tier`` (core/memory/context.py ×3,
+  core/tools/memory_tools.py, tests/test_context_assembler.py —
+  matches the existing 5-tier comment block in
+  ``ContextAssembler.assemble``); AgenticLoop ``50-round limit
+  → no round limit (time-budget controlled)`` (AGENTS.md —
+  matches ``DEFAULT_MAX_ROUNDS = 0``). ``geode_judge_subset_split.yaml``
+  header comment ``Identical dim set`` corrected to acknowledge
+  the 3 PR-0 context-management dict entries are intentionally
+  legacy-only (split-mode scores 19, legacy-mode scores 22).
+  Touches ~40 files + 2 file renames; no behavioural change.
+  Historical CHANGELOG entries and dated docs/audits / docs/plans
+  retain their original counts as snapshots; only path references
+  inside them are mass-rewritten so links stay valid post-rename.
+
 ## [0.99.32] - 2026-05-22
 
 > LaneQueue 5-phase plan completion + Codex parity. Phase 3

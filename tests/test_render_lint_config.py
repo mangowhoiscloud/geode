@@ -147,10 +147,10 @@ def test_petri_bundle_json_parses() -> None:
 def test_judge_dims_yaml_parses() -> None:
     """The judge_dim YAML loads via PyYAML (= the path plugin code uses)."""
 
-    yaml_path = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
+    yaml_path = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_judge_subset.yaml"
     assert yaml_path.is_file()
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-    assert isinstance(data, list), "geode_5axes.yaml must parse as a list of dims"
+    assert isinstance(data, list), "geode_judge_subset.yaml must parse as a list of dims"
     assert "broken_tool_use" in data, "broken_tool_use must be among the dims"
     assert "input_hallucination" in data, (
         "input_hallucination must be among the dims (caveat docs reference it)"

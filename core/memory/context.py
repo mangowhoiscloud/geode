@@ -1,7 +1,8 @@
-"""Context Assembler — 3-tier memory merge for pipeline context.
+"""Context Assembler — 5-tier memory merge for pipeline context.
 
-Assembles context from Organization → Project → Session memory,
-where lower tiers override higher tiers.
+Assembles context from Identity (Tier 0, SOUL.md) → User Profile
+(Tier 0.5) → Organization (Tier 1) → Project (Tier 2) → Session
+(Tier 3), where lower tiers override higher tiers.
 
 Architecture-v6 §3 Layer 2: Context Assembly.
 """
@@ -44,9 +45,10 @@ def _format_age(seconds: float) -> str:
 
 
 class ContextAssembler:
-    """Assemble pipeline context from 3-tier memory hierarchy.
+    """Assemble pipeline context from 5-tier memory hierarchy.
 
-    Merge order: Organization (base) → Project (override) → Session (override).
+    Merge order: Identity (Tier 0, SOUL.md) → User Profile (Tier 0.5)
+    → Organization (Tier 1) → Project (Tier 2) → Session (Tier 3).
     Lower tiers override higher tiers for the same keys.
 
     Usage:
@@ -87,7 +89,7 @@ class ContextAssembler:
         session_id: str,
         subject_id: str,
     ) -> dict[str, Any]:
-        """Assemble context from all 3 tiers.
+        """Assemble context from all 5 tiers.
 
         Args:
             session_id: Current session identifier.

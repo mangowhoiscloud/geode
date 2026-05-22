@@ -55,7 +55,7 @@ judge_model    = "claude-code/opus"
 use_oauth      = true
 seed_limit     = 10
 seed_select    = "plugins/petri_audit/seeds"
-dim_set        = "5axes"
+dim_set        = "subset"
 max_turns      = 10
 # 옵션: per-component fallback override
 # fallback_to_payg = true
@@ -176,7 +176,7 @@ class AutoresearchConfig(BaseModel):
     use_oauth: bool = True
     seed_limit: int = 10
     seed_select: str = "plugins/petri_audit/seeds"
-    dim_set: str = "5axes"
+    dim_set: str = "subset"
     max_turns: int = 10
     fallback_to_payg: bool | None = None
 

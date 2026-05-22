@@ -172,12 +172,13 @@ def test_build_command_omits_optional_flags() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_command_default_dim_set_pins_geode_5axes_yaml() -> None:
-    """Default ``dim_set`` resolves to the bundled 17-dim YAML.
+def test_build_command_default_dim_set_pins_geode_judge_subset_yaml() -> None:
+    """Default ``dim_set`` resolves to the bundled 22-dim YAML.
 
     Any caller that does not pass ``--dim-set`` gets the pruned set
-    automatically — this is the contract the user asked for: 'core 9
-    + 표적 3 + 보정 5 = 17 dim' as the report surface.
+    automatically — this is the contract the user asked for: 19 base
+    dims (default-38 subset) + 3 PR-0 context-management dims = 22 dim
+    as the report surface.
     """
     cmd = build_command(
         judge="anthropic/claude-haiku-4-5-20251001",
@@ -190,10 +191,10 @@ def test_build_command_default_dim_set_pins_geode_5axes_yaml() -> None:
     )
     assert "-T" in cmd and any("judge_dimensions=" in part for part in cmd), (
         "default dim_set must inject judge_dimensions; otherwise inspect-petri "
-        "falls back to its 36-dim set and the surface contract is broken"
+        "falls back to its 38-dim set and the surface contract is broken"
     )
     flag = next(p for p in cmd if p.startswith("judge_dimensions="))
-    assert flag.endswith("geode_5axes.yaml")
+    assert flag.endswith("geode_judge_subset.yaml")
 
 
 @pytest.mark.parametrize("alias", ["full", "default", "all", "FULL", "Default"])
@@ -201,7 +202,7 @@ def test_build_command_dim_set_full_aliases_omit_judge_dimensions(alias: str) ->
     """Explicit opt-out aliases drop the flag entirely (case-insensitive).
 
     ``"full"`` is the documented escape hatch for users who want
-    inspect-petri's bundled 36 dims.
+    inspect-petri's bundled 38 dims.
     """
     cmd = build_command(
         judge="anthropic/claude-haiku-4-5-20251001",
@@ -260,7 +261,7 @@ def test_build_command_rejects_missing_dim_yaml(tmp_path: Path) -> None:
 
 def test_build_command_rejects_dim_yaml_with_unknown_names(tmp_path: Path) -> None:
     """결함 K — a custom dim YAML must list names that exist in
-    inspect-petri's default 36 dim set, otherwise
+    inspect-petri's default 38 dim set, otherwise
     ``judge_dimensions(...)`` raises ``Unknown dimension`` at audit
     start. Surface the error at build_command instead.
     """
@@ -360,10 +361,11 @@ def test_build_command_target_tools_rejects_unknown() -> None:
         )
 
 
-def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
-    """Every name in geode_5axes.yaml must exist in inspect-petri's
-    default 36-dim set, otherwise ``judge_dimensions(...)`` raises
-    ``ValueError: Unknown dimension`` at audit start.
+def test_geode_judge_subset_yaml_is_subset_of_inspect_petri_38() -> None:
+    """Every bare-string name in geode_judge_subset.yaml must exist in
+    inspect-petri's default 38-dim set, otherwise
+    ``judge_dimensions(...)`` raises ``ValueError: Unknown dimension``
+    at audit start.
 
     Skipped when [audit] extra is absent — judge_dimensions is part of
     the optional dependency.
@@ -372,13 +374,13 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
     import yaml
     from plugins.petri_audit.judge_dims import BUILTIN_DIM_SETS
 
-    yaml_path = BUILTIN_DIM_SETS["5axes"]
+    yaml_path = BUILTIN_DIM_SETS["subset"]
     with open(yaml_path) as f:
         entries = yaml.safe_load(f)
-    # PR 0 (2026-05-18): 22 entries = 19 default-36 string subset
+    # PR 0 (2026-05-18): 22 entries = 19 default-38 string subset
     # + 3 new context-management JudgeDimension dicts.
     assert isinstance(entries, list) and len(entries) == 22, (
-        "5axes set is documented as 22 dims post-PR-0 (19 default-subset "
+        "subset set is documented as 22 dims post-PR-0 (19 default-subset "
         "strings + 3 context-management JudgeDimension dicts); update "
         "CHANGELOG + the report surface contract if intentionally changed."
     )
@@ -395,7 +397,7 @@ def test_geode_5axes_yaml_is_subset_of_inspect_petri_36() -> None:
     defaults = {d.name for d in judge_dims_mod.load_dimensions()}
     unknown_strings = [n for n in string_entries if n not in defaults]
     assert not unknown_strings, (
-        f"Unknown string dimension(s) in geode_5axes.yaml: {unknown_strings}. "
+        f"Unknown string dimension(s) in geode_judge_subset.yaml: {unknown_strings}. "
         "inspect-petri rejects these at judge load time."
     )
     # Dict entries can introduce new names (that's why they're dicts);

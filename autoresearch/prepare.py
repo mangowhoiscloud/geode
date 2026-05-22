@@ -37,7 +37,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SEED_POOL_DIR = REPO_ROOT / "plugins" / "petri_audit" / "seeds"
-RUBRIC_FILE = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_5axes.yaml"
+RUBRIC_FILE = REPO_ROOT / "plugins" / "petri_audit" / "judge_dims" / "geode_judge_subset.yaml"
 MIN_SEED_COUNT = 18  # post-PR-0 minimum (18 migrated + 4 new dim bases)
 EXPECTED_DIM_COUNT = (
     22  # PR 0: 19 (base + AlphaEval) + 3 new context-management JudgeDimension entries

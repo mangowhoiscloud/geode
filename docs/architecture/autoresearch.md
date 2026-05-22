@@ -237,7 +237,7 @@ ratchet 의 input 이 되는 경로:
 | mutation 이 GEODE syntax 깨뜨림 | wrapper override JSON 의 schema 단순 (str→str dict). syntax break X. env 가 잘못되면 `core/agent/system_prompt.py` load 가 fail-closed 하므로 fitness 가 기본 wrapper 로 조용히 오염되지 않음. |
 | Generation drift (cumulative bias) | per-generation `results.tsv` + cross-axis ratchet (§5) + critical axis strict gate. |
 | Long-running loop 의 cost 폭주 | per-audit budget 5분 + self-improving-loop agent 의 timeout (program.md). ChatGPT Plus / Claude Max OAuth path = $0 per-token. |
-| Goodhart's law (rubric self-mutation) | AlphaEval rubric (`plugins/petri_audit/judge_dims/geode_5axes.yaml`) 는 program.md 의 CANNOT 항. seed pool (`plugins/petri_audit/seeds_safe10/`) 도 mutation 불가. |
+| Goodhart's law (rubric self-mutation) | AlphaEval rubric (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`) 는 program.md 의 CANNOT 항. seed pool (`plugins/petri_audit/seeds_safe10/`) 도 mutation 불가. |
 | 자기참조 loop (autoresearch 가 autoresearch 를 mutate) | mutation target 이 `WRAPPER_PROMPT_SECTIONS` dict 1 곳 — `autoresearch/` 디렉터리 자체 mutate 불가능 (program.md 의 in-scope file 4 개 외 X). |
 | Rejected hypothesis 의 information loss | `results.tsv` 의 discard row 가 다음 hypothesis 의 부정적 prior. agent context 에 결과 누적. |
 
@@ -263,5 +263,5 @@ PR 로 추가될 수 있는 컴포넌트 (현재는 미구현):
 - Gen 0 plan + signal: `docs/audits/2026-05-15-autoresearch-gen0-plan.md` + `docs/audits/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `docs/audits/2026-05-16-autoresearch-gen0-baseline.md`
 - Wrapper override hook 구현: `core/agent/system_prompt.py:_load_wrapper_override`
-- Petri audit harness: `plugins/petri_audit/runner.py` + `plugins/petri_audit/judge_dims/geode_5axes.yaml`
+- Petri audit harness: `plugins/petri_audit/runner.py` + `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
 - Karpathy 5 원칙 skill: `karpathy-patterns` (`.claude/skills/`)

@@ -27,7 +27,7 @@
 
 ### Petri × GEODE audit pipeline 확장
 - **OAuth bridge** (PR #1133): ChatGPT Plus 의 Codex OAuth 를 inspect_ai 의 ModelAPI 로 wrap — `openai-codex/<model>` provider
-- **AlphaEval 19 dim** (PR #1133): `geode_5axes.yaml` 의 17 → 19 dim (`eval_awareness` + `unprompted_sycophancy` 추가)
+- **AlphaEval 19 dim** (PR #1133): `geode_judge_subset.yaml` 의 17 → 19 dim (`eval_awareness` + `unprompted_sycophancy` 추가)
 - **5 paraphrase seed** (PR #1133): AlphaEval Robustness 측정용 input perturbation
 - **Same-provider bias correction** (PR #1133): polarity-aware ±factor 0.16, 19/19 dim polarity
 - **Orchestration gap fix** (PR #1135): GoalDecomposer 의 model propagation + AgenticLoop 의 provider auto-detect → target token 0 → 347,558

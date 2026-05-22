@@ -38,7 +38,7 @@ uv run geode "schedule daily standup reminder at 9am"
 | Document | Path | Content |
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Runtime architecture, LLM models, conventions |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 58 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 69 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
