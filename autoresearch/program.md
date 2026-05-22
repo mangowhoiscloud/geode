@@ -45,7 +45,20 @@ Before starting a new experiment run, confirm with the user:
 5. **Initialise `results.tsv`** — only the header row in
    `autoresearch/state/results.tsv`; the baseline appears after the
    first run.
-6. **Confirm and go** — once the user OKs the setup, start
+6. **Confirm config precedence**. Two TOML sections can name the same
+   role from different angles — keep them in sync to avoid a silent
+   cross-model mismatch:
+   - `[self_improving_loop.autoresearch].target_model` / `judge_model`
+     — what `train.py` passes via `--target` / `--judge` argv to the
+     `geode audit` subprocess. **Wins on model**.
+   - `[self_improving_loop.petri.<role>].model` — only applies for
+     standalone `geode audit` calls without `--target` / `--judge`. In
+     the outer loop the autoresearch argv pins the model, so this field
+     is silently ignored. **Source still flows through this section**
+     for the autoresearch path (argv doesn't carry per-role source).
+   See `core.config.self_improving_loop.PetriRoleConfig` docstring for
+   the full resolution order.
+7. **Confirm and go** — once the user OKs the setup, start
    experimentation.
 
 ## Experimentation

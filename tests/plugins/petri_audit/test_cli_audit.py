@@ -78,7 +78,7 @@ def test_slash_parser_parses_short_and_long_flags() -> None:
         ]
     )
     assert ns.judge == "gpt-5.4-mini"
-    assert ns.auditor == "claude-sonnet-4-6"
+    assert ns.auditor == "claude-opus-4-7"
     assert ns.target == "claude-opus-4-7"
     assert ns.seeds == 2
     assert ns.max_turns == 4

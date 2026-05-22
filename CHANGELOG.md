@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **autoresearch outer-loop UX cleanup — auditor default + config
+  precedence docs**. Two deferrals from the 2026-05-22 gen-0 baseline
+  sprint (`project_session66_handoff`) landed together as one PR:
+  (B1) the ``geode audit --auditor`` default flipped from
+  ``claude-sonnet-4-6`` → ``claude-opus-4-7`` so the auditor role no
+  longer drops to the cost-optimised pick when the operator omits the
+  flag (subscription path pays the same per-token, and the auditor's
+  transcript-shaping ability bounds test signal-to-noise — the default
+  should track the flagship). Both the Typer entry surface
+  (``plugins/petri_audit/cli_audit.py``) and the slash parser default
+  flipped in lockstep; the matching ``test_cli_audit.py`` slash-args
+  assertion updated to pin the new default. Help text expanded to spell
+  out the "flagship by default" rationale so future operators don't
+  silently revert.
+  (B2) ``PetriRoleConfig`` docstring (``core/config/self_improving_loop.py``)
+  now spells out the precedence rule between
+  ``[self_improving_loop.autoresearch].{target_model,judge_model}``
+  (argv → wins on model) and ``[self_improving_loop.petri.<role>]``
+  (applies for standalone ``geode audit`` + source axis still flows
+  through cascade). The gen-0 baseline session surfaced the trap when
+  the operator's config carried ``[petri.target].model = "gpt-5.5"``
+  while ``[autoresearch].target_model = "claude-opus-4-7"`` — argv
+  silently won and the cross-model audit signal vanished without any
+  warning. ``autoresearch/program.md`` § Setup gained a new "Confirm
+  config precedence" step (#6) that names both sections + points the
+  agent at the full resolution order in the class docstring.
+
 ### Added
 
 - **petri bundle auto-sync — agent context → repo-tracked bundle.** New
