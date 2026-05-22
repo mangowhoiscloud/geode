@@ -49,6 +49,35 @@ functional change.
 
 ### Changed
 
+- **CSP-8 — Proximity reverted to paper's LLM-clustering pattern**.
+  Removed the pre-CSP-8 GEODE-specific 3-track majority vote
+  (embedding cosine + 5-gram Jaccard + role overlap) along with
+  PR-Π1 (proximity_graph), PR-Π2 (partial-survive floor), PR-Π3
+  (goal-conditioning). Proximity now dispatches one
+  ``seed_proximity`` sub-agent that emits ``similarity_clusters``
+  with per-entry ``similarity_degree`` (``high``/``medium``/``low``);
+  the orchestrator drops every candidate marked ``high``. The LLM
+  keeps the "winner" of each high-similarity group OUT of the high
+  list, so no tiebreak rule is needed in the orchestrator. Mirrors
+  `open-coscientist/nodes/proximity.py` 1:1.
+
+  Cascading changes:
+  - `state.proximity_graph` field removed; replaced by
+    `state.similarity_clusters` + `state.removed_duplicates` (paper
+    schema).
+  - `tournament.plan_matches` lost its `proximity_graph=` parameter
+    and reverts to pure random-shuffle bracket seeding.
+  - `core/tools/text_embed.py` (+ its test file) deleted — Proximity
+    was the sole importer, no other GEODE surface uses embeddings.
+  - `seed_generation.plugin.toml` proximity role flipped from
+    `kind="embedding"` to `kind="completion"` (LLM call now); the
+    `kind` field stays in the schema for forward-compat.
+  - `seed_proximity.md` AgentDef rewritten — model bumped from
+    `text-embedding-3-small` to `claude-sonnet-4-6`, system prompt
+    documents the clustering contract.
+
+### Changed
+
 - **CSP-7 — symlink-free, in-repo state for cross-machine reproducibility**.
   Replaced the pre-CSP-7 `~/.geode/self-improving-loop/latest_seed_pool`
   + `latest_meta_review.json` symlink pair with a single JSON pointer

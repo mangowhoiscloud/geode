@@ -52,15 +52,17 @@ allowed_models = [
 role_contract = ".claude/agents/seed_critic.md"
 
 [seed_generation.role.proximity]
-# Embedding-based — not LLM completion. ``kind="embedding"`` is the
-# explicit dispatch tag so the S4 wiring routes through the
-# ``text_embed`` tool, NOT Petri's [petri.adapter.*] table. Without
-# this discriminator downstream code would have to guess the role's
-# kind from the model-name string.
-default_model = "text-embedding-3-small"
-allowed_models = ["text-embedding-3-small"]
+# CSP-8 (2026-05-22) — Proximity reverted to LLM-clustering pattern
+# (paper §3). Pre-CSP-8 was kind="embedding" + text-embedding-3-small;
+# now an LLM completion call like every other role.
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.5",
+]
 role_contract = ".claude/agents/seed_proximity.md"
-kind = "embedding"
+kind = "completion"
 
 [seed_generation.role.pilot]
 default_model = "claude-haiku-4-5"

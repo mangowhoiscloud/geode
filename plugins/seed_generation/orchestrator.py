@@ -100,6 +100,11 @@ def _state_to_json(state: PipelineState) -> str:
         # replay knows how many iteration cycles already ran.
         "max_iterations": state.max_iterations,
         "current_iteration": state.current_iteration,
+        # CSP-8 (2026-05-22) — proximity LLM-clustering output. The
+        # meta_reviewer + operator-readable summary both consume these
+        # as a coverage signal (replaces the pre-CSP-8 proximity_graph).
+        "similarity_clusters": state.similarity_clusters,
+        "removed_duplicates": state.removed_duplicates,
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -208,15 +213,13 @@ class PipelineState:
     survivors: list[str] = field(default_factory=list)
     evolved_candidates: list[dict[str, Any]] = field(default_factory=list)
     meta_review: dict[str, Any] = field(default_factory=dict)
-    # PR-Π1 — pair-wise similarity scores emitted by the Proximity phase
-    # (PR-Π1 §A). Key is the sorted ``(cid_a, cid_b)`` tuple (a < b);
-    # value is the composite similarity in ``[0.0, 1.0]`` (1.0 = identical).
-    # The Ranker (S6) consumes this in its ``plan_matches`` call to seed
-    # the Elo bracket toward diverse pairings — Co-Scientist §3.3.4
-    # "showcasing a diverse range of ideas". Sparse — only candidate
-    # pairs the Proximity phase scored are present; missing pairs are
-    # treated as maximally distant (proximity = 0.0).
-    proximity_graph: dict[tuple[str, str], float] = field(default_factory=dict)
+    # CSP-8 (2026-05-22) — paper §3 proximity_node output. The Proximity
+    # phase emits its LLM-clustering result here; the orchestrator reads
+    # nothing from it (state.candidates is filtered in-place), but the
+    # downstream meta_reviewer and the operator-readable state.json
+    # snapshot both consume it as a coverage signal.
+    similarity_clusters: list[dict[str, Any]] = field(default_factory=list)
+    removed_duplicates: list[dict[str, Any]] = field(default_factory=list)
     # cost rollup
     usd_spent: float = 0.0
     prompt_tokens: int = 0
@@ -267,6 +270,13 @@ class PipelineState:
             # CSP-4 (2026-05-22) — Supervisor phase output. Dict-typed
             # so ``merge`` overlays the new payload via ``dict.update``.
             "supervisor_guidance",
+            # CSP-8 (2026-05-22) — Proximity phase paper-fidelity output
+            # (replaces the pre-CSP-8 proximity_graph). Both list-typed
+            # so the orchestrator's list-extend merge semantics keep the
+            # full set across iterations (Proximity only runs in iter 0,
+            # so a single extend is the steady state).
+            "similarity_clusters",
+            "removed_duplicates",
         }
         unknown = set(output) - known
         if unknown:
@@ -469,12 +479,11 @@ class Pipeline:
         self.state.pilot_scores = {}
         self.state.elo_ratings = {}
         self.state.survivors = []
-        # ``proximity_graph`` is also per-candidate-batch but the
-        # Ranker uses ``state.proximity_graph or None`` fallback, so a
-        # stale graph is harmless for the iteration cycle (no
-        # proximity phase re-runs). Keeping the symbol around lets
-        # the Ranker fall back to its legacy random shuffle policy
-        # cleanly — no change.
+        # CSP-8 (2026-05-22) — proximity phase only runs in iter 0,
+        # so ``similarity_clusters`` / ``removed_duplicates`` stay
+        # populated from the initial draft batch. Iteration cycles
+        # don't re-cluster (evolved candidates are deduped by the
+        # Evolver's anti-convergence Jaccard guard, CSP-6).
         return True
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:

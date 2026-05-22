@@ -58,19 +58,17 @@ class SeedRoleSpec(BaseModel):
     """Per-role default + allowed model set + contract path.
 
     Mirrors :class:`plugins.petri_audit.manifest.RoleSpec` in field shape
-    (default + allowed + contract) but adds the ``kind`` discriminator
-    because the seed-generation 7-role topology includes one role
-    (``proximity``) that runs an embedding tool rather than an LLM
-    completion. The ``kind`` field is the explicit dispatch tag so
-    downstream code (S4 ``text_embed`` tool wiring, S5.5 picker) can
-    route ``embedding`` roles through the embedding adapter instead of
-    the Petri completion adapter table.
+    (default + allowed + contract). The ``kind`` discriminator was added
+    pre-CSP-8 when Proximity ran an embedding API directly; CSP-8
+    reverted Proximity to the LLM-completion path, so every shipped
+    role is now ``kind="completion"``. The field is retained for
+    forward-compat (a future plugin may want to introduce a non-
+    completion role kind).
 
-    Field rationale:
+    Field values:
     - ``completion`` (default) — LLM chat completion via Petri adapters.
-    - ``embedding`` — vector embedding model (e.g. ``text-embedding-3-small``);
-      bound at runtime to the ``text_embed`` tool, NOT Petri's
-      [petri.adapter.<provider>.<source>] table.
+    - ``embedding`` — reserved for future vector-embedding-driven roles
+      (no current GEODE role uses this; pre-CSP-8 Proximity did).
     """
 
     default_model: str
