@@ -47,6 +47,25 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.34] - 2026-05-22
+
+> CSA sprint endgame + async-only migration foundation + petri-bundle
+> Pages serving + autoresearch outer-loop UX cleanup, all riding
+> together in one release window. CSA-1/1b/2/3/2c stack closes: the
+> claude-cli + codex-cli paperclip subprocess providers + MCP bridge
+> mirror tool_use audit support on both anthropic and codex sides;
+> the CSA-3 manifest flip routes the autoresearch outer loop through
+> subscription quota end-to-end (gen-0 + gen-1 live runs verified).
+> Async Phase C lands ``SubAgentManager.adelegate`` + Pipeline.arun
+> + 8 native async seed-generation agents; legacy sync ``delegate``
+> carries deprecation warning + grep anchor for the bulk-removal
+> pass. petri-bundle ``bundle_sync`` auto-copies finished ``.eval``
+> archives from the agent context layer
+> (``~/.geode/petri/logs/``) into the repo-tracked publish surface
+> (``docs/petri-bundle/logs/``), with the matching ``.gitignore``
+> exception so the synced files actually enter git. gen-0 + gen-1
+> baseline backfilled for live Pages publish.
+
 ### Added
 
 - **petri-bundle gen-1 backfill — recover the untracked auto-sync output.**
