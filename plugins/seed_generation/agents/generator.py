@@ -2,7 +2,7 @@
 
 Fans out ``state.candidates_requested`` parallel sub-agents via the parent
 ``SubAgentManager``. Each sub-agent is dispatched to the ``seed_generator``
-AgentDefinition (``.claude/agents/seed_generator.md``) with a SubTask
+AgentDefinition (``plugins/seed_generation/agents/generator.md``) with a SubTask
 description that names the target dim, generation tag, candidate id, and
 output path. The sub-agent reads its system prompt + style samples from
 the existing pool, then writes ONE seed markdown file to disk.
@@ -233,7 +233,7 @@ class Generator(BaseSeedAgent):
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
-        The system prompt is owned by ``.claude/agents/seed_generator.md``.
+        The system prompt is owned by ``plugins/seed_generation/agents/generator.md``.
         The description fills in the per-spawn parameters (target dim,
         output path, pool reference, candidate id).
         """

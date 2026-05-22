@@ -58,24 +58,71 @@ class TestUnchangedToolkits:
 
 
 class TestAgentPromptContract:
-    """Grep-level pin — seed_generator.md and seed_critic.md must mention
-    the literature tool names so the LLM knows they exist. Without the
-    mention, the model would have access but not awareness."""
+    """Grep-level pin — the generator and critic prompts must mention the
+    literature tool names so the LLM knows they exist. Without the
+    mention, the model would have access but not awareness.
+
+    CSP-9 — prompts now live under ``plugins/seed_generation/agents/``
+    (operator-override copies in ``.claude/agents/`` still win at
+    discovery time, but the canonical source is the plugin folder).
+    """
+
+    _PLUGIN_AGENTS_DIR = Path("plugins/seed_generation/agents")
 
     def test_generator_prompt_mentions_lit_tools(self) -> None:
-        text = Path(".claude/agents/seed_generator.md").read_text(encoding="utf-8")
+        text = (self._PLUGIN_AGENTS_DIR / "generator.md").read_text(encoding="utf-8")
         assert "geode_seed_pool_search" in text
         assert "arxiv_search" in text
         assert "references:" in text  # frontmatter contract advertised
 
     def test_critic_prompt_mentions_paper_fetch(self) -> None:
-        text = Path(".claude/agents/seed_critic.md").read_text(encoding="utf-8")
+        text = (self._PLUGIN_AGENTS_DIR / "critic.md").read_text(encoding="utf-8")
         assert "paper_fetch_arxiv" in text
         assert "references:" in text  # spot-check contract
 
     def test_evolver_preserves_references_field(self) -> None:
         """CSP-3 contract — Evolver must preserve the Generator's
         ``references:`` provenance across rewrites."""
-        text = Path(".claude/agents/seed_evolver.md").read_text(encoding="utf-8")
+        text = (self._PLUGIN_AGENTS_DIR / "evolver.md").read_text(encoding="utf-8")
         assert "references:" in text
         assert "unchanged" in text.lower()  # phrased as a preservation rule
+
+
+class TestPromptsColocationCSP9:
+    """CSP-9 — pin that the 8 seed-generation prompts live in the plugin
+    folder and that ``SubagentLoader`` discovers them under default config.
+
+    Without this pin, a future refactor could move the .md files back to
+    ``.claude/agents/`` (cwd-relative, not shipped with the package) and
+    fresh clones would silently regress to "no registered agent" at
+    runtime.
+    """
+
+    _ROLES = (
+        "critic",
+        "evolver",
+        "generator",
+        "meta_reviewer",
+        "pilot",
+        "proximity",
+        "ranker",
+        "supervisor",
+    )
+
+    def test_all_8_prompts_in_plugin_folder(self) -> None:
+        agents_dir = Path("plugins/seed_generation/agents")
+        for role in self._ROLES:
+            prompt = agents_dir / f"{role}.md"
+            assert prompt.is_file(), f"missing prompt: {prompt}"
+
+    def test_subagent_loader_discovers_all_8_prompts(self) -> None:
+        from core.skills.agents import SubagentLoader
+
+        loader = SubagentLoader()
+        loaded_names = {loader.load_file(p).name for p in loader.discover()}
+        for role in self._ROLES:
+            expected = f"seed_{role}"
+            assert expected in loaded_names, (
+                f"SubagentLoader did not discover {expected}; "
+                f"check plugins/seed_generation/agents/{role}.md"
+            )

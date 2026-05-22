@@ -339,16 +339,16 @@ def test_status_tolerates_partial_jsonl_row(
 
 
 def test_seed_generator_contract_requires_tags_field() -> None:
-    """The seed_generator agent contract (`.claude/agents/seed_generator.md`)
+    """The seed_generator agent contract (`plugins/seed_generation/agents/generator.md`)
     must require BOTH the co-scientist canonical ``target_dims`` field and
     a Petri-compatible ``tags`` field so a mixed pool (seed_generation
     survivors + plugins/petri_audit/seeds/) keeps dim attribution
     readable by both consumers."""
     from core.paths import get_project_root
 
-    contract = (get_project_root() / ".claude" / "agents" / "seed_generator.md").read_text(
-        encoding="utf-8"
-    )
+    contract = (
+        get_project_root() / "plugins" / "seed_generation" / "agents" / "generator.md"
+    ).read_text(encoding="utf-8")
     assert "`target_dims`" in contract
     assert "`tags`" in contract
     assert "Petri" in contract  # rationale must be documented in the contract

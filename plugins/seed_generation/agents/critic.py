@@ -5,7 +5,7 @@ candidate seed; each sub-agent reads the candidate's markdown body and
 returns a dim-level critique as structured JSON. The orchestrator merges
 the critiques into ``PipelineState.reflections`` keyed by candidate id.
 
-Per-candidate sub-agent contract (``.claude/agents/seed_critic.md``):
+Per-candidate sub-agent contract (``plugins/seed_generation/agents/critic.md``):
 
 .. code-block:: json
 
@@ -221,7 +221,7 @@ class Critic(BaseSeedAgent):
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
-        The system prompt is owned by ``.claude/agents/seed_critic.md``.
+        The system prompt is owned by ``plugins/seed_generation/agents/critic.md``.
         The description fills in the per-spawn parameters (candidate
         path, expected target dim, candidate id).
 
