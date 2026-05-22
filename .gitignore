@@ -116,6 +116,10 @@ reports/
 !docs/**/*.html
 !docs/visualizations/*.png
 
+# Pixel-ratchet baselines (Step 3 — tests/test_hero_frame_ratchet.py)
+# must ship with the repo so the test has something to diff against.
+!tests/visualizations/baselines/*.png
+
 # v0.63.0 — agent-generated personal reports (subject names + date suffixes).
 # Pattern guard so trend/stock/etc. reports the user generates via /report
 # don't accidentally leak into git. Add specific files via `git add -f` if

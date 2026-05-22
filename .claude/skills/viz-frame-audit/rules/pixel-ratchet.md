@@ -1,4 +1,9 @@
-# Pixel ratchet — Step 3 integration plan
+# Pixel ratchet — Step 3 (shipped 2026-05-22)
+
+> **Status**: implemented in `tests/test_hero_frame_ratchet.py`
+> (12 hero key frames, EN+KO). Baselines under
+> `tests/visualizations/baselines/`. Regenerate via
+> `scripts/visualizations/update_frame_baselines.py`.
 
 ## Goal
 
@@ -48,7 +53,11 @@ This re-renders the EN + KO scenes, extracts every `KEY_FRAMES` timestamp,
 and overwrites the baseline PNGs. Run after every intentional layout
 change; commit the new baselines alongside the scene change.
 
-## Sample integration (Step 3 PR)
+## Shipped integration — `tests/test_hero_frame_ratchet.py`
+
+The actual code is ~135 lines and uses `pytest.parametrize` over the
+`KEY_FRAMES` manifest in `tests/visualizations/key_frames.py`. The
+sample below shows the core shape.
 
 ```python
 from pathlib import Path

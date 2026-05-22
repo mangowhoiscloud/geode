@@ -194,6 +194,15 @@ dev = [
     # post-render audit. See .claude/skills/viz-frame-audit/rules/
     # typography-drift-gate.md.
     "uharfbuzz>=0.54.1",
+    # Step 3 frame ratchet — `tests/test_hero_frame_ratchet.py` extracts
+    # key timestamps from rendered scenes and diffs them against
+    # committed baselines (`tests/visualizations/baselines/`). Catches
+    # categories 2 (padding intrusion) and 4 (frame-order error) that
+    # the typography drift gate (Step 2) cannot see. Mapbox `pixelmatch`
+    # JS port, anti-aliasing-aware perceptual diff. See
+    # .claude/skills/viz-frame-audit/rules/pixel-ratchet.md.
+    "pixelmatch>=0.4.0",
+    "Pillow>=10.0.0",
 ]
 
 
