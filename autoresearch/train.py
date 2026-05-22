@@ -30,15 +30,20 @@ Agent CAN modify:
     active AgenticLoop system prompt replaces the wrapper base with it.
   * Hyperparameters via ``[self_improving_loop.autoresearch]`` in
     ``~/.geode/config.toml`` (``budget_minutes``, ``seed_limit``,
-    ``max_turns``, ``source``, etc.). The module constants below
-    (``BUDGET_MINUTES`` / ``TARGET_MODEL`` / ``JUDGE_MODEL`` /
-    ``SEED_LIMIT`` / …) are the SimpleNamespace fallback used only
-    when ``core.config`` cannot be imported (test stubs). For
-    role models specifically, ``[self_improving_loop.petri.<role>]``
-    is the operator-config SoT — set ``[autoresearch].target_model``
-    / ``.judge_model`` only when this run must override the per-role
-    baseline (see ``AutoresearchConfig`` docstring). Change one
-    knob at a time so the fitness delta is attributable.
+    ``max_turns``, ``source``, ``dim_set``). The module constants below
+    (``BUDGET_MINUTES`` / ``SEED_LIMIT`` / ``MAX_TURNS`` /
+    ``DIM_SET_NAME`` / ``SOURCE``) are the SimpleNamespace fallback
+    used only when ``core.config`` cannot be imported (test stubs).
+    Role models live in a separate SoT —
+    ``[self_improving_loop.petri.<role>]`` is the canonical operator
+    section; ``_petri_role_model(role)`` resolves it for status / argv
+    print. PR-CSP-12 (2026-05-22) removed the legacy
+    ``TARGET_MODEL`` / ``JUDGE_MODEL`` module constants and the
+    ``[autoresearch].target_model`` / ``.judge_model`` argv-emit path;
+    operators who want a per-run role override now edit the petri
+    section directly or pass ``--target`` / ``--judge`` argv on the
+    ``geode audit`` invocation. Change one knob at a time so the
+    fitness delta is attributable.
 
 Agent CANNOT modify (the ``prepare.py`` ground truth):
   * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
