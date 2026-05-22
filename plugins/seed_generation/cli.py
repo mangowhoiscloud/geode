@@ -127,6 +127,20 @@ def audit_seeds_generate(
         "-q",
         help="Suppress the ToS notice for subscription paths.",
     ),
+    max_iterations: int = typer.Option(
+        0,
+        "--max-iterations",
+        "-i",
+        min=0,
+        max=10,
+        help=(
+            "CSP-5 (2026-05-22): number of post-meta_reviewer iteration "
+            "cycles to run AFTER the initial draft batch. 0 (default) keeps "
+            "the pre-CSP-5 single-pass behaviour. Each iteration promotes "
+            "the Evolver's outputs into candidates and re-runs the "
+            "critic → pilot → ranker → evolver → meta_reviewer cycle."
+        ),
+    ),
 ) -> None:
     """Generate a new candidate batch — runs picker → cost preview →
     pre-flight → confirm → Pipeline.run().
@@ -145,6 +159,7 @@ def audit_seeds_generate(
         candidates=resolved_candidates,
         yes=yes,
         quiet=quiet,
+        max_iterations=max_iterations,
     )
     raise typer.Exit(code=exit_code)
 
@@ -237,6 +252,7 @@ def run_audit_seeds(
     candidates: int = 15,
     yes: bool = False,
     quiet: bool = False,
+    max_iterations: int = 0,
     stdout: IO[str] | None = None,
     stderr: IO[str] | None = None,
     confirm_fn: Callable[[IO[str], IO[str]], bool] | None = None,
@@ -343,6 +359,7 @@ def run_audit_seeds(
                 err=err,
                 baseline_snapshot=baseline_snapshot,
                 meta_review_snapshot=meta_review_snapshot,
+                max_iterations=max_iterations,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -374,6 +391,7 @@ def _dispatch_pipeline(
     err: IO[str],
     baseline_snapshot: Any = None,
     meta_review_snapshot: Any = None,
+    max_iterations: int = 0,
 ) -> None:
     """Build orchestrator + run.
 
@@ -408,6 +426,7 @@ def _dispatch_pipeline(
         run_dir=run_dir,
         baseline_snapshot=baseline_snapshot,
         meta_review_snapshot=meta_review_snapshot,
+        max_iterations=max_iterations,
     )
     registry = PipelineRegistry()
     # NOTE: real registry population happens in S11-wire / S12 (per
