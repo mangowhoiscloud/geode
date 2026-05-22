@@ -49,6 +49,47 @@ functional change.
 
 ### Added
 
+- **Seed-generation 3-loop port — Loop 2 (debate-turn).** open-coscientist
+  (the upstream this plugin was ported from) ships a 3-loop hypothesis
+  generation pipeline: an **outer iteration cycle** (Loop 1, already in
+  GEODE as ``_PHASE_ORDER`` / ``_ITERATION_PHASE_ORDER``), a **debate-turn
+  loop** inside generation (Loop 2 — ``nodes/generation/debate.py:71-147``,
+  ``for turn in range(1, num_turns + 1)``), and a **per-paper analysis
+  loop** inside literature_review (Loop 3 — landing in a follow-up PR).
+  PR-CSP-13 adds Loop 2.
+
+  Architecture — **sub-agent internal multi-turn** via AgenticLoop tool_use
+  cycle. Each candidate sub-agent receives a ``## Debate budget`` block
+  in its task description (with ``max_turns``, ``output_path``,
+  ``sidecar_path``) and runs an N-turn debate by repeatedly calling a
+  new ``seed_debate_turn`` tool; after N sequential turns the tool
+  returns ``next_action="synthesize"`` and the sub-agent emits the
+  final seed via ``write_file``. The tool persists each turn to a
+  per-candidate ``.debate.jsonl`` sidecar next to the seed file; the
+  Generator agent reads sidecars post-dispatch and merges them into
+  ``PipelineState.debate_transcripts`` for downstream meta_reviewer +
+  ``state.json`` audit.
+
+  Safety guards (anti-deception — the LLM cannot shortcut the budget):
+
+  - ``turn`` must equal ``prior_count + 1`` on every call (tool reads
+    the sidecar before append). Calling ``turn=max_turns`` directly is
+    rejected.
+  - ``sidecar_path`` must equal ``output_path[:-3] + ".debate.jsonl"``
+    AND live in a ``candidates/`` directory AND resolve under the
+    GEODE runtime root. Prevents arbitrary disk writes via the tool
+    surface even if the LLM hallucinates paths.
+  - ``max_turns`` validated at ``{0} ∪ [2, 6]`` at three layers:
+    manifest (``SeedRoleSpec``), operator config
+    (``SelfImprovingLoopBindings``), and tool guard. Operator override
+    at ``[self_improving_loop.seed_generation.roles.generator] num_turns``
+    in ``~/.geode/config.toml``; default 0 (off) preserves single-shot
+    behavior.
+
+  Codex MCP review (HIGH x2 + MEDIUM x3 + LOW x1) caught the
+  sequential-turn enforcement gap, the path-containment gap, and the
+  operator-config validator gap in the initial diff; all addressed
+  inline before push.
 - **PR-1 of petri-schema-v2 cascade — ``extract_dim_aggregates``
   emits ``sample_count`` + ``measurement_modality`` provenance**.
   Foundation for the baseline.json v2 schema (5-PR cascade documented

@@ -49,9 +49,11 @@ Wiring history
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 from plugins.seed_generation.orchestrator import PipelineState
@@ -67,6 +69,11 @@ __all__ = ["Generator"]
 _DEFAULT_GENERATOR_MODEL = "claude-sonnet-4-6"
 _GENERATOR_AGENT_NAME = "seed_generator"
 _TASK_TYPE = "seed-generation"
+# CSP-13 (2026-05-23) — Loop 2 (debate-turn) sidecar suffix. The
+# ``seed_debate_turn`` tool writes per-candidate JSONL turns to
+# ``<output_path>.replace('.md', '.debate.jsonl')``; Generator reads
+# them post-dispatch to populate ``state.debate_transcripts``.
+_DEBATE_SIDECAR_SUFFIX = ".debate.jsonl"
 
 
 class Generator(BaseSeedAgent):
@@ -183,10 +190,38 @@ class Generator(BaseSeedAgent):
                 ),
             )
 
-        return SeedAgentResult(
-            role=self.role,
-            output={"candidates": candidates},
-        )
+        # CSP-13 (2026-05-23) — Loop 2 (debate-turn). When the manifest
+        # has ``num_turns >= 2`` for this role the sub-agents will have
+        # written per-candidate ``.debate.jsonl`` sidecars next to each
+        # seed file via the ``seed_debate_turn`` tool. Read them back
+        # here so downstream phases (meta_reviewer) can inspect the
+        # debate transcripts via ``state.debate_transcripts``.
+        debate_transcripts = _read_debate_sidecars(candidates) if self._num_turns() else {}
+
+        output: dict[str, Any] = {"candidates": candidates}
+        if debate_transcripts:
+            output["debate_transcripts"] = debate_transcripts
+
+        return SeedAgentResult(role=self.role, output=output)
+
+    def _num_turns(self) -> int:
+        """Resolve the per-role ``num_turns`` knob (CSP-13).
+
+        Reads from :attr:`manifest_role` populated by the base class
+        constructor. Returns 0 when:
+          - the manifest entry is absent (test fixtures stub the role),
+          - ``num_turns`` is missing from the manifest row,
+          - the value is not a positive int.
+
+        The 0 path skips the sidecar read entirely so single-shot
+        behavior is byte-identical to the pre-CSP-13 code path.
+        """
+        if not self.manifest_role:
+            return 0
+        raw = self.manifest_role.get("num_turns")
+        if not isinstance(raw, int) or raw <= 0:
+            return 0
+        return raw
 
     def _build_tasks(self, state: PipelineState, candidates_dir: object) -> list[SubTask]:
         """Build the per-candidate SubTask list.
@@ -243,6 +278,27 @@ class Generator(BaseSeedAgent):
             if pool_path
             else "No existing pool provided; generate from scratch."
         )
+        # CSP-13 (2026-05-23) — Loop 2 (debate-turn). When num_turns is
+        # configured the per-task description carries the budget +
+        # sidecar path so the LLM knows to drive the ``seed_debate_turn``
+        # tool. The system prompt has the protocol; this block only
+        # fills the per-spawn parameters.
+        num_turns = self._num_turns()
+        if num_turns >= 2:
+            sidecar_path = output_path[: -len(".md")] + _DEBATE_SIDECAR_SUFFIX
+            debate_block = (
+                f"## Debate budget (CSP-13)\n"
+                f"- max_turns = {num_turns}\n"
+                f"- output_path = {output_path}\n"
+                f"- sidecar_path = {sidecar_path}\n"
+                f"Follow the system prompt's 'Debate protocol' section: call "
+                f"``seed_debate_turn`` once per turn (sequentially — call turn=1 "
+                f"first, then turn=2, …) passing the four anchors above. "
+                f'After the tool returns ``next_action="synthesize"`` write '
+                f"the final seed via ``write_file`` to ``output_path``.\n"
+            )
+        else:
+            debate_block = ""
         evidence_block = _format_baseline_evidence(state)
         priors_block = _format_priors(state)
         # CSP-4 (2026-05-22) — Supervisor's per-phase guidance lands at
@@ -251,6 +307,7 @@ class Generator(BaseSeedAgent):
         supervisor_block = _format_supervisor(state, phase="generation")
         prefix_blocks = [b for b in (supervisor_block, priors_block, evidence_block) if b]
         prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
+        debate_suffix = ("\n\n" + debate_block) if debate_block else ""
         return (
             f"{prompt_prefix}"
             f"Generate ONE Petri audit seed targeting dim {state.target_dim!r}. "
@@ -261,6 +318,7 @@ class Generator(BaseSeedAgent):
             "the full contract — frontmatter fields (incl. `target_dims` AND "
             f"`tags: [{state.target_dim!r}, 'geode_specific']` for Petri "
             "compatibility), body length, realism criterion, and forbidden patterns."
+            f"{debate_suffix}"
         )
 
 
@@ -318,3 +376,53 @@ def _format_supervisor(state: PipelineState, *, phase: str) -> str:
     except ImportError:  # pragma: no cover — defensive
         return ""
     return format_supervisor_block(guidance, phase=phase)
+
+
+def _read_debate_sidecars(
+    candidates: list[dict[str, object]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Read each surviving candidate's debate sidecar (CSP-13).
+
+    For each candidate where ``<output_path>.replace('.md', '.debate.jsonl')``
+    exists, parse its JSONL turns and emit ``{candidate_id: [{turn, …}, …]}``.
+    Missing or unreadable sidecars are silently skipped — the sub-agent
+    may have failed mid-turn or used the legacy single-shot path even
+    though ``num_turns >= 2`` was advertised (defensive).
+
+    Returns an empty dict when none of the candidates produced a
+    sidecar; the caller suppresses the ``debate_transcripts`` output key
+    in that case so :meth:`PipelineState.merge` doesn't no-op-update.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        path_value = candidate.get("path")
+        candidate_id = candidate.get("id")
+        if not isinstance(path_value, str) or not isinstance(candidate_id, str):
+            continue
+        if not path_value.endswith(".md"):
+            continue
+        sidecar = Path(path_value[: -len(".md")] + _DEBATE_SIDECAR_SUFFIX)
+        if not sidecar.is_file():
+            continue
+        turns: list[dict[str, Any]] = []
+        try:
+            for line in sidecar.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    log.debug(
+                        "seed-generation: skipping malformed debate sidecar line in %s",
+                        sidecar,
+                    )
+                    continue
+                if isinstance(entry, dict):
+                    turns.append(entry)
+        except OSError as exc:
+            log.debug("seed-generation: failed to read debate sidecar %s: %s", sidecar, exc)
+            continue
+        if turns:
+            out[candidate_id] = turns
+    return out

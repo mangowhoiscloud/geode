@@ -64,11 +64,19 @@ class SeedRoleSpec(BaseModel):
     removed the pre-CSP-8 ``kind`` discriminator after CSP-8 reverted
     the only embedding consumer, Proximity, to the paper's
     LLM-clustering path).
+
+    CSP-13 (2026-05-23) — adds the optional ``num_turns`` knob for the
+    Loop 2 (debate-turn) port. 0 = no debate, fall through to the
+    existing single-shot path (default + back-compat). 2-6 = active
+    multi-turn debate inside the sub-agent's AgenticLoop, recorded via
+    the ``seed_debate_turn`` tool. Only meaningful on the Generator
+    role today; other roles ignore the knob.
     """
 
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
+    num_turns: int = 0
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:
@@ -76,6 +84,17 @@ class SeedRoleSpec(BaseModel):
             raise ValueError(
                 f"default_model {self.default_model!r} not in allowed_models {self.allowed_models}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _num_turns_in_range(self) -> SeedRoleSpec:
+        # Mirror the tool-side bounds (core/tools/seed_debate.py): 0
+        # disables the debate path entirely (single-shot generation),
+        # 2-6 activates the multi-turn loop. Any other value is a
+        # silent foot-gun (e.g. 1 = "debate of one turn" makes no
+        # sense; >6 risks runaway cost per candidate).
+        if self.num_turns != 0 and not (2 <= self.num_turns <= 6):
+            raise ValueError(f"num_turns={self.num_turns} invalid; must be 0 (off) or in [2, 6]")
         return self
 
 
