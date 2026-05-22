@@ -13,7 +13,7 @@ A general-purpose autonomous execution agent built on LangGraph. Autonomously pe
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
 - **Modules**: 355 core + 58 plugins = 413
-- **Tests**: 6600 (+5 live)
+- **Tests**: 6645 (+5 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
