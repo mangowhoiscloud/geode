@@ -1025,7 +1025,17 @@ def _persist_full_config(
 
 
 def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
-    """Splice ``updates`` into ``[<section>]`` of ``~/.geode/config.toml``.
+    """Splice ``updates`` into ``[<section>]`` of the active config TOML.
+
+    Resolves the write path through
+    :func:`core.config.self_improving_loop._resolve_config_path` — same
+    helper the loader uses for reads — so a ``GEODE_CONFIG_TOML`` env
+    override (test fixtures, isolated session runs) reads and writes
+    the same file. Without that resolution the read/write parity broke:
+    the loader honored the env override while the writer pinned the
+    hardcoded ``GLOBAL_CONFIG_TOML`` constant — operator's
+    ``[self_improving_loop.petri.<role>]`` updates landed in the home
+    config while the test loader read the env-pinned tmp file.
 
     If the section is missing it's appended; if a key exists in the
     section it's replaced in place; otherwise the key is inserted at the
@@ -1033,10 +1043,10 @@ def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
     """
     if not updates:
         return
-    from core.paths import GLOBAL_CONFIG_TOML
+    from core.config.self_improving_loop import _resolve_config_path
     from core.utils.atomic_io import atomic_write_text
 
-    path = Path(GLOBAL_CONFIG_TOML)
+    path = _resolve_config_path(None)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     new_text = _splice_section(text, section, updates)

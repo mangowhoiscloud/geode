@@ -190,6 +190,49 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
     assert "--use-oauth" not in argv
 
 
+def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SoT-flip (2026-05-22) — when ``cfg.target_model`` /
+    ``cfg.judge_model`` are ``None`` (autoresearch has nothing to
+    override over the per-role config), ``_build_audit_command`` must
+    OMIT ``--target`` and ``--judge`` from the argv so the runner
+    falls through to ``[self_improving_loop.petri.<role>].model`` via
+    the binding registry. This is the branch that closes the silent
+    argv-pin bypass — assert it stays covered."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            budget_minutes=10,
+            target_model=None,
+            judge_model=None,
+            source="claude-cli",
+            seed_limit=2,
+            seed_select="plugins/petri_audit/seeds",
+            dim_set="subset",
+            max_turns=5,
+        ),
+    )
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    argv = auto_train._build_audit_command()
+    assert "--target" not in argv, (
+        "cfg.target_model=None must NOT add --target argv; the runner "
+        "resolves the target via [self_improving_loop.petri.target] when "
+        "the slot is absent"
+    )
+    assert "--judge" not in argv, (
+        "cfg.judge_model=None must NOT add --judge argv; the runner "
+        "resolves the judge via [self_improving_loop.petri.judge]"
+    )
+    # Other flags still emitted from cfg fields.
+    assert "subset" in argv
+    assert "5" in argv  # max_turns
+    assert "--use-oauth" in argv  # source != "api_key"
+
+
 def test_resolve_seed_select_falls_back_to_config(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

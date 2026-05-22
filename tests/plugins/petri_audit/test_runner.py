@@ -168,6 +168,41 @@ def test_build_command_omits_optional_flags() -> None:
 
 
 # ---------------------------------------------------------------------------
+# SoT-flip (2026-05-22) — None argv resolves via [petri.<role>] registry
+# ---------------------------------------------------------------------------
+
+
+def test_run_audit_resolves_none_judge_via_petri_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SoT-flip (2026-05-22) — ``run_audit(judge=None)`` must resolve the
+    judge model through ``get_binding("judge").model`` rather than
+    raising ``AuditModelMappingError("Empty model id")``. The same
+    fall-through applies to ``auditor`` (target already used the
+    None-defer pattern pre-PR).
+
+    Pin via ``GEODE_CONFIG_TOML`` env override so the test loader sees
+    a known ``[self_improving_loop.petri.judge].model`` pin without
+    touching the host's ``~/.geode/config.toml``."""
+    config_toml = tmp_path / "config.toml"
+    config_toml.write_text(
+        '[self_improving_loop.petri.judge]\nmodel = "claude-sonnet-4-6"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(config_toml))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+
+    from plugins.petri_audit.registry import get_binding
+
+    binding = get_binding("judge")
+    assert binding.model == "claude-sonnet-4-6", (
+        "registry must consult [self_improving_loop.petri.judge].model "
+        "when no argv-level model pin is provided — same path that "
+        "run_audit takes when called with judge=None"
+    )
+
+
+# ---------------------------------------------------------------------------
 # judge dimension set selection (--dim-set)
 # ---------------------------------------------------------------------------
 

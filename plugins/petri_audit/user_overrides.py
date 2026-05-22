@@ -256,29 +256,56 @@ def save_role_override_to_config_toml(
     (per :func:`read_role_override`) while the slash command wrote the
     legacy file, so the operator's intent never reached the audit.
 
-    Empty-string (delete) requests fall back to the legacy
-    ``save_role_override`` write path because the underlying
-    ``_persist_section_updates`` helper does not yet support
-    line-removal of an existing key — keeping the rare clear-axis
-    workflow alive on the legacy file is preferable to a silent
-    no-op or a broken contract.
+    Axis-split routing — non-empty model / source writes go to
+    config.toml via ``_persist_section_updates``; empty-string
+    (delete-axis) requests fall back to the legacy
+    ``save_role_override`` write path **for that single axis only**.
+    This protects the common ``/petri model <role> X`` flow when a
+    provider switch also sets ``source=""`` (cli.py:128-133): the
+    model lands in config.toml as the SoT, the source clear lands on
+    the legacy file's ``[petri.<role>]`` block. Without the split the
+    entire write fell back to legacy and the model update was lost to
+    the read-precedence (config.toml's stale value still won).
+
+    The legacy file is read as a fallback layer by
+    :func:`read_role_override`, so the source-clear actually flows
+    through to subsequent binding resolution — but ONLY because the
+    config.toml side stopped pinning the source (it's a fresh write
+    target, no pre-existing key).
     """
-    has_clear_request = (model == "") or (source == "")
-    if has_clear_request:
-        save_role_override(role, model=model, source=source, path=GLOBAL_PETRI_TOML)
-        return
+    config_updates: dict[str, str] = {}
+    legacy_axes: dict[str, str] = {}
 
-    updates: dict[str, str] = {}
     if model is not None:
-        updates["model"] = model
+        if model == "":
+            legacy_axes["model"] = ""
+        else:
+            config_updates["model"] = model
     if source is not None:
-        updates["source"] = source
-    if not updates:
-        return
+        if source == "":
+            legacy_axes["source"] = ""
+        else:
+            config_updates["source"] = source
 
-    from core.cli.commands.self_improving import _persist_section_updates
+    if config_updates:
+        from core.cli.commands.self_improving import _persist_section_updates
 
-    _persist_section_updates(f"self_improving_loop.petri.{role}", updates)
+        _persist_section_updates(f"self_improving_loop.petri.{role}", config_updates)
+
+    if legacy_axes:
+        # Empty-string clears the axis in petri.toml. The legacy file's
+        # value is read AFTER config.toml on the read precedence, so a
+        # legacy clear only takes effect when the operator's config.toml
+        # also lacks the corresponding key — which is typical because
+        # this code is the only writer that pins ``source`` into
+        # ``[self_improving_loop.petri.<role>]`` and we only do that
+        # when ``source`` is explicitly non-empty.
+        save_role_override(
+            role,
+            model=legacy_axes.get("model"),
+            source=legacy_axes.get("source"),
+            path=GLOBAL_PETRI_TOML,
+        )
 
 
 def clear_overrides(role: str | None = None, *, path: Path | str | None = None) -> None:
