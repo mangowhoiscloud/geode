@@ -130,6 +130,31 @@ functional change.
   (homebrew install, ``strings(1)`` lookup); end-to-end runtime
   validation is a CSA-2c-followup.
 
+- **PR-Async-Phase-C foundation — ``SubAgentManager.adelegate``**.
+  First leg of the async-only migration plan ([[async-phase-c]] —
+  Phase A+B sequence). New ``async def adelegate(tasks, *,
+  on_progress=None, announce=True)`` uses ``asyncio.gather`` over
+  the existing async ``IsolatedRunner.arun`` per task — each task
+  off-loads its blocking subprocess/thread wait via
+  ``asyncio.to_thread``, so the caller's event loop is not pinned.
+  Backpressure is now suspended-coroutine cost (~1 KB) instead of
+  thread/subprocess RSS. Contract parity with sync ``delegate`` —
+  same depth guard, dedup, sandbox-dir expansion, hooks
+  (``SUBAGENT_STARTED/COMPLETED/FAILED``), run-record bookkeeping,
+  and announce semantics; only the wait mechanic differs
+  (asyncio.gather vs polling).
+
+  The legacy sync ``delegate`` now emits ``DeprecationWarning`` and
+  carries a ``# DEPRECATED-ASYNC-PHASE-C:`` grep anchor for the
+  bulk-removal pass at the end of the migration. Six new behaviour
+  tests in ``tests/test_agentic_loop.py::TestSubAgentManagerAdelegate``
+  pin parity (empty / handler success / handler failure / parallel
+  fan-out wall-clock / depth-guard short-circuit / deprecation
+  warning emission). All 127 pre-existing sub-agent tests stay green.
+
+  Next slice in the migration: Pipeline.arun + BaseSeedAgent.aexecute
+  + 8 seed-generation agents native async + CLI wiring.
+
 ### Changed
 
 - **autoresearch outer-loop UX cleanup — auditor default + config
