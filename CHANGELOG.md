@@ -49,6 +49,87 @@ functional change.
 
 ### Added
 
+- **PR-CSA-2c — codex MCP bridge mirror (auditor tool_use enabled for
+  the codex-cli path).** Lifts the CSA-1b boundary
+  (``NotImplementedError("tool_use deferred to CSA-2b MCP bridge")``)
+  so the auditor role can now drive tool calls through the codex CLI
+  subprocess in addition to the claude side. Reuses the
+  provider-agnostic bridge core that CSA-2 stood up
+  (``plugins/petri_audit/mcp_bridge/{bridge_server,lifecycle,
+  tool_translator,stream_parser_ext}.py``); the only codex-specific
+  surface is one new module that translates the bridge invocation
+  into codex's TOML override flag shape.
+
+  **New module** ``plugins/petri_audit/mcp_bridge/codex_overrides.py``
+  (~110 LOC of production code + ~190 LOC of tests):
+    * :func:`build_codex_cli_mcp_overrides` — renders a
+      :class:`BridgeInvocation` into a flat list of ``-c key=value``
+      argv tokens for ``codex exec``. Where the claude side uses a
+      single ``--mcp-config <path>`` JSON file, codex needs one ``-c``
+      override per leaf field under ``[mcp_servers.bridge.*]`` (TOML
+      shape). Each string value JSON-quoted (which TOML decodes as a
+      string literal too — single quoting strategy works across both
+      parsers). Read the bridge config from
+      ``invocation.mcp_config_json`` so a single :func:`prepare_bridge`
+      call materialises the resources both CLI sides need.
+    * :func:`extract_codex_tool_calls` — walks the codex JSONL stream
+      for ``{"type": "item.completed", "item": {"type":
+      "function_call", "name": "mcp__bridge__<tool>", "arguments":
+      "...", "call_id": "..."}}`` events and builds
+      ``inspect_ai.tool.ToolCall`` instances with the
+      ``mcp__bridge__`` prefix stripped via the shared
+      :func:`strip_mcp_prefix`. ``arguments`` decodes as JSON; parse
+      failures surface as ``parse_error`` on the ToolCall instead of
+      raising (same tolerant contract the claude side uses).
+
+  **``codex_cli_provider.py`` wiring** —
+  :class:`CodexCliAPI.generate` splits into
+  :meth:`_generate_text_only` (CSA-1b path, unchanged) and the new
+  :meth:`_generate_with_tools`. The tools path lazy-imports the bridge
+  package, calls :func:`prepare_bridge`, passes the override tokens to
+  :func:`build_codex_cli_argv` via the new ``mcp_overrides=`` kwarg,
+  parses the JSONL stream, calls :func:`extract_codex_tool_calls`, and
+  returns a ``ChatMessageAssistant`` with ``tool_calls=...`` +
+  ``stop_reason="tool_calls"`` when any function_call items present.
+  :func:`release_bridge` always runs in ``finally`` (parity with the
+  claude side's contract — leaks would multiply on every audit
+  sample). Shares the same ``codex-cli-subagent`` lane as the
+  text-only path so subscription quota stays bounded.
+
+  **argv builder extension** —
+  :func:`build_codex_cli_argv` grew a single ``mcp_overrides:
+  Iterable[str] | None`` kwarg that splices the bridge overrides into
+  the argv right after ``--model``. Backwards-compatible: existing
+  callers (CSA-1b text-only + autoresearch outer loop) leave the kwarg
+  unset and the argv is unchanged.
+
+  **Tests** — 10 new unit tests
+  (``tests/plugins/petri_audit/test_codex_overrides.py``) pin the
+  contract:
+  ``build_codex_cli_mcp_overrides`` — command/args/env layout × TOML
+  JSON-quoting × per-env-var separate overrides × bridge-server-name
+  invariant (``"bridge"`` pinned); ``extract_codex_tool_calls`` —
+  mcp prefix strip × JSON arguments parse × parse_error surfacing on
+  bad JSON × non-function_call events ignored × empty stream → []
+  × multiple calls in one turn (parallel-tools support).
+
+  **Operator surface** — no config change required.
+  ``[petri.adapter.openai.codex-cli]`` already binds the codex-cli
+  provider to the ``codex-cli/`` inspect_ai prefix (CSA-3 manifest
+  flip). Once auditor or judge roles route through that prefix and
+  the audit task advertises tools, codex CLI sees them via the
+  bridge automatically. Cross-model auditor diversity (anthropic +
+  codex sides both tool-capable) is now unblocked.
+
+  **Live verification** deferred — CSA-2c lands with mock tests only.
+  The codex CLI's actual behavior under ``--max-turns``-equivalent
+  semantics + MCP-tool boundary (does codex stop before executing the
+  function_call?) needs operator validation on a real subscription
+  audit run. The shape of the JSONL ``function_call`` events was
+  cross-verified against the codex binary's emitted symbol table
+  (homebrew install, ``strings(1)`` lookup); end-to-end runtime
+  validation is a CSA-2c-followup.
+
 - **PR-Async-Phase-C foundation — ``SubAgentManager.adelegate``**.
   First leg of the async-only migration plan ([[async-phase-c]] —
   Phase A+B sequence). New ``async def adelegate(tasks, *,
