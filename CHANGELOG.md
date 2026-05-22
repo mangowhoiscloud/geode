@@ -72,6 +72,54 @@ functional change.
   fire a deploy. A follow-up release PR will land both today's gen-0
   baseline and this gen-1 backfill on the live site.
 
+### Removed
+
+- **PR-Async-Phase-C step 4b — bulk delete deprecated sync APIs**. Closes the
+  async-only migration arc (steps 1-4a). Every ``# DEPRECATED-ASYNC-PHASE-C:``
+  grep anchor in ``core/`` + ``plugins/`` is now gone (10 anchors / 6 files
+  cleared, ``rg "# DEPRECATED-ASYNC-PHASE-C"`` returns 0).
+
+  **Production deletions**:
+
+  - ``core/agent/sub_agent.py`` — ``SubAgentManager.delegate`` (sync
+    polling fan-out via ``IsolatedRunner.run_async`` + ``get_result``)
+    and the dead ``_wait_for_result`` polling helper.
+  - ``core/agent/tool_executor/executor.py`` — ``ToolExecutor._execute_delegate``
+    (sync ``run_process_coroutine``-bridged shim around the async path).
+  - ``core/orchestration/isolated_execution.py`` —
+    ``IsolatedRunner.run_async`` + ``get_result`` + ``_execute_subprocess``
+    + ``_dispatch``. The async-native ``arun`` /
+    ``_aexecute_subprocess`` / ``_adispatch`` trio are the survivors.
+  - ``plugins/seed_generation/agents/base.py`` — ``BaseSeedAgent.execute``
+    (sync ``run_process_coroutine`` shim around ``aexecute``).
+  - ``plugins/seed_generation/orchestrator.py`` — ``Pipeline.run``,
+    ``_run_phase``, ``_acquire_lane`` (the three sync ``run_process_coroutine``
+    shims around the ``arun`` / ``_arun_phase`` / ``_aacquire_lane`` trio).
+
+  **Test surface adaptations** (~1,000 line net reduction):
+
+  - ``tests/test_scheduler_async_drain.py`` — file removed; tested the
+    sync polling API exclusively.
+  - ``tests/test_isolated_execution.py`` — ``TestIsolatedRunnerAsync``
+    + ``TestCancelBehavior`` classes removed (sync semantics).
+    ``TestEdgeCases.test_get_result_unknown_session`` removed; the
+    concurrency test renamed to ``TestConcurrentLimit`` and rewritten
+    on the async path with a ``lane.try_acquire("blocker")`` prefill.
+  - ``tests/test_isolated_subprocess.py`` — ``test_subprocess_async_returns_session_id``,
+    ``test_subprocess_cancel_kills_process`` removed (sync polling).
+    ``test_subprocess_lane_wait`` rewritten on the async path with
+    a ``lane.try_acquire`` prefill. Routing test stops spying on the
+    deleted ``_execute_subprocess``.
+  - ``tests/test_agentic_loop.py`` + ``tests/test_subagent_announce.py``
+    — 21 ``manager.delegate(tasks)`` calls auto-converted to
+    ``asyncio.run(manager.adelegate(tasks))``. The
+    ``test_sync_delegate_emits_deprecation_warning`` test removed
+    (tested a method that no longer exists).
+  - ``tests/plugins/seed_generation/*`` (14 files) — 80+ sync
+    ``execute(state)`` / ``pipeline.run()`` / ``pipeline._run_phase(...)``
+    calls auto-converted to ``asyncio.run(... .aexecute(...))`` /
+    ``asyncio.run(... .arun())`` / ``asyncio.run(... ._arun_phase(...))``.
+
 ### Changed
 
 - **PR-Async-Phase-C step 4a — scheduler_drain async-native + serve loop on

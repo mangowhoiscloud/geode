@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 import time
 from typing import Any
 
@@ -357,177 +356,28 @@ class TestMakeSummary:
 
 
 # ---------------------------------------------------------------------------
-# Async run
+# Concurrent limit (async path)
 # ---------------------------------------------------------------------------
 
 
-class TestIsolatedRunnerAsync:
-    def test_background_execution(self) -> None:
-        runner = IsolatedRunner()
-        cfg = IsolationConfig(post_to_main=False)
-        sid = runner.run_async(lambda: "async result", config=cfg)
-        assert isinstance(sid, str)
-        assert len(sid) > 0
-
-        # Wait for completion
-        for _ in range(50):
-            result = runner.get_result(sid)
-            if result is not None:
-                break
-            time.sleep(0.05)
-
-        assert result is not None
-        assert result.success is True
-        assert result.output == "async result"
-
-    def test_get_result_before_completion(self) -> None:
-        runner = IsolatedRunner()
-        cfg = IsolationConfig(timeout_s=10, post_to_main=False)
-        sid = runner.run_async(_slow_fn, args=(0.5,), config=cfg)
-
-        # Should be None immediately
-        assert runner.get_result(sid) is None
-
-        # Wait for completion
-        for _ in range(30):
-            r = runner.get_result(sid)
-            if r is not None:
-                break
-            time.sleep(0.05)
-        assert r is not None
-        assert r.success is True
-
-    def test_list_active(self) -> None:
-        runner = IsolatedRunner()
-        started = threading.Event()
-
-        def slow_with_signal() -> str:
-            started.set()
-            time.sleep(1.0)
-            return "done"
-
-        cfg = IsolationConfig(post_to_main=False)
-        sid = runner.run_async(slow_with_signal, config=cfg)
-        started.wait(timeout=2.0)
-
-        active = runner.list_active()
-        assert sid in active
-
-        # Wait for completion
-        for _ in range(30):
-            if runner.get_result(sid) is not None:
-                break
-            time.sleep(0.1)
-
-    def test_active_count(self) -> None:
-        runner = IsolatedRunner()
-        started = threading.Event()
-
-        def slow_with_signal() -> str:
-            started.set()
-            time.sleep(0.5)
-            return "done"
-
-        cfg = IsolationConfig(post_to_main=False)
-        runner.run_async(slow_with_signal, config=cfg)
-        started.wait(timeout=2.0)
-
-        assert runner.active_count >= 1
-
-        # Wait for cleanup
-        time.sleep(1.0)
-        assert runner.active_count == 0
-
-    def test_cancel_active_session(self) -> None:
-        runner = IsolatedRunner()
-        started = threading.Event()
-
-        def cancellable() -> str:
-            started.set()
-            time.sleep(5.0)
-            return "should not complete"
-
-        cfg = IsolationConfig(timeout_s=10, post_to_main=False)
-        sid = runner.run_async(cancellable, config=cfg)
-        started.wait(timeout=2.0)
-
-        assert runner.cancel(sid) is True
-
-    def test_cancel_nonexistent(self) -> None:
-        runner = IsolatedRunner()
-        assert runner.cancel("nonexistent-session") is False
-
-    def test_concurrent_limit_enforcement(self) -> None:
+class TestConcurrentLimit:
+    def test_arun_respects_global_lane(self) -> None:
+        """arun must return a 'limit reached' error result once the lane is full."""
         from core.orchestration.lane_queue import Lane
 
-        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        lane = Lane("global", max_concurrent=1, timeout_s=30.0)
         runner = IsolatedRunner(lane=lane)
-        barriers: list[threading.Event] = []
-        started_events: list[threading.Event] = []
-
-        def blocking_fn(idx: int) -> str:
-            started_events[idx].set()
-            barriers[idx].wait(timeout=10.0)
-            return f"done-{idx}"
-
-        # Start 5 sessions (global lane max_concurrent)
-        sids: list[str] = []
-        for i in range(5):
-            barrier = threading.Event()
-            started_event = threading.Event()
-            barriers.append(barrier)
-            started_events.append(started_event)
-            cfg = IsolationConfig(post_to_main=False)
-            sid = runner.run_async(blocking_fn, args=(i,), config=cfg)
-            sids.append(sid)
-
-        # Wait for all to start
-        for ev in started_events:
-            ev.wait(timeout=2.0)
-
-        # The next synchronous run should fail with concurrency limit.
-        # Use a short wait to avoid 30s default; slots are genuinely full.
         orig = runner.SLOT_WAIT_S
         runner.SLOT_WAIT_S = 0.1
         try:
+            # Pre-fill the slot by manually acquiring (simulates an in-flight run).
+            assert lane.try_acquire("blocker") is True
             result = asyncio.run(runner.arun(lambda: "over-limit"))
             assert result.success is False
             assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
+            lane.manual_release("blocker")
         finally:
             runner.SLOT_WAIT_S = orig
-
-        # Release all
-        for b in barriers:
-            b.set()
-
-        # Wait for all to complete
-        for sid in sids:
-            for _ in range(50):
-                if runner.get_result(sid) is not None:
-                    break
-                time.sleep(0.05)
-
-    def test_multiple_concurrent_runs(self) -> None:
-        runner = IsolatedRunner()
-        cfg = IsolationConfig(post_to_main=False)
-
-        sids = []
-        for i in range(3):
-            sid = runner.run_async(lambda x=i: f"result-{x}", config=cfg)
-            sids.append(sid)
-
-        # Wait for all results
-        results: list[IsolationResult] = []
-        for sid in sids:
-            for _ in range(50):
-                r = runner.get_result(sid)
-                if r is not None:
-                    results.append(r)
-                    break
-                time.sleep(0.05)
-
-        assert len(results) == 3
-        assert all(r.success for r in results)
 
 
 # ---------------------------------------------------------------------------
@@ -535,33 +385,7 @@ class TestIsolatedRunnerAsync:
 # ---------------------------------------------------------------------------
 
 
-class TestCancelBehavior:
-    def test_cancel_prevents_execution(self) -> None:
-        runner = IsolatedRunner()
-        executed: list[bool] = []
-        started = threading.Event()
-
-        def slow_fn() -> str:
-            started.set()
-            time.sleep(2)
-            executed.append(True)
-            return "done"
-
-        cfg = IsolationConfig(timeout_s=10, post_to_main=False)
-        session_id = runner.run_async(slow_fn, config=cfg)
-        started.wait(timeout=3.0)
-        runner.cancel(session_id)
-        time.sleep(0.5)
-        result = runner.get_result(session_id)
-        # Task should be cancelled, not fully executed
-        assert not executed or result is not None
-
-
 class TestEdgeCases:
-    def test_get_result_unknown_session(self) -> None:
-        runner = IsolatedRunner()
-        assert runner.get_result("does-not-exist") is None
-
     def test_list_active_empty(self) -> None:
         runner = IsolatedRunner()
         assert runner.list_active() == []

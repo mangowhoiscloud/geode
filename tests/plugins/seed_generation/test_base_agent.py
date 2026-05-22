@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
@@ -32,7 +34,7 @@ class _DummyAgent(BaseSeedAgent):
 
 def test_subclass_execute_round_trip() -> None:
     agent = _DummyAgent(role="generator", model="claude-sonnet-4-6")
-    result = agent.execute(state=None)
+    result = asyncio.run(agent.aexecute(state=None))
     assert result.role == "generator"
     assert result.output["candidates"][0]["id"] == "x"
 

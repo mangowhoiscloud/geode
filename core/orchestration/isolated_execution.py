@@ -148,69 +148,6 @@ class IsolatedRunner:
         cfg = self._resolve_config(config)
         return await self._adispatch(fn_or_request, args, kwargs or {}, cfg)
 
-    def run_async(
-        self,
-        fn_or_request: Callable[..., Any] | Any,
-        *,
-        args: tuple[Any, ...] = (),
-        kwargs: dict[str, Any] | None = None,
-        config: IsolationConfig | None = None,
-    ) -> str:
-        """[DEPRECATED] Sync fire-and-forget — see :meth:`arun`.
-
-        Run *fn_or_request* in a background thread; returns session_id
-        for later polling via :meth:`get_result`. async callers should
-        ``await runner.arun(...)`` directly — no polling needed.
-
-        Retained for ``SubAgentManager.delegate`` (deprecated sync
-        polling path) + ``core/cli/scheduler_drain.py`` (fire-and-forget
-        cron path). Both will migrate post step-3.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after all sync
-        # callers migrate.
-        """
-        import warnings
-
-        warnings.warn(
-            "IsolatedRunner.run_async is deprecated; use arun() (async) instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        cfg = self._resolve_config(config)
-        session_id = cfg.session_id
-
-        cancel_flag = threading.Event()
-        with self._lock:
-            self._cancel_flags[session_id] = cancel_flag
-
-        def _worker() -> None:
-            result = self._dispatch(fn_or_request, args, kwargs or {}, cfg)
-            with self._lock:
-                self._results[session_id] = result
-                self._active.pop(session_id, None)
-                self._cancel_flags.pop(session_id, None)
-                # Evict oldest results to prevent unbounded growth
-                if len(self._results) > self.MAX_RESULTS_CACHE:
-                    oldest = next(iter(self._results))
-                    self._results.pop(oldest, None)
-
-        thread = threading.Thread(target=_worker, name=f"isolated-{session_id}", daemon=True)
-        with self._lock:
-            self._active[session_id] = thread
-        thread.start()
-        return session_id
-
-    def get_result(self, session_id: str) -> IsolationResult | None:
-        """[DEPRECATED] Polling-side companion of :meth:`run_async`.
-
-        Async callers should ``await arun(...)`` — no polling needed.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target alongside
-        # :meth:`run_async`.
-        """
-        with self._lock:
-            return self._results.get(session_id)
-
     def list_active(self) -> list[str]:
         """Return session IDs of currently running executions."""
         with self._lock:
@@ -269,21 +206,6 @@ class IsolatedRunner:
                 metadata=dict(cfg.metadata),
             )
         return cfg
-
-    def _dispatch(
-        self,
-        fn_or_request: Callable[..., Any] | Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-        config: IsolationConfig,
-    ) -> IsolationResult:
-        """Route to thread or subprocess execution based on input type."""
-        # Import here to avoid circular import at module level
-        from core.agent.worker import WorkerRequest
-
-        if isinstance(fn_or_request, WorkerRequest):
-            return self._execute_subprocess(fn_or_request, config)
-        return self._execute_thread(fn_or_request, args, kwargs, config)
 
     def _acquire_slot(self, config: IsolationConfig) -> IsolationResult | None:
         """Acquire a lane slot. Returns an error result if timed out.
@@ -427,136 +349,7 @@ class IsolatedRunner:
 
     # ------------------------------------------------------------------
     # Subprocess mode (WorkerRequest → python -m core.agent.worker)
-    # ------------------------------------------------------------------
-
-    def _execute_subprocess(
-        self,
-        request: Any,  # WorkerRequest (typed as Any to avoid circular import at annotation level)
-        config: IsolationConfig,
-    ) -> IsolationResult:
-        """[DEPRECATED] Sync subprocess path — see :meth:`_aexecute_subprocess`.
-
-        Execute a WorkerRequest in a child process with clean timeout
-        via SIGKILL. Eliminates zombie thread problem: process.kill()
-        guarantees termination, so the semaphore is only released
-        after confirmed process death.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target — superseded by
-        # ``_aexecute_subprocess`` which uses
-        # ``asyncio.create_subprocess_exec`` so the parent's event
-        # loop is not pinned during the worker's subprocess wait.
-        """
-        slot_error = self._acquire_slot(config)
-        if slot_error is not None:
-            return slot_error
-        acquired = True
-
-        started = time.time()
-        proc: subprocess.Popen[bytes] | None = None
-
-        try:
-            safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
-            proc = subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
-                [sys.executable, "-m", "core.agent.worker"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=safe_env,
-            )
-
-            # Track process for cancel()
-            with self._lock:
-                self._active[config.session_id] = proc
-
-            # Send request and wait for result
-            request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
-            stdout_bytes, stderr_bytes = proc.communicate(
-                input=request_bytes,
-                timeout=config.timeout_s,
-            )
-
-            completed = time.time()
-            duration_ms = (completed - started) * 1000
-
-            # Save stderr for debugging
-            if stderr_bytes:
-                self._save_stderr(config.session_id, stderr_bytes)
-
-            # Parse result
-            stdout_text = stdout_bytes.decode("utf-8", errors="replace").strip()
-            if not stdout_text:
-                return IsolationResult(
-                    session_id=config.session_id,
-                    success=False,
-                    error="Worker produced no output on stdout",
-                    duration_ms=duration_ms,
-                    started_at=started,
-                    completed_at=completed,
-                    metadata=dict(config.metadata),
-                )
-
-            result_data = json.loads(stdout_text)
-            result = IsolationResult(
-                session_id=config.session_id,
-                success=result_data.get("success", False),
-                output=result_data.get("output", ""),
-                summary=result_data.get("summary", ""),
-                error=result_data.get("error"),
-                duration_ms=duration_ms,
-                started_at=started,
-                completed_at=completed,
-                metadata=dict(config.metadata),
-            )
-
-            if config.post_to_main:
-                self._post_to_main(result, config)
-
-            return result
-
-        except subprocess.TimeoutExpired:
-            # Clean timeout: kill process, wait for confirmed death
-            if proc is not None:
-                proc.kill()
-                proc.wait(timeout=self.KILL_WAIT_S)
-            completed = time.time()
-            duration_ms = (completed - started) * 1000
-            log.warning(
-                "Subprocess session %s killed after %.1fs timeout",
-                config.session_id,
-                config.timeout_s,
-            )
-            return IsolationResult(
-                session_id=config.session_id,
-                success=False,
-                error=f"Timeout after {config.timeout_s}s (process killed)",
-                duration_ms=duration_ms,
-                started_at=started,
-                completed_at=completed,
-                metadata=dict(config.metadata),
-            )
-        except Exception as exc:
-            if proc is not None and proc.poll() is None:
-                proc.kill()
-                proc.wait(timeout=self.KILL_WAIT_S)
-            completed = time.time()
-            duration_ms = (completed - started) * 1000
-            return IsolationResult(
-                session_id=config.session_id,
-                success=False,
-                error=f"Subprocess error: {type(exc).__name__}: {exc}",
-                duration_ms=duration_ms,
-                started_at=started,
-                completed_at=completed,
-                metadata=dict(config.metadata),
-            )
-        finally:
-            with self._lock:
-                self._active.pop(config.session_id, None)
-            if acquired:
-                self._release_slot(config)
-
-    # ------------------------------------------------------------------
-    # Async subprocess mode (asyncio.create_subprocess_exec) — Phase C step 3
+    # async-native via ``asyncio.create_subprocess_exec``.
     # ------------------------------------------------------------------
 
     async def _aexecute_subprocess(
@@ -564,12 +357,11 @@ class IsolatedRunner:
         request: Any,  # WorkerRequest
         config: IsolationConfig,
     ) -> IsolationResult:
-        """Async sibling of :meth:`_execute_subprocess`.
+        """Async subprocess execution via ``asyncio.create_subprocess_exec``.
 
-        PR-Async-Phase-C step 3 (2026-05-22) — uses
-        :func:`asyncio.create_subprocess_exec` so the parent process's
-        event loop is not pinned waiting for the worker subprocess to
-        finish. Behaviour parity with the sync sibling:
+        Uses :func:`asyncio.create_subprocess_exec` so the parent
+        process's event loop is not pinned waiting for the worker
+        subprocess to finish.
 
         * Lane-slot acquisition gates concurrency via the shared
           ``Lane`` semaphore (sync acquire run via
@@ -578,8 +370,6 @@ class IsolatedRunner:
           on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
           process death before the slot is released.
         * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
-        * Result parsing identical to the sync path
-          (single-line JSON on worker stdout).
         """
         slot_error = await asyncio.to_thread(self._acquire_slot, config)
         if slot_error is not None:

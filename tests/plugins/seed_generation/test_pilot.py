@@ -11,6 +11,7 @@ P-checklist application (cycle-skill SKILL.md):
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -122,7 +123,7 @@ def test_pilot_builds_one_task_per_candidate() -> None:
     state = _make_state()
     _seed_candidates(state, 4)
     manager = _StubManager()
-    Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert len(manager.received_tasks) == 4
     for task in manager.received_tasks:
         assert task.agent == "seed_pilot"
@@ -135,7 +136,7 @@ def test_pilot_returns_scores_keyed_by_candidate_id() -> None:
     state = _make_state()
     _seed_candidates(state, 3)
     manager = _StubManager()
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     pilot_scores = result.output["pilot_scores"]
     assert isinstance(pilot_scores, dict)
@@ -152,7 +153,7 @@ def test_pilot_pairs_by_task_id_under_reverse_order() -> None:
     state = _make_state()
     _seed_candidates(state, 5)
     manager = _ReverseOrderManager()
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     pilot_scores = result.output["pilot_scores"]
     for candidate in state.candidates:
@@ -165,7 +166,7 @@ def test_pilot_drops_failed_sub_agents() -> None:
     state = _make_state()
     _seed_candidates(state, 5)
     manager = _StubManager(force_failures=2)
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert len(result.output["pilot_scores"]) == 3
 
@@ -175,7 +176,7 @@ def test_pilot_drops_unparseable_responses() -> None:
     state = _make_state()
     _seed_candidates(state, 3)
     manager = _StubManager(force_unparseable=True)
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "pilot_failed"
 
@@ -186,7 +187,7 @@ def test_pilot_drops_malformed_partial_output() -> None:
     _seed_candidates(state, 1)
     partial = {"candidate_id": "gen2-000-cand", "status": "ok"}
     manager = _StubManager(pilot_outputs={"gen2-000-cand": partial})
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "pilot_failed"
 
@@ -202,7 +203,7 @@ def test_pilot_drops_non_dict_dim_means() -> None:
         "status": "ok",
     }
     manager = _StubManager(pilot_outputs={"gen2-000-cand": bad})
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "pilot_failed"
 
@@ -218,7 +219,7 @@ def test_pilot_drops_invalid_status() -> None:
         "status": "broken",
     }
     manager = _StubManager(pilot_outputs={"gen2-000-cand": bad_status})
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "pilot_failed"
 
@@ -242,7 +243,7 @@ def test_pilot_accepts_timeout_status() -> None:
         },
     }
     manager = _StubManager(pilot_outputs=pilots)
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     scores = result.output["pilot_scores"]
     assert scores["gen2-000-cand"]["status"] == "timeout"
@@ -271,7 +272,7 @@ def test_pilot_accepts_text_json_fallback() -> None:
                 )
             ]
 
-    result = Pilot(manager=_TextJsonManager()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=_TextJsonManager()).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert "gen2-000-cand" in result.output["pilot_scores"]
 
@@ -279,7 +280,7 @@ def test_pilot_accepts_text_json_fallback() -> None:
 def test_pilot_validates_empty_candidates() -> None:
     state = _make_state()
     manager = _StubManager()
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -288,7 +289,7 @@ def test_pilot_announce_false() -> None:
     state = _make_state()
     _seed_candidates(state, 2)
     manager = _StubManager()
-    Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert manager.received_announce is False
 
 
@@ -298,7 +299,7 @@ def test_pilot_pins_candidate_id_from_task() -> None:
     _seed_candidates(state, 1)
     wrong_id_pilot = _good_pilot("WRONG-id-from-llm")
     manager = _StubManager(pilot_outputs={"gen2-000-cand": wrong_id_pilot})
-    result = Pilot(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     pilot_scores = result.output["pilot_scores"]
     assert "gen2-000-cand" in pilot_scores
@@ -329,6 +330,6 @@ def test_pilot_drops_non_dict_outputs() -> None:
                 for t, shape in zip(tasks, shapes, strict=True)
             ]
 
-    result = Pilot(manager=_NonDictManager()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Pilot(manager=_NonDictManager()).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "pilot_failed"

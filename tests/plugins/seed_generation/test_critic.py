@@ -12,6 +12,7 @@ P-checklist application (cycle-skill SKILL.md):
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -129,7 +130,7 @@ def test_critic_builds_one_task_per_candidate() -> None:
     state = _make_state()
     _seed_candidates(state, 4)
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert len(manager.received_tasks) == 4
     for task in manager.received_tasks:
         assert task.agent == "seed_critic"
@@ -142,7 +143,7 @@ def test_critic_returns_reflections_keyed_by_candidate_id() -> None:
     state = _make_state()
     _seed_candidates(state, 3)
     manager = _StubManager()
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     reflections = result.output["reflections"]
     assert isinstance(reflections, dict)
@@ -157,7 +158,7 @@ def test_critic_pairs_by_task_id_under_reverse_order() -> None:
     state = _make_state()
     _seed_candidates(state, 5)
     manager = _ReverseOrderManager()
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     reflections = result.output["reflections"]
     # Every candidate's id should map to its OWN critique (the stub
@@ -174,7 +175,7 @@ def test_critic_drops_failed_sub_agents() -> None:
     state = _make_state()
     _seed_candidates(state, 5)
     manager = _StubManager(force_failures=2)
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert len(result.output["reflections"]) == 3
 
@@ -184,7 +185,7 @@ def test_critic_drops_unparseable_responses() -> None:
     state = _make_state()
     _seed_candidates(state, 3)
     manager = _StubManager(force_unparseable=True)
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "critique_failed"
 
@@ -195,7 +196,7 @@ def test_critic_drops_malformed_partial_critique() -> None:
     _seed_candidates(state, 1)
     partial = {"candidate_id": "gen2-000-cand", "judge_risk": "low"}
     manager = _StubManager(critique_outputs={"gen2-000-cand": partial})
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "critique_failed"
 
@@ -224,7 +225,7 @@ def test_critic_accepts_text_json_fallback() -> None:
                 )
             ]
 
-    result = Critic(manager=_TextJsonManager()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=_TextJsonManager()).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert "gen2-000-cand" in result.output["reflections"]
 
@@ -233,7 +234,7 @@ def test_critic_validates_empty_candidates() -> None:
     state = _make_state()
     # state.candidates is empty by default
     manager = _StubManager()
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -242,7 +243,7 @@ def test_critic_announce_false() -> None:
     state = _make_state()
     _seed_candidates(state, 2)
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert manager.received_announce is False
 
 
@@ -269,7 +270,7 @@ def test_critic_drops_non_dict_outputs() -> None:
                 for t, shape in zip(tasks, shapes, strict=True)
             ]
 
-    result = Critic(manager=_NonDictManager()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=_NonDictManager()).aexecute(state))  # type: ignore[arg-type]
     # All 3 are non-dict → all dropped → critique_failed
     assert not result.success
     assert result.error_category == "critique_failed"
@@ -281,7 +282,7 @@ def test_critic_pins_candidate_id_from_task() -> None:
     _seed_candidates(state, 1)
     wrong_id_critique = _good_critique("WRONG-id-from-llm")
     manager = _StubManager(critique_outputs={"gen2-000-cand": wrong_id_critique})
-    result = Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     reflections = result.output["reflections"]
     # The slot is keyed by the TASK's candidate_id ('gen2-000-cand'),
@@ -314,7 +315,7 @@ def test_critic_injects_baseline_evidence_into_description(monkeypatch: Any) -> 
         ),
     )
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     for task in manager.received_tasks:
         assert "Recent audit evidence" in task.description
         assert "seed-z" in task.description
@@ -326,7 +327,7 @@ def test_critic_no_evidence_block_without_snapshot() -> None:
     _seed_candidates(state, 1)
     state.baseline_snapshot = None
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert "Recent audit evidence" not in manager.received_tasks[0].description
 
 
@@ -351,7 +352,7 @@ def test_critic_injects_priors_block_when_snapshot_present() -> None:
         underrepresented_dims=["broken_tool_use"],
     )
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert "Previous-generation meta-review" in task.description
     assert "underrepresented in prior generation" in task.description
@@ -362,5 +363,5 @@ def test_critic_priors_block_skipped_without_snapshot() -> None:
     _seed_candidates(state, 1)
     state.meta_review_snapshot = None
     manager = _StubManager()
-    Critic(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert "Previous-generation meta-review" not in manager.received_tasks[0].description

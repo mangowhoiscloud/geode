@@ -349,32 +349,6 @@ class Pipeline:
         self._lane_queue = lane_queue
         self._on_phase_error = on_phase_error
 
-    def run(self) -> PipelineState:
-        """[DEPRECATED] Sync sibling — calls :meth:`arun` via run_process_coroutine.
-
-        Bridges legacy sync callers (pre-Phase-C ``cli.py:452``,
-        test fixtures still on ``pipeline.run()``) to the async-only
-        runtime. The bridge uses
-        :func:`core.async_runtime.run_process_coroutine`, which
-        requires no running event loop — RuntimeError if the caller
-        already has one (in which case they should
-        ``await pipeline.arun()`` directly).
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after cli.py +
-        # tests/* migrate to ``run_process_coroutine(pipeline.arun())``.
-        """
-        import warnings
-
-        warnings.warn(
-            "Pipeline.run is deprecated; use arun() (async) — wrap with "
-            "core.async_runtime.run_process_coroutine for sync entry points",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self.arun())
-
     async def arun(self) -> PipelineState:
         """Walk the 7 phases (then optional iteration cycles). Returns the final state.
 
@@ -792,28 +766,6 @@ class Pipeline:
                 exc,
             )
 
-    def _run_phase(self, role: str) -> SeedAgentResult:
-        """[DEPRECATED] Sync sibling of :meth:`_arun_phase`.
-
-        Bridges legacy sync callers to async pipeline. The actual
-        phase logic lives in :meth:`_arun_phase`; this shim uses
-        :func:`run_process_coroutine` to satisfy sync test fixtures
-        that haven't migrated to ``arun`` yet.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after all sync
-        # ``Pipeline.run`` callers migrate to ``arun``.
-        """
-        import warnings
-
-        warnings.warn(
-            "Pipeline._run_phase is deprecated; use _arun_phase (async) instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self._arun_phase(role))
-
     async def _arun_phase(self, role: str) -> SeedAgentResult:
         """Look up the role's agent, invoke it (async), merge the result.
 
@@ -915,27 +867,6 @@ class Pipeline:
                 },
             )
         return result
-
-    def _acquire_lane(self, role: str) -> Any:
-        """[DEPRECATED] Sync sibling — see :meth:`_aacquire_lane`.
-
-        Retained because some pre-Phase-C test fixtures invoke
-        ``_run_phase`` (sync) directly. Once those fixtures migrate
-        to ``_arun_phase``, this can be removed.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target.
-        """
-        from contextlib import nullcontext
-
-        if self._lane_queue is None:
-            return nullcontext()
-        if self._lane_queue.get_lane("seed-generation") is None:
-            return nullcontext()
-        session_key = f"seed-generation:{self.state.run_id}"
-        return self._lane_queue.acquire_all(
-            session_key,
-            ["session", "seed-generation", "global"],
-        )
 
     def _aacquire_lane(self, role: str) -> Any:
         """Return an async context manager walking the OpenClaw lane chain.

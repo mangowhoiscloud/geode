@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +57,7 @@ def _make_state(tmp_path: Path, n: int = 3) -> PipelineState:
 def test_generator_builds_n_tasks_against_seed_generator_agent(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=5)
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert len(manager.received_tasks) == 5
     for task in manager.received_tasks:
         assert task.agent == "seed_generator"
@@ -68,14 +69,14 @@ def test_generator_builds_n_tasks_against_seed_generator_agent(tmp_path: Path) -
 def test_generator_creates_candidates_dir(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=2)
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert (tmp_path / "candidates").is_dir()
 
 
 def test_generator_returns_one_candidate_per_success(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=4)
     manager = _StubManager(force_failures=0)
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     candidates = result.output["candidates"]
     assert isinstance(candidates, list)
@@ -91,7 +92,7 @@ def test_generator_returns_one_candidate_per_success(tmp_path: Path) -> None:
 def test_generator_drops_failed_sub_agents(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=5)
     manager = _StubManager(force_failures=2)
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert len(result.output["candidates"]) == 3
 
@@ -99,7 +100,7 @@ def test_generator_drops_failed_sub_agents(tmp_path: Path) -> None:
 def test_generator_returns_error_when_all_fail(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=3)
     manager = _StubManager(fail_all=True)
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "generation_failed"
     assert "all 3 candidate sub-agents failed" in (result.error_message or "")
@@ -109,7 +110,7 @@ def test_generator_announce_false(tmp_path: Path) -> None:
     """Each candidate spawn must NOT push to the parent's announce queue."""
     state = _make_state(tmp_path, n=2)
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert manager.received_announce is False
 
 
@@ -122,7 +123,7 @@ def test_generator_validates_run_dir(tmp_path: Path) -> None:
         run_dir=None,  # missing
     )
     manager = _StubManager()
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -130,7 +131,7 @@ def test_generator_validates_run_dir(tmp_path: Path) -> None:
 def test_generator_validates_candidates_requested(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=0)
     manager = _StubManager()
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -138,7 +139,7 @@ def test_generator_validates_candidates_requested(tmp_path: Path) -> None:
 def test_generator_task_description_includes_pool_hint(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=1)
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert "broken_tool_use" in task.description
     assert "gen2" in task.description
@@ -149,7 +150,7 @@ def test_generator_task_description_handles_no_pool(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=1)
     state.pool_path_in = None
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert "from scratch" in task.description
 
@@ -157,7 +158,7 @@ def test_generator_task_description_handles_no_pool(tmp_path: Path) -> None:
 def test_generator_id_is_unique_across_batch(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=10)
     manager = _StubManager()
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     ids = {c["id"] for c in result.output["candidates"]}
     assert len(ids) == 10, "candidate ids should be unique"
 
@@ -165,7 +166,7 @@ def test_generator_id_is_unique_across_batch(tmp_path: Path) -> None:
 def test_generator_args_carry_output_path(tmp_path: Path) -> None:
     state = _make_state(tmp_path, n=2)
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     for task in manager.received_tasks:
         assert task.args["output_path"].endswith(".md")
         assert task.args["candidate_id"] in task.args["output_path"]
@@ -212,7 +213,7 @@ def test_generator_injects_baseline_evidence_into_description(
         ),
     )
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     for task in manager.received_tasks:
         assert "Recent audit evidence" in task.description
         assert "seed-anchor" in task.description
@@ -227,7 +228,7 @@ def test_generator_skips_evidence_when_snapshot_is_none(tmp_path: Path) -> None:
     state = _make_state(run_dir, n=1)
     state.baseline_snapshot = None
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert "Recent audit evidence" not in task.description
     assert task.description.startswith("Generate ONE Petri audit seed")
@@ -246,7 +247,7 @@ def test_generator_skips_evidence_when_block_is_empty(tmp_path: Path, monkeypatc
         lambda _snap, _dim, **_kw: "",
     )
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert "Recent audit evidence" not in manager.received_tasks[0].description
 
 
@@ -272,7 +273,7 @@ def test_generator_injects_priors_block_when_snapshot_present(tmp_path: Path) ->
         underrepresented_dims=["broken_tool_use"],
     )
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert "Previous-generation meta-review" in task.description
     assert "broken_tool_use" in task.description
@@ -286,5 +287,5 @@ def test_generator_priors_block_skipped_without_snapshot(tmp_path: Path) -> None
     state = _make_state(run_dir, n=1)
     state.meta_review_snapshot = None
     manager = _StubManager()
-    Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert "Previous-generation meta-review" not in manager.received_tasks[0].description

@@ -12,6 +12,7 @@ P-checklist application (cycle-skill SKILL.md):
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from core.agent.sub_agent import SubResult, SubTask
@@ -137,7 +138,7 @@ def test_evolver_validates_empty_survivors() -> None:
         candidates_requested=3,
     )
     manager = _StubManager()
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -152,7 +153,7 @@ def test_evolver_validates_survivors_without_candidates() -> None:
     )
     state.survivors = ["ghost-1"]
     manager = _StubManager()
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -160,7 +161,7 @@ def test_evolver_validates_survivors_without_candidates() -> None:
 def test_evolver_builds_one_task_per_survivor() -> None:
     state = _state_with_survivors(3)
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert len(manager.received_tasks) == 3
     for task in manager.received_tasks:
         assert task.agent == "seed_evolver"
@@ -172,7 +173,7 @@ def test_evolver_builds_one_task_per_survivor() -> None:
 def test_evolver_returns_evolved_candidates_rows() -> None:
     state = _state_with_survivors(3)
     manager = _StubManager()
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     rows = result.output["evolved_candidates"]
     assert len(rows) == 3
@@ -186,7 +187,7 @@ def test_evolver_pairs_by_task_id_under_reverse_order() -> None:
     """P1 — reverse-order completion must still pair correctly via pin_field."""
     state = _state_with_survivors(5)
     manager = _ReverseOrderManager()
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     rows = result.output["evolved_candidates"]
     for row in rows:
@@ -197,7 +198,7 @@ def test_evolver_pairs_by_task_id_under_reverse_order() -> None:
 def test_evolver_drops_failed_sub_agents() -> None:
     state = _state_with_survivors(5)
     manager = _StubManager(force_failures=2)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert len(result.output["evolved_candidates"]) == 3
 
@@ -205,7 +206,7 @@ def test_evolver_drops_failed_sub_agents() -> None:
 def test_evolver_drops_unparseable_responses() -> None:
     state = _state_with_survivors(3)
     manager = _StubManager(force_unparseable=True)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "evolution_failed"
 
@@ -215,7 +216,7 @@ def test_evolver_skips_evolution_skipped_verdict() -> None:
     state = _state_with_survivors(3)
     skipped = {cid: _good_evolve(cid, verdict="evolution_skipped") for cid in state.survivors}
     manager = _StubManager(evolve_outputs=skipped)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success  # no rows → failure
     assert result.error_category == "evolution_failed"
 
@@ -224,7 +225,7 @@ def test_evolver_skips_failed_verdict() -> None:
     state = _state_with_survivors(3)
     failed_verdicts = {cid: _good_evolve(cid, verdict="failed") for cid in state.survivors}
     manager = _StubManager(evolve_outputs=failed_verdicts)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "evolution_failed"
 
@@ -234,7 +235,7 @@ def test_evolver_drops_invalid_verdict() -> None:
     state = _state_with_survivors(1)
     bad = {state.survivors[0]: _good_evolve(state.survivors[0], verdict="weird")}
     manager = _StubManager(evolve_outputs=bad)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "evolution_failed"
 
@@ -248,7 +249,7 @@ def test_evolver_mixed_verdicts() -> None:
         "c-02": _good_evolve("c-02", verdict="ok"),
     }
     manager = _StubManager(evolve_outputs=outputs)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     rows = result.output["evolved_candidates"]
     assert len(rows) == 2
@@ -262,7 +263,7 @@ def test_evolver_pins_parent_id_from_task() -> None:
     wrong = _good_evolve("WRONG-from-llm")
     outputs = {"c-00": wrong}
     manager = _StubManager(evolve_outputs=outputs)
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     rows = result.output["evolved_candidates"]
     assert rows[0]["parent_id"] == "c-00"
@@ -271,14 +272,14 @@ def test_evolver_pins_parent_id_from_task() -> None:
 def test_evolver_announce_false() -> None:
     state = _state_with_survivors(2)
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert manager.received_announce is False
 
 
 def test_evolver_description_includes_pilot_means() -> None:
     state = _state_with_survivors(1)
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     desc = manager.received_tasks[0].description
     assert "dim_01" in desc
     assert "Body" in desc  # rewrite_section
@@ -289,7 +290,7 @@ def test_evolver_description_default_rewrite_section_when_missing() -> None:
     state = _state_with_survivors(1)
     state.reflections["c-00"] = {"weaknesses": ["partial overlap"]}
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     assert task.args["rewrite_section"] == "Body"
 
@@ -298,7 +299,7 @@ def test_evolver_evolved_row_schema_mirrors_candidates() -> None:
     """Evolved row has the same schema as state.candidates plus provenance."""
     state = _state_with_survivors(1)
     manager = _StubManager()
-    result = Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     row = result.output["evolved_candidates"][0]
     for key in ("id", "path", "target_dim", "gen_tag", "task_id", "duration_ms"):
         assert key in row, f"missing {key}"
@@ -330,7 +331,7 @@ def test_evolver_injects_baseline_evidence_into_description(monkeypatch: Any) ->
         ),
     )
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     for task in manager.received_tasks:
         assert "Recent audit evidence" in task.description
         assert "seed-evolver" in task.description
@@ -342,5 +343,5 @@ def test_evolver_no_evidence_block_without_snapshot() -> None:
     state = _state_with_survivors(n=1)
     state.baseline_snapshot = None
     manager = _StubManager()
-    Evolver(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(Evolver(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert "Recent audit evidence" not in manager.received_tasks[0].description

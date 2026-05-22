@@ -11,6 +11,7 @@ Validates that:
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from typing import Any
 from unittest.mock import MagicMock
@@ -243,7 +244,7 @@ class TestSubAgentManagerAnnounce:
             parent_session_key=parent_key,
         )
         tasks = [SubTask(task_id="t1", description="analyze demo", task_type="analyze")]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         # Results should be in announce queue
         announced = drain_announced_results(parent_key)
@@ -270,7 +271,7 @@ class TestSubAgentManagerAnnounce:
             parent_session_key=parent_key,
         )
         tasks = [SubTask(task_id="t-fail", description="will fail", task_type="analyze")]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         announced = drain_announced_results(parent_key)
         assert len(announced) == 1
@@ -292,7 +293,7 @@ class TestSubAgentManagerAnnounce:
         tasks = [
             SubTask(task_id=f"t{i}", description=f"task {i}", task_type="analyze") for i in range(3)
         ]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         announced = drain_announced_results(parent_key)
         assert len(announced) == 3
@@ -327,7 +328,7 @@ class TestHookDataSummary:
             parent_session_key=parent_key,
         )
         tasks = [SubTask(task_id="t1", description="analyze", task_type="analyze")]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         assert len(captured) == 1
         assert "summary" in captured[0]
@@ -505,7 +506,7 @@ class TestAnnounceIntegration:
         tasks = [
             SubTask(task_id="analyze-1", description="analyze Project Atlas", task_type="analyze")
         ]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         # 2. Parent loop checks for announced results
         ctx = ConversationContext(max_turns=200)
@@ -533,7 +534,7 @@ class TestAnnounceIntegration:
             parent_session_key="",
         )
         tasks = [SubTask(task_id="t1", description="test", task_type="analyze")]
-        mgr.delegate(tasks)
+        asyncio.run(mgr.adelegate(tasks))
 
         # No results in any queue
         with _announce_lock:
