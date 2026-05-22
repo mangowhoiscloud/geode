@@ -51,117 +51,80 @@ functional change.
 
 ### Changed
 
-- **Single SoT for audit role models — consolidation PR #1496 finalizes
-  the work begun by the initial 4-part wiring.** The previous PR closed
-  the operator-facing read/write asymmetry but left three duplicate SoTs
-  alive ("override-only" knobs on ``AutoresearchConfig`` /
-  ``TARGET_MODEL`` & ``JUDGE_MODEL`` module constants in
-  ``autoresearch/train.py`` / legacy ``~/.geode/petri.toml`` write
-  fallback in ``user_overrides.save_role_override``). All three are now
-  collapsed into the canonical ``[self_improving_loop.petri.<role>]``
-  section:
+- **Petri-role config SoT consolidation — ``[self_improving_loop.petri.<role>]``
+  in ``~/.geode/config.toml`` is the single source of truth.** Closes
+  the 2026-05-22 baseline-misalignment audit. The gen-0/gen-1 baseline
+  trace surfaced operator's ``[petri.auditor].model = "claude-opus-4-7"``
+  agreeing with Typer's default by coincidence, while the actual
+  mechanism was "Typer argv pin wins, registry never consults
+  ``[petri.<role>]``". Five duplicate-SoT layers collapsed into the
+  canonical petri-role section across two PRs (#1496 initial wiring +
+  #1496 final consolidation):
 
-  1. **``AutoresearchConfig.target_model`` / ``judge_model`` →
+  1. **Typer + argparse argv defaults flipped to ``None``**
+     (``plugins/petri_audit/cli_audit.py``). Omitted ``--judge`` /
+     ``--auditor`` / ``--target`` → ``runner.run_audit`` receives
+     ``None`` → resolved through the petri-role section. Explicit
+     argv pin still wins for the audit lifetime.
+  2. **``runner.run_audit`` None-fallback** routes through manifest +
+     ``read_role_override(role)`` directly (NOT
+     ``get_binding(role)``), so dry-run + CI-without-env-keys paths
+     work credential-free. Credential resolution happens later, only
+     on the real-run branch via ``to_inspect_model``.
+  3. **``/petri model <role>`` writes ``config.toml`` exclusively.**
+     New ``save_role_override_to_config_toml`` splices
+     ``{model, source}`` into ``[self_improving_loop.petri.<role>]``
+     via ``_persist_section_updates``, which now supports
+     empty-string-as-delete (line removal). Legacy
+     ``~/.geode/petri.toml`` writer removed; read fallback retained
+     one release for migration via
+     ``geode config migrate-petri-toml``.
+  4. **``AutoresearchConfig.target_model`` / ``judge_model`` →
      deprecated no-op slots.** Fields survive on the dataclass so an
-     old ``config.toml`` carrying these keys still parses, but their
+     old ``config.toml`` carrying these keys still parses, but
      values are *silently ignored at runtime*. ``_build_audit_command``
-     no longer emits ``--target`` / ``--judge`` argv flags from them.
-  2. **``autoresearch.train.TARGET_MODEL`` / ``JUDGE_MODEL`` module
+     no longer emits ``--target`` / ``--judge`` argv flags.
+  5. **``autoresearch.train.TARGET_MODEL`` / ``JUDGE_MODEL`` module
      constants removed.** Replaced by ``_petri_role_model(role)``
-     helper that consults ``[self_improving_loop.petri.<role>]`` →
-     manifest default. Same SoT precedence as
-     ``plugins.petri_audit.registry.get_binding`` but credential-free
-     so dry-run + CI-without-env-keys paths work.
-  3. **``/petri model <role>`` → writes ``config.toml`` exclusively.**
-     New ``save_role_override_to_config_toml`` routes through
-     ``_persist_section_updates`` which now supports empty-string-as-
-     delete (line removal). Legacy ``~/.geode/petri.toml`` read
-     fallback retained one release for migration; writer removed.
-  4. **Manifest layered defaults — auditor=flagship /
+     helper. Same SoT precedence as ``get_binding`` but
+     credential-free for status / dry-run / docs paths.
+  6. **Manifest layered defaults — auditor=flagship /
      judge=cost-balanced / target=smallest.** ``auditor.default_model``
-     flipped from ``claude-sonnet-4-6`` to ``claude-opus-4-7`` so the
-     manifest reflects the layered cost-quality intent. ``judge`` stays
-     on sonnet-4-6, ``target`` stays on haiku-4-5.
+     flipped from ``claude-sonnet-4-6`` to ``claude-opus-4-7`` so
+     the manifest reflects the layered cost-quality intent.
+     ``judge`` stays on sonnet-4-6, ``target`` stays on haiku-4-5.
 
-  Closes the 2026-05-22 baseline-misalignment audit's deepest catch —
-  Typer's hardcoded ``--auditor`` argv default ``claude-sonnet-4-6``
-  silently shadowed the operator's ``[petri.auditor].model =
-  "claude-opus-4-7"``. Same reader-assumption-drift anti-pattern as
-  PR-G3 #1347 / PR-G2 #1346 — fixed once, here, by deleting every
-  duplicate SoT.
-
-  ``runner.run_audit`` ``target`` slot now also falls through to the
-  registry when ``None`` (previously only ``judge`` / ``auditor`` did
-  — Typer + argparse already defaulted ``target`` to ``None`` from
-  the initial PR).
-
-  Test coverage: 6582 passed / 0 failed / 42 skipped after the
-  consolidation (was 6582 before, structurally unchanged). G-B drift
-  pins flipped — ``_petri_role_model`` is canonical, the legacy
-  constants are *forbidden* (``hasattr(train, "TARGET_MODEL")`` must
-  return ``False``).
-
-- **Single SoT for audit role models — ``[self_improving_loop.petri.<role>]``
-  in ``~/.geode/config.toml`` wins.** Closes the read/write asymmetry
-  + silent argv bypass that made the operator's per-role config dead
-  for two out of three roles. The gen-0/gen-1 baseline run made the
-  drift visible: ``[petri.auditor].model = "claude-opus-4-7"`` agreed
-  with the Typer default by coincidence, but the underlying mechanism
-  was "Typer argv pin wins, registry never consults
-  ``[petri.auditor]``" — a single default-tweak away from a silent
-  bypass. Four moving parts realigned, one PR:
-
-  1. **Typer ``--judge`` / ``--auditor`` defaults flipped to ``None``**
-     (``plugins/petri_audit/cli_audit.py:154-167``). The ``target`` slot
-     already used this pattern; the other two roles now match. Omitted
-     argv → ``runner.run_audit`` receives ``None`` → falls through to
-     :func:`plugins.petri_audit.registry.get_binding(role)` which
-     consults ``[petri.<role>]`` (operator config → legacy
-     ``~/.geode/petri.toml`` → manifest default). Explicit argv pin
-     still wins for the audit lifetime. Help text spells out the new
-     fall-through rule so a future operator doesn't read the omitted
-     argv as a bug.
-  2. **argparse slash parser defaults match** (``cli_audit.py:299-300``).
-     ``/audit`` slash command parity with the Typer surface.
-  3. **``runner.run_audit`` signature**: ``judge`` / ``auditor`` now
-     ``str | None``; resolution via ``get_binding(role).model`` when
-     ``None`` (``plugins/petri_audit/runner.py:516-587``).
-  4. **``/petri`` slash now writes to ``config.toml``**, not the
-     legacy ``~/.geode/petri.toml``. New
-     :func:`plugins.petri_audit.user_overrides.save_role_override_to_config_toml`
-     splices ``{model, source}`` into
-     ``[self_improving_loop.petri.<role>]`` via
-     ``_persist_section_updates``. Empty-string (delete-key) requests
-     still fall back to the legacy file because
-     ``_persist_section_updates`` doesn't yet support line removal —
-     the rare clear-axis workflow keeps a working path on the legacy
-     file. The legacy ``save_role_override`` survives unchanged for
-     fixtures + the back-compat probe in ``test_user_overrides.py``.
-  5. **``AutoresearchConfig.target_model`` / ``judge_model`` semantic
-     narrowed** to "override-only knob": ``None`` defers to
-     ``[petri.<role>]`` (the autoresearch argv builder omits
-     ``--target`` / ``--judge`` when the operator hasn't pinned an
-     autoresearch-specific value), explicit string still pins. The
-     previous behaviour ("``None`` → inherit ``Settings.model``") was
-     the asymmetric path that bypassed the per-role config; the
-     ``Settings.model`` inherit happens automatically inside the
-     runner via ``to_inspect_model`` when the registry returns the
-     manifest default.
-
-  Net effect on operator surface: ``[self_improving_loop.petri.<role>].model``
-  is the canonical write site. ``/petri model auditor claude-opus-4-7``
-  → updates ``[petri.auditor]`` in ``config.toml`` → next audit's
+  Net effect: ``[self_improving_loop.petri.<role>].model`` is the
+  canonical write site. ``/petri model auditor claude-opus-4-7``
+  updates ``[petri.auditor]`` in ``config.toml``; next audit's
   binding resolver reads the same line. Autoresearch outer-loop
-  honours the operator's role config out of the box; the redundant
-  ``[autoresearch].target_model`` / ``.judge_model`` fields survive
-  only for one-shot cross-model probes.
+  honours the operator's role config out of the box. Same
+  reader-assumption-drift anti-pattern as PR-G3 #1347 / PR-G2 #1346
+  — fixed once, here, by deleting every duplicate SoT.
 
-  Aligns with the broader misalignment audit (the same
-  reader-assumption drift pattern as PR-G3 #1347 / PR-G2 #1346:
-  "config layer A reads but layer B writes — operator's intent
-  evaporates between the two"). gen-0 audit cued the catch because
-  the auditor model in the ``.eval`` header (``claude-cli/claude-sonnet-4-6``)
-  did not match the operator's ``[petri.auditor].model`` setting.
+  G-B drift pins flipped — ``_petri_role_model`` is canonical, the
+  legacy constants are *forbidden* (``hasattr(train, "TARGET_MODEL")``
+  must return ``False``). Test coverage: 6582 passed / 0 failed /
+  42 skipped after consolidation.
+
+## [0.99.34] - 2026-05-22
+
+> CSA sprint endgame + async-only migration foundation + petri-bundle
+> Pages serving + autoresearch outer-loop UX cleanup, all riding
+> together in one release window. CSA-1/1b/2/3/2c stack closes: the
+> claude-cli + codex-cli paperclip subprocess providers + MCP bridge
+> mirror tool_use audit support on both anthropic and codex sides;
+> the CSA-3 manifest flip routes the autoresearch outer loop through
+> subscription quota end-to-end (gen-0 + gen-1 live runs verified).
+> Async Phase C lands ``SubAgentManager.adelegate`` + Pipeline.arun
+> + 8 native async seed-generation agents; legacy sync ``delegate``
+> carries deprecation warning + grep anchor for the bulk-removal
+> pass. petri-bundle ``bundle_sync`` auto-copies finished ``.eval``
+> archives from the agent context layer
+> (``~/.geode/petri/logs/``) into the repo-tracked publish surface
+> (``docs/petri-bundle/logs/``), with the matching ``.gitignore``
+> exception so the synced files actually enter git. gen-0 + gen-1
+> baseline backfilled for live Pages publish.
 
 ### Added
 
