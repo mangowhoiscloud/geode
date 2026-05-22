@@ -485,7 +485,14 @@ class Pipeline:
         invocation). I/O failures are logged but never raise; the
         in-memory ``state`` stays authoritative.
         """
-        self_improving_loop_home = Path.home() / ".geode" / "self-improving-loop"
+        # CSP-7 (2026-05-22) — cross-run state moved into the repo
+        # (``state/self-improving-loop/`` by default, env-overridable
+        # via ``GEODE_STATE_ROOT``). Pre-CSP-7 path was
+        # ``~/.geode/self-improving-loop/`` — machine-specific, broke
+        # reproducibility when the run was cloned to a different host.
+        from core.paths import STATE_SELF_IMPROVING_LOOP_DIR
+
+        self_improving_loop_home = STATE_SELF_IMPROVING_LOOP_DIR
         index_path = self_improving_loop_home / "sessions.jsonl"
         payload = {
             "session_id": self.state.run_id,
@@ -529,14 +536,17 @@ class Pipeline:
                  ]
                }
 
-        2. ``survivors/`` — directory of symlinks to each survivor's
-           candidate body file. This is what
+        2. ``survivors/`` — directory of **file copies** (was: symlinks,
+           pre-CSP-7) of each survivor's candidate body. This is what
            ``inspect-petri`` 's flat-glob ``--seed-select`` consumer
            expects (``flatten_for_inspect_petri`` passes a directory of
-           ``*.md`` through unchanged). ``state.pool_path_out`` is
-           stamped to this directory so a parent driver can set
-           ``AUTORESEARCH_SEED_SELECT=<pool_path_out>`` and the next
-           audit will pick up the winners.
+           ``*.md`` through unchanged). File copies (vs symlinks) make
+           the survivors directory self-contained so a clone on a
+           different machine still has the candidate bodies even when
+           the original ``<run_dir>/candidates/`` is absent.
+           ``state.pool_path_out`` is stamped to this directory so a
+           parent driver can set ``AUTORESEARCH_SEED_SELECT=<pool_path_out>``
+           and the next audit will pick up the winners.
 
         Skipped when ``state.run_dir`` is unset (test fixtures often
         omit it). I/O failures log a WARNING but do not raise — the
@@ -571,11 +581,14 @@ class Pipeline:
             )
             survivors_dir = self.state.run_dir / "survivors"
             survivors_dir.mkdir(parents=True, exist_ok=True)
-            # Clear stale entries from a previous run so the symlink set
-            # is exactly the current survivors.
+            # CSP-7 (2026-05-22) — clear stale entries (file copies +
+            # any legacy symlinks left from a pre-CSP-7 run) so the
+            # survivor set is exactly the current rows.
             for entry in survivors_dir.iterdir():
                 if entry.is_symlink() or entry.is_file():
                     entry.unlink()
+            import shutil
+
             for row in rows:
                 src_str = row.get("path")
                 if not src_str:
@@ -584,9 +597,19 @@ class Pipeline:
                 if not src.is_file():
                     continue
                 dst = survivors_dir / src.name
-                dst.symlink_to(src.resolve())
+                # CSP-7 — file copy (was symlink). Makes the survivors
+                # directory self-contained for cross-machine reproducibility.
+                shutil.copy2(src, dst)
             self.state.pool_path_out = survivors_dir
-            self._update_latest_seed_pool_symlink(survivors_dir)
+            # CSP-7 (2026-05-22) — write the cross-run pointer with
+            # seed_pool only (meta_review may be empty for this run;
+            # ``_persist_meta_review`` will re-write the pointer with
+            # both fields once it has meta_review_path). Idempotent
+            # writes — the meta-review call overwrites the file.
+            self._write_latest_pointer(
+                survivors_dir=survivors_dir,
+                meta_review_path=None,
+            )
             log.info(
                 "seed-generation cross-loop handoff: %d survivors → %s (metadata at %s)",
                 len(rows),
@@ -600,31 +623,41 @@ class Pipeline:
                 exc,
             )
 
-    @staticmethod
-    def _update_latest_seed_pool_symlink(survivors_dir: Path) -> None:
-        """Point ``~/.geode/self-improving-loop/latest_seed_pool`` at this run's survivors.
+    def _write_latest_pointer(
+        self,
+        *,
+        survivors_dir: Path | None,
+        meta_review_path: Path | None,
+    ) -> None:
+        """Update the cross-run forward pointer JSON.
 
-        G1 closed-loop wiring: autoresearch ``_resolve_seed_select`` reads
-        this symlink as the env-less fallback so the next audit
-        automatically consumes the freshest survivor pool without a
-        manual ``AUTORESEARCH_SEED_SELECT=…`` export. Older runs stay
-        addressable by their ``<run_dir>/survivors/`` path; only the
-        symlink target moves forward.
+        CSP-7 (2026-05-22) — replaces the pre-CSP-7
+        ``~/.geode/self-improving-loop/latest_seed_pool`` +
+        ``latest_meta_review.json`` symlink pair with a single JSON
+        file at :data:`core.paths.STATE_LATEST_POINTER_PATH`. The
+        readers (autoresearch ``_resolve_seed_select`` +
+        ``baseline_reader.load_latest_meta_review``) consume the
+        pointer instead of dereferencing symlinks, so the handoff
+        survives a fresh clone on a different machine.
 
-        Failures are logged but never raise — the canonical handoff is
-        ``state.pool_path_out`` + ``sessions.jsonl``; the symlink is a
-        convenience accelerator, not a correctness boundary.
+        Both args are optional — pass only what this run produced.
+        Failures are logged but never raise; the canonical handoff is
+        ``state.pool_path_out`` + the per-run artefacts, and the
+        pointer is a convenience accelerator (next-run readers fall
+        back to env vars / config when the pointer is missing).
         """
-        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_seed_pool"
+        from core.paths import write_latest_pointer
+
         try:
-            latest.parent.mkdir(parents=True, exist_ok=True)
-            if latest.is_symlink() or latest.exists():
-                latest.unlink()
-            latest.symlink_to(survivors_dir.resolve())
+            write_latest_pointer(
+                run_id=self.state.run_id,
+                gen_tag=self.state.gen_tag,
+                seed_pool=survivors_dir,
+                meta_review=meta_review_path,
+            )
         except OSError as exc:
             log.warning(
-                "seed-generation latest_seed_pool symlink update failed at %s: %s",
-                latest,
+                "seed-generation latest_pointer.json update failed: %s",
                 exc,
             )
 
@@ -672,21 +705,15 @@ class Pipeline:
                 exc,
             )
             return
-        # Symlink update is best-effort — survivor handoff already
-        # writes state.pool_path_out + sessions.jsonl row, so a stale
-        # latest_meta_review never makes the run incorrect.
-        latest = Path.home() / ".geode" / "self-improving-loop" / "latest_meta_review.json"
-        try:
-            latest.parent.mkdir(parents=True, exist_ok=True)
-            if latest.is_symlink() or latest.exists():
-                latest.unlink()
-            latest.symlink_to(meta_review_path.resolve())
-        except OSError as exc:
-            log.warning(
-                "seed-generation latest_meta_review symlink update failed at %s: %s",
-                latest,
-                exc,
-            )
+        # CSP-7 (2026-05-22) — pointer file update (was: symlink to
+        # ``~/.geode/self-improving-loop/latest_meta_review.json``).
+        # The pointer also carries ``seed_pool`` from the prior
+        # ``_persist_survivors`` call (same run) so a single read
+        # gets both signals.
+        self._write_latest_pointer(
+            survivors_dir=self.state.pool_path_out,
+            meta_review_path=meta_review_path,
+        )
 
     def _persist_state(self) -> None:
         """Write a JSON snapshot of state to ``<run_dir>/state.json``.

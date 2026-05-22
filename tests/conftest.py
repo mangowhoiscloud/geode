@@ -38,6 +38,31 @@ _test_auth_toml = os.path.join(tempfile.gettempdir(), "geode_test_auth.toml")
 os.environ.setdefault("GEODE_AUTH_TOML", _test_auth_toml)
 
 
+# CSP-7 (2026-05-22) — Pipeline.run() writes cross-run state to
+# ``<repo_root>/state/`` by default. Tests that don't explicitly
+# monkeypatch ``core.paths`` constants would otherwise mutate the
+# in-repo state/ directory and leak across the test suite (a previous
+# test's ``latest_pointer.json`` survives into a later test's
+# ``_resolve_seed_select`` reader, breaking isolation). Autouse fixture
+# redirects every test's STATE_ROOT to a fresh tmp directory unless
+# the test explicitly re-monkeypatches.
+@pytest.fixture(autouse=True)
+def _isolate_state_root(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import core.paths as cp
+
+    sandbox = tmp_path_factory.mktemp("state-isolation")
+    monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
+    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", sandbox / "self-improving-loop")
+    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", sandbox / "seed-generation")
+    monkeypatch.setattr(
+        cp,
+        "STATE_LATEST_POINTER_PATH",
+        sandbox / "self-improving-loop" / "latest_pointer.json",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_auth_singletons():
     from core.llm.routing import plan_registry as _pr

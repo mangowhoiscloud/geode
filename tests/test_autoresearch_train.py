@@ -257,23 +257,41 @@ def test_resolve_seed_select_treats_whitespace_as_unset(
 
 
 # ---------------------------------------------------------------------------
-# G1 — latest_seed_pool symlink fallback (closed-loop wiring sprint)
+# CSP-7 — latest_pointer.json fallback (machine-portable, was symlink pre-CSP-7)
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_seed_select_reads_latest_seed_pool_symlink(
+def _stage_pointer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, seed_pool: Path) -> None:
+    """Stamp ``state/self-improving-loop/latest_pointer.json`` for the test."""
+    import json
+
+    import core.paths as cp
+
+    state_root = tmp_path / "state"
+    monkeypatch.setattr(cp, "STATE_ROOT", state_root)
+    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", state_root / "self-improving-loop")
+    monkeypatch.setattr(
+        cp,
+        "STATE_LATEST_POINTER_PATH",
+        state_root / "self-improving-loop" / "latest_pointer.json",
+    )
+    cp.STATE_LATEST_POINTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    cp.STATE_LATEST_POINTER_PATH.write_text(
+        json.dumps({"version": 1, "seed_pool": str(seed_pool)}),
+        encoding="utf-8",
+    )
+
+
+def test_resolve_seed_select_reads_latest_pointer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """When env is unset, resolver reads ``latest_seed_pool`` symlink target."""
+    """When env is unset, resolver reads the latest_pointer.json's seed_pool."""
     from types import SimpleNamespace
 
-    sil_home = tmp_path / "sil"
-    sil_home.mkdir()
     survivors_dir = tmp_path / "run123" / "survivors"
     survivors_dir.mkdir(parents=True)
-    (sil_home / "latest_seed_pool").symlink_to(survivors_dir.resolve())
+    _stage_pointer(monkeypatch, tmp_path, seed_pool=survivors_dir)
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",
@@ -282,32 +300,26 @@ def test_resolve_seed_select_reads_latest_seed_pool_symlink(
     assert auto_train._resolve_seed_select() == str(survivors_dir.resolve())
 
 
-def test_resolve_seed_select_env_wins_over_latest_symlink(
+def test_resolve_seed_select_env_wins_over_pointer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Env var override beats the latest_seed_pool symlink."""
-    sil_home = tmp_path / "sil"
-    sil_home.mkdir()
+    """Env var override beats the latest_pointer.json seed_pool."""
     survivors_dir = tmp_path / "survivors"
     survivors_dir.mkdir()
-    (sil_home / "latest_seed_pool").symlink_to(survivors_dir.resolve())
+    _stage_pointer(monkeypatch, tmp_path, seed_pool=survivors_dir)
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "env/wins")
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
     assert auto_train._resolve_seed_select() == "env/wins"
 
 
-def test_resolve_seed_select_skips_dead_symlink(
+def test_resolve_seed_select_skips_pointer_with_missing_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A symlink whose target was removed falls through to config."""
+    """A pointer whose seed_pool target was removed falls through to config."""
     from types import SimpleNamespace
 
-    sil_home = tmp_path / "sil"
-    sil_home.mkdir()
-    dead_target = tmp_path / "deleted"
-    (sil_home / "latest_seed_pool").symlink_to(dead_target)  # never created
+    dead_target = tmp_path / "deleted_survivors"  # never created
+    _stage_pointer(monkeypatch, tmp_path, seed_pool=dead_target)
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sil_home)
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",

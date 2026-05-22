@@ -47,6 +47,41 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **CSP-7 — symlink-free, in-repo state for cross-machine reproducibility**.
+  Replaced the pre-CSP-7 `~/.geode/self-improving-loop/latest_seed_pool`
+  + `latest_meta_review.json` symlink pair with a single JSON pointer
+  at `state/self-improving-loop/latest_pointer.json` (stored as
+  `STATE_ROOT`-relative paths so the file is portable across hosts).
+  Moved per-run artefacts from `~/.geode/seed-generation/<run_id>/`
+  to `state/seed-generation/<run_id>/` (env-overridable via
+  `GEODE_STATE_ROOT`). `survivors/` directory now holds **file copies**
+  of each survivor candidate `.md` rather than symlinks — the
+  directory is self-contained on a fresh clone. Readers
+  (`autoresearch.train._resolve_seed_select`,
+  `plugins.seed_generation.baseline_reader.load_latest_meta_review`)
+  consult the pointer instead of dereferencing symlinks. `state/`
+  ships in-tree (`.gitkeep` + `README.md` committed) so the layout is
+  part of the project; runtime artefacts stay `.gitignore`-d under
+  `state/*` — paths in repo, content per-machine. Bumps the
+  reproducibility ratchet: clone on a fresh box, no manual `~/.geode/`
+  bootstrap, the seed-generation loop just picks up the prior run's
+  pointer when it exists.
+
+## [0.99.29] - 2026-05-22
+
+> co-scientist port sprint completion (CSP-1 ~ CSP-6). Audit gaps
+> §1-A (Supervisor) / §1-B (literature) / §1-D (iteration) / §1-L
+> (Jaccard) all closed. arXiv:2502.18864 paper-fidelity restored on
+> the LLM-self-improving-loop domain (PubMed/INDRA → arXiv/seed_pool
+> domain-shift, with intra-corpus grounding as the INDRA analogue).
+> 6 feature PRs landed in one session: #1456 (toolkit infra), #1458
+> (arxiv tools), #1459 (Generator+Critic grounding), #1460 (Supervisor),
+> #1461 (iteration loop), #1463 (anti-convergence Jaccard). Sources
+> at `mango-wiki/vault/projects/geode/synthesis/coscientist-port-audit-2026-05-22.md`
+> + `coscientist-csp2-grounding-audit-2026-05-22.md`.
+
 ### Added
 
 - **PR-CSA-1b — paperclip-pattern codex-cli provider (text-only, judge role).**
