@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.37] - 2026-05-23
+
+> Two parallel sprints land together: **seed-generation 3-loop port
+> Phase 1** (Loop 2 debate-turn) and **petri-schema-v2 cascade PR-1**
+> (`extract_dim_aggregates` provenance). The 3-loop port's Phase 2
+> SoT (`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`) is
+> committed but Phase 2 implementation deferred to a future PR cycle.
+
 ### Added
 
 - **Seed-generation 3-loop port — Loop 2 (debate-turn).** open-coscientist
