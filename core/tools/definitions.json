@@ -1321,7 +1321,11 @@
         },
         "target_tools": {
           "type": "string",
-          "enum": ["synthetic", "fixed", "none"],
+          "enum": [
+            "synthetic",
+            "fixed",
+            "none"
+          ],
           "description": "Auditor's tool-creation tool set. 'none' (default — conversation-only mode, fits the 5-axis surface), 'fixed' (send_tool_call_result only, target has pre-registered tools), 'synthetic' (full set — auditor can fabricate tool results; inspect-petri default; useful for capability/broken_tool_use dim studies)."
         },
         "cache": {
@@ -1350,7 +1354,11 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["enable", "disable", "status"],
+          "enum": [
+            "enable",
+            "disable",
+            "status"
+          ],
           "description": "enable: start exporting. disable: shutdown. status: report current state."
         },
         "endpoint": {
@@ -1362,7 +1370,9 @@
           "description": "Service name attached to spans. Default 'geode'."
         }
       },
-      "required": ["action"]
+      "required": [
+        "action"
+      ]
     }
   },
   {
@@ -1379,7 +1389,13 @@
         },
         "chart": {
           "type": "string",
-          "enum": ["heatmap", "cost", "tool", "agree", "trend"],
+          "enum": [
+            "heatmap",
+            "cost",
+            "tool",
+            "agree",
+            "trend"
+          ],
           "description": "Chart type. Default 'heatmap'."
         },
         "output_path": {
@@ -1387,7 +1403,9 @@
           "description": "Output PNG/SVG path. Defaults to ./reports/<chart>.png."
         }
       },
-      "required": ["log_path"]
+      "required": [
+        "log_path"
+      ]
     }
   },
   {
@@ -1427,7 +1445,81 @@
           "description": "MUST be true unless the user has explicitly authorised the live compile cost. Default true."
         }
       },
-      "required": ["judge", "generator", "eval_log_path"]
+      "required": [
+        "judge",
+        "generator",
+        "eval_log_path"
+      ]
+    }
+  },
+  {
+    "name": "arxiv_search",
+    "description": "Search arXiv for scholarly preprints (alignment, interpretability, LLM safety, ML). Returns ranked metadata (title, authors, abstract, arxiv_id, pdf_url) for grounding research-style hypotheses. Free, no-auth. Prefer over general_web_search when the user wants the actual papers/preprints behind a topic or research grounding for a Petri seed proposal.",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "arXiv-style query (e.g. \"all:LLM alignment\" or \"ti:reasoning AND cat:cs.AI\")"
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Number of papers to return (default 5, max 20)."
+        },
+        "sort_by": {
+          "type": "string",
+          "description": "Sort key: relevance (default) | lastUpdatedDate | submittedDate."
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "paper_fetch_arxiv",
+    "description": "Fetch full metadata for ONE arXiv paper by its id (e.g. \"2502.18864\" or \"arXiv:2502.18864\"). Returns title, authors, abstract, categories, publication dates, pdf_url. Use after arxiv_search to get the full abstract of a specific paper.",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "arxiv_id": {
+          "type": "string",
+          "description": "arXiv paper id (e.g. \"2502.18864\"); the arXiv: prefix and version suffix are stripped if present."
+        }
+      },
+      "required": [
+        "arxiv_id"
+      ]
+    }
+  },
+  {
+    "name": "geode_seed_pool_search",
+    "description": "Search GEODE local Petri audit seed pool for existing seeds matching a query (target_dim, behaviour, scenario keyword). Returns top-N seeds with path and excerpt. Use BEFORE proposing a new seed to ground the proposal in what already exists and avoid duplication. Sources: bundled tiers + ~/.geode/self-improving-loop/latest_seed_pool/.",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Free-text query (target_dim keyword, scenario term)."
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Number of seeds to return (default 5, max 20)."
+        }
+      },
+      "required": [
+        "query"
+      ]
     }
   }
 ]

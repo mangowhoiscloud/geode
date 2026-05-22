@@ -61,6 +61,11 @@ description = "Broad-surface kit for orchestrator-style agents — read/write + 
 includes = ["common_read", "common_write"]
 tools = ["general_web_search", "web_fetch", "memory_save", "note_save"]
 
+[toolkits.literature_research]
+description = "Literature grounding for research / Petri-seed-style agents — arXiv API + intra-corpus seed-pool search + common read primitives. Domain-shifted replacement for the co-scientist port's PubMed/INDRA path (GEODE's domain is LLM self-improving loops + Petri audit, not biology)."
+includes = ["common_read"]
+tools = ["arxiv_search", "paper_fetch_arxiv", "geode_seed_pool_search"]
+
 # ---------------------------------------------------------------------------
 # Seed-generation toolkits — one per role of the co-scientist port
 # (`plugins/seed_generation/`). The agent definitions under
