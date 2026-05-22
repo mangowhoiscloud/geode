@@ -49,6 +49,23 @@ functional change.
 
 ### Added
 
+- **Evolver anti-convergence Jaccard guard (CSP-6)** — Hoisted
+  `_shingles` / `_jaccard` out of
+  `plugins/seed_generation/agents/proximity.py` into the new
+  `core/text/similarity.py` module (`shingles`, `jaccard_similarity`,
+  `text_jaccard`); proximity.py retains the private-name aliases as
+  compatibility shims. The Evolver phase now runs an
+  ``_is_near_duplicate`` post-check on every ok-verdict spawn — if
+  the evolved body's 5-gram Jaccard against any already-admitted
+  sibling OR its parent candidate exceeds 0.70 the row is dropped
+  (verdict coerced to ``evolution_skipped``, parent stays). Catches
+  the "LLM thinks it diversified but actually didn't" failure mode
+  that the Evolver's own verdict can miss. Defensive on I/O blips:
+  unreadable evolved files admit the row (fail-open, log WARNING)
+  rather than mask legitimate evolutions. Mirrors the original
+  co-scientist ``DUPLICATE_SIMILARITY_THRESHOLD = 0.70``
+  (``open-coscientist/nodes/evolve.py:14``) — closes audit §1-L.
+
 - **Iteration loop — paper §3 (CSP-5)** —
   `plugins/seed_generation/orchestrator.Pipeline.run()` now wraps the
   phase walk in an outer `for iteration in range(max_iterations + 1)`
