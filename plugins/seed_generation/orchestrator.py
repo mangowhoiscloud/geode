@@ -96,6 +96,10 @@ def _state_to_json(state: PipelineState) -> str:
         # guidance so a state.json replay carries the same strategy
         # the live run consumed (audit trail + reproducibility).
         "supervisor_guidance": state.supervisor_guidance,
+        # CSP-5 (2026-05-22) — persist iteration cursor so a state.json
+        # replay knows how many iteration cycles already ran.
+        "max_iterations": state.max_iterations,
+        "current_iteration": state.current_iteration,
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -145,6 +149,23 @@ _PHASE_ORDER: tuple[str, ...] = (
     "meta_reviewer",
 )
 
+# CSP-5 (2026-05-22) — phase sequence for iteration cycles 1..N
+# (post-meta_reviewer of iteration 0). The Supervisor / Generator /
+# Proximity steps DON'T re-run — iteration cycles operate on the
+# *evolved* candidates that the previous iteration's Evolver
+# produced, not on a fresh draft batch. Mirrors the paper's iteration
+# loop (``meta_review → evolve → review → ranking → proximity``)
+# adapted to GEODE's phase names: previous iteration ended with
+# meta_reviewer; we promote its evolved_candidates into candidates,
+# then critique / pilot / rank / evolve / meta-review again.
+_ITERATION_PHASE_ORDER: tuple[str, ...] = (
+    "critic",
+    "pilot",
+    "ranker",
+    "evolver",
+    "meta_reviewer",
+)
+
 
 @dataclass
 class PipelineState:
@@ -166,6 +187,16 @@ class PipelineState:
     # See :mod:`plugins.seed_generation.baseline_reader.SEED_COHORTS`.
     cohort: str = "petri_17dim"
     candidates_requested: int = 15
+    # CSP-5 (2026-05-22) — paper §3 iteration loop. Default 0 keeps
+    # the pre-CSP-5 single-pass behaviour (Pipeline.run() executes
+    # ``_PHASE_ORDER`` once and persists). With ``max_iterations >= 1``
+    # the orchestrator re-enters the post-meta_reviewer cycle
+    # (``_ITERATION_PHASE_ORDER``: critic → pilot → ranker → evolver →
+    # meta_reviewer) that many times, promoting ``evolved_candidates``
+    # into ``candidates`` between iterations. ``current_iteration`` is
+    # the cursor (0 = initial draft batch).
+    max_iterations: int = 0
+    current_iteration: int = 0
     pool_path_in: Path | None = None
     pool_path_out: Path | None = None
     run_dir: Path | None = None
@@ -309,46 +340,82 @@ class Pipeline:
         self._on_phase_error = on_phase_error
 
     def run(self) -> PipelineState:
-        """Walk all 7 phases in order. Returns the final state."""
+        """Walk the 7 phases (then optional iteration cycles). Returns the final state."""
         log.info(
-            "seed-generation run started: run_id=%s target=%s gen=%s",
+            "seed-generation run started: run_id=%s target=%s gen=%s max_iters=%d",
             self.state.run_id,
             self.state.target_dim,
             self.state.gen_tag,
+            self.state.max_iterations,
         )
         started_at = time.time()
-        for phase in _PHASE_ORDER:
-            self._run_phase(phase)
-            # PR-COSCI-1 (2026-05-21) — abort early when the
-            # candidates pool is empty after a phase that should
-            # have populated or filtered it. Pre-fix the
-            # downstream phases (critic / pilot / ranker) would
-            # silently run with zero candidates and emit empty
-            # ``elo_ratings`` / ``pilot_scores`` / ``survivors``,
-            # making the operator chase a "successful but empty
-            # run" rather than the actual root cause. Phases
-            # AFTER generator must see candidates; ``meta_reviewer``
-            # is the only exception (operates on the run record,
-            # not the candidates pool).
-            if phase in {"generator", "proximity"} and not self.state.candidates:
-                log.warning(
-                    "seed-generation aborting: phase %r left state.candidates empty "
-                    "(target_dim=%s, run_id=%s). Downstream phases would emit "
-                    "empty survivors/elo_ratings — abort early so the operator "
-                    "sees the root cause rather than a 'successful but empty' run.",
-                    phase,
-                    self.state.target_dim,
-                    self.state.run_id,
+        aborted = False
+        # CSP-5 (2026-05-22) — iteration 0 walks the full
+        # ``_PHASE_ORDER``; iterations 1..max_iterations re-enter the
+        # ``_ITERATION_PHASE_ORDER`` cycle, promoting evolved
+        # candidates into the candidates list between cycles.
+        for iteration in range(self.state.max_iterations + 1):
+            self.state.current_iteration = iteration
+            if iteration > 0:
+                if not self._promote_evolved_for_iteration():
+                    log.info(
+                        "seed-generation iteration %d skipped — no evolved "
+                        "candidates from previous iteration's Evolver.",
+                        iteration,
+                    )
+                    _emit_orchestrator_event(
+                        "iteration_skipped",
+                        level="info",
+                        payload={
+                            "iteration": iteration,
+                            "reason": "no_evolved_candidates",
+                        },
+                    )
+                    break
+                log.info(
+                    "seed-generation iteration %d/%d started: %d evolved → candidates",
+                    iteration,
+                    self.state.max_iterations,
+                    len(self.state.candidates),
                 )
                 _emit_orchestrator_event(
-                    "empty_candidates_abort",
-                    level="error",
+                    "iteration_started",
                     payload={
-                        "after_phase": phase,
-                        "target_dim": self.state.target_dim,
-                        "run_id": self.state.run_id,
+                        "iteration": iteration,
+                        "candidates": len(self.state.candidates),
                     },
                 )
+            order = _PHASE_ORDER if iteration == 0 else _ITERATION_PHASE_ORDER
+            for phase in order:
+                self._run_phase(phase)
+                # PR-COSCI-1 (2026-05-21) — abort early when the
+                # candidates pool is empty after a phase that should
+                # have populated or filtered it. The check is scoped
+                # to iteration 0 phases (generator / proximity) — in
+                # later iterations the pool is pre-seeded from
+                # evolved_candidates so generator/proximity don't run.
+                if phase in {"generator", "proximity"} and not self.state.candidates:
+                    log.warning(
+                        "seed-generation aborting: phase %r left state.candidates empty "
+                        "(target_dim=%s, run_id=%s). Downstream phases would emit "
+                        "empty survivors/elo_ratings — abort early so the operator "
+                        "sees the root cause rather than a 'successful but empty' run.",
+                        phase,
+                        self.state.target_dim,
+                        self.state.run_id,
+                    )
+                    _emit_orchestrator_event(
+                        "empty_candidates_abort",
+                        level="error",
+                        payload={
+                            "after_phase": phase,
+                            "target_dim": self.state.target_dim,
+                            "run_id": self.state.run_id,
+                        },
+                    )
+                    aborted = True
+                    break
+            if aborted:
                 break
         # P0b — cross-loop handoff runs FIRST so ``state.pool_path_out``
         # is stamped before ``_persist_state`` snapshots state.json.
@@ -372,6 +439,43 @@ class Pipeline:
             self.state.usd_spent,
         )
         return self.state
+
+    def _promote_evolved_for_iteration(self) -> bool:
+        """Promote ``evolved_candidates`` into ``candidates`` for the next iteration.
+
+        CSP-5 (2026-05-22) — between iterations the post-meta_reviewer
+        cycle (``_ITERATION_PHASE_ORDER``) starts at the Critic phase,
+        which expects ``state.candidates`` populated. The previous
+        iteration's Evolver wrote new rows into
+        ``state.evolved_candidates``; we replace ``state.candidates``
+        with those rows (NOT extend — we don't want the previous
+        iteration's already-evolved candidates re-evaluated) and clear
+        the per-iteration ephemeral state (reflections, pilot_scores,
+        elo_ratings, survivors, evolved_candidates) so the next cycle
+        runs against a clean slate.
+
+        Returns False when no evolved candidates exist (the Evolver
+        produced none, or wasn't registered) — the caller skips the
+        iteration and breaks the outer loop.
+        """
+        if not self.state.evolved_candidates:
+            return False
+        self.state.candidates = list(self.state.evolved_candidates)
+        self.state.evolved_candidates = []
+        # Per-iteration ephemera reset — these belong to the previous
+        # cycle's candidate set and would mislead the new Critic /
+        # Pilot / Ranker if left behind.
+        self.state.reflections = {}
+        self.state.pilot_scores = {}
+        self.state.elo_ratings = {}
+        self.state.survivors = []
+        # ``proximity_graph`` is also per-candidate-batch but the
+        # Ranker uses ``state.proximity_graph or None`` fallback, so a
+        # stale graph is harmless for the iteration cycle (no
+        # proximity phase re-runs). Keeping the symbol around lets
+        # the Ranker fall back to its legacy random shuffle policy
+        # cleanly — no change.
+        return True
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
         """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.

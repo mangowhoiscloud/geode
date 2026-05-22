@@ -49,6 +49,24 @@ functional change.
 
 ### Added
 
+- **Iteration loop — paper §3 (CSP-5)** —
+  `plugins/seed_generation/orchestrator.Pipeline.run()` now wraps the
+  phase walk in an outer `for iteration in range(max_iterations + 1)`
+  loop. Iteration 0 runs the full `_PHASE_ORDER`
+  (supervisor → … → meta_reviewer). Iterations 1..N run the new
+  `_ITERATION_PHASE_ORDER` cycle (critic → pilot → ranker → evolver →
+  meta_reviewer) against the previous iteration's evolved candidates,
+  via the `_promote_evolved_for_iteration` helper that replaces (not
+  extends) `state.candidates` with `state.evolved_candidates` and
+  clears the per-iteration ephemera (reflections / pilot_scores /
+  elo_ratings / survivors). Iteration short-circuits with an
+  `iteration_skipped` event when the Evolver produced nothing — no
+  empty cycles. `PipelineState.max_iterations` (default 0 preserves
+  the pre-CSP-5 single-pass behaviour) + `current_iteration` cursor
+  are persisted in `state.json` so a replay knows how many cycles
+  ran. CLI exposes `--max-iterations / -i` (0..10) on
+  `geode audit-seeds generate`.
+
 - **Supervisor phase — run-level strategy synthesis (CSP-4)** — New
   Phase 0 of the seed-generation pipeline (paper §3 Supervisor).
   `plugins/seed_generation/agents/supervisor.py` dispatches one Opus
