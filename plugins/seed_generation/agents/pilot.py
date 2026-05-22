@@ -98,7 +98,7 @@ class Pilot(BaseSeedAgent):
         )
         self._manager = manager
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Fan out N pilot sub-agents and collect dim aggregates."""
         if not state.candidates:
             return SeedAgentResult(
@@ -119,7 +119,7 @@ class Pilot(BaseSeedAgent):
         )
 
         # announce=False — orchestrator already announces the parent phase.
-        results = self._manager.delegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks, announce=False)
 
         # S2-fix pattern — pair by task_id dict lookup, never by position.
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}

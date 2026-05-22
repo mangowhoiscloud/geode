@@ -76,12 +76,17 @@ def test_orchestrator_aborts_on_empty_candidates_after_generator(
 ) -> None:
     """When the generator phase leaves ``state.candidates == []``, the
     orchestrator must abort BEFORE running critic/pilot/ranker rather
-    than emit a "successful but empty" run."""
+    than emit a "successful but empty" run.
+
+    PR-Async-Phase-C step 2 (2026-05-22) — abort logic now lives in
+    ``Pipeline.arun`` (async); sync ``run`` is a deprecation shim. Pin
+    the source on ``arun`` instead.
+    """
     import inspect
 
     from plugins.seed_generation import orchestrator
 
-    src = inspect.getsource(orchestrator.Pipeline.run)
+    src = inspect.getsource(orchestrator.Pipeline.arun)
     # The abort gate must check the post-phase state for empty
     # candidates after generator or proximity. Pin presence.
     assert "empty_candidates_abort" in src or "state.candidates empty" in src
@@ -97,7 +102,7 @@ def test_orchestrator_abort_emits_observability_event() -> None:
 
     from plugins.seed_generation import orchestrator
 
-    src = inspect.getsource(orchestrator.Pipeline.run)
+    src = inspect.getsource(orchestrator.Pipeline.arun)
     assert '"empty_candidates_abort"' in src
     # Error level — abort is a failure, not a normal state.
     assert 'level="error"' in src

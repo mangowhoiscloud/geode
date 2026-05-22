@@ -111,7 +111,7 @@ class Ranker(BaseSeedAgent):
         self._survivors_k = survivors_k
         self._rng = rng
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Run the Elo tournament against ``state.candidates`` survivors."""
         if not state.candidates:
             return SeedAgentResult(
@@ -164,7 +164,7 @@ class Ranker(BaseSeedAgent):
 
         outcomes: list[MatchOutcome] = []
         for match in match_plan:
-            outcome = self._play_match(match, pilot_means=pilot_means)
+            outcome = await self._play_match(match, pilot_means=pilot_means)
             if outcome is None:
                 continue
             outcomes.append(outcome)
@@ -187,7 +187,7 @@ class Ranker(BaseSeedAgent):
             },
         )
 
-    def _play_match(
+    async def _play_match(
         self,
         match: MatchPlan,
         *,
@@ -195,7 +195,7 @@ class Ranker(BaseSeedAgent):
     ) -> MatchOutcome | None:
         """Dispatch the 3 voters for one match; return ``None`` on quorum loss."""
         tasks = self._build_voter_tasks(match, pilot_means=pilot_means or {})
-        results = self._manager.delegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks, announce=False)
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
 
         votes: list[str] = []

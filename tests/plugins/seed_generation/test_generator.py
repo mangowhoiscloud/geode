@@ -19,6 +19,10 @@ class _StubManager:
         self._force_failures = force_failures
         self._fail_all = fail_all
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         self.received_tasks = list(tasks)
         self.received_announce = announce

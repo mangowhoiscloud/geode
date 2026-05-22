@@ -98,7 +98,7 @@ class MetaReviewer(BaseSeedAgent):
         )
         self._manager = manager
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Dispatch one meta-review sub-agent and parse the structured report."""
         if not state.candidates:
             return SeedAgentResult(
@@ -116,7 +116,7 @@ class MetaReviewer(BaseSeedAgent):
             "seed-generation meta_reviewer dispatching aggregate review to %r",
             _META_REVIEWER_AGENT_NAME,
         )
-        results = self._manager.delegate([task], announce=False)
+        results = await self._manager.adelegate([task], announce=False)
         if not results:
             return SeedAgentResult(
                 role=self.role,
