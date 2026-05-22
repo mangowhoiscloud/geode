@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **CSP-7 — symlink-free, in-repo state for cross-machine reproducibility**.
+  Replaced the pre-CSP-7 `~/.geode/self-improving-loop/latest_seed_pool`
+  + `latest_meta_review.json` symlink pair with a single JSON pointer
+  at `state/self-improving-loop/latest_pointer.json` (stored as
+  `STATE_ROOT`-relative paths so the file is portable across hosts).
+  Moved per-run artefacts from `~/.geode/seed-generation/<run_id>/`
+  to `state/seed-generation/<run_id>/` (env-overridable via
+  `GEODE_STATE_ROOT`). `survivors/` directory now holds **file copies**
+  of each survivor candidate `.md` rather than symlinks — the
+  directory is self-contained on a fresh clone. Readers
+  (`autoresearch.train._resolve_seed_select`,
+  `plugins.seed_generation.baseline_reader.load_latest_meta_review`)
+  consult the pointer instead of dereferencing symlinks. `state/`
+  ships in-tree (`.gitkeep` + `README.md` committed) so the layout is
+  part of the project; runtime artefacts stay `.gitignore`-d under
+  `state/*` — paths in repo, content per-machine. Bumps the
+  reproducibility ratchet: clone on a fresh box, no manual `~/.geode/`
+  bootstrap, the seed-generation loop just picks up the prior run's
+  pointer when it exists.
+
 ## [0.99.29] - 2026-05-22
 
 > co-scientist port sprint completion (CSP-1 ~ CSP-6). Audit gaps
