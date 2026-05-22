@@ -49,6 +49,22 @@ functional change.
 
 ### Added
 
+- **LaneQueue Phase 5 — observability boost**. ``LaneQueue.status()``
+  now returns lifetime ``stats`` (``acquired`` / ``released`` /
+  ``timeouts`` per lane) and a ``stuck`` list of keys held longer
+  than the supplied ``stuck_threshold_s`` (default 300 s, matching
+  the upper end of the gateway / global timeouts). New
+  :meth:`Lane.get_stuck(threshold_s)` / :meth:`SessionLane.get_stuck`
+  helpers surface the same info standalone — operators can poll a
+  single lane without paying for the full ``status()`` walk.
+  ``SessionLane.get_stuck`` skips released-but-cached entries (those
+  belong to the idle-eviction path, a different concern), so the
+  list only flags work that's currently held but not progressing. A
+  zero or negative threshold returns an empty list rather than
+  flagging every fresh acquisition — sensible default for callers
+  that haven't yet decided on a threshold value. Three new test
+  classes pin ``get_stuck`` precedence + the enriched status shape.
+
 - **LaneQueue Phase 4 — ``claude-cli`` error parser + tiered backoff**.
   New ``core/llm/claude_cli_errors.py`` module ports paperclip's
   ``parse.ts`` regex patterns (``CLAUDE_TRANSIENT_UPSTREAM_RE`` +
