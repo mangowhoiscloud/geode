@@ -87,6 +87,22 @@ except ImportError:
         exc_info=True,
     )
 
+# CSA-1 (2026-05-22) — register the ``claude-cli`` ModelAPI for the
+# paperclip-pattern adapter. Routes ``claude-cli/<model>`` ids through
+# ``claude --print`` subprocess (per-call). Avoids the raw-SDK + OAuth
+# 100% 429 enforcement that breaks ``claude-code/`` path on Claude Max
+# OAuth subscription. CSA-1 ships text-only generate (judge role);
+# CSA-2 will add MCP bridge for tool-use (auditor role).
+try:
+    from plugins.petri_audit.claude_cli_provider import register as _register_claude_cli
+
+    _register_claude_cli()
+except ImportError:
+    _logging.getLogger(__name__).debug(
+        "petri_audit claude-cli ModelAPI registration deferred — [audit] extra not installed",
+        exc_info=True,
+    )
+
 # CSA-1b (2026-05-22) — register the ``codex-cli`` ModelAPI for the
 # paperclip-pattern adapter (codex CLI subprocess). Sibling of CSA-1's
 # claude-cli provider. Routes ``codex-cli/<model>`` ids through
