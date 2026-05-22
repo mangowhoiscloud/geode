@@ -148,22 +148,18 @@ class Ranker(BaseSeedAgent):
                 pilot_means[cid] = means
 
         ratings = initial_ratings(candidate_ids)
-        # PR-Π1 — when the Proximity phase populated ``state.proximity_graph``
-        # the Ranker forwards it to ``plan_matches`` so the Elo bracket
-        # seeds toward diverse (low-proximity) pairs. Empty graph → legacy
-        # random shuffle policy, identical to pre-Π1 behaviour.
-        match_plan = plan_matches(
-            candidate_ids,
-            rng=self._rng,
-            proximity_graph=state.proximity_graph or None,
-        )
+        # CSP-8 (2026-05-22) — Proximity now emits clusters
+        # (``state.similarity_clusters``) instead of a sparse pairwise
+        # graph. Bracket seeding reverts to the legacy random-shuffle
+        # policy. The cluster output stays available to the
+        # meta_reviewer + operator-readable state.json as a coverage
+        # signal but does NOT feed the Elo bracket.
+        match_plan = plan_matches(candidate_ids, rng=self._rng)
         log.info(
-            "seed-generation ranker: %d candidates → %d matches × %d voters "
-            "(proximity_graph entries=%d)",
+            "seed-generation ranker: %d candidates → %d matches × %d voters",
             len(candidate_ids),
             len(match_plan),
             len(self._voters),
-            len(state.proximity_graph),
         )
 
         outcomes: list[MatchOutcome] = []

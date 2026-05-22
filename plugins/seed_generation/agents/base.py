@@ -34,11 +34,12 @@ Lifecycle
 Sub-agent integration
 =====================
 
-For roles that use full ``AgenticLoop`` inheritance (Generator,
-Critic, Pilot, Ranker voter, Evolver, Meta-reviewer) the concrete
-subclass dispatches through ``SubAgentManager.delegate`` (S2+). The
-Proximity role is a pure tool call (``text_embed``) and does not
-spawn a sub-agent — the embedding API is called directly.
+Every role (including the CSP-8 LLM-clustering Proximity role)
+dispatches through ``SubAgentManager.delegate`` (S2+). Pre-CSP-8
+the Proximity role was an embedding-only path that bypassed
+``delegate`` and called the ``text_embed`` tool directly; the
+LLM-clustering revert (paper §3 Proximity) collapsed it into the
+standard sub-agent pattern.
 """
 
 from __future__ import annotations

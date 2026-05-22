@@ -232,13 +232,17 @@ def test_role_kind_embedding_explicit() -> None:
     assert spec.kind == "embedding"
 
 
-def test_bundled_proximity_role_is_embedding() -> None:
-    """Proximity role in seed_generation.plugin.toml must be embedding kind."""
+def test_bundled_proximity_role_is_completion() -> None:
+    """CSP-8 (2026-05-22): Proximity role flipped from ``kind="embedding"``
+    to ``kind="completion"`` when it reverted to the paper's LLM-clustering
+    pattern. The ``kind`` field stays in the schema for forward-compat —
+    a future plugin may want a non-completion role kind — but no role
+    in the bundled seed-generation manifest currently uses it."""
     clear_manifest_cache()
     manifest = load_manifest()
     proximity = manifest.get_role("proximity")
-    assert proximity.kind == "embedding"
-    # Sibling check — generator/critic remain completion
+    assert proximity.kind == "completion"
+    # Sibling check — every shipped role is now completion.
     assert manifest.get_role("generator").kind == "completion"
     assert manifest.get_role("critic").kind == "completion"
 
