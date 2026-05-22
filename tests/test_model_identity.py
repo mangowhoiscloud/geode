@@ -26,13 +26,16 @@ the bug was our breadcrumb pollution.
 
 Two invariants pinned here:
 
-  1. ``_build_model_card(model)`` returns a strong identity assertion
-     (explicit + repeated + override of stale acks) — combats both
-     recency bias and any backend system-layer claim.
+  1. ``_build_model_card(model)`` names the active model + provider in
+     a single neutral line (PR-MIC 2026-05-23 weakened the v0.52.8
+     strong "non-negotiable" assertion to Option B from the X2
+     decision; the strong block is grep-pinned absent by
+     ``test_model_card_does_not_carry_assertion_overhead``).
 
   2. ``AgenticLoop.update_model`` purges prior ``"Understood. I am now
-     <prev>."`` assistant acks BEFORE adding the new one. Each switch
-     leaves exactly one active ack.
+     <prev>."`` assistant acks BEFORE adding the new one — string AND
+     Anthropic-style block-form. Each switch leaves exactly one
+     active ack.
 """
 
 from __future__ import annotations
@@ -59,32 +62,25 @@ def _clear_model_card_cache() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Contract 1 — model card asserts identity strongly
+# Contract 1 — model card names the active model + provider (Option B / PR-MIC)
 # ---------------------------------------------------------------------------
 
 
-def test_model_card_asserts_active_identity_for_gpt_5_5() -> None:
-    """The model card must contain the exact model name in a non-negotiable
-    assertion; pre-fix wording was a single soft "You are powered by..."
-    that lost out to history pollution."""
+def test_model_card_names_active_model() -> None:
+    """The model card must name the active model — minimal, non-aggressive.
+
+    PR-MIC (2026-05-23) — Option B from the X2 decision: drop the
+    v0.52.8 strong "non-negotiable" assertion + stale-ack override
+    sentences. Root cause of the original incident is now fully
+    covered by ``_purge_stale_model_switch_acks`` (block-form aware
+    after PR-MIC). The system prompt stays informative without the
+    ~80-token assertion overhead per round.
+    """
     card = _build_model_card("gpt-5.5")
-    # Strong identity assertion present.
-    # G1 (2026-05-12) — the "## ACTIVE MODEL IDENTITY" markdown heading is
-    # now the <model_card> XML wrapper + a non-negotiable first sentence.
     assert "<model_card>" in card
-    assert "non-negotiable" in card, (
-        "model card must use the strong-assertion header — pre-fix "
-        "wording was too soft and lost to prior history claims"
-    )
-    # Model name appears multiple times for repetition reinforcement.
-    assert card.count("gpt-5.5") >= 2, (
-        f"model name must repeat in the card, got {card.count('gpt-5.5')} times"
-    )
-    # Explicit override of stale history acks.
-    assert "stale" in card.lower() or "earlier assistant message" in card.lower(), (
-        "card must explicitly tell the LLM to ignore stale acks from prior "
-        "switches in the same conversation"
-    )
+    assert "gpt-5.5" in card
+    # Provider context retained.
+    assert "openai" in card.lower()
 
 
 def test_model_card_includes_provider() -> None:
@@ -94,14 +90,31 @@ def test_model_card_includes_provider() -> None:
 
 
 def test_model_card_for_anthropic_model() -> None:
-    """Same shape for Anthropic models — identity assertion is provider-agnostic."""
+    """Same shape for Anthropic models — identity statement is provider-agnostic."""
     card = _build_model_card("claude-opus-4-7")
-    # G1 (2026-05-12) — the "## ACTIVE MODEL IDENTITY" markdown heading is
-    # now the <model_card> XML wrapper + a non-negotiable first sentence.
     assert "<model_card>" in card
-    assert "non-negotiable" in card
     assert "claude-opus-4-7" in card
-    assert card.count("claude-opus-4-7") >= 2
+    assert "anthropic" in card.lower()
+
+
+def test_model_card_does_not_carry_assertion_overhead() -> None:
+    """PR-MIC drift guard — the strong-assertion sentences from v0.52.8
+    must not creep back without an explicit revisit of the X2 decision.
+
+    Pin the three load-bearing phrases of the old "non-negotiable"
+    block so a future drift surfaces in CI rather than at runtime.
+    """
+    card = _build_model_card("gpt-5.5")
+    assert "non-negotiable" not in card.lower(), (
+        "the v0.52.8 strong assertion was dropped in PR-MIC; re-adding "
+        "it needs a fresh X2 decision (purge already covers root cause)"
+    )
+    assert "When asked which model you are" not in card, (
+        "explicit-answer assertion dropped — purge now handles ack pollution"
+    )
+    assert "stale acknowledgements" not in card, (
+        "stale-ack override sentence dropped — purge already strips acks"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -210,9 +223,12 @@ def test_purge_on_empty_history_is_noop() -> None:
     assert stub.context.messages == []
 
 
-def test_purge_handles_non_string_content() -> None:
-    """Anthropic-style multimodal content (list of blocks) must not crash
-    the purge. Only string-content acks match."""
+def test_purge_handles_block_form_content() -> None:
+    """Anthropic-style multimodal content (list of blocks) must also be
+    purged when the first text block carries our self-emitted ack
+    prefix. PR-MIC (2026-05-23) — pre-fix the block-form was silently
+    preserved, so a model switch could leave a stale identity ack
+    behind if any code path stored the ack as blocks."""
     stub = _make_loop_stub_with_history(
         [
             {
@@ -220,10 +236,35 @@ def test_purge_handles_non_string_content() -> None:
                 "content": [{"type": "text", "text": "Understood. I am now gpt-5.4-mini."}],
             },
             {"role": "assistant", "content": "Understood. I am now gpt-5.4."},  # string match
+            # Non-matching block — should survive (different prefix).
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Here is the answer to your question."}],
+            },
         ]
     )
     stub._purge_stale_model_switch_acks()
     msgs = stub.context.messages
-    # The block-form is preserved (not a string), the plain-string ack is removed.
+    # Both prefix-matching acks gone (block + string). Unrelated block survives.
     assert len(msgs) == 1
     assert isinstance(msgs[0]["content"], list)
+    assert msgs[0]["content"][0]["text"].startswith("Here is")
+
+
+def test_purge_handles_mixed_block_types() -> None:
+    """Block-form content with mixed types (text + image) must not crash;
+    only text blocks are scanned for the prefix."""
+    stub = _make_loop_stub_with_history(
+        [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "data": "..."}},
+                    {"type": "text", "text": "Understood. I am now claude-opus-4-6."},
+                ],
+            },
+        ]
+    )
+    stub._purge_stale_model_switch_acks()
+    # Any text-block matching the prefix → drop the whole message.
+    assert stub.context.messages == []
