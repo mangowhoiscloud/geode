@@ -21,14 +21,12 @@ def _good_picker() -> PickerResult:
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
-            model="text-embedding-3-small",
-            provider="openai",
+            model="claude-sonnet-4-6",
+            provider="anthropic",
             source="api_key",
-            kind="embedding",
         ),
     }
     voters = [
@@ -68,8 +66,11 @@ def test_check_auth_provides_fix_hint() -> None:
         assert any(token in issue.fix for token in ("API_KEY", "login", "geode"))
 
 
-def test_check_auth_embedding_role_probes_openai_api_key() -> None:
-    """Embedding role short-circuits to (openai, api_key) for the probe."""
+def test_check_auth_probes_every_resolved_binding() -> None:
+    """CSP-10 — every role binding flows through the same probe path
+    (the pre-CSP-10 embedding-role short-circuit is gone). Verify the
+    probe sees each role's resolved (provider, source) at least once.
+    """
     picker = _good_picker()
     probed: list[tuple[str, str]] = []
 
@@ -79,6 +80,9 @@ def test_check_auth_embedding_role_probes_openai_api_key() -> None:
 
     with patch("plugins.seed_generation.pre_flight._credential_present", side_effect=_probe):
         check_auth(picker)
+    # _good_picker has 2 role bindings + 3 voters all on (anthropic|openai, api_key);
+    # dedup collapses the repeats, so the unique probed set is exactly those pairs.
+    assert ("anthropic", "api_key") in probed
     assert ("openai", "api_key") in probed
 
 
@@ -90,7 +94,6 @@ def test_check_auth_dedups_repeated_pairs() -> None:
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
     }
     voters = [

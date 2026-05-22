@@ -158,3 +158,12 @@ autoresearch/state/*
 !autoresearch/state/policies/
 !autoresearch/state/policies/**
 .claude/scratch/
+
+# CSP-7 (2026-05-22) — seed-generation cross-run state. The directory
+# layout is part of the project (committed via .gitkeep + README) so
+# a fresh clone has the expected paths, but runtime artefacts
+# (per-run subdirs, latest_pointer.json, sessions.jsonl) stay
+# git-ignored — they're machine-local execution traces, not source.
+state/*
+!state/.gitkeep
+!state/README.md

@@ -21,6 +21,168 @@ from functools import lru_cache
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Repository-relative state (CSP-7, 2026-05-22) — machine-portable
+# cross-run artefacts.
+#
+# Pre-CSP-7 the seed-generation pipeline wrote its cross-run handoff
+# (latest_seed_pool symlink, latest_meta_review.json symlink,
+# sessions.jsonl) and per-run artefacts into ``~/.geode/`` — host-
+# specific paths that broke reproducibility across machines (cloned
+# repo on a fresh box couldn't pick up the previous run's priors
+# because they lived under the previous box's $HOME).
+#
+# STATE_ROOT moves those handoff + per-run artefacts INTO the repo
+# (``state/`` directory, gitignored). Same repo, same state path —
+# CI and local boxes share the layout. The runtime artefacts
+# themselves stay un-tracked (gitignored under ``state/*``) so
+# experimental runs don't pollute git history, but the *path
+# convention* is in-tree.
+#
+# Override via ``GEODE_STATE_ROOT`` env var when an operator wants a
+# specific spool location (e.g. a CI runner with limited workspace
+# size that needs to redirect state to ephemeral disk). Default
+# resolves to ``<repo_root>/state/`` — where ``<repo_root>`` is
+# inferred from this module's filesystem location (works under
+# editable installs + worktrees).
+# ---------------------------------------------------------------------------
+
+
+def _resolve_repo_root() -> Path:
+    """Return the repository root that ships this ``core/paths.py``.
+
+    The file lives at ``<repo_root>/core/paths.py``, so the root is
+    two directory levels up. Works under editable installs (``uv tool
+    install -e .``) and inside git worktrees alike.
+    """
+    return Path(__file__).resolve().parent.parent
+
+
+_REPO_ROOT = _resolve_repo_root()
+STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state"))
+
+# Cross-run handoff (latest_pointer.toml, sessions.jsonl). The
+# ``self-improving-loop`` SUFFIX is preserved from the pre-CSP-7
+# user-level dir name so the conceptual mapping
+# ``~/.geode/self-improving-loop/...`` ↔ ``state/self-improving-loop/...``
+# stays obvious in logs and ops docs.
+STATE_SELF_IMPROVING_LOOP_DIR = STATE_ROOT / "self-improving-loop"
+
+# Per-run artefacts (state.json, candidates/, survivors/, meta_review.json,
+# elo_log.tsv). Pre-CSP-7: ``~/.geode/seed-generation/<run_id>/``.
+STATE_SEED_GENERATION_DIR = STATE_ROOT / "seed-generation"
+
+# Single forward-pointer JSON file the seed-generation orchestrator
+# writes at the end of every run (CSP-7). Replaces the pre-CSP-7
+# pair of ``latest_seed_pool`` / ``latest_meta_review.json`` symlinks.
+# Schema (JSON object):
+#
+#     {
+#       "version": 1,
+#       "run_id": "gen2-broken_tool_use",
+#       "gen_tag": "gen2",
+#       "updated_at": "2026-05-22T01:00:00Z",
+#       "seed_pool":   "seed-generation/gen2-broken_tool_use/survivors",
+#       "meta_review": "seed-generation/gen2-broken_tool_use/meta_review.json"
+#     }
+#
+# Paths stored as STATE_ROOT-relative strings so a clone-on-fresh-box
+# can resolve them without honouring the writer's ``$HOME`` or
+# absolute layout. Readers MUST go through :func:`read_latest_pointer`
+# (validates schema + resolves to absolute via STATE_ROOT).
+STATE_LATEST_POINTER_PATH = STATE_SELF_IMPROVING_LOOP_DIR / "latest_pointer.json"
+
+
+def write_latest_pointer(
+    *,
+    run_id: str,
+    gen_tag: str,
+    seed_pool: Path | str | None,
+    meta_review: Path | str | None,
+) -> None:
+    """Write the cross-run forward pointer JSON.
+
+    Stores ``seed_pool`` / ``meta_review`` as ``STATE_ROOT``-relative
+    strings so a fresh clone resolves them under that machine's
+    STATE_ROOT (which itself may be env-overridden). Absolute inputs
+    that fall outside STATE_ROOT are stored verbatim — readers must
+    then deal with absolute paths (used by tests that stage fixtures
+    outside the repo).
+
+    Failures (parent mkdir / write) are NOT swallowed here — the
+    caller (orchestrator) owns the "observability must not break the
+    run it observes" decision and wraps this in a try/except.
+    """
+    import json as _json
+    from datetime import UTC, datetime
+
+    payload: dict[str, object] = {
+        "version": 1,
+        "run_id": run_id,
+        "gen_tag": gen_tag,
+        "updated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    if seed_pool is not None:
+        payload["seed_pool"] = _stringify_relative(Path(seed_pool))
+    if meta_review is not None:
+        payload["meta_review"] = _stringify_relative(Path(meta_review))
+    STATE_LATEST_POINTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_LATEST_POINTER_PATH.write_text(
+        _json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def read_latest_pointer() -> dict[str, object] | None:
+    """Read the cross-run forward pointer JSON.
+
+    Returns the parsed payload with ``seed_pool`` / ``meta_review``
+    keys re-resolved to absolute :class:`Path` objects (against
+    STATE_ROOT), or ``None`` when:
+
+    - The pointer file does not exist (bootstrap — no prior run on
+      this machine + STATE_ROOT pair).
+    - The JSON is unparseable.
+    - The payload is not a dict.
+
+    Returning a dict (not a class) keeps the surface dependency-free
+    for the autoresearch reader (which lives outside ``core/``).
+    """
+    import json as _json
+
+    if not STATE_LATEST_POINTER_PATH.is_file():
+        return None
+    try:
+        raw = STATE_LATEST_POINTER_PATH.read_text(encoding="utf-8")
+        payload = _json.loads(raw)
+    except (OSError, _json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    # Resolve relative paths against STATE_ROOT so readers receive
+    # absolute Path objects ready to ``open`` / ``iterdir``.
+    out: dict[str, object] = dict(payload)
+    for key in ("seed_pool", "meta_review"):
+        value = out.get(key)
+        if isinstance(value, str) and value:
+            p = Path(value)
+            out[key] = (p if p.is_absolute() else STATE_ROOT / p).resolve()
+    return out
+
+
+def _stringify_relative(path: Path) -> str:
+    """Return ``path`` as a STATE_ROOT-relative string when possible.
+
+    Falls back to ``str(path)`` (absolute) when ``path`` lives outside
+    STATE_ROOT — the reader then handles it as an absolute path.
+    """
+    try:
+        rel = path.resolve().relative_to(STATE_ROOT.resolve())
+    except ValueError:
+        return str(path)
+    return str(rel)
+
+
+# ---------------------------------------------------------------------------
 # User-level (global) — ~/.geode/
 # ---------------------------------------------------------------------------
 

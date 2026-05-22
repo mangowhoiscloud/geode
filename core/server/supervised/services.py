@@ -15,6 +15,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -235,7 +236,7 @@ class SharedServices:
         )
 
     def _build_agent_registry(self) -> Any:
-        """Build AgentRegistry with defaults + .claude/agents/*.md.
+        """Build AgentRegistry with defaults + .claude/agents/ + plugins/*/agents/.
 
         Defaults (research_assistant, data_analyst, web_researcher) load
         first; then ``.claude/agents/`` files are loaded per-file so a
@@ -251,20 +252,35 @@ class SharedServices:
         was launched from a directory without ``.claude/agents/`` (e.g.
         ``$HOME``), which made the entire S2-wire dispatch a no-op in
         common operator deployments.
+
+        CSP-9 (2026-05-22) — extend the search to plugin-shipped agent
+        definitions at ``plugins/*/agents/*.md``. Operator overrides at
+        ``.claude/agents/`` still take precedence (same-basename dedup,
+        first-wins) so a plugin's ``critic.md`` can be replaced by
+        dropping a tweaked ``critic.md`` into ``.claude/agents/``. This
+        keeps seed-generation prompts (and any future plugin's agent
+        prompts) bundled with the plugin package rather than scattered
+        under the project-wide override directory.
         """
         from core.paths import get_project_root
         from core.skills.agents import AgentRegistry, SubagentLoader
 
         registry = AgentRegistry()
         registry.load_defaults()
-        agents_dir = get_project_root() / ".claude" / "agents"
-        loader = SubagentLoader(agents_dir=agents_dir)
+        project_root = get_project_root()
+        agent_search_dirs: list[Path] = [project_root / ".claude" / "agents"]
+        plugins_root = project_root / "plugins"
+        if plugins_root.exists():
+            for plugin_agents in sorted(plugins_root.glob("*/agents")):
+                if plugin_agents.is_dir():
+                    agent_search_dirs.append(plugin_agents)
+        loader = SubagentLoader(agents_dirs=agent_search_dirs)
         discovered = loader.discover()
         if not discovered:
             log.info(
-                "AgentRegistry: no .claude/agents/*.md found at %s; "
+                "AgentRegistry: no *.md found across %s; "
                 "only the 3 built-in defaults are registered",
-                agents_dir,
+                [str(d) for d in agent_search_dirs],
             )
         loaded = 0
         for path in discovered:
@@ -285,9 +301,10 @@ class SharedServices:
                     path,
                 )
         log.info(
-            "AgentRegistry: loaded %d agents (3 defaults + %d from .claude/agents/)",
+            "AgentRegistry: loaded %d agents (3 defaults + %d from %d dirs)",
             len(registry),
             loaded,
+            len(agent_search_dirs),
         )
         return registry
 

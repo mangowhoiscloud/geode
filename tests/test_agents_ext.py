@@ -166,4 +166,44 @@ class TestSubagentLoader:
 
     def test_default_agents_dir(self):
         loader = SubagentLoader()
+        # CSP-9 — primary dir is still .claude/agents (operator override
+        # precedence). Plugin-shipped agent dirs follow.
         assert loader.agents_dir == Path(".claude/agents")
+        assert loader.agents_dirs[0] == Path(".claude/agents")
+
+    def test_default_includes_plugin_agent_dirs(self, tmp_path: Path, monkeypatch):
+        """Default discovery should pick up plugins/*/agents/*.md."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".claude" / "agents").mkdir(parents=True)
+        (tmp_path / "plugins" / "alpha" / "agents").mkdir(parents=True)
+        (tmp_path / "plugins" / "beta" / "agents").mkdir(parents=True)
+        loader = SubagentLoader()
+        dirs = loader.agents_dirs
+        # First entry is the operator override dir.
+        assert dirs[0] == Path(".claude/agents")
+        # Plugin dirs are scanned in lexical order after it.
+        assert Path("plugins/alpha/agents") in dirs
+        assert Path("plugins/beta/agents") in dirs
+        assert dirs.index(Path("plugins/alpha/agents")) < dirs.index(Path("plugins/beta/agents"))
+
+    def test_discover_dedups_by_filename_first_wins(self, tmp_path: Path):
+        """Same-basename file in two dirs — first dir wins (operator override)."""
+        override = tmp_path / "override"
+        plugin = tmp_path / "plugin"
+        override.mkdir()
+        plugin.mkdir()
+        body = "---\nname: agent_x\nrole: R\n---\nfrom {origin}"
+        (override / "shared.md").write_text(body.format(origin="override"))
+        (plugin / "shared.md").write_text(body.format(origin="plugin"))
+        (plugin / "extra.md").write_text(body.format(origin="extra"))
+
+        loader = SubagentLoader(agents_dirs=[override, plugin])
+        discovered = loader.discover()
+        # Two unique files: shared (from override) + extra (from plugin).
+        assert [p.name for p in discovered] == ["shared.md", "extra.md"]
+        assert discovered[0].parent == override
+        assert discovered[1].parent == plugin
+
+    def test_agents_dir_and_agents_dirs_are_exclusive(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="not both"):
+            SubagentLoader(agents_dir=tmp_path, agents_dirs=[tmp_path])

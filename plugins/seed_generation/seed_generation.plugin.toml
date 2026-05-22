@@ -19,6 +19,12 @@
 #
 # Defaults reflect ADR-003's settled-decision table (Plan §13). Override
 # via ~/.geode/seed-generation.toml is wired in S5.5 (picker).
+#
+# Supported model lineup (CSP-10, 2026-05-22) — only models currently exposed
+# by Claude Code CLI (anthropic.claude-cli) or Codex CLI (openai.openai-codex)
+# may appear in allowed_models. Anthropic surface: claude-opus-4-7 /
+# claude-sonnet-4-6 / claude-haiku-4-5. Codex surface: gpt-5.5 / gpt-5.4 /
+# gpt-5.4-mini / gpt-5.3-codex (see core/llm/model_pricing.toml).
 
 [seed_generation]
 enabled_roles = [
@@ -39,8 +45,9 @@ allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
+    "gpt-5.4",
 ]
-role_contract = ".claude/agents/seed_generator.md"
+role_contract = "plugins/seed_generation/agents/generator.md"
 
 [seed_generation.role.critic]
 default_model = "claude-sonnet-4-6"
@@ -48,27 +55,33 @@ allowed_models = [
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
     "gpt-5.5",
+    "gpt-5.4-mini",
 ]
-role_contract = ".claude/agents/seed_critic.md"
+role_contract = "plugins/seed_generation/agents/critic.md"
 
 [seed_generation.role.proximity]
-# Embedding-based — not LLM completion. ``kind="embedding"`` is the
-# explicit dispatch tag so the S4 wiring routes through the
-# ``text_embed`` tool, NOT Petri's [petri.adapter.*] table. Without
-# this discriminator downstream code would have to guess the role's
-# kind from the model-name string.
-default_model = "text-embedding-3-small"
-allowed_models = ["text-embedding-3-small"]
-role_contract = ".claude/agents/seed_proximity.md"
-kind = "embedding"
+# CSP-8 (2026-05-22) — Proximity reverted to LLM-clustering pattern
+# (paper §3). Pre-CSP-8 was an embedding call to text-embedding-3-small;
+# now an LLM completion call like every other role. CSP-10 dropped the
+# ``kind`` field from the schema (every role is completion now).
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "gpt-5.5",
+    "gpt-5.4-mini",
+]
+role_contract = "plugins/seed_generation/agents/proximity.md"
 
 [seed_generation.role.pilot]
+# Cheap-fast slot — runs inside the Petri inner-loop on every candidate.
 default_model = "claude-haiku-4-5"
 allowed_models = [
     "claude-haiku-4-5",
     "gpt-5.4-mini",
+    "gpt-5.3-codex",
 ]
-role_contract = ".claude/agents/seed_pilot.md"
+role_contract = "plugins/seed_generation/agents/pilot.md"
 
 [seed_generation.role.ranker]
 # 3-judge panel orchestrator. Its own default_model is a placeholder —
@@ -77,24 +90,27 @@ default_model = "claude-sonnet-4-6"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
+    "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_ranker.md"
+role_contract = "plugins/seed_generation/agents/ranker.md"
 
 [seed_generation.role.evolver]
 default_model = "claude-sonnet-4-6"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
+    "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_evolver.md"
+role_contract = "plugins/seed_generation/agents/evolver.md"
 
 [seed_generation.role.meta_reviewer]
 default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
+    "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_meta_reviewer.md"
+role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
 
 # ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
 #

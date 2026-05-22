@@ -193,22 +193,28 @@ def _settings_model() -> str:
 def _resolve_seed_select() -> str:
     """Return the seed-select argv value, honoring ``AUTORESEARCH_SEED_SELECT``.
 
-    Precedence (Codex CLI pattern, post-PR-G1 4-tier):
+    Precedence (Codex CLI pattern, CSP-7 4-tier):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``~/.geode/self-improving-loop/latest_seed_pool`` symlink — closed-loop
-       fallback stamped by seed-generation's ``_persist_survivors``. Lets
-       autoresearch auto-pick the freshest survivor pool without a manual
-       env export. Skipped when the symlink is missing or its target is
-       gone (e.g. clean install with no prior seed-generation run).
+    2. ``state/self-improving-loop/latest_pointer.json`` — CSP-7
+       closed-loop fallback (was: pre-CSP-7
+       ``~/.geode/self-improving-loop/latest_seed_pool`` symlink).
+       Lets autoresearch auto-pick the freshest survivor pool without
+       a manual env export. Skipped when the pointer file is missing
+       (e.g. clean clone with no prior seed-generation run) or has no
+       ``seed_pool`` key.
     3. ``[self_improving_loop.autoresearch] seed_select`` from ``config.toml``.
     4. :data:`SEED_SELECT` module constant (final fallback).
     """
     override = os.environ.get("AUTORESEARCH_SEED_SELECT", "").strip()
     if override:
         return override
-    latest = SELF_IMPROVING_LOOP_HOME / "latest_seed_pool"
-    if latest.is_symlink() and latest.exists():
-        return str(latest.resolve())
+    from core.paths import read_latest_pointer
+
+    pointer = read_latest_pointer()
+    if pointer is not None:
+        seed_pool = pointer.get("seed_pool")
+        if isinstance(seed_pool, Path) and seed_pool.exists():
+            return str(seed_pool)
     return str(_get_autoresearch_config().seed_select)
 
 

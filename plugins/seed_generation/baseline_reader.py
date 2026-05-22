@@ -473,14 +473,29 @@ class MetaReviewSnapshot:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
-def _default_latest_meta_review_path() -> Path:
-    """``~/.geode/self-improving-loop/latest_meta_review.json`` symlink.
+def _default_latest_meta_review_path() -> Path | None:
+    """Resolve the most-recent run's ``meta_review.json`` via the pointer.
 
-    The orchestrator's ``_persist_meta_review`` stamps this on every
-    run; the reader treats a missing / dead symlink as "bootstrap"
-    (no priors).
+    CSP-7 (2026-05-22) — replaces the pre-CSP-7 symlink at
+    ``~/.geode/self-improving-loop/latest_meta_review.json`` with a
+    JSON pointer (:data:`core.paths.STATE_LATEST_POINTER_PATH`) the
+    orchestrator's ``_persist_meta_review`` stamps. Returns ``None``
+    when:
+
+    - The pointer file does not exist (bootstrap).
+    - The pointer has no ``meta_review`` key (e.g. the prior run had
+      empty ``state.meta_review`` and ``_persist_meta_review`` was
+      skipped — seed-pool-only handoff).
     """
-    return Path.home() / ".geode" / "self-improving-loop" / "latest_meta_review.json"
+    from core.paths import read_latest_pointer
+
+    pointer = read_latest_pointer()
+    if pointer is None:
+        return None
+    meta_review = pointer.get("meta_review")
+    if isinstance(meta_review, Path):
+        return meta_review
+    return None
 
 
 def load_latest_meta_review(path: Path | str | None = None) -> MetaReviewSnapshot | None:
@@ -497,7 +512,7 @@ def load_latest_meta_review(path: Path | str | None = None) -> MetaReviewSnapsho
     the reader at a fixture.
     """
     review_path = Path(path) if path is not None else _default_latest_meta_review_path()
-    if not review_path.exists():
+    if review_path is None or not review_path.exists():
         return None
     try:
         meta_review_payload = json.loads(review_path.read_text(encoding="utf-8"))

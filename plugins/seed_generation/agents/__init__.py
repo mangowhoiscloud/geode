@@ -3,7 +3,7 @@
 7 role (paper 6 + GEODE Pilot):
 - generator     (S2, ✓)
 - critic        (S3, ✓) — Reflection
-- proximity     (S4, ✓) — 3-track dedup (embedding + lexical + role)
+- proximity     (S4, ✓) — paper §3 LLM-clustering (CSP-8 revert)
 - pilot         (S5, ✓) — GEODE addition (scientist-in-the-loop slot)
 - ranker        (S6, ✓) — Elo tournament + 3-judge panel
 - evolver       (S7, ✓) — Reflection-driven section rewrite

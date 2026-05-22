@@ -231,7 +231,7 @@ def search_seed_pool(
             # CSP-2 fix-up (Codex LOW) — skip docs / README files that
             # happen to live inside a seeds_* directory. A real Petri
             # seed must declare ``target_dim`` or ``target_dims`` (per
-            # ``.claude/agents/seed_generator.md`` contract) in its
+            # ``plugins/seed_generation/agents/generator.md`` contract) in its
             # YAML frontmatter; anything missing both fields is treated
             # as a co-located doc and excluded from the corpus.
             if not _looks_like_seed(text):

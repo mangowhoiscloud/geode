@@ -33,14 +33,12 @@ def _good_picker() -> PickerResult:
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
-            model="text-embedding-3-small",
-            provider="openai",
+            model="claude-sonnet-4-6",
+            provider="anthropic",
             source="api_key",
-            kind="embedding",
         ),
     }
     voters = [

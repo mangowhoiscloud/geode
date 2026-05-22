@@ -133,11 +133,6 @@ def check_auth(picker_result: PickerResult) -> list[PreFlightIssue]:
             )
 
     for role, binding in picker_result.bindings.items():
-        # Embedding kind only needs the openai api_key; the OAuth
-        # subscription doesn't expose embeddings.
-        if binding.kind == "embedding":
-            _check("openai", "api_key", f"role {role!r}")
-            continue
         _check(binding.provider, binding.source, f"role {role!r}")
     for voter in picker_result.voters:
         _check(voter.provider, voter.source, f"voter {voter.provider}.{voter.source}")

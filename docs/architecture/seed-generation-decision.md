@@ -87,7 +87,7 @@ Parent `AgenticLoop` 가 central orchestrator. `depth=1` 한계 내에서 phase 
 ## Implementation pointers
 
 - 디렉토리 layout: `plugins/seed_generation/{manifest.py, cli.py, orchestrator.py, agents/, fitness.py, tournament.py, cost_preview.py, picker.py, pre_flight.py}`
-- AgentDefinition: `.claude/agents/seed_{generator,critic,proximity,pilot,ranker,evolver,meta_reviewer}.md` YAML 7 file
+- AgentDefinition: `plugins/seed_generation/agents/{generator,critic,proximity,pilot,ranker,evolver,meta_reviewer,supervisor}.md` YAML 8 file (CSP-9, 2026-05-22)
 - Pool storage: `plugins/petri_audit/seeds_gen<N>/` (frozen, monotonic gen-suffix). `seeds_safe10` 보존.
 - Runtime artifacts: `~/.geode/seed-generation/<run_id>/` (gitignored).
 - Audit trail: `docs/audits/seed-generation-runs/<YYYY-MM-DD>/` (committed).

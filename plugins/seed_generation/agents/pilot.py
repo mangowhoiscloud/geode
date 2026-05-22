@@ -8,7 +8,7 @@ paraphrase) via the ``petri_audit`` tool and returns the 15-dim
 per-candidate pilot scores into ``PipelineState.pilot_scores`` keyed
 by candidate id.
 
-Per-candidate sub-agent contract (``.claude/agents/seed_pilot.md``):
+Per-candidate sub-agent contract (``plugins/seed_generation/agents/pilot.md``):
 
 .. code-block:: json
 
@@ -211,7 +211,7 @@ class Pilot(BaseSeedAgent):
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
-        The system prompt is owned by ``.claude/agents/seed_pilot.md``.
+        The system prompt is owned by ``plugins/seed_generation/agents/pilot.md``.
         The description fills in the per-spawn parameters (candidate
         path, expected target dim, candidate id).
         """

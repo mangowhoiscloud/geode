@@ -154,8 +154,10 @@ def test_persist_survivors_writes_survivors_json(tmp_path: Path) -> None:
     assert rows[0]["pilot"] == {"dim_means": {"d": 0.5}}
 
 
-def test_persist_survivors_creates_symlink_dir(tmp_path: Path) -> None:
-    """``survivors/`` dir holds symlinks to each survivor candidate .md."""
+def test_persist_survivors_creates_file_copy_dir(tmp_path: Path) -> None:
+    """CSP-7: ``survivors/`` dir holds FILE COPIES (was symlinks) of each
+    survivor candidate .md so the directory is self-contained on a
+    cross-machine clone."""
     state = _populated_state(tmp_path)
     cand_path = _seed_candidate_md(tmp_path, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
@@ -163,9 +165,10 @@ def test_persist_survivors_creates_symlink_dir(tmp_path: Path) -> None:
     pipeline.run()
     survivors_dir = tmp_path / "survivors"
     assert survivors_dir.is_dir()
-    link = survivors_dir / "c-00.md"
-    assert link.is_symlink()
-    assert link.resolve() == cand_path.resolve()
+    copy = survivors_dir / "c-00.md"
+    assert copy.is_file() and not copy.is_symlink()
+    # Content equality — copy carries the same bytes as the source candidate.
+    assert copy.read_bytes() == cand_path.read_bytes()
 
 
 def test_persist_survivors_pool_path_out_targets_directory(tmp_path: Path) -> None:
@@ -232,79 +235,101 @@ def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# G1 — latest_seed_pool symlink (closed-loop wiring sprint, 2026-05-20)
+# CSP-7 — latest_pointer.json (replaces pre-CSP-7 symlink pair, 2026-05-22)
 # ---------------------------------------------------------------------------
 
 
-def test_persist_survivors_updates_latest_seed_pool_symlink(
+def _patch_state_root(monkeypatch: Any, root: Path) -> Path:
+    """Redirect ``core.paths`` STATE_* constants at ``root`` for the test."""
+    import core.paths as cp
+
+    monkeypatch.setattr(cp, "STATE_ROOT", root)
+    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", root / "self-improving-loop")
+    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", root / "seed-generation")
+    monkeypatch.setattr(
+        cp,
+        "STATE_LATEST_POINTER_PATH",
+        root / "self-improving-loop" / "latest_pointer.json",
+    )
+    return root
+
+
+def test_persist_survivors_writes_latest_pointer(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """``~/.geode/self-improving-loop/latest_seed_pool`` is stamped to this run."""
-    run_dir = tmp_path
-    fake_home = run_dir / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    """CSP-7: ``state/self-improving-loop/latest_pointer.json`` carries
+    the seed_pool path (was: latest_seed_pool symlink)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     state = _populated_state(run_dir)
     cand_path = _seed_candidate_md(run_dir, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
-    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
-    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
-    assert latest.is_symlink()
-    assert latest.resolve() == (run_dir / "survivors").resolve()
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    assert pointer.is_file()
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["run_id"] == state.run_id
+    assert payload["gen_tag"] == state.gen_tag
+    # seed_pool stored as absolute (run_dir outside STATE_ROOT in this fixture).
+    assert payload["seed_pool"].endswith("/survivors")
+    assert Path(payload["seed_pool"]).resolve() == (run_dir / "survivors").resolve()
 
 
-def test_persist_survivors_latest_symlink_moves_forward(
+def test_persist_survivors_pointer_moves_forward(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """A second run replaces the symlink target rather than failing on EEXIST."""
-    run_root = tmp_path
-    fake_home = run_root / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    """A second run rewrites the pointer to the new survivors dir (was:
+    symlink retarget)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
 
-    run_a = run_root / "runA"
+    run_a = tmp_path / "runA"
     run_a.mkdir()
     state_a = _populated_state(run_a)
     cand_a = _seed_candidate_md(run_a, "c-00")
     state_a.candidates = [{"id": "c-00", "path": str(cand_a), "target_dim": "broken_tool_use"}]
     Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
 
-    run_b = run_root / "runB"
+    run_b = tmp_path / "runB"
     run_b.mkdir()
     state_b = _populated_state(run_b)
     cand_b = _seed_candidate_md(run_b, "c-00")
     state_b.candidates = [{"id": "c-00", "path": str(cand_b), "target_dim": "broken_tool_use"}]
     Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
 
-    latest = fake_home / ".geode" / "self-improving-loop" / "latest_seed_pool"
-    assert latest.is_symlink()
-    assert latest.resolve() == (run_b / "survivors").resolve()
+    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    assert Path(payload["seed_pool"]).resolve() == (run_b / "survivors").resolve()
 
 
-def test_persist_survivors_latest_symlink_swallows_oserror(
+def test_persist_survivors_pointer_swallows_oserror(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """Symlink-update failure must not break the run (handoff is best-effort)."""
-    run_dir = tmp_path
-    fake_home = run_dir / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
-    original_symlink = Path.symlink_to
+    """Pointer-write failure must not break the run (best-effort handoff)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
+    original_write = Path.write_text
 
-    def _selective_symlink(self: Path, target: Any, *a: Any, **kw: Any) -> None:
-        if self.name == "latest_seed_pool":
-            raise OSError("simulated symlink failure")
-        return original_symlink(self, target, *a, **kw)
+    def _selective_write(self: Path, *a: Any, **kw: Any) -> int:
+        if self.name == "latest_pointer.json":
+            raise OSError("simulated pointer-write failure")
+        return original_write(self, *a, **kw)
 
-    monkeypatch.setattr(Path, "symlink_to", _selective_symlink)
+    monkeypatch.setattr(Path, "write_text", _selective_write)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     state = _populated_state(run_dir)
     cand_path = _seed_candidate_md(run_dir, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
-    pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()  # must not raise
-    # state.pool_path_out is still stamped — canonical handoff remains intact.
+    Pipeline(state=state, registry=_registry_with_noop_agents()).run()  # must not raise
+    # Canonical handoff (state.pool_path_out + survivors_dir copies) stays intact.
     assert state.pool_path_out == run_dir / "survivors"
+    assert (run_dir / "survivors" / "c-00.md").is_file()
+    # Pointer file was not created because every write raised.
+    assert not (state_root / "self-improving-loop" / "latest_pointer.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -316,13 +341,13 @@ def test_pipeline_appends_session_index(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """Pipeline.run() appends one row to ``~/.geode/self-improving-loop/sessions.jsonl``."""
-    fake_home = tmp_path / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    """Pipeline.run() appends one row to ``state/self-improving-loop/sessions.jsonl``
+    (CSP-7: was ``~/.geode/self-improving-loop/sessions.jsonl``)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
     pipeline.run()
-    index = fake_home / ".geode" / "self-improving-loop" / "sessions.jsonl"
+    index = state_root / "self-improving-loop" / "sessions.jsonl"
     assert index.is_file()
     lines = index.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -341,8 +366,7 @@ def test_pipeline_session_index_swallows_oserror(
     monkeypatch: Any,
 ) -> None:
     """Index-append OSError must not break the run."""
-    fake_home = tmp_path / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    _patch_state_root(monkeypatch, tmp_path / "state")
     original_mkdir = Path.mkdir
 
     def _selective_mkdir(self: Path, *a: Any, **kw: Any) -> None:
@@ -368,9 +392,9 @@ def test_persist_meta_review_writes_standalone_json(
     monkeypatch: Any,
 ) -> None:
     """Pipeline.run() emits ``<run_dir>/meta_review.json`` when state.meta_review is set."""
-    run_dir = tmp_path
-    fake_home = run_dir / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    _patch_state_root(monkeypatch, tmp_path / "state")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     state = _populated_state(run_dir)
     Pipeline(state=state, registry=_registry_with_noop_agents()).run()
     meta_review_path = run_dir / "meta_review.json"
@@ -384,50 +408,51 @@ def test_persist_meta_review_skipped_when_empty(
     monkeypatch: Any,
 ) -> None:
     """No meta_review → no standalone file (bootstrap / failed meta phase)."""
-    run_dir = tmp_path
-    fake_home = run_dir / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    _patch_state_root(monkeypatch, tmp_path / "state")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     state = _populated_state(run_dir)
     state.meta_review = {}
     Pipeline(state=state, registry=_registry_with_noop_agents()).run()
     assert not (run_dir / "meta_review.json").exists()
 
 
-def test_persist_meta_review_updates_latest_symlink(
+def test_persist_meta_review_writes_pointer(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """latest_meta_review.json symlink points at this run's meta_review.json."""
-    run_dir = tmp_path
-    fake_home = run_dir / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    """CSP-7: latest_pointer.json's ``meta_review`` key points at this
+    run's meta_review.json (was: latest_meta_review.json symlink)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
     state = _populated_state(run_dir)
     Pipeline(state=state, registry=_registry_with_noop_agents()).run()
-    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
-    assert latest.is_symlink()
-    assert latest.resolve() == (run_dir / "meta_review.json").resolve()
+    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    assert pointer.is_file()
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    assert "meta_review" in payload
+    assert Path(payload["meta_review"]).resolve() == (run_dir / "meta_review.json").resolve()
 
 
-def test_persist_meta_review_symlink_moves_forward(
+def test_persist_meta_review_pointer_moves_forward(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """A second run replaces the latest_meta_review symlink target."""
-    run_root = tmp_path
-    fake_home = run_root / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    """A second run rewrites the pointer's meta_review key (was symlink retarget)."""
+    state_root = _patch_state_root(monkeypatch, tmp_path / "state")
 
-    run_a = run_root / "runA"
+    run_a = tmp_path / "runA"
     run_a.mkdir()
     state_a = _populated_state(run_a)
     Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
 
-    run_b = run_root / "runB"
+    run_b = tmp_path / "runB"
     run_b.mkdir()
     state_b = _populated_state(run_b)
     state_b.meta_review = {"coverage": {"d2": 1}, "next_gen_priors": []}
     Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
 
-    latest = fake_home / ".geode" / "self-improving-loop" / "latest_meta_review.json"
-    assert latest.is_symlink()
-    assert latest.resolve() == (run_b / "meta_review.json").resolve()
+    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    payload = json.loads(pointer.read_text(encoding="utf-8"))
+    assert Path(payload["meta_review"]).resolve() == (run_b / "meta_review.json").resolve()

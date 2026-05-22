@@ -37,7 +37,7 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -58,25 +58,17 @@ class SeedRoleSpec(BaseModel):
     """Per-role default + allowed model set + contract path.
 
     Mirrors :class:`plugins.petri_audit.manifest.RoleSpec` in field shape
-    (default + allowed + contract) but adds the ``kind`` discriminator
-    because the seed-generation 7-role topology includes one role
-    (``proximity``) that runs an embedding tool rather than an LLM
-    completion. The ``kind`` field is the explicit dispatch tag so
-    downstream code (S4 ``text_embed`` tool wiring, S5.5 picker) can
-    route ``embedding`` roles through the embedding adapter instead of
-    the Petri completion adapter table.
-
-    Field rationale:
-    - ``completion`` (default) — LLM chat completion via Petri adapters.
-    - ``embedding`` — vector embedding model (e.g. ``text-embedding-3-small``);
-      bound at runtime to the ``text_embed`` tool, NOT Petri's
-      [petri.adapter.<provider>.<source>] table.
+    (default + allowed + contract). Every shipped role is an LLM
+    completion call dispatched through :class:`SubAgentManager.delegate`
+    — there is no longer any embedding-driven role surface (CSP-10
+    removed the pre-CSP-8 ``kind`` discriminator after CSP-8 reverted
+    the only embedding consumer, Proximity, to the paper's
+    LLM-clustering path).
     """
 
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
-    kind: Literal["completion", "embedding"] = "completion"
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:
