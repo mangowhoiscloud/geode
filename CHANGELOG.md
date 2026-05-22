@@ -47,6 +47,73 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-2 of petri-schema-v2 cascade — ``baseline.json`` schema_version=2
+  + ``raw`` / ``axes`` namespace split**. Second step of the 5-PR
+  cascade documented in ``docs/plans/2026-05-23-petri-schema-v2.md``.
+
+  ``autoresearch/state/baseline.json`` now writes in a namespace-split
+  layout::
+
+      {"schema_version": 2,
+       "session_id": "<run id>", "commit": "<git sha>", "ts_utc": "...",
+       "raw": {
+         "dim_means": {dim: float},
+         "dim_stderr": {dim: float},
+         "sample_count": {dim: int},
+         "measurement_modality": {dim: str},
+         "eval_archive": "<path>" | null,
+         "rubric_version": "v3-22dim-PR0"
+       },
+       "axes": {
+         "ux_means":     {field: float} | null,
+         "admire_means": {field: float} | null,
+         "bench_means":  {field: float} | null
+       }}
+
+  Five readers (``_load_baseline`` in ``autoresearch/train.py``,
+  ``load_baseline`` in ``plugins/seed_generation/baseline_reader.py``,
+  ``_load_baseline_event`` in ``core/cli/outer_bundle.py``,
+  ``_cmd_status`` baseline block in
+  ``core/cli/commands/self_improving.py``, and ``find_worst_regressions``
+  in ``core/self_improving_loop/rubric_excerpts.py``) branch on
+  ``schema_version`` —
+  v1 legacy flat ``{dim_means, dim_stderr, [ux_means], [admire_means],
+  [bench_means]}`` files in the wild still load. The next promotion
+  overwrites them in v2 shape, no manual migration step.
+
+  ``run_audit`` return tuple extended from 4 to 6 elements: adds
+  ``sample_count`` + ``measurement_modality`` from PR-1's
+  ``extract_dim_aggregates`` emit. ``main()`` routes both into both
+  ``_write_baseline`` call sites (``--promote`` manual override and
+  the ``_should_promote`` auto branch) via a shared
+  ``_baseline_provenance`` dict.
+
+  New module-level constants in ``autoresearch/train.py``:
+  ``PETRI_RUBRIC_VERSION = "v3-22dim-PR0"`` (matches the YAML rubric
+  PR 0 extension) and ``LATEST_EVAL_SYMLINK`` (resolves
+  ``~/.geode/petri/logs/latest.eval``). New helper
+  ``_resolve_eval_archive_path`` returns the symlink target or
+  ``None`` — best-effort, never raises.
+
+  The remaining ``normalized`` / ``fitness`` / ``audit`` /
+  ``promotion`` namespaces from the SOT plan land in PR-3/4/5.
+
+  Tests: 8 new tests cover v2 write (namespace shape, axes null
+  semantics), v2 read, v1 legacy compat, round-trip, symlink
+  resolution, ``find_worst_regressions`` v2 ``raw.dim_means`` source,
+  and ``_cmd_status`` v2 ``ts_utc`` + ``session_id`` rendering. 3
+  existing ``test_s3_joint_ratchet.py`` tests updated to assert the
+  v2 layout. 498 tests pass across the impacted surface (autoresearch
+  + ratchet + dim_extractor + rubric_excerpts + self_improving_status
+  + seed_generation). Codex MCP reviewed twice:
+  - ``019e51e3-f5e5-74a1-a9cb-ce4d546a29f1`` (1st pass) — 2 HIGH
+    (seed-gen reader + ratchet test) + 2 MEDIUM addressed.
+  - ``019e51e9-3501-7f83-b7b7-583634fa957f`` (2nd pass) — 2 MEDIUM
+    (status command + rubric_excerpts readers) addressed.
+  No remaining blocking findings.
+
 ### Added
 
 - **PR-1 of petri-schema-v2 cascade — ``extract_dim_aggregates``

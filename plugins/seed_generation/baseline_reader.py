@@ -162,10 +162,29 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
         return None
     if not isinstance(baseline_payload, dict):
         return None
-    raw_means = baseline_payload.get("dim_means") or {}
+
+    # PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 splits the
+    # legacy flat layout into ``raw`` + ``axes`` namespaces. Detect the
+    # version and route the per-namespace reads accordingly. v1 (no
+    # ``schema_version`` key, top-level flat ``dim_*`` + axes) stays
+    # supported for pre-PR-2 baseline.json files in the wild.
+    if baseline_payload.get("schema_version") == 2:
+        raw_block = baseline_payload.get("raw") or {}
+        axes_block = baseline_payload.get("axes") or {}
+        raw_means = raw_block.get("dim_means") or {}
+        raw_stderr = raw_block.get("dim_stderr") or {}
+        ux_raw = axes_block.get("ux_means")
+        admire_raw = axes_block.get("admire_means")
+        bench_raw = axes_block.get("bench_means")
+    else:
+        raw_means = baseline_payload.get("dim_means") or {}
+        raw_stderr = baseline_payload.get("dim_stderr") or {}
+        ux_raw = baseline_payload.get("ux_means")
+        admire_raw = baseline_payload.get("admire_means")
+        bench_raw = baseline_payload.get("bench_means")
+
     if not raw_means:
         return None
-    raw_stderr = baseline_payload.get("dim_stderr") or {}
 
     # G3.fix2 (2026-05-20) — Codex caught a graceful-contract violation:
     # ``float(v)`` raised ``ValueError`` on non-numeric values, breaking
@@ -189,9 +208,9 @@ def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
     # S3 (2026-05-21) — the 3 additional axes are graceful per-axis
     # (each defaults to ``{}`` when absent / malformed) so a single
     # broken axis can't invalidate the dim baseline.
-    ux_means = _coerce_dim_dict(baseline_payload.get("ux_means"))
-    admire_means = _coerce_dim_dict(baseline_payload.get("admire_means"))
-    bench_means = _coerce_dim_dict(baseline_payload.get("bench_means"))
+    ux_means = _coerce_dim_dict(ux_raw)
+    admire_means = _coerce_dim_dict(admire_raw)
+    bench_means = _coerce_dim_dict(bench_raw)
     return BaselineSnapshot(
         dim_means=dim_means,
         dim_stderr=dim_stderr,

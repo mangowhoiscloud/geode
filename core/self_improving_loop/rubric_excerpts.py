@@ -175,7 +175,18 @@ def find_worst_regressions(
     """
     if top_k <= 0:
         return []
-    dim_means = baseline.get("dim_means")
+    # PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 nests
+    # ``dim_means`` under ``raw.``. ``baseline_means`` is a separate
+    # input slot (caller-merged), so this branch only relocates
+    # ``dim_means``. NB: this function has been dormant in practice
+    # because ``baseline_means`` is never present in the live baseline
+    # file shape; the v2 branch is forward-prep so the slot wires
+    # correctly when a caller starts populating it.
+    if baseline.get("schema_version") == 2:
+        raw_block = baseline.get("raw") or {}
+        dim_means = raw_block.get("dim_means")
+    else:
+        dim_means = baseline.get("dim_means")
     baseline_means = baseline.get("baseline_means")
     if not isinstance(dim_means, dict) or not isinstance(baseline_means, dict):
         return []

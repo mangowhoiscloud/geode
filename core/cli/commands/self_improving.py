@@ -123,9 +123,18 @@ def _cmd_status() -> None:
     if baseline is None:
         console.print(f"    [muted]no baseline yet — {baseline_path} absent[/muted]")
     else:
+        # PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 nests
+        # the run metadata under top-level ``ts_utc`` + ``session_id``
+        # instead of the legacy ``timestamp`` / ``ts`` / ``promote_reason``
+        # fields. Fall through to legacy keys for v1 baselines still on
+        # disk; the next promotion overwrites them in v2 shape.
         fitness = baseline.get("fitness")
-        ts = baseline.get("timestamp") or baseline.get("ts") or "?"
-        reason = baseline.get("promote_reason") or baseline.get("reason") or "?"
+        if baseline.get("schema_version") == 2:
+            ts = baseline.get("ts_utc") or "?"
+            reason = baseline.get("session_id") or "?"
+        else:
+            ts = baseline.get("timestamp") or baseline.get("ts") or "?"
+            reason = baseline.get("promote_reason") or baseline.get("reason") or "?"
         fitness_str = f"{fitness:.4f}" if isinstance(fitness, int | float) else "?"
         console.print(f"    fitness  [bold]{fitness_str}[/bold]")
         console.print(f"    promoted [muted]{ts}[/muted]")
