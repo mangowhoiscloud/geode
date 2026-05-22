@@ -88,6 +88,26 @@ class PetriRoleConfig(BaseModel):
     parity with the legacy ``~/.geode/petri.toml`` semantics that
     ``read_role_override`` exposes (both fields optional, missing →
     manifest default).
+
+    **Precedence vs ``[self_improving_loop.autoresearch]``** — important
+    operator surface to understand because two sections can name the
+    same role from different angles. ``autoresearch/train.py`` calls
+    ``geode audit --target <X> --judge <Y>`` with the model ids from
+    ``[self_improving_loop.autoresearch].{target_model,judge_model}``.
+    Inside ``geode audit``, :func:`plugins.petri_audit.registry.get_binding`
+    resolves the role binding with this order::
+
+        1. argv (caller override) — wins outright for the ``model`` axis
+        2. ``[self_improving_loop.petri.<role>]`` (this class)
+        3. manifest default + credential_source cascade
+
+    So when the outer loop runs, ``[self_improving_loop.petri.target].model``
+    is **silently ignored** because the autoresearch argv already pinned
+    the model. ``source`` still applies through the cascade in step 2
+    (argv doesn't carry per-role source). The ``[petri.<role>]`` section
+    becomes load-bearing again when an operator invokes ``geode audit``
+    standalone without ``--target/--judge``. Keep the two sections in
+    sync to avoid the cross-model mismatch that looks like a bug.
     """
 
     model_config = ConfigDict(extra="forbid")

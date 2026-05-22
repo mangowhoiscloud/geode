@@ -89,6 +89,19 @@ def test_slash_parser_parses_short_and_long_flags() -> None:
     assert ns.yes is True
 
 
+def test_slash_parser_auditor_default_is_opus_flagship() -> None:
+    """When ``--auditor`` is omitted the slash parser must fall to
+    ``claude-opus-4-7`` (flagship). The auditor's transcript-shaping
+    ability bounds test SNR — a cost-optimised default (Sonnet 4.6)
+    silently degrades audit quality whenever an operator skips the
+    flag, even on the subscription path where the per-token price is
+    identical. Pinned so a future cost-optimisation pass can't revert
+    without breaking this test."""
+    parser = _build_slash_parser()
+    ns = parser.parse_args([])
+    assert ns.auditor == "claude-opus-4-7"
+
+
 def test_slash_parser_accepts_dim_set_override() -> None:
     """``--dim-set full`` opts back into inspect-petri's 36-dim default."""
     parser = _build_slash_parser()
