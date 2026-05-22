@@ -531,7 +531,19 @@ def register() -> None:
                 model_name=self.model_name,
             )
             prompt = serialise_messages_to_prompt(input)
-            stdout, stderr, returncode = await _run_claude_subprocess(argv, prompt, self._timeout_s)
+            # PR-LQ-Phase2 (2026-05-22) — share the
+            # claude-cli-subagent lane with the self-improving-loop
+            # mutator path so the host OAuth bucket sees at most
+            # ``DEFAULT_CLAUDE_CLI_LANE_MAX`` (=2) concurrent
+            # ``claude --print`` subprocesses. The lane runs the
+            # blocking semaphore wait in a worker thread so the
+            # event loop is not pinned while queued.
+            from core.orchestration.claude_cli_lane import acquire_claude_cli_lane_async
+
+            async with acquire_claude_cli_lane_async(key=f"petri.claude_cli.{self.model_name}"):
+                stdout, stderr, returncode = await _run_claude_subprocess(
+                    argv, prompt, self._timeout_s
+                )
             if returncode != 0:
                 raise ClaudeCliInvocationError(f"claude exited {returncode}: {stderr[:400]!r}")
             events = parse_stream_json_events(stdout)

@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **LaneQueue Phase 2 — ``claude-cli-subagent`` lane**. New module-
+  level :class:`~core.orchestration.lane_queue.Lane` at
+  ``core/orchestration/claude_cli_lane.py`` (same pattern as
+  ``core/llm/audit_lane.py``) caps the concurrent ``claude --print``
+  subprocess fan-out from BOTH spawn sites — the self-improving-loop
+  mutator runner
+  (:func:`core.self_improving_loop.cli_subprocess.invoke_claude_cli`)
+  and the Petri inspect_ai bridge
+  (:class:`plugins.petri_audit.claude_cli_provider.ClaudeCliAPI.generate`)
+  — at ``DEFAULT_CLAUDE_CLI_LANE_MAX=2``, one slot below the public
+  3-4 burst-limiter floor (anthropics/claude-code#53922) so the
+  operator's host Claude Code session has bucket headroom. Operators
+  tune via ``GEODE_CLAUDE_CLI_LANE_MAX`` (positive int; empty /
+  non-int / non-positive falls back to the default). Sync + async
+  acquire helpers (:func:`acquire_claude_cli_lane` /
+  :func:`acquire_claude_cli_lane_async`) share the SAME semaphore so
+  the cap composes across the two spawn paths. The lane is mirrored
+  in ``build_default_lanes`` for ``LaneQueue.status()`` dashboards.
+  Phase 3 (paperclip OAuth-usage polling) will plug into the same
+  acquire site to surface 5h-bucket telemetry before each slot grab.
+
 ### Changed
 
 - **LaneQueue Phase 1 — hierarchy invariant restored**. The
