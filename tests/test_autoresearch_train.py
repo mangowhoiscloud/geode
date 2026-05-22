@@ -434,7 +434,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    dim_means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
+    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
     assert dim_stderr == {}
@@ -464,7 +464,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
+    _means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
 
@@ -488,7 +488,7 @@ def test_real_mode_raises_when_summary_json_missing(
 
 
 def test_dry_run_emits_finite_fitness() -> None:
-    dim_means, dim_stderr, audit_seconds, _ = run_audit(dry_run=True)
+    dim_means, dim_stderr, audit_seconds, _, _sc, _mm = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)
     assert dim_stderr == {}
     assert audit_seconds == 0.0
@@ -932,6 +932,179 @@ def test_write_baseline_creates_parent_dirs(
     assert nested_baseline_path.is_file()
 
 
+# ---------------------------------------------------------------------------
+# PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 namespace layout
+# ---------------------------------------------------------------------------
+
+
+def test_write_baseline_emits_schema_v2_layout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_write_baseline`` must emit the schema_version=2 namespace shape:
+    top-level meta (``schema_version``, ``session_id``, ``commit``,
+    ``ts_utc``) + ``raw`` namespace (dim_means / dim_stderr /
+    sample_count / measurement_modality / eval_archive / rubric_version)
+    + ``axes`` namespace (ux/admire/bench).
+    """
+    state_dir = tmp_path
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    _write_baseline(
+        {"broken_tool_use": 3.4, "verbose_padding": 2.0},
+        {"broken_tool_use": 0.4, "verbose_padding": 0.0},
+        sample_count={"broken_tool_use": 5, "verbose_padding": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "verbose_padding": "token_count",
+        },
+        eval_archive="/var/folders/fake.eval",
+        session_id="sess-1",
+        commit="abc1234",
+        ux_means={"success_rate": 0.9},
+    )
+    payload = json.loads((state_dir / "baseline.json").read_text())
+    assert payload["schema_version"] == 2
+    assert payload["session_id"] == "sess-1"
+    assert payload["commit"] == "abc1234"
+    assert "ts_utc" in payload
+    raw = payload["raw"]
+    assert raw["dim_means"]["broken_tool_use"] == 3.4
+    assert raw["sample_count"]["broken_tool_use"] == 5
+    assert raw["measurement_modality"]["verbose_padding"] == "token_count"
+    assert raw["eval_archive"] == "/var/folders/fake.eval"
+    assert raw["rubric_version"] == auto_train.PETRI_RUBRIC_VERSION
+    axes = payload["axes"]
+    assert axes["ux_means"] == {"success_rate": 0.9}
+    # admire / bench are None when not supplied
+    assert axes["admire_means"] is None
+    assert axes["bench_means"] is None
+
+
+def test_load_baseline_reads_schema_v2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_load_baseline`` must consume the schema_version=2 layout
+    and return the same (dim_means, dim_stderr, ux, admire, bench)
+    tuple shape as for v1 — backwards compat for downstream callers
+    (``_should_promote`` etc.) that don't know about the namespace
+    split yet."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "sess-v2",
+                "commit": "deadbeef",
+                "ts_utc": "2026-05-23T00:00:00Z",
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.4},
+                    "dim_stderr": {"broken_tool_use": 0.4},
+                    "sample_count": {"broken_tool_use": 5},
+                    "measurement_modality": {"broken_tool_use": "judge_llm"},
+                    "eval_archive": "/var/folders/x.eval",
+                    "rubric_version": "v3-22dim-PR0",
+                },
+                "axes": {
+                    "ux_means": {"success_rate": 0.9},
+                    "admire_means": None,
+                    "bench_means": None,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    assert means == {"broken_tool_use": 3.4}
+    assert stderr == {"broken_tool_use": 0.4}
+    assert ux == {"success_rate": 0.9}
+    assert admire == {}
+    assert bench == {}
+
+
+def test_load_baseline_still_reads_v1_flat_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy v1 baseline.json (no ``schema_version`` key, top-level flat
+    ``{dim_means, dim_stderr, [ux_means]}``) must still load. Pre-PR-2
+    files in the wild stay valid until the next promotion overwrites
+    them in v2 shape."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 3.4},
+                "dim_stderr": {"broken_tool_use": 0.4},
+                "ux_means": {"success_rate": 0.9},
+            }
+        ),
+        encoding="utf-8",
+    )
+    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    assert means == {"broken_tool_use": 3.4}
+    assert stderr == {"broken_tool_use": 0.4}
+    assert ux == {"success_rate": 0.9}
+    assert admire == {}
+    assert bench == {}
+
+
+def test_write_then_load_round_trip_v2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Write a v2 baseline then load it back. The 5-tuple return signature
+    of ``_load_baseline`` must hold for downstream callers."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
+    dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
+    _write_baseline(
+        dim_means,
+        dim_stderr,
+        sample_count={"broken_tool_use": 5, "input_hallucination": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "input_hallucination": "judge_llm",
+        },
+        ux_means={"success_rate": 0.9},
+        session_id="sess-rt",
+        commit="cafef00d",
+    )
+    loaded_means, loaded_stderr, ux, admire, bench = auto_train._load_baseline()
+    assert loaded_means == dim_means
+    assert loaded_stderr == dim_stderr
+    assert ux == {"success_rate": 0.9}
+
+
+def test_resolve_eval_archive_path_returns_none_when_symlink_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_resolve_eval_archive_path`` is best-effort — returns ``None``
+    when ``~/.geode/petri/logs/latest.eval`` does not exist (dry-run /
+    fresh install). No exception."""
+    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", tmp_path / "nope.eval")
+    assert auto_train._resolve_eval_archive_path() is None
+
+
+def test_resolve_eval_archive_path_reads_symlink_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``latest.eval`` is a symlink, return its target path."""
+    target = tmp_path / "2026-05-22T05-56-42-00-00_audit_T6LMA3.eval"
+    target.write_bytes(b"placeholder")
+    symlink = tmp_path / "latest.eval"
+    symlink.symlink_to(target)
+    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", symlink)
+    resolved = auto_train._resolve_eval_archive_path()
+    assert resolved is not None
+    assert resolved.endswith(target.name)
+
+
 def test_should_promote_bootstraps_when_no_prior_baseline() -> None:
     """First valid run with no baseline.json → always promote."""
     ok, reason = _should_promote(
@@ -1008,6 +1181,187 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
     )
     assert ok is False
     assert "margin 0.05" in reason
+
+
+# ---------------------------------------------------------------------------
+# PR-3 of petri-schema-v2 (2026-05-23) — N=1 critical margin floor
+# ---------------------------------------------------------------------------
+
+
+def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
+    """PR-3 — when ``baseline_sample_count`` shows any critical dim at
+    N=1, the margin floor is widened from 0.05 to 0.20. The bug this
+    closes: N=1 stderr is forced to 0.0 by dim_extractor (ddof=1
+    variance undefined), so the legacy ``max(stderr, 0.05)`` collapses
+    to 0.05 — a tiny fitness Δ of 0.06 would promote against an
+    under-sampled baseline. With the new gate, the same Δ falls below
+    the 0.20 N=1 floor and stays rejected.
+    """
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)  # N=1 → stderr 0
+    # 0.06 improvement (well above 0.05 default floor) on every critical dim.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 1),
+    )
+    assert ok is False
+    assert "0.2000" in reason or "margin 0.20" in reason
+    assert "N=1 critical" in reason
+
+
+def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
+    """Mirror image — when all critical dims have N>=2 samples, the
+    legacy 0.05 floor stays in effect. Otherwise PR-3 would over-tighten
+    the gate for well-sampled baselines."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    # Same 0.06 gain that PR-3 N=1 path rejects above.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 5),
+    )
+    # 0.06 raw gain on every critical dim > 0.05 floor → promote.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_dormant_for_v1_baselines() -> None:
+    """v1 baselines emit no sample_count — the new N=1 gate must stay
+    dormant (legacy behaviour preserved). Without baseline_sample_count
+    kwarg the function falls through to the 0.05 floor."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        # kwarg omitted — no sample_count map.
+    )
+    # 0.06 gain on every critical dim passes legacy 0.05 floor.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_boundary_n2_exact_keeps_legacy_floor() -> None:
+    """Boundary pin — exact N=2 on all critical dims must keep the
+    legacy 0.05 floor. A future ``<= 2`` typo would silently widen the
+    gate at N=2 and break this assertion."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 2),
+    )
+    # N=2 is NOT N=1, so legacy 0.05 floor applies; 0.075 gain promotes.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_fires_when_single_critical_dim_n1() -> None:
+    """Pin — only ONE critical dim at N=1 (rest at N=5) is enough to
+    widen the gate. The detector uses ``any(...)``; a future ``all(...)``
+    rewrite would break this assertion. Mirrors the production case
+    where one slow-to-converge dim drags the whole margin wider."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
+    # Single critical dim at N=1.
+    first_critical = next(iter(CRITICAL_DIMS))
+    sample_count[first_critical] = 1
+    ok, reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=sample_count,
+    )
+    assert ok is False
+    assert "N=1 critical" in reason
+
+
+def test_should_promote_n1_gate_uses_critical_tier_only() -> None:
+    """The N=1 detector walks ``CRITICAL_DIMS`` only — an auxiliary
+    or info dim being N=1 must NOT widen the margin. The conservative
+    gate fires on safety-relevant axes; auxiliaries already have their
+    own squared-penalty path inside ``compute_fitness``."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # An auxiliary dim is N=1; all critical dims are N>=5.
+    sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
+    sample_count["input_hallucination"] = 1  # auxiliary
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=sample_count,
+    )
+    assert ok is True  # auxiliary N=1 does not trigger the wider floor
+
+
+def test_load_baseline_sample_count_reads_v2_raw_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_load_baseline_sample_count`` reads ``raw.sample_count`` from a
+    schema_version=2 baseline."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.4},
+                    "sample_count": {"broken_tool_use": 5},
+                },
+                "axes": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert auto_train._load_baseline_sample_count() == {"broken_tool_use": 5}
+
+
+def test_load_baseline_sample_count_returns_empty_for_v1_baseline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v1 legacy baseline files carry no sample_count — return empty
+    dict so the N=1 detector stays dormant for pre-PR-1 data."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 3.4},
+                "dim_stderr": {"broken_tool_use": 0.4},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert auto_train._load_baseline_sample_count() == {}
+
+
+def test_load_baseline_sample_count_returns_empty_on_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "absent.json")
+    assert auto_train._load_baseline_sample_count() == {}
 
 
 # ---------------------------------------------------------------------------
