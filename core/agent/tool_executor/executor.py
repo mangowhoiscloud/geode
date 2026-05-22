@@ -140,7 +140,10 @@ class ToolExecutor:
             return gate_result
 
         if tool_name == "delegate_task":
-            return await asyncio.to_thread(self._execute_delegate, tool_input)
+            # PR-Async-Phase-C step 3 (2026-05-22) — switched to native
+            # async delegate dispatch. The old asyncio.to_thread bridge
+            # over sync ``_execute_delegate`` is gone.
+            return await self._aexecute_delegate(tool_input)
 
         handler = self._handlers.get(tool_name)
         if handler is None:
@@ -209,7 +212,34 @@ class ToolExecutor:
         return classify_tool_exception(exc, tool_name=tool_name)
 
     def _execute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """Delegate task(s) to sub-agent. Supports single and batch."""
+        """[DEPRECATED] Sync sibling — see :meth:`_aexecute_delegate`.
+
+        Pre-Phase-C path that wrapped ``SubAgentManager.delegate`` (sync
+        polling). Retained so external callers that still invoke the
+        sync helper (none in core after step 3) keep working through
+        the migration window via ``run_process_coroutine``.
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target.
+        """
+        import warnings
+
+        warnings.warn(
+            "ToolExecutor._execute_delegate is deprecated; use _aexecute_delegate (async) instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from core.async_runtime import run_process_coroutine
+
+        return run_process_coroutine(self._aexecute_delegate(tool_input))
+
+    async def _aexecute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
+        """Delegate task(s) to sub-agent (async). Supports single and batch.
+
+        PR-Async-Phase-C step 3 (2026-05-22) — async-native sibling of
+        :meth:`_execute_delegate`. Uses ``await
+        SubAgentManager.adelegate(...)`` so the parent ToolExecutor's
+        event loop is not pinned during sub-agent fan-out.
+        """
         from core.agent.sub_agent import SubTask
 
         if not self._sub_agent_manager:
@@ -257,7 +287,7 @@ class ToolExecutor:
 
         # announce=False: delegate_task returns full results via tool_result,
         # so skip announce queue to avoid double context injection.
-        results = self._sub_agent_manager.delegate(
+        results = await self._sub_agent_manager.adelegate(
             sub_tasks, on_progress=_on_progress, announce=False
         )
 
