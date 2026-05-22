@@ -101,7 +101,7 @@ done
 
 ```bash
 # Trigger one audit on the new seeds_gen1 pool to seed baseline.json
-geode audit --seed-select plugins/petri_audit/seeds_gen1 --dim-set 5axes --live
+geode audit --seed-select plugins/petri_audit/seeds_gen1 --dim-set subset --live
 
 # The audit emits a summary JSON with dim_means + dim_stderr;
 # write the post-S9 schema (no axes wrapping) to:

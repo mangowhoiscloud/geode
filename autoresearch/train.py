@@ -5,9 +5,9 @@ Single-experiment runner for autoresearch — GEODE self-improving loop driver.
 the self-improving-loop agent modifies. Role split with petri (the
 measurement layer) is strict:
 
-* **petri** owns *what gets measured* — the 20-dim rubric
-  (``plugins/petri_audit/judge_dims/geode_5axes.yaml``) defines the
-  dim universe, ``geode audit`` runs the judge subprocess, and
+* **petri** owns *what gets measured* — the 22-dim rubric
+  (``plugins/petri_audit/judge_dims/geode_judge_subset.yaml``) defines
+  the dim universe, ``geode audit`` runs the judge subprocess, and
   ``core/audit/dim_extractor`` emits raw ``dim_means`` /
   ``dim_stderr`` dicts on the 1–10 concerning-behaviour scale.
 * **autoresearch (this file)** owns *how the measurement accrues into
@@ -35,8 +35,8 @@ Agent CAN modify:
 Agent CANNOT modify (the ``prepare.py`` ground truth):
   * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
     post-PR-0).
-  * AlphaEval rubric (``plugins/petri_audit/judge_dims/geode_5axes.yaml``).
-  * Fitness weight definitions (20-dim tiered per ADR-002 §1 +
+  * AlphaEval rubric (``plugins/petri_audit/judge_dims/geode_judge_subset.yaml``).
+  * Fitness weight definitions (22-dim tiered per ADR-002 §1 +
     PR 0 expansion).
 
 Usage::
@@ -129,7 +129,7 @@ SEED_SELECT = "plugins/petri_audit/seeds"
 :func:`_resolve_seed_select` so the seed-generation cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
 literal default so existing tests and self-improving-loop agents can grep it."""
-DIM_SET_NAME = "5axes"
+DIM_SET_NAME = "subset"
 MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 

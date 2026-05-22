@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/53%20agentic%20tools-MCP%20native-1e293b?style=flat-square" alt="53 Agentic Tools">
+  <img src="https://img.shields.io/badge/57%20agentic%20tools-MCP%20native-1e293b?style=flat-square" alt="57 Agentic Tools">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -18,7 +18,7 @@
 
 [English](README.md)
 
-# GEODE v0.99.30 — Long-running Autonomous Execution Harness
+# GEODE v0.99.32 — Long-running Autonomous Execution Harness
 
 탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
 
@@ -323,7 +323,7 @@ geode update                  # 소스 체크아웃
 | 기능 | 설명 |
 |------|------|
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 — 전부 같은 루프의 인스턴스 |
-| **53 agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
+| **57 agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
@@ -416,7 +416,7 @@ IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 *
 GEODE 는 두 개의 컨트롤 레이어가 있습니다:
 
 - **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스.
-- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 53 agentic tools + native ToolRegistry + 런타임 Skills + 58 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
+- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 57 agentic tools + native ToolRegistry + 런타임 Skills + 69 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + 서브에이전트 시스템 + 5-Tier 메모리.
 
@@ -435,7 +435,7 @@ graph LR
 | Layer | 핵심 | Entry points |
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
-| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58) | `core/orchestration/`, `core/hooks/` |
+| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69) | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | Agentic tools(53), native ToolRegistry(16), MCP Catalog (200 via Anthropic registry plus project-configured servers), 런타임 Skills, Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 

@@ -308,7 +308,7 @@ inspect_ai's native implementation covers them:
 | Change shape | Touch this layer | Examples |
 |--------------|------------------|----------|
 | New cost dimension on existing models | Layer 2 (UsageRecord) | Adding `reasoning_cache_read_tokens` |
-| New audit metadata (e.g. dim_set used) | Layer 3 (manifest entry) | Adding `dim_set: "5axes"` to the manifest line |
+| New audit metadata (e.g. dim_set used) | Layer 3 (manifest entry) | Adding `dim_set: "subset"` to the manifest line |
 | New per-call observability (latency, retries) | Layer 2 (UsageRecord) **and** TokenTracker | Latency requires the AgenticLoop to time the call |
 | New raw-archive content | inspect_ai upstream — not GEODE | Wait for inspect_ai release |
 | New search index (e.g. by score) | Layer 3 only | Add `judge_scores` to the manifest entry |

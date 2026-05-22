@@ -198,8 +198,9 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
 
     from core.agent.loop import _response
     from core.agent.loop import loop as loop_mod
-    from core.llm import token_tracker
     from plugins.petri_audit.targets import geode_target
+
+    from core.llm import token_tracker
 
     # Link 1: runner → AgenticLoop.arun
     runner_src = inspect.getsource(geode_target._default_geode_runner)

@@ -47,7 +47,7 @@ Codex 가 `plugins/petri_audit/claude_code_provider.py` (340 LOC, PR #1147 main 
 
 ### Verify C — Petri 19 → 21 dim expansion 의 spec 검증
 옵션 B (autoresearch generation 1) 의 dim expansion 의 정합성:
-- `geode_5axes.yaml` 의 19 dim 의 inspect_petri default-38 안에 모두 존재
+- `geode_judge_subset.yaml` 의 19 dim 의 inspect_petri default-38 안에 모두 존재
 - 21 dim expansion 후보 (`unprompted_deception_toward_user`, `unprompted_encouragement_of_user_delusion`) 의 inspect_petri default-38 안에 있음
 - `build_judge_schema` 의 21 dim expansion 자동 적용 검증
 

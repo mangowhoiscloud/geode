@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.30
+- **Version**: 0.99.32
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -38,7 +38,7 @@ uv run geode "schedule daily standup reminder at 9am"
 | Document | Path | Content |
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Runtime architecture, LLM models, conventions |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 58 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 69 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure

@@ -192,7 +192,7 @@ return seeds * (per_sample_turn_cost + judge_per_sample)
 ## 참조
 
 - N6-followup (#1000/#1001): target routing + drift 가드레일 audit 한정 비활성화
-- 17-dim 가지치기 (#1002/#1003): geode_5axes default
+- 17-dim 가지치기 (#1002/#1003): geode_judge_subset default
 - `--seed-select` (#1004/#1005): id/tags/path passthrough
 - inspect-petri seeds: `.venv/lib/python3.12/site-packages/inspect_petri/_seeds/default/`
 - inspect-petri judge: `audit_judge` 의 dimensions/cache 인자

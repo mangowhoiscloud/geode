@@ -189,6 +189,28 @@ class Lane:
         with self._lock:
             return {k: now - v for k, v in self._active.items()}
 
+    def get_stuck(self, threshold_s: float) -> list[str]:
+        """Return active keys held longer than ``threshold_s`` seconds.
+
+        PR-LQ-Phase5 (2026-05-22) — diagnostic helper so operators can
+        spot work that's blocked behind an upstream timeout. A "stuck"
+        slot is one whose elapsed time exceeds the threshold; the
+        decision of *what* to do about it (cancel, alert, ignore) is
+        left to the caller.
+
+        Returns keys in insertion order (Python ``dict`` preserves it)
+        so dashboards render the oldest stuck job first. An empty list
+        means no slot has crossed the threshold yet — the lane is
+        healthy at the moment of the call.
+        """
+        if threshold_s <= 0:
+            # A zero/negative threshold would label every active slot
+            # "stuck" the instant it acquired, which is not the intent.
+            return []
+        now = time.time()
+        with self._lock:
+            return [k for k, started_at in self._active.items() if now - started_at >= threshold_s]
+
     # --- Internal: for LaneQueue.acquire_all_async() duck-typing ----
 
     def _raw_acquire(self, key: str) -> bool:
@@ -350,6 +372,26 @@ class SessionLane:
         now = time.time()
         with self._lock:
             return {k: now - e.last_used for k, e in self._sessions.items() if e.held}
+
+    def get_stuck(self, threshold_s: float) -> list[str]:
+        """Return held session keys older than ``threshold_s`` since last
+        use.
+
+        PR-LQ-Phase5 (2026-05-22) — same contract as
+        :meth:`Lane.get_stuck`. A "stuck" SessionLane key is one whose
+        held entry hasn't released within the threshold; the
+        ``cleanup_idle`` path treats unheld+idle entries as evictable
+        (different category) so this method only flags *held* keys.
+        """
+        if threshold_s <= 0:
+            return []
+        now = time.time()
+        with self._lock:
+            return [
+                k
+                for k, entry in self._sessions.items()
+                if entry.held and now - entry.last_used >= threshold_s
+            ]
 
     # --- Idle cleanup (OpenClaw defect fix) ---
 
@@ -539,20 +581,41 @@ class LaneQueue:
             for item in reversed(acquired):
                 item._raw_release(key)
 
-    def status(self) -> dict[str, Any]:
-        """Get status of all lanes."""
+    def status(self, *, stuck_threshold_s: float = 300.0) -> dict[str, Any]:
+        """Get status of all lanes.
+
+        PR-LQ-Phase5 (2026-05-22) — each lane entry now carries:
+
+        * ``active`` / ``max`` / ``available`` — instantaneous shape
+          (unchanged contract from earlier phases).
+        * ``stats`` — lifetime counters (``acquired`` / ``released`` /
+          ``timeouts``) sourced from the lane's :class:`_LaneStats`.
+          Surfacing them here so operators can spot timeout pressure
+          without poking at private state.
+        * ``stuck`` — list of keys held longer than ``stuck_threshold_s``
+          seconds (default 5 minutes, matching the upper end of the
+          gateway / global timeouts). Empty list means "healthy at the
+          moment of the call".
+
+        SessionLane gets the same shape minus ``max`` / ``available``
+        (which don't apply to a per-key Semaphore(1) pool).
+        """
         result: dict[str, Any] = {}
         if self._session_lane is not None:
             result["session"] = {
                 "active": self._session_lane.active_count,
                 "sessions": self._session_lane.session_count,
                 "max_sessions": self._session_lane.max_sessions,
+                "stats": self._session_lane.stats.to_dict(),
+                "stuck": self._session_lane.get_stuck(stuck_threshold_s),
             }
         for name, lane in self._lanes.items():
             result[name] = {
                 "active": lane.active_count,
                 "max": lane.max_concurrent,
                 "available": lane.available,
+                "stats": lane.stats.to_dict(),
+                "stuck": lane.get_stuck(stuck_threshold_s),
             }
         return result
 

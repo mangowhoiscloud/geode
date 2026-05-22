@@ -7,7 +7,7 @@
 ## Identity
 
 GEODE is a general-purpose autonomous execution agent built on a `while(tool_use)` loop.
-It understands user requests in natural language, selects and invokes the appropriate tool from 61 available,
+It understands user requests in natural language, selects and invokes the appropriate tool from 57 available,
 observes the result, and decides the next action. This loop continues until the task is complete.
 
 It specializes in exploratory tasks: research, web investigation, document
@@ -34,8 +34,8 @@ analysis, automation, scheduling, and multi-step tool work.
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(58 events)
-RUNTIME:  ToolRegistry(61), MCP Registry(API), Skills, Memory(5-Tier), Reports
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69 events)
+RUNTIME:  ToolRegistry(57), MCP Registry(API), Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
 ```
 
@@ -74,7 +74,7 @@ handler entry to re-inject readiness, memory, and profile context.
 
 ## Tool Routing
 
-All free-text input goes directly to AgenticLoop. 61 tool definitions + autonomous selection via tool_use.
+All free-text input goes directly to AgenticLoop. 57 tool definitions + autonomous selection via tool_use.
 
 **Tool Permission Levels** (spanning PolicyChain 6 layers):
 - **STANDARD**: Read/analysis tools — eligible for Sub-Agent auto_approve
@@ -107,7 +107,7 @@ All free-text input goes directly to AgenticLoop. 61 tool definitions + autonomo
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: list reducers use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 58 lifecycle events. Cross-cutting; accessible from all layers.
+- **Hook-driven**: `core.hooks` — 69 lifecycle events. Cross-cutting; accessible from all layers.
 - **LLM-consumed content in English**: All files injected into LLM context must be written in English.
 
 ## Failure Modes

@@ -117,6 +117,183 @@ functional change.
 
 ### Changed
 
+- **judge-dims rename + 7-axis metric drift sync.** Renamed
+  ``plugins/petri_audit/judge_dims/geode_5axes.yaml`` →
+  ``geode_judge_subset.yaml`` and ``geode_5axes_split.yaml`` →
+  ``geode_judge_subset_split.yaml``. The old name "5axes" suggested a
+  dim count of 5; the file actually carries 22 dims (5 *operational
+  axes* × multiple dims per axis). The new name reflects role: a
+  GEODE-curated subset of inspect-petri's default-38 dim catalog.
+  CLI flag default flipped from ``--dim-set 5axes`` to
+  ``--dim-set subset`` (clean break — no alias kept; muscle memory
+  ratchets to the new name in one step). ``BUILTIN_DIM_SETS`` key,
+  ``DEFAULT_DIM_SET``, ``AutoresearchConfig.dim_set`` default,
+  ``DIM_SET_NAME`` constant, and the typer + argparse + slash
+  parsers all flipped in lockstep. Six metric drift fixes ride
+  along on the same sweep so reader-facing surfaces stop lying:
+  ``HookEvent`` count ``58 → 69`` (GEODE.md ×2, CLAUDE.md, AGENTS.md,
+  README ×2 [body + shield URL], README.ko ×2, hook-system.md +
+  .en.md, domain-free-core-audit.md ×3 — measured via
+  ``len(list(HookEvent))``); ``ToolRegistry`` ``61 → 57`` and
+  README badge ``53 → 57`` (GEODE.md ×3, AGENTS.md, README +
+  README.ko body + shield URL — measured via
+  ``len(load_all_tool_definitions())``); judge-dim count
+  ``17 → 22`` (judge_dims/__init__.py, cli_audit.py typer help,
+  runner.py docstring + comment ×2, bias.py, test_runner.py
+  assertion, scripts/petri_analyze.py, autoresearch/program.md ×4,
+  README.md auto-research line, critic.md / pilot.md prompts);
+  inspect-petri default count ``36 → 38`` (runner.py ×5,
+  judge_dims/__init__.py ×2, test_runner.py — measured via
+  ``find inspect_petri/_judge/dimensions -name '*.md' | wc -l``);
+  seed count ``13 → 22`` (AGENTS.md — measured via ``find
+  plugins/petri_audit/seeds -type f | wc -l``); memory-tier
+  docstring ``3-tier → 5-tier`` (core/memory/context.py ×3,
+  core/tools/memory_tools.py, tests/test_context_assembler.py —
+  matches the existing 5-tier comment block in
+  ``ContextAssembler.assemble``); AgenticLoop ``50-round limit
+  → no round limit (time-budget controlled)`` (AGENTS.md —
+  matches ``DEFAULT_MAX_ROUNDS = 0``). ``geode_judge_subset_split.yaml``
+  header comment ``Identical dim set`` corrected to acknowledge
+  the 3 PR-0 context-management dict entries are intentionally
+  legacy-only (split-mode scores 19, legacy-mode scores 22).
+  Touches ~40 files + 2 file renames; no behavioural change.
+  Historical CHANGELOG entries and dated docs/audits / docs/plans
+  retain their original counts as snapshots; only path references
+  inside them are mass-rewritten so links stay valid post-rename.
+
+## [0.99.32] - 2026-05-22
+
+> LaneQueue 5-phase plan completion + Codex parity. Phase 3
+> (paperclip ``/api/oauth/usage`` polling) lands and wires into the
+> ``claude-cli-subagent`` lane, closing the 5-phase plan. Codex side
+> mirrors the full Phase 2 + Phase 3 stack — new
+> ``codex-cli-subagent`` lane with admission helper scaffold (probe
+> placeholder until the ChatGPT-Plus quota endpoint contract is
+> publicly verified).
+
+### Added
+
+- **LaneQueue Phase 3 — OAuth usage polling (paperclip P1 port) + Codex parity**.
+  New ``core/llm/oauth_usage.py`` ports paperclip's
+  ``fetchClaudeQuota`` 1:1 to Python (raw HTTP + Bearer to
+  ``GET /api/oauth/usage`` with the ``anthropic-beta:
+  oauth-2025-04-20`` header — same metadata endpoint that
+  paperclip's 1+ year of production traffic verifies, **not** the
+  rate-limited inference SDK path). Module surface:
+  :func:`read_anthropic_oauth_token` (walks
+  ``$CLAUDE_CONFIG_DIR``/``.credentials.json``),
+  :func:`fetch_oauth_usage` (sync HTTP via stdlib :mod:`urllib`),
+  :class:`OAuthUsage` / :class:`OAuthUsageWindow` (normalised 0-1
+  utilisation regardless of API shape), :class:`OAuthUsagePoller`
+  (30 s TTL + stale-on-fail), and
+  :func:`should_block_lane_acquisition` (consulted by
+  ``acquire_claude_cli_lane*`` before the semaphore grab; throttles
+  at ``five_hour.utilization >= 0.8``). All failure paths fall open
+  by default — a single network blip would otherwise harden every
+  ``claude --print`` spawn into "no slots forever" — but operators
+  who want strict admission can flip to fail-closed via
+  ``GEODE_CLAUDE_OAUTH_POLL_REQUIRED=1``. Bypass entirely with
+  ``GEODE_CLAUDE_OAUTH_POLL_DISABLED=1``.
+
+  The throttle surface emits a ``5-hour limit reached``-shaped
+  ``TimeoutError`` so Phase 4's classifier already routes the
+  block to the quota backoff schedule (paperclip 2 m / 10 m / 30 m
+  / 2 h) without additional wiring.
+
+  **Codex parity** — sibling stack at
+  ``core/llm/codex_oauth_usage.py`` +
+  ``core/orchestration/codex_cli_lane.py``. New
+  ``codex-cli-subagent`` lane (``DEFAULT_CODEX_CLI_LANE_MAX=2``,
+  ``GEODE_CODEX_CLI_LANE_MAX`` override) caps concurrent
+  ``codex exec`` subprocess fan-out from both the self-improving-
+  loop mutator (``invoke_codex_cli``) and the Petri inspect_ai
+  bridge (``CodexCliAPI.generate``). The two provider buckets
+  (Anthropic vs ChatGPT-Plus OAuth) get separate semaphores so the
+  cross-provider judge-panel diversity isn't blocked by single-
+  provider load. The Codex usage probe
+  (:func:`fetch_codex_usage`) ships as a documented placeholder
+  returning ``None`` until the ChatGPT-Plus / Codex-CLI quota
+  endpoint contract is publicly verified — the lane fails open
+  meanwhile, but every other layer (token reader at
+  ``$CODEX_HOME/auth.json``, poller, decision helper, lane wiring)
+  is already in place so a future verified-endpoint PR is a
+  one-file change.
+
+## [0.99.31] - 2026-05-22
+
+> LaneQueue 5-phase plan landing 4 of 5 phases (Phase 1 hierarchy fix,
+> Phase 2 ``claude-cli-subagent`` lane, Phase 4 claude-cli error parser
+> + tiered backoff, Phase 5 observability boost). Phase 3 (paperclip
+> OAuth-usage polling) requires live operator OAuth credentials and is
+> deferred to a follow-up sprint — see
+> [[project_lanequeue_handoff_2026_05_22]].
+
+### Added
+
+- **LaneQueue Phase 5 — observability boost**. ``LaneQueue.status()``
+  now returns lifetime ``stats`` (``acquired`` / ``released`` /
+  ``timeouts`` per lane) and a ``stuck`` list of keys held longer
+  than the supplied ``stuck_threshold_s`` (default 300 s, matching
+  the upper end of the gateway / global timeouts). New
+  :meth:`Lane.get_stuck(threshold_s)` / :meth:`SessionLane.get_stuck`
+  helpers surface the same info standalone — operators can poll a
+  single lane without paying for the full ``status()`` walk.
+  ``SessionLane.get_stuck`` skips released-but-cached entries (those
+  belong to the idle-eviction path, a different concern), so the
+  list only flags work that's currently held but not progressing. A
+  zero or negative threshold returns an empty list rather than
+  flagging every fresh acquisition — sensible default for callers
+  that haven't yet decided on a threshold value. Three new test
+  classes pin ``get_stuck`` precedence + the enriched status shape.
+
+- **LaneQueue Phase 4 — ``claude-cli`` error parser + tiered backoff**.
+  New ``core/llm/claude_cli_errors.py`` module ports paperclip's
+  ``parse.ts`` regex patterns (``CLAUDE_TRANSIENT_UPSTREAM_RE`` +
+  ``CLAUDE_EXTRA_USAGE_RESET_RE``) plus the 4-tier
+  ``heartbeat.ts:217-226`` backoff schedule to Python. Public surface:
+  :func:`is_transient_upstream` (paperclip parity boolean classifier),
+  :func:`classify_transient` (5-way label ``burst`` / ``quota`` /
+  ``auth`` / ``deterministic`` / ``unknown``),
+  :func:`extract_reset_clock_time` (parse "resets at 3:00pm
+  (Pacific)" into a tz-aware ``datetime``), and :func:`next_retry_at`
+  (combines the three into a single suggested retry timestamp).
+  Schedules :data:`BURST_BACKOFF_SECONDS` (1/2/4/8/16s) and
+  :data:`QUOTA_BACKOFF_SECONDS` (2m/10m/30m/2h) ship as module
+  constants so callers (mutator runner / inspect_ai bridge / future
+  Anthropic provider retry hook) can choose how to weave them into
+  their own retry path. Quota failures honour an explicit
+  ``resets at …`` time when it lies AFTER the schedule wait — a
+  server-promised reset overrides the schedule's lower bound but
+  never shortens the wait below it. Unknown / non-transient stderr
+  short-circuits ``next_retry_at`` to ``None`` so callers don't burn
+  retries on deterministic failures (auth-required, model-not-found,
+  max-turns). Pin tests at ``tests/core/llm/test_claude_cli_errors.py``
+  (5 classes, ~30 cases). Wiring into the two spawn sites + the
+  Anthropic provider's retry journal is scoped to a follow-up PR.
+
+- **LaneQueue Phase 2 — ``claude-cli-subagent`` lane**. New module-
+  level :class:`~core.orchestration.lane_queue.Lane` at
+  ``core/orchestration/claude_cli_lane.py`` (same pattern as
+  ``core/llm/audit_lane.py``) caps the concurrent ``claude --print``
+  subprocess fan-out from BOTH spawn sites — the self-improving-loop
+  mutator runner
+  (:func:`core.self_improving_loop.cli_subprocess.invoke_claude_cli`)
+  and the Petri inspect_ai bridge
+  (:class:`plugins.petri_audit.claude_cli_provider.ClaudeCliAPI.generate`)
+  — at ``DEFAULT_CLAUDE_CLI_LANE_MAX=2``, one slot below the public
+  3-4 burst-limiter floor (anthropics/claude-code#53922) so the
+  operator's host Claude Code session has bucket headroom. Operators
+  tune via ``GEODE_CLAUDE_CLI_LANE_MAX`` (positive int; empty /
+  non-int / non-positive falls back to the default). Sync + async
+  acquire helpers (:func:`acquire_claude_cli_lane` /
+  :func:`acquire_claude_cli_lane_async`) share the SAME semaphore so
+  the cap composes across the two spawn paths. The lane is mirrored
+  in ``build_default_lanes`` for ``LaneQueue.status()`` dashboards.
+  Phase 3 (paperclip OAuth-usage polling) will plug into the same
+  acquire site to surface 5h-bucket telemetry before each slot grab.
+
+### Changed
+
 - **LaneQueue Phase 1 — hierarchy invariant restored**. The
   ``seed-generation`` workload lane defaulted to ``max_concurrent=16``
   while the ``global`` lane was capped at 8 — a textbook hierarchy

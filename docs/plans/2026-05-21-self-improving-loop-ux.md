@@ -286,7 +286,7 @@ diagram + per-stage role 매트릭스 + harness radio + scope/quota.
 │                                                                             │
 │  Petri-only                                                                 │
 │   bias correction   ✓ auto (same-provider judge → -10~22%)                  │
-│   dim_set           5axes  (geode_5axes available)                          │
+│   dim_set           subset (default — geode_judge_subset.yaml, 22 dims)    │
 │   audit_mode        dry_run · auto_approve · denied=[edit_file]             │
 │                                                                             │
 │  Scope                                                                      │
@@ -344,7 +344,7 @@ Operator-visible sub-panel (Tier 1 dashboard 의 stage ④ 카드 클릭 시):
 │                                                                              │
 │   measurement scope                                                          │
 │     seed_limit          10    (1 ~ 1000)       ⓘ Petri audit 시나리오 수    │
-│     dim_set             5axes (5axes | geode_5axes)                          │
+│     dim_set             subset (subset | full)                              │
 │     seed_select         auto  (env > symlink > toml > module)                │
 │       └─ resolved      ~/.geode/.../latest_seed_pool → <co-scientist run>   │
 │                                                                              │

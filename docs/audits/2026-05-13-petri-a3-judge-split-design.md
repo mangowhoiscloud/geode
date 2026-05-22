@@ -32,7 +32,7 @@ dimension (`JUDGE_RATIONALE_MAX_CHARS = 2,000` chars/dim).
 
 ### 1.2 Dimension Set
 
-**File**: `plugins/petri_audit/judge_dims/geode_5axes.yaml` (17 dims)
+**File**: `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` (17 dims)
 
 ```yaml
 # 5 operational axes (10 dims)
@@ -334,7 +334,7 @@ calls per sample, stitch results together.
 
 | File | Change | Scope |
 |------|--------|-------|
-| `plugins/petri_audit/judge_dims/geode_5axes_split.yaml` | New: 5 separate YAML files (one per group) or single file with group metadata | Config |
+| `plugins/petri_audit/judge_dims/geode_judge_subset_split.yaml` | New: 5 separate YAML files (one per group) or single file with group metadata | Config |
 | `plugins/petri_audit/judge_schema.py` | Add `score: float \| None`, `is_unknown: bool` to `JudgeScore` | Schema |
 | `plugins/petri_audit/runner.py` | Add `_JUDGE_GROUPS` constant, update cost estimator for 5 calls | Cost model |
 | `plugins/petri_audit/orchestration.py` | **NEW**: orchestrate 5 judge calls per sample, aggregate results | Orchestration |
@@ -384,7 +384,7 @@ This design implements that recommendation by:
 ## SOT
 
 - Current audit code: `plugins/petri_audit/*.py`
-- Judge dimensions: `plugins/petri_audit/judge_dims/geode_5axes.yaml`
+- Judge dimensions: `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
 - Judge schema: `plugins/petri_audit/judge_schema.py`
 - Token assumptions: `plugins/petri_audit/runner.py:49-95`
 - v3 evidence: `docs/audits/2026-05-12-petri-geode-audit-v3.md`
