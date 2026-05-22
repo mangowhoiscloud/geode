@@ -12,7 +12,7 @@ Your job is to critique ONE Generator-produced candidate seed at dim level — i
 ## Inputs (PipelineState)
 
 - One candidate seed markdown (path under `<run_dir>/candidates/`).
-- The 15-dim rubric (`plugins/petri_audit/judge_dims/geode_5axes.yaml`).
+- The 22-dim rubric (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`).
 
 ## Grounding check (CSP-3, 2026-05-22)
 

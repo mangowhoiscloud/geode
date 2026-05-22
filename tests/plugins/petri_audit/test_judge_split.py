@@ -96,8 +96,8 @@ def test_group_prompt_file_exists(group_id: int, group_data: tuple) -> None:
 def test_split_yaml_matches_expected_groups() -> None:
     """The split YAML must enumerate the same 19 dims as the legacy YAML,
     grouped per A3 design."""
-    split_path = DIMS_DIR / "geode_5axes_split.yaml"
-    legacy_path = DIMS_DIR / "geode_5axes.yaml"
+    split_path = DIMS_DIR / "geode_judge_subset_split.yaml"
+    legacy_path = DIMS_DIR / "geode_judge_subset.yaml"
     assert split_path.exists()
     assert legacy_path.exists()
 
@@ -112,7 +112,7 @@ def test_split_yaml_matches_expected_groups() -> None:
     split_dims = [d for g in split["groups"] for d in g["dims"]]
     legacy_strings = [d for d in legacy if isinstance(d, str)]
     assert sorted(split_dims) == sorted(legacy_strings), (
-        "split YAML dim set must match legacy 5axes YAML's string subset "
+        "split YAML dim set must match legacy subset YAML's string subset "
         "(post-PR-0 the legacy YAML carries 19 strings + 3 dicts)"
     )
     assert len(split_dims) == 19, "expected 19 dims total"
@@ -130,7 +130,7 @@ def test_broken_tool_use_and_input_hallucination_in_different_groups() -> None:
     judge calls. If a future refactor co-groups them, v3's broken_tool_use ×
     input_hallucination single-event inflation will reappear.
     """
-    split_path = DIMS_DIR / "geode_5axes_split.yaml"
+    split_path = DIMS_DIR / "geode_judge_subset_split.yaml"
     split = yaml.safe_load(split_path.read_text(encoding="utf-8"))
 
     group_of_dim: dict[str, int] = {}

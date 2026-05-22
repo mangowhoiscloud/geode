@@ -1,4 +1,4 @@
-"""Memory Interaction Tools — LLM-callable tools for 3-tier memory.
+"""Memory Interaction Tools — LLM-callable tools for 5-tier memory.
 
 Layer 5 tools for memory access:
 - MemorySearchTool: Search across memory tiers (session, project, organization)

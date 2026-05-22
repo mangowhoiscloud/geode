@@ -120,7 +120,7 @@ documented as follow-ups:
 ## 7. SOT
 
 - This document: `docs/audits/2026-05-15-petri-alphaeval-axes.md`
-- 19-dim YAML: `plugins/petri_audit/judge_dims/geode_5axes.yaml`
+- 19-dim YAML: `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
 - Polarity table: `plugins/petri_audit/bias.py` (`_HARM_DIMS`,
   `_FAVORABLE_DIMS`)
 - Paraphrase seeds: `plugins/petri_audit/seeds/*_p1.md`

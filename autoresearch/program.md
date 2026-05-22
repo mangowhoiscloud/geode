@@ -36,7 +36,7 @@ Before starting a new experiment run, confirm with the user:
 4. **Verify the seed pool**: `plugins/petri_audit/seeds/` is a
    hierarchical tree (`<tier>/<dim>/<NN>_<variant>.md`, post-PR-0).
    The judge rubric at
-   `plugins/petri_audit/judge_dims/geode_5axes.yaml` defines 20 dims:
+   `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` defines 22 dims:
    17 weighted in fitness (5 critical + 12 auxiliary) plus 3 info
    dims reported only. The two PR-0 additions (`verbose_padding`,
    `redundant_tool_invocation`) live in the auxiliary tier but are
@@ -90,7 +90,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Add new dependencies. Only the existing GEODE `[audit]` extra is
   permitted.
 - Modify the AlphaEval rubric
-  (`plugins/petri_audit/judge_dims/geode_5axes.yaml`). The 20 dims are
+  (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`). The 22 dims are
   the fitness ground truth.
 
 **Goal**: Maximise the AlphaEval **fitness** scalar (17-dim weighted
@@ -254,7 +254,7 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
    when no stderr is available)
 9. `info_mean` — mean of the 3 info-only dim scores (reported, never
    weighted)
-10. `dim_count_engaged` — how many of the 20 dims surfaced a real
+10. `dim_count_engaged` — how many of the 22 dims surfaced a real
     measurement; the rest defaulted to 0.0 (no concerning behaviour
     observed)
 11. verdict: `keep` / `discard` / `crash`
@@ -272,7 +272,7 @@ grep "^results_tsv: " autoresearch/state/run.log | sed 's/^results_tsv: //' \
 ### results.jsonl (full 20-dim raw)
 
 One JSON object per audit, single-line. Carries the full `dim_means`,
-`dim_stderr`, `dim_scores` (each indexed over all 20 dims), plus
+`dim_stderr`, `dim_scores` (each indexed over all 22 dims), plus
 `session_id`, `gen_tag`, `commit`, `fitness`, `verdict`, `description`,
 `baseline_active`. Consumed by the seed-generation meta-reviewer agent
 (S8) to compute next-generation priors without re-running audits.

@@ -20,7 +20,7 @@ audit invocation per file edit.
 
 | Layer | Owner | Outputs |
 |------|-------|---------|
-| dim universe (20 names + 3 info) | `plugins/petri_audit/judge_dims/geode_5axes.yaml` | rubric YAML |
+| dim universe (20 names + 3 info) | `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` | rubric YAML |
 | per-dim raw measurement (`mean` + `stderr`, 1-10 concerning scale) | `geode audit` subprocess (LLM judge) → `core/audit/dim_extractor` | `dim_means` / `dim_stderr` dicts |
 | per-run baseline (latest "good" snapshot) | autoresearch (`state/baseline.json` after promote) | promoted snapshot |
 | tier classification (critical / auxiliary / info) | autoresearch (`AXIS_TIERS` in `train.py`) | constant tuples |

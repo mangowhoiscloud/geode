@@ -19,7 +19,7 @@ uv run geode audit \
   --judge claude-code/sonnet \
   --seed-select plugins/petri_audit/seeds_safe10 \
   --seeds 10 \
-  --dim-set 5axes \
+  --dim-set subset \
   --max-turns 10 \
   --live --yes --use-oauth
 ```

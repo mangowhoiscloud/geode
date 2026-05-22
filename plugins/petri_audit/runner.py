@@ -90,8 +90,8 @@ class TokenAssumptions:
     judge_out_per_sample: int = 2_000
     geode_amplifier: int = 1
     #: 1 in legacy mode (single mega-judge call), 5 in A3 split mode.
-    #: See plugins/petri_audit/judge_dims/geode_5axes_split.yaml for the
-    #: 5-group definition; runtime orchestration is staged behind
+    #: See plugins/petri_audit/judge_dims/geode_judge_subset_split.yaml
+    #: for the 5-group definition; runtime orchestration is staged behind
     #: cli_audit.py --judge-mode split (legacy is default until upstream
     #: inspect-petri supports group-aware audit_judge).
     judge_calls_per_sample: float = 1.0
@@ -112,10 +112,11 @@ class TokenAssumptions:
 DEFAULT_TOKEN_ASSUMPTIONS = TokenAssumptions()
 
 #: A3 (2026-05-14) split-mode token assumptions. 5 judge calls per sample
-#: with scoped rubrics — input drops from 6K (full 17-dim rubric) to 3.5K
-#: per call (one group's rubric), output averages 580 tokens (~17 dims
-#: total spread across 5 calls, ~3.4 dims × 170 tokens each). Net cost
-#: per sample: $0.0346 (vs legacy $0.016), +$1.40 on a 75-sample N=5 batch.
+#: with scoped rubrics — input drops from 6K (full 19-dim split rubric;
+#: PR-0 context-management 3 dims stay legacy-only) to 3.5K per call
+#: (one group's rubric), output averages 580 tokens (~19 dims total
+#: spread across 5 calls, ~3.8 dims × 150 tokens each). Net cost per
+#: sample: $0.0346 (vs legacy $0.016), +$1.40 on a 75-sample N=5 batch.
 #: See docs/audits/2026-05-13-petri-a3-judge-split-design.md § 6.2.
 SPLIT_TOKEN_ASSUMPTIONS = TokenAssumptions(
     judge_in_per_sample=3_500,
@@ -199,12 +200,14 @@ def build_command(
     inspect_ai-shaped ids (``provider/model``).
 
     ``dim_set`` selects the judge-dimension set:
-    ``"5axes"`` → ``-T judge_dimensions=<built-in YAML>`` (17 dims).
-    ``"full"`` / ``None`` → flag omitted; inspect-petri's default 36.
+    ``"subset"`` → ``-T judge_dimensions=<built-in YAML>`` (22 dims).
+    ``"full"`` / ``None`` → flag omitted; inspect-petri's default 38.
     Anything else → resolved to a path string. The path's existence is
-    checked at build time + the YAML's dim names are validated as a
-    subset of inspect-petri's default 36 (when [audit] extra is
+    checked at build time + the YAML's bare-string dim names are validated
+    as a subset of inspect-petri's default 38 (when [audit] extra is
     installed) so a typo fails fast here instead of inside the audit.
+    Inline ``JudgeDimension`` dict entries (used by the PR-0
+    context-management dims) are passed through unchanged.
 
     ``seed_select`` selects seed scenarios (forwarded to ``-T
     seed_instructions=<value>`` verbatim). Inspect-petri accepts
@@ -298,11 +301,11 @@ def _validate_dim_path(resolved: Any) -> None:
     semantics intentionally elevated to ValueError so the CLI surfaces
     the same class of error for every kind of bad input. When the
     [audit] extra is installed and the path is a YAML, also load the
-    file and check that every name is a subset of inspect-petri's
-    default 36 dim set (covers 결함 K).
+    file and check that every bare-string name is a subset of
+    inspect-petri's default 38 dim set (covers 결함 K).
 
     ``None`` (= ``--dim-set full``) is a no-op. The built-in YAML path
-    (``geode_5axes.yaml``) is shipped with this package so its
+    (``geode_judge_subset.yaml``) is shipped with this package so its
     existence is also enforced — a missing built-in is a deployment
     bug worth surfacing the same way as a typo'd custom path.
     """
@@ -313,7 +316,7 @@ def _validate_dim_path(resolved: Any) -> None:
         raise ValueError(
             f"--dim-set resolved to a path that does not exist: {p}. "
             f"Check the path or use ``--dim-set full`` to fall back to "
-            f"inspect-petri's default 36 dim set."
+            f"inspect-petri's default 38 dim set."
         )
     # Best-effort subset validation when the [audit] extra is installed.
     # Skipped on default ``uv sync`` so the runner module keeps loading
@@ -341,8 +344,9 @@ def _validate_dim_path(resolved: Any) -> None:
     if unknown:
         raise ValueError(
             f"--dim-set YAML at {p} contains unknown dimension(s): {unknown}. "
-            f"Allowed names are inspect-petri's default 36 (see "
-            f"inspect_petri/_judge/dimensions/*.md)."
+            f"Allowed bare-string names are inspect-petri's default 38 "
+            f"(see inspect_petri/_judge/dimensions/*.md); GEODE-specific "
+            f"dims must use the inline ``JudgeDimension`` dict form."
         )
 
 

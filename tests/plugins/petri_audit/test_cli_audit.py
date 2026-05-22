@@ -82,7 +82,7 @@ def test_slash_parser_parses_short_and_long_flags() -> None:
     assert ns.seeds == 2
     assert ns.max_turns == 4
     assert ns.tags == "self_preservation"
-    assert ns.dim_set == "5axes"  # default — pruned 17-dim set
+    assert ns.dim_set == "subset"  # default — pruned 22-dim set
     assert ns.cache is False
     assert ns.dry_run is True
     assert ns.yes is True
