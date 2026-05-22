@@ -51,6 +51,17 @@ __all__ = [
 ]
 
 
+# PR-1 (2026-05-23) — explicit per-dim measurement modality tag for the
+# baseline.json v2 schema. The 20 judge-scored dims share ``judge_llm``;
+# the two post-judge analytics dims live here so the autoresearch caller
+# can tell them apart without re-deriving from dim name.
+_ANALYTICS_MODALITY: dict[str, str] = {
+    "verbose_padding": "token_count",
+    "redundant_tool_invocation": "tool_log",
+}
+DEFAULT_MODALITY = "judge_llm"
+
+
 def _coerce_float(value: Any) -> float | None:
     """Return ``float(value)`` when value is a real scalar, else ``None``.
 
@@ -265,14 +276,34 @@ def _aggregate(values: list[float]) -> tuple[float, float]:
     return mean, stderr
 
 
-def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]:
-    """Read the ``.eval`` archive and return per-dim mean + stderr.
+def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
+    """Read the ``.eval`` archive and return per-dim aggregates + provenance.
 
-    Returns ``{"dim_means": {dim: float, ...}, "dim_stderr": {dim:
-    float, ...}}``. Both dicts have the same key set (every dim with at
-    least one numeric value).
+    Returns a dict with these keys (PR-1, 2026-05-23 — extends the
+    legacy ``{dim_means, dim_stderr}`` shape with two provenance
+    fields the baseline.json v2 schema consumes):
 
-    Returns empty dicts (not raises) when:
+    - ``"dim_means"``: ``{dim: float}`` — mean per dim, raw Petri scale.
+    - ``"dim_stderr"``: ``{dim: float}`` — standard error of the mean.
+      ``0.0`` arises in TWO distinct cases that ``sample_count``
+      disambiguates: (a) ``N == 1`` — variance undefined under ddof=1,
+      so "no stability signal"; (b) ``N > 1 and all values identical``
+      — variance genuinely zero, so "perfect stability". Callers
+      should treat (a) and (b) differently.
+    - ``"sample_count"``: ``{dim: int}`` — number of numeric values that
+      went into ``(mean, stderr)`` for this dim. The disambiguator
+      for the two ``stderr == 0.0`` cases above.
+    - ``"measurement_modality"``: ``{dim: str}`` — provenance of the dim's
+      score. ``"judge_llm"`` for rubric-scored dims, ``"token_count"`` for
+      ``verbose_padding``, ``"tool_log"`` for ``redundant_tool_invocation``.
+      Future analytics dims would default to ``"judge_llm"`` — guard
+      via ``_ANALYTICS_MODALITY`` when adding a new analytics source.
+
+    All four dicts have the same key set (every dim with at least one
+    numeric value).
+
+    Returns dicts with empty ``dim_means`` / ``dim_stderr`` / ``sample_count``
+    / ``measurement_modality`` (not raises) when:
 
     - ``inspect_ai`` is not installed (default ``uv sync`` env — the
       ``[audit]`` extra is opt-in).
@@ -282,22 +313,28 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]
     Failures during read are logged at WARNING and swallowed — the
     self-improving-loop is best-effort scaffolding, not a blocker.
     """
+    empty: dict[str, Any] = {
+        "dim_means": {},
+        "dim_stderr": {},
+        "sample_count": {},
+        "measurement_modality": {},
+    }
     try:
         from inspect_ai.log import read_eval_log
     except ImportError:
         log.debug("dim_extractor: inspect_ai not installed — no-op")
-        return {"dim_means": {}, "dim_stderr": {}}
+        return empty
 
     path = Path(eval_path).expanduser()
     if not path.is_file():
         log.warning("dim_extractor: %s does not exist", path)
-        return {"dim_means": {}, "dim_stderr": {}}
+        return empty
 
     try:
         elog = read_eval_log(str(path))
     except Exception:
         log.warning("dim_extractor: failed to read %s", path, exc_info=True)
-        return {"dim_means": {}, "dim_stderr": {}}
+        return empty
 
     samples = getattr(elog, "samples", None)
     per_dim = _walk_dim_values(samples)
@@ -312,10 +349,14 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]
 
     dim_means: dict[str, float] = {}
     dim_stderr: dict[str, float] = {}
+    sample_count: dict[str, int] = {}
+    measurement_modality: dict[str, str] = {}
     for dim, vals in per_dim.items():
         mean, stderr = _aggregate(vals)
         dim_means[dim] = mean
         dim_stderr[dim] = stderr
+        sample_count[dim] = len(vals)
+        measurement_modality[dim] = _ANALYTICS_MODALITY.get(dim, DEFAULT_MODALITY)
 
     log.info(
         "dim_extractor: aggregated %d dim(s) across %d sample(s) from %s",
@@ -323,7 +364,12 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, dict[str, float]]
         len(samples or []),
         path.name,
     )
-    return {"dim_means": dim_means, "dim_stderr": dim_stderr}
+    return {
+        "dim_means": dim_means,
+        "dim_stderr": dim_stderr,
+        "sample_count": sample_count,
+        "measurement_modality": measurement_modality,
+    }
 
 
 def _walk_evidence(samples: Any) -> dict[str, list[dict[str, Any]]]:
