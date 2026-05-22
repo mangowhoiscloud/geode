@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.33] - 2026-05-22
+
+> Codex Phase 3 OAuth polling lands. paperclip ``fetchCodexQuota``
+> 1:1 Python port replaces the Phase 3 placeholder — Codex side now
+> has real WHAM (``chatgpt.com/backend-api/wham/usage``) admission
+> control, parity with the Anthropic poller. Path A (Codex
+> ``app-server`` JSON-RPC) deferred to a later PR.
+
 ### Added
 
 - **LQ-Codex-WHAM — Codex OAuth usage polling (paperclip ``fetchCodexQuota`` port)**.
