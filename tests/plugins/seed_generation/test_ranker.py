@@ -67,6 +67,10 @@ class _AlwaysAWinsManager:
     def __init__(self) -> None:
         self.received_tasks: list[SubTask] = []
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         self.received_tasks.extend(tasks)
         return [
@@ -84,6 +88,10 @@ class _AlwaysAWinsManager:
 class _SplitVotesManager:
     """First voter A, second B, third tie → 3-way split → tie outcome."""
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         winners = ["A", "B", "tie"]
         return [
@@ -100,6 +108,10 @@ class _SplitVotesManager:
 
 class _OneFailureManager:
     """1 voter fails per match — 2 votes survive → quorum still met."""
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
 
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         results: list[SubResult] = []
@@ -129,6 +141,10 @@ class _OneFailureManager:
 
 class _MostFailManager:
     """2 of 3 voters fail per match → quorum lost → match skipped."""
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
 
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         results: list[SubResult] = []
@@ -260,6 +276,10 @@ def test_ranker_skips_match_on_quorum_loss() -> None:
 
 def test_ranker_drops_invalid_winner_label() -> None:
     class _BadWinnerManager:
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
+
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             return [
                 SubResult(
@@ -287,6 +307,10 @@ def test_ranker_drops_invalid_winner_label() -> None:
 
 def test_ranker_accepts_text_json_fallback() -> None:
     class _TextJsonManager:
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
+
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             return [
                 SubResult(
@@ -313,6 +337,10 @@ def test_ranker_announce_false_propagates() -> None:
     class _CapturingManager:
         def __init__(self) -> None:
             self.received_announce: bool | None = None
+
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
 
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             self.received_announce = announce
@@ -342,6 +370,10 @@ def test_ranker_match_id_pinned_in_parse() -> None:
     """Even if LLM echoes a wrong match_id, the task's match_id wins."""
 
     class _WrongMatchIdManager:
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
+
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             return [
                 SubResult(

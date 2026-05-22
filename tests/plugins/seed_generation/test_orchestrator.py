@@ -26,7 +26,7 @@ class _StubAgent(BaseSeedAgent):
         self._output = output
         self.invocations = 0
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         self.invocations += 1
         return SeedAgentResult(
             role=self.role, output=self._output, prompt_tokens=10, completion_tokens=5
@@ -132,7 +132,7 @@ class _CostReportingAgent(BaseSeedAgent):
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         return SeedAgentResult(
             role=self.role,
             output={},
@@ -212,7 +212,7 @@ class _FailingAgent(BaseSeedAgent):
     def __init__(self, role: str) -> None:
         super().__init__(role=role, model="stub-model")
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         return SeedAgentResult(
             role=self.role,
             output={},
@@ -227,7 +227,7 @@ class _RaisingAgent(BaseSeedAgent):
     def __init__(self, role: str) -> None:
         super().__init__(role=role, model="stub-model")
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         raise RuntimeError("stub-induced hard failure")
 
 

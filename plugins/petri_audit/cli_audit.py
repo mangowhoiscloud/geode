@@ -100,6 +100,16 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
     # ``.eval`` is now the single SoT for evidence.
     _update_latest_petri_eval_symlink(report.archived_raw)
     try:
+        from plugins.petri_audit.bundle_sync import sync_eval_to_bundle
+
+        sync_eval_to_bundle(report.archived_raw)
+    except Exception:
+        log.warning(
+            "petri_audit: bundle sync failed for %s",
+            report.archived_raw,
+            exc_info=True,
+        )
+    try:
         from core.audit.dim_extractor import extract_dim_aggregates
 
         aggregates = extract_dim_aggregates(report.archived_raw)
@@ -148,10 +158,14 @@ def audit(
         help="Judge model (GEODE id, e.g. claude-sonnet-4-6, gpt-5.4-mini, glm-5).",
     ),
     auditor: str = typer.Option(
-        "claude-sonnet-4-6",
+        "claude-opus-4-7",
         "--auditor",
         "-a",
-        help="Auditor model (GEODE id).",
+        help="Auditor model (GEODE id). Default is the strongest available "
+        "Claude — the auditor's transcript-shaping ability bounds the test's "
+        "signal-to-noise, so the default tracks the flagship rather than "
+        "the cost-optimised pick (operators routing through Claude Max "
+        "subscription pay the same per-token regardless).",
     ),
     target: str = typer.Option(
         None,
@@ -290,7 +304,7 @@ def audit(
 def _build_slash_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="/audit", add_help=False, allow_abbrev=False)
     parser.add_argument("--judge", "-j", default="claude-haiku-4-5-20251001")
-    parser.add_argument("--auditor", "-a", default="claude-sonnet-4-6")
+    parser.add_argument("--auditor", "-a", default="claude-opus-4-7")
     parser.add_argument("--target", "-t", default=None)
     parser.add_argument("--seeds", "-s", type=int, default=1)
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")

@@ -44,6 +44,10 @@ class _StubManager:
         self._force_failures = force_failures
         self._force_unparseable = force_unparseable
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         self.received_tasks = list(tasks)
         self.received_announce = announce
@@ -81,6 +85,10 @@ class _StubManager:
 
 class _ReverseOrderManager(_StubManager):
     """Returns SubResults in REVERSE submission order (worst-case latency)."""
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
 
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         results = super().delegate(tasks, announce=announce)
@@ -248,6 +256,10 @@ def test_pilot_accepts_text_json_fallback() -> None:
     pilot_text = json.dumps(_good_pilot("gen2-000-cand"))
 
     class _TextJsonManager:
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
+
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             return [
                 SubResult(
@@ -300,6 +312,10 @@ def test_pilot_drops_non_dict_outputs() -> None:
     _seed_candidates(state, 3)
 
     class _NonDictManager:
+        async def adelegate(self, tasks, *, announce: bool = True) -> list:
+            """Async sibling for Phase-C tests."""
+            return self.delegate(tasks, announce=announce)
+
         def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
             shapes: list[Any] = [None, ["not", "a", "dict"], 42]
             return [

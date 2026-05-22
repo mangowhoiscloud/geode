@@ -449,7 +449,13 @@ def _dispatch_pipeline(
     if journal is not None:
         journal.append("pipeline_started", payload={"target_dim": target_dim})
 
-    pipeline.run()
+    # PR-Async-Phase-C step 2 (2026-05-22) — Typer command must remain
+    # sync (Typer 0.25.1 doesn't natively support ``async def`` commands;
+    # issue #950 closed without merged implementation). Bridge the
+    # async pipeline via the OS-process-boundary adapter.
+    from core.async_runtime import run_process_coroutine
+
+    run_process_coroutine(pipeline.arun())
 
     # P0a dedup — canonical run metrics (survivors, usd_spent, pool_path_out)
     # live in sessions.jsonl via Pipeline._append_session_index. The

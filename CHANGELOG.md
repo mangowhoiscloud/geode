@@ -47,6 +47,297 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.34] - 2026-05-22
+
+> CSA sprint endgame + async-only migration foundation + petri-bundle
+> Pages serving + autoresearch outer-loop UX cleanup, all riding
+> together in one release window. CSA-1/1b/2/3/2c stack closes: the
+> claude-cli + codex-cli paperclip subprocess providers + MCP bridge
+> mirror tool_use audit support on both anthropic and codex sides;
+> the CSA-3 manifest flip routes the autoresearch outer loop through
+> subscription quota end-to-end (gen-0 + gen-1 live runs verified).
+> Async Phase C lands ``SubAgentManager.adelegate`` + Pipeline.arun
+> + 8 native async seed-generation agents; legacy sync ``delegate``
+> carries deprecation warning + grep anchor for the bulk-removal
+> pass. petri-bundle ``bundle_sync`` auto-copies finished ``.eval``
+> archives from the agent context layer
+> (``~/.geode/petri/logs/``) into the repo-tracked publish surface
+> (``docs/petri-bundle/logs/``), with the matching ``.gitignore``
+> exception so the synced files actually enter git. gen-0 + gen-1
+> baseline backfilled for live Pages publish.
+
+### Added
+
+- **petri-bundle gen-1 backfill — recover the untracked auto-sync output.**
+  PR #1487 wired ``bundle_sync.sync_eval_to_bundle`` into
+  ``cli_audit._post_run_emit`` so every audit auto-copies its archived
+  ``.eval`` from ``~/.geode/petri/logs/`` into
+  ``docs/petri-bundle/logs/``. The 2026-05-22 gen-1 iteration run (session
+  ``2026-05-22T0657Z-c857b9``, ``cuXC28imBo4pTc6VSVuujm``) fired the hook
+  and the file landed on disk correctly, but the resulting modification
+  + new file was never staged through a PR — it stayed untracked on
+  develop and was lost during a later working-tree churn. The ``.eval``
+  itself survives at ``~/.geode/petri/logs/`` because that path is the
+  runtime SoT outside the repo. This PR re-syncs the archive into
+  ``docs/petri-bundle/logs/`` so ``listing.json`` carries the gen-1 entry
+  (target=geode/gpt-5.5, judge=claude-cli/claude-opus-4-7,
+  auditor=claude-cli/claude-sonnet-4-6 — gen-1 ran before PR #1488's
+  opus-4-7 default flip). ``validate_petri_bundle.py`` reports
+  ``OK: 11 archive(s)`` (9 historical + gen-0 + gen-1).
+
+  The Pages publish itself still depends on a develop→main release PR
+  since ``.github/workflows/pages.yml`` triggers on ``push: branches:
+  [main]`` only — the develop merges from today (#1487 ~ #1491) do not
+  fire a deploy. A follow-up release PR will land both today's gen-0
+  baseline and this gen-1 backfill on the live site.
+
+### Changed
+
+- **PR-Async-Phase-C step 2 — seed-generation Pipeline + 8 agents native async**.
+  Second leg of the async-only migration. The Pipeline orchestrator
+  + 8 seed-generation agents (Critic / Evolver / Generator /
+  MetaReviewer / Pilot / Proximity / Ranker / Supervisor) flip to
+  native async; sync siblings remain as ``DeprecationWarning`` +
+  ``# DEPRECATED-ASYNC-PHASE-C:`` grep-anchored shims for the
+  bulk-removal pass at the end of the migration.
+
+  **Pipeline orchestrator (``plugins/seed_generation/orchestrator.py``)**:
+
+  - ``async def arun`` (new) — walks the 8-phase ``_PHASE_ORDER``
+    (+ optional ``_ITERATION_PHASE_ORDER`` cycles) via
+    ``await self._arun_phase(phase)``.
+  - ``async def _arun_phase`` (new) — acquires the OpenClaw lane
+    chain via ``self._aacquire_lane(role)`` (async ctx) and awaits
+    the agent's ``aexecute``.
+  - ``_aacquire_lane(role)`` (new) — async context manager wrapping
+    ``LaneQueue.acquire_all_async`` with the ``["session",
+    "seed-generation", "global"]`` chain.
+  - Sync ``run`` / ``_run_phase`` / ``_acquire_lane`` retain
+    behaviour via ``run_process_coroutine(self.arun())`` shims;
+    each emits ``DeprecationWarning``.
+
+  **BaseSeedAgent (``plugins/seed_generation/agents/base.py``)**:
+
+  - Abstract method flipped to ``async def aexecute(state) ->
+    SeedAgentResult``.
+  - Sync ``execute`` becomes a deprecation shim that bridges
+    legacy callers via ``run_process_coroutine``.
+
+  **8 concrete agents**: each ``def execute`` body became
+  ``async def aexecute``, with ``self._manager.delegate(...)`` →
+  ``await self._manager.adelegate(...)``. The Ranker's
+  ``_play_match`` helper also flipped to ``async`` so the bracket
+  loop can await each match's voter fan-out.
+
+  **CLI wiring (``plugins/seed_generation/cli.py:452``)**:
+  ``pipeline.run()`` → ``run_process_coroutine(pipeline.arun())``
+  with a comment grounding the Typer 0.25.1 async-support gap
+  (issue #950 closed unmerged 2026-05-18). Group A entry points
+  (Typer CLI / worker subprocess main) MUST stay sync because Typer
+  doesn't natively support ``async def`` commands; the runtime
+  layer inside the process boundary is async-only.
+
+  **Test parity**:
+
+  - ``tests/plugins/seed_generation/`` — 14 stub manager classes
+    across 10 test files gained ``async def adelegate(tasks, ...)``
+    siblings calling ``self.delegate(...)``. Stub agents in
+    ``test_state_offload.py`` / ``test_iteration_loop.py`` /
+    ``test_base_agent.py`` / ``test_orchestrator.py`` flipped
+    ``def execute`` → ``async def aexecute``.
+  - ``tests/test_cosci_1_fixups.py`` — two ``inspect.getsource``
+    pins on ``Pipeline.run`` moved to ``Pipeline.arun`` (abort gate
+    now lives in async path).
+  - 362 seed-generation tests pass, 0 fail.
+
+### Added
+
+- **PR-CSA-2c — codex MCP bridge mirror (auditor tool_use enabled for
+  the codex-cli path).** Lifts the CSA-1b boundary
+  (``NotImplementedError("tool_use deferred to CSA-2b MCP bridge")``)
+  so the auditor role can now drive tool calls through the codex CLI
+  subprocess in addition to the claude side. Reuses the
+  provider-agnostic bridge core that CSA-2 stood up
+  (``plugins/petri_audit/mcp_bridge/{bridge_server,lifecycle,
+  tool_translator,stream_parser_ext}.py``); the only codex-specific
+  surface is one new module that translates the bridge invocation
+  into codex's TOML override flag shape.
+
+  **New module** ``plugins/petri_audit/mcp_bridge/codex_overrides.py``
+  (~110 LOC of production code + ~190 LOC of tests):
+    * :func:`build_codex_cli_mcp_overrides` — renders a
+      :class:`BridgeInvocation` into a flat list of ``-c key=value``
+      argv tokens for ``codex exec``. Where the claude side uses a
+      single ``--mcp-config <path>`` JSON file, codex needs one ``-c``
+      override per leaf field under ``[mcp_servers.bridge.*]`` (TOML
+      shape). Each string value JSON-quoted (which TOML decodes as a
+      string literal too — single quoting strategy works across both
+      parsers). Read the bridge config from
+      ``invocation.mcp_config_json`` so a single :func:`prepare_bridge`
+      call materialises the resources both CLI sides need.
+    * :func:`extract_codex_tool_calls` — walks the codex JSONL stream
+      for ``{"type": "item.completed", "item": {"type":
+      "function_call", "name": "mcp__bridge__<tool>", "arguments":
+      "...", "call_id": "..."}}`` events and builds
+      ``inspect_ai.tool.ToolCall`` instances with the
+      ``mcp__bridge__`` prefix stripped via the shared
+      :func:`strip_mcp_prefix`. ``arguments`` decodes as JSON; parse
+      failures surface as ``parse_error`` on the ToolCall instead of
+      raising (same tolerant contract the claude side uses).
+
+  **``codex_cli_provider.py`` wiring** —
+  :class:`CodexCliAPI.generate` splits into
+  :meth:`_generate_text_only` (CSA-1b path, unchanged) and the new
+  :meth:`_generate_with_tools`. The tools path lazy-imports the bridge
+  package, calls :func:`prepare_bridge`, passes the override tokens to
+  :func:`build_codex_cli_argv` via the new ``mcp_overrides=`` kwarg,
+  parses the JSONL stream, calls :func:`extract_codex_tool_calls`, and
+  returns a ``ChatMessageAssistant`` with ``tool_calls=...`` +
+  ``stop_reason="tool_calls"`` when any function_call items present.
+  :func:`release_bridge` always runs in ``finally`` (parity with the
+  claude side's contract — leaks would multiply on every audit
+  sample). Shares the same ``codex-cli-subagent`` lane as the
+  text-only path so subscription quota stays bounded.
+
+  **argv builder extension** —
+  :func:`build_codex_cli_argv` grew a single ``mcp_overrides:
+  Iterable[str] | None`` kwarg that splices the bridge overrides into
+  the argv right after ``--model``. Backwards-compatible: existing
+  callers (CSA-1b text-only + autoresearch outer loop) leave the kwarg
+  unset and the argv is unchanged.
+
+  **Tests** — 10 new unit tests
+  (``tests/plugins/petri_audit/test_codex_overrides.py``) pin the
+  contract:
+  ``build_codex_cli_mcp_overrides`` — command/args/env layout × TOML
+  JSON-quoting × per-env-var separate overrides × bridge-server-name
+  invariant (``"bridge"`` pinned); ``extract_codex_tool_calls`` —
+  mcp prefix strip × JSON arguments parse × parse_error surfacing on
+  bad JSON × non-function_call events ignored × empty stream → []
+  × multiple calls in one turn (parallel-tools support).
+
+  **Operator surface** — no config change required.
+  ``[petri.adapter.openai.codex-cli]`` already binds the codex-cli
+  provider to the ``codex-cli/`` inspect_ai prefix (CSA-3 manifest
+  flip). Once auditor or judge roles route through that prefix and
+  the audit task advertises tools, codex CLI sees them via the
+  bridge automatically. Cross-model auditor diversity (anthropic +
+  codex sides both tool-capable) is now unblocked.
+
+  **Live verification** deferred — CSA-2c lands with mock tests only.
+  The codex CLI's actual behavior under ``--max-turns``-equivalent
+  semantics + MCP-tool boundary (does codex stop before executing the
+  function_call?) needs operator validation on a real subscription
+  audit run. The shape of the JSONL ``function_call`` events was
+  cross-verified against the codex binary's emitted symbol table
+  (homebrew install, ``strings(1)`` lookup); end-to-end runtime
+  validation is a CSA-2c-followup.
+
+- **PR-Async-Phase-C foundation — ``SubAgentManager.adelegate``**.
+  First leg of the async-only migration plan ([[async-phase-c]] —
+  Phase A+B sequence). New ``async def adelegate(tasks, *,
+  on_progress=None, announce=True)`` uses ``asyncio.gather`` over
+  the existing async ``IsolatedRunner.arun`` per task — each task
+  off-loads its blocking subprocess/thread wait via
+  ``asyncio.to_thread``, so the caller's event loop is not pinned.
+  Backpressure is now suspended-coroutine cost (~1 KB) instead of
+  thread/subprocess RSS. Contract parity with sync ``delegate`` —
+  same depth guard, dedup, sandbox-dir expansion, hooks
+  (``SUBAGENT_STARTED/COMPLETED/FAILED``), run-record bookkeeping,
+  and announce semantics; only the wait mechanic differs
+  (asyncio.gather vs polling).
+
+  The legacy sync ``delegate`` now emits ``DeprecationWarning`` and
+  carries a ``# DEPRECATED-ASYNC-PHASE-C:`` grep anchor for the
+  bulk-removal pass at the end of the migration. Six new behaviour
+  tests in ``tests/test_agentic_loop.py::TestSubAgentManagerAdelegate``
+  pin parity (empty / handler success / handler failure / parallel
+  fan-out wall-clock / depth-guard short-circuit / deprecation
+  warning emission). All 127 pre-existing sub-agent tests stay green.
+
+  Next slice in the migration: Pipeline.arun + BaseSeedAgent.aexecute
+  + 8 seed-generation agents native async + CLI wiring.
+
+### Changed
+
+- **autoresearch outer-loop UX cleanup — auditor default + config
+  precedence docs**. Two deferrals from the 2026-05-22 gen-0 baseline
+  sprint (`project_session66_handoff`) landed together as one PR:
+  (B1) the ``geode audit --auditor`` default flipped from
+  ``claude-sonnet-4-6`` → ``claude-opus-4-7`` so the auditor role no
+  longer drops to the cost-optimised pick when the operator omits the
+  flag (subscription path pays the same per-token, and the auditor's
+  transcript-shaping ability bounds test signal-to-noise — the default
+  should track the flagship). Both the Typer entry surface
+  (``plugins/petri_audit/cli_audit.py``) and the slash parser default
+  flipped in lockstep; the matching ``test_cli_audit.py`` slash-args
+  assertion updated to pin the new default. Help text expanded to spell
+  out the "flagship by default" rationale so future operators don't
+  silently revert.
+  (B2) ``PetriRoleConfig`` docstring (``core/config/self_improving_loop.py``)
+  now spells out the precedence rule between
+  ``[self_improving_loop.autoresearch].{target_model,judge_model}``
+  (argv → wins on model) and ``[self_improving_loop.petri.<role>]``
+  (applies for standalone ``geode audit`` + source axis still flows
+  through cascade). The gen-0 baseline session surfaced the trap when
+  the operator's config carried ``[petri.target].model = "gpt-5.5"``
+  while ``[autoresearch].target_model = "claude-opus-4-7"`` — argv
+  silently won and the cross-model audit signal vanished without any
+  warning. ``autoresearch/program.md`` § Setup gained a new "Confirm
+  config precedence" step (#6) that names both sections + points the
+  agent at the full resolution order in the class docstring.
+
+### Added
+
+- **petri bundle auto-sync — agent context → repo-tracked bundle.** New
+  ``plugins/petri_audit/bundle_sync.py`` (~100 LOC) lifts ``.eval`` archives
+  from the agent context layer (``~/.geode/petri/logs/``, per-machine
+  accumulating runtime) into the repo-tracked publish surface
+  (``docs/petri-bundle/logs/``, committable + Pages-served) right after
+  every successful audit. Hook lives in
+  ``plugins.petri_audit.cli_audit._post_run_emit`` immediately after the
+  ``_update_latest_petri_eval_symlink`` call — same single chokepoint every
+  audit (standalone ``geode audit`` + autoresearch outer-loop) already
+  passes through, so no extra wiring per call site. Per ``.eval`` the
+  sync copies the archive into ``docs/petri-bundle/logs/<name>.eval`` and
+  merges a ``listing.json`` entry built from the inspect-ai
+  ``header.json`` (eval_id / run_id / task / task_id / task_version /
+  version / status / invalidated / model / model_roles / started_at /
+  completed_at / primary_metric). ``model_roles`` is flattened from
+  inspect-ai's nested ``{role: {model, config, args}}`` to the viewer's
+  expected ``{role: model_id}`` shape; ``primary_metric`` picks the first
+  scorer's first metric (typically ``mean``) — the same heuristic
+  inspect-ai's viewer uses for its cold-start summary. Existing
+  ``listing.json`` entries are preserved on merge — only the new entry's
+  filename is overwritten. **Bypass**: set
+  ``GEODE_PETRI_BUNDLE_SYNC_DISABLED=1`` to short-circuit before copy
+  (used by tests / operators who curate the bundle manually). **Failure
+  semantics**: sync is best-effort — any exception (missing source, OS
+  error, listing parse failure) logs a warning but does not break the
+  audit return path or the dim-aggregate stdout emission. zstd header
+  decompression falls back to a filename-only listing entry on Python <
+  3.14 without ``zipfile-zstd`` installed (the same fallback pattern
+  ``scripts/validate_petri_bundle.py`` already uses). 9 unit tests pin
+  the contract (flatten / primary_metric / preserve-existing / bootstrap-
+  missing / overwrite-same-key / env-knob / missing-source / idempotent-
+  resync). Net effect: today's gen-0 baseline (and every subsequent
+  audit) lands in the Pages-publishable bundle automatically — no manual
+  copy step before the next ``docs/petri-bundle/**`` paths trigger fires.
+
+  ``.gitignore`` exception added — the blanket ``logs/`` rule was
+  silently dropping every newly-synced ``.eval`` (existing files in
+  ``docs/petri-bundle/logs/`` were tracked from before the rule existed,
+  but freshly-synced ones got swallowed by the broad pattern). Same
+  anti-pattern as PR-G5b #1350 (``MUTATION_AUDIT_LOG_PATH`` vs
+  ``autoresearch/state/*``) — ``git check-ignore`` would have caught it
+  before push. Added ``!docs/petri-bundle/logs/`` +
+  ``!docs/petri-bundle/logs/**`` colocated with the ``logs/`` rule it
+  negates, with an inline comment naming the consumer
+  (``bundle_sync.py``) so a future reader doesn't strip the exception
+  thinking it's stale. Today's gen-0 ``.eval`` is now actually committed
+  (verified via ``git ls-files``), not just copied into a gitignored
+  hole.
+
 ## [0.99.33] - 2026-05-22
 
 > Codex Phase 3 OAuth polling lands. paperclip ``fetchCodexQuota``

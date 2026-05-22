@@ -25,6 +25,10 @@ class _ReverseOrderManager:
     def __init__(self) -> None:
         self.received_tasks: list[SubTask] = []
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         self.received_tasks = list(tasks)
         results = [
@@ -76,6 +80,10 @@ def test_generator_pairs_by_task_id_under_reverse_order(tmp_path: Path) -> None:
 
 class _UnmatchedResultManager:
     """Returns a result whose task_id doesn't match any submitted task."""
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
 
     def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
         results = [

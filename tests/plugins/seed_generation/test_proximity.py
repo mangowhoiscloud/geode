@@ -36,6 +36,10 @@ class _StubManager:
         self._success = success
         self.delegated: list[Any] = []
 
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        """Async sibling for Phase-C tests."""
+        return self.delegate(tasks, announce=announce)
+
     def delegate(self, tasks: list[Any], *, announce: bool = False) -> list[Any]:
         self.delegated.append((tasks, announce))
         return [

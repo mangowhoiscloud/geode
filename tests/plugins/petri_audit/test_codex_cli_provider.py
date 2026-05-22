@@ -518,19 +518,33 @@ def test_provider_registers_modelapi() -> None:
     assert hasattr(p, "CodexCliAPI")
 
 
-def test_generate_with_tools_raises_csa1b_boundary(tmp_path: Any) -> None:
+def test_generate_with_tools_dispatches_to_tools_path(tmp_path: Any) -> None:
+    """CSA-2c (2026-05-22) — the CSA-1b boundary
+    (``NotImplementedError("tool_use deferred to CSA-2b MCP bridge")``)
+    was lifted. ``generate()`` with a non-empty ``tools`` argument now
+    routes through ``_generate_with_tools`` which calls into the MCP
+    bridge. Pin the routing: mock ``_generate_with_tools`` and confirm
+    it is what gets called when tools are present. The bridge internals
+    have their own contract tests in ``test_codex_overrides.py``."""
+    pytest.importorskip("inspect_ai")
     from plugins.petri_audit import codex_cli_provider as p
 
     fake = tmp_path / "fake-codex"
     fake.write_text("#!/bin/sh\necho ok\n")
     fake.chmod(0o755)
+
+    async def _fake_with_tools(_inp: Any, _tools: Any) -> str:
+        return "sentinel-tools"
+
     with patch(
         "plugins.petri_audit.codex_cli_provider._resolve_codex_binary",
         return_value=str(fake),
     ):
         api = p.CodexCliAPI(model_name="gpt-5.5")
-        with pytest.raises(NotImplementedError, match="MCP bridge"):
-            asyncio.run(api.generate([], tools=["t"], tool_choice="auto", config=None))
+        with patch.object(api, "_generate_with_tools", side_effect=_fake_with_tools) as mocked:
+            result = asyncio.run(api.generate([], tools=["t"], tool_choice="auto", config=None))
+        assert result == "sentinel-tools"
+        mocked.assert_called_once()
 
 
 def test_generate_text_only_round_trip(tmp_path: Any) -> None:

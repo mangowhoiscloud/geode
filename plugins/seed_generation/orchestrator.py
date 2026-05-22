@@ -350,7 +350,42 @@ class Pipeline:
         self._on_phase_error = on_phase_error
 
     def run(self) -> PipelineState:
-        """Walk the 7 phases (then optional iteration cycles). Returns the final state."""
+        """[DEPRECATED] Sync sibling — calls :meth:`arun` via run_process_coroutine.
+
+        Bridges legacy sync callers (pre-Phase-C ``cli.py:452``,
+        test fixtures still on ``pipeline.run()``) to the async-only
+        runtime. The bridge uses
+        :func:`core.async_runtime.run_process_coroutine`, which
+        requires no running event loop — RuntimeError if the caller
+        already has one (in which case they should
+        ``await pipeline.arun()`` directly).
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target after cli.py +
+        # tests/* migrate to ``run_process_coroutine(pipeline.arun())``.
+        """
+        import warnings
+
+        warnings.warn(
+            "Pipeline.run is deprecated; use arun() (async) — wrap with "
+            "core.async_runtime.run_process_coroutine for sync entry points",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from core.async_runtime import run_process_coroutine
+
+        return run_process_coroutine(self.arun())
+
+    async def arun(self) -> PipelineState:
+        """Walk the 7 phases (then optional iteration cycles). Returns the final state.
+
+        PR-Async-Phase-C step 2 (2026-05-22) — async-native pipeline
+        walker. Replaces sync ``run`` which is now a deprecation
+        shim. Each phase calls :meth:`_arun_phase` (await), which
+        acquires the OpenClaw lane chain via the LaneQueue's
+        async ``acquire_all_async`` and awaits the agent's
+        :meth:`BaseSeedAgent.aexecute` — fan-out via
+        :meth:`SubAgentManager.adelegate` inside the agent.
+        """
         log.info(
             "seed-generation run started: run_id=%s target=%s gen=%s max_iters=%d",
             self.state.run_id,
@@ -397,7 +432,7 @@ class Pipeline:
                 )
             order = _PHASE_ORDER if iteration == 0 else _ITERATION_PHASE_ORDER
             for phase in order:
-                self._run_phase(phase)
+                await self._arun_phase(phase)
                 # PR-COSCI-1 (2026-05-21) — abort early when the
                 # candidates pool is empty after a phase that should
                 # have populated or filtered it. The check is scoped
@@ -758,14 +793,37 @@ class Pipeline:
             )
 
     def _run_phase(self, role: str) -> SeedAgentResult:
-        """Look up the role's agent, invoke it, merge the result.
+        """[DEPRECATED] Sync sibling of :meth:`_arun_phase`.
 
-        Wraps the execute call in an optional ``seed-generation`` lane
-        acquisition (when a ``LaneQueue`` was passed). For sequential
-        phases the lane is effectively a no-op; for phases that fan
-        out via ``delegate(tasks=[…])`` in S2+ the lane gates
-        concurrency at 16 (see ``DEFAULT_SEED_PIPELINE_CONCURRENCY``
-        in ``core/wiring/container.py``).
+        Bridges legacy sync callers to async pipeline. The actual
+        phase logic lives in :meth:`_arun_phase`; this shim uses
+        :func:`run_process_coroutine` to satisfy sync test fixtures
+        that haven't migrated to ``arun`` yet.
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target after all sync
+        # ``Pipeline.run`` callers migrate to ``arun``.
+        """
+        import warnings
+
+        warnings.warn(
+            "Pipeline._run_phase is deprecated; use _arun_phase (async) instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from core.async_runtime import run_process_coroutine
+
+        return run_process_coroutine(self._arun_phase(role))
+
+    async def _arun_phase(self, role: str) -> SeedAgentResult:
+        """Look up the role's agent, invoke it (async), merge the result.
+
+        PR-Async-Phase-C step 2 (2026-05-22) — async-native phase
+        runner. Wraps the agent's ``aexecute`` in the OpenClaw lane
+        chain via :meth:`_aacquire_lane` (which uses LaneQueue's
+        ``acquire_all_async``). For phases that fan out via
+        :meth:`SubAgentManager.adelegate` the lane gates concurrency
+        at the seed-generation cap (default 4 per Phase 1
+        ``DEFAULT_SEED_PIPELINE_CONCURRENCY``).
 
         Cost rollup is purely informational — the agent (or its test
         stub) sets ``result.usd_spent`` / ``prompt_tokens`` /
@@ -804,9 +862,9 @@ class Pipeline:
         started = time.time()
 
         result: SeedAgentResult | None = None
-        with self._acquire_lane(role):
+        async with self._aacquire_lane(role):
             try:
-                result = agent.execute(self.state)
+                result = await agent.aexecute(self.state)
             except Exception as exc:
                 duration = (time.time() - started) * 1000
                 log.exception("seed-generation phase %s raised", role)
@@ -859,21 +917,13 @@ class Pipeline:
         return result
 
     def _acquire_lane(self, role: str) -> Any:
-        """Return a context manager that walks the OpenClaw lane hierarchy.
+        """[DEPRECATED] Sync sibling — see :meth:`_aacquire_lane`.
 
-        Acquires ``["session", "seed-generation", "global"]`` in order so
-        per-role concurrency is bounded by BOTH the seed-generation
-        workload cap and the global cap (PR-LQ-Phase1, 2026-05-22). The
-        SessionLane keys on ``seed-generation:<run_id>`` so two concurrent
-        ``Pipeline.run()`` calls for the same ``run_id`` serialize
-        (prevents the pre-PR race where two launches of the same run
-        non-atomically incremented ``state.usd_spent`` etc.).
+        Retained because some pre-Phase-C test fixtures invoke
+        ``_run_phase`` (sync) directly. Once those fixtures migrate
+        to ``_arun_phase``, this can be removed.
 
-        When no ``LaneQueue`` was supplied (test path) or the
-        ``seed-generation`` lane is not registered, returns a no-op
-        context manager. The actual semaphore gating only takes effect
-        when the agent fans out via ``SubAgentManager.delegate(tasks=[…])``
-        in S2+.
+        # DEPRECATED-ASYNC-PHASE-C: removal target.
         """
         from contextlib import nullcontext
 
@@ -883,6 +933,38 @@ class Pipeline:
             return nullcontext()
         session_key = f"seed-generation:{self.state.run_id}"
         return self._lane_queue.acquire_all(
+            session_key,
+            ["session", "seed-generation", "global"],
+        )
+
+    def _aacquire_lane(self, role: str) -> Any:
+        """Return an async context manager walking the OpenClaw lane chain.
+
+        PR-Async-Phase-C step 2 (2026-05-22) — async sibling of
+        :meth:`_acquire_lane`. Acquires
+        ``["session", "seed-generation", "global"]`` in order via
+        :meth:`LaneQueue.acquire_all_async` so per-role concurrency
+        is bounded by BOTH the seed-generation workload cap and the
+        global cap (PR-LQ-Phase1). The SessionLane keys on
+        ``seed-generation:<run_id>`` so two concurrent
+        ``Pipeline.arun()`` calls for the same ``run_id`` serialize.
+
+        When no ``LaneQueue`` was supplied (test path) or the
+        ``seed-generation`` lane is not registered, returns an async
+        nullcontext.
+        """
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _noop() -> Any:
+            yield
+
+        if self._lane_queue is None:
+            return _noop()
+        if self._lane_queue.get_lane("seed-generation") is None:
+            return _noop()
+        session_key = f"seed-generation:{self.state.run_id}"
+        return self._lane_queue.acquire_all_async(
             session_key,
             ["session", "seed-generation", "global"],
         )

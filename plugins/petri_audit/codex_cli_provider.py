@@ -173,6 +173,7 @@ def build_codex_cli_argv(
     bypass_sandbox: bool = False,
     resume_session_id: str | None = None,
     reasoning_effort: str | None = None,
+    mcp_overrides: Iterable[str] | None = None,
     extra_args: Iterable[str] | None = None,
 ) -> list[str]:
     """Construct the ``codex exec --json`` argv.
@@ -209,6 +210,13 @@ def build_codex_cli_argv(
         argv += ["--model", model_name]
     if reasoning_effort:
         argv += ["-c", f"model_reasoning_effort={json.dumps(reasoning_effort)}"]
+    if mcp_overrides:
+        # CSA-2c (2026-05-22) — MCP bridge wiring goes here as a flat
+        # sequence of ``-c key=value`` tokens emitted by
+        # :func:`plugins.petri_audit.mcp_bridge.codex_overrides.build_codex_cli_mcp_overrides`.
+        # Codex parses TOML values, so the bridge module already
+        # JSON-quotes strings for parser parity.
+        argv += list(mcp_overrides)
     if extra_args:
         argv += list(extra_args)
     # stdin marker — must come last (codex parses positional after
@@ -482,15 +490,10 @@ def register() -> None:
             config: Any,  # GenerateConfig
         ) -> Any:  # ModelOutput
             if tools:
-                # CSA-1b ships text-only. Tool support requires the
-                # MCP bridge (CSA-2b) — codex has first-class MCP
-                # (`codex mcp` + `codex mcp-server`) so the bridge
-                # work is lower-risk than the claude side.
-                raise NotImplementedError(
-                    "codex-cli provider: tool_use deferred to CSA-2b "
-                    "(MCP bridge). Use openai-codex/ provider for now if "
-                    "tools are required."
-                )
+                return await self._generate_with_tools(input, tools)
+            return await self._generate_text_only(input)
+
+        async def _generate_text_only(self, input: Any) -> Any:
             argv = build_codex_cli_argv(
                 binary=self._binary,
                 model_name=self.model_name,
@@ -538,5 +541,80 @@ def register() -> None:
                 usage=usage,
                 error=error_msg,
             )
+
+        async def _generate_with_tools(self, input: Any, tools: Any) -> Any:
+            # Lazy-import so plain ``import plugins.petri_audit.
+            # codex_cli_provider`` does not pay the mcp library +
+            # bridge package cold-start cost when tools aren't used.
+            from plugins.petri_audit.mcp_bridge import (
+                build_codex_cli_mcp_overrides,
+                extract_codex_tool_calls,
+                prepare_bridge,
+                release_bridge,
+            )
+
+            invocation = prepare_bridge(tools)
+            try:
+                argv = build_codex_cli_argv(
+                    binary=self._binary,
+                    model_name=self.model_name,
+                    mcp_overrides=build_codex_cli_mcp_overrides(invocation),
+                )
+                prompt = serialise_messages_to_prompt(input)
+                # PR-LQ-Phase3 (2026-05-22) — share the codex-cli-subagent
+                # lane (parity with the text-only path above).
+                from core.orchestration.codex_cli_lane import (
+                    acquire_codex_cli_lane_async,
+                )
+
+                async with acquire_codex_cli_lane_async(key=f"petri.codex_cli.{self.model_name}"):
+                    stdout, stderr, returncode = await _run_codex_subprocess(
+                        argv, prompt, self._timeout_s
+                    )
+                if returncode != 0:
+                    raise CodexCliInvocationError(f"codex exited {returncode}: {stderr[:400]!r}")
+                events = parse_codex_jsonl_events(stdout)
+                if not events:
+                    raise CodexCliInvocationError(
+                        f"codex stdout had no JSONL events. stderr: {stderr[:400]!r}"
+                    )
+                text = _extract_agent_message(events)
+                # extract_codex_tool_calls operates on the raw JSON
+                # shape (``{"type": ..., "item": {...}}``); convert
+                # the CodexJsonlEvent dataclasses back to that shape
+                # at the call boundary.
+                event_dicts = [{"type": e.type, **e.payload} for e in events]
+                tool_calls = extract_codex_tool_calls(event_dicts)
+                # Stop reason: tool_use vs text. inspect_ai's contract
+                # is "tool_calls" when any tool call was emitted, else
+                # the regular stop_reason.
+                stop_reason = "tool_calls" if tool_calls else _extract_stop_reason(events)
+                usage_dict = _extract_usage(events)
+                error_msg = _extract_error(events)
+                choice = ChatCompletionChoice(
+                    message=ChatMessageAssistant(
+                        content=text,
+                        tool_calls=tool_calls or None,
+                    ),
+                    stop_reason=stop_reason,
+                )
+                usage = ModelUsage(
+                    input_tokens=usage_dict["input_tokens"],
+                    output_tokens=usage_dict["output_tokens"],
+                    total_tokens=usage_dict["input_tokens"] + usage_dict["output_tokens"],
+                    input_tokens_cache_read=usage_dict["cached_input_tokens"] or None,
+                )
+                return ModelOutput(
+                    model=self.model_name,
+                    choices=[choice],
+                    completion=text,
+                    usage=usage,
+                    error=error_msg,
+                )
+            finally:
+                # Release the per-call tempdir + bridge process. Runs
+                # even on subprocess failure (boundary-violation safety
+                # — matches the claude side's contract).
+                release_bridge(invocation)
 
     globals()["CodexCliAPI"] = CodexCliAPI

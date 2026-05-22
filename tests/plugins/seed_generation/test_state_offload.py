@@ -24,7 +24,7 @@ class _NoopAgent(BaseSeedAgent):
     def __init__(self, role: str) -> None:
         super().__init__(role=role, model="dummy")
 
-    def execute(self, state: Any) -> SeedAgentResult:
+    async def aexecute(self, state: Any) -> SeedAgentResult:
         return SeedAgentResult(role=self.role)
 
 
