@@ -1,5 +1,12 @@
 """Read autoresearch's ``baseline.json`` for seed-generation agents.
 
+Also hosts the CSP-4 Supervisor guidance prefix helper —
+``format_supervisor_block`` — so all prompt-prefix utilities live in
+one place. The Supervisor block is sibling to the baseline-evidence
+and meta-review-priors blocks already in this module; co-locating
+them lets sub-agents import a single helper namespace for every
+prefix they prepend.
+
 G3 — closes the 2026-05-20 self-improving-loop wiring sprint's third
 gap: seed-generation's generator / critic / evolver previously
 generated seeds without any knowledge of which dims the *most-recent*
@@ -578,4 +585,57 @@ def format_priors_block(
         summary = snapshot.session_summary.strip().splitlines()
         if summary:
             lines.append(f"- session_summary: {summary[0][:240]}")
+    return "\n".join(lines)
+
+
+# ----------------------------------------------------------------------
+# CSP-4 (2026-05-22) — Supervisor guidance prefix helper
+# ----------------------------------------------------------------------
+
+
+def format_supervisor_block(
+    guidance: dict[str, object] | None,
+    *,
+    phase: str,
+) -> str:
+    """Render the Supervisor's per-phase guidance for a sub-agent prompt.
+
+    ``guidance`` is the dict the Supervisor sub-agent emitted under
+    ``state.supervisor_guidance``. ``phase`` is one of ``"generation"``,
+    ``"critique"``, or ``"evolution"`` (matches the keys in
+    ``guidance["phase_guidance"]``).
+
+    Returns an empty string when:
+    - ``guidance`` is None or empty (Supervisor phase didn't run / was skipped)
+    - The named ``phase`` has no entry in ``guidance["phase_guidance"]``
+    - The phase guidance value is empty after strip
+
+    The returned block is prefixed onto the per-spawn description with
+    ``\\n\\n`` so it sits visually distinct from the per-candidate
+    parameters. Format::
+
+        ## Supervisor guidance for <phase>
+
+        <phase-specific guidance text>
+
+        Run-level focus: <research_goal_analysis.target_dim_focus>
+    """
+    if not guidance or not isinstance(guidance, dict):
+        return ""
+    phase_guidance = guidance.get("phase_guidance")
+    if not isinstance(phase_guidance, dict):
+        return ""
+    raw = phase_guidance.get(phase)
+    if not isinstance(raw, str):
+        return ""
+    text = raw.strip()
+    if not text:
+        return ""
+    lines = [f"## Supervisor guidance for {phase}", "", text]
+    analysis = guidance.get("research_goal_analysis")
+    if isinstance(analysis, dict):
+        focus = analysis.get("target_dim_focus")
+        if isinstance(focus, str) and focus.strip():
+            lines.append("")
+            lines.append(f"Run-level focus: {focus.strip()[:240]}")
     return "\n".join(lines)

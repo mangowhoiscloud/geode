@@ -49,6 +49,27 @@ functional change.
 
 ### Added
 
+- **Supervisor phase — run-level strategy synthesis (CSP-4)** — New
+  Phase 0 of the seed-generation pipeline (paper §3 Supervisor).
+  `plugins/seed_generation/agents/supervisor.py` dispatches one Opus
+  sub-agent at the start of every run; the sub-agent
+  (`.claude/agents/seed_supervisor.md`) reads target_dim + cohort +
+  baseline-snapshot / meta-review-snapshot summaries and emits one
+  canonical strategy as `state.supervisor_guidance`
+  (`research_goal_analysis` + per-phase `phase_guidance` for
+  generation/critique/evolution + `session_summary`). Generator,
+  Critic, and Evolver now prefix the relevant `phase_guidance.*`
+  entry onto each per-candidate sub-agent description via the new
+  `baseline_reader.format_supervisor_block` helper — sibling to the
+  pre-CSP-4 evidence + priors prefixes. The Supervisor phase is
+  OPTIONAL: when no Supervisor agent is registered (test fixtures
+  that mock a subset of roles, pre-CSP-4 callers), the phase short-
+  circuits with a `phase_skipped` journal event and
+  `state.supervisor_guidance` stays at its empty-dict default — no
+  downstream change. `_state_to_json` persists the guidance so
+  `state.json` replay carries the same strategy the live run
+  consumed.
+
 - **Generator + Critic literature grounding (CSP-3)** — The
   `seed_generation` and `seed_critique` toolkits in `toolkits.toml`
   now fold in the `literature_research` kit (via `includes:`), so
