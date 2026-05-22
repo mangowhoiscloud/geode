@@ -576,14 +576,13 @@ def run_audit(
     # ~/.geode/petri.toml, then the manifest default). Callers that
     # explicitly pin a model still win — the resolved binding only
     # fires when the argv slot was omitted.
-    if auditor is None:
+    if auditor is None or judge is None:
         from plugins.petri_audit.registry import get_binding
 
-        auditor = get_binding("auditor").model
-    if judge is None:
-        from plugins.petri_audit.registry import get_binding
-
-        judge = get_binding("judge").model
+        if auditor is None:
+            auditor = get_binding("auditor").model
+        if judge is None:
+            judge = get_binding("judge").model
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)

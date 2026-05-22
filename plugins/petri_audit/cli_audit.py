@@ -151,7 +151,7 @@ def _update_latest_petri_eval_symlink(archive_path: str) -> None:
 
 
 def audit(
-    judge: str = typer.Option(
+    judge: str | None = typer.Option(
         None,
         "--judge",
         "-j",
@@ -160,7 +160,7 @@ def audit(
         "in ``~/.geode/config.toml`` — the operator-config SoT for the role. "
         "Explicit argv pins the model for the call's lifetime.",
     ),
-    auditor: str = typer.Option(
+    auditor: str | None = typer.Option(
         None,
         "--auditor",
         "-a",
@@ -170,7 +170,7 @@ def audit(
         "transcript-shaping ability bounds test signal-to-noise, so the "
         "operator typically pins the flagship Claude there.",
     ),
-    target: str = typer.Option(
+    target: str | None = typer.Option(
         None,
         "--target",
         "-t",

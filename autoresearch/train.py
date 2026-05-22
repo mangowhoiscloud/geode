@@ -28,9 +28,17 @@ Agent CAN modify:
     The dict is exported to the audit subprocess via
     ``GEODE_WRAPPER_OVERRIDE`` and the GEODE runtime's
     active AgenticLoop system prompt replaces the wrapper base with it.
-  * Hyperparameters such as ``BUDGET_MINUTES`` / ``TARGET_MODEL`` /
-    ``JUDGE_MODEL`` / ``USE_OAUTH`` — change one at a time so the
-    fitness delta is attributable.
+  * Hyperparameters via ``[self_improving_loop.autoresearch]`` in
+    ``~/.geode/config.toml`` (``budget_minutes``, ``seed_limit``,
+    ``max_turns``, ``source``, etc.). The module constants below
+    (``BUDGET_MINUTES`` / ``TARGET_MODEL`` / ``JUDGE_MODEL`` /
+    ``SEED_LIMIT`` / …) are the SimpleNamespace fallback used only
+    when ``core.config`` cannot be imported (test stubs). For
+    role models specifically, ``[self_improving_loop.petri.<role>]``
+    is the operator-config SoT — set ``[autoresearch].target_model``
+    / ``.judge_model`` only when this run must override the per-role
+    baseline (see ``AutoresearchConfig`` docstring). Change one
+    knob at a time so the fitness delta is attributable.
 
 Agent CANNOT modify (the ``prepare.py`` ground truth):
   * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
