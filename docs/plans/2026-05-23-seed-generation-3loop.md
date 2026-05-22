@@ -62,23 +62,17 @@ Why this over Generator-class direct calls:
 3. Full pytest suite (`-m "not live"`)
 4. CLI smoke — `geode audit-seeds generate --dry-run` (without env keys triggers cred error which is fine for plan validation)
 
-## Phase 2 — Loop 3 (literature paper-analysis) [next session]
+## Phase 2 — Loop 3 (literature paper-analysis) [next PR cycle]
 
-Decision locked: **Option 2 + snapshot freeze** — external paper fetch via MCP (PubMed/arXiv) + freeze results in `docs/literature-snapshots/<paper_id>-<retrieved_at>.json` (git-tracked) so audit replay remains reproducible.
+**Full SoT** at [`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`](2026-05-23-seed-gen-loop3-bundle-serving.md).
 
-Outline (will be expanded in next session):
-- NEW `LiteratureReview` agent in `plugins/seed_generation/agents/literature_review.py`
-- 4-phase: query_gen → paper_fetch → per_paper_analysis → synthesis (per upstream `literature_review.py`)
-- Snapshot writer to `docs/literature-snapshots/`
-- `mutations.jsonl` evidence schema extension: `evidence: [{kind: "external_paper_snapshot", path: "docs/literature-snapshots/<id>.json", content_hash}]`
-- `baseline.json` schema migration (literature evidence card)
-- Orchestrator phase: literature_review insert before generator in `_PHASE_ORDER`
-- ~750 LOC
-
-Open questions for Phase 2:
-- MCP server choice (pubmed-mcp / arxiv-mcp / generic web fetch)
-- Frequency — every outer iteration vs only iteration 0
-- Snapshot retention policy (keep all forever vs prune by gen tag)
+Quick summary:
+- New `LiteratureReview` agent runs once per seed-generation run (iteration 0 only) before `generator`.
+- 4-phase internal pipeline: query_gen → paper_fetch → **per_paper_analysis (Loop 3)** → synthesis.
+- Paper snapshots freeze to `docs/petri-bundle/literature/<arxiv_id>-<retrieved_at>.json` (git-tracked).
+- Bundle UI gets new literature index + detail pages + inline reference cards in the audit log viewer.
+- `scripts/build_literature_listing.py` builds `listing.json` with reverse `cited_by` index from `mutations.jsonl` + seed frontmatter at Pages workflow time.
+- **Scope-locked**: `mutations.jsonl` / `baseline.json` evidence schema realign is OUT (parallel petri-autoresearch session owns that).
 
 ## Status
 
