@@ -49,6 +49,52 @@ functional change.
 
 ### Changed
 
+- **PR-3 of petri-schema-v2 cascade — ``_should_promote`` N=1 critical
+  margin floor**. Third step of the 5-PR cascade documented in
+  ``docs/plans/2026-05-23-petri-schema-v2.md``. Closes the L3/P5 gate
+  invariant — when a prior baseline carries N=1 samples on a critical
+  dim, the promotion margin floor widens from 0.05 to 0.20 (4× the
+  default).
+
+  **Why**: ``dim_extractor._aggregate`` forces N=1 stderr to 0.0
+  (ddof=1 variance undefined). The legacy ``_should_promote`` rule 3
+  formula ``max(baseline_stderr.values(), 0.05)`` then collapsed to
+  the 0.05 floor — a tiny 0.06+ fitness Δ could promote against an
+  under-sampled baseline that had no actual stability signal.
+
+  **What changed**:
+  - New constant ``N1_FITNESS_MARGIN_FLOOR = 0.20`` in
+    ``autoresearch/train.py``.
+  - ``_should_promote`` gains ``baseline_sample_count`` kwarg.
+    If any dim in ``CRITICAL_DIMS`` has count ≤ 1, the floor becomes
+    the N=1 floor. Otherwise legacy behaviour preserved.
+  - New helper ``_load_baseline_sample_count`` reads ``raw.sample_count``
+    from a v2 baseline (returns ``{}`` for v1 / missing / malformed).
+  - ``main()`` auto-promote branch calls the new helper and threads
+    the count map into the gate.
+
+  **Backwards compat**: v1 baselines emit no ``sample_count`` →
+  empty dict → gate stays dormant → legacy 0.05 floor preserved.
+  Once a v2 promotion overwrites the file, the gate becomes active
+  for subsequent runs.
+
+  **Tests added** (``tests/test_autoresearch_train.py``):
+  - ``test_should_promote_widens_margin_when_critical_dim_n1``
+  - ``test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2``
+  - ``test_should_promote_n1_gate_dormant_for_v1_baselines``
+  - ``test_should_promote_n1_gate_uses_critical_tier_only``
+  - ``test_should_promote_n1_gate_boundary_n2_exact_keeps_legacy_floor``
+    (PR-3 Codex catch — pins ``<= 1`` semantics)
+  - ``test_should_promote_n1_gate_fires_when_single_critical_dim_n1``
+    (PR-3 Codex catch — pins ``any(...)`` semantics)
+  - ``test_load_baseline_sample_count_reads_v2_raw_block`` +
+    v1-empty + missing-file variants
+  - 95 ``test_autoresearch_train.py`` + 530 across impacted surface pass.
+
+  Codex MCP reviewed at thread ``019e51f9-cf5d-7b43-9f0f-0a5d759e924c``
+  — 0 CRITICAL / 0 HIGH / 0 MEDIUM / 1 LOW (boundary coverage gap)
+  addressed in the same commit.
+
 - **PR-2 of petri-schema-v2 cascade — ``baseline.json`` schema_version=2
   + ``raw`` / ``axes`` namespace split**. Second step of the 5-PR
   cascade documented in ``docs/plans/2026-05-23-petri-schema-v2.md``.
