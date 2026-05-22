@@ -24,6 +24,16 @@ hf-release/
 # SOT 는 docs/audits/<date>-petri-*.md 보고서. logs 자체는 너무 크고 PII /
 # transcript 가 있을 수 있어 git 제외.
 logs/
+# Exception: docs/petri-bundle/logs/ is the Pages-published audit bundle.
+# bundle_sync (plugins/petri_audit/bundle_sync.py) auto-copies finished
+# .eval archives here from ~/.geode/petri/logs/, and the validator
+# (scripts/validate_petri_bundle.py) treats the path as part of the
+# publishable surface. The blanket `logs/` rule above would silently
+# drop every newly-synced .eval — the same anti-pattern as PR-G5b
+# #1350 (MUTATION_AUDIT_LOG_PATH). Keep this exception colocated with
+# the rule it negates.
+!docs/petri-bundle/logs/
+!docs/petri-bundle/logs/**
 optimized_prompts/
 
 # OS
