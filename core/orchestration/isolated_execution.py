@@ -14,7 +14,6 @@ import dataclasses
 import json
 import logging
 import os
-import subprocess  # nosec B404 — subprocess used for controlled worker process spawn only
 import sys
 import threading
 import time
@@ -120,8 +119,9 @@ class IsolatedRunner:
         self._hooks = hooks
         self._lane = lane  # Lane("global") from unified LaneQueue
         self._results: dict[str, IsolationResult] = {}
-        self._active: dict[str, threading.Thread | subprocess.Popen[bytes]] = {}
-        self._cancel_flags: dict[str, threading.Event] = {}
+        # Only async subprocess workers register here — thread-mode runs
+        # via ``asyncio.to_thread`` and is not externally cancellable.
+        self._active: dict[str, asyncio.subprocess.Process] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -154,33 +154,34 @@ class IsolatedRunner:
             return list(self._active.keys())
 
     def cancel(self, session_id: str) -> bool:
-        """Cancel a running session. Returns True if found.
+        """Cancel a running async subprocess session via SIGKILL.
 
-        For thread mode: sets the cooperative cancel flag.
-        For subprocess mode: kills the child process (SIGKILL).
+        Returns True if the worker process was found alive and killed.
+        Thread-mode runs (``arun(callable)``) are not externally
+        cancellable in CPython and return False.
+
+        PR-Async-Phase-C step 4b fix-up (2026-05-22) — after the sync
+        ``run_async`` / ``_execute_subprocess`` paths were deleted,
+        ``_active`` only holds ``asyncio.subprocess.Process`` instances
+        (registered by :meth:`_aexecute_subprocess`). The cooperative
+        ``_cancel_flags`` indirection is gone — async tasks should be
+        cancelled via ``task.cancel()`` instead, which surfaces as
+        ``asyncio.CancelledError`` inside ``_aexecute_subprocess`` and
+        triggers the same kill+release path.
         """
         with self._lock:
-            flag = self._cancel_flags.get(session_id)
             active = self._active.get(session_id)
 
-        cancelled = False
-        # Cooperative cancel for threads
-        if flag is not None:
-            flag.set()
-            cancelled = True
-        # Forceful kill for subprocesses
-        if isinstance(active, subprocess.Popen) and active.poll() is None:
-            active.kill()
-            cancelled = True
-
-        if cancelled:
-            log.info("Cancel requested for session %s", session_id)
-            if self._hooks:
-                self._hooks.trigger(
-                    HookEvent.EXECUTION_CANCELLED,
-                    {"session_id": session_id},
-                )
-        return cancelled
+        if active is None or active.returncode is not None:
+            return False
+        active.kill()
+        log.info("Cancel requested for session %s", session_id)
+        if self._hooks:
+            self._hooks.trigger(
+                HookEvent.EXECUTION_CANCELLED,
+                {"session_id": session_id},
+            )
+        return True
 
     @property
     def active_count(self) -> int:
@@ -258,17 +259,8 @@ class IsolatedRunner:
         result_holder: list[IsolationResult] = []
         error_holder: list[str] = []
 
-        # Capture cancel event before thread creation to avoid
-        # a race condition on self._cancel_flags inside the thread.
-        with self._lock:
-            cancel_event = self._cancel_flags.get(config.session_id)
-
         def _target() -> None:
             try:
-                # Check cancel flag before execution (uses captured value)
-                if cancel_event and cancel_event.is_set():
-                    error_holder.append("Cancelled before execution")
-                    return
                 raw = fn(*args, **kwargs)
                 output = str(raw) if raw is not None else ""
                 result_holder.append(
@@ -292,13 +284,10 @@ class IsolatedRunner:
 
         try:
             if thread.is_alive():
-                # Timeout — thread still running (zombie thread, known limitation).
-                # Clean up tracking state so the zombie doesn't hold a slot
-                # in _active / _cancel_flags.  The thread itself cannot be
-                # killed in CPython, but at least we stop tracking it.
-                with self._lock:
-                    self._active.pop(config.session_id, None)
-                    self._cancel_flags.pop(config.session_id, None)
+                # Timeout — thread still running (zombie thread, known
+                # limitation). The thread itself cannot be killed in
+                # CPython; ``_active`` does not track threads after the
+                # step-4b cleanup, so there is nothing to evict.
                 log.warning(
                     "Zombie thread: session %s still running after timeout",
                     config.session_id,
@@ -364,22 +353,37 @@ class IsolatedRunner:
         subprocess to finish.
 
         * Lane-slot acquisition gates concurrency via the shared
-          ``Lane`` semaphore (sync acquire run via
-          :func:`asyncio.to_thread`).
+          ``Lane`` semaphore. The blocking acquire is wrapped in
+          :func:`asyncio.shield` so that a mid-await ``CancelledError``
+          cannot drop the slot mid-acquisition — the underlying
+          ``to_thread`` is drained in the ``finally`` block and the
+          slot is released if it ended up acquired.
         * Timeout via ``asyncio.wait_for(proc.communicate(input), ...)``;
           on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
           process death before the slot is released.
         * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
         """
-        slot_error = await asyncio.to_thread(self._acquire_slot, config)
-        if slot_error is not None:
-            return slot_error
-        acquired = True
-
+        # PR-Async-Phase-C step 4b fix-up — Codex MCP CRITICAL catch
+        # (2026-05-22). Previously the slot acquire was a bare
+        # ``await asyncio.to_thread(...)``; cancelling the coroutine
+        # while the underlying thread was still blocked on the lane
+        # semaphore left an orphan slot (the thread eventually woke
+        # and claimed the slot, but the cancelled coroutine never
+        # reached the ``finally`` release). Shielding the acquire +
+        # draining the task on cancel closes that hole.
+        acquired = False
         started = time.time()
         proc: asyncio.subprocess.Process | None = None
+        acquire_task: asyncio.Task[IsolationResult | None] = asyncio.create_task(
+            asyncio.to_thread(self._acquire_slot, config),
+            name=f"isolated-acquire:{config.session_id}",
+        )
 
         try:
+            slot_error: IsolationResult | None = await asyncio.shield(acquire_task)
+            if slot_error is not None:
+                return slot_error
+            acquired = True
             safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -392,7 +396,7 @@ class IsolatedRunner:
             )
 
             with self._lock:
-                self._active[config.session_id] = proc  # type: ignore[assignment]
+                self._active[config.session_id] = proc
 
             request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
             try:
@@ -464,6 +468,17 @@ class IsolatedRunner:
 
             return result
 
+        except asyncio.CancelledError:
+            # CancelledError is BaseException (not Exception) on 3.8+, so
+            # the broader handler below would miss it. Kill the worker
+            # before re-raising so cancellation never orphans a child.
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                import contextlib as _cl
+
+                with _cl.suppress(TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+            raise
         except Exception as exc:
             if proc is not None and proc.returncode is None:
                 proc.kill()
@@ -483,8 +498,30 @@ class IsolatedRunner:
                 metadata=dict(config.metadata),
             )
         finally:
+            # Hard guarantee: even if a path above missed it, kill any
+            # still-live child before releasing the lane slot.
+            if proc is not None and proc.returncode is None:
+                proc.kill()
             with self._lock:
                 self._active.pop(config.session_id, None)
+            # Drain the (possibly still-running) acquire_task so a
+            # mid-await cancel cannot leak a lane slot — see the
+            # CRITICAL note at the top of this method.
+            if not acquire_task.done():
+                import contextlib as _cl
+
+                with _cl.suppress(asyncio.CancelledError, Exception):
+                    slot_error_late = await acquire_task
+                    if slot_error_late is None:
+                        acquired = True
+            elif not acquired and acquire_task.cancelled() is False:
+                # acquire_task completed before cancel arrived but
+                # we never reached ``acquired = True``. Inspect.
+                import contextlib as _cl
+
+                with _cl.suppress(Exception):
+                    if acquire_task.result() is None:
+                        acquired = True
             if acquired:
                 await asyncio.to_thread(self._release_slot, config)
 

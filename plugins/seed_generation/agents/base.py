@@ -4,8 +4,8 @@ Each concrete role (Generation / Reflection / Proximity / Pilot / Ranker
 / Evolver / Meta-review) is a subclass of :class:`BaseSeedAgent` and
 returns a :class:`SeedAgentResult`. The orchestrator
 (``plugins.seed_generation.orchestrator.Pipeline``) registers role
-instances via :class:`PipelineRegistry` and calls
-:meth:`BaseSeedAgent.execute` once per phase, passing the current
+instances via :class:`PipelineRegistry` and awaits
+:meth:`BaseSeedAgent.aexecute` once per phase, passing the current
 :class:`PipelineState`.
 
 Why a class hierarchy

@@ -403,49 +403,55 @@ class SubAgentManager:
                     )
             return sub_result
 
-        results: list[SubResult] = await asyncio.gather(
-            *[
-                _run_one(task, fn_or_request, config)
-                for task, fn_or_request, config in per_task_setup
-            ]
-        )
+        try:
+            results: list[SubResult] = await asyncio.gather(
+                *[
+                    _run_one(task, fn_or_request, config)
+                    for task, fn_or_request, config in per_task_setup
+                ]
+            )
 
-        # Update run records with outcomes (G7 observability)
-        now = time.time()
-        with self._records_lock:
-            for sub_result in results:
-                rec = self._run_records.get(sub_result.task_id)
-                if rec is not None:
-                    rec.completed_at = now
-                    rec.outcome = "ok" if sub_result.success else "error"
+            # Update run records with outcomes (G7 observability)
+            now = time.time()
+            with self._records_lock:
+                for sub_result in results:
+                    rec = self._run_records.get(sub_result.task_id)
+                    if rec is not None:
+                        rec.completed_at = now
+                        rec.outcome = "ok" if sub_result.success else "error"
 
-        # Announce completed results to parent (OpenClaw Spawn+Announce)
-        if announce and self._announce_enabled and self._parent_session_key:
-            for sub_result in results:
-                summary = ""
-                if sub_result.success:
-                    summary = sub_result.output.get("summary", "") if sub_result.output else ""
-                    if not summary:
-                        summary = str(sub_result.output)[:200] if sub_result.output else "completed"
-                else:
-                    summary = sub_result.error or "failed"
-                agent_result = SubAgentResult(
-                    task_id=sub_result.task_id,
-                    task_type=sub_result.description,
-                    status="ok" if sub_result.success else "error",
-                    summary=summary,
-                    data=sub_result.output,
-                    duration_ms=sub_result.duration_ms,
-                    error_message=sub_result.error,
-                )
-                self._announce_result(self._parent_session_key, agent_result)
+            # Announce completed results to parent (OpenClaw Spawn+Announce)
+            if announce and self._announce_enabled and self._parent_session_key:
+                for sub_result in results:
+                    summary = ""
+                    if sub_result.success:
+                        summary = sub_result.output.get("summary", "") if sub_result.output else ""
+                        if not summary:
+                            summary = (
+                                str(sub_result.output)[:200] if sub_result.output else "completed"
+                            )
+                    else:
+                        summary = sub_result.error or "failed"
+                    agent_result = SubAgentResult(
+                        task_id=sub_result.task_id,
+                        task_type=sub_result.description,
+                        status="ok" if sub_result.success else "error",
+                        summary=summary,
+                        data=sub_result.output,
+                        duration_ms=sub_result.duration_ms,
+                        error_message=sub_result.error,
+                    )
+                    self._announce_result(self._parent_session_key, agent_result)
+        finally:
+            # PR-Async-Phase-C step 4b fix-up — sandbox cleanup must run
+            # even when the caller cancels ``adelegate`` mid-gather; a
+            # missed ``remove_working_directory`` would leak the
+            # sub-agent's writable paths into the parent's sandbox.
+            if added_dirs:
+                from core.tools.sandbox import remove_working_directory
 
-        # Clean up expanded sandbox directories
-        if added_dirs:
-            from core.tools.sandbox import remove_working_directory
-
-            for dir_path in added_dirs:
-                remove_working_directory(dir_path)
+                for dir_path in added_dirs:
+                    remove_working_directory(dir_path)
 
         succeeded = sum(1 for r in results if r.success)
         log.info(
