@@ -213,38 +213,41 @@ def test_manifest_get_role_known_returns_spec() -> None:
     assert spec.default_model in spec.allowed_models
 
 
-def test_role_kind_completion_default() -> None:
-    """Roles default to kind='completion' when not specified."""
-    spec = SeedRoleSpec(
-        default_model="claude-sonnet-4-6",
-        allowed_models=["claude-sonnet-4-6"],
-    )
-    assert spec.kind == "completion"
+def test_role_spec_has_no_kind_field() -> None:
+    """CSP-10 (2026-05-22) — the ``kind`` discriminator was removed
+    from :class:`SeedRoleSpec` once the only embedding consumer
+    (Proximity) reverted to LLM clustering in CSP-8. Pin the field
+    absence so a future contributor reintroducing ``kind`` has to
+    touch this test first."""
+    assert "kind" not in SeedRoleSpec.model_fields
 
 
-def test_role_kind_embedding_explicit() -> None:
-    """An embedding role (e.g. proximity) must set kind='embedding'."""
-    spec = SeedRoleSpec(
-        default_model="text-embedding-3-small",
-        allowed_models=["text-embedding-3-small"],
-        kind="embedding",
-    )
-    assert spec.kind == "embedding"
-
-
-def test_bundled_proximity_role_is_completion() -> None:
-    """CSP-8 (2026-05-22): Proximity role flipped from ``kind="embedding"``
-    to ``kind="completion"`` when it reverted to the paper's LLM-clustering
-    pattern. The ``kind`` field stays in the schema for forward-compat —
-    a future plugin may want a non-completion role kind — but no role
-    in the bundled seed-generation manifest currently uses it."""
+def test_bundled_manifest_proximity_role_loads_without_kind() -> None:
+    """CSP-10 — the shipped TOML must not declare a ``kind`` key on
+    any role. Loading via :func:`load_manifest` returning a clean
+    :class:`SeedRoleSpec` for proximity is the smoke check; any
+    stale ``kind = "..."`` left in TOML would be silently ignored by
+    pydantic's default permissive parsing, so we also grep the file
+    body for the bare keyword."""
     clear_manifest_cache()
     manifest = load_manifest()
     proximity = manifest.get_role("proximity")
-    assert proximity.kind == "completion"
-    # Sibling check — every shipped role is now completion.
-    assert manifest.get_role("generator").kind == "completion"
-    assert manifest.get_role("critic").kind == "completion"
+    assert proximity.default_model == "claude-sonnet-4-6"
+
+    toml_body = (
+        Path(__file__).resolve().parents[3]
+        / "plugins"
+        / "seed_generation"
+        / "seed_generation.plugin.toml"
+    ).read_text(encoding="utf-8")
+    # Grep — every ``kind = "..."`` line was the embedding plumbing.
+    for line in toml_body.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        assert not stripped.startswith("kind ="), (
+            f"manifest still carries an embedding-era 'kind' key: {line!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

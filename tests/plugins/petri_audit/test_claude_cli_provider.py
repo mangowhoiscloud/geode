@@ -12,7 +12,7 @@ Mock-based tests covering:
 * Usage extraction.
 * Subprocess runner (success / non-zero exit / timeout).
 * Provider registration on inspect_ai modelapi registry.
-* CSA-1 boundary: tools=[...] raises NotImplementedError (defers to CSA-2).
+* CSA-2 dispatch: tools=[...] routes to _generate_with_tools (MCP bridge path).
 
 inspect_ai-dependent tests are gated on ``pytest.importorskip``.
 Pure-helper tests (argv / serialiser / parser) run in any env.
@@ -518,8 +518,13 @@ def test_provider_registers_modelapi() -> None:
     assert hasattr(p, "ClaudeCliAPI")
 
 
-def test_generate_with_tools_raises_csa1_boundary(tmp_path: Any) -> None:
-    """CSA-1 boundary — tools forces NotImplementedError (CSA-2 wires MCP)."""
+def test_generate_with_tools_dispatches_to_bridge_path(tmp_path: Any) -> None:
+    """CSA-2 — non-empty ``tools`` routes through `_generate_with_tools`.
+
+    The previous CSA-1 boundary (``NotImplementedError("MCP bridge")``)
+    is gone; the provider now spins up an MCP bridge per call. Here we
+    just assert the dispatch happens — full round-trip lives in the
+    dedicated tool-path test below."""
     from plugins.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
@@ -529,8 +534,17 @@ def test_generate_with_tools_raises_csa1_boundary(tmp_path: Any) -> None:
         "plugins.petri_audit.claude_cli_provider._resolve_claude_binary", return_value=str(fake)
     ):
         api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
-        with pytest.raises(NotImplementedError, match="MCP bridge"):
-            asyncio.run(api.generate([], tools=["fake-tool"], tool_choice="auto", config=None))
+
+    captured: dict[str, Any] = {}
+
+    async def _fake(self, input, tools):  # type: ignore[no-untyped-def]
+        captured["tools"] = tools
+        return "sentinel-routed-through-bridge"
+
+    with patch.object(type(api), "_generate_with_tools", _fake):
+        result = asyncio.run(api.generate([], tools=[object()], tool_choice="auto", config=None))
+    assert result == "sentinel-routed-through-bridge"
+    assert len(captured["tools"]) == 1
 
 
 def test_generate_text_only_round_trip(tmp_path: Any) -> None:
@@ -609,3 +623,124 @@ def test_generate_empty_stdout_raises(tmp_path: Any) -> None:
                     config=None,
                 )
             )
+
+
+# ---------------------------------------------------------------------------
+# CSA-2 — generate(tools=[...]) round trip via real MCP bridge prep
+# ---------------------------------------------------------------------------
+
+
+def _make_send_message_tool_info() -> Any:
+    from inspect_ai.tool import ToolInfo, ToolParams
+    from inspect_ai.util._json import JSONSchema
+
+    return ToolInfo(
+        name="send_message",
+        description="Send a message to the target",
+        parameters=ToolParams(
+            properties={"message": JSONSchema(type="string", description="body")},
+            required=["message"],
+        ),
+    )
+
+
+_TOOL_USE_STREAM = (
+    "#!/bin/sh\n"
+    "cat <<'EOF'\n"
+    '{"type":"content_block_start","index":0,'
+    '"content_block":{"type":"tool_use","id":"tu_1",'
+    '"name":"mcp__bridge__send_message","input":{}}}\n'
+    '{"type":"content_block_delta","index":0,'
+    '"delta":{"type":"input_json_delta",'
+    '"partial_json":"{\\"message\\":\\"hi\\"}"}}\n'
+    '{"type":"content_block_stop","index":0}\n'
+    '{"type":"message_delta","delta":{"stop_reason":"tool_use"}}\n'
+    '{"type":"result","result":"","stop_reason":"tool_use",'
+    '"usage":{"input_tokens":50,"output_tokens":12,'
+    '"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}\n'
+    "EOF\n"
+)
+
+
+def test_generate_with_tools_round_trip_returns_tool_calls(tmp_path: Any) -> None:
+    """End-to-end CSA-2: fake claude binary emits tool_use stream-json →
+    provider parses → ChatMessageAssistant.tool_calls populated."""
+    from inspect_ai.model._model_output import ModelOutput
+
+    from plugins.petri_audit import claude_cli_provider as p
+
+    fake = tmp_path / "fake-claude"
+    fake.write_text(_TOOL_USE_STREAM)
+    fake.chmod(0o755)
+    with patch(
+        "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+        return_value=str(fake),
+    ):
+        api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
+        msgs = [SimpleNamespace(role="user", content="Use the tool")]
+        output = asyncio.run(
+            api.generate(
+                msgs,
+                tools=[_make_send_message_tool_info()],
+                tool_choice="auto",
+                config=None,
+            )
+        )
+    assert isinstance(output, ModelOutput)
+    choice = output.choices[0]
+    # ChatMessageAssistant.tool_calls populated with the parsed block
+    assert choice.message.tool_calls is not None
+    assert len(choice.message.tool_calls) == 1
+    call = choice.message.tool_calls[0]
+    # mcp__bridge__ prefix stripped → bare auditor name
+    assert call.function == "send_message"
+    assert call.arguments == {"message": "hi"}
+    assert call.parse_error is None
+    # stop_reason flips to tool_calls when any tool_use blocks present
+    assert choice.stop_reason == "tool_calls"
+    # Usage still parsed from result event
+    assert output.usage is not None
+    assert output.usage.input_tokens == 50
+
+
+def test_generate_with_tools_release_bridge_called_even_on_failure(tmp_path: Any) -> None:
+    """When the subprocess exits non-zero, release_bridge must still
+    run — otherwise parallel inspect_ai samples accumulate tempdirs."""
+    from plugins.petri_audit import claude_cli_provider as p
+
+    fake = tmp_path / "fake-claude"
+    fake.write_text("#!/bin/sh\nexit 7\n")
+    fake.chmod(0o755)
+
+    released: list[Any] = []
+    real_release = None
+
+    def _track_release(inv: Any) -> None:
+        released.append(inv)
+        if real_release is not None:
+            real_release(inv)
+
+    # The provider's lazy import does ``from plugins.petri_audit.mcp_bridge
+    # import release_bridge`` — so the binding lives on the package
+    # __init__.py, not on lifecycle.py. Patch the package-level symbol.
+    import plugins.petri_audit.mcp_bridge as mcp_bridge_pkg
+
+    real_release = mcp_bridge_pkg.release_bridge
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value=str(fake),
+        ),
+        patch.object(mcp_bridge_pkg, "release_bridge", _track_release),
+    ):
+        api = p.ClaudeCliAPI(model_name="claude-opus-4-7")
+        with pytest.raises(p.ClaudeCliInvocationError, match="exited 7"):
+            asyncio.run(
+                api.generate(
+                    [SimpleNamespace(role="user", content="x")],
+                    tools=[_make_send_message_tool_info()],
+                    tool_choice="auto",
+                    config=None,
+                )
+            )
+    assert len(released) == 1, "release_bridge must fire even on subprocess failure"

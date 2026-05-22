@@ -1,4 +1,4 @@
-"""Tests for L2 Context Assembler (3-tier memory merge)."""
+"""Tests for L2 Context Assembler (5-tier memory merge)."""
 
 from unittest.mock import patch
 

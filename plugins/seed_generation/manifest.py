@@ -37,7 +37,7 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -58,23 +58,17 @@ class SeedRoleSpec(BaseModel):
     """Per-role default + allowed model set + contract path.
 
     Mirrors :class:`plugins.petri_audit.manifest.RoleSpec` in field shape
-    (default + allowed + contract). The ``kind`` discriminator was added
-    pre-CSP-8 when Proximity ran an embedding API directly; CSP-8
-    reverted Proximity to the LLM-completion path, so every shipped
-    role is now ``kind="completion"``. The field is retained for
-    forward-compat (a future plugin may want to introduce a non-
-    completion role kind).
-
-    Field values:
-    - ``completion`` (default) — LLM chat completion via Petri adapters.
-    - ``embedding`` — reserved for future vector-embedding-driven roles
-      (no current GEODE role uses this; pre-CSP-8 Proximity did).
+    (default + allowed + contract). Every shipped role is an LLM
+    completion call dispatched through :class:`SubAgentManager.delegate`
+    — there is no longer any embedding-driven role surface (CSP-10
+    removed the pre-CSP-8 ``kind`` discriminator after CSP-8 reverted
+    the only embedding consumer, Proximity, to the paper's
+    LLM-clustering path).
     """
 
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
-    kind: Literal["completion", "embedding"] = "completion"
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:

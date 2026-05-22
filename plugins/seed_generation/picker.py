@@ -7,7 +7,7 @@ runtime, factoring in:
 1. The role's ``default_model`` from
    ``plugins/seed_generation/seed_generation.plugin.toml``.
 2. The model's provider, inferred from a prefix table (claude-*
-   → anthropic, gpt-* / text-embedding-* → openai, glm-* → zhipuai).
+   → anthropic, gpt-* → openai, glm-* → zhipuai).
 3. The Petri source table's ``default`` (typically ``auto``) for that
    provider.
 4. The OAuth probe (``is_claude_oauth_available`` /
@@ -52,10 +52,6 @@ P1-P7 prevention checklist application:
 - **P4 Environment Anchor**: ``GLOBAL_SEED_PIPELINE_TOML`` is the single
   filesystem anchor (``core/paths.py``), NOT a cwd-relative or
   module-relative path. Mirrors :data:`core.paths.GLOBAL_PETRI_TOML`.
-- **P7 Caller-Callee Contract**: every :class:`RoleBinding` carries the
-  ``kind`` discriminator (``completion`` / ``embedding``), so the S6
-  Ranker / S5 Pilot dispatchers don't need to guess by model-name
-  string.
 """
 
 from __future__ import annotations
@@ -66,7 +62,7 @@ import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Literal
+from typing import IO
 
 from core.paths import GLOBAL_SEED_PIPELINE_TOML
 
@@ -98,10 +94,7 @@ SUBSCRIPTION_SOURCES = frozenset({"claude-cli", "openai-codex"})
 
 _PROVIDER_PREFIX_MAP: tuple[tuple[str, str], ...] = (
     ("claude-", "anthropic"),
-    ("text-embedding-", "openai"),
     ("gpt-", "openai"),
-    ("o1-", "openai"),
-    ("o3-", "openai"),
     ("glm-", "zhipuai"),
 )
 
@@ -128,16 +121,15 @@ class RoleBinding:
     """Resolved auth binding for one seed-generation role.
 
     All fields are concrete after :func:`pick_bindings` returns — no
-    ``auto`` sentinel, no ``None`` source. The ``kind`` discriminator
-    mirrors :attr:`SeedRoleSpec.kind` so callers don't have to re-import
-    the manifest schema.
+    ``auto`` sentinel, no ``None`` source. Every role goes through the
+    completion path; CSP-10 dropped the pre-CSP-8 ``kind`` discriminator
+    once Proximity reverted to LLM clustering.
     """
 
     role: str
     model: str
     provider: str
     source: str
-    kind: Literal["completion", "embedding"]
 
 
 @dataclass(frozen=True)
@@ -336,7 +328,6 @@ def pick_bindings(
             model=model,
             provider=provider,
             source=source,
-            kind=spec.kind,
         )
         if source in SUBSCRIPTION_SOURCES:
             subscription_paths.add(source)

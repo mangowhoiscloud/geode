@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm import few_shot_pool as fsp
 from core.llm.few_shot_pool import (
     FewShotExemplar,
     _load_few_shot_pool_override,
     apply_few_shot_pool,
 )
+
+from core.llm import few_shot_pool as fsp
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ Per ADR-001 §3 Ranking + the panel diversity gate (manifest-time
 picker), the Ranker NEVER judges directly — it only orchestrates the
 voters.
 
-Per-voter sub-agent contract (``.claude/agents/seed_ranker.md`` +
+Per-voter sub-agent contract (``plugins/seed_generation/agents/ranker.md`` +
 voter-specific judges):
 
 .. code-block:: json
@@ -138,7 +138,7 @@ class Ranker(BaseSeedAgent):
         candidate_ids = [c["id"] for c in state.candidates]
         # Snapshot pilot dim_means per candidate (read-only) so the
         # voter-task builder can surface the empirical signal to each
-        # judge per .claude/agents/seed_ranker.md contract. Absent
+        # judge per plugins/seed_generation/agents/ranker.md contract. Absent
         # pilot_scores → empty dict (judges fall back to seed bodies).
         pilot_means: dict[str, dict[str, Any]] = {}
         for cid in candidate_ids:
@@ -295,7 +295,7 @@ class Ranker(BaseSeedAgent):
         """Compose the per-voter user message for the sub-agent.
 
         Includes Pilot dim_means alongside the seed paths so the judge
-        (per ``.claude/agents/seed_ranker.md``) can weigh empirical
+        (per ``plugins/seed_generation/agents/ranker.md``) can weigh empirical
         engagement signal against the seed body. When pilot_scores is
         missing for a candidate, the corresponding dim_means is empty
         and the judge falls back to seed body alone.

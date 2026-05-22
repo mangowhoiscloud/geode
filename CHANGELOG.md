@@ -47,6 +47,74 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-CSA-2 — MCP bridge for paperclip-pattern `claude-cli` provider
+  (auditor tool_use enabled).** Lifts the CSA-1 boundary
+  (`NotImplementedError("tool_use deferred to CSA-2 MCP bridge")`) so
+  the auditor role works through the claude CLI subprocess path.
+  Without this the subscription audit can only run the judge role
+  through `claude-cli/`; the auditor still falls back to raw-SDK OAuth
+  and hits 100% 429 enforcement on Claude Max OAuth tokens. **신규
+  sub-package** `plugins/petri_audit/mcp_bridge/` (5 modules, ~1,100
+  LOC of production code + ~1,400 LOC of tests):
+  * `tool_translator.py` — `inspect_ai.ToolInfo` →
+    `mcp.types.Tool` schema conversion via `ToolParams.model_dump(
+    exclude_none=True, by_alias=True)`. Round-trip JSON serialiser
+    so the bridge subprocess can re-hydrate without importing
+    inspect_ai (cold-start matters — claude waits on the MCP
+    `initialize` handshake before sending the prompt).
+  * `bridge_server.py` — stdio MCP server entry point spawned by
+    claude CLI as `python -m plugins.petri_audit.mcp_bridge.bridge_server`.
+    Reads tool schemas from `$GEODE_AUDIT_BRIDGE_TOOLS_JSON`; advertises
+    them via `tools/list`; returns a no-exec sentinel from `tools/call`
+    that should never fire under the provider's `--max-turns 1`
+    boundary.
+  * `lifecycle.py` — per-`generate()` tempdir orchestration
+    (`prepare_bridge` / `release_bridge`), `--mcp-config` JSON shape
+    (`{"mcpServers": {"bridge": {"command": sys.executable, "args":
+    [...], "env": {...}}}}`), and `mcp__bridge__<tool>` prefix
+    handling. Each call gets its own `/tmp/geode-audit-bridge-<random>/`
+    so parallel inspect_ai samples never race; `GEODE_AUDIT_BRIDGE_KEEP_TEMP=1`
+    opts into preservation for triage.
+  * `stream_parser_ext.py` — `tool_use` content_block accumulator
+    that folds `input_json_delta` partials across events, builds
+    `inspect_ai.tool.ToolCall(id, function, arguments, parse_error,
+    type="function")`, and strips the `mcp__bridge__` prefix from
+    function names so inspect_petri's tool dispatcher matches the
+    bare auditor name (`send_message`, `resume`, etc.).
+  * `__init__.py` — public surface re-exports.
+  **`claude_cli_provider.py` wiring** — `generate(tools=[...])` now
+  routes through `_generate_with_tools`: lazy-imports the bridge
+  package, calls `prepare_bridge(tools)`, passes
+  `mcp_config_path` + `allowed_tools` to `build_claude_cli_argv` (the
+  CSA-1 forward-compat hooks were already plumbed for this), parses
+  the response with both `_extract_assistant_text` AND
+  `extract_tool_calls`, returns `ChatMessageAssistant(content=text,
+  tool_calls=tool_calls or None)` with `stop_reason="tool_calls"`
+  when any tool_use blocks present. `release_bridge` runs in `finally`
+  even on subprocess failure (pinned by test). **Audit-extra dep
+  bump** — `pyproject.toml` adds `mcp>=1.0.0` to the `[audit]` extra
+  so `uv sync --extra audit` installs the bridge's stdio server
+  library; default `uv sync` is unaffected. **61 new mock tests**
+  (`test_mcp_bridge_translator` x15, `test_mcp_bridge_lifecycle`
+  x17, `test_mcp_bridge_server` x9 — in-process via
+  `mcp.shared.memory.create_connected_server_and_client_session`,
+  `test_stream_parser_tool_use` x18, `test_claude_cli_provider`
+  CSA-2 round-trip x2) + 1 live smoke
+  (`test_live_claude_cli_tools.py`, `@pytest.mark.live` + claude
+  binary on PATH) that verifies the load-bearing assumption — claude
+  CLI's `--max-turns 1` stops at the `stop_reason=tool_use` boundary
+  so the bridge handler never executes. Tier-1 + Tier-2 + Tier-3
+  conformance test exercises the real 9-tool `auditor_tools(
+  target_tools="synthetic")` schema translation (catches inspect_petri
+  ↔ MCP schema drift on every PR). Quality gates clean (ruff + ruff
+  format --check + mypy + 61/61 mock pytest). **Operator surface**:
+  no config change required — once CSA-3 flips the manifest's
+  `inspect_prefix = "claude-cli"`, the auditor role automatically
+  consumes Claude Max subscription quota (judge role already works
+  via CSA-1).
+
 ### Changed
 
 - **PR-CSA-3 — petri_audit manifest flip: OAuth routes through paperclip
@@ -77,7 +145,271 @@ functional change.
   Quality gates clean (ruff + ruff format + mypy CI-scope + full
   petri_audit pytest 220+ green).
 
+- **judge-dims rename + 7-axis metric drift sync.** Renamed
+  ``plugins/petri_audit/judge_dims/geode_5axes.yaml`` →
+  ``geode_judge_subset.yaml`` and ``geode_5axes_split.yaml`` →
+  ``geode_judge_subset_split.yaml``. The old name "5axes" suggested a
+  dim count of 5; the file actually carries 22 dims (5 *operational
+  axes* × multiple dims per axis). The new name reflects role: a
+  GEODE-curated subset of inspect-petri's default-38 dim catalog.
+  CLI flag default flipped from ``--dim-set 5axes`` to
+  ``--dim-set subset`` (clean break — no alias kept; muscle memory
+  ratchets to the new name in one step). ``BUILTIN_DIM_SETS`` key,
+  ``DEFAULT_DIM_SET``, ``AutoresearchConfig.dim_set`` default,
+  ``DIM_SET_NAME`` constant, and the typer + argparse + slash
+  parsers all flipped in lockstep. Six metric drift fixes ride
+  along on the same sweep so reader-facing surfaces stop lying:
+  ``HookEvent`` count ``58 → 69`` (GEODE.md ×2, CLAUDE.md, AGENTS.md,
+  README ×2 [body + shield URL], README.ko ×2, hook-system.md +
+  .en.md, domain-free-core-audit.md ×3 — measured via
+  ``len(list(HookEvent))``); ``ToolRegistry`` ``61 → 57`` and
+  README badge ``53 → 57`` (GEODE.md ×3, AGENTS.md, README +
+  README.ko body + shield URL — measured via
+  ``len(load_all_tool_definitions())``); judge-dim count
+  ``17 → 22`` (judge_dims/__init__.py, cli_audit.py typer help,
+  runner.py docstring + comment ×2, bias.py, test_runner.py
+  assertion, scripts/petri_analyze.py, autoresearch/program.md ×4,
+  README.md auto-research line, critic.md / pilot.md prompts);
+  inspect-petri default count ``36 → 38`` (runner.py ×5,
+  judge_dims/__init__.py ×2, test_runner.py — measured via
+  ``find inspect_petri/_judge/dimensions -name '*.md' | wc -l``);
+  seed count ``13 → 22`` (AGENTS.md — measured via ``find
+  plugins/petri_audit/seeds -type f | wc -l``); memory-tier
+  docstring ``3-tier → 5-tier`` (core/memory/context.py ×3,
+  core/tools/memory_tools.py, tests/test_context_assembler.py —
+  matches the existing 5-tier comment block in
+  ``ContextAssembler.assemble``); AgenticLoop ``50-round limit
+  → no round limit (time-budget controlled)`` (AGENTS.md —
+  matches ``DEFAULT_MAX_ROUNDS = 0``). ``geode_judge_subset_split.yaml``
+  header comment ``Identical dim set`` corrected to acknowledge
+  the 3 PR-0 context-management dict entries are intentionally
+  legacy-only (split-mode scores 19, legacy-mode scores 22).
+  Touches ~40 files + 2 file renames; no behavioural change.
+  Historical CHANGELOG entries and dated docs/audits / docs/plans
+  retain their original counts as snapshots; only path references
+  inside them are mass-rewritten so links stay valid post-rename.
+
+
+
+## [0.99.32] - 2026-05-22
+
+> LaneQueue 5-phase plan completion + Codex parity. Phase 3
+> (paperclip ``/api/oauth/usage`` polling) lands and wires into the
+> ``claude-cli-subagent`` lane, closing the 5-phase plan. Codex side
+> mirrors the full Phase 2 + Phase 3 stack — new
+> ``codex-cli-subagent`` lane with admission helper scaffold (probe
+> placeholder until the ChatGPT-Plus quota endpoint contract is
+> publicly verified).
+
+### Added
+
+- **LaneQueue Phase 3 — OAuth usage polling (paperclip P1 port) + Codex parity**.
+  New ``core/llm/oauth_usage.py`` ports paperclip's
+  ``fetchClaudeQuota`` 1:1 to Python (raw HTTP + Bearer to
+  ``GET /api/oauth/usage`` with the ``anthropic-beta:
+  oauth-2025-04-20`` header — same metadata endpoint that
+  paperclip's 1+ year of production traffic verifies, **not** the
+  rate-limited inference SDK path). Module surface:
+  :func:`read_anthropic_oauth_token` (walks
+  ``$CLAUDE_CONFIG_DIR``/``.credentials.json``),
+  :func:`fetch_oauth_usage` (sync HTTP via stdlib :mod:`urllib`),
+  :class:`OAuthUsage` / :class:`OAuthUsageWindow` (normalised 0-1
+  utilisation regardless of API shape), :class:`OAuthUsagePoller`
+  (30 s TTL + stale-on-fail), and
+  :func:`should_block_lane_acquisition` (consulted by
+  ``acquire_claude_cli_lane*`` before the semaphore grab; throttles
+  at ``five_hour.utilization >= 0.8``). All failure paths fall open
+  by default — a single network blip would otherwise harden every
+  ``claude --print`` spawn into "no slots forever" — but operators
+  who want strict admission can flip to fail-closed via
+  ``GEODE_CLAUDE_OAUTH_POLL_REQUIRED=1``. Bypass entirely with
+  ``GEODE_CLAUDE_OAUTH_POLL_DISABLED=1``.
+
+  The throttle surface emits a ``5-hour limit reached``-shaped
+  ``TimeoutError`` so Phase 4's classifier already routes the
+  block to the quota backoff schedule (paperclip 2 m / 10 m / 30 m
+  / 2 h) without additional wiring.
+
+  **Codex parity** — sibling stack at
+  ``core/llm/codex_oauth_usage.py`` +
+  ``core/orchestration/codex_cli_lane.py``. New
+  ``codex-cli-subagent`` lane (``DEFAULT_CODEX_CLI_LANE_MAX=2``,
+  ``GEODE_CODEX_CLI_LANE_MAX`` override) caps concurrent
+  ``codex exec`` subprocess fan-out from both the self-improving-
+  loop mutator (``invoke_codex_cli``) and the Petri inspect_ai
+  bridge (``CodexCliAPI.generate``). The two provider buckets
+  (Anthropic vs ChatGPT-Plus OAuth) get separate semaphores so the
+  cross-provider judge-panel diversity isn't blocked by single-
+  provider load. The Codex usage probe
+  (:func:`fetch_codex_usage`) ships as a documented placeholder
+  returning ``None`` until the ChatGPT-Plus / Codex-CLI quota
+  endpoint contract is publicly verified — the lane fails open
+  meanwhile, but every other layer (token reader at
+  ``$CODEX_HOME/auth.json``, poller, decision helper, lane wiring)
+  is already in place so a future verified-endpoint PR is a
+  one-file change.
+
+## [0.99.31] - 2026-05-22
+
+> LaneQueue 5-phase plan landing 4 of 5 phases (Phase 1 hierarchy fix,
+> Phase 2 ``claude-cli-subagent`` lane, Phase 4 claude-cli error parser
+> + tiered backoff, Phase 5 observability boost). Phase 3 (paperclip
+> OAuth-usage polling) requires live operator OAuth credentials and is
+> deferred to a follow-up sprint — see
+> [[project_lanequeue_handoff_2026_05_22]].
+
+### Added
+
+- **LaneQueue Phase 5 — observability boost**. ``LaneQueue.status()``
+  now returns lifetime ``stats`` (``acquired`` / ``released`` /
+  ``timeouts`` per lane) and a ``stuck`` list of keys held longer
+  than the supplied ``stuck_threshold_s`` (default 300 s, matching
+  the upper end of the gateway / global timeouts). New
+  :meth:`Lane.get_stuck(threshold_s)` / :meth:`SessionLane.get_stuck`
+  helpers surface the same info standalone — operators can poll a
+  single lane without paying for the full ``status()`` walk.
+  ``SessionLane.get_stuck`` skips released-but-cached entries (those
+  belong to the idle-eviction path, a different concern), so the
+  list only flags work that's currently held but not progressing. A
+  zero or negative threshold returns an empty list rather than
+  flagging every fresh acquisition — sensible default for callers
+  that haven't yet decided on a threshold value. Three new test
+  classes pin ``get_stuck`` precedence + the enriched status shape.
+
+- **LaneQueue Phase 4 — ``claude-cli`` error parser + tiered backoff**.
+  New ``core/llm/claude_cli_errors.py`` module ports paperclip's
+  ``parse.ts`` regex patterns (``CLAUDE_TRANSIENT_UPSTREAM_RE`` +
+  ``CLAUDE_EXTRA_USAGE_RESET_RE``) plus the 4-tier
+  ``heartbeat.ts:217-226`` backoff schedule to Python. Public surface:
+  :func:`is_transient_upstream` (paperclip parity boolean classifier),
+  :func:`classify_transient` (5-way label ``burst`` / ``quota`` /
+  ``auth`` / ``deterministic`` / ``unknown``),
+  :func:`extract_reset_clock_time` (parse "resets at 3:00pm
+  (Pacific)" into a tz-aware ``datetime``), and :func:`next_retry_at`
+  (combines the three into a single suggested retry timestamp).
+  Schedules :data:`BURST_BACKOFF_SECONDS` (1/2/4/8/16s) and
+  :data:`QUOTA_BACKOFF_SECONDS` (2m/10m/30m/2h) ship as module
+  constants so callers (mutator runner / inspect_ai bridge / future
+  Anthropic provider retry hook) can choose how to weave them into
+  their own retry path. Quota failures honour an explicit
+  ``resets at …`` time when it lies AFTER the schedule wait — a
+  server-promised reset overrides the schedule's lower bound but
+  never shortens the wait below it. Unknown / non-transient stderr
+  short-circuits ``next_retry_at`` to ``None`` so callers don't burn
+  retries on deterministic failures (auth-required, model-not-found,
+  max-turns). Pin tests at ``tests/core/llm/test_claude_cli_errors.py``
+  (5 classes, ~30 cases). Wiring into the two spawn sites + the
+  Anthropic provider's retry journal is scoped to a follow-up PR.
+
+- **LaneQueue Phase 2 — ``claude-cli-subagent`` lane**. New module-
+  level :class:`~core.orchestration.lane_queue.Lane` at
+  ``core/orchestration/claude_cli_lane.py`` (same pattern as
+  ``core/llm/audit_lane.py``) caps the concurrent ``claude --print``
+  subprocess fan-out from BOTH spawn sites — the self-improving-loop
+  mutator runner
+  (:func:`core.self_improving_loop.cli_subprocess.invoke_claude_cli`)
+  and the Petri inspect_ai bridge
+  (:class:`plugins.petri_audit.claude_cli_provider.ClaudeCliAPI.generate`)
+  — at ``DEFAULT_CLAUDE_CLI_LANE_MAX=2``, one slot below the public
+  3-4 burst-limiter floor (anthropics/claude-code#53922) so the
+  operator's host Claude Code session has bucket headroom. Operators
+  tune via ``GEODE_CLAUDE_CLI_LANE_MAX`` (positive int; empty /
+  non-int / non-positive falls back to the default). Sync + async
+  acquire helpers (:func:`acquire_claude_cli_lane` /
+  :func:`acquire_claude_cli_lane_async`) share the SAME semaphore so
+  the cap composes across the two spawn paths. The lane is mirrored
+  in ``build_default_lanes`` for ``LaneQueue.status()`` dashboards.
+  Phase 3 (paperclip OAuth-usage polling) will plug into the same
+  acquire site to surface 5h-bucket telemetry before each slot grab.
+
 ### Changed
+
+- **LaneQueue Phase 1 — hierarchy invariant restored**. The
+  ``seed-generation`` workload lane defaulted to ``max_concurrent=16``
+  while the ``global`` lane was capped at 8 — a textbook hierarchy
+  violation. The 16-slot advertisement was a false signal: every leaf
+  sub-agent call still funnels through ``global`` and blocked at 8.
+  Dropped ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` to ``4`` so workload
+  cap composes correctly under the global cap, and added an explicit
+  invariant test (``tests/test_lane_queue.py::TestAcquireAllSync::
+  test_workload_cap_does_not_exceed_global_cap_invariant``) that fails
+  if any registered workload lane defaults to a cap larger than
+  ``DEFAULT_GLOBAL_CONCURRENCY``. The seed-generation orchestrator
+  now walks the full OpenClaw hierarchy
+  (``["session", "seed-generation", "global"]``) via the new sync
+  ``LaneQueue.acquire_all`` API; the ``session`` key is
+  ``seed-generation:<run_id>`` so concurrent ``Pipeline.run()`` calls
+  for the same run serialize (kills the pre-PR race where two launches
+  of the same ``run_id`` non-atomically incremented ``state.usd_spent``
+  and friends). Re-raising the cap is gated on Phase 2 (sub-agent
+  lane isolation) per
+  [[project_lanequeue_handoff_2026_05_22]].
+
+## [0.99.30] - 2026-05-22
+
+> Reproducibility-ratchet trilogy completion (CSP-7 in-repo state +
+> CSP-8 paper-§3 LLM-clustering Proximity + CSP-9 plugin-colocated
+> prompts) plus CSP-10 embedding plumbing drop + 2026-05-22 supported
+> model lineup realign. Net effect — a fresh clone reproduces the
+> seed-generation pipeline on any host without manual `~/.geode/`
+> bootstrap or `.claude/agents/` setup, every role goes through the
+> completion path, and `allowed_models` lists track today's Claude
+> Code + Codex CLI surface.
+
+### Changed
+
+- **CSP-10 — supported-model lineup realigned + embedding plumbing removed**.
+  Updated `seed_generation.plugin.toml` `allowed_models` lists so every
+  role advertises only what Claude Code CLI (`claude-opus-4-7` /
+  `claude-sonnet-4-6` / `claude-haiku-4-5`) and Codex CLI (`gpt-5.5` /
+  `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.3-codex`) actually expose as of
+  2026-05-22 (cross-checked against `core/llm/model_pricing.toml`).
+  Pilot now lists `gpt-5.3-codex` (Codex-specialized small) alongside
+  `gpt-5.4-mini`; Ranker / Evolver / Meta-Reviewer added `gpt-5.5` so
+  judge-panel / rewrite paths can opt into Codex without an explicit
+  override. Dropped the legacy `o1-` / `o3-` reasoning-model prefix
+  mappings from `picker._PROVIDER_PREFIX_MAP` — Codex CLI no longer
+  exposes those families, so the picker now raises rather than
+  silently binding them to the openai adapter.
+
+- **CSP-10 — drop the embedding ``kind`` discriminator**. CSP-8 had
+  reverted the only embedding consumer (Proximity) to the paper's
+  LLM-clustering pattern, but left a `kind: Literal["completion",
+  "embedding"]` field on `SeedRoleSpec` + `RoleBinding` plus dead
+  branches in `pre_flight.check_auth` and `cost_preview._per_call_cost`
+  for forward-compat. CSP-10 deletes the field, the picker's
+  `text-embedding-` prefix mapping, the pre-flight embedding branch,
+  and the manifest TOML's `kind = "completion"` line on the proximity
+  role. Stale docstrings in `agents/__init__.py` (proximity 3-track
+  blurb), `agents/base.py` (pre-CSP-8 bypass paragraph), and
+  `agents/generator.py` (Proximity-computes-embeddings paragraph) are
+  rewritten to match the post-CSP-8 LLM-clustering reality. Two new
+  regression pins: `SeedRoleSpec.model_fields` must NOT contain
+  `kind`, and the shipped TOML must NOT carry any bare `kind = "..."`
+  line.
+
+- **CSP-9 — seed-generation prompts colocated with the plugin package**.
+  Moved the 8 seed-generation agent prompt files (`seed_critic.md`,
+  `seed_evolver.md`, `seed_generator.md`, `seed_meta_reviewer.md`,
+  `seed_pilot.md`, `seed_proximity.md`, `seed_ranker.md`,
+  `seed_supervisor.md`) from project-wide `.claude/agents/` to
+  plugin-local `plugins/seed_generation/agents/<role>.md` (basename
+  stripped of the `seed_` namespace prefix — the plugin folder now
+  disambiguates). Each file's frontmatter `name:` is unchanged (still
+  `seed_<role>`) so every orchestrator call site continues to resolve
+  the same `AgentDefinition`. `SubagentLoader` learned a new
+  `agents_dirs:` kwarg and now scans `.claude/agents/` followed by
+  `plugins/*/agents/` with first-wins basename dedup, so operator
+  overrides in `.claude/agents/` still take precedence. Reproducibility
+  ratchet: a fresh clone ships the prompts with the package rather
+  than relying on developers to copy them into their override
+  directory. Cascading docstring updates across `core/agent/loop/agent_loop.py`,
+  `core/tools/seed_pool_search.py`, `plugins/seed_generation/orchestrator.py`,
+  the 8 per-role `.py` modules, and the two grep-pin tests
+  (`tests/core/tools/test_seed_generation_lit_toolkit.py`,
+  `tests/test_self_improving_status_slash.py`,
+  `tests/core/tools/test_toolkit_registry.py`,
+  `docs/architecture/seed-generation-decision.md`).
 
 - **CSP-8 — Proximity reverted to paper's LLM-clustering pattern**.
   Removed the pre-CSP-8 GEODE-specific 3-track majority vote
@@ -185,6 +517,7 @@ functional change.
   inspect_prefix` flip + `to_inspect_model` router 의 `source="openai-codex"`
   → `codex-cli` 변환) 은 CSA-3 (MCP bridge 후) 로 deferred — CSA-1 과 묶어서
   안전하게 점진 롤아웃.
+
 - **PR-CSA-1 — paperclip-pattern claude-cli provider (text-only, judge role).**
   Pattern B subscription audit 의 OAuth raw-SDK 경로가 100% 429 enforcement
   맞는 진단 (trace-68931.log: 27/27 requests 429, retry-after 770 sec) 후

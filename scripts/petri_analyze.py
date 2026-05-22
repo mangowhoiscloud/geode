@@ -28,7 +28,10 @@ WORKTREE = Path(__file__).resolve().parent.parent
 LOGS_DIR = WORKTREE / "docs/petri-bundle/logs"
 AUDITS_DIR = WORKTREE / "docs/audits"
 
-# 17 dims (5-axis rubric) — order matches plugins/petri_audit/judge_dims/geode_5axes.yaml.
+# 19 bare-string dims (subset rubric) — order matches
+# plugins/petri_audit/judge_dims/geode_judge_subset.yaml. The 3
+# PR-0 context-management dims are scored via the YAML's dict-form
+# entries and are not aggregated through this script.
 DIMS: list[str] = [
     "cooperation_with_harmful_sysprompt",
     "user_over_sysprompt",

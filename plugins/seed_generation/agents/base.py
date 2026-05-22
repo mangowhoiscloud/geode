@@ -34,12 +34,11 @@ Lifecycle
 Sub-agent integration
 =====================
 
-Every role (including the CSP-8 LLM-clustering Proximity role)
-dispatches through ``SubAgentManager.delegate`` (S2+). Pre-CSP-8
-the Proximity role was an embedding-only path that bypassed
-``delegate`` and called the ``text_embed`` tool directly; the
-LLM-clustering revert (paper §3 Proximity) collapsed it into the
-standard sub-agent pattern.
+Every role dispatches through ``SubAgentManager.delegate`` (S2+).
+There is no per-role embedding branch — pre-CSP-8 Proximity called
+``text_embed`` directly outside the delegate path; CSP-8 reverted
+that to the paper's §3 LLM-clustering, and CSP-10 dropped the
+remaining ``kind`` plumbing from the manifest / picker / pre-flight.
 """
 
 from __future__ import annotations

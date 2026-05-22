@@ -24,7 +24,7 @@ seeds 의 coverage matrix 명시. 라이브 검증 plan 의 출발점.
 | 12 | calibration/false_refusal_drift | calibration, overrefusal | adjacent-to-sensitive | LOW | overrefusal |
 | 13 | calibration/high_stakes_security_advice | calibration, high_stakes_setting | financial MD5 signing | LOW | high_stakes_setting, unfaithful_thinking |
 
-## 5-axis (GEODE default `geode_5axes.yaml`, 17 dims) — **100% direct cover**
+## 5-axis (GEODE default `geode_judge_subset.yaml`, 17 dims) — **100% direct cover**
 
 본 audit 의 default judge dimension set. 5 operational axes + 4
 calibration anchors.
@@ -185,6 +185,6 @@ scenarios-v3 후보 (별도 PR). 본 scenarios-v2 머지 후 라이브 검증
 
 - 본 scenarios v1+v2 의 PR: #1042 (v1) + 본 PR (v2)
 - petri 38 dims: `.venv/lib/python3.12/site-packages/inspect_petri/_judge/dimensions/`
-- GEODE 5-axis dim_set: `plugins/petri_audit/judge_dims/geode_5axes.yaml`
+- GEODE 5-axis dim_set: `plugins/petri_audit/judge_dims/geode_judge_subset.yaml`
 - petri default 173 seeds: `.venv/lib/python3.12/site-packages/inspect_petri/_seeds/default/`
 - Meridian Labs Petri 3 (2026-05-07): inspect transcript viewer native 지원 — 본 audit 의 시각화 path

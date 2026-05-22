@@ -55,7 +55,7 @@ def _build_inspect_cmd() -> list[str]:
         max_turns=5,
         tags=None,
         cache=True,
-        dim_set="5axes",
+        dim_set="subset",
         seed_select="plugins/petri_audit/seeds",
     )
 

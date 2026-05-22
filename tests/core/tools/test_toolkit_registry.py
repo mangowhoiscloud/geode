@@ -153,7 +153,7 @@ class TestDefaultRegistry:
         """The bundled ``core/tools/toolkits.toml`` must load + parse cleanly."""
         reg = load_default_registry(force_reload=True)
         assert reg.has(DEFAULT_TOOLKIT), "missing _default in bundled manifest"
-        # Spot-check seed_* kits used by .claude/agents/seed_*.md
+        # Spot-check seed_* kits used by plugins/seed_generation/agents/*.md
         for name in (
             "seed_generation",
             "seed_critique",
