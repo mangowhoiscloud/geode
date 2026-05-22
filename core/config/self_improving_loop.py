@@ -23,14 +23,22 @@ never overwrite each other.
 Precedence (Codex / OpenAI Agents pattern)
 ==========================================
 
-1. Per-component env var override (e.g. ``AUTORESEARCH_TARGET_MODEL``)
-   — handled at the caller, not here.
-2. ``~/.geode/config.toml`` ``[self_improving_loop.*]`` section — this loader.
-3. Module-level constants in ``autoresearch/train.py`` / picker
-   defaults — fallback when the section is missing.
-4. Pydantic model default — last resort.
+1. ``~/.geode/config.toml`` ``[self_improving_loop.*]`` section — this
+   loader. Per-role petri model selection lives under
+   ``[self_improving_loop.petri.<role>]`` (PR-CSP-12, 2026-05-22 — the
+   single SoT for ``auditor`` / ``target`` / ``judge`` after the
+   duplicate-SoT consolidation removed argv defaults, the
+   ``TARGET_MODEL`` / ``JUDGE_MODEL`` module constants, and the legacy
+   ``~/.geode/petri.toml`` writer).
+2. Picker defaults in ``autoresearch/train.py`` (``BUDGET_MINUTES``,
+   ``SEED_LIMIT``, etc.) — fallback when the section is missing. Role
+   models fall back to the manifest ``default_model`` in
+   ``plugins/petri_audit/petri.plugin.toml`` via
+   ``autoresearch.train._petri_role_model``.
+3. Pydantic model default — last resort.
 
-Source: 2026-05-19 config consolidation plan (settled decision #1).
+Source: 2026-05-19 config consolidation plan (settled decision #1),
+finalized by the 2026-05-22 PR-CSP-12 single-SoT consolidation.
 """
 
 from __future__ import annotations
