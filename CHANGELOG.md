@@ -93,6 +93,64 @@ functional change.
   retain their original counts as snapshots; only path references
   inside them are mass-rewritten so links stay valid post-rename.
 
+## [0.99.32] - 2026-05-22
+
+> LaneQueue 5-phase plan completion + Codex parity. Phase 3
+> (paperclip ``/api/oauth/usage`` polling) lands and wires into the
+> ``claude-cli-subagent`` lane, closing the 5-phase plan. Codex side
+> mirrors the full Phase 2 + Phase 3 stack — new
+> ``codex-cli-subagent`` lane with admission helper scaffold (probe
+> placeholder until the ChatGPT-Plus quota endpoint contract is
+> publicly verified).
+
+### Added
+
+- **LaneQueue Phase 3 — OAuth usage polling (paperclip P1 port) + Codex parity**.
+  New ``core/llm/oauth_usage.py`` ports paperclip's
+  ``fetchClaudeQuota`` 1:1 to Python (raw HTTP + Bearer to
+  ``GET /api/oauth/usage`` with the ``anthropic-beta:
+  oauth-2025-04-20`` header — same metadata endpoint that
+  paperclip's 1+ year of production traffic verifies, **not** the
+  rate-limited inference SDK path). Module surface:
+  :func:`read_anthropic_oauth_token` (walks
+  ``$CLAUDE_CONFIG_DIR``/``.credentials.json``),
+  :func:`fetch_oauth_usage` (sync HTTP via stdlib :mod:`urllib`),
+  :class:`OAuthUsage` / :class:`OAuthUsageWindow` (normalised 0-1
+  utilisation regardless of API shape), :class:`OAuthUsagePoller`
+  (30 s TTL + stale-on-fail), and
+  :func:`should_block_lane_acquisition` (consulted by
+  ``acquire_claude_cli_lane*`` before the semaphore grab; throttles
+  at ``five_hour.utilization >= 0.8``). All failure paths fall open
+  by default — a single network blip would otherwise harden every
+  ``claude --print`` spawn into "no slots forever" — but operators
+  who want strict admission can flip to fail-closed via
+  ``GEODE_CLAUDE_OAUTH_POLL_REQUIRED=1``. Bypass entirely with
+  ``GEODE_CLAUDE_OAUTH_POLL_DISABLED=1``.
+
+  The throttle surface emits a ``5-hour limit reached``-shaped
+  ``TimeoutError`` so Phase 4's classifier already routes the
+  block to the quota backoff schedule (paperclip 2 m / 10 m / 30 m
+  / 2 h) without additional wiring.
+
+  **Codex parity** — sibling stack at
+  ``core/llm/codex_oauth_usage.py`` +
+  ``core/orchestration/codex_cli_lane.py``. New
+  ``codex-cli-subagent`` lane (``DEFAULT_CODEX_CLI_LANE_MAX=2``,
+  ``GEODE_CODEX_CLI_LANE_MAX`` override) caps concurrent
+  ``codex exec`` subprocess fan-out from both the self-improving-
+  loop mutator (``invoke_codex_cli``) and the Petri inspect_ai
+  bridge (``CodexCliAPI.generate``). The two provider buckets
+  (Anthropic vs ChatGPT-Plus OAuth) get separate semaphores so the
+  cross-provider judge-panel diversity isn't blocked by single-
+  provider load. The Codex usage probe
+  (:func:`fetch_codex_usage`) ships as a documented placeholder
+  returning ``None`` until the ChatGPT-Plus / Codex-CLI quota
+  endpoint contract is publicly verified — the lane fails open
+  meanwhile, but every other layer (token reader at
+  ``$CODEX_HOME/auth.json``, poller, decision helper, lane wiring)
+  is already in place so a future verified-endpoint PR is a
+  one-file change.
+
 ## [0.99.31] - 2026-05-22
 
 > LaneQueue 5-phase plan landing 4 of 5 phases (Phase 1 hierarchy fix,

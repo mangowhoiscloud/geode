@@ -182,6 +182,19 @@ def get_claude_cli_lane() -> Lane:
     return _CLAUDE_CLI_LANE
 
 
+CLAUDE_CLI_LANE_THROTTLED_MSG = (
+    "claude-cli-subagent lane blocked — 5-hour OAuth bucket >= "
+    "throttle threshold (see GEODE_CLAUDE_OAUTH_POLL_DISABLED to bypass)."
+)
+"""Surface text for the PR-LQ-Phase3 OAuth-quota block.
+
+Phase 4's classifier sees this as a quota-class transient because the
+message mentions ``5-hour`` — so the existing retry/backoff path
+(``next_retry_at`` → quota schedule) picks it up without any
+additional wiring. Tests pin the substring against the
+``_QUOTA_RE`` pattern."""
+
+
 @contextmanager
 def acquire_claude_cli_lane(key: str) -> Iterator[None]:
     """Block until a ``claude --print`` slot is free, then yield.
@@ -195,7 +208,18 @@ def acquire_claude_cli_lane(key: str) -> Iterator[None]:
     Raises :class:`TimeoutError` (propagated from
     :meth:`Lane.acquire`) when the slot doesn't free within
     :data:`CLAUDE_CLI_LANE_TIMEOUT_S`.
+
+    PR-LQ-Phase3 (2026-05-22) — before reserving a slot, consult
+    :func:`core.llm.oauth_usage.should_block_lane_acquisition`. When
+    the 5-hour OAuth bucket has crossed the throttle threshold the
+    helper returns True and this acquire raises ``TimeoutError`` with
+    a ``5-hour limit reached``-shaped message so Phase 4's
+    classifier routes the caller to the quota backoff schedule.
     """
+    from core.llm.oauth_usage import should_block_lane_acquisition
+
+    if should_block_lane_acquisition():
+        raise TimeoutError(CLAUDE_CLI_LANE_THROTTLED_MSG)
     lane = get_claude_cli_lane()
     with lane.acquire(key):
         yield
@@ -210,7 +234,17 @@ async def acquire_claude_cli_lane_async(key: str) -> AsyncIterator[None]:
     sync and async spawn paths. The blocking acquire runs in a worker
     thread (``asyncio.to_thread``) so the event loop is not pinned
     while waiting for a slot.
+
+    PR-LQ-Phase3 — the OAuth-quota probe runs via
+    :func:`asyncio.to_thread` (the underlying poller uses
+    :mod:`urllib`, which would block the loop if called directly).
     """
+    import asyncio
+
+    from core.llm.oauth_usage import should_block_lane_acquisition
+
+    if await asyncio.to_thread(should_block_lane_acquisition):
+        raise TimeoutError(CLAUDE_CLI_LANE_THROTTLED_MSG)
     lane = get_claude_cli_lane()
     async with lane.acquire_async(key):
         yield

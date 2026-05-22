@@ -230,6 +230,21 @@ def build_default_lanes() -> LaneQueue:
         max_concurrent=resolve_claude_cli_lane_max(),
         timeout_s=CLAUDE_CLI_LANE_TIMEOUT_S,
     )
+    # PR-LQ-Phase3 (2026-05-22) — Codex CLI parity. Sibling lane to
+    # ``claude-cli-subagent``; separate semaphore because the two
+    # provider buckets (Anthropic vs ChatGPT-Plus OAuth) are
+    # independent. Operator tunes via ``GEODE_CODEX_CLI_LANE_MAX``.
+    from core.orchestration.codex_cli_lane import (
+        CODEX_CLI_LANE_NAME,
+        CODEX_CLI_LANE_TIMEOUT_S,
+        resolve_codex_cli_lane_max,
+    )
+
+    queue.add_lane(
+        CODEX_CLI_LANE_NAME,
+        max_concurrent=resolve_codex_cli_lane_max(),
+        timeout_s=CODEX_CLI_LANE_TIMEOUT_S,
+    )
     return queue
 
 
