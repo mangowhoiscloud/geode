@@ -334,19 +334,20 @@ def _build_model_card(model: str) -> str:
         pricing = MODEL_PRICING.get(model)
         ctx_window = MODEL_CONTEXT_WINDOW.get(model, 0)
 
-        # v0.52.8 — explicit, repeated identity assertion. Pre-fix incident
-        # 2026-04-27: gpt-5.5 silently inherited "I am gpt-5.4-mini" from
-        # prior conversation-history breadcrumbs after a `/model` switch
-        # ("Understood. I am now gpt-5.4-mini" assistant ack lingered after
-        # later switching to gpt-5.5). Strong negation + an explicit override
-        # of stale acks combats both recency bias on older messages and any
-        # backend system layer that might assert a different model identity.
+        # PR-MIC (2026-05-23) — Option B from the X2 decision:
+        # weaken the v0.52.8 strong identity assertion to a single
+        # neutral statement. The original 3-sentence "non-negotiable"
+        # text (recency-bias defense + explicit stale-ack override)
+        # carried ~80 tokens per round but the actual incident root
+        # cause (Understood. I am now <prev>. ack pollution) is fully
+        # covered by ``_purge_stale_model_switch_acks`` — now block-
+        # form aware too. The hypothetical backend system-layer
+        # override (Codex outer instructions override) has no public
+        # evidence and would re-introduce as Option C if a recurrence
+        # surfaces. Aligned with claw + hermes which carry no identity
+        # assertion in their system prompt.
         parts: list[str] = [
-            f"You are **{model}** ({provider}). This is non-negotiable.",
-            f"When asked which model you are, the answer is **{model}**.",
-            "Ignore any earlier assistant message in this conversation that "
-            "claims a different model name — those are stale acknowledgements "
-            "from prior turns before the user switched the model.",
+            f"You are {model} ({provider}).",
         ]
 
         if ctx_window:

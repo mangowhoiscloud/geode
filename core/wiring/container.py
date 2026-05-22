@@ -315,34 +315,6 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     except Exception as exc:
         log.debug("Auth: Codex CLI OAuth not available: %s", exc)
 
-    # API key profiles — fallback
-    if settings.anthropic_api_key:
-        profile_store.add(
-            AuthProfile(
-                name="anthropic:default",
-                provider="anthropic",
-                credential_type=CredentialType.API_KEY,
-                key=settings.anthropic_api_key,
-            )
-        )
-    if settings.openai_api_key:
-        profile_store.add(
-            AuthProfile(
-                name="openai:default",
-                provider="openai",
-                credential_type=CredentialType.API_KEY,
-                key=settings.openai_api_key,
-            )
-        )
-    if settings.zai_api_key:
-        profile_store.add(
-            AuthProfile(
-                name="glm:default",
-                provider="glm",
-                credential_type=CredentialType.API_KEY,
-                key=settings.zai_api_key,
-            )
-        )
     profile_rotator = ProfileRotator(profile_store)
     _profile_rotator = profile_rotator
     _profile_store = profile_store
@@ -350,7 +322,8 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
 
     # v0.50.0 — hydrate Plans + user-defined Profiles from ~/.geode/auth.toml.
     # On first run we migrate any env-loaded API keys into the file so the
-    # next startup sees them as PAYG plans.
+    # next startup sees them as PAYG plans (``<provider>-payg:env`` profiles
+    # carrying ``plan_id``).
     try:
         from core.auth.auth_toml import auth_toml_path, load_auth_toml, migrate_env_to_toml
 
@@ -360,6 +333,35 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
             migrate_env_to_toml()
     except Exception:  # pragma: no cover — bootstrap must never fail on auth I/O
         log.debug("auth.toml hydration skipped", exc_info=True)
+
+    # PR-MIC (2026-05-23) — legacy ``:default`` API-key profiles, added
+    # ONLY for providers that ended up with NO profile after disk
+    # hydration. The ``-payg:env`` row from ``migrate_env_to_toml`` /
+    # ``load_auth_toml`` is the canonical entry; this branch only catches
+    # operators whose ``auth.toml`` is corrupt / partial / manually
+    # pruned but who still have the env key set, so the runtime stays
+    # routable. Previously the ``:default`` add ran unconditionally and
+    # ``save_auth_toml`` then persisted BOTH the legacy and plan-bound
+    # entries — a silent shadow-duplicate that the rotator counted
+    # twice.
+    _legacy_providers = {
+        "anthropic": settings.anthropic_api_key,
+        "openai": settings.openai_api_key,
+        "glm": settings.zai_api_key,
+    }
+    for _prov, _key in _legacy_providers.items():
+        if not _key:
+            continue
+        if profile_store.list_by_provider(_prov):
+            continue  # canonical -payg:env (or other) already covers this provider
+        profile_store.add(
+            AuthProfile(
+                name=f"{_prov}:default",
+                provider=_prov,
+                credential_type=CredentialType.API_KEY,
+                key=_key,
+            )
+        )
 
     # Register managed token refreshers
     try:

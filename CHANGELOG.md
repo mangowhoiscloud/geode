@@ -47,6 +47,64 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-MIC (Model Identity Cleanup) — drift_sync label + ack purge boost
+  + auth.toml dedup**. Closes a 2026-05-23 production incident chain
+  surfaced in the REPL header (``Model: gpt-5.5 → claude-opus-4-6
+  (user_switch)`` immediately followed by Anthropic PAYG quota
+  exhaustion) and the X2 deferred decision from
+  ``project_session65_deferred_followup.md``.
+
+  **Label correctness — ``reason="drift_sync"``**
+  (``core/agent/loop/_model_switching.py``):
+  ``sync_model_from_settings_async`` was omitting the ``reason`` kwarg,
+  so ``update_model_async``'s default ``"user_switch"`` reached the
+  ``MODEL_SWITCHED`` hook and the REPL header — mis-attributing
+  Settings-drift auto-sync to the operator. Now passes
+  ``reason="drift_sync"`` so the UI surfaces the real trigger.
+
+  **Stale-ack purge — block-form aware**
+  (``core/agent/loop/_model_switching.py``): ``_purge_stale_model_switch_acks``
+  previously gated on ``isinstance(content, str)`` only, so an ack
+  stored as Anthropic-style ``[{"type": "text", "text": "Understood. I
+  am now …"}]`` block-form silently survived. Now scans text blocks
+  too — any prefix-matching text block drops the whole message.
+  Mixed-content (image + text) handled.
+
+  **Model card weakened — Option B from X2 decision**
+  (``core/agent/system_prompt.py``): the v0.52.8 strong 3-sentence
+  "non-negotiable" identity assertion + explicit stale-ack override
+  text is replaced with a single neutral ``You are {model} ({provider}).``
+  line. The root cause of the v0.52.8 production incident (history
+  pollution from prior ``Understood. I am now <prev>.`` acks) is now
+  fully covered by the block-form-aware purge — the assertion
+  carried ~80 tokens per round defending against a hypothetical
+  backend system-layer override with no public evidence (deferred
+  WebFetch verification in v0.52.8 returned 403 on 3 openai.com
+  URLs). Aligns with claw + hermes which carry no identity
+  assertion in their system prompt. If a recurrence surfaces, the
+  "Option C" Codex-only branch reintroduction is the documented
+  rollback path.
+
+  **Auth-profile dedup** (``core/wiring/container.py``): the legacy
+  ``anthropic:default`` / ``openai:default`` / ``glm:default``
+  in-memory profile add at startup used to shadow-duplicate the
+  canonical ``<provider>-payg:env`` row that ``load_auth_toml``
+  hydrates from disk — same credential, no ``plan_id`` metadata,
+  redundant rotator entry. Now skipped when ``~/.geode/auth.toml``
+  exists.
+
+  **Tests**: ``test_purge_handles_non_string_content`` flipped to
+  ``test_purge_handles_block_form_content`` (asserts purge now eats
+  block-form acks) + new ``test_purge_handles_mixed_block_types``.
+  ``test_model_card_asserts_active_identity_for_gpt_5_5`` rewritten
+  as ``test_model_card_names_active_model`` for the weakened card.
+  New ``test_model_card_does_not_carry_assertion_overhead`` pins the
+  three load-bearing phrases of the dropped strong assertion so a
+  silent re-introduction fails CI. New
+  ``test_drift_sync_emits_drift_sync_reason`` pins the label.
+
 ## [0.99.35] - 2026-05-22
 
 ### Changed
