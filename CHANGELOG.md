@@ -47,6 +47,74 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-CSA-2 — MCP bridge for paperclip-pattern `claude-cli` provider
+  (auditor tool_use enabled).** Lifts the CSA-1 boundary
+  (`NotImplementedError("tool_use deferred to CSA-2 MCP bridge")`) so
+  the auditor role works through the claude CLI subprocess path.
+  Without this the subscription audit can only run the judge role
+  through `claude-cli/`; the auditor still falls back to raw-SDK OAuth
+  and hits 100% 429 enforcement on Claude Max OAuth tokens. **신규
+  sub-package** `plugins/petri_audit/mcp_bridge/` (5 modules, ~1,100
+  LOC of production code + ~1,400 LOC of tests):
+  * `tool_translator.py` — `inspect_ai.ToolInfo` →
+    `mcp.types.Tool` schema conversion via `ToolParams.model_dump(
+    exclude_none=True, by_alias=True)`. Round-trip JSON serialiser
+    so the bridge subprocess can re-hydrate without importing
+    inspect_ai (cold-start matters — claude waits on the MCP
+    `initialize` handshake before sending the prompt).
+  * `bridge_server.py` — stdio MCP server entry point spawned by
+    claude CLI as `python -m plugins.petri_audit.mcp_bridge.bridge_server`.
+    Reads tool schemas from `$GEODE_AUDIT_BRIDGE_TOOLS_JSON`; advertises
+    them via `tools/list`; returns a no-exec sentinel from `tools/call`
+    that should never fire under the provider's `--max-turns 1`
+    boundary.
+  * `lifecycle.py` — per-`generate()` tempdir orchestration
+    (`prepare_bridge` / `release_bridge`), `--mcp-config` JSON shape
+    (`{"mcpServers": {"bridge": {"command": sys.executable, "args":
+    [...], "env": {...}}}}`), and `mcp__bridge__<tool>` prefix
+    handling. Each call gets its own `/tmp/geode-audit-bridge-<random>/`
+    so parallel inspect_ai samples never race; `GEODE_AUDIT_BRIDGE_KEEP_TEMP=1`
+    opts into preservation for triage.
+  * `stream_parser_ext.py` — `tool_use` content_block accumulator
+    that folds `input_json_delta` partials across events, builds
+    `inspect_ai.tool.ToolCall(id, function, arguments, parse_error,
+    type="function")`, and strips the `mcp__bridge__` prefix from
+    function names so inspect_petri's tool dispatcher matches the
+    bare auditor name (`send_message`, `resume`, etc.).
+  * `__init__.py` — public surface re-exports.
+  **`claude_cli_provider.py` wiring** — `generate(tools=[...])` now
+  routes through `_generate_with_tools`: lazy-imports the bridge
+  package, calls `prepare_bridge(tools)`, passes
+  `mcp_config_path` + `allowed_tools` to `build_claude_cli_argv` (the
+  CSA-1 forward-compat hooks were already plumbed for this), parses
+  the response with both `_extract_assistant_text` AND
+  `extract_tool_calls`, returns `ChatMessageAssistant(content=text,
+  tool_calls=tool_calls or None)` with `stop_reason="tool_calls"`
+  when any tool_use blocks present. `release_bridge` runs in `finally`
+  even on subprocess failure (pinned by test). **Audit-extra dep
+  bump** — `pyproject.toml` adds `mcp>=1.0.0` to the `[audit]` extra
+  so `uv sync --extra audit` installs the bridge's stdio server
+  library; default `uv sync` is unaffected. **61 new mock tests**
+  (`test_mcp_bridge_translator` x15, `test_mcp_bridge_lifecycle`
+  x17, `test_mcp_bridge_server` x9 — in-process via
+  `mcp.shared.memory.create_connected_server_and_client_session`,
+  `test_stream_parser_tool_use` x18, `test_claude_cli_provider`
+  CSA-2 round-trip x2) + 1 live smoke
+  (`test_live_claude_cli_tools.py`, `@pytest.mark.live` + claude
+  binary on PATH) that verifies the load-bearing assumption — claude
+  CLI's `--max-turns 1` stops at the `stop_reason=tool_use` boundary
+  so the bridge handler never executes. Tier-1 + Tier-2 + Tier-3
+  conformance test exercises the real 9-tool `auditor_tools(
+  target_tools="synthetic")` schema translation (catches inspect_petri
+  ↔ MCP schema drift on every PR). Quality gates clean (ruff + ruff
+  format --check + mypy + 61/61 mock pytest). **Operator surface**:
+  no config change required — once CSA-3 flips the manifest's
+  `inspect_prefix = "claude-cli"`, the auditor role automatically
+  consumes Claude Max subscription quota (judge role already works
+  via CSA-1).
+
 ### Changed
 
 - **judge-dims rename + 7-axis metric drift sync.** Renamed
@@ -419,6 +487,7 @@ functional change.
   inspect_prefix` flip + `to_inspect_model` router 의 `source="openai-codex"`
   → `codex-cli` 변환) 은 CSA-3 (MCP bridge 후) 로 deferred — CSA-1 과 묶어서
   안전하게 점진 롤아웃.
+
 - **PR-CSA-1 — paperclip-pattern claude-cli provider (text-only, judge role).**
   Pattern B subscription audit 의 OAuth raw-SDK 경로가 100% 429 enforcement
   맞는 진단 (trace-68931.log: 27/27 requests 429, retry-after 770 sec) 후
