@@ -47,6 +47,7 @@ functional change.
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ## [0.99.37] - 2026-05-23
 
 > Multiple parallel sprints land in one release window:
@@ -244,6 +245,8 @@ functional change.
   — no CRITICAL/HIGH; 2 LOWs (docstring nit + missing test for
   N>1 identical values) addressed in the same commit. 31
   ``tests/audit/test_dim_extractor.py`` pass.
+
+## [0.99.36] - 2026-05-23
 
 ### Fixed
 
