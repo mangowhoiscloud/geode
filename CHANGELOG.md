@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.30] - 2026-05-22
+
+> Reproducibility-ratchet trilogy completion (CSP-7 in-repo state +
+> CSP-8 paper-§3 LLM-clustering Proximity + CSP-9 plugin-colocated
+> prompts) plus CSP-10 embedding plumbing drop + 2026-05-22 supported
+> model lineup realign. Net effect — a fresh clone reproduces the
+> seed-generation pipeline on any host without manual `~/.geode/`
+> bootstrap or `.claude/agents/` setup, every role goes through the
+> completion path, and `allowed_models` lists track today's Claude
+> Code + Codex CLI surface.
+
 ### Changed
 
 - **CSP-10 — supported-model lineup realigned + embedding plumbing removed**.
