@@ -74,6 +74,42 @@ functional change.
 
 ### Changed
 
+- **PR-Async-Phase-C step 4a — scheduler_drain async-native + serve loop on
+  asyncio.run**. Migration prerequisite for step 4b's bulk delete of the
+  ``# DEPRECATED-ASYNC-PHASE-C:`` anchors. The last remaining non-deprecated
+  ``IsolatedRunner.run_async`` caller — the scheduler queue drain — flips
+  to ``asyncio.create_task`` fire-and-forget on the calling loop.
+
+  **``core/cli/scheduler_drain.py``**:
+
+  - ``drain_scheduler_queue`` flips to ``async def``. The ``runner``
+    parameter is removed (no longer needed — fire-and-forget runs on
+    the caller's event loop).
+  - Isolated dispatch path: builds an ``async def _arun_isolated``
+    closure with ``asyncio.wait_for(_loop.arun(_p), timeout=300.0)``
+    (was ``run_process_coroutine(_loop.arun(_p))`` inside a thread).
+    ``asyncio.create_task`` schedules it; the task is stored in a
+    module-level ``_INFLIGHT_SCHEDULED_TASKS: set[asyncio.Task]`` so
+    the GC cannot reap it mid-flight (``create_task`` only holds a
+    weak reference).
+  - Non-isolated REPL path: ``run_process_coroutine(main_loop.arun(prompt))``
+    → ``await main_loop.arun(prompt)``.
+
+  **``core/cli/interactive_loop.py``** — ``_drain_scheduler_queue``
+  delegator becomes ``async def`` to match.
+
+  **``core/cli/typer_serve.py``** — the sync poll loop
+  (``while not stop: _drain(...); _time.sleep(1.0)``) is hoisted into
+  an ``async def _serve_loop`` driven by ``asyncio.run(_serve_loop())``.
+  Signal handlers stay sync (they only flip the ``stop`` flag the loop
+  polls). The ``_sched_runner = IsolatedRunner()`` line is gone.
+
+  **Tests (``tests/test_scheduler_serve.py`` 9 calls +
+  ``tests/test_cli_extracted.py`` 1 call)**: each ``_drain_scheduler_queue(...)``
+  call wrapped in ``asyncio.run(...)``. The ``mock_runner`` fixture and
+  every ``mock_runner.run_async.assert_*`` assertion deleted. Dispatch
+  verification migrated to ``on_dispatch`` callbacks. 20/20 tests pass.
+
 - **PR-Async-Phase-C step 3 — IsolatedRunner subprocess + ToolExecutor
   delegate native async**. Third leg of the async-only migration.
   Two remaining non-seed-generation sync entries on the hot path —
