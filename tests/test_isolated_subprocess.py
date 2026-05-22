@@ -223,9 +223,7 @@ class TestAsyncSubprocessCancel:
             # Pre-fill the only slot so the next arun blocks on acquire.
             assert lane.try_acquire("blocker") is True
             req = WorkerRequest(task_id="wait-cancel", description="blocked")
-            cfg = IsolationConfig(
-                session_id="wait-cancel", timeout_s=30.0, post_to_main=False
-            )
+            cfg = IsolationConfig(session_id="wait-cancel", timeout_s=30.0, post_to_main=False)
             task = asyncio.create_task(runner.arun(req, config=cfg))
             # Let the acquire enter the to_thread wait.
             await asyncio.sleep(0.1)
