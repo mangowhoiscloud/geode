@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.37] - 2026-05-23
+
+> Multiple parallel sprints land in one release window:
+> **seed-generation 3-loop port Phase 1** (Loop 2 debate-turn) and the
+> **petri-schema-v2 cascade PR-1 through PR-3** (`extract_dim_aggregates`
+> provenance, `baseline.json` schema_version=2 namespace split, and
+> `_should_promote` N=1 critical margin floor). The 3-loop port's
+> Phase 2 SoT (`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`)
+> is committed but Phase 2 implementation deferred to a future PR cycle.
+> Cascade PRs 4-5 of petri-schema-v2 also deferred per
+> `docs/plans/2026-05-23-petri-schema-v2.md`.
+
 ### Changed
 
 - **PR-3 of petri-schema-v2 cascade — ``_should_promote`` N=1 critical
@@ -232,6 +244,8 @@ functional change.
   — no CRITICAL/HIGH; 2 LOWs (docstring nit + missing test for
   N>1 identical values) addressed in the same commit. 31
   ``tests/audit/test_dim_extractor.py`` pass.
+
+## [0.99.36] - 2026-05-23
 
 ### Fixed
 
