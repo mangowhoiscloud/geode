@@ -40,7 +40,7 @@ allowed_models = [
     "claude-sonnet-4-6",
     "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_generator.md"
+role_contract = "plugins/seed_generation/agents/generator.md"
 
 [seed_generation.role.critic]
 default_model = "claude-sonnet-4-6"
@@ -49,7 +49,7 @@ allowed_models = [
     "claude-haiku-4-5",
     "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_critic.md"
+role_contract = "plugins/seed_generation/agents/critic.md"
 
 [seed_generation.role.proximity]
 # CSP-8 (2026-05-22) — Proximity reverted to LLM-clustering pattern
@@ -61,7 +61,7 @@ allowed_models = [
     "claude-haiku-4-5",
     "gpt-5.5",
 ]
-role_contract = ".claude/agents/seed_proximity.md"
+role_contract = "plugins/seed_generation/agents/proximity.md"
 kind = "completion"
 
 [seed_generation.role.pilot]
@@ -70,7 +70,7 @@ allowed_models = [
     "claude-haiku-4-5",
     "gpt-5.4-mini",
 ]
-role_contract = ".claude/agents/seed_pilot.md"
+role_contract = "plugins/seed_generation/agents/pilot.md"
 
 [seed_generation.role.ranker]
 # 3-judge panel orchestrator. Its own default_model is a placeholder —
@@ -80,7 +80,7 @@ allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
 ]
-role_contract = ".claude/agents/seed_ranker.md"
+role_contract = "plugins/seed_generation/agents/ranker.md"
 
 [seed_generation.role.evolver]
 default_model = "claude-sonnet-4-6"
@@ -88,7 +88,7 @@ allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
 ]
-role_contract = ".claude/agents/seed_evolver.md"
+role_contract = "plugins/seed_generation/agents/evolver.md"
 
 [seed_generation.role.meta_reviewer]
 default_model = "claude-opus-4-7"
@@ -96,7 +96,7 @@ allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
 ]
-role_contract = ".claude/agents/seed_meta_reviewer.md"
+role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
 
 # ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
 #

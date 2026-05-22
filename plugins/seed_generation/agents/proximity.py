@@ -8,7 +8,7 @@ asks the LLM to cluster the candidate batch + emit per-candidate
 ``similarity_degree`` (``high`` / ``medium`` / ``low``). Only
 ``high`` entries are dropped — the rest survive.
 
-Sub-agent contract (``.claude/agents/seed_proximity.md``)::
+Sub-agent contract (``plugins/seed_generation/agents/proximity.md``)::
 
     {
       "similarity_clusters": [

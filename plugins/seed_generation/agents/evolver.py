@@ -9,7 +9,7 @@ seed is written to ``<run_dir>/candidates_evolved/<uuid>.md`` and a
 manifest entry is added to ``state.evolved_candidates`` for re-piloting
 in the next generation.
 
-Per-survivor sub-agent contract (``.claude/agents/seed_evolver.md``):
+Per-survivor sub-agent contract (``plugins/seed_generation/agents/evolver.md``):
 
 .. code-block:: json
 
@@ -281,7 +281,7 @@ class Evolver(BaseSeedAgent):
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
-        The system prompt is owned by ``.claude/agents/seed_evolver.md``.
+        The system prompt is owned by ``plugins/seed_generation/agents/evolver.md``.
         The description fills in the parent candidate path, the section
         the Critic flagged, the per-candidate weaknesses list, the
         Pilot dim_means, AND (G3) the baseline-evidence block for the

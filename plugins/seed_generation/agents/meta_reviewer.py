@@ -13,7 +13,7 @@ sub-agent reads the aggregated state (candidates, pilot_scores,
 elo_ratings, survivors, reflections, evolved_candidates) and produces
 one structured report.
 
-Sub-agent contract (``.claude/agents/seed_meta_reviewer.md``):
+Sub-agent contract (``plugins/seed_generation/agents/meta_reviewer.md``):
 
 .. code-block:: json
 

@@ -49,6 +49,29 @@ functional change.
 
 ### Changed
 
+- **CSP-9 — seed-generation prompts colocated with the plugin package**.
+  Moved the 8 seed-generation agent prompt files (`seed_critic.md`,
+  `seed_evolver.md`, `seed_generator.md`, `seed_meta_reviewer.md`,
+  `seed_pilot.md`, `seed_proximity.md`, `seed_ranker.md`,
+  `seed_supervisor.md`) from project-wide `.claude/agents/` to
+  plugin-local `plugins/seed_generation/agents/<role>.md` (basename
+  stripped of the `seed_` namespace prefix — the plugin folder now
+  disambiguates). Each file's frontmatter `name:` is unchanged (still
+  `seed_<role>`) so every orchestrator call site continues to resolve
+  the same `AgentDefinition`. `SubagentLoader` learned a new
+  `agents_dirs:` kwarg and now scans `.claude/agents/` followed by
+  `plugins/*/agents/` with first-wins basename dedup, so operator
+  overrides in `.claude/agents/` still take precedence. Reproducibility
+  ratchet: a fresh clone ships the prompts with the package rather
+  than relying on developers to copy them into their override
+  directory. Cascading docstring updates across `core/agent/loop/agent_loop.py`,
+  `core/tools/seed_pool_search.py`, `plugins/seed_generation/orchestrator.py`,
+  the 8 per-role `.py` modules, and the two grep-pin tests
+  (`tests/core/tools/test_seed_generation_lit_toolkit.py`,
+  `tests/test_self_improving_status_slash.py`,
+  `tests/core/tools/test_toolkit_registry.py`,
+  `docs/architecture/seed-generation-decision.md`).
+
 - **CSP-8 — Proximity reverted to paper's LLM-clustering pattern**.
   Removed the pre-CSP-8 GEODE-specific 3-track majority vote
   (embedding cosine + 5-gram Jaccard + role overlap) along with
