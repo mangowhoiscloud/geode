@@ -542,9 +542,7 @@ def test_generate_with_tools_dispatches_to_tools_path(tmp_path: Any) -> None:
     ):
         api = p.CodexCliAPI(model_name="gpt-5.5")
         with patch.object(api, "_generate_with_tools", side_effect=_fake_with_tools) as mocked:
-            result = asyncio.run(
-                api.generate([], tools=["t"], tool_choice="auto", config=None)
-            )
+            result = asyncio.run(api.generate([], tools=["t"], tool_choice="auto", config=None))
         assert result == "sentinel-tools"
         mocked.assert_called_once()
 
