@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **petri-bundle gen-1 backfill — recover the untracked auto-sync output.**
+  PR #1487 wired ``bundle_sync.sync_eval_to_bundle`` into
+  ``cli_audit._post_run_emit`` so every audit auto-copies its archived
+  ``.eval`` from ``~/.geode/petri/logs/`` into
+  ``docs/petri-bundle/logs/``. The 2026-05-22 gen-1 iteration run (session
+  ``2026-05-22T0657Z-c857b9``, ``cuXC28imBo4pTc6VSVuujm``) fired the hook
+  and the file landed on disk correctly, but the resulting modification
+  + new file was never staged through a PR — it stayed untracked on
+  develop and was lost during a later working-tree churn. The ``.eval``
+  itself survives at ``~/.geode/petri/logs/`` because that path is the
+  runtime SoT outside the repo. This PR re-syncs the archive into
+  ``docs/petri-bundle/logs/`` so ``listing.json`` carries the gen-1 entry
+  (target=geode/gpt-5.5, judge=claude-cli/claude-opus-4-7,
+  auditor=claude-cli/claude-sonnet-4-6 — gen-1 ran before PR #1488's
+  opus-4-7 default flip). ``validate_petri_bundle.py`` reports
+  ``OK: 11 archive(s)`` (9 historical + gen-0 + gen-1).
+
+  The Pages publish itself still depends on a develop→main release PR
+  since ``.github/workflows/pages.yml`` triggers on ``push: branches:
+  [main]`` only — the develop merges from today (#1487 ~ #1491) do not
+  fire a deploy. A follow-up release PR will land both today's gen-0
+  baseline and this gen-1 backfill on the live site.
+
 ### Changed
 
 - **PR-Async-Phase-C step 2 — seed-generation Pipeline + 8 agents native async**.
