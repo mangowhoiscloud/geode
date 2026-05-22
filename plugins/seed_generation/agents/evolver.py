@@ -109,7 +109,7 @@ class Evolver(BaseSeedAgent):
         )
         self._manager = manager
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Fan out N evolution sub-agents and collect evolved candidate rows."""
         if not state.survivors:
             return SeedAgentResult(
@@ -141,7 +141,7 @@ class Evolver(BaseSeedAgent):
             len(tasks),
             _EVOLVER_AGENT_NAME,
         )
-        results = self._manager.delegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks, announce=False)
 
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
         evolved_rows: list[dict[str, Any]] = []

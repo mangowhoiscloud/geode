@@ -25,7 +25,7 @@ class _RecordingAgent(BaseSeedAgent):
         self._output = output or {}
         self.calls: list[int] = []
 
-    def execute(self, state: Any) -> SeedAgentResult:
+    async def aexecute(self, state: Any) -> SeedAgentResult:
         self.calls.append(state.current_iteration)
         return SeedAgentResult(role=self.role, output=dict(self._output))
 

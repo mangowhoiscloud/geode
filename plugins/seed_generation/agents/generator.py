@@ -100,7 +100,7 @@ class Generator(BaseSeedAgent):
         )
         self._manager = manager
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Fan out N candidate-generation sub-agents and collect successes."""
         if state.run_dir is None:
             return SeedAgentResult(
@@ -132,7 +132,7 @@ class Generator(BaseSeedAgent):
         # announce=False — orchestrator already announces the parent
         # phase, individual candidate spawns are sub-events not parent
         # events.
-        results = self._manager.delegate(tasks, announce=False)
+        results = await self._manager.adelegate(tasks, announce=False)
 
         # S2-fix (2026-05-18) — pair results by task_id, NOT by positional zip.
         # ``SubAgentManager.delegate`` returns SubResult in *completion* order

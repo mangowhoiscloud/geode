@@ -47,6 +47,65 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-Async-Phase-C step 2 — seed-generation Pipeline + 8 agents native async**.
+  Second leg of the async-only migration. The Pipeline orchestrator
+  + 8 seed-generation agents (Critic / Evolver / Generator /
+  MetaReviewer / Pilot / Proximity / Ranker / Supervisor) flip to
+  native async; sync siblings remain as ``DeprecationWarning`` +
+  ``# DEPRECATED-ASYNC-PHASE-C:`` grep-anchored shims for the
+  bulk-removal pass at the end of the migration.
+
+  **Pipeline orchestrator (``plugins/seed_generation/orchestrator.py``)**:
+
+  - ``async def arun`` (new) — walks the 8-phase ``_PHASE_ORDER``
+    (+ optional ``_ITERATION_PHASE_ORDER`` cycles) via
+    ``await self._arun_phase(phase)``.
+  - ``async def _arun_phase`` (new) — acquires the OpenClaw lane
+    chain via ``self._aacquire_lane(role)`` (async ctx) and awaits
+    the agent's ``aexecute``.
+  - ``_aacquire_lane(role)`` (new) — async context manager wrapping
+    ``LaneQueue.acquire_all_async`` with the ``["session",
+    "seed-generation", "global"]`` chain.
+  - Sync ``run`` / ``_run_phase`` / ``_acquire_lane`` retain
+    behaviour via ``run_process_coroutine(self.arun())`` shims;
+    each emits ``DeprecationWarning``.
+
+  **BaseSeedAgent (``plugins/seed_generation/agents/base.py``)**:
+
+  - Abstract method flipped to ``async def aexecute(state) ->
+    SeedAgentResult``.
+  - Sync ``execute`` becomes a deprecation shim that bridges
+    legacy callers via ``run_process_coroutine``.
+
+  **8 concrete agents**: each ``def execute`` body became
+  ``async def aexecute``, with ``self._manager.delegate(...)`` →
+  ``await self._manager.adelegate(...)``. The Ranker's
+  ``_play_match`` helper also flipped to ``async`` so the bracket
+  loop can await each match's voter fan-out.
+
+  **CLI wiring (``plugins/seed_generation/cli.py:452``)**:
+  ``pipeline.run()`` → ``run_process_coroutine(pipeline.arun())``
+  with a comment grounding the Typer 0.25.1 async-support gap
+  (issue #950 closed unmerged 2026-05-18). Group A entry points
+  (Typer CLI / worker subprocess main) MUST stay sync because Typer
+  doesn't natively support ``async def`` commands; the runtime
+  layer inside the process boundary is async-only.
+
+  **Test parity**:
+
+  - ``tests/plugins/seed_generation/`` — 14 stub manager classes
+    across 10 test files gained ``async def adelegate(tasks, ...)``
+    siblings calling ``self.delegate(...)``. Stub agents in
+    ``test_state_offload.py`` / ``test_iteration_loop.py`` /
+    ``test_base_agent.py`` / ``test_orchestrator.py`` flipped
+    ``def execute`` → ``async def aexecute``.
+  - ``tests/test_cosci_1_fixups.py`` — two ``inspect.getsource``
+    pins on ``Pipeline.run`` moved to ``Pipeline.arun`` (abort gate
+    now lives in async path).
+  - 362 seed-generation tests pass, 0 fail.
+
 ### Added
 
 - **PR-CSA-2c — codex MCP bridge mirror (auditor tool_use enabled for

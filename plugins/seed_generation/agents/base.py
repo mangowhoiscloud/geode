@@ -159,9 +159,13 @@ class SeedAgentResult:
 class BaseSeedAgent(abc.ABC):
     """Abstract contract for a single seed-generation phase role.
 
-    Subclasses MUST override :meth:`execute`. Phase orchestration,
-    budget tracking, and registry lookup are owned by the Pipeline
-    class.
+    PR-Async-Phase-C step 2 (2026-05-22) — :meth:`aexecute` is now the
+    abstract method subclasses MUST override. The sync :meth:`execute`
+    is a deprecation shim that calls :meth:`aexecute` via
+    :func:`core.async_runtime.run_process_coroutine` so legacy sync
+    callers (Pipeline.run) still work while migration is in progress.
+    The shim emits ``DeprecationWarning`` and carries a grep anchor
+    (``# DEPRECATED-ASYNC-PHASE-C:``) for the bulk-removal pass.
 
     Per the fidelity amendment, the role concrete implementations
     (S2-S8) must perform substantive work — no ``pass`` /
@@ -182,14 +186,39 @@ class BaseSeedAgent(abc.ABC):
         self.manifest_role = manifest_role or {}
 
     @abc.abstractmethod
-    def execute(self, state: Any) -> SeedAgentResult:
-        """Run one phase of the pipeline against ``state``.
+    async def aexecute(self, state: Any) -> SeedAgentResult:
+        """Run one phase of the pipeline against ``state`` (async).
 
         ``state`` is the ``PipelineState`` instance (forward type to
         avoid circular import). The agent reads input fields, performs
-        its work, and returns a ``SeedAgentResult`` whose ``output``
-        the orchestrator merges back into the state.
+        its work (typically via ``await self._manager.adelegate(...)``),
+        and returns a ``SeedAgentResult`` whose ``output`` the
+        orchestrator merges back into the state.
         """
+
+    def execute(self, state: Any) -> SeedAgentResult:
+        """[DEPRECATED] Sync sibling of :meth:`aexecute`.
+
+        Bridges async ``aexecute`` to legacy sync ``Pipeline.run``
+        call sites until those migrate to ``Pipeline.arun``. The
+        bridge uses :func:`run_process_coroutine` which requires no
+        running event loop — RuntimeError if the caller already has
+        one (in which case they should ``await aexecute(...)``
+        directly).
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target after Pipeline /
+        # CLI / tool_handler migrate to aexecute / arun fully.
+        """
+        import warnings
+
+        warnings.warn(
+            f"{type(self).__name__}.execute is deprecated; use aexecute (async) instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from core.async_runtime import run_process_coroutine
+
+        return run_process_coroutine(self.aexecute(state))
 
     def __repr__(self) -> str:
         return (

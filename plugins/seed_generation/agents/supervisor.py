@@ -121,14 +121,14 @@ class Supervisor(BaseSeedAgent):
         )
         self._manager = manager
 
-    def execute(self, state: PipelineState) -> SeedAgentResult:
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
         """Dispatch one supervisor sub-agent and parse its guidance."""
         task = self._build_task(state)
         log.info(
             "seed-generation supervisor dispatching strategy synthesis to %r",
             _SUPERVISOR_AGENT_NAME,
         )
-        results = self._manager.delegate([task], announce=False)
+        results = await self._manager.adelegate([task], announce=False)
         if not results:
             return SeedAgentResult(
                 role=self.role,

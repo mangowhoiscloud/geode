@@ -26,7 +26,7 @@ def test_base_seed_agent_requires_execute_override() -> None:
 
 
 class _DummyAgent(BaseSeedAgent):
-    def execute(self, state: object) -> SeedAgentResult:
+    async def aexecute(self, state: object) -> SeedAgentResult:
         return SeedAgentResult(role=self.role, output={"candidates": [{"id": "x"}]})
 
 
