@@ -117,6 +117,34 @@ functional change.
 
 ### Changed
 
+- **PR-CSA-3 — petri_audit manifest flip: OAuth routes through paperclip
+  subprocess providers (claude-cli / codex-cli).** The
+  `[petri.adapter.anthropic.claude-cli] inspect_prefix` flipped from
+  `"claude-code"` → `"claude-cli"`; same flip on the openai side from
+  `"openai-codex"` → `"codex-cli"`. The two backend modules
+  (`adapters/claude_cli_backend.py`, `adapters/openai_codex_oauth.py`)
+  now register the CSA-1 / CSA-1b providers in their `register()`
+  callbacks instead of the legacy raw-SDK provider's `register()`. The
+  `is_oauth_routed` predicate (used by cost zeroing) recognises all
+  four prefixes (`claude-code/`, `claude-cli/`, `openai-codex/`,
+  `codex-cli/`) for back-compat with archived `.eval` ids. The
+  same-provider bias detector treats both prefix families as the same
+  underlying provider for the self-preference correction. **Net
+  effect** — `source="claude-cli"` / `source="openai-codex"` in
+  `~/.geode/config.toml` now actually pick the paperclip subprocess
+  providers (CSA-1 + CSA-1b + CSA-2 MCP bridge for auditor
+  tool_use). The raw-SDK paths (`claude_code_provider` /
+  `codex_provider`) stay loaded for the OAuth metadata + availability
+  probes that don't depend on which `ModelAPI` runs inference. This
+  is the routing change that unblocks the autoresearch real-mode
+  gen-0 baseline (BLOCKED on 100% 429 enforcement when going through
+  raw-SDK OAuth). Pinned by updates to
+  `tests/plugins/petri_audit/test_manifest.py`, `test_registry.py`,
+  `test_models.py`, `test_oauth_judge.py`, `test_cli_audit.py`
+  (string-replacement of the old prefixes in routing expectations).
+  Quality gates clean (ruff + ruff format + mypy CI-scope + full
+  petri_audit pytest 220+ green).
+
 - **judge-dims rename + 7-axis metric drift sync.** Renamed
   ``plugins/petri_audit/judge_dims/geode_5axes.yaml`` →
   ``geode_judge_subset.yaml`` and ``geode_5axes_split.yaml`` →
@@ -160,6 +188,8 @@ functional change.
   Historical CHANGELOG entries and dated docs/audits / docs/plans
   retain their original counts as snapshots; only path references
   inside them are mass-rewritten so links stay valid post-rename.
+
+
 
 ## [0.99.32] - 2026-05-22
 
