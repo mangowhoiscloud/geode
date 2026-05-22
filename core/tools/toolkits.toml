@@ -73,13 +73,13 @@ tools = ["arxiv_search", "paper_fetch_arxiv", "geode_seed_pool_search"]
 # ---------------------------------------------------------------------------
 
 [toolkits.seed_generation]
-description = "Petri seed candidate Generator — writes one .md candidate per spawn."
-includes = ["common_read", "common_write"]
+description = "Petri seed candidate Generator — writes one .md candidate per spawn. CSP-3 (2026-05-22): folds in ``literature_research`` so the generator can ground its proposal in arXiv papers + the existing seed corpus before writing."
+includes = ["common_read", "common_write", "literature_research"]
 tools = []  # all tools come from `includes`
 
 [toolkits.seed_critique]
-description = "Reflection critic — read-only critique of a candidate seed."
-includes = ["common_read"]
+description = "Reflection critic — read-only critique of a candidate seed. CSP-3 (2026-05-22): folds in ``literature_research`` so the critic can verify any ``references:`` the generator put in the seed's frontmatter (arXiv id lookup) + scan the existing pool for near-duplicates."
+includes = ["common_read", "literature_research"]
 tools = []
 
 [toolkits.seed_proximity]

@@ -49,6 +49,25 @@ functional change.
 
 ### Added
 
+- **Generator + Critic literature grounding (CSP-3)** — The
+  `seed_generation` and `seed_critique` toolkits in `toolkits.toml`
+  now fold in the `literature_research` kit (via `includes:`), so
+  `seed_generator` and `seed_critic` sub-agents can call
+  `arxiv_search`, `paper_fetch_arxiv`, and `geode_seed_pool_search`
+  themselves — LLM-autonomous grounding rather than pre-fetch into
+  PipelineState. The Generator's `.claude/agents/seed_generator.md`
+  prompt now defines a 2-step **Grounding step** (intra-corpus seed
+  search → optional arXiv lookup) before drafting; the seed
+  frontmatter contract advertises an optional `references: [<arxiv_id>,
+  ...]` field for provenance. The Critic's prompt picks one arXiv id
+  to spot-check via `paper_fetch_arxiv` and flags `judge_risk` when
+  the abstract doesn't actually describe the claimed behavior. The
+  Evolver contract explicitly preserves `references:` across
+  rewrites (the field is a provenance signal, not an editable body
+  section). The remaining 5 seed toolkits (pilot / ranker / proximity
+  / evolver / meta_review) stay unchanged — CSP-3 scope is the two
+  authoring roles only.
+
 - **Literature-grounding tools — `arxiv_search` / `paper_fetch_arxiv` /
   `geode_seed_pool_search` (CSP-2)** — Three new native tools wired into
   `core/tools/definitions.json` + the `_DELEGATED_TOOLS` registry. arXiv

@@ -24,6 +24,11 @@ You are the **Evolution** agent of the GEODE seed-generation (ADR-001, arXiv:250
      for the Generator contract). An evolved seed with stripped
      `tags` would silently lose Petri-side dim attribution
      when the file flows through `flatten_for_inspect_petri`.
+   - **`references:` field unchanged** (CSP-3, 2026-05-22) — if the
+     Generator listed arXiv ids that grounded the original seed,
+     those provenance signals must survive evolution. The Evolver
+     does NOT add new references unilaterally; pulling in fresh
+     papers is the Generator's job on a re-spawn.
    - Total token budget within ±20% of original.
    - Target dim unchanged (`target_dims` frontmatter).
 4. Write the evolved version to `<run_dir>/candidates_evolved/<uuid>.md`.
