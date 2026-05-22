@@ -8,8 +8,8 @@ P-checklist application (cycle-skill SKILL.md):
 - **P4 Environment Anchor** — overrides loaded via explicit path arg
   in tests; no env-var coupling.
 - **P7 Caller-Callee Contract** — every test asserts the resolver's
-  output shape: concrete (no ``auto``) sources, kind discriminator,
-  diversity counts, subscription set membership.
+  output shape: concrete (no ``auto``) sources, diversity counts,
+  subscription set membership.
 """
 
 from __future__ import annotations
@@ -52,9 +52,8 @@ def _make_manifest() -> SeedGenerationManifest:
             allowed_models=["claude-sonnet-4-6"],
         ),
         "proximity": SeedRoleSpec(
-            default_model="text-embedding-3-small",
-            allowed_models=["text-embedding-3-small"],
-            kind="embedding",
+            default_model="claude-sonnet-4-6",
+            allowed_models=["claude-sonnet-4-6"],
         ),
         "pilot": SeedRoleSpec(
             default_model="claude-haiku-4-5",
@@ -96,7 +95,21 @@ def test_infer_provider_claude_models() -> None:
 
 def test_infer_provider_openai_models() -> None:
     assert infer_provider("gpt-5.5") == "openai"
-    assert infer_provider("text-embedding-3-small") == "openai"
+    assert infer_provider("gpt-5.4-mini") == "openai"
+    assert infer_provider("gpt-5.3-codex") == "openai"
+
+
+def test_infer_provider_drops_legacy_o1_o3_prefixes() -> None:
+    """CSP-10 (2026-05-22) — Codex CLI's current surface is the gpt-5.x
+    family. Legacy ``o1-`` / ``o3-`` reasoning models are no longer
+    exposed by Codex CLI, so the picker rejects them rather than
+    silently routing to openai (the old behaviour bound them to the
+    OpenAI provider regardless of whether the adapter could call them).
+    """
+    with pytest.raises(ValueError, match=r"did not match any known prefix"):
+        infer_provider("o1-mini")
+    with pytest.raises(ValueError, match=r"did not match any known prefix"):
+        infer_provider("o3-mini")
 
 
 def test_infer_provider_zhipuai() -> None:
@@ -119,12 +132,10 @@ def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
     for role in ("generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         assert result.bindings[role].provider == "anthropic"
         assert result.bindings[role].source == "claude-cli"
-    # Proximity (embedding) — openai provider, but with OAuth probe we still
-    # land on openai-codex (semantics of "auto" probe). Note this is a
-    # known limitation; embeddings actually need api_key but the picker's
-    # job here is the binding, not the runtime check (S4 text_embed reads
-    # OPENAI_API_KEY directly so this won't break in practice).
-    assert result.bindings["proximity"].provider == "openai"
+    # Proximity now runs claude-sonnet completion (CSP-8 LLM-clustering
+    # revert, paper §3); CSP-10 dropped the embedding kind plumbing.
+    assert result.bindings["proximity"].provider == "anthropic"
+    assert result.bindings["proximity"].source == "claude-cli"
 
 
 def test_pick_bindings_resolves_payg_when_no_oauth() -> None:
@@ -159,14 +170,6 @@ def test_pick_bindings_user_override_model() -> None:
     with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     assert result.bindings["generator"].model == "claude-opus-4-7"
-
-
-def test_pick_bindings_carries_kind_discriminator() -> None:
-    manifest = _make_manifest()
-    with patch("plugins.seed_generation.picker._probe_oauth", return_value=False):
-        result = pick_bindings(manifest=manifest, overrides={})
-    assert result.bindings["proximity"].kind == "embedding"
-    assert result.bindings["generator"].kind == "completion"
 
 
 def test_pick_bindings_voter_panel_resolved() -> None:

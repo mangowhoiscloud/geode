@@ -115,6 +115,202 @@ functional change.
   consumes Claude Max subscription quota (judge role already works
   via CSA-1).
 
+### Changed
+
+- **LaneQueue Phase 1 — hierarchy invariant restored**. The
+  ``seed-generation`` workload lane defaulted to ``max_concurrent=16``
+  while the ``global`` lane was capped at 8 — a textbook hierarchy
+  violation. The 16-slot advertisement was a false signal: every leaf
+  sub-agent call still funnels through ``global`` and blocked at 8.
+  Dropped ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` to ``4`` so workload
+  cap composes correctly under the global cap, and added an explicit
+  invariant test (``tests/test_lane_queue.py::TestAcquireAllSync::
+  test_workload_cap_does_not_exceed_global_cap_invariant``) that fails
+  if any registered workload lane defaults to a cap larger than
+  ``DEFAULT_GLOBAL_CONCURRENCY``. The seed-generation orchestrator
+  now walks the full OpenClaw hierarchy
+  (``["session", "seed-generation", "global"]``) via the new sync
+  ``LaneQueue.acquire_all`` API; the ``session`` key is
+  ``seed-generation:<run_id>`` so concurrent ``Pipeline.run()`` calls
+  for the same run serialize (kills the pre-PR race where two launches
+  of the same ``run_id`` non-atomically incremented ``state.usd_spent``
+  and friends). Re-raising the cap is gated on Phase 2 (sub-agent
+  lane isolation) per
+  [[project_lanequeue_handoff_2026_05_22]].
+
+## [0.99.30] - 2026-05-22
+
+> Reproducibility-ratchet trilogy completion (CSP-7 in-repo state +
+> CSP-8 paper-§3 LLM-clustering Proximity + CSP-9 plugin-colocated
+> prompts) plus CSP-10 embedding plumbing drop + 2026-05-22 supported
+> model lineup realign. Net effect — a fresh clone reproduces the
+> seed-generation pipeline on any host without manual `~/.geode/`
+> bootstrap or `.claude/agents/` setup, every role goes through the
+> completion path, and `allowed_models` lists track today's Claude
+> Code + Codex CLI surface.
+
+### Changed
+
+- **CSP-10 — supported-model lineup realigned + embedding plumbing removed**.
+  Updated `seed_generation.plugin.toml` `allowed_models` lists so every
+  role advertises only what Claude Code CLI (`claude-opus-4-7` /
+  `claude-sonnet-4-6` / `claude-haiku-4-5`) and Codex CLI (`gpt-5.5` /
+  `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.3-codex`) actually expose as of
+  2026-05-22 (cross-checked against `core/llm/model_pricing.toml`).
+  Pilot now lists `gpt-5.3-codex` (Codex-specialized small) alongside
+  `gpt-5.4-mini`; Ranker / Evolver / Meta-Reviewer added `gpt-5.5` so
+  judge-panel / rewrite paths can opt into Codex without an explicit
+  override. Dropped the legacy `o1-` / `o3-` reasoning-model prefix
+  mappings from `picker._PROVIDER_PREFIX_MAP` — Codex CLI no longer
+  exposes those families, so the picker now raises rather than
+  silently binding them to the openai adapter.
+
+- **CSP-10 — drop the embedding ``kind`` discriminator**. CSP-8 had
+  reverted the only embedding consumer (Proximity) to the paper's
+  LLM-clustering pattern, but left a `kind: Literal["completion",
+  "embedding"]` field on `SeedRoleSpec` + `RoleBinding` plus dead
+  branches in `pre_flight.check_auth` and `cost_preview._per_call_cost`
+  for forward-compat. CSP-10 deletes the field, the picker's
+  `text-embedding-` prefix mapping, the pre-flight embedding branch,
+  and the manifest TOML's `kind = "completion"` line on the proximity
+  role. Stale docstrings in `agents/__init__.py` (proximity 3-track
+  blurb), `agents/base.py` (pre-CSP-8 bypass paragraph), and
+  `agents/generator.py` (Proximity-computes-embeddings paragraph) are
+  rewritten to match the post-CSP-8 LLM-clustering reality. Two new
+  regression pins: `SeedRoleSpec.model_fields` must NOT contain
+  `kind`, and the shipped TOML must NOT carry any bare `kind = "..."`
+  line.
+
+- **CSP-9 — seed-generation prompts colocated with the plugin package**.
+  Moved the 8 seed-generation agent prompt files (`seed_critic.md`,
+  `seed_evolver.md`, `seed_generator.md`, `seed_meta_reviewer.md`,
+  `seed_pilot.md`, `seed_proximity.md`, `seed_ranker.md`,
+  `seed_supervisor.md`) from project-wide `.claude/agents/` to
+  plugin-local `plugins/seed_generation/agents/<role>.md` (basename
+  stripped of the `seed_` namespace prefix — the plugin folder now
+  disambiguates). Each file's frontmatter `name:` is unchanged (still
+  `seed_<role>`) so every orchestrator call site continues to resolve
+  the same `AgentDefinition`. `SubagentLoader` learned a new
+  `agents_dirs:` kwarg and now scans `.claude/agents/` followed by
+  `plugins/*/agents/` with first-wins basename dedup, so operator
+  overrides in `.claude/agents/` still take precedence. Reproducibility
+  ratchet: a fresh clone ships the prompts with the package rather
+  than relying on developers to copy them into their override
+  directory. Cascading docstring updates across `core/agent/loop/agent_loop.py`,
+  `core/tools/seed_pool_search.py`, `plugins/seed_generation/orchestrator.py`,
+  the 8 per-role `.py` modules, and the two grep-pin tests
+  (`tests/core/tools/test_seed_generation_lit_toolkit.py`,
+  `tests/test_self_improving_status_slash.py`,
+  `tests/core/tools/test_toolkit_registry.py`,
+  `docs/architecture/seed-generation-decision.md`).
+
+- **CSP-8 — Proximity reverted to paper's LLM-clustering pattern**.
+  Removed the pre-CSP-8 GEODE-specific 3-track majority vote
+  (embedding cosine + 5-gram Jaccard + role overlap) along with
+  PR-Π1 (proximity_graph), PR-Π2 (partial-survive floor), PR-Π3
+  (goal-conditioning). Proximity now dispatches one
+  ``seed_proximity`` sub-agent that emits ``similarity_clusters``
+  with per-entry ``similarity_degree`` (``high``/``medium``/``low``);
+  the orchestrator drops every candidate marked ``high``. The LLM
+  keeps the "winner" of each high-similarity group OUT of the high
+  list, so no tiebreak rule is needed in the orchestrator. Mirrors
+  `open-coscientist/nodes/proximity.py` 1:1.
+
+  Cascading changes:
+  - `state.proximity_graph` field removed; replaced by
+    `state.similarity_clusters` + `state.removed_duplicates` (paper
+    schema).
+  - `tournament.plan_matches` lost its `proximity_graph=` parameter
+    and reverts to pure random-shuffle bracket seeding.
+  - `core/tools/text_embed.py` (+ its test file) deleted — Proximity
+    was the sole importer, no other GEODE surface uses embeddings.
+  - `seed_generation.plugin.toml` proximity role flipped from
+    `kind="embedding"` to `kind="completion"` (LLM call now); the
+    `kind` field stays in the schema for forward-compat.
+  - `seed_proximity.md` AgentDef rewritten — model bumped from
+    `text-embedding-3-small` to `claude-sonnet-4-6`, system prompt
+    documents the clustering contract.
+
+### Changed
+
+- **CSP-7 — symlink-free, in-repo state for cross-machine reproducibility**.
+  Replaced the pre-CSP-7 `~/.geode/self-improving-loop/latest_seed_pool`
+  + `latest_meta_review.json` symlink pair with a single JSON pointer
+  at `state/self-improving-loop/latest_pointer.json` (stored as
+  `STATE_ROOT`-relative paths so the file is portable across hosts).
+  Moved per-run artefacts from `~/.geode/seed-generation/<run_id>/`
+  to `state/seed-generation/<run_id>/` (env-overridable via
+  `GEODE_STATE_ROOT`). `survivors/` directory now holds **file copies**
+  of each survivor candidate `.md` rather than symlinks — the
+  directory is self-contained on a fresh clone. Readers
+  (`autoresearch.train._resolve_seed_select`,
+  `plugins.seed_generation.baseline_reader.load_latest_meta_review`)
+  consult the pointer instead of dereferencing symlinks. `state/`
+  ships in-tree (`.gitkeep` + `README.md` committed) so the layout is
+  part of the project; runtime artefacts stay `.gitignore`-d under
+  `state/*` — paths in repo, content per-machine. Bumps the
+  reproducibility ratchet: clone on a fresh box, no manual `~/.geode/`
+  bootstrap, the seed-generation loop just picks up the prior run's
+  pointer when it exists.
+
+## [0.99.29] - 2026-05-22
+
+> co-scientist port sprint completion (CSP-1 ~ CSP-6). Audit gaps
+> §1-A (Supervisor) / §1-B (literature) / §1-D (iteration) / §1-L
+> (Jaccard) all closed. arXiv:2502.18864 paper-fidelity restored on
+> the LLM-self-improving-loop domain (PubMed/INDRA → arXiv/seed_pool
+> domain-shift, with intra-corpus grounding as the INDRA analogue).
+> 6 feature PRs landed in one session: #1456 (toolkit infra), #1458
+> (arxiv tools), #1459 (Generator+Critic grounding), #1460 (Supervisor),
+> #1461 (iteration loop), #1463 (anti-convergence Jaccard). Sources
+> at `mango-wiki/vault/projects/geode/synthesis/coscientist-port-audit-2026-05-22.md`
+> + `coscientist-csp2-grounding-audit-2026-05-22.md`.
+
+### Added
+
+- **PR-CSA-1b — paperclip-pattern codex-cli provider (text-only, judge role).**
+  Sibling of PR-CSA-1 (claude-cli) on the OpenAI/Codex side. Same paperclip
+  motivation: route OAuth-backed `openai-codex/<model>` traffic through the
+  local `codex` CLI subprocess rather than a raw OpenAI SDK call, so account-
+  scoped rate limiting on the ChatGPT subscription tier behaves like the CLI
+  user expects (no separate audit-quota burst on the Anthropic side, no
+  per-token PAYG billing on the OpenAI side). Pattern verified against
+  `~/workspace/paperclip/packages/adapters/codex-local/src/server/
+  codex-args.ts:53` (argv shape) and `~/workspace/paperclip/packages/adapters/
+  codex-local/src/server/parse.ts` (JSONL event shapes). **신규 inspect_ai
+  프로바이더** `plugins/petri_audit/codex_cli_provider.py::CodexCliAPI` —
+  `@modelapi(name="codex-cli")` 로 등록. Identifier shape `codex-cli/<model>`.
+  매 `generate()` 호출당 `codex exec --json --skip-git-repo-check --model <m>
+  -` subprocess spawn (resume form: `codex exec --json resume <session_id> -`,
+  subcommand position not flag), stdin 으로 ChatMessage 시리얼라이즈 (CSA-1 과
+  동일한 role-header sentinels), stdout per-line JSON events 파싱 → `ModelOutput`
+  빌드. OAuth header / ChatGPT Plus token 은 codex CLI 가 내부 처리 — 우리는
+  stdin/stdout 만 다룸. **CSA-1b boundary**: tool-use 미지원 (`generate(tools=
+  [...])` → `NotImplementedError("tool_use deferred to CSA-2b MCP bridge")`).
+  judge role 처리 충분. CSA-2b 가 MCP bridge 로 auditor 활성화 — codex 는 first-
+  class `codex mcp` / `codex mcp-server` 지원이라 claude 측보다 lower-risk.
+  **신규 모듈 (~470 LOC)** — `_resolve_codex_binary` (env `GEODE_CODEX_CLI_BIN`
+  > PATH), `_resolve_timeout_s` (env `GEODE_CODEX_CLI_TIMEOUT_S`, 기본 600 s),
+  `build_codex_cli_argv` (resume / skip-git-repo-check / bypass-sandbox /
+  reasoning-effort / extra-args 인자 — CSA-2b 까지 forward-compat),
+  `serialise_messages_to_prompt` (CSA-1 과 동일한 sentinel 포맷),
+  `parse_codex_jsonl_events` (forward-compatible — unknown event type 무시),
+  `_extract_agent_message` (`item.completed` + `item.type == "agent_message"`),
+  `_extract_session_id` (`thread.started` 의 `thread_id`), `_extract_stop_reason`
+  (`turn.completed` / `turn.failed` → "stop"), `_extract_usage` (`turn.completed`
+  의 input/cached_input/output 3 필드), `_extract_error` (`error` / `turn.failed`
+  메시지 surface), `_run_codex_subprocess` (asyncio + timeout). **__init__ hook**
+  — `plugins/petri_audit/__init__.py` 의 try/except register 추가 (CSA-1 패턴
+  과 동일, audit extra 부재시 graceful skip). **42 invariant test** — binary
+  x4 / timeout x3 / argv x6 / serialiser x3 / parser x5 / event extractors x10
+  / subprocess x4 / provider+boundary+round-trip x7. Quality gates clean (ruff
+  + ruff format --check + mypy + 42/42 pytest). **Operator surface (CSA-1b)**:
+  manual opt-in via `codex-cli/<model>` identifier in inspect eval argv.
+  Default config 라우팅 (manifest `[petri.adapter.openai.codex-cli]
+  inspect_prefix` flip + `to_inspect_model` router 의 `source="openai-codex"`
+  → `codex-cli` 변환) 은 CSA-3 (MCP bridge 후) 로 deferred — CSA-1 과 묶어서
+  안전하게 점진 롤아웃.
+
 - **PR-CSA-1 — paperclip-pattern claude-cli provider (text-only, judge role).**
   Pattern B subscription audit 의 OAuth raw-SDK 경로가 100% 429 enforcement
   맞는 진단 (trace-68931.log: 27/27 requests 429, retry-after 770 sec) 후

@@ -6,6 +6,7 @@ that can be loaded from .claude/agents/*.md (YAML frontmatter + markdown body).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -152,10 +153,22 @@ _parse_yaml_frontmatter = parse_yaml_frontmatter
 
 
 class SubagentLoader:
-    """Load agent definitions from .claude/agents/*.md files.
+    """Load agent definitions from agent-prompt directories.
 
     Each markdown file should have YAML frontmatter with agent metadata
     and a markdown body that becomes the system_prompt.
+
+    Two search roots, scanned in this order:
+
+    1. ``.claude/agents/*.md`` — operator-local overrides + ad-hoc agents.
+    2. ``plugins/*/agents/*.md`` — plugin-shipped agent definitions
+       (e.g. ``plugins/seed_generation/agents/critic.md``).
+
+    When the same filename appears in both, the ``.claude/agents/`` copy
+    wins (operator override takes precedence over plugin defaults).
+    The dedup key is the file basename, so a plugin agent named
+    ``critic.md`` can be overridden by dropping a same-named file into
+    ``.claude/agents/``.
 
     Example file format:
         ---
@@ -167,22 +180,74 @@ class SubagentLoader:
         You are a research specialist...
     """
 
-    def __init__(self, agents_dir: str | Path | None = None) -> None:
-        if agents_dir is not None:
-            self._agents_dir = Path(agents_dir)
+    def __init__(
+        self,
+        agents_dir: str | Path | None = None,
+        *,
+        agents_dirs: Sequence[str | Path] | None = None,
+    ) -> None:
+        if agents_dir is not None and agents_dirs is not None:
+            raise ValueError("pass either agents_dir (single) or agents_dirs (list), not both")
+        if agents_dirs is not None:
+            self._agents_dirs: list[Path] = [Path(d) for d in agents_dirs]
+        elif agents_dir is not None:
+            self._agents_dirs = [Path(agents_dir)]
         else:
-            self._agents_dir = Path(".claude/agents")
+            self._agents_dirs = self._default_agent_dirs()
+
+    @staticmethod
+    def _default_agent_dirs() -> list[Path]:
+        """Return ``[.claude/agents, plugins/*/agents]`` relative to cwd.
+
+        Operator overrides (``.claude/agents/``) come first so they win
+        the filename-dedup race against plugin-shipped defaults. Callers
+        that need absolute-path anchoring (e.g. ``geode serve`` launched
+        from $HOME) should construct the list via :func:`core.paths.get_project_root`
+        and pass ``agents_dirs=``.
+        """
+        dirs: list[Path] = [Path(".claude/agents")]
+        plugins_root = Path("plugins")
+        if plugins_root.exists():
+            for plugin_agents in sorted(plugins_root.glob("*/agents")):
+                if plugin_agents.is_dir():
+                    dirs.append(plugin_agents)
+        return dirs
 
     @property
     def agents_dir(self) -> Path:
-        """Directory where agent definition files are stored."""
-        return self._agents_dir
+        """Primary directory (first entry of :attr:`agents_dirs`).
+
+        Backward-compat accessor for callers that predate multi-source
+        discovery. Always returns the first dir in scan order — which
+        is ``.claude/agents`` under the default config.
+        """
+        return self._agents_dirs[0]
+
+    @property
+    def agents_dirs(self) -> list[Path]:
+        """All directories scanned by :meth:`discover`, in scan order."""
+        return list(self._agents_dirs)
 
     def discover(self) -> list[Path]:
-        """Find all .md files in the agents directory."""
-        if not self._agents_dir.exists():
-            return []
-        return sorted(self._agents_dir.glob("*.md"))
+        """Find all .md files across configured agent directories.
+
+        Dedup is by file basename — when the same filename appears in
+        multiple search roots, the first occurrence wins (operator
+        override semantics). Returns paths in scan order so two
+        operator overrides of differently-named plugin agents both
+        load.
+        """
+        seen_names: set[str] = set()
+        result: list[Path] = []
+        for agents_dir in self._agents_dirs:
+            if not agents_dir.exists():
+                continue
+            for path in sorted(agents_dir.glob("*.md")):
+                if path.name in seen_names:
+                    continue
+                seen_names.add(path.name)
+                result.append(path)
+        return result
 
     def load_file(self, path: Path) -> AgentDefinition:
         """Load a single agent definition from a markdown file.

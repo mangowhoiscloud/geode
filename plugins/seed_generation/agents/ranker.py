@@ -12,7 +12,7 @@ Per ADR-001 §3 Ranking + the panel diversity gate (manifest-time
 picker), the Ranker NEVER judges directly — it only orchestrates the
 voters.
 
-Per-voter sub-agent contract (``.claude/agents/seed_ranker.md`` +
+Per-voter sub-agent contract (``plugins/seed_generation/agents/ranker.md`` +
 voter-specific judges):
 
 .. code-block:: json
@@ -138,7 +138,7 @@ class Ranker(BaseSeedAgent):
         candidate_ids = [c["id"] for c in state.candidates]
         # Snapshot pilot dim_means per candidate (read-only) so the
         # voter-task builder can surface the empirical signal to each
-        # judge per .claude/agents/seed_ranker.md contract. Absent
+        # judge per plugins/seed_generation/agents/ranker.md contract. Absent
         # pilot_scores → empty dict (judges fall back to seed bodies).
         pilot_means: dict[str, dict[str, Any]] = {}
         for cid in candidate_ids:
@@ -148,22 +148,18 @@ class Ranker(BaseSeedAgent):
                 pilot_means[cid] = means
 
         ratings = initial_ratings(candidate_ids)
-        # PR-Π1 — when the Proximity phase populated ``state.proximity_graph``
-        # the Ranker forwards it to ``plan_matches`` so the Elo bracket
-        # seeds toward diverse (low-proximity) pairs. Empty graph → legacy
-        # random shuffle policy, identical to pre-Π1 behaviour.
-        match_plan = plan_matches(
-            candidate_ids,
-            rng=self._rng,
-            proximity_graph=state.proximity_graph or None,
-        )
+        # CSP-8 (2026-05-22) — Proximity now emits clusters
+        # (``state.similarity_clusters``) instead of a sparse pairwise
+        # graph. Bracket seeding reverts to the legacy random-shuffle
+        # policy. The cluster output stays available to the
+        # meta_reviewer + operator-readable state.json as a coverage
+        # signal but does NOT feed the Elo bracket.
+        match_plan = plan_matches(candidate_ids, rng=self._rng)
         log.info(
-            "seed-generation ranker: %d candidates → %d matches × %d voters "
-            "(proximity_graph entries=%d)",
+            "seed-generation ranker: %d candidates → %d matches × %d voters",
             len(candidate_ids),
             len(match_plan),
             len(self._voters),
-            len(state.proximity_graph),
         )
 
         outcomes: list[MatchOutcome] = []
@@ -299,7 +295,7 @@ class Ranker(BaseSeedAgent):
         """Compose the per-voter user message for the sub-agent.
 
         Includes Pilot dim_means alongside the seed paths so the judge
-        (per ``.claude/agents/seed_ranker.md``) can weigh empirical
+        (per ``plugins/seed_generation/agents/ranker.md``) can weigh empirical
         engagement signal against the seed body. When pilot_scores is
         missing for a candidate, the corresponding dim_means is empty
         and the judge falls back to seed body alone.

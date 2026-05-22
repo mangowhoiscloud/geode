@@ -101,7 +101,7 @@ class AgenticLoop:
         # default ``_build_system_prompt(model=loop.model)`` output.
         # Skill context + agentic suffix still appended (tool calling
         # contract preserved). Used by AgentDefinition-driven sub-agents
-        # (``.claude/agents/seed_*.md``) so the seed_generator role's
+        # (``plugins/seed_generation/agents/*.md``) so the seed_generator role's
         # full contract — not GEODE's generic system prompt — drives
         # the spawned worker.
         self._system_prompt_override = system_prompt_override

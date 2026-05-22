@@ -407,7 +407,12 @@ def _dispatch_pipeline(
     ``pipeline_finished``) and the post-run ``cost_divergence`` event
     are emitted via :func:`core.observability.current_session_journal`.
     """
-    from core.paths import GEODE_HOME
+    # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
+    # under ``state/seed-generation/`` (env-overridable via
+    # ``GEODE_STATE_ROOT``). Pre-CSP-7 base was
+    # ``~/.geode/seed-generation/`` — machine-specific, broke
+    # cross-host reproducibility.
+    from core.paths import STATE_SEED_GENERATION_DIR
 
     from core.observability import current_session_journal
     from plugins.seed_generation.orchestrator import (
@@ -417,7 +422,7 @@ def _dispatch_pipeline(
     )
 
     run_id = f"{gen_tag}-{target_dim}"
-    run_dir = GEODE_HOME / "seed-generation" / run_id
+    run_dir = STATE_SEED_GENERATION_DIR / run_id
     state = PipelineState(
         run_id=run_id,
         target_dim=target_dim,

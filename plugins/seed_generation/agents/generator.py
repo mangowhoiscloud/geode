@@ -2,7 +2,7 @@
 
 Fans out ``state.candidates_requested`` parallel sub-agents via the parent
 ``SubAgentManager``. Each sub-agent is dispatched to the ``seed_generator``
-AgentDefinition (``.claude/agents/seed_generator.md``) with a SubTask
+AgentDefinition (``plugins/seed_generation/agents/generator.md``) with a SubTask
 description that names the target dim, generation tag, candidate id, and
 output path. The sub-agent reads its system prompt + style samples from
 the existing pool, then writes ONE seed markdown file to disk.
@@ -22,9 +22,10 @@ Return shape (merged into ``PipelineState.candidates``)::
     ]
 
 The output dict is what later phases consume — Proximity (S4) reads
-the file to compute embeddings, Reflection (S3) critiques it, Pilot (S5)
-runs it through the Petri inner-loop subset. The candidate id is also
-the basename of the seed file, so disk layout matches state shape 1:1.
+the file to cluster near-duplicates by LLM call (paper §3, CSP-8),
+Reflection (S3) critiques it, Pilot (S5) runs it through the Petri
+inner-loop subset. The candidate id is also the basename of the seed
+file, so disk layout matches state shape 1:1.
 
 Cost accounting:
 ================
@@ -233,7 +234,7 @@ class Generator(BaseSeedAgent):
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
-        The system prompt is owned by ``.claude/agents/seed_generator.md``.
+        The system prompt is owned by ``plugins/seed_generation/agents/generator.md``.
         The description fills in the per-spawn parameters (target dim,
         output path, pool reference, candidate id).
         """

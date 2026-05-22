@@ -12,8 +12,16 @@ from pathlib import Path
 
 
 def _read_contract(name: str) -> str:
+    """Resolve a seed-generation agent contract by filename.
+
+    CSP-9 moved the prompts from ``.claude/agents/seed_<role>.md`` to
+    ``plugins/seed_generation/agents/<role>.md``. Accept the historical
+    ``seed_<role>.md`` filename for backward-compat in the test body
+    and rewrite to the new ``<role>.md`` basename internally.
+    """
     repo_root = Path(__file__).resolve().parent.parent
-    contract = repo_root / ".claude" / "agents" / name
+    normalized = name.removeprefix("seed_")
+    contract = repo_root / "plugins" / "seed_generation" / "agents" / normalized
     assert contract.is_file(), f"missing agent contract: {contract}"
     return contract.read_text(encoding="utf-8")
 

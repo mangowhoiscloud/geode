@@ -72,17 +72,11 @@ class TestTextJaccard:
         assert 0.0 < score < 1.0  # some shingles shared, not all
 
 
-class TestProximityReexports:
-    """Pin that proximity.py still exposes ``_shingles`` and ``_jaccard``
-    as compatibility shims so external importers (tests, third-party
-    plugins) don't break after the hoist."""
-
-    def test_proximity_reexports_jaccard(self) -> None:
-        from plugins.seed_generation.agents.proximity import _jaccard
-
-        assert _jaccard({"a"}, {"a"}) == 1.0
-
-    def test_proximity_reexports_shingles(self) -> None:
-        from plugins.seed_generation.agents.proximity import _shingles
-
-        assert _shingles("a b c d e f g") == shingles("a b c d e f g")
+# CSP-8 (2026-05-22) — pre-CSP-8 ``TestProximityReexports`` pinned the
+# ``_shingles`` / ``_jaccard`` compatibility shims that proximity.py
+# kept after the CSP-6 hoist. CSP-8 reverted Proximity to the paper's
+# LLM-clustering pattern and dropped the shims entirely (no more
+# token-overlap math in proximity), so the reexport contract no
+# longer exists to test. The Evolver's anti-convergence guard (CSP-6)
+# still uses ``core.text.similarity`` directly — the other test
+# classes above keep that surface pinned.

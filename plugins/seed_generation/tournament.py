@@ -143,7 +143,6 @@ def plan_matches(
     *,
     rng: random.Random | None = None,
     target_matches: int | None = None,
-    proximity_graph: dict[tuple[str, str], float] | None = None,
 ) -> list[MatchPlan]:
     """Sample distinct pairwise matches for the tournament.
 
@@ -155,19 +154,12 @@ def plan_matches(
     needs a smaller schedule. ``rng`` is the random source — pass a
     seeded ``Random`` instance in tests for determinism.
 
-    PR-Π1 — ``proximity_graph`` (sorted ``(a, b)`` → similarity in
-    ``[0, 1]``) enables the **diverse-bracket policy**: pairs are
-    selected by ascending proximity so the tournament prioritises
-    informative ("far") matches over near-duplicate ones that the
-    Proximity phase would have already dropped if they crossed the
-    dedup threshold. This realises Co-Scientist §3.3.4 — the Proximity
-    agent "assists the Ranking agent in organizing tournament matches".
-    Missing graph entries (pair never scored) default to ``0.0``
-    (maximally distant) so they sort to the front. When the graph is
-    ``None`` or empty the legacy random-shuffle policy is retained for
-    backwards compatibility (every existing test passes unchanged).
-    Presentation order per pair is still randomised to defeat position
-    bias.
+    CSP-8 (2026-05-22) — the pre-CSP-8 ``proximity_graph`` parameter
+    (PR-Π1 "diverse-bracket policy") was removed when Proximity reverted
+    to the paper's LLM-clustering pattern. The Ranker now uses a pure
+    random-shuffle policy; the proximity step's coverage signal lives
+    in ``state.similarity_clusters`` and is consumed by the
+    meta_reviewer instead of the Elo bracket.
     """
     if len(candidate_ids) < 2:
         return []
@@ -183,17 +175,7 @@ def plan_matches(
         for b in candidate_ids[i + 1 :]:
             all_pairs.append((a, b))
 
-    if proximity_graph:
-        # Diverse-bracket policy — sort by ascending proximity (far pairs
-        # first). Stable sort on a string-tiebreaker keeps deterministic
-        # ordering when many pairs share the default 0.0 score.
-        def _diversity_key(pair: tuple[str, str]) -> tuple[float, str, str]:
-            key = pair if pair[0] < pair[1] else (pair[1], pair[0])
-            return (proximity_graph.get(key, 0.0), key[0], key[1])
-
-        all_pairs.sort(key=_diversity_key)
-    else:
-        rng.shuffle(all_pairs)
+    rng.shuffle(all_pairs)
     selected = all_pairs[: max(0, target_matches)]
 
     plans: list[MatchPlan] = []

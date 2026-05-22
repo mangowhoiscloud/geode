@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.28
+- **Version**: 0.99.30
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -93,7 +93,7 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
 | | No leaving `[Unreleased]` on main | Release discipline |
-| | No version mismatch across 4 locations | Single source of truth |
+| | No version mismatch across 5 locations | Single source of truth |
 | **PR** | No PR body without HEREDOC | Format consistency |
 | | No PR without a "Why" rationale | Decision record |
 | | No PR body without Summary/Why/Changes/Verification sections | Information completeness |
@@ -255,7 +255,7 @@ See `geode-changelog` skill.
 
 | Sync Target | Verification |
 |-------------|--------------|
-| Version across 4 locations | CHANGELOG, CLAUDE.md, README.md, pyproject.toml |
+| Version across 5 locations | CHANGELOG, CLAUDE.md, README.md, README.ko.md, pyproject.toml |
 | Metrics | Tests, Modules, Commands — measured values |
 
 **Versioning**: New feature = MINOR, Bug fix = PATCH, Docs only = none.

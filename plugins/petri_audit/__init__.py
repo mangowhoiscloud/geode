@@ -103,4 +103,20 @@ except ImportError:
         exc_info=True,
     )
 
+# CSA-1b (2026-05-22) — register the ``codex-cli`` ModelAPI for the
+# paperclip-pattern adapter (codex CLI subprocess). Sibling of CSA-1's
+# claude-cli provider. Routes ``codex-cli/<model>`` ids through
+# ``codex exec --json`` subprocess (per-call). Pattern verified in
+# ``~/workspace/paperclip/packages/adapters/codex-local/src/server/
+# codex-args.ts:53``.
+try:
+    from plugins.petri_audit.codex_cli_provider import register as _register_codex_cli
+
+    _register_codex_cli()
+except ImportError:
+    _logging.getLogger(__name__).debug(
+        "petri_audit codex-cli ModelAPI registration deferred — [audit] extra not installed",
+        exc_info=True,
+    )
+
 __all__: list[str] = []
