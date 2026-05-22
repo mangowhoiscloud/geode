@@ -116,10 +116,9 @@ def _calls_for(budget: _RoleBudget, *, candidates: int, matches: int, voters: in
 def _per_call_cost(model: str, budget: _RoleBudget) -> float:
     """Per-call USD using :data:`MODEL_PRICING`.
 
-    Returns ``0.0`` when the model is unknown (proximity's embedding
-    pricing is the obvious case — :data:`MODEL_PRICING` only ships
-    completion-model rates). The caller can override or supplement
-    when an embedding-specific catalogue lands.
+    Returns ``0.0`` when the model is unknown. :data:`MODEL_PRICING`
+    only ships completion-model rates (all GEODE seed-generation roles
+    are completion calls after CSP-8 + CSP-10).
     """
     price = MODEL_PRICING.get(model)
     if price is None:

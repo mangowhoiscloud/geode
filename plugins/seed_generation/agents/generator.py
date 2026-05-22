@@ -22,9 +22,10 @@ Return shape (merged into ``PipelineState.candidates``)::
     ]
 
 The output dict is what later phases consume — Proximity (S4) reads
-the file to compute embeddings, Reflection (S3) critiques it, Pilot (S5)
-runs it through the Petri inner-loop subset. The candidate id is also
-the basename of the seed file, so disk layout matches state shape 1:1.
+the file to cluster near-duplicates by LLM call (paper §3, CSP-8),
+Reflection (S3) critiques it, Pilot (S5) runs it through the Petri
+inner-loop subset. The candidate id is also the basename of the seed
+file, so disk layout matches state shape 1:1.
 
 Cost accounting:
 ================

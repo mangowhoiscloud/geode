@@ -49,6 +49,36 @@ functional change.
 
 ### Changed
 
+- **CSP-10 — supported-model lineup realigned + embedding plumbing removed**.
+  Updated `seed_generation.plugin.toml` `allowed_models` lists so every
+  role advertises only what Claude Code CLI (`claude-opus-4-7` /
+  `claude-sonnet-4-6` / `claude-haiku-4-5`) and Codex CLI (`gpt-5.5` /
+  `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.3-codex`) actually expose as of
+  2026-05-22 (cross-checked against `core/llm/model_pricing.toml`).
+  Pilot now lists `gpt-5.3-codex` (Codex-specialized small) alongside
+  `gpt-5.4-mini`; Ranker / Evolver / Meta-Reviewer added `gpt-5.5` so
+  judge-panel / rewrite paths can opt into Codex without an explicit
+  override. Dropped the legacy `o1-` / `o3-` reasoning-model prefix
+  mappings from `picker._PROVIDER_PREFIX_MAP` — Codex CLI no longer
+  exposes those families, so the picker now raises rather than
+  silently binding them to the openai adapter.
+
+- **CSP-10 — drop the embedding ``kind`` discriminator**. CSP-8 had
+  reverted the only embedding consumer (Proximity) to the paper's
+  LLM-clustering pattern, but left a `kind: Literal["completion",
+  "embedding"]` field on `SeedRoleSpec` + `RoleBinding` plus dead
+  branches in `pre_flight.check_auth` and `cost_preview._per_call_cost`
+  for forward-compat. CSP-10 deletes the field, the picker's
+  `text-embedding-` prefix mapping, the pre-flight embedding branch,
+  and the manifest TOML's `kind = "completion"` line on the proximity
+  role. Stale docstrings in `agents/__init__.py` (proximity 3-track
+  blurb), `agents/base.py` (pre-CSP-8 bypass paragraph), and
+  `agents/generator.py` (Proximity-computes-embeddings paragraph) are
+  rewritten to match the post-CSP-8 LLM-clustering reality. Two new
+  regression pins: `SeedRoleSpec.model_fields` must NOT contain
+  `kind`, and the shipped TOML must NOT carry any bare `kind = "..."`
+  line.
+
 - **CSP-9 — seed-generation prompts colocated with the plugin package**.
   Moved the 8 seed-generation agent prompt files (`seed_critic.md`,
   `seed_evolver.md`, `seed_generator.md`, `seed_meta_reviewer.md`,
