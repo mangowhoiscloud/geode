@@ -139,8 +139,12 @@ class TestReadLatestPointer:
 
 class TestRepoRelativeDefault:
     def test_state_root_defaults_inside_repo(self) -> None:
-        """The default STATE_ROOT lives inside the repo (machine-portable)."""
-        # Should be ``<repo_root>/state`` — does NOT contain user $HOME.
-        assert "state" in cp.STATE_ROOT.parts
-        # Default sits under the resolved repo root, not user home.
-        assert cp.STATE_ROOT.is_absolute()
+        """The default STATE_ROOT lives inside the repo (machine-portable).
+
+        Note: ``cp.STATE_ROOT`` is monkeypatched by ``conftest._isolate_state_root``,
+        so we exercise the underlying ``_resolve_repo_root`` directly to
+        check the default the module would compute at import time.
+        """
+        default = cp._resolve_repo_root() / "state"
+        assert "state" in default.parts
+        assert default.is_absolute()
