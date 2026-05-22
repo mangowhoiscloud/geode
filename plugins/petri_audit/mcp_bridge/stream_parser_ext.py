@@ -1,25 +1,30 @@
-"""``content_block_delta`` accumulator for ``tool_use`` blocks (CSA-2).
+"""``tool_use`` block extractor for the claude CLI stream-json output.
 
-Extends CSA-1's text-only stream-json parser. The claude CLI emits
-``tool_use`` content blocks as a sequence::
+Two emission shapes documented:
 
-    content_block_start  { index, content_block: {type: "tool_use", id, name, input: {}} }
-    content_block_delta  { index, delta: {type: "input_json_delta", partial_json: "..."} }
-    ...
-    content_block_stop   { index }
+1. **Wrapped assistant events** (the actual claude CLI 2.x format under
+   ``--print --output-format stream-json --verbose``)::
 
-We accumulate ``partial_json`` fragments keyed by ``index``, then
-``json.loads`` the concatenation at ``content_block_stop`` to build an
-inspect_ai :class:`ToolCall`.
+       {"type":"assistant","message":{...,"content":[
+         {"type":"tool_use","id":"toolu_…","name":"…","input":{…}}
+       ]}}
 
-Why split from the CSA-1 parser
-================================
+   This is the shape observed live (verified 2026-05-22 against a real
+   ``claude 2.1.140`` invocation). ``input`` is a complete dict — no
+   incremental partial_json delta streaming under ``--print``.
 
-CSA-1's ``_extract_assistant_text`` was a single-purpose folder over
-``text_delta`` events. Adding tool_use accumulation in-place would have
-muddled two unrelated concerns and forced the text-only path to pay
-the bookkeeping cost. The split keeps each function single-purpose
-and lets the tool-aware response builder compose both.
+2. **Flat ``content_block_*`` events** (the upstream Anthropic SSE
+   format that the inspect_ai harness mocks in unit tests, and that
+   may apply if claude CLI ever exposes raw passthrough streaming)::
+
+       content_block_start  { index, content_block: {type:"tool_use",…,"input":{}} }
+       content_block_delta  { index, delta: {type:"input_json_delta","partial_json":"…"} }
+       content_block_stop   { index }
+
+The extractor handles **both** shapes — the wrapped path is the
+production hot path; the flat path is the unit-test contract that
+lets us pin parser behaviour without standing up a real claude
+binary.
 
 Edge cases
 ----------
@@ -153,6 +158,8 @@ def extract_tool_calls(
 
     in_flight: dict[int, ToolUseAccumulator] = {}
     completed_order: list[int] = []
+    wrapped_tool_calls: list[ToolCall] = []
+    seen_wrapped_ids: set[str] = set()
 
     for raw_event in events:
         event = _coerce_event_dict(raw_event)
@@ -161,6 +168,47 @@ def extract_tool_calls(
         event_type = event.get("type")
         payload = _event_payload(event)
 
+        # SHAPE 1 — wrapped assistant event (production claude CLI).
+        # ``message.content`` is a list of content blocks where
+        # ``tool_use`` blocks already carry a complete ``input`` dict
+        # (no incremental streaming under --print). The same tool_use
+        # block may be re-emitted across multiple ``assistant`` events
+        # as the message accumulates — dedupe by tool_use ``id``.
+        if event_type == "assistant":
+            message = payload.get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, list):
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("type") != "tool_use":
+                            continue
+                        tu_id = str(block.get("id", "") or "")
+                        if tu_id and tu_id in seen_wrapped_ids:
+                            continue
+                        if tu_id:
+                            seen_wrapped_ids.add(tu_id)
+                        raw_name = str(block.get("name", "") or "")
+                        raw_input = block.get("input")
+                        if not isinstance(raw_input, dict):
+                            raw_input = {}
+                        if server_name:
+                            function_name = strip_mcp_prefix(raw_name, server_name=server_name)
+                        else:
+                            function_name = raw_name
+                        wrapped_tool_calls.append(
+                            ToolCall(
+                                id=tu_id or f"tool_use_wrapped_{len(wrapped_tool_calls)}",
+                                function=function_name,
+                                arguments=raw_input,
+                                parse_error=None,
+                                type="function",
+                            )
+                        )
+            continue
+
+        # SHAPE 2 — flat content_block_* events (Anthropic SSE format).
         if event_type == "content_block_start":
             content_block = payload.get("content_block")
             if not isinstance(content_block, dict):
@@ -205,7 +253,7 @@ def extract_tool_calls(
             completed_order.append(index)
             continue
 
-    tool_calls: list[ToolCall] = []
+    tool_calls: list[ToolCall] = list(wrapped_tool_calls)
     for index in completed_order:
         acc = in_flight[index]
         if not acc.done:

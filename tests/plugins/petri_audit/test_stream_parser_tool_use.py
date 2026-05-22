@@ -283,6 +283,78 @@ def test_extract_missing_stop_omits_call() -> None:
     assert calls == []
 
 
+def test_extract_wrapped_assistant_event_shape() -> None:
+    """Production claude CLI 2.x emits wrapped ``assistant`` events with
+    ``message.content[]`` arrays — NOT the flat content_block_* shape.
+    Verified live 2026-05-22 against claude 2.1.140."""
+    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+
+    events = [
+        _ev("system", subtype="init"),
+        _ev(
+            "assistant",
+            message={
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_01",
+                        "name": "mcp__bridge__send_message",
+                        "input": {"message": "hello"},
+                    }
+                ],
+            },
+        ),
+        _ev("result", subtype="error_max_turns", stop_reason="tool_use"),
+    ]
+    calls = extract_tool_calls(events, server_name="bridge")
+    assert len(calls) == 1
+    assert calls[0].id == "toolu_01"
+    assert calls[0].function == "send_message"
+    assert calls[0].arguments == {"message": "hello"}
+
+
+def test_extract_wrapped_dedupe_repeated_assistant_events() -> None:
+    """claude CLI sometimes re-emits the same assistant event as the
+    message accumulates; dedupe on tool_use id."""
+    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+
+    wrapped_block = {
+        "type": "tool_use",
+        "id": "toolu_01",
+        "name": "send_message",
+        "input": {"a": 1},
+    }
+    events = [
+        _ev("assistant", message={"role": "assistant", "content": [wrapped_block]}),
+        _ev("assistant", message={"role": "assistant", "content": [wrapped_block]}),
+        _ev("assistant", message={"role": "assistant", "content": [wrapped_block]}),
+    ]
+    calls = extract_tool_calls(events)
+    assert len(calls) == 1
+
+
+def test_extract_wrapped_multiple_tool_uses_in_one_message() -> None:
+    from plugins.petri_audit.mcp_bridge.stream_parser_ext import extract_tool_calls
+
+    events = [
+        _ev(
+            "assistant",
+            message={
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "tu_1", "name": "a", "input": {}},
+                    {"type": "thinking", "thinking": "..."},
+                    {"type": "tool_use", "id": "tu_2", "name": "b", "input": {"x": 2}},
+                ],
+            },
+        ),
+    ]
+    calls = extract_tool_calls(events)
+    assert [c.function for c in calls] == ["a", "b"]
+    assert calls[1].arguments == {"x": 2}
+
+
 def test_extract_accepts_dataclass_shape_events() -> None:
     """CSA-1's parse_stream_json_events returns StreamJsonEvent
     dataclasses, not dicts. The parser must accept both."""

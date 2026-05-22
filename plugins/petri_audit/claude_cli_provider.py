@@ -201,6 +201,7 @@ def build_claude_cli_argv(
     max_turns: int = 1,
     mcp_config_path: str | None = None,
     allowed_tools: list[str] | None = None,
+    disable_builtin_tools: bool = False,
     extra_args: Iterable[str] | None = None,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
@@ -242,6 +243,14 @@ def build_claude_cli_argv(
     if allowed_tools:
         # CLI flag accepts space-or-comma-separated list.
         argv += ["--allowed-tools", ",".join(allowed_tools)]
+    if disable_builtin_tools:
+        # CSA-2 (2026-05-22) — when wrapping a real ``claude`` binary
+        # (e.g. the cmux.app variant) the CLI auto-injects Claude
+        # Code's built-in tools (Bash / Edit / ToolSearch / …) which
+        # poison the auditor's tool choice (the LLM picks ToolSearch
+        # over mcp__bridge__send_message). ``--tools ""`` disables
+        # the built-in set so only MCP tools remain.
+        argv += ["--tools", ""]
     if extra_args:
         argv += list(extra_args)
     return argv
@@ -415,6 +424,30 @@ def _extract_usage(events: list[StreamJsonEvent]) -> dict[str, int]:
     }
 
 
+def _is_expected_tool_use_boundary(events: list[StreamJsonEvent]) -> bool:
+    """True when the terminal ``result`` event indicates a clean
+    ``--max-turns 1`` stop at the tool_use boundary.
+
+    The claude CLI exits with returncode 1 + ``is_error=true`` +
+    ``errors=["Reached maximum number of turns (1)"]`` whenever the
+    model would have continued (i.e. the assistant message ends with
+    ``stop_reason=tool_use``). That is the **expected** behaviour for
+    inspect_ai — the harness owns the iteration loop and just wants
+    the tool_use blocks. CSA-2 detects this case so the provider
+    doesn't surface it as ``ClaudeCliInvocationError``.
+
+    Verified live 2026-05-22 against claude CLI 2.1.140.
+    """
+    for event in reversed(events):
+        if event.type != "result":
+            continue
+        payload = event.payload
+        terminal = payload.get("terminal_reason")
+        stop = payload.get("stop_reason")
+        return terminal == "max_turns" and stop == "tool_use"
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Subprocess runner
 # ---------------------------------------------------------------------------
@@ -576,14 +609,20 @@ def register() -> None:
                     model_name=self.model_name,
                     mcp_config_path=str(invocation.mcp_config_json),
                     allowed_tools=invocation.allowed_tools,
+                    disable_builtin_tools=True,
                 )
                 prompt = serialise_messages_to_prompt(input)
                 stdout, stderr, returncode = await _run_claude_subprocess(
                     argv, prompt, self._timeout_s
                 )
-                if returncode != 0:
-                    raise ClaudeCliInvocationError(f"claude exited {returncode}: {stderr[:400]!r}")
                 events = parse_stream_json_events(stdout)
+                # Order matters here: when the subprocess truly fails
+                # (no events at all), surface the exit code first;
+                # ``_is_expected_tool_use_boundary`` requires a terminal
+                # ``result`` event so its check is meaningless when
+                # ``events`` is empty.
+                if returncode != 0 and (not events or not _is_expected_tool_use_boundary(events)):
+                    raise ClaudeCliInvocationError(f"claude exited {returncode}: {stderr[:400]!r}")
                 if not events:
                     raise ClaudeCliInvocationError(
                         f"claude stdout had no stream-json events. stderr: {stderr[:400]!r}"
