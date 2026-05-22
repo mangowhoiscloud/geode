@@ -131,18 +131,23 @@ def load_user_overrides(path: Path | str | None = None) -> dict[str, RoleOverrid
 def read_role_override(role: str, *, path: Path | str | None = None) -> RoleOverride:
     """Return the override dict for a single role (empty if unset).
 
-    PR-δ2 (2026-05-19) — precedence:
-      1. ``[self_improving_loop.petri.<role>]`` section in ``~/.geode/config.toml``
-         (PR-α1 single SoT).
-      2. Legacy ``[petri.<role>]`` in ``~/.geode/petri.toml`` (only
-         honoured when ``path`` is the default; explicit path arg
-         always reads the legacy file as before so callers that
-         deliberately load a snapshot keep working).
+    Single-SoT (2026-05-22) — read precedence:
+      1. ``[self_improving_loop.petri.<role>]`` section in
+         ``~/.geode/config.toml`` (the SoT).
+      2. Legacy ``[petri.<role>]`` in ``~/.geode/petri.toml`` —
+         **deprecated read fallback** kept for one release so
+         operators with an existing legacy file don't lose their
+         pinned values at upgrade. The ``/petri`` slash command no
+         longer writes there; new writes flow into config.toml
+         exclusively via :func:`save_role_override_to_config_toml`.
+         The ``geode config migrate-petri-toml`` helper prints the
+         diff so operators can fold the legacy values into config.toml
+         and delete petri.toml.
 
-    The legacy fallback is retained for one release so existing users
-    are not stranded; the migration helper
-    (``migration_plan_from_petri_toml``) prints the diff and the
-    follow-up PR-ε1 wires it into ``geode config migrate-petri-toml``.
+    When ``path`` is supplied (fixtures / migration tooling), the
+    function reads only that file in the legacy ``[petri.<role>]``
+    shape — the config.toml SoT layer is bypassed so callers can
+    introspect a snapshot.
     """
     if path is None:
         outer_override = _read_role_from_self_improving_loop(role)
@@ -209,6 +214,14 @@ def save_role_override(
     The function is additive — other roles are preserved verbatim. Atomic
     write via a temp-file rename so a crashed editor never leaves a
     partial petri.toml on disk.
+
+    SoT-flip (2026-05-22) — the operator-facing SoT for ``model`` /
+    ``source`` per role is now
+    ``[self_improving_loop.petri.<role>]`` in ``~/.geode/config.toml``.
+    The ``/petri`` slash command uses
+    :func:`save_role_override_to_config_toml` for that path; this
+    function survives as the legacy ``~/.geode/petri.toml`` writer for
+    fixtures + back-compat probes that explicitly target petri.toml.
     """
     target = _resolve_path(path)
     existing = load_user_overrides(target)
@@ -231,6 +244,42 @@ def save_role_override(
         existing.pop(role, None)
 
     _atomic_write_toml(target, existing)
+
+
+def save_role_override_to_config_toml(
+    role: str,
+    *,
+    model: str | None = None,
+    source: str | None = None,
+) -> None:
+    """Persist a role override to ``~/.geode/config.toml`` under
+    ``[self_improving_loop.petri.<role>]`` — the operator-config SoT.
+
+    Single-SoT (2026-05-22) — all writes flow into the config.toml
+    section. Empty-string (delete-axis) requests are honoured by
+    ``_persist_section_updates`` directly: it drops the matching
+    ``key = "..."`` line so a subsequent
+    :func:`read_role_override` returns ``{}`` for the cleared axis and
+    the binding registry falls through to the manifest default.
+
+    No legacy ``~/.geode/petri.toml`` write path remains —
+    consolidation kills the read/write asymmetry that made
+    ``/petri model <role>`` a silent no-op when the operator had
+    pinned a different value in config.toml. Migration helper
+    (``geode config migrate-petri-toml``) still reads pre-existing
+    legacy files for the diff print.
+    """
+    updates: dict[str, str] = {}
+    if model is not None:
+        updates["model"] = model
+    if source is not None:
+        updates["source"] = source
+    if not updates:
+        return
+
+    from core.cli.commands.self_improving import _persist_section_updates
+
+    _persist_section_updates(f"self_improving_loop.petri.{role}", updates)
 
 
 def clear_overrides(role: str | None = None, *, path: Path | str | None = None) -> None:

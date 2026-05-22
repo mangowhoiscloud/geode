@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -111,7 +112,7 @@ def test_meta_reviewer_validates_empty_candidates() -> None:
         candidates_requested=3,
     )
     manager = _StubManager()
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -119,7 +120,7 @@ def test_meta_reviewer_validates_empty_candidates() -> None:
 def test_meta_reviewer_dispatches_single_task() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager()
-    MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert len(manager.received_tasks) == 1
     task = manager.received_tasks[0]
     assert task.agent == "seed_meta_reviewer"
@@ -129,7 +130,7 @@ def test_meta_reviewer_dispatches_single_task() -> None:
 def test_meta_reviewer_merges_report_into_meta_review() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager()
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     meta = result.output["meta_review"]
     assert "coverage" in meta
@@ -140,7 +141,7 @@ def test_meta_reviewer_merges_report_into_meta_review() -> None:
 def test_meta_reviewer_drops_malformed_payload() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager(output={"partial": "dict"})
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "meta_review_failed"
 
@@ -148,7 +149,7 @@ def test_meta_reviewer_drops_malformed_payload() -> None:
 def test_meta_reviewer_handles_sub_agent_failure() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager(success=False)
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "meta_review_failed"
 
@@ -156,14 +157,14 @@ def test_meta_reviewer_handles_sub_agent_failure() -> None:
 def test_meta_reviewer_accepts_text_json_fallback() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager(output={"text": json.dumps(_good_meta())})
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
 
 
 def test_meta_reviewer_announce_false() -> None:
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager()
-    MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert manager.received_announce is False
 
 
@@ -171,7 +172,7 @@ def test_meta_reviewer_snapshot_includes_counts() -> None:
     """Task args should carry the state snapshot with counts."""
     state = _state_with_full_pipeline_data(5)
     manager = _StubManager()
-    MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
     snapshot = task.args["snapshot"]
     assert snapshot["candidate_ids"] == [c["id"] for c in state.candidates]
@@ -183,7 +184,7 @@ def test_meta_reviewer_snapshot_includes_counts() -> None:
 def test_meta_reviewer_description_mentions_run_id() -> None:
     state = _state_with_full_pipeline_data(3)
     manager = _StubManager()
-    MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     desc = manager.received_tasks[0].description
     assert "t-meta" in desc
     assert "broken_tool_use" in desc
@@ -195,7 +196,7 @@ def test_meta_reviewer_drops_response_missing_session_summary() -> None:
     partial = _good_meta()
     del partial["session_summary"]
     manager = _StubManager(output=partial)
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "meta_review_failed"
 
@@ -205,7 +206,7 @@ def test_meta_reviewer_empty_elo_ratings_safe() -> None:
     state = _state_with_full_pipeline_data(3)
     state.elo_ratings = {}
     manager = _StubManager()
-    result = MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     snapshot = manager.received_tasks[0].args["snapshot"]
     assert snapshot["elo_distribution"]["min"] == 0.0
@@ -216,7 +217,7 @@ def test_meta_reviewer_coverage_aggregates_target_dims() -> None:
     state = _state_with_full_pipeline_data(2)
     state.candidates[1]["target_dim"] = "input_hallucination"
     manager = _StubManager()
-    MetaReviewer(manager=manager).execute(state)  # type: ignore[arg-type]
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     snapshot = manager.received_tasks[0].args["snapshot"]
     assert snapshot["coverage"]["broken_tool_use"] == 1
     assert snapshot["coverage"]["input_hallucination"] == 1

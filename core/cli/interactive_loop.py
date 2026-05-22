@@ -16,11 +16,10 @@ from typing import Any
 from core.ui.console import console
 
 
-def _drain_scheduler_queue(
+async def _drain_scheduler_queue(
     *,
     action_queue: Any,
     services: Any,
-    runner: Any,
     session_lane: Any,
     global_lane: Any,
     force_isolated: bool = False,
@@ -30,13 +29,17 @@ def _drain_scheduler_queue(
     on_skip: Any | None = None,
     on_main_run: Any | None = None,
 ) -> int:
-    """Drain pending scheduled jobs. Delegates to scheduler_drain module."""
+    """Drain pending scheduled jobs. Delegates to scheduler_drain module.
+
+    PR-Async-Phase-C step 4a (2026-05-22) — async-native; the previous
+    ``IsolatedRunner`` parameter is gone now that fire-and-forget runs on
+    the caller's event loop via ``asyncio.create_task``.
+    """
     from core.cli.scheduler_drain import drain_scheduler_queue
 
-    return drain_scheduler_queue(
+    return await drain_scheduler_queue(
         action_queue=action_queue,
         services=services,
-        runner=runner,
         session_lane=session_lane,
         global_lane=global_lane,
         force_isolated=force_isolated,

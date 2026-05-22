@@ -59,17 +59,34 @@ def test_runner_default_llm_call_inherits_settings_model() -> None:
     assert "cfg.mutator.default_model" in src
 
 
-def test_build_audit_command_inherits_settings_model() -> None:
-    """``autoresearch.train._build_audit_command`` must read
-    ``cfg.target_model`` / ``cfg.judge_model`` AND fall back to
-    ``_settings_model()`` when either is None (G1a)."""
+def test_build_audit_command_never_pins_role_models_on_argv() -> None:
+    """Single-SoT (2026-05-22) — ``_build_audit_command`` must NEVER
+    emit ``--target`` / ``--judge`` / ``--auditor`` argv. The role
+    models live in ``[self_improving_loop.petri.<role>].model`` and
+    the runner resolves them via the binding registry when argv slots
+    are absent. Earlier revisions:
+
+    * PR-MINIMAL-2 (2026-05-21) — inherited via
+      ``cfg.target_model or _settings_model()`` (Settings.model
+      bypass)
+    * 2026-05-22 first cut — emitted ``if cfg.target_model:`` argv
+      (override-only knob) — still a second SoT layer
+
+    Both paths created a duplicate-SoT race with ``[petri.<role>]``.
+    Pin the no-argv contract so a future refactor doesn't silently
+    re-introduce the bypass."""
     from autoresearch import train
 
     src = inspect.getsource(train._build_audit_command)
-    assert "_settings_model" in src
-    # Both target + judge fall back via the helper
-    assert "cfg.target_model or _settings_model()" in src
-    assert "cfg.judge_model or _settings_model()" in src
+    # No ``--target`` / ``--judge`` / ``--auditor`` argv emission
+    assert '"--target"' not in src
+    assert '"--judge"' not in src
+    assert '"--auditor"' not in src
+    # And no model-axis cfg reads inside the builder
+    assert "cfg.target_model" not in src
+    assert "cfg.judge_model" not in src
+    # The legacy inherit-via-Settings.model wiring is gone too
+    assert "_settings_model" not in src
 
 
 # ---------------------------------------------------------------------------

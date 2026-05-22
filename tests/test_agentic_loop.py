@@ -968,7 +968,7 @@ class TestSubAgentManager:
 
         runner = IsolatedRunner()
         manager = SubAgentManager(runner)
-        results = manager.delegate([])
+        results = asyncio.run(manager.adelegate([]))
         assert results == []
 
     def test_delegate_with_handler(self) -> None:
@@ -983,7 +983,7 @@ class TestSubAgentManager:
         tasks = [
             SubTask("t1", "Test task 1", "analyze", {"subject_id": "Test"}),
         ]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
         assert results[0].task_id == "t1"
@@ -999,7 +999,7 @@ class TestSubAgentManager:
 
         manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
         tasks = [SubTask("t1", "Failing task", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
         # The exception is caught by _execute_subtask and returned as error dict.
@@ -1011,7 +1011,7 @@ class TestSubAgentManager:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, task_handler=None, timeout_s=10)
         tasks = [SubTask("t1", "No handler", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
         assert results[0].success is True  # IsolationResult is success, but output has error
@@ -1119,23 +1119,6 @@ class TestSubAgentManagerAdelegate:
         assert results[0].success is False
         assert "depth limit exceeded" in (results[0].error or "").lower()
 
-    def test_sync_delegate_emits_deprecation_warning(self) -> None:
-        """The sync ``delegate`` must surface a DeprecationWarning so
-        callers see the migration cue. ``adelegate`` is the survivor."""
-        import warnings
-
-        from core.orchestration.isolated_execution import IsolatedRunner
-
-        runner = IsolatedRunner()
-        manager = SubAgentManager(runner)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            manager.delegate([])
-        assert any(
-            issubclass(w.category, DeprecationWarning) and "adelegate" in str(w.message)
-            for w in caught
-        )
-
 
 # ---------------------------------------------------------------------------
 # SubAgentManager — Orchestration Integration tests
@@ -1169,7 +1152,7 @@ class TestSubAgentOrchestration:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10, hooks=hooks)
         tasks = [SubTask("t1", "Test task", "analyze", {"subject_id": "Project Atlas"})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
         assert results[0].success is True
@@ -1198,7 +1181,7 @@ class TestSubAgentOrchestration:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, failing_handler, timeout_s=10, hooks=hooks)
         tasks = [SubTask("t1", "Failing task", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 1
         # Error is caught by _execute_subtask → returned as dict → IsolationResult is success
@@ -1211,7 +1194,7 @@ class TestSubAgentOrchestration:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10, hooks=None)
         tasks = [SubTask("t1", "Test", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
         assert len(results) == 1
         assert results[0].success is True
 
@@ -1232,7 +1215,7 @@ class TestSubAgentOrchestration:
             SubTask("t2", "Task 2", "search", {}),
             SubTask("t3", "Task 3", "compare", {}),
         ]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert len(results) == 3
         assert enter_count == 3
@@ -1246,7 +1229,7 @@ class TestSubAgentOrchestration:
             SubTask("t1", "Task 1 dup", "analyze", {}),
             SubTask("t2", "Task 2", "search", {}),
         ]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         # Only t1 and t2 should execute (t1 dup removed)
         assert len(results) == 2
@@ -1263,7 +1246,7 @@ class TestSubAgentOrchestration:
             SubTask("t1", "Task 1", "analyze", {}),
             SubTask("t1", "Task 1 again", "analyze", {}),
         ]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
         assert len(results) == 1
 
     def test_hooks_property(self, handler: Any, hooks: HookSystem) -> None:
@@ -1420,7 +1403,7 @@ class TestSubAgentEdgeCases:
 
         manager = SubAgentManager(runner, slow_handler, timeout_s=0.3)
         tasks = [SubTask("t_slow", "Slow task", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         # Unblock the handler thread to avoid dangling threads
         block_event.set()
@@ -1438,7 +1421,7 @@ class TestSubAgentEdgeCases:
 
         manager = SubAgentManager(runner, handler, timeout_s=10)
         tasks = [SubTask("t1", "JSON test", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert results[0].success is True
         assert results[0].output["score"] == 0.85
@@ -1455,7 +1438,7 @@ class TestSubAgentEdgeCases:
 
         manager = SubAgentManager(runner, handler, timeout_s=10)
         tasks = [SubTask("t1", "Non-serializable test", "analyze", {})]
-        results = manager.delegate(tasks)
+        results = asyncio.run(manager.adelegate(tasks))
 
         assert results[0].success is True
         assert "2026" in results[0].output["timestamp"]
@@ -1758,7 +1741,7 @@ class TestSubAgentSessionIsolation:
         runner = IsolatedRunner()
         manager = SubAgentManager(runner, handler, timeout_s=10)
         tasks = [SubTask("t1", "Test task", "analyze", {"subject_id": "demo"})]
-        manager.delegate(tasks)
+        asyncio.run(manager.adelegate(tasks))
 
         # Handler should have received (True, child_key)
         assert len(captured) == 1
@@ -1785,7 +1768,7 @@ class TestSubAgentSessionIsolation:
             SubTask("t1", "Task 1", "analyze", {"subject_id": "Project Atlas"}),
             SubTask("t2", "Task 2", "search", {"subject_id": "Project Orion"}),
         ]
-        manager.delegate(tasks)
+        asyncio.run(manager.adelegate(tasks))
 
         records = manager.get_run_records()
         assert len(records) == 2

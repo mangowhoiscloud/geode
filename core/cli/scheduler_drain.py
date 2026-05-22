@@ -1,24 +1,37 @@
 """Scheduler queue drain — extracted from cli/__init__.py for SRP.
 
 Drains pending scheduled jobs from the action queue, shared by REPL and serve modes.
+
+PR-Async-Phase-C step 4a (2026-05-22) — fully async-native drain. The old
+sync helper that dispatched isolated jobs through ``IsolatedRunner.run_async``
+is replaced by ``asyncio.create_task`` fire-and-forget on the calling loop.
+Active tasks are tracked in a module-level set so the GC cannot reap them
+mid-flight (see ``asyncio.create_task`` docs — "Save a reference to the result
+of this function").
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from core.agent.conversation import ConversationContext
-from core.async_runtime import run_process_coroutine
 
 log = logging.getLogger(__name__)
 
 
-def drain_scheduler_queue(
+# Module-level strong refs for fire-and-forget tasks. Required because
+# ``asyncio.create_task`` only holds a weak reference; without this the
+# task could be GC'd before completion and the event loop would log
+# "Task was destroyed but it is pending!".
+_INFLIGHT_SCHEDULED_TASKS: set[asyncio.Task[None]] = set()
+
+
+async def drain_scheduler_queue(
     *,
     action_queue: Any,
     services: Any,
-    runner: Any,
     session_lane: Any,
     global_lane: Any,
     force_isolated: bool = False,
@@ -30,17 +43,17 @@ def drain_scheduler_queue(
 ) -> int:
     """Drain pending scheduled jobs from the action queue.
 
-    Shared by both REPL and serve modes.  In serve mode ``force_isolated``
+    Shared by both REPL and serve modes. In serve mode ``force_isolated``
     is True because there is no interactive main session to inject into.
 
     Uses SessionLane (per-key serial) + Global Lane (capacity) for
     concurrency control through the unified LaneQueue.
 
-    Returns the number of jobs drained.
+    Returns the number of jobs drained. Isolated dispatch is fire-and-
+    forget: the function returns once tasks are scheduled, not once
+    they complete.
     """
     import queue as _q
-
-    from core.orchestration.isolated_execution import IsolationConfig
 
     count = 0
     try:
@@ -84,42 +97,33 @@ def drain_scheduler_queue(
                         conversation=_iso_conv,
                         propagate_context=True,
                     )
-                    _cap_loop = _iso_loop
-                    _cap_prompt = prompt
-                    _cap_jid = job_id
-                    _cap_sess = session_lane
-                    _cap_glob = global_lane
-                    _cap_key = lane_key
-                    _cap_cb = on_complete
 
-                    def _run_isolated(
+                    async def _arun_isolated(
                         *,
-                        _loop: Any = _cap_loop,
-                        _p: str = _cap_prompt,
-                        _jid: str = _cap_jid,
-                        _sess: Any = _cap_sess,
-                        _glob: Any = _cap_glob,
-                        _key: str = _cap_key,
-                        _cb: Any = _cap_cb,
-                    ) -> str:
+                        _loop: Any = _iso_loop,
+                        _p: str = prompt,
+                        _jid: str = job_id,
+                        _sess: Any = session_lane,
+                        _glob: Any = global_lane,
+                        _key: str = lane_key,
+                        _cb: Any = on_complete,
+                    ) -> None:
                         try:
-                            r = run_process_coroutine(_loop.arun(_p))
+                            r = await asyncio.wait_for(_loop.arun(_p), timeout=300.0)
                             if _cb:
                                 _cb(r, job_id=_jid)
-                            return r.text if r and r.text else ""
+                        except TimeoutError:
+                            log.warning("Scheduler job %s timed out after 300s", _jid)
+                        except Exception:
+                            log.warning("Scheduler job %s execution failed", _jid, exc_info=True)
                         finally:
                             _glob.manual_release(_key)
                             _sess.manual_release(_key)
 
-                    runner.run_async(
-                        _run_isolated,
-                        config=IsolationConfig(
-                            prefix=f"scheduled:{job_id}",
-                            post_to_main=False,
-                            timeout_s=300.0,
-                        ),
-                    )
-                    _lanes_acquired = False  # ownership transferred to _run_isolated
+                    task = asyncio.create_task(_arun_isolated(), name=f"scheduled:{job_id}")
+                    _INFLIGHT_SCHEDULED_TASKS.add(task)
+                    task.add_done_callback(_INFLIGHT_SCHEDULED_TASKS.discard)
+                    _lanes_acquired = False  # ownership transferred to the task
                     if on_dispatch:
                         on_dispatch(job_id)
                 except Exception:
@@ -132,7 +136,7 @@ def drain_scheduler_queue(
                 if on_main_run:
                     on_main_run(job_id)
                 try:
-                    run_process_coroutine(main_loop.arun(prompt))
+                    await main_loop.arun(prompt)
                 except Exception:
                     log.warning("Scheduler job %s main-loop failed", job_id, exc_info=True)
     except _q.Empty:

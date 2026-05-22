@@ -99,12 +99,14 @@ def test_get_binding_auditor_default(monkeypatch: pytest.MonkeyPatch) -> None:
     binding = get_binding("auditor")
     assert isinstance(binding, PetriBinding)
     assert binding.role == "auditor"
-    assert binding.model == "claude-sonnet-4-6"
+    # Single-SoT (2026-05-22) — manifest default flipped sonnet→opus
+    # (auditor=flagship/judge=cost-balanced/target=smallest layering).
+    assert binding.model == "claude-opus-4-7"
     assert binding.source == "api_key"
     assert binding.provider == "anthropic"
     assert binding.adapter_module == "plugins.petri_audit.adapters.http_anthropic"
     assert binding.inspect_prefix == "anthropic"
-    assert binding.inspect_id == "anthropic/claude-sonnet-4-6"
+    assert binding.inspect_id == "anthropic/claude-opus-4-7"
 
 
 def test_get_binding_judge_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -188,7 +190,8 @@ def test_get_binding_oauth_priority(monkeypatch: pytest.MonkeyPatch) -> None:
     assert binding.source == "claude-cli"
     # CSA-3 flip — was claude-code/, now claude-cli/.
     assert binding.inspect_prefix == "claude-cli"
-    assert binding.inspect_id == "claude-cli/claude-sonnet-4-6"
+    # Single-SoT (2026-05-22) — auditor default flipped sonnet→opus.
+    assert binding.inspect_id == "claude-cli/claude-opus-4-7"
 
 
 def test_get_binding_target_with_openai_model(monkeypatch: pytest.MonkeyPatch) -> None:

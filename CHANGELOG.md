@@ -47,6 +47,66 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.35] - 2026-05-22
+
+### Changed
+
+- **Petri-role config SoT consolidation — ``[self_improving_loop.petri.<role>]``
+  in ``~/.geode/config.toml`` is the single source of truth.** Closes
+  the 2026-05-22 baseline-misalignment audit. The gen-0/gen-1 baseline
+  trace surfaced operator's ``[petri.auditor].model = "claude-opus-4-7"``
+  agreeing with Typer's default by coincidence, while the actual
+  mechanism was "Typer argv pin wins, registry never consults
+  ``[petri.<role>]``". Five duplicate-SoT layers collapsed into the
+  canonical petri-role section across two PRs (#1496 initial wiring +
+  #1496 final consolidation):
+
+  1. **Typer + argparse argv defaults flipped to ``None``**
+     (``plugins/petri_audit/cli_audit.py``). Omitted ``--judge`` /
+     ``--auditor`` / ``--target`` → ``runner.run_audit`` receives
+     ``None`` → resolved through the petri-role section. Explicit
+     argv pin still wins for the audit lifetime.
+  2. **``runner.run_audit`` None-fallback** routes through manifest +
+     ``read_role_override(role)`` directly (NOT
+     ``get_binding(role)``), so dry-run + CI-without-env-keys paths
+     work credential-free. Credential resolution happens later, only
+     on the real-run branch via ``to_inspect_model``.
+  3. **``/petri model <role>`` writes ``config.toml`` exclusively.**
+     New ``save_role_override_to_config_toml`` splices
+     ``{model, source}`` into ``[self_improving_loop.petri.<role>]``
+     via ``_persist_section_updates``, which now supports
+     empty-string-as-delete (line removal). Legacy
+     ``~/.geode/petri.toml`` writer removed; read fallback retained
+     one release for migration via
+     ``geode config migrate-petri-toml``.
+  4. **``AutoresearchConfig.target_model`` / ``judge_model`` →
+     deprecated no-op slots.** Fields survive on the dataclass so an
+     old ``config.toml`` carrying these keys still parses, but
+     values are *silently ignored at runtime*. ``_build_audit_command``
+     no longer emits ``--target`` / ``--judge`` argv flags.
+  5. **``autoresearch.train.TARGET_MODEL`` / ``JUDGE_MODEL`` module
+     constants removed.** Replaced by ``_petri_role_model(role)``
+     helper. Same SoT precedence as ``get_binding`` but
+     credential-free for status / dry-run / docs paths.
+  6. **Manifest layered defaults — auditor=flagship /
+     judge=cost-balanced / target=smallest.** ``auditor.default_model``
+     flipped from ``claude-sonnet-4-6`` to ``claude-opus-4-7`` so
+     the manifest reflects the layered cost-quality intent.
+     ``judge`` stays on sonnet-4-6, ``target`` stays on haiku-4-5.
+
+  Net effect: ``[self_improving_loop.petri.<role>].model`` is the
+  canonical write site. ``/petri model auditor claude-opus-4-7``
+  updates ``[petri.auditor]`` in ``config.toml``; next audit's
+  binding resolver reads the same line. Autoresearch outer-loop
+  honours the operator's role config out of the box. Same
+  reader-assumption-drift anti-pattern as PR-G3 #1347 / PR-G2 #1346
+  — fixed once, here, by deleting every duplicate SoT.
+
+  G-B drift pins flipped — ``_petri_role_model`` is canonical, the
+  legacy constants are *forbidden* (``hasattr(train, "TARGET_MODEL")``
+  must return ``False``). Test coverage: 6582 passed / 0 failed /
+  42 skipped after consolidation.
+
 ## [0.99.34] - 2026-05-22
 
 > CSA sprint endgame + async-only migration foundation + petri-bundle
@@ -91,7 +151,208 @@ functional change.
   fire a deploy. A follow-up release PR will land both today's gen-0
   baseline and this gen-1 backfill on the live site.
 
+### Fixed
+
+- **PR-Async-Phase-C step 4b fix-up — Codex MCP CRITICAL/HIGH/MEDIUM catches**.
+  After the bulk delete (entry below) Codex MCP review surfaced three issues
+  that local ruff/mypy/pytest/CI 8-of-8 had missed. All fixed in the same
+  PR before merge.
+
+  **CRITICAL #1 — ``IsolatedRunner.cancel()`` orphaned after sync-API
+  deletion** (``core/orchestration/isolated_execution.py``):
+  ``_cancel_flags`` was still read in ``cancel()`` and ``_execute_thread``
+  but no surviving code writes to it (the writers lived in the deleted
+  ``run_async``). ``_active`` was typed as
+  ``dict[str, threading.Thread | subprocess.Popen[bytes]]`` and the
+  isinstance check only matched ``subprocess.Popen`` — but the survivors
+  only register ``asyncio.subprocess.Process`` instances. Net effect:
+  ``cancel(session_id)`` returned ``False`` for every live async worker.
+  Fixed by removing ``_cancel_flags`` entirely, re-typing ``_active``
+  to ``dict[str, asyncio.subprocess.Process]``, and rewriting
+  ``cancel()`` to call ``.kill()`` directly on the registered process.
+  ``subprocess`` import removed.
+
+  **CRITICAL #2 — ``_aexecute_subprocess`` missed
+  ``asyncio.CancelledError``**: ``CancelledError`` is a ``BaseException``
+  child on Python 3.12, so the existing ``except Exception:`` did not
+  intercept it. ``finally`` released the lane but did not kill the
+  child — a ``task.cancel()`` on an in-flight ``arun`` could orphan a
+  worker process. Fixed with an explicit ``except asyncio.CancelledError:``
+  branch that kills + awaits + re-raises, plus a belt-and-braces
+  ``proc.kill()`` in ``finally``.
+
+  **CRITICAL #3 (Codex 2nd pass) — lane slot leak on cancel-during-lane-
+  wait**: the slot acquire was ``await asyncio.to_thread(self._acquire_slot, ...)``
+  on the lane semaphore. A ``CancelledError`` raised while the underlying
+  thread was still blocked could not stop the thread — when the slot
+  opened, the thread claimed it but the coroutine was already unwound,
+  leaving an orphan slot. Fixed by wrapping the acquire in
+  ``asyncio.shield`` so the await unwinds without dropping the thread,
+  then draining the ``acquire_task`` in ``finally`` and releasing the
+  slot if it ended up claimed.
+
+  **HIGH — cancel/timeout coverage gap**: ``TestCancelBehavior`` +
+  ``test_subprocess_cancel_kills_process`` deletion in the parent
+  commit removed the regression tests that would have caught the
+  CRITICAL items. New ``TestAsyncSubprocessCancel`` +
+  ``TestAsyncSubprocessLaneRelease`` classes in
+  ``tests/test_isolated_subprocess.py`` pin all three failure modes:
+  - ``test_cancel_kills_live_subprocess`` — ``runner.cancel()`` kills
+    the live worker and ``returncode`` becomes non-None.
+  - ``test_cancel_during_lane_wait_does_not_leak_slot`` — cancel
+    during lane wait must not leak a slot.
+  - ``test_task_cancel_kills_subprocess_and_releases_lane`` —
+    ``CancelledError`` propagation kills + releases.
+  - ``test_lane_released_after_success_path`` +
+    ``test_lane_released_after_timeout_kill`` — ``lane.active_count == 0``
+    invariant on both exit shapes.
+
+  **MEDIUM — ``adelegate`` sandbox cleanup on cancel**
+  (``core/agent/sub_agent.py``): the ``remove_working_directory`` loop
+  ran after ``asyncio.gather`` completed. Cancel mid-gather skipped
+  cleanup → sandbox path leak. Wrapped in ``try/finally`` around the
+  gather block.
+
+  **LOW — stale docstrings**: removed references to deleted methods
+  in ``plugins/seed_generation/agents/base.py``,
+  ``plugins/seed_generation/orchestrator.py``,
+  ``plugins/seed_generation/cli.py``,
+  ``core/orchestration/lane_queue.py``, and
+  ``tests/test_isolated_subprocess.py``.
+
+### Removed
+
+- **PR-Async-Phase-C step 4b — bulk delete deprecated sync APIs**. Closes the
+  async-only migration arc (steps 1-4a). Every ``# DEPRECATED-ASYNC-PHASE-C:``
+  grep anchor in ``core/`` + ``plugins/`` is now gone (10 anchors / 6 files
+  cleared, ``rg "# DEPRECATED-ASYNC-PHASE-C"`` returns 0).
+
+  **Production deletions**:
+
+  - ``core/agent/sub_agent.py`` — ``SubAgentManager.delegate`` (sync
+    polling fan-out via ``IsolatedRunner.run_async`` + ``get_result``)
+    and the dead ``_wait_for_result`` polling helper.
+  - ``core/agent/tool_executor/executor.py`` — ``ToolExecutor._execute_delegate``
+    (sync ``run_process_coroutine``-bridged shim around the async path).
+  - ``core/orchestration/isolated_execution.py`` —
+    ``IsolatedRunner.run_async`` + ``get_result`` + ``_execute_subprocess``
+    + ``_dispatch``. The async-native ``arun`` /
+    ``_aexecute_subprocess`` / ``_adispatch`` trio are the survivors.
+  - ``plugins/seed_generation/agents/base.py`` — ``BaseSeedAgent.execute``
+    (sync ``run_process_coroutine`` shim around ``aexecute``).
+  - ``plugins/seed_generation/orchestrator.py`` — ``Pipeline.run``,
+    ``_run_phase``, ``_acquire_lane`` (the three sync ``run_process_coroutine``
+    shims around the ``arun`` / ``_arun_phase`` / ``_aacquire_lane`` trio).
+
+  **Test surface adaptations** (~1,000 line net reduction):
+
+  - ``tests/test_scheduler_async_drain.py`` — file removed; tested the
+    sync polling API exclusively.
+  - ``tests/test_isolated_execution.py`` — ``TestIsolatedRunnerAsync``
+    + ``TestCancelBehavior`` classes removed (sync semantics).
+    ``TestEdgeCases.test_get_result_unknown_session`` removed; the
+    concurrency test renamed to ``TestConcurrentLimit`` and rewritten
+    on the async path with a ``lane.try_acquire("blocker")`` prefill.
+  - ``tests/test_isolated_subprocess.py`` — ``test_subprocess_async_returns_session_id``,
+    ``test_subprocess_cancel_kills_process`` removed (sync polling).
+    ``test_subprocess_lane_wait`` rewritten on the async path with
+    a ``lane.try_acquire`` prefill. Routing test stops spying on the
+    deleted ``_execute_subprocess``.
+  - ``tests/test_agentic_loop.py`` + ``tests/test_subagent_announce.py``
+    — 21 ``manager.delegate(tasks)`` calls auto-converted to
+    ``asyncio.run(manager.adelegate(tasks))``. The
+    ``test_sync_delegate_emits_deprecation_warning`` test removed
+    (tested a method that no longer exists).
+  - ``tests/plugins/seed_generation/*`` (14 files) — 80+ sync
+    ``execute(state)`` / ``pipeline.run()`` / ``pipeline._run_phase(...)``
+    calls auto-converted to ``asyncio.run(... .aexecute(...))`` /
+    ``asyncio.run(... .arun())`` / ``asyncio.run(... ._arun_phase(...))``.
+
 ### Changed
+
+- **PR-Async-Phase-C step 4a — scheduler_drain async-native + serve loop on
+  asyncio.run**. Migration prerequisite for step 4b's bulk delete of the
+  ``# DEPRECATED-ASYNC-PHASE-C:`` anchors. The last remaining non-deprecated
+  ``IsolatedRunner.run_async`` caller — the scheduler queue drain — flips
+  to ``asyncio.create_task`` fire-and-forget on the calling loop.
+
+  **``core/cli/scheduler_drain.py``**:
+
+  - ``drain_scheduler_queue`` flips to ``async def``. The ``runner``
+    parameter is removed (no longer needed — fire-and-forget runs on
+    the caller's event loop).
+  - Isolated dispatch path: builds an ``async def _arun_isolated``
+    closure with ``asyncio.wait_for(_loop.arun(_p), timeout=300.0)``
+    (was ``run_process_coroutine(_loop.arun(_p))`` inside a thread).
+    ``asyncio.create_task`` schedules it; the task is stored in a
+    module-level ``_INFLIGHT_SCHEDULED_TASKS: set[asyncio.Task]`` so
+    the GC cannot reap it mid-flight (``create_task`` only holds a
+    weak reference).
+  - Non-isolated REPL path: ``run_process_coroutine(main_loop.arun(prompt))``
+    → ``await main_loop.arun(prompt)``.
+
+  **``core/cli/interactive_loop.py``** — ``_drain_scheduler_queue``
+  delegator becomes ``async def`` to match.
+
+  **``core/cli/typer_serve.py``** — the sync poll loop
+  (``while not stop: _drain(...); _time.sleep(1.0)``) is hoisted into
+  an ``async def _serve_loop`` driven by ``asyncio.run(_serve_loop())``.
+  Signal handlers stay sync (they only flip the ``stop`` flag the loop
+  polls). The ``_sched_runner = IsolatedRunner()`` line is gone.
+
+  **Tests (``tests/test_scheduler_serve.py`` 9 calls +
+  ``tests/test_cli_extracted.py`` 1 call)**: each ``_drain_scheduler_queue(...)``
+  call wrapped in ``asyncio.run(...)``. The ``mock_runner`` fixture and
+  every ``mock_runner.run_async.assert_*`` assertion deleted. Dispatch
+  verification migrated to ``on_dispatch`` callbacks. 20/20 tests pass.
+
+- **PR-Async-Phase-C step 3 — IsolatedRunner subprocess + ToolExecutor
+  delegate native async**. Third leg of the async-only migration.
+  Two remaining non-seed-generation sync entries on the hot path —
+  subprocess sub-agent spawn and the ``delegate_task`` tool — flip
+  to native async. Sync siblings stay as ``DeprecationWarning`` +
+  ``# DEPRECATED-ASYNC-PHASE-C:`` grep-anchored shims for the
+  bulk-removal pass at the end of the migration.
+
+  **IsolatedRunner (``core/orchestration/isolated_execution.py``)**:
+
+  - ``_aexecute_subprocess`` (new) — native
+    ``asyncio.create_subprocess_exec`` + ``asyncio.wait_for`` + SIGKILL
+    recovery. Stores the live ``asyncio.subprocess.Process`` in
+    ``self._active`` so ``cancel`` keeps killing the child reliably.
+  - ``_adispatch`` (new) — routes ``WorkerRequest`` to
+    ``_aexecute_subprocess`` and plain callables to
+    ``asyncio.to_thread(self._execute_thread, ...)``.
+  - ``arun`` rerouted: ``await asyncio.to_thread(self._dispatch, ...)``
+    → ``await self._adispatch(...)``. The parent event loop is no
+    longer pinned on the thread pool for subprocess sub-agent fan-out.
+  - Sync ``run_async`` + ``get_result`` + ``_execute_subprocess``
+    + ``_dispatch`` emit ``DeprecationWarning`` with
+    ``# DEPRECATED-ASYNC-PHASE-C:`` grep anchors.
+
+  **ToolExecutor (``core/agent/tool_executor/executor.py``)**:
+
+  - ``_aexecute_delegate`` (new) — calls
+    ``await self._sub_agent_manager.adelegate(...)`` instead of the
+    sync polling helper.
+  - ``aexecute`` reroute: the ``delegate_task`` branch was
+    ``await asyncio.to_thread(self._execute_delegate, tool_input)``
+    and is now ``await self._aexecute_delegate(tool_input)``.
+  - Sync ``_execute_delegate`` becomes a
+    ``run_process_coroutine``-bridged ``DeprecationWarning`` shim.
+
+  **Test parity (``tests/test_isolated_subprocess.py``)**:
+
+  - ``TestAsyncSubprocessNative.test_arun_routes_worker_request_to_aexecute_subprocess``
+    pins the routing: ``arun(WorkerRequest)`` must hit
+    ``_aexecute_subprocess``, never ``_execute_subprocess``.
+  - ``test_arun_does_not_pin_event_loop_to_thread`` runs two
+    subprocess ``arun`` requests concurrently on a single event loop
+    and confirms both complete — only the native path allows that
+    interleaving without consuming two thread-pool slots.
+  - ``test_aexecute_subprocess_kills_on_timeout`` pins the
+    ``asyncio.wait_for`` + ``proc.kill()`` recovery branch.
+  - 11/11 ``test_isolated_subprocess.py`` tests pass.
 
 - **PR-Async-Phase-C step 2 — seed-generation Pipeline + 8 agents native async**.
   Second leg of the async-only migration. The Pipeline orchestrator

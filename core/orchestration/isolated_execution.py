@@ -14,7 +14,6 @@ import dataclasses
 import json
 import logging
 import os
-import subprocess  # nosec B404 — subprocess used for controlled worker process spawn only
 import sys
 import threading
 import time
@@ -120,8 +119,9 @@ class IsolatedRunner:
         self._hooks = hooks
         self._lane = lane  # Lane("global") from unified LaneQueue
         self._results: dict[str, IsolationResult] = {}
-        self._active: dict[str, threading.Thread | subprocess.Popen[bytes]] = {}
-        self._cancel_flags: dict[str, threading.Event] = {}
+        # Only async subprocess workers register here — thread-mode runs
+        # via ``asyncio.to_thread`` and is not externally cancellable.
+        self._active: dict[str, asyncio.subprocess.Process] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -139,50 +139,14 @@ class IsolatedRunner:
         """Run *fn_or_request* asynchronously in an isolated context.
 
         Accepts either a callable (thread mode) or a WorkerRequest (subprocess mode).
+
+        PR-Async-Phase-C step 3 (2026-05-22) — subprocess path now uses
+        :meth:`_aexecute_subprocess` (native ``asyncio.create_subprocess_exec``)
+        so the parent event loop is not pinned. Thread path stays via
+        :func:`asyncio.to_thread`.
         """
         cfg = self._resolve_config(config)
-        return await asyncio.to_thread(self._dispatch, fn_or_request, args, kwargs or {}, cfg)
-
-    def run_async(
-        self,
-        fn_or_request: Callable[..., Any] | Any,
-        *,
-        args: tuple[Any, ...] = (),
-        kwargs: dict[str, Any] | None = None,
-        config: IsolationConfig | None = None,
-    ) -> str:
-        """Run *fn_or_request* in background. Returns session_id for later retrieval.
-
-        Accepts either a callable (thread mode) or a WorkerRequest (subprocess mode).
-        """
-        cfg = self._resolve_config(config)
-        session_id = cfg.session_id
-
-        cancel_flag = threading.Event()
-        with self._lock:
-            self._cancel_flags[session_id] = cancel_flag
-
-        def _worker() -> None:
-            result = self._dispatch(fn_or_request, args, kwargs or {}, cfg)
-            with self._lock:
-                self._results[session_id] = result
-                self._active.pop(session_id, None)
-                self._cancel_flags.pop(session_id, None)
-                # Evict oldest results to prevent unbounded growth
-                if len(self._results) > self.MAX_RESULTS_CACHE:
-                    oldest = next(iter(self._results))
-                    self._results.pop(oldest, None)
-
-        thread = threading.Thread(target=_worker, name=f"isolated-{session_id}", daemon=True)
-        with self._lock:
-            self._active[session_id] = thread
-        thread.start()
-        return session_id
-
-    def get_result(self, session_id: str) -> IsolationResult | None:
-        """Retrieve the result for a completed async execution."""
-        with self._lock:
-            return self._results.get(session_id)
+        return await self._adispatch(fn_or_request, args, kwargs or {}, cfg)
 
     def list_active(self) -> list[str]:
         """Return session IDs of currently running executions."""
@@ -190,33 +154,34 @@ class IsolatedRunner:
             return list(self._active.keys())
 
     def cancel(self, session_id: str) -> bool:
-        """Cancel a running session. Returns True if found.
+        """Cancel a running async subprocess session via SIGKILL.
 
-        For thread mode: sets the cooperative cancel flag.
-        For subprocess mode: kills the child process (SIGKILL).
+        Returns True if the worker process was found alive and killed.
+        Thread-mode runs (``arun(callable)``) are not externally
+        cancellable in CPython and return False.
+
+        PR-Async-Phase-C step 4b fix-up (2026-05-22) — after the sync
+        ``run_async`` / ``_execute_subprocess`` paths were deleted,
+        ``_active`` only holds ``asyncio.subprocess.Process`` instances
+        (registered by :meth:`_aexecute_subprocess`). The cooperative
+        ``_cancel_flags`` indirection is gone — async tasks should be
+        cancelled via ``task.cancel()`` instead, which surfaces as
+        ``asyncio.CancelledError`` inside ``_aexecute_subprocess`` and
+        triggers the same kill+release path.
         """
         with self._lock:
-            flag = self._cancel_flags.get(session_id)
             active = self._active.get(session_id)
 
-        cancelled = False
-        # Cooperative cancel for threads
-        if flag is not None:
-            flag.set()
-            cancelled = True
-        # Forceful kill for subprocesses
-        if isinstance(active, subprocess.Popen) and active.poll() is None:
-            active.kill()
-            cancelled = True
-
-        if cancelled:
-            log.info("Cancel requested for session %s", session_id)
-            if self._hooks:
-                self._hooks.trigger(
-                    HookEvent.EXECUTION_CANCELLED,
-                    {"session_id": session_id},
-                )
-        return cancelled
+        if active is None or active.returncode is not None:
+            return False
+        active.kill()
+        log.info("Cancel requested for session %s", session_id)
+        if self._hooks:
+            self._hooks.trigger(
+                HookEvent.EXECUTION_CANCELLED,
+                {"session_id": session_id},
+            )
+        return True
 
     @property
     def active_count(self) -> int:
@@ -242,21 +207,6 @@ class IsolatedRunner:
                 metadata=dict(cfg.metadata),
             )
         return cfg
-
-    def _dispatch(
-        self,
-        fn_or_request: Callable[..., Any] | Any,
-        args: tuple[Any, ...],
-        kwargs: dict[str, Any],
-        config: IsolationConfig,
-    ) -> IsolationResult:
-        """Route to thread or subprocess execution based on input type."""
-        # Import here to avoid circular import at module level
-        from core.agent.worker import WorkerRequest
-
-        if isinstance(fn_or_request, WorkerRequest):
-            return self._execute_subprocess(fn_or_request, config)
-        return self._execute_thread(fn_or_request, args, kwargs, config)
 
     def _acquire_slot(self, config: IsolationConfig) -> IsolationResult | None:
         """Acquire a lane slot. Returns an error result if timed out.
@@ -309,17 +259,8 @@ class IsolatedRunner:
         result_holder: list[IsolationResult] = []
         error_holder: list[str] = []
 
-        # Capture cancel event before thread creation to avoid
-        # a race condition on self._cancel_flags inside the thread.
-        with self._lock:
-            cancel_event = self._cancel_flags.get(config.session_id)
-
         def _target() -> None:
             try:
-                # Check cancel flag before execution (uses captured value)
-                if cancel_event and cancel_event.is_set():
-                    error_holder.append("Cancelled before execution")
-                    return
                 raw = fn(*args, **kwargs)
                 output = str(raw) if raw is not None else ""
                 result_holder.append(
@@ -343,13 +284,10 @@ class IsolatedRunner:
 
         try:
             if thread.is_alive():
-                # Timeout — thread still running (zombie thread, known limitation).
-                # Clean up tracking state so the zombie doesn't hold a slot
-                # in _active / _cancel_flags.  The thread itself cannot be
-                # killed in CPython, but at least we stop tracking it.
-                with self._lock:
-                    self._active.pop(config.session_id, None)
-                    self._cancel_flags.pop(config.session_id, None)
+                # Timeout — thread still running (zombie thread, known
+                # limitation). The thread itself cannot be killed in
+                # CPython; ``_active`` does not track threads after the
+                # step-4b cleanup, so there is nothing to evict.
                 log.warning(
                     "Zombie thread: session %s still running after timeout",
                     config.session_id,
@@ -400,55 +338,106 @@ class IsolatedRunner:
 
     # ------------------------------------------------------------------
     # Subprocess mode (WorkerRequest → python -m core.agent.worker)
+    # async-native via ``asyncio.create_subprocess_exec``.
     # ------------------------------------------------------------------
 
-    def _execute_subprocess(
+    async def _aexecute_subprocess(
         self,
-        request: Any,  # WorkerRequest (typed as Any to avoid circular import at annotation level)
+        request: Any,  # WorkerRequest
         config: IsolationConfig,
     ) -> IsolationResult:
-        """Execute a WorkerRequest in a child process with clean timeout via SIGKILL.
+        """Async subprocess execution via ``asyncio.create_subprocess_exec``.
 
-        Eliminates zombie thread problem: process.kill() guarantees termination,
-        so the semaphore is only released after confirmed process death.
+        Uses :func:`asyncio.create_subprocess_exec` so the parent
+        process's event loop is not pinned waiting for the worker
+        subprocess to finish.
+
+        * Lane-slot acquisition gates concurrency via the shared
+          ``Lane`` semaphore. The blocking acquire is wrapped in
+          :func:`asyncio.shield` so that a mid-await ``CancelledError``
+          cannot drop the slot mid-acquisition — the underlying
+          ``to_thread`` is drained in the ``finally`` block and the
+          slot is released if it ended up acquired.
+        * Timeout via ``asyncio.wait_for(proc.communicate(input), ...)``;
+          on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
+          process death before the slot is released.
+        * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
         """
-        slot_error = self._acquire_slot(config)
-        if slot_error is not None:
-            return slot_error
-        acquired = True
-
+        # PR-Async-Phase-C step 4b fix-up — Codex MCP CRITICAL catch
+        # (2026-05-22). Previously the slot acquire was a bare
+        # ``await asyncio.to_thread(...)``; cancelling the coroutine
+        # while the underlying thread was still blocked on the lane
+        # semaphore left an orphan slot (the thread eventually woke
+        # and claimed the slot, but the cancelled coroutine never
+        # reached the ``finally`` release). Shielding the acquire +
+        # draining the task on cancel closes that hole.
+        acquired = False
         started = time.time()
-        proc: subprocess.Popen[bytes] | None = None
+        proc: asyncio.subprocess.Process | None = None
+        acquire_task: asyncio.Task[IsolationResult | None] = asyncio.create_task(
+            asyncio.to_thread(self._acquire_slot, config),
+            name=f"isolated-acquire:{config.session_id}",
+        )
 
         try:
+            slot_error: IsolationResult | None = await asyncio.shield(acquire_task)
+            if slot_error is not None:
+                return slot_error
+            acquired = True
             safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
-            proc = subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
-                [sys.executable, "-m", "core.agent.worker"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "core.agent.worker",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 env=safe_env,
             )
 
-            # Track process for cancel()
             with self._lock:
                 self._active[config.session_id] = proc
 
-            # Send request and wait for result
             request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
-            stdout_bytes, stderr_bytes = proc.communicate(
-                input=request_bytes,
-                timeout=config.timeout_s,
-            )
+            try:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    proc.communicate(input=request_bytes),
+                    timeout=config.timeout_s,
+                )
+            except TimeoutError:
+                # Clean timeout: kill + await death before releasing slot.
+                proc.kill()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+                except TimeoutError:
+                    log.warning(
+                        "Async subprocess %s did not die within %.1fs after kill",
+                        config.session_id,
+                        self.KILL_WAIT_S,
+                    )
+                completed = time.time()
+                duration_ms = (completed - started) * 1000
+                log.warning(
+                    "Async subprocess session %s killed after %.1fs timeout",
+                    config.session_id,
+                    config.timeout_s,
+                )
+                return IsolationResult(
+                    session_id=config.session_id,
+                    success=False,
+                    error=f"Timeout after {config.timeout_s}s (process killed)",
+                    duration_ms=duration_ms,
+                    started_at=started,
+                    completed_at=completed,
+                    metadata=dict(config.metadata),
+                )
 
             completed = time.time()
             duration_ms = (completed - started) * 1000
 
-            # Save stderr for debugging
             if stderr_bytes:
-                self._save_stderr(config.session_id, stderr_bytes)
+                await asyncio.to_thread(self._save_stderr, config.session_id, stderr_bytes)
 
-            # Parse result
             stdout_text = stdout_bytes.decode("utf-8", errors="replace").strip()
             if not stdout_text:
                 return IsolationResult(
@@ -479,31 +468,24 @@ class IsolatedRunner:
 
             return result
 
-        except subprocess.TimeoutExpired:
-            # Clean timeout: kill process, wait for confirmed death
-            if proc is not None:
+        except asyncio.CancelledError:
+            # CancelledError is BaseException (not Exception) on 3.8+, so
+            # the broader handler below would miss it. Kill the worker
+            # before re-raising so cancellation never orphans a child.
+            if proc is not None and proc.returncode is None:
                 proc.kill()
-                proc.wait(timeout=self.KILL_WAIT_S)
-            completed = time.time()
-            duration_ms = (completed - started) * 1000
-            log.warning(
-                "Subprocess session %s killed after %.1fs timeout",
-                config.session_id,
-                config.timeout_s,
-            )
-            return IsolationResult(
-                session_id=config.session_id,
-                success=False,
-                error=f"Timeout after {config.timeout_s}s (process killed)",
-                duration_ms=duration_ms,
-                started_at=started,
-                completed_at=completed,
-                metadata=dict(config.metadata),
-            )
+                import contextlib as _cl
+
+                with _cl.suppress(TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+            raise
         except Exception as exc:
-            if proc is not None and proc.poll() is None:
+            if proc is not None and proc.returncode is None:
                 proc.kill()
-                proc.wait(timeout=self.KILL_WAIT_S)
+                import contextlib as _cl
+
+                with _cl.suppress(TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
             completed = time.time()
             duration_ms = (completed - started) * 1000
             return IsolationResult(
@@ -516,10 +498,47 @@ class IsolatedRunner:
                 metadata=dict(config.metadata),
             )
         finally:
+            # Hard guarantee: even if a path above missed it, kill any
+            # still-live child before releasing the lane slot.
+            if proc is not None and proc.returncode is None:
+                proc.kill()
             with self._lock:
                 self._active.pop(config.session_id, None)
+            # Drain the (possibly still-running) acquire_task so a
+            # mid-await cancel cannot leak a lane slot — see the
+            # CRITICAL note at the top of this method.
+            if not acquire_task.done():
+                import contextlib as _cl
+
+                with _cl.suppress(asyncio.CancelledError, Exception):
+                    slot_error_late = await acquire_task
+                    if slot_error_late is None:
+                        acquired = True
+            elif not acquired and acquire_task.cancelled() is False:
+                # acquire_task completed before cancel arrived but
+                # we never reached ``acquired = True``. Inspect.
+                import contextlib as _cl
+
+                with _cl.suppress(Exception):
+                    if acquire_task.result() is None:
+                        acquired = True
             if acquired:
-                self._release_slot(config)
+                await asyncio.to_thread(self._release_slot, config)
+
+    async def _adispatch(
+        self,
+        fn_or_request: Callable[..., Any] | Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        config: IsolationConfig,
+    ) -> IsolationResult:
+        """Async router — WorkerRequest → :meth:`_aexecute_subprocess`,
+        callable → thread (via :func:`asyncio.to_thread`)."""
+        from core.agent.worker import WorkerRequest
+
+        if isinstance(fn_or_request, WorkerRequest):
+            return await self._aexecute_subprocess(fn_or_request, config)
+        return await asyncio.to_thread(self._execute_thread, fn_or_request, args, kwargs, config)
 
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:

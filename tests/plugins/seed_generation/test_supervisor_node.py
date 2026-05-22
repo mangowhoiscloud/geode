@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -60,7 +61,7 @@ class TestSupervisorExecute:
         state = PipelineState(run_id="r1", target_dim="broken_tool_use", gen_tag="gen1")
         manager = _StubManager(_GOOD_OUTPUT)
         supervisor = Supervisor(manager)  # type: ignore[arg-type]
-        result = supervisor.execute(state)
+        result = asyncio.run(supervisor.aexecute(state))
         assert result.status == "ok"
         guidance = result.output["supervisor_guidance"]
         assert guidance["phase_guidance"]["generation"].startswith("Focus on ambiguity")
@@ -72,7 +73,7 @@ class TestSupervisorExecute:
         manager = _StubManager(bad)
         supervisor = Supervisor(manager)  # type: ignore[arg-type]
         state = PipelineState(run_id="r2", target_dim="dim", gen_tag="g1")
-        result = supervisor.execute(state)
+        result = asyncio.run(supervisor.aexecute(state))
         assert result.status == "error"
         assert result.error_category == "supervisor_failed"
 
@@ -89,7 +90,7 @@ class TestSupervisorExecute:
 
         supervisor = Supervisor(_Failing({}))  # type: ignore[arg-type]
         state = PipelineState(run_id="r3", target_dim="dim", gen_tag="g1")
-        result = supervisor.execute(state)
+        result = asyncio.run(supervisor.aexecute(state))
         assert result.status == "error"
         assert "model_timeout" in (result.error_message or "")
 
@@ -101,7 +102,7 @@ class TestPipelineSupervisorOptional:
         registry = PipelineRegistry()
         state = PipelineState(run_id="r4", target_dim="dim", gen_tag="g1")
         pipeline = Pipeline(state, registry)
-        result = pipeline._run_phase("supervisor")
+        result = asyncio.run(pipeline._arun_phase("supervisor"))
         assert isinstance(result, SeedAgentResult)
         assert result.status == "skipped"
         assert state.supervisor_guidance == {}
@@ -111,7 +112,7 @@ class TestPipelineSupervisorOptional:
         state = PipelineState(run_id="r5", target_dim="dim", gen_tag="g1")
         pipeline = Pipeline(state, registry)
         with pytest.raises(RuntimeError, match="no registered agent"):
-            pipeline._run_phase("generator")
+            asyncio.run(pipeline._arun_phase("generator"))
 
 
 class TestStateJsonRoundtrip:

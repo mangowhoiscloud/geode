@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,7 @@ def _registry_with_noop_agents() -> PipelineRegistry:
 def test_persist_state_writes_state_json(tmp_path: Path) -> None:
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     state_path = tmp_path / "state.json"
     assert state_path.is_file()
     blob = json.loads(state_path.read_text(encoding="utf-8"))
@@ -78,7 +79,7 @@ def test_persist_state_writes_state_json(tmp_path: Path) -> None:
 def test_persist_state_includes_cost_rollup(tmp_path: Path) -> None:
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert blob["usd_spent"] == 0.42
 
@@ -87,7 +88,7 @@ def test_persist_state_omitted_when_run_dir_unset(tmp_path: Path) -> None:
     state = _populated_state(tmp_path)
     state.run_dir = None
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     # No state.json written
     assert not (tmp_path / "state.json").exists()
 
@@ -97,7 +98,7 @@ def test_persist_state_path_fields_coerced_to_strings(tmp_path: Path) -> None:
     state.pool_path_in = tmp_path / "pool_in"
     state.pool_path_out = tmp_path / "pool_out"
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert isinstance(blob["pool_path_in"], str)
     assert isinstance(blob["pool_path_out"], str)
@@ -113,7 +114,7 @@ def test_persist_state_excludes_runtime_only_fields(tmp_path: Path) -> None:
     """
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert "budget_guard" not in blob
 
@@ -133,12 +134,12 @@ def _seed_candidate_md(run_dir: Path, cid: str) -> Path:
 
 
 def test_persist_survivors_writes_survivors_json(tmp_path: Path) -> None:
-    """Pipeline.run() emits ``<run_dir>/survivors.json`` with metadata."""
+    """asyncio.run(Pipeline.arun()) emits ``<run_dir>/survivors.json`` with metadata."""
     state = _populated_state(tmp_path)
     cand_path = _seed_candidate_md(tmp_path, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     survivors_path = tmp_path / "survivors.json"
     assert survivors_path.is_file()
     blob = json.loads(survivors_path.read_text(encoding="utf-8"))
@@ -162,7 +163,7 @@ def test_persist_survivors_creates_file_copy_dir(tmp_path: Path) -> None:
     cand_path = _seed_candidate_md(tmp_path, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     survivors_dir = tmp_path / "survivors"
     assert survivors_dir.is_dir()
     copy = survivors_dir / "c-00.md"
@@ -177,7 +178,7 @@ def test_persist_survivors_pool_path_out_targets_directory(tmp_path: Path) -> No
     cand_path = _seed_candidate_md(tmp_path, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     assert state.pool_path_out == tmp_path / "survivors"
     # Stamp happens before _persist_state, so state.json carries the path.
     blob = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
@@ -189,7 +190,7 @@ def test_persist_survivors_omitted_when_run_dir_unset(tmp_path: Path) -> None:
     state = _populated_state(tmp_path)
     state.run_dir = None
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     assert not (tmp_path / "survivors.json").exists()
     assert not (tmp_path / "survivors").exists()
     assert state.pool_path_out is None
@@ -202,7 +203,7 @@ def test_persist_survivors_handles_missing_elo_and_pilot(tmp_path: Path) -> None
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
     state.survivors = ["c-00", "c-missing"]
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     blob = json.loads((tmp_path / "survivors.json").read_text(encoding="utf-8"))
     rows = {row["id"]: row for row in blob["survivors"]}
     assert rows["c-missing"]["elo_rating"] is None
@@ -225,10 +226,10 @@ def test_persist_survivors_clears_stale_symlinks(tmp_path: Path) -> None:
     ]
     state.survivors = ["c-old"]
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     # Second run with a different survivor set.
     state.survivors = ["c-new"]
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     survivors_dir = tmp_path / "survivors"
     names = sorted(p.name for p in survivors_dir.iterdir())
     assert names == ["c-new.md"]
@@ -266,7 +267,7 @@ def test_persist_survivors_writes_latest_pointer(
     state = _populated_state(run_dir)
     cand_path = _seed_candidate_md(run_dir, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
-    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
     pointer = state_root / "self-improving-loop" / "latest_pointer.json"
     assert pointer.is_file()
     payload = json.loads(pointer.read_text(encoding="utf-8"))
@@ -291,14 +292,14 @@ def test_persist_survivors_pointer_moves_forward(
     state_a = _populated_state(run_a)
     cand_a = _seed_candidate_md(run_a, "c-00")
     state_a.candidates = [{"id": "c-00", "path": str(cand_a), "target_dim": "broken_tool_use"}]
-    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state_a, registry=_registry_with_noop_agents()).arun())
 
     run_b = tmp_path / "runB"
     run_b.mkdir()
     state_b = _populated_state(run_b)
     cand_b = _seed_candidate_md(run_b, "c-00")
     state_b.candidates = [{"id": "c-00", "path": str(cand_b), "target_dim": "broken_tool_use"}]
-    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state_b, registry=_registry_with_noop_agents()).arun())
 
     pointer = state_root / "self-improving-loop" / "latest_pointer.json"
     payload = json.loads(pointer.read_text(encoding="utf-8"))
@@ -324,7 +325,9 @@ def test_persist_survivors_pointer_swallows_oserror(
     state = _populated_state(run_dir)
     cand_path = _seed_candidate_md(run_dir, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
-    Pipeline(state=state, registry=_registry_with_noop_agents()).run()  # must not raise
+    asyncio.run(
+        Pipeline(state=state, registry=_registry_with_noop_agents()).arun()
+    )  # must not raise
     # Canonical handoff (state.pool_path_out + survivors_dir copies) stays intact.
     assert state.pool_path_out == run_dir / "survivors"
     assert (run_dir / "survivors" / "c-00.md").is_file()
@@ -341,12 +344,12 @@ def test_pipeline_appends_session_index(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """Pipeline.run() appends one row to ``state/self-improving-loop/sessions.jsonl``
+    """asyncio.run(Pipeline.arun()) appends one row to ``state/self-improving-loop/sessions.jsonl``
     (CSP-7: was ``~/.geode/self-improving-loop/sessions.jsonl``)."""
     state_root = _patch_state_root(monkeypatch, tmp_path / "state")
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()
+    asyncio.run(pipeline.arun())
     index = state_root / "self-improving-loop" / "sessions.jsonl"
     assert index.is_file()
     lines = index.read_text(encoding="utf-8").splitlines()
@@ -377,7 +380,7 @@ def test_pipeline_session_index_swallows_oserror(
     monkeypatch.setattr(Path, "mkdir", _selective_mkdir)
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
-    pipeline.run()  # Must NOT raise.
+    asyncio.run(pipeline.arun())  # Must NOT raise.
     # State persistence (other paths) still works.
     assert (tmp_path / "state.json").is_file()
 
@@ -391,12 +394,12 @@ def test_persist_meta_review_writes_standalone_json(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """Pipeline.run() emits ``<run_dir>/meta_review.json`` when state.meta_review is set."""
+    """asyncio.run(Pipeline.arun()) emits ``<run_dir>/meta_review.json`` when state.meta_review is set."""
     _patch_state_root(monkeypatch, tmp_path / "state")
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     state = _populated_state(run_dir)
-    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
     meta_review_path = run_dir / "meta_review.json"
     assert meta_review_path.is_file()
     blob = json.loads(meta_review_path.read_text(encoding="utf-8"))
@@ -413,7 +416,7 @@ def test_persist_meta_review_skipped_when_empty(
     run_dir.mkdir()
     state = _populated_state(run_dir)
     state.meta_review = {}
-    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
     assert not (run_dir / "meta_review.json").exists()
 
 
@@ -427,7 +430,7 @@ def test_persist_meta_review_writes_pointer(
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     state = _populated_state(run_dir)
-    Pipeline(state=state, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
     pointer = state_root / "self-improving-loop" / "latest_pointer.json"
     assert pointer.is_file()
     payload = json.loads(pointer.read_text(encoding="utf-8"))
@@ -445,13 +448,13 @@ def test_persist_meta_review_pointer_moves_forward(
     run_a = tmp_path / "runA"
     run_a.mkdir()
     state_a = _populated_state(run_a)
-    Pipeline(state=state_a, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state_a, registry=_registry_with_noop_agents()).arun())
 
     run_b = tmp_path / "runB"
     run_b.mkdir()
     state_b = _populated_state(run_b)
     state_b.meta_review = {"coverage": {"d2": 1}, "next_gen_priors": []}
-    Pipeline(state=state_b, registry=_registry_with_noop_agents()).run()
+    asyncio.run(Pipeline(state=state_b, registry=_registry_with_noop_agents()).arun())
 
     pointer = state_root / "self-improving-loop" / "latest_pointer.json"
     payload = json.loads(pointer.read_text(encoding="utf-8"))

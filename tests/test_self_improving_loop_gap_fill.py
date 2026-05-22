@@ -180,13 +180,27 @@ def test_runner_reads_default_model_from_config() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_train_audit_command_uses_config_target_judge() -> None:
+def test_train_audit_command_omits_per_role_argv_pins() -> None:
+    """Single-SoT (2026-05-22, PR-CSP-12) — ``_build_audit_command``
+    must NOT emit ``--target`` / ``--judge`` argv flags. The legacy
+    flags shadowed ``[self_improving_loop.petri.<role>].model`` (the
+    operator SoT) and were the original silent-bypass discovered in
+    the 2026-05-22 baseline misalignment audit. The argv must only
+    carry seed / dim / turns / source flags; role model selection
+    flows through the registry inside ``geode audit``.
+    """
     from autoresearch import train
 
     src = inspect.getsource(train._build_audit_command)
-    assert "cfg.target_model" in src
-    assert "cfg.judge_model" in src
-    assert '"--target",' in src and '"--judge",' in src
+    assert "cfg.target_model" not in src, (
+        "G-B regressed: _build_audit_command re-reads deprecated cfg.target_model"
+    )
+    assert "cfg.judge_model" not in src, (
+        "G-B regressed: _build_audit_command re-reads deprecated cfg.judge_model"
+    )
+    assert '"--target",' not in src and '"--judge",' not in src, (
+        "G-B regressed: _build_audit_command re-emits --target/--judge argv pins"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -194,33 +208,23 @@ def test_train_audit_command_uses_config_target_judge() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_program_md_example_log_matches_train_module_constants() -> None:
-    """Pin the example log block in ``autoresearch/program.md`` to the
-    ``autoresearch.train`` module-constant defaults
-    (``TARGET_MODEL`` / ``JUDGE_MODEL``) so an operator who edits the
-    constant and forgets to refresh the doc gets a CI hit.
+def test_program_md_example_log_present() -> None:
+    """Smoke-pin that ``autoresearch/program.md`` retains the example
+    log block referencing ``target_model:`` / ``judge_model:``.
 
-    PR-MINIMAL-2 (2026-05-21) — pre-PR this test compared against
-    ``AutoresearchConfig`` defaults. With G1a those defaults are
-    ``None`` (inherit ``Settings.model``), so the example log can no
-    longer use the config dataclass as the truth source — the
-    module constants in ``train.py`` ARE the SoT for the docs
-    example, and the agent (per ``program.md``) can grep + edit them.
+    Single-SoT (2026-05-22, PR-CSP-12) — the legacy module constants
+    (``TARGET_MODEL`` / ``JUDGE_MODEL``) were removed; the canonical
+    SoT is the per-role petri config section. The example log values
+    are illustrative — they don't have to match a Python literal —
+    but the structural shape of the example must remain so the agent
+    grepping ``program.md`` for "target_model:" still locates the
+    block. The drift-pin is now structural, not value-comparing.
     """
-    from autoresearch.train import JUDGE_MODEL, TARGET_MODEL
-
     repo_root = Path(__file__).resolve().parent.parent
     program_md = repo_root / "autoresearch" / "program.md"
     text = program_md.read_text(encoding="utf-8")
-    assert f"target_model:             {TARGET_MODEL}" in text, (
-        "program.md example log target_model has drifted from "
-        f"autoresearch.train.TARGET_MODEL ({TARGET_MODEL!r}). Update "
-        "the example block (lines ~180) to keep the doc honest."
-    )
-    assert f"judge_model:              {JUDGE_MODEL}" in text, (
-        "program.md example log judge_model has drifted from "
-        f"autoresearch.train.JUDGE_MODEL ({JUDGE_MODEL!r})."
-    )
+    assert "target_model:" in text, "program.md missing target_model: example anchor"
+    assert "judge_model:" in text, "program.md missing judge_model: example anchor"
 
 
 # ---------------------------------------------------------------------------

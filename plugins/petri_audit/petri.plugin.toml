@@ -18,8 +18,25 @@ enabled_roles = ["auditor", "target", "judge"]
 
 # ── Roles ────────────────────────────────────────────────────────────────────
 
+# Layered default rationale (2026-05-22 single-SoT alignment) —
+# `default_model` per role is the "no operator config" baseline that
+# every "fresh-clone, no `[self_improving_loop.petri.<role>]`" audit
+# inherits. The three roles intentionally pick different tiers:
+#   * auditor → flagship (claude-opus-4-7). The auditor's
+#     transcript-shaping ability bounds test signal-to-noise; a
+#     cost-optimised default silently degrades audit quality.
+#   * judge → cost-balanced (claude-sonnet-4-6). The judge scores
+#     22 dims in one structured-answer call; output stays small so
+#     the cheaper flagship-adjacent tier produces stable scores.
+#   * target → smallest (claude-haiku-4-5). The target is the model
+#     under audit, and the baseline tier should be cheap so a fresh
+#     clone can run a smoke audit without burning quota on flagship
+#     output. Operators promote to Opus / GPT-5.5 via
+#     `[self_improving_loop.petri.target].model` when they have a
+#     specific evaluation budget.
+
 [petri.role.auditor]
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",

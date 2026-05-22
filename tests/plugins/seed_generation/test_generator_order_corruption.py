@@ -12,6 +12,7 @@ LLM latency; the post-fix generator must produce candidates whose
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from core.agent.sub_agent import SubResult, SubTask
@@ -59,7 +60,7 @@ def test_generator_pairs_by_task_id_under_reverse_order(tmp_path: Path) -> None:
     """A reversed delegate() return must still produce correctly-paired candidates."""
     state = _make_state(tmp_path, n=5)
     manager = _ReverseOrderManager()
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     candidates = result.output["candidates"]
     assert len(candidates) == 5
@@ -107,7 +108,7 @@ def test_generator_handles_unmatched_result(tmp_path: Path) -> None:
     """A SubResult with no corresponding task must be logged as failed, not silently merged."""
     state = _make_state(tmp_path, n=2)
     manager = _UnmatchedResultManager()
-    result = Generator(manager=manager).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Generator(manager=manager).aexecute(state))  # type: ignore[arg-type]
     # Real candidates: 2 (matched). Orphan should not appear.
     assert result.success
     assert len(result.output["candidates"]) == 2

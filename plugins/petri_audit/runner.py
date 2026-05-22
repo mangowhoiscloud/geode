@@ -515,8 +515,8 @@ def confirm_or_abort(cost_label: str, *, yes: bool) -> bool:
 
 def run_audit(
     *,
-    judge: str,
-    auditor: str,
+    judge: str | None = None,
+    auditor: str | None = None,
     target: str | None = None,
     seeds: int = 1,
     max_turns: int = 10,
@@ -570,6 +570,38 @@ def run_audit(
             assumptions = DEFAULT_TOKEN_ASSUMPTIONS
         else:
             raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
+    # SoT alignment (2026-05-22) — None argv values defer to
+    # ``[self_improving_loop.petri.<role>].model`` via the binding
+    # registry (which consults operator config first, then the legacy
+    # ~/.geode/petri.toml, then the manifest default). Callers that
+    # explicitly pin a model still win — the resolved binding only
+    # fires when the argv slot was omitted.
+    # Manifest + override resolution does NOT need credentials —
+    # ``get_binding`` would also resolve them, but we want this path
+    # to work in ``dry_run`` mode (CI smoke runs, slash dry-runs,
+    # `geode audit` without env keys). Credential resolution happens
+    # later, only on the real-run branch.
+    if auditor is None or judge is None or target is None:
+        from plugins.petri_audit.manifest import load_manifest
+        from plugins.petri_audit.user_overrides import read_role_override
+
+        manifest = load_manifest()
+        for slot, role in (("auditor", "auditor"), ("judge", "judge"), ("target", "target")):
+            if slot == "auditor" and auditor is not None:
+                continue
+            if slot == "judge" and judge is not None:
+                continue
+            if slot == "target" and target is not None:
+                continue
+            override_model = read_role_override(role).get("model")
+            resolved = override_model or manifest.get_role(role).default_model
+            if slot == "auditor":
+                auditor = resolved
+            elif slot == "judge":
+                judge = resolved
+            else:
+                target = resolved
+    assert auditor is not None and judge is not None and target is not None  # narrowed
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)

@@ -13,6 +13,7 @@ P-checklist application (cycle-skill SKILL.md):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import random
 from typing import Any
@@ -185,7 +186,7 @@ def test_ranker_validates_empty_candidates() -> None:
         candidates_requested=3,
     )
     manager = _AlwaysAWinsManager()
-    result = Ranker(manager=manager, voters=_voters()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Ranker(manager=manager, voters=_voters()).aexecute(state))  # type: ignore[arg-type]
     assert not result.success
     assert result.error_category == "validation"
 
@@ -193,7 +194,7 @@ def test_ranker_validates_empty_candidates() -> None:
 def test_ranker_single_candidate_short_circuits() -> None:
     state = _state_with_candidates(1)
     manager = _AlwaysAWinsManager()
-    result = Ranker(manager=manager, voters=_voters()).execute(state)  # type: ignore[arg-type]
+    result = asyncio.run(Ranker(manager=manager, voters=_voters()).aexecute(state))  # type: ignore[arg-type]
     assert result.success
     assert result.output["survivors"] == ["c-00"]
 
@@ -206,7 +207,7 @@ def test_ranker_produces_elo_ratings_and_survivors() -> None:
         voters=_voters(),
         rng=random.Random(42),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
     ratings = result.output["elo_ratings"]
     survivors = result.output["survivors"]
@@ -224,7 +225,7 @@ def test_ranker_dispatches_3_voters_per_match() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    ranker.execute(state)
+    asyncio.run(ranker.aexecute(state))
     # Each match has 3 voters; total tasks = 3 * match_count
     assert len(manager.received_tasks) % 3 == 0
 
@@ -237,7 +238,7 @@ def test_ranker_split_votes_become_ties() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
     # All-tie matches → ratings unchanged
     for cid, rating in result.output["elo_ratings"].items():
@@ -252,7 +253,7 @@ def test_ranker_handles_partial_voter_failure() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
     # 2/3 voters succeeded → quorum met → matches counted
     survivors = result.output["survivors"]
@@ -267,7 +268,7 @@ def test_ranker_skips_match_on_quorum_loss() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
     # Quorum lost on every match → ratings all stay at 1000.0
     for rating in result.output["elo_ratings"].values():
@@ -298,7 +299,7 @@ def test_ranker_drops_invalid_winner_label() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
     # All votes rejected → quorum lost → no rating change
     for rating in result.output["elo_ratings"].values():
@@ -329,7 +330,7 @@ def test_ranker_accepts_text_json_fallback() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
 
 
@@ -362,7 +363,7 @@ def test_ranker_announce_false_propagates() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    ranker.execute(state)
+    asyncio.run(ranker.aexecute(state))
     assert manager.received_announce is False
 
 
@@ -396,7 +397,7 @@ def test_ranker_match_id_pinned_in_parse() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     # The vote is accepted because match_id is re-pinned from the task,
     # not from the LLM echo. Ratings should update.
     assert result.success
@@ -412,7 +413,7 @@ def test_ranker_survivors_count_respects_k() -> None:
         survivors_k=3,
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert len(result.output["survivors"]) == 3
 
 
@@ -429,7 +430,7 @@ def test_ranker_emits_elo_log_tsv(tmp_path: Any) -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    ranker.execute(state)
+    asyncio.run(ranker.aexecute(state))
     log_path = tmp_path / "elo_log.tsv"
     assert log_path.is_file()
     content = log_path.read_text(encoding="utf-8")
@@ -452,7 +453,7 @@ def test_ranker_no_elo_log_when_run_dir_unset() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    result = ranker.execute(state)
+    result = asyncio.run(ranker.aexecute(state))
     assert result.success
 
 
@@ -486,7 +487,7 @@ def test_ranker_voter_description_includes_pilot_means() -> None:
         voters=_voters(),
         rng=random.Random(0),
     )
-    ranker.execute(state)
+    asyncio.run(ranker.aexecute(state))
     # At least one task's description should mention dim_01 from pilot means.
     descriptions = [t.description for t in manager.received_tasks]
     assert any("dim_01" in d for d in descriptions), descriptions[:1]

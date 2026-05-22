@@ -306,6 +306,11 @@ def test_cmd_source_set_rejects_invalid_source(
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    # Single-SoT (2026-05-22) — writer now resolves through
+    # ``core.config.self_improving_loop._resolve_config_path`` which
+    # reads the module-local import; patch that symbol too so the test
+    # honors fake_toml regardless of which side calls in first.
+    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
     with patch.object(self_improving, "console") as cmock:
         self_improving._cmd_source_set(["source=bogus"])
     assert not fake_toml.exists()
@@ -322,6 +327,8 @@ def test_cmd_source_set_persists_valid_source(
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
+    # See sibling test for rationale on patching both symbols.
+    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._cmd_source_set(["source=claude-cli"])
     text = fake_toml.read_text(encoding="utf-8")
     assert "[self_improving_loop.mutator]" in text

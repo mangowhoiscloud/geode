@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +136,7 @@ class TestEvolverExecuteAdmissionFlow:
         }
 
         evolver = Evolver(_StubManager())  # type: ignore[arg-type]
-        result = evolver.execute(state)
+        result = asyncio.run(evolver.aexecute(state))
         # First evolved row admitted (no siblings yet); second is the
         # near-duplicate → dropped → only 1 evolved row.
         assert result.success is True
