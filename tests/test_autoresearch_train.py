@@ -907,6 +907,111 @@ def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> N
     assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
 
 
+# ---------------------------------------------------------------------------
+# PR-5 of petri-schema-v2 (2026-05-23) — JSONL provenance + Goodhart surface
+# ---------------------------------------------------------------------------
+
+
+def test_results_jsonl_row_emits_pr5_provenance_when_supplied() -> None:
+    """``format_results_jsonl_row`` must surface ``sample_count`` +
+    ``measurement_modality`` + ``missing_dims`` + ``eval_archive`` when
+    the caller threads them through. Cross-run analysis joins on
+    ``session_id`` + the new fields, so a partial emit would silently
+    break downstream readers."""
+    from autoresearch.train import format_results_jsonl_row
+
+    dim_means = {"broken_tool_use": 3.0, "input_hallucination": 2.0}
+    dim_stderr = {"broken_tool_use": 0.5, "input_hallucination": 0.4}
+    scores = compute_dim_scores(dim_means, dim_stderr)
+    line = format_results_jsonl_row(
+        session_id="s-pr5",
+        gen_tag="autoresearch-abc",
+        commit="abc",
+        fitness=0.5,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=scores,
+        verdict="keep",
+        description="pr5",
+        baseline_active=True,
+        sample_count={"broken_tool_use": 5, "input_hallucination": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "input_hallucination": "judge_llm",
+        },
+        missing_dims=["overrefusal", "verbose_padding"],
+        eval_archive="/var/folders/x.eval",
+    )
+    payload = json.loads(line)
+    # All 4 PR-5 fields are present + schema parity preserved.
+    assert "sample_count" in payload
+    assert "measurement_modality" in payload
+    assert "missing_dims" in payload
+    assert "eval_archive" in payload
+    assert payload["sample_count"]["broken_tool_use"] == 5
+    assert payload["measurement_modality"]["broken_tool_use"] == "judge_llm"
+    assert payload["missing_dims"] == ["overrefusal", "verbose_padding"]
+    assert payload["eval_archive"] == "/var/folders/x.eval"
+    # Provenance dicts must cover the full AXIS_TIERS universe so the
+    # dim columns zip 1-to-1 with dim_means (defaults: 0 / "").
+    assert set(payload["sample_count"]) == set(AXIS_TIERS)
+    assert set(payload["measurement_modality"]) == set(AXIS_TIERS)
+
+
+def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
+    """When caller omits the PR-5 provenance kwargs, the schema slots
+    are still populated (so a downstream parser sees a stable column
+    set). Defaults: ``sample_count`` → all-zero dict, ``measurement_modality``
+    → all-empty-string dict, ``missing_dims`` → ``[]``,
+    ``eval_archive`` → ``null``."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
+        commit="abc",
+        fitness=0.4,
+        dim_means={},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({}),
+        verdict="keep",
+        description="default-provenance",
+        baseline_active=False,
+        # no sample_count / measurement_modality / missing_dims / eval_archive
+    )
+    payload = json.loads(line)
+    assert payload["sample_count"] == dict.fromkeys(AXIS_TIERS, 0)
+    assert payload["measurement_modality"] == dict.fromkeys(AXIS_TIERS, "")
+    assert payload["missing_dims"] == []
+    assert payload["eval_archive"] is None
+
+
+def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
+    """Partial sample_count / modality (some dims missing) must default
+    the absent dims to 0 / "" without dropping the present ones."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
+        commit="abc",
+        fitness=0.4,
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({"broken_tool_use": 3.0}),
+        verdict="keep",
+        description="partial",
+        baseline_active=False,
+        sample_count={"broken_tool_use": 5},  # only this dim
+        measurement_modality={"broken_tool_use": "judge_llm"},
+    )
+    payload = json.loads(line)
+    assert payload["sample_count"]["broken_tool_use"] == 5
+    assert payload["sample_count"]["overrefusal"] == 0  # defaulted
+    assert payload["measurement_modality"]["broken_tool_use"] == "judge_llm"
+    assert payload["measurement_modality"]["overrefusal"] == ""  # defaulted
+
+
 def test_results_jsonl_row_is_single_line() -> None:
     """JSONL lines must be single-line (no embedded newlines)."""
     from autoresearch.train import format_results_jsonl_row
@@ -943,6 +1048,10 @@ def test_results_jsonl_round_trip() -> None:
         baseline_active=False,
     )
     obj = json.loads(line)
+    # PR-5 of petri-schema-v2 (2026-05-23) — pin the 4 new provenance
+    # keys here too. The dedicated PR-5 formatter tests cover supplied/
+    # default/partial cases; this round-trip pin catches a future
+    # schema-key regression on the omitted-kwargs path.
     for key in (
         "session_id",
         "gen_tag",
@@ -951,6 +1060,10 @@ def test_results_jsonl_round_trip() -> None:
         "dim_means",
         "dim_stderr",
         "dim_scores",
+        "sample_count",
+        "measurement_modality",
+        "missing_dims",
+        "eval_archive",
         "verdict",
         "description",
         "baseline_active",

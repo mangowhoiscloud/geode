@@ -49,6 +49,59 @@ functional change.
 
 ### Added
 
+- **PR-5 of petri-schema-v2 cascade — ``results.jsonl`` PR-1/PR-4
+  provenance + Goodhart surface threading**. Final step of the 5-PR
+  cascade. Surfaces the per-dim provenance (sample_count,
+  measurement_modality), the Goodhart-risk surface (missing_dims),
+  and the eval_archive symlink target into ``results.jsonl`` so
+  cross-run analysis can disambiguate real measurements from
+  default-filled fallbacks without joining against baseline.json or
+  the journal.
+
+  **What changed in ``autoresearch/train.py``**:
+  - ``format_results_jsonl_row`` gains 4 new optional kwargs:
+    ``sample_count`` / ``measurement_modality`` / ``missing_dims`` /
+    ``eval_archive``. When supplied they emit into the JSONL row.
+    When omitted, defaults populate the schema slots (zeros / empty
+    strings / ``[]`` / ``null``) so downstream parsers see a stable
+    column set.
+  - The two provenance dicts (sample_count, measurement_modality)
+    are written over the full ``AXIS_TIERS`` universe so they zip
+    1-to-1 with ``dim_means`` / ``dim_stderr``.
+  - ``main()`` threads the kwargs from PR-1's ``run_audit`` return
+    (sample_count + measurement_modality), PR-4's
+    ``compute_missing_dims(dim_means)``, and
+    ``_resolve_eval_archive_path()``.
+
+  **Scope narrowing — ``results.tsv`` intentionally unchanged**:
+  the SOT plan PR-5 row mentioned both TSV and JSONL, but Codex MCP
+  review of PR-2 already discouraged TSV column expansion (downstream
+  parsers depend on the 12-column shape). JSONL alone is sufficient
+  for the cross-run analysis goal; TSV stays as the row-grep summary.
+
+  **``baseline.json normalized`` namespace** — the SOT plan also
+  hinted at extending the v2 baseline with a ``normalized.missing_dims``
+  sink. That's deferred — the baseline-side surface is observability
+  only (the auto-promote gate already runs off ``raw.sample_count``
+  via PR-3), and the journal + JSONL already carry the missing list.
+
+  **Tests added** (``tests/test_autoresearch_train.py``):
+  - ``test_results_jsonl_row_emits_pr5_provenance_when_supplied`` —
+    all 4 new fields present + dim universe parity
+  - ``test_results_jsonl_row_pr5_defaults_when_provenance_absent`` —
+    omitted kwargs → stable default values
+  - ``test_results_jsonl_row_pr5_handles_partial_provenance`` —
+    partial sample_count / modality → defaults for absent dims
+  - ``test_results_jsonl_round_trip`` updated to assert the new
+    schema keys so a future regression breaks at write time.
+
+  Codex MCP reviewed at thread ``019e521d-5d1c-70d3-9d83-bb35aa896bb2``
+  — 0 CRITICAL / 0 HIGH / 1 MEDIUM (missing CHANGELOG entry, fixed
+  here) / 2 LOW (round-trip test schema pin + missing_dims sort
+  contract docstring) addressed in this commit.
+
+  539 ``test_autoresearch_train.py`` + impacted surface pass.
+
 - **PR-4 of petri-schema-v2 cascade — ``compute_missing_dims``
   Goodhart-risk surface**. Fourth step of the 5-PR cascade. Surfaces
   the silent ``compute_dim_scores`` "missing dim = best case (1.0)"
