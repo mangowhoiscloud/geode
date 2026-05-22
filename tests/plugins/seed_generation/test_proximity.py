@@ -9,6 +9,7 @@ file is rewritten to pin the new contract.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +76,7 @@ class TestExecuteDropsHighSimilarity:
             ]
         }
         proximity = Proximity(_StubManager(output))  # type: ignore[arg-type]
-        result = proximity.execute(state)
+        result = asyncio.run(proximity.aexecute(state))
         assert result.status == "ok"
         assert {c["id"] for c in state.candidates} == {"c0"}
         removed = result.output["removed_duplicates"]
@@ -96,7 +97,7 @@ class TestExecuteDropsHighSimilarity:
                 }
             ]
         }
-        Proximity(_StubManager(output)).execute(state)  # type: ignore[arg-type]
+        asyncio.run(Proximity(_StubManager(output)).aexecute(state))  # type: ignore[arg-type]
         assert {c["id"] for c in state.candidates} == {"c0", "c1", "c2"}
 
     def test_unknown_candidate_id_ignored(self, tmp_path: Path) -> None:
@@ -113,39 +114,39 @@ class TestExecuteDropsHighSimilarity:
                 }
             ]
         }
-        Proximity(_StubManager(output)).execute(state)  # type: ignore[arg-type]
+        asyncio.run(Proximity(_StubManager(output)).aexecute(state))  # type: ignore[arg-type]
         assert {c["id"] for c in state.candidates} == {"c0"}
 
 
 class TestExecuteErrorPaths:
     def test_empty_candidates_validation_error(self) -> None:
         state = PipelineState(run_id="r1", target_dim="d", gen_tag="g1")
-        result = Proximity(_StubManager({})).execute(state)  # type: ignore[arg-type]
+        result = asyncio.run(Proximity(_StubManager({})).aexecute(state))  # type: ignore[arg-type]
         assert result.status == "error"
         assert result.error_category == "validation"
 
     def test_single_candidate_trivial_pass(self, tmp_path: Path) -> None:
         state = _state_with(tmp_path, "only")
-        result = Proximity(_StubManager({"unused": "yes"})).execute(state)  # type: ignore[arg-type]
+        result = asyncio.run(Proximity(_StubManager({"unused": "yes"})).aexecute(state))  # type: ignore[arg-type]
         assert result.status == "ok"
         assert result.output["similarity_clusters"] == []
         assert result.output["removed_duplicates"] == []
 
     def test_sub_agent_failure_surfaces(self, tmp_path: Path) -> None:
         state = _state_with(tmp_path, "c0", "c1")
-        result = Proximity(_StubManager({}, success=False)).execute(state)  # type: ignore[arg-type]
+        result = asyncio.run(Proximity(_StubManager({}, success=False)).aexecute(state))  # type: ignore[arg-type]
         assert result.status == "error"
         assert result.error_category == "proximity_failed"
 
     def test_malformed_payload_missing_field(self, tmp_path: Path) -> None:
         state = _state_with(tmp_path, "c0", "c1")
-        result = Proximity(_StubManager({"wrong_key": []})).execute(state)  # type: ignore[arg-type]
+        result = asyncio.run(Proximity(_StubManager({"wrong_key": []})).aexecute(state))  # type: ignore[arg-type]
         assert result.status == "error"
         assert result.error_category == "proximity_failed"
 
     def test_malformed_clusters_not_list(self, tmp_path: Path) -> None:
         state = _state_with(tmp_path, "c0", "c1")
-        result = Proximity(_StubManager({"similarity_clusters": "x"})).execute(state)  # type: ignore[arg-type]
+        result = asyncio.run(Proximity(_StubManager({"similarity_clusters": "x"})).aexecute(state))  # type: ignore[arg-type]
         assert result.status == "error"
         assert "must be a list" in (result.error_message or "")
 

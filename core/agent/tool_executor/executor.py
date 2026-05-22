@@ -211,27 +211,6 @@ class ToolExecutor:
 
         return classify_tool_exception(exc, tool_name=tool_name)
 
-    def _execute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
-        """[DEPRECATED] Sync sibling — see :meth:`_aexecute_delegate`.
-
-        Pre-Phase-C path that wrapped ``SubAgentManager.delegate`` (sync
-        polling). Retained so external callers that still invoke the
-        sync helper (none in core after step 3) keep working through
-        the migration window via ``run_process_coroutine``.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target.
-        """
-        import warnings
-
-        warnings.warn(
-            "ToolExecutor._execute_delegate is deprecated; use _aexecute_delegate (async) instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self._aexecute_delegate(tool_input))
-
     async def _aexecute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
         """Delegate task(s) to sub-agent (async). Supports single and batch.
 

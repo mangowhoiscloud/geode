@@ -4,7 +4,7 @@ Maps the ADR-001 7-phase topology (Generation → Proximity → Reflection
 → Pilot → Ranking → Evolution → Meta-review) onto a sequential phase
 dispatcher backed by :class:`PipelineRegistry`. Each phase is a method
 that reads :class:`PipelineState`, looks up the role's agent from the
-registry, invokes :meth:`BaseSeedAgent.execute`, and merges the
+registry, awaits :meth:`BaseSeedAgent.aexecute`, and merges the
 result's ``output`` dict back into state.
 
 Why a flat orchestrator, not LangGraph
@@ -15,7 +15,7 @@ GEODE has no LangGraph in core. The ``SubAgentManager`` +
 + workers + observability pattern (depth=1 enforced — sub-agents
 cannot recurse, so the parent ``AgenticLoop`` IS the StateGraph).
 Each phase runs in the parent loop; within a phase, the role can
-fan out via ``delegate(tasks=[…])``.
+fan out via ``await self._manager.adelegate(tasks=[…])``.
 
 Phases as methods
 =================
@@ -143,7 +143,7 @@ _PHASE_ORDER: tuple[str, ...] = (
     # per-candidate phase prefixes the relevant ``phase_guidance.*``
     # entry into its own prompt. The phase short-circuits when no
     # Supervisor agent is registered (test fixtures that mock a
-    # subset of roles) — see ``Pipeline._run_phase``.
+    # subset of roles) — see ``Pipeline._arun_phase``.
     "supervisor",
     "generator",
     "proximity",
@@ -176,7 +176,7 @@ _ITERATION_PHASE_ORDER: tuple[str, ...] = (
 class PipelineState:
     """In-flight pipeline state shared across the 7 phases.
 
-    Mutated by each phase's :meth:`BaseSeedAgent.execute` return
+    Mutated by each phase's :meth:`BaseSeedAgent.aexecute` return
     payload. Persisted at run end to
     ``~/.geode/seed-generation/<run_id>/state.json`` (S8 wires the
     offload via ``note_save``).
@@ -193,7 +193,7 @@ class PipelineState:
     cohort: str = "petri_17dim"
     candidates_requested: int = 15
     # CSP-5 (2026-05-22) — paper §3 iteration loop. Default 0 keeps
-    # the pre-CSP-5 single-pass behaviour (Pipeline.run() executes
+    # the pre-CSP-5 single-pass behaviour (Pipeline.arun() executes
     # ``_PHASE_ORDER`` once and persists). With ``max_iterations >= 1``
     # the orchestrator re-enters the post-meta_reviewer cycle
     # (``_ITERATION_PHASE_ORDER``: critic → pilot → ranker → evolver →
@@ -331,7 +331,7 @@ class Pipeline:
     """Orchestrate the 7-phase generate-debate-evolve loop.
 
     Constructed once per ``geode audit-seeds generate`` invocation.
-    :meth:`run` walks ``_PHASE_ORDER`` and emits per-phase hook events.
+    :meth:`arun` walks ``_PHASE_ORDER`` and emits per-phase hook events.
     """
 
     def __init__(
@@ -348,32 +348,6 @@ class Pipeline:
         self._hooks = hooks
         self._lane_queue = lane_queue
         self._on_phase_error = on_phase_error
-
-    def run(self) -> PipelineState:
-        """[DEPRECATED] Sync sibling — calls :meth:`arun` via run_process_coroutine.
-
-        Bridges legacy sync callers (pre-Phase-C ``cli.py:452``,
-        test fixtures still on ``pipeline.run()``) to the async-only
-        runtime. The bridge uses
-        :func:`core.async_runtime.run_process_coroutine`, which
-        requires no running event loop — RuntimeError if the caller
-        already has one (in which case they should
-        ``await pipeline.arun()`` directly).
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after cli.py +
-        # tests/* migrate to ``run_process_coroutine(pipeline.arun())``.
-        """
-        import warnings
-
-        warnings.warn(
-            "Pipeline.run is deprecated; use arun() (async) — wrap with "
-            "core.async_runtime.run_process_coroutine for sync entry points",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self.arun())
 
     async def arun(self) -> PipelineState:
         """Walk the 7 phases (then optional iteration cycles). Returns the final state.
@@ -792,28 +766,6 @@ class Pipeline:
                 exc,
             )
 
-    def _run_phase(self, role: str) -> SeedAgentResult:
-        """[DEPRECATED] Sync sibling of :meth:`_arun_phase`.
-
-        Bridges legacy sync callers to async pipeline. The actual
-        phase logic lives in :meth:`_arun_phase`; this shim uses
-        :func:`run_process_coroutine` to satisfy sync test fixtures
-        that haven't migrated to ``arun`` yet.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after all sync
-        # ``Pipeline.run`` callers migrate to ``arun``.
-        """
-        import warnings
-
-        warnings.warn(
-            "Pipeline._run_phase is deprecated; use _arun_phase (async) instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self._arun_phase(role))
-
     async def _arun_phase(self, role: str) -> SeedAgentResult:
         """Look up the role's agent, invoke it (async), merge the result.
 
@@ -915,27 +867,6 @@ class Pipeline:
                 },
             )
         return result
-
-    def _acquire_lane(self, role: str) -> Any:
-        """[DEPRECATED] Sync sibling — see :meth:`_aacquire_lane`.
-
-        Retained because some pre-Phase-C test fixtures invoke
-        ``_run_phase`` (sync) directly. Once those fixtures migrate
-        to ``_arun_phase``, this can be removed.
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target.
-        """
-        from contextlib import nullcontext
-
-        if self._lane_queue is None:
-            return nullcontext()
-        if self._lane_queue.get_lane("seed-generation") is None:
-            return nullcontext()
-        session_key = f"seed-generation:{self.state.run_id}"
-        return self._lane_queue.acquire_all(
-            session_key,
-            ["session", "seed-generation", "global"],
-        )
 
     def _aacquire_lane(self, role: str) -> Any:
         """Return an async context manager walking the OpenClaw lane chain.

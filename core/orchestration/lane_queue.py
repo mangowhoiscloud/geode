@@ -547,13 +547,12 @@ class LaneQueue:
     ) -> Generator[None, None, None]:
         """Sync sibling of :meth:`acquire_all_async`.
 
-        Provided so sync call sites (e.g. ``Pipeline._run_phase`` —
-        the seed-generation orchestrator) can compose the OpenClaw
-        hierarchy ``["session", <workload>, "global"]`` without bouncing
-        through ``asyncio.run``. Mirrors the async version's
-        ordering + partial-failure release semantics: lanes are
-        acquired in the order given and released in reverse, so a
-        timeout mid-chain still releases everything already held.
+        Provided so sync call sites can compose the OpenClaw hierarchy
+        ``["session", <workload>, "global"]`` without bouncing through
+        ``asyncio.run``. Mirrors the async version's ordering +
+        partial-failure release semantics: lanes are acquired in the
+        order given and released in reverse, so a timeout mid-chain
+        still releases everything already held.
         """
         acquired: list[Lane | SessionLane] = []
         try:

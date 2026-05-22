@@ -1,8 +1,9 @@
-"""Tests for CSP-5 iteration loop — Pipeline.run() outer cycle + evolved
+"""Tests for CSP-5 iteration loop — asyncio.run(Pipeline.arun()) outer cycle + evolved
 candidate promotion + state JSON round-trip."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -34,7 +35,7 @@ def _build_full_registry(
     *,
     evolver_emits: list[dict[str, Any]] | None = None,
 ) -> tuple[PipelineRegistry, dict[str, _RecordingAgent]]:
-    """Register all 8 roles with stub agents so Pipeline.run() walks
+    """Register all 8 roles with stub agents so asyncio.run(Pipeline.arun()) walks
     without raising. ``evolver_emits`` controls what the Evolver writes
     into ``state.evolved_candidates`` — empty list means the iteration
     cycle terminates after meta_reviewer (no candidates to promote)."""
@@ -59,10 +60,10 @@ def _build_full_registry(
 
 class TestIterationLoop:
     def test_single_pass_default(self) -> None:
-        """max_iterations=0 → Pipeline.run() walks ``_PHASE_ORDER`` once."""
+        """max_iterations=0 → asyncio.run(Pipeline.arun()) walks ``_PHASE_ORDER`` once."""
         registry, agents = _build_full_registry()
         state = PipelineState(run_id="r0", target_dim="d", gen_tag="g")
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
         for role in _PHASE_ORDER:
             assert agents[role].calls == [0], (
                 f"{role!r} should run once with iteration=0, got {agents[role].calls}"
@@ -78,7 +79,7 @@ class TestIterationLoop:
         ]
         registry, agents = _build_full_registry(evolver_emits=evolved)
         state = PipelineState(run_id="r1", target_dim="d", gen_tag="g", max_iterations=1)
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
         # supervisor / generator / proximity stay at one call (iter 0 only).
         assert agents["supervisor"].calls == [0]
         assert agents["generator"].calls == [0]
@@ -94,7 +95,7 @@ class TestIterationLoop:
         """max_iterations=2 but Evolver yields nothing → no iteration cycles."""
         registry, agents = _build_full_registry(evolver_emits=[])
         state = PipelineState(run_id="r2", target_dim="d", gen_tag="g", max_iterations=2)
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
         for role in _PHASE_ORDER:
             assert agents[role].calls == [0]
 

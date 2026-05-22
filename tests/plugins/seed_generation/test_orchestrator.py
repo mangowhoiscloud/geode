@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from core.orchestration.lane_queue import LaneQueue
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
@@ -46,7 +48,7 @@ def _make_registry_with_all_stubs() -> tuple[PipelineRegistry, dict[str, _StubAg
 def test_pipeline_runs_all_seven_phases_in_order() -> None:
     registry, agents = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-1", target_dim="broken_tool_use", gen_tag="gen2")
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())
     for role, agent in agents.items():
         assert agent.invocations == 1, f"role={role} not invoked"
 
@@ -58,7 +60,7 @@ def test_pipeline_merges_phase_output_into_state() -> None:
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_StubAgent(r))
     state = PipelineState(run_id="t-2", target_dim="overrefusal", gen_tag="gen2")
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())
     assert len(state.candidates) == 2
     assert state.candidates[0]["id"] == "c1"
 
@@ -67,7 +69,7 @@ def test_pipeline_rolls_up_cost() -> None:
     registry, agents = _make_registry_with_all_stubs()
     # Each stub returns 10 prompt + 5 completion tokens, 0 usd
     state = PipelineState(run_id="t-3", target_dim="logic", gen_tag="gen2")
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())
     assert state.prompt_tokens == 10 * 7
     assert state.completion_tokens == 5 * 7
     assert state.usd_spent == 0.0
@@ -80,7 +82,7 @@ def test_missing_role_raises() -> None:
     registry.register(_StubAgent("proximity"))
     state = PipelineState(run_id="t-4", target_dim="x", gen_tag="gen2")
     with pytest.raises(RuntimeError, match="critic"):
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
 
 
 def test_unknown_output_keys_are_warned_not_merged() -> None:
@@ -89,7 +91,7 @@ def test_unknown_output_keys_are_warned_not_merged() -> None:
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_StubAgent(r))
     state = PipelineState(run_id="t-5", target_dim="x", gen_tag="gen2")
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())
     # state should not have a `garbage_key` attribute
     assert not hasattr(state, "garbage_key")
 
@@ -151,7 +153,7 @@ def test_pipeline_rolls_up_result_cost_into_state() -> None:
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_CostReportingAgent(r))
     state = PipelineState(run_id="t-cost", target_dim="x", gen_tag="gen2")
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())
     assert state.prompt_tokens == 100
     assert state.completion_tokens == 50
     assert state.usd_spent == pytest.approx(0.05, abs=1e-6)
@@ -162,7 +164,7 @@ def test_pipeline_accepts_lane_queue_without_lane_registered() -> None:
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-lane", target_dim="x", gen_tag="gen2")
     queue = LaneQueue()  # no lanes registered
-    Pipeline(state, registry, lane_queue=queue).run()
+    asyncio.run(Pipeline(state, registry, lane_queue=queue).arun())
 
 
 def test_pipeline_acquires_lane_when_registered() -> None:
@@ -182,7 +184,7 @@ def test_pipeline_acquires_lane_when_registered() -> None:
     queue.set_session_lane(SessionLane(max_sessions=8))
     queue.add_lane("seed-generation", max_concurrent=4, timeout_s=5.0)
     queue.add_lane("global", max_concurrent=8, timeout_s=5.0)
-    Pipeline(state, registry, lane_queue=queue).run()
+    asyncio.run(Pipeline(state, registry, lane_queue=queue).arun())
 
     seed_lane = queue.get_lane("seed-generation")
     global_lane = queue.get_lane("global")
@@ -246,7 +248,7 @@ def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None
         path=tmp_path / "journal.jsonl",
     )
     with session_journal_scope(journal):
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     started = [r for r in rows if r["event"] == "phase_started"]
     finished = [r for r in rows if r["event"] == "phase_finished"]
@@ -294,7 +296,7 @@ def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
         path=tmp_path / "journal.jsonl",
     )
     with session_journal_scope(journal):
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     failed = [r for r in rows if r["event"] == "phase_failed"]
     assert len(failed) == 1
@@ -324,7 +326,7 @@ def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
         session_journal_scope(journal),
         pytest.raises(RuntimeError, match="stub-induced hard failure"),
     ):
-        Pipeline(state, registry).run()
+        asyncio.run(Pipeline(state, registry).arun())
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     failed = [r for r in rows if r["event"] == "phase_failed"]
     assert len(failed) == 1
@@ -360,4 +362,4 @@ def test_orchestrator_emits_noop_outside_journal_scope() -> None:
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-noscope", target_dim="x", gen_tag="gen2")
     # No session_journal_scope active — must not raise.
-    Pipeline(state, registry).run()
+    asyncio.run(Pipeline(state, registry).arun())

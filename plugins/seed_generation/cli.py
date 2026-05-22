@@ -143,7 +143,7 @@ def audit_seeds_generate(
     ),
 ) -> None:
     """Generate a new candidate batch — runs picker → cost preview →
-    pre-flight → confirm → Pipeline.run().
+    pre-flight → confirm → Pipeline.arun().
 
     PR-δ2 (2026-05-19) — ``--gen-tag`` and ``--candidates`` default to
     values read from ``~/.geode/config.toml`` ``[self_improving_loop.seed_generation]``
@@ -437,7 +437,7 @@ def _dispatch_pipeline(
     # NOTE: real registry population happens in S11-wire / S12 (per
     # sprint plan §S6.5-wire and §S12 data run). For S11 the CLI flow
     # surfaces every gate + abort path even when the registry is empty
-    # — the Pipeline.run() will raise a RuntimeError with an actionable
+    # — the Pipeline.arun() will raise a RuntimeError with an actionable
     # "no registered agent" message that the operator can map back to
     # the unwired phase.
     pipeline = Pipeline(state=state, registry=registry)

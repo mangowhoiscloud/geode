@@ -4,8 +4,8 @@ Each concrete role (Generation / Reflection / Proximity / Pilot / Ranker
 / Evolver / Meta-review) is a subclass of :class:`BaseSeedAgent` and
 returns a :class:`SeedAgentResult`. The orchestrator
 (``plugins.seed_generation.orchestrator.Pipeline``) registers role
-instances via :class:`PipelineRegistry` and calls
-:meth:`BaseSeedAgent.execute` once per phase, passing the current
+instances via :class:`PipelineRegistry` and awaits
+:meth:`BaseSeedAgent.aexecute` once per phase, passing the current
 :class:`PipelineState`.
 
 Why a class hierarchy
@@ -159,17 +159,10 @@ class SeedAgentResult:
 class BaseSeedAgent(abc.ABC):
     """Abstract contract for a single seed-generation phase role.
 
-    PR-Async-Phase-C step 2 (2026-05-22) — :meth:`aexecute` is now the
-    abstract method subclasses MUST override. The sync :meth:`execute`
-    is a deprecation shim that calls :meth:`aexecute` via
-    :func:`core.async_runtime.run_process_coroutine` so legacy sync
-    callers (Pipeline.run) still work while migration is in progress.
-    The shim emits ``DeprecationWarning`` and carries a grep anchor
-    (``# DEPRECATED-ASYNC-PHASE-C:``) for the bulk-removal pass.
-
-    Per the fidelity amendment, the role concrete implementations
-    (S2-S8) must perform substantive work — no ``pass`` /
-    ``return None`` stubs are permitted in this sprint.
+    Subclasses MUST override :meth:`aexecute`. Per the fidelity
+    amendment, the role concrete implementations (S2-S8) must perform
+    substantive work — no ``pass`` / ``return None`` stubs are
+    permitted.
     """
 
     def __init__(
@@ -195,30 +188,6 @@ class BaseSeedAgent(abc.ABC):
         and returns a ``SeedAgentResult`` whose ``output`` the
         orchestrator merges back into the state.
         """
-
-    def execute(self, state: Any) -> SeedAgentResult:
-        """[DEPRECATED] Sync sibling of :meth:`aexecute`.
-
-        Bridges async ``aexecute`` to legacy sync ``Pipeline.run``
-        call sites until those migrate to ``Pipeline.arun``. The
-        bridge uses :func:`run_process_coroutine` which requires no
-        running event loop — RuntimeError if the caller already has
-        one (in which case they should ``await aexecute(...)``
-        directly).
-
-        # DEPRECATED-ASYNC-PHASE-C: removal target after Pipeline /
-        # CLI / tool_handler migrate to aexecute / arun fully.
-        """
-        import warnings
-
-        warnings.warn(
-            f"{type(self).__name__}.execute is deprecated; use aexecute (async) instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from core.async_runtime import run_process_coroutine
-
-        return run_process_coroutine(self.aexecute(state))
 
     def __repr__(self) -> str:
         return (

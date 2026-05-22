@@ -1,10 +1,8 @@
-"""Tests for IsolatedRunner subprocess mode (_execute_subprocess)."""
+"""Tests for IsolatedRunner subprocess mode (``_aexecute_subprocess``)."""
 
 from __future__ import annotations
 
 import asyncio
-import threading
-import time
 
 from core.agent.worker import WorkerRequest
 from core.orchestration.isolated_execution import (
@@ -48,64 +46,24 @@ class TestSubprocessMode:
         assert "Timeout" in (result.error or "") or "killed" in (result.error or "").lower()
         assert result.duration_ms > 0
 
-    def test_subprocess_async_returns_session_id(self) -> None:
-        """run_async with WorkerRequest should return session_id immediately."""
-        runner = IsolatedRunner()
-        req = WorkerRequest(task_id="async-001", description="hello")
-        cfg = IsolationConfig(session_id="async-001", timeout_s=15, post_to_main=False)
-        sid = runner.run_async(req, config=cfg)
-        assert sid == "async-001"
-
-        # Wait for result (extended for slow CI runners)
-        for _ in range(300):
-            result = runner.get_result(sid)
-            if result is not None:
-                break
-            time.sleep(0.1)
-        assert result is not None, "Async subprocess did not complete within 30s"
-        assert result.session_id == "async-001"
-
-    def test_subprocess_cancel_kills_process(self) -> None:
-        """cancel() should kill the subprocess."""
-        runner = IsolatedRunner()
-        req = WorkerRequest(task_id="cancel-001", description="long task")
-        cfg = IsolationConfig(session_id="cancel-001", timeout_s=60, post_to_main=False)
-        sid = runner.run_async(req, config=cfg)
-        time.sleep(0.5)  # Let subprocess start
-        cancelled = runner.cancel(sid)
-        # cancel may or may not find the process depending on timing
-        # but should not raise
-        assert isinstance(cancelled, bool)
-
     def test_subprocess_lane_wait(self) -> None:
-        """Subprocess mode should wait SLOT_WAIT_S for a lane slot."""
+        """Subprocess mode should fail fast when the lane is full."""
         from core.orchestration.lane_queue import Lane
 
-        lane = Lane("global", max_concurrent=5, timeout_s=30.0)
+        lane = Lane("global", max_concurrent=1, timeout_s=30.0)
         runner = IsolatedRunner(lane=lane)
-        runner.SLOT_WAIT_S = 0.1  # Short wait for test
+        runner.SLOT_WAIT_S = 0.1
 
-        # Fill all slots with blocking threads
-        barriers = []
-        for _i in range(5):
-            barrier = threading.Event()
-            barriers.append(barrier)
-            runner.run_async(
-                lambda b=barrier: (b.wait(timeout=10), "done"),
-                config=IsolationConfig(post_to_main=False),
-            )
-        time.sleep(0.2)  # Let threads start
-
-        # Subprocess request should fail after 0.1s wait
-        req = WorkerRequest(task_id="sem-001", description="blocked")
-        cfg = IsolationConfig(session_id="sem-001", timeout_s=5, post_to_main=False)
-        result = asyncio.run(runner.arun(req, config=cfg))
-        assert result.success is False
-        assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
-
-        # Cleanup
-        for b in barriers:
-            b.set()
+        # Pre-fill the slot so the next request hits 'lane full'.
+        assert lane.try_acquire("blocker") is True
+        try:
+            req = WorkerRequest(task_id="sem-001", description="blocked")
+            cfg = IsolationConfig(session_id="sem-001", timeout_s=5, post_to_main=False)
+            result = asyncio.run(runner.arun(req, config=cfg))
+            assert result.success is False
+            assert "full" in (result.error or "").lower() or "limit" in (result.error or "").lower()
+        finally:
+            lane.manual_release("blocker")
 
     def test_subprocess_result_has_duration(self) -> None:
         """Subprocess results should have duration_ms."""
@@ -137,30 +95,23 @@ class TestAsyncSubprocessNative:
     """
 
     def test_arun_routes_worker_request_to_aexecute_subprocess(self) -> None:
-        """arun(WorkerRequest) must invoke _aexecute_subprocess, not _execute_subprocess."""
+        """arun(WorkerRequest) must invoke _aexecute_subprocess."""
         runner = IsolatedRunner()
-        called: dict[str, int] = {"async": 0, "sync": 0}
+        called: list[int] = []
 
         original_async = runner._aexecute_subprocess
-        original_sync = runner._execute_subprocess
 
         async def _spy_async(request, config):  # type: ignore[no-untyped-def]
-            called["async"] += 1
+            called.append(1)
             return await original_async(request, config)
 
-        def _spy_sync(request, config):  # type: ignore[no-untyped-def]
-            called["sync"] += 1
-            return original_sync(request, config)
-
         runner._aexecute_subprocess = _spy_async  # type: ignore[method-assign]
-        runner._execute_subprocess = _spy_sync  # type: ignore[method-assign]
 
         req = WorkerRequest(task_id="native-001", description="hello")
         cfg = IsolationConfig(session_id="native-001", timeout_s=0.05, post_to_main=False)
         asyncio.run(runner.arun(req, config=cfg))
 
-        assert called["async"] == 1, "arun must go through _aexecute_subprocess"
-        assert called["sync"] == 0, "arun must NOT fall back to sync _execute_subprocess"
+        assert called == [1], "arun must go through _aexecute_subprocess"
 
     def test_arun_does_not_pin_event_loop_to_thread(self) -> None:
         """While a subprocess request runs via arun, the event loop must
@@ -207,3 +158,145 @@ class TestAsyncSubprocessNative:
         assert result.duration_ms > 0
         err = (result.error or "").lower()
         assert "timeout" in err or "killed" in err or "no output" in err
+
+
+class TestAsyncSubprocessCancel:
+    """PR-Async-Phase-C step 4b fix-up — regression tests for cancel
+    + CancelledError on the async subprocess path.
+
+    Without these tests the Codex MCP review would not have caught the
+    bug where ``cancel()`` was still gated on the deleted sync
+    ``_cancel_flags`` indirection and ``isinstance(active, subprocess.Popen)``
+    that no surviving code path ever satisfies.
+    """
+
+    def test_cancel_kills_live_subprocess(self) -> None:
+        """``IsolatedRunner.cancel(session_id)`` must kill an in-flight
+        ``asyncio.subprocess.Process``, return ``True`` immediately,
+        and the child's ``returncode`` must become non-None within the
+        kill-wait window."""
+        from core.orchestration.lane_queue import Lane
+
+        async def _scenario() -> tuple[bool, int | None, int, Lane]:
+            lane = Lane("global", max_concurrent=1, timeout_s=30.0)
+            runner = IsolatedRunner(lane=lane)
+            req = WorkerRequest(task_id="cx-001", description="long task")
+            cfg = IsolationConfig(session_id="cx-001", timeout_s=30.0, post_to_main=False)
+            task = asyncio.create_task(runner.arun(req, config=cfg))
+            # Spin until the subprocess is registered (worker spawn ~50ms).
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                if "cx-001" in runner.list_active():
+                    break
+            else:
+                task.cancel()
+                raise AssertionError("subprocess never registered in _active")
+            # Grab the live process handle BEFORE cancel so the assertion
+            # is on the proc cancel actually killed (not on a stale ref).
+            proc = runner._active["cx-001"]
+            cancelled = runner.cancel("cx-001")
+            # Let the arun finish (it surfaces the kill as a subprocess
+            # error result). We do NOT suppress TimeoutError — if the
+            # arun does not return within 10s the cancel did not work.
+            await asyncio.wait_for(task, timeout=10.0)
+            return cancelled, proc.returncode, runner.active_count, lane
+
+        cancelled, returncode, active_count, lane = asyncio.run(_scenario())
+        assert cancelled is True
+        assert returncode is not None, "cancel() did not kill the worker process"
+        assert active_count == 0, "_active dict was not cleaned up"
+        assert lane.active_count == 0, "lane slot leaked after cancel"
+
+    def test_cancel_during_lane_wait_does_not_leak_slot(self) -> None:
+        """Cancel WHILE the coroutine is still blocked on lane acquire
+        must not leak the slot. The underlying ``asyncio.to_thread``
+        cannot be interrupted, so cancellation while waiting on the
+        semaphore would otherwise let the acquire silently succeed
+        after the coroutine unwound — leaving the slot held with no
+        owner. ``asyncio.shield`` + finally-drain closes that hole.
+        """
+        from core.orchestration.lane_queue import Lane
+
+        async def _scenario() -> Lane:
+            lane = Lane("global", max_concurrent=1, timeout_s=30.0)
+            runner = IsolatedRunner(lane=lane)
+            # Pre-fill the only slot so the next arun blocks on acquire.
+            assert lane.try_acquire("blocker") is True
+            req = WorkerRequest(task_id="wait-cancel", description="blocked")
+            cfg = IsolationConfig(session_id="wait-cancel", timeout_s=30.0, post_to_main=False)
+            task = asyncio.create_task(runner.arun(req, config=cfg))
+            # Let the acquire enter the to_thread wait.
+            await asyncio.sleep(0.1)
+            task.cancel()
+            import contextlib
+
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            # Release the blocker — if the slot leaked, active_count
+            # stays at 1.
+            lane.manual_release("blocker")
+            # Give the drained acquire_task a chance to release.
+            await asyncio.sleep(0.5)
+            return lane
+
+        lane = asyncio.run(_scenario())
+        assert lane.active_count == 0, (
+            f"lane slot leaked after cancel-during-wait: active_count={lane.active_count}"
+        )
+
+    def test_task_cancel_kills_subprocess_and_releases_lane(self) -> None:
+        """``task.cancel()`` on an in-flight ``arun`` must surface as
+        ``CancelledError`` inside ``_aexecute_subprocess`` and trigger
+        kill + lane release before re-raising."""
+        from core.orchestration.lane_queue import Lane
+
+        async def _scenario() -> Lane:
+            lane = Lane("global", max_concurrent=1, timeout_s=30.0)
+            runner = IsolatedRunner(lane=lane)
+            req = WorkerRequest(task_id="cx-002", description="long task")
+            cfg = IsolationConfig(session_id="cx-002", timeout_s=30.0, post_to_main=False)
+            task = asyncio.create_task(runner.arun(req, config=cfg))
+            for _ in range(50):
+                await asyncio.sleep(0.05)
+                if "cx-002" in runner.list_active():
+                    break
+            else:
+                task.cancel()
+                raise AssertionError("subprocess never registered in _active")
+            task.cancel()
+            import contextlib
+
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            return lane
+
+        lane = asyncio.run(_scenario())
+        # Lane slot must be released after the CancelledError unwinds.
+        assert lane.active_count == 0
+
+
+class TestAsyncSubprocessLaneRelease:
+    """PR-Async-Phase-C step 4b fix-up — lane.active_count must hit 0
+    after every exit shape of ``_aexecute_subprocess`` (success path
+    timeout / kill path)."""
+
+    def test_lane_released_after_success_path(self) -> None:
+        from core.orchestration.lane_queue import Lane
+
+        lane = Lane("global", max_concurrent=1, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
+        req = WorkerRequest(task_id="rel-001", description="hello")
+        cfg = IsolationConfig(session_id="rel-001", timeout_s=15.0, post_to_main=False)
+        asyncio.run(runner.arun(req, config=cfg))
+        assert lane.active_count == 0
+
+    def test_lane_released_after_timeout_kill(self) -> None:
+        from core.orchestration.lane_queue import Lane
+
+        lane = Lane("global", max_concurrent=1, timeout_s=30.0)
+        runner = IsolatedRunner(lane=lane)
+        req = WorkerRequest(task_id="rel-002", description="long")
+        cfg = IsolationConfig(session_id="rel-002", timeout_s=0.05, post_to_main=False)
+        result = asyncio.run(runner.arun(req, config=cfg))
+        assert result.success is False
+        assert lane.active_count == 0
