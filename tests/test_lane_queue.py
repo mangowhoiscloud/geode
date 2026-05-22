@@ -490,9 +490,11 @@ class TestAcquireAllSync:
         q = LaneQueue()
         q.add_lane("global", max_concurrent=2)
 
-        with pytest.raises(KeyError, match="not found"):
-            with q.acquire_all("k1", ["global", "missing"]):
-                pass
+        with (
+            pytest.raises(KeyError, match="not found"),
+            q.acquire_all("k1", ["global", "missing"]),
+        ):
+            pass
 
         # global should be back to 0 active (partial-failure release).
         assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
