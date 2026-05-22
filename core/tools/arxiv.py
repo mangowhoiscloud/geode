@@ -43,7 +43,14 @@ import logging
 import threading
 import time
 from typing import Any
-from xml.etree import ElementTree as ET
+
+# CSP-2 fix-up (2026-05-22) — switched from stdlib ``xml.etree.ElementTree``
+# to ``defusedxml.ElementTree`` to harden the Atom-feed parser against
+# billion-laughs / external-entity / DTD attacks. arxiv.org is a trusted
+# endpoint today, but the policy lift is cheap and bandit's B405/B314
+# scanner pins the rule across the repo so a future module can't quietly
+# re-introduce the stdlib import.
+import defusedxml.ElementTree as ET  # type: ignore[import-untyped]  # noqa: N817
 
 log = logging.getLogger(__name__)
 
@@ -309,12 +316,7 @@ def _parse_arxiv_atom(xml_text: str) -> list[dict[str, Any]]:
     caller (LLM) does not need to special-case ``None`` for grounding
     text concatenation.
     """
-    # S314: arXiv responses come from a single trusted HTTPS endpoint
-    # (``export.arxiv.org``) the tool itself controls — there is no
-    # operator-supplied XML path. Adding the ``defusedxml`` dependency
-    # for one fixed-format Atom feed is overkill; the suppression is
-    # scoped to this call site, not module-wide.
-    root = ET.fromstring(xml_text)  # noqa: S314
+    root = ET.fromstring(xml_text)
     out: list[dict[str, Any]] = []
     for entry in root.findall("atom:entry", _ATOM_NS):
         id_url = (entry.findtext("atom:id", default="", namespaces=_ATOM_NS) or "").strip()
