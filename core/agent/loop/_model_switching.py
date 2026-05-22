@@ -58,12 +58,20 @@ def _settings_model_target(loop: AgenticLoop) -> str | None:
 
 
 async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:
-    """Async variant of ``sync_model_from_settings`` for the agent loop."""
+    """Async variant of ``sync_model_from_settings`` for the agent loop.
+
+    PR-MIC (2026-05-23) — passes ``reason="drift_sync"`` so the
+    ``MODEL_SWITCHED`` hook + UI surface the actual trigger (Settings
+    drift between rounds) instead of the default ``"user_switch"``
+    label, which mis-attributed automatic sync to the operator and
+    surfaced as a confusing ``Model: gpt-5.5 → claude-opus-4-6
+    (user_switch)`` line in the REPL header.
+    """
     try:
         target = _settings_model_target(loop)
         if target is None:
             return False
-        await loop.update_model_async(target)
+        await loop.update_model_async(target, reason="drift_sync")
         return True
     except Exception:
         log.debug("Model drift check failed", exc_info=True)
@@ -175,9 +183,12 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> None:
     breadcrumb pollution. Each model switch should leave **only one**
     active "I am now <model>" ack at any time.
 
-    Conservative: only matches the exact ``Understood. I am now ``
-    prefix we ourselves emit; never touches user content. Mutates
-    ``self.context.messages`` in place.
+    PR-MIC (2026-05-23) — handles Anthropic-style block-form content
+    too. Previously only ``isinstance(content, str)`` matched, so an
+    ack stored as ``[{"type": "text", "text": "Understood. I am now …"}]``
+    silently survived. Conservative: only matches the exact
+    ``Understood. I am now `` prefix we ourselves emit, in either
+    representation. Never touches user content.
     """
     msgs = loop.context.messages
     prefix = "Understood. I am now "
@@ -189,6 +200,14 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> None:
         content = msg.get("content", "")
         if isinstance(content, str) and content.startswith(prefix):
             continue
+        if isinstance(content, list):
+            # Block-form (Anthropic / multimodal): drop the message
+            # when any text-block begins with our self-emitted prefix.
+            text_blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            if any(
+                isinstance(b.get("text"), str) and b["text"].startswith(prefix) for b in text_blocks
+            ):
+                continue
         kept.append(msg)
     msgs.clear()
     msgs.extend(kept)

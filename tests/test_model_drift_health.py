@@ -153,7 +153,8 @@ def test_drift_accepted_when_rotator_returns_profile(monkeypatch) -> None:
         changed = asyncio.run(stub._sync_model_from_settings_async())
 
     assert changed is True
-    stub.update_model_async.assert_awaited_once_with("glm-4.7-flash")
+    # PR-MIC (2026-05-23) — drift sync now passes ``reason="drift_sync"``.
+    stub.update_model_async.assert_awaited_once_with("glm-4.7-flash", reason="drift_sync")
 
 
 def test_drift_accepted_when_rotator_not_initialised(monkeypatch) -> None:
