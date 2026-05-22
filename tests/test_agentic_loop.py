@@ -1018,6 +1018,126 @@ class TestSubAgentManager:
 
 
 # ---------------------------------------------------------------------------
+# adelegate — async sibling parity (PR-Async-Phase-C, 2026-05-22)
+# ---------------------------------------------------------------------------
+
+
+class TestSubAgentManagerAdelegate:
+    """Behaviour-parity tests for async ``SubAgentManager.adelegate``.
+
+    Mirrors the sync ``delegate`` test class so a future bulk-delete of
+    the sync path (Phase C cleanup) keeps full coverage on the async
+    survivor. Each test exercises the same input shape as its sync sibling.
+    """
+
+    def test_adelegate_empty_tasks(self) -> None:
+        import asyncio
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner)
+        results = asyncio.run(manager.adelegate([]))
+        assert results == []
+
+    def test_adelegate_with_handler(self) -> None:
+        import asyncio
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            return {"processed": True, "type": task_type}
+
+        manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
+        tasks = [SubTask("t1", "Test task 1", "analyze", {"subject_id": "Test"})]
+        results = asyncio.run(manager.adelegate(tasks))
+
+        assert len(results) == 1
+        assert results[0].task_id == "t1"
+        assert results[0].success is True
+
+    def test_adelegate_handler_failure(self) -> None:
+        import asyncio
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            raise ValueError("task handler failed")
+
+        manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
+        tasks = [SubTask("t1", "Failing task", "analyze", {})]
+        results = asyncio.run(manager.adelegate(tasks))
+
+        assert len(results) == 1
+        assert results[0].output.get("error") is not None
+
+    def test_adelegate_fans_out_in_parallel(self) -> None:
+        """Async fan-out must launch tasks concurrently via gather.
+
+        Verifies the wall-clock duration is closer to a single task's
+        runtime than to N × runtime — i.e., tasks ran in parallel.
+        """
+        import asyncio
+        import time
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+
+        def handler(task_type: str, args: dict[str, Any]) -> dict[str, Any]:
+            time.sleep(0.1)
+            return {"ok": True}
+
+        manager = SubAgentManager(runner, task_handler=handler, timeout_s=10)
+        tasks = [SubTask(f"t{i}", f"Task {i}", "analyze", {}) for i in range(5)]
+
+        started = time.time()
+        results = asyncio.run(manager.adelegate(tasks))
+        elapsed = time.time() - started
+
+        assert len(results) == 5
+        assert all(r.success for r in results)
+        # 5 × 0.1s sequential = 0.5s; parallel should be ≤ 0.3s with
+        # generous CI buffer.
+        assert elapsed < 0.3, f"parallel fan-out too slow: {elapsed:.2f}s"
+
+    def test_adelegate_depth_guard(self) -> None:
+        """Depth limit returns synthetic failures without launching tasks."""
+        import asyncio
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner, depth=2, max_depth=1)
+        tasks = [SubTask("t1", "Should be rejected", "analyze", {})]
+        results = asyncio.run(manager.adelegate(tasks))
+        assert len(results) == 1
+        assert results[0].success is False
+        assert "depth limit exceeded" in (results[0].error or "").lower()
+
+    def test_sync_delegate_emits_deprecation_warning(self) -> None:
+        """The sync ``delegate`` must surface a DeprecationWarning so
+        callers see the migration cue. ``adelegate`` is the survivor."""
+        import warnings
+
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        runner = IsolatedRunner()
+        manager = SubAgentManager(runner)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            manager.delegate([])
+        assert any(
+            issubclass(w.category, DeprecationWarning) and "adelegate" in str(w.message)
+            for w in caught
+        )
+
+
+# ---------------------------------------------------------------------------
 # SubAgentManager — Orchestration Integration tests
 # ---------------------------------------------------------------------------
 

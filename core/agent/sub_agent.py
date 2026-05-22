@@ -273,7 +273,22 @@ class SubAgentManager:
                 Callers that already return full results via tool_result
                 (e.g. delegate_task) should pass announce=False to avoid
                 injecting the same information into the parent context twice.
+
+        .. deprecated:: 0.99.34
+            Use :meth:`adelegate` (async) instead. The polling-based sync
+            collection is replaced by ``asyncio.gather`` for cheaper
+            backpressure (no thread suspension during LLM wait). This
+            method is retained for non-async tool handler call sites
+            and will be removed once they migrate.
+            # DEPRECATED-ASYNC-PHASE-C: removal target
         """
+        import warnings
+
+        warnings.warn(
+            "SubAgentManager.delegate is deprecated; use adelegate() (async) instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not tasks:
             return []
 
@@ -461,6 +476,202 @@ class SubAgentManager:
             len(results),
         )
         return results
+
+    async def adelegate(
+        self,
+        tasks: list[SubTask],
+        *,
+        on_progress: Callable[[SubResult], None] | None = None,
+        announce: bool = True,
+    ) -> list[SubResult]:
+        """Async sibling of :meth:`delegate` — ``asyncio.gather`` based fan-out.
+
+        PR-Async-Phase-C (2026-05-22) — replaces the polling collection loop
+        with native async. Each task runs in its own
+        :class:`IsolatedRunner.arun` coroutine (which uses ``asyncio.to_thread``
+        to off-load the blocking subprocess/thread wait); ``asyncio.gather``
+        completes when all tasks finish. Backpressure is suspended-coroutine
+        cost (~1 KB) instead of thread/subprocess RSS — fits cleanly with
+        async caller paths (Pipeline.arun, async tool handlers).
+
+        Contract parity with sync :meth:`delegate`: same depth guard, dedup,
+        sandbox directory expansion, hooks, run-record bookkeeping, announce
+        semantics. Only the *waiting* mechanic differs (asyncio.gather vs
+        polling).
+        """
+        import asyncio
+
+        if not tasks:
+            return []
+
+        # Explicit depth guard (defense-in-depth alongside denied_tools)
+        if self._depth >= self._max_depth:
+            log.warning(
+                "Sub-agent depth limit reached (%d/%d), rejecting %d tasks",
+                self._depth,
+                self._max_depth,
+                len(tasks),
+            )
+            return [
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=False,
+                    error=f"Depth limit exceeded ({self._depth}/{self._max_depth})",
+                )
+                for t in tasks
+            ]
+
+        tasks = self._deduplicate(tasks)
+        if not tasks:
+            log.info("All tasks coalesced — nothing to execute")
+            return []
+
+        # Expand sandbox for sub-agent working directories
+        added_dirs: list[Path] = []
+        if self._working_dirs:
+            from core.tools.sandbox import add_working_directory
+
+            for dir_str in self._working_dirs:
+                dir_path = Path(dir_str)
+                if dir_path.is_dir():
+                    add_working_directory(dir_path)
+                    added_dirs.append(dir_path)
+
+        graph = self._build_task_graph(tasks)
+
+        # Build per-task IsolationConfig + run-record + hook STARTED in
+        # the same shape sync delegate uses.
+        from core.memory.session_key import build_subagent_session_key
+
+        per_task_setup: list[tuple[SubTask, Any, IsolationConfig]] = []
+        for task in tasks:
+            graph.mark_running(task.task_id)
+            self._emit_hook(HookEvent.SUBAGENT_STARTED, task)
+
+            child_key = build_subagent_session_key(
+                task.args.get("subject_id", task.args.get("subject", "unknown")), task.task_id
+            )
+
+            import uuid as _uuid
+
+            record = SubagentRunRecord(
+                run_id=_uuid.uuid4().hex[:12],
+                task_id=task.task_id,
+                child_session_key=child_key,
+                parent_session_key=self._parent_session_key,
+                task_type=task.task_type,
+                started_at=time.time(),
+            )
+            with self._records_lock:
+                self._run_records[task.task_id] = record
+                if len(self._run_records) > 200:
+                    oldest_key = next(iter(self._run_records))
+                    self._run_records.pop(oldest_key, None)
+
+            config = IsolationConfig(
+                session_id=task.task_id,
+                timeout_s=self._timeout_s,
+                post_to_main=False,
+                prefix=f"SubAgent:{task.task_type}",
+                metadata={
+                    "description": task.description,
+                    "task_type": task.task_type,
+                    "child_session_key": child_key,
+                },
+            )
+            fn_or_request: Any
+            if self._action_handlers is not None:
+                fn_or_request = self._build_worker_request(task)
+            else:
+                # _execute_subtask is bound method; arun expects callable
+                # passed via args/kwargs. The thread-mode path is sync.
+                fn_or_request = self._execute_subtask
+            per_task_setup.append((task, fn_or_request, config))
+
+        # Launch ALL tasks concurrently via asyncio.gather over IsolatedRunner.arun.
+        # arun's signature: arun(fn_or_request, *, args=(), kwargs=None, config=None)
+        # For the legacy thread mode, args=(task,) carries the SubTask payload.
+        async def _run_one(task: SubTask, fn_or_request: Any, config: IsolationConfig) -> SubResult:
+            try:
+                if self._action_handlers is not None:
+                    # Subprocess mode — WorkerRequest carries the payload.
+                    isolation = await self._runner.arun(fn_or_request, config=config)
+                else:
+                    # Thread mode — legacy callable + SubTask arg.
+                    isolation = await self._runner.arun(fn_or_request, args=(task,), config=config)
+            except Exception as exc:  # pragma: no cover — defensive
+                log.warning("adelegate: arun raised for %s — %s", task.task_id, exc)
+                isolation = None
+            sub_result = self._to_sub_result(task, isolation)
+            if sub_result.success:
+                graph.mark_completed(task.task_id, result=sub_result.output)
+                self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
+            else:
+                graph.mark_failed(task.task_id, error=sub_result.error or "unknown")
+                self._emit_hook(HookEvent.SUBAGENT_FAILED, task, error=sub_result.error)
+            if on_progress is not None:
+                try:
+                    on_progress(sub_result)
+                except Exception:
+                    log.warning(
+                        "on_progress callback failed for %s",
+                        task.task_id,
+                        exc_info=True,
+                    )
+            return sub_result
+
+        results: list[SubResult] = await asyncio.gather(
+            *[
+                _run_one(task, fn_or_request, config)
+                for task, fn_or_request, config in per_task_setup
+            ]
+        )
+
+        # Update run records with outcomes (G7 observability)
+        now = time.time()
+        with self._records_lock:
+            for sub_result in results:
+                rec = self._run_records.get(sub_result.task_id)
+                if rec is not None:
+                    rec.completed_at = now
+                    rec.outcome = "ok" if sub_result.success else "error"
+
+        # Announce completed results to parent (OpenClaw Spawn+Announce)
+        if announce and self._announce_enabled and self._parent_session_key:
+            for sub_result in results:
+                summary = ""
+                if sub_result.success:
+                    summary = sub_result.output.get("summary", "") if sub_result.output else ""
+                    if not summary:
+                        summary = str(sub_result.output)[:200] if sub_result.output else "completed"
+                else:
+                    summary = sub_result.error or "failed"
+                agent_result = SubAgentResult(
+                    task_id=sub_result.task_id,
+                    task_type=sub_result.description,
+                    status="ok" if sub_result.success else "error",
+                    summary=summary,
+                    data=sub_result.output,
+                    duration_ms=sub_result.duration_ms,
+                    error_message=sub_result.error,
+                )
+                self._announce_result(self._parent_session_key, agent_result)
+
+        # Clean up expanded sandbox directories
+        if added_dirs:
+            from core.tools.sandbox import remove_working_directory
+
+            for dir_path in added_dirs:
+                remove_working_directory(dir_path)
+
+        succeeded = sum(1 for r in results if r.success)
+        log.info(
+            "SubAgent async batch complete: %d/%d succeeded",
+            succeeded,
+            len(results),
+        )
+        return list(results)
 
     @property
     def hooks(self) -> HookSystem | None:
