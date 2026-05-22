@@ -438,12 +438,20 @@ def register() -> None:
     from inspect_ai.model._model_output import ChatCompletionChoice, ModelUsage
 
     @modelapi(name="codex-cli")
-    class CodexCliAPI(ModelAPI):
+    class CodexCliAPI(ModelAPI):  # type: ignore[misc, unused-ignore]
         """inspect_ai provider that delegates to ``codex exec --json``.
 
         Identifier shape: ``codex-cli/<model-id>``. inspect_ai's
         router strips the ``codex-cli/`` prefix and instantiates this
         class with ``model_name=<model-id>``.
+
+        ``# type: ignore[misc, unused-ignore]`` mirrors the sibling
+        providers (``GeodeModelAPI`` / ``ClaudeOAuthAPI`` /
+        ``OpenAICodexAPI``): inspect_ai ships without type stubs, so
+        in the default ``uv sync`` (no ``[audit]`` extra) environment
+        ``ModelAPI`` resolves to ``Any`` and strict mypy rejects the
+        subclass; with the extra installed, the suppression is unused
+        (hence ``unused-ignore`` flag).
         """
 
         def __init__(
