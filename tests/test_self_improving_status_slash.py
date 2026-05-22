@@ -189,6 +189,52 @@ def test_status_renders_baseline_block(
     assert "fitness 0.7100" in out
 
 
+def test_status_renders_baseline_v2_block(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """PR-2 of petri-schema-v2 (2026-05-23) — when baseline.json is in
+    schema_version=2 shape, the status block must source the timestamp
+    from ``ts_utc`` (not the legacy ``timestamp``/``ts``) and the
+    "reason" line from ``session_id`` (since v2 stores the run id, not
+    a free-form reason). Pre-fix the status block rendered ``?`` for
+    both fields."""
+    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir.mkdir(parents=True)
+    baseline_path = state_dir / "baseline.json"
+    fake_audit = state_dir / "mutations.jsonl"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "sess-v2-status",
+                "commit": "deadbeef",
+                "ts_utc": "2026-05-23T01:23:45Z",
+                "fitness": 0.8123,
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.4},
+                    "dim_stderr": {"broken_tool_use": 0.4},
+                },
+                "axes": {"ux_means": None, "admire_means": None, "bench_means": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake_audit.touch()
+    monkeypatch.setattr(
+        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        fake_audit,
+    )
+    from core.cli.commands.self_improving import _cmd_status
+
+    _cmd_status()
+    out = capsys.readouterr().out
+    assert "0.8123" in out
+    assert "2026-05-23T01:23:45Z" in out
+    assert "sess-v2-status" in out
+
+
 def test_status_renders_rolled_back_row_with_muted_style(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

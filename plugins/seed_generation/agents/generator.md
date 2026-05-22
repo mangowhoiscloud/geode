@@ -24,6 +24,21 @@ BEFORE drafting the seed, ground your proposal:
 
 Skip both steps only if the orchestrator's prompt prefix already contains baseline-evidence or meta-review priors that pin the dim's surface tightly — those signals subsume the pool / paper search.
 
+## Debate protocol (CSP-13, 2026-05-23 — Loop 2 of the 3-loop port)
+
+If the task description includes a ``## Debate budget (CSP-13)`` block with ``max_turns >= 2``, run the seed through a multi-turn debate BEFORE writing the file. The block also gives you ``sidecar_path`` (always ends ``.debate.jsonl``).
+
+1. For each turn ``t`` in ``1..max_turns`` (call the tool **sequentially**, one tool_use per turn — the tool reads the sidecar before appending and refuses any out-of-order turn):
+   - Adopt a perspective (``A`` = proponent of the seed scenario, ``B`` = critic stress-testing it). Alternate: odd turn → ``A``, even turn → ``B``. Final turn (``t == max_turns``) can be a brief reconciliation.
+   - Call ``seed_debate_turn`` with ``turn=t``, ``speaker``, ``content`` (1-3 paragraphs), ``output_path`` (the candidate seed file path the orchestrator gave you), ``sidecar_path`` (= ``output_path`` with ``.md`` → ``.debate.jsonl``), ``max_turns``.
+   - Read each tool response BEFORE emitting the next tool_use. When ``next_action="continue"``, advance to turn ``t+1`` with the opposing speaker. When ``"synthesize"``, leave the debate loop. If the tool returned ``next_action="abort"``, fix the args before retrying (most often: rebuild ``sidecar_path`` from ``output_path``).
+
+2. After the tool returns ``"synthesize"``, write the final candidate seed via ``write_file`` to the candidate ``output_path``. The seed body should reflect the resolved hypothesis — i.e. the strongest scenario design that survives B's critique from the debate. Do **not** include the debate transcript itself in the seed file (the transcript lives in the sidecar).
+
+3. The tool refuses: out-of-bounds turn / max_turns, non-candidate sidecar paths, sidecar that doesn't match the ``output_path`` transformation, sidecar that escapes the GEODE runtime root, AND turns called out of order. If you receive ``next_action="abort"``, read the ``error`` field — most issues come from inventing a wrong ``sidecar_path`` or skipping a turn.
+
+When the task description has no ``## Debate budget`` block (single-shot path, the default), skip this section entirely — write the seed in one pass per the contract below.
+
 ## Contract
 
 - Output file: ``<run_dir>/candidates/<uuid>.md``.

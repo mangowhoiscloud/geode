@@ -1521,5 +1521,52 @@
         "query"
       ]
     }
+  },
+  {
+    "name": "seed_debate_turn",
+    "description": "Record one turn of the multi-turn debate while drafting a Petri audit seed. Only used when the seed_generator task description specifies max_turns >= 2. Call once per debate turn with the speaker label (e.g. 'A', 'B') and the turn's argument; the tool appends the turn to a sidecar JSONL next to the candidate seed and returns next_action='continue' until turn reaches max_turns, then 'synthesize' (write the final seed via write_file). Refuses out-of-bounds turn / max_turns, non-sequential turns (you must call turn=1 then 2 then 3 …; calling turn=N immediately is rejected), non-candidate sidecar paths, and paths escaping the GEODE runtime root.",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "turn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "description": "1-indexed turn number for this debate exchange. MUST equal prior_count + 1 (the tool reads the sidecar and refuses if you skip)."
+        },
+        "speaker": {
+          "type": "string",
+          "description": "Short speaker label (e.g. 'A', 'B', 'critic'). Non-empty."
+        },
+        "content": {
+          "type": "string",
+          "description": "This turn's argument / position text. Non-empty."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "The candidate seed file path from the task description (ends with '.md'). The tool uses this to derive + validate sidecar_path, preventing arbitrary disk writes."
+        },
+        "sidecar_path": {
+          "type": "string",
+          "description": "Absolute path to the per-candidate debate sidecar JSONL. MUST equal output_path with the '.md' suffix replaced by '.debate.jsonl' (e.g. output_path '/.../candidates/gen2-000-abc.md' → sidecar_path '/.../candidates/gen2-000-abc.debate.jsonl'). Tool rejects any mismatch."
+        },
+        "max_turns": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6,
+          "description": "Total turn budget for this candidate's debate (from the task description). Tool returns 'synthesize' when turn >= max_turns."
+        }
+      },
+      "required": [
+        "turn",
+        "speaker",
+        "content",
+        "output_path",
+        "sidecar_path",
+        "max_turns"
+      ]
+    }
   }
 ]

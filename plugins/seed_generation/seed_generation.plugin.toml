@@ -48,6 +48,13 @@ allowed_models = [
     "gpt-5.4",
 ]
 role_contract = "plugins/seed_generation/agents/generator.md"
+# CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the 3-loop port. 0 =
+# off (single-shot, back-compat default). 2-6 = N-turn debate inside
+# each candidate sub-agent's AgenticLoop, recorded via the
+# ``seed_debate_turn`` tool. Operators flip this in
+# ``~/.geode/config.toml``'s ``[self_improving_loop.seed_generation.roles.generator]``
+# section; the manifest default keeps the existing free behavior.
+num_turns = 0
 
 [seed_generation.role.critic]
 default_model = "claude-sonnet-4-6"
