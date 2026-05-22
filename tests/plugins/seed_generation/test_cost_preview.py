@@ -19,49 +19,42 @@ def _make_picker_result(*, voter_source: str = "api_key") -> PickerResult:
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "critic": RoleBinding(
             role="critic",
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "proximity": RoleBinding(
             role="proximity",
-            model="text-embedding-3-small",
+            model="claude-sonnet-4-6",
             provider="openai",
             source="api_key",
-            kind="embedding",
         ),
         "pilot": RoleBinding(
             role="pilot",
             model="claude-haiku-4-5",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "ranker": RoleBinding(
             role="ranker",
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "evolver": RoleBinding(
             role="evolver",
             model="claude-sonnet-4-6",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
         "meta_reviewer": RoleBinding(
             role="meta_reviewer",
             model="claude-opus-4-7",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
     }
     voters = [
@@ -145,7 +138,6 @@ def test_estimate_cost_subscription_vs_payg_split() -> None:
         model="claude-sonnet-4-6",
         provider="anthropic",
         source="claude-cli",
-        kind="completion",
     )
     pr = PickerResult(
         bindings=bindings,
@@ -159,13 +151,16 @@ def test_estimate_cost_subscription_vs_payg_split() -> None:
     assert abs(est.subscription_usd + est.payg_usd - est.total_usd) < 1e-9
 
 
-def test_estimate_cost_proximity_zero_or_negligible_for_embedding() -> None:
-    """Embedding pricing not in MODEL_PRICING → 0 estimate (acceptable)."""
+def test_estimate_cost_proximity_uses_completion_pricing() -> None:
+    """CSP-10 — Proximity now runs claude-sonnet-4-6 (LLM clustering,
+    paper §3) so its row carries a positive completion-pricing estimate,
+    NOT the pre-CSP-10 zero-estimate fallback for the dropped
+    text-embedding-3-small model.
+    """
     pr = _make_picker_result()
     est = estimate_cost(pr, candidate_count=15)
     prox_row = next(r for r in est.rows if r.role == "proximity")
-    # Embedding model not in completion pricing catalogue → 0.0
-    assert prox_row.est_usd == 0.0
+    assert prox_row.est_usd > 0.0
 
 
 def test_estimate_cost_explicit_match_count_override() -> None:
@@ -193,7 +188,6 @@ def test_format_cost_summary_marks_subscription_rows() -> None:
         model="claude-sonnet-4-6",
         provider="anthropic",
         source="claude-cli",
-        kind="completion",
     )
     pr = PickerResult(
         bindings=bindings,
@@ -225,7 +219,6 @@ def test_estimate_cost_unknown_model_logs_and_zeros() -> None:
             model="mystery-x9-unknown",
             provider="anthropic",
             source="api_key",
-            kind="completion",
         ),
     }
     voters = [
