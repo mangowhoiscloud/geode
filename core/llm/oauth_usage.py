@@ -301,7 +301,7 @@ def fetch_oauth_usage(token: str, *, timeout_s: float = 8.0) -> OAuthUsage | Non
     ``httpx`` into the cold-start path. paperclip's ``fetchWithTimeout``
     pattern is reproduced via ``socket`` timeout on the urlopen call.
     """
-    req = urllib.request.Request(  # noqa: S310 — OAUTH_USAGE_URL is a hardcoded https constant
+    req = urllib.request.Request(  # noqa: S310
         OAUTH_USAGE_URL,
         headers={
             "Authorization": f"Bearer {token}",
@@ -310,8 +310,12 @@ def fetch_oauth_usage(token: str, *, timeout_s: float = 8.0) -> OAuthUsage | Non
         },
         method="GET",
     )
+    # OAUTH_USAGE_URL is a hardcoded module constant (https) — not an
+    # operator-supplied input. ruff S310 + bandit B310 fire because
+    # the rule can't statically prove the scheme; both suppressions
+    # below mark the constraint as enforced at module load.
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 - hardcoded https URL
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
             if resp.status != 200:
                 log.debug("oauth_usage: /api/oauth/usage returned status=%s", resp.status)
                 return None
