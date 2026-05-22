@@ -660,10 +660,26 @@ class TestCredentialScrubbing:
 
 
 class TestBuildAuthZAI:
-    """Verify build_auth registers ZAI profile when api key is set."""
+    """Verify build_auth registers ZAI profile when api key is set.
 
-    def test_zai_profile_registered(self):
+    PR-MIC (2026-05-23) — the legacy ``glm:default`` add is now skipped
+    when ``auth.toml`` already covers the glm provider (via the
+    ``glm-payg:env`` plan-bound entry). Tests isolate ``auth.toml`` to
+    a tmp path so the legacy fallback still fires when the real
+    operator file is absent. Contract under test is "glm key is
+    registered as a routable profile," not the specific legacy
+    ``glm:default`` name.
+    """
+
+    def test_zai_profile_registered(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
+        monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+        # Reset cached store/rotator so build_auth sees the tmp path.
+        from core.wiring import container as _container
+
+        monkeypatch.setattr(_container, "_profile_store", None, raising=False)
+        monkeypatch.setattr(_container, "_profile_rotator", None, raising=False)
 
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
@@ -674,14 +690,24 @@ class TestBuildAuthZAI:
 
             store, _rotator, _cooldown = build_auth()
 
-        profile = store.get("glm:default")
-        assert profile is not None
-        assert profile.provider == "glm"
-        assert profile.key == "test-zai-key"
-        assert profile.credential_type == CredentialType.API_KEY
+        # Either the legacy ``glm:default`` (fresh install) or the
+        # canonical ``glm-payg:env`` (post-migrate path) — both
+        # equally valid contracts for "the glm key is registered."
+        glm_profiles = store.list_by_provider("glm")
+        assert len(glm_profiles) >= 1
+        assert any(
+            p.key == "test-zai-key" and p.credential_type == CredentialType.API_KEY
+            for p in glm_profiles
+        )
 
-    def test_zai_profile_not_registered_when_empty(self):
+    def test_zai_profile_not_registered_when_empty(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
+        monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
+        from core.wiring import container as _container
+
+        monkeypatch.setattr(_container, "_profile_store", None, raising=False)
+        monkeypatch.setattr(_container, "_profile_rotator", None, raising=False)
 
         with patch("core.config.settings") as mock_settings:
             mock_settings.anthropic_api_key = ""
@@ -692,4 +718,4 @@ class TestBuildAuthZAI:
 
             store, _rotator, _cooldown = build_auth()
 
-        assert store.get("glm:default") is None
+        assert store.list_by_provider("glm") == []

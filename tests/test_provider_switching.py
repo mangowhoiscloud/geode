@@ -455,6 +455,41 @@ def test_update_model_swaps_adapter_on_provider_change(
     assert stub._tool_processor._model == "claude-opus-4-7"
 
 
+def test_drift_sync_emits_drift_sync_reason(isolated_auth, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-MIC (2026-05-23) — ``sync_model_from_settings_async`` must
+    label the switch as ``reason="drift_sync"``. Pre-fix, the helper
+    omitted the kwarg so ``update_model_async``'s default
+    ``"user_switch"`` reached the MODEL_SWITCHED hook + UI, making
+    automatic settings drift look like an operator action.
+    Reproduces the 2026-05-23 production incident
+    (``gpt-5.5 → claude-opus-4-6 (user_switch)`` REPL header).
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    import core.agent.loop._model_switching as _ms
+    from core.config import settings
+
+    stub = MagicMock()
+    stub.model = "gpt-5.5"
+    stub._disable_settings_drift = False
+    stub.update_model_async = AsyncMock()
+    stub._drift_target_is_healthy = MagicMock(return_value=True)
+
+    original_model = settings.model
+    object.__setattr__(settings, "model", "claude-opus-4-6")
+    try:
+        asyncio.run(_ms.sync_model_from_settings_async(stub))
+    finally:
+        object.__setattr__(settings, "model", original_model)
+
+    stub.update_model_async.assert_awaited_once()
+    _args, kwargs = stub.update_model_async.await_args
+    assert kwargs.get("reason") == "drift_sync", (
+        "drift sync path must surface a distinct reason — UI mis-labels "
+        "as 'user_switch' otherwise (regression of 2026-05-23 incident)."
+    )
+
+
 def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     isolated_auth, monkeypatch: pytest.MonkeyPatch
 ) -> None:
