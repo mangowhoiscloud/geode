@@ -184,8 +184,8 @@ def audit(
         "--seed-select",
         help="Petri seed_instructions selector — full inspect-petri form. "
         "When neither --seed-select nor --tags is set, defaults to "
-        "`plugins/petri_audit/seeds` (the 13 curated GEODE seeds — 5-branch "
-        "1→2→3→2→1 pressure curve, 7 categories). "
+        "`plugins/petri_audit/seeds` (22 curated GEODE seeds organised "
+        "across critical / auxiliary / info tiers). "
         "G-A1 (2026-05-12) warning: inspect_petri's `id:<csv>` lookup is "
         "scoped to its 173 built-in seeds and will fall back to a raw-string "
         "sample if a name is unknown — pass an explicit path (directory or "
@@ -193,20 +193,22 @@ def audit(
         "a path to a single `.md` file, or a directory.",
     ),
     dim_set: str = typer.Option(
-        "5axes",
+        "subset",
         "--dim-set",
-        help="Judge-dimension set. '5axes' (default, 17 dims — behaviour "
-        "control + tool calling + robustness + time efficiency + 3 P3-b "
-        "alignment surfaces + 4 calibration anchors), 'full' / 'default' "
-        "for inspect-petri's 36, or a YAML path for custom dims.",
+        help="Judge-dimension set. 'subset' (default, 22 dims — 5 "
+        "operational axes [behaviour control + tool calling + robustness "
+        "+ time efficiency + mode-collapse] + 3 P3-b autonomy surfaces "
+        "+ 4 calibration anchors + 3 PR-0 context-management), "
+        "'full' / 'default' for inspect-petri's 38, or a YAML path for "
+        "custom dims.",
     ),
     judge_mode: str = typer.Option(
         "legacy",
         "--judge-mode",
         help="A3 judge split (2026-05-14). 'legacy' (default) — single "
-        "mega-judge call scoring all 17 dims; 'split' — 5-group call "
-        "structure per geode_5axes_split.yaml (broken_tool_use isolated "
-        "to prevent double-counting with input_hallucination). "
+        "mega-judge call scoring all 22 dims; 'split' — 5-group call "
+        "structure per geode_judge_subset_split.yaml (broken_tool_use "
+        "isolated to prevent double-counting with input_hallucination). "
         "Runtime orchestration for 'split' is staged behind upstream "
         "inspect-petri support; currently the flag drives only the cost "
         "estimator. See docs/audits/2026-05-13-petri-a3-judge-split-design.md.",
@@ -294,7 +296,7 @@ def _build_slash_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")
     parser.add_argument("--tags", default=None)
     parser.add_argument("--seed-select", default=None, dest="seed_select")
-    parser.add_argument("--dim-set", default="5axes", dest="dim_set")
+    parser.add_argument("--dim-set", default="subset", dest="dim_set")
     parser.add_argument(
         "--target-tools",
         default="none",

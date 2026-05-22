@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.32"
+version = "0.99.33"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -76,6 +76,13 @@ desktop = ["pyautogui>=0.9.54", "Pillow>=10.0.0"]
 audit = [
     "inspect-ai>=0.3.211",
     "inspect-petri @ git+https://github.com/meridianlabs-ai/inspect_petri@6d9b9e1dbc19bcc06544aca982427cfb37357ffc",
+    # CSA-2 (2026-05-22) — paperclip-pattern auditor tool_use bridge.
+    # plugins/petri_audit/mcp_bridge/ stands up a stdio MCP server that
+    # exposes inspect_ai ToolInfo[] as MCP tools so the claude CLI
+    # subprocess (--mcp-config + --strict-mcp-config + --allowed-tools)
+    # can emit tool_use blocks under --max-turns 1 without raw-SDK
+    # 429 enforcement on Claude Max OAuth tokens.
+    "mcp>=1.0.0",
 ]
 # OpenLLMetry (Apache-2.0) — OTel-compatible LLM/agent tracing.
 # Lazy-imported in core/observability/ so default `uv sync` cold-start is

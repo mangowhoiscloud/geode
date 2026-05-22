@@ -39,21 +39,26 @@ This module mirrors that pattern for inspect_ai. Each
    counts + stop_reason.
 5. Returns ``ModelOutput`` to inspect_ai's harness.
 
-CSA-1 scope
-===========
+CSA-1 + CSA-2 scope
+====================
 
-This PR ships the **text-only** path:
+This module now ships both branches:
 
-* Provider scaffold + ``@modelapi("claude-cli")`` registration.
-* argv builder + stdin serialiser + stream-json parser.
-* ``ModelOutput`` construction (content / usage / stop_reason).
-* No tool support — ``generate()`` with non-empty ``tools`` raises
-  ``NotImplementedError("tool_use deferred to CSA-2 MCP bridge")``.
+* **Text-only** (CSA-1, judge role): provider scaffold +
+  ``@modelapi("claude-cli")`` registration, argv builder + stdin
+  serialiser + stream-json parser, ``ModelOutput`` construction
+  (content / usage / stop_reason).
 
-This is sufficient for the **judge role** (the audit's scoring
-role) which does not call custom tools. Auditor role (which uses
-inspect_petri's ``send_message`` + ``recommend_termination``) is
-deferred to CSA-2 where MCP bridge wires the tool path.
+* **Tool-use** (CSA-2, auditor role): when ``generate(tools=[...])``
+  is non-empty, the call routes through
+  :mod:`plugins.petri_audit.mcp_bridge.prepare_bridge` which spins up
+  a per-call stdio MCP server, materialises tool schemas, and wires
+  the claude CLI with ``--mcp-config`` / ``--strict-mcp-config`` /
+  ``--allowed-tools``. The response parser extracts ``tool_use``
+  content blocks via :func:`extract_tool_calls` and returns them on
+  ``ChatMessageAssistant.tool_calls``. Bridge handlers do NOT execute
+  tools (``--max-turns 1`` stops claude at the tool boundary);
+  inspect_petri's solver dispatches the calls in the parent process.
 
 Operator surface
 ================
@@ -196,6 +201,7 @@ def build_claude_cli_argv(
     max_turns: int = 1,
     mcp_config_path: str | None = None,
     allowed_tools: list[str] | None = None,
+    disable_builtin_tools: bool = False,
     extra_args: Iterable[str] | None = None,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
@@ -237,6 +243,14 @@ def build_claude_cli_argv(
     if allowed_tools:
         # CLI flag accepts space-or-comma-separated list.
         argv += ["--allowed-tools", ",".join(allowed_tools)]
+    if disable_builtin_tools:
+        # CSA-2 (2026-05-22) — when wrapping a real ``claude`` binary
+        # (e.g. the cmux.app variant) the CLI auto-injects Claude
+        # Code's built-in tools (Bash / Edit / ToolSearch / …) which
+        # poison the auditor's tool choice (the LLM picks ToolSearch
+        # over mcp__bridge__send_message). ``--tools ""`` disables
+        # the built-in set so only MCP tools remain.
+        argv += ["--tools", ""]
     if extra_args:
         argv += list(extra_args)
     return argv
@@ -410,6 +424,30 @@ def _extract_usage(events: list[StreamJsonEvent]) -> dict[str, int]:
     }
 
 
+def _is_expected_tool_use_boundary(events: list[StreamJsonEvent]) -> bool:
+    """True when the terminal ``result`` event indicates a clean
+    ``--max-turns 1`` stop at the tool_use boundary.
+
+    The claude CLI exits with returncode 1 + ``is_error=true`` +
+    ``errors=["Reached maximum number of turns (1)"]`` whenever the
+    model would have continued (i.e. the assistant message ends with
+    ``stop_reason=tool_use``). That is the **expected** behaviour for
+    inspect_ai — the harness owns the iteration loop and just wants
+    the tool_use blocks. CSA-2 detects this case so the provider
+    doesn't surface it as ``ClaudeCliInvocationError``.
+
+    Verified live 2026-05-22 against claude CLI 2.1.140.
+    """
+    for event in reversed(events):
+        if event.type != "result":
+            continue
+        payload = event.payload
+        terminal = payload.get("terminal_reason")
+        stop = payload.get("stop_reason")
+        return terminal == "max_turns" and stop == "tool_use"
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Subprocess runner
 # ---------------------------------------------------------------------------
@@ -516,16 +554,16 @@ def register() -> None:
             tool_choice: Any,  # ToolChoice
             config: Any,  # GenerateConfig
         ) -> Any:  # ModelOutput
+            # CSA-2 (2026-05-22): tool support via MCP bridge. The text-
+            # only path is the hot path (judge role); the tool path
+            # spins up a per-call stdio MCP server and is gated behind
+            # ``if tools``. Same OAuth-friendly subprocess invocation
+            # in both branches — only the argv + parser differ.
             if tools:
-                # CSA-1 ships text-only. Tool support requires the MCP
-                # bridge layer (CSA-2). Raising NotImplementedError
-                # lets inspect_ai surface the boundary instead of
-                # silently dropping tools.
-                raise NotImplementedError(
-                    "claude-cli provider: tool_use deferred to CSA-2 "
-                    "(MCP bridge). Use claude-code/ provider for now if "
-                    "tools are required."
-                )
+                return await self._generate_with_tools(input, tools)
+            return await self._generate_text_only(input)
+
+        async def _generate_text_only(self, input: Any) -> Any:
             argv = build_claude_cli_argv(
                 binary=self._binary,
                 model_name=self.model_name,
@@ -553,17 +591,10 @@ def register() -> None:
                 )
             text = _extract_assistant_text(events)
             stop_reason = _extract_stop_reason(events)
-            usage_dict = _extract_usage(events)
+            usage = _build_usage(_extract_usage(events))
             choice = ChatCompletionChoice(
                 message=ChatMessageAssistant(content=text),
                 stop_reason=stop_reason,
-            )
-            usage = ModelUsage(
-                input_tokens=usage_dict["input_tokens"],
-                output_tokens=usage_dict["output_tokens"],
-                total_tokens=usage_dict["input_tokens"] + usage_dict["output_tokens"],
-                input_tokens_cache_read=usage_dict["cache_read_input_tokens"] or None,
-                input_tokens_cache_write=usage_dict["cache_creation_input_tokens"] or None,
             )
             return ModelOutput(
                 model=self.model_name,
@@ -571,5 +602,75 @@ def register() -> None:
                 completion=text,
                 usage=usage,
             )
+
+        async def _generate_with_tools(self, input: Any, tools: Any) -> Any:
+            # Lazy-import so plain ``import plugins.petri_audit.
+            # claude_cli_provider`` does not pay the mcp library +
+            # bridge package cold-start cost when tools aren't used.
+            from plugins.petri_audit.mcp_bridge import (
+                BRIDGE_SERVER_NAME,
+                extract_tool_calls,
+                prepare_bridge,
+                release_bridge,
+            )
+
+            invocation = prepare_bridge(tools)
+            try:
+                argv = build_claude_cli_argv(
+                    binary=self._binary,
+                    model_name=self.model_name,
+                    mcp_config_path=str(invocation.mcp_config_json),
+                    allowed_tools=invocation.allowed_tools,
+                    disable_builtin_tools=True,
+                )
+                prompt = serialise_messages_to_prompt(input)
+                stdout, stderr, returncode = await _run_claude_subprocess(
+                    argv, prompt, self._timeout_s
+                )
+                events = parse_stream_json_events(stdout)
+                # Order matters here: when the subprocess truly fails
+                # (no events at all), surface the exit code first;
+                # ``_is_expected_tool_use_boundary`` requires a terminal
+                # ``result`` event so its check is meaningless when
+                # ``events`` is empty.
+                if returncode != 0 and (not events or not _is_expected_tool_use_boundary(events)):
+                    raise ClaudeCliInvocationError(f"claude exited {returncode}: {stderr[:400]!r}")
+                if not events:
+                    raise ClaudeCliInvocationError(
+                        f"claude stdout had no stream-json events. stderr: {stderr[:400]!r}"
+                    )
+                text = _extract_assistant_text(events)
+                tool_calls = extract_tool_calls(events, server_name=BRIDGE_SERVER_NAME)
+                # ``stop_reason="tool_calls"`` when claude emitted any
+                # tool_use blocks. Otherwise fall back to CSA-1's
+                # end_turn / stop_sequence mapping. Tool_calls is the
+                # inspect_ai-blessed sentinel for the solver's
+                # tool-dispatch path.
+                stop_reason = "tool_calls" if tool_calls else _extract_stop_reason(events)
+                usage = _build_usage(_extract_usage(events))
+                choice = ChatCompletionChoice(
+                    message=ChatMessageAssistant(
+                        content=text,
+                        tool_calls=tool_calls or None,
+                    ),
+                    stop_reason=stop_reason,
+                )
+                return ModelOutput(
+                    model=self.model_name,
+                    choices=[choice],
+                    completion=text,
+                    usage=usage,
+                )
+            finally:
+                release_bridge(invocation)
+
+    def _build_usage(usage_dict: dict[str, int]) -> Any:
+        return ModelUsage(
+            input_tokens=usage_dict["input_tokens"],
+            output_tokens=usage_dict["output_tokens"],
+            total_tokens=usage_dict["input_tokens"] + usage_dict["output_tokens"],
+            input_tokens_cache_read=usage_dict["cache_read_input_tokens"] or None,
+            input_tokens_cache_write=usage_dict["cache_creation_input_tokens"] or None,
+        )
 
     globals()["ClaudeCliAPI"] = ClaudeCliAPI

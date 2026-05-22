@@ -47,6 +47,189 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.33] - 2026-05-22
+
+> Codex Phase 3 OAuth polling lands. paperclip ``fetchCodexQuota``
+> 1:1 Python port replaces the Phase 3 placeholder — Codex side now
+> has real WHAM (``chatgpt.com/backend-api/wham/usage``) admission
+> control, parity with the Anthropic poller. Path A (Codex
+> ``app-server`` JSON-RPC) deferred to a later PR.
+
+### Added
+
+- **LQ-Codex-WHAM — Codex OAuth usage polling (paperclip ``fetchCodexQuota`` port)**.
+  Replaces the placeholder ``fetch_codex_usage`` from Phase 3 with a
+  Python 1:1 port of paperclip's
+  ``packages/adapters/codex-local/src/server/quota.ts:226-279``.
+  Path B (HTTP) of the 2-path quota scheme: stdlib ``urllib`` GET
+  against ``https://chatgpt.com/backend-api/wham/usage`` with
+  ``Authorization: Bearer <tokens.access_token>`` and optional
+  ``ChatGPT-Account-Id: <tokens.account_id>``. Path A (Codex
+  ``app-server`` JSON-RPC) is explicitly out of scope — left for a
+  future PR if the stateful subprocess proves worth the cost.
+
+  Schema: ``rate_limit.primary_window`` maps to ``CodexUsage.five_hour``
+  (admission gate), ``secondary_window`` maps to ``weekly`` (dashboard
+  only), ``credits`` + ``plan_type`` carried raw. ``reset_at`` is
+  normalised to ISO-8601 regardless of WHAM's number-vs-string
+  shape. ``used_percent`` accepts both 0-100 (current API) and 0-1
+  (legacy) per paperclip's ``normalizeCodexUsedPercent``.
+
+  New :class:`CodexAuthCredentials` dataclass threads the
+  ``(token, account_id)`` pair through the poller →
+  ``fetch_codex_usage`` chain. Both modern (``tokens.access_token``)
+  and legacy (top-level ``accessToken``) auth.json layouts are
+  accepted by :func:`read_codex_oauth_credentials`. The compat shim
+  :func:`read_codex_oauth_token` stays for callers that don't need
+  the account id.
+
+  Same fail-open default as the Anthropic side — a single WHAM
+  hiccup never hardens the lane. ``GEODE_CODEX_OAUTH_POLL_REQUIRED``
+  flips to fail-closed for strict operators;
+  ``GEODE_CODEX_OAUTH_POLL_DISABLED`` bypasses polling entirely.
+
+- **PR-CSA-2 — MCP bridge for paperclip-pattern `claude-cli` provider
+  (auditor tool_use enabled).** Lifts the CSA-1 boundary
+  (`NotImplementedError("tool_use deferred to CSA-2 MCP bridge")`) so
+  the auditor role works through the claude CLI subprocess path.
+  Without this the subscription audit can only run the judge role
+  through `claude-cli/`; the auditor still falls back to raw-SDK OAuth
+  and hits 100% 429 enforcement on Claude Max OAuth tokens. **신규
+  sub-package** `plugins/petri_audit/mcp_bridge/` (5 modules, ~1,100
+  LOC of production code + ~1,400 LOC of tests):
+  * `tool_translator.py` — `inspect_ai.ToolInfo` →
+    `mcp.types.Tool` schema conversion via `ToolParams.model_dump(
+    exclude_none=True, by_alias=True)`. Round-trip JSON serialiser
+    so the bridge subprocess can re-hydrate without importing
+    inspect_ai (cold-start matters — claude waits on the MCP
+    `initialize` handshake before sending the prompt).
+  * `bridge_server.py` — stdio MCP server entry point spawned by
+    claude CLI as `python -m plugins.petri_audit.mcp_bridge.bridge_server`.
+    Reads tool schemas from `$GEODE_AUDIT_BRIDGE_TOOLS_JSON`; advertises
+    them via `tools/list`; returns a no-exec sentinel from `tools/call`
+    that should never fire under the provider's `--max-turns 1`
+    boundary.
+  * `lifecycle.py` — per-`generate()` tempdir orchestration
+    (`prepare_bridge` / `release_bridge`), `--mcp-config` JSON shape
+    (`{"mcpServers": {"bridge": {"command": sys.executable, "args":
+    [...], "env": {...}}}}`), and `mcp__bridge__<tool>` prefix
+    handling. Each call gets its own `/tmp/geode-audit-bridge-<random>/`
+    so parallel inspect_ai samples never race; `GEODE_AUDIT_BRIDGE_KEEP_TEMP=1`
+    opts into preservation for triage.
+  * `stream_parser_ext.py` — `tool_use` content_block accumulator
+    that folds `input_json_delta` partials across events, builds
+    `inspect_ai.tool.ToolCall(id, function, arguments, parse_error,
+    type="function")`, and strips the `mcp__bridge__` prefix from
+    function names so inspect_petri's tool dispatcher matches the
+    bare auditor name (`send_message`, `resume`, etc.).
+  * `__init__.py` — public surface re-exports.
+  **`claude_cli_provider.py` wiring** — `generate(tools=[...])` now
+  routes through `_generate_with_tools`: lazy-imports the bridge
+  package, calls `prepare_bridge(tools)`, passes
+  `mcp_config_path` + `allowed_tools` to `build_claude_cli_argv` (the
+  CSA-1 forward-compat hooks were already plumbed for this), parses
+  the response with both `_extract_assistant_text` AND
+  `extract_tool_calls`, returns `ChatMessageAssistant(content=text,
+  tool_calls=tool_calls or None)` with `stop_reason="tool_calls"`
+  when any tool_use blocks present. `release_bridge` runs in `finally`
+  even on subprocess failure (pinned by test). **Audit-extra dep
+  bump** — `pyproject.toml` adds `mcp>=1.0.0` to the `[audit]` extra
+  so `uv sync --extra audit` installs the bridge's stdio server
+  library; default `uv sync` is unaffected. **61 new mock tests**
+  (`test_mcp_bridge_translator` x15, `test_mcp_bridge_lifecycle`
+  x17, `test_mcp_bridge_server` x9 — in-process via
+  `mcp.shared.memory.create_connected_server_and_client_session`,
+  `test_stream_parser_tool_use` x18, `test_claude_cli_provider`
+  CSA-2 round-trip x2) + 1 live smoke
+  (`test_live_claude_cli_tools.py`, `@pytest.mark.live` + claude
+  binary on PATH) that verifies the load-bearing assumption — claude
+  CLI's `--max-turns 1` stops at the `stop_reason=tool_use` boundary
+  so the bridge handler never executes. Tier-1 + Tier-2 + Tier-3
+  conformance test exercises the real 9-tool `auditor_tools(
+  target_tools="synthetic")` schema translation (catches inspect_petri
+  ↔ MCP schema drift on every PR). Quality gates clean (ruff + ruff
+  format --check + mypy + 61/61 mock pytest). **Operator surface**:
+  no config change required — once CSA-3 flips the manifest's
+  `inspect_prefix = "claude-cli"`, the auditor role automatically
+  consumes Claude Max subscription quota (judge role already works
+  via CSA-1).
+
+### Changed
+
+- **PR-CSA-3 — petri_audit manifest flip: OAuth routes through paperclip
+  subprocess providers (claude-cli / codex-cli).** The
+  `[petri.adapter.anthropic.claude-cli] inspect_prefix` flipped from
+  `"claude-code"` → `"claude-cli"`; same flip on the openai side from
+  `"openai-codex"` → `"codex-cli"`. The two backend modules
+  (`adapters/claude_cli_backend.py`, `adapters/openai_codex_oauth.py`)
+  now register the CSA-1 / CSA-1b providers in their `register()`
+  callbacks instead of the legacy raw-SDK provider's `register()`. The
+  `is_oauth_routed` predicate (used by cost zeroing) recognises all
+  four prefixes (`claude-code/`, `claude-cli/`, `openai-codex/`,
+  `codex-cli/`) for back-compat with archived `.eval` ids. The
+  same-provider bias detector treats both prefix families as the same
+  underlying provider for the self-preference correction. **Net
+  effect** — `source="claude-cli"` / `source="openai-codex"` in
+  `~/.geode/config.toml` now actually pick the paperclip subprocess
+  providers (CSA-1 + CSA-1b + CSA-2 MCP bridge for auditor
+  tool_use). The raw-SDK paths (`claude_code_provider` /
+  `codex_provider`) stay loaded for the OAuth metadata + availability
+  probes that don't depend on which `ModelAPI` runs inference. This
+  is the routing change that unblocks the autoresearch real-mode
+  gen-0 baseline (BLOCKED on 100% 429 enforcement when going through
+  raw-SDK OAuth). Pinned by updates to
+  `tests/plugins/petri_audit/test_manifest.py`, `test_registry.py`,
+  `test_models.py`, `test_oauth_judge.py`, `test_cli_audit.py`
+  (string-replacement of the old prefixes in routing expectations).
+  Quality gates clean (ruff + ruff format + mypy CI-scope + full
+  petri_audit pytest 220+ green).
+
+- **judge-dims rename + 7-axis metric drift sync.** Renamed
+  ``plugins/petri_audit/judge_dims/geode_5axes.yaml`` →
+  ``geode_judge_subset.yaml`` and ``geode_5axes_split.yaml`` →
+  ``geode_judge_subset_split.yaml``. The old name "5axes" suggested a
+  dim count of 5; the file actually carries 22 dims (5 *operational
+  axes* × multiple dims per axis). The new name reflects role: a
+  GEODE-curated subset of inspect-petri's default-38 dim catalog.
+  CLI flag default flipped from ``--dim-set 5axes`` to
+  ``--dim-set subset`` (clean break — no alias kept; muscle memory
+  ratchets to the new name in one step). ``BUILTIN_DIM_SETS`` key,
+  ``DEFAULT_DIM_SET``, ``AutoresearchConfig.dim_set`` default,
+  ``DIM_SET_NAME`` constant, and the typer + argparse + slash
+  parsers all flipped in lockstep. Six metric drift fixes ride
+  along on the same sweep so reader-facing surfaces stop lying:
+  ``HookEvent`` count ``58 → 69`` (GEODE.md ×2, CLAUDE.md, AGENTS.md,
+  README ×2 [body + shield URL], README.ko ×2, hook-system.md +
+  .en.md, domain-free-core-audit.md ×3 — measured via
+  ``len(list(HookEvent))``); ``ToolRegistry`` ``61 → 57`` and
+  README badge ``53 → 57`` (GEODE.md ×3, AGENTS.md, README +
+  README.ko body + shield URL — measured via
+  ``len(load_all_tool_definitions())``); judge-dim count
+  ``17 → 22`` (judge_dims/__init__.py, cli_audit.py typer help,
+  runner.py docstring + comment ×2, bias.py, test_runner.py
+  assertion, scripts/petri_analyze.py, autoresearch/program.md ×4,
+  README.md auto-research line, critic.md / pilot.md prompts);
+  inspect-petri default count ``36 → 38`` (runner.py ×5,
+  judge_dims/__init__.py ×2, test_runner.py — measured via
+  ``find inspect_petri/_judge/dimensions -name '*.md' | wc -l``);
+  seed count ``13 → 22`` (AGENTS.md — measured via ``find
+  plugins/petri_audit/seeds -type f | wc -l``); memory-tier
+  docstring ``3-tier → 5-tier`` (core/memory/context.py ×3,
+  core/tools/memory_tools.py, tests/test_context_assembler.py —
+  matches the existing 5-tier comment block in
+  ``ContextAssembler.assemble``); AgenticLoop ``50-round limit
+  → no round limit (time-budget controlled)`` (AGENTS.md —
+  matches ``DEFAULT_MAX_ROUNDS = 0``). ``geode_judge_subset_split.yaml``
+  header comment ``Identical dim set`` corrected to acknowledge
+  the 3 PR-0 context-management dict entries are intentionally
+  legacy-only (split-mode scores 19, legacy-mode scores 22).
+  Touches ~40 files + 2 file renames; no behavioural change.
+  Historical CHANGELOG entries and dated docs/audits / docs/plans
+  retain their original counts as snapshots; only path references
+  inside them are mass-rewritten so links stay valid post-rename.
+
+
+
 ## [0.99.32] - 2026-05-22
 
 > LaneQueue 5-phase plan completion + Codex parity. Phase 3
@@ -373,6 +556,7 @@ functional change.
   inspect_prefix` flip + `to_inspect_model` router 의 `source="openai-codex"`
   → `codex-cli` 변환) 은 CSA-3 (MCP bridge 후) 로 deferred — CSA-1 과 묶어서
   안전하게 점진 롤아웃.
+
 - **PR-CSA-1 — paperclip-pattern claude-cli provider (text-only, judge role).**
   Pattern B subscription audit 의 OAuth raw-SDK 경로가 100% 429 enforcement
   맞는 진단 (trace-68931.log: 27/27 requests 429, retry-after 770 sec) 후

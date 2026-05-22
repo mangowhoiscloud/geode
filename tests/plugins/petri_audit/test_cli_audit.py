@@ -42,7 +42,8 @@ def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.exit_code == 0, result.output
     assert "Petri audit" in result.output
     assert "inspect eval inspect_petri/audit" in result.output
-    assert "judge=claude-code/claude-haiku-4-5-20251001" in result.output
+    # CSA-3 flip — was claude-code/, now claude-cli/.
+    assert "judge=claude-cli/claude-haiku-4-5-20251001" in result.output
     assert "target=geode/claude-opus-4-7" in result.output
     assert "seed_instructions=tags:sycophancy" in result.output
     assert "dry-run" in result.output.lower()
@@ -82,7 +83,7 @@ def test_slash_parser_parses_short_and_long_flags() -> None:
     assert ns.seeds == 2
     assert ns.max_turns == 4
     assert ns.tags == "self_preservation"
-    assert ns.dim_set == "5axes"  # default — pruned 17-dim set
+    assert ns.dim_set == "subset"  # default — pruned 22-dim set
     assert ns.cache is False
     assert ns.dry_run is True
     assert ns.yes is True

@@ -90,15 +90,12 @@ def test_list_audit_models_includes_each_provider() -> None:
     # subscription keychain entry is present, or ``anthropic/`` when
     # not. Accept either form (same precedent as the gpt-5 OAuth path).
     assert any(
-        i.startswith("anthropic/claude-") or i.startswith("claude-code/claude-")
-        for i in inspect_ids
+        i.startswith("anthropic/claude-") or i.startswith("claude-cli/claude-") for i in inspect_ids
     )
     # PR #6 — gpt-* now resolves to ``openai-codex/`` when a token is
     # available, or ``openai/`` when not. Accept either form so the
     # test passes in both environments.
-    assert any(
-        i.startswith("openai/gpt-") or i.startswith("openai-codex/gpt-") for i in inspect_ids
-    )
+    assert any(i.startswith("openai/gpt-") or i.startswith("codex-cli/gpt-") for i in inspect_ids)
     assert any(i.startswith("geode/glm-") for i in inspect_ids)
 
 
@@ -122,7 +119,7 @@ def test_claude_oauth_explicit_use_oauth_wins(monkeypatch: pytest.MonkeyPatch) -
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "api_key", raising=False)
-    assert to_inspect_model("claude-opus-4-7", use_oauth=True) == "claude-code/claude-opus-4-7"
+    assert to_inspect_model("claude-opus-4-7", use_oauth=True) == "claude-cli/claude-opus-4-7"
 
 
 def test_claude_oauth_explicit_off_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,7 +136,7 @@ def test_claude_source_oauth_routes_to_claude_code(monkeypatch: pytest.MonkeyPat
     from core.config import settings
 
     monkeypatch.setattr(settings, "anthropic_credential_source", "oauth", raising=False)
-    assert to_inspect_model("claude-sonnet-4-6") == "claude-code/claude-sonnet-4-6"
+    assert to_inspect_model("claude-sonnet-4-6") == "claude-cli/claude-sonnet-4-6"
 
 
 def test_claude_source_api_key_routes_to_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,7 +163,7 @@ def test_claude_source_auto_prefers_oauth_when_keychain_present(
     monkeypatch.setattr(settings, "anthropic_credential_source", "auto", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: True)
-    assert to_inspect_model("claude-opus-4-7") == "claude-code/claude-opus-4-7"
+    assert to_inspect_model("claude-opus-4-7") == "claude-cli/claude-opus-4-7"
 
     monkeypatch.setattr(claude_cli_backend, "is_available", lambda: False)
     assert to_inspect_model("claude-opus-4-7") == "anthropic/claude-opus-4-7"
@@ -183,7 +180,7 @@ def test_gpt_source_oauth_routes_to_codex(monkeypatch: pytest.MonkeyPatch) -> No
     from core.config import settings
 
     monkeypatch.setattr(settings, "openai_credential_source", "oauth", raising=False)
-    assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
+    assert to_inspect_model("gpt-5.5") == "codex-cli/gpt-5.5"
 
 
 def test_gpt_source_api_key_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -31,7 +31,7 @@ LLM judge 는 동일 family 의 model 의 output 의 의 token 분포 / phrasing
 
 ## 3. 본 polarity 분류 — 17 dim 의 적용 방향
 
-`plugins/petri_audit/judge_dims/geode_5axes.yaml` 의 17 dim 의 polarity:
+`plugins/petri_audit/judge_dims/geode_judge_subset.yaml` 의 17 dim 의 polarity:
 
 ### Harm dims (15) — `raw / (1 - factor)` 로 inflate (under-score 보정)
 

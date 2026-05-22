@@ -130,7 +130,7 @@ class AutoresearchConfig(BaseModel):
     sources to ``--use-oauth`` for the audit subprocess."""
     seed_limit: Annotated[int, Field(ge=1, le=1000)] = 10
     seed_select: str = "plugins/petri_audit/seeds"
-    dim_set: str = "5axes"
+    dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
 
 

@@ -33,10 +33,11 @@ do it. Cross-cutting changes require reading all related modules.
 
 The agentic loop. `while(tool_use)` primitive that drives every turn.
 
-- `loop/agent_loop.py` — `AgenticLoop`. 50-round limit, 5 termination paths
-  (`model_action_required`, `user_clarification_needed`, etc.).
-  Auto-escalation was removed in v0.90.0. The model itself emits the
-  termination signal.
+- `loop/agent_loop.py` — `AgenticLoop`. No round limit by default
+  (`DEFAULT_MAX_ROUNDS = 0` → unlimited; time-budget controlled),
+  5 termination paths (`model_action_required`,
+  `user_clarification_needed`, etc.). Auto-escalation was removed in
+  v0.90.0. The model itself emits the termination signal.
 - `system_prompt.py` — `build_system_prompt()`. Inserts the
   `__GEODE_PROMPT_CACHE_BOUNDARY__` marker between STATIC and DYNAMIC blocks.
   Since v0.93 the DYNAMIC block is wrapped in `<dynamic_context>` XML.
@@ -66,7 +67,7 @@ adding a provider, or touching cache/tool-choice/streaming behaviour.
 
 ### `core/tools/`
 
-61 tools. Deferred-loading registry.
+57 tools. Deferred-loading registry.
 
 - `base.py:35` — `Tool` Protocol.
 - `registry.py:209-218` — `ALWAYS_LOADED_TOOLS` frozenset (6 tools).
@@ -98,7 +99,7 @@ absolute token guard.
 
 ### `core/hooks/`
 
-58 lifecycle events across 14 categories.
+69 lifecycle events across 14 categories.
 
 - `system.py:28` — `HookEvent` enum.
 - `system.py:200` — `HookSystem` class. Three trigger modes:
@@ -169,10 +170,12 @@ Slack / Discord / Telegram adapters. Lane queue concurrency.
 Petri × GEODE alignment audit (v0.92+).
 
 - `cli_audit.py` — `geode audit` Typer wrapper.
-- `seeds/` — 13 GEODE-specific seeds across 7 categories (autonomy,
-  calibration, compute_use, efficiency, exploratory, reasoning, research).
-- `judge_dims/` — judge dimension catalog. Default `geode_5axes` (17 dim) or
-  `full` (38 dim).
+- `seeds/` — 22 GEODE-specific seeds organised across 3 tiers
+  (critical / auxiliary / info), spanning autonomy, calibration,
+  compute_use, efficiency, exploratory, reasoning, research.
+- `judge_dims/` — judge dimension catalog. Default `subset`
+  (`geode_judge_subset.yaml`, 22 dim = 19 default-38 string subset +
+  3 PR-0 context-management JudgeDimension dicts) or `full` (38 dim).
 - `runner.py`, `audit_mode.py`, `judge_schema.py`, `optimize.py`.
 
 ## Workflow constraints

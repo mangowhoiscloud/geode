@@ -54,7 +54,7 @@ def test_autoresearch_defaults_match_train_module() -> None:
     assert a.source == "auto"  # B1
     assert a.seed_limit == 10
     assert a.seed_select == "plugins/petri_audit/seeds"
-    assert a.dim_set == "5axes"
+    assert a.dim_set == "subset"
     assert a.max_turns == 10
     # PR-MINIMAL-2: per-component fallback_to_payg removed
     assert not hasattr(a, "fallback_to_payg")

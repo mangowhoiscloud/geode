@@ -237,8 +237,13 @@ def is_oauth_routed(inspect_id: str) -> bool:
     The cost estimator and audit-report renderer use this to zero out
     the per-token cost line for judge / auditor calls that hit ChatGPT
     Plus or Claude subscription quota instead of the PAYG endpoint.
+
+    CSA-3 (2026-05-22) — the OAuth-routed prefixes are now ``claude-cli/``
+    and ``codex-cli/`` (paperclip subprocess providers); the older
+    ``claude-code/`` and ``openai-codex/`` prefixes stay recognised
+    for back-compat with already-archived eval IDs.
     """
-    return inspect_id.startswith(("openai-codex/", "claude-code/"))
+    return inspect_id.startswith(("openai-codex/", "claude-code/", "claude-cli/", "codex-cli/"))
 
 
 def to_inspect_target(geode_id: str | None) -> str:

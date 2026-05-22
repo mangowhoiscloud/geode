@@ -33,13 +33,13 @@ _AUDIT_INSTALLED = importlib.util.find_spec("inspect_ai") is not None
 
 
 def test_to_inspect_model_uses_oauth_when_token_present() -> None:
-    """Auto-detect: token resolves → ``openai-codex/<model>``."""
+    """Auto-detect: token resolves → ``codex-cli/<model>`` (CSA-3 flip)."""
     from plugins.petri_audit.models import to_inspect_model
 
     with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True):
-        assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
-        assert to_inspect_model("gpt-5.4-mini") == "openai-codex/gpt-5.4-mini"
-        assert to_inspect_model("gpt-5.3-codex") == "openai-codex/gpt-5.3-codex"
+        assert to_inspect_model("gpt-5.5") == "codex-cli/gpt-5.5"
+        assert to_inspect_model("gpt-5.4-mini") == "codex-cli/gpt-5.4-mini"
+        assert to_inspect_model("gpt-5.3-codex") == "codex-cli/gpt-5.3-codex"
 
 
 def test_to_inspect_model_falls_back_to_per_token_without_token() -> None:
@@ -61,7 +61,7 @@ def test_to_inspect_model_use_oauth_true_forces_route() -> None:
     from plugins.petri_audit.models import to_inspect_model
 
     with patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=False):
-        assert to_inspect_model("gpt-5.5", use_oauth=True) == "openai-codex/gpt-5.5"
+        assert to_inspect_model("gpt-5.5", use_oauth=True) == "codex-cli/gpt-5.5"
 
 
 def test_to_inspect_model_use_oauth_false_keeps_per_token() -> None:
@@ -100,8 +100,9 @@ def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
         patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True),
         patch("plugins.petri_audit.adapters.claude_cli_backend.is_available", return_value=True),
     ):
+        # CSA-3 flip — was claude-code/, now claude-cli/.
         assert (
-            to_inspect_model("claude-haiku-4-5-20251001") == "claude-code/claude-haiku-4-5-20251001"
+            to_inspect_model("claude-haiku-4-5-20251001") == "claude-cli/claude-haiku-4-5-20251001"
         )
 
 
@@ -227,8 +228,9 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "judge=openai-codex/gpt-5.5" in joined
-    assert "auditor=claude-code/claude-sonnet-4-6" in joined
+    # CSA-3 — flipped to paperclip subprocess prefixes.
+    assert "judge=codex-cli/gpt-5.5" in joined
+    assert "auditor=claude-cli/claude-sonnet-4-6" in joined
 
 
 def test_run_audit_no_oauth_flag_forces_per_token() -> None:
