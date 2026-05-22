@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.36] - 2026-05-23
+
 ### Fixed
 
 - **PR-MIC (Model Identity Cleanup) — drift_sync label + ack purge boost
