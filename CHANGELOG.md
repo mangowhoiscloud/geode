@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.29] - 2026-05-22
+
+> co-scientist port sprint completion (CSP-1 ~ CSP-6). Audit gaps
+> §1-A (Supervisor) / §1-B (literature) / §1-D (iteration) / §1-L
+> (Jaccard) all closed. arXiv:2502.18864 paper-fidelity restored on
+> the LLM-self-improving-loop domain (PubMed/INDRA → arXiv/seed_pool
+> domain-shift, with intra-corpus grounding as the INDRA analogue).
+> 6 feature PRs landed in one session: #1456 (toolkit infra), #1458
+> (arxiv tools), #1459 (Generator+Critic grounding), #1460 (Supervisor),
+> #1461 (iteration loop), #1463 (anti-convergence Jaccard). Sources
+> at `mango-wiki/vault/projects/geode/synthesis/coscientist-port-audit-2026-05-22.md`
+> + `coscientist-csp2-grounding-audit-2026-05-22.md`.
+
 ### Added
 
 - **Evolver anti-convergence Jaccard guard (CSP-6)** — Hoisted
