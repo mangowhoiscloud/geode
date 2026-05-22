@@ -548,15 +548,21 @@ def _build_audit_command() -> list[str]:
        credentials). ``api_key`` explicitly opts into PAYG.
     """
     cfg = _get_autoresearch_config()
-    target_model = cfg.target_model or _settings_model()
-    judge_model = cfg.judge_model or _settings_model()
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
+    # SoT alignment (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
+    # in ``~/.geode/config.toml`` is the canonical source. Only forward
+    # the explicit ``[autoresearch].target_model`` / ``.judge_model``
+    # override when the operator pinned one; otherwise omit the argv so
+    # the runner falls through to the petri-role config (registry's
+    # step 2 of the binding resolution order). This keeps the outer
+    # loop's role bindings consistent with standalone ``geode audit``
+    # invocations.
+    if cfg.target_model:
+        argv += ["--target", cfg.target_model]
+    if cfg.judge_model:
+        argv += ["--judge", cfg.judge_model]
     argv += [
-        "--target",
-        target_model,
-        "--judge",
-        judge_model,
         "--seed-select",
         _resolve_seed_select(),
         "--seeds",

@@ -515,8 +515,8 @@ def confirm_or_abort(cost_label: str, *, yes: bool) -> bool:
 
 def run_audit(
     *,
-    judge: str,
-    auditor: str,
+    judge: str | None = None,
+    auditor: str | None = None,
     target: str | None = None,
     seeds: int = 1,
     max_turns: int = 10,
@@ -570,6 +570,20 @@ def run_audit(
             assumptions = DEFAULT_TOKEN_ASSUMPTIONS
         else:
             raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
+    # SoT alignment (2026-05-22) — None argv values defer to
+    # ``[self_improving_loop.petri.<role>].model`` via the binding
+    # registry (which consults operator config first, then the legacy
+    # ~/.geode/petri.toml, then the manifest default). Callers that
+    # explicitly pin a model still win — the resolved binding only
+    # fires when the argv slot was omitted.
+    if auditor is None:
+        from plugins.petri_audit.registry import get_binding
+
+        auditor = get_binding("auditor").model
+    if judge is None:
+        from plugins.petri_audit.registry import get_binding
+
+        judge = get_binding("judge").model
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
     inspect_target = to_inspect_target(target)

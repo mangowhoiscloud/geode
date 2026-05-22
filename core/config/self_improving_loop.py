@@ -119,30 +119,36 @@ class PetriRoleConfig(BaseModel):
 class AutoresearchConfig(BaseModel):
     """autoresearch/train.py runtime knobs.
 
-    PR-MINIMAL-2 (2026-05-21) — three changes:
+    SoT-flip (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
+    in ``~/.geode/config.toml`` is the canonical model SoT for every
+    audit role. The fields below survive as **override-only knobs**: set
+    them when the outer-loop run needs a different model than the
+    operator-pinned ``[petri.<role>]`` baseline (e.g. a one-shot
+    cross-model run while keeping ``geode audit`` standalone defaults
+    intact); leave them ``None`` for the common case and the autoresearch
+    argv builder simply omits ``--target`` / ``--judge``, letting the
+    registry fall through to the per-role config.
 
-    1. ``target_model`` / ``judge_model`` defaults flipped to ``None``
-       so they inherit ``Settings.model`` when unset. Operator edits
-       ``Settings.model`` (or ``/model``) in one place; both audit
-       roles follow. Explicit override still wins.
-    2. ``use_oauth: bool`` → ``source: Source`` (4-enum: auto / api_key
-       / claude-cli / openai-codex). Aligns shape with ``MutatorConfig.source``
-       and ``PetriRoleConfig.source`` — one credential vocabulary across
-       the loop instead of a bool here + Literal elsewhere.
-    3. ``fallback_to_payg`` per-component override removed; the global
-       flag at ``[self_improving_loop] fallback_to_payg`` survives.
+    PR-MINIMAL-2 (2026-05-21) shipped these as inherit-from-``Settings.model``
+    fields; this revision narrows their role to ``[petri.<role>]``
+    override only, removing the asymmetry where the autoresearch path
+    silently bypassed the operator's role config while standalone
+    ``geode audit`` respected it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
     target_model: str | None = None
-    """``None`` → inherit ``Settings.model``. Operator sets this only
-    when the autoresearch audit target must differ from the GEODE
-    primary (e.g. cross-model alignment audit)."""
+    """``None`` → defer to ``[self_improving_loop.petri.target].model``
+    in the operator config (or the manifest default when neither is
+    set). Operators set this here only when the autoresearch run must
+    use a different target than the standalone-audit baseline — e.g.
+    a temporary cross-model probe without editing the per-role config."""
     judge_model: str | None = None
-    """``None`` → inherit ``Settings.model``. Operator sets this only
-    when the audit judge must differ from the GEODE primary."""
+    """``None`` → defer to ``[self_improving_loop.petri.judge].model``.
+    Operators set this here only when the autoresearch judge must
+    differ from the per-role baseline."""
     source: Source = "auto"
     """Credential source for the audit subprocess. ``auto`` =
     subscription-first with PAYG fallback per the global

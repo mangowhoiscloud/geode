@@ -209,6 +209,14 @@ def save_role_override(
     The function is additive — other roles are preserved verbatim. Atomic
     write via a temp-file rename so a crashed editor never leaves a
     partial petri.toml on disk.
+
+    SoT-flip (2026-05-22) — the operator-facing SoT for ``model`` /
+    ``source`` per role is now
+    ``[self_improving_loop.petri.<role>]`` in ``~/.geode/config.toml``.
+    The ``/petri`` slash command uses
+    :func:`save_role_override_to_config_toml` for that path; this
+    function survives as the legacy ``~/.geode/petri.toml`` writer for
+    fixtures + back-compat probes that explicitly target petri.toml.
     """
     target = _resolve_path(path)
     existing = load_user_overrides(target)
@@ -231,6 +239,46 @@ def save_role_override(
         existing.pop(role, None)
 
     _atomic_write_toml(target, existing)
+
+
+def save_role_override_to_config_toml(
+    role: str,
+    *,
+    model: str | None = None,
+    source: str | None = None,
+) -> None:
+    """Persist a role override to ``~/.geode/config.toml`` under
+    ``[self_improving_loop.petri.<role>]`` — the operator-config SoT.
+
+    Closes the read/write asymmetry that made ``/petri model <role> X``
+    a silent no-op when the operator had already pinned a value in
+    ``config.toml``: the new-section value won the read precedence
+    (per :func:`read_role_override`) while the slash command wrote the
+    legacy file, so the operator's intent never reached the audit.
+
+    Empty-string (delete) requests fall back to the legacy
+    ``save_role_override`` write path because the underlying
+    ``_persist_section_updates`` helper does not yet support
+    line-removal of an existing key — keeping the rare clear-axis
+    workflow alive on the legacy file is preferable to a silent
+    no-op or a broken contract.
+    """
+    has_clear_request = (model == "") or (source == "")
+    if has_clear_request:
+        save_role_override(role, model=model, source=source, path=GLOBAL_PETRI_TOML)
+        return
+
+    updates: dict[str, str] = {}
+    if model is not None:
+        updates["model"] = model
+    if source is not None:
+        updates["source"] = source
+    if not updates:
+        return
+
+    from core.cli.commands.self_improving import _persist_section_updates
+
+    _persist_section_updates(f"self_improving_loop.petri.{role}", updates)
 
 
 def clear_overrides(role: str | None = None, *, path: Path | str | None = None) -> None:
