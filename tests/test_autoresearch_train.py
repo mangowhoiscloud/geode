@@ -1184,6 +1184,187 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PR-3 of petri-schema-v2 (2026-05-23) — N=1 critical margin floor
+# ---------------------------------------------------------------------------
+
+
+def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
+    """PR-3 — when ``baseline_sample_count`` shows any critical dim at
+    N=1, the margin floor is widened from 0.05 to 0.20. The bug this
+    closes: N=1 stderr is forced to 0.0 by dim_extractor (ddof=1
+    variance undefined), so the legacy ``max(stderr, 0.05)`` collapses
+    to 0.05 — a tiny fitness Δ of 0.06 would promote against an
+    under-sampled baseline. With the new gate, the same Δ falls below
+    the 0.20 N=1 floor and stays rejected.
+    """
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)  # N=1 → stderr 0
+    # 0.06 improvement (well above 0.05 default floor) on every critical dim.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 1),
+    )
+    assert ok is False
+    assert "0.2000" in reason or "margin 0.20" in reason
+    assert "N=1 critical" in reason
+
+
+def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
+    """Mirror image — when all critical dims have N>=2 samples, the
+    legacy 0.05 floor stays in effect. Otherwise PR-3 would over-tighten
+    the gate for well-sampled baselines."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    # Same 0.06 gain that PR-3 N=1 path rejects above.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 5),
+    )
+    # 0.06 raw gain on every critical dim > 0.05 floor → promote.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_dormant_for_v1_baselines() -> None:
+    """v1 baselines emit no sample_count — the new N=1 gate must stay
+    dormant (legacy behaviour preserved). Without baseline_sample_count
+    kwarg the function falls through to the 0.05 floor."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        # kwarg omitted — no sample_count map.
+    )
+    # 0.06 gain on every critical dim passes legacy 0.05 floor.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_boundary_n2_exact_keeps_legacy_floor() -> None:
+    """Boundary pin — exact N=2 on all critical dims must keep the
+    legacy 0.05 floor. A future ``<= 2`` typo would silently widen the
+    gate at N=2 and break this assertion."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 2),
+    )
+    # N=2 is NOT N=1, so legacy 0.05 floor applies; 0.075 gain promotes.
+    assert ok is True
+
+
+def test_should_promote_n1_gate_fires_when_single_critical_dim_n1() -> None:
+    """Pin — only ONE critical dim at N=1 (rest at N=5) is enough to
+    widen the gate. The detector uses ``any(...)``; a future ``all(...)``
+    rewrite would break this assertion. Mirrors the production case
+    where one slow-to-converge dim drags the whole margin wider."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
+    # Single critical dim at N=1.
+    first_critical = next(iter(CRITICAL_DIMS))
+    sample_count[first_critical] = 1
+    ok, reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=sample_count,
+    )
+    assert ok is False
+    assert "N=1 critical" in reason
+
+
+def test_should_promote_n1_gate_uses_critical_tier_only() -> None:
+    """The N=1 detector walks ``CRITICAL_DIMS`` only — an auxiliary
+    or info dim being N=1 must NOT widen the margin. The conservative
+    gate fires on safety-relevant axes; auxiliaries already have their
+    own squared-penalty path inside ``compute_fitness``."""
+    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # An auxiliary dim is N=1; all critical dims are N>=5.
+    sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
+    sample_count["input_hallucination"] = 1  # auxiliary
+    ok, _reason = _should_promote(
+        current_means,
+        dict.fromkeys(CRITICAL_DIMS, 0.0),
+        baseline_means=baseline_means,
+        baseline_stderr=baseline_stderr,
+        baseline_sample_count=sample_count,
+    )
+    assert ok is True  # auxiliary N=1 does not trigger the wider floor
+
+
+def test_load_baseline_sample_count_reads_v2_raw_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_load_baseline_sample_count`` reads ``raw.sample_count`` from a
+    schema_version=2 baseline."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.4},
+                    "sample_count": {"broken_tool_use": 5},
+                },
+                "axes": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert auto_train._load_baseline_sample_count() == {"broken_tool_use": 5}
+
+
+def test_load_baseline_sample_count_returns_empty_for_v1_baseline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v1 legacy baseline files carry no sample_count — return empty
+    dict so the N=1 detector stays dormant for pre-PR-1 data."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 3.4},
+                "dim_stderr": {"broken_tool_use": 0.4},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert auto_train._load_baseline_sample_count() == {}
+
+
+def test_load_baseline_sample_count_returns_empty_on_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "absent.json")
+    assert auto_train._load_baseline_sample_count() == {}
+
+
+# ---------------------------------------------------------------------------
 # P1a — generation linkage (defects #2, #3, #7, #11 from 2026-05-19 plan)
 # ---------------------------------------------------------------------------
 
