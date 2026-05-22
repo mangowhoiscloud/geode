@@ -497,6 +497,48 @@ class LaneQueue:
             for item in reversed(acquired):
                 item._raw_release(key)
 
+    @contextmanager
+    def acquire_all(
+        self,
+        key: str,
+        lane_names: list[str],
+    ) -> Generator[None, None, None]:
+        """Sync sibling of :meth:`acquire_all_async`.
+
+        Provided so sync call sites (e.g. ``Pipeline._run_phase`` —
+        the seed-generation orchestrator) can compose the OpenClaw
+        hierarchy ``["session", <workload>, "global"]`` without bouncing
+        through ``asyncio.run``. Mirrors the async version's
+        ordering + partial-failure release semantics: lanes are
+        acquired in the order given and released in reverse, so a
+        timeout mid-chain still releases everything already held.
+        """
+        acquired: list[Lane | SessionLane] = []
+        try:
+            for name in lane_names:
+                if name == "session":
+                    if self._session_lane is None:
+                        continue
+                    if not self._session_lane._raw_acquire(key):
+                        raise TimeoutError(f"SessionLane timeout for key '{key}'")
+                    acquired.append(self._session_lane)
+                else:
+                    lane = self._lanes.get(name)
+                    if lane is None:
+                        raise KeyError(f"Lane '{name}' not found")
+                    if not lane._raw_acquire(key):
+                        raise TimeoutError(
+                            f"Lane '{name}' timeout after {lane.timeout_s}s "
+                            f"(max_concurrent={lane.max_concurrent})"
+                        )
+                    acquired.append(lane)
+
+            yield
+
+        finally:
+            for item in reversed(acquired):
+                item._raw_release(key)
+
     def status(self) -> dict[str, Any]:
         """Get status of all lanes."""
         result: dict[str, Any] = {}
