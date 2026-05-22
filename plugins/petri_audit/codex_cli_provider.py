@@ -496,7 +496,18 @@ def register() -> None:
                 model_name=self.model_name,
             )
             prompt = serialise_messages_to_prompt(input)
-            stdout, stderr, returncode = await _run_codex_subprocess(argv, prompt, self._timeout_s)
+            # PR-LQ-Phase3 (2026-05-22) — share the
+            # codex-cli-subagent lane with the self-improving-loop
+            # mutator path so the host ChatGPT-Plus OAuth bucket
+            # sees at most ``DEFAULT_CODEX_CLI_LANE_MAX`` (=2)
+            # concurrent ``codex exec`` subprocesses. Parity with the
+            # Claude-side wiring in ``ClaudeCliAPI.generate``.
+            from core.orchestration.codex_cli_lane import acquire_codex_cli_lane_async
+
+            async with acquire_codex_cli_lane_async(key=f"petri.codex_cli.{self.model_name}"):
+                stdout, stderr, returncode = await _run_codex_subprocess(
+                    argv, prompt, self._timeout_s
+                )
             if returncode != 0:
                 raise CodexCliInvocationError(f"codex exited {returncode}: {stderr[:400]!r}")
             events = parse_codex_jsonl_events(stdout)
