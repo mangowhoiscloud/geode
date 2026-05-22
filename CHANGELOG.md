@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.32] - 2026-05-22
+
+> LaneQueue 5-phase plan completion + Codex parity. Phase 3
+> (paperclip ``/api/oauth/usage`` polling) lands and wires into the
+> ``claude-cli-subagent`` lane, closing the 5-phase plan. Codex side
+> mirrors the full Phase 2 + Phase 3 stack — new
+> ``codex-cli-subagent`` lane with admission helper scaffold (probe
+> placeholder until the ChatGPT-Plus quota endpoint contract is
+> publicly verified).
+
 ### Added
 
 - **LaneQueue Phase 3 — OAuth usage polling (paperclip P1 port) + Codex parity**.
