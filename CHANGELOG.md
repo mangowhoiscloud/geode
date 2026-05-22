@@ -63,11 +63,14 @@ functional change.
   active agent 수 ~2-5 → 누적 ~5 req/sec, (4) invoke-dedup 5-sec window
   + circuit-breaker 가 burst 추가 차단. GEODE audit 는 (1)-(4) 모두 없이
   inspect_ai default 가 즉시 burst → 환경 불일치. **3 fix**:
-  - **FIX-1** `autoresearch/train.py::_build_audit_command` argv 에
-    `--max-connections 1` 추가 — inspect_ai per-provider connection pool
-    10 → 1.
-  - **FIX-2** 같은 argv 에 `--max-samples 1` — per-sample parallelism 도
-    직렬화.
+  - **FIX-1** `plugins/petri_audit/runner.py::build_command` (실제
+    `inspect eval` argv assembly 지점) 에 `--max-connections 1` 추가 —
+    inspect_ai per-provider connection pool 10 → 1. Codex MCP fix-up:
+    초기엔 `autoresearch/train.py::_build_audit_command` 에 추가했으나
+    `geode audit` Typer wrapper 가 unknown option 으로 reject → 한 layer
+    아래로 이동.
+  - **FIX-2** 같은 `build_command` 에 `--max-samples 1` — per-sample
+    parallelism 도 직렬화.
   - **FIX-3** 신규 `core/llm/audit_lane.py` (module-level `Lane(max_
     concurrent=1, timeout_s=900)`, `core.orchestration.lane_queue.Lane`
     재사용) + `run_audit` 의 `subprocess.run` 을 `with acquire_audit_lane
@@ -75,15 +78,18 @@ functional change.
     LaneQueue container 가 standalone CLI 실행시엔 build 안 되므로 module-
     level singleton 패턴 채택.
   Lane timeout (900s) 도달 시 `audit_lane_timeout` journal event 발화 +
-  `RuntimeError("audit lane busy beyond timeout: …")` raise. **9 invariant
-  test** (`tests/test_ol_audit_burst_fix.py`) — argv 4 (max-connections /
-  max-samples / 순서 / source=api_key 시 use-oauth skip 하지만 burst fix
-  유지) + lane 5 (singleton 안정성 / capacity / sequential 직렬화 / 동시
-  acquire blocking 시간 측정 / source-level integration grep). Quality
-  gates clean (ruff + ruff format --check + mypy + 9/9 pytest). Cost:
-  audit wall time 늘어남 (10x parallel → serial). 거래 가치: 429 storm
-  zero + 실제 sample 완료. multi-account AccountPool 도입시 lane capacity
-  knob 으로 ramp 가능.
+  `RuntimeError("audit lane busy beyond timeout: …")` raise. Codex MCP
+  fix-up: lazy init 에 `threading.Lock` (double-checked locking) 추가 —
+  두 thread 가 동시 first-call 시 distinct Lane instance 발급되는 race
+  차단. **10 invariant test** (`tests/test_ol_audit_burst_fix.py`) — argv
+  4 (max-connections / max-samples / 순서 / outer `geode audit` argv
+  에는 안 들어가야 함) + lane 6 (singleton 안정성 / capacity / sequential
+  직렬화 / 동시 acquire blocking 시간 측정 / 8-thread lazy-init race
+  thread-safety / source-level integration grep). Quality gates clean
+  (ruff + ruff format --check + mypy + 10/10 pytest). Cost: audit wall
+  time 늘어남 (10x parallel → serial). 거래 가치: 429 storm zero + 실제
+  sample 완료. multi-account AccountPool 도입시 lane capacity knob 으로
+  ramp 가능.
 
 
 - **PR-OL-OAUTH-COUNT-TOKENS — Claude OAuth count_tokens 401 fallback.**

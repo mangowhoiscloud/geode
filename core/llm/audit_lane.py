@@ -51,6 +51,7 @@ moves.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -75,21 +76,30 @@ truly-stuck audit hides the problem from operators."""
 
 
 _AUDIT_LANE: Lane | None = None
+_AUDIT_LANE_INIT_LOCK = threading.Lock()
+"""Codex MCP catch (PR-OL-AUDIT-BURST-FIX fix-up): double-checked
+locking around lazy init. Two concurrent first-callers could both
+observe ``_AUDIT_LANE is None`` and create distinct ``Lane``
+instances — defeating the very serialisation this module exists for."""
 
 
 def get_audit_lane() -> Lane:
     """Return the singleton audit lane, lazily initialised.
 
-    Exposed for tests that need to inspect ``lane.stats`` or
-    ``lane.get_active()`` after a series of acquires.
+    Thread-safe via double-checked locking (see
+    :data:`_AUDIT_LANE_INIT_LOCK`). Exposed for tests that need to
+    inspect ``lane.stats`` or ``lane.get_active()`` after a series of
+    acquires.
     """
     global _AUDIT_LANE
     if _AUDIT_LANE is None:
-        _AUDIT_LANE = Lane(
-            name=AUDIT_LANE_NAME,
-            max_concurrent=1,
-            timeout_s=AUDIT_LANE_TIMEOUT_S,
-        )
+        with _AUDIT_LANE_INIT_LOCK:
+            if _AUDIT_LANE is None:  # re-check inside lock
+                _AUDIT_LANE = Lane(
+                    name=AUDIT_LANE_NAME,
+                    max_concurrent=1,
+                    timeout_s=AUDIT_LANE_TIMEOUT_S,
+                )
     return _AUDIT_LANE
 
 

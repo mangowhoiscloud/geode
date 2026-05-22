@@ -240,6 +240,21 @@ def build_command(
     _validate_seed_select_path(seed_select)
 
     cmd: list[str] = ["inspect", "eval", "inspect_petri/audit"]
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-1+2 — serialise inspect_ai's
+    # per-provider connection pool (default 10) and per-sample
+    # parallelism (default also 10) down to 1 each. Matches Paperclip's
+    # empirical "1 active subprocess at a time, serial-turn loop"
+    # pattern that keeps Anthropic Max OAuth's ~5 req/sec soft limit
+    # honoured. Without these flags inspect_ai bursts 30 concurrent
+    # POST /v1/messages (auditor + judge + target × 10) → instant 429
+    # storm → 769s retry-after backoff → 17-min timeout with 0 samples.
+    #
+    # Cost: audit wall time scales linearly with sample count instead
+    # of fan-out parallel. Trade: actually completing > 0 samples.
+    # Operators with a multi-account pool (future AccountPool sprint)
+    # can lift these caps; the single-OAuth default stays at 1.
+    cmd.extend(["--max-connections", "1"])
+    cmd.extend(["--max-samples", "1"])
     if seeds > 0:
         cmd.extend(["--limit", str(seeds)])
     cmd.extend(["--model-role", f"auditor={auditor}"])

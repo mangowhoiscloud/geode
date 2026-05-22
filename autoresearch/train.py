@@ -562,30 +562,13 @@ def _build_audit_command() -> list[str]:
         "--live",
         "--yes",
     ]
-    # PR-OL-AUDIT-BURST-FIX (2026-05-22) — inspect_ai's default
-    # `DEFAULT_MAX_CONNECTIONS = 10` (.venv/.../inspect_ai/_util/
-    # constants.py:9) means each provider can fire up to 10 concurrent
-    # `/v1/messages` POSTs. With auditor + judge both on
-    # ``claude-code/...`` provider, peak inflight reaches ~30 — 6x
-    # what Claude Max OAuth tier's "interactive coding" assumption
-    # (~5 req/sec soft limit) tolerates → instant 429 storm.
-    #
-    # Paperclip's multi-agent-on-single-account success pattern is
-    # *serial-per-agent + ~5 active agents* = ~5 req/sec peak. We mirror
-    # that pattern here: serialise inspect_ai's per-provider connection
-    # pool to 1 and limit parallel samples to 1. Total audit wall time
-    # increases proportionally but the audit actually COMPLETES instead
-    # of hitting 17-min timeout with 0 samples.
-    #
-    # Operators with a multi-account pool (future AccountPool work) can
-    # bump these via env overrides; for the single-OAuth common case
-    # (this default) serial matches the subscription's billing model.
-    argv += [
-        "--max-connections",
-        "1",
-        "--max-samples",
-        "1",
-    ]
+    # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-1+2 — burst caps are
+    # plumbed via ``plugins/petri_audit/runner.py::build_command``
+    # (the actual ``inspect eval`` command assembly site). The
+    # ``geode audit`` Typer wrapper does NOT accept these flags
+    # directly — see plugins/petri_audit/cli_audit.py for the surface.
+    # This argv stays unchanged; the inspect_ai connection / sample
+    # caps live one layer down.
     if getattr(cfg, "source", "auto") != "api_key":
         argv.append("--use-oauth")
     return argv
