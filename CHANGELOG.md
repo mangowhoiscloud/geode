@@ -49,6 +49,49 @@ functional change.
 
 ### Added
 
+- **PR-CSA-1b — paperclip-pattern codex-cli provider (text-only, judge role).**
+  Sibling of PR-CSA-1 (claude-cli) on the OpenAI/Codex side. Same paperclip
+  motivation: route OAuth-backed `openai-codex/<model>` traffic through the
+  local `codex` CLI subprocess rather than a raw OpenAI SDK call, so account-
+  scoped rate limiting on the ChatGPT subscription tier behaves like the CLI
+  user expects (no separate audit-quota burst on the Anthropic side, no
+  per-token PAYG billing on the OpenAI side). Pattern verified against
+  `~/workspace/paperclip/packages/adapters/codex-local/src/server/
+  codex-args.ts:53` (argv shape) and `~/workspace/paperclip/packages/adapters/
+  codex-local/src/server/parse.ts` (JSONL event shapes). **신규 inspect_ai
+  프로바이더** `plugins/petri_audit/codex_cli_provider.py::CodexCliAPI` —
+  `@modelapi(name="codex-cli")` 로 등록. Identifier shape `codex-cli/<model>`.
+  매 `generate()` 호출당 `codex exec --json --skip-git-repo-check --model <m>
+  -` subprocess spawn (resume form: `codex exec --json resume <session_id> -`,
+  subcommand position not flag), stdin 으로 ChatMessage 시리얼라이즈 (CSA-1 과
+  동일한 role-header sentinels), stdout per-line JSON events 파싱 → `ModelOutput`
+  빌드. OAuth header / ChatGPT Plus token 은 codex CLI 가 내부 처리 — 우리는
+  stdin/stdout 만 다룸. **CSA-1b boundary**: tool-use 미지원 (`generate(tools=
+  [...])` → `NotImplementedError("tool_use deferred to CSA-2b MCP bridge")`).
+  judge role 처리 충분. CSA-2b 가 MCP bridge 로 auditor 활성화 — codex 는 first-
+  class `codex mcp` / `codex mcp-server` 지원이라 claude 측보다 lower-risk.
+  **신규 모듈 (~470 LOC)** — `_resolve_codex_binary` (env `GEODE_CODEX_CLI_BIN`
+  > PATH), `_resolve_timeout_s` (env `GEODE_CODEX_CLI_TIMEOUT_S`, 기본 600 s),
+  `build_codex_cli_argv` (resume / skip-git-repo-check / bypass-sandbox /
+  reasoning-effort / extra-args 인자 — CSA-2b 까지 forward-compat),
+  `serialise_messages_to_prompt` (CSA-1 과 동일한 sentinel 포맷),
+  `parse_codex_jsonl_events` (forward-compatible — unknown event type 무시),
+  `_extract_agent_message` (`item.completed` + `item.type == "agent_message"`),
+  `_extract_session_id` (`thread.started` 의 `thread_id`), `_extract_stop_reason`
+  (`turn.completed` / `turn.failed` → "stop"), `_extract_usage` (`turn.completed`
+  의 input/cached_input/output 3 필드), `_extract_error` (`error` / `turn.failed`
+  메시지 surface), `_run_codex_subprocess` (asyncio + timeout). **__init__ hook**
+  — `plugins/petri_audit/__init__.py` 의 try/except register 추가 (CSA-1 패턴
+  과 동일, audit extra 부재시 graceful skip). **42 invariant test** — binary
+  x4 / timeout x3 / argv x6 / serialiser x3 / parser x5 / event extractors x10
+  / subprocess x4 / provider+boundary+round-trip x7. Quality gates clean (ruff
+  + ruff format --check + mypy + 42/42 pytest). **Operator surface (CSA-1b)**:
+  manual opt-in via `codex-cli/<model>` identifier in inspect eval argv.
+  Default config 라우팅 (manifest `[petri.adapter.openai.codex-cli]
+  inspect_prefix` flip + `to_inspect_model` router 의 `source="openai-codex"`
+  → `codex-cli` 변환) 은 CSA-3 (MCP bridge 후) 로 deferred — CSA-1 과 묶어서
+  안전하게 점진 롤아웃.
+
 - **Evolver anti-convergence Jaccard guard (CSP-6)** — Hoisted
   `_shingles` / `_jaccard` out of
   `plugins/seed_generation/agents/proximity.py` into the new
