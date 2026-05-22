@@ -338,8 +338,9 @@ class TestTokenTrackerPersistsCacheFields:
     """TokenTracker.record → _persist_usage forwards cache/think to JSONL."""
 
     def test_record_propagates_cache_fields(self, tmp_path: Path):
-        from core.llm import usage_store as us_mod
         from core.llm.token_tracker import TokenTracker
+
+        from core.llm import usage_store as us_mod
 
         # Redirect the singleton at the JSONL boundary so the tracker
         # writes into our tmp dir.
