@@ -49,6 +49,41 @@ functional change.
 
 ### Added
 
+- **PR-CSA-1 — paperclip-pattern claude-cli provider (text-only, judge role).**
+  Pattern B subscription audit 의 OAuth raw-SDK 경로가 100% 429 enforcement
+  맞는 진단 (trace-68931.log: 27/27 requests 429, retry-after 770 sec) 후
+  paperclip pattern (`~/workspace/paperclip/packages/adapters/claude-local/
+  src/server/execute.ts:679` 검증) 차용. **신규 inspect_ai 프로바이더**
+  `plugins/petri_audit/claude_cli_provider.py::ClaudeCliAPI` —
+  `@modelapi(name="claude-cli")` 로 등록. Identifier shape `claude-cli/
+  <model>`. 매 `generate()` 호출당 `claude --print - --output-format
+  stream-json --verbose --model <m> --max-turns 1` subprocess spawn,
+  stdin 으로 ChatMessage 시리얼라이즈 (role-header sentinels), stdout
+  stream-json events 파싱 → `ModelOutput` 빌드. OAuth header 는 claude
+  CLI 가 내부 처리 (`claude-code-20250219`, `oauth-2025-04-20`, session-
+  aware) — 우리는 stdin/stdout 만 다룸. **CSA-1 boundary**: tool-use 미지원
+  (`generate(tools=[...])` → `NotImplementedError("tool_use deferred to
+  CSA-2 MCP bridge")`). judge role 처리 충분 (judge 는 custom tool 안 씀).
+  CSA-2 가 MCP bridge 로 auditor 활성화. **신규 모듈 (~570 LOC)** —
+  `_resolve_claude_binary` (env `GEODE_CLAUDE_CLI_BIN` > PATH),
+  `_resolve_timeout_s` (env `GEODE_CLAUDE_CLI_TIMEOUT_S`),
+  `build_claude_cli_argv` (MCP / allowed-tools / extra-args 인자 — CSA-2
+  까지 forward-compat), `serialise_messages_to_prompt`, `parse_stream_json_
+  events`, `_extract_assistant_text` (delta 우선 + result fallback),
+  `_extract_stop_reason` (end_turn→stop / tool_use→tool_calls 매핑),
+  `_extract_usage` (input/output/cache 4 필드), `_run_claude_subprocess`
+  (asyncio + timeout). **__init__ hook** — `plugins/petri_audit/__init__.py`
+  의 try/except register 추가 (audit extra 부재시 graceful skip).
+  **37 invariant test** — binary x4 / timeout x3 / argv x5 / serialiser x4
+  / parser x4 / text x2 / stop_reason x4 / usage x2 / subprocess x4 /
+  provider+boundary+round-trip x5. Quality gates clean (ruff + ruff
+  format --check + mypy + 37/37 pytest). **Operator surface (CSA-1)**:
+  manual opt-in via `claude-cli/<model>` identifier in inspect eval argv.
+  Default config 라우팅 (manifest `[petri.adapter.anthropic.claude-cli]
+  inspect_prefix`) flip 은 CSA-3 (MCP bridge 후) 로 deferred — 안전한 점진
+  롤아웃.
+
+
 - **Supervisor phase — run-level strategy synthesis (CSP-4)** — New
   Phase 0 of the seed-generation pipeline (paper §3 Supervisor).
   `plugins/seed_generation/agents/supervisor.py` dispatches one Opus
