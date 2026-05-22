@@ -134,17 +134,27 @@ def test_load_missing_dim_means_returns_none(isolated_baseline: Path) -> None:
 # Writer ----------------------------------------------------------------------
 
 
-def test_write_default_omits_3_newer_axes(isolated_baseline: Path) -> None:
-    """Backwards compat — callers that don't pass the 3 newer axes
-    serialize a payload that's identical to the pre-S3 shape."""
+def test_write_default_uses_v2_namespace_layout(isolated_baseline: Path) -> None:
+    """PR-2 of petri-schema-v2 (2026-05-23) — writer always emits the
+    namespace-split v2 layout. Callers that don't pass provenance kwargs
+    still get a valid schema_version=2 payload; ``axes`` slots are
+    explicit ``null`` (not omitted) so the read side can detect
+    "axis absent" without dict-key gymnastics."""
     from autoresearch.train import _write_baseline
 
     _write_baseline({"role_realism": 7.5}, {"role_realism": 0.2})
     payload = json.loads(isolated_baseline.read_text(encoding="utf-8"))
-    assert payload == {
-        "dim_means": {"role_realism": 7.5},
-        "dim_stderr": {"role_realism": 0.2},
-    }
+    assert payload["schema_version"] == 2
+    assert payload["raw"]["dim_means"] == {"role_realism": 7.5}
+    assert payload["raw"]["dim_stderr"] == {"role_realism": 0.2}
+    # No provenance supplied → sample_count + measurement_modality
+    # omitted from raw (None defaults → not serialised).
+    assert "sample_count" not in payload["raw"]
+    assert "measurement_modality" not in payload["raw"]
+    # Axes are explicit null (kept for read-side disambiguation).
+    assert payload["axes"]["ux_means"] is None
+    assert payload["axes"]["admire_means"] is None
+    assert payload["axes"]["bench_means"] is None
 
 
 def test_write_full_4axis_serializes_all(isolated_baseline: Path) -> None:
@@ -158,17 +168,17 @@ def test_write_full_4axis_serializes_all(isolated_baseline: Path) -> None:
         bench_means={"swe_bench_pro_pass": 0.35},
     )
     payload = json.loads(isolated_baseline.read_text(encoding="utf-8"))
-    assert payload == {
-        "dim_means": {"role_realism": 7.5},
-        "dim_stderr": {"role_realism": 0.2},
-        "ux_means": {"success_rate": 0.9},
-        "admire_means": {"pairwise_win_rate": 0.6},
-        "bench_means": {"swe_bench_pro_pass": 0.35},
-    }
+    assert payload["schema_version"] == 2
+    assert payload["raw"]["dim_means"] == {"role_realism": 7.5}
+    assert payload["raw"]["dim_stderr"] == {"role_realism": 0.2}
+    assert payload["axes"]["ux_means"] == {"success_rate": 0.9}
+    assert payload["axes"]["admire_means"] == {"pairwise_win_rate": 0.6}
+    assert payload["axes"]["bench_means"] == {"swe_bench_pro_pass": 0.35}
 
 
 def test_write_empty_axis_dict_is_omitted(isolated_baseline: Path) -> None:
-    """``ux_means={}`` is treated as 'no signal' and omitted (same as None)."""
+    """``ux_means={}`` is treated as 'no signal' (same as None) — the
+    v2 ``axes.ux_means`` slot is explicit null."""
     from autoresearch.train import _write_baseline
 
     _write_baseline(
@@ -178,8 +188,8 @@ def test_write_empty_axis_dict_is_omitted(isolated_baseline: Path) -> None:
         admire_means={"pairwise_win_rate": 0.6},
     )
     payload = json.loads(isolated_baseline.read_text(encoding="utf-8"))
-    assert "ux_means" not in payload
-    assert payload["admire_means"] == {"pairwise_win_rate": 0.6}
+    assert payload["axes"]["ux_means"] is None
+    assert payload["axes"]["admire_means"] == {"pairwise_win_rate": 0.6}
 
 
 # Round-trip ------------------------------------------------------------------

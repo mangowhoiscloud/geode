@@ -103,6 +103,25 @@ def test_find_returns_empty_for_top_k_zero() -> None:
     assert find_worst_regressions(baseline, top_k=0) == []
 
 
+def test_find_worst_regressions_reads_v2_raw_dim_means() -> None:
+    """PR-2 of petri-schema-v2 (2026-05-23) — when ``baseline`` carries
+    ``schema_version=2``, ``dim_means`` lives under ``raw.dim_means``.
+    The function must source from there, not from the top-level
+    ``dim_means`` key (which v2 baselines do not carry)."""
+    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+
+    baseline_v2 = {
+        "schema_version": 2,
+        "raw": {"dim_means": {"d1": 0.5}},
+        "baseline_means": {"d1": 0.9},  # caller-merged input slot
+    }
+    rows = find_worst_regressions(baseline_v2, top_k=5)
+    # Regression detected at raw.dim_means["d1"]=0.5 vs baseline 0.9
+    assert len(rows) == 1
+    assert rows[0].dim == "d1"
+    assert rows[0].regression == 0.4
+
+
 def test_find_skips_improving_dims() -> None:
     """Dims where current >= baseline are excluded — slot focuses on risks."""
     from core.self_improving_loop.rubric_excerpts import find_worst_regressions

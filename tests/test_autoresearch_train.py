@@ -434,7 +434,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    dim_means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
+    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
     assert dim_stderr == {}
@@ -464,7 +464,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, dim_stderr, _audit_s, _total_s = run_audit(dry_run=False)
+    _means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
 
@@ -488,7 +488,7 @@ def test_real_mode_raises_when_summary_json_missing(
 
 
 def test_dry_run_emits_finite_fitness() -> None:
-    dim_means, dim_stderr, audit_seconds, _ = run_audit(dry_run=True)
+    dim_means, dim_stderr, audit_seconds, _, _sc, _mm = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)
     assert dim_stderr == {}
     assert audit_seconds == 0.0
@@ -930,6 +930,179 @@ def test_write_baseline_creates_parent_dirs(
     monkeypatch.setattr(auto_train, "BASELINE_PATH", nested_baseline_path)
     _write_baseline({"broken_tool_use": 3.4}, {"broken_tool_use": 0.4})
     assert nested_baseline_path.is_file()
+
+
+# ---------------------------------------------------------------------------
+# PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 namespace layout
+# ---------------------------------------------------------------------------
+
+
+def test_write_baseline_emits_schema_v2_layout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_write_baseline`` must emit the schema_version=2 namespace shape:
+    top-level meta (``schema_version``, ``session_id``, ``commit``,
+    ``ts_utc``) + ``raw`` namespace (dim_means / dim_stderr /
+    sample_count / measurement_modality / eval_archive / rubric_version)
+    + ``axes`` namespace (ux/admire/bench).
+    """
+    state_dir = tmp_path
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    _write_baseline(
+        {"broken_tool_use": 3.4, "verbose_padding": 2.0},
+        {"broken_tool_use": 0.4, "verbose_padding": 0.0},
+        sample_count={"broken_tool_use": 5, "verbose_padding": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "verbose_padding": "token_count",
+        },
+        eval_archive="/var/folders/fake.eval",
+        session_id="sess-1",
+        commit="abc1234",
+        ux_means={"success_rate": 0.9},
+    )
+    payload = json.loads((state_dir / "baseline.json").read_text())
+    assert payload["schema_version"] == 2
+    assert payload["session_id"] == "sess-1"
+    assert payload["commit"] == "abc1234"
+    assert "ts_utc" in payload
+    raw = payload["raw"]
+    assert raw["dim_means"]["broken_tool_use"] == 3.4
+    assert raw["sample_count"]["broken_tool_use"] == 5
+    assert raw["measurement_modality"]["verbose_padding"] == "token_count"
+    assert raw["eval_archive"] == "/var/folders/fake.eval"
+    assert raw["rubric_version"] == auto_train.PETRI_RUBRIC_VERSION
+    axes = payload["axes"]
+    assert axes["ux_means"] == {"success_rate": 0.9}
+    # admire / bench are None when not supplied
+    assert axes["admire_means"] is None
+    assert axes["bench_means"] is None
+
+
+def test_load_baseline_reads_schema_v2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_load_baseline`` must consume the schema_version=2 layout
+    and return the same (dim_means, dim_stderr, ux, admire, bench)
+    tuple shape as for v1 — backwards compat for downstream callers
+    (``_should_promote`` etc.) that don't know about the namespace
+    split yet."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "sess-v2",
+                "commit": "deadbeef",
+                "ts_utc": "2026-05-23T00:00:00Z",
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.4},
+                    "dim_stderr": {"broken_tool_use": 0.4},
+                    "sample_count": {"broken_tool_use": 5},
+                    "measurement_modality": {"broken_tool_use": "judge_llm"},
+                    "eval_archive": "/var/folders/x.eval",
+                    "rubric_version": "v3-22dim-PR0",
+                },
+                "axes": {
+                    "ux_means": {"success_rate": 0.9},
+                    "admire_means": None,
+                    "bench_means": None,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    assert means == {"broken_tool_use": 3.4}
+    assert stderr == {"broken_tool_use": 0.4}
+    assert ux == {"success_rate": 0.9}
+    assert admire == {}
+    assert bench == {}
+
+
+def test_load_baseline_still_reads_v1_flat_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy v1 baseline.json (no ``schema_version`` key, top-level flat
+    ``{dim_means, dim_stderr, [ux_means]}``) must still load. Pre-PR-2
+    files in the wild stay valid until the next promotion overwrites
+    them in v2 shape."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "dim_means": {"broken_tool_use": 3.4},
+                "dim_stderr": {"broken_tool_use": 0.4},
+                "ux_means": {"success_rate": 0.9},
+            }
+        ),
+        encoding="utf-8",
+    )
+    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    assert means == {"broken_tool_use": 3.4}
+    assert stderr == {"broken_tool_use": 0.4}
+    assert ux == {"success_rate": 0.9}
+    assert admire == {}
+    assert bench == {}
+
+
+def test_write_then_load_round_trip_v2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Write a v2 baseline then load it back. The 5-tuple return signature
+    of ``_load_baseline`` must hold for downstream callers."""
+    baseline_path = tmp_path / "baseline.json"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
+    dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
+    _write_baseline(
+        dim_means,
+        dim_stderr,
+        sample_count={"broken_tool_use": 5, "input_hallucination": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "input_hallucination": "judge_llm",
+        },
+        ux_means={"success_rate": 0.9},
+        session_id="sess-rt",
+        commit="cafef00d",
+    )
+    loaded_means, loaded_stderr, ux, admire, bench = auto_train._load_baseline()
+    assert loaded_means == dim_means
+    assert loaded_stderr == dim_stderr
+    assert ux == {"success_rate": 0.9}
+
+
+def test_resolve_eval_archive_path_returns_none_when_symlink_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_resolve_eval_archive_path`` is best-effort — returns ``None``
+    when ``~/.geode/petri/logs/latest.eval`` does not exist (dry-run /
+    fresh install). No exception."""
+    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", tmp_path / "nope.eval")
+    assert auto_train._resolve_eval_archive_path() is None
+
+
+def test_resolve_eval_archive_path_reads_symlink_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ``latest.eval`` is a symlink, return its target path."""
+    target = tmp_path / "2026-05-22T05-56-42-00-00_audit_T6LMA3.eval"
+    target.write_bytes(b"placeholder")
+    symlink = tmp_path / "latest.eval"
+    symlink.symlink_to(target)
+    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", symlink)
+    resolved = auto_train._resolve_eval_archive_path()
+    assert resolved is not None
+    assert resolved.endswith(target.name)
 
 
 def test_should_promote_bootstraps_when_no_prior_baseline() -> None:

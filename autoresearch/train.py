@@ -503,14 +503,31 @@ from any self-improving-loop driver (autoresearch / seed-generation) so external
 tools can join across the two loops via ``session_id`` + ``gen_tag``."""
 """Per-branch baseline written by the self-improving-loop agent after a promote.
 
-S9 schema (ADR-002 §3 — baseline wrapping removed)::
+PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 layout::
 
-    {"dim_means":  {"broken_tool_use": 3.4, ...},
-     "dim_stderr": {"broken_tool_use": 0.4, ...}}
+    {"schema_version": 2,
+     "session_id":     "<run id>",
+     "commit":         "<git sha>",
+     "ts_utc":         "<ISO 8601>",
+     "raw": {
+        "dim_means":            {dim: float},
+        "dim_stderr":           {dim: float},
+        "sample_count":         {dim: int},     # PR-1 provenance
+        "measurement_modality": {dim: str},     # PR-1 provenance
+        "eval_archive":         "<path>" | null,
+        "rubric_version":       "v3-22dim-PR0",
+     },
+     "axes": {
+        "ux_means":     {field: float} | null,
+        "admire_means": {field: float} | null,
+        "bench_means":  {field: float} | null,
+     }}
 
-Matches Petri's ``core/audit/dim_extractor.extract_dim_aggregates``
-output shape — no FitnessBaseline wrapping layer. Absent file → gate  # slop:keep
-dormant (first run / fresh branch).
+Legacy v1 (pre-PR-2 flat ``{dim_means, dim_stderr, [ux_means],
+[admire_means], [bench_means]}``) is still read by ``_load_baseline``
+for backwards compat. Absent file → gate dormant (first run / fresh  # slop:keep
+branch). Future PR-3/4/5 extend with ``normalized`` / ``fitness`` /
+``audit`` / ``promotion`` namespaces.
 """
 
 
@@ -613,10 +630,26 @@ def run_audit(
     *,
     session_id: str = "",
     gen_tag: str = "",
-) -> tuple[dict[str, float], dict[str, float], float, float]:
+) -> tuple[
+    dict[str, float],
+    dict[str, float],
+    float,
+    float,
+    dict[str, int],
+    dict[str, str],
+]:
     """Invoke a single audit.
 
-    Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds)``.
+    Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds,
+    sample_count, measurement_modality)``.
+
+    PR-2 of petri-schema-v2 (2026-05-23) — pass through the per-dim
+    ``sample_count`` and ``measurement_modality`` fields that
+    ``core/audit/dim_extractor.extract_dim_aggregates`` now emits in
+    the subprocess stdout summary (PR-1 of the cascade). The caller
+    routes them into ``_write_baseline`` so the v2 schema's
+    ``raw.sample_count`` + ``raw.measurement_modality`` namespaces
+    are populated.
 
     G2.fix (2026-05-20) — the evidence return slot was dropped: petri's
     ``.eval`` archive (linked through ``~/.geode/petri/logs/latest.eval``)
@@ -626,8 +659,10 @@ def run_audit(
 
     ``dry_run=True`` skips the subprocess and emits a baseline-flavoured set
     of dim means so the loop scaffolding can be smoke-tested without touching
-    LLM quota / API credits. dry-run returns an empty ``dim_stderr`` so the
-    stability axis falls back to the placeholder constant.
+    LLM quota / API credits. dry-run returns empty ``dim_stderr``,
+    ``sample_count``, and ``measurement_modality`` so the stability axis
+    falls back to the placeholder constant and the v2 schema records
+    no provenance for synthesized data.
 
     ``session_id`` / ``gen_tag`` are forwarded for SessionJournal emission
     (P0b — wrapper_override_dumped / subprocess_started / subprocess_finished
@@ -658,7 +693,9 @@ def run_audit(
         # dry-run synthesises numeric fitness only — no real .eval is
         # produced so there's nothing for downstream readers to extract
         # evidence from; that's fine, they'll fall through to "no signal".
-        return dim_means, {}, audit_seconds, total_seconds
+        # ``sample_count`` and ``measurement_modality`` are empty for the
+        # same reason: synthesised numbers have no provenance.
+        return dim_means, {}, audit_seconds, total_seconds, {}, {}
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
         raise RuntimeError(
@@ -845,8 +882,20 @@ def run_audit(
     summary = json.loads(summary_line)
     dim_means = {k: float(v) for k, v in summary.get("dim_means", {}).items()}
     dim_stderr = {k: float(v) for k, v in summary.get("dim_stderr", {}).items()}
+    # PR-2 (2026-05-23) — pass through PR-1 dim_extractor provenance.
+    # Older subprocess builds without PR-1 omit these keys; default to
+    # empty dicts so callers can detect "no provenance" without crashing.
+    sample_count = {k: int(v) for k, v in summary.get("sample_count", {}).items()}
+    measurement_modality = {k: str(v) for k, v in summary.get("measurement_modality", {}).items()}
     total_seconds = time.time() - started
-    return dim_means, dim_stderr, audit_seconds, total_seconds
+    return (
+        dim_means,
+        dim_stderr,
+        audit_seconds,
+        total_seconds,
+        sample_count,
+        measurement_modality,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1318,17 +1367,22 @@ def _load_baseline() -> tuple[
     multi-axis aggregates); petri's ``.eval`` archive at
     ``~/.geode/petri/logs/latest.eval`` is the single SoT for evidence.
 
-    S3 schema (2026-05-21)::
+    Schema versions (PR-2 of petri-schema-v2, 2026-05-23):
 
-        {"dim_means":     {dim: float, ...},
-         "dim_stderr":    {dim: float, ...},
-         "ux_means":      {field: float, ...},     # S1, ADR-012
-         "admire_means":  {field: float, ...},     # S2, ADR-012
-         "bench_means":   {field: float, ...}}     # S6, ADR-012
+    - **v1 (legacy)** — top-level ``{dim_means, dim_stderr,
+      [ux_means], [admire_means], [bench_means]}`` flat shape. Files
+      pre-PR-2 keep this layout; this reader still consumes them so
+      no migration step is forced.
+    - **v2 (current)** — namespace-split ``{schema_version: 2,
+      session_id, commit, ts_utc, raw: {dim_means, dim_stderr,
+      sample_count, measurement_modality, eval_archive,
+      rubric_version}, axes: {ux_means, admire_means, bench_means}}``.
+      The reader pulls dim_* out of ``raw.`` and the axis dicts out of
+      ``axes.`` while keeping the same return signature.
 
-    Mirrors :func:`core.audit.dim_extractor.extract_dim_aggregates` for
-    ``dim_*`` and :mod:`autoresearch.{ux,admire,bench}_means` for the
-    multi-axis fields.
+    See ``docs/plans/2026-05-23-petri-schema-v2.md`` for the full v2
+    layout (additional ``normalized`` / ``fitness`` / ``audit`` /
+    ``promotion`` namespaces land in PR-3/4/5).
     """
     if not BASELINE_PATH.is_file():
         return None, None, {}, {}, {}
@@ -1336,6 +1390,23 @@ def _load_baseline() -> tuple[
         baseline_payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None, None, {}, {}, {}
+
+    # v2 path: namespace-split — read from ``raw`` + ``axes``.
+    if baseline_payload.get("schema_version") == 2:
+        raw_block = baseline_payload.get("raw") or {}
+        axes_block = baseline_payload.get("axes") or {}
+        raw_means = raw_block.get("dim_means") or {}
+        raw_stderr = raw_block.get("dim_stderr") or {}
+        if not raw_means:
+            return None, None, {}, {}, {}
+        baseline_means = {k: float(v) for k, v in raw_means.items()}
+        baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+        ux_means = _coerce_axis_dict(axes_block.get("ux_means"))
+        admire_means = _coerce_axis_dict(axes_block.get("admire_means"))
+        bench_means = _coerce_axis_dict(axes_block.get("bench_means"))
+        return baseline_means, baseline_stderr, ux_means, admire_means, bench_means
+
+    # v1 (legacy flat) path.
     raw_means = baseline_payload.get("dim_means") or {}
     raw_stderr = baseline_payload.get("dim_stderr") or {}
     if not raw_means:
@@ -1372,6 +1443,37 @@ def _coerce_axis_dict(raw: Any) -> dict[str, float]:
     return out
 
 
+# PR-2 (2026-05-23) — Petri rubric version stamp for baseline.json v2
+# provenance. Bumped alongside ``plugins/petri_audit/judge_dims/`` rubric
+# YAML when the dim set changes; PR 0 (2026-05-18) extended the judge
+# rubric with the post-judge analytics dims, hence ``-PR0``.
+PETRI_RUBRIC_VERSION = "v3-22dim-PR0"
+
+# PR-2 (2026-05-23) — eval archive symlink. Mirrors
+# ``plugins/petri_audit/cli_audit.py:_update_latest_petri_eval_symlink``
+# so baseline.json v2 ``raw.eval_archive`` can resolve the symlink
+# target (the actual immutable .eval archive path) for replay.
+LATEST_EVAL_SYMLINK = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"
+
+
+def _resolve_eval_archive_path() -> str | None:
+    """Return the symlink target of ``latest.eval`` or ``None``.
+
+    PR-2 (2026-05-23) — recorded in baseline.json v2's ``raw.eval_archive``
+    so a future replay step can locate the exact archive the promotion
+    was scored against. ``None`` when the symlink is missing (dry-run,
+    pre-PR-0 install, manual cleanup).
+    """
+    try:
+        if LATEST_EVAL_SYMLINK.is_symlink():
+            return str(LATEST_EVAL_SYMLINK.readlink())
+        if LATEST_EVAL_SYMLINK.is_file():
+            return str(LATEST_EVAL_SYMLINK)
+    except OSError:
+        return None
+    return None
+
+
 def _write_baseline(
     dim_means: dict[str, float],
     dim_stderr: dict[str, float],
@@ -1379,29 +1481,71 @@ def _write_baseline(
     ux_means: dict[str, float] | None = None,
     admire_means: dict[str, float] | None = None,
     bench_means: dict[str, float] | None = None,
+    sample_count: dict[str, int] | None = None,
+    measurement_modality: dict[str, str] | None = None,
+    eval_archive: str | None = None,
+    session_id: str = "",
+    commit: str = "",
 ) -> None:
-    """Persist current audit's aggregates as the new baseline (S3, 2026-05-21).
+    """Persist current audit's aggregates as the new baseline.
 
-    Schema (post-S3) extends the legacy ``{dim_means, dim_stderr}`` with
-    optional ``{ux_means, admire_means, bench_means}`` axes from ADR-012
-    §Decision.2 fitness 다축화. ``None`` axes are omitted from the
-    serialized payload — backwards compat for callers that haven't yet
-    wired the collectors (S1b/S2b/S6b).
+    PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 namespace
+    layout. The legacy v1 flat ``{dim_means, dim_stderr, [ux_means],
+    [admire_means], [bench_means]}`` payload is replaced with a
+    namespace-split shape::
+
+        {"schema_version": 2,
+         "session_id": "<run id>",
+         "commit": "<git sha>",
+         "ts_utc": "<ISO 8601>",
+         "raw": {
+            "dim_means": {dim: float},
+            "dim_stderr": {dim: float},
+            "sample_count": {dim: int},
+            "measurement_modality": {dim: str},
+            "eval_archive": "<path>" | null,
+            "rubric_version": "v3-22dim-PR0",
+         },
+         "axes": {
+            "ux_means":     {field: float} | null,
+            "admire_means": {field: float} | null,
+            "bench_means":  {field: float} | null,
+         }}
+
+    The ``normalized`` / ``fitness`` / ``audit`` / ``promotion``
+    namespaces from the SOT plan land in PR-3/4/5 — this PR establishes
+    the schema_version split + ``raw`` + ``axes`` shape.
 
     Caller decides *when* to write (auto-promote rule vs ``--promote``
-    manual override).
+    manual override) and supplies the new provenance args from
+    ``run_audit``'s return tuple.
     """
+    from datetime import UTC, datetime
+
     BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    baseline_payload: dict[str, Any] = {
+    raw_payload: dict[str, Any] = {
         "dim_means": {k: float(v) for k, v in dim_means.items()},
         "dim_stderr": {k: float(v) for k, v in dim_stderr.items()},
+        "rubric_version": PETRI_RUBRIC_VERSION,
+        "eval_archive": eval_archive,
     }
-    if ux_means:
-        baseline_payload["ux_means"] = {k: float(v) for k, v in ux_means.items()}
-    if admire_means:
-        baseline_payload["admire_means"] = {k: float(v) for k, v in admire_means.items()}
-    if bench_means:
-        baseline_payload["bench_means"] = {k: float(v) for k, v in bench_means.items()}
+    if sample_count:
+        raw_payload["sample_count"] = {k: int(v) for k, v in sample_count.items()}
+    if measurement_modality:
+        raw_payload["measurement_modality"] = {k: str(v) for k, v in measurement_modality.items()}
+    axes_payload: dict[str, Any] = {
+        "ux_means": ({k: float(v) for k, v in ux_means.items()} if ux_means else None),
+        "admire_means": ({k: float(v) for k, v in admire_means.items()} if admire_means else None),
+        "bench_means": ({k: float(v) for k, v in bench_means.items()} if bench_means else None),
+    }
+    baseline_payload: dict[str, Any] = {
+        "schema_version": 2,
+        "session_id": session_id,
+        "commit": commit,
+        "ts_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "raw": raw_payload,
+        "axes": axes_payload,
+    }
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1521,7 +1665,14 @@ def main() -> int:
     )
 
     try:
-        dim_means, dim_stderr, audit_seconds, total_seconds = run_audit(
+        (
+            dim_means,
+            dim_stderr,
+            audit_seconds,
+            total_seconds,
+            sample_count,
+            measurement_modality,
+        ) = run_audit(
             dry_run=args.dry_run,
             session_id=session_id,
             gen_tag=gen_tag,
@@ -1639,17 +1790,26 @@ def main() -> int:
     # P0a — auto-promote + manual override.
     # dry-run emulates data; promoting that would freeze in a synthetic
     # baseline, so the gate is short-circuited.
+    # PR-2 of petri-schema-v2 (2026-05-23) — gather v2 provenance once
+    # so the two promote branches don't drift in argument lists.
+    _baseline_provenance: dict[str, Any] = {
+        "sample_count": sample_count,
+        "measurement_modality": measurement_modality,
+        "eval_archive": _resolve_eval_archive_path(),
+        "session_id": session_id,
+        "commit": commit,
+    }
     if args.dry_run:
         promoted_line = "false (dry-run)"
     elif args.no_promote:
         promoted_line = "false (--no-promote)"
     elif args.promote:
-        _write_baseline(dim_means, dim_stderr)
+        _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
         promoted_line = "true (--promote, manual override)"
     else:
         ok, reason = _should_promote(dim_means, dim_stderr, baseline_means, baseline_stderr)
         if ok:
-            _write_baseline(dim_means, dim_stderr)
+            _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 

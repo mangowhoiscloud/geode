@@ -225,11 +225,18 @@ def _load_baseline_event() -> BundleEvent | None:
             return None
     # `fitness` scalar may or may not be present; if not, summarise
     # dim_means count instead so the event still renders informatively.
+    # PR-2 of petri-schema-v2 (2026-05-23) — schema_version=2 nests
+    # dim_means under ``raw.``; route the count lookup accordingly so
+    # promoted baselines render `dim_means[24]` instead of `dim_means[0]`.
     fitness = data.get("fitness")
     if isinstance(fitness, int | float):
         body_detail = f"fitness={fitness:.4f}"
     else:
-        dim_means = data.get("dim_means") or {}
+        if data.get("schema_version") == 2:
+            raw_block = data.get("raw") or {}
+            dim_means = raw_block.get("dim_means") or {}
+        else:
+            dim_means = data.get("dim_means") or {}
         dim_count = len(dim_means) if isinstance(dim_means, dict) else 0
         body_detail = f"dim_means[{dim_count}]"
     reason = data.get("promote_reason") or data.get("reason") or "promoted"
