@@ -151,30 +151,33 @@ def _update_latest_petri_eval_symlink(archive_path: str) -> None:
 
 
 def audit(
-    judge: str = typer.Option(
-        "claude-haiku-4-5-20251001",
+    judge: str | None = typer.Option(
+        None,
         "--judge",
         "-j",
-        help="Judge model (GEODE id, e.g. claude-sonnet-4-6, gpt-5.4-mini, glm-5).",
+        help="Judge model (GEODE id, e.g. claude-sonnet-4-6, gpt-5.4-mini, glm-5). "
+        "**Omit to fall back to ``[self_improving_loop.petri.judge].model``** "
+        "in ``~/.geode/config.toml`` — the operator-config SoT for the role. "
+        "Explicit argv pins the model for the call's lifetime.",
     ),
-    auditor: str = typer.Option(
-        "claude-opus-4-7",
+    auditor: str | None = typer.Option(
+        None,
         "--auditor",
         "-a",
-        help="Auditor model (GEODE id). Default is the strongest available "
-        "Claude — the auditor's transcript-shaping ability bounds the test's "
-        "signal-to-noise, so the default tracks the flagship rather than "
-        "the cost-optimised pick (operators routing through Claude Max "
-        "subscription pay the same per-token regardless).",
+        help="Auditor model (GEODE id). **Omit to fall back to "
+        "``[self_improving_loop.petri.auditor].model``** in "
+        "``~/.geode/config.toml`` — the operator-config SoT. The auditor's "
+        "transcript-shaping ability bounds test signal-to-noise, so the "
+        "operator typically pins the flagship Claude there.",
     ),
-    target: str = typer.Option(
+    target: str | None = typer.Option(
         None,
         "--target",
         "-t",
         help="Target base model (GEODE id, e.g. claude-opus-4-7). "
-        "Pinned for the audit's lifetime when set. "
-        "**Omit to fall back to GEODE's active settings.model** — your "
-        "current /model selection wins, drift sync stays active.",
+        "**Omit to fall back to ``[self_improving_loop.petri.target].model``** "
+        "in ``~/.geode/config.toml`` (or ``Settings.model`` when neither "
+        "is set). Explicit argv pins the target for the audit's lifetime.",
     ),
     seeds: int = typer.Option(1, "--seeds", "-s", help="Sample count (--limit)."),
     max_turns: int = typer.Option(
@@ -303,8 +306,8 @@ def audit(
 
 def _build_slash_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="/audit", add_help=False, allow_abbrev=False)
-    parser.add_argument("--judge", "-j", default="claude-haiku-4-5-20251001")
-    parser.add_argument("--auditor", "-a", default="claude-opus-4-7")
+    parser.add_argument("--judge", "-j", default=None)
+    parser.add_argument("--auditor", "-a", default=None)
     parser.add_argument("--target", "-t", default=None)
     parser.add_argument("--seeds", "-s", type=int, default=1)
     parser.add_argument("--max-turns", "-m", type=int, default=10, dest="max_turns")

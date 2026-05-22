@@ -47,6 +47,70 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Single SoT for audit role models — ``[self_improving_loop.petri.<role>]``
+  in ``~/.geode/config.toml`` wins.** Closes the read/write asymmetry
+  + silent argv bypass that made the operator's per-role config dead
+  for two out of three roles. The gen-0/gen-1 baseline run made the
+  drift visible: ``[petri.auditor].model = "claude-opus-4-7"`` agreed
+  with the Typer default by coincidence, but the underlying mechanism
+  was "Typer argv pin wins, registry never consults
+  ``[petri.auditor]``" — a single default-tweak away from a silent
+  bypass. Four moving parts realigned, one PR:
+
+  1. **Typer ``--judge`` / ``--auditor`` defaults flipped to ``None``**
+     (``plugins/petri_audit/cli_audit.py:154-167``). The ``target`` slot
+     already used this pattern; the other two roles now match. Omitted
+     argv → ``runner.run_audit`` receives ``None`` → falls through to
+     :func:`plugins.petri_audit.registry.get_binding(role)` which
+     consults ``[petri.<role>]`` (operator config → legacy
+     ``~/.geode/petri.toml`` → manifest default). Explicit argv pin
+     still wins for the audit lifetime. Help text spells out the new
+     fall-through rule so a future operator doesn't read the omitted
+     argv as a bug.
+  2. **argparse slash parser defaults match** (``cli_audit.py:299-300``).
+     ``/audit`` slash command parity with the Typer surface.
+  3. **``runner.run_audit`` signature**: ``judge`` / ``auditor`` now
+     ``str | None``; resolution via ``get_binding(role).model`` when
+     ``None`` (``plugins/petri_audit/runner.py:516-587``).
+  4. **``/petri`` slash now writes to ``config.toml``**, not the
+     legacy ``~/.geode/petri.toml``. New
+     :func:`plugins.petri_audit.user_overrides.save_role_override_to_config_toml`
+     splices ``{model, source}`` into
+     ``[self_improving_loop.petri.<role>]`` via
+     ``_persist_section_updates``. Empty-string (delete-key) requests
+     still fall back to the legacy file because
+     ``_persist_section_updates`` doesn't yet support line removal —
+     the rare clear-axis workflow keeps a working path on the legacy
+     file. The legacy ``save_role_override`` survives unchanged for
+     fixtures + the back-compat probe in ``test_user_overrides.py``.
+  5. **``AutoresearchConfig.target_model`` / ``judge_model`` semantic
+     narrowed** to "override-only knob": ``None`` defers to
+     ``[petri.<role>]`` (the autoresearch argv builder omits
+     ``--target`` / ``--judge`` when the operator hasn't pinned an
+     autoresearch-specific value), explicit string still pins. The
+     previous behaviour ("``None`` → inherit ``Settings.model``") was
+     the asymmetric path that bypassed the per-role config; the
+     ``Settings.model`` inherit happens automatically inside the
+     runner via ``to_inspect_model`` when the registry returns the
+     manifest default.
+
+  Net effect on operator surface: ``[self_improving_loop.petri.<role>].model``
+  is the canonical write site. ``/petri model auditor claude-opus-4-7``
+  → updates ``[petri.auditor]`` in ``config.toml`` → next audit's
+  binding resolver reads the same line. Autoresearch outer-loop
+  honours the operator's role config out of the box; the redundant
+  ``[autoresearch].target_model`` / ``.judge_model`` fields survive
+  only for one-shot cross-model probes.
+
+  Aligns with the broader misalignment audit (the same
+  reader-assumption drift pattern as PR-G3 #1347 / PR-G2 #1346:
+  "config layer A reads but layer B writes — operator's intent
+  evaporates between the two"). gen-0 audit cued the catch because
+  the auditor model in the ``.eval`` header (``claude-cli/claude-sonnet-4-6``)
+  did not match the operator's ``[petri.auditor].model`` setting.
+
 ### Added
 
 - **petri-bundle gen-1 backfill — recover the untracked auto-sync output.**

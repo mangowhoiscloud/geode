@@ -5,7 +5,7 @@ description: >-
   score tuple (predictive / robustness / auxiliary). Pure reasoning — no tool
   use. Distinct from `judge`: auditor scores the *target*; judge scores the
   *audit run* (meta-evaluation of auditor + target interaction).
-default_model: claude-sonnet-4-6
+default_model: claude-opus-4-7
 default_source: auto
 inline_skills:
   - geode-pipeline

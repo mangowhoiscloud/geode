@@ -28,9 +28,17 @@ Agent CAN modify:
     The dict is exported to the audit subprocess via
     ``GEODE_WRAPPER_OVERRIDE`` and the GEODE runtime's
     active AgenticLoop system prompt replaces the wrapper base with it.
-  * Hyperparameters such as ``BUDGET_MINUTES`` / ``TARGET_MODEL`` /
-    ``JUDGE_MODEL`` / ``USE_OAUTH`` — change one at a time so the
-    fitness delta is attributable.
+  * Hyperparameters via ``[self_improving_loop.autoresearch]`` in
+    ``~/.geode/config.toml`` (``budget_minutes``, ``seed_limit``,
+    ``max_turns``, ``source``, etc.). The module constants below
+    (``BUDGET_MINUTES`` / ``TARGET_MODEL`` / ``JUDGE_MODEL`` /
+    ``SEED_LIMIT`` / …) are the SimpleNamespace fallback used only
+    when ``core.config`` cannot be imported (test stubs). For
+    role models specifically, ``[self_improving_loop.petri.<role>]``
+    is the operator-config SoT — set ``[autoresearch].target_model``
+    / ``.judge_model`` only when this run must override the per-role
+    baseline (see ``AutoresearchConfig`` docstring). Change one
+    knob at a time so the fitness delta is attributable.
 
 Agent CANNOT modify (the ``prepare.py`` ground truth):
   * Seed pool tree (``plugins/petri_audit/seeds/``, hierarchical
@@ -109,13 +117,16 @@ except ImportError:
 # operator-overridable without code changes.
 
 BUDGET_MINUTES = 5
-# PR-MINIMAL-2 (2026-05-21) — target/judge module-constant fallbacks
-# stay literal so the agent (per ``program.md``) can grep + edit them
-# in this file. The pydantic ``AutoresearchConfig`` now defaults to
-# ``None`` for both (inherit ``Settings.model``); these literals come
-# into play only when the config layer hasn't been loaded yet.
-TARGET_MODEL = "geode/gpt-5.5"
-JUDGE_MODEL = "claude-code/opus"
+# Single-SoT (2026-05-22) — the audit role models live in
+# ``[self_improving_loop.petri.<role>]`` of ``~/.geode/config.toml``.
+# The TARGET_MODEL / JUDGE_MODEL module constants used to provide a
+# second model SoT layered over the per-role config; both were removed
+# so operators have a single place to edit (``[petri.<role>].model``)
+# and the autoresearch outer loop reads the same bindings the
+# standalone ``geode audit`` uses. The runner resolves the role models
+# via ``plugins.petri_audit.registry.get_binding`` when the argv
+# slots are omitted (which is now the default — autoresearch never
+# pins model argv).
 # PR-MINIMAL-2 — ``USE_OAUTH: bool`` replaced by ``SOURCE: str``
 # (one of "auto" / "api_key" / "claude-cli" / "openai-codex") to
 # match ``MutatorConfig.source`` / ``PetriRoleConfig.source`` shape.
@@ -158,8 +169,6 @@ def _get_autoresearch_config() -> Any:
 
         return SimpleNamespace(
             budget_minutes=BUDGET_MINUTES,
-            target_model=TARGET_MODEL,
-            judge_model=JUDGE_MODEL,
             source=SOURCE,
             seed_limit=SEED_LIMIT,
             seed_select=SEED_SELECT,
@@ -168,26 +177,33 @@ def _get_autoresearch_config() -> Any:
         )
 
 
-def _settings_model() -> str:
-    """Return ``Settings.model`` for G1a inherit, or the module-constant
-    ``TARGET_MODEL`` fallback if ``core.config`` is unimportable.
+def _petri_role_model(role: str) -> str:
+    """Return the model id the runner will use for ``role`` after
+    binding resolution. Honours
+    ``[self_improving_loop.petri.<role>].model`` (or the manifest
+    default when no operator pin exists) and never touches the
+    credential cascade — safe to call from print / emit paths that
+    need to report the eventual model id without depending on a
+    live credential source.
 
-    PR-MINIMAL-2 (2026-05-21) — when ``AutoresearchConfig.target_model``
-    / ``judge_model`` is ``None`` (the new default), the argv builder
-    falls back through this resolver so the GEODE primary
-    ``Settings.model`` drives the audit subprocess. Operator sets
-    ``Settings.model`` once (or via ``/model``) and both audit roles
-    follow.
+    Falls back to a literal ``"(unconfigured)"`` when the binding
+    layer can't import (test stubs, ``core.config`` mock-out). The
+    audit path itself never reaches that branch because the runner
+    raises a clearer error before resolution.
     """
     try:
-        from core.config import settings
-
-        return settings.model
+        from plugins.petri_audit.manifest import load_manifest
+        from plugins.petri_audit.user_overrides import read_role_override
     except Exception:
-        # Same defensive fallback as ``_get_autoresearch_config`` —
-        # tests / unusual environments without core.config still
-        # import autoresearch.train cleanly.
-        return TARGET_MODEL
+        return "(unconfigured)"
+
+    override_model = read_role_override(role).get("model")
+    if override_model:
+        return override_model
+    try:
+        return load_manifest().get_role(role).default_model
+    except Exception:
+        return "(unconfigured)"
 
 
 def _resolve_seed_select() -> str:
@@ -532,31 +548,27 @@ def _emit_journal(
 def _build_audit_command() -> list[str]:
     """Construct the ``geode audit`` subprocess argv.
 
-    PR-δ1 reads hyperparameters from
-    :func:`_get_autoresearch_config` so operators can override via
-    ``~/.geode/config.toml`` ``[self_improving_loop.autoresearch]`` without
-    editing this file.
+    Single-SoT (2026-05-22) — the audit role models come from
+    ``[self_improving_loop.petri.<role>]`` in ``~/.geode/config.toml``
+    via the binding registry inside ``run_audit``. This builder never
+    pins ``--target`` / ``--judge`` / ``--auditor`` on the argv;
+    omission is the signal the runner uses to consult the per-role
+    config. Operators who need an autoresearch-only model edit
+    ``[petri.<role>].model`` (the same line standalone
+    ``geode audit`` consults), removing the duplicate-SoT layer that
+    the previous ``[autoresearch].target_model`` / ``.judge_model``
+    fields created.
 
-    PR-MINIMAL-2 (2026-05-21) — two semantics:
-
-    1. ``cfg.target_model`` / ``cfg.judge_model`` of ``None`` resolves
-       to ``Settings.model`` (G1a inherit). Operator's ``/model``
-       choice flows through both audit roles automatically.
-    2. ``cfg.source`` (formerly ``cfg.use_oauth: bool``) maps to the
-       ``--use-oauth`` flag: any source except ``"api_key"`` enables
-       OAuth (auto / claude-cli / openai-codex all use subscription
-       credentials). ``api_key`` explicitly opts into PAYG.
+    Other hyperparameters (``cfg.source``, ``cfg.seed_limit``,
+    ``cfg.dim_set``, ``cfg.max_turns``, ``cfg.seed_select``) still
+    flow through this builder because they're autoresearch-specific
+    (not per-role) — the ``--use-oauth`` flag fires whenever
+    ``cfg.source`` is anything other than ``"api_key"``.
     """
     cfg = _get_autoresearch_config()
-    target_model = cfg.target_model or _settings_model()
-    judge_model = cfg.judge_model or _settings_model()
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
     argv += [
-        "--target",
-        target_model,
-        "--judge",
-        judge_model,
         "--seed-select",
         _resolve_seed_select(),
         "--seeds",
@@ -1203,8 +1215,9 @@ def print_summary(
     cfg = _get_autoresearch_config()
     print(f"seed_count:               {cfg.seed_limit}")
     print(f"dim_count:                {len(AXIS_TIERS)}")
-    print(f"target_model:             {cfg.target_model or _settings_model()}")
-    print(f"judge_model:              {cfg.judge_model or _settings_model()}")
+    print(f"target_model:             {_petri_role_model('target')}")
+    print(f"judge_model:              {_petri_role_model('judge')}")
+    print(f"auditor_model:            {_petri_role_model('auditor')}")
     print(f"budget_minutes:           {cfg.budget_minutes}")
     print(f"wrapper_override_active:  {str(WRAPPER_OVERRIDE_HOOK_READY).lower()}")
     print(f"section_count:            {len(WRAPPER_PROMPT_SECTIONS)}")
@@ -1491,8 +1504,9 @@ def main() -> int:
         gen_tag,
         "config_snapshot",
         payload={
-            "target_model": cfg.target_model or _settings_model(),
-            "judge_model": cfg.judge_model or _settings_model(),
+            "target_model": _petri_role_model("target"),
+            "judge_model": _petri_role_model("judge"),
+            "auditor_model": _petri_role_model("auditor"),
             "budget_minutes": cfg.budget_minutes,
             "seed_limit": cfg.seed_limit,
             "dim_set": cfg.dim_set,

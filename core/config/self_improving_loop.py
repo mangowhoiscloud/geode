@@ -119,30 +119,42 @@ class PetriRoleConfig(BaseModel):
 class AutoresearchConfig(BaseModel):
     """autoresearch/train.py runtime knobs.
 
-    PR-MINIMAL-2 (2026-05-21) — three changes:
+    Single-SoT (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
+    in ``~/.geode/config.toml`` is the **sole** model SoT for every audit
+    role (auditor / target / judge). The autoresearch outer loop reads
+    the role models through that section indirectly: it omits
+    ``--target`` / ``--judge`` / ``--auditor`` from the ``geode audit``
+    argv entirely, and the runner resolves each role via the binding
+    registry (which reads ``[petri.<role>]``).
 
-    1. ``target_model`` / ``judge_model`` defaults flipped to ``None``
-       so they inherit ``Settings.model`` when unset. Operator edits
-       ``Settings.model`` (or ``/model``) in one place; both audit
-       roles follow. Explicit override still wins.
-    2. ``use_oauth: bool`` → ``source: Source`` (4-enum: auto / api_key
-       / claude-cli / openai-codex). Aligns shape with ``MutatorConfig.source``
-       and ``PetriRoleConfig.source`` — one credential vocabulary across
-       the loop instead of a bool here + Literal elsewhere.
-    3. ``fallback_to_payg`` per-component override removed; the global
-       flag at ``[self_improving_loop] fallback_to_payg`` survives.
+    The ``target_model`` / ``judge_model`` fields survive as
+    **deprecated no-op slots** — silently accepted at load time so
+    existing ``~/.geode/config.toml`` files don't ``extra="forbid"``
+    on the loader, but never consulted at runtime. ``_build_audit_command``
+    no longer reads them; the next release will drop the fields
+    entirely after operators have migrated to ``[petri.<role>].model``.
+
+    Operators who want an autoresearch-only model now edit
+    ``[petri.target].model`` / ``[petri.judge].model`` directly;
+    standalone ``geode audit`` and the outer loop share the same
+    bindings end-to-end.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
     target_model: str | None = None
-    """``None`` → inherit ``Settings.model``. Operator sets this only
-    when the autoresearch audit target must differ from the GEODE
-    primary (e.g. cross-model alignment audit)."""
+    """**Deprecated** — surviving slot for back-compat config file load.
+    The runtime always resolves the target through
+    ``[self_improving_loop.petri.target].model`` via the binding
+    registry; this field is silently ignored. Will be dropped in a
+    future release once operator configs are migrated."""
     judge_model: str | None = None
-    """``None`` → inherit ``Settings.model``. Operator sets this only
-    when the audit judge must differ from the GEODE primary."""
+    """**Deprecated** — surviving slot for back-compat config file load.
+    The runtime resolves the judge through
+    ``[self_improving_loop.petri.judge].model`` via the binding
+    registry; this field is silently ignored. Will be dropped in a
+    future release once operator configs are migrated."""
     source: Source = "auto"
     """Credential source for the audit subprocess. ``auto`` =
     subscription-first with PAYG fallback per the global

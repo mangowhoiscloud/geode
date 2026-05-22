@@ -10,11 +10,16 @@ stack to a user-facing slash command. Mirrors GEODE's existing
 - ``/petri source <role> <source>``  → set source only
 - ``/petri reset [<role>]``          → restore manifest default (all / one)
 
-Persistence: ``~/.geode/petri.toml`` (see
-:mod:`plugins.petri_audit.user_overrides`). Read by
-:func:`plugins.petri_audit.registry.get_binding`, which is the single
-SOT for downstream consumers (/petri picker itself, P1-G's
-`to_inspect_model` router, the audit runner).
+Persistence (SoT-flip 2026-05-22): writes flow through
+:func:`plugins.petri_audit.user_overrides.save_role_override_to_config_toml`
+into ``~/.geode/config.toml`` under
+``[self_improving_loop.petri.<role>]`` — the operator-config SoT for
+every audit role. The legacy ``~/.geode/petri.toml`` is still read as
+a fallback layer (so existing operator setups keep working) but new
+writes no longer land there. Read precedence (config.toml → legacy)
+is owned by :func:`plugins.petri_audit.registry.get_binding`, the
+single binding resolver for downstream consumers (/petri picker
+itself, P1-G's ``to_inspect_model`` router, the audit runner).
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from plugins.petri_audit.registry import (
 from plugins.petri_audit.user_overrides import (
     clear_overrides,
     read_role_override,
-    save_role_override,
+    save_role_override_to_config_toml,
 )
 
 __all__ = ["cmd_petri"]
@@ -132,7 +137,7 @@ def _cmd_set_model(role: str, model_arg: str) -> None:
         if old_provider != new_provider:
             extra["source"] = ""  # erase
 
-    save_role_override(role, model=chosen, **extra)
+    save_role_override_to_config_toml(role, model=chosen, **extra)
     _print_role_after_change(role)
 
 
@@ -162,7 +167,7 @@ def _cmd_set_source(role: str, source_arg: str) -> None:
         _pkg.console.print(f"  [muted]Allowed: {', '.join(source_spec.allowed)}[/muted]\n")
         return
 
-    save_role_override(role, source=source_arg)
+    save_role_override_to_config_toml(role, source=source_arg)
     _print_role_after_change(role)
 
 
@@ -342,7 +347,7 @@ def _picker_for_role(role: str) -> None:
     chosen_source = sources_info[sidx]["source"]
 
     # ── Persist + confirm ────────────────────────────────────────────
-    save_role_override(role, model=chosen_model, source=chosen_source)
+    save_role_override_to_config_toml(role, model=chosen_model, source=chosen_source)
     _print_role_after_change(role)
 
 

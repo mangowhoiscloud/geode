@@ -45,11 +45,16 @@ from autoresearch.train import (
 
 
 def test_build_audit_command_uses_current_geode_audit_flags() -> None:
+    """Single-SoT (2026-05-22) — autoresearch's ``_build_audit_command``
+    only emits flags that this layer owns. ``--target`` / ``--judge`` /
+    ``--auditor`` were removed because the role models now live in
+    ``[self_improving_loop.petri.<role>]`` and the runner resolves
+    them via the binding registry when argv slots are absent."""
     argv = _build_audit_command()
-    for flag in ("--seed-select", "--dim-set", "--live", "--yes", "--target", "--judge"):
+    for flag in ("--seed-select", "--dim-set", "--live", "--yes"):
         assert flag in argv, f"missing required flag {flag} in {argv}"
-    for stale in ("--rubric", "--budget-minutes"):
-        assert stale not in argv, f"obsolete flag {stale} re-introduced in {argv}"
+    for stale in ("--rubric", "--budget-minutes", "--target", "--judge", "--auditor"):
+        assert stale not in argv, f"unexpected flag {stale} present in {argv}"
 
 
 def test_wrapper_override_hook_ready_is_true() -> None:
@@ -118,36 +123,46 @@ def test_get_autoresearch_config_returns_config_object() -> None:
         assert hasattr(cfg, attr), f"missing field {attr}"
 
 
-def test_get_autoresearch_config_defaults_match_module_constants() -> None:
+def test_get_autoresearch_config_defaults_match_module_constants(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """No-op behaviour change — unconfigured loader matches module constants.
 
-    PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH`` module constant replaced
-    by ``SOURCE``. ``target_model`` / ``judge_model`` AutoresearchConfig
-    defaults flipped to ``None`` (G1a), but the train module constants
-    still carry literal defaults for the SimpleNamespace fallback path
-    when ``core.config`` is unimportable.
+    Single-SoT (2026-05-22) — ``TARGET_MODEL`` / ``JUDGE_MODEL`` module
+    constants removed (role models now live exclusively in
+    ``[self_improving_loop.petri.<role>]``). Only the
+    autoresearch-owned knobs (budget / seed / dim / source / turns)
+    remain as module constants for the SimpleNamespace fallback when
+    ``core.config`` is unimportable.
     """
     from autoresearch.train import (
         BUDGET_MINUTES,
         DIM_SET_NAME,
-        JUDGE_MODEL,
         MAX_TURNS,
         SEED_LIMIT,
         SEED_SELECT,
         SOURCE,
-        TARGET_MODEL,
         _get_autoresearch_config,
     )
     from core.config.self_improving_loop import AutoresearchConfig
 
+    # Isolate from the operator's ``~/.geode/config.toml`` — point
+    # ``GEODE_CONFIG_TOML`` at an empty tmp path so the loader falls
+    # back to the dataclass defaults (matches the SimpleNamespace
+    # fallback the module constants encode).
+    empty_cfg = tmp_path / "config.toml"
+    empty_cfg.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(empty_cfg))
+
     cfg = _get_autoresearch_config()
     expected = AutoresearchConfig()
     assert cfg.budget_minutes == BUDGET_MINUTES == expected.budget_minutes
-    # G1a: AutoresearchConfig defaults to None, but the SimpleNamespace
-    # fallback (used when core.config can't be imported) carries the
-    # train module-constant literals. Either path is valid — accept both.
-    assert cfg.target_model in (TARGET_MODEL, None)
-    assert cfg.judge_model in (JUDGE_MODEL, None)
+    # Single-SoT (2026-05-22) — target_model / judge_model survived as
+    # deprecated no-op slots on the typed config (for back-compat
+    # load) but are silently ignored at runtime. The SimpleNamespace
+    # fallback no longer carries them at all.
+    assert getattr(cfg, "target_model", None) is None
+    assert getattr(cfg, "judge_model", None) is None
     assert cfg.source == SOURCE
     assert cfg.seed_limit == SEED_LIMIT
     assert cfg.seed_select == SEED_SELECT
@@ -170,8 +185,8 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
         "_get_autoresearch_config",
         lambda: SimpleNamespace(
             budget_minutes=10,
-            target_model="geode/claude-opus-4-7",
-            judge_model="claude-code/sonnet",
+            target_model="geode/claude-opus-4-7",  # deprecated no-op slot
+            judge_model="claude-code/sonnet",  # deprecated no-op slot
             source="api_key",
             seed_limit=25,
             seed_select="plugins/petri_audit/seeds_safe10",
@@ -181,13 +196,61 @@ def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) 
     )
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
     argv = auto_train._build_audit_command()
-    assert "geode/claude-opus-4-7" in argv
-    assert "claude-code/sonnet" in argv
-    assert "25" in argv
-    assert "legacy" in argv
-    assert "20" in argv
+    # Single-SoT (2026-05-22) — target/judge model ids resolved by the
+    # runner via [petri.<role>] registry, not pinned on argv. The
+    # config-fed values for target_model/judge_model are deprecated
+    # no-op slots; assert they do NOT leak onto the argv.
+    assert "geode/claude-opus-4-7" not in argv
+    assert "claude-code/sonnet" not in argv
+    # Autoresearch-owned knobs still flow through this builder.
+    assert "25" in argv  # seed_limit
+    assert "legacy" in argv  # dim_set
+    assert "20" in argv  # max_turns
     # source == "api_key" → no --use-oauth flag.
     assert "--use-oauth" not in argv
+
+
+def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SoT-flip (2026-05-22) — when ``cfg.target_model`` /
+    ``cfg.judge_model`` are ``None`` (autoresearch has nothing to
+    override over the per-role config), ``_build_audit_command`` must
+    OMIT ``--target`` and ``--judge`` from the argv so the runner
+    falls through to ``[self_improving_loop.petri.<role>].model`` via
+    the binding registry. This is the branch that closes the silent
+    argv-pin bypass — assert it stays covered."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            budget_minutes=10,
+            target_model=None,
+            judge_model=None,
+            source="claude-cli",
+            seed_limit=2,
+            seed_select="plugins/petri_audit/seeds",
+            dim_set="subset",
+            max_turns=5,
+        ),
+    )
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    argv = auto_train._build_audit_command()
+    assert "--target" not in argv, (
+        "cfg.target_model=None must NOT add --target argv; the runner "
+        "resolves the target via [self_improving_loop.petri.target] when "
+        "the slot is absent"
+    )
+    assert "--judge" not in argv, (
+        "cfg.judge_model=None must NOT add --judge argv; the runner "
+        "resolves the judge via [self_improving_loop.petri.judge]"
+    )
+    # Other flags still emitted from cfg fields.
+    assert "subset" in argv
+    assert "5" in argv  # max_turns
+    assert "--use-oauth" in argv  # source != "api_key"
 
 
 def test_resolve_seed_select_falls_back_to_config(
@@ -1249,9 +1312,13 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     # PR-MINIMAL-2 (2026-05-21) — ``use_oauth`` key renamed to
     # ``source`` (B1: AutoresearchConfig.use_oauth: bool →
     # AutoresearchConfig.source: Source enum).
+    # Single-SoT (2026-05-22) — auditor_model added alongside
+    # target/judge so the journal records the full [petri.<role>] →
+    # registry resolution for all three audit roles.
     assert set(by_event["config_snapshot"].keys()) == {
         "target_model",
         "judge_model",
+        "auditor_model",
         "budget_minutes",
         "seed_limit",
         "dim_set",

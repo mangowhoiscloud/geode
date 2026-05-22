@@ -177,9 +177,20 @@ def test_set_source_provider_aware(captured):
 
 
 def test_set_source_auto(captured):
-    """'auto' is always a valid source for any provider that lists it."""
+    """'auto' is always a valid source for any provider that lists it.
+
+    SoT-flip (2026-05-22) — the literal ``"auto"`` lands in
+    ``[self_improving_loop.petri.<role>]`` of config.toml, but the
+    loader's ``_read_role_from_self_improving_loop`` filter treats
+    ``source == "auto"`` as "no override" (it's the manifest default
+    anyway). The user-facing semantic is unchanged — operator's
+    ``/petri source <role> auto`` still resets the role to manifest
+    default — but the read returns an empty override map instead of
+    round-tripping the explicit ``"auto"`` literal that the legacy
+    petri.toml writer used to surface. Pin the new contract.
+    """
     cmd_petri("source auditor auto")
-    assert uo.read_role_override("auditor").get("source") == "auto"
+    assert "source" not in uo.read_role_override("auditor")
 
 
 # ── /petri reset ───────────────────────────────────────────────────────────
