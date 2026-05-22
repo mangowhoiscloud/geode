@@ -262,7 +262,7 @@ See `geode-changelog` skill.
 
 #### 6. PR & Merge
 
-See `geode-gitflow` skill. feature → develop → main. HEREDOC PR. CI 5/5 required.
+See `geode-gitflow` skill. **Flow**: `feature → develop` (per-change), then for releases `release/* → develop → main` (the release branch carries stamp + CHANGELOG bumps; it merges into develop *first* so develop never lags behind main on those files; develop → main is then a straight pass-through). HEREDOC PR. CI 5/5 required. `.github/workflows/auto-backmerge.yml` is the safety net — fires only if some past release skipped the rotation and develop drifts behind main.
 
 **PR Body Template (MANDATORY):**
 

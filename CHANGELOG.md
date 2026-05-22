@@ -47,6 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Release flow rotation — eliminates backmerge friction**. Pre-PR the
+  GEODE release workflow followed canonical gitflow: release branch
+  off develop → merge to main → manual backmerge main → develop. That
+  pattern left develop's stamps stale until the backmerge PR landed
+  and caused CHANGELOG conflicts when develop moved while the release
+  PR was in flight (4 conflicts hit across PR #1499 / #1504 / #1506).
+
+  The new pattern rotates the merge order: the release branch lands
+  on **develop first**, then develop → main is a straight pass-through
+  with no new commits. After the develop merge, develop already
+  carries the v0.99.X stamps; the develop → main PR moves main's tip
+  up. No backmerge step.
+
+  Edits across the scaffold:
+  - `CLAUDE.md` § Step 6 — workflow description updated.
+  - `.claude/skills/geode-gitflow/SKILL.md` — new `## Release Flow`
+    section documenting the rotation + backmerge safety net.
+  - `.claude/skills/geode-changelog/SKILL.md` — `On Release` checklist
+    rewritten with the 5-stamp surface + rotation PR steps.
+  - `.github/workflows/auto-backmerge.yml` — NEW safety-net workflow.
+    Fires on main pushes; if develop is behind main (off-nominal —
+    rotation skipped, hotfix landed direct on main, etc.) it opens an
+    auto-backmerge PR. Under the rotation pattern this should rarely
+    fire.
+
+  Codified after the 2026-05-23 frontier research surveying Crumb
+  (single-branch trunk + tags), OpenClaw (release branches + manual
+  release-publish), release-please (auto PR), and changesets (per-PR
+  files). GEODE's rotation pattern is the closest fit to Crumb's
+  trunk-flow while preserving the develop staging branch + Pages-on-
+  main deploy trigger.
+
 ## [0.99.37] - 2026-05-23
 
 > Multiple parallel sprints land in one release window:

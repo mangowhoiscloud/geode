@@ -13,6 +13,8 @@ description: GEODE branch strategy and PR rules. feature → develop → main me
 feature/xxx ──PR──→ develop ──PR──→ main
 ```
 
+For releases (version stamp bump + CHANGELOG promote), the release branch lands on **develop first**, then a straight pass-through develop → main PR ships to production. See `## Release Flow` below — this rotation eliminates the post-release backmerge that the older pattern required.
+
 ## Full Workflow
 
 > **Principle 1**: Every work unit **starts with worktree open (alloc) and ends with worktree close (free)**.
@@ -68,6 +70,92 @@ git rebase origin/develop
 git push --force-with-lease
 # → CI re-triggered → confirm pass → merge
 ```
+
+---
+
+## Release Flow (rotation — eliminates backmerge)
+
+Pre-2026-05-23 GEODE used the canonical gitflow pattern: release branch off
+develop → merge to main → backmerge main → develop. That created a one-way
+push of version stamps + CHANGELOG promotes into main, leaving develop's
+stamps stale until the backmerge PR landed. Every release cycle paid the
+cost of a 6-file backmerge PR, **AND** CHANGELOG conflicts when
+develop moved while the release PR was in flight (we hit this 4 times
+across PR #1499, #1504, #1506).
+
+The current pattern rotates the order so release stamps land on develop
+first:
+
+```
+develop ──cut──→ release/vX.Y.Z (stamp bump + CHANGELOG promote)
+                       │
+                       └─PR─→ develop  (1)  ← release branch absorbs back
+                                │
+                                └─PR─→ main (2)  ← straight pass-through
+```
+
+**Step (1)** — release/* → develop PR. Carries the 5-location stamp bump
+(`pyproject.toml`, `CLAUDE.md`, `README.md`, `README.ko.md`, CHANGELOG
+header) and the `## [Unreleased]` → `## [X.Y.Z]` promote. Insert a fresh
+empty `## [Unreleased]` above the just-promoted section so the next batch
+of feature PRs has somewhere to land. Develop is now content-equivalent to
+the eventual main state.
+
+**Step (2)** — develop → main PR. No new commits beyond merge — it just
+moves main's tip up to develop's. Abbreviated PR body (Summary +
+Verification only) is fine here.
+
+**No backmerge step.** Develop already has every commit that main has.
+After release, the two are content-identical (modulo gitflow merge-commit
+asymmetry).
+
+```bash
+# ── Release flow (rotation) ──
+
+# 1. Cut release branch
+git fetch origin
+git worktree add .claude/worktrees/release-vX.Y.Z -b release/vX.Y.Z origin/develop
+
+# 2. Bump stamps + CHANGELOG promote + add fresh [Unreleased]
+# (edit 5 files; see geode-changelog skill for [Unreleased] ratchet rules)
+
+# 3. PR release → develop
+gh pr create --base develop --head release/vX.Y.Z \
+  --title "release: vX.Y.Z — <summary>" \
+  --body "<release notes>"
+# → CI ratchet → merge
+
+# 4. PR develop → main (straight pass-through)
+gh pr create --base main --head develop \
+  --title "release: vX.Y.Z (develop → main)" \
+  --body "<abbreviated body>"
+# → CI ratchet → merge → Pages workflow fires
+```
+
+### Backmerge safety net
+
+`.github/workflows/auto-backmerge.yml` watches main pushes. If for any
+reason (rotation skipped, force-push, hotfix landed directly on main) main
+moves ahead of develop, the workflow opens an auto-backmerge PR. Manual
+intervention required only if the auto-PR has conflicts.
+
+The safety net should fire **rarely** under the rotation pattern — it
+exists so a one-off mistake doesn't silently drift develop behind main.
+
+### Docs pipeline compatibility
+
+The rotation pattern preserves every existing docs / release workflow
+trigger:
+
+| Workflow | Trigger | Behavior under rotation |
+|----------|---------|-------------------------|
+| `pages.yml` | `push: main` (paths include `CHANGELOG.md`, `pyproject.toml`, `CLAUDE.md`) | Fires when develop → main pass-through PR merges. Same moment as before. |
+| `petri-publish.yml` | `push: main, develop` | Fires on develop merge AND main merge. Unchanged. |
+| `release.yml` | `workflow_dispatch` (manual, default `ref: main`) | Manual trigger unchanged. The `version` input matches both `pyproject.toml` and `CHANGELOG.md` `## [X.Y.Z]` header. |
+| `site/scripts/sync-stats.mjs` | invoked by `pages.yml` build | Counts CHANGELOG `## [X.Y.Z]` headers excluding `[Unreleased]`. Rotation's fresh-`[Unreleased]` block is correctly skipped. |
+
+No workflow file needs editing for the rotation. `auto-backmerge.yml` is
+additive.
 
 ---
 
