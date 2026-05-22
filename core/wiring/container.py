@@ -211,6 +211,25 @@ def build_default_lanes() -> LaneQueue:
         max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
         timeout_s=300.0,
     )
+    # PR-LQ-Phase2 (2026-05-22) — surface the module-level
+    # claude-cli-subagent lane in the LaneQueue dashboard for parity
+    # with the autoresearch-audit lane pattern. The actual semaphore
+    # lives at :mod:`core.orchestration.claude_cli_lane`; this lane
+    # registration is a dashboard mirror that ``LaneQueue.status()``
+    # consumers can read alongside ``gateway`` / ``global`` /
+    # ``seed-generation``. Both registrations stay in lockstep by
+    # routing through the same constants + ``resolve_*`` resolver.
+    from core.orchestration.claude_cli_lane import (
+        CLAUDE_CLI_LANE_NAME,
+        CLAUDE_CLI_LANE_TIMEOUT_S,
+        resolve_claude_cli_lane_max,
+    )
+
+    queue.add_lane(
+        CLAUDE_CLI_LANE_NAME,
+        max_concurrent=resolve_claude_cli_lane_max(),
+        timeout_s=CLAUDE_CLI_LANE_TIMEOUT_S,
+    )
     return queue
 
 

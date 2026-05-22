@@ -129,7 +129,18 @@ def invoke_claude_cli(*, system_prompt: str, user_prompt: str) -> str:
 
     ``--output-format text`` keeps stdout free of the Markdown framing
     that Claude Code's TUI render layer would otherwise add.
+
+    Concurrency gate (PR-LQ-Phase2, 2026-05-22): the call is wrapped
+    in :func:`core.orchestration.claude_cli_lane.acquire_claude_cli_lane`
+    so simultaneous mutator invocations + Petri inspect_ai bridge
+    spawns share a single bucket-wide cap (default 2 — one slot below
+    the public 3-4 burst-limiter floor, leaving room for the
+    operator's host Claude Code session). See
+    [[project_lanequeue_handoff_2026_05_22]] for Phase 2 rationale +
+    Phase 3 OAuth-usage polling integration.
     """
+    from core.orchestration.claude_cli_lane import acquire_claude_cli_lane
+
     binary = _resolve_binary(CLAUDE_CLI_BIN_ENV, _DEFAULT_CLAUDE_BIN)
     args = [
         "--print",
@@ -139,7 +150,8 @@ def invoke_claude_cli(*, system_prompt: str, user_prompt: str) -> str:
         system_prompt,
         user_prompt,
     ]
-    out = _run(binary, args, stdin_text="")
+    with acquire_claude_cli_lane(key="self_improving_loop.mutator"):
+        out = _run(binary, args, stdin_text="")
     return out.strip()
 
 
