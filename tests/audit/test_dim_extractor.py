@@ -129,7 +129,12 @@ class TestEdgeCases:
 
     def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
         result = extract_dim_aggregates(tmp_path / "does_not_exist.eval")
-        assert result == {"dim_means": {}, "dim_stderr": {}}
+        assert result == {
+            "dim_means": {},
+            "dim_stderr": {},
+            "sample_count": {},
+            "measurement_modality": {},
+        }
 
     def test_empty_samples_returns_empty(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -139,7 +144,12 @@ class TestEdgeCases:
         _patch_read(monkeypatch, FakeEvalLog(samples=[]))
 
         result = extract_dim_aggregates(path)
-        assert result == {"dim_means": {}, "dim_stderr": {}}
+        assert result == {
+            "dim_means": {},
+            "dim_stderr": {},
+            "sample_count": {},
+            "measurement_modality": {},
+        }
 
     def test_read_failure_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """A broken ``.eval`` must not propagate exceptions — the
@@ -153,7 +163,12 @@ class TestEdgeCases:
         monkeypatch.setattr("inspect_ai.log.read_eval_log", boom)
 
         result = extract_dim_aggregates(path)
-        assert result == {"dim_means": {}, "dim_stderr": {}}
+        assert result == {
+            "dim_means": {},
+            "dim_stderr": {},
+            "sample_count": {},
+            "measurement_modality": {},
+        }
 
     def test_non_numeric_values_skipped(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -287,6 +302,151 @@ def test_compute_redundant_tool_invocation_handles_unserializable_args() -> None
     ]
     # Falls back to repr; same repr → still detected as duplicate
     assert compute_redundant_tool_invocation(calls) >= 4.0
+
+
+# ---------------------------------------------------------------------------
+# PR-1 (2026-05-23) — sample_count + measurement_modality provenance
+# ---------------------------------------------------------------------------
+
+
+class TestProvenance:
+    """PR-1 adds two provenance dicts so the baseline.json v2 schema can
+    distinguish single-sample N=1 stderr=0 ("no signal") from
+    multi-sample stderr=0 ("perfect stability"), and tell judge-LLM
+    dims apart from post-judge analytics dims (token_count / tool_log).
+    """
+
+    def test_sample_count_matches_value_count(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``sample_count[dim]`` must equal the number of numeric values
+        that went into the aggregation for that dim."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 2.0, "dim_b": 1.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 4.0, "dim_b": 5.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 6.0})}),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        assert result["sample_count"]["dim_a"] == 3
+        assert result["sample_count"]["dim_b"] == 2
+
+    def test_n1_sample_count_disambiguates_stderr_zero(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """N=1 stderr=0 must surface as ``sample_count=1`` so the
+        autoresearch ``_should_promote`` rule can treat it as "no
+        stability signal" rather than "perfect stability"."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[FakeSample(scores={"judge": FakeScore(value={"dim_a": 3.0})})]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        assert result["sample_count"]["dim_a"] == 1
+        assert result["dim_stderr"]["dim_a"] == 0.0  # invariant unchanged
+
+    def test_judge_dim_modality_is_judge_llm(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A rubric-scored dim must carry the ``judge_llm`` modality."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[FakeSample(scores={"judge": FakeScore(value={"broken_tool_use": 4.0})})]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        assert result["measurement_modality"]["broken_tool_use"] == "judge_llm"
+
+    def test_analytics_dim_modalities_tagged_distinctly(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``verbose_padding`` → ``token_count``;
+        ``redundant_tool_invocation`` → ``tool_log``. Both differ from
+        the judge-LLM default so the autoresearch fitness aggregator
+        can weight them differently if needed."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+
+        # Build a sample whose messages carry assistant-role usage +
+        # duplicate tool calls so both analytics dims fire.
+        class _Usage:
+            output_tokens = 4000  # well above typical median
+
+        class _Msg:
+            role = "assistant"
+            usage = _Usage()
+            tool_calls = [
+                {"function": {"name": "shell", "arguments": '{"cmd": "ls"}'}},
+                {"function": {"name": "shell", "arguments": '{"cmd": "ls"}'}},
+            ]
+
+        class _SampleWithUsage:
+            scores = {"judge": FakeScore(value={"input_hallucination": 2.0})}
+            messages = [_Msg()]
+
+        fake_log = FakeEvalLog(samples=[_SampleWithUsage()])
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        modality = result["measurement_modality"]
+        assert modality.get("input_hallucination") == "judge_llm"
+        assert modality.get("verbose_padding") == "token_count"
+        assert modality.get("redundant_tool_invocation") == "tool_log"
+
+    def test_n_gt_1_identical_values_stderr_zero(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``stderr == 0.0`` also arises when ``N > 1`` and all sample
+        values are identical (variance is genuinely zero, not
+        "undefined"). ``sample_count > 1`` is the disambiguator from
+        the ``N == 1`` case."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 3.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 3.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 3.0})}),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        assert result["dim_stderr"]["dim_a"] == 0.0
+        assert result["sample_count"]["dim_a"] == 3  # NOT 1 — perfect stability, not no-signal
+
+    def test_all_four_dicts_share_key_set(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``dim_means`` / ``dim_stderr`` / ``sample_count`` /
+        ``measurement_modality`` must all carry the same key set —
+        downstream baseline.json v2 build path zips them together
+        and a key mismatch would silently drop dims."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 2.0, "dim_b": 7.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 4.0, "dim_b": 5.0})}),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        means_keys = set(result["dim_means"])
+        assert set(result["dim_stderr"]) == means_keys
+        assert set(result["sample_count"]) == means_keys
+        assert set(result["measurement_modality"]) == means_keys
 
 
 # ---------------------------------------------------------------------------
