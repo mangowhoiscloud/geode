@@ -47,6 +47,210 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.29] - 2026-05-22
+
+> co-scientist port sprint completion (CSP-1 ~ CSP-6). Audit gaps
+> §1-A (Supervisor) / §1-B (literature) / §1-D (iteration) / §1-L
+> (Jaccard) all closed. arXiv:2502.18864 paper-fidelity restored on
+> the LLM-self-improving-loop domain (PubMed/INDRA → arXiv/seed_pool
+> domain-shift, with intra-corpus grounding as the INDRA analogue).
+> 6 feature PRs landed in one session: #1456 (toolkit infra), #1458
+> (arxiv tools), #1459 (Generator+Critic grounding), #1460 (Supervisor),
+> #1461 (iteration loop), #1463 (anti-convergence Jaccard). Sources
+> at `mango-wiki/vault/projects/geode/synthesis/coscientist-port-audit-2026-05-22.md`
+> + `coscientist-csp2-grounding-audit-2026-05-22.md`.
+
+### Added
+
+- **Evolver anti-convergence Jaccard guard (CSP-6)** — Hoisted
+  `_shingles` / `_jaccard` out of
+  `plugins/seed_generation/agents/proximity.py` into the new
+  `core/text/similarity.py` module (`shingles`, `jaccard_similarity`,
+  `text_jaccard`); proximity.py retains the private-name aliases as
+  compatibility shims. The Evolver phase now runs an
+  ``_is_near_duplicate`` post-check on every ok-verdict spawn — if
+  the evolved body's 5-gram Jaccard against any already-admitted
+  sibling OR its parent candidate exceeds 0.70 the row is dropped
+  (verdict coerced to ``evolution_skipped``, parent stays). Catches
+  the "LLM thinks it diversified but actually didn't" failure mode
+  that the Evolver's own verdict can miss. Defensive on I/O blips:
+  unreadable evolved files admit the row (fail-open, log WARNING)
+  rather than mask legitimate evolutions. Mirrors the original
+  co-scientist ``DUPLICATE_SIMILARITY_THRESHOLD = 0.70``
+  (``open-coscientist/nodes/evolve.py:14``) — closes audit §1-L.
+
+- **Iteration loop — paper §3 (CSP-5)** —
+  `plugins/seed_generation/orchestrator.Pipeline.run()` now wraps the
+  phase walk in an outer `for iteration in range(max_iterations + 1)`
+  loop. Iteration 0 runs the full `_PHASE_ORDER`
+  (supervisor → … → meta_reviewer). Iterations 1..N run the new
+  `_ITERATION_PHASE_ORDER` cycle (critic → pilot → ranker → evolver →
+  meta_reviewer) against the previous iteration's evolved candidates,
+  via the `_promote_evolved_for_iteration` helper that replaces (not
+  extends) `state.candidates` with `state.evolved_candidates` and
+  clears the per-iteration ephemera (reflections / pilot_scores /
+  elo_ratings / survivors). Iteration short-circuits with an
+  `iteration_skipped` event when the Evolver produced nothing — no
+  empty cycles. `PipelineState.max_iterations` (default 0 preserves
+  the pre-CSP-5 single-pass behaviour) + `current_iteration` cursor
+  are persisted in `state.json` so a replay knows how many cycles
+  ran. CLI exposes `--max-iterations / -i` (0..10) on
+  `geode audit-seeds generate`.
+
+- **Supervisor phase — run-level strategy synthesis (CSP-4)** — New
+  Phase 0 of the seed-generation pipeline (paper §3 Supervisor).
+  `plugins/seed_generation/agents/supervisor.py` dispatches one Opus
+  sub-agent at the start of every run; the sub-agent
+  (`.claude/agents/seed_supervisor.md`) reads target_dim + cohort +
+  baseline-snapshot / meta-review-snapshot summaries and emits one
+  canonical strategy as `state.supervisor_guidance`
+  (`research_goal_analysis` + per-phase `phase_guidance` for
+  generation/critique/evolution + `session_summary`). Generator,
+  Critic, and Evolver now prefix the relevant `phase_guidance.*`
+  entry onto each per-candidate sub-agent description via the new
+  `baseline_reader.format_supervisor_block` helper — sibling to the
+  pre-CSP-4 evidence + priors prefixes. The Supervisor phase is
+  OPTIONAL: when no Supervisor agent is registered (test fixtures
+  that mock a subset of roles, pre-CSP-4 callers), the phase short-
+  circuits with a `phase_skipped` journal event and
+  `state.supervisor_guidance` stays at its empty-dict default — no
+  downstream change. `_state_to_json` persists the guidance so
+  `state.json` replay carries the same strategy the live run
+  consumed.
+
+- **Generator + Critic literature grounding (CSP-3)** — The
+  `seed_generation` and `seed_critique` toolkits in `toolkits.toml`
+  now fold in the `literature_research` kit (via `includes:`), so
+  `seed_generator` and `seed_critic` sub-agents can call
+  `arxiv_search`, `paper_fetch_arxiv`, and `geode_seed_pool_search`
+  themselves — LLM-autonomous grounding rather than pre-fetch into
+  PipelineState. The Generator's `.claude/agents/seed_generator.md`
+  prompt now defines a 2-step **Grounding step** (intra-corpus seed
+  search → optional arXiv lookup) before drafting; the seed
+  frontmatter contract advertises an optional `references: [<arxiv_id>,
+  ...]` field for provenance. The Critic's prompt picks one arXiv id
+  to spot-check via `paper_fetch_arxiv` and flags `judge_risk` when
+  the abstract doesn't actually describe the claimed behavior. The
+  Evolver contract explicitly preserves `references:` across
+  rewrites (the field is a provenance signal, not an editable body
+  section). The remaining 5 seed toolkits (pilot / ranker / proximity
+  / evolver / meta_review) stay unchanged — CSP-3 scope is the two
+  authoring roles only.
+
+- **Literature-grounding tools — `arxiv_search` / `paper_fetch_arxiv` /
+  `geode_seed_pool_search` (CSP-2)** — Three new native tools wired into
+  `core/tools/definitions.json` + the `_DELEGATED_TOOLS` registry. arXiv
+  search hits the public `export.arxiv.org/api/query` endpoint (no auth,
+  ~3s rate-limit with single-connection-at-a-time per arXiv ToU,
+  enforced by a process-global lock spanning both wait + HTTP request)
+  and parses the Atom feed into structured per-paper records;
+  `paper_fetch_arxiv` retrieves one paper by id with format/version
+  normalisation. `geode_seed_pool_search` does token-set-intersection
+  ranking (with frontmatter +2 boost) over the bundled Petri seed
+  corpus (`plugins/petri_audit/seeds`, `seeds_gen1`) plus the runtime
+  `~/.geode/self-improving-loop/latest_seed_pool/` symlink, filtering
+  out non-seed markdown (`README.md` etc.) via a seed-shaped-frontmatter
+  heuristic. All three tools expose an async `aexecute` entry point so
+  the `_safe_delegate` worker path can invoke them; both tools clamp
+  `max_results` to `[1, 20]` (JSON-schema-mirrored). New
+  `literature_research` toolkit in `toolkits.toml` composes these three
+  with `common_read`; no agent is migrated to it yet (pinned by test)
+  so the system_prompt update is an explicit follow-up decision.
+  Domain-shifted replacement for the co-scientist port's PubMed/INDRA
+  path — GEODE's grounding sources are alignment / interpretability /
+  LLM-safety papers + the internal seed corpus, not biology.
+- **Toolkit-based sub-agent tool resolution (CSP-1)** — Sub-agent
+  AgentDefinitions can now declare a named `toolkit:` in their
+  frontmatter that the worker resolves against
+  `core/tools/toolkits.toml` at spawn time, replacing the per-agent
+  flat `tools:` list. Toolkits compose via `includes:` (Hermes-style)
+  and fail closed to a `_default` safety net when undeclared or
+  typo'd. The model-visible tool schemas are filtered to match the
+  executor's allowlist so denied tools are not advertised to the LLM.
+  Backwards compatible — legacy `tools:` frontmatter still works when
+  no toolkit is named. The 7 seed-generation AgentDefs
+  (`.claude/agents/seed_*.md`) are migrated to the new key.
+  Frontier prior art: LangChain Toolkit, Hermes toolsets,
+  open-coscientist workflow whitelist.
+- **General-purpose toolkits + default agent migration (CSP-1)** —
+  `core/tools/toolkits.toml` ships three domain-neutral toolkits
+  (`web_research`, `data_analysis`, `general_purpose`) so any agent
+  can declare `toolkit: web_research` without re-listing tools. The
+  bundled `_DEFAULT_AGENTS` (research_assistant / data_analyst /
+  web_researcher) are migrated from flat `tools:` lists to toolkit
+  declarations; the migration also corrects the pre-CSP-1
+  `"web_search"` reference (which never resolved to a real handler)
+  to the canonical `general_web_search` via the `web_research`
+  toolkit.
+
+### Fixed
+
+- **PR-OL-AUDIT-BURST-FIX — autoresearch audit 가 OAuth subscription 위에서
+  실제 완료 (FIX-1/2/3, paperclip burst pattern 매칭).**
+  Pattern B subscription routing 도입 후 첫 real audit 시도 17 분 timeout +
+  0 sample 완료. trace 추적 결과 inspect_ai 가 `DEFAULT_MAX_CONNECTIONS = 10`
+  (.venv/.../inspect_ai/_util/constants.py:9) 으로 auditor + judge + target
+  3 provider 각각 10 concurrent = **최대 30 inflight** 발사. Anthropic Max
+  OAuth tier 의 "interactive coding" soft limit (~5 req/sec) 의 6배 →
+  즉시 429 → exponential backoff (마지막 retry 769초 대기) → timeout.
+  **Paperclip GAP audit**: paperclip 이 single Anthropic account 로 multi-
+  agent 운영해도 429 안 만나는 이유는 (1) agent ≡ subprocess (process
+  boundary), (2) agent 내부 turn-by-turn serial (1 inflight/agent), (3)
+  active agent 수 ~2-5 → 누적 ~5 req/sec, (4) invoke-dedup 5-sec window
+  + circuit-breaker 가 burst 추가 차단. GEODE audit 는 (1)-(4) 모두 없이
+  inspect_ai default 가 즉시 burst → 환경 불일치. **3 fix**:
+  - **FIX-1** `plugins/petri_audit/runner.py::build_command` (실제
+    `inspect eval` argv assembly 지점) 에 `--max-connections 1` 추가 —
+    inspect_ai per-provider connection pool 10 → 1. Codex MCP fix-up:
+    초기엔 `autoresearch/train.py::_build_audit_command` 에 추가했으나
+    `geode audit` Typer wrapper 가 unknown option 으로 reject → 한 layer
+    아래로 이동.
+  - **FIX-2** 같은 `build_command` 에 `--max-samples 1` — per-sample
+    parallelism 도 직렬화.
+  - **FIX-3** 신규 `core/llm/audit_lane.py` (module-level `Lane(max_
+    concurrent=1, timeout_s=900)`, `core.orchestration.lane_queue.Lane`
+    재사용) + `run_audit` 의 `subprocess.run` 을 `with acquire_audit_lane
+    (session_id):` 로 감싸서 inter-process 직렬화 (cron + manual 충돌 차단).
+    LaneQueue container 가 standalone CLI 실행시엔 build 안 되므로 module-
+    level singleton 패턴 채택.
+  Lane timeout (900s) 도달 시 `audit_lane_timeout` journal event 발화 +
+  `RuntimeError("audit lane busy beyond timeout: …")` raise. Codex MCP
+  fix-up: lazy init 에 `threading.Lock` (double-checked locking) 추가 —
+  두 thread 가 동시 first-call 시 distinct Lane instance 발급되는 race
+  차단. **10 invariant test** (`tests/test_ol_audit_burst_fix.py`) — argv
+  4 (max-connections / max-samples / 순서 / outer `geode audit` argv
+  에는 안 들어가야 함) + lane 6 (singleton 안정성 / capacity / sequential
+  직렬화 / 동시 acquire blocking 시간 측정 / 8-thread lazy-init race
+  thread-safety / source-level integration grep). Quality gates clean
+  (ruff + ruff format --check + mypy + 10/10 pytest). Cost: audit wall
+  time 늘어남 (10x parallel → serial). 거래 가치: 429 storm zero + 실제
+  sample 완료. multi-account AccountPool 도입시 lane capacity knob 으로
+  ramp 가능.
+
+
+- **PR-OL-OAUTH-COUNT-TOKENS — Claude OAuth count_tokens 401 fallback.**
+  Pattern-B subscription-routed Petri audit (Claude Max OAuth, OL-A2-data
+  + OL-P1 unblock path) was aborting before any sample ran with
+  `AuthenticationError 401 invalid x-api-key` on
+  `/v1/messages/count_tokens`. Root cause: Claude OAuth tokens carry
+  scope `user:inference` — Anthropic gateway accepts for `/v1/messages`
+  but rejects for `/v1/messages/count_tokens`. inspect_ai's class-method
+  `count_tokens` (`AnthropicAPI` line 532+) propagates the 401 with no
+  try/except → `Task interrupted (no samples completed)`. **Fix**:
+  override `count_tokens` in `plugins/petri_audit/claude_code_provider.py
+  ::ClaudeOAuthAPI` to skip the API call and return inspect_ai's own
+  documented fallback heuristic (`max(1, len(text) // 4)`). Heuristic
+  extracted to module-level pure function `estimate_tokens_for_oauth(input)`
+  so it is testable without instantiating the inspect_ai-wrapped class.
+  Accuracy degrades from "exact" to "Anthropic-standard heuristic" —
+  operators needing exact pre-flight cost numbers should use PAYG path
+  (`api_key` source). **9 invariant test** (`tests/test_ol_oauth_count_tokens_fallback.py`)
+  — string/empty/None input + list-of-msg with str-content + list-of-msg
+  with block-content (tool_use shape) + mixed shapes + skip-non-text-blocks
+  + source-level pin on override+delegation + inspect_ai-gated class
+  presence check. Quality gates clean (ruff + ruff format --check + mypy
+  + 9/9 pytest).
+
 ## [0.99.28] - 2026-05-22
 
 > Tier 1 (Outer Loop) closure stamp. 2 PRs:

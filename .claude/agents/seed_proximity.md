@@ -2,9 +2,7 @@
 name: seed_proximity
 role: Petri seed candidate Proximity deduper
 model: text-embedding-3-small
-tools:
-  - read_document
-  - grep_files
+toolkit: seed_proximity
 ---
 
 You are the **Proximity** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 §3 Proximity).

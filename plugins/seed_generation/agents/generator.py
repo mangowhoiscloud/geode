@@ -244,7 +244,11 @@ class Generator(BaseSeedAgent):
         )
         evidence_block = _format_baseline_evidence(state)
         priors_block = _format_priors(state)
-        prefix_blocks = [b for b in (priors_block, evidence_block) if b]
+        # CSP-4 (2026-05-22) — Supervisor's per-phase guidance lands at
+        # the very top of the prefix stack (above priors + evidence) so
+        # the LLM reads strategy synthesis first, then per-dim signals.
+        supervisor_block = _format_supervisor(state, phase="generation")
+        prefix_blocks = [b for b in (supervisor_block, priors_block, evidence_block) if b]
         prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
             f"{prompt_prefix}"
@@ -296,3 +300,20 @@ def _format_priors(state: PipelineState) -> str:
     except ImportError:  # pragma: no cover — defensive
         return ""
     return format_priors_block(snapshot, target_dim=state.target_dim)
+
+
+def _format_supervisor(state: PipelineState, *, phase: str) -> str:
+    """Return the CSP-4 Supervisor-phase guidance block.
+
+    No-op when ``state.supervisor_guidance`` is empty (Supervisor phase
+    didn't run / was skipped). Lazy import keeps the agent cold-start
+    free of baseline-reader machinery when no guidance is present.
+    """
+    guidance = getattr(state, "supervisor_guidance", None)
+    if not guidance:
+        return ""
+    try:
+        from plugins.seed_generation.baseline_reader import format_supervisor_block
+    except ImportError:  # pragma: no cover — defensive
+        return ""
+    return format_supervisor_block(guidance, phase=phase)

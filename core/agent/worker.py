@@ -63,6 +63,13 @@ class WorkerRequest:
     agent_name: str = ""
     agent_system_prompt: str = ""
     agent_allowed_tools: list[str] = field(default_factory=list)
+    # CSP-1 (2026-05-22) — named tool bundle the agent declared in its
+    # frontmatter (``toolkit:`` key). Resolved by
+    # ``filter_handlers`` against ``core/tools/toolkits.toml``. When
+    # both ``toolkit`` and ``agent_allowed_tools`` are set, ``toolkit``
+    # takes precedence; the legacy list path stays available for
+    # AgentDefinitions that haven't migrated yet (backwards compat).
+    toolkit: str = ""
     # Sub-agent lineage (2026-05-21) — parent's routing key + uuid
     # threaded into the child loop so its Episodes carry both for
     # cross-session attribution. Empty strings = top-level spawn.
@@ -96,6 +103,7 @@ class WorkerRequest:
             agent_name=data.get("agent_name", ""),
             agent_system_prompt=data.get("agent_system_prompt", ""),
             agent_allowed_tools=data.get("agent_allowed_tools", []),
+            toolkit=data.get("toolkit", ""),
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
         )
@@ -137,30 +145,75 @@ def filter_handlers(
     handlers: dict[str, Any],
     denied_tools: list[str],
     agent_allowed_tools: list[str],
+    toolkit: str = "",
+    toolkit_registry: Any | None = None,
 ) -> dict[str, Any]:
-    """Apply denied-set + AgentDefinition whitelist to the tool handler map.
+    """Apply denied-set + agent toolkit/whitelist to the tool handler map.
 
     Pure function — testable without the worker's AgenticLoop bootstrap.
 
+    Resolution priority (CSP-1, 2026-05-22):
+
+    1. **toolkit** — if non-empty AND ``toolkit_registry`` is provided,
+       the registry expands the name (with ``includes`` recursion) into
+       a tool allowlist. Unknown toolkit names fall through to
+       ``_default`` (with a WARNING) so a typo cannot zero out the
+       agent's capability.
+    2. **agent_allowed_tools** — legacy flat whitelist from the
+       AgentDefinition's ``tools:`` frontmatter. Used when no toolkit
+       is declared (backwards compat with pre-CSP-1 AgentDefs).
+    3. **_default** — when neither is set AND the registry has a
+       ``_default`` toolkit, that fallback is applied. This means a
+       sub-agent that declares neither ``toolkit:`` nor ``tools:`` gets
+       a minimal read-only safety net rather than inheriting the full
+       parent surface.
+
+    Invariants regardless of which branch applied:
+
     - ``delegate_task`` is always denied (depth=1 enforcement).
-    - When ``agent_allowed_tools`` is non-empty, tools not on the whitelist
-      are added to the denied set (whitelist takes precedence over
-      inherited tools).
-    - S2-fix (2026-05-18): whitelist entries that don't match any handler
-      are logged at WARNING so a typo in ``.claude/agents/<name>.md``'s
-      ``tools:`` frontmatter (e.g. ``foo_typo``) doesn't silently degrade
-      the agent's capability to zero tools.
+    - Whitelist entries that don't match any handler emit a WARNING so
+      typos in frontmatter (e.g. ``foo_typo``) don't silently degrade
+      the agent's capability to zero tools (S2-fix, 2026-05-18).
     """
     denied = set(denied_tools)
     denied.add("delegate_task")
-    if agent_allowed_tools:
+    allowed: set[str] | None = None
+    if toolkit and toolkit_registry is not None:
+        # Tier 1 — named toolkit takes precedence. The registry already
+        # handles missing-toolkit fallback to ``_default`` with a WARNING.
+        allowed = set(toolkit_registry.resolve_with_fallback(toolkit))
+    elif toolkit and toolkit_registry is None:
+        # CSP-1 fix-up (Codex MCP MEDIUM #2) — fail closed when the
+        # caller explicitly declared a toolkit but no registry was
+        # supplied. Silently routing to ``agent_allowed_tools`` or to
+        # the full surface would let a misconfigured spawn quietly
+        # ignore the operator's whitelist intent.
+        log.warning(
+            "filter_handlers: agent declared toolkit=%r but no "
+            "toolkit_registry was provided — failing closed (no tools "
+            "allowed). Pass ``toolkit_registry=load_default_registry()`` "
+            "if you want the named toolkit applied.",
+            toolkit,
+        )
+        allowed = set()
+    elif agent_allowed_tools:
+        # Tier 2 — legacy ``tools:`` frontmatter list (backwards compat).
         allowed = set(agent_allowed_tools)
+    elif toolkit_registry is not None:
+        # Tier 3 — no declaration at all → ``_default`` safety net.
+        # CSP-1 fix-up (Codex MCP HIGH #2) — fail closed even when the
+        # ``_default`` toolkit is missing or empty. Pre-fix this branch
+        # left ``allowed = None`` so a registry without ``_default``
+        # silently re-opened the full handler surface — the inverse of
+        # the "minimal read-only safety net" claim.
+        allowed = set(toolkit_registry.resolve_with_fallback(None))
+    if allowed is not None:
         unknown = allowed - set(handlers)
         if unknown:
             log.warning(
-                "filter_handlers: AgentDefinition whitelist contains "
-                "tool names not in the handler registry — %s. The agent "
-                "will run without these tools. Check the 'tools:' "
+                "filter_handlers: agent allowlist references tool names "
+                "not in the handler registry — %s. The agent will run "
+                "without these tools. Check the agent's toolkit / "
                 "frontmatter for typos.",
                 sorted(unknown),
             )
@@ -194,12 +247,24 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
 
     handlers = _build_tool_handlers(verbose=False)
 
-    # 2. Filter tools
+    # 2. Filter tools — CSP-1 (2026-05-22): consult the toolkit registry
+    # so the agent's declared ``toolkit:`` frontmatter expands into the
+    # allowlist (with ``_default`` fallback when undeclared).
+    from core.tools.toolkit_registry import load_default_registry
+
     handlers = filter_handlers(
         handlers=handlers,
         denied_tools=request.denied_tools,
         agent_allowed_tools=request.agent_allowed_tools,
+        toolkit=request.toolkit,
+        toolkit_registry=load_default_registry(),
     )
+    # CSP-1 (2026-05-22) — the resulting handler key set is also the
+    # set of tool names the model should see. Pass it through to
+    # AgenticLoop so the tool schemas advertised to the LLM match the
+    # executor's allowlist (otherwise denied tools would be visible to
+    # the model and only fail at execution time as "Unknown tool").
+    allowed_tool_names = set(handlers)
 
     # 3. Build ToolExecutor (auto_approve=True for sub-agents)
     from core.agent.tool_executor import ToolExecutor
@@ -246,6 +311,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         parent_session_key=request.parent_session_key,
         parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
+        allowed_tool_names=allowed_tool_names,
     )
 
     # 7. Build prompt

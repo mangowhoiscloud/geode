@@ -67,6 +67,18 @@ _REQUIRED_EVOLVE_FIELDS = (
 )
 _VALID_VERDICTS = frozenset({"ok", "evolution_skipped", "failed"})
 
+# CSP-6 (2026-05-22) — anti-convergence Jaccard threshold. An evolved
+# seed body whose 5-gram Jaccard against any sibling evolved (or
+# pre-existing) candidate exceeds this is treated as "too close" —
+# the verdict gets coerced to ``evolution_skipped`` so the parent
+# candidate stays. 0.70 mirrors the original co-scientist
+# ``DUPLICATE_SIMILARITY_THRESHOLD`` (``open-coscientist/nodes/
+# evolve.py:14``). Proximity uses a stricter 0.40 because it's
+# deduping against the entire pool; this guard fires AFTER the
+# Evolver writes the file, so it tolerates more overlap and only
+# flips on near-duplicates.
+ANTI_CONVERGENCE_JACCARD_THRESHOLD = 0.70
+
 
 class Evolver(BaseSeedAgent):
     """Spawn one sub-agent per survivor; collect evolved candidate rows.
@@ -166,6 +178,24 @@ class Evolver(BaseSeedAgent):
             if parsed["verdict"] != "ok":
                 # Evolution skipped or failed — original candidate stays.
                 continue
+            # CSP-6 (2026-05-22) — anti-convergence Jaccard guard. If
+            # the evolved body's 5-gram Jaccard against ANY sibling
+            # evolved row or the candidate it parents from exceeds
+            # the threshold, treat the spawn as "evolution_skipped"
+            # (original candidate stays) rather than admit a
+            # near-duplicate into the next iteration's candidate pool.
+            # The Evolver's verdict is best-effort LLM intent; this
+            # guard is a deterministic safety net for the case where
+            # the model thinks it diversified but actually didn't.
+            if self._is_near_duplicate(parsed, evolved_rows, candidates_by_id):
+                log.info(
+                    "seed-generation evolver: parent=%s evolved body too close "
+                    "to sibling (Jaccard ≥ %.2f) — coercing verdict to "
+                    "evolution_skipped.",
+                    task.args["parent_id"],
+                    ANTI_CONVERGENCE_JACCARD_THRESHOLD,
+                )
+                continue
             evolved_rows.append(self._build_evolved_row(parsed, task, state.gen_tag))
 
         if failed:
@@ -220,6 +250,7 @@ class Evolver(BaseSeedAgent):
                 weaknesses=reflection.get("weaknesses", []),
                 dim_means=pilot.get("dim_means", {}) if isinstance(pilot, dict) else {},
                 baseline_snapshot=state.baseline_snapshot,
+                supervisor_guidance=state.supervisor_guidance,
             )
             tasks.append(
                 SubTask(
@@ -246,6 +277,7 @@ class Evolver(BaseSeedAgent):
         weaknesses: list[Any],
         dim_means: dict[str, Any],
         baseline_snapshot: Any = None,
+        supervisor_guidance: dict[str, Any] | None = None,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -259,17 +291,30 @@ class Evolver(BaseSeedAgent):
         weakness_summary = "; ".join(str(w) for w in weaknesses) or "n/a"
         means_summary = ", ".join(f"{k}={v}" for k, v in dim_means.items()) or "n/a"
         target_dim = candidate.get("target_dim", "unknown")
-        evidence_block = ""
+        prefix_blocks: list[str] = []
+        # CSP-4 (2026-05-22) — Supervisor's evolution guidance at the
+        # top of the prefix stack, above per-dim baseline evidence.
+        if supervisor_guidance:
+            try:
+                from plugins.seed_generation.baseline_reader import format_supervisor_block
+
+                supervisor_block = format_supervisor_block(supervisor_guidance, phase="evolution")
+                if supervisor_block:
+                    prefix_blocks.append(supervisor_block)
+            except ImportError:  # pragma: no cover — defensive
+                pass
         if baseline_snapshot is not None:
             try:
                 from plugins.seed_generation.baseline_reader import format_evidence_block
 
                 evidence_block = format_evidence_block(baseline_snapshot, target_dim)
+                if evidence_block:
+                    prefix_blocks.append(evidence_block)
             except ImportError:  # pragma: no cover — defensive
-                evidence_block = ""
-        evidence_prefix = (evidence_block + "\n\n") if evidence_block else ""
+                pass
+        prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
-            f"{evidence_prefix}"
+            f"{prefix}"
             f"Evolve ONE Petri seed candidate. Parent id: {candidate['id']!r}. "
             f"Parent path: {candidate['path']!r}. Target dim: "
             f"{target_dim!r}. Rewrite section: "
@@ -307,3 +352,72 @@ class Evolver(BaseSeedAgent):
             "rewrite_section": str(parsed["rewrite_section"]),
             "notes": parsed.get("notes", ""),
         }
+
+    def _is_near_duplicate(
+        self,
+        parsed: dict[str, Any],
+        already_admitted: list[dict[str, Any]],
+        candidates_by_id: dict[str, dict[str, Any]],
+    ) -> bool:
+        """Return True iff the evolved body is too close to a sibling.
+
+        CSP-6 (2026-05-22) — reads the evolved file body and compares
+        its 5-gram Jaccard against:
+
+        1. Every already-admitted evolved row (the sibling spawns this
+           run already accepted).
+        2. The parent candidate's body (to catch the "evolution returned
+           almost the same text" failure mode the LLM verdict can miss).
+
+        Returns True as soon as ANY comparison exceeds
+        :data:`ANTI_CONVERGENCE_JACCARD_THRESHOLD`. Returns False when
+        the evolved file is unreadable (defensive — failing closed
+        on every IO blip would mask legitimate evolutions).
+        """
+        from pathlib import Path
+
+        from core.text.similarity import jaccard_similarity, shingles
+
+        evolved_path = parsed.get("evolved_path")
+        parent_id = parsed.get("parent_id")
+        if not evolved_path:
+            return False
+        try:
+            evolved_body = Path(str(evolved_path)).read_text(encoding="utf-8")
+        except OSError as exc:
+            log.warning(
+                "seed-generation evolver: anti-convergence guard could not "
+                "read evolved body at %s (%s) — admitting the row.",
+                evolved_path,
+                exc,
+            )
+            return False
+        evolved_shingles = shingles(evolved_body)
+        # Sibling check.
+        for row in already_admitted:
+            other_path = row.get("path")
+            if not other_path:
+                continue
+            try:
+                other_body = Path(str(other_path)).read_text(encoding="utf-8")
+            except OSError:
+                continue
+            score = jaccard_similarity(evolved_shingles, shingles(other_body))
+            if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
+                return True
+        # Parent-vs-evolved check — catches the "barely changed" LLM
+        # output the verdict didn't flag.
+        if parent_id:
+            parent_row = candidates_by_id.get(str(parent_id))
+            if parent_row:
+                parent_path = parent_row.get("path")
+                if parent_path:
+                    try:
+                        parent_body = Path(str(parent_path)).read_text(encoding="utf-8")
+                    except OSError:
+                        parent_body = ""
+                    if parent_body:
+                        score = jaccard_similarity(evolved_shingles, shingles(parent_body))
+                        if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
+                            return True
+        return False

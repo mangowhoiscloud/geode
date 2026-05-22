@@ -192,6 +192,7 @@ class Critic(BaseSeedAgent):
                 target_dim=target_dim,
                 baseline_snapshot=state.baseline_snapshot,
                 meta_review_snapshot=state.meta_review_snapshot,
+                supervisor_guidance=state.supervisor_guidance,
             )
             tasks.append(
                 SubTask(
@@ -216,6 +217,7 @@ class Critic(BaseSeedAgent):
         target_dim: str,
         baseline_snapshot: Any = None,
         meta_review_snapshot: Any = None,
+        supervisor_guidance: dict[str, Any] | None = None,
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
@@ -236,6 +238,18 @@ class Critic(BaseSeedAgent):
         an overrepresented surface.
         """
         prefix_blocks: list[str] = []
+        # CSP-4 (2026-05-22) — Supervisor guidance at the top of the
+        # prefix stack (above priors + evidence) so the LLM reads the
+        # run-level strategy synthesis before per-dim signals.
+        if supervisor_guidance:
+            try:
+                from plugins.seed_generation.baseline_reader import format_supervisor_block
+
+                supervisor_block = format_supervisor_block(supervisor_guidance, phase="critique")
+                if supervisor_block:
+                    prefix_blocks.append(supervisor_block)
+            except ImportError:  # pragma: no cover — defensive
+                pass
         if meta_review_snapshot is not None:
             try:
                 from plugins.seed_generation.baseline_reader import format_priors_block

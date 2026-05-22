@@ -181,6 +181,23 @@ def apply_agent_contracts_policy(
     overrides = {k: v for k, v in entry.items() if k in _MUTABLE_FIELDS}
     if not overrides:
         return agent_def
+    # CSP-1 fix-up (Codex MCP MEDIUM #1) — an agent that declares a
+    # ``toolkit:`` will have its ``tools`` field shadowed by the
+    # toolkit's resolved set inside ``filter_handlers``. A policy entry
+    # that mutates ``tools`` on a toolkit-declaring agent therefore
+    # silently does nothing. Warn so operators notice rather than
+    # debugging a no-op override later.
+    agent_toolkit: str = str(getattr(agent_def, "toolkit", "") or "")
+    if _FIELD_TOOLS in overrides and agent_toolkit:
+        log.warning(
+            "agent_contracts_policy: agent %r declares toolkit=%r; "
+            "the policy's ``tools`` override is shadowed at spawn time "
+            "(toolkit takes precedence in filter_handlers). Either "
+            "remove the ``tools`` override or add a ``toolkit`` field "
+            "to the policy entry.",
+            name,
+            agent_toolkit,
+        )
     if hasattr(agent_def, "model_copy"):
         return agent_def.model_copy(update=overrides)
     # Fallback for non-BaseModel doubles (test stubs, dicts) —

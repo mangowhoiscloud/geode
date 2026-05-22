@@ -1,0 +1,106 @@
+# GEODE Toolkits — sub-agent tool grouping manifest.
+#
+# A "toolkit" is a named bundle of tool ids that a sub-agent declares it
+# wants access to (via the `toolkit:` key in `.claude/agents/<name>.md`
+# frontmatter). The worker resolves the toolkit at spawn time and passes
+# the resulting allowlist into `filter_handlers()`.
+#
+# Resolution order (see core/tools/toolkit_registry.py):
+#   1. If agent declares `toolkit: <name>`, use that toolkit's tools
+#      (after recursive `includes:` expansion).
+#   2. If agent declares `tools: [...]` (legacy frontmatter), use that
+#      list verbatim — backwards compatible with pre-CSP-1 AgentDefs.
+#   3. If neither is declared (or the named toolkit is missing), fall
+#      back to the `_default` toolkit.
+#
+# Tool names MUST match `core/tools/definitions.json` entries — typos
+# produce a WARNING at spawn time (worker.py:filter_handlers) and the
+# agent runs without the missing tool.
+
+# ---------------------------------------------------------------------------
+# Fallback — applied when an agent has no toolkit AND no tools: list.
+# Keep this minimal; agents that need more should declare a toolkit.
+# ---------------------------------------------------------------------------
+
+[toolkits._default]
+description = "Minimal read-only safety net for sub-agents without a declared toolkit."
+tools = ["read_document", "grep_files"]
+
+# ---------------------------------------------------------------------------
+# Composition leaves — reusable building blocks pulled in via `includes`.
+# Single-purpose; do not declare these as an agent's primary toolkit.
+# ---------------------------------------------------------------------------
+
+[toolkits.common_read]
+description = "Filesystem read primitives."
+tools = ["read_document", "grep_files", "glob_files"]
+
+[toolkits.common_write]
+description = "Filesystem write primitives (paired with common_read in practice)."
+tools = ["write_file", "edit_file"]
+
+# ---------------------------------------------------------------------------
+# General-purpose toolkits — domain-neutral kits any agent can declare via
+# ``toolkit:`` in `.claude/agents/<name>.md`. Each is named after the
+# *job profile* the agent is performing (web research, analysis, etc.) so
+# the meaning carries without reading the manifest.
+# ---------------------------------------------------------------------------
+
+[toolkits.web_research]
+description = "Web research — search + fetch + read primitives."
+includes = ["common_read"]
+tools = ["general_web_search", "web_fetch"]
+
+[toolkits.data_analysis]
+description = "Read-only analysis kit with web + memory context."
+includes = ["common_read"]
+tools = ["general_web_search", "memory_search"]
+
+[toolkits.general_purpose]
+description = "Broad-surface kit for orchestrator-style agents — read/write + web + notes. Distinct from ``_default`` (which is the *fallback* minimal safety net for undeclared agents); ``general_purpose`` is a *declared* full-research surface."
+includes = ["common_read", "common_write"]
+tools = ["general_web_search", "web_fetch", "memory_save", "note_save"]
+
+[toolkits.literature_research]
+description = "Literature grounding for research / Petri-seed-style agents — arXiv API + intra-corpus seed-pool search + common read primitives. Domain-shifted replacement for the co-scientist port's PubMed/INDRA path (GEODE's domain is LLM self-improving loops + Petri audit, not biology)."
+includes = ["common_read"]
+tools = ["arxiv_search", "paper_fetch_arxiv", "geode_seed_pool_search"]
+
+# ---------------------------------------------------------------------------
+# Seed-generation toolkits — one per role of the co-scientist port
+# (`plugins/seed_generation/`). The agent definitions under
+# `.claude/agents/seed_*.md` declare these via `toolkit:`.
+# ---------------------------------------------------------------------------
+
+[toolkits.seed_generation]
+description = "Petri seed candidate Generator — writes one .md candidate per spawn. CSP-3 (2026-05-22): folds in ``literature_research`` so the generator can ground its proposal in arXiv papers + the existing seed corpus before writing."
+includes = ["common_read", "common_write", "literature_research"]
+tools = []  # all tools come from `includes`
+
+[toolkits.seed_critique]
+description = "Reflection critic — read-only critique of a candidate seed. CSP-3 (2026-05-22): folds in ``literature_research`` so the critic can verify any ``references:`` the generator put in the seed's frontmatter (arXiv id lookup) + scan the existing pool for near-duplicates."
+includes = ["common_read", "literature_research"]
+tools = []
+
+[toolkits.seed_proximity]
+description = "Proximity dedup — read-only; embedding API is invoked outside the tool handler layer (see plugins/seed_generation/agents/proximity.py)."
+includes = ["common_read"]
+tools = []
+
+[toolkits.seed_pilot]
+description = "Petri inner-loop pilot audit for one candidate."
+tools = ["petri_audit", "read_document"]
+
+[toolkits.seed_ranker]
+description = "Elo tournament voter — reads two candidates and casts a vote."
+tools = ["read_document"]
+
+[toolkits.seed_evolver]
+description = "Section-targeted rewrite of one survivor candidate."
+includes = ["common_read", "common_write"]
+tools = []
+
+[toolkits.seed_meta_review]
+description = "Aggregate meta-review across the candidate batch."
+includes = ["common_read"]
+tools = []

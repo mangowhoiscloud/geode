@@ -73,6 +73,23 @@ class TestWorkerRequest:
         assert req.thinking_budget == 0
         assert req.time_budget_s == 0.0
 
+    def test_toolkit_roundtrip(self) -> None:
+        """CSP-1 — ``toolkit`` survives the parent→worker IPC boundary."""
+        req = WorkerRequest(
+            task_id="t-csp1",
+            description="seed generator spawn",
+            toolkit="seed_generation",
+        )
+        data = req.to_dict()
+        assert data["toolkit"] == "seed_generation"
+        restored = WorkerRequest.from_dict(data)
+        assert restored.toolkit == "seed_generation"
+
+    def test_toolkit_default_empty(self) -> None:
+        """Default ``toolkit`` is empty string — legacy callers unaffected."""
+        req = WorkerRequest.from_dict({"task_id": "t-bc"})
+        assert req.toolkit == ""
+
 
 class TestWorkerResult:
     def test_roundtrip(self) -> None:

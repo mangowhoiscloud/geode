@@ -36,6 +36,15 @@ import logging
 from pathlib import Path
 from typing import Any
 
+# CSP-6 (2026-05-22) — the Jaccard primitives moved to
+# ``core/text/similarity.py`` so the Evolver's anti-convergence guard
+# can reuse them without reaching into a sibling plugin. The module-
+# level ``_shingles`` / ``_jaccard`` symbols below stay as thin
+# compatibility shims so this file's existing call sites (and any
+# external importer that referenced the private names) keep working.
+from core.text.similarity import jaccard_similarity as _jaccard
+from core.text.similarity import shingles as _shingles_impl
+
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 from plugins.seed_generation.orchestrator import PipelineState
 
@@ -499,14 +508,10 @@ def _pair_key(a: str, b: str) -> tuple[str, str]:
 
 
 def _shingles(text: str, n: int = NGRAM_SIZE) -> set[str]:
-    """Split lowercase whitespace-tokenized text into n-gram shingles."""
-    tokens = text.lower().split()
-    if len(tokens) < n:
-        return {" ".join(tokens)} if tokens else set()
-    return {" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)}
+    """Compatibility shim — defaults to the proximity-module ``NGRAM_SIZE``.
 
-
-def _jaccard(a: set[str], b: set[str]) -> float:
-    if not a and not b:
-        return 0.0
-    return len(a & b) / len(a | b) if (a or b) else 0.0
+    CSP-6 (2026-05-22) — wraps :func:`core.text.similarity.shingles`
+    with the proximity module's default ``n`` so legacy call sites
+    that don't pass ``n=`` keep their pre-CSP-6 behaviour.
+    """
+    return _shingles_impl(text, n=n)

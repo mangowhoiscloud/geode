@@ -26,6 +26,13 @@ class AgentDefinition(BaseModel):
     role: str
     system_prompt: str
     tools: list[str] = Field(default_factory=list)
+    # CSP-1 (2026-05-22) — named tool bundle declared in the agent's
+    # ``toolkit:`` frontmatter. When present it takes precedence over
+    # ``tools`` at spawn time (see
+    # ``core/agent/worker.py:filter_handlers``). Empty string preserves
+    # the pre-CSP-1 behaviour for AgentDefinitions that still use the
+    # flat ``tools:`` list.
+    toolkit: str = ""
     model: str = ANTHROPIC_SECONDARY
 
     def to_system_message(self) -> str:
@@ -37,6 +44,15 @@ class AgentDefinition(BaseModel):
 # Default agents
 # ---------------------------------------------------------------------------
 
+# CSP-1 (2026-05-22) — the bundled default agents migrated from flat
+# ``tools:`` whitelists to named ``toolkit`` declarations against
+# ``core/tools/toolkits.toml``. The legacy ``tools`` field is dropped
+# (an empty list) since the agent's effective allowlist now comes from
+# the toolkit expansion in ``filter_handlers``. Toolkit choice also
+# fixes the pre-CSP-1 ``"web_search"`` reference, which never resolved
+# to a real handler — ``core/tools/definitions.json`` exposes the tool
+# as ``general_web_search`` and the ``web_research`` toolkit lists it
+# under its canonical name.
 _DEFAULT_AGENTS: list[dict[str, Any]] = [
     {
         "name": "research_assistant",
@@ -46,7 +62,8 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "from multiple sources — web, documents, and databases. "
             "Provide well-structured summaries with key findings and evidence."
         ),
-        "tools": ["web_search", "web_fetch", "read_document"],
+        "tools": [],
+        "toolkit": "web_research",
         "model": ANTHROPIC_SECONDARY,
     },
     {
@@ -57,7 +74,8 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "compute statistics, and generate visualizations. "
             "Provide data-driven insights with clear methodology."
         ),
-        "tools": ["web_search", "read_document"],
+        "tools": [],
+        "toolkit": "data_analysis",
         "model": ANTHROPIC_SECONDARY,
     },
     {
@@ -68,7 +86,8 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
             "tracking updates, and aggregating information from online sources. "
             "Provide timely summaries with source attribution."
         ),
-        "tools": ["web_search", "web_fetch"],
+        "tools": [],
+        "toolkit": "web_research",
         "model": ANTHROPIC_SECONDARY,
     },
 ]
@@ -194,12 +213,17 @@ class SubagentLoader:
             tools = list(tools_raw)
 
         model = metadata.get("model", ANTHROPIC_SECONDARY)
+        # CSP-1 — optional ``toolkit:`` frontmatter (string). Empty when
+        # the agent still uses the legacy flat ``tools:`` list.
+        toolkit_raw = metadata.get("toolkit", "")
+        toolkit = str(toolkit_raw) if toolkit_raw else ""
 
         return AgentDefinition(
             name=name,
             role=role,
             system_prompt=body.strip(),
             tools=tools,
+            toolkit=toolkit,
             model=model,
         )
 
