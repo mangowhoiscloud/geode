@@ -93,9 +93,14 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   (`SelfImprovingLoopRunner`) dispatches by `Mutation.target_kind`
   to the matching file; Mode A agents can edit any of the 5 directly
   via `git`-tracked JSON.
-- Tune hyperparameters on `train.py`: `BUDGET_MINUTES`, `JUDGE_MODEL`,
-  `TARGET_MODEL`, etc. Change **one at a time** so the fitness delta
-  is attributable.
+- Tune hyperparameters on `train.py`: `BUDGET_MINUTES`, `SEED_LIMIT`,
+  `MAX_TURNS`, `DIM_SET_NAME`, `SOURCE`. Change **one at a time** so the
+  fitness delta is attributable. The `auditor` / `target` / `judge` role
+  models are **not** tuned here — they live in
+  `~/.geode/config.toml` under `[self_improving_loop.petri.<role>]`
+  (PR-CSP-12, 2026-05-22) and the autoresearch outer loop reads them
+  via the binding registry. Edit those sections directly (or use the
+  `/petri model <role> <model>` slash) to flip role models.
 
 **The agent CANNOT**:
 - Modify `prepare.py`. It is the fixed ground truth for the seed pool,
