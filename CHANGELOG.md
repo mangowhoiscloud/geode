@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **LaneQueue Phase 1 — hierarchy invariant restored**. The
+  ``seed-generation`` workload lane defaulted to ``max_concurrent=16``
+  while the ``global`` lane was capped at 8 — a textbook hierarchy
+  violation. The 16-slot advertisement was a false signal: every leaf
+  sub-agent call still funnels through ``global`` and blocked at 8.
+  Dropped ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` to ``4`` so workload
+  cap composes correctly under the global cap, and added an explicit
+  invariant test (``tests/test_lane_queue.py::TestAcquireAllSync::
+  test_workload_cap_does_not_exceed_global_cap_invariant``) that fails
+  if any registered workload lane defaults to a cap larger than
+  ``DEFAULT_GLOBAL_CONCURRENCY``. The seed-generation orchestrator
+  now walks the full OpenClaw hierarchy
+  (``["session", "seed-generation", "global"]``) via the new sync
+  ``LaneQueue.acquire_all`` API; the ``session`` key is
+  ``seed-generation:<run_id>`` so concurrent ``Pipeline.run()`` calls
+  for the same run serialize (kills the pre-PR race where two launches
+  of the same ``run_id`` non-atomically incremented ``state.usd_spent``
+  and friends). Re-raising the cap is gated on Phase 2 (sub-agent
+  lane isolation) per
+  [[project_lanequeue_handoff_2026_05_22]].
+
 ## [0.99.30] - 2026-05-22
 
 > Reproducibility-ratchet trilogy completion (CSP-7 in-repo state +

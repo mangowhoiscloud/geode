@@ -461,3 +461,84 @@ class TestSessionLane:
             assert sl.active_count == 0
 
         asyncio.run(scenario())
+
+
+class TestAcquireAllSync:
+    """PR-LQ-Phase1 (2026-05-22) — sync sibling of ``acquire_all_async``.
+
+    The seed-generation orchestrator runs each phase synchronously and
+    needs to compose the OpenClaw lane hierarchy
+    ``["session", "seed-generation", "global"]`` without bouncing through
+    ``asyncio.run``. This class pins the contract: ordering, partial-
+    failure release, missing-lane errors.
+    """
+
+    def test_acquire_all_runs_through_session_workload_and_global(self) -> None:
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=8))
+        q.add_lane("seed-generation", max_concurrent=2)
+        q.add_lane("global", max_concurrent=4)
+
+        with q.acquire_all("run-1", ["session", "seed-generation", "global"]):
+            assert q.get_lane("seed-generation").active_count == 1  # type: ignore[union-attr]
+            assert q.get_lane("global").active_count == 1  # type: ignore[union-attr]
+        assert q.get_lane("seed-generation").active_count == 0  # type: ignore[union-attr]
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_unknown_lane_releases_prior_acquisitions(self) -> None:
+        """If a later lane name is missing, the earlier acquisitions release."""
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=2)
+
+        with pytest.raises(KeyError, match="not found"):
+            with q.acquire_all("k1", ["global", "missing"]):
+                pass
+
+        # global should be back to 0 active (partial-failure release).
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_skips_session_when_none_registered(self) -> None:
+        """Same shape as acquire_all_async: ``session`` is silently skipped
+        when no SessionLane was registered."""
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=2)
+        with q.acquire_all("k1", ["session", "global"]):
+            assert q.get_lane("global").active_count == 1  # type: ignore[union-attr]
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_releases_in_reverse_order(self) -> None:
+        """LIFO release matches acquire_all_async's finally-loop semantics
+        (``for item in reversed(acquired): item._raw_release(key)``)."""
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=8))
+        q.add_lane("seed-generation", max_concurrent=2)
+        q.add_lane("global", max_concurrent=4)
+
+        with q.acquire_all("k1", ["session", "seed-generation", "global"]):
+            pass
+        # After release every lane is empty.
+        for name in ("seed-generation", "global"):
+            assert q.get_lane(name).active_count == 0  # type: ignore[union-attr]
+
+    def test_workload_cap_does_not_exceed_global_cap_invariant(self) -> None:
+        """Hierarchy invariant — ``max(workload_lane) <= max(global)``.
+
+        A workload cap larger than global is a false signal: the leaf
+        semaphore still funnels through the global lane. The seed-
+        generation lane (DEFAULT_SEED_PIPELINE_CONCURRENCY) is the
+        first concrete consumer of this invariant.
+        """
+        from core.wiring.container import (
+            DEFAULT_GATEWAY_CONCURRENCY,
+            DEFAULT_GLOBAL_CONCURRENCY,
+            DEFAULT_SEED_PIPELINE_CONCURRENCY,
+        )
+
+        for workload_name, workload_cap in (
+            ("gateway", DEFAULT_GATEWAY_CONCURRENCY),
+            ("seed-generation", DEFAULT_SEED_PIPELINE_CONCURRENCY),
+        ):
+            assert workload_cap <= DEFAULT_GLOBAL_CONCURRENCY, (
+                f"workload lane {workload_name!r} cap {workload_cap} > "
+                f"global cap {DEFAULT_GLOBAL_CONCURRENCY} — hierarchy violation"
+            )

@@ -859,21 +859,33 @@ class Pipeline:
         return result
 
     def _acquire_lane(self, role: str) -> Any:
-        """Return a context manager that acquires the ``seed-generation`` lane.
+        """Return a context manager that walks the OpenClaw lane hierarchy.
 
-        When no ``LaneQueue`` was supplied (test path) or the lane is not
-        registered, returns a no-op context manager. The actual semaphore
-        gating only takes effect when the agent fans out via
-        ``SubAgentManager.delegate(tasks=[…])`` in S2+.
+        Acquires ``["session", "seed-generation", "global"]`` in order so
+        per-role concurrency is bounded by BOTH the seed-generation
+        workload cap and the global cap (PR-LQ-Phase1, 2026-05-22). The
+        SessionLane keys on ``seed-generation:<run_id>`` so two concurrent
+        ``Pipeline.run()`` calls for the same ``run_id`` serialize
+        (prevents the pre-PR race where two launches of the same run
+        non-atomically incremented ``state.usd_spent`` etc.).
+
+        When no ``LaneQueue`` was supplied (test path) or the
+        ``seed-generation`` lane is not registered, returns a no-op
+        context manager. The actual semaphore gating only takes effect
+        when the agent fans out via ``SubAgentManager.delegate(tasks=[…])``
+        in S2+.
         """
         from contextlib import nullcontext
 
         if self._lane_queue is None:
             return nullcontext()
-        lane = self._lane_queue.get_lane("seed-generation")
-        if lane is None:
+        if self._lane_queue.get_lane("seed-generation") is None:
             return nullcontext()
-        return lane.acquire(f"seed-generation/{self.state.run_id}/{role}")
+        session_key = f"seed-generation:{self.state.run_id}"
+        return self._lane_queue.acquire_all(
+            session_key,
+            ["session", "seed-generation", "global"],
+        )
 
     def _emit_hook(self, event: HookEvent, role: str, **extra: Any) -> None:
         if self._hooks is None:
