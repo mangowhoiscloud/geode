@@ -47,6 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-4 of petri-schema-v2 cascade — ``compute_missing_dims``
+  Goodhart-risk surface**. Fourth step of the 5-PR cascade. Surfaces
+  the silent ``compute_dim_scores`` "missing dim = best case (1.0)"
+  fallback that would let a mutation suppressing dim measurement
+  inflate fitness without a real improvement.
+
+  **What changed**:
+  - New ``autoresearch/train.py::compute_missing_dims(dim_means) ->
+    list[str]`` — sorted lexicographic list of ``AXIS_TIERS`` dims
+    absent from ``dim_means``. Empty when all dims present.
+  - ``main()`` calls it after ``compute_dim_scores`` and emits the
+    result in the journal ``per_dim_scores`` event payload alongside
+    ``dim_scores`` (new ``missing_dims`` key).
+  - ``compute_dim_scores`` docstring updated to reference the surface
+    (behaviour unchanged — observability only).
+
+  **Goodhart vector**: a mutation that drops a dim from the audit's
+  emit would silently score 1.0 on that dim (fitness ↑) without
+  improving anything. The journal now shows which dims fell back so
+  the operator can spot the pattern across runs.
+
+  **Tests added** (``tests/test_autoresearch_train.py``):
+  - ``test_compute_missing_dims_empty_when_all_present``
+  - ``test_compute_missing_dims_lists_absent_dims_sorted``
+  - ``test_compute_missing_dims_handles_empty_input``
+  - ``test_compute_missing_dims_ignores_extra_dims_outside_axis_tiers``
+  - ``test_main_dry_run_emits_full_p0b_event_sequence`` extended to
+    pin the actual emitted list against
+    ``compute_missing_dims(dim_means)`` so a future literal /
+    hardcoded payload would fail.
+
+  99 ``test_autoresearch_train.py`` + 536 across impacted surface
+  pass. Codex MCP reviewed at thread
+  ``019e520f-7556-71e1-91ed-bd49ebf8ee76`` — 0 CRITICAL / 0 HIGH /
+  0 MEDIUM / 2 LOW (docstring overclaim + thin integration assertion)
+  addressed in this commit.
+
+  PR-5 will extend ``missing_dims`` persistence into ``baseline.json``'s
+  ``normalized`` namespace + ``results.jsonl`` for cross-run analysis.
+
 ### Changed
 
 - **PR-3 of petri-schema-v2 cascade — ``_should_promote`` N=1 critical

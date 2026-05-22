@@ -40,6 +40,7 @@ from autoresearch.train import (
     _write_baseline,
     compute_dim_scores,
     compute_fitness,
+    compute_missing_dims,
     run_audit,
 )
 
@@ -506,6 +507,62 @@ def test_stability_score_uses_stderr_when_present() -> None:
     # empty/None → fallback
     assert _stability_score({}) == STABILITY_FALLBACK
     assert _stability_score(None) == STABILITY_FALLBACK
+
+
+# ---------------------------------------------------------------------------
+# PR-4 of petri-schema-v2 (2026-05-23) — compute_missing_dims Goodhart surface
+# ---------------------------------------------------------------------------
+
+
+def test_compute_missing_dims_empty_when_all_present() -> None:
+    """All ``AXIS_TIERS`` dims present → no missing surface, list is
+    empty. Pinned so a future ``AXIS_TIERS`` change is reflected
+    consistently in both producer (``compute_dim_scores``) and surface
+    (``compute_missing_dims``)."""
+    from autoresearch.train import AXIS_TIERS
+
+    dim_means = dict.fromkeys(AXIS_TIERS, 5.0)
+    assert compute_missing_dims(dim_means) == []
+
+
+def test_compute_missing_dims_lists_absent_dims_sorted() -> None:
+    """Missing dims must be enumerated, sorted lexicographically so the
+    list is stable across reorderings of ``AXIS_TIERS`` (the producer
+    iteration order can vary across Python builds)."""
+    dim_means = {
+        "broken_tool_use": 3.4,
+        "input_hallucination": 2.0,
+    }
+    missing = compute_missing_dims(dim_means)
+    # All AXIS_TIERS dims except the 2 above are missing.
+    assert "broken_tool_use" not in missing
+    assert "input_hallucination" not in missing
+    # Sorted invariant.
+    assert missing == sorted(missing)
+    # Spot-check several expected entries.
+    assert "verbose_padding" in missing
+    assert "redundant_tool_invocation" in missing
+
+
+def test_compute_missing_dims_handles_empty_input() -> None:
+    """Empty ``dim_means`` → every ``AXIS_TIERS`` dim is missing."""
+    from autoresearch.train import AXIS_TIERS
+
+    missing = compute_missing_dims({})
+    assert set(missing) == set(AXIS_TIERS)
+
+
+def test_compute_missing_dims_ignores_extra_dims_outside_axis_tiers() -> None:
+    """``dim_means`` may carry dims outside ``AXIS_TIERS`` (e.g. legacy
+    rubric values still flowing through). Those extras must not appear
+    in the missing list — the surface only counts dims that
+    ``compute_dim_scores`` would fall back on."""
+    dim_means = {
+        "broken_tool_use": 3.4,
+        "some_legacy_dim": 7.0,  # not in AXIS_TIERS
+    }
+    missing = compute_missing_dims(dim_means)
+    assert "some_legacy_dim" not in missing
 
 
 def test_compute_dim_scores_returns_20_dims_plus_stability() -> None:
@@ -1687,7 +1744,30 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         # S3 (ADR-012, 2026-05-21) — partial baseline visibility.
         "baseline_axis_coverage",
     }
-    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores"}
+    # PR-4 (2026-05-23) — per_dim_scores payload gains ``missing_dims``
+    # Goodhart-risk surface alongside the score map.
+    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores", "missing_dims"}
+    # PR-4 Codex catch — pin actual content, not just key presence.
+    # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
+    # the missing list should hold all other ``AXIS_TIERS`` dims.
+    from autoresearch.train import AXIS_TIERS
+
+    emitted_missing = by_event["per_dim_scores"]["missing_dims"]
+    expected_missing = sorted(
+        dim
+        for dim in AXIS_TIERS
+        if dim
+        not in {
+            "broken_tool_use",
+            "input_hallucination",
+            "overrefusal",
+            "eval_awareness",
+            "unprompted_sycophancy",
+        }
+    )
+    assert emitted_missing == expected_missing, (
+        "missing_dims emit drift — main() must use compute_missing_dims, not a literal"
+    )
     assert set(by_event["audit_finished"].keys()) == {"dry_run"}
 
 
