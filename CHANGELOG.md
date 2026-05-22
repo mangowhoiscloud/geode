@@ -47,6 +47,57 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **petri bundle auto-sync — agent context → repo-tracked bundle.** New
+  ``plugins/petri_audit/bundle_sync.py`` (~100 LOC) lifts ``.eval`` archives
+  from the agent context layer (``~/.geode/petri/logs/``, per-machine
+  accumulating runtime) into the repo-tracked publish surface
+  (``docs/petri-bundle/logs/``, committable + Pages-served) right after
+  every successful audit. Hook lives in
+  ``plugins.petri_audit.cli_audit._post_run_emit`` immediately after the
+  ``_update_latest_petri_eval_symlink`` call — same single chokepoint every
+  audit (standalone ``geode audit`` + autoresearch outer-loop) already
+  passes through, so no extra wiring per call site. Per ``.eval`` the
+  sync copies the archive into ``docs/petri-bundle/logs/<name>.eval`` and
+  merges a ``listing.json`` entry built from the inspect-ai
+  ``header.json`` (eval_id / run_id / task / task_id / task_version /
+  version / status / invalidated / model / model_roles / started_at /
+  completed_at / primary_metric). ``model_roles`` is flattened from
+  inspect-ai's nested ``{role: {model, config, args}}`` to the viewer's
+  expected ``{role: model_id}`` shape; ``primary_metric`` picks the first
+  scorer's first metric (typically ``mean``) — the same heuristic
+  inspect-ai's viewer uses for its cold-start summary. Existing
+  ``listing.json`` entries are preserved on merge — only the new entry's
+  filename is overwritten. **Bypass**: set
+  ``GEODE_PETRI_BUNDLE_SYNC_DISABLED=1`` to short-circuit before copy
+  (used by tests / operators who curate the bundle manually). **Failure
+  semantics**: sync is best-effort — any exception (missing source, OS
+  error, listing parse failure) logs a warning but does not break the
+  audit return path or the dim-aggregate stdout emission. zstd header
+  decompression falls back to a filename-only listing entry on Python <
+  3.14 without ``zipfile-zstd`` installed (the same fallback pattern
+  ``scripts/validate_petri_bundle.py`` already uses). 9 unit tests pin
+  the contract (flatten / primary_metric / preserve-existing / bootstrap-
+  missing / overwrite-same-key / env-knob / missing-source / idempotent-
+  resync). Net effect: today's gen-0 baseline (and every subsequent
+  audit) lands in the Pages-publishable bundle automatically — no manual
+  copy step before the next ``docs/petri-bundle/**`` paths trigger fires.
+
+  ``.gitignore`` exception added — the blanket ``logs/`` rule was
+  silently dropping every newly-synced ``.eval`` (existing files in
+  ``docs/petri-bundle/logs/`` were tracked from before the rule existed,
+  but freshly-synced ones got swallowed by the broad pattern). Same
+  anti-pattern as PR-G5b #1350 (``MUTATION_AUDIT_LOG_PATH`` vs
+  ``autoresearch/state/*``) — ``git check-ignore`` would have caught it
+  before push. Added ``!docs/petri-bundle/logs/`` +
+  ``!docs/petri-bundle/logs/**`` colocated with the ``logs/`` rule it
+  negates, with an inline comment naming the consumer
+  (``bundle_sync.py``) so a future reader doesn't strip the exception
+  thinking it's stale. Today's gen-0 ``.eval`` is now actually committed
+  (verified via ``git ls-files``), not just copied into a gitignored
+  hole.
+
 ## [0.99.33] - 2026-05-22
 
 > Codex Phase 3 OAuth polling lands. paperclip ``fetchCodexQuota``

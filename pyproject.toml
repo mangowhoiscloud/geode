@@ -366,6 +366,21 @@ DEP002 = [
     "opentelemetry-instrumentation-anthropic",
 ]
 
+# DEP004 — module imported but the package is declared as a dev-group
+# dependency. The single entry below is a soft optional: the consumer
+# (plugins/petri_audit/bundle_sync.py) uses ``importlib.import_module``
+# at first call, falls back gracefully when the package is absent, and
+# never fails the audit return path on its absence. The package is in
+# the dev group (not [audit] extra) because zipfile-zstd is purely a
+# read-side helper for the existing validator script + this sync hook —
+# operators who only run audits without inspecting bundle internals do
+# not need to install it.
+DEP004 = [
+    # Module name (underscore), not package name (hyphen) — deptry's
+    # DEP004 keys on the imported module identifier, not the pip name.
+    "zipfile_zstd",
+]
+
 [tool.deptry.package_module_name_map]
 # Pip name → top-level importable name. Pillow exposes PIL; pyyaml exposes yaml.
 Pillow = "PIL"

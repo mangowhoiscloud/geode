@@ -100,6 +100,16 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
     # ``.eval`` is now the single SoT for evidence.
     _update_latest_petri_eval_symlink(report.archived_raw)
     try:
+        from plugins.petri_audit.bundle_sync import sync_eval_to_bundle
+
+        sync_eval_to_bundle(report.archived_raw)
+    except Exception:
+        log.warning(
+            "petri_audit: bundle sync failed for %s",
+            report.archived_raw,
+            exc_info=True,
+        )
+    try:
         from core.audit.dim_extractor import extract_dim_aggregates
 
         aggregates = extract_dim_aggregates(report.archived_raw)
