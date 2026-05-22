@@ -47,6 +47,38 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-1 of petri-schema-v2 cascade — ``extract_dim_aggregates``
+  emits ``sample_count`` + ``measurement_modality`` provenance**.
+  Foundation for the baseline.json v2 schema (5-PR cascade documented
+  in ``docs/plans/2026-05-23-petri-schema-v2.md``).
+
+  ``core/audit/dim_extractor.extract_dim_aggregates`` now returns 4
+  top-level keys instead of 2:
+
+  - ``dim_means`` / ``dim_stderr`` (behaviour unchanged).
+  - **``sample_count: dict[str, int]``** — N per dim, lets autoresearch
+    ``_should_promote`` disambiguate ``stderr == 0.0`` between
+    (a) N=1 "no signal" vs (b) N>1 identical values "perfect
+    stability". Two tests pin both cases.
+  - **``measurement_modality: dict[str, str]``** — ``"judge_llm"``
+    (20 rubric dims), ``"token_count"`` (``verbose_padding``),
+    ``"tool_log"`` (``redundant_tool_invocation``). Built from
+    module-level ``_ANALYTICS_MODALITY`` + ``DEFAULT_MODALITY``.
+
+  Empty-result invariant preserved on every graceful-fail path
+  (no inspect_ai, missing file, parse error, empty samples) — all
+  four keys present with empty dicts. Downstream callers
+  (``plugins/petri_audit/cli_audit.py:125`` JSON-print,
+  ``autoresearch/train.py:840`` ``summary.get("dim_means", {})``)
+  are backwards-compatible because they ignore unknown keys.
+
+  Codex MCP reviewed at thread ``019e51d4-95bc-76a1-878c-5e2ce7b75ff2``
+  — no CRITICAL/HIGH; 2 LOWs (docstring nit + missing test for
+  N>1 identical values) addressed in the same commit. 31
+  ``tests/audit/test_dim_extractor.py`` pass.
+
 ### Fixed
 
 - **PR-MIC (Model Identity Cleanup) — drift_sync label + ack purge boost
