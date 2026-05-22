@@ -58,16 +58,18 @@ class TestSchedulerDrain:
     """Test scheduler drain function."""
 
     def test_empty_queue(self) -> None:
+        import asyncio
         import queue
 
         from core.cli.scheduler_drain import drain_scheduler_queue
 
         q: queue.Queue = queue.Queue()
-        result = drain_scheduler_queue(
-            action_queue=q,
-            services=MagicMock(),
-            runner=MagicMock(),
-            session_lane=MagicMock(),
-            global_lane=MagicMock(),
+        result = asyncio.run(
+            drain_scheduler_queue(
+                action_queue=q,
+                services=MagicMock(),
+                session_lane=MagicMock(),
+                global_lane=MagicMock(),
+            )
         )
         assert result == 0

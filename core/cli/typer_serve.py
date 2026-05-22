@@ -28,6 +28,7 @@ def serve(
     ),
 ) -> None:
     """Run GEODE Gateway in headless mode (no REPL, Slack/Discord/Telegram only)."""
+    import asyncio
     import logging as _logging
     import signal
     import time as _time
@@ -107,8 +108,6 @@ def serve(
     # --- Scheduler daemon (same SchedulerService as REPL, drain in main loop) ---
     import queue as _queue_mod
 
-    from core.orchestration.isolated_execution import IsolatedRunner
-
     _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
@@ -131,7 +130,6 @@ def serve(
         log.warning("SchedulerService init failed in serve", exc_info=True)
         console.print("  [warning]Scheduler init failed — running without scheduler[/warning]")
 
-    _sched_runner = IsolatedRunner()
     _serve_session_lane = _gw_services.lane_queue.session_lane
     _serve_global_lane = _gw_services.lane_queue.get_lane("global")
 
@@ -236,15 +234,22 @@ def serve(
     signal.signal(signal.SIGINT, _on_signal)
     signal.signal(signal.SIGTERM, _on_signal)
 
-    try:
-        while not stop:
-            # Drain scheduled jobs (all forced-isolated — no main session in serve)
-            from core.cli.interactive_loop import _drain_scheduler_queue
+    async def _serve_loop() -> None:
+        """Async serve loop driving scheduler drain + idle cleanup.
 
-            _drain_scheduler_queue(
+        PR-Async-Phase-C step 4a (2026-05-22) — was a sync ``while not
+        stop: _drain(...); _time.sleep(1.0)``. The drain is now async-
+        native (fire-and-forget jobs are scheduled via
+        ``asyncio.create_task`` on this loop), so the entire tick body
+        has to run inside ``asyncio.run`` for the dispatched tasks to
+        survive past the drain call.
+        """
+        from core.cli.interactive_loop import _drain_scheduler_queue
+
+        while not stop:
+            await _drain_scheduler_queue(
                 action_queue=_sched_queue,
                 services=_gw_services,
-                runner=_sched_runner,
                 session_lane=_serve_session_lane,
                 global_lane=_serve_global_lane,
                 force_isolated=True,
@@ -252,10 +257,12 @@ def serve(
                 on_dispatch=lambda jid: log.info("scheduled:%s dispatched", jid),
                 on_skip=lambda jid: log.warning("scheduled:%s skipped (slots full)", jid),
             )
-            # Periodic idle session cleanup
             if _serve_session_lane:
                 _serve_session_lane.cleanup_idle()
-            _time.sleep(1.0)
+            await asyncio.sleep(1.0)
+
+    try:
+        asyncio.run(_serve_loop())
     finally:
         # --- Phase 0: notify shutdown hook ---
         try:
