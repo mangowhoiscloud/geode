@@ -139,9 +139,14 @@ class IsolatedRunner:
         """Run *fn_or_request* asynchronously in an isolated context.
 
         Accepts either a callable (thread mode) or a WorkerRequest (subprocess mode).
+
+        PR-Async-Phase-C step 3 (2026-05-22) — subprocess path now uses
+        :meth:`_aexecute_subprocess` (native ``asyncio.create_subprocess_exec``)
+        so the parent event loop is not pinned. Thread path stays via
+        :func:`asyncio.to_thread`.
         """
         cfg = self._resolve_config(config)
-        return await asyncio.to_thread(self._dispatch, fn_or_request, args, kwargs or {}, cfg)
+        return await self._adispatch(fn_or_request, args, kwargs or {}, cfg)
 
     def run_async(
         self,
@@ -151,10 +156,26 @@ class IsolatedRunner:
         kwargs: dict[str, Any] | None = None,
         config: IsolationConfig | None = None,
     ) -> str:
-        """Run *fn_or_request* in background. Returns session_id for later retrieval.
+        """[DEPRECATED] Sync fire-and-forget — see :meth:`arun`.
 
-        Accepts either a callable (thread mode) or a WorkerRequest (subprocess mode).
+        Run *fn_or_request* in a background thread; returns session_id
+        for later polling via :meth:`get_result`. async callers should
+        ``await runner.arun(...)`` directly — no polling needed.
+
+        Retained for ``SubAgentManager.delegate`` (deprecated sync
+        polling path) + ``core/cli/scheduler_drain.py`` (fire-and-forget
+        cron path). Both will migrate post step-3.
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target after all sync
+        # callers migrate.
         """
+        import warnings
+
+        warnings.warn(
+            "IsolatedRunner.run_async is deprecated; use arun() (async) instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         cfg = self._resolve_config(config)
         session_id = cfg.session_id
 
@@ -180,7 +201,13 @@ class IsolatedRunner:
         return session_id
 
     def get_result(self, session_id: str) -> IsolationResult | None:
-        """Retrieve the result for a completed async execution."""
+        """[DEPRECATED] Polling-side companion of :meth:`run_async`.
+
+        Async callers should ``await arun(...)`` — no polling needed.
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target alongside
+        # :meth:`run_async`.
+        """
         with self._lock:
             return self._results.get(session_id)
 
@@ -407,10 +434,17 @@ class IsolatedRunner:
         request: Any,  # WorkerRequest (typed as Any to avoid circular import at annotation level)
         config: IsolationConfig,
     ) -> IsolationResult:
-        """Execute a WorkerRequest in a child process with clean timeout via SIGKILL.
+        """[DEPRECATED] Sync subprocess path — see :meth:`_aexecute_subprocess`.
 
-        Eliminates zombie thread problem: process.kill() guarantees termination,
-        so the semaphore is only released after confirmed process death.
+        Execute a WorkerRequest in a child process with clean timeout
+        via SIGKILL. Eliminates zombie thread problem: process.kill()
+        guarantees termination, so the semaphore is only released
+        after confirmed process death.
+
+        # DEPRECATED-ASYNC-PHASE-C: removal target — superseded by
+        # ``_aexecute_subprocess`` which uses
+        # ``asyncio.create_subprocess_exec`` so the parent's event
+        # loop is not pinned during the worker's subprocess wait.
         """
         slot_error = self._acquire_slot(config)
         if slot_error is not None:
@@ -520,6 +554,164 @@ class IsolatedRunner:
                 self._active.pop(config.session_id, None)
             if acquired:
                 self._release_slot(config)
+
+    # ------------------------------------------------------------------
+    # Async subprocess mode (asyncio.create_subprocess_exec) — Phase C step 3
+    # ------------------------------------------------------------------
+
+    async def _aexecute_subprocess(
+        self,
+        request: Any,  # WorkerRequest
+        config: IsolationConfig,
+    ) -> IsolationResult:
+        """Async sibling of :meth:`_execute_subprocess`.
+
+        PR-Async-Phase-C step 3 (2026-05-22) — uses
+        :func:`asyncio.create_subprocess_exec` so the parent process's
+        event loop is not pinned waiting for the worker subprocess to
+        finish. Behaviour parity with the sync sibling:
+
+        * Lane-slot acquisition gates concurrency via the shared
+          ``Lane`` semaphore (sync acquire run via
+          :func:`asyncio.to_thread`).
+        * Timeout via ``asyncio.wait_for(proc.communicate(input), ...)``;
+          on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
+          process death before the slot is released.
+        * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
+        * Result parsing identical to the sync path
+          (single-line JSON on worker stdout).
+        """
+        slot_error = await asyncio.to_thread(self._acquire_slot, config)
+        if slot_error is not None:
+            return slot_error
+        acquired = True
+
+        started = time.time()
+        proc: asyncio.subprocess.Process | None = None
+
+        try:
+            safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "core.agent.worker",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=safe_env,
+            )
+
+            with self._lock:
+                self._active[config.session_id] = proc  # type: ignore[assignment]
+
+            request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
+            try:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    proc.communicate(input=request_bytes),
+                    timeout=config.timeout_s,
+                )
+            except TimeoutError:
+                # Clean timeout: kill + await death before releasing slot.
+                proc.kill()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+                except TimeoutError:
+                    log.warning(
+                        "Async subprocess %s did not die within %.1fs after kill",
+                        config.session_id,
+                        self.KILL_WAIT_S,
+                    )
+                completed = time.time()
+                duration_ms = (completed - started) * 1000
+                log.warning(
+                    "Async subprocess session %s killed after %.1fs timeout",
+                    config.session_id,
+                    config.timeout_s,
+                )
+                return IsolationResult(
+                    session_id=config.session_id,
+                    success=False,
+                    error=f"Timeout after {config.timeout_s}s (process killed)",
+                    duration_ms=duration_ms,
+                    started_at=started,
+                    completed_at=completed,
+                    metadata=dict(config.metadata),
+                )
+
+            completed = time.time()
+            duration_ms = (completed - started) * 1000
+
+            if stderr_bytes:
+                await asyncio.to_thread(self._save_stderr, config.session_id, stderr_bytes)
+
+            stdout_text = stdout_bytes.decode("utf-8", errors="replace").strip()
+            if not stdout_text:
+                return IsolationResult(
+                    session_id=config.session_id,
+                    success=False,
+                    error="Worker produced no output on stdout",
+                    duration_ms=duration_ms,
+                    started_at=started,
+                    completed_at=completed,
+                    metadata=dict(config.metadata),
+                )
+
+            result_data = json.loads(stdout_text)
+            result = IsolationResult(
+                session_id=config.session_id,
+                success=result_data.get("success", False),
+                output=result_data.get("output", ""),
+                summary=result_data.get("summary", ""),
+                error=result_data.get("error"),
+                duration_ms=duration_ms,
+                started_at=started,
+                completed_at=completed,
+                metadata=dict(config.metadata),
+            )
+
+            if config.post_to_main:
+                self._post_to_main(result, config)
+
+            return result
+
+        except Exception as exc:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                import contextlib as _cl
+
+                with _cl.suppress(TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=self.KILL_WAIT_S)
+            completed = time.time()
+            duration_ms = (completed - started) * 1000
+            return IsolationResult(
+                session_id=config.session_id,
+                success=False,
+                error=f"Subprocess error: {type(exc).__name__}: {exc}",
+                duration_ms=duration_ms,
+                started_at=started,
+                completed_at=completed,
+                metadata=dict(config.metadata),
+            )
+        finally:
+            with self._lock:
+                self._active.pop(config.session_id, None)
+            if acquired:
+                await asyncio.to_thread(self._release_slot, config)
+
+    async def _adispatch(
+        self,
+        fn_or_request: Callable[..., Any] | Any,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        config: IsolationConfig,
+    ) -> IsolationResult:
+        """Async router — WorkerRequest → :meth:`_aexecute_subprocess`,
+        callable → thread (via :func:`asyncio.to_thread`)."""
+        from core.agent.worker import WorkerRequest
+
+        if isinstance(fn_or_request, WorkerRequest):
+            return await self._aexecute_subprocess(fn_or_request, config)
+        return await asyncio.to_thread(self._execute_thread, fn_or_request, args, kwargs, config)
 
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:

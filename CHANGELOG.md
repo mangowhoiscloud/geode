@@ -49,6 +49,54 @@ functional change.
 
 ### Changed
 
+- **PR-Async-Phase-C step 3 — IsolatedRunner subprocess + ToolExecutor
+  delegate native async**. Third leg of the async-only migration.
+  Two remaining non-seed-generation sync entries on the hot path —
+  subprocess sub-agent spawn and the ``delegate_task`` tool — flip
+  to native async. Sync siblings stay as ``DeprecationWarning`` +
+  ``# DEPRECATED-ASYNC-PHASE-C:`` grep-anchored shims for the
+  bulk-removal pass at the end of the migration.
+
+  **IsolatedRunner (``core/orchestration/isolated_execution.py``)**:
+
+  - ``_aexecute_subprocess`` (new) — native
+    ``asyncio.create_subprocess_exec`` + ``asyncio.wait_for`` + SIGKILL
+    recovery. Stores the live ``asyncio.subprocess.Process`` in
+    ``self._active`` so ``cancel`` keeps killing the child reliably.
+  - ``_adispatch`` (new) — routes ``WorkerRequest`` to
+    ``_aexecute_subprocess`` and plain callables to
+    ``asyncio.to_thread(self._execute_thread, ...)``.
+  - ``arun`` rerouted: ``await asyncio.to_thread(self._dispatch, ...)``
+    → ``await self._adispatch(...)``. The parent event loop is no
+    longer pinned on the thread pool for subprocess sub-agent fan-out.
+  - Sync ``run_async`` + ``get_result`` + ``_execute_subprocess``
+    + ``_dispatch`` emit ``DeprecationWarning`` with
+    ``# DEPRECATED-ASYNC-PHASE-C:`` grep anchors.
+
+  **ToolExecutor (``core/agent/tool_executor/executor.py``)**:
+
+  - ``_aexecute_delegate`` (new) — calls
+    ``await self._sub_agent_manager.adelegate(...)`` instead of the
+    sync polling helper.
+  - ``aexecute`` reroute: the ``delegate_task`` branch was
+    ``await asyncio.to_thread(self._execute_delegate, tool_input)``
+    and is now ``await self._aexecute_delegate(tool_input)``.
+  - Sync ``_execute_delegate`` becomes a
+    ``run_process_coroutine``-bridged ``DeprecationWarning`` shim.
+
+  **Test parity (``tests/test_isolated_subprocess.py``)**:
+
+  - ``TestAsyncSubprocessNative.test_arun_routes_worker_request_to_aexecute_subprocess``
+    pins the routing: ``arun(WorkerRequest)`` must hit
+    ``_aexecute_subprocess``, never ``_execute_subprocess``.
+  - ``test_arun_does_not_pin_event_loop_to_thread`` runs two
+    subprocess ``arun`` requests concurrently on a single event loop
+    and confirms both complete — only the native path allows that
+    interleaving without consuming two thread-pool slots.
+  - ``test_aexecute_subprocess_kills_on_timeout`` pins the
+    ``asyncio.wait_for`` + ``proc.kill()`` recovery branch.
+  - 11/11 ``test_isolated_subprocess.py`` tests pass.
+
 - **PR-Async-Phase-C step 2 — seed-generation Pipeline + 8 agents native async**.
   Second leg of the async-only migration. The Pipeline orchestrator
   + 8 seed-generation agents (Critic / Evolver / Generator /
