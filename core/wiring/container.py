@@ -34,7 +34,17 @@ def __getattr__(name: str) -> Any:
 # ---------------------------------------------------------------------------
 DEFAULT_GLOBAL_CONCURRENCY = 8
 DEFAULT_GATEWAY_CONCURRENCY = 4
-DEFAULT_SEED_PIPELINE_CONCURRENCY = 16
+# PR-LQ-Phase1 (2026-05-22) — seed-generation lane bumped DOWN from 16 to 4
+# to restore the OpenClaw lane hierarchy invariant
+# ``max(workload_lane) <= max(global)``. Pre-PR the workload cap (16) was
+# strictly larger than the global cap (8), so 16 "seed-generation slots" was
+# a false signal — leaf sub-agent calls still funnel through the global lane
+# and blocked at 8. The lane cap is now the same load shape the global
+# semaphore can actually deliver, and an explicit invariant test in
+# ``tests/test_lane_queue.py`` guards future drift. Re-raising the cap is
+# fine once the global lane grows OR a Claude-CLI-specific sub-agent lane
+# isolates that path (see [[project_lanequeue_handoff_2026_05_22]] Phase 2).
+DEFAULT_SEED_PIPELINE_CONCURRENCY = 4
 
 # Module-level accessors set by build_auth().
 # Both runtime LLM dispatch and the CLI (`/login`) read from the
@@ -157,15 +167,25 @@ def build_default_lanes() -> LaneQueue:
 
         SessionLane (per-key serial, max=256)
             ↓
-        Workload Lanes (per-workload cap)
-        ├── "gateway"  (max=4)  — Slack/Discord/Telegram messages
-        └── (CLI/sub-agent use global only)
+        Workload Lanes (per-workload cap, MUST be <= global)
+        ├── "gateway"          (max=4)  — Slack/Discord/Telegram messages
+        ├── "seed-generation"  (max=4)  — co-scientist 8-role sub-agent pipeline
+        └── (CLI/general sub-agent paths use global only)
             ↓
         "global" (max=8) — total system capacity
 
     Gateway messages acquire ["session", "gateway", "global"].
-    CLI/sub-agents acquire ["session", "global"] (no workload lane).
-    This prevents Gateway from starving CLI when busy.
+    Seed-generation phases acquire ["session", "seed-generation", "global"]
+    so the workload cap composes with the global cap rather than bypassing
+    it. CLI/general sub-agents acquire ["session", "global"] (no workload
+    lane). This prevents Gateway from starving CLI when busy and prevents
+    seed-generation fan-out from saturating the global slot pool.
+
+    Hierarchy invariant (PR-LQ-Phase1, 2026-05-22): every workload lane's
+    ``max_concurrent`` MUST be <= the ``global`` lane's cap. A workload
+    cap larger than global is a false signal — the leaf semaphore still
+    blocks at the global cap. ``tests/test_lane_queue.py`` pins the
+    invariant.
     """
     from core.orchestration.lane_queue import SessionLane
 
@@ -190,6 +210,25 @@ def build_default_lanes() -> LaneQueue:
         "seed-generation",
         max_concurrent=DEFAULT_SEED_PIPELINE_CONCURRENCY,
         timeout_s=300.0,
+    )
+    # PR-LQ-Phase2 (2026-05-22) — surface the module-level
+    # claude-cli-subagent lane in the LaneQueue dashboard for parity
+    # with the autoresearch-audit lane pattern. The actual semaphore
+    # lives at :mod:`core.orchestration.claude_cli_lane`; this lane
+    # registration is a dashboard mirror that ``LaneQueue.status()``
+    # consumers can read alongside ``gateway`` / ``global`` /
+    # ``seed-generation``. Both registrations stay in lockstep by
+    # routing through the same constants + ``resolve_*`` resolver.
+    from core.orchestration.claude_cli_lane import (
+        CLAUDE_CLI_LANE_NAME,
+        CLAUDE_CLI_LANE_TIMEOUT_S,
+        resolve_claude_cli_lane_max,
+    )
+
+    queue.add_lane(
+        CLAUDE_CLI_LANE_NAME,
+        max_concurrent=resolve_claude_cli_lane_max(),
+        timeout_s=CLAUDE_CLI_LANE_TIMEOUT_S,
     )
     return queue
 

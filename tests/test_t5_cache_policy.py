@@ -16,11 +16,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm import cache_policy
 from core.llm.cache_policy import (
     _load_cache_policy_override,
     apply_cache_policy_breakpoints,
 )
+
+from core.llm import cache_policy
 
 
 @pytest.fixture

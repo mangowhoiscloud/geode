@@ -263,6 +263,126 @@ class TestLaneQueue:
 
 
 # ---------------------------------------------------------------------------
+# PR-LQ-Phase5 — observability surface
+# ---------------------------------------------------------------------------
+
+
+class TestGetStuck:
+    """Lane.get_stuck / SessionLane.get_stuck pin the stuck-key shape:
+    a positive threshold returns keys held >= threshold, negative or
+    zero returns empty.
+
+    Tests construct ``_active`` / session-entry state directly with a
+    backdated timestamp so we don't have to ``time.sleep`` for the
+    threshold to elapse — the production code reads ``time.time()``
+    so we just shift the stored value.
+    """
+
+    def test_lane_get_stuck_returns_keys_past_threshold(self) -> None:
+        lane = Lane("test", max_concurrent=4)
+        # Construct active entries with backdated timestamps directly.
+        # We don't need to acquire/release through the semaphore — the
+        # purpose is to test the threshold filter, not the semaphore.
+        old_ts = time.time() - 10.0
+        recent_ts = time.time() - 0.1
+        with lane._lock:
+            lane._active["stuck-job"] = old_ts
+            lane._active["fresh-job"] = recent_ts
+
+        stuck_5s = lane.get_stuck(threshold_s=5.0)
+        assert stuck_5s == ["stuck-job"]
+
+        stuck_1s = lane.get_stuck(threshold_s=1.0)
+        assert stuck_1s == ["stuck-job"]
+
+        stuck_15s = lane.get_stuck(threshold_s=15.0)
+        assert stuck_15s == []  # neither is older than 15s
+
+    def test_lane_get_stuck_returns_empty_for_zero_or_negative_threshold(
+        self,
+    ) -> None:
+        """A zero/negative threshold would otherwise label every active
+        slot stuck the instant it acquired — explicitly refused."""
+        lane = Lane("test", max_concurrent=2)
+        with lane._lock:
+            lane._active["job"] = time.time() - 1.0
+        assert lane.get_stuck(threshold_s=0) == []
+        assert lane.get_stuck(threshold_s=-1.0) == []
+
+    def test_session_lane_get_stuck_only_counts_held_entries(self) -> None:
+        """SessionLane keeps released entries around for the idle-evict
+        path; ``get_stuck`` must skip those."""
+        sl = SessionLane(max_sessions=4)
+        # Acquire two keys, release one of them.
+        with sl.acquire("held"):
+            sl.try_acquire("released")
+            sl.manual_release("released")
+            # Backdate both entries to land outside the stuck threshold.
+            with sl._lock:
+                sl._sessions["held"].last_used = time.time() - 30.0
+                sl._sessions["released"].last_used = time.time() - 30.0
+            # Only "held" is currently held → only it is "stuck".
+            stuck = sl.get_stuck(threshold_s=5.0)
+            assert stuck == ["held"]
+
+
+class TestStatusObservability:
+    """PR-LQ-Phase5 — ``LaneQueue.status()`` returns the full per-lane
+    observability shape: instantaneous counts + lifetime stats +
+    stuck keys."""
+
+    def test_status_includes_stats_and_stuck_for_each_lane(self) -> None:
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=8))
+        q.add_lane("global", max_concurrent=4)
+
+        with q.acquire_all("k1", ["session", "global"]):
+            # Force a fake-old entry on the global lane so it shows up
+            # as stuck.
+            global_lane = q.get_lane("global")
+            assert global_lane is not None
+            with global_lane._lock:
+                global_lane._active["k1"] = time.time() - 600.0
+
+            snapshot = q.status(stuck_threshold_s=300.0)
+            assert "session" in snapshot
+            assert "global" in snapshot
+
+            # Lifetime stats surfaced.
+            assert snapshot["global"]["stats"]["acquired"] >= 1
+            assert "released" in snapshot["global"]["stats"]
+            assert "timeouts" in snapshot["global"]["stats"]
+            assert snapshot["session"]["stats"]["acquired"] >= 1
+
+            # Stuck list populated for the backdated key.
+            assert snapshot["global"]["stuck"] == ["k1"]
+
+    def test_status_stuck_threshold_default_is_5_minutes(self) -> None:
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=1)
+        with q.acquire_all("k1", ["global"]):
+            # Backdate to 60 s — well under the 300 s default.
+            global_lane = q.get_lane("global")
+            assert global_lane is not None
+            with global_lane._lock:
+                global_lane._active["k1"] = time.time() - 60.0
+
+            snapshot = q.status()
+            assert snapshot["global"]["stuck"] == []
+
+    def test_status_after_release_has_no_active_or_stuck(self) -> None:
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=2)
+        with q.acquire_all("k1", ["global"]):
+            pass
+        snapshot = q.status()
+        assert snapshot["global"]["active"] == 0
+        assert snapshot["global"]["stuck"] == []
+        # acquired == released by now.
+        assert snapshot["global"]["stats"]["acquired"] == snapshot["global"]["stats"]["released"]
+
+
+# ---------------------------------------------------------------------------
 # C4 Regression: acquire_all partial failure (v0.35.1 fix)
 # ---------------------------------------------------------------------------
 
@@ -461,3 +581,86 @@ class TestSessionLane:
             assert sl.active_count == 0
 
         asyncio.run(scenario())
+
+
+class TestAcquireAllSync:
+    """PR-LQ-Phase1 (2026-05-22) — sync sibling of ``acquire_all_async``.
+
+    The seed-generation orchestrator runs each phase synchronously and
+    needs to compose the OpenClaw lane hierarchy
+    ``["session", "seed-generation", "global"]`` without bouncing through
+    ``asyncio.run``. This class pins the contract: ordering, partial-
+    failure release, missing-lane errors.
+    """
+
+    def test_acquire_all_runs_through_session_workload_and_global(self) -> None:
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=8))
+        q.add_lane("seed-generation", max_concurrent=2)
+        q.add_lane("global", max_concurrent=4)
+
+        with q.acquire_all("run-1", ["session", "seed-generation", "global"]):
+            assert q.get_lane("seed-generation").active_count == 1  # type: ignore[union-attr]
+            assert q.get_lane("global").active_count == 1  # type: ignore[union-attr]
+        assert q.get_lane("seed-generation").active_count == 0  # type: ignore[union-attr]
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_unknown_lane_releases_prior_acquisitions(self) -> None:
+        """If a later lane name is missing, the earlier acquisitions release."""
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=2)
+
+        with (
+            pytest.raises(KeyError, match="not found"),
+            q.acquire_all("k1", ["global", "missing"]),
+        ):
+            pass
+
+        # global should be back to 0 active (partial-failure release).
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_skips_session_when_none_registered(self) -> None:
+        """Same shape as acquire_all_async: ``session`` is silently skipped
+        when no SessionLane was registered."""
+        q = LaneQueue()
+        q.add_lane("global", max_concurrent=2)
+        with q.acquire_all("k1", ["session", "global"]):
+            assert q.get_lane("global").active_count == 1  # type: ignore[union-attr]
+        assert q.get_lane("global").active_count == 0  # type: ignore[union-attr]
+
+    def test_acquire_all_releases_in_reverse_order(self) -> None:
+        """LIFO release matches acquire_all_async's finally-loop semantics
+        (``for item in reversed(acquired): item._raw_release(key)``)."""
+        q = LaneQueue()
+        q.set_session_lane(SessionLane(max_sessions=8))
+        q.add_lane("seed-generation", max_concurrent=2)
+        q.add_lane("global", max_concurrent=4)
+
+        with q.acquire_all("k1", ["session", "seed-generation", "global"]):
+            pass
+        # After release every lane is empty.
+        for name in ("seed-generation", "global"):
+            assert q.get_lane(name).active_count == 0  # type: ignore[union-attr]
+
+    def test_workload_cap_does_not_exceed_global_cap_invariant(self) -> None:
+        """Hierarchy invariant — ``max(workload_lane) <= max(global)``.
+
+        A workload cap larger than global is a false signal: the leaf
+        semaphore still funnels through the global lane. The seed-
+        generation lane (DEFAULT_SEED_PIPELINE_CONCURRENCY) is the
+        first concrete consumer of this invariant.
+        """
+        from core.wiring.container import (
+            DEFAULT_GATEWAY_CONCURRENCY,
+            DEFAULT_GLOBAL_CONCURRENCY,
+            DEFAULT_SEED_PIPELINE_CONCURRENCY,
+        )
+
+        for workload_name, workload_cap in (
+            ("gateway", DEFAULT_GATEWAY_CONCURRENCY),
+            ("seed-generation", DEFAULT_SEED_PIPELINE_CONCURRENCY),
+        ):
+            assert workload_cap <= DEFAULT_GLOBAL_CONCURRENCY, (
+                f"workload lane {workload_name!r} cap {workload_cap} > "
+                f"global cap {DEFAULT_GLOBAL_CONCURRENCY} — hierarchy violation"
+            )

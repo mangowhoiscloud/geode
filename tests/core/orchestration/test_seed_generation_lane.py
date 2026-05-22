@@ -8,7 +8,11 @@ wiring. The third checks the constant directly.
 from __future__ import annotations
 
 import pytest
-from core.wiring.container import DEFAULT_SEED_PIPELINE_CONCURRENCY, build_default_lanes
+from core.wiring.container import (
+    DEFAULT_GLOBAL_CONCURRENCY,
+    DEFAULT_SEED_PIPELINE_CONCURRENCY,
+    build_default_lanes,
+)
 
 
 @pytest.fixture
@@ -28,8 +32,16 @@ def real_queue(monkeypatch: pytest.MonkeyPatch) -> object:
     return build_default_lanes()
 
 
-def test_seed_generation_lane_max_concurrent_is_16() -> None:
-    assert DEFAULT_SEED_PIPELINE_CONCURRENCY == 16
+def test_seed_generation_lane_default_matches_global_safe_share() -> None:
+    """PR-LQ-Phase1 (2026-05-22) — seed-generation cap MUST be <= global.
+
+    Pre-PR the cap was 16 while global was 8, a hierarchy violation that
+    advertised 16 slots a leaf semaphore could never deliver. Lowered
+    to 4 so the workload cap composes correctly with the global cap.
+    Re-raising requires growing global or introducing a sub-agent lane
+    (see [[project_lanequeue_handoff_2026_05_22]] Phase 2)."""
+    assert DEFAULT_SEED_PIPELINE_CONCURRENCY == 4
+    assert DEFAULT_SEED_PIPELINE_CONCURRENCY <= DEFAULT_GLOBAL_CONCURRENCY
 
 
 def test_seed_generation_lane_is_registered_by_real_builder(real_queue: object) -> None:

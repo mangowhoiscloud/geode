@@ -47,6 +47,102 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.31] - 2026-05-22
+
+> LaneQueue 5-phase plan landing 4 of 5 phases (Phase 1 hierarchy fix,
+> Phase 2 ``claude-cli-subagent`` lane, Phase 4 claude-cli error parser
+> + tiered backoff, Phase 5 observability boost). Phase 3 (paperclip
+> OAuth-usage polling) requires live operator OAuth credentials and is
+> deferred to a follow-up sprint — see
+> [[project_lanequeue_handoff_2026_05_22]].
+
+### Added
+
+- **LaneQueue Phase 5 — observability boost**. ``LaneQueue.status()``
+  now returns lifetime ``stats`` (``acquired`` / ``released`` /
+  ``timeouts`` per lane) and a ``stuck`` list of keys held longer
+  than the supplied ``stuck_threshold_s`` (default 300 s, matching
+  the upper end of the gateway / global timeouts). New
+  :meth:`Lane.get_stuck(threshold_s)` / :meth:`SessionLane.get_stuck`
+  helpers surface the same info standalone — operators can poll a
+  single lane without paying for the full ``status()`` walk.
+  ``SessionLane.get_stuck`` skips released-but-cached entries (those
+  belong to the idle-eviction path, a different concern), so the
+  list only flags work that's currently held but not progressing. A
+  zero or negative threshold returns an empty list rather than
+  flagging every fresh acquisition — sensible default for callers
+  that haven't yet decided on a threshold value. Three new test
+  classes pin ``get_stuck`` precedence + the enriched status shape.
+
+- **LaneQueue Phase 4 — ``claude-cli`` error parser + tiered backoff**.
+  New ``core/llm/claude_cli_errors.py`` module ports paperclip's
+  ``parse.ts`` regex patterns (``CLAUDE_TRANSIENT_UPSTREAM_RE`` +
+  ``CLAUDE_EXTRA_USAGE_RESET_RE``) plus the 4-tier
+  ``heartbeat.ts:217-226`` backoff schedule to Python. Public surface:
+  :func:`is_transient_upstream` (paperclip parity boolean classifier),
+  :func:`classify_transient` (5-way label ``burst`` / ``quota`` /
+  ``auth`` / ``deterministic`` / ``unknown``),
+  :func:`extract_reset_clock_time` (parse "resets at 3:00pm
+  (Pacific)" into a tz-aware ``datetime``), and :func:`next_retry_at`
+  (combines the three into a single suggested retry timestamp).
+  Schedules :data:`BURST_BACKOFF_SECONDS` (1/2/4/8/16s) and
+  :data:`QUOTA_BACKOFF_SECONDS` (2m/10m/30m/2h) ship as module
+  constants so callers (mutator runner / inspect_ai bridge / future
+  Anthropic provider retry hook) can choose how to weave them into
+  their own retry path. Quota failures honour an explicit
+  ``resets at …`` time when it lies AFTER the schedule wait — a
+  server-promised reset overrides the schedule's lower bound but
+  never shortens the wait below it. Unknown / non-transient stderr
+  short-circuits ``next_retry_at`` to ``None`` so callers don't burn
+  retries on deterministic failures (auth-required, model-not-found,
+  max-turns). Pin tests at ``tests/core/llm/test_claude_cli_errors.py``
+  (5 classes, ~30 cases). Wiring into the two spawn sites + the
+  Anthropic provider's retry journal is scoped to a follow-up PR.
+
+- **LaneQueue Phase 2 — ``claude-cli-subagent`` lane**. New module-
+  level :class:`~core.orchestration.lane_queue.Lane` at
+  ``core/orchestration/claude_cli_lane.py`` (same pattern as
+  ``core/llm/audit_lane.py``) caps the concurrent ``claude --print``
+  subprocess fan-out from BOTH spawn sites — the self-improving-loop
+  mutator runner
+  (:func:`core.self_improving_loop.cli_subprocess.invoke_claude_cli`)
+  and the Petri inspect_ai bridge
+  (:class:`plugins.petri_audit.claude_cli_provider.ClaudeCliAPI.generate`)
+  — at ``DEFAULT_CLAUDE_CLI_LANE_MAX=2``, one slot below the public
+  3-4 burst-limiter floor (anthropics/claude-code#53922) so the
+  operator's host Claude Code session has bucket headroom. Operators
+  tune via ``GEODE_CLAUDE_CLI_LANE_MAX`` (positive int; empty /
+  non-int / non-positive falls back to the default). Sync + async
+  acquire helpers (:func:`acquire_claude_cli_lane` /
+  :func:`acquire_claude_cli_lane_async`) share the SAME semaphore so
+  the cap composes across the two spawn paths. The lane is mirrored
+  in ``build_default_lanes`` for ``LaneQueue.status()`` dashboards.
+  Phase 3 (paperclip OAuth-usage polling) will plug into the same
+  acquire site to surface 5h-bucket telemetry before each slot grab.
+
+### Changed
+
+- **LaneQueue Phase 1 — hierarchy invariant restored**. The
+  ``seed-generation`` workload lane defaulted to ``max_concurrent=16``
+  while the ``global`` lane was capped at 8 — a textbook hierarchy
+  violation. The 16-slot advertisement was a false signal: every leaf
+  sub-agent call still funnels through ``global`` and blocked at 8.
+  Dropped ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` to ``4`` so workload
+  cap composes correctly under the global cap, and added an explicit
+  invariant test (``tests/test_lane_queue.py::TestAcquireAllSync::
+  test_workload_cap_does_not_exceed_global_cap_invariant``) that fails
+  if any registered workload lane defaults to a cap larger than
+  ``DEFAULT_GLOBAL_CONCURRENCY``. The seed-generation orchestrator
+  now walks the full OpenClaw hierarchy
+  (``["session", "seed-generation", "global"]``) via the new sync
+  ``LaneQueue.acquire_all`` API; the ``session`` key is
+  ``seed-generation:<run_id>`` so concurrent ``Pipeline.run()`` calls
+  for the same run serialize (kills the pre-PR race where two launches
+  of the same ``run_id`` non-atomically incremented ``state.usd_spent``
+  and friends). Re-raising the cap is gated on Phase 2 (sub-agent
+  lane isolation) per
+  [[project_lanequeue_handoff_2026_05_22]].
+
 ## [0.99.30] - 2026-05-22
 
 > Reproducibility-ratchet trilogy completion (CSP-7 in-repo state +

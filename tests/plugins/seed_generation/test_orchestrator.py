@@ -166,18 +166,30 @@ def test_pipeline_accepts_lane_queue_without_lane_registered() -> None:
 
 
 def test_pipeline_acquires_lane_when_registered() -> None:
-    """When the seed-generation lane is on the queue, execute is gated through it."""
+    """When the OpenClaw lane chain (session → seed-generation → global)
+    is on the queue, execute is gated through every layer.
+
+    PR-LQ-Phase1 (2026-05-22) — ``_acquire_lane`` now walks the full
+    chain via ``LaneQueue.acquire_all``. The test registers all three
+    layers so it mirrors production wiring; reaching `run()` completion
+    proves acquire/release symmetry across all 7 phases for each layer.
+    """
+    from core.orchestration.lane_queue import SessionLane
+
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-lane", target_dim="x", gen_tag="gen2")
     queue = LaneQueue()
+    queue.set_session_lane(SessionLane(max_sessions=8))
     queue.add_lane("seed-generation", max_concurrent=4, timeout_s=5.0)
+    queue.add_lane("global", max_concurrent=8, timeout_s=5.0)
     Pipeline(state, registry, lane_queue=queue).run()
-    # No assertion target beyond completion — the lane.acquire would block
-    # if the slot wasn't released, so reaching here proves acquire/release
-    # symmetry across all 7 phases.
+
     seed_lane = queue.get_lane("seed-generation")
+    global_lane = queue.get_lane("global")
     assert seed_lane is not None
+    assert global_lane is not None
     assert seed_lane.active_count == 0
+    assert global_lane.active_count == 0
 
 
 class _RecordingHookSystem:
