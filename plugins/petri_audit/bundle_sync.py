@@ -52,18 +52,40 @@ BUNDLE_LOGS_DIR: Path = _REPO_ROOT / "docs" / "petri-bundle" / "logs"
 _LISTING_FILENAME = "listing.json"
 
 # zstd entries inside .eval require the zipfile-zstd monkey-patch on
-# Python < 3.14. Try to import it once at module load; on failure the
-# listing entry is built from filename-only (still copyable, but the
-# row in the viewer's index loses model_roles / metric until a future
-# run regenerates the full entry).
-try:
-    import zipfile_zstd  # type: ignore[import-untyped]  # noqa: F401 — patches zipfile
+# Python < 3.14. The check is deferred to first call (rather than
+# module load) for two reasons:
+#   1. zipfile-zstd is a dev-group dependency (it ships only for the
+#      validator + this sync). Module-level import would trip deptry
+#      DEP004; lazy import keeps the production module dep-clean.
+#   2. A side-effect-free module load is friendlier to cold-start —
+#      the patch happens only when an actual ``.eval`` needs reading.
+_ZSTD_CHECKED: bool = False
+_ZSTD_AVAILABLE: bool = False
 
-    _ZSTD_AVAILABLE = True
-except ImportError:
-    import sys
 
-    _ZSTD_AVAILABLE = sys.version_info >= (3, 14)
+def _ensure_zstd() -> bool:
+    """Idempotently import zipfile-zstd (patches stdlib zipfile) or fall back
+    to stdlib's Python 3.14+ native zstd. Cached after first call.
+
+    zipfile-zstd is a dev-group dep registered in deptry's
+    ``per_rule_ignores.DEP004`` because this module treats it as a soft
+    optional — present on developer / operator machines that also run
+    ``scripts/validate_petri_bundle.py``, absent on minimal installs
+    where the fallback (filename-only listing entry) is acceptable.
+    """
+    global _ZSTD_CHECKED, _ZSTD_AVAILABLE
+    if _ZSTD_CHECKED:
+        return _ZSTD_AVAILABLE
+    try:
+        import zipfile_zstd  # type: ignore[import-untyped]  # noqa: F401 — patches zipfile
+
+        _ZSTD_AVAILABLE = True
+    except ImportError:
+        import sys
+
+        _ZSTD_AVAILABLE = sys.version_info >= (3, 14)
+    _ZSTD_CHECKED = True
+    return _ZSTD_AVAILABLE
 
 
 def sync_eval_to_bundle(eval_path: Path | str) -> Path | None:
@@ -113,7 +135,7 @@ def sync_eval_to_bundle(eval_path: Path | str) -> Path | None:
 
 def _extract_listing_entry(eval_path: Path) -> dict[str, Any]:
     """Read ``.eval`` header.json and shape it into a listing.json entry."""
-    if not _ZSTD_AVAILABLE:
+    if not _ensure_zstd():
         # No header decompression available — minimal entry from filename.
         return {"status": "unknown", "model": "none/none"}
 
