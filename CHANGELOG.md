@@ -47,6 +47,128 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.47] - 2026-05-23
+
+> Path-B ``LLMAdapter`` sprint package — 4 PRs that close the
+> abstraction migration started in v0.99.44 (A2 / F) and the
+> self-improving-loop SoT relocation started in v0.99.46 (J-b.1).
+> The mutator runner's API path now consumes the Path-B Protocol
+> directly (J-b.2 / #1555); inspect_ai's reasoning-replay pathway is
+> documented + smoke-pinned (I.b / #1554); a one-call
+> ``adapter_health(name)`` accessor lands on the registry surface
+> (I.c / #1556); plus the end-of-sprint cross-tree audit + docs
+> alignment (#1557). PR-CLEANUP-1 (#1558) lands alongside as a
+> separate over-split-module compression.
+
+### Removed
+
+- **PR-CLEANUP-1 — over-split helper modules + 1-release-grace aliases.**
+  Three module files + one ``core.paths`` alias removed without
+  behavior change (and one test import migrated to the new host):
+  - ``core/agent/loop/loop.py`` (30 LOC) — re-export shim left over from
+    the Tier 3 #7 monolith split; 0 production callers (1 test caller
+    in ``tests/plugins/petri_audit/test_skeleton.py`` migrated to
+    ``core.agent.loop.agent_loop``). The package ``__init__`` already
+    re-exports the same symbols.
+  - ``core/agent/loop/_announce.py`` (41 LOC) and
+    ``core/agent/loop/_decomposition.py`` (81 LOC) absorbed into
+    ``core/agent/loop/_helpers.py``. All three were <100 LOC each and
+    shared exactly one caller (``agent_loop.py``); the sibling-module
+    split was over-engineered for the file size and obscured the
+    locality of the two helpers. ``_response.py`` (184 LOC, distinct
+    streaming responsibility) stays separate.
+  - ``core.paths.GLOBAL_JOURNAL_DIR`` legacy alias removed (1-release
+    grace expired; 0 external callers confirmed via grep).
+  No public symbol moves: ``check_announced_results`` /
+  ``try_decompose`` are accessed through the ``AgenticLoop`` delegator
+  methods (``_check_announced_results`` / ``_try_decompose``) which now
+  forward to ``_helpers`` instead of the two deleted modules.
+
+### Changed
+
+- **Step J-b.2 — mutator runner API path migrated to the LLMAdapter Protocol.**
+  ``core/self_improving_loop/runner.py:_default_llm_call`` 's API path
+  (``source == "api_key"`` and the ``auto`` cascade fallback) now
+  resolves the mutator adapter via
+  :func:`core.llm.adapters.registry.resolve_for(provider, "payg")` and
+  calls :meth:`LLMAdapter.acomplete` with a typed
+  :class:`AdapterCallRequest` instead of the legacy
+  :class:`AgenticLLMPort.agentic_call`. The API path therefore inherits
+  F's GLM adapter family directly when ``source = "api_key"`` lands on
+  a glm model.
+  A new ``_normalize_provider_for_registry`` helper translates the
+  legacy ``_resolve_provider`` keys (which return ``openai-codex`` for
+  gpt-5.x ids) to the Path-B registry's narrower vocabulary
+  (``openai``). The CLI-subscription branches (``claude-cli`` /
+  ``openai-codex`` source) **deliberately remain on the dedicated
+  ``invoke_claude_cli`` / ``invoke_codex_cli`` helpers** in
+  :mod:`core.self_improving_loop.cli_subprocess` rather than going
+  through the ``ClaudeCliAdapter`` / ``CodexCliAdapter`` built-ins
+  because the built-in adapters speak the streaming-JSON event
+  protocol used by the agentic loop, whereas the mutator parser
+  consumes plain text. Migrating both CLI adapters to support a
+  text-output mode is a separate follow-up (Step I.c). Usage telemetry
+  continues to feed ``SessionMetrics.accumulate_llm_call``
+  (``input_tokens`` / ``output_tokens`` / ``cached_input_tokens``);
+  per-call elapsed + model captured the same way.
+
+### Added
+
+- **Step I.c — `core.llm.adapters.adapter_health(name)` registry accessor.**
+  Thin one-call probe over the existing
+  :meth:`LLMAdapter.test_environment` method so picker UIs, readiness
+  audits, and external consumers (petri_audit's ``credential_source``
+  cascade, the ``/auth`` slash, the routing-recovery loop) can ask
+  "is adapter X healthy?" without an explicit
+  ``get_adapter(name).test_environment()`` two-step. The accessor
+  returns the unmodified :class:`EnvironmentReport`
+  (``ok`` / ``checks`` / ``hints``) so callers retain full access to
+  the operator-facing diagnostic detail.
+
+  Step I.c originally framed an :meth:`LLMAdapter.is_available`
+  Protocol extension; grounding revealed the equivalent contract
+  already exists as ``test_environment`` (every built-in implements
+  it). The PR therefore ships the ergonomic accessor + 4 new tests
+  (delegation parity, ``ok=False`` passthrough, missing-adapter
+  ``KeyError``, 8-built-in smoke), without touching the Protocol
+  surface.
+
+
+- **Step I.b — Codex reasoning-replay inspect_ai integration smoke test.**
+  Step A2 (v0.99.44) wired Codex encrypted-reasoning replay into the
+  GEODE AgenticLoop's ``Message`` path via
+  ``core.llm.adapters._openai_common.build_codex_input``. Petri's
+  :class:`OpenAICodexAPI` (inspect_ai ``ModelAPI`` subclass) inherits
+  the equivalent capability *for free* — inspect_ai's stock
+  ``openai_responses_inputs`` converter walks the ``ChatMessage`` list
+  and translates ``ContentReasoning`` blocks into Codex Responses-API
+  ``{"type": "reasoning", "encrypted_content": ...}`` typed items via
+  ``responses_reasoning_from_reasoning``
+  (``inspect_ai/model/_openai_responses.py:1130``). The Petri provider
+  must NOT reimplement that replay logic; this PR adds the explicit
+  guard rails so a future contributor doesn't accidentally drift.
+
+  Changes:
+
+  - ``plugins/petri_audit/codex_provider.py`` — multi-line comment
+    block at the ``openai_responses_inputs`` call inside ``register``'s
+    nested ``OpenAICodexAPI.generate`` documenting (a) inspect_ai owns
+    the replay, (b) where the upstream translator lives, (c) the
+    cross-reference to A2's GEODE-path helper, (d) the test pin.
+  - ``tests/plugins/petri_audit/test_codex_reasoning_replay_inspect_pipeline.py``
+    (NEW, 3 cases) — gated on the ``[audit]`` extra via
+    ``pytest.importorskip``:
+    1. ``openai_responses_inputs`` + ``responses_reasoning_from_reasoning``
+       remain importable from inspect_ai (catches an upstream rename
+       at import time).
+    2. ``responses_reasoning_from_reasoning(ContentReasoning(redacted=True))``
+       round-trips the encrypted payload (the GEODE-path contract
+       inspect_ai must mirror).
+    3. ``OpenAICodexAPI.generate`` source contains
+       ``await openai_responses_inputs(`` — anti-deception ratchet
+       against a future refactor that drops the call while leaving
+       the import/comment alone (Codex MCP HIGH catch).
+
 ## [0.99.46] - 2026-05-23
 
 > Cognitive Loop sprint release — 5-PR chain (BUDGET → A3 → A6 → A1 →

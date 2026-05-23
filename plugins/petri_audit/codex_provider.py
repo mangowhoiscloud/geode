@@ -283,6 +283,22 @@ def register() -> None:
 
             request_id = self._http_hooks.start_request()
 
+            # Step I.b (2026-05-23) — Codex encrypted-reasoning replay is
+            # owned by inspect_ai, NOT this subclass. ``openai_responses_inputs``
+            # walks the ``ChatMessage`` list and translates every
+            # ``inspect_ai.tool.ContentReasoning`` block on prior
+            # ``ChatMessageAssistant`` turns into a Codex Responses-API
+            # ``{"type": "reasoning", "encrypted_content": ...}`` typed
+            # item (see ``inspect_ai/model/_openai_responses.py:1130-1131``
+            # → ``responses_reasoning_from_reasoning`` at line 860). Petri's
+            # ``OpenAICodexAPI`` therefore inherits A2's per-turn reasoning
+            # replay for free across multi-turn audits — do NOT reimplement
+            # the replay logic from
+            # ``core.llm.adapters._openai_common.build_codex_input`` here;
+            # that helper exists for the GEODE AgenticLoop's ``Message``
+            # path, and the two should not drift. The integration is
+            # smoke-tested by
+            # ``tests/plugins/petri_audit/test_codex_reasoning_replay_inspect_pipeline.py``.
             raw_input_items = await openai_responses_inputs(
                 input, self, synthesize_phase=self.responses_phase
             )

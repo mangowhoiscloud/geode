@@ -1,12 +1,18 @@
-"""Tool definition factory + agentic-tool constants.
+"""AgenticLoop internal helpers — tool factory + sub-agent announce + decomposition.
 
-Extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7).
+Originally extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7)
+into three sibling modules (``_helpers.py`` + ``_announce.py`` +
+``_decomposition.py``). PR-CLEANUP-1 (2026-05-23) consolidated the
+announce-queue poller and decomposition dispatcher into this module —
+all three were <100 LOC each and shared the same caller (``agent_loop.py``).
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
+from core.agent.sub_agent import SubAgentResult, drain_announced_results
 from core.agent.tool_descriptions_policy import (
     _load_tool_descriptions_override,
     apply_tool_descriptions_policy,
@@ -16,6 +22,10 @@ from core.tools.base import load_all_tool_definitions
 
 if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
+
+    from .agent_loop import AgenticLoop
+
+log = logging.getLogger(__name__)
 
 
 # Load base tool definitions from centralized JSON (SOT: core/tools/base.py)
@@ -75,3 +85,86 @@ def get_agentic_tools(
 # ---------------------------------------------------------------------------
 MAX_TOOL_RESULT_TOKENS = 0  # backward-compat alias; canonical: settings.max_tool_result_tokens
 TOOL_LAZY_LOAD_THRESHOLD = 50  # Above this count, skip MCP lazy loading
+
+
+# ---------------------------------------------------------------------------
+# Sub-agent announce-queue polling (PR-CLEANUP-1 흡수, was ``_announce.py``)
+# ---------------------------------------------------------------------------
+
+
+def check_announced_results(loop: AgenticLoop, messages: list[dict[str, Any]]) -> int:
+    """Poll for sub-agent announced results and inject into conversation.
+
+    Drains the announce queue for this parent session and adds each
+    completed sub-agent's summary as a system event message.
+
+    OpenClaw Spawn+Announce pattern: parent polls at each round start.
+    """
+    if not loop._parent_session_key:
+        return 0
+    announced: list[SubAgentResult] = drain_announced_results(loop._parent_session_key)
+    if not announced:
+        return 0
+    for result in announced:
+        status_label = "completed" if result.success else "failed"
+        content = f"Sub-agent {status_label}: task_id={result.task_id}, summary={result.summary}"
+        if result.error_message:
+            content += f", error={result.error_message}"
+        loop.context.add_system_event("subagent_completed", content)
+        messages.append({"role": "user", "content": f"[system:subagent_completed] {content}"})
+        log.debug("Injected announce for task_id=%s", result.task_id)
+    return len(announced)
+
+
+# ---------------------------------------------------------------------------
+# Goal decomposition dispatch (PR-CLEANUP-1 흡수, was ``_decomposition.py``)
+# ---------------------------------------------------------------------------
+
+
+async def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
+    """Run the planner LLM (when warranted) and install the Plan.
+
+    Returns ``None`` either way. Async because ``decompose_async``
+    awaits ``loop._call_llm``. Pre-A1 callers received a markdown
+    suffix string — that path is gone (Plan body now lives on
+    ``SessionMetrics.active_plan`` and is rendered at ``arun`` entry
+    via ``_consume_plan_hint``).
+    """
+    if not loop._enable_goal_decomposition:
+        return None
+    try:
+        from core.agent.plan import decompose_async
+        from core.observability.session_metrics import current_session_metrics
+
+        plan = await decompose_async(loop, user_input, tools=loop._tools)
+        if plan is None:
+            return None
+
+        # Install the explicit Plan on SessionMetrics so subsequent
+        # ``arun`` invocations + the replan path read the same object.
+        # ``reset_attempts=True`` because this is the initial install —
+        # no prior step attempts to preserve.
+        current_session_metrics().set_active_plan(plan, reset_attempts=True)
+
+        # Emit structured events for thin client. ``emit_goal_decomposition``
+        # is the legacy summary; ``emit_plan_step`` (PR-CL-A1) emits the
+        # current-step detail so UIs can render "Step 1/N: …".
+        from core.ui.agentic_ui import emit_goal_decomposition, emit_plan_step
+
+        emit_goal_decomposition([step.description for step in plan.steps])
+        first_step = plan.current_step()
+        if first_step is not None:
+            emit_plan_step(
+                current=plan.current + 1,
+                total=len(plan.steps),
+                description=first_step.description,
+                revision=plan.revision,
+            )
+        log.info(
+            "decompose_async: installed %d-step Plan on SessionMetrics",
+            len(plan.steps),
+        )
+        return None
+    except Exception:
+        log.debug("Goal decomposition skipped", exc_info=True)
+        return None

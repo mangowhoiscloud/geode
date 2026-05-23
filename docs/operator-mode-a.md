@@ -10,7 +10,7 @@
 | Mode | Trigger | LLM that proposes mutations |
 |------|---------|----------------------------|
 | **A (this doc)** | An external Claude Code / Codex CLI session, manually started by you | Whatever model the external session runs |
-| **B** (`/self-improving run`) | The GEODE CLI slash command | `[self_improving_loop.mutator] default_model` (defaults to `Settings.model` via PR-MINIMAL-2 G1a) |
+| **B** (`/self-improving run`) | The GEODE CLI slash command | `[self_improving_loop.autoresearch.mutator] default_model` (defaults to `Settings.model` via PR-MINIMAL-2 G1a; section relocated from `[self_improving_loop.mutator]` by Step J-b.1 — legacy section still auto-migrates for one release with a `DeprecationWarning`) |
 
 Both modes write to the same 5 policy SoTs at
 `autoresearch/state/policies/*.json` (git-tracked since

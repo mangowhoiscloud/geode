@@ -133,8 +133,37 @@ def test_invoke_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 # runner dispatch -----------------------------------------------------------
 
 
+def _stub_adapter_call_result(
+    text: str, *, input_tokens: int = 1, output_tokens: int = 1
+) -> object:
+    """Build a minimal :class:`AdapterCallResult` for the mutator runner tests.
+
+    Step J-b.2 — the runner now consumes
+    :class:`core.llm.adapters.base.AdapterCallResult` directly (no
+    intermediate AgenticResponse), so dispatch tests build the typed
+    dataclass instead of a generic ``MagicMock`` with ``.content`` /
+    ``.text`` blocks.
+    """
+    from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+    return AdapterCallResult(
+        text=text,
+        usage=UsageSummary(input_tokens=input_tokens, output_tokens=output_tokens),
+        stop_reason="end_turn",
+    )
+
+
 def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    """source=claude-cli skips the API path entirely."""
+    """source=claude-cli still uses cli_subprocess.invoke_claude_cli (text output).
+
+    Step J-b.2 (2026-05-23) — only the API path (``api_key`` / ``auto``)
+    migrates to the Path-B :class:`LLMAdapter` Protocol. The CLI
+    subscription branches stay on the dedicated text-output helpers
+    because the ``ClaudeCliAdapter`` / ``CodexCliAdapter`` built-ins
+    speak the streaming-JSON event protocol used by the agentic loop,
+    not the plain-text shape the mutator parser consumes. Codex MCP
+    BLOCKER fix-up.
+    """
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
@@ -146,7 +175,6 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
-    monkeypatch.setattr("core.llm.adapters.resolve_agentic_adapter", lambda p: MagicMock())
 
     invoked = {"called": False, "system": "", "user": ""}
 
@@ -159,13 +187,16 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("core.self_improving_loop.cli_subprocess.invoke_claude_cli", _fake_invoke)
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from claude-cli"
-    assert invoked["called"] is True
-    assert invoked["system"] == "SYS"
-    assert invoked["user"] == "USR"
+    assert invoked == {"called": True, "system": "SYS", "user": "USR"}
 
 
 def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    """source=openai-codex skips the API path entirely."""
+    """source=openai-codex still uses cli_subprocess.invoke_codex_cli (text output).
+
+    See ``test_default_llm_call_dispatches_to_claude_cli`` for the
+    Step J-b.2 rationale on keeping CLI subscription branches on the
+    plain-text helpers.
+    """
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
@@ -177,7 +208,6 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
-    monkeypatch.setattr("core.llm.adapters.resolve_agentic_adapter", lambda p: MagicMock())
 
     def _fake_invoke(*, system_prompt: str, user_prompt: str) -> str:
         return "from codex-cli"
@@ -187,8 +217,79 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
     assert result == "from codex-cli"
 
 
+def test_default_llm_call_normalizes_openai_codex_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Step J-b.2 Codex MCP LOW fix-up — gpt-5 model with API source.
+
+    ``_resolve_provider("gpt-5.x")`` returns the legacy
+    ``"openai-codex"`` provider key, but the Path-B registry only
+    knows ``"openai"``. ``_normalize_provider_for_registry`` collapses
+    the legacy key so the API path resolves to ``openai-payg`` instead
+    of erroring with ``AdapterNotFoundError``.
+    """
+    from core.self_improving_loop import runner
+
+    cfg_mock = MagicMock()
+    cfg_mock.autoresearch.mutator.default_model = "gpt-5.5"
+    cfg_mock.autoresearch.mutator.source = "api_key"
+    cfg_mock.autoresearch.mutator.max_tokens = 1024
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: cfg_mock,
+    )
+    monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
+
+    captured: dict[str, object] = {"provider": None, "source": None}
+
+    def _capture_resolve(provider: str, source: str) -> MagicMock:
+        captured["provider"] = provider
+        captured["source"] = source
+        stub = MagicMock()
+        stub.name = "openai-payg"
+
+        async def _acomplete(req: object) -> object:
+            return _stub_adapter_call_result("from openai-payg")
+
+        stub.acomplete = _acomplete
+        return stub
+
+    monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
+
+    async def _fake_failover(
+        models: list[str], do_call: object, **kwargs: object
+    ) -> tuple[object, str]:
+        result_obj = await do_call(models[0])  # type: ignore[operator]
+        return (result_obj, models[0])
+
+    monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
+
+    result = runner._default_llm_call("SYS", "USR")
+    assert result == "from openai-payg"
+    # Provider normalisation: ``openai-codex`` (legacy key) → ``openai``
+    # (Path-B registry key). Source stays ``payg`` per API-path default.
+    assert captured == {"provider": "openai", "source": "payg"}
+
+
+def test_normalize_provider_for_registry_passes_through_known_keys() -> None:
+    """Non-codex provider keys pass through ``_normalize_provider_for_registry``
+    unchanged so the helper is conservative."""
+    from core.self_improving_loop.runner import _normalize_provider_for_registry
+
+    assert _normalize_provider_for_registry("anthropic") == "anthropic"
+    assert _normalize_provider_for_registry("openai") == "openai"
+    assert _normalize_provider_for_registry("glm") == "glm"
+    # Legacy Codex provider key collapses to the Path-B registry key.
+    assert _normalize_provider_for_registry("openai-codex") == "openai"
+
+
 def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
-    """source=api_key still routes through call_with_failover (no subprocess)."""
+    """source=api_key routes to the PAYG adapter via resolve_for.
+
+    Step J-b.2 — the API path is the migrated branch: legacy
+    ``resolve_agentic_adapter(provider).agentic_call(...)`` →
+    ``resolve_for(provider, "payg").acomplete(req)``.
+    """
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
@@ -201,36 +302,34 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
 
-    adapter = MagicMock()
-    adapter.last_error = None
-    monkeypatch.setattr("core.llm.adapters.resolve_agentic_adapter", lambda p: adapter)
+    captured: dict[str, object] = {"provider": None, "source": None}
 
-    text_block = MagicMock()
-    text_block.text = "from api"
-    api_response = MagicMock()
-    api_response.content = [text_block]
+    def _capture_resolve(provider: str, source: str) -> MagicMock:
+        captured["provider"] = provider
+        captured["source"] = source
+        stub = MagicMock()
+        stub.name = "anthropic-payg"
 
-    async def _fake_failover(models: list[str], do_call: object) -> tuple[object, str]:
-        return (api_response, models[0])
+        async def _acomplete(req: object) -> object:
+            return _stub_adapter_call_result("from api")
+
+        stub.acomplete = _acomplete
+        return stub
+
+    monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
+
+    async def _fake_failover(
+        models: list[str], do_call: object, **kwargs: object
+    ) -> tuple[object, str]:
+        result_obj = await do_call(models[0])  # type: ignore[operator]
+        return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
 
-    claude_called = {"hit": False}
-
-    def _explode_if_called(**_kw: object) -> str:
-        claude_called["hit"] = True
-        return "should never reach claude-cli"
-
-    monkeypatch.setattr(
-        "core.self_improving_loop.cli_subprocess.invoke_claude_cli", _explode_if_called
-    )
-    monkeypatch.setattr(
-        "core.self_improving_loop.cli_subprocess.invoke_codex_cli", _explode_if_called
-    )
-
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from api"
-    assert claude_called["hit"] is False
+    # ``api_key`` source → registry pair ``(<provider>, payg)``.
+    assert captured == {"provider": "anthropic", "source": "payg"}
 
 
 # TOML splicer --------------------------------------------------------------

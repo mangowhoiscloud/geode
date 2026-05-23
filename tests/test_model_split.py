@@ -6,7 +6,7 @@ Coverage:
 - TOML mapping covers all three knobs.
 - ``AgenticLoop.__init__`` honours ``settings.act_model`` when no explicit
   ``model`` is passed; explicit ``model`` wins.
-- ``_decomposition.try_decompose`` uses ``settings.plan_model`` when set.
+- ``_helpers.try_decompose`` uses ``settings.plan_model`` when set.
 - ``_call_llm(model=...)`` override threads through to the adapter call.
 - ``_verify_llm_judge`` actually calls the LLM via ``loop._call_llm`` with
   ``settings.judge_model`` + parses the judge JSON response.

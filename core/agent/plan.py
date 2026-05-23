@@ -1,6 +1,6 @@
 """Explicit ``Plan`` object + dynamic replan (PR-CL-A1, 2026-05-23).
 
-Replaces the implicit one-shot plan that ``_decomposition.try_decompose``
+Replaces the implicit one-shot plan that ``_helpers.try_decompose``
 emitted as a system-prompt suffix string. The plan now lives as a
 structured :class:`Plan` object on :class:`SessionMetrics` so:
 

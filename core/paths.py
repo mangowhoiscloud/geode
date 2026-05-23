@@ -382,10 +382,9 @@ SERVE_LOG_PATH = GEODE_HOME / "logs" / "serve.log"
 # ``~/.geode/journal/transcripts/<project-slug>/<session_id>.jsonl`` 이중
 # nesting 이었으나 transcript 가 단독 Tier-1 으로 정렬되며 ``journal/``
 # 디렉터리 의미 사라짐. 이제 ``~/.geode/transcripts/<project-slug>/<session_id>.jsonl``.
-# ``GLOBAL_JOURNAL_DIR`` 이름은 backward-compat 으로 alias 유지 (한 release
-# 후 제거 권장).
+# PR-CLEANUP-1 (2026-05-23) — ``GLOBAL_JOURNAL_DIR`` legacy alias 제거
+# (1-release grace 만료). 외부 caller 0 확인.
 GLOBAL_TRANSCRIPTS_DIR = GEODE_HOME / "transcripts"
-GLOBAL_JOURNAL_DIR = GLOBAL_TRANSCRIPTS_DIR  # legacy alias — will be dropped
 GLOBAL_WORKERS_DIR = GEODE_HOME / "workers"
 # v0.95.x layout migration v1 — moved under mcp/ to group with other MCP state.
 # Legacy ``~/.geode/mcp-registry-cache.json`` migrated by

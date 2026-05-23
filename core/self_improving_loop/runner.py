@@ -511,26 +511,56 @@ def _consume_last_llm_call_usage() -> dict[str, Any]:
     return snapshot
 
 
-def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
-    """Mutator LLM call routed through ``core.llm.router`` (PR-1 G-A).
+def _normalize_provider_for_registry(provider: str) -> str:
+    """Translate :func:`core.config._resolve_provider` output to the
+    Path-B registry's provider key vocabulary.
 
-    Pre-PR-1 (v0.99.22) this body instantiated ``anthropic.Anthropic()``
-    directly and pinned ``model="claude-opus-4-7"`` as a literal —
-    paperclip-style abstraction goal: route through the same
-    ``call_with_failover`` path every other provider-aware caller uses,
-    and read the model id from ``[self_improving_loop.mutator]`` so the
-    operator can flip provider/model without editing this file.
+    Step J-b.2 (2026-05-23, Codex MCP HIGH fix-up) —
+    :func:`_resolve_provider` returns the legacy AgenticLLMPort provider
+    keys (``anthropic`` / ``openai`` / ``openai-codex`` / ``glm``). The
+    Path-B :func:`~core.llm.adapters.registry.resolve_for` registry uses
+    a narrower set: ``anthropic`` / ``openai`` / ``glm``. The Codex
+    distinction is encoded on the ``source`` axis instead (``CodexOAuthAdapter``
+    lives at ``provider="openai"`` ``source="subscription"``).
+
+    For a gpt-5.x model the legacy resolver returns ``"openai-codex"``;
+    the Path-B mutator collapses that to ``"openai"`` and lets the
+    source axis pick between ``payg`` / ``subscription`` / ``adapter``.
+    """
+    if provider == "openai-codex":
+        return "openai"
+    return provider
+
+
+def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
+    """Mutator LLM call.
+
+    Step J-b.2 (2026-05-23) — the **API path** (``source=api_key`` /
+    ``auto``) now routes through the v0.99.39 Path-B
+    :class:`~core.llm.adapters.base.LLMAdapter` Protocol via
+    :func:`~core.llm.adapters.registry.resolve_for(provider, "payg")`.
+    The mutator therefore inherits I.a's Codex OAuth header dedup and
+    F's GLM adapter family on the API path directly.
+
+    **CLI-subscription paths (``claude-cli`` / ``openai-codex``)
+    deliberately stay on the dedicated ``invoke_claude_cli`` /
+    ``invoke_codex_cli`` helpers** in :mod:`core.self_improving_loop.cli_subprocess`
+    rather than going through the Path-B ``ClaudeCliAdapter`` /
+    ``CodexCliAdapter`` built-ins. The built-in adapters were designed
+    for the agentic-loop's streaming JSON event protocol
+    (``--output-format stream-json``), whereas the mutator parser
+    expects plain text output (``--output-format text`` for claude-cli
+    and the ``--skip-git-repo-check`` codex_exec invocation). Forcing
+    the mutator through the streaming adapters would break the JSON
+    mutation-payload extraction. Migrating both adapters to support
+    a text-output mode is tracked separately (Step I.c follow-up).
 
     Resolution order:
 
-    1. ``~/.geode/config.toml [self_improving_loop.mutator] default_model``
-       (user override).
-    2. ``MutatorConfig.default_model`` ship default (``claude-opus-4-7``).
-
-    The model id is routed through ``core.llm.router.call_with_failover``
-    so the same credential / provider rotator the agentic loop uses
-    also serves the mutator — no second SDK client, no second key
-    store.
+    1. ``~/.geode/config.toml [self_improving_loop.autoresearch.mutator]
+       default_model`` (user override).
+    2. ``MutatorConfig.default_model`` ship default — ``None`` inherits
+       ``Settings.model`` (G1a, PR-MINIMAL-2).
 
     Tests inject a mock callable via
     ``SelfImprovingLoopRunner(llm_call=...)`` and skip this code path
@@ -542,8 +572,6 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
     from core.config import _resolve_provider
     from core.config.self_improving_loop import load_self_improving_loop_config
-    from core.llm.adapters import resolve_agentic_adapter
-    from core.llm.router import call_with_failover
 
     cfg = load_self_improving_loop_config()
     # PR-MINIMAL-2 (2026-05-21) — G1a inherit: MutatorConfig.default_model
@@ -558,21 +586,8 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     max_tokens = cfg.autoresearch.mutator.max_tokens
     source = cfg.autoresearch.mutator.source
 
-    # PR-MINIMAL-2 — model allow-list field removed (C1). The
-    # router's provider routing already guards model existence per
-    # provider; the dedicated 5-model list added more config surface
-    # than it caught. The (formerly logged-only) contract-path field
-    # was also removed (A1) since the dispatch log line below already
-    # carries the configured model + provider + source for telemetry
-    # grouping — operator-facing contract docs at
-    # ``.claude/agents/self_improving_loop_mutator.md`` remain on
-    # disk as reference.
-
     provider = _resolve_provider(model)
-    adapter = resolve_agentic_adapter(provider)
 
-    # Mutator dispatch telemetry (one line per call) so downstream
-    # Petri / Inspect viewers can group runs by operator intent.
     _logging.getLogger("core.self_improving_loop.runner").info(
         "mutator dispatch: model=%s provider=%s source=%s max_tokens=%d",
         model,
@@ -581,13 +596,11 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
         max_tokens,
     )
 
-    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. When the
-    # operator opted into "claude-cli" / "openai-codex" via
-    # ``[self_improving_loop.mutator] source = "..."`` in config.toml,
-    # route the mutator call through the local CLI binary so the
-    # subscription (Claude Code Max / ChatGPT Plus) is billed instead
-    # of the API. The default "auto" / "api_key" path remains
-    # unchanged — existing operators see zero behavior diff.
+    # PR-PAPERCLIP (2026-05-21) — source-aware dispatch. The CLI-subscription
+    # branches use the dedicated text-output helpers in ``cli_subprocess``
+    # (see docstring above for the streaming-vs-text incompatibility with
+    # the Path-B CLI adapters). The API path (``api_key`` / ``auto``)
+    # falls through to the LLMAdapter Protocol.
     if source == "claude-cli":
         from core.self_improving_loop.cli_subprocess import invoke_claude_cli
 
@@ -597,66 +610,62 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
         return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
 
+    # Step J-b.2 (Path-B API path) — resolve_for + acomplete.
     from core.config import settings as _settings
+    from core.llm.adapters import resolve_for
+    from core.llm.adapters.base import AdapterCallRequest, Message
+    from core.llm.router import call_with_failover
 
+    adapter = resolve_for(_normalize_provider_for_registry(provider), "payg")
     mutator_temperature = _settings.temperature_self_improving_mutation
 
     async def _do_call(m: str) -> object:
-        return await adapter.agentic_call(
+        req = AdapterCallRequest(
             model=m,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-            tools=[],
-            tool_choice={"type": "auto"},
+            messages=(Message(role="user", content=user_prompt),),
+            system_prompt=system_prompt,
+            tools=(),
+            tool_choice="auto",
             max_tokens=max_tokens,
             temperature=mutator_temperature,
         )
+        return await adapter.acomplete(req)
 
     # ``call_with_failover`` is the router's async dispatcher (transport
     # layer) — accepts an ordered model list. PR-1 keeps it single-
-    # element so the M5 silent-fallback knob default is preserved; an
-    # operator who wants the mutator to fall through to alternate models
-    # can set per-provider fallback chains in the router config
-    # (the dispatcher's ``models`` list is expanded in a follow-up PR
-    # once the operator-facing surface for that exists).
+    # element so the M5 silent-fallback knob default is preserved.
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 timing
-    # 캡처. response.usage 도 같이 record_*.
+    # 캡처. result.usage 도 같이 record_*.
     call_started_at = time.time()
-    response, _used_model = asyncio.run(call_with_failover([model], _do_call))
+    result, _used_model = asyncio.run(call_with_failover([model], _do_call))
     call_elapsed = time.time() - call_started_at
-    if response is None:
-        last_err = getattr(adapter, "last_error", None)
+    if result is None:
         raise RuntimeError(
-            f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
+            f"mutator LLM call failed (model={model}, provider={provider}, adapter={adapter.name})"
         )
 
     # PR-SIL-5THEME C4 + PR-SESSION-METRICS — usage metadata capture.
-    # AgenticResponse 의 ``usage`` (ResponseUsage dataclass: input_tokens /
-    # output_tokens / thinking_tokens / cache_*) 를 SessionMetrics 의
-    # ContextVar 에 직접 fold. last-call snapshot 도 같이 적재 — propose()
-    # 가 동일 ContextVar 에서 읽어 Mutation.cost_* 채움. Module-level
-    # sidecar / dict ContextVar / proxy shim 의 race-prone 패턴 완전 제거.
+    # ``AdapterCallResult.usage`` is the v0.99.39 :class:`UsageSummary`
+    # (``input_tokens`` / ``output_tokens`` / ``cached_input_tokens``).
+    # The legacy ``AgenticResponse.usage`` had additional
+    # ``cache_creation_tokens`` / ``thinking_tokens`` slots — those are
+    # zeroed here because the new ``UsageSummary`` doesn't surface them
+    # and no downstream mutator ledger reader consumes them today.
     from core.observability import current_session_metrics
 
-    usage_obj = getattr(response, "usage", None)
+    usage_obj = getattr(result, "usage", None)
     if usage_obj is not None:
         current_session_metrics().accumulate_llm_call(
             input_tokens=int(getattr(usage_obj, "input_tokens", 0)),
             output_tokens=int(getattr(usage_obj, "output_tokens", 0)),
-            cache_creation_tokens=int(getattr(usage_obj, "cache_creation_tokens", 0)),
-            cache_read_tokens=int(getattr(usage_obj, "cache_read_tokens", 0)),
-            thinking_tokens=int(getattr(usage_obj, "thinking_tokens", 0)),
+            cache_creation_tokens=0,
+            cache_read_tokens=int(getattr(usage_obj, "cached_input_tokens", 0)),
+            thinking_tokens=0,
             elapsed_seconds=float(call_elapsed),
             model=str(_used_model or model),
         )
 
-    # Adapter normalises to AgenticResponse — concatenate text blocks.
-    text_chunks: list[str] = []
-    for block in getattr(response, "content", []):
-        text = getattr(block, "text", "")
-        if text:
-            text_chunks.append(text)
-    text = "".join(text_chunks)
+    text = getattr(result, "text", "") or ""
     if not text:
         # Empty text is a known anti-pattern surface (``parse_mutation``
         # raises ValueError downstream); callers that catch it can retry,
@@ -664,7 +673,8 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
         # of letting JSON parsing carry the blame.
         raise RuntimeError(
             f"mutator LLM call returned empty text "
-            f"(model={model}, provider={provider}, used={_used_model!r})"
+            f"(model={model}, provider={provider}, adapter={adapter.name}, "
+            f"used={_used_model!r})"
         )
     return text
 
