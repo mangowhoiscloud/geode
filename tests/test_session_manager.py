@@ -126,7 +126,7 @@ class TestSessionCheckpointIntegration:
     """SessionCheckpoint.save() syncs to SQLite index."""
 
     def test_save_creates_index_entry(self, tmp_path: Path) -> None:
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         state = SessionState(
@@ -388,7 +388,7 @@ class TestSessionCheckpointDualWrite:
     """Phase 1a — SessionCheckpoint.save() mirrors messages into DB."""
 
     def test_save_mirrors_messages_to_db(self, tmp_path: Path) -> None:
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         state = SessionState(
@@ -413,7 +413,7 @@ class TestSessionCheckpointDualWrite:
     ) -> None:
         """JSON checkpoint survives even when the DB mirror raises."""
         from core.memory import session_manager as _sm_mod
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         def _boom(self, *_a: object, **_kw: object) -> int:
             raise RuntimeError("boom")
@@ -433,7 +433,7 @@ class TestSessionCheckpointDualWrite:
 
     def test_save_round_idempotent_against_db(self, tmp_path: Path) -> None:
         """Two consecutive saves with the same messages produce one row each."""
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         msgs = [
@@ -453,7 +453,7 @@ class TestSessionCheckpointDualWrite:
 
     def test_save_appends_new_messages_into_db(self, tmp_path: Path) -> None:
         """Adding messages and re-saving extends the DB row set."""
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         cp.save(
@@ -482,7 +482,7 @@ class TestSessionCheckpointDualWrite:
 
     def test_save_empty_messages_removes_stale_db_rows(self, tmp_path: Path) -> None:
         """Re-saving an empty transcript keeps the DB mirror aligned with JSON."""
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
         cp.save(
@@ -511,7 +511,7 @@ class TestSessionCheckpointDualWrite:
         import sqlite3
 
         from core.memory import session_manager as _sm_mod
-        from core.runtime_state.session_checkpoint import SessionCheckpoint, SessionState
+        from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
         def _raise(self, *_a: object, **_kw: object) -> int:
             raise sqlite3.OperationalError("database is locked")
@@ -519,7 +519,7 @@ class TestSessionCheckpointDualWrite:
         monkeypatch.setattr(_sm_mod.SessionManager, "upsert_messages", _raise)
 
         cp = SessionCheckpoint(session_dir=tmp_path / "session")
-        with caplog.at_level(logging.WARNING, logger="core.runtime_state.session_checkpoint"):
+        with caplog.at_level(logging.WARNING, logger="core.memory.session_checkpoint"):
             cp.save(
                 SessionState(
                     session_id="op-fail",

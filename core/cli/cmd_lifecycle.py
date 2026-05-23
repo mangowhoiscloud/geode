@@ -603,7 +603,7 @@ def do_clean(
     # Run existing cleanup utilities for --all mode
     if all_data and include_global:
         try:
-            from core.runtime_state.transcript import cleanup_old_transcripts
+            from core.observability.transcript import cleanup_old_transcripts
 
             removed = cleanup_old_transcripts(max_age_days=older_than)
             if removed:

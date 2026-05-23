@@ -64,7 +64,7 @@
 | self-improving-loop event journal | `~/.geode/self-improving-loop/<session_id>/journal.jsonl` | `SessionJournal.append` | ⚠️ event 종류 빈약 |
 | token usage ledger | `~/.geode/usage/<YYYY-MM>.jsonl` | token tracker | ✅ |
 | RunLog | `~/.geode/runs/{key}.jsonl` | `AgenticLoop` | ✅ |
-| SessionTranscript | `~/.geode/journal/transcripts/<project>/<session>.jsonl` | `core.runtime_state.transcript` | ✅ |
+| SessionTranscript | `~/.geode/journal/transcripts/<project>/<session>.jsonl` | `core.observability.transcript` | ✅ |
 | petri raw eval | `~/.geode/petri/logs/*.eval` | inspect_ai subprocess | ✅ |
 | autoresearch stdout summary | console 45-line block | `print` in `train.py` | ✅ |
 | autoresearch RUN_LOG | `~/.geode/self-improving-loop/<session>/audit.log` | subprocess stdout+stderr | ✅ |

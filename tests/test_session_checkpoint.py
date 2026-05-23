@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from core.runtime_state.session_checkpoint import (
+from core.memory.session_checkpoint import (
     CHECKPOINT_MAX_MESSAGES,
     SessionCheckpoint,
     SessionState,
