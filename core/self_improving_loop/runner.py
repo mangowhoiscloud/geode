@@ -37,6 +37,7 @@ Test strategy:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import subprocess
@@ -111,6 +112,18 @@ class Mutation:
     (e.g. ``"any dim drops more than 0.5"``). Recorded for auditability;
     enforcement is a follow-up."""
 
+    # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger. 이전엔
+    # mutator LLM 의 usage metadata (input_tokens / output_tokens /
+    # elapsed_seconds / model) 가 _default_llm_call 의 응답에서 폐기됐다
+    # — runner.py:543 의 ``response, _used_model = …`` 에서 _used_model
+    # 만 받고 response.usage 미사용. cost 컬럼이 mutations.jsonl 에 없어
+    # operator 가 mutation ROI (cost vs fitness Δ) 못 봤다. C4 가 그 캡처
+    # 경로 활성. 기본값은 0 / "" (legacy mutation row backward-compat).
+    cost_input_tokens: int = 0
+    cost_output_tokens: int = 0
+    cost_elapsed_seconds: float = 0.0
+    cost_model: str = ""
+
     def to_audit_row(
         self,
         *,
@@ -118,8 +131,13 @@ class Mutation:
         timestamp: float | None = None,
         baseline_fitness: float | None = None,
     ) -> dict[str, Any]:
-        """Render the mutation as one audit-log row."""
-        return {
+        """Render the mutation as one audit-log row.
+
+        PR-SIL-5THEME C4 (2026-05-23) — cost 4-field 추가. 모두 0 / "" 일
+        때만 row 에 컬럼 자체 미생성 → legacy reader 가 새 컬럼 부재 시
+        graceful (key 가 없으면 0 / "" 가정).
+        """
+        row: dict[str, Any] = {
             "ts": timestamp if timestamp is not None else time.time(),
             "kind": "applied",
             "mutation_id": self.mutation_id,
@@ -133,6 +151,17 @@ class Mutation:
             "rollback_condition": self.rollback_condition,
             "baseline_fitness": baseline_fitness,
         }
+        # PR-SIL-5THEME C4 — cost 컬럼은 non-zero 일 때만 emit. 0 값
+        # (legacy 또는 mock LLM 호출) 은 column 자체 생략 — JSONL 의
+        # noise 절감 + legacy reader 무영향.
+        if self.cost_input_tokens or self.cost_output_tokens:
+            row["cost_input_tokens"] = int(self.cost_input_tokens)
+            row["cost_output_tokens"] = int(self.cost_output_tokens)
+        if self.cost_elapsed_seconds:
+            row["cost_elapsed_seconds"] = round(float(self.cost_elapsed_seconds), 4)
+        if self.cost_model:
+            row["cost_model"] = str(self.cost_model)
+        return row
 
 
 @dataclass
@@ -436,6 +465,35 @@ LLMCallable = Callable[[str, str], str]
 """Signature: ``llm_call(system_prompt, user_prompt) -> raw response``."""
 
 
+# PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 sidecar 캡처.
+# ``_default_llm_call`` 이 ``response.usage`` 를 dict 로 저장하면 ``propose()``
+# 가 같은 process 내에서 읽어 ``Mutation.cost_*`` field 채움. tests inject 한
+# str-returning mock 은 usage 미세팅 → ``Mutation.cost_*`` 가 default 0 / ""
+# 로 남아 ``to_audit_row()`` 가 cost 컬럼 자체 생략 (backward-compat).
+#
+# Thread-local 대신 module-level 인 이유: SelfImprovingLoopRunner 는 single-
+# threaded async (asyncio.run 으로 동기 호출) 가정이고, 한 propose() 가 끝
+# 나기 전 다른 propose() 가 끼어들 가능 X. 만약 future 에 concurrent runner
+# 가 필요해지면 threading.local() 로 교체.
+_LAST_LLM_CALL_USAGE: dict[str, Any] = {}
+
+
+def _reset_last_llm_call_usage() -> None:
+    """``_LAST_LLM_CALL_USAGE`` 를 비움 — propose() 가 새 LLM call 직전에 호출."""
+    _LAST_LLM_CALL_USAGE.clear()
+
+
+def _consume_last_llm_call_usage() -> dict[str, Any]:
+    """``_LAST_LLM_CALL_USAGE`` 의 snapshot 을 반환하고 module-level dict 를 비움.
+
+    Returns 빈 dict 면 LLM call 이 usage 를 emit 안 했거나 mock 이라 캡처 안
+    된 경우 — caller 는 cost 0 / "" 로 처리 (backward-compat).
+    """
+    snapshot = dict(_LAST_LLM_CALL_USAGE)
+    _LAST_LLM_CALL_USAGE.clear()
+    return snapshot
+
+
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     """Mutator LLM call routed through ``core.llm.router`` (PR-1 G-A).
 
@@ -540,12 +598,28 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # can set per-provider fallback chains in the router config
     # (the dispatcher's ``models`` list is expanded in a follow-up PR
     # once the operator-facing surface for that exists).
+    # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 timing
+    # 캡처. response.usage 도 같이 record_*.
+    call_started_at = time.time()
     response, _used_model = asyncio.run(call_with_failover([model], _do_call))
+    call_elapsed = time.time() - call_started_at
     if response is None:
         last_err = getattr(adapter, "last_error", None)
         raise RuntimeError(
             f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
         )
+
+    # PR-SIL-5THEME C4 — usage metadata capture. AgenticResponse 의
+    # ``usage`` 가 ResponseUsage dataclass (input_tokens / output_tokens
+    # / thinking_tokens / cache_*) — sidecar dict 에 저장하면 propose()
+    # 가 같은 process 에서 읽어 Mutation 에 채워 넣음.
+    _LAST_LLM_CALL_USAGE.clear()
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is not None:
+        _LAST_LLM_CALL_USAGE["input_tokens"] = int(getattr(usage_obj, "input_tokens", 0))
+        _LAST_LLM_CALL_USAGE["output_tokens"] = int(getattr(usage_obj, "output_tokens", 0))
+        _LAST_LLM_CALL_USAGE["elapsed_seconds"] = float(call_elapsed)
+        _LAST_LLM_CALL_USAGE["model"] = str(_used_model or model)
 
     # Adapter normalises to AgenticResponse — concatenate text blocks.
     text_chunks: list[str] = []
@@ -860,8 +934,26 @@ class SelfImprovingLoopRunner:
         """
         ctx = build_runner_context()
         user_prompt = _build_user_prompt(ctx)
+        # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger. 새 LLM
+        # call 직전 sidecar 비우고, _default_llm_call 이 호출 후 채움. mock
+        # 인 경우 빈 dict 가 그대로 남음 → consume_usage() 가 빈 dict 반환
+        # → Mutation.cost_* 가 default 0 / "" 유지.
+        _reset_last_llm_call_usage()
         raw_response = self.llm_call(_build_system_prompt(), user_prompt)
+        usage_snapshot = _consume_last_llm_call_usage()
         mutation = parse_mutation(raw_response)
+        # PR-SIL-5THEME C4 — usage → mutation cost field. ``Mutation`` 은
+        # ``frozen=True`` dataclass 라 dataclasses.replace 로 새 인스턴스
+        # 생성. usage_snapshot 이 빈 dict (mock injection) 면 mutation
+        # 그대로 (default 0 / "").
+        if usage_snapshot:
+            mutation = dataclasses.replace(
+                mutation,
+                cost_input_tokens=int(usage_snapshot.get("input_tokens", 0)),
+                cost_output_tokens=int(usage_snapshot.get("output_tokens", 0)),
+                cost_elapsed_seconds=float(usage_snapshot.get("elapsed_seconds", 0.0)),
+                cost_model=str(usage_snapshot.get("model", "")),
+            )
         # PR-6 C-5 (Codex MCP catch) — apply_mutation dispatches by
         # target_kind, but ctx.current_sections is *always* the wrapper-
         # prompt sections (built by build_runner_context). Passing those

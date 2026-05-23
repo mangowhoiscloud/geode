@@ -158,6 +158,74 @@ functional change.
   translated to the adapter Protocol's ``payg`` / ``subscription`` /
   ``adapter`` names via a single SoT table — both naming schemes are
   accepted in ``[seed_generation.role.<role>]`` overrides.
+- **PR-SIL-5THEME C4 — E1 mutation cost ledger**. `mutations.jsonl` 가
+  git-tracked 으로 존재 (PR-G5b #1350 의 deception fix 으로 보장) 했으나
+  cost 컬럼이 0건이라 operator 가 mutation ROI (cost vs fitness Δ) 볼
+  수 없던 silent disconnect 닫음. 3-step wiring:
+
+  **Step 1 — `_default_llm_call` 의 usage capture**. 이전엔
+  `response, _used_model = asyncio.run(call_with_failover(...))` 에서
+  `_used_model` 만 받고 `response.usage` (`ResponseUsage` dataclass 의
+  `input_tokens` / `output_tokens`) 가 폐기됐다. 이제 module-level
+  sidecar dict (`_LAST_LLM_CALL_USAGE`) 에 호출 직후 `input_tokens` /
+  `output_tokens` / `elapsed_seconds` / `model` 4-field 적재. 같은
+  process 내 단일-threaded propose() 사이클이라 threading.local 불필요
+  (concurrent runner 가 미래 surface 시 교체).
+
+  **Step 2 — `propose()` 의 sidecar consumption**. `_reset_last_llm_call_usage`
+  로 직전 잔여 clear → `self.llm_call(...)` → `_consume_last_llm_call_usage`
+  로 atomic snapshot read-and-clear → `dataclasses.replace` 로 frozen
+  `Mutation` 의 cost 4-field 채워서 새 instance 생성. Mock LLM (test
+  inject) 는 sidecar 채우지 않음 → cost field 가 default 0 / "" 유지 →
+  `to_audit_row()` 가 cost 컬럼 자체 omit (legacy reader 무영향).
+
+  **Step 3 — `compute_attribution` 의 `fitness_delta` 추가**. 새
+  `fitness_before` / `fitness_after` optional kwarg 받음. 둘 다 명시
+  되면 `payload["fitness_before"]` / `payload["fitness_after"]` /
+  `payload["fitness_delta"]` (6 decimal round) 3-key emit. caller 가
+  baseline.json 의 직전 + 현재 fitness scalar 를 둘 다 hand 에 들고 있
+  을 때만 fire (autoresearch run loop / scheduler 가 활용). 부재 시
+  키 자체 미생성.
+
+  **`Mutation` dataclass 확장**:
+  - `cost_input_tokens: int = 0`
+  - `cost_output_tokens: int = 0`
+  - `cost_elapsed_seconds: float = 0.0`
+  - `cost_model: str = ""`
+  - 모두 default 0 / "" → backward-compat. `Mutation` 이 `frozen=True`
+    이라 cost 채우려면 `dataclasses.replace` 사용해야 함 (propose()
+    가 그렇게 함).
+
+  **`to_audit_row()` 의 selective emit**: cost 0 / "" 일 때 row 의
+  cost_* 키 자체 미생성 — JSONL noise 절감 + legacy reader (cost
+  컬럼 부재 시 0 / "" 가정) 무영향. `cost_input_tokens` 와
+  `cost_output_tokens` 는 atomic — 하나만 emit 되는 partial state 없음.
+
+  **`write_attribution` convenience wrapper** — `fitness_before` /
+  `fitness_after` kwarg 동봉 forward (caller 가 `write_attribution`
+  하나로 끝낼 수 있게).
+
+  **Test guards** (`tests/test_e1_mutation_cost_ledger.py` 신규, 14
+  tests):
+  - `Mutation` default cost field state (0 / "" 4-field)
+  - `to_audit_row` cost 0 → 컬럼 omit / cost set → 컬럼 emit / partial
+    (elapsed_seconds 만) 분리 처리
+  - `_LAST_LLM_CALL_USAGE` sidecar lifecycle: `_reset` clears, `_consume`
+    returns-and-clears atomic, empty when unset
+  - `propose()` mock LLM (sidecar 미채움) → cost default / production-
+    style usage sidecar → cost populated / stale sidecar 잔여 차단
+  - `compute_attribution` fitness emit: 둘 다 명시 → 3-key + Δ /
+    부재 → 키 미생성 / only-before → 키 미생성 (Δ 계산 불가) /
+    regression scenario (after < before) → 음수 Δ
+
+  **anti-deception**: PR-G5b #1350 의 "git-tracked audit log" 주장은
+  유효 — 이 PR 이 컬럼만 채워 넣음. `mutations.jsonl` path 자체는
+  `core/paths.py` 에 정착, .gitignore-clean (PR-RATCHET-1 의
+  ``tests/test_ratchet_policies_in_repo.py::test_policy_files_not_gitignored``
+  invariant 으로 pinned).
+
+### Added
+
 - **PR-SIL-5THEME C3 — P3 modality 가중 분리**. `core/audit/dim_extractor`
   가 PR-1 으로 per-dim `measurement_modality` 를 emit 했으나
   `compute_fitness` / `_should_promote` 는 그 신호를 0% 사용하던
