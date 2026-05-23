@@ -231,7 +231,7 @@ def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
             target_model=None,
             judge_model=None,
             source="claude-cli",
-            seed_limit=2,
+            seed_limit=5,
             seed_select="plugins/petri_audit/seeds",
             dim_set="subset",
             max_turns=5,

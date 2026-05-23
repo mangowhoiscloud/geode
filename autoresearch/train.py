@@ -153,23 +153,32 @@ WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 def _get_autoresearch_config() -> Any:
     """Lazily load ``[self_improving_loop.autoresearch]`` from ``~/.geode/config.toml``.
 
-    Returns the typed ``AutoresearchConfig`` (PR-α1) when the loader is
-    available; falls back to a fresh ``AutoresearchConfig`` (whose
-    defaults mirror the module constants verbatim) on
-    ``ImportError`` / load failure so this module stays importable in
-    test contexts that stub ``core.config``.
+    Returns the typed ``AutoresearchConfig`` (PR-α1) when the loader
+    can be imported. Falls back to a ``SimpleNamespace`` whose fields
+    mirror the module constants verbatim **only** on ``ImportError``,
+    so this module stays importable in test contexts that stub
+    ``core.config``. ``pydantic.ValidationError`` and other loader
+    errors (e.g. ``tomllib.TOMLDecodeError``) bubble naturally;
+    missing-file / unreadable-file fallback is the loader's own
+    behaviour (it returns a fully-defaulted ``SelfImprovingLoopConfig``
+    on ``OSError``).
 
     Tests can monkeypatch this function to inject a custom config
     without touching ``~/.geode/config.toml``.
     """
+    # PR-C-P1 (2026-05-23) — Codex MCP catch: this used to be
+    # ``except Exception`` which silently swallowed
+    # ``pydantic.ValidationError`` (e.g. operator config with
+    # ``seed_limit = 2`` < the new ``ge=5`` lower bound) and fell back
+    # to module defaults. The operator never saw the validation
+    # message — same silent-drift pattern as PR-MINIMAL-2 #1398. Now
+    # narrowed to ``ImportError`` (the test-stub case) so the
+    # ValidationError surfaces with the actionable Pydantic message;
+    # TOML parse errors and other loader-raised exceptions bubble too;
+    # missing/unreadable-file fallback stays inside the loader.
     try:
         from core.config.self_improving_loop import load_self_improving_loop_config
-
-        return load_self_improving_loop_config().autoresearch
-    except Exception:
-        # Use the in-module default (matches AutoresearchConfig() exactly,
-        # which is verified by tests/test_self_improving_loop_config.py::
-        # test_autoresearch_defaults_match_train_module).
+    except ImportError:
         from types import SimpleNamespace
 
         return SimpleNamespace(
@@ -180,6 +189,7 @@ def _get_autoresearch_config() -> Any:
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
+    return load_self_improving_loop_config().autoresearch
 
 
 def _petri_role_model(role: str) -> str:

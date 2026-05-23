@@ -115,6 +115,81 @@ seed_limit = 25
     assert cfg.autoresearch.source == "auto"
 
 
+# ---------------------------------------------------------------------------
+# PR-C-P1 (2026-05-23) — seed_limit lower bound ≥ 5
+# ---------------------------------------------------------------------------
+
+
+def test_autoresearch_seed_limit_lower_bound_is_5() -> None:
+    """PR-C-P1 bumps ``seed_limit`` from ``ge=1`` to ``ge=5``.
+    ``dim_extractor._aggregate`` forces ``stderr=0.0`` only at N=1
+    (ddof=1 variance undefined); N=2-4 produces a sample stderr but
+    the CV is too unstable to drive ``_should_promote``. Either way
+    the gate ends up flooring at the default 0.05, so a 0.05+ Δ
+    promotes against a measurement with no confidence signal.
+    Pydantic must reject any config that sets it lower."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as exc_info:
+        AutoresearchConfig(seed_limit=2)
+    msg = str(exc_info.value)
+    assert "seed_limit" in msg
+    assert "greater than or equal to 5" in msg or "ge=5" in msg
+
+
+def test_autoresearch_seed_limit_boundary_n5_accepted() -> None:
+    """Boundary pin — N=5 (the threshold) must be accepted. A future
+    typo bumping to ``gt=5`` would silently exclude the boundary."""
+    cfg = AutoresearchConfig(seed_limit=5)
+    assert cfg.seed_limit == 5
+
+
+def test_autoresearch_seed_limit_default_remains_10() -> None:
+    """The default (already healthy at 10) stays unchanged so operators
+    who never set ``seed_limit`` see no behaviour shift."""
+    cfg = AutoresearchConfig()
+    assert cfg.seed_limit == 10
+
+
+def test_get_autoresearch_config_propagates_validation_error_to_operator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-C-P1 Codex MCP catch — ``autoresearch.train._get_autoresearch_config``
+    used to ``except Exception:`` and silently fall back to the module
+    defaults, so an operator config with ``seed_limit = 2`` (< new
+    ``ge=5`` floor) produced no error. The narrowed catch now lets
+    ``pydantic.ValidationError`` surface to the operator with the
+    actionable Pydantic message. Same silent-drift pattern as
+    PR-MINIMAL-2 #1398."""
+    from pydantic import ValidationError
+
+    path = tmp_path / "config.toml"
+    _write_toml(
+        path,
+        """
+[self_improving_loop.autoresearch]
+seed_limit = 2
+""",
+    )
+    import autoresearch.train as auto_train
+    from core.config import self_improving_loop as sil_config
+
+    # Capture the unpatched loader, then monkeypatch the import target
+    # to force the tmp_path. ``_get_autoresearch_config`` imports the
+    # loader from ``core.config.self_improving_loop`` so the patch
+    # needs to land on that module attribute.
+    original_loader = sil_config.load_self_improving_loop_config
+
+    def _load_with_tmp_path(*_args: object, **_kwargs: object) -> object:
+        return original_loader(path)
+
+    monkeypatch.setattr(sil_config, "load_self_improving_loop_config", _load_with_tmp_path)
+
+    with pytest.raises(ValidationError):
+        auto_train._get_autoresearch_config()
+
+
 def test_load_reads_petri_role_bindings(tmp_path: Path) -> None:
     """[self_improving_loop.petri.<role>] keys become PetriRoleConfig entries."""
     path = tmp_path / "config.toml"
