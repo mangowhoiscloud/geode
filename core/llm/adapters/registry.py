@@ -23,7 +23,12 @@ from __future__ import annotations
 
 import logging
 
-from core.llm.adapters.base import CONCRETE_SOURCES, SOURCE_AUTO, LLMAdapter
+from core.llm.adapters.base import (
+    CONCRETE_SOURCES,
+    SOURCE_AUTO,
+    EnvironmentReport,
+    LLMAdapter,
+)
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +94,25 @@ def get_adapter(name: str) -> LLMAdapter:
 def list_adapters() -> list[LLMAdapter]:
     """All currently registered adapters in registration order."""
     return list(_REGISTRY.values())
+
+
+def adapter_health(name: str) -> EnvironmentReport:
+    """Probe ``adapter.test_environment`` by registry name.
+
+    Step I.c (2026-05-23) — thin one-call accessor over the existing
+    :meth:`LLMAdapter.test_environment` probe so picker UIs / readiness
+    audits / external consumers (petri_audit's ``credential_source``
+    cascade, the ``/auth`` slash, the routing-recovery loop) don't have
+    to ``get_adapter(name).test_environment()`` themselves and don't
+    need to know which exception ``get_adapter`` raises on a typo.
+
+    Raises :class:`KeyError` when no adapter is registered under
+    ``name`` (delegates to :func:`get_adapter`); the underlying
+    ``test_environment`` call NEVER raises — adapters return an
+    :class:`EnvironmentReport` with ``ok=False`` and operator-facing
+    ``hints`` on credential failures by design (paperclip mirror).
+    """
+    return get_adapter(name).test_environment()
 
 
 def resolve_for(provider: str, source: str) -> LLMAdapter:
@@ -170,6 +194,7 @@ def _reset_for_test() -> None:
 __all__ = [
     "AdapterAlreadyRegisteredError",
     "AdapterNotFoundError",
+    "adapter_health",
     "bootstrap_builtins",
     "get_adapter",
     "list_adapters",

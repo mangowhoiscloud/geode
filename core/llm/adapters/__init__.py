@@ -50,6 +50,7 @@ from core.llm.adapters.base import (
 from core.llm.adapters.registry import (
     AdapterAlreadyRegisteredError,
     AdapterNotFoundError,
+    adapter_health,
     bootstrap_builtins,
     get_adapter,
     list_adapters,
@@ -85,6 +86,7 @@ __all__ = [
     "StreamEvent",
     "ToolSpec",
     "UsageSummary",
+    "adapter_health",
     "bootstrap_builtins",
     "get_adapter",
     "infer_provider_from_model",
