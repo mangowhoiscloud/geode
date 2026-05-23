@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.43] - 2026-05-23
+
 ### Added
 
 - **PR-CSP-14 — Loop 3 (literature paper-analysis) backend + bundle
