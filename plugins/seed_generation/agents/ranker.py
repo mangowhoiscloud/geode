@@ -257,6 +257,8 @@ class Ranker(BaseSeedAgent):
         means_a = pilot_means.get(match.a, {})
         means_b = pilot_means.get(match.b, {})
         tasks: list[SubTask] = []
+        from plugins.seed_generation.agents.base import picker_source_to_adapter_source
+
         for voter in self._voters:
             voter_id = f"{voter.provider}.{voter.source}"
             tasks.append(
@@ -280,6 +282,7 @@ class Ranker(BaseSeedAgent):
                         "voter_source": voter.source,
                     },
                     agent=f"seed_ranker_voter_{voter.provider}",
+                    source=picker_source_to_adapter_source(voter.source),
                 )
             )
         return tasks

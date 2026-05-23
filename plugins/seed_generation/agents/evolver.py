@@ -265,6 +265,7 @@ class Evolver(BaseSeedAgent):
                         "gen_tag": state.gen_tag,
                     },
                     agent=_EVOLVER_AGENT_NAME,
+                    source=self.adapter_source,
                 )
             )
         return tasks

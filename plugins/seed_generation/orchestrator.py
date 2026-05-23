@@ -369,12 +369,19 @@ class Pipeline:
         hooks: HookSystem | None = None,
         lane_queue: LaneQueue | None = None,
         on_phase_error: Any | None = None,
+        bindings: dict[str, Any] | None = None,
     ) -> None:
         self.state = state
         self.registry = registry
         self._hooks = hooks
         self._lane_queue = lane_queue
         self._on_phase_error = on_phase_error
+        # v0.99.40 Follow-up B — picker-resolved per-role bindings
+        # (``role_name → RoleBinding``). Stored for observability /
+        # journaling; agents themselves are already constructed with
+        # the binding's model + source, so the Pipeline does not re-
+        # inject the values into SubTask creation.
+        self.bindings = bindings or {}
 
     async def arun(self) -> PipelineState:
         """Walk the 7 phases (then optional iteration cycles). Returns the final state.
