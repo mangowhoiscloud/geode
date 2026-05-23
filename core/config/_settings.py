@@ -82,6 +82,43 @@ class Settings(BaseSettings):
             "set this to opus / sonnet. PR-3 C-2."
         ),
     )
+    # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model separation
+    # (agentic-loop-evolution.md A6). Empty string ("") means "fall back
+    # to ``settings.model``" so existing operators see no behaviour change
+    # until they set a concrete value. ReWOO (arxiv 2305.18323) showed
+    # plan / observation decoupling yields 5x token efficiency; Anthropic
+    # Plan / Edit mode pattern (claude-code) splits Opus-class planning
+    # from Sonnet-class action.
+    plan_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("plan_model", "GEODE_PLAN_MODEL"),
+        description=(
+            "Model used by the planning step (goal decomposition before "
+            "the main loop). Empty string falls back to ``settings.model``. "
+            "Set to ``claude-opus-4-7`` for higher-quality plans, "
+            "``claude-haiku-4-5-20251001`` for cheaper. PR-CL-A6."
+        ),
+    )
+    act_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("act_model", "GEODE_ACT_MODEL"),
+        description=(
+            "Model used by the action loop (per-round tool calls). Empty "
+            "string falls back to ``settings.model``. Set to ``claude-"
+            "sonnet-4-6`` to keep planning on Opus while action runs on "
+            "Sonnet for cost. PR-CL-A6."
+        ),
+    )
+    judge_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("judge_model", "GEODE_JUDGE_MODEL"),
+        description=(
+            "Model used by the per-turn verify LLM-judge mode "
+            "(``GEODE_VERIFY_MODE=llm_judge``). Empty string falls back "
+            "to ``settings.model``. Cheap models like Haiku 4.5 are "
+            "appropriate for binary pass/fail judgement. PR-CL-A6."
+        ),
+    )
     cognitive_reflection_max_tokens: int = Field(
         default=512,
         validation_alias=AliasChoices(

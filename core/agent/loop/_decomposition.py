@@ -28,11 +28,18 @@ def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
         return None
 
     try:
+        from core.config import settings
         from core.orchestration.goal_decomposer import GoalDecomposer
 
+        # PR-CL-A6 (2026-05-23) — use ``settings.plan_model`` for goal
+        # decomposition when an operator has set one. Empty string falls
+        # back to ``loop.model`` so the behaviour matches pre-A6 when the
+        # knob isn't configured. ``getattr`` keeps the helper resilient
+        # if ``settings`` is mocked in a test fixture.
+        plan_model = getattr(settings, "plan_model", "") or loop.model
         if loop._goal_decomposer is None:
             loop._goal_decomposer = GoalDecomposer(
-                model=loop.model,
+                model=plan_model,
                 tool_definitions=loop._tools,
             )
 
