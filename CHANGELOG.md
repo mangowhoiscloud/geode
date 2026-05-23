@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.40] - 2026-05-23
+
 ### Added
 
 - **Follow-up D — UI surface for the adapter registry.** Two new
