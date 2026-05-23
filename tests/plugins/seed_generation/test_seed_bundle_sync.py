@@ -21,9 +21,16 @@ from plugins.seed_generation.bundle_sync import iter_synced_runs, sync_run_to_bu
 
 
 def _make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Set up a fake repo root with the bundle path skeleton + env override."""
+    """Set up a fake repo root with the bundle path skeleton + env override.
+
+    The conftest's autouse fixture sets ``GEODE_SEED_BUNDLE_SYNC_DISABLED=1``
+    to prevent unrelated tests from leaking into the real repo's
+    docs/petri-bundle/seeds/. Bundle-sync's own tests need to actually
+    exercise the sync, so we clear that knob here.
+    """
     (tmp_path / "pyproject.toml").write_text("# fake\n", encoding="utf-8")
     monkeypatch.setenv("GEODE_REPO_ROOT", str(tmp_path))
+    monkeypatch.delenv("GEODE_SEED_BUNDLE_SYNC_DISABLED", raising=False)
     return tmp_path
 
 
