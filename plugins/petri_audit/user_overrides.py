@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_PETRI_TOML
+from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -183,14 +184,34 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
             payload={"role": role, "reason": "import_error"},
         )
         return {}
-    cfg = load_self_improving_loop_config()
+    try:
+        cfg = load_self_improving_loop_config()
+    except ValidationError as exc:
+        # PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure 후 operator
+        # config 의 ``source = "api_key"`` 가 Pydantic Source literal 에서
+        # 제거됐다. autoresearch / mutator 의 직접 호출은 ValidationError 가
+        # 의도된 surface (PR-C-P1 패턴) 이나, petri standalone CLI 의 user
+        # overrides read 는 graceful 이 맞다 — operator 가 petri.toml 의
+        # legacy 경로로 fallback 가능. event emit 으로 추적 가능.
+        _emit_user_overrides_event(
+            "petri_role_legacy_fallback",
+            payload={"role": role, "reason": "validation_error", "error": str(exc)[:200]},
+        )
+        return {}
     entry = cfg.petri.get(role)
     if entry is None:
         return {}
     out: RoleOverride = {}
     if entry.model:
         out["model"] = entry.model
-    if entry.source and entry.source != "auto":
+    # PR-SIL-5THEME C6 (2026-05-23) — Pydantic 의 default 가 explicit 과
+    # 구분 불가하므로 known defaults ("auto", "claude-cli") 는 override
+    # output 에서 제거. operator 가 명시 설정한 explicit 만 surface — 기존
+    # 행동 (auto skip) 보존 + 새 default ("claude-cli") 도 동일 처리.
+    # explicit "claude-cli" 설정이 silent 되는 minor UX corner: operator 가
+    # default 와 같은 값을 명시 설정한 경우 → 효과 같음, 명시 사실만 감춰짐.
+    _KNOWN_DEFAULTS = ("auto", "claude-cli")
+    if entry.source and entry.source not in _KNOWN_DEFAULTS:
         out["source"] = entry.source
     return out
 

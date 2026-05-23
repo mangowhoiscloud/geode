@@ -38,10 +38,16 @@ def test_bench_dim_weights_sum_to_one() -> None:
 
 def test_bench_dim_weights_exact_7_fields_2026_frontier() -> None:
     """2026-05 갱신 — 4 outdated bench (SWE/HumanEval/TAU/GAIA) 교체 후
-    7 frontier bench (Claude Opus 4.5 + GPT-5 system card 공통)."""
+    7 frontier bench (Claude Opus 4.5 + GPT-5 system card 공통).
+
+    2026-05-23 F1.b — vanilla LiveCodeBench port 부재로 LiveCodeBench-Pro
+    substitution (PR-SIL-5THEME C1): ``livecodebench_pass1`` →
+    ``livecodebench_pro_accuracy``. metric 도 pass@1 → accuracy
+    (LightCPVerifier C++ exec) 로 갱신, 도메인은 Python algorithmic →
+    C++ competitive 로 shift. weight 0.15 변동 없음."""
     assert set(BENCH_DIM_WEIGHTS) == {
         "swe_bench_pro_pass",  # Scale AI SWE-bench Pro (OpenAI 2026-02 retire 후)
-        "livecodebench_pass1",  # contam-free Python coding
+        "livecodebench_pro_accuracy",  # F1.b: LiveCodeBench-Pro (C++ competitive, contam-defended)
         "tau2_bench_success",  # Sierra τ²-bench (telecom domain)
         "gpqa_diamond",  # NYU PhD reasoning
         "hle_accuracy",  # Humanity's Last Exam (Nature 2026-01)
@@ -199,13 +205,28 @@ def test_no_conflict_when_both_aligned() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. collect_bench_means_from_inspect_ai — S6b placeholder
+# 5. collect_bench_means_from_inspect_ai — S6b production wiring
+# (PR-SIL-5THEME C2, 2026-05-23 — placeholder return None 에서 BenchProvenance
+# dataclass + 7-bench dispatch + A1 graceful-skip 로 교체됨)
 # ---------------------------------------------------------------------------
 
 
-def test_collect_returns_none_in_s6() -> None:
-    """S6 (이 PR) — inspect_ai federation 실제 wiring 은 S6b. placeholder."""
-    assert collect_bench_means_from_inspect_ai() is None
+def test_collect_returns_bench_provenance_dataclass() -> None:
+    """S6b production wiring — placeholder 였던 ``collect_bench_means_from_inspect_ai``
+    가 ``BenchProvenance`` dataclass 반환으로 교체. nominal smoke 환경
+    (Docker / inspect-evals / inspect-harbor 부재 + ``GEODE_BENCH_S6B_LIVE``
+    unset) 에선 모든 bench 가 ``missing_benches`` 에 등록."""
+    from autoresearch.bench_means import BenchProvenance
+
+    result = collect_bench_means_from_inspect_ai(target_model="gpt-5")
+    assert isinstance(result, BenchProvenance)
+    # 7-field universe 가 어딘가에 등장해야 함 (means 든 missing 이든)
+    accounted = set(result.bench_means) | set(result.missing_benches)
+    from autoresearch.bench_means import BENCH_DIM_WEIGHTS
+
+    assert accounted == set(BENCH_DIM_WEIGHTS)
+    # rubric_version 은 항상 present (cohort tag)
+    assert result.rubric_version
 
 
 # ---------------------------------------------------------------------------
