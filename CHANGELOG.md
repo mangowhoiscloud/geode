@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.47] - 2026-05-23
+
+> Path-B ``LLMAdapter`` sprint package — 4 PRs that close the
+> abstraction migration started in v0.99.44 (A2 / F) and the
+> self-improving-loop SoT relocation started in v0.99.46 (J-b.1).
+> The mutator runner's API path now consumes the Path-B Protocol
+> directly (J-b.2 / #1555); inspect_ai's reasoning-replay pathway is
+> documented + smoke-pinned (I.b / #1554); a one-call
+> ``adapter_health(name)`` accessor lands on the registry surface
+> (I.c / #1556); plus the end-of-sprint cross-tree audit + docs
+> alignment (#1557). PR-CLEANUP-1 (#1558) lands alongside as a
+> separate over-split-module compression.
+
 ### Removed
 
 - **PR-CLEANUP-1 — over-split helper modules + 1-release-grace aliases.**
