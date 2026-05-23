@@ -70,6 +70,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -154,6 +155,27 @@ class SessionMetrics:
     missing_benches_total: int = 0
     cross_validation_conflict_count: int = 0
 
+    # I. Wall-clock budget + handoff (PR-CL-BUDGET, 2026-05-23) — 2-hour
+    #    time cap with T-10min auto-handoff trigger replacing the prior
+    #    turn-count cap. ``time_budget_start_s`` is monotonic clock; 0.0
+    #    means budget tracking inactive. ``handoff_threshold_s`` carves
+    #    out the warning headroom (default 600s = 10 min). Once
+    #    ``handoff_triggered_at`` is set, ``is_handoff_due`` returns False
+    #    (one-shot trigger so AgenticLoop doesn't fire HANDOFF_TRIGGERED
+    #    every subsequent round).
+    time_budget_start_s: float = 0.0
+    time_budget_total_s: float = 0.0  # 0.0 = no budget
+    handoff_threshold_s: float = 600.0  # T-10min
+    handoff_triggered_at: float = 0.0  # 0.0 = not yet fired
+    # Codex MCP 2026-05-23 MEDIUM #2 — without this lock, two threads in the
+    # same ContextVar scope (e.g. asyncio.to_thread fan-out) can both observe
+    # ``handoff_triggered_at == 0.0`` and double-fire HANDOFF_TRIGGERED.
+    # Async-only fan-out is safe (no ``await`` in ``is_handoff_due``); the
+    # lock is the cheap defensive layer for the threaded edge case.
+    _handoff_latch_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
+
     # ------------------------------------------------------------------
     # Mutation API
     # ------------------------------------------------------------------
@@ -226,6 +248,46 @@ class SessionMetrics:
     def record_rollback(self) -> None:
         self.rollback_count += 1
 
+    def start_time_budget(self, total_seconds: float, *, threshold_seconds: float = 600.0) -> None:
+        """Begin tracking a wall-clock budget. Caller passes the cap in seconds
+        (e.g. 7200.0 for 2 hours) and the handoff threshold (default 600s = T-10min).
+        Idempotent — re-calling resets the start time."""
+        self.time_budget_start_s = time.monotonic()
+        self.time_budget_total_s = float(total_seconds)
+        self.handoff_threshold_s = float(threshold_seconds)
+        self.handoff_triggered_at = 0.0
+
+    def time_budget_remaining_s(self) -> float:
+        """Seconds left before the wall-clock cap. ``inf`` when no budget set
+        (``time_budget_total_s == 0``). Negative when over-budget — caller
+        decides whether to hard-stop or grace."""
+        if self.time_budget_total_s <= 0.0:
+            return float("inf")
+        elapsed = time.monotonic() - self.time_budget_start_s
+        return self.time_budget_total_s - elapsed
+
+    def is_handoff_due(self) -> bool:
+        """One-shot check: returns True the first time wall-clock crosses
+        the T-threshold (default T-10min) and a handoff has not yet been
+        triggered. Subsequent calls return False so AgenticLoop fires
+        ``HANDOFF_TRIGGERED`` once per session, not every round.
+
+        Thread-safe — the latch test+set is guarded by an instance lock so
+        ``asyncio.to_thread`` fan-out (or any concurrent threaded callers)
+        observes a single winner. The fast-path early-return skips the lock
+        when no budget is set or the latch has already fired.
+        """
+        if self.time_budget_total_s <= 0.0 or self.handoff_triggered_at > 0.0:
+            return False
+        with self._handoff_latch_lock:
+            if self.handoff_triggered_at > 0.0:
+                return False  # Lost the race to another caller.
+            remaining = self.time_budget_remaining_s()
+            if remaining <= self.handoff_threshold_s:
+                self.handoff_triggered_at = time.monotonic()
+                return True
+            return False
+
     def record_goodhart(
         self,
         *,
@@ -276,6 +338,9 @@ class SessionMetrics:
             "missing_dims_total": self.missing_dims_total,
             "missing_benches_total": self.missing_benches_total,
             "cross_validation_conflict_count": self.cross_validation_conflict_count,
+            "time_budget_total_s": self.time_budget_total_s,
+            "handoff_threshold_s": self.handoff_threshold_s,
+            "handoff_triggered_at": self.handoff_triggered_at,
         }
 
 

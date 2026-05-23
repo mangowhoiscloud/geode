@@ -35,8 +35,9 @@ class TestMCPHookEvents:
         assert not hasattr(HookEvent, "MCP_SERVER_STOPPED")
 
     def test_hook_event_count(self) -> None:
-        """Total hook events — +6 cognitive cycle members in PR-2."""
-        assert len(HookEvent) == 69
+        """Total hook events — +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
+        + 3 PR-CL-BUDGET handoff."""
+        assert len(HookEvent) == 72
 
 
 # ---------------------------------------------------------------------------
