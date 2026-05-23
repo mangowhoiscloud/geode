@@ -42,6 +42,10 @@ def _build_full_registry(
     agents: dict[str, _RecordingAgent] = {}
     role_outputs: dict[str, dict[str, Any]] = {
         "supervisor": {"supervisor_guidance": {"session_summary": "ok"}},
+        # CSP-14 — Loop 3 stub agent. Default state is empty literature
+        # (mirrors max_papers=0 back-compat); tests that exercise the
+        # populated path inject their own state.articles_with_reasoning.
+        "literature_review": {"articles_with_reasoning": "", "literature_snapshots": {}},
         "generator": {"candidates": [{"id": "c0", "path": "p0", "target_dim": "d"}]},
         "proximity": {},
         "critic": {"reflections": {"c0": {"strengths": [], "weaknesses": []}}},

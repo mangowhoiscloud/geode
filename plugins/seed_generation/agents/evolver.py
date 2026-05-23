@@ -251,6 +251,7 @@ class Evolver(BaseSeedAgent):
                 dim_means=pilot.get("dim_means", {}) if isinstance(pilot, dict) else {},
                 baseline_snapshot=state.baseline_snapshot,
                 supervisor_guidance=state.supervisor_guidance,
+                articles_with_reasoning=state.articles_with_reasoning,
             )
             tasks.append(
                 SubTask(
@@ -279,6 +280,7 @@ class Evolver(BaseSeedAgent):
         dim_means: dict[str, Any],
         baseline_snapshot: Any = None,
         supervisor_guidance: dict[str, Any] | None = None,
+        articles_with_reasoning: str = "",
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -313,6 +315,13 @@ class Evolver(BaseSeedAgent):
                     prefix_blocks.append(evidence_block)
             except ImportError:  # pragma: no cover — defensive
                 pass
+        # CSP-14 (2026-05-23) — Loop 3 literature evidence block.
+        # Empty string short-circuits (max_papers=0 default).
+        if articles_with_reasoning and articles_with_reasoning.strip():
+            prefix_blocks.append(
+                "## Literature evidence (from LiteratureReview phase)\n\n"
+                + articles_with_reasoning.strip()
+            )
         prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         return (
             f"{prefix}"

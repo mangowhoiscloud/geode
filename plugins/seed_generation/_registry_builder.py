@@ -159,6 +159,7 @@ def populate_registry(
     from plugins.seed_generation.agents.critic import Critic
     from plugins.seed_generation.agents.evolver import Evolver
     from plugins.seed_generation.agents.generator import Generator
+    from plugins.seed_generation.agents.literature_review import LiteratureReview
     from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
     from plugins.seed_generation.agents.pilot import Pilot
     from plugins.seed_generation.agents.proximity import Proximity
@@ -171,6 +172,7 @@ def populate_registry(
         "pilot": Pilot,
         "evolver": Evolver,
         "meta_reviewer": MetaReviewer,
+        "literature_review": LiteratureReview,
     }
 
     for role_name in manifest.enabled_roles:

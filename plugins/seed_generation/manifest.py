@@ -71,12 +71,20 @@ class SeedRoleSpec(BaseModel):
     multi-turn debate inside the sub-agent's AgenticLoop, recorded via
     the ``seed_debate_turn`` tool. Only meaningful on the Generator
     role today; other roles ignore the knob.
+
+    CSP-14 (2026-05-23) — adds the ``max_papers`` + ``queries_per_run``
+    knobs for the Loop 3 (literature paper-analysis) port. 0 =
+    literature_review phase short-circuits (default + back-compat).
+    1-20 = active per-paper loop. Only meaningful on the
+    ``literature_review`` role; other roles ignore the knob.
     """
 
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
     num_turns: int = 0
+    max_papers: int = 0
+    queries_per_run: int = 3
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:
@@ -95,6 +103,17 @@ class SeedRoleSpec(BaseModel):
         # sense; >6 risks runaway cost per candidate).
         if self.num_turns != 0 and not (2 <= self.num_turns <= 6):
             raise ValueError(f"num_turns={self.num_turns} invalid; must be 0 (off) or in [2, 6]")
+        return self
+
+    @model_validator(mode="after")
+    def _max_papers_in_range(self) -> SeedRoleSpec:
+        # CSP-14 — 0 = literature_review phase off (default), 1-20 =
+        # active per-paper loop. Upper bound caps cost: max_papers=20
+        # × ~$0.05/paper ≈ $1/run on Sonnet-class.
+        if self.max_papers < 0 or self.max_papers > 20:
+            raise ValueError(f"max_papers={self.max_papers} invalid; must be 0 (off) or in [1, 20]")
+        if self.queries_per_run < 1 or self.queries_per_run > 10:
+            raise ValueError(f"queries_per_run={self.queries_per_run} invalid; must be in [1, 10]")
         return self
 
 

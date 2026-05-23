@@ -34,6 +34,22 @@ logs/
 # the rule it negates.
 !docs/petri-bundle/logs/
 !docs/petri-bundle/logs/**
+# CSP-14 (2026-05-23) — Pages-published seed-generation bundle. Same
+# bundle_sync pattern as the audit logs above: ``plugins/seed_generation/
+# bundle_sync.py`` auto-copies finished run artefacts (state.json,
+# survivors.json, meta_review.json, candidates/*.md) from
+# ``state/seed-generation/<run_id>/`` here. Without this exception
+# the gitignored ``state/*`` rule below would silently drop the
+# synced files (same anti-pattern as PR-G5b #1350).
+!docs/petri-bundle/seeds/
+!docs/petri-bundle/seeds/**
+# CSP-14 (2026-05-23) — Pages-published literature snapshots.
+# ``core/tools/literature_snapshot.py:FreezePaperSnapshotTool`` writes
+# directly to this directory; if the literature dir is ever moved
+# under a gitignored path the writer thinks it persisted but git
+# won't track it.
+!docs/petri-bundle/literature/
+!docs/petri-bundle/literature/**
 optimized_prompts/
 
 # OS

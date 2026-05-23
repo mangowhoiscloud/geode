@@ -47,6 +47,91 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-CSP-14 — Loop 3 (literature paper-analysis) backend + bundle
+  serving infrastructure**. Final loop of the 3-loop port from
+  open-coscientist (`nodes/literature_review.py:840-873`). Per
+  `docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md` (Phase 2
+  SoT doc).
+
+  - `core/tools/literature_snapshot.py` — NEW `FreezePaperSnapshotTool`.
+    Per-paper snapshot writer with content-hash deterministic cache,
+    arxiv_id pattern validation, env-anchored containment under
+    `docs/petri-bundle/literature/`, atomic tmp+rename, uuid nonce
+    on the file name to dodge same-second concurrent collisions.
+  - `plugins/seed_generation/literature_snapshot.py` — read-side
+    helpers (`load_snapshot`, `iter_snapshots`).
+  - `plugins/seed_generation/agents/literature_review.py` + `.md` —
+    NEW `LiteratureReview` agent. Dispatches one sub-agent walking
+    the 4-phase pipeline (query_gen → paper_fetch → per-paper analysis
+    → synthesis). `max_papers=0` (manifest default) short-circuits
+    to no-op for byte-equivalent back-compat with pre-CSP-14 runs.
+  - Orchestrator: `_PHASE_ORDER` inserts `literature_review` after
+    `supervisor`, before `generator`. NEW state fields
+    `articles_with_reasoning: str` + `literature_snapshots: dict`.
+    Both Generator + Critic + Evolver inject the literature block as
+    a prompt prefix when populated (Codex MCP MEDIUM fix-up — original
+    diff only wired Generator).
+  - `scripts/build_literature_listing.py` — NEW build step. Scans
+    snapshots + cross-refs `mutations.jsonl` evidence + seed frontmatter
+    `references:` for the `cited_by` reverse index. Defensive parser
+    handles both typed-array (post petri-autoresearch realign) and
+    flat (pre-realign) evidence shapes.
+  - `.github/workflows/pages.yml` — gains a `Build literature
+    listing.json` step before the Next.js export.
+  - `scripts/validate_petri_bundle.py` — extended to count literature
+    snapshots alongside audit archives in the OK line.
+  - Manifest + config: `SeedRoleSpec.max_papers` (0 or [1, 20]) +
+    `queries_per_run` ([1, 10]) validators. Operator override slots
+    in `SelfImprovingLoopBindings`.
+  - **Seed bundle_sync** (added 2026-05-23 after mockup feedback —
+    discovered the publish hierarchy gap):
+    `plugins/seed_generation/bundle_sync.py` mirrors the audit-side
+    `sync_eval_to_bundle` pattern. `sync_run_to_bundle(run_dir)` runs
+    on `Pipeline.arun` finalization and selectively copies
+    `state/seed-generation/<run_id>/{state.json, survivors.json,
+    meta_review.json, candidates/<survivor_id>.md}` into
+    `docs/petri-bundle/seeds/<run_id>/`. Drafts that didn't survive
+    stay in `state/` only — the bundle is a publish surface, not an
+    archive. `.gitignore` carries `!docs/petri-bundle/seeds/**` so
+    the synced files actually enter git (parity with the audit-side
+    `!docs/petri-bundle/logs/**` rule; avoids the PR-G5b #1350
+    silent-drop anti-pattern). NEW `scripts/build_seeds_listing.py`
+    aggregates run rows into `docs/petri-bundle/seeds/listing.json`
+    for the bundle-UI consumers; wired into `pages.yml` next to the
+    literature build step. `validate_petri_bundle.py` extended to
+    count synced runs alongside audit archives + literature snapshots.
+    The CSP-14-UI mockups read these surfaces (`bundle-landing.html` +
+    `seeds.html` reference the listing.json + per-run state.json).
+    Same gitignore exception added for `docs/petri-bundle/literature/`
+    — the writer's GEODE_REPO_ROOT-anchored path was correct but the
+    new dir wasn't covered by the existing audit-logs exception, so
+    git tracking would have silently dropped fresh snapshots.
+
+  **Bundle UI (Next.js literature index + detail pages + inline
+  reference card in audit log viewer)** is deferred to a follow-up PR
+  — the backend wiring (agent + tool + snapshots on disk + build
+  step + listing.json) is complete; the visual surfaces (steps 7+8
+  of the 13-step plan) land in PR-CSP-14-UI.
+
+  **Production wire-up dependency**: `cli.py:_dispatch_pipeline()`
+  still creates an empty `PipelineRegistry` (S11 not landed for any
+  role yet — same gap as Phase 1 PR #1504's `num_turns` knob). The
+  `max_papers` override is fully validated end-to-end via the test
+  fixtures + Codex MCP review; production CLI flow waits on the S11
+  registry wire-up which covers all roles uniformly.
+
+  Codex MCP review (thread `019e5260-1c30-78c0-969b-61f0f658c8c2`)
+  caught 2 MEDIUM + 2 LOW pre-push; addressed inline:
+  - MEDIUM: Critic + Evolver inject `articles_with_reasoning` (not
+    just Generator). MEDIUM #1 closed.
+  - MEDIUM: uuid nonce on snapshot file name dodges same-second
+    concurrent write collisions. MEDIUM #2 closed.
+  - LOW: this CHANGELOG entry.
+  - LOW (acknowledged): `cost_preview.py` accounting gets a phantom
+    one-run estimate for `literature_review` when `max_papers=0`;
+    follow-up to add a phase-skip bypass.
 ## [0.99.42] - 2026-05-23
 
 > Observability central-isation release. ``SessionMetrics`` 신설 (Tier 2 of
