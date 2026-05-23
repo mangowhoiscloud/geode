@@ -180,7 +180,28 @@ class MetaReviewer(BaseSeedAgent):
         few aggregate dicts — passing all candidate bodies would blow
         the context budget for what is fundamentally an aggregate
         statistics call.
+
+        PR-CSP-13a (2026-05-23) — when Loop 2 (debate-turn) ran for any
+        candidate, append a one-line debate summary so the meta-reviewer
+        can attribute its effect on coverage / priors. The block is
+        omitted entirely when the snapshot has no ``debate_summary`` key
+        (``num_turns=0`` path OR iteration cycle with no surviving
+        debate transcripts) to preserve pre-PR back-compat.
         """
+        debate = snapshot.get("debate_summary")
+        if debate is not None:
+            debate_block = (
+                f" Debate (Loop 2) ran for {debate['candidates_with_debate']} of "
+                f"{len(snapshot['candidate_ids'])} candidates "
+                f"(avg {debate['avg_turns']} turns/candidate, "
+                f"sample {debate['sample_candidate_id']!r} = "
+                f"{debate['sample_turn_count']} turns); attribute its effect "
+                "on the proposal-side coverage + suggest next_gen_priors that "
+                "either widen or sharpen the debate budget."
+            )
+        else:
+            debate_block = ""
+
         return (
             f"Produce ONE meta-review report for the seed-generation run "
             f"{state.run_id!r}. Aggregate state snapshot: "
@@ -193,7 +214,7 @@ class MetaReviewer(BaseSeedAgent):
             f"{snapshot['candidate_ids'][:5]!r} (showing first 5 of "
             f"{len(snapshot['candidate_ids'])}). Use `read_document` to "
             "inspect specific candidates as needed; do NOT request the "
-            "entire pool body."
+            f"entire pool body.{debate_block}"
         )
 
 
@@ -204,6 +225,12 @@ def _state_snapshot(state: PipelineState) -> dict[str, Any]:
     description (~ 1KB) so the LLM doesn't have to re-fetch upstream
     state — it gets counts + ids and the AgentDef tells it to use
     ``read_document`` for specific candidates.
+
+    PR-CSP-13a (2026-05-23) — also rolls up ``debate_summary`` from the
+    Loop 2 (debate-turn) ``state.debate_transcripts`` dict so the
+    meta-reviewer can attribute the debate's effect on coverage /
+    next_gen_priors. Empty dict (``num_turns=0`` path) → ``None`` so
+    ``_build_description`` skips the block.
     """
     candidate_ids = [c["id"] for c in state.candidates]
     coverage: dict[str, int] = {}
@@ -224,7 +251,7 @@ def _state_snapshot(state: PipelineState) -> dict[str, Any]:
         f"{len(state.evolved_candidates)} evolved, "
         f"elo p50={elo_distribution['p50']:.1f}"
     )
-    return {
+    snapshot: dict[str, Any] = {
         "summary": summary,
         "candidate_ids": candidate_ids,
         "survivors": list(state.survivors),
@@ -234,4 +261,67 @@ def _state_snapshot(state: PipelineState) -> dict[str, Any]:
             "attempted": len(state.survivors),
             "successful": len(state.evolved_candidates),
         },
+    }
+    # PR-CSP-13a (Codex MCP MEDIUM fix-up) — only add ``debate_summary``
+    # when there's something to report. Otherwise the snapshot dict
+    # (which is serialized into ``SubTask.args`` and rendered into the
+    # worker's "Parameters:" line) gains a ``debate_summary: None`` row
+    # that breaks byte-equivalence with the pre-CSP-13a back-compat
+    # path. ``_build_description`` already gates on ``snapshot.get(...)``
+    # so the omit-the-key shape is what the renderer needs to see.
+    debate = _debate_summary(state, candidate_ids)
+    if debate is not None:
+        snapshot["debate_summary"] = debate
+    return snapshot
+
+
+def _debate_summary(state: PipelineState, candidate_ids: list[str]) -> dict[str, Any] | None:
+    """Roll up ``state.debate_transcripts`` into an aggregate row.
+
+    Returns ``None`` when no transcript matches the current batch.
+    Causes:
+
+    - Loop 2 ``num_turns=0`` path (debate dict empty), OR
+    - num_turns >= 2 but no sub-agent emitted any turn, OR
+    - iteration cycle N≥1 where the only transcripts on state are from
+      candidates that have since been replaced (Codex MCP MEDIUM fix-up
+      — ``state.candidates`` flips per iteration but the dict accumulates
+      across iterations because ``PipelineState.merge`` uses ``dict
+      .update``, so stale candidate-ids must be filtered).
+
+    Filtering keeps the reported counts truthful — ``candidates_with_debate``
+    means "current candidates that have a transcript", not "transcripts
+    on the state dict regardless of provenance". Sample id pick stays
+    deterministic over the *filtered* set.
+
+    Shape (when present)::
+
+        {
+          "candidates_with_debate": int,   # how many *current* candidates ran a debate
+          "total_turns": int,              # sum across the filtered set
+          "avg_turns": float,              # mean turns per debate
+          "sample_candidate_id": str,      # deterministic — alphabetically first id
+          "sample_turn_count": int,        # turns recorded for the sample
+        }
+    """
+    transcripts = getattr(state, "debate_transcripts", None) or {}
+    if not transcripts:
+        return None
+    current = set(candidate_ids)
+    # Filter to current batch — drops stale entries from prior iteration
+    # cycles whose candidates are no longer in ``state.candidates``.
+    relevant = {cid: turns for cid, turns in transcripts.items() if cid in current}
+    if not relevant:
+        return None
+    total_turns = sum(len(turns) for turns in relevant.values())
+    candidates_with_debate = len(relevant)
+    # Deterministic sample pick: smallest candidate_id over the filtered
+    # set (stable across runs / re-orderings).
+    sample_id = min(relevant.keys())
+    return {
+        "candidates_with_debate": candidates_with_debate,
+        "total_turns": total_turns,
+        "avg_turns": round(total_turns / candidates_with_debate, 2),
+        "sample_candidate_id": sample_id,
+        "sample_turn_count": len(relevant[sample_id]),
     }

@@ -47,6 +47,41 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-CSP-13a — meta_reviewer reads ``state.debate_transcripts``**.
+  Closes the read-write parity gap left by PR #1504 (Phase 1 Loop 2
+  debate-turn): the Generator wrote per-candidate ``.debate.jsonl``
+  sidecars and the orchestrator's ``PipelineState.merge`` populated
+  ``state.debate_transcripts``, but ``meta_reviewer.aexecute`` did not
+  read the field — the Loop 2 cost wasn't being attributed in the
+  meta-review report. Codex MCP MEDIUM defer at the time of the Phase
+  1 review.
+
+  - ``plugins/seed_generation/agents/meta_reviewer.py`` — new
+    ``_debate_summary(state, candidate_ids)`` helper rolls the dict
+    into a 5-key aggregate (candidates_with_debate, total_turns,
+    avg_turns, sample_candidate_id, sample_turn_count) **filtered to
+    the current batch** so iteration cycle N≥1 doesn't report stale
+    transcripts left over from prior batches by the
+    ``PipelineState.merge``'s dict-update semantics. ``None`` return
+    (empty / all-stale) means the snapshot key is omitted entirely
+    (byte-equivalent pre-PR back-compat for the worker's
+    ``Parameters:`` line).
+  - ``plugins/seed_generation/agents/meta_reviewer.md`` — new "Debate
+    transcripts" entry under Inputs + Quality bar requirement that
+    at least one ``next_gen_priors`` entry's rationale cite the
+    debate signal when Loop 2 ran.
+  - ``tests/plugins/seed_generation/test_meta_reviewer.py`` — 5 new
+    tests: omit-when-empty (back-compat byte-equivalence), populated
+    case (aggregate present), stale-transcript filter, all-stale →
+    no block, grep-provable read-path invariant, context budget cap
+    (< 500 chars worst-case at 6-turn × current-batch).
+
+  Codex MCP review (thread ``019e522f-65d7-71b3-aa0b-d9ba730bae68``)
+  caught the snapshot-key back-compat issue + iteration staleness
+  before push; both addressed inline.
+
 ### Added
 
 - **PR-5 of petri-schema-v2 cascade — ``results.jsonl`` PR-1/PR-4
