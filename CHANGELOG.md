@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.41] - 2026-05-23
+
+> SIL 5-theme closure release. Bench S6b production wiring + ADR-012 §S6/§S6b
+> amendment + P3 modality 가중 분리 + E1 mutation cost ledger + D4 X2
+> telemetry + D1 PAYG exclusion enforcement. PR #1524 (6 commits + plan + fix
+> up). +176 new tests (6658 → 6834).
+
 ### Changed
 
 - **PR-SIL-5THEME C6 — D1 provider B/C closure (PAYG exclusion enforcement)**.
