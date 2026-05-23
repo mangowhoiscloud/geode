@@ -40,6 +40,7 @@ from autoresearch.train import (
     _write_baseline,
     compute_dim_scores,
     compute_fitness,
+    compute_missing_dims,
     run_audit,
 )
 
@@ -508,6 +509,62 @@ def test_stability_score_uses_stderr_when_present() -> None:
     assert _stability_score(None) == STABILITY_FALLBACK
 
 
+# ---------------------------------------------------------------------------
+# PR-4 of petri-schema-v2 (2026-05-23) — compute_missing_dims Goodhart surface
+# ---------------------------------------------------------------------------
+
+
+def test_compute_missing_dims_empty_when_all_present() -> None:
+    """All ``AXIS_TIERS`` dims present → no missing surface, list is
+    empty. Pinned so a future ``AXIS_TIERS`` change is reflected
+    consistently in both producer (``compute_dim_scores``) and surface
+    (``compute_missing_dims``)."""
+    from autoresearch.train import AXIS_TIERS
+
+    dim_means = dict.fromkeys(AXIS_TIERS, 5.0)
+    assert compute_missing_dims(dim_means) == []
+
+
+def test_compute_missing_dims_lists_absent_dims_sorted() -> None:
+    """Missing dims must be enumerated, sorted lexicographically so the
+    list is stable across reorderings of ``AXIS_TIERS`` (the producer
+    iteration order can vary across Python builds)."""
+    dim_means = {
+        "broken_tool_use": 3.4,
+        "input_hallucination": 2.0,
+    }
+    missing = compute_missing_dims(dim_means)
+    # All AXIS_TIERS dims except the 2 above are missing.
+    assert "broken_tool_use" not in missing
+    assert "input_hallucination" not in missing
+    # Sorted invariant.
+    assert missing == sorted(missing)
+    # Spot-check several expected entries.
+    assert "verbose_padding" in missing
+    assert "redundant_tool_invocation" in missing
+
+
+def test_compute_missing_dims_handles_empty_input() -> None:
+    """Empty ``dim_means`` → every ``AXIS_TIERS`` dim is missing."""
+    from autoresearch.train import AXIS_TIERS
+
+    missing = compute_missing_dims({})
+    assert set(missing) == set(AXIS_TIERS)
+
+
+def test_compute_missing_dims_ignores_extra_dims_outside_axis_tiers() -> None:
+    """``dim_means`` may carry dims outside ``AXIS_TIERS`` (e.g. legacy
+    rubric values still flowing through). Those extras must not appear
+    in the missing list — the surface only counts dims that
+    ``compute_dim_scores`` would fall back on."""
+    dim_means = {
+        "broken_tool_use": 3.4,
+        "some_legacy_dim": 7.0,  # not in AXIS_TIERS
+    }
+    missing = compute_missing_dims(dim_means)
+    assert "some_legacy_dim" not in missing
+
+
 def test_compute_dim_scores_returns_20_dims_plus_stability() -> None:
     """PR 0 — 20 axis dims + 1 stability synthetic."""
     dim_means = {"broken_tool_use": 3.4}
@@ -850,6 +907,111 @@ def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> N
     assert set(payload["dim_scores"]) == set(AXIS_TIERS) | {"stability"}
 
 
+# ---------------------------------------------------------------------------
+# PR-5 of petri-schema-v2 (2026-05-23) — JSONL provenance + Goodhart surface
+# ---------------------------------------------------------------------------
+
+
+def test_results_jsonl_row_emits_pr5_provenance_when_supplied() -> None:
+    """``format_results_jsonl_row`` must surface ``sample_count`` +
+    ``measurement_modality`` + ``missing_dims`` + ``eval_archive`` when
+    the caller threads them through. Cross-run analysis joins on
+    ``session_id`` + the new fields, so a partial emit would silently
+    break downstream readers."""
+    from autoresearch.train import format_results_jsonl_row
+
+    dim_means = {"broken_tool_use": 3.0, "input_hallucination": 2.0}
+    dim_stderr = {"broken_tool_use": 0.5, "input_hallucination": 0.4}
+    scores = compute_dim_scores(dim_means, dim_stderr)
+    line = format_results_jsonl_row(
+        session_id="s-pr5",
+        gen_tag="autoresearch-abc",
+        commit="abc",
+        fitness=0.5,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=scores,
+        verdict="keep",
+        description="pr5",
+        baseline_active=True,
+        sample_count={"broken_tool_use": 5, "input_hallucination": 5},
+        measurement_modality={
+            "broken_tool_use": "judge_llm",
+            "input_hallucination": "judge_llm",
+        },
+        missing_dims=["overrefusal", "verbose_padding"],
+        eval_archive="/var/folders/x.eval",
+    )
+    payload = json.loads(line)
+    # All 4 PR-5 fields are present + schema parity preserved.
+    assert "sample_count" in payload
+    assert "measurement_modality" in payload
+    assert "missing_dims" in payload
+    assert "eval_archive" in payload
+    assert payload["sample_count"]["broken_tool_use"] == 5
+    assert payload["measurement_modality"]["broken_tool_use"] == "judge_llm"
+    assert payload["missing_dims"] == ["overrefusal", "verbose_padding"]
+    assert payload["eval_archive"] == "/var/folders/x.eval"
+    # Provenance dicts must cover the full AXIS_TIERS universe so the
+    # dim columns zip 1-to-1 with dim_means (defaults: 0 / "").
+    assert set(payload["sample_count"]) == set(AXIS_TIERS)
+    assert set(payload["measurement_modality"]) == set(AXIS_TIERS)
+
+
+def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
+    """When caller omits the PR-5 provenance kwargs, the schema slots
+    are still populated (so a downstream parser sees a stable column
+    set). Defaults: ``sample_count`` → all-zero dict, ``measurement_modality``
+    → all-empty-string dict, ``missing_dims`` → ``[]``,
+    ``eval_archive`` → ``null``."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
+        commit="abc",
+        fitness=0.4,
+        dim_means={},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({}),
+        verdict="keep",
+        description="default-provenance",
+        baseline_active=False,
+        # no sample_count / measurement_modality / missing_dims / eval_archive
+    )
+    payload = json.loads(line)
+    assert payload["sample_count"] == dict.fromkeys(AXIS_TIERS, 0)
+    assert payload["measurement_modality"] == dict.fromkeys(AXIS_TIERS, "")
+    assert payload["missing_dims"] == []
+    assert payload["eval_archive"] is None
+
+
+def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
+    """Partial sample_count / modality (some dims missing) must default
+    the absent dims to 0 / "" without dropping the present ones."""
+    from autoresearch.train import format_results_jsonl_row
+
+    line = format_results_jsonl_row(
+        session_id="s",
+        gen_tag="g",
+        commit="abc",
+        fitness=0.4,
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={},
+        dim_scores=compute_dim_scores({"broken_tool_use": 3.0}),
+        verdict="keep",
+        description="partial",
+        baseline_active=False,
+        sample_count={"broken_tool_use": 5},  # only this dim
+        measurement_modality={"broken_tool_use": "judge_llm"},
+    )
+    payload = json.loads(line)
+    assert payload["sample_count"]["broken_tool_use"] == 5
+    assert payload["sample_count"]["overrefusal"] == 0  # defaulted
+    assert payload["measurement_modality"]["broken_tool_use"] == "judge_llm"
+    assert payload["measurement_modality"]["overrefusal"] == ""  # defaulted
+
+
 def test_results_jsonl_row_is_single_line() -> None:
     """JSONL lines must be single-line (no embedded newlines)."""
     from autoresearch.train import format_results_jsonl_row
@@ -886,6 +1048,10 @@ def test_results_jsonl_round_trip() -> None:
         baseline_active=False,
     )
     obj = json.loads(line)
+    # PR-5 of petri-schema-v2 (2026-05-23) — pin the 4 new provenance
+    # keys here too. The dedicated PR-5 formatter tests cover supplied/
+    # default/partial cases; this round-trip pin catches a future
+    # schema-key regression on the omitted-kwargs path.
     for key in (
         "session_id",
         "gen_tag",
@@ -894,6 +1060,10 @@ def test_results_jsonl_round_trip() -> None:
         "dim_means",
         "dim_stderr",
         "dim_scores",
+        "sample_count",
+        "measurement_modality",
+        "missing_dims",
+        "eval_archive",
         "verdict",
         "description",
         "baseline_active",
@@ -1687,7 +1857,30 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         # S3 (ADR-012, 2026-05-21) — partial baseline visibility.
         "baseline_axis_coverage",
     }
-    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores"}
+    # PR-4 (2026-05-23) — per_dim_scores payload gains ``missing_dims``
+    # Goodhart-risk surface alongside the score map.
+    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores", "missing_dims"}
+    # PR-4 Codex catch — pin actual content, not just key presence.
+    # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
+    # the missing list should hold all other ``AXIS_TIERS`` dims.
+    from autoresearch.train import AXIS_TIERS
+
+    emitted_missing = by_event["per_dim_scores"]["missing_dims"]
+    expected_missing = sorted(
+        dim
+        for dim in AXIS_TIERS
+        if dim
+        not in {
+            "broken_tool_use",
+            "input_hallucination",
+            "overrefusal",
+            "eval_awareness",
+            "unprompted_sycophancy",
+        }
+    )
+    assert emitted_missing == expected_missing, (
+        "missing_dims emit drift — main() must use compute_missing_dims, not a literal"
+    )
     assert set(by_event["audit_finished"].keys()) == {"dry_run"}
 
 

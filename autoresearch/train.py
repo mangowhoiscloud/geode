@@ -942,6 +942,13 @@ def compute_dim_scores(
     Includes a synthetic ``"stability"`` key (derived from dim_stderr).
     Info-only dims are scored but their weight in fitness is 0; the
     score is still recorded for results.jsonl.
+
+    PR-4 of petri-schema-v2 (2026-05-23) — dims absent from ``dim_means``
+    silently default to 0.0 mean → score 1.0 ("missing dim = best case").
+    That semantic creates a Goodhart vector: a mutation that suppresses
+    measurement of a dim would silently bump fitness. Use
+    :func:`compute_missing_dims` to surface which dims are running on
+    that fallback so the journal + baseline.json can record them.
     """
     out: dict[str, float] = {
         dim: _dim_score(dim_means.get(dim, 0.0))
@@ -952,6 +959,28 @@ def compute_dim_scores(
     }
     out["stability"] = _stability_score(dim_stderr)
     return out
+
+
+def compute_missing_dims(dim_means: dict[str, float]) -> list[str]:
+    """Return dims in ``AXIS_TIERS`` absent from ``dim_means``.
+
+    PR-4 of petri-schema-v2 (2026-05-23) — surfaces the Goodhart-risk
+    fallback path in :func:`compute_dim_scores`. A dim missing from
+    the audit's emit silently scores 1.0 (best case), inflating
+    fitness. The journal ``per_dim_scores`` event records this list
+    so the operator can spot mutations that suppress dim measurement
+    instead of improving it. Additional sinks (baseline.json's
+    ``normalized`` namespace, ``results.jsonl``) land in PR-5; for now
+    this PR is observability-only and the gate logic in
+    :func:`compute_fitness` is unchanged — the surface alone lets the
+    operator triage without a behaviour change.
+
+    Sorted lexicographically so the list is stable across reorderings
+    of ``AXIS_TIERS`` (diff-friendly for cross-run comparison).
+
+    Returns ``[]`` when all ``AXIS_TIERS`` dims are present.
+    """
+    return sorted(dim for dim in AXIS_TIERS if dim not in dim_means)
 
 
 def compute_fitness(
@@ -1193,10 +1222,20 @@ def format_results_jsonl_row(
     verdict: str,
     description: str,
     baseline_active: bool,
+    sample_count: dict[str, int] | None = None,
+    measurement_modality: dict[str, str] | None = None,
+    missing_dims: list[str] | None = None,
+    eval_archive: str | None = None,
 ) -> str:
     """Render one results.jsonl line — full per-dim raw signal.
 
     P1a adds ``session_id`` + ``gen_tag`` as top-level keys.
+
+    PR-5 of petri-schema-v2 (2026-05-23) — adds the 4 provenance
+    fields that landed in baseline.json v2 (PR-2) + the
+    ``missing_dims`` Goodhart surface (PR-4) so cross-run analysis
+    can tell apart real measurements from default-filled fallbacks
+    without joining against baseline.json or the journal.
 
     Schema (JSON object on one line)::
 
@@ -1205,6 +1244,10 @@ def format_results_jsonl_row(
          "dim_means": {...20 entries...},
          "dim_stderr": {...20 entries...},
          "dim_scores": {...20 + 'stability'...},
+         "sample_count": {...20 entries...},          # PR-5
+         "measurement_modality": {...20 entries...},  # PR-5
+         "missing_dims": [...],                       # PR-5 (sorted)
+         "eval_archive": "<path>" | null,             # PR-5
          "verdict": "keep", "description": "...",
          "baseline_active": true}
 
@@ -1217,6 +1260,11 @@ def format_results_jsonl_row(
     # cannot silently drop fields).
     scores_full = {d: round(dim_scores.get(d, 0.0), 4) for d in AXIS_TIERS}
     scores_full["stability"] = round(dim_scores.get("stability", STABILITY_FALLBACK), 4)
+    # PR-5 — emit the 3 provenance dicts with the same dim universe
+    # so a downstream parser can zip them against ``dim_means``. Missing
+    # provenance (dry-run, pre-PR-1 build) → 0 count + empty modality.
+    sample_count_full = {d: int((sample_count or {}).get(d, 0)) for d in AXIS_TIERS}
+    modality_full = {d: str((measurement_modality or {}).get(d, "")) for d in AXIS_TIERS}
     payload = {
         "session_id": session_id,
         "gen_tag": gen_tag,
@@ -1225,6 +1273,13 @@ def format_results_jsonl_row(
         "dim_means": {d: round(dim_means.get(d, 0.0), 4) for d in AXIS_TIERS},
         "dim_stderr": {d: round(dim_stderr.get(d, 0.0), 4) for d in AXIS_TIERS},
         "dim_scores": scores_full,
+        "sample_count": sample_count_full,
+        "measurement_modality": modality_full,
+        # PR-5 — sort defensively. ``compute_missing_dims`` already
+        # returns a sorted list, but a misbehaving caller passing an
+        # unsorted list would break cross-run diff stability.
+        "missing_dims": sorted(missing_dims or []),
+        "eval_archive": eval_archive,
         "verdict": verdict,
         "description": description.replace("\n", " ").strip(),
         "baseline_active": baseline_active,
@@ -1792,6 +1847,10 @@ def main() -> int:
         },
     )
     dim_scores = compute_dim_scores(dim_means, dim_stderr)
+    # PR-4 of petri-schema-v2 (2026-05-23) — surface "missing dim = best
+    # case" fallback so the operator + downstream readers can spot a
+    # mutation that suppresses measurement to inflate fitness.
+    missing_dims = compute_missing_dims(dim_means)
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
@@ -1806,7 +1865,10 @@ def main() -> int:
         session_id,
         gen_tag,
         "per_dim_scores",
-        payload={"dim_scores": {k: round(v, 4) for k, v in dim_scores.items()}},
+        payload={
+            "dim_scores": {k: round(v, 4) for k, v in dim_scores.items()},
+            "missing_dims": missing_dims,  # PR-4 Goodhart-risk surface
+        },
     )
     print_summary(
         dim_means,
@@ -1855,6 +1917,15 @@ def main() -> int:
             verdict=verdict,
             description=description,
             baseline_active=baseline_means is not None,
+            # PR-5 of petri-schema-v2 (2026-05-23) — thread the
+            # provenance from PR-1 (run_audit return) + PR-4
+            # (compute_missing_dims) into the JSONL row so cross-run
+            # analysis can disambiguate measurements without
+            # joining against baseline.json or the journal.
+            sample_count=sample_count,
+            measurement_modality=measurement_modality,
+            missing_dims=missing_dims,
+            eval_archive=_resolve_eval_archive_path(),
         )
     )
 
