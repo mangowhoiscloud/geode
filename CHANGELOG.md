@@ -47,6 +47,52 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-C-P1 — autoresearch ``seed_limit`` lower bound bumped from
+  ``ge=1`` to ``ge=5``**. Pydantic now rejects any
+  ``[self_improving_loop.autoresearch] seed_limit`` value below 5.
+  Operators who had ``seed_limit = 2`` (the historic default in some
+  ``~/.geode/config.toml`` files) will see a ``ValidationError`` with
+  the actionable Pydantic message at audit-launch time, instead of
+  the previous silent fallback to module defaults.
+
+  **Why**. ``core/audit/dim_extractor._aggregate`` forces
+  ``stderr=0.0`` only at N=1 (``statistics.stdev(ddof=1)`` undefined);
+  N=2-4 produces a sample stderr but the CV is too noisy to drive
+  ``_should_promote`` — the gate floors its margin at
+  ``max(stderr, fitness_margin_floor)`` (``fitness_margin_floor=0.05``,
+  raised to ``N1_FITNESS_MARGIN_FLOOR=0.20`` when any ``CRITICAL_DIMS``
+  member has N≤1), so a 0.05+ fitness delta would promote a
+  measurement with no confidence signal. N≥5 keeps the sample stderr
+  meaningful, so the stderr-derived margin rises above the default
+  floor instead of collapsing onto it.
+
+  **Codex MCP catch — narrowed exception**.
+  ``autoresearch.train._get_autoresearch_config`` previously caught
+  bare ``Exception`` and silently fell back to module defaults
+  whenever the loader raised — which meant a config with
+  ``seed_limit = 2`` produced no error, defeating the lower-bound
+  gate. Catch narrowed to ``ImportError`` only so
+  ``pydantic.ValidationError`` surfaces to the operator. Same
+  silent-drift pattern as PR-MINIMAL-2 #1398.
+
+  **Test guards**:
+  - ``tests/test_self_improving_loop_config.py::test_autoresearch_seed_limit_lower_bound_is_5``
+    pins the ``ge=5`` rejection.
+  - ``...::test_autoresearch_seed_limit_boundary_n5_accepted``
+    pins the boundary case so a future typo to ``gt=5`` is caught.
+  - ``...::test_autoresearch_seed_limit_default_remains_10``
+    pins the default so operators with no override see no shift.
+  - ``...::test_get_autoresearch_config_propagates_validation_error_to_operator``
+    pins the narrowed ``ImportError`` catch.
+
+  **Operator action — bumping a low value**. If ``geode`` refuses to
+  start an audit after pulling this PR, edit
+  ``~/.geode/config.toml`` and raise
+  ``[self_improving_loop.autoresearch] seed_limit`` to ``5`` or
+  higher (10 is the default).
+
 ## [0.99.38] - 2026-05-23
 
 > First release under the **rotation pattern** (release branch lands on

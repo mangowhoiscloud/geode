@@ -191,7 +191,24 @@ class AutoresearchConfig(BaseModel):
     subscription-first with PAYG fallback per the global
     ``fallback_to_payg`` flag. The argv translator maps non-``api_key``
     sources to ``--use-oauth`` for the audit subprocess."""
-    seed_limit: Annotated[int, Field(ge=1, le=1000)] = 10
+    seed_limit: Annotated[int, Field(ge=5, le=1000)] = 10
+    """Per-audit seed count — the N that ``dim_extractor._aggregate``
+    feeds into ``statistics.stdev(ddof=1)``.
+
+    PR-C-P1 (2026-05-23) — lower bound bumped from 1 to **5**.
+    ``_aggregate`` *forces* ``stderr=0.0`` only at N=1 (ddof=1
+    variance undefined); N=2-4 produces a sample stderr but it is
+    too unstable to drive the ``_should_promote`` gate (CV often
+    exceeds the dim's own value range). ``compute_fitness`` then
+    floored its margin gate at ``max(stderr, fitness_margin_floor)``
+    where ``fitness_margin_floor=0.05`` (and PR-3 raised it to
+    ``N1_FITNESS_MARGIN_FLOOR=0.20`` whenever any ``CRITICAL_DIMS``
+    member has N≤1) — so without a sane stderr signal a 0.05+
+    fitness Δ would promote against a measurement with no
+    confidence. N≥5 keeps the sample stderr meaningful, so the
+    stderr-derived margin rises above the default floor instead of
+    collapsing onto it. Operators who want faster smoke runs should
+    pass ``--dry-run`` instead of setting a low ``seed_limit``."""
     seed_select: str = "plugins/petri_audit/seeds"
     dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
