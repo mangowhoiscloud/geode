@@ -215,7 +215,9 @@ class AgenticLoop:
 
         # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
         self._enable_goal_decomposition = enable_goal_decomposition
-        self._goal_decomposer: Any | None = None  # lazy init
+        # PR-CL-A1-followup (2026-05-23) — ``_goal_decomposer`` removed.
+        # The legacy ``GoalDecomposer`` class is gone; ``decompose_async``
+        # (in ``core.agent.plan``) is stateless and called directly.
 
         # LLM-call retry budget. v0.90.0 — auto-escalation removed; once
         # the cap is hit the loop exits with ``model_action_required`` so
@@ -1153,9 +1155,10 @@ class AgenticLoop:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
         # Goal decomposition: try to break compound requests into sub-goal DAGs.
-        # Returns a hint string appended to the system prompt, or None if not compound.
+        # PR-CL-A1-followup (2026-05-23) — async now (planner LLM call); the
+        # return value is always None (Plan installed on SessionMetrics).
         try:
-            decomposition_hint = self._try_decompose(user_input)
+            decomposition_hint = await self._try_decompose(user_input)
         except BillingError as exc:
             self._emit_quota_panel(exc)
             return AgenticResult(
@@ -1868,9 +1871,14 @@ class AgenticLoop:
     # Goal decomposition — delegate to ``_decomposition``
     # ------------------------------------------------------------------
 
-    def _try_decompose(self, user_input: str) -> str | None:
-        """Delegates to :func:`_decomposition.try_decompose`."""
-        return _decomposition.try_decompose(self, user_input)
+    async def _try_decompose(self, user_input: str) -> str | None:
+        """Delegates to :func:`_decomposition.try_decompose`.
+
+        Async (PR-CL-A1-followup, 2026-05-23) because the new planner
+        path awaits ``loop._call_llm`` — single async LLM dispatch,
+        no thread-pool hop.
+        """
+        return await _decomposition.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------
     # Sub-agent announce queue — delegate to ``_announce``

@@ -37,7 +37,10 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 if TYPE_CHECKING:
     from core.agent.loop.agent_loop import AgenticLoop
@@ -47,15 +50,62 @@ log = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_REPLAN_INTERVAL",
     "DEFAULT_REPLAN_MAX_ATTEMPTS",
+    "DecompositionResult",
     "Plan",
     "PlanStep",
+    "SubGoal",
     "_replan_max_attempts",
     "build_plan_from_decomposition",
+    "decompose_async",
     "parse_replan_response",
     "render_plan_for_prompt",
     "replan_async",
     "should_replan",
 ]
+
+
+# ----------------------------------------------------------------------
+# Legacy decomposition models (PR-CL-A1-followup, 2026-05-23)
+# Moved from ``core/orchestration/goal_decomposer.py`` so a single module
+# owns the planner schema. Pydantic models stay so ``call_llm_parsed`` /
+# JSON-schema validation paths keep working.
+# ----------------------------------------------------------------------
+
+
+class SubGoal(BaseModel):
+    """A single sub-goal in the decomposed task DAG.
+
+    Migrated from ``core.orchestration.goal_decomposer.SubGoal`` —
+    PR-CL-A1-followup folded planner schema into :mod:`core.agent.plan`
+    so the Plan and its source data live in one place.
+    """
+
+    id: str = PydanticField(description="Unique identifier (e.g. 'step_1')")
+    description: str = PydanticField(description="Human-readable description of this sub-goal")
+    tool_name: str = PydanticField(description="Tool to invoke for this sub-goal")
+    tool_args: dict[str, Any] = PydanticField(
+        default_factory=dict, description="Arguments for the tool"
+    )
+    depends_on: list[str] = PydanticField(
+        default_factory=list, description="IDs of sub-goals that must complete first"
+    )
+    difficulty: Literal["low", "medium", "high"] = PydanticField(
+        default="medium",
+        description="Complexity: low=lookup, medium=analysis, high=reasoning",
+    )
+
+
+class DecompositionResult(BaseModel):
+    """Result of goal decomposition.
+
+    Migrated from ``core.orchestration.goal_decomposer.DecompositionResult``.
+    """
+
+    is_compound: bool = PydanticField(description="Whether the request requires multiple sub-goals")
+    goals: list[SubGoal] = PydanticField(
+        default_factory=list, description="Ordered list of sub-goals"
+    )
+    reasoning: str = PydanticField(default="", description="Brief explanation of the decomposition")
 
 
 # Cadence interval (number of rounds between forced replan calls). ``0``
@@ -501,4 +551,207 @@ async def replan_async(
         )
     except Exception:
         log.warning("replan_async call failed; keeping prior plan", exc_info=True)
+        return None
+
+
+# ----------------------------------------------------------------------
+# Initial decomposition — direct planner LLM call → Plan
+# PR-CL-A1-followup (2026-05-23): absorbed from
+# ``core/orchestration/goal_decomposer.py`` (deleted in this PR). The
+# heuristics + LLM call + Pydantic parse all live here so the Plan
+# module owns the full planner pipeline.
+# ----------------------------------------------------------------------
+
+# Single-tool indicators: requests that map to exactly one tool call.
+# Slash commands + tiny inputs bypass the LLM entirely.
+_SIMPLE_PATTERNS: tuple[str, ...] = (
+    "/",
+    "목록",
+    "리스트",
+    "list",
+    "도움",
+    "help",
+    "상태",
+    "status",
+)
+
+# Compound-intent indicators — used to detect multi-step requests before
+# spending an LLM call.
+_COMPOUND_INDICATORS: tuple[str, ...] = (
+    # Korean connectors
+    "그리고",
+    "다음에",
+    "후에",
+    "하고",
+    # English connectors
+    " and ",
+    " then ",
+    # Multi-step keywords (Korean)
+    "종합",
+    "전반적",
+    "포괄적",
+    "다각도",
+    "전체적",
+    "분석하고",
+    "비교하고",
+    "검색하고",
+    "한 다음",
+    "이후에",
+    # Multi-step keywords (English)
+    "comprehensive",
+    "thorough",
+    "end-to-end",
+    "full evaluation",
+    "analyze and",
+    "compare and",
+    "search and",
+)
+
+
+def _is_clearly_simple(text: str) -> bool:
+    """Skip LLM decomposition for obviously single-intent requests.
+
+    Returns True for slash commands and very short inputs (<15 chars).
+    Migrated from ``goal_decomposer._is_clearly_simple`` for PR-CL-A1-followup.
+    """
+    lower = text.strip().lower()
+    if lower.startswith("/"):
+        return True
+    return len(lower) < 15
+
+
+def _has_compound_indicators(text: str) -> bool:
+    """Check whether ``text`` carries multi-step intent markers.
+
+    Migrated from ``goal_decomposer._has_compound_indicators`` for
+    PR-CL-A1-followup.
+    """
+    lower = text.strip().lower()
+    return any(indicator in lower for indicator in _COMPOUND_INDICATORS)
+
+
+def _build_tool_summary(tools: list[dict[str, Any]]) -> str:
+    """Render available tool definitions as a short text summary for the
+    planner prompt.
+
+    Migrated from ``goal_decomposer._build_tool_summary`` with full
+    legacy parity (Codex MCP LOW #3, PR-CL-A1-followup 2026-05-23):
+    bold tool name, ``[cost_tier]`` label when present (e.g.
+    ``[expensive]`` / ``[free]`` — preserves cost-aware prompt context
+    the planner uses to choose between paid and free tools), and
+    first-sentence truncation of the description.
+    """
+    if not tools:
+        return "(no tools available)"
+    lines: list[str] = []
+    for tool in tools:
+        name = str(tool.get("name", "?"))
+        desc = str(tool.get("description", "") or "")
+        first_sentence = desc.split(".", 1)[0] if desc else ""
+        cost = str(tool.get("cost_tier", "") or "")
+        cost_label = f" [{cost}]" if cost else ""
+        lines.append(f"- **{name}**{cost_label}: {first_sentence}")
+    return "\n".join(lines)
+
+
+_DECOMPOSE_CALL_TIMEOUT_S: float = 60.0
+
+
+async def decompose_async(
+    loop: AgenticLoop,
+    user_input: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+) -> Plan | None:
+    """Initial planner LLM call — returns a :class:`Plan` or ``None``.
+
+    PR-CL-A1-followup (2026-05-23) absorbs the legacy
+    ``GoalDecomposer.decompose`` path. The flow:
+
+    1. **Heuristic gate**: skip LLM for clearly-simple requests + requests
+       without compound indicators (preserves the cost-control profile
+       of the legacy decomposer — ~80% of requests bypass LLM).
+    2. **System prompt**: ``load_prompt("decomposer", "system")`` +
+       ``apply_decomposition_policy`` (ADR-012 SoT — preserves the
+       operator-tunable policy surface; only the call site moves).
+    3. **LLM call**: ``loop._call_llm`` with ``settings.plan_model``
+       (PR-CL-A6 knob) bounded by 60s timeout.
+    4. **Parse**: pydantic ``DecompositionResult.model_validate_json``
+       — schema-validated, error-on-malformed.
+    5. **Skip when** the LLM reports ``is_compound=False`` or only
+       one goal (single-tool request — no Plan needed).
+    6. **Convert** to :class:`Plan` via :func:`build_plan_from_decomposition`.
+
+    Returns ``None`` whenever the request is simple, the LLM call fails,
+    or the response can't be parsed — caller treats None as
+    "no explicit Plan, proceed with implicit single-shot reasoning"
+    (the pre-A1 default).
+    """
+    if not isinstance(user_input, str) or not user_input.strip():
+        return None
+    if _is_clearly_simple(user_input):
+        return None
+    if not _has_compound_indicators(user_input):
+        return None
+    try:
+        import asyncio
+
+        from core.agent.decomposition_policy import (
+            _load_decomposition_policy_override,
+            apply_decomposition_policy,
+        )
+        from core.config import settings
+        from core.llm.prompts import load_prompt
+
+        plan_model_raw = getattr(settings, "plan_model", "")
+        plan_model = (
+            plan_model_raw.strip() if isinstance(plan_model_raw, str) else ""
+        ) or loop.model
+
+        system_prompt = load_prompt("decomposer", "system")
+        # ADR-012 S0c — the decomposition SoT's *single application
+        # point* used to live in ``GoalDecomposer._llm_decompose``; now
+        # it lives here. Policy reader is unchanged, only the host moved.
+        system_prompt = apply_decomposition_policy(
+            system_prompt, _load_decomposition_policy_override()
+        )
+        tool_summary = _build_tool_summary(tools or [])
+        user_prompt = f"## Available Tools\n\n{tool_summary}\n\n## User Request\n\n{user_input}"
+
+        response = await asyncio.wait_for(
+            loop._call_llm(
+                system_prompt,
+                [{"role": "user", "content": user_prompt}],
+                model=plan_model,
+            ),
+            timeout=_DECOMPOSE_CALL_TIMEOUT_S,
+        )
+        if response is None:
+            return None
+        # Record planner usage (mirrors replan_async pattern).
+        track = getattr(loop, "_track_usage_async", None)
+        if track is not None:
+            try:
+                await track(response)
+            except Exception:
+                log.debug("decompose usage tracking failed", exc_info=True)
+
+        raw_text = (getattr(response, "text", "") or "").strip()
+        if not raw_text:
+            return None
+        # Strip ```json fences if the model wrapped them.
+        if raw_text.startswith("```"):
+            raw_text = "\n".join(
+                ln for ln in raw_text.splitlines() if not ln.strip().startswith("```")
+            ).strip()
+        try:
+            result = DecompositionResult.model_validate_json(raw_text)
+        except Exception:
+            log.debug("decompose response failed schema parse", exc_info=True)
+            return None
+        if not result.is_compound or len(result.goals) <= 1:
+            return None
+        return build_plan_from_decomposition(result)
+    except Exception:
+        log.warning("decompose_async failed; proceeding without Plan", exc_info=True)
         return None
