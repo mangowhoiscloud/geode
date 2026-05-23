@@ -159,6 +159,104 @@ functional change.
   ``adapter`` names via a single SoT table — both naming schemes are
   accepted in ``[seed_generation.role.<role>]`` overrides.
 
+- **PR-SIL-5THEME C2 — Bench S6b production wiring**. ADR-012 §S6
+  (schema + math + cross-validation gate, C1 amendment 로 ADR 측 명세
+  완료) 의 production path 가 모두 silently 끊겼던 9 disconnect 를 닫
+  는 7-bench inspect_ai federation collector + 4-axis fitness 활성 +
+  Goodhart cross-validation gate fire + observability 4-axis 컬럼 확장.
+
+  **Collector 실구현** — ``autoresearch/bench_means.py`` 의
+  ``collect_bench_means_from_inspect_ai`` 가 placeholder
+  (``return None``) → ``BenchProvenance`` dataclass 반환으로 교체.
+  ``BENCH_PORT_MAP`` 7 entry (F1.b LCB-Pro substitution 반영) 가
+  ``inspect-evals`` 6 bench (``livecodebench_pro`` / ``tau2_telecom``
+  / ``gpqa_diamond`` / ``hle`` / ``osworld`` / ``mle_bench``) +
+  ``inspect-harbor`` 1 bench (``swebenchpro``) 로 dispatch.
+
+  **A1 graceful-skip 의 4 게이트** — (1) ``inspect-evals`` import
+  가용성, (2) ``inspect-harbor`` import 가용성, (3) Docker daemon 가용
+  (``swe_bench_pro_pass`` / ``osworld_success`` / ``mle_bench_medal``
+  의 sandbox 요구), (4) target_model 의 vision 지원
+  (``hle_accuracy`` 의 multi-modal items). 환경 부재 시 해당 bench
+  skip 후 ``missing_benches`` 에 등록 — Petri-side ``compute_missing_dims``
+  (PR-4) 와 symmetric Goodhart suppression surface.
+
+  **``GEODE_BENCH_S6B_LIVE`` env gate** — 기본 off (nominal smoke /
+  unit test / dry-run 환경 보호). ``=1`` 설정 시에만 실제
+  ``inspect_ai.eval`` subprocess fire. off 일 땐 모든 bench 가
+  ``missing_benches`` 에 등록돼 caller / journal / results.jsonl 모두
+  동일 시그널.
+
+  **4-axis fitness 활성 (silent disconnect 9 → 0)**:
+  - ``main()`` 가 ``run_audit`` 직후 collector 호출 →
+    ``compute_fitness(bench_means=current_bench, baseline_bench_means=...)``
+    4-axis 분기 firing path 활성 (이전엔 분기 정의돼 있으나 호출 0회)
+  - ``_baseline_provenance`` dict 에 ``bench_means`` + provenance
+    슬롯 추가 → ``_write_baseline`` 가 ``axes.bench_means`` +
+    ``raw.bench_stderr`` + ``raw.bench_sample_count`` +
+    ``raw.bench_rubric_version`` 영속화 (dim 측 PR-1 패턴 symmetric)
+  - ``_should_promote`` 가 internal ``compute_fitness`` 호출에 bench
+    forward → Goodhart cross-validation gate
+    (``alignment_only_fooling`` / ``capability_at_alignment_cost``) 가
+    promote 결정에 영향. conflict 발화 시 reason payload
+    (``cross-validation conflict (<type>)``) 가 ``promoted_line`` 에
+    surface — 이전엔 fitness=0 이 critical-axis vs cross-validation
+    인지 구분 불가
+  - ``format_results_jsonl_row`` 가 ``bench_means`` / ``bench_stderr``
+    / ``bench_sample_count`` / ``missing_benches`` /
+    ``bench_rubric_version`` 5 컬럼 emit + ``ux_means`` /
+    ``admire_means`` 컬럼 슬롯 (placeholder, S1b/S2b 후속) — cross-run
+    분석이 4-axis breakdown 을 baseline.json join 없이 읽기 가능
+  - OL-C1 eval emit (``eval_response_recorded``) 의
+    ``axis_scores["bench_means_aggregate"]`` 계산 출처를 baseline (이전
+    generation frozen) → ``bench_means_current`` (이번 audit) 로 교체
+    — M4.1 DPO pile 의 chosen/rejected pairing 의 stale signal 해소
+  - ``_emit_journal("per_dim_scores")`` payload 에
+    ``missing_benches`` + ``bench_rubric_version`` 동봉 (cohort 추적)
+
+  **의존성 추가** (``pyproject.toml [audit]`` extra):
+  - ``inspect-evals>=0.13.0`` — 6 bench cover (B1 grounding survey)
+  - ``inspect-harbor>=0.4.5`` — SWE-bench Pro
+
+  **Test guards** (``tests/test_s6b_bench_production_wiring.py`` 신규
+  + ``tests/test_s6_bench_means_fitness.py`` / ``tests/test_autoresearch_train.py`` 갱신):
+  - ``BENCH_PORT_MAP`` ↔ ``BENCH_DIM_WEIGHTS`` 7-key parity (drift 차단)
+  - ``BENCH_PORT_MAP`` 의 package 가 두 PyPI 패키지 중 하나임을 강제
+  - ``BENCH_REQUIRES_DOCKER`` / ``BENCH_REQUIRES_VISION`` subset
+    invariant
+  - ``BENCH_RUBRIC_VERSION`` non-empty (cohort tag 유효)
+  - ``BenchProvenance()`` default state
+  - ``compute_missing_benches`` empty / partial / None 입력 모두
+  - ``collect_bench_means_from_inspect_ai`` 가 ``BenchProvenance``
+    반환 + 7-field universe coverage (means ∪ missing = 7) + vision
+    gate (text-only 모델 → ``hle_accuracy`` missing)
+  - ``format_results_jsonl_row`` 가 bench_provenance 전달 시 5 컬럼
+    모두 emit + 7-field universe 보존 + sorted ``missing_benches`` +
+    rubric_version 보존
+  - ``format_results_jsonl_row`` legacy caller (provenance 미전달)
+    backward-compat — 7-field 0.0 default 채워서 schema 일관성
+  - ``_write_baseline`` 가 ``raw.bench_stderr`` /
+    ``raw.bench_sample_count`` / ``raw.bench_rubric_version`` 영속화
+  - ``_should_promote`` 의 ``alignment_only_fooling`` scenario —
+    dim promote + bench regress 시 promote 차단 + reason 에
+    ``cross-validation conflict (alignment_only_fooling)`` surface
+
+  **F1.b LCB-Pro substitution** (C1 의 amendment 와 grep-provable 일치):
+  ``BENCH_DIM_WEIGHTS`` 의 ``livecodebench_pass1`` →
+  ``livecodebench_pro_accuracy`` rename (weight 0.15 변동 없음).
+  ``BENCH_PORT_MAP[livecodebench_pro_accuracy] = ("inspect_evals",
+  "livecodebench_pro")`` dispatch path 도 갱신.
+
+  **Backward-compat 보장**:
+  - ``BenchProvenance`` field 모두 default factory 라 ``BenchProvenance()``
+    호출이 dry-run path 에서 안전
+  - ``format_results_jsonl_row`` 의 ``bench_provenance=None`` 기본값 →
+    legacy caller (PR-5 이전 코드) 가 빈 7-field default 로 schema
+    유지
+  - ``baseline.json`` 의 ``raw.bench_stderr`` 등 새 슬롯은
+    ``if bench_stderr:`` 조건부 write — empty 시 키 자체 미생성
+    (legacy reader 무영향)
+
 ### Changed
 
 - **Config SoT consolidation — ``~/.geode/config.toml``

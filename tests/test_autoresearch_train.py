@@ -1859,7 +1859,14 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     }
     # PR-4 (2026-05-23) — per_dim_scores payload gains ``missing_dims``
     # Goodhart-risk surface alongside the score map.
-    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores", "missing_dims"}
+    # PR-SIL-5THEME C2 (2026-05-23) — bench 측 symmetric Goodhart surface
+    # 추가 (``missing_benches`` + ``bench_rubric_version``).
+    assert set(by_event["per_dim_scores"].keys()) == {
+        "dim_scores",
+        "missing_dims",
+        "missing_benches",
+        "bench_rubric_version",
+    }
     # PR-4 Codex catch — pin actual content, not just key presence.
     # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
     # the missing list should hold all other ``AXIS_TIERS`` dims.

@@ -83,6 +83,17 @@ audit = [
     # can emit tool_use blocks under --max-turns 1 without raw-SDK
     # 429 enforcement on Claude Max OAuth tokens.
     "mcp>=1.0.0",
+    # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring 의 7-bench
+    # federation dependencies. ``inspect-evals`` 가 6 bench
+    # (livecodebench_pro / tau2_telecom / gpqa_diamond / hle / osworld /
+    # mle_bench) 를 cover, ``inspect-harbor`` 가 SWE-bench Pro 1 bench
+    # 추가. Both gated by ``autoresearch/bench_means.py`` 의 A1
+    # graceful-skip — Docker / VM / vision 부재 시 해당 bench skip 하고
+    # ``missing_benches`` Goodhart surface 에 등록. B1 grounding
+    # survey: vanilla LiveCodeBench port 부재 확인 → F1.b
+    # ``livecodebench_pro`` substitution 결정.
+    "inspect-evals>=0.13.0",
+    "inspect-harbor>=0.4.5",
 ]
 # OpenLLMetry (Apache-2.0) — OTel-compatible LLM/agent tracing.
 # Lazy-imported in core/observability/ so default `uv sync` cold-start is
@@ -460,6 +471,9 @@ module = [
     # `uv sync --extra audit` is run; default sync skips them.
     "inspect_ai.*",
     "inspect_petri.*",
+    # PR-SIL-5THEME C2 — S6b bench federation dependencies, same opt-in.
+    "inspect_evals.*",
+    "inspect_harbor.*",
     # P4 prep — [obs] / [viz] optional extras. Same opt-in pattern.
     "traceloop.*",
     "opentelemetry.*",

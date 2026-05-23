@@ -102,6 +102,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. ``BenchProvenance``
+# + ``collect_bench_means_from_inspect_ai`` 가 main() 의 audit 사이클에서
+# 호출됨. 기존 ``from autoresearch.bench_means import
+# (compute_bench_aggregate, ...)`` 의 local import 는 compute_fitness 내부
+# 에서만 호출되는 lazy import 라 보존. (``BenchProvenance`` 는
+# ``format_results_jsonl_row`` 시그너처에도 사용되므로 module-top import.)
+from autoresearch.bench_means import BenchProvenance, collect_bench_means_from_inspect_ai
+
 log = logging.getLogger(__name__)
 
 try:
@@ -1236,6 +1244,14 @@ def format_results_jsonl_row(
     measurement_modality: dict[str, str] | None = None,
     missing_dims: list[str] | None = None,
     eval_archive: str | None = None,
+    # PR-SIL-5THEME C2 (2026-05-23) — S6b 4-axis breakdown columns. 이전엔
+    # results.jsonl 가 dim axis 만 emit → cross-run 분석이 4-axis 어느 축이
+    # 기여/저하 했는지 join 없이 못 봤다. 이제 ux/admire/bench 컬럼 + per-axis
+    # aggregate 같이 emit. 모든 새 컬럼 optional (legacy reader backward-compat).
+    # bench 측은 BenchProvenance dataclass 로 묶어 arg count 압축.
+    ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    bench_provenance: BenchProvenance | None = None,
 ) -> str:
     """Render one results.jsonl line — full per-dim raw signal.
 
@@ -1275,6 +1291,19 @@ def format_results_jsonl_row(
     # provenance (dry-run, pre-PR-1 build) → 0 count + empty modality.
     sample_count_full = {d: int((sample_count or {}).get(d, 0)) for d in AXIS_TIERS}
     modality_full = {d: str((measurement_modality or {}).get(d, "")) for d in AXIS_TIERS}
+    # PR-SIL-5THEME C2 — bench-side 의 7-field universe over emit so 다운스트림
+    # parser 가 7 column zip 가능. None / empty 시 0.0 / 0 / "" default 채워
+    # missing 은 missing_benches 로 surface 한다.
+    from autoresearch.bench_means import BENCH_DIM_WEIGHTS, BenchProvenance
+
+    _prov = bench_provenance or BenchProvenance(rubric_version="")
+    _bm = _prov.bench_means
+    _bs = _prov.bench_stderr
+    _bc = _prov.bench_sample_count
+    bench_means_full = {b: round(_bm.get(b, 0.0), 4) for b in BENCH_DIM_WEIGHTS}
+    bench_stderr_full = {b: round(_bs.get(b, 0.0), 4) for b in BENCH_DIM_WEIGHTS}
+    bench_sample_count_full = {b: int(_bc.get(b, 0)) for b in BENCH_DIM_WEIGHTS}
+
     payload = {
         "session_id": session_id,
         "gen_tag": gen_tag,
@@ -1293,6 +1322,14 @@ def format_results_jsonl_row(
         "verdict": verdict,
         "description": description.replace("\n", " ").strip(),
         "baseline_active": baseline_active,
+        # PR-SIL-5THEME C2 — 4-axis breakdown.
+        "ux_means": dict(ux_means) if ux_means else None,
+        "admire_means": dict(admire_means) if admire_means else None,
+        "bench_means": bench_means_full,
+        "bench_stderr": bench_stderr_full,
+        "bench_sample_count": bench_sample_count_full,
+        "missing_benches": sorted(_prov.missing_benches),
+        "bench_rubric_version": _prov.rubric_version,
     }
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
@@ -1588,6 +1625,13 @@ def _write_baseline(
     eval_archive: str | None = None,
     session_id: str = "",
     commit: str = "",
+    # PR-SIL-5THEME C2 (2026-05-23) — S6b bench provenance 영속화 슬롯.
+    # PR-1 의 dim 측 provenance (sample_count + measurement_modality) 와
+    # symmetric — bench 도 stderr + sample_count + rubric_version 으로
+    # cohort-blind comparison 차단.
+    bench_stderr: dict[str, float] | None = None,
+    bench_sample_count: dict[str, int] | None = None,
+    bench_rubric_version: str = "",
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -1635,6 +1679,13 @@ def _write_baseline(
         raw_payload["sample_count"] = {k: int(v) for k, v in sample_count.items()}
     if measurement_modality:
         raw_payload["measurement_modality"] = {k: str(v) for k, v in measurement_modality.items()}
+    # PR-SIL-5THEME C2 — bench provenance slots. dim 측 PR-1 패턴과 symmetric.
+    if bench_stderr:
+        raw_payload["bench_stderr"] = {k: float(v) for k, v in bench_stderr.items()}
+    if bench_sample_count:
+        raw_payload["bench_sample_count"] = {k: int(v) for k, v in bench_sample_count.items()}
+    if bench_rubric_version:
+        raw_payload["bench_rubric_version"] = str(bench_rubric_version)
     axes_payload: dict[str, Any] = {
         "ux_means": ({k: float(v) for k, v in ux_means.items()} if ux_means else None),
         "admire_means": ({k: float(v) for k, v in admire_means.items()} if admire_means else None),
@@ -1673,6 +1724,12 @@ def _should_promote(
     *,
     fitness_margin_floor: float = 0.05,
     baseline_sample_count: dict[str, int] | None = None,
+    # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. 이전엔 internal
+    # compute_fitness 호출에 bench 전달 0 → Goodhart bidirectional gate
+    # (alignment_only_fooling / capability_at_alignment_cost) 의 promote
+    # 결정 영향력 0. 이제 bench + baseline_bench 둘 다 받아서 gate fire.
+    bench_means: dict[str, float] | None = None,
+    baseline_bench_means: dict[str, float] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
@@ -1711,8 +1768,24 @@ def _should_promote(
         current_stderr,
         baseline_means=baseline_means,
         baseline_stderr=baseline_stderr,
+        bench_means=bench_means,
+        baseline_bench_means=baseline_bench_means,
     )
     if gated == 0.0:
+        # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
+        # 가 fire 했으면 (bench 측 conflict) 그 reason 을 보고. dim critical
+        # gate 만 fire 했으면 기존 메시지 보존.
+        from autoresearch.bench_means import detect_cross_validation_conflict
+
+        conflict = detect_cross_validation_conflict(
+            dim_means=current_means,
+            baseline_dim_means=baseline_means,
+            bench_means=bench_means,
+            baseline_bench_means=baseline_bench_means,
+            critical_dims=CRITICAL_DIMS,
+        )
+        if conflict is not None:
+            return False, f"cross-validation conflict ({conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
     current_raw = compute_fitness(current_means, current_stderr)
@@ -1861,11 +1934,36 @@ def main() -> int:
     # case" fallback so the operator + downstream readers can spot a
     # mutation that suppresses measurement to inflate fitness.
     missing_dims = compute_missing_dims(dim_means)
+
+    # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring activation.
+    # Previous behaviour: ``compute_fitness`` only received
+    # ``baseline_bench_means`` (read-only side), never the current
+    # audit's bench measurements — so the 4-axis branch + Goodhart
+    # cross-validation gate were structurally dead code. Now the
+    # collector runs after run_audit, threads its result into
+    # compute_fitness / _write_baseline / _should_promote / journal /
+    # results.jsonl / OL-C1 emit. The collector's A1 graceful-skip
+    # ensures Docker / VM / vision absence skips affected benches into
+    # ``missing_benches`` rather than failing the audit.
+    bench_provenance = (
+        BenchProvenance()
+        if args.dry_run
+        else collect_bench_means_from_inspect_ai(
+            target_model=_petri_role_model("target"),
+        )
+    )
+    # Caller-side: 빈 dict vs None 의 의미를 분리. None 은 "collector 부재" (예전),
+    # 빈 dict 는 "collector 호출했으나 0 bench 가 활성 (전부 missing)" (이제).
+    # compute_fitness 의 4-axis 분기는 ``bench_means is not None`` 일 때 활성.
+    # 즉 정상 cohort 라면 bench_provenance.bench_means 가 빈 dict 라도
+    # ``{}`` (not None) 으로 넘겨야 cross-validation gate 가 fire 가능.
+    bench_means_current: dict[str, float] | None = bench_provenance.bench_means
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
         baseline_means=baseline_means,
         baseline_stderr=baseline_stderr,
+        bench_means=bench_means_current,
         baseline_bench_means=baseline_bench_means or None,
     )
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
@@ -1878,6 +1976,11 @@ def main() -> int:
         payload={
             "dim_scores": {k: round(v, 4) for k, v in dim_scores.items()},
             "missing_dims": missing_dims,  # PR-4 Goodhart-risk surface
+            # PR-SIL-5THEME C2 — bench 측 Goodhart surface 의 symmetric
+            # journal entry. mutation 이 bench 측정을 silently suppress 하면
+            # missing_benches 가 늘어남 — operator 가 cross-run 으로 패턴 추적.
+            "missing_benches": bench_provenance.missing_benches,
+            "bench_rubric_version": bench_provenance.rubric_version,
         },
     )
     print_summary(
@@ -1936,6 +2039,10 @@ def main() -> int:
             measurement_modality=measurement_modality,
             missing_dims=missing_dims,
             eval_archive=_resolve_eval_archive_path(),
+            # PR-SIL-5THEME C2 (2026-05-23) — 4-axis breakdown columns. ux /
+            # admire 는 현재 collector 가 placeholder 라 미전달 (S1b/S2b
+            # 후속 PR), bench 는 BenchProvenance 전달 — 4-axis 가능.
+            bench_provenance=bench_provenance,
         )
     )
 
@@ -1944,12 +2051,20 @@ def main() -> int:
     # baseline, so the gate is short-circuited.
     # PR-2 of petri-schema-v2 (2026-05-23) — gather v2 provenance once
     # so the two promote branches don't drift in argument lists.
+    # PR-SIL-5THEME C2 (2026-05-23) — bench provenance 동봉. 이전엔 dim 측
+    # provenance (sample_count + measurement_modality) 만 영속화 → bench 의
+    # cohort tag (rubric_version) + per-bench stderr / sample_count 가 사라져
+    # baseline 의 axes.bench_means 가 cohort-blind 였다. 이제 dim 측과 symmetric.
     _baseline_provenance: dict[str, Any] = {
         "sample_count": sample_count,
         "measurement_modality": measurement_modality,
         "eval_archive": _resolve_eval_archive_path(),
         "session_id": session_id,
         "commit": commit,
+        "bench_means": bench_provenance.bench_means or None,
+        "bench_stderr": bench_provenance.bench_stderr or None,
+        "bench_sample_count": bench_provenance.bench_sample_count or None,
+        "bench_rubric_version": bench_provenance.rubric_version,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -1971,6 +2086,11 @@ def main() -> int:
             baseline_means,
             baseline_stderr,
             baseline_sample_count=baseline_sample_count,
+            # PR-SIL-5THEME C2 — cross-validation gate 입력. nominal path
+            # (bench env off) 에선 bench_means_current 가 {} 라 gate 의
+            # ``bench_means is None`` 분기로 안전하게 skip — 기존 동작 보존.
+            bench_means=bench_means_current or None,
+            baseline_bench_means=baseline_bench_means or None,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
@@ -2033,19 +2153,25 @@ def main() -> int:
             f"(seed_select={os.environ.get('SEED_SELECT', '<default>')!r}, "
             f"description={description!r})"
         )
+        # PR-SIL-5THEME C2 (2026-05-23) — bench_means 측정 출처를 baseline
+        # (frozen 이전 generation) → bench_means_current (이번 audit 결과)
+        # 로 교체. 이전엔 OL-C1 emit 의 axis_score 가 "이번 mutation 이
+        # bench 에서 어떻게 했는지" 가 아니라 "직전 generation 의 frozen
+        # 점수" 였다 — M4.1 DPO pile 의 chosen/rejected pairing 이 stale
+        # signal 받음.
         response_label = (
             f"verdict={verdict} fitness={fitness:.4f} "
             f"promoted={promoted_line} "
             f"dim_means_count={len(dim_means)} "
-            f"bench_means_count={len(baseline_bench_means) if baseline_bench_means else 0}"
+            f"bench_means_count={len(bench_means_current) if bench_means_current else 0}"
         )
         rollback = fitness == 0.0 or verdict.lower() in {"reject", "regression"}
         axis_scores: dict[str, float] = {}
         if dim_means:
             axis_scores["dim_means_aggregate"] = sum(dim_means.values()) / len(dim_means)
-        if baseline_bench_means:
-            axis_scores["bench_means_aggregate"] = sum(baseline_bench_means.values()) / len(
-                baseline_bench_means
+        if bench_means_current:
+            axis_scores["bench_means_aggregate"] = sum(bench_means_current.values()) / len(
+                bench_means_current
             )
         emit_eval_response_recorded(
             prompt=prompt_label,

@@ -205,13 +205,28 @@ def test_no_conflict_when_both_aligned() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. collect_bench_means_from_inspect_ai — S6b placeholder
+# 5. collect_bench_means_from_inspect_ai — S6b production wiring
+# (PR-SIL-5THEME C2, 2026-05-23 — placeholder return None 에서 BenchProvenance
+# dataclass + 7-bench dispatch + A1 graceful-skip 로 교체됨)
 # ---------------------------------------------------------------------------
 
 
-def test_collect_returns_none_in_s6() -> None:
-    """S6 (이 PR) — inspect_ai federation 실제 wiring 은 S6b. placeholder."""
-    assert collect_bench_means_from_inspect_ai() is None
+def test_collect_returns_bench_provenance_dataclass() -> None:
+    """S6b production wiring — placeholder 였던 ``collect_bench_means_from_inspect_ai``
+    가 ``BenchProvenance`` dataclass 반환으로 교체. nominal smoke 환경
+    (Docker / inspect-evals / inspect-harbor 부재 + ``GEODE_BENCH_S6B_LIVE``
+    unset) 에선 모든 bench 가 ``missing_benches`` 에 등록."""
+    from autoresearch.bench_means import BenchProvenance
+
+    result = collect_bench_means_from_inspect_ai(target_model="gpt-5")
+    assert isinstance(result, BenchProvenance)
+    # 7-field universe 가 어딘가에 등장해야 함 (means 든 missing 이든)
+    accounted = set(result.bench_means) | set(result.missing_benches)
+    from autoresearch.bench_means import BENCH_DIM_WEIGHTS
+
+    assert accounted == set(BENCH_DIM_WEIGHTS)
+    # rubric_version 은 항상 present (cohort tag)
+    assert result.rubric_version
 
 
 # ---------------------------------------------------------------------------
