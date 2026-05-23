@@ -369,7 +369,7 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
     ):
         result = CliRunner().invoke(
             audit_seeds_app,
-            ["--target-dim", "broken_tool_use"],
+            ["generate", "--target-dim", "broken_tool_use"],
         )
     assert result.exit_code == 0, result.output
     assert captured["gen_tag"] == "gen7"
@@ -628,6 +628,7 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
         result = CliRunner().invoke(
             audit_seeds_app,
             [
+                "generate",
                 "--target-dim",
                 "broken_tool_use",
                 "--gen-tag",
