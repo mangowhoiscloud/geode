@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from core.config import settings
 from core.llm.prompts import CROSS_LLM_DUAL_VERIFY, CROSS_LLM_RESCORE, CROSS_LLM_SYSTEM
 from core.llm.router import LLMClientPort
 from core.state import GeodeState
@@ -129,7 +130,7 @@ def run_cross_llm_check(
             response = secondary_adapter.generate(
                 CROSS_LLM_SYSTEM,
                 rescore_prompt,
-                temperature=0.1,
+                temperature=settings.temperature_verification,
                 max_tokens=10,
             )
             secondary_score = _parse_secondary_score(response)
@@ -195,7 +196,7 @@ def run_dual_adapter_check(
         response = secondary_adapter.generate(
             CROSS_LLM_SYSTEM,
             verification_prompt,
-            temperature=0.1,
+            temperature=settings.temperature_verification,
             max_tokens=10,
         )
         secondary_agreement = _parse_secondary_score(response)
