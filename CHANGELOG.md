@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.38] - 2026-05-23
+
+> First release under the **rotation pattern** (release branch lands on
+> develop first, then develop → main pass-through — no backmerge).
+> Bundles the CSP-13a meta_reviewer read-write parity fix-up + the
+> scaffold refinement PR (`auto-backmerge.yml` safety net, new
+> ``geode-gitflow`` ``## Release Flow`` section, updated
+> ``geode-changelog`` On-Release checklist).
+
 ### Fixed
 
 - **PR-CSP-13a — meta_reviewer reads ``state.debate_transcripts``**.
