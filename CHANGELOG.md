@@ -47,6 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.42] - 2026-05-23
+
+> PR-SIL-5THEME C4 sidecar flake hotfix. `_LAST_LLM_CALL_USAGE` module-level
+> dict 가 pytest-xdist worker 간 격리 깨짐 → ContextVar 교체로 해소. Future
+> concurrent SelfImprovingLoopRunner 의 cross-runner race 도 동시 차단.
+
+### Fixed
+
+- **PR-C4.fix-contextvar — mutation cost ledger sidecar flake**. PR-SIL-5THEME
+  C4 (#1524) 의 `_LAST_LLM_CALL_USAGE: dict[str, Any] = {}` module-level
+  sidecar 가 (a) pytest-xdist worker 간 process 공유로 flaky test fail
+  발생 (`test_propose_populates_cost_from_sidecar` — 격리 실행 pass,
+  full sweep 시 race fail), (b) future concurrent SelfImprovingLoopRunner
+  (cron + manual 동시 호출) 시 cost 가 잘못된 mutation 에 cross-attributed
+  될 silent bug 위험을 동시에 가졌다.
+
+  **Fix**: `_LAST_LLM_CALL_USAGE_VAR: ContextVar[dict[str, Any] | None]`
+  으로 교체. ContextVar 가 asyncio Task / pytest test scope 단위로 격리
+  → 두 문제 동시 해소. `_default_llm_call` 가 ContextVar.set 으로 매번
+  새 dict 적재 (partial mutation 패턴 회피). 기존 `_LAST_LLM_CALL_USAGE`
+  module-level alias 는 `_UsageProxy` 로 보존 — test code 의 `update()`
+  / `clear()` / `__setitem__` 패턴이 ContextVar 의 현재 dict 에 위임
+  되어 backward-compat.
+
+  **Verification**:
+  - tests/test_e1_mutation_cost_ledger.py 14 tests pass (격리 + full
+    sweep + xdist parallel 모두)
+  - PR #1529 CI 8/8 green (flaky 해소 검증)
+  - 6834 passed full sweep (no flaky)
+
+  Same operator-visible pattern as PR-MINIMAL-2 #1398 의 silent dual-
+  prompt drift fix — module-level state 가 silent race 를 부른다는
+  lesson 의 또 다른 사례.
+
 ## [0.99.41] - 2026-05-23
 
 > SIL 5-theme closure release. Bench S6b production wiring + ADR-012 §S6/§S6b
