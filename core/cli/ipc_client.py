@@ -259,6 +259,9 @@ class IPCClient:
                 "time_budget_expired",
                 "convergence_detected",
                 "goal_decomposition",
+                # PR-CL-A1 (2026-05-23) — Dynamic Replan UI events.
+                "plan_step",
+                "replan",
                 "tool_backpressure",
                 "tool_diversity_forced",
                 "model_switched",

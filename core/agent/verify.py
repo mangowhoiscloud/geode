@@ -79,7 +79,9 @@ DEFAULT_MIN_TEXT_CHARS: int = 10
 # failures like ``model_action_required`` request operator intervention
 # (cost cap / billing) so retry would just burn more tokens. The other
 # three codes are recoverable via a different prompt or tool path.
-_RETRYABLE_MISSES: frozenset[str] = frozenset({"empty_turn", "short_output", "tool_error"})
+_RETRYABLE_MISSES: frozenset[str] = frozenset(
+    {"empty_turn", "short_output", "tool_error", "step_expected_mismatch"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +171,43 @@ def _min_text_chars() -> int:
     return value if value >= 0 else DEFAULT_MIN_TEXT_CHARS
 
 
+def _check_step_expected_match(text: str) -> bool:
+    """PR-CL-A1 (2026-05-23) — verify the just-finished turn's text against
+    the active :class:`PlanStep.expected_outcome`.
+
+    Returns True when the step matches (or there's no active plan / no
+    expected_outcome on the current step — both treated as "no constraint
+    to check"). False when expected_outcome is set and the turn's text
+    fails the keyword overlap heuristic (case-insensitive substring
+    match on any non-trivial token >=3 chars in expected_outcome).
+
+    Failures NEVER raise — falls back to True so observability mustn't
+    break the run it observes.
+    """
+    try:
+        from core.observability.session_metrics import current_session_metrics
+
+        plan = current_session_metrics().active_plan
+        if plan is None:
+            return True
+        cur = plan.current_step()
+        if cur is None:
+            return True
+        expected = (cur.expected_outcome or "").strip()
+        if not expected:
+            return True
+        haystack = text.lower()
+        # Split expected into tokens >=3 chars; any token must appear.
+        # Conservative — short expected strings (single short word) match
+        # liberally so the rubric_miss only fires on clear mismatches.
+        tokens = [t for t in expected.lower().split() if len(t) >= 3]
+        if not tokens:
+            return True
+        return any(tok in haystack for tok in tokens)
+    except Exception:
+        return True
+
+
 def _verify_rule_based(result: AgenticResult) -> VerifyResult:
     """Fast structural checks — no LLM call.
 
@@ -181,6 +220,11 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
       short, but only when paired with tool action).
     - ``model_action_required``: termination reason indicates the model
       asked for operator intervention (cost limit, billing error, etc.).
+    - ``step_expected_mismatch`` (PR-CL-A1): the turn's text doesn't
+      contain any non-trivial token from the active
+      :class:`PlanStep.expected_outcome`. Fires only when a Plan is
+      active AND the current step has a non-empty expected_outcome.
+      Treated as retryable so PR-CL-A1 replan can revise the plan.
 
     Reason code list is intentionally short — verbal RL hints are stronger
     when they cite a concrete failure category, not a long checklist.
@@ -204,12 +248,22 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
     if termination_reason == "model_action_required":
         misses.append("model_action_required")
 
+    # PR-CL-A1 — Plan expected_outcome integration. Only fires when a
+    # turn produced *some* text (skip empty_turn cases — they already
+    # flagged) and the active step has a concrete expected_outcome.
+    if text_len > 0 and not _check_step_expected_match(text):
+        misses.append("step_expected_mismatch")
+
     passed = not misses
     hint = "" if passed else synthesize_reflexion_hint(tuple(misses))
-    # Retry signal: any retryable miss → True; pure hard-fail (e.g. only
-    # ``model_action_required``) → False so PR-CL-A1 doesn't loop on an
-    # operator-action item. Pass → False (nothing to retry).
-    retry = (not passed) and any(m in _RETRYABLE_MISSES for m in misses)
+    # Retry signal: hard-fail (e.g. ``model_action_required``) ALWAYS
+    # wins — even if a retryable miss (e.g. ``step_expected_mismatch``)
+    # co-occurs, the operator-action signal should not be ignored
+    # (Codex MCP HIGH #1, PR-CL-A1, 2026-05-23). The prior `any(...)`
+    # path let a recoverable miss flip should_retry True alongside a
+    # hard-fail, looping the agent on a billing/cost-cap event.
+    hard_fail = any(m == "model_action_required" for m in misses)
+    retry = (not passed) and (not hard_fail) and any(m in _RETRYABLE_MISSES for m in misses)
     return VerifyResult(
         passed=passed,
         mode=VerifyMode.RULE_BASED,
@@ -231,6 +285,10 @@ _REASON_DESCRIPTIONS: dict[str, str] = {
     "short_output": "Last turn returned an unusually short response without tool action.",
     "tool_error": "A tool call in the last turn failed with an error.",
     "model_action_required": "The model surfaced a recoverable error (cost, billing, etc.).",
+    "step_expected_mismatch": (
+        "Last turn's output did not contain any keyword from the current "
+        "PlanStep's expected_outcome. PR-CL-A1 replan may revise the plan."
+    ),
 }
 
 

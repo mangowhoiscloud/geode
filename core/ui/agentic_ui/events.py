@@ -219,6 +219,48 @@ def emit_goal_decomposition(steps: list[str]) -> None:
     _pkg.console.print(f"  [dim]● Goal decomposed into {len(steps)} steps[/dim]")
 
 
+def emit_plan_step(*, current: int, total: int, description: str, revision: int) -> None:
+    """PR-CL-A1 (2026-05-23) — emit ``plan_step`` event each time a new
+    Plan revision is installed or a step advances. Shows operators where
+    the agent is in the explicit plan ("Step 3/5: …"). Render via the
+    IPC writer for the thin client; fall back to console for non-IPC."""
+    from core.ui import agentic_ui as _pkg
+
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "plan_step",
+            current=current,
+            total=total,
+            description=description,
+            revision=revision,
+        )
+        return
+    _pkg.console.print(
+        f"  [dim]▸ Plan step {current}/{total} (rev {revision}): {description}[/dim]"
+    )
+
+
+def emit_replan(*, trigger: str, step_count: int, revision: int) -> None:
+    """PR-CL-A1 — emit ``replan`` event when ``_maybe_replan_async``
+    installs a new Plan revision. ``trigger`` is ``"verify_fail"`` or
+    ``"cadence"``."""
+    from core.ui import agentic_ui as _pkg
+
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "replan",
+            trigger=trigger,
+            step_count=step_count,
+            revision=revision,
+        )
+        return
+    _pkg.console.print(
+        f"  [dim]⟲ Replan (trigger={trigger}, rev {revision}, {step_count} steps)[/dim]"
+    )
+
+
 def emit_tool_backpressure(consecutive_errors: int) -> None:
     """Emit tool_backpressure event when error recovery kicks in."""
     from core.ui import agentic_ui as _pkg

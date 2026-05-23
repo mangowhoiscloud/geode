@@ -190,6 +190,20 @@ class SessionMetrics:
     # distinction in sessions.jsonl telemetry — Codex MCP follow-up #1)
     last_verify_rubric_misses: tuple[str, ...] = ()
     last_verify_reflexion_hint: str = ""
+    last_verify_should_retry: bool = False  # PR-CL-A3 — machine-readable replan signal
+
+    # K. Active execution plan (PR-CL-A1, 2026-05-23) — the explicit
+    #    :class:`core.agent.plan.Plan` the loop is following. ``Any`` keeps
+    #    SessionMetrics import-light (no forward reference to core.agent).
+    #    Read at the start of every ``arun`` so the system prompt can
+    #    prepend the current-step hint; ``record_replan`` advances the
+    #    counters; ``record_step_attempt`` increments per-step retry
+    #    tracking so the loop can abandon a step that exceeds
+    #    ``GEODE_REPLAN_MAX_ATTEMPTS``.
+    active_plan: Any = None
+    replan_count: int = 0
+    replan_attempts_on_current_step: int = 0
+    last_replan_trigger: str = ""  # "verify_fail" / "cadence" / ""
 
     # ------------------------------------------------------------------
     # Mutation API
@@ -311,6 +325,7 @@ class SessionMetrics:
         effective_mode: str = "",
         rubric_misses: tuple[str, ...] = (),
         reflexion_hint: str = "",
+        should_retry: bool = False,
     ) -> None:
         """Record one per-turn verify outcome.
 
@@ -333,6 +348,45 @@ class SessionMetrics:
         self.last_verify_effective_mode = str(effective_mode or mode)
         self.last_verify_rubric_misses = tuple(rubric_misses)
         self.last_verify_reflexion_hint = str(reflexion_hint)
+        self.last_verify_should_retry = bool(should_retry)
+
+    def set_active_plan(self, plan: Any, *, reset_attempts: bool = False) -> None:
+        """PR-CL-A1 — install or replace the active execution plan.
+
+        ``reset_attempts`` defaults to False so the per-step retry
+        counter SURVIVES a successful replan call (the new plan may
+        keep the same failing step, and we want to count those retries
+        toward the abandon cap). Pass ``reset_attempts=True`` when the
+        loop *manually* advances to a different step (the abandon path
+        does this) or on the initial decomposition install (no prior
+        attempt context).
+
+        Codex MCP follow-up (2026-05-23): pre-fix this always reset,
+        which made ``replan_max_attempts`` track "consecutive planner
+        failures" rather than the intended "consecutive step failures".
+        """
+        self.active_plan = plan
+        if reset_attempts:
+            self.replan_attempts_on_current_step = 0
+
+    def record_replan(self, trigger: str) -> None:
+        """PR-CL-A1 — increment the replan counter and remember the
+        trigger ("verify_fail" or "cadence") for telemetry.
+
+        Does NOT reset ``replan_attempts_on_current_step`` — the caller
+        controls reset semantics via :meth:`set_active_plan`'s
+        ``reset_attempts`` flag (Codex MCP follow-up 2026-05-23 — see
+        ``set_active_plan`` rationale).
+        """
+        self.replan_count += 1
+        self.last_replan_trigger = str(trigger)
+
+    def record_step_attempt(self) -> None:
+        """PR-CL-A1 — increment per-step retry counter so the loop can
+        abandon a step that exceeds ``GEODE_REPLAN_MAX_ATTEMPTS``. The
+        counter only resets when :meth:`set_active_plan` is called with
+        ``reset_attempts=True`` (typically by the abandon path)."""
+        self.replan_attempts_on_current_step += 1
 
     def record_goodhart(
         self,
@@ -393,6 +447,15 @@ class SessionMetrics:
             "last_verify_mode": self.last_verify_mode,
             "last_verify_effective_mode": self.last_verify_effective_mode,
             "last_verify_rubric_misses": list(self.last_verify_rubric_misses),
+            "last_verify_should_retry": self.last_verify_should_retry,
+            "replan_count": self.replan_count,
+            "last_replan_trigger": self.last_replan_trigger,
+            "active_plan_revision": (
+                getattr(self.active_plan, "revision", 0) if self.active_plan else 0
+            ),
+            "active_plan_step_count": (
+                len(getattr(self.active_plan, "steps", ())) if self.active_plan is not None else 0
+            ),
         }
 
 

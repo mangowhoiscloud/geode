@@ -421,8 +421,12 @@ def test_should_retry_false_for_hard_fail_only() -> None:
         assert vr.should_retry is False
 
 
-def test_should_retry_true_when_mixed_misses() -> None:
-    """If any miss in the result is in the retryable allowlist, retry True."""
+def test_should_retry_false_when_hard_fail_co_occurs() -> None:
+    """Codex MCP HIGH #1 (PR-CL-A1 update, 2026-05-23) — hard fail
+    (``model_action_required``) ALWAYS wins, even when a retryable miss
+    (e.g. ``tool_error``) co-occurs. Pre-A1 the ``any(...)`` check let
+    the recoverable miss flip should_retry True alongside a hard fail,
+    looping the agent on a billing/cost-cap event."""
     result = _make_result(
         text="",
         tool_calls=[{"name": "search", "error": True}],
@@ -431,9 +435,22 @@ def test_should_retry_true_when_mixed_misses() -> None:
     vr = verify_turn(result)
     assert "tool_error" in vr.rubric_misses
     assert "model_action_required" in vr.rubric_misses
-    assert vr.should_retry is True  # tool_error makes it retryable
+    assert vr.should_retry is False  # hard fail wins
     payload = vr.to_payload()
-    assert payload["should_retry"] is True
+    assert payload["should_retry"] is False
+
+
+def test_should_retry_true_for_pure_recoverable_miss() -> None:
+    """Without ``model_action_required``, a retryable miss flips
+    should_retry True (the normal recoverable-error path)."""
+    result = _make_result(
+        text="I tried",
+        tool_calls=[{"name": "search", "error": True}],
+    )
+    vr = verify_turn(result)
+    assert "tool_error" in vr.rubric_misses
+    assert "model_action_required" not in vr.rubric_misses
+    assert vr.should_retry is True
 
 
 def test_payload_includes_should_retry() -> None:

@@ -119,6 +119,39 @@ class Settings(BaseSettings):
             "appropriate for binary pass/fail judgement. PR-CL-A6."
         ),
     )
+    # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
+    replan_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("replan_enabled", "GEODE_REPLAN_ENABLED"),
+        description=(
+            "When True (default) the loop calls the planner LLM on "
+            "verify FAIL and every ``replan_interval`` rounds. False "
+            "disables the replan feature entirely (the explicit Plan "
+            "object still tracks step progress but never revises). PR-CL-A1."
+        ),
+    )
+    replan_interval: int = Field(
+        default=5,
+        ge=0,
+        validation_alias=AliasChoices("replan_interval", "GEODE_REPLAN_INTERVAL"),
+        description=(
+            "Number of rounds between cadence-based replans. ``0`` "
+            "disables cadence (verify FAIL still triggers). Default 5 "
+            "balances ReWOO 5x-token-efficiency target with the cost of "
+            "an extra plan_model call per N rounds. PR-CL-A1."
+        ),
+    )
+    replan_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        validation_alias=AliasChoices("replan_max_attempts", "GEODE_REPLAN_MAX_ATTEMPTS"),
+        description=(
+            "Maximum attempts on a single PlanStep before the step is "
+            "abandoned and the loop advances to the next step. "
+            "Prevents the agent from looping forever on an impossible "
+            "step. Default 3. PR-CL-A1."
+        ),
+    )
     cognitive_reflection_max_tokens: int = Field(
         default=512,
         validation_alias=AliasChoices(
