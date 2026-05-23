@@ -144,6 +144,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validate_petri_bundle.py
 
+      - name: Build literature listing.json (CSP-14)
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/build_literature_listing.py
+
       - name: Sync GEODE stats into site SOT
         run: npm run sync-stats
         env:

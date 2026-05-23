@@ -306,7 +306,14 @@ class Generator(BaseSeedAgent):
         # the very top of the prefix stack (above priors + evidence) so
         # the LLM reads strategy synthesis first, then per-dim signals.
         supervisor_block = _format_supervisor(state, phase="generation")
-        prefix_blocks = [b for b in (supervisor_block, priors_block, evidence_block) if b]
+        # CSP-14 (2026-05-23) — Loop 3 literature block. Empty when
+        # ``literature_review.max_papers = 0`` (back-compat default) or
+        # the agent ran but found no relevant papers — both yield an
+        # empty string so the prefix stays unchanged.
+        literature_block = _format_literature(state)
+        prefix_blocks = [
+            b for b in (supervisor_block, literature_block, priors_block, evidence_block) if b
+        ]
         prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
         debate_suffix = ("\n\n" + debate_block) if debate_block else ""
         return (
@@ -377,6 +384,22 @@ def _format_supervisor(state: PipelineState, *, phase: str) -> str:
     except ImportError:  # pragma: no cover — defensive
         return ""
     return format_supervisor_block(guidance, phase=phase)
+
+
+def _format_literature(state: PipelineState) -> str:
+    """Return the CSP-14 LiteratureReview output as a prefix block.
+
+    No-op when ``state.articles_with_reasoning`` is empty (Loop 3
+    short-circuited via ``max_papers = 0`` OR the agent ran but found
+    no relevant papers). The LiteratureReview agent already formats
+    its output as a markdown block, so we just wrap it with a header
+    so it's visually distinct from the supervisor / priors / evidence
+    blocks already in the prefix stack.
+    """
+    articles = getattr(state, "articles_with_reasoning", "") or ""
+    if not articles.strip():
+        return ""
+    return f"## Literature evidence (from LiteratureReview phase)\n\n{articles.strip()}"
 
 
 def _read_debate_sidecars(

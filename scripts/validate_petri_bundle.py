@@ -183,8 +183,18 @@ def main() -> int:
         print("    (inspect_ai #1747 pattern).")
         return 1
 
+    # CSP-14 (2026-05-23) — also count literature snapshots under
+    # docs/petri-bundle/literature/. Empty dir = 0; the surface is
+    # opt-in (max_papers must be ≥ 1 for the literature_review phase
+    # to write anything) so 0 is a normal state, not a failure.
+    lit_count = 0
+    lit_dir = BUNDLE_DIR / "literature"
+    if lit_dir.is_dir():
+        lit_count = sum(1 for path in lit_dir.glob("*.json") if path.name != "listing.json")
+
     print(
-        f"OK: {len(data)} archive(s) — listing + zip header + scores + assets all valid.",
+        f"OK: {len(data)} archive(s), {lit_count} literature snapshot(s) — "
+        "listing + zip header + scores + assets all valid.",
     )
     return 0
 
