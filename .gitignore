@@ -12,6 +12,14 @@ hf-release/
 .venv/
 .release-venv/
 
+# Manim render outputs — `scripts/visualizations/geode_hero.py` renders
+# to `media/videos/`. The storyboard MD + scene source are the only
+# versioned artifacts; rendered MP4s (1080p60 EN/KO + smoke 480p60) are
+# distribution assets, not source. The thumbnail PNG under
+# `docs/visualizations/` is exempted from the global `*.png` rule a few
+# lines below.
+media/
+
 # Cache
 .mypy_cache/
 .pytest_cache/
@@ -122,6 +130,11 @@ reports/
 *.png
 *.html
 !docs/**/*.html
+!docs/visualizations/*.png
+
+# Pixel-ratchet baselines (Step 3 — tests/test_hero_frame_ratchet.py)
+# must ship with the repo so the test has something to diff against.
+!tests/visualizations/baselines/*.png
 
 # v0.63.0 — agent-generated personal reports (subject names + date suffixes).
 # Pattern guard so trend/stock/etc. reports the user generates via /report

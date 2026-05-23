@@ -186,6 +186,30 @@ dev = [
     # can open Petri .eval archives without the heavy [audit] extra.
     # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
     "zipfile-zstd>=0.0.4",
+    "Pillow>=10.0.0",
+]
+# Hero visualization scripts — opt-in only via ``uv sync --group viz``.
+# manim transitively requires system pangocairo which is not available
+# on the default CI container; gating behind a non-default group keeps
+# the main CI gates fast. Tests using these deps (test_hero_frame_ratchet,
+# test_verify_hero_layout) auto-skip when the deps are missing.
+viz = [
+    "manim>=0.20.1",
+    # Step 2 typography drift gate — `verify_hero_layout.py` shapes every
+    # ratchet site's text via HarfBuzz and stores the glyph cluster
+    # sequence in `layout_baseline.json`, catching Helvetica Neue + Pango
+    # kerning drift ("GE ODE", "g eneration") at compile time instead of
+    # post-render audit. See .claude/skills/viz-frame-audit/rules/
+    # typography-drift-gate.md.
+    "uharfbuzz>=0.54.1",
+    # Step 3 frame ratchet — `tests/test_hero_frame_ratchet.py` extracts
+    # key timestamps from rendered scenes and diffs them against
+    # committed baselines (`tests/visualizations/baselines/`). Catches
+    # categories 2 (padding intrusion) and 4 (frame-order error) that
+    # the typography drift gate (Step 2) cannot see. Mapbox `pixelmatch`
+    # JS port, anti-aliasing-aware perceptual diff. See
+    # .claude/skills/viz-frame-audit/rules/pixel-ratchet.md.
+    "pixelmatch>=0.4.0",
 ]
 
 
@@ -304,6 +328,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501", "PLR0915", "PLR0912", "PLR0913"]
 "core/agent/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
+# Manim visualization scripts use long literal vector / score lists; line-length not
+# enforced on this path (mirrors the tests/** allowance).
+"scripts/visualizations/**.py" = ["E501"]
 
 # Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
 # Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.
@@ -482,12 +509,28 @@ module = [
     "plotly.*",
     "kaleido.*",
     "inspect_viz.*",
+    # Hero visualization extras (manim + harfbuzz + pixelmatch). Only
+    # installed via ``uv sync --group viz``; CI default sync skips them.
+    "manim.*",
+    "manim_voiceover.*",
+    "uharfbuzz",
+    "pixelmatch.*",
     # P4 D 단계 — [reason] optional extra (DSPy + TextGrad + Instructor).
     "dspy.*",
     "textgrad.*",
     "instructor.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Manim visualization scripts subclass Scene (Any) and use literal lists /
+# call-time tuples that strict mypy rejects. The viz scripts are opt-in
+# (only run when ``uv sync --group viz`` is active) and the tests that
+# load them auto-skip without the deps; strict typing isn't the right
+# gate for these — a render gate (test_hero_frame_ratchet) catches real
+# regressions visually.
+module = ["scripts.visualizations.*"]
+ignore_errors = true
 
 [[tool.mypy.overrides]]
 # inspect_ai's `@agent(name=...)` decorator has no stubs, so mypy treats
