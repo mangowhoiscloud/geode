@@ -1,13 +1,13 @@
 """LLM credential-plan routing primitives."""
 
-from core.llm.routing.plan_registry import (
+from core.llm.strategies.plan_registry import (
     PlanRegistry,
     RoutingTarget,
     get_plan_registry,
     reset_plan_registry,
     resolve_routing,
 )
-from core.llm.routing.plans import (
+from core.llm.strategies.plans import (
     GLM_CODING_TIERS,
     PLAN_KIND_PRIORITY,
     Plan,

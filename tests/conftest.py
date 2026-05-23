@@ -65,7 +65,7 @@ def _isolate_state_root(
 
 @pytest.fixture(autouse=True)
 def _reset_auth_singletons():
-    from core.llm.routing import plan_registry as _pr
+    from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
     _infra._profile_store = None

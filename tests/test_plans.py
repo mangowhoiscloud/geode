@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import PROVIDER_VARIANTS, get_provider_spec
-from core.llm.routing.plan_registry import (
+from core.llm.strategies.plan_registry import (
     PlanRegistry,
     get_plan_registry,
     reset_plan_registry,
     resolve_routing,
 )
-from core.llm.routing.plans import (
+from core.llm.strategies.plans import (
     GLM_CODING_TIERS,
     Plan,
     PlanKind,

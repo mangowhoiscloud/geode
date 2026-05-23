@@ -21,7 +21,7 @@ Storage shape (``.geode/plans.json``):
       ...
     }
 
-Atomic write via tmp+rename (mirrors core/scheduler/scheduler.py:save).
+Atomic write via tmp+rename (mirrors core/scheduler/service.py:save).
 """
 
 from __future__ import annotations

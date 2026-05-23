@@ -3,8 +3,8 @@
 5-element 패턴:
 - SoT: provider-routing.json (in-repo + operator-local)
 - Path: GLOBAL_PROVIDER_ROUTING_PATH + OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
-- Reader: core/llm/routing/provider_routing_policy.py
-- Entry: core/llm/routing/plan_registry.py:resolve_routing (explicit-chain branch)
+- Reader: core/llm/strategies/provider_routing_policy.py
+- Entry: core/llm/strategies/plan_registry.py:resolve_routing (explicit-chain branch)
 - Env: GEODE_PROVIDER_ROUTING_OVERRIDE + GEODE_PROVIDER_ROUTING_STRICT
 """
 
@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.llm.routing import provider_routing_policy
-from core.llm.routing.provider_routing_policy import (
+from core.llm.strategies import provider_routing_policy
+from core.llm.strategies.provider_routing_policy import (
     _load_provider_routing_override,
     apply_provider_routing_policy,
 )
@@ -162,7 +162,7 @@ def test_apply_returns_new_list_not_alias() -> None:
 
 def test_plan_registry_module_imports_reader_and_apply() -> None:
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/llm/routing/plan_registry.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/strategies/plan_registry.py").read_text(encoding="utf-8")
     assert "_load_provider_routing_override" in src
     assert "apply_provider_routing_policy" in src
 
@@ -171,7 +171,7 @@ def test_plan_registry_uses_apply_before_iterating_chain() -> None:
     """resolve_routing 의 explicit-chain branch 가 registry.get_routing 대신
     apply_provider_routing_policy() 의 결과를 iterate 해야 함."""
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/llm/routing/plan_registry.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/llm/strategies/plan_registry.py").read_text(encoding="utf-8")
     assert "apply_provider_routing_policy(" in src
     # The output of apply is what gets iterated for plan lookup.
     apply_idx = src.find("apply_provider_routing_policy(")
@@ -218,5 +218,5 @@ def test_provider_routing_json_referenced_in_inference_path() -> None:
         if "provider-routing.json" in content:
             hits.append(str(path.relative_to(repo_root)))
     assert any("provider_routing_policy.py" in h for h in hits), (
-        f"provider-routing.json must appear in core/llm/routing/provider_routing_policy.py. hits={hits}"
+        f"provider-routing.json must appear in core/llm/strategies/provider_routing_policy.py. hits={hits}"
     )

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from core.auth.profiles import AuthProfile
-from core.llm.routing.plans import Plan, PlanUsage, default_plan_for_payg
+from core.llm.strategies.plans import Plan, PlanUsage, default_plan_for_payg
 
 if TYPE_CHECKING:
     from core.auth.profiles import ProfileStore
@@ -156,7 +156,7 @@ def resolve_routing(model: str) -> RoutingTarget | None:
     # 1) explicit per-model routing
     # ADR-013 T4 (2026-05-21) — JSON SoT 가 model 별 plan-chain override.
     # 정책 부재 시 registry.get_routing(model) 그대로 (no behavior change).
-    from core.llm.routing.provider_routing_policy import (
+    from core.llm.strategies.provider_routing_policy import (
         _load_provider_routing_override,
         apply_provider_routing_policy,
     )
@@ -223,7 +223,7 @@ def _equivalence_class_plans(registry: PlanRegistry, base_provider: str) -> list
     Within tier, preserve registry insertion order (stable sort).
     """
     from core.llm.registry import equivalent_providers
-    from core.llm.routing.plans import PLAN_KIND_PRIORITY
+    from core.llm.strategies.plans import PLAN_KIND_PRIORITY
 
     candidates: list[Plan] = []
     for sibling in equivalent_providers(base_provider):
@@ -254,7 +254,7 @@ def _apply_forced_login_method(plans: list[Plan], base_provider: str) -> list[Pl
       - ``"auto"`` — alias for default
     """
     from core.config import settings
-    from core.llm.routing.plans import PlanKind
+    from core.llm.strategies.plans import PlanKind
 
     forced = (getattr(settings, "forced_login_method", {}) or {}).get(base_provider, "subscription")
     forced = str(forced).strip().lower()

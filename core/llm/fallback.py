@@ -123,7 +123,7 @@ def _resolve_plan_for_billing_error(model: str) -> dict[str, str]:
     Empty values when routing fails (caller falls back to generic msg).
     """
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         target = resolve_routing(model)
         if target is None:

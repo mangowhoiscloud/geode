@@ -169,7 +169,7 @@ def test_login_show_status_renders_plan_label(capsys: pytest.CaptureFixture[str]
 
     with (
         patch("core.wiring.container.ensure_profile_store", return_value=store),
-        patch("core.llm.routing.plan_registry.get_plan_registry", return_value=fake_registry),
+        patch("core.llm.strategies.plan_registry.get_plan_registry", return_value=fake_registry),
         patch("core.auth.oauth_login.get_auth_status", return_value=[]),
     ):
         _login_show_status()

@@ -49,6 +49,36 @@ functional change.
 
 ### Changed
 
+- **PR-CLEANUP-3 — three structural renames driven by the new CLAUDE.md
+  Naming CANNOTs.** Pure structural moves, no behaviour change; every
+  import prefix updated in lock-step with the move.
+  - **`core/scheduler/scheduler/` flattened to `core/scheduler/`.** The
+    inner package was a same-name-nested folder (`X/X/`) — the
+    pre-flatten state was the outer `core/scheduler/__init__.py` being
+    empty while the inner one carried the 81-line re-export surface.
+    All 8 source modules (factory, jitter, lock, models, run_log,
+    serialization, service, timezone) move up one level; the re-export
+    `__init__.py` follows them; internal cross-references rewrite
+    `core.scheduler.scheduler.X` → `core.scheduler.X`. 12 external
+    consumers updated (4 production + 8 tests). The pre-split-monolith
+    historical reference (`core/scheduler/scheduler.py — pre-split
+    monolith`) is preserved verbatim in the new `__init__` docstring.
+  - **`core/channels/` renamed to `core/integrations/messaging/`.** The
+    package only ever contained Slack / Discord / Telegram bindings; the
+    abstract name "channels" suggested a more general capability than
+    actually existed. The new `core/integrations/` parent leaves room
+    for sibling integrations (calendar, etc.) without re-introducing
+    the same abstract noun. `pyproject.toml`'s import-linter contracts
+    update accordingly (rule name + `forbidden_modules` /
+    `source_modules` lists); the 4 contracts still all KEPT.
+  - **`core/llm/routing/` renamed to `core/llm/strategies/`.** Sat
+    next to `core/llm/router/`, which is the main LLM call dispatch
+    surface — the two were near-synonymous package names doing
+    different jobs ("router" = call API, "routing" = plan dispatch /
+    provider selection). `strategies` describes the actual content
+    (plan registries, provider routing policies) without colliding
+    with `router`. All 14 callers updated.
+
 - **PR-DOCS-CANT-CAN — CLAUDE.md restructure: CANNOT/CAN adjacency + 6 frontier-convergent CANNOT rows.**
   The two governance tables (``### CANNOT`` and ``### CAN``) were
   separated by ``### Wiring Verification`` + ``### Refactoring Deception

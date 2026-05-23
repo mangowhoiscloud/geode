@@ -9,8 +9,8 @@ import asyncio
 import time
 from unittest.mock import MagicMock, patch
 
-from core.channels.binding import ChannelManager, get_gateway, set_gateway
-from core.channels.models import ChannelBinding, InboundMessage
+from core.integrations.messaging.binding import ChannelManager, get_gateway, set_gateway
+from core.integrations.messaging.models import ChannelBinding, InboundMessage
 from core.server.supervised.discord_poller import DiscordPoller
 from core.server.supervised.poller_base import BasePoller
 from core.server.supervised.slack_poller import SlackPoller

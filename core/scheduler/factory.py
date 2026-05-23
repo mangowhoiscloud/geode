@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from core.scheduler.scheduler.models import DEFAULT_MAX_JITTER_MS, OnJobFired
-from core.scheduler.scheduler.service import SchedulerService
+from core.scheduler.models import DEFAULT_MAX_JITTER_MS, OnJobFired
+from core.scheduler.service import SchedulerService
 from core.scheduler.triggers import TriggerManager
 
 if TYPE_CHECKING:

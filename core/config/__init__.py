@@ -274,7 +274,7 @@ def _resolve_provider(model: str) -> str:
     of patching code.
 
     Public surface unchanged — every caller (``core.llm.router``,
-    ``core.llm.routing.plan_registry``, monkeypatched test sites) keeps
+    ``core.llm.strategies.plan_registry``, monkeypatched test sites) keeps
     working without modification.
 
     .. deprecated:: v0.99.39

@@ -45,8 +45,8 @@ from pathlib import Path
 from typing import Any
 
 from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
-from core.llm.routing.plan_registry import PlanRegistry, get_plan_registry
-from core.llm.routing.plans import Plan, PlanKind, Quota
+from core.llm.strategies.plan_registry import PlanRegistry, get_plan_registry
+from core.llm.strategies.plans import Plan, PlanKind, Quota
 from core.paths import GLOBAL_AUTH_TOML
 
 log = logging.getLogger(__name__)
@@ -312,7 +312,7 @@ def migrate_env_to_toml(
     Returns the number of plans persisted. Idempotent — re-running after
     the file exists is a no-op (data is loaded but not duplicated).
     """
-    from core.llm.routing.plans import default_plan_for_payg
+    from core.llm.strategies.plans import default_plan_for_payg
     from core.wiring.container import ensure_profile_store
 
     registry = registry or get_plan_registry()

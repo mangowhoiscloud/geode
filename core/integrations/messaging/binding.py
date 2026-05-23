@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from inspect import isawaitable
 from typing import Any
 
-from core.channels.models import ChannelBinding, InboundMessage
+from core.integrations.messaging.models import ChannelBinding, InboundMessage
 from core.memory.session_key import build_gateway_session_key
 from core.server.supervised.poller_base import BasePoller
 

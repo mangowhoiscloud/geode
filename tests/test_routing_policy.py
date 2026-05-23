@@ -35,8 +35,8 @@ import pytest
 from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.registry import equivalent_providers
 from core.llm.router import calls as _calls_mod
-from core.llm.routing.plan_registry import resolve_routing
-from core.llm.routing.plans import PLAN_KIND_PRIORITY, Plan, PlanKind
+from core.llm.strategies.plan_registry import resolve_routing
+from core.llm.strategies.plans import PLAN_KIND_PRIORITY, Plan, PlanKind
 
 # ---------------------------------------------------------------------------
 # Contract 0 — equivalence map + kind priority sanity
@@ -80,8 +80,8 @@ def _seed_two_plans(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Pl
     plan, each with an available profile. Returns (subscription_plan,
     payg_plan)."""
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
-    from core.llm.routing import plan_registry as _pr
-    from core.llm.routing.plan_registry import get_plan_registry
+    from core.llm.strategies import plan_registry as _pr
+    from core.llm.strategies.plan_registry import get_plan_registry
     from core.wiring import container as _infra
     from core.wiring.container import ensure_profile_store
 
@@ -153,7 +153,7 @@ def test_resolve_routing_explicit_set_routing_wins_over_policy(
 ) -> None:
     """If user set ``/login route gpt-5.4 openai-payg``, the explicit
     override must win even though kind-priority would prefer OAuth."""
-    from core.llm.routing.plan_registry import get_plan_registry
+    from core.llm.strategies.plan_registry import get_plan_registry
 
     _, payg_plan = _seed_two_plans(monkeypatch, tmp_path)
     get_plan_registry().set_routing("gpt-5.4", [payg_plan.id])
@@ -255,7 +255,7 @@ def test_route_provider_falls_back_when_resolve_routing_returns_none(
     """When PlanRegistry has no plan for the model, ``_route_provider``
     must fall back to the static ``_resolve_provider`` so legacy env-var
     users (no /login add) still route correctly."""
-    monkeypatch.setattr("core.llm.routing.plan_registry.resolve_routing", lambda _model: None)
+    monkeypatch.setattr("core.llm.strategies.plan_registry.resolve_routing", lambda _model: None)
     monkeypatch.setattr("core.llm.router.calls._route._resolve_provider", lambda _m: "anthropic")
     assert _router_mod._route_provider("claude-opus-4-7") == "anthropic"
 
@@ -277,7 +277,7 @@ def test_route_provider_returns_routed_provider_when_plan_found(
         (),
         {"plan": fake_plan, "profile": None, "base_url": fake_plan.base_url},
     )()
-    monkeypatch.setattr("core.llm.routing.plan_registry.resolve_routing", lambda _m: fake_target)
+    monkeypatch.setattr("core.llm.strategies.plan_registry.resolve_routing", lambda _m: fake_target)
     # Static fallback would have returned "openai"; the Plan-aware path
     # must override to "openai-codex".
     assert _router_mod._route_provider("gpt-5.4") == "openai-codex"

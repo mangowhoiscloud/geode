@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from core.scheduler.scheduler.models import DEFAULT_JITTER_FRACTION, DEFAULT_MAX_JITTER_MS
+from core.scheduler.models import DEFAULT_JITTER_FRACTION, DEFAULT_MAX_JITTER_MS
 
 
 def _compute_jitter_frac(job_id: str) -> float:
