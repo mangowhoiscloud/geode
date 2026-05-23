@@ -193,13 +193,23 @@ def test_reflection_module_imports_reader() -> None:
 
 def test_reflection_module_uses_overridden_values() -> None:
     """`_reflection.py` 가 `active_tool` / `active_system` (override 적용된
-    값) 을 사용하는지 — 단순 import 가 아니라 실제 사용 여부 검증."""
+    값) 을 사용하는지 — 단순 import 가 아니라 실제 사용 여부 검증.
+
+    Step J-b.3 (2026-05-23) — substring assertions migrated from the
+    legacy ``AgenticLLMPort.agentic_call(system=..., tools=[...])``
+    keyword call to the Path-B ``AdapterCallRequest(system_prompt=...,
+    tools=(...,))`` dataclass field shape.
+    """
     repo_root = Path(__file__).resolve().parent.parent
     src = (repo_root / "core/agent/loop/_reflection.py").read_text(encoding="utf-8")
     assert "active_tool" in src
     assert "active_system" in src
-    assert "system=active_system" in src
-    assert "tools=[active_tool]" in src
+    assert "system_prompt=active_system" in src
+    # ``active_tool`` dict is translated to a ``ToolSpec`` and the
+    # spec then lands in ``tools=(tool_spec,)``. Match both the
+    # source of the dict-derived fields and the request site.
+    assert "active_tool[" in src
+    assert "tools=(tool_spec,)" in src
 
 
 # ---------------------------------------------------------------------------

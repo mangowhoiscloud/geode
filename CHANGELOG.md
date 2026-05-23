@@ -47,6 +47,67 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Step J-b.3 — reflection node migrated to the LLMAdapter Protocol.**
+  ``core/agent/loop/_reflection.py`` 's dispatch path moves off the
+  legacy ``AgenticLLMPort.agentic_call`` surface (resolved via
+  :func:`core.llm.adapters.resolve_agentic_adapter`) and onto the
+  v0.99.39 Path-B Protocol — :func:`~core.llm.adapters.registry.resolve_for`
+  + :meth:`~core.llm.adapters.base.LLMAdapter.acomplete` with a typed
+  :class:`~core.llm.adapters.base.AdapterCallRequest`. The reflection
+  call therefore inherits I.a's Codex OAuth header dedup and F's GLM
+  adapter family on the same code path the J-b.2 mutator runner now
+  uses (so the agentic loop and the self-improving-loop mutator share
+  one credential / adapter surface for the API path).
+
+  Translation: the in-source ``_REFLECTION_TOOL`` dict (kept as SoT so
+  the ADR-012 ``reflection`` policy override path keeps working) is
+  converted to a :class:`~core.llm.adapters.base.ToolSpec` at request
+  time. The ``strict: True`` field the legacy dict carried is dropped
+  in translation — ``ToolSpec`` does not surface it today, and
+  ``_anthropic_common.translate_tool`` would strip it anyway. The
+  client-side ``_apply_reflection`` isinstance + range checks already
+  enforce the same payload contract, so the regression is a soft
+  degrade from "server-rejects-malformed" to "client-coerces-silently"
+  rather than a fail-open. Restoring server-side strict validation is
+  tracked as a future ``ToolSpec`` Protocol extension.
+
+  Result-side: ``_extract_reflection_input`` now reads from
+  :attr:`AdapterCallResult.tool_uses` (tuple of ``{id, name, input}``
+  dicts) but tolerates the legacy ``AgenticResponse.content`` list-of-
+  ``ToolUseBlock`` shape for back-compat. A ``_normalize_provider_for_registry``
+  helper (4 lines, duplicated from
+  :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
+  per the "no premature hoisting" principle — both callers can
+  diverge later if their needs split) translates
+  ``"openai-codex"`` → ``"openai"`` so the registry's narrower
+  vocabulary lands on the right adapter.
+
+  Tests: ``tests/test_reflection_node.py`` 's ``_StubAdapter`` now
+  implements ``acomplete(AdapterCallRequest)`` instead of
+  ``agentic_call(**kwargs)``, ``_install_reflection_stubs``
+  monkeypatches ``resolve_for`` instead of ``resolve_agentic_adapter``,
+  the happy-path + tool-schema assertions move to the new
+  ``AdapterCallResult(tool_uses=(...))`` / ``ToolSpec`` shape. The
+  ``tools[0].get("strict") is True`` assertion is removed alongside
+  the dict→ToolSpec translation; a comment in the test calls out the
+  intentional contract narrowing.
+  ``tests/test_s0b_reflection_reader.py`` 's source-substring
+  assertions move from ``system=active_system`` / ``tools=[active_tool]``
+  to ``system_prompt=active_system`` / ``tools=(tool_spec,)`` to
+  match the dataclass field names.
+
+  **Out of scope (intentional)**: the AgenticLoop's main call path
+  (``core/agent/loop/agent_loop.py``, ``_model_switching.py``,
+  package ``__init__``) still uses
+  :func:`~core.llm.router.resolve_agentic_adapter` +
+  ``adapter.agentic_call(...)``. That migration is its own sprint —
+  the agentic call surface is materially larger (streaming +
+  ``tool_use_id`` round-trip + retry orchestration) than the
+  reflection call and needs separate Codex-MCP review. J-b.3 stops
+  at the reflection node.
+
 ### Removed
 
 - **PR-CLEANUP-6 — file-name hygiene sweep: catch-all `_helpers` /
