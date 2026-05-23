@@ -47,6 +47,86 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-CL-A1 — Dynamic Replan**. Fourth (final) PR in the Cognitive
+  Loop sprint (A3 → A6 → **A1**). Introduces an explicit :class:`Plan`
+  object stored on :class:`SessionMetrics`; the loop reads the current
+  step at every ``arun`` entry and prepends a ``<plan>...</plan>`` block
+  to the system prompt. A per-round ``_maybe_replan_async`` helper
+  calls the planner LLM (using :data:`settings.plan_model` from
+  PR-CL-A6) when either trigger fires:
+
+  - **Verify FAIL** — ``metrics.last_verify_should_retry`` (recoverable
+    miss → revise the plan).
+  - **Cadence** — every ``settings.replan_interval`` rounds (default 5;
+    ``0`` disables; ReWOO 5x-token-efficiency target).
+
+  Implementation:
+
+  - ``core/agent/plan.py`` (NEW, ~330 LOC) — frozen :class:`PlanStep`
+    + :class:`Plan` dataclasses (slots, JSON-serialisable) +
+    ``build_plan_from_decomposition`` (converts the legacy
+    :class:`GoalDecomposer` output into a Plan) + ``render_plan_for_prompt``
+    (``<plan>...</plan>`` block with current-step marker) +
+    ``should_replan`` (pure trigger policy: verify-fail wins over
+    cadence; env knobs ``GEODE_REPLAN_ENABLED`` / ``GEODE_REPLAN_INTERVAL``)
+    + ``parse_replan_response`` (JSON parser tolerating code fences) +
+    ``replan_async`` (calls ``loop._call_llm(model=plan_model)`` bounded
+    by 60s timeout, records planner usage via ``_track_usage_async``).
+  - ``core/agent/loop/_decomposition.py`` — REWRITTEN per A1 spec.
+    ``try_decompose`` now installs the explicit Plan on
+    ``SessionMetrics.active_plan`` (via ``set_active_plan``) instead of
+    returning a markdown suffix string. Pre-A1 callers see ``None``
+    return signalling "plan handled — caller skips suffix".
+  - ``core/agent/loop/agent_loop.py`` — new ``_maybe_replan_async``
+    helper fires per-round before ``_sync_model_and_rebuild_prompt``;
+    new ``_consume_plan_hint`` renders the active Plan for the system
+    prompt (parallel to PR-CL-A3 ``_consume_reflexion_hint``);
+    ``_sync_model_and_rebuild_prompt`` re-applies the plan hint on
+    model-drift rebuild so the plan isn't silently dropped.
+  - ``core/agent/verify.py`` — ``_verify_rule_based`` adds
+    ``step_expected_mismatch`` rubric_miss (PR-CL-A1 integration with
+    A3, per operator decision). Fires only when the active plan's
+    current step has a non-empty ``expected_outcome`` and the turn's
+    text contains none of its tokens. Added to ``_RETRYABLE_MISSES``
+    so replan can recover.
+  - ``core/observability/session_metrics.py`` — extended with
+    ``active_plan`` + ``replan_count`` +
+    ``replan_attempts_on_current_step`` + ``last_replan_trigger`` +
+    ``last_verify_should_retry`` fields + ``set_active_plan`` /
+    ``record_replan`` / ``record_step_attempt`` mutators. 4 telemetry
+    keys added to ``to_session_row``.
+  - ``core/config/_settings.py`` — 3 new ``Field`` declarations
+    (``replan_enabled`` / ``replan_interval`` / ``replan_max_attempts``)
+    with ``AliasChoices`` env overrides.
+  - ``core/config/__init__.py`` — 3 new ``_TOML_TO_SETTINGS`` mappings.
+  - ``core/ui/agentic_ui/events.py`` — new ``emit_plan_step`` (per-step
+    rendering: "Step 3/5: …") + ``emit_replan`` (revision banner) UI
+    events. Wired into ``_decomposition.try_decompose`` (initial step)
+    + ``_maybe_replan_async`` (each replan).
+  - ``tests/test_replan.py`` (NEW, 39 tests) — Plan dataclass shape +
+    ``build_plan_from_decomposition`` + ``render_plan_for_prompt`` +
+    ``should_replan`` policy (6 cases) + ``parse_replan_response`` (4
+    cases) + ``replan_async`` LLM integration (4 cases) +
+    SessionMetrics integration (4 cases) + ``step_expected_mismatch``
+    rubric (5 cases).
+
+  Frontier alignment (Socratic Q5):
+
+  - **ReWOO** (arxiv 2305.18323) — plan / observation decouple → 5x
+    token efficiency. Now actually wired: plan_model + replan cadence.
+  - **Self-Discover** (arxiv 2402.03620) — task-level plan composition
+    → 10-40x fewer inferences vs ToT / Self-Consistency.
+  - **Reflexion** (NeurIPS 2023) — verbal-RL hint (A3) + explicit Plan
+    block (A1) interleave at the system-prompt level.
+
+  Deferred to follow-up sprint: ``core/orchestration/goal_decomposer.py``
+  + ``core/agent/decomposition_policy.py`` direct removal (operator-
+  confirmed 2026-05-23, ~200 LOC). A1 keeps GoalDecomposer as the
+  underlying planner LLM caller; folding it into the Plan path is a
+  separate sprint.
+
 ### Changed
 
 - **Step I.a — Codex OAuth header construction collapsed onto one helper.**

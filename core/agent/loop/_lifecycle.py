@@ -185,6 +185,7 @@ def _finalize_verify_outcome(
         effective_mode=vr.effective_mode.value,
         rubric_misses=vr.rubric_misses,
         reflexion_hint=vr.reflexion_hint,
+        should_retry=vr.should_retry,
     )
     _persist_verify_state(loop, metrics, vr.should_retry)
     payload: dict[str, Any] = vr.to_payload()

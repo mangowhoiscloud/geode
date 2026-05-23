@@ -636,6 +636,13 @@ class AgenticLoop:
                 system_prompt += "\n\n" + decomposition_hint
             if reflexion_hint:
                 system_prompt += "\n\n" + reflexion_hint
+            # PR-CL-A1 (2026-05-23) — re-apply active Plan on rebuild so a
+            # model drift or replan-triggered ``_prompt_dirty`` flag doesn't
+            # silently drop the plan hint (parallels the reflexion_hint
+            # fix in PR-CL-A3 Codex MCP MEDIUM #6).
+            plan_hint = self._consume_plan_hint()
+            if plan_hint:
+                system_prompt += "\n\n" + plan_hint
             self._prompt_dirty = False
             # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. ``HookEvent.PROMPT_ASSEMBLED``
             # 가 ``core/hooks/system.py:69`` 에 정의됐으나 fire 0회 였다 → X2
@@ -734,6 +741,140 @@ class AgenticLoop:
                     mgr.close()
                 except Exception:
                     log.debug("Handoff SessionManager close failed", exc_info=True)
+
+    async def _maybe_replan_async(self, round_idx: int) -> None:
+        """PR-CL-A1 (2026-05-23) — per-round Dynamic Replan trigger.
+
+        Reads SessionMetrics' verify state + the active plan and asks
+        :func:`core.agent.plan.should_replan` whether to fire. On a
+        trigger, calls :func:`core.agent.plan.replan_async` which uses
+        ``settings.plan_model`` for the planner LLM call, parses the
+        JSON response into a new :class:`Plan`, and installs it via
+        ``set_active_plan``. Increments ``record_replan`` for telemetry.
+
+        **Trigger timing** (Codex MCP HIGH #2, 2026-05-23):
+          - **verify_fail** — verify runs at ``arun`` finalization, so
+            this trigger fires only at the *first round of the next*
+            ``arun`` (the prior turn's verify state lives on the
+            SessionMetrics ContextVar). Mid-``arun`` rounds within a
+            single user turn see ``last_verify_passed=True`` until the
+            turn completes.
+          - **cadence** — fires every ``settings.replan_interval``
+            rounds within the same ``arun``, regardless of verify
+            state. This is the safety-net for long-horizon work where
+            verify hasn't surfaced a problem yet but the plan is
+            getting stale.
+
+        Failures NEVER raise — observability mustn't break the run it
+        observes. When ``settings.replan_enabled=False`` or no trigger
+        fires, this is a cheap no-op.
+        """
+        try:
+            from core.agent.plan import (
+                _replan_max_attempts,
+                replan_async,
+                should_replan,
+            )
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            trigger = should_replan(
+                round_idx=round_idx,
+                plan=metrics.active_plan,
+                verify_failed=not metrics.last_verify_passed,
+                verify_should_retry=metrics.last_verify_should_retry,
+            )
+            if trigger is None:
+                return
+            # PR-CL-A1 (2026-05-23) — abandon path. ``settings.replan_max_attempts``
+            # caps retries on a single step. If the verify_fail trigger
+            # fires again on the same step beyond the cap, advance the
+            # plan with ``abandoned=True`` instead of calling the
+            # planner LLM (operator-action signal: this step is stuck).
+            # Cadence trigger always proceeds to replan since it isn't
+            # tied to a single step's retry budget.
+            if trigger == "verify_fail" and metrics.active_plan is not None:
+                metrics.record_step_attempt()
+                cap = _replan_max_attempts()
+                if metrics.replan_attempts_on_current_step > cap:
+                    advanced = metrics.active_plan.advance(completed=False)
+                    # Advancing to a new step → reset the per-step counter.
+                    metrics.set_active_plan(advanced, reset_attempts=True)
+                    self._prompt_dirty = True
+                    log.info(
+                        "Replan abandon: step exceeded %d attempts; advancing plan",
+                        cap,
+                    )
+                    return
+            # Build a synthetic "result" object capturing the prior turn's
+            # text + tool calls so the planner sees what happened. The
+            # replan_async helper only reads ``getattr(turn_result, "text",
+            # "")`` so any object with that attr works.
+            from types import SimpleNamespace
+
+            recent_text = ""
+            try:
+                recent_text = self._tool_processor.tool_log[-1].get("result", "")
+            except Exception:
+                recent_text = ""
+            stub_result = SimpleNamespace(text=str(recent_text))
+            new_plan = await replan_async(
+                self, plan=metrics.active_plan, turn_result=stub_result, trigger=trigger
+            )
+            if new_plan is None:
+                log.info("Replan trigger=%s: planner failed; keeping prior plan", trigger)
+                return
+            metrics.record_replan(trigger)
+            metrics.set_active_plan(new_plan)
+            # Trigger a prompt rebuild so the next LLM call sees the new plan.
+            self._prompt_dirty = True
+            # Emit UI event so thin client renders the replan banner.
+            try:
+                from core.ui.agentic_ui import emit_plan_step, emit_replan
+
+                emit_replan(
+                    trigger=trigger,
+                    step_count=len(new_plan.steps),
+                    revision=new_plan.revision,
+                )
+                first_step = new_plan.current_step()
+                if first_step is not None:
+                    emit_plan_step(
+                        current=new_plan.current + 1,
+                        total=len(new_plan.steps),
+                        description=first_step.description,
+                        revision=new_plan.revision,
+                    )
+            except Exception:
+                log.debug("Replan UI emit failed", exc_info=True)
+            log.info(
+                "Replan trigger=%s: installed %d-step plan (revision %d)",
+                trigger,
+                len(new_plan.steps),
+                new_plan.revision,
+            )
+        except Exception:
+            log.warning("Replan dispatch crashed", exc_info=True)
+
+    def _consume_plan_hint(self) -> str:
+        """PR-CL-A1 (2026-05-23) — render the active :class:`Plan` for the
+        system prompt as a ``<plan>...</plan>`` block.
+
+        Read-only (no clear) — the plan persists across rounds and only
+        changes when a replan installs a new revision. Returns the empty
+        string when no plan is active. Failures NEVER raise.
+        """
+        try:
+            from core.agent.plan import render_plan_for_prompt
+            from core.observability.session_metrics import current_session_metrics
+
+            plan = current_session_metrics().active_plan
+            if plan is None:
+                return ""
+            return render_plan_for_prompt(plan)
+        except Exception:
+            log.warning("Plan hint consume failed", exc_info=True)
+            return ""
 
     def _consume_reflexion_hint(self) -> str:
         """PR-CL-A3 — read+clear the verbal-RL hint left by the prior turn.
@@ -1047,6 +1188,16 @@ class AgenticLoop:
         if reflexion_hint:
             system_prompt += "\n\n" + reflexion_hint
 
+        # PR-CL-A1 (2026-05-23) — explicit Plan injection. If goal
+        # decomposition (or a prior replan) installed a Plan on
+        # SessionMetrics, render the current-step hint as a
+        # ``<plan>...</plan>`` block so the model sees "you are at step
+        # 3/5: …" at the top of every system prompt. Read-only consume —
+        # the plan persists until ``advance`` / replan swaps it.
+        plan_hint = self._consume_plan_hint()
+        if plan_hint:
+            system_prompt += "\n\n" + plan_hint
+
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
 
@@ -1083,6 +1234,14 @@ class AgenticLoop:
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
+
+            # PR-CL-A1 (2026-05-23) — Dynamic Replan trigger. Fires on
+            # verify FAIL (from the prior round's record_verify) or
+            # cadence (every ``settings.replan_interval`` rounds). When a
+            # replan runs, the new plan replaces SessionMetrics.active_plan;
+            # the system_prompt rebuild below picks it up via the helper
+            # ``_consume_plan_hint`` already wired into the rebuild path.
+            await self._maybe_replan_async(round_idx)
 
             # PR-D Phase 2b — model-drift sync extracted to a helper.
             # The helper returns the possibly-rebuilt system_prompt;
