@@ -81,18 +81,32 @@ class Message:
 
 @dataclass(frozen=True)
 class AdapterCallRequest:
-    """Request envelope handed to ``LLMAdapter.acomplete`` / ``astream``."""
+    """Request envelope handed to ``LLMAdapter.acomplete`` / ``astream``.
+
+    ``tool_choice`` mirrors the Anthropic ``messages.create`` parameter shape
+    (``{"type": "auto" | "any" | "none" | "tool"}`` or the strings
+    ``"auto"`` / ``"any"`` / ``"none"`` / ``"required"``). Adapters translate
+    to provider-specific syntax in their request builders. Default ``"auto"``
+    lets the model pick whether to call a tool.
+
+    ``provider_options`` is a pass-through dict that adapters may consult for
+    provider-specific knobs without bloating the top-level schema (e.g.
+    Anthropic ``priority_tier``, Codex ``parallel_tool_calls``, OpenAI
+    ``response_format``). Each adapter ignores keys it doesn't recognise.
+    """
 
     model: str
     messages: Sequence[Message]
     system_prompt: str = ""
     tools: Sequence[ToolSpec] = field(default_factory=tuple)
+    tool_choice: str | dict[str, Any] = "auto"
     max_tokens: int = 8192
     temperature: float | None = None
     thinking_budget: int = 0
     effort: str = "medium"
     stop_sequences: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+    provider_options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

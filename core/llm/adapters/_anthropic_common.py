@@ -104,11 +104,31 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["temperature"] = req.temperature
     if req.tools:
         kwargs["tools"] = [translate_tool(t) for t in req.tools]
+        tc = _translate_tool_choice(req.tool_choice)
+        if tc is not None:
+            kwargs["tool_choice"] = tc
     if req.stop_sequences:
         kwargs["stop_sequences"] = list(req.stop_sequences)
     if req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
     return kwargs
+
+
+def _translate_tool_choice(tc: str | dict[str, Any]) -> dict[str, Any] | None:
+    """Adapter-neutral ``tool_choice`` → Anthropic ``tool_choice`` payload.
+
+    Anthropic accepts ``{"type": "auto" | "any" | "none" | "tool", "name": ...}``.
+    The loop emits ``{"type": "none"}`` during wrap-up to forbid tool calls;
+    without explicit translation the SDK silently allows tool use and the
+    wrap-up safety net is defeated (Codex MCP 2026-05-23 MEDIUM 1).
+    """
+    if isinstance(tc, dict):
+        return tc
+    if tc in ("auto", "any", "none"):
+        return {"type": tc}
+    if tc == "required":
+        return {"type": "any"}
+    return None  # unknown literal — let Anthropic default apply
 
 
 def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
@@ -127,6 +147,9 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["temperature"] = req.temperature
     if req.tools:
         kwargs["tools"] = [translate_tool(t) for t in req.tools]
+        tc = _translate_tool_choice(req.tool_choice)
+        if tc is not None:
+            kwargs["tool_choice"] = tc
     return kwargs
 
 
