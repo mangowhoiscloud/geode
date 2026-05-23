@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.45] - 2026-05-23
+
 ### Changed
 
 - **Step I.a — Codex OAuth header construction collapsed onto one helper.**
