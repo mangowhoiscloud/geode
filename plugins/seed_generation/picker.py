@@ -64,7 +64,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
-from core.paths import GLOBAL_SEED_PIPELINE_TOML
+from core.paths import GLOBAL_CONFIG_TOML, GLOBAL_SEED_PIPELINE_TOML
 
 from plugins.seed_generation.manifest import (
     SeedGenerationManifest,
@@ -80,11 +80,13 @@ __all__ = [
     "PickerResult",
     "RoleBinding",
     "VoterBinding",
+    "binding_to_adapter_source",
     "infer_provider",
     "load_user_overrides",
     "pick_bindings",
     "print_tos_notice",
     "reset_tos_notice",
+    "resolve_binding_to_adapter",
     "validate_runtime_diversity",
 ]
 
@@ -173,26 +175,65 @@ def infer_provider(model: str) -> str:
     )
 
 
+_LEGACY_OVERRIDE_WARNED = False
+
+
 def load_user_overrides(
     path: Path | str | None = None,
 ) -> dict[str, dict[str, str]]:
-    """Load ``~/.geode/seed-generation.toml`` per-role overrides.
+    """Load per-role overrides — config.toml first, legacy file as fallback.
 
-    Schema:
+    CSP-15 (v0.99.39) — config SoT consolidation. The canonical surface is
+    ``~/.geode/config.toml`` with the following schema, mirroring the
+    Session 66 ``[self_improving_loop.petri.<role>]`` consolidation:
 
     .. code-block:: toml
 
-       [generator]
-       source = "api_key"
+       [seed_generation.role.generator]
+       source = "payg"
 
-       [pilot]
-       source = "claude-cli"
+       [seed_generation.role.pilot]
+       source = "subscription"
        model  = "claude-haiku-4-5"
 
-    Returns ``{role: {key: value, …}}``. Empty dict when the file does
-    not exist (the override file is OPTIONAL).
+    The legacy ``~/.geode/seed-generation.toml`` schema (per-role top-level
+    table) is still read when ``[seed_generation.role.*]`` is absent from
+    ``config.toml``. The first time the legacy fallback is used, a one-time
+    warning is logged with the migration command. Removal target: v1.0.0.
+
+    The ``source`` value accepts both legacy (``claude-cli`` / ``openai-codex`` /
+    ``api_key``) and new (``payg`` / ``subscription`` / ``adapter``) names —
+    see :func:`binding_to_adapter_source`.
+
+    Returns ``{role: {key: value, …}}``. Empty dict when neither file holds
+    overrides (the surface is OPTIONAL).
     """
-    target = Path(path) if path is not None else GLOBAL_SEED_PIPELINE_TOML
+    if path is not None:
+        return _load_overrides_from_file(Path(path))
+
+    # 1. Canonical SoT: ~/.geode/config.toml [seed_generation.role.*]
+    canonical_overrides = _load_config_toml_seed_overrides(GLOBAL_CONFIG_TOML)
+    if canonical_overrides:
+        return canonical_overrides
+
+    # 2. Legacy fallback: ~/.geode/seed-generation.toml
+    legacy_overrides = _load_overrides_from_file(GLOBAL_SEED_PIPELINE_TOML)
+    if legacy_overrides:
+        global _LEGACY_OVERRIDE_WARNED
+        if not _LEGACY_OVERRIDE_WARNED:
+            log.warning(
+                "seed-generation picker: reading legacy %s. Migrate per-role "
+                "overrides to ~/.geode/config.toml under [seed_generation.role.<role>] "
+                "(see docs/plans/2026-05-23-llm-adapter-abstraction.md). "
+                "The legacy file will be removed in v1.0.0.",
+                GLOBAL_SEED_PIPELINE_TOML,
+            )
+            _LEGACY_OVERRIDE_WARNED = True
+    return legacy_overrides
+
+
+def _load_overrides_from_file(target: Path) -> dict[str, dict[str, str]]:
+    """Parse a flat ``[<role>]`` override TOML — legacy seed-generation.toml shape."""
     if not target.is_file():
         return {}
     try:
@@ -214,6 +255,94 @@ def load_user_overrides(
             continue
         out[role] = {k: str(v) for k, v in body.items() if isinstance(v, (str, int, float))}
     return out
+
+
+def _load_config_toml_seed_overrides(target: Path) -> dict[str, dict[str, str]]:
+    """Read ``[seed_generation.role.*]`` from the unified config.toml SoT.
+
+    Returns an empty dict when the file is missing, malformed, or carries no
+    ``[seed_generation.role.*]`` table — caller falls back to legacy path.
+    """
+    if not target.is_file():
+        return {}
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        log.warning(
+            "seed-generation picker: %s is not valid TOML (%s) — ignoring overrides",
+            target,
+            exc,
+        )
+        return {}
+    seed_section = raw.get("seed_generation")
+    if not isinstance(seed_section, dict):
+        return {}
+    role_section = seed_section.get("role")
+    if not isinstance(role_section, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for role, body in role_section.items():
+        if not isinstance(body, dict):
+            log.warning(
+                "seed-generation picker: config.toml entry [seed_generation.role.%s] "
+                "is not a table — ignoring",
+                role,
+            )
+            continue
+        out[role] = {k: str(v) for k, v in body.items() if isinstance(v, (str, int, float))}
+    return out
+
+
+# Picker source → adapter source translation. The picker emits legacy source
+# strings (``claude-cli`` / ``openai-codex`` / ``api_key``) for backwards
+# compatibility with existing overrides; the new adapter Protocol uses
+# ``payg`` / ``subscription`` / ``adapter`` (paperclip-aligned). The mapping
+# below is the single SoT for the translation.
+_PICKER_SOURCE_TO_ADAPTER_SOURCE: dict[str, str] = {
+    "api_key": "payg",
+    "payg": "payg",
+    "claude-cli": "adapter",  # Anthropic local binary
+    "openai-codex": "subscription",  # ChatGPT OAuth endpoint (NOT the codex binary)
+    "subscription": "subscription",
+    "adapter": "adapter",
+}
+
+
+def binding_to_adapter_source(picker_source: str) -> str:
+    """Translate the picker's legacy source name → adapter Protocol source.
+
+    Picker emits one of ``api_key`` / ``claude-cli`` / ``openai-codex``
+    (historical). The new :class:`core.llm.adapters.LLMAdapter` uses
+    ``payg`` / ``subscription`` / ``adapter``. This helper bridges the gap
+    so callers can resolve a registered adapter from a :class:`RoleBinding`.
+
+    Raises :class:`ValueError` for unknown source strings.
+    """
+    out = _PICKER_SOURCE_TO_ADAPTER_SOURCE.get(picker_source)
+    if out is None:
+        raise ValueError(
+            f"binding_to_adapter_source: unknown picker source {picker_source!r}. "
+            f"Known: {sorted(_PICKER_SOURCE_TO_ADAPTER_SOURCE)}"
+        )
+    return out
+
+
+def resolve_binding_to_adapter(binding: RoleBinding) -> object:
+    """Resolve a :class:`RoleBinding` to a concrete :class:`LLMAdapter`.
+
+    Combines :func:`binding_to_adapter_source` with the adapter registry's
+    ``resolve_for(provider, source)``. The return type is ``object`` to avoid
+    a hard module-level import of :class:`LLMAdapter` (keeps picker import
+    lightweight); callers cast via ``isinstance(...)`` or trust the duck type.
+
+    Raises :class:`core.llm.adapters.AdapterNotFoundError` when no adapter
+    matches the binding (e.g. the binding references a provider × source pair
+    the registry doesn't carry — opportunity for an external plugin).
+    """
+    from core.llm.adapters import resolve_for
+
+    adapter_source = binding_to_adapter_source(binding.source)
+    return resolve_for(binding.provider, adapter_source)
 
 
 def _probe_oauth(provider: str) -> bool:

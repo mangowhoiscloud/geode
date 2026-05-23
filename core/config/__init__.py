@@ -267,6 +267,12 @@ def _resolve_provider(model: str) -> str:
     Public surface unchanged — every caller (``core.llm.router``,
     ``core.llm.routing.plan_registry``, monkeypatched test sites) keeps
     working without modification.
+
+    .. deprecated:: v0.99.39
+       Resolves only ``provider`` from a model id string — cannot express
+       the source axis (PAYG vs Subscription vs Adapter) that callers
+       increasingly need. Use :func:`core.llm.adapters.resolve_for` which
+       takes ``(provider, source)`` jointly. Removal target: v1.0.0.
     """
     from core.config.routing_manifest import resolve_provider as _manifest_resolve
 

@@ -42,10 +42,11 @@ from unittest.mock import MagicMock
 
 import core.agent.loop as _loop_mod
 import core.agent.loop._model_switching as _switching_mod
-import core.llm.adapters as _adapters_mod
 import core.llm.provider_dispatch as _provider_dispatch_mod
 from core.config._settings import Settings
 from core.llm.errors import BillingError
+
+import core.llm.adapters as _adapters_mod
 
 # ---------------------------------------------------------------------------
 # Contract 1 — cross-provider failover removed

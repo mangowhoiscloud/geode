@@ -47,6 +47,117 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **LLM adapter abstraction (paperclip pattern) — Layer 4 Protocol +
+  Layer 3 built-ins.** New :class:`core.llm.adapters.LLMAdapter`
+  Protocol (paperclip ``ServerAdapterModule`` mirror) + mutable
+  registry (``register_adapter`` / ``unregister_adapter`` /
+  ``resolve_for(provider, source)`` / ``bootstrap_builtins``). Six
+  built-in adapters covering all PAYG / Subscription / Adapter paths
+  for Anthropic + OpenAI:
+
+  | name | provider | source | billing_type |
+  |---|---|---|---|
+  | ``anthropic-payg`` | anthropic | payg | api |
+  | ``anthropic-oauth`` | anthropic | subscription | subscription |
+  | ``claude-cli`` | anthropic | adapter | subscription_included |
+  | ``openai-payg`` | openai | payg | api |
+  | ``codex-oauth`` | openai | subscription | subscription |
+  | ``codex-cli`` | openai | adapter | subscription_included |
+
+  Registry boot happens once at runtime construction via the
+  ``build_llm_adapters`` wiring step. External plugins implement the
+  Protocol and register via :func:`core.llm.adapters.register_adapter`
+  from their entry point (paperclip's external-adapter pattern).
+
+- **Picker → adapter resolution glue.** New
+  :func:`plugins.seed_generation.picker.binding_to_adapter_source` +
+  :func:`resolve_binding_to_adapter` collapse a :class:`RoleBinding`
+  into a concrete :class:`LLMAdapter`. The picker's historical source
+  strings (``api_key`` / ``claude-cli`` / ``openai-codex``) are
+  translated to the adapter Protocol's ``payg`` / ``subscription`` /
+  ``adapter`` names via a single SoT table — both naming schemes are
+  accepted in ``[seed_generation.role.<role>]`` overrides.
+
+### Changed
+
+- **Config SoT consolidation — ``~/.geode/config.toml``
+  ``[seed_generation.role.<role>]``.** Mirrors the Session 66
+  ``[self_improving_loop.petri.<role>]`` consolidation
+  (PR #1496/#1498/#1499). ``picker.load_user_overrides`` now reads
+  ``config.toml`` first; the legacy ``~/.geode/seed-generation.toml``
+  is still honoured as a fallback with a one-time deprecation
+  warning. Removal target: v1.0.0.
+
+- **PR-C-P1 — autoresearch ``seed_limit`` lower bound bumped from
+  ``ge=1`` to ``ge=5``**. Pydantic now rejects any
+  ``[self_improving_loop.autoresearch] seed_limit`` value below 5.
+  Operators who had ``seed_limit = 2`` (the historic default in some
+  ``~/.geode/config.toml`` files) will see a ``ValidationError`` with
+  the actionable Pydantic message at audit-launch time, instead of
+  the previous silent fallback to module defaults.
+
+  **Why**. ``core/audit/dim_extractor._aggregate`` forces
+  ``stderr=0.0`` only at N=1 (``statistics.stdev(ddof=1)`` undefined);
+  N=2-4 produces a sample stderr but the CV is too noisy to drive
+  ``_should_promote`` — the gate floors its margin at
+  ``max(stderr, fitness_margin_floor)`` (``fitness_margin_floor=0.05``,
+  raised to ``N1_FITNESS_MARGIN_FLOOR=0.20`` when any ``CRITICAL_DIMS``
+  member has N≤1), so a 0.05+ fitness delta would promote a
+  measurement with no confidence signal. N≥5 keeps the sample stderr
+  meaningful, so the stderr-derived margin rises above the default
+  floor instead of collapsing onto it.
+
+  **Codex MCP catch — narrowed exception**.
+  ``autoresearch.train._get_autoresearch_config`` previously caught
+  bare ``Exception`` and silently fell back to module defaults
+  whenever the loader raised — which meant a config with
+  ``seed_limit = 2`` produced no error, defeating the lower-bound
+  gate. Catch narrowed to ``ImportError`` only so
+  ``pydantic.ValidationError`` surfaces to the operator. Same
+  silent-drift pattern as PR-MINIMAL-2 #1398.
+
+  **Test guards**:
+  - ``tests/test_self_improving_loop_config.py::test_autoresearch_seed_limit_lower_bound_is_5``
+    pins the ``ge=5`` rejection.
+  - ``...::test_autoresearch_seed_limit_boundary_n5_accepted``
+    pins the boundary case so a future typo to ``gt=5`` is caught.
+  - ``...::test_autoresearch_seed_limit_default_remains_10``
+    pins the default so operators with no override see no shift.
+  - ``...::test_get_autoresearch_config_propagates_validation_error_to_operator``
+    pins the narrowed ``ImportError`` catch.
+
+  **Operator action — bumping a low value**. If ``geode`` refuses to
+  start an audit after pulling this PR, edit
+  ``~/.geode/config.toml`` and raise
+  ``[self_improving_loop.autoresearch] seed_limit`` to ``5`` or
+  higher (10 is the default).
+
+### Deprecated
+
+- **``core.llm.credentials.resolve_provider_key(provider, fallback)``.**
+  Global type-priority (OAUTH > TOKEN > API_KEY) loses per-role source
+  information. New callers use the
+  :class:`core.llm.adapters.LLMAdapter` registry instead. Removal
+  target: v1.0.0.
+- **``core.config._resolve_provider(model)``.** Resolves only
+  ``provider`` from a model id string — cannot express the source axis
+  (PAYG vs Subscription vs Adapter). New callers use
+  :func:`core.llm.adapters.resolve_for(provider, source)`. Removal
+  target: v1.0.0.
+- **``~/.geode/seed-generation.toml``.** Per-role overrides migrate to
+  ``~/.geode/config.toml`` ``[seed_generation.role.<role>]``. The
+  legacy file is still read with a one-time deprecation warning until
+  v1.0.0.
+- **Layer 2 ``LLMClientPort`` / ``AgenticLLMPort`` /
+  ``resolve_agentic_adapter`` (re-exported via
+  ``core.llm.adapters._legacy``).** Pre-v0.99.39 paperclip-style
+  abstraction superseded by the unified :class:`LLMAdapter`. Kept
+  functional for in-tree callers (``core.agent.loop._reflection``,
+  ``core.llm.router``, ``plugins.petri_audit``); their migration to
+  ``resolve_for`` is the v1.0.0 milestone.
+
 ## [0.99.38] - 2026-05-23
 
 > First release under the **rotation pattern** (release branch lands on
