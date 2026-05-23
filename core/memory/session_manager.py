@@ -53,20 +53,44 @@ class SessionMeta:
 
 _CREATE_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id   TEXT PRIMARY KEY,
-    created_at   REAL NOT NULL,
-    updated_at   REAL NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'active',
-    model        TEXT NOT NULL DEFAULT '',
-    provider     TEXT NOT NULL DEFAULT 'anthropic',
-    user_input   TEXT NOT NULL DEFAULT '',
-    round_count  INTEGER NOT NULL DEFAULT 0,
-    message_count INTEGER NOT NULL DEFAULT 0
+    session_id            TEXT PRIMARY KEY,
+    created_at            REAL NOT NULL,
+    updated_at            REAL NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'active',
+    model                 TEXT NOT NULL DEFAULT '',
+    provider              TEXT NOT NULL DEFAULT 'anthropic',
+    user_input            TEXT NOT NULL DEFAULT '',
+    round_count           INTEGER NOT NULL DEFAULT 0,
+    message_count         INTEGER NOT NULL DEFAULT 0,
+    handoff_state         TEXT NOT NULL DEFAULT '',
+    handoff_platform      TEXT NOT NULL DEFAULT '',
+    handoff_error         TEXT NOT NULL DEFAULT '',
+    handoff_triggered_at  REAL NOT NULL DEFAULT 0.0
 )
 """
 
+# Existing-DB migration: legacy schemas (pre PR-CL-BUDGET) lack the four
+# handoff columns. ``PRAGMA table_info`` is the SoT for present columns;
+# we add only those that are missing. Idempotent on schemas already
+# carrying the columns. Defaults match ``_CREATE_TABLE_SQL`` so a fresh
+# DB and a migrated DB produce identical rows.
+_HANDOFF_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("handoff_state", "TEXT NOT NULL DEFAULT ''"),
+    ("handoff_platform", "TEXT NOT NULL DEFAULT ''"),
+    ("handoff_error", "TEXT NOT NULL DEFAULT ''"),
+    ("handoff_triggered_at", "REAL NOT NULL DEFAULT 0.0"),
+)
+
 _CREATE_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions (updated_at DESC)
+"""
+
+# PR-CL-BUDGET — handoff watcher polls ``handoff_state='pending'`` rows.
+# Partial index keeps the lookup cheap when most rows have empty state.
+_CREATE_HANDOFF_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_sessions_handoff_state
+    ON sessions (handoff_state, handoff_triggered_at)
+    WHERE handoff_state != ''
 """
 
 # Phase 1a (Hermes absorption) — messages table mirroring SessionCheckpoint
@@ -282,7 +306,28 @@ class SessionManager:
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE_SQL)
+        # PR-CL-BUDGET — additive ALTER TABLE for handoff cols on legacy DBs.
+        # ``PRAGMA table_info`` is the SoT for column presence; sqlite has
+        # no native ``ADD COLUMN IF NOT EXISTS`` so we filter ourselves.
+        # ``BEGIN IMMEDIATE`` + commit wraps the read+writes so concurrent
+        # startup processes can't observe a half-migrated schema (Codex MCP
+        # 2026-05-23 LOW #3). The transaction is no-op-cheap on fresh DBs
+        # where every column already exists.
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing_cols = {
+                str(r[1]) for r in self._conn.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+            for col_name, col_decl in _HANDOFF_COLUMNS:
+                if col_name not in existing_cols:
+                    # col_name + col_decl sourced from a module-level constant — not user input.
+                    self._conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_decl}")
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
         self._conn.execute(_CREATE_INDEX_SQL)
+        self._conn.execute(_CREATE_HANDOFF_INDEX_SQL)
         self._conn.execute(_CREATE_MESSAGES_TABLE_SQL)
         self._conn.execute(_CREATE_MESSAGES_SESSION_INDEX_SQL)
         self._conn.execute(_CREATE_MESSAGES_TOOL_INDEX_SQL)

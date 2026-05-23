@@ -27,7 +27,7 @@ from typing import Any
 
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
-    build_messages,
+    build_codex_input,
     translate_codex_response,
     translate_tool_for_codex,
 )
@@ -95,6 +95,15 @@ class CodexOAuthAdapter:
         We stream by default and aggregate the final response — non-streaming
         ``responses.create`` returns a structurally empty body on the Codex
         backend (the actual content arrives only via SSE events).
+
+        A2 (v0.99.44): the SSE accumulator now also captures ``type:
+        reasoning`` typed items (encrypted_content + summary) — Codex
+        gpt-5.x models lose their chain of thought on the next turn
+        unless those items are replayed in the next ``input`` array
+        (``store=False`` makes server-side resolution by id impossible).
+        :func:`translate_codex_response` surfaces them on
+        :attr:`AdapterCallResult.reasoning_items` and the legacy bridge
+        forwards them to :attr:`AgenticResponse.codex_reasoning_items`.
         """
         client = self._get_client()
         kwargs = _build_codex_call_kwargs(req)
@@ -107,13 +116,11 @@ class CodexOAuthAdapter:
                         if item is not None:
                             accumulated.append(item)
                 final = await stream.get_final_response()
-                if accumulated:
-                    final.output = accumulated
         except Exception as exc:
             self._last_error = exc
             log.warning("codex-oauth: responses.stream failed model=%s err=%s", req.model, exc)
             raise
-        return translate_codex_response(final)
+        return translate_codex_response(final, accumulated_items=accumulated)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
@@ -208,29 +215,34 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     ``docs/research/codex-oauth-request-spec.md``):
 
     - ``instructions`` carries the system prompt (not ``input[].role:system``)
-    - ``input`` is the user/assistant/tool array; we drop the leading system
-      entry that :func:`build_messages` would prepend
+    - ``input`` is the user/assistant/tool array — built via
+      :func:`build_codex_input` which re-encodes Anthropic content blocks
+      into Codex typed items (``function_call`` / ``function_call_output``)
     - ``store=False`` is mandatory
     - ``max_output_tokens`` is FORBIDDEN — Plus subscription manages it
       server-side, sending the field returns 400
     - Tools use the FLAT shape (``translate_tool_for_codex``)
     - gpt-5.x family omits ``temperature`` and adds ``reasoning`` +
       ``include: ["reasoning.encrypted_content"]``
+    - A2 (v0.99.44): previous-turn reasoning items replay inline via
+      :func:`build_codex_input` — each assistant :class:`Message` carries
+      its own ``codex_reasoning_items`` (populated by the bridge from the
+      Anthropic-shape assistant message dict's ``codex_reasoning_items``
+      key) and ``build_codex_input`` prepends those entries at the
+      correct ordinal position. The legacy whole-input prepend approach
+      lost per-turn association for multi-assistant histories — Codex
+      MCP A2 BLOCKER 3.
     """
-    messages_payload = build_messages(req)
-    # Drop the system entry build_messages prepends — Codex needs it in
-    # ``instructions`` not in ``input``.
-    if req.system_prompt and messages_payload and messages_payload[0].get("role") == "system":
-        messages_payload = messages_payload[1:]
+    resp_input = build_codex_input(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
         "instructions": req.system_prompt or "You are a helpful assistant.",
-        "input": messages_payload or [{"role": "user", "content": "hello"}],
+        "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }
     if req.tools:
         kwargs["tools"] = [translate_tool_for_codex(t) for t in req.tools]
-        kwargs["tool_choice"] = "auto"
+        kwargs["tool_choice"] = _translate_codex_tool_choice(req.tool_choice)
         kwargs["parallel_tool_calls"] = True
     if req.model.startswith("gpt-5"):
         # gpt-5.x family — encrypted reasoning passthrough; temperature omitted.
@@ -239,6 +251,23 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     elif req.temperature is not None:
         kwargs["temperature"] = req.temperature
     return kwargs
+
+
+def _translate_codex_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any]:
+    """Adapter-neutral ``tool_choice`` → Codex Responses API wire shape.
+
+    Routes through :func:`core.llm.tool_choice.normalize` with
+    ``provider="openai"`` — Responses API uses the FLAT shape
+    ``{"type": "function", "name": "..."}`` (not the Chat nested
+    ``function`` wrapper). The legacy helper accepts the Anthropic-shape
+    dicts the AgenticLoop emits (``{"type": "auto"}`` / ``{"type":
+    "none"}`` / ``{"type": "any"}`` / ``{"type": "tool", "name": "..."}``)
+    and returns the Codex-correct payload (Codex MCP A2 BLOCKER 2).
+    """
+    from core.llm.tool_choice import normalize
+
+    normalised = normalize("openai", tc)
+    return normalised if normalised is not None else "auto"
 
 
 __all__ = ["CodexOAuthAdapter"]

@@ -47,6 +47,144 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.44] - 2026-05-23
+
+### Added
+
+- **Follow-up F — GLM adapter family.** Two new built-ins land the
+  ZhipuAI provider on the v0.99.39 :class:`LLMAdapter` registry:
+
+  - ``glm-payg`` (``provider=glm``, ``source=payg``,
+    ``billing_type=api``) — calls ``api.z.ai/api/paas/v4`` with
+    ``settings.zai_api_key``. PAYG metered.
+  - ``glm-coding-plan`` (``provider=glm``, ``source=subscription``,
+    ``billing_type=subscription``) — calls
+    ``api.z.ai/api/coding/paas/v4`` with the API key bound to a
+    Coding Plan profile resolved via
+    :func:`core.llm.routing.plan_registry.resolve_routing`. Refuses to
+    fall back to PAYG when no Plan is registered — the picker source
+    ``subscription`` means subscription.
+
+  Both share :func:`build_async_openai_client` (per-adapter fresh
+  client, no module-level singleton shadowing) and route
+  ``tool_choice`` through ``normalize("glm", ...)`` for the Chat
+  Completions nested ``function`` wire shape.
+
+- **Follow-up A2 — OpenAI + Codex adapter route closure.** Removes the
+  ``provider == "anthropic"`` guard from
+  ``AgenticLoop.__init__`` so concrete-source resolution now works for
+  every provider via :func:`core.llm.adapters.resolve_for`. The two
+  Codex MCP findings from PR #1519 are closed:
+
+  - **BLOCKER 2 (multi-turn translation).**
+    ``core/llm/adapters/_openai_common.py`` gained ports of
+    ``_convert_messages_to_openai`` / ``_convert_messages_to_responses``
+    from the legacy provider — assistant ``tool_use`` blocks re-encode
+    into Chat ``tool_calls`` (nested ``function``) or Codex Responses
+    ``function_call`` typed items; user ``tool_result`` blocks become
+    ``role: tool`` follow-ups with ``tool_call_id`` (Chat) or
+    ``function_call_output`` items with ``call_id`` (Codex). Pre-A2 the
+    adapter passed the Anthropic content list through verbatim and the
+    SDK returned 400.
+
+  - **HIGH 1 (Codex encrypted-reasoning replay).**
+    :class:`core.llm.adapters.AdapterCallResult` gained
+    ``reasoning_items`` + ``reasoning_summaries`` fields.
+    ``CodexOAuthAdapter.acomplete`` captures ``type: reasoning`` typed
+    items from the ``response.output_item.done`` SSE stream and
+    surfaces them on the result. ``_legacy_bridge.build_adapter_request``
+    pulls ``codex_reasoning_items`` off the prior assistant turn and
+    threads them via ``AdapterCallRequest.provider_options``;
+    ``_build_codex_call_kwargs`` calls
+    :func:`core.llm.adapters._openai_common.inject_reasoning_replay`
+    to prepend the encrypted_content blobs into the next-turn ``input``.
+    Without this chain gpt-5.x ``store=False`` models lose their chain
+    of thought across turns.
+
+  - Tool_choice translation now mirrors the Anthropic adapter pattern.
+    OpenAI Chat receives ``auto``/``none``/``required`` (the
+    adapter-neutral ``"any"`` maps to ``"required"``); Codex Responses
+    same mapping, with unknown literals defaulting to ``"auto"``.
+
+  Tests: ``tests/core/llm/adapters/test_openai_multi_turn.py`` (14
+  cases, Chat + Responses converters + reasoning replay) +
+  ``test_codex_reasoning_replay.py`` (12 cases — SSE accumulation →
+  result → bridge → next-turn provider_options chain).
+- **PR-CL-BUDGET — 2-hour wall-clock cap + automatic T-10min hand-off**.
+  Foundation PR for the Cognitive Loop sprint (A3 → A6 → A1). Replaces
+  the per-AgenticLoop turn hard-cap with a session-wide wall-clock
+  budget (default 7200s) and an automatic graceful exit at T-600s
+  remaining.
+
+  - ``core/agent/budget.py`` (NEW) — ``TimeBudget`` config dataclass +
+    ``start_session_budget()`` / ``check_session_budget()`` /
+    ``budget_summary()`` helpers. Budget *state* (start time, latch flag)
+    lives on the existing :class:`SessionMetrics` so the budget travels
+    with the ContextVar across nested loops. Defaults pulled from
+    ``GEODE_SESSION_TIME_BUDGET_S`` env knob.
+  - ``core/agent/handoff.py`` (NEW) — DB-backed state machine adapted
+    from hermes-agent ``hermes_state.py:218-220`` + ``gateway/run.py:
+    3712-3766`` watcher pattern. 5 states (NONE / PENDING / RUNNING /
+    COMPLETED / FAILED) with atomic CAS helpers
+    (``request_handoff`` / ``claim_handoff`` / ``complete_handoff`` /
+    ``fail_handoff`` / ``get_handoff`` / ``list_pending_handoffs``).
+    GEODE adapts the trigger from hermes's user-initiated
+    ``/handoff <platform>`` slash command to an *automatic* wall-clock
+    crossing (operator decision in
+    ``project_budget_handoff_decision`` memory).
+  - ``core/observability/session_metrics.py`` — extended ``SessionMetrics``
+    with 4 new fields (``time_budget_start_s`` / ``time_budget_total_s``
+    / ``handoff_threshold_s`` / ``handoff_triggered_at``) + 3 methods
+    (``start_time_budget`` / ``time_budget_remaining_s`` /
+    ``is_handoff_due``). ``is_handoff_due`` is **one-shot** — first
+    crossing latches ``handoff_triggered_at`` so the AgenticLoop fires
+    HANDOFF_TRIGGERED exactly once per session, not every round.
+  - ``core/memory/session_manager.py`` — schema extended with 4 columns
+    on the ``sessions`` table (``handoff_state TEXT`` /
+    ``handoff_platform TEXT`` / ``handoff_error TEXT`` /
+    ``handoff_triggered_at REAL``) + a partial index
+    (``idx_sessions_handoff_state``) for the watcher poll. Existing DBs
+    migrate via additive ALTER TABLE inside ``__init__`` —
+    ``PRAGMA table_info`` is the SoT for column presence (idempotent on
+    fresh + migrated DBs).
+  - ``core/hooks/system.py`` — added ``HANDOFF_TRIGGERED`` /
+    ``HANDOFF_COMPLETED`` / ``HANDOFF_FAILED`` events. Payload schema:
+    ``{session_id, platform, remaining_s, budget_total_s,
+    handoff_threshold_s, handoff_triggered_at, ts}``.
+  - ``core/agent/loop/agent_loop.py`` — ``_check_round_guards`` extended
+    to call the new ``_check_session_budget_and_maybe_handoff`` helper
+    after the existing ``round_limit`` / ``time_budget`` gates. The
+    ``arun`` entry now calls ``_maybe_start_session_budget`` once per
+    session (idempotent guard via ``time_budget_total_s > 0``). ``getattr``
+    guard preserves the ``_StubLoop`` test pattern from
+    ``tests/test_arun_round_guards.py``.
+  - ``core/channels/binding.py`` + ``core/cli/typer_serve.py`` —
+    ``gateway_max_turns`` default flipped from ``20`` to ``0`` (unlimited).
+    The session-wide 2h wall-clock budget is now the global safety net;
+    ``gateway_time_budget_s`` (120s per-message default) remains the
+    per-binding cap.
+  - ``tests/test_budget.py`` (NEW, 14 tests) — defaults, dataclass shape,
+    populate + check, one-shot handoff latch, hard expiry, ContextVar
+    isolation, explicit-target arg, ``to_session_row`` row shape.
+  - ``tests/test_handoff.py`` (NEW, 15 tests) — 5-state machine atomic
+    CAS verification, get/list contract, ``handoff_summary`` rendering,
+    legacy-DB migration adds columns, idempotent re-open.
+
+  Frontier alignment (4 systems, Socratic Q5):
+  - **Claude Code** ``agent-loop.ts:checkBudgetExhausted`` — wall-clock
+    + token budget per-turn boundary.
+  - **Codex CLI** ``--budget-seconds`` flag — single wall-clock knob.
+  - **OpenClaw** Lane TTL — per-lane time cap inside the gateway.
+  - **Hermes Agent** ``sessions.handoff_state`` 3-col DB state machine
+    + ``_handoff_watcher`` atomic-claim asyncio task.
+
+  Out of scope (separate PRs): asyncio ``_handoff_watcher`` background
+  task in ``typer_serve``'s ``_serve_loop`` (this PR lays the schema +
+  CAS helpers; the actual watcher follows once a consumer is wired).
+  Successor re-spawn from a hand-off record (the watcher logs + the
+  user manually invokes ``geode resume <session_id>`` for now). See
+  follow-up tasks in ``project_budget_handoff_decision`` memory.
+
 ## [0.99.43] - 2026-05-23
 
 ### Added
@@ -134,6 +272,25 @@ functional change.
   - LOW (acknowledged): `cost_preview.py` accounting gets a phantom
     one-run estimate for `literature_review` when `max_papers=0`;
     follow-up to add a phase-skip bypass.
+
+### Changed
+
+- **Plan docs sync with PR-SESSION-METRICS rename**. 3 plan docs updated
+  to reflect ``journal.jsonl`` → ``transcript.jsonl`` rename + ``SessionJournal``
+  → ``SessionTranscript`` alias-shim absorption from PR #1531:
+  - ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`` —
+    schema row #7 의 ``journal.jsonl`` → ``transcript.jsonl`` + Phase C
+    verification checklist 의 path 갱신
+  - ``docs/plans/2026-05-21-self-improving-loop-ux.md`` — UX mockup 의
+    "G9 — last 9 journal events" → "transcript events" + Stage ④ telemetry
+    의 ``SessionJournal event`` → ``SessionTranscript lifecycle event``
+    (3 places)
+  - ``docs/plans/2026-05-23-sil-5theme-closure.md`` — C4 row 에 PR #1531
+    sidecar 흡수 + race-surface 0 후속 노트 추가
+
+  Codex MCP review (thread ``019e53a5-c793-7d13-b40c-562fb28b0d9f``): 4 checks
+  pass + 1 LOW finding (UX residual 392/412 line) addressed in this commit.
+
 ## [0.99.42] - 2026-05-23
 
 > Observability central-isation release. ``SessionMetrics`` 신설 (Tier 2 of

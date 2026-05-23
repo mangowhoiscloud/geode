@@ -60,7 +60,26 @@ def build_adapter_request(
         role = m.get("role", "user")
         content = m.get("content", "")
         tool_use_id = m.get("tool_use_id")
-        adapter_messages.append(Message(role=role, content=content, tool_use_id=tool_use_id))
+        # A2 (v0.99.44) — Codex reasoning items are attached to the SPECIFIC
+        # assistant turn that emitted them so the adapter can replay each
+        # blob at the correct ordinal position when rebuilding the
+        # next-turn ``input`` array. Flattening into a single
+        # provider_options tuple would lose the per-turn association the
+        # legacy ``inject_reasoning_replay`` walker depends on (Codex MCP
+        # A2 BLOCKER 3).
+        reasoning_items: tuple[dict[str, Any], ...] = ()
+        if role == "assistant":
+            raw = m.get("codex_reasoning_items")
+            if isinstance(raw, list):
+                reasoning_items = tuple(item for item in raw if isinstance(item, dict))
+        adapter_messages.append(
+            Message(
+                role=role,
+                content=content,
+                tool_use_id=tool_use_id,
+                codex_reasoning_items=reasoning_items,
+            )
+        )
     adapter_tools: list[ToolSpec] = [
         ToolSpec(
             name=t.get("name", ""),
@@ -118,10 +137,21 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         output_tokens=result.usage.output_tokens,
         cache_read_tokens=result.usage.cached_input_tokens,
     )
+    # A2 (v0.99.44) — Codex encrypted reasoning replay + reasoning summaries
+    # forwarded. AgenticLoop's next-turn input builder reads
+    # ``codex_reasoning_items`` and prepends them so gpt-5.x ``store=False``
+    # multi-turn doesn't lose chain of thought. ``reasoning_summaries`` feeds
+    # the live "thinking..." UI surface (``emit_reasoning_summary``).
+    codex_reasoning_items = (
+        [dict(item) for item in result.reasoning_items] if result.reasoning_items else None
+    )
+    reasoning_summaries = list(result.reasoning_summaries) if result.reasoning_summaries else None
     return AgenticResponse(
         content=blocks,
         stop_reason=_translate_stop_reason(result.stop_reason),
         usage=usage,
+        codex_reasoning_items=codex_reasoning_items,
+        reasoning_summaries=reasoning_summaries,
     )
 
 

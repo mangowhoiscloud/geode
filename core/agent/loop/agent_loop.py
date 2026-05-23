@@ -147,39 +147,28 @@ class AgenticLoop:
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message
-        # v0.99.40 Follow-up A — opt-in adapter route via the v0.99.39
-        # :class:`LLMAdapter` registry. Scope limited to ``provider="anthropic"``
-        # in this PR: the OpenAI / Codex adapter route needs full multi-turn
-        # message translation (Anthropic tool_use → ``tool_calls`` /
-        # ``function_call`` etc.) + Codex encrypted-reasoning replay, both
-        # tracked as Follow-up A2 (``docs/plans/2026-05-23-llm-adapter-
-        # abstraction.md`` § Scope cut). Concrete source values still thread
-        # through SubTask/WorkerRequest for observability on every provider,
-        # but the actual LLM call stays on the legacy adapter when the
-        # bridge is not yet wired for that provider.
+        # v0.99.40 Follow-up A + v0.99.44 Follow-up A2 — opt-in adapter route
+        # via the v0.99.39 :class:`LLMAdapter` registry. A2 closes the
+        # Anthropic-only scope of Follow-up A by porting the multi-turn
+        # message converters to ``core/llm/adapters/_openai_common.py``
+        # (``build_codex_input`` / ``build_messages``) + capturing Codex
+        # encrypted-reasoning items + summaries on the SSE stream, so
+        # OpenAI Chat Completions and Codex Responses routes now also
+        # work through ``LLMAdapter.acomplete``.
         #
-        # When ``source`` is concrete (one of CONCRETE_SOURCES) AND the
-        # provider is supported, ``_call_llm`` routes through
-        # ``LLMAdapter.acomplete``. A concrete source with a missing
-        # adapter HARD-FAILS in :func:`resolve_for` — silent fallback would
-        # mask operator misconfiguration (Codex MCP 2026-05-23 HIGH 2).
+        # When ``source`` is concrete (one of CONCRETE_SOURCES), ``_call_llm``
+        # routes through ``LLMAdapter.acomplete`` for any provider. A
+        # concrete source with a missing adapter HARD-FAILS in
+        # :func:`resolve_for` — silent fallback would mask operator
+        # misconfiguration (Codex MCP 2026-05-23 HIGH 2).
         self._source = source
         self._new_adapter: Any | None = None
         if source:
             from core.llm.adapters import CONCRETE_SOURCES, resolve_for
 
             if source in CONCRETE_SOURCES:
-                if self._provider == "anthropic":
-                    # Hard-fail on resolve mismatch — concrete source MUST resolve.
-                    self._new_adapter = resolve_for(self._provider, source)
-                else:
-                    log.info(
-                        "AgenticLoop: source=%s threaded through but provider=%s "
-                        "stays on legacy adapter — A2 follow-up adds OpenAI/Codex "
-                        "multi-turn translation + reasoning replay.",
-                        source,
-                        self._provider,
-                    )
+                # Hard-fail on resolve mismatch — concrete source MUST resolve.
+                self._new_adapter = resolve_for(self._provider, source)
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
@@ -679,6 +668,108 @@ class AgenticLoop:
             elapsed = _time.monotonic() - self._loop_start_time
             if elapsed >= self._time_budget_s:
                 return "time_budget"
+        # PR-CL-BUDGET — session-wide wall-clock cap (default 2h) with
+        # T-10min auto-handoff. ``handoff_due`` is one-shot per session;
+        # we fire HANDOFF_TRIGGERED on the boundary and break the loop
+        # so the caller drains gracefully. ``expired`` is the hard stop
+        # if the loop somehow runs past zero. ``getattr`` tolerates stub
+        # loops in unit tests that bind ``_check_round_guards`` to a
+        # minimal object (see tests/test_arun_round_guards.py::_StubLoop).
+        handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
+        if handoff_check is not None:
+            handoff_reason: str | None = handoff_check()
+            if handoff_reason is not None:
+                return handoff_reason
+        return None
+
+    def _maybe_start_session_budget(self) -> None:
+        """Begin session-wide wall-clock budget if not already started.
+
+        Idempotent — if a prior AgenticLoop in the same SessionMetrics
+        scope already started the budget (``time_budget_total_s > 0``),
+        this is a no-op so the elapsed clock keeps running across the
+        nested loops. ``GEODE_SESSION_TIME_BUDGET_S`` env knob overrides
+        the default (set to 0 to disable; set to a positive float to
+        change the cap). Failures NEVER raise — observability mustn't
+        break the run it observes.
+        """
+        import os
+
+        try:
+            from core.agent.budget import (
+                DEFAULT_HANDOFF_THRESHOLD_S,
+                DEFAULT_TIME_BUDGET_S,
+                start_session_budget,
+            )
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            if metrics.time_budget_total_s > 0.0:
+                return  # Already started in this session.
+            raw = os.environ.get("GEODE_SESSION_TIME_BUDGET_S")
+            if raw is not None:
+                try:
+                    total = float(raw)
+                except ValueError:
+                    total = DEFAULT_TIME_BUDGET_S
+            else:
+                total = DEFAULT_TIME_BUDGET_S
+            if total <= 0.0:
+                return  # Explicitly disabled.
+            start_session_budget(
+                total_seconds=total,
+                handoff_threshold_seconds=DEFAULT_HANDOFF_THRESHOLD_S,
+                metrics=metrics,
+            )
+        except Exception:
+            log.warning("Session budget start failed", exc_info=True)
+
+    def _check_session_budget_and_maybe_handoff(self) -> str | None:
+        """Check session-wide wall-clock budget. Returns a guard-string when
+        the loop must break, ``None`` otherwise. Fires ``HANDOFF_TRIGGERED``
+        on the first threshold crossing.
+
+        Returns:
+            * ``"session_time_budget_handoff"`` on first T-threshold crossing.
+            * ``"session_time_budget_expired"`` when fully past the cap.
+            * ``None`` when still within budget (or no budget set).
+        """
+        import time as _time
+
+        try:
+            from core.agent.budget import budget_summary, check_session_budget
+            from core.observability.session_metrics import current_session_metrics
+
+            check = check_session_budget()
+            if check.handoff_due:
+                metrics = current_session_metrics()
+                payload: dict[str, Any] = {
+                    "session_id": self._session_id,
+                    "platform": "",  # adapter binding can override
+                    "remaining_s": check.remaining_seconds,
+                    "ts": _time.time(),
+                    **budget_summary(metrics=metrics),
+                }
+                if self._hooks is not None:
+                    try:
+                        self._hooks.trigger(HookEvent.HANDOFF_TRIGGERED, payload)
+                    except Exception:
+                        log.warning("HANDOFF_TRIGGERED hook failed", exc_info=True)
+                if self._transcript is not None:
+                    try:
+                        self._transcript.record_lifecycle_event(
+                            event="handoff_triggered",
+                            component="agentic_loop",
+                            level="warning",
+                            payload=payload,
+                        )
+                    except Exception:
+                        log.warning("Transcript handoff_triggered record failed", exc_info=True)
+                return "session_time_budget_handoff"
+            if check.expired:
+                return "session_time_budget_expired"
+        except Exception:
+            log.warning("Session budget check failed", exc_info=True)
         return None
 
     def _overthinking_token_threshold(self) -> int:
@@ -855,6 +946,15 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
+        # PR-CL-BUDGET (2026-05-23) — start the session-wide 2-hour
+        # wall-clock budget on first ``arun`` within a SessionMetrics
+        # scope. Subsequent loops in the same session share the budget
+        # via the ContextVar-bound metrics (guard: only start if no
+        # prior budget). Env override: ``GEODE_SESSION_TIME_BUDGET_S=0``
+        # disables; positive float overrides the 7200s default. The
+        # session budget is *separate from* per-loop ``self._time_budget_s``
+        # — both gate the loop, whichever fires first wins.
+        self._maybe_start_session_budget()
         # Defect A F-A1 — capture tracker snapshot at the loop entry so
         # ``finalize_and_return`` can compute a per-arun usage delta
         # without double-counting calls from sibling loops sharing the

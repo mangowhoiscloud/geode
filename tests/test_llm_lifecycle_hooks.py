@@ -26,8 +26,9 @@ class TestLLMLifecycleEvents:
         assert HookEvent.LLM_CALL_ENDED.value == "llm_call_end"
 
     def test_event_count_includes_llm_events(self) -> None:
-        """64 events total — +6 cognitive cycle members in PR-2."""
-        assert len(HookEvent) == 69
+        """72 events total — +6 cognitive (PR-2) + 5 auto-trigger (OL-A1.5)
+        + 3 handoff (PR-CL-BUDGET)."""
+        assert len(HookEvent) == 72
 
 
 class TestFireHook:

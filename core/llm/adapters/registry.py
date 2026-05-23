@@ -127,17 +127,22 @@ def resolve_for(provider: str, source: str) -> LLMAdapter:
 
 
 def bootstrap_builtins() -> None:
-    """Register the 6 built-in adapters.
+    """Register the 8 built-in adapters.
 
     Called from ``core/runtime.py`` during process bootstrap. Idempotent —
     re-registration is a no-op (logs at debug level). Mirrors paperclip's
     ``initializeBuiltinAdapters`` startup hook.
+
+    v0.99.44 — Follow-up F adds the two GLM adapters (PAYG /api/paas/v4
+    + Coding Plan /api/coding/paas/v4 subscription endpoint).
     """
     from core.llm.adapters.anthropic_oauth import AnthropicOAuthAdapter
     from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
     from core.llm.adapters.claude_cli import ClaudeCliAdapter
     from core.llm.adapters.codex_cli import CodexCliAdapter
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+    from core.llm.adapters.glm_coding_plan import GlmCodingPlanAdapter
+    from core.llm.adapters.glm_payg import GlmPaygAdapter
     from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
     for adapter_cls in (
@@ -147,6 +152,8 @@ def bootstrap_builtins() -> None:
         OpenAIPaygAdapter,
         CodexOAuthAdapter,
         CodexCliAdapter,
+        GlmPaygAdapter,
+        GlmCodingPlanAdapter,
     ):
         instance = adapter_cls()
         if instance.name in _REGISTRY:
