@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **PR-CLEANUP-4 — `core/llm/client.py` re-export shim removed.** 162-LOC
+  backward-compatibility module that re-exported 30+ symbols from
+  ``core.llm.router``, ``core.llm.fallback``, ``core.llm.providers.anthropic``,
+  and ``core.llm.errors``. The new "Compat" CANNOT row (added in
+  PR-DOCS-CANT-CAN) forbids re-export shims past their 1-release
+  grace, and this module had outlived its purpose — every production
+  path already imported from the canonical modules; only 6 test files
+  still routed through the shim.
+  Migration: 15 import sites across 6 test files
+  (``tests/test_failover.py``, ``tests/test_agentic_loop.py``,
+  ``tests/test_model_failover.py``, ``tests/test_tool_use.py``,
+  ``tests/test_status.py``, ``tests/test_llm_client.py``) rewrote
+  ``core.llm.client`` → ``core.llm.router`` (where every symbol they
+  reached for actually lives). ``tests/test_failover.py`` separately
+  imports ``retry_with_backoff`` from
+  ``core.llm.providers.anthropic`` (aliased ``_retry_with_backoff``
+  to keep the test-internal name stable). 190 tests across the
+  affected files pass post-migration. CLAUDE.md's
+  "Cascading Updates" table updated to point at the real LLM-adapter
+  layout (``core/llm/router/`` + ``core/llm/providers/``) instead of
+  the deleted shim.
+
 ### Changed
 
 - **PR-CLEANUP-3 — three structural renames driven by the new CLAUDE.md
