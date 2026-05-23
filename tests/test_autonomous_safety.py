@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,31 @@ import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticResult
 from core.agent.tool_executor import ToolExecutor
+from core.observability.session_metrics import session_metrics_scope
+
+
+@pytest.fixture(autouse=True)
+def _isolated_session_metrics() -> Iterator[None]:
+    """Step J-b.1 fix-up (2026-05-23) — isolate SessionMetrics per test.
+
+    PR-CL-A1 (#1548) added ``_maybe_replan_async`` which reads
+    ``current_session_metrics().last_verify_passed`` / ``.active_plan`` at
+    every round entry. The ContextVar's lazy-init pattern means state
+    from a prior test in the same xdist worker (xdist ``loadfile``
+    packs all tests in this file into one worker) leaks into the next
+    test's ``arun``. ``test_diversity_hint_injected`` is the canary —
+    when the leaked state trips a verify_fail replan trigger, the
+    planner mock consumes the tool-response slot and the diversity
+    tracker never advances to 5.
+
+    Wrapping every test in this file with a fresh ``session_metrics_scope``
+    closes the leak. Each test sees a clean SessionMetrics with default
+    ``last_verify_passed=True`` and ``active_plan=None`` so the replan
+    trigger stays silent.
+    """
+    with session_metrics_scope():
+        yield
+
 
 # ---------------------------------------------------------------------------
 # Helpers
