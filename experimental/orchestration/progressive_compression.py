@@ -274,6 +274,8 @@ class ProgressiveCompressor:
             client = _get_openai_client()
             if client is None:
                 return None
+            from core.config import settings as _settings
+
             response = client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=[
@@ -281,7 +283,7 @@ class ProgressiveCompressor:
                     {"role": "user", "content": text},
                 ],
                 max_tokens=256,
-                temperature=0.0,
+                temperature=_settings.temperature_progressive_compression,
             )
             choice = response.choices[0] if response.choices else None
             if choice and choice.message and choice.message.content:

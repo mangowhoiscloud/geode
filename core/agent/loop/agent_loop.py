@@ -1741,6 +1741,7 @@ class AgenticLoop:
         # v0.90.0 — the prior overthinking effort-downgrade branch is gone:
         # the post-response check now exits the loop on the same condition,
         # so the only remaining adaptive case is wrap-up.
+        from core.config import settings as _settings
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
         ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
@@ -1754,6 +1755,11 @@ class AgenticLoop:
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
             adaptive_effort = "low"
+
+        # PR-TEMP (2026-05-23) — config-driven temperature, replacing the
+        # prior hardcoded 0.0. See ``Settings.temperature_agent_loop`` for
+        # the frontier-API grounding behind the new 1.0 default.
+        loop_temperature = _settings.temperature_agent_loop
 
         if self._new_adapter is not None:
             # v0.99.40 Follow-up A — opt-in adapter route. Build adapter-neutral
@@ -1772,7 +1778,7 @@ class AgenticLoop:
                 tools=self._tools,
                 tool_choice=tool_choice,
                 max_tokens=adaptive_max_tokens,
-                temperature=0.0,
+                temperature=loop_temperature,
                 thinking_budget=adaptive_thinking,
                 effort=adaptive_effort,
             )
@@ -1796,7 +1802,7 @@ class AgenticLoop:
                 tools=self._tools,
                 tool_choice=tool_choice,
                 max_tokens=adaptive_max_tokens,
-                temperature=0.0,
+                temperature=loop_temperature,
                 thinking_budget=adaptive_thinking,
                 effort=adaptive_effort,
             )

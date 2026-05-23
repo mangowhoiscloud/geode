@@ -49,6 +49,27 @@ functional change.
 
 ### Changed
 
+- **PR-TEMP — LLM sampling temperature is config-driven, no more hardcoded
+  constants.** Six call sites previously held literal floats (agent loop
+  ``0.0`` × 2, reflection ``0.2``, cross-LLM verification ``0.1`` × 2,
+  commentary signature default ``0.4``, self-improving mutation ``0.3``,
+  progressive compression ``0.0``). Each one now reads from a new
+  ``Settings.temperature_*`` knob, exposed via ``~/.geode/config.toml`` or
+  the matching ``GEODE_TEMPERATURE_*`` env var. Defaults reflect a frontier-
+  API grounding pass (Anthropic / OpenAI / Gemini docs + Moonshot/Kimi):
+  most paths land on ``1.0`` (provider default — Gemini 3 explicitly warns
+  against lowering temperature; OpenAI reasoning models reject ≠ 1);
+  ``temperature_verification`` and ``temperature_progressive_compression``
+  default to ``0.0`` because cross-LLM agreement and reproducible summaries
+  are functional invariants where stochastic output is meaningless.
+  ``tests/test_temperature_config_invariants.py`` (NEW, 19 cases) ratchets
+  the migration: Settings keys + defaults + range validation, plus a per-
+  site grep guard that fails if a literal ``temperature=<float>`` kwarg
+  sneaks back into any of the six policy sites. ``Settings.temperature_*``
+  fields enforce ``ge=0.0, le=2.0``; per-provider clamping (Opus 4.x adaptive
+  models stripping sampling params, Codex gpt-5.x omitting temperature
+  entirely) is untouched and still kicks in downstream.
+
 - **Step I.a — Codex OAuth header construction collapsed onto one helper.**
   Four call sites built the same
   ``{"originator": "codex_cli_rs", "ChatGPT-Account-ID": <jwt-claim>}`` dict

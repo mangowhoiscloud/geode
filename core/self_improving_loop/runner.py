@@ -597,6 +597,10 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
         return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
 
+    from core.config import settings as _settings
+
+    mutator_temperature = _settings.temperature_self_improving_mutation
+
     async def _do_call(m: str) -> object:
         return await adapter.agentic_call(
             model=m,
@@ -605,7 +609,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
             tools=[],
             tool_choice={"type": "auto"},
             max_tokens=max_tokens,
-            temperature=0.3,
+            temperature=mutator_temperature,
         )
 
     # ``call_with_failover`` is the router's async dispatcher (transport
