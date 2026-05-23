@@ -125,7 +125,10 @@ class AgenticLoop:
             try:
                 from core.config import settings
 
-                act_model = (getattr(settings, "act_model", "") or "").strip()
+                # ``isinstance(..., str)`` filters MagicMock-auto-attrs in
+                # test fixtures that don't seed ``act_model`` explicitly.
+                act_raw = getattr(settings, "act_model", "")
+                act_model = act_raw.strip() if isinstance(act_raw, str) else ""
             except Exception:
                 act_model = ""
             self.model = act_model or ANTHROPIC_PRIMARY

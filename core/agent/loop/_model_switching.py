@@ -48,8 +48,12 @@ def _settings_model_target(loop: AgenticLoop) -> str | None:
 
     # Action loop's intended model — ``act_model`` wins when set; falls
     # back to ``settings.model`` for callers that haven't configured the
-    # Plan/Act knob (pre-A6 behaviour).
-    target_model = (getattr(settings, "act_model", "") or "").strip() or settings.model
+    # Plan/Act knob (pre-A6 behaviour). ``isinstance(..., str)`` filters
+    # MagicMock attrs in test fixtures that auto-create non-string values
+    # (Codex MCP CI catch 2026-05-23).
+    act_raw = getattr(settings, "act_model", "")
+    act_model = act_raw.strip() if isinstance(act_raw, str) else ""
+    target_model = act_model or settings.model
     if target_model == loop.model:
         return None
     if not loop._drift_target_is_healthy(target_model):
