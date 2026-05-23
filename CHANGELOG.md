@@ -134,6 +134,25 @@ functional change.
   - LOW (acknowledged): `cost_preview.py` accounting gets a phantom
     one-run estimate for `literature_review` when `max_papers=0`;
     follow-up to add a phase-skip bypass.
+
+### Changed
+
+- **Plan docs sync with PR-SESSION-METRICS rename**. 3 plan docs updated
+  to reflect ``journal.jsonl`` → ``transcript.jsonl`` rename + ``SessionJournal``
+  → ``SessionTranscript`` alias-shim absorption from PR #1531:
+  - ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`` —
+    schema row #7 의 ``journal.jsonl`` → ``transcript.jsonl`` + Phase C
+    verification checklist 의 path 갱신
+  - ``docs/plans/2026-05-21-self-improving-loop-ux.md`` — UX mockup 의
+    "G9 — last 9 journal events" → "transcript events" + Stage ④ telemetry
+    의 ``SessionJournal event`` → ``SessionTranscript lifecycle event``
+    (3 places)
+  - ``docs/plans/2026-05-23-sil-5theme-closure.md`` — C4 row 에 PR #1531
+    sidecar 흡수 + race-surface 0 후속 노트 추가
+
+  Codex MCP review (thread ``019e53a5-c793-7d13-b40c-562fb28b0d9f``): 4 checks
+  pass + 1 LOW finding (UX residual 392/412 line) addressed in this commit.
+
 ## [0.99.42] - 2026-05-23
 
 > Observability central-isation release. ``SessionMetrics`` 신설 (Tier 2 of
