@@ -25,7 +25,7 @@ Live invocation triggers paid LLM calls. Default ``dry_run=True`` —
 the report contains the constructed ``compile_id``, the would-be
 output path, and the cost estimate, with no DSPy import on the cold
 path. ``dry_run=False`` requires explicit user authorisation per
-CLAUDE.md L99.
+`CLAUDE.md` → CANNOT → Quality: "No unauthorized live test execution".
 """
 
 from __future__ import annotations

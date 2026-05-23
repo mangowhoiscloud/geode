@@ -227,6 +227,46 @@ functional change.
   HumanEval pass@1 via verbal RL) + OpenAI o1 chain-of-verify + AgentHub
   per-branch verify gate + Claude Code Plan/Edit implicit verify.
 
+### Changed
+
+- **Scaffold consolidation — `CLAUDE.md` + `GEODE.md` 정돈.** Absorbed the
+  free-standing `### DONT — Real Incidents` table into the structured
+  `### CANNOT` + `### Wiring Verification` + `### Refactoring Deception
+  Prevention` tables so every prohibition rule lives in one indexable
+  place with the originating sprint incident attached. Five new CANNOT
+  rows distilled from prior incidents (graceful-contract scope / latest
+  vs promoted SoT / dual-SoT drift invariant / 제거 disambiguation /
+  no-emoji-no-card UI). Consolidated the triple-listed Quality Gates
+  recipe (was duplicated across §3 Implement, §4b Correctness, and the
+  trailing `### Quality Gates` table) into a single trailing SoT with
+  the two earlier locations now linking back. Compressed `Refactoring
+  Deception Prevention` (5 rows → 2: implementation-completeness +
+  CHANGELOG/PR-body parity) and `§4c Cleanliness` (4-row table → one
+  line delegating to the `anti-deception-checklist` skill) so the
+  scaffold no longer duplicates skill content. Added cross-reference
+  banners on `### CANNOT`, `### Wiring Verification`, the worktree row,
+  the PR row, and the `4-layer stack` line so each scaffold table now
+  names the skill or sibling document it pairs with.
+- **`GEODE.md` runtime-vs-dev scope disambiguation.** Renamed
+  `## CANNOT` → `## RUNTIME CANNOT` so the runtime agent-guardrail
+  table is no longer confusable with the scaffold's development-time
+  `### CANNOT`. Both headers now carry a one-line banner pointing at
+  the sibling document.
+
+### Fixed
+
+- **G1 identity context — `RUNTIME CANNOT` header parity.**
+  `core/agent/system_prompt.py:_build_identity_context` looked for the
+  hardcoded literal `"## CANNOT"` when extracting the agent-identity
+  block from `GEODE.md`. The scaffold-consolidation rename to
+  `## RUNTIME CANNOT` would have silently dropped the 4-line CANNOT
+  section (G3 Grounding / cross-validation / Confidence loopback /
+  sub-agent delegation) from every LLM system prompt's
+  `<agent_identity>` block. `target_sections` (line 477) and the
+  surrounding module + function docstrings now reference
+  `## RUNTIME CANNOT`. Verified by direct call — the block still
+  contains all 4 RUNTIME CANNOT bullets after the rename.
+
 ## [0.99.44] - 2026-05-23
 
 ### Added

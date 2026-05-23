@@ -4,10 +4,11 @@ ground-truth runtime constants (`autoresearch/train.py` /
 `autoresearch/bench_means.py`).
 
 PR-SIL-5THEME C1 (2026-05-23) — codifies the
-CHANGELOG/PR-body-parity anti-deception lesson (CLAUDE.md DONT row
-1, PR-G5b #1350) for the §S6/§S6b ADR amendments. Without these
-tests a future ADR edit could regress the doc to "3축" or drop
-``§S6`` and the build would stay green.
+CHANGELOG/PR-body-parity anti-deception lesson (`CLAUDE.md` →
+Refactoring Deception Prevention → "CHANGELOG/PR-body parity",
+incident PR-G5b #1350) for the §S6/§S6b ADR amendments. Without
+these tests a future ADR edit could regress the doc to "3축" or
+drop ``§S6`` and the build would stay green.
 """
 
 from __future__ import annotations

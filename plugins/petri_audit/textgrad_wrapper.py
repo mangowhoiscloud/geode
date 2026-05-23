@@ -11,7 +11,7 @@ This wrapper is intentionally thin — it does not duplicate TextGrad's
 public API, just gates the depth/chaining knobs and lazy-imports the
 underlying library so the cold path is unaffected when ``[reason]`` is
 absent. Live calls require an explicit user authorisation per
-CLAUDE.md L99.
+`CLAUDE.md` → CANNOT → Quality: "No unauthorized live test execution".
 """
 
 from __future__ import annotations
