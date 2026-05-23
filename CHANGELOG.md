@@ -49,6 +49,21 @@ functional change.
 
 ### Added
 
+- **Follow-up D — UI surface for the adapter registry.** Two new
+  read-only Typer subcommands:
+
+  - ``geode adapters list`` enumerates the 6 registered adapters with
+    ``billing_type`` and per-adapter ``test_environment`` status.
+  - ``geode adapters detect-model <name>`` reports the currently
+    configured model + provenance via the adapter's
+    ``detect_credential()`` hook.
+  - ``geode audit-seeds config`` shows the 7-role × (provider, model,
+    source) binding matrix resolved by the picker, plus the judge
+    panel voters.
+
+  UI follows the ``feedback_no_box_ui_no_emoji`` rule: dense aligned
+  table, plain text headers, no box-card / emoji decoration.
+
 - **Follow-up C — S11 PipelineRegistry wire-up.** ``cli._dispatch_pipeline``
   now populates the ``PipelineRegistry`` with one concrete agent per
   ``manifest.enabled_roles`` (generator / critic / proximity / pilot /
