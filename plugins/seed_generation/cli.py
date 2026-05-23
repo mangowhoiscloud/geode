@@ -83,6 +83,49 @@ def _get_seed_generation_config() -> Any:
         return SimpleNamespace(candidates_default=15, default_gen_tag="gen1")
 
 
+@audit_seeds_app.command("config")
+def audit_seeds_config() -> None:
+    """Show the 7-role × (model, source) binding matrix.
+
+    Resolved by :func:`plugins.seed_generation.picker.pick_bindings`
+    after merging in user overrides from ``~/.geode/config.toml``
+    ``[seed_generation.role.<role>]`` (or the legacy
+    ``~/.geode/seed-generation.toml`` fallback).
+
+    Read-only — to change a role's source, edit
+    ``~/.geode/config.toml`` directly:
+
+      [seed_generation.role.generator]
+      source = "payg" | "subscription" | "adapter"
+
+    See ``geode adapters list`` for the available source names per
+    provider.
+    """
+    from plugins.seed_generation.picker import pick_bindings
+
+    picker = pick_bindings(auto_probe=False)
+    header = f"{'ROLE':<18} {'PROVIDER':<10} {'MODEL':<26} {'SOURCE':<14}"
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for role_name in sorted(picker.bindings):
+        b = picker.bindings[role_name]
+        typer.echo(f"{role_name:<18} {b.provider:<10} {b.model:<26} {b.source:<14}")
+
+    if picker.voters:
+        typer.echo("\nJudge panel voters:")
+        voter_header = f"  {'PROVIDER':<10} {'MODEL':<26} {'SOURCE':<14}"
+        typer.echo(voter_header)
+        typer.echo("  " + "-" * (len(voter_header) - 2))
+        for v in picker.voters:
+            typer.echo(f"  {v.provider:<10} {v.model:<26} {v.source:<14}")
+
+    typer.echo(
+        f"\n{len(picker.bindings)} role(s) bound; "
+        f"{len(picker.voters)} voter(s); "
+        f"{len(picker.subscription_paths_in_use)} subscription path(s) active."
+    )
+
+
 @audit_seeds_app.command("generate")
 def audit_seeds_generate(
     target_dim: str | None = typer.Option(
