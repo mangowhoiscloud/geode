@@ -85,6 +85,29 @@ functional change.
   - Manifest + config: `SeedRoleSpec.max_papers` (0 or [1, 20]) +
     `queries_per_run` ([1, 10]) validators. Operator override slots
     in `SelfImprovingLoopBindings`.
+  - **Seed bundle_sync** (added 2026-05-23 after mockup feedback —
+    discovered the publish hierarchy gap):
+    `plugins/seed_generation/bundle_sync.py` mirrors the audit-side
+    `sync_eval_to_bundle` pattern. `sync_run_to_bundle(run_dir)` runs
+    on `Pipeline.arun` finalization and selectively copies
+    `state/seed-generation/<run_id>/{state.json, survivors.json,
+    meta_review.json, candidates/<survivor_id>.md}` into
+    `docs/petri-bundle/seeds/<run_id>/`. Drafts that didn't survive
+    stay in `state/` only — the bundle is a publish surface, not an
+    archive. `.gitignore` carries `!docs/petri-bundle/seeds/**` so
+    the synced files actually enter git (parity with the audit-side
+    `!docs/petri-bundle/logs/**` rule; avoids the PR-G5b #1350
+    silent-drop anti-pattern). NEW `scripts/build_seeds_listing.py`
+    aggregates run rows into `docs/petri-bundle/seeds/listing.json`
+    for the bundle-UI consumers; wired into `pages.yml` next to the
+    literature build step. `validate_petri_bundle.py` extended to
+    count synced runs alongside audit archives + literature snapshots.
+    The CSP-14-UI mockups read these surfaces (`bundle-landing.html` +
+    `seeds.html` reference the listing.json + per-run state.json).
+    Same gitignore exception added for `docs/petri-bundle/literature/`
+    — the writer's GEODE_REPO_ROOT-anchored path was correct but the
+    new dir wasn't covered by the existing audit-logs exception, so
+    git tracking would have silently dropped fresh snapshots.
 
   **Bundle UI (Next.js literature index + detail pages + inline
   reference card in audit log viewer)** is deferred to a follow-up PR

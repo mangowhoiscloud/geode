@@ -148,6 +148,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/build_literature_listing.py
 
+      - name: Build seeds listing.json (CSP-14)
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/build_seeds_listing.py
+
       - name: Sync GEODE stats into site SOT
         run: npm run sync-stats
         env:
