@@ -77,6 +77,26 @@ functional change.
 
 ### Added
 
+- **Step I.c — `core.llm.adapters.adapter_health(name)` registry accessor.**
+  Thin one-call probe over the existing
+  :meth:`LLMAdapter.test_environment` method so picker UIs, readiness
+  audits, and external consumers (petri_audit's ``credential_source``
+  cascade, the ``/auth`` slash, the routing-recovery loop) can ask
+  "is adapter X healthy?" without an explicit
+  ``get_adapter(name).test_environment()`` two-step. The accessor
+  returns the unmodified :class:`EnvironmentReport`
+  (``ok`` / ``checks`` / ``hints``) so callers retain full access to
+  the operator-facing diagnostic detail.
+
+  Step I.c originally framed an :meth:`LLMAdapter.is_available`
+  Protocol extension; grounding revealed the equivalent contract
+  already exists as ``test_environment`` (every built-in implements
+  it). The PR therefore ships the ergonomic accessor + 4 new tests
+  (delegation parity, ``ok=False`` passthrough, missing-adapter
+  ``KeyError``, 8-built-in smoke), without touching the Protocol
+  surface.
+
+
 - **Step I.b — Codex reasoning-replay inspect_ai integration smoke test.**
   Step A2 (v0.99.44) wired Codex encrypted-reasoning replay into the
   GEODE AgenticLoop's ``Message`` path via

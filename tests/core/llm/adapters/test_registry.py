@@ -15,6 +15,7 @@ from core.llm.adapters import (
     AdapterAlreadyRegisteredError,
     AdapterBillingType,
     AdapterNotFoundError,
+    adapter_health,
     bootstrap_builtins,
     get_adapter,
     list_adapters,
@@ -185,3 +186,74 @@ def test_all_concrete_sources_covered_by_some_builtin() -> None:
     bootstrap_builtins()
     seen = {a.source for a in list_adapters()}
     assert seen >= CONCRETE_SOURCES
+
+
+# ---------------------------------------------------------------------------
+# Step I.c (2026-05-23) — adapter_health(name) registry accessor
+# ---------------------------------------------------------------------------
+
+
+def test_adapter_health_returns_environment_report_for_stub() -> None:
+    """``adapter_health(name)`` delegates to ``adapter.test_environment()``.
+
+    Step I.c — the accessor is the ergonomic one-call probe over the
+    existing ``LLMAdapter.test_environment`` method. The stub above
+    always reports ``ok=True``; this confirms the helper threads the
+    result through unchanged.
+    """
+    from core.llm.adapters.base import EnvironmentReport
+
+    register_adapter(_Stub("stub-health-ok", "stub", SOURCE_PAYG))
+    report = adapter_health("stub-health-ok")
+    assert isinstance(report, EnvironmentReport)
+    assert report.ok is True
+
+
+def test_adapter_health_surfaces_not_ok_report() -> None:
+    """An adapter that returns ``ok=False`` must surface verbatim — no
+    ``adapter_health`` post-processing. Picker UIs depend on the report's
+    full structure (``checks`` + ``hints``) to render actionable errors.
+    """
+    from core.llm.adapters.base import EnvironmentReport
+
+    class _UnhealthyStub(_Stub):
+        def test_environment(self) -> EnvironmentReport:
+            return EnvironmentReport(
+                ok=False,
+                checks=(("ANTHROPIC_API_KEY", "missing"),),
+                hints=("set ANTHROPIC_API_KEY",),
+            )
+
+    register_adapter(_UnhealthyStub("stub-health-fail", "stub", SOURCE_PAYG))
+    report = adapter_health("stub-health-fail")
+    assert report.ok is False
+    assert report.checks == (("ANTHROPIC_API_KEY", "missing"),)
+    assert report.hints == ("set ANTHROPIC_API_KEY",)
+
+
+def test_adapter_health_missing_adapter_raises_keyerror() -> None:
+    """The accessor delegates to :func:`get_adapter` for the lookup,
+    which raises :class:`KeyError` on a typo. Confirm the behaviour
+    propagates (no silent ``ok=False`` swallow that would mask
+    operator typos)."""
+    with pytest.raises(KeyError):
+        adapter_health("never-registered")
+
+
+def test_adapter_health_runs_on_every_builtin() -> None:
+    """Smoke-call ``adapter_health`` on every bootstrapped built-in.
+
+    The probe must not raise for any of the 8 adapters even when
+    credentials are absent (the test environment has no API keys).
+    Adapters honor the contract: ``test_environment`` returns an
+    :class:`EnvironmentReport` with ``ok=False`` instead of raising.
+    """
+    from core.llm.adapters.base import EnvironmentReport
+
+    bootstrap_builtins()
+    for adapter in list_adapters():
+        report = adapter_health(adapter.name)
+        assert isinstance(report, EnvironmentReport), (
+            f"adapter_health({adapter.name!r}) returned {type(report).__name__}; "
+            "every built-in must honor the EnvironmentReport contract."
+        )
