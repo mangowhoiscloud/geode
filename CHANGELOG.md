@@ -169,6 +169,61 @@ functional change.
   is still honoured as a fallback with a one-time deprecation
   warning. Removal target: v1.0.0.
 
+- **PR-SIL-5THEME C1 — ADR-012 §Decision.2 의 3축 → 4축 amendment + §S6 /
+  §S6b 신설**. self-improving loop 의 fitness 명세 — ``dim_means`` (Petri
+  alignment, 음의 압력) 1축 외에 ``ux_means`` (S1, 양의 압력) +
+  ``admire_means`` (S2, 양의 압력) + ``bench_means`` (S6, capability 양의
+  압력) 추가 — 가 코드에는 (`autoresearch/train.py:344-350` 의
+  ``FITNESS_*_4AX`` 상수 + ``bench_means.py:91-101`` 의
+  ``BENCH_DIM_WEIGHTS``) 정착돼 있었으나 ADR 본문은 초안의 3축 상태로
+  남아있었다. 본 amendment 가 그 mismatch 를 정리:
+
+  - §Decision.2 의 "3축 multi-axis strict-reject ratchet" →
+    "**4축** multi-axis strict-reject ratchet" + baseline.json schema
+    가 ``schema_version=2`` 의 ``raw`` + ``axes`` namespace 로 갱신
+  - 축별 권장 가중치 ``dim 0.4 / ux 0.3 / admire 0.3`` (3축) →
+    ``dim 0.30 / ux 0.25 / admire 0.20 / bench 0.25`` (4축, sum=1.0)
+  - ``seed_pool_diversity`` 슬롯 — 초안에 4번째 묶음으로 명시됐으나 코드
+    0 grep, ELO tournament 의 cross-provider panel 이 diversity 신호 흡수 —
+    명시적 deprecate
+  - 신규 §S6 (Bench fitness axis) — 7-bench frontier federation 명세
+    (SWE-bench Pro / **LiveCodeBench-Pro** / τ²-bench / GPQA Diamond /
+    HLE / OSWorld / MLE-bench) + 2026-05 갱신 history + cross-validation
+    gate (alignment_only_fooling / capability_at_alignment_cost) +
+    frontier sources 10건
+  - 신규 §S6b (Production wiring) — collector / dispatcher / persistence /
+    observability / Docker A1 graceful-skip 명세
+  - "후속 PR 시퀀스" 표에 S6 + S6b 두 entry 추가
+
+  **F1.b LiveCodeBench substitution** — vanilla LiveCodeBench (Python
+  algorithmic, pass@1) 의 공식 inspect_ai port 가 부재한 상태에서
+  frontier consensus 가 ``livecodebench_pro`` (C++ competitive, accuracy
+  metric, live-contest scrape + time-cutoff windowing, 2026 v2 가 ICPC
+  WF/IOI/Chinese olympiad 추가) 로 그 niche 를 흡수. ``BENCH_DIM_WEIGHTS``
+  의 ``livecodebench_pass1`` → ``livecodebench_pro_accuracy`` 로 rename
+  (weight 0.15 변동 없음, metric 형식 변경은 0-1 float schema 무영향).
+  ``bench_means.py`` docstring 의 "LiveCodeBench (algo, contam-free)" →
+  "LiveCodeBench-Pro (C++ competitive, contam-defended, 2026 v2)" 로 갱신.
+
+  **Drift invariant 7건** (``tests/test_adr_012_parity.py`` 신규):
+  - ``test_adr012_decision2_header_says_4axis`` — 헤더 "4축" 명시
+  - ``test_adr012_decision2_weights_match_code_constants`` — ADR ↔ code
+    상수 4-axis 가중치 일치 (regex parse)
+  - ``test_adr012_deprecates_seed_pool_diversity`` — deprecate 명시 확인
+  - ``test_adr012_has_s6_section`` — §S6 헤더 존재 (docstring 인용 grep
+    provable 보장)
+  - ``test_adr012_s6_schema_field_names_match_code`` — §S6.2 표의 field
+    name 7개 모두 ``BENCH_DIM_WEIGHTS`` 와 일치
+  - ``test_adr012_s6_weights_match_bench_dim_weights`` — §S6.2 표의
+    weight column 이 코드 dict 와 byte-equivalent
+  - ``test_adr012_has_s6b_section`` — §S6b 헤더 존재
+  - ``test_adr012_pr_sequence_lists_s6_and_s6b`` — "후속 PR 시퀀스" 표가
+    S6 + S6b 모두 포함
+
+  Same anti-deception pattern as PR-G5b #1350 / PR-MINIMAL-2 #1398:
+  ADR 와 코드 docstring 사이의 grep-provable invariant 가 없으면 future
+  ADR 편집이 silent drift 를 부른다.
+
 - **PR-C-P1 — autoresearch ``seed_limit`` lower bound bumped from
   ``ge=1`` to ``ge=5``**. Pydantic now rejects any
   ``[self_improving_loop.autoresearch] seed_limit`` value below 5.

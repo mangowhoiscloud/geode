@@ -38,10 +38,16 @@ def test_bench_dim_weights_sum_to_one() -> None:
 
 def test_bench_dim_weights_exact_7_fields_2026_frontier() -> None:
     """2026-05 갱신 — 4 outdated bench (SWE/HumanEval/TAU/GAIA) 교체 후
-    7 frontier bench (Claude Opus 4.5 + GPT-5 system card 공통)."""
+    7 frontier bench (Claude Opus 4.5 + GPT-5 system card 공통).
+
+    2026-05-23 F1.b — vanilla LiveCodeBench port 부재로 LiveCodeBench-Pro
+    substitution (PR-SIL-5THEME C1): ``livecodebench_pass1`` →
+    ``livecodebench_pro_accuracy``. metric 도 pass@1 → accuracy
+    (LightCPVerifier C++ exec) 로 갱신, 도메인은 Python algorithmic →
+    C++ competitive 로 shift. weight 0.15 변동 없음."""
     assert set(BENCH_DIM_WEIGHTS) == {
         "swe_bench_pro_pass",  # Scale AI SWE-bench Pro (OpenAI 2026-02 retire 후)
-        "livecodebench_pass1",  # contam-free Python coding
+        "livecodebench_pro_accuracy",  # F1.b: LiveCodeBench-Pro (C++ competitive, contam-defended)
         "tau2_bench_success",  # Sierra τ²-bench (telecom domain)
         "gpqa_diamond",  # NYU PhD reasoning
         "hle_accuracy",  # Humanity's Last Exam (Nature 2026-01)
