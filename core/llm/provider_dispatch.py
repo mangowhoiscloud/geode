@@ -15,8 +15,8 @@ from core.config import (
     OPENAI_FALLBACK_CHAIN,
     is_model_allowed,
 )
+from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
-from core.hooks.utils import fire_hook
 from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
 
 
