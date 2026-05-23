@@ -54,7 +54,7 @@ def _patch_refresh_path(
     profile_store.list_all.side_effect = profile_calls
 
     return (
-        patch("core.llm.routing.plan_registry.get_plan_registry", return_value=plan_store),
+        patch("core.llm.strategies.plan_registry.get_plan_registry", return_value=plan_store),
         patch("core.wiring.container.ensure_profile_store", return_value=profile_store),
         patch("core.auth.auth_toml.load_auth_toml", return_value=ok),
         patch("core.auth.auth_toml.auth_toml_path", return_value="/tmp/auth.toml"),  # noqa: S108

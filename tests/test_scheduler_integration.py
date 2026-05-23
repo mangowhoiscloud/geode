@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 from core.cli.commands import cmd_schedule
-from core.scheduler.nl_scheduler import NLScheduleParser
-from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
-from core.scheduler.scheduler import (
+from core.scheduler import (
     Schedule,
     ScheduledJob,
     ScheduleKind,
     SchedulerService,
 )
+from core.scheduler.nl_scheduler import NLScheduleParser
+from core.scheduler.predefined import PREDEFINED_AUTOMATIONS
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from core.scheduler.scheduler import (
+from core.scheduler import (
     MISSED_TASK_GRACE_MS,
     Schedule,
     ScheduledJob,

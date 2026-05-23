@@ -79,7 +79,7 @@ def build_automation(
     trigger_manager.start_scheduler()
 
     # Advanced scheduler service (3-type: AT/EVERY/CRON + active hours)
-    from core.scheduler.scheduler import create_scheduler
+    from core.scheduler import create_scheduler
 
     scheduler_service = create_scheduler(
         trigger_manager=trigger_manager,

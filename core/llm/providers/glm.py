@@ -45,7 +45,7 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
     from core.config import settings
 
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         target = resolve_routing("glm-5.1")
         if target is not None and target.profile.key:

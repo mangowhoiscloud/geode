@@ -97,7 +97,7 @@ __all__ = [
 #       successful ``create_plan``.
 #   Persistence: in-memory only → daemon restart wiped all plan history.
 # ``PlanStore`` lives at ``.geode/plans.json`` (atomic write via
-# tmp+rename, mirrors ``core/scheduler/scheduler.py:save``) and is shared
+# tmp+rename, mirrors ``core/scheduler/service.py:save``) and is shared
 # across factories.
 _PLAN_STORE: Any | None = None
 

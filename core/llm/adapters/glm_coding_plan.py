@@ -186,13 +186,13 @@ def _resolve_coding_plan_endpoint() -> tuple[str, str]:
     """Return ``(api_key, base_url)`` for the registered Coding Plan, else
     ``("", "")``.
 
-    Walks :func:`core.llm.routing.plan_registry.resolve_routing` for the
+    Walks :func:`core.llm.strategies.plan_registry.resolve_routing` for the
     ``glm-coding-*`` Plan (the same path :func:`core.llm.providers.glm._resolve_glm_endpoint`
     uses). If no Plan is bound, returns empty strings so the adapter
     refuses rather than silently falling back to PAYG.
     """
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         target = resolve_routing("glm-5.1")
         if target is not None and target.profile.key:

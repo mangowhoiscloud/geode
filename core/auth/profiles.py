@@ -79,7 +79,7 @@ class AuthProfile:
     Naming convention: {provider}:{identifier} e.g. 'anthropic:work'.
 
     plan_id (v0.50.0+) optionally links the profile to a Plan in
-    `core.llm.routing.plans`, which carries the endpoint, auth type,
+    `core.llm.strategies.plans`, which carries the endpoint, auth type,
     quota, and subscription metadata. When unset, the profile defaults
     to a synthetic PAYG Plan derived from `provider`.
 
