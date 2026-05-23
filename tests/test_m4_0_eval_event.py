@@ -29,7 +29,7 @@ from core.self_improving_loop.eval_journaling import (
 
 @pytest.fixture
 def journal_path(tmp_path: Path) -> Iterator[Path]:
-    yield tmp_path / "journal.jsonl"
+    yield tmp_path / "transcript.jsonl"
 
 
 def _read_events(path: Path) -> list[dict]:

@@ -104,7 +104,7 @@ def pair_signature(prompt: str, chosen: str, rejected: str) -> str:
 
 
 def _iter_eval_events(journal_path: Path) -> list[_EvalEvent]:
-    """Read one ``journal.jsonl`` file → list of ``eval_response_recorded`` rows.
+    """Read one ``transcript.jsonl`` file → list of ``eval_response_recorded`` rows.
 
     Lines that fail to parse, lack the canonical event name, or are
     missing required payload fields are silently skipped (the journal
@@ -209,7 +209,7 @@ def build_dpo_pack(
     """Walk ``journal_paths`` → group by prompt → append new pairs to ``pack_path``.
 
     Args:
-        journal_paths: ``journal.jsonl`` files to scan. Missing files are
+        journal_paths: ``transcript.jsonl`` files to scan. Missing files are
             treated as empty (graceful).
         pack_path: Destination JSONL. Created lazily; existing rows are
             preserved + their signatures are honoured for dedup.

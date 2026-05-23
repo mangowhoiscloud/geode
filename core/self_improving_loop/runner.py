@@ -44,7 +44,6 @@ import subprocess
 import time
 import uuid
 from collections.abc import Callable
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -467,90 +466,49 @@ LLMCallable = Callable[[str, str], str]
 
 
 # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 sidecar 캡처.
-# ``_default_llm_call`` 이 ``response.usage`` 를 dict 로 저장하면 ``propose()``
-# 가 같은 process 내에서 읽어 ``Mutation.cost_*`` field 채움. tests inject 한
-# str-returning mock 은 usage 미세팅 → ``Mutation.cost_*`` 가 default 0 / ""
-# 로 남아 ``to_audit_row()`` 가 cost 컬럼 자체 생략 (backward-compat).
+# PR-SESSION-METRICS (2026-05-23) — sidecar pattern 폐기. 13개 곳에 분산된
+# session-scoped state 가 ``core/observability/session_metrics.py:SessionMetrics``
+# 의 ContextVar 로 중앙 집중. ``_default_llm_call`` 이 response.usage 를
+# ``current_session_metrics().accumulate_llm_call(...)`` 로 직접 fold 하고,
+# ``propose()`` 는 같은 ContextVar 의 last-call 4-field snapshot 을 읽는다.
+# Module-level dict / ContextVar[dict] / Proxy shim 의 race-prone 패턴 완전
+# 제거 — claude-code AgentLoopState.totalUsage + hermes _SESSION_ID
+# ContextVar family 의 frontier 정렬.
 #
-# PR-C4.fix-contextvar (2026-05-23) — module-level dict → ContextVar 교체.
-# 초안의 module-level dict 는 (a) pytest-xdist worker 간 격리 깨짐 +
-# (b) future concurrent runner 시 cross-runner race 위험을 가졌다. ContextVar
-# 는 asyncio Task / pytest test 단위로 격리되어 두 문제를 동시에 닫는다.
-#
-# 이전 module-level state 의 backward-compat 노출 (``_LAST_LLM_CALL_USAGE``)
-# 은 더 이상 외부에서 직접 mutate 하면 안 된다 — 테스트는 helper API 만
-# 사용. tests/test_e1_mutation_cost_ledger.py 의 backward-compat 보장.
-# Ruff B039 — mutable default 는 ContextVar 가 process-wide 라 위험. None
-# default + helper 가 _current 시점에 빈 dict 로 lazily set.
-_LAST_LLM_CALL_USAGE_VAR: ContextVar[dict[str, Any] | None] = ContextVar(
-    "_LAST_LLM_CALL_USAGE", default=None
-)
-
-
-def _current_llm_call_usage() -> dict[str, Any]:
-    """Read-only view — caller mutate 금지. 새 dict 를 매번 ContextVar.set 으로."""
-    return _LAST_LLM_CALL_USAGE_VAR.get() or {}
+# 기존 helper 이름 (``_reset_last_llm_call_usage`` / ``_consume_last_llm_call_usage``)
+# 은 thin wrapper 로 보존 — 외부 test 호환성 유지. 새 코드는
+# ``current_session_metrics()`` 직접 호출 권장.
 
 
 def _reset_last_llm_call_usage() -> None:
-    """``_LAST_LLM_CALL_USAGE_VAR`` 를 빈 dict 로 비움 — propose() 가 새 LLM
-    call 직전에 호출. ContextVar.set 은 같은 task / test scope 안에서 effective."""
-    _LAST_LLM_CALL_USAGE_VAR.set({})
+    """SessionMetrics 의 last-call snapshot 만 비움 (cumulative 보존). propose()
+    가 새 LLM call 직전에 호출 — mock LLM 이 accumulate 안 해도 stale
+    per-call 값이 안 새도록."""
+    from core.observability import current_session_metrics
+
+    current_session_metrics().reset_last_call()
 
 
 def _consume_last_llm_call_usage() -> dict[str, Any]:
-    """ContextVar 의 snapshot 을 반환하고 빈 dict 로 reset.
+    """SessionMetrics 의 last-call snapshot 을 dict 로 반환하고 reset.
 
-    Returns 빈 dict 면 LLM call 이 usage 를 emit 안 했거나 mock 이라 캡처 안
-    된 경우 — caller 는 cost 0 / "" 로 처리 (backward-compat).
+    Returns 빈 dict (input/output_tokens 둘 다 0) 면 LLM call 이 usage 를
+    emit 안 했거나 mock 이라 캡처 안 된 경우 — caller 는 cost 0 / "" 로 처리
+    (backward-compat).
     """
-    snapshot = dict(_LAST_LLM_CALL_USAGE_VAR.get() or {})
-    _LAST_LLM_CALL_USAGE_VAR.set({})
+    from core.observability import current_session_metrics
+
+    m = current_session_metrics()
+    snapshot: dict[str, Any] = {}
+    if m.last_call_input_tokens or m.last_call_output_tokens:
+        snapshot = {
+            "input_tokens": m.last_call_input_tokens,
+            "output_tokens": m.last_call_output_tokens,
+            "elapsed_seconds": m.last_call_elapsed_seconds,
+            "model": m.last_call_model,
+        }
+    m.reset_last_call()
     return snapshot
-
-
-# backward-compat shim — test code 가 ``_LAST_LLM_CALL_USAGE.update(...)``
-# 또는 ``_LAST_LLM_CALL_USAGE.clear()`` 형태로 module-level dict 를 mutate
-# 하던 경우 (e.g. tests/test_e1_mutation_cost_ledger.py 의 일부 패턴) 그
-# mutation 이 ContextVar 의 현재 dict 에도 반영되도록 proxy.
-class _UsageProxy:
-    """``_LAST_LLM_CALL_USAGE`` 의 dict-like proxy. ContextVar 의 현재 값에
-    위임. ``update()`` / ``clear()`` / ``__setitem__`` 등의 mutate 가 같은
-    task scope 안의 sidecar 에 즉시 반영."""
-
-    def _backing(self) -> dict[str, Any]:
-        return _LAST_LLM_CALL_USAGE_VAR.get() or {}
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        d = dict(self._backing())
-        d.update(*args, **kwargs)
-        _LAST_LLM_CALL_USAGE_VAR.set(d)
-
-    def clear(self) -> None:
-        _LAST_LLM_CALL_USAGE_VAR.set({})
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        d = dict(self._backing())
-        d[key] = value
-        _LAST_LLM_CALL_USAGE_VAR.set(d)
-
-    def __getitem__(self, key: str) -> Any:
-        return self._backing()[key]
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._backing()
-
-    def __eq__(self, other: object) -> bool:
-        return self._backing() == other
-
-    def __repr__(self) -> str:
-        return repr(self._backing())
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._backing().get(key, default)
-
-
-_LAST_LLM_CALL_USAGE = _UsageProxy()
 
 
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
@@ -668,24 +626,25 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
             f"mutator LLM call failed (model={model}, provider={provider}): {last_err!r}"
         )
 
-    # PR-SIL-5THEME C4 — usage metadata capture. AgenticResponse 의
-    # ``usage`` 가 ResponseUsage dataclass (input_tokens / output_tokens
-    # / thinking_tokens / cache_*) — ContextVar sidecar 에 저장하면
-    # propose() 가 같은 task scope 에서 읽어 Mutation 에 채워 넣음.
-    # PR-C4.fix-contextvar — ContextVar.set 으로 매번 새 dict 적재 (test
-    # / concurrent runner 격리 보장).
+    # PR-SIL-5THEME C4 + PR-SESSION-METRICS — usage metadata capture.
+    # AgenticResponse 의 ``usage`` (ResponseUsage dataclass: input_tokens /
+    # output_tokens / thinking_tokens / cache_*) 를 SessionMetrics 의
+    # ContextVar 에 직접 fold. last-call snapshot 도 같이 적재 — propose()
+    # 가 동일 ContextVar 에서 읽어 Mutation.cost_* 채움. Module-level
+    # sidecar / dict ContextVar / proxy shim 의 race-prone 패턴 완전 제거.
+    from core.observability import current_session_metrics
+
     usage_obj = getattr(response, "usage", None)
     if usage_obj is not None:
-        _LAST_LLM_CALL_USAGE_VAR.set(
-            {
-                "input_tokens": int(getattr(usage_obj, "input_tokens", 0)),
-                "output_tokens": int(getattr(usage_obj, "output_tokens", 0)),
-                "elapsed_seconds": float(call_elapsed),
-                "model": str(_used_model or model),
-            }
+        current_session_metrics().accumulate_llm_call(
+            input_tokens=int(getattr(usage_obj, "input_tokens", 0)),
+            output_tokens=int(getattr(usage_obj, "output_tokens", 0)),
+            cache_creation_tokens=int(getattr(usage_obj, "cache_creation_tokens", 0)),
+            cache_read_tokens=int(getattr(usage_obj, "cache_read_tokens", 0)),
+            thinking_tokens=int(getattr(usage_obj, "thinking_tokens", 0)),
+            elapsed_seconds=float(call_elapsed),
+            model=str(_used_model or model),
         )
-    else:
-        _LAST_LLM_CALL_USAGE_VAR.set({})
 
     # Adapter normalises to AgenticResponse — concatenate text blocks.
     text_chunks: list[str] = []

@@ -23,7 +23,7 @@ def _make_journal(tmp_path: Path) -> SessionJournal:
         session_id="s-test",
         gen_tag="autoresearch-test",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
 
@@ -31,7 +31,7 @@ def test_append_writes_jsonl_row(tmp_path: Path) -> None:
     """append() writes one JSONL row with the full schema."""
     journal = _make_journal(tmp_path)
     journal.append("audit_finished", payload={"fitness": 0.5}, ts=1700000000.0)
-    rows = (tmp_path / "journal.jsonl").read_text().splitlines()
+    rows = (tmp_path / "transcript.jsonl").read_text().splitlines()
     assert len(rows) == 1
     payload = json.loads(rows[0])
     assert payload == {
@@ -49,14 +49,14 @@ def test_append_supports_level_and_default_payload(tmp_path: Path) -> None:
     """level kwarg defaults to 'info'; missing payload becomes empty dict."""
     journal = _make_journal(tmp_path)
     journal.append("subagent_failed", level="error", ts=1.0)
-    row = json.loads((tmp_path / "journal.jsonl").read_text().splitlines()[0])
+    row = json.loads((tmp_path / "transcript.jsonl").read_text().splitlines()[0])
     assert row["level"] == "error"
     assert row["payload"] == {}
 
 
 def test_append_creates_parent_dirs(tmp_path: Path) -> None:
     """Nested paths are auto-mkdir'd before write."""
-    deep = tmp_path / "nested" / "deeper" / "journal.jsonl"
+    deep = tmp_path / "nested" / "deeper" / "transcript.jsonl"
     journal = SessionJournal(
         session_id="s",
         gen_tag="g",
@@ -72,7 +72,7 @@ def test_append_appends_not_overwrites(tmp_path: Path) -> None:
     journal = _make_journal(tmp_path)
     for i in range(3):
         journal.append(f"event-{i}", ts=float(i))
-    rows = (tmp_path / "journal.jsonl").read_text().splitlines()
+    rows = (tmp_path / "transcript.jsonl").read_text().splitlines()
     assert len(rows) == 3
     events = [json.loads(r)["event"] for r in rows]
     assert events == ["event-0", "event-1", "event-2"]
@@ -92,7 +92,7 @@ def test_append_swallows_oserror(
         session_id="s",
         gen_tag="g",
         component="autoresearch",
-        path=tmp_path / "nonexistent" / "journal.jsonl",
+        path=tmp_path / "nonexistent" / "transcript.jsonl",
     )
     journal.append("event")  # Must not raise.
 
@@ -120,7 +120,7 @@ def test_session_journal_scope_restores_on_exception(tmp_path: Path) -> None:
 
 
 def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Unset path falls back to ``GLOBAL_SELF_IMPROVING_LOOP_DIR`` / <session> / journal.jsonl."""
+    """Unset path falls back to ``GLOBAL_SELF_IMPROVING_LOOP_DIR`` / <session> / transcript.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
     # Reload both core.paths and core.observability.session_journal so
@@ -137,7 +137,7 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
         gen_tag="g",
         component="autoresearch",
     )
-    expected = fake_home / ".geode" / "self-improving-loop" / "s-default" / "journal.jsonl"
+    expected = fake_home / ".geode" / "self-improving-loop" / "s-default" / "transcript.jsonl"
     assert journal.path == expected
     journal.append("event")
     assert expected.is_file()
@@ -178,7 +178,7 @@ def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
             {"task_id": "t-2", "error": "boom", "session_id": "s"},
         )
 
-    rows = [json.loads(r) for r in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    rows = [json.loads(r) for r in (tmp_path / "transcript.jsonl").read_text().splitlines()]
     events = [r["event"] for r in rows]
     levels = [r["level"] for r in rows]
     assert events == ["subagent_started", "subagent_completed", "subagent_failed"]

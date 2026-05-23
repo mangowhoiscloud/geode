@@ -21,10 +21,10 @@ from core.paths import (
     CLI_SOCKET_PATH,
     CLI_STARTUP_LOCK,
     GEODE_HOME,
-    GLOBAL_JOURNAL_DIR,
     GLOBAL_PROJECTS_DIR,
     GLOBAL_RUNS_DIR,
     GLOBAL_SCHEDULER_DIR,
+    GLOBAL_TRANSCRIPTS_DIR,
     GLOBAL_USAGE_DIR,
     GLOBAL_WORKERS_DIR,
     MCP_REGISTRY_CACHE,
@@ -303,7 +303,7 @@ def show_status(*, json_output: bool = False) -> None:
     # Global disk usage
     global_dirs = {
         "runs": GLOBAL_RUNS_DIR,
-        "journal": GLOBAL_JOURNAL_DIR,
+        "transcripts": GLOBAL_TRANSCRIPTS_DIR,
         "projects": GLOBAL_PROJECTS_DIR,
         "scheduler": GLOBAL_SCHEDULER_DIR,
         "usage": GLOBAL_USAGE_DIR,

@@ -407,7 +407,7 @@ def _make_journal(tmp_path: Path):
         session_id="p2-test",
         gen_tag="test",
         component="config-test",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
 

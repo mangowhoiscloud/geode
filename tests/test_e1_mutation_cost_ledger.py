@@ -18,11 +18,12 @@ from unittest.mock import MagicMock
 
 from core.self_improving_loop.attribution import compute_attribution
 from core.self_improving_loop.runner import (
-    _LAST_LLM_CALL_USAGE,
     Mutation,
     _consume_last_llm_call_usage,
     _reset_last_llm_call_usage,
 )
+
+from core.observability import current_session_metrics, session_metrics_scope
 
 # ---------------------------------------------------------------------------
 # 1. Mutation cost fields
@@ -88,34 +89,55 @@ def test_mutation_to_audit_row_partial_cost_fields() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. _LAST_LLM_CALL_USAGE sidecar capture
+# 2. SessionMetrics last-call snapshot capture (PR-SESSION-METRICS)
 # ---------------------------------------------------------------------------
+#
+# PR-SIL-5THEME C4 의 module-level ``_LAST_LLM_CALL_USAGE`` dict + PR-C4.fix-
+# contextvar 의 ``_LAST_LLM_CALL_USAGE_VAR`` ContextVar + ``_UsageProxy`` shim
+# 이 SessionMetrics 의 last-call 4-field snapshot 으로 흡수됨. Test 는
+# ``current_session_metrics()`` ContextVar 를 통해 직접 mutate / read.
 
 
-def test_reset_last_llm_call_usage_clears_module_dict() -> None:
-    """``_reset_last_llm_call_usage`` 는 module-level dict 를 비움 — propose()
-    가 LLM call 직전 호출해서 이전 mutation 의 usage 잔여 차단."""
-    _LAST_LLM_CALL_USAGE["dirty"] = "value"
-    _reset_last_llm_call_usage()
-    assert _LAST_LLM_CALL_USAGE == {}
+def test_reset_last_llm_call_usage_clears_session_metrics_last_call() -> None:
+    """``_reset_last_llm_call_usage`` 는 SessionMetrics 의 last-call snapshot
+    만 비움 (cumulative 보존). propose() 가 LLM call 직전 호출."""
+    with session_metrics_scope(session_id="test"):
+        m = current_session_metrics()
+        m.last_call_input_tokens = 100
+        m.last_call_model = "test-model"
+        _reset_last_llm_call_usage()
+        assert m.last_call_input_tokens == 0
+        assert m.last_call_model == ""
 
 
 def test_consume_last_llm_call_usage_returns_snapshot_and_clears() -> None:
-    """``_consume_last_llm_call_usage`` 가 snapshot 반환 + module dict 비움.
-
-    Atomic — return-and-clear 의 race condition 자체가 single-threaded
-    propose() 사이클 안에서 없도록.
-    """
-    _LAST_LLM_CALL_USAGE.update({"input_tokens": 100, "output_tokens": 50})
-    snapshot = _consume_last_llm_call_usage()
-    assert snapshot == {"input_tokens": 100, "output_tokens": 50}
-    assert _LAST_LLM_CALL_USAGE == {}
+    """``_consume_last_llm_call_usage`` 가 snapshot 반환 + SessionMetrics 의
+    last-call 슬롯 비움. Race condition 없음 — 같은 ContextVar 안의 atomic
+    read-and-clear."""
+    with session_metrics_scope(session_id="test"):
+        m = current_session_metrics()
+        m.accumulate_llm_call(
+            input_tokens=100,
+            output_tokens=50,
+            elapsed_seconds=1.23,
+            model="claude-opus-4-7",
+        )
+        snapshot = _consume_last_llm_call_usage()
+        assert snapshot == {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "elapsed_seconds": 1.23,
+            "model": "claude-opus-4-7",
+        }
+        # last-call 슬롯 비워짐, cumulative 는 보존
+        assert m.last_call_input_tokens == 0
+        assert m.input_tokens == 100  # cumulative untouched
 
 
 def test_consume_last_llm_call_usage_empty_when_unset() -> None:
-    """sidecar 비어 있을 때 (mock LLM 호출 후) consume 은 빈 dict 반환."""
-    _LAST_LLM_CALL_USAGE.clear()
-    assert _consume_last_llm_call_usage() == {}
+    """LLM call mock 이 accumulate 안 했으면 consume 은 빈 dict 반환."""
+    with session_metrics_scope(session_id="test"):
+        assert _consume_last_llm_call_usage() == {}
 
 
 # ---------------------------------------------------------------------------
@@ -189,14 +211,12 @@ def test_propose_populates_cost_from_sidecar(
     )
 
     def llm_call_with_usage(_sys: str, _usr: str) -> str:
-        # production _default_llm_call 처럼 sidecar 에 usage 적재
-        _LAST_LLM_CALL_USAGE.update(
-            {
-                "input_tokens": 2500,
-                "output_tokens": 1200,
-                "elapsed_seconds": 4.567,
-                "model": "claude-opus-4-7",
-            }
+        # production _default_llm_call 처럼 SessionMetrics accumulate
+        current_session_metrics().accumulate_llm_call(
+            input_tokens=2500,
+            output_tokens=1200,
+            elapsed_seconds=4.567,
+            model="claude-opus-4-7",
         )
         return response_json
 
@@ -217,7 +237,8 @@ def test_propose_populates_cost_from_sidecar(
         audit_log_path=tmp_path / "mutations.jsonl",
     )
 
-    proposal = runner.propose()
+    with session_metrics_scope(session_id="test"):
+        proposal = runner.propose()
     m = proposal.mutation
     assert m.cost_input_tokens == 2500
     assert m.cost_output_tokens == 1200
@@ -225,15 +246,13 @@ def test_propose_populates_cost_from_sidecar(
     assert m.cost_model == "claude-opus-4-7"
 
 
-def test_propose_clears_sidecar_before_call(
+def test_propose_clears_last_call_before_invocation(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """이전 mutation 의 sidecar 잔여 (e.g. 이전 propose() 가 실패하고 race
-    한 경우) 가 다음 propose() 의 mutation 에 끼지 못함. _reset_last_llm_call_usage
-    가 LLM call 직전 fire."""
-    # 이전 mutation 의 잔여 sidecar
-    _LAST_LLM_CALL_USAGE.update({"input_tokens": 999, "stale": True})
+    """이전 mutation 의 last-call snapshot 잔여 (e.g. 이전 propose() 가 실패한
+    경우) 가 다음 propose() 의 mutation 에 끼지 못함. ``_reset_last_llm_call_usage``
+    가 LLM call 직전 fire 해서 SessionMetrics 의 last-call 슬롯 비움."""
 
     response_json = json.dumps(
         {
@@ -244,8 +263,7 @@ def test_propose_clears_sidecar_before_call(
     )
 
     def mock_llm(_sys: str, _usr: str) -> str:
-        # mock 는 sidecar 채우지 않음 (test inject 의 일반 패턴)
-        # → propose() 가 _reset 호출했으므로 stale data 미흡수
+        # mock 는 SessionMetrics accumulate 안 함 → reset 후 0 유지
         return response_json
 
     from core.self_improving_loop import runner as runner_mod
@@ -264,9 +282,14 @@ def test_propose_clears_sidecar_before_call(
         rerun_enabled=False,
         audit_log_path=tmp_path / "mutations.jsonl",
     )
-    proposal = runner.propose()
+    with session_metrics_scope(session_id="test") as m:
+        # 이전 mutation 의 last-call 잔여 시뮬레이션
+        m.last_call_input_tokens = 999
+        m.last_call_model = "stale-model"
+        proposal = runner.propose()
     # stale 999 가 안 새들어옴 — default 0
     assert proposal.mutation.cost_input_tokens == 0
+    assert proposal.mutation.cost_model == ""
 
 
 # ---------------------------------------------------------------------------

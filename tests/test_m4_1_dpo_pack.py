@@ -36,7 +36,7 @@ from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
 
 @pytest.fixture
 def journal_path(tmp_path: Path) -> Iterator[Path]:
-    yield tmp_path / "session-A" / "journal.jsonl"
+    yield tmp_path / "session-A" / "transcript.jsonl"
 
 
 @pytest.fixture
@@ -206,8 +206,8 @@ def test_new_pair_appended_on_rerun(journal_path: Path, pack_path: Path) -> None
 
 def test_multi_journal_merge(tmp_path: Path, pack_path: Path) -> None:
     """Two journals (different sessions) feed the same prompt → cross-session pair."""
-    j1 = tmp_path / "s1" / "journal.jsonl"
-    j2 = tmp_path / "s2" / "journal.jsonl"
+    j1 = tmp_path / "s1" / "transcript.jsonl"
+    j2 = tmp_path / "s2" / "transcript.jsonl"
     with session_journal_scope(_journal(j1, session_id="s1")):
         emit_eval_response_recorded(
             prompt="shared", response="great", fitness_score=0.95, source="petri_audit"

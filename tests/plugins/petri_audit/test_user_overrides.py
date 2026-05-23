@@ -420,7 +420,7 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
         session_id="s-legacy",
         gen_tag="gen-legacy",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
     # Force the lazy import inside _read_role_from_self_improving_loop to fail
@@ -463,7 +463,7 @@ def test_read_role_no_emit_when_self_improving_loop_available(
         session_id="s-newpath",
         gen_tag="gen-newpath",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     with session_journal_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
