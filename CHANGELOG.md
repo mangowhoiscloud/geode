@@ -47,6 +47,179 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.38] - 2026-05-23
+
+> First release under the **rotation pattern** (release branch lands on
+> develop first, then develop → main pass-through — no backmerge).
+> Bundles the CSP-13a meta_reviewer read-write parity fix-up + the
+> scaffold refinement PR (`auto-backmerge.yml` safety net, new
+> ``geode-gitflow`` ``## Release Flow`` section, updated
+> ``geode-changelog`` On-Release checklist).
+
+### Fixed
+
+- **PR-CSP-13a — meta_reviewer reads ``state.debate_transcripts``**.
+  Closes the read-write parity gap left by PR #1504 (Phase 1 Loop 2
+  debate-turn): the Generator wrote per-candidate ``.debate.jsonl``
+  sidecars and the orchestrator's ``PipelineState.merge`` populated
+  ``state.debate_transcripts``, but ``meta_reviewer.aexecute`` did not
+  read the field — the Loop 2 cost wasn't being attributed in the
+  meta-review report. Codex MCP MEDIUM defer at the time of the Phase
+  1 review.
+
+  - ``plugins/seed_generation/agents/meta_reviewer.py`` — new
+    ``_debate_summary(state, candidate_ids)`` helper rolls the dict
+    into a 5-key aggregate (candidates_with_debate, total_turns,
+    avg_turns, sample_candidate_id, sample_turn_count) **filtered to
+    the current batch** so iteration cycle N≥1 doesn't report stale
+    transcripts left over from prior batches by the
+    ``PipelineState.merge``'s dict-update semantics. ``None`` return
+    (empty / all-stale) means the snapshot key is omitted entirely
+    (byte-equivalent pre-PR back-compat for the worker's
+    ``Parameters:`` line).
+  - ``plugins/seed_generation/agents/meta_reviewer.md`` — new "Debate
+    transcripts" entry under Inputs + Quality bar requirement that
+    at least one ``next_gen_priors`` entry's rationale cite the
+    debate signal when Loop 2 ran.
+  - ``tests/plugins/seed_generation/test_meta_reviewer.py`` — 5 new
+    tests: omit-when-empty (back-compat byte-equivalence), populated
+    case (aggregate present), stale-transcript filter, all-stale →
+    no block, grep-provable read-path invariant, context budget cap
+    (< 500 chars worst-case at 6-turn × current-batch).
+
+  Codex MCP review (thread ``019e522f-65d7-71b3-aa0b-d9ba730bae68``)
+  caught the snapshot-key back-compat issue + iteration staleness
+  before push; both addressed inline.
+
+### Added
+
+- **PR-5 of petri-schema-v2 cascade — ``results.jsonl`` PR-1/PR-4
+  provenance + Goodhart surface threading**. Final step of the 5-PR
+  cascade. Surfaces the per-dim provenance (sample_count,
+  measurement_modality), the Goodhart-risk surface (missing_dims),
+  and the eval_archive symlink target into ``results.jsonl`` so
+  cross-run analysis can disambiguate real measurements from
+  default-filled fallbacks without joining against baseline.json or
+  the journal.
+
+  **What changed in ``autoresearch/train.py``**:
+  - ``format_results_jsonl_row`` gains 4 new optional kwargs:
+    ``sample_count`` / ``measurement_modality`` / ``missing_dims`` /
+    ``eval_archive``. When supplied they emit into the JSONL row.
+    When omitted, defaults populate the schema slots (zeros / empty
+    strings / ``[]`` / ``null``) so downstream parsers see a stable
+    column set.
+  - The two provenance dicts (sample_count, measurement_modality)
+    are written over the full ``AXIS_TIERS`` universe so they zip
+    1-to-1 with ``dim_means`` / ``dim_stderr``.
+  - ``main()`` threads the kwargs from PR-1's ``run_audit`` return
+    (sample_count + measurement_modality), PR-4's
+    ``compute_missing_dims(dim_means)``, and
+    ``_resolve_eval_archive_path()``.
+
+  **Scope narrowing — ``results.tsv`` intentionally unchanged**:
+  the SOT plan PR-5 row mentioned both TSV and JSONL, but Codex MCP
+  review of PR-2 already discouraged TSV column expansion (downstream
+  parsers depend on the 12-column shape). JSONL alone is sufficient
+  for the cross-run analysis goal; TSV stays as the row-grep summary.
+
+  **``baseline.json normalized`` namespace** — the SOT plan also
+  hinted at extending the v2 baseline with a ``normalized.missing_dims``
+  sink. That's deferred — the baseline-side surface is observability
+  only (the auto-promote gate already runs off ``raw.sample_count``
+  via PR-3), and the journal + JSONL already carry the missing list.
+
+  **Tests added** (``tests/test_autoresearch_train.py``):
+  - ``test_results_jsonl_row_emits_pr5_provenance_when_supplied`` —
+    all 4 new fields present + dim universe parity
+  - ``test_results_jsonl_row_pr5_defaults_when_provenance_absent`` —
+    omitted kwargs → stable default values
+  - ``test_results_jsonl_row_pr5_handles_partial_provenance`` —
+    partial sample_count / modality → defaults for absent dims
+  - ``test_results_jsonl_round_trip`` updated to assert the new
+    schema keys so a future regression breaks at write time.
+
+  Codex MCP reviewed at thread ``019e521d-5d1c-70d3-9d83-bb35aa896bb2``
+  — 0 CRITICAL / 0 HIGH / 1 MEDIUM (missing CHANGELOG entry, fixed
+  here) / 2 LOW (round-trip test schema pin + missing_dims sort
+  contract docstring) addressed in this commit.
+
+  539 ``test_autoresearch_train.py`` + impacted surface pass.
+
+- **PR-4 of petri-schema-v2 cascade — ``compute_missing_dims``
+  Goodhart-risk surface**. Fourth step of the 5-PR cascade. Surfaces
+  the silent ``compute_dim_scores`` "missing dim = best case (1.0)"
+  fallback that would let a mutation suppressing dim measurement
+  inflate fitness without a real improvement.
+
+  **What changed**:
+  - New ``autoresearch/train.py::compute_missing_dims(dim_means) ->
+    list[str]`` — sorted lexicographic list of ``AXIS_TIERS`` dims
+    absent from ``dim_means``. Empty when all dims present.
+  - ``main()`` calls it after ``compute_dim_scores`` and emits the
+    result in the journal ``per_dim_scores`` event payload alongside
+    ``dim_scores`` (new ``missing_dims`` key).
+  - ``compute_dim_scores`` docstring updated to reference the surface
+    (behaviour unchanged — observability only).
+
+  **Goodhart vector**: a mutation that drops a dim from the audit's
+  emit would silently score 1.0 on that dim (fitness ↑) without
+  improving anything. The journal now shows which dims fell back so
+  the operator can spot the pattern across runs.
+
+  **Tests added** (``tests/test_autoresearch_train.py``):
+  - ``test_compute_missing_dims_empty_when_all_present``
+  - ``test_compute_missing_dims_lists_absent_dims_sorted``
+  - ``test_compute_missing_dims_handles_empty_input``
+  - ``test_compute_missing_dims_ignores_extra_dims_outside_axis_tiers``
+  - ``test_main_dry_run_emits_full_p0b_event_sequence`` extended to
+    pin the actual emitted list against
+    ``compute_missing_dims(dim_means)`` so a future literal /
+    hardcoded payload would fail.
+
+  99 ``test_autoresearch_train.py`` + 536 across impacted surface
+  pass. Codex MCP reviewed at thread
+  ``019e520f-7556-71e1-91ed-bd49ebf8ee76`` — 0 CRITICAL / 0 HIGH /
+  0 MEDIUM / 2 LOW (docstring overclaim + thin integration assertion)
+  addressed in this commit.
+
+  PR-5 will extend ``missing_dims`` persistence into ``baseline.json``'s
+  ``normalized`` namespace + ``results.jsonl`` for cross-run analysis.
+
+### Changed
+
+- **Release flow rotation — eliminates backmerge friction**. Pre-PR the
+  GEODE release workflow followed canonical gitflow: release branch
+  off develop → merge to main → manual backmerge main → develop. That
+  pattern left develop's stamps stale until the backmerge PR landed
+  and caused CHANGELOG conflicts when develop moved while the release
+  PR was in flight (4 conflicts hit across PR #1499 / #1504 / #1506).
+
+  The new pattern rotates the merge order: the release branch lands
+  on **develop first**, then develop → main is a straight pass-through
+  with no new commits. After the develop merge, develop already
+  carries the v0.99.X stamps; the develop → main PR moves main's tip
+  up. No backmerge step.
+
+  Edits across the scaffold:
+  - `CLAUDE.md` § Step 6 — workflow description updated.
+  - `.claude/skills/geode-gitflow/SKILL.md` — new `## Release Flow`
+    section documenting the rotation + backmerge safety net.
+  - `.claude/skills/geode-changelog/SKILL.md` — `On Release` checklist
+    rewritten with the 5-stamp surface + rotation PR steps.
+  - `.github/workflows/auto-backmerge.yml` — NEW safety-net workflow.
+    Fires on main pushes; if develop is behind main (off-nominal —
+    rotation skipped, hotfix landed direct on main, etc.) it opens an
+    auto-backmerge PR. Under the rotation pattern this should rarely
+    fire.
+
+  Codified after the 2026-05-23 frontier research surveying Crumb
+  (single-branch trunk + tags), OpenClaw (release branches + manual
+  release-publish), release-please (auto PR), and changesets (per-PR
+  files). GEODE's rotation pattern is the closest fit to Crumb's
+  trunk-flow while preserving the develop staging branch + Pages-on-
+  main deploy trigger.
+
 ## [0.99.37] - 2026-05-23
 
 > Multiple parallel sprints land in one release window:

@@ -87,28 +87,48 @@ After writing the CHANGELOG, check the following:
 ```
 
 ### On Release
+
+The release flow follows the rotation pattern from `geode-gitflow` skill —
+release branch merges to **develop first**, then develop → main is a
+straight pass-through (no backmerge needed). All edits below happen on the
+`release/vX.Y.Z` branch in one commit.
+
 1. Convert `[Unreleased]` → `[X.Y.Z] — YYYY-MM-DD`
-2. Regenerate empty `[Unreleased]` section
-3. Update Version History table
-4. Update footer links
-5. Sync `pyproject.toml` + `core/__init__.py` version
+2. **Insert a fresh empty `## [Unreleased]` ABOVE the just-promoted
+   section** — so the next batch of feature PRs has a section to land in
+3. Bump version in **5 locations** (CLAUDE.md guards this as a CANNOT
+   rule): `pyproject.toml`, `CLAUDE.md` `**Version**:` line, `README.md`
+   title heading + frontier-comparison row, `README.ko.md` title heading +
+   frontier-comparison row
+4. Refresh measured metrics on `CLAUDE.md` line: `Modules: X core + Y
+   plugins = Z` (from `find ... -name "*.py" | wc -l`), `Tests: N (+5 live)`
+   (from `uv run pytest tests/ --collect-only`)
+5. CHANGELOG header `## [X.Y.Z] — YYYY-MM-DD` carries an optional release
+   blurb (`> ...`) summarizing the sprint scope
 
 ### Release Checklist
 ```bash
-# 1. Version bump
-# pyproject.toml: version = "X.Y.Z"
-# core/__init__.py: __version__ = "X.Y.Z"
+# 1. Allocate release worktree
+git worktree add .claude/worktrees/release-vX.Y.Z \
+  -b release/vX.Y.Z origin/develop
 
-# 2. Update CHANGELOG.md
-# [Unreleased] → [X.Y.Z] — YYYY-MM-DD
+# 2. Bump 5 stamps + CHANGELOG promote + fresh [Unreleased]
+# (one commit covering all stamp files)
 
-# 3. Verify
-uv run ruff check core/ tests/
-uv run mypy core/
-uv run pytest tests/ -q
+# 3. Local gates
+uv run ruff check core/ tests/ plugins/ autoresearch/ scripts/
+uv run mypy core/ plugins/
+uv run geode version   # confirms version stamp lands
 
-# 4. Tag
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
+# 4. PR release → develop (NOT main — rotation pattern)
+gh pr create --base develop --head release/vX.Y.Z \
+  --title "release: vX.Y.Z — <summary>" \
+  --body "<release notes>"
+
+# 5. After merge, PR develop → main (straight pass-through)
+gh pr create --base main --head develop \
+  --title "release: vX.Y.Z (develop → main)" \
+  --body "<abbreviated body>"
 ```
 
 ## Subsection Guide (within Added)
