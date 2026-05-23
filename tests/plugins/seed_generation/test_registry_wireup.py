@@ -10,7 +10,6 @@ Pins:
 from __future__ import annotations
 
 import pytest
-
 from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
 from plugins.seed_generation._registry_builder import populate_registry
 from plugins.seed_generation.manifest import load_manifest
