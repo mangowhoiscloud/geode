@@ -330,8 +330,7 @@ def test_meta_reviewer_debate_block_under_500_chars() -> None:
     # Use the fixture's actual ids so the staleness filter passes.
     state.debate_transcripts = {
         c["id"]: [
-            {"turn": t, "speaker": "A" if t % 2 else "B", "content": "x" * 500}
-            for t in range(1, 7)
+            {"turn": t, "speaker": "A" if t % 2 else "B", "content": "x" * 500} for t in range(1, 7)
         ]
         for c in state.candidates
     }

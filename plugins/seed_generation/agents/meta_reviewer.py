@@ -275,9 +275,7 @@ def _state_snapshot(state: PipelineState) -> dict[str, Any]:
     return snapshot
 
 
-def _debate_summary(
-    state: PipelineState, candidate_ids: list[str]
-) -> dict[str, Any] | None:
+def _debate_summary(state: PipelineState, candidate_ids: list[str]) -> dict[str, Any] | None:
     """Roll up ``state.debate_transcripts`` into an aggregate row.
 
     Returns ``None`` when no transcript matches the current batch.
