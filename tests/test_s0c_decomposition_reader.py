@@ -1,7 +1,12 @@
 """ADR-012 S0c — `decomposition` reader invariants.
 
-`decomposition.json` 의 정책이 GoalDecomposer 의 LLM 호출 직전에
-system prompt 를 override / prefix / suffix 하는지 검증.
+`decomposition.json` 의 정책이 ``core/agent/plan.py:decompose_async`` 의
+LLM 호출 직전에 system prompt 를 override / prefix / suffix 하는지 검증.
+
+PR-CL-A1-followup (2026-05-23): host 가 ``core/orchestration/goal_decomposer.py``
+→ ``core/agent/plan.py:decompose_async`` 로 이전됨 (모듈 삭제). wiring
+자체는 동일 — ``load_prompt("decomposer", "system")`` 직후 ``apply_decomposition_policy``
+가 적용됨.
 """
 
 from __future__ import annotations
@@ -148,24 +153,26 @@ def test_apply_prefix_and_suffix() -> None:
 # Wiring ----------------------------------------------------------------------
 
 
-def test_goal_decomposer_imports_reader() -> None:
+def test_decompose_async_imports_reader() -> None:
+    """PR-CL-A1-followup (2026-05-23) — reader host moved from
+    ``goal_decomposer.py`` (deleted) to ``plan.py:decompose_async``."""
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/orchestration/goal_decomposer.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/agent/plan.py").read_text(encoding="utf-8")
     assert "_load_decomposition_policy_override" in src
     assert "apply_decomposition_policy" in src
 
 
-def test_goal_decomposer_applies_policy_after_load_prompt() -> None:
+def test_decompose_async_applies_policy_after_load_prompt() -> None:
     """``load_prompt("decomposer", "system")`` 호출 직후에 정책이 적용되는지
-    source-order 검증."""
+    source-order 검증. PR-CL-A1-followup (2026-05-23) — host 가
+    ``plan.py:decompose_async`` 로 이전됨."""
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/orchestration/goal_decomposer.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/agent/plan.py").read_text(encoding="utf-8")
     load_pos = src.find('load_prompt("decomposer", "system")')
     # apply_decomposition_policy 의 첫 호출 위치 — 들여쓰기 무관
     apply_pos = src.find("apply_decomposition_policy(")
     # 호출 (괄호 있는 패턴) 만 검색 — import 의 식별자 위치보다 뒤에 있어야 함
     while apply_pos != -1 and src.count("import", 0, apply_pos) > src.count("def ", 0, apply_pos):
-        # import 라인은 스킵 — 다음 호출 위치 검색
         next_pos = src.find("apply_decomposition_policy(", apply_pos + 1)
         if next_pos == -1:
             break

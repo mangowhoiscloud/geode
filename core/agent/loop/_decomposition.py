@@ -1,6 +1,24 @@
-"""Goal decomposition helper for compound user requests.
+"""Goal decomposition helper — installs an explicit ``Plan`` on metrics.
 
-Extracted from the monolithic ``core/agent/loop.py`` (Tier 3 #7).
+PR-CL-A1-followup (2026-05-23) rewrite — the helper now calls
+:func:`core.agent.plan.decompose_async` directly instead of going
+through the legacy ``core/orchestration/goal_decomposer.py`` (DELETED
+in this PR). The async dispatch matches the planner-LLM pattern already
+established by ``replan_async`` so the loop has a single planner code
+path.
+
+Side-effect contract (preserved from PR-CL-A1):
+
+- On a successful multi-step decomposition, installs the Plan on
+  ``current_session_metrics().active_plan`` and returns ``None``.
+- On a simple/single-tool request OR LLM failure, returns ``None``
+  without installing a Plan.
+- Caller (``arun``) reads the active Plan via
+  :func:`core.agent.plan.render_plan_for_prompt` and prepends a
+  ``<plan>...</plan>`` block to the system prompt.
+
+The helper is **async** because it awaits ``decompose_async``; the
+``AgenticLoop._try_decompose`` delegator is correspondingly async.
 """
 
 from __future__ import annotations
@@ -14,79 +32,50 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
-    """Attempt to decompose a compound user request into sub-goals.
+async def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
+    """Run the planner LLM (when warranted) and install the Plan.
 
-    Returns a system prompt suffix describing the execution plan,
-    or None if the request is simple (single tool call).
-
-    Uses GoalDecomposer with ANTHROPIC_BUDGET (Haiku) for low-cost
-    decomposition. Only triggered when compound indicators are present
-    in the user input.
+    Returns ``None`` either way. Async because ``decompose_async``
+    awaits ``loop._call_llm``. Pre-A1 callers received a markdown
+    suffix string — that path is gone (Plan body now lives on
+    ``SessionMetrics.active_plan`` and is rendered at ``arun`` entry
+    via ``_consume_plan_hint``).
     """
     if not loop._enable_goal_decomposition:
         return None
-
     try:
-        from core.config import settings
-        from core.orchestration.goal_decomposer import GoalDecomposer
+        from core.agent.plan import decompose_async
+        from core.observability.session_metrics import current_session_metrics
 
-        # PR-CL-A6 (2026-05-23) — use ``settings.plan_model`` for goal
-        # decomposition when an operator has set one. Empty string falls
-        # back to ``loop.model`` so the behaviour matches pre-A6 when the
-        # knob isn't configured. ``getattr`` keeps the helper resilient
-        # if ``settings`` is mocked in a test fixture.
-        plan_model = getattr(settings, "plan_model", "") or loop.model
-        if loop._goal_decomposer is None:
-            loop._goal_decomposer = GoalDecomposer(
-                model=plan_model,
-                tool_definitions=loop._tools,
-            )
-
-        result = loop._goal_decomposer.decompose(
-            user_input,
-            tool_definitions=loop._tools,
-        )
-
-        if result is None:
+        plan = await decompose_async(loop, user_input, tools=loop._tools)
+        if plan is None:
             return None
 
-        # Build execution plan hint for the system prompt
-        lines = [
-            "## Goal Decomposition Plan",
-            "",
-            f"The user's request has been decomposed into {len(result.goals)} sub-goals.",
-            "Execute them in dependency order. For each step, call the specified tool.",
-            "If a step depends on a previous step's output, use the result from that step.",
-            "",
-        ]
-        for goal in result.goals:
-            deps = ""
-            if goal.depends_on:
-                deps = f" (depends on: {', '.join(goal.depends_on)})"
-            args_str = ""
-            if goal.tool_args:
-                args_str = ", ".join(f"{k}={v!r}" for k, v in goal.tool_args.items())
-            lines.append(
-                f"- **{goal.id}**: {goal.description} → `{goal.tool_name}({args_str})`{deps}"
+        # Install the explicit Plan on SessionMetrics so subsequent
+        # ``arun`` invocations + the replan path read the same object.
+        # ``reset_attempts=True`` because this is the initial install —
+        # no prior step attempts to preserve.
+        current_session_metrics().set_active_plan(plan, reset_attempts=True)
+
+        # Emit structured events for thin client. ``emit_goal_decomposition``
+        # is the legacy summary; ``emit_plan_step`` (PR-CL-A1) emits the
+        # current-step detail so UIs can render "Step 1/N: …".
+        from core.ui.agentic_ui import emit_goal_decomposition, emit_plan_step
+
+        emit_goal_decomposition([step.description for step in plan.steps])
+        first_step = plan.current_step()
+        if first_step is not None:
+            emit_plan_step(
+                current=plan.current + 1,
+                total=len(plan.steps),
+                description=first_step.description,
+                revision=plan.revision,
             )
-
-        if result.reasoning:
-            lines.append("")
-            lines.append(f"Reasoning: {result.reasoning}")
-
-        plan_text = "\n".join(lines)
-
-        # Emit structured event for thin client
-        from core.ui.agentic_ui import emit_goal_decomposition
-
-        emit_goal_decomposition([g.description for g in result.goals])
         log.info(
-            "GoalDecomposer: injecting %d-step plan into system prompt",
-            len(result.goals),
+            "decompose_async: installed %d-step Plan on SessionMetrics",
+            len(plan.steps),
         )
-        return plan_text
-
+        return None
     except Exception:
         log.debug("Goal decomposition skipped", exc_info=True)
         return None

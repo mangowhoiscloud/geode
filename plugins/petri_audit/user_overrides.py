@@ -198,7 +198,15 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
             payload={"role": role, "reason": "validation_error", "error": str(exc)[:200]},
         )
         return {}
-    entry = cfg.petri.get(role)
+    # Step J-b.1 — audit role bindings now live under
+    # ``[self_improving_loop.autoresearch.<role>]`` (control layer).
+    # The legacy ``[petri.<role>]`` section is auto-migrated by
+    # :class:`SelfImprovingLoopConfig` 's ``_migrate_legacy_role_namespaces``
+    # so config-file readers see the new location uniformly.
+    autoresearch = getattr(cfg, "autoresearch", None)
+    if autoresearch is None:
+        return {}
+    entry = getattr(autoresearch, role, None)
     if entry is None:
         return {}
     out: RoleOverride = {}
@@ -274,21 +282,24 @@ def save_role_override_to_config_toml(
     source: str | None = None,
 ) -> None:
     """Persist a role override to ``~/.geode/config.toml`` under
-    ``[self_improving_loop.petri.<role>]`` — the operator-config SoT.
+    ``[self_improving_loop.autoresearch.<role>]`` — the control-layer
+    operator-config SoT (Step J-b.1, 2026-05-23).
 
-    Single-SoT (2026-05-22) — all writes flow into the config.toml
-    section. Empty-string (delete-axis) requests are honoured by
+    Pre-Step J-b.1 the writer targeted ``[self_improving_loop.petri.<role>]``
+    (executor namespace, PR #1496). After J-b.1 the loader's
+    before-validator silently migrates any legacy ``[petri.*]`` keys up
+    into ``autoresearch.<role>`` with a ``DeprecationWarning``, so a
+    writer that still emitted the legacy path would create an *ignored*
+    section whenever the operator also had explicit ``autoresearch.<role>``
+    entries — silent no-op, the same write/read asymmetry the previous
+    single-SoT consolidation was meant to kill. Writing directly to the
+    new namespace is the only correct path.
+
+    Empty-string (delete-axis) requests are honoured by
     ``_persist_section_updates`` directly: it drops the matching
-    ``key = "..."`` line so a subsequent
-    :func:`read_role_override` returns ``{}`` for the cleared axis and
-    the binding registry falls through to the manifest default.
-
-    No legacy ``~/.geode/petri.toml`` write path remains —
-    consolidation kills the read/write asymmetry that made
-    ``/petri model <role>`` a silent no-op when the operator had
-    pinned a different value in config.toml. Migration helper
-    (``geode config migrate-petri-toml``) still reads pre-existing
-    legacy files for the diff print.
+    ``key = "..."`` line so a subsequent :func:`read_role_override`
+    returns ``{}`` for the cleared axis and the binding registry falls
+    through to the manifest default.
     """
     updates: dict[str, str] = {}
     if model is not None:
@@ -300,7 +311,7 @@ def save_role_override_to_config_toml(
 
     from core.cli.commands.self_improving import _persist_section_updates
 
-    _persist_section_updates(f"self_improving_loop.petri.{role}", updates)
+    _persist_section_updates(f"self_improving_loop.autoresearch.{role}", updates)
 
 
 def clear_overrides(role: str | None = None, *, path: Path | str | None = None) -> None:

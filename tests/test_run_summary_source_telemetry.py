@@ -74,8 +74,12 @@ def test_resolve_telemetry_inherits_settings_model_when_default_is_none(
         default_model = None
         source = "auto"
 
-    class _StubCfg:
+    class _StubAutoresearch:
         mutator = _StubMutator()
+
+    class _StubCfg:
+        # Step J-b.1 — mutator now lives under autoresearch (control SoT).
+        autoresearch = _StubAutoresearch()
 
     class _StubSettings:
         model = "claude-opus-4-7"
@@ -100,8 +104,11 @@ def test_resolve_telemetry_uses_explicit_default_model(
         default_model = "claude-haiku-4-5-20251001"
         source = "api_key"
 
-    class _StubCfg:
+    class _StubAutoresearch:
         mutator = _StubMutator()
+
+    class _StubCfg:
+        autoresearch = _StubAutoresearch()
 
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",

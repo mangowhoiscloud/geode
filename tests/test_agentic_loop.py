@@ -1280,8 +1280,16 @@ class TestAgenticLoopEdgeCases:
     def test_multiple_tool_calls_in_single_response(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Test response with 2+ tool_use blocks processed in one round."""
-        loop = AgenticLoop(context, executor, quiet=True)
+        """Test response with 2+ tool_use blocks processed in one round.
+
+        PR-CL-A1-followup (2026-05-23) — disable goal_decomposition so
+        the test's mocked ``_call_llm`` side_effect list isn't consumed
+        by the new ``decompose_async`` planner LLM call. The prompt
+        ``"list and search"`` matches ``_has_compound_indicators``
+        (" and " connector); the test is about multi-tool dispatch, not
+        decomposition, so isolation keeps the assertion stable.
+        """
+        loop = AgenticLoop(context, executor, quiet=True, enable_goal_decomposition=False)
 
         # Round 1: LLM calls 2 tools simultaneously
         tool_response = MagicMock()

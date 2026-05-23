@@ -161,59 +161,54 @@ def test_call_llm_signature_accepts_model_override() -> None:
 # -- Goal decomposition uses plan_model -------------------------------
 
 
-def test_try_decompose_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``try_decompose`` instantiates ``GoalDecomposer`` with
-    ``settings.plan_model`` when set."""
+def test_decompose_async_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-CL-A1-followup (2026-05-23) — ``decompose_async`` reads
+    ``settings.plan_model`` and threads it through ``loop._call_llm``.
+    Replaces the pre-followup test that mocked ``GoalDecomposer``."""
+    import asyncio
+
     fake_settings = SimpleNamespace(plan_model="claude-opus-4-7", model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     captured: dict[str, str] = {}
 
-    class _FakeDecomposer:
-        def __init__(self, *, model: str, tool_definitions: list) -> None:
-            captured["model"] = model
+    async def _fake_call_llm(
+        _system: str, _msgs: list, *, model: str | None = None
+    ) -> SimpleNamespace:
+        captured["model"] = model or ""
+        # Return None so decompose_async early-exits without parsing
+        # (we only care which model was requested for the call).
+        return None
 
-        def decompose(self, *_args: object, **_kwargs: object) -> None:
-            return None  # short-circuit — we only care about __init__ arg
+    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-haiku-4-5")
 
-    monkeypatch.setattr("core.orchestration.goal_decomposer.GoalDecomposer", _FakeDecomposer)
+    from core.agent.plan import decompose_async
 
-    loop = SimpleNamespace(
-        _enable_goal_decomposition=True,
-        _goal_decomposer=None,
-        _tools=[],
-        model="claude-haiku-4-5",
-    )
-    from core.agent.loop._decomposition import try_decompose
-
-    try_decompose(loop, "compound input with multiple steps")
+    asyncio.run(decompose_async(loop, "comprehensive analysis and report"))
     assert captured["model"] == "claude-opus-4-7"
 
 
-def test_try_decompose_falls_back_to_loop_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Empty ``plan_model`` → ``GoalDecomposer`` gets ``loop.model``."""
+def test_decompose_async_falls_back_to_loop_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty ``plan_model`` → ``decompose_async`` uses ``loop.model``."""
+    import asyncio
+
     fake_settings = SimpleNamespace(plan_model="", model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
     captured: dict[str, str] = {}
 
-    class _FakeDecomposer:
-        def __init__(self, *, model: str, tool_definitions: list) -> None:
-            captured["model"] = model
+    async def _fake_call_llm(
+        _system: str, _msgs: list, *, model: str | None = None
+    ) -> SimpleNamespace:
+        captured["model"] = model or ""
+        return None
 
-        def decompose(self, *_args: object, **_kwargs: object) -> None:
-            return None
+    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="claude-opus-4-7")
 
-    monkeypatch.setattr("core.orchestration.goal_decomposer.GoalDecomposer", _FakeDecomposer)
+    from core.agent.plan import decompose_async
 
-    loop = SimpleNamespace(
-        _enable_goal_decomposition=True,
-        _goal_decomposer=None,
-        _tools=[],
-        model="claude-opus-4-7",  # this should be used
-    )
-    from core.agent.loop._decomposition import try_decompose
-
-    try_decompose(loop, "compound input")
+    asyncio.run(decompose_async(loop, "comprehensive analysis and report"))
     assert captured["model"] == "claude-opus-4-7"
 
 

@@ -30,35 +30,60 @@ from pathlib import Path
 
 
 def test_g_b_autoresearch_petri_role_is_canonical_sot() -> None:
-    """Petri role models resolve through ``[self_improving_loop.petri.<role>]``.
+    """Audit role models resolve through ``[self_improving_loop.autoresearch.<role>]``.
 
-    Single-SoT (2026-05-22, PR-CSP-12) — ``AutoresearchConfig.target_model``
-    and ``judge_model`` survive as **deprecated no-op slots** for
-    back-compat config load (so an old config.toml doesn't break parse),
-    but the canonical SoT is the petri-role section. The fields must
-    accept any string round-trip, but runtime resolution does NOT
-    consult them — that path runs through ``_petri_role_model``.
+    Step J-b.1 (2026-05-23) — relocates the canonical SoT from the
+    executor layer (``[self_improving_loop.petri.<role>]``, set by
+    PR-CSP-12 on 2026-05-22) up to the control layer
+    (``[self_improving_loop.autoresearch.<role>]``). Rationale: the
+    self-improving pipeline (run → seed gen → petri baseline →
+    autoresearch surface engineering → petri audit → autoresearch
+    Drop/commit) places autoresearch above the audit executor, so
+    config ownership belongs to the control layer. The legacy
+    ``[petri.<role>]`` section continues to load for one release via
+    ``_migrate_legacy_role_namespaces`` with a ``DeprecationWarning``.
+
+    ``AutoresearchConfig.target_model`` / ``judge_model`` survive as
+    pre-PR-CSP-12 deprecated no-op slots; runtime resolution does not
+    consult them, but they accept any string round-trip so an even
+    older config.toml doesn't break parse.
     """
     from core.config.self_improving_loop import (
         AutoresearchConfig,
+        PetriRoleConfig,
         SelfImprovingLoopConfig,
     )
 
     cfg = AutoresearchConfig()
-    # Deprecated fields survive on AutoresearchConfig — default None
-    # signals "not set" (back-compat: an old config.toml carrying
-    # these keys won't fail to parse).
+    # Pre-PR-CSP-12 deprecated fields survive (back-compat with old
+    # configs).
     assert getattr(cfg, "target_model", "MISSING") is None, (
         "G-B regressed: target_model deprecated slot removed before back-compat window"
     )
     assert getattr(cfg, "judge_model", "MISSING") is None, (
         "G-B regressed: judge_model deprecated slot removed before back-compat window"
     )
-    # The petri section lives on the top-level config — it's the
-    # real SoT for per-role model selection.
+    # Step J-b.1 canonical SoT — the role bindings live on
+    # AutoresearchConfig as nested PetriRoleConfig sub-fields.
+    assert isinstance(cfg.target, PetriRoleConfig), (
+        "G-B regressed: autoresearch.target sub-field missing — canonical SoT moved"
+    )
+    assert isinstance(cfg.judge, PetriRoleConfig), (
+        "G-B regressed: autoresearch.judge sub-field missing"
+    )
+    assert isinstance(cfg.auditor, PetriRoleConfig), (
+        "G-B regressed: autoresearch.auditor sub-field missing"
+    )
+    # The top-level [petri.*] / [mutator] sections are no longer fields —
+    # they auto-migrate via the loader's before-validator.
     loop_cfg = SelfImprovingLoopConfig()
-    assert hasattr(loop_cfg, "petri"), (
-        "G-B regressed: SelfImprovingLoopConfig.petri role-config section missing"
+    assert not hasattr(loop_cfg, "petri"), (
+        "Step J-b.1 regressed: SelfImprovingLoopConfig.petri must be relocated "
+        "into autoresearch.<role> (the control-layer SoT)."
+    )
+    assert not hasattr(loop_cfg, "mutator"), (
+        "Step J-b.1 regressed: SelfImprovingLoopConfig.mutator must be relocated "
+        "into autoresearch.mutator (autoresearch owns its engineering LLM)."
     )
 
 

@@ -35,7 +35,12 @@ def test_default_config_has_safe_defaults() -> None:
     assert cfg.abort_threshold == pytest.approx(0.9)
     assert isinstance(cfg.autoresearch, AutoresearchConfig)
     assert isinstance(cfg.seed_generation, SeedGenerationConfig)
-    assert cfg.petri == {}
+    # Step J-b.1 — audit role bindings moved into autoresearch namespace.
+    # Defaults are now PetriRoleConfig() instances (model="", source="claude-cli"),
+    # not entries in a top-level petri dict.
+    assert cfg.autoresearch.target.model == ""
+    assert cfg.autoresearch.judge.model == ""
+    assert cfg.autoresearch.auditor.model == ""
 
 
 def test_autoresearch_defaults_match_train_module() -> None:
@@ -195,30 +200,35 @@ seed_limit = 2
 
 
 def test_load_reads_petri_role_bindings(tmp_path: Path) -> None:
-    """[self_improving_loop.petri.<role>] keys become PetriRoleConfig entries."""
+    """[self_improving_loop.autoresearch.<role>] keys hydrate PetriRoleConfig sub-fields.
+
+    Step J-b.1 — namespace relocated from ``petri`` (executor layer) to
+    ``autoresearch`` (control layer) so role-binding ownership matches
+    the self-improving pipeline's control flow.
+    """
     path = tmp_path / "config.toml"
     _write_toml(
         path,
         """
-[self_improving_loop.petri.auditor]
+[self_improving_loop.autoresearch.auditor]
 model = "claude-sonnet-4-6"
 source = "claude-cli"
 
-[self_improving_loop.petri.target]
+[self_improving_loop.autoresearch.target]
 model = "geode/gpt-5.5"
 source = "openai-codex"
 
-[self_improving_loop.petri.judge]
+[self_improving_loop.autoresearch.judge]
 model = "claude-opus-4-7"
 source = "claude-cli"
 """,
     )
     cfg = load_self_improving_loop_config(path)
-    assert set(cfg.petri) == {"auditor", "target", "judge"}
-    assert cfg.petri["auditor"].model == "claude-sonnet-4-6"
-    assert cfg.petri["auditor"].source == "claude-cli"
-    assert cfg.petri["target"].source == "openai-codex"
-    assert cfg.petri["judge"].model == "claude-opus-4-7"
+    # Step J-b.1 — role bindings live under autoresearch namespace (control SoT).
+    assert cfg.autoresearch.auditor.model == "claude-sonnet-4-6"
+    assert cfg.autoresearch.auditor.source == "claude-cli"
+    assert cfg.autoresearch.target.source == "openai-codex"
+    assert cfg.autoresearch.judge.model == "claude-opus-4-7"
 
 
 def test_load_reads_seed_generation_subsection(tmp_path: Path) -> None:
@@ -508,3 +518,118 @@ warn_threshold = 0.4
         cfg = load_self_improving_loop_config(path)
     assert cfg.warn_threshold == pytest.approx(0.4)
     assert not journal.path.exists() or _read_journal(journal.path) == []
+
+
+# ── Step J-b.1 — control-layer SoT migration semantics ──────────────────
+
+
+def test_step_j_b1_petri_namespace_migrates_to_autoresearch() -> None:
+    """Legacy ``[self_improving_loop.petri.<role>]`` raw input is moved
+    under ``autoresearch`` by the before-validator and the migration
+    fires a ``DeprecationWarning``. The Python field
+    ``SelfImprovingLoopConfig.petri`` no longer exists — readers must
+    use ``cfg.autoresearch.target`` etc.
+    """
+    import warnings
+
+    raw = {
+        "petri": {
+            "target": {"model": "legacy-target", "source": "claude-cli"},
+            "judge": {"model": "legacy-judge"},
+            "auditor": {"model": "legacy-auditor"},
+        },
+    }
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        cfg = SelfImprovingLoopConfig.model_validate(raw)
+    deprecations = [w for w in recorded if issubclass(w.category, DeprecationWarning)]
+    petri_warnings = [w for w in deprecations if "[self_improving_loop.petri.*]" in str(w.message)]
+    assert len(petri_warnings) == 1, (
+        "Step J-b.1 invariant: legacy [petri.*] input must emit exactly one "
+        "DeprecationWarning per load so operators see the migration once."
+    )
+
+    assert cfg.autoresearch.target.model == "legacy-target"
+    assert cfg.autoresearch.judge.model == "legacy-judge"
+    assert cfg.autoresearch.auditor.model == "legacy-auditor"
+    assert not hasattr(cfg, "petri"), (
+        "Step J-b.1 regressed: SelfImprovingLoopConfig.petri must be removed; "
+        "readers route through cfg.autoresearch.<role>."
+    )
+
+
+def test_step_j_b1_mutator_namespace_migrates_to_autoresearch() -> None:
+    """Legacy ``[self_improving_loop.mutator]`` raw input is moved
+    under ``autoresearch.mutator`` by the before-validator with a
+    ``DeprecationWarning``. The top-level ``mutator`` field is removed.
+    """
+    import warnings
+
+    raw = {
+        "mutator": {"default_model": "legacy-mutator", "source": "claude-cli"},
+    }
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        cfg = SelfImprovingLoopConfig.model_validate(raw)
+    mutator_warnings = [
+        w
+        for w in recorded
+        if issubclass(w.category, DeprecationWarning)
+        and "[self_improving_loop.mutator]" in str(w.message)
+    ]
+    assert len(mutator_warnings) == 1
+
+    assert cfg.autoresearch.mutator.default_model == "legacy-mutator"
+    assert cfg.autoresearch.mutator.source == "claude-cli"
+    assert not hasattr(cfg, "mutator"), (
+        "Step J-b.1 regressed: SelfImprovingLoopConfig.mutator must be removed; "
+        "readers route through cfg.autoresearch.mutator."
+    )
+
+
+def test_step_j_b1_new_namespace_wins_when_both_layouts_present() -> None:
+    """When both ``[autoresearch.target]`` and the legacy
+    ``[petri.target]`` are present, the new (control-layer) value wins.
+    Mirrors PR #1496's "new wins" semantics in the opposite direction.
+    """
+    raw = {
+        "autoresearch": {"target": {"model": "NEW-WINS"}},
+        "petri": {"target": {"model": "OLD-LOSES"}},
+    }
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        cfg = SelfImprovingLoopConfig.model_validate(raw)
+    assert cfg.autoresearch.target.model == "NEW-WINS"
+
+
+def test_step_j_b1_clean_input_emits_no_deprecation() -> None:
+    """Pure ``autoresearch.*`` input (no legacy keys) must not emit any
+    DeprecationWarning — the migration warning is a deprecation signal,
+    not noise on every load."""
+    import warnings
+
+    raw = {
+        "autoresearch": {
+            "target": {"model": "new-target"},
+            "judge": {"model": "new-judge"},
+            "mutator": {"default_model": "new-mutator"},
+        },
+    }
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        SelfImprovingLoopConfig.model_validate(raw)
+    deprecations = [
+        w
+        for w in recorded
+        if issubclass(w.category, DeprecationWarning)
+        and (
+            "[self_improving_loop.petri.*]" in str(w.message)
+            or "[self_improving_loop.mutator]" in str(w.message)
+        )
+    ]
+    assert deprecations == [], (
+        "Step J-b.1 regressed: clean (new-style) input should not emit any "
+        "petri/mutator DeprecationWarning."
+    )

@@ -59,6 +59,10 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.plan_model": "plan_model",
     "llm.act_model": "act_model",
     "llm.judge_model": "judge_model",
+    # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
+    "replan.enabled": "replan_enabled",
+    "replan.interval": "replan_interval",
+    "replan.max_attempts": "replan_max_attempts",
     "cognitive.reflection_enabled": "cognitive_reflection_enabled",
     "cognitive.reflection_model": "cognitive_reflection_model",
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",

@@ -47,6 +47,186 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.46] - 2026-05-23
+
+> Cognitive Loop sprint release — 5-PR chain (BUDGET → A3 → A6 → A1 →
+> A1-followup) introduces session-wide wall-clock budget + auto handoff,
+> per-turn verify (Reflexion), Plan/Action/Judge model separation,
+> dynamic replan with explicit Plan object, and GoalDecomposer absorption
+> into Plan. Plus Step J-b.1 self-improving-loop model SoT relocation +
+> test isolation fix-up.
+
+### Removed
+
+- **PR-CL-A1-followup — GoalDecomposer 제거 + Plan 흡수**. PR-CL-A1 의
+  follow-up sprint. ``core/orchestration/goal_decomposer.py`` (321 LOC)
+  + ``tests/test_goal_decomposer.py`` 를 삭제하고 planner LLM 호출 path
+  를 ``core/agent/plan.py:decompose_async`` 로 흡수. 4-PR Cognitive Loop
+  sprint (BUDGET → A3 → A6 → A1) 와 같은 ``loop._call_llm(model=
+  settings.plan_model)`` async-native 패턴으로 통일.
+
+  변경:
+
+  - ``core/orchestration/goal_decomposer.py`` (DELETED, 321 LOC) — ``GoalDecomposer``
+    클래스 + ``DecomposerStats`` + ``_llm_decompose`` + ``_build_tool_summary``
+    + ``_is_clearly_simple`` / ``_has_compound_indicators`` 휴리스틱.
+  - ``tests/test_goal_decomposer.py`` (DELETED) — 모듈 자체 폐기로 함께 삭제.
+  - ``core/agent/plan.py`` (NEW additions, ~180 LOC) — ``SubGoal`` /
+    ``DecompositionResult`` pydantic 모델 (legacy schema 보존) +
+    ``_is_clearly_simple`` / ``_has_compound_indicators`` / ``_build_tool_summary``
+    휴리스틱 port + ``decompose_async`` 신설. ``decompose_async`` flow:
+    heuristic gate → ``load_prompt("decomposer", "system")`` +
+    ``apply_decomposition_policy`` (ADR-012 SoT 보존) → ``loop._call_llm(
+    model=settings.plan_model)`` (60s timeout, usage tracking) →
+    ``DecompositionResult.model_validate_json`` parse → ``build_plan_from_decomposition``.
+  - ``core/agent/loop/_decomposition.py`` — ``try_decompose`` 가 async
+    로 전환되고 ``decompose_async`` 를 호출. 사전 ``GoalDecomposer``
+    인스턴스화 제거.
+  - ``core/agent/loop/agent_loop.py`` — ``_try_decompose`` async 전환 +
+    ``arun`` 에서 ``await``. ``_goal_decomposer: Any | None = None`` 인스턴스
+    필드 제거 (stateless ``decompose_async`` 가 대체).
+  - ``core/agent/decomposition_policy.py`` — docstring 만 갱신 (호출 site
+    이전 명시). 코드 변경 없음 — ADR-012 의 4-axis SoT 중 하나로 KEEP.
+  - ``tests/test_model_split.py`` — ``test_try_decompose_uses_plan_model``
+    + ``test_try_decompose_falls_back_to_loop_model`` 두 테스트가
+    ``decompose_async`` mock 패턴으로 재작성됨.
+  - ``tests/test_s0c_decomposition_reader.py`` — wiring 검증 테스트가
+    ``goal_decomposer.py`` source-grep 에서 ``plan.py`` source-grep 으로 이전.
+  - ``tests/test_self_improving_5_slot_reader_audit.py`` —
+    ``test_decomposition_slot_is_now_alive_post_s0c`` 가 새 host 검증.
+  - ``docs/scaffold-architecture.md`` — orchestration tree 에서 ``goal_decomposer.py``
+    제거 + bullet 갱신.
+  - ``docs/adr/ADR-012-self-improvement-surface-tiers.md`` — `decomposition`
+    SoT row + S0a/S0b/S0c/S0d 후속 상태 문단에서 호출 site 이전 명시.
+
+  이유 (operator directive, 2026-05-23): PR-CL-A1 이 GoalDecomposer 를
+  underlying caller 로 유지했지만, ``decompose_async`` 와 ``replan_async``
+  가 같은 async LLM 호출 패턴을 사용하면서 두 path 가 직접 충돌. 단일
+  planner code path 로 흡수해 maintenance overhead 제거 + sprint 동안
+  반복적으로 발생한 "GoalDecomposer ↔ Plan 변환" boilerplate 축소.
+
+### Fixed
+
+- **Step J-b.1 fix-up — `test_diversity_hint_injected` xdist leak.**
+  PR-CL-A1 (#1548) added ``_maybe_replan_async`` which reads
+  ``current_session_metrics().last_verify_passed`` / ``.active_plan`` at
+  every round entry. ``current_session_metrics()`` lazy-inits and binds
+  to the ContextVar, so state from a prior test in the same xdist
+  worker (xdist ``loadfile`` packs all tests in
+  ``tests/test_autonomous_safety.py`` into one worker) leaks into the
+  next test. The canary was ``TestDiversityForcing.test_diversity_hint_injected``
+  — the leaked state intermittently tripped a verify_fail replan
+  trigger, the planner mock consumed the tool-response slot, and the
+  diversity tracker never advanced to 5. PR-CL-A1's author documented
+  the failure in 967927fa as "pre-existing xdist race, unrelated"; this
+  fix-up closes it. An ``autouse=True`` ``_isolated_session_metrics``
+  fixture wraps each test in this file with a fresh ``session_metrics_scope``
+  so every test sees default ``last_verify_passed=True`` and
+  ``active_plan=None``, keeping the replan trigger silent.
+
+### Changed
+
+- **Step J-b.1 — self-improving loop model SoT relocated to control layer.**
+  PR #1496 (2026-05-22) had collapsed audit role bindings into
+  ``[self_improving_loop.petri.<role>]`` (executor namespace). Step J-b.1
+  is the layer-aware mirror: the bindings move up to
+  ``[self_improving_loop.autoresearch.<role>]`` (control namespace) so
+  the model selection lives where the self-improving pipeline's control
+  actually runs — ``run → seed gen → petri baseline → autoresearch
+  surface engineering → petri audit → autoresearch Drop/commit``. The
+  mutator binding also relocates from ``[self_improving_loop.mutator]``
+  to ``[self_improving_loop.autoresearch.mutator]`` (autoresearch owns
+  its in-process engineering LLM). Legacy sections continue to load for
+  one release via the loader's
+  ``SelfImprovingLoopConfig._migrate_legacy_role_namespaces`` validator
+  with a ``DeprecationWarning``; the
+  ``SelfImprovingLoopConfig.petri`` / ``.mutator`` Python fields are
+  removed (``extra="forbid"`` keeps typos loud), so reader sites move
+  to ``cfg.autoresearch.target`` / ``.judge`` / ``.auditor`` /
+  ``.mutator``. Writer sites (``cmd_config.py``,
+  ``self_improving._persist_*``, ``geode config migrate-petri-toml``)
+  emit the new section names.
+
+### Added
+
+- **PR-CL-A1 — Dynamic Replan**. Fourth (final) PR in the Cognitive
+  Loop sprint (A3 → A6 → **A1**). Introduces an explicit :class:`Plan`
+  object stored on :class:`SessionMetrics`; the loop reads the current
+  step at every ``arun`` entry and prepends a ``<plan>...</plan>`` block
+  to the system prompt. A per-round ``_maybe_replan_async`` helper
+  calls the planner LLM (using :data:`settings.plan_model` from
+  PR-CL-A6) when either trigger fires:
+
+  - **Verify FAIL** — ``metrics.last_verify_should_retry`` (recoverable
+    miss → revise the plan).
+  - **Cadence** — every ``settings.replan_interval`` rounds (default 5;
+    ``0`` disables; ReWOO 5x-token-efficiency target).
+
+  Implementation:
+
+  - ``core/agent/plan.py`` (NEW, ~330 LOC) — frozen :class:`PlanStep`
+    + :class:`Plan` dataclasses (slots, JSON-serialisable) +
+    ``build_plan_from_decomposition`` (converts the legacy
+    :class:`GoalDecomposer` output into a Plan) + ``render_plan_for_prompt``
+    (``<plan>...</plan>`` block with current-step marker) +
+    ``should_replan`` (pure trigger policy: verify-fail wins over
+    cadence; env knobs ``GEODE_REPLAN_ENABLED`` / ``GEODE_REPLAN_INTERVAL``)
+    + ``parse_replan_response`` (JSON parser tolerating code fences) +
+    ``replan_async`` (calls ``loop._call_llm(model=plan_model)`` bounded
+    by 60s timeout, records planner usage via ``_track_usage_async``).
+  - ``core/agent/loop/_decomposition.py`` — REWRITTEN per A1 spec.
+    ``try_decompose`` now installs the explicit Plan on
+    ``SessionMetrics.active_plan`` (via ``set_active_plan``) instead of
+    returning a markdown suffix string. Pre-A1 callers see ``None``
+    return signalling "plan handled — caller skips suffix".
+  - ``core/agent/loop/agent_loop.py`` — new ``_maybe_replan_async``
+    helper fires per-round before ``_sync_model_and_rebuild_prompt``;
+    new ``_consume_plan_hint`` renders the active Plan for the system
+    prompt (parallel to PR-CL-A3 ``_consume_reflexion_hint``);
+    ``_sync_model_and_rebuild_prompt`` re-applies the plan hint on
+    model-drift rebuild so the plan isn't silently dropped.
+  - ``core/agent/verify.py`` — ``_verify_rule_based`` adds
+    ``step_expected_mismatch`` rubric_miss (PR-CL-A1 integration with
+    A3, per operator decision). Fires only when the active plan's
+    current step has a non-empty ``expected_outcome`` and the turn's
+    text contains none of its tokens. Added to ``_RETRYABLE_MISSES``
+    so replan can recover.
+  - ``core/observability/session_metrics.py`` — extended with
+    ``active_plan`` + ``replan_count`` +
+    ``replan_attempts_on_current_step`` + ``last_replan_trigger`` +
+    ``last_verify_should_retry`` fields + ``set_active_plan`` /
+    ``record_replan`` / ``record_step_attempt`` mutators. 4 telemetry
+    keys added to ``to_session_row``.
+  - ``core/config/_settings.py`` — 3 new ``Field`` declarations
+    (``replan_enabled`` / ``replan_interval`` / ``replan_max_attempts``)
+    with ``AliasChoices`` env overrides.
+  - ``core/config/__init__.py`` — 3 new ``_TOML_TO_SETTINGS`` mappings.
+  - ``core/ui/agentic_ui/events.py`` — new ``emit_plan_step`` (per-step
+    rendering: "Step 3/5: …") + ``emit_replan`` (revision banner) UI
+    events. Wired into ``_decomposition.try_decompose`` (initial step)
+    + ``_maybe_replan_async`` (each replan).
+  - ``tests/test_replan.py`` (NEW, 39 tests) — Plan dataclass shape +
+    ``build_plan_from_decomposition`` + ``render_plan_for_prompt`` +
+    ``should_replan`` policy (6 cases) + ``parse_replan_response`` (4
+    cases) + ``replan_async`` LLM integration (4 cases) +
+    SessionMetrics integration (4 cases) + ``step_expected_mismatch``
+    rubric (5 cases).
+
+  Frontier alignment (Socratic Q5):
+
+  - **ReWOO** (arxiv 2305.18323) — plan / observation decouple → 5x
+    token efficiency. Now actually wired: plan_model + replan cadence.
+  - **Self-Discover** (arxiv 2402.03620) — task-level plan composition
+    → 10-40x fewer inferences vs ToT / Self-Consistency.
+  - **Reflexion** (NeurIPS 2023) — verbal-RL hint (A3) + explicit Plan
+    block (A1) interleave at the system-prompt level.
+
+  Deferred to follow-up sprint: ``core/orchestration/goal_decomposer.py``
+  + ``core/agent/decomposition_policy.py`` direct removal (operator-
+  confirmed 2026-05-23, ~200 LOC). A1 keeps GoalDecomposer as the
+  underlying planner LLM caller; folding it into the Plan path is a
+  separate sprint.
+
 ## [0.99.45] - 2026-05-23
 
 ### Changed

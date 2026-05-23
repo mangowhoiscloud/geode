@@ -549,14 +549,14 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # PR-MINIMAL-2 (2026-05-21) — G1a inherit: MutatorConfig.default_model
     # defaults to None, fall back to Settings.model so the operator's
     # ``/model`` choice flows through. Explicit override still wins.
-    if cfg.mutator.default_model:
-        model = cfg.mutator.default_model
+    if cfg.autoresearch.mutator.default_model:
+        model = cfg.autoresearch.mutator.default_model
     else:
         from core.config import settings
 
         model = settings.model
-    max_tokens = cfg.mutator.max_tokens
-    source = cfg.mutator.source
+    max_tokens = cfg.autoresearch.mutator.max_tokens
+    source = cfg.autoresearch.mutator.source
 
     # PR-MINIMAL-2 — model allow-list field removed (C1). The
     # router's provider routing already guards model existence per
