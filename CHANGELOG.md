@@ -47,6 +47,43 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Step I.b — Codex reasoning-replay inspect_ai integration smoke test.**
+  Step A2 (v0.99.44) wired Codex encrypted-reasoning replay into the
+  GEODE AgenticLoop's ``Message`` path via
+  ``core.llm.adapters._openai_common.build_codex_input``. Petri's
+  :class:`OpenAICodexAPI` (inspect_ai ``ModelAPI`` subclass) inherits
+  the equivalent capability *for free* — inspect_ai's stock
+  ``openai_responses_inputs`` converter walks the ``ChatMessage`` list
+  and translates ``ContentReasoning`` blocks into Codex Responses-API
+  ``{"type": "reasoning", "encrypted_content": ...}`` typed items via
+  ``responses_reasoning_from_reasoning``
+  (``inspect_ai/model/_openai_responses.py:1130``). The Petri provider
+  must NOT reimplement that replay logic; this PR adds the explicit
+  guard rails so a future contributor doesn't accidentally drift.
+
+  Changes:
+
+  - ``plugins/petri_audit/codex_provider.py`` — multi-line comment
+    block at the ``openai_responses_inputs`` call inside ``register``'s
+    nested ``OpenAICodexAPI.generate`` documenting (a) inspect_ai owns
+    the replay, (b) where the upstream translator lives, (c) the
+    cross-reference to A2's GEODE-path helper, (d) the test pin.
+  - ``tests/plugins/petri_audit/test_codex_reasoning_replay_inspect_pipeline.py``
+    (NEW, 3 cases) — gated on the ``[audit]`` extra via
+    ``pytest.importorskip``:
+    1. ``openai_responses_inputs`` + ``responses_reasoning_from_reasoning``
+       remain importable from inspect_ai (catches an upstream rename
+       at import time).
+    2. ``responses_reasoning_from_reasoning(ContentReasoning(redacted=True))``
+       round-trips the encrypted payload (the GEODE-path contract
+       inspect_ai must mirror).
+    3. ``OpenAICodexAPI.generate`` source contains
+       ``await openai_responses_inputs(`` — anti-deception ratchet
+       against a future refactor that drops the call while leaving
+       the import/comment alone (Codex MCP HIGH catch).
+
 ## [0.99.46] - 2026-05-23
 
 > Cognitive Loop sprint release — 5-PR chain (BUDGET → A3 → A6 → A1 →
