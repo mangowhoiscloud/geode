@@ -1426,10 +1426,8 @@ dev = [
     { name = "codespell" },
     { name = "deptry" },
     { name = "import-linter" },
-    { name = "manim" },
     { name = "mypy" },
     { name = "pillow" },
-    { name = "pixelmatch" },
     { name = "pre-commit" },
     { name = "pymarkdownlnt" },
     { name = "pytest" },
@@ -1438,9 +1436,13 @@ dev = [
     { name = "ruff" },
     { name = "twine" },
     { name = "types-pyyaml" },
-    { name = "uharfbuzz" },
     { name = "yamllint" },
     { name = "zipfile-zstd" },
+]
+viz = [
+    { name = "manim" },
+    { name = "pixelmatch" },
+    { name = "uharfbuzz" },
 ]
 
 [package.metadata]
@@ -1491,10 +1493,8 @@ dev = [
     { name = "codespell", specifier = ">=2.3.0" },
     { name = "deptry", specifier = ">=0.25.0" },
     { name = "import-linter", specifier = ">=2.0" },
-    { name = "manim", specifier = ">=0.20.1" },
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "pillow", specifier = ">=10.0.0" },
-    { name = "pixelmatch", specifier = ">=0.4.0" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pymarkdownlnt", specifier = ">=0.9.37" },
     { name = "pytest", specifier = ">=9.0.2" },
@@ -1503,9 +1503,13 @@ dev = [
     { name = "ruff", specifier = ">=0.15.2" },
     { name = "twine", specifier = ">=6.0.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
-    { name = "uharfbuzz", specifier = ">=0.54.1" },
     { name = "yamllint", specifier = ">=1.38.0" },
     { name = "zipfile-zstd", specifier = ">=0.0.4" },
+]
+viz = [
+    { name = "manim", specifier = ">=0.20.1" },
+    { name = "pixelmatch", specifier = ">=0.4.0" },
+    { name = "uharfbuzz", specifier = ">=0.54.1" },
 ]
 
 [[package]]

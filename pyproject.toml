@@ -186,6 +186,14 @@ dev = [
     # can open Petri .eval archives without the heavy [audit] extra.
     # Python 3.14+ has native zstd in zipfile and this becomes a no-op shim.
     "zipfile-zstd>=0.0.4",
+    "Pillow>=10.0.0",
+]
+# Hero visualization scripts — opt-in only via ``uv sync --group viz``.
+# manim transitively requires system pangocairo which is not available
+# on the default CI container; gating behind a non-default group keeps
+# the main CI gates fast. Tests using these deps (test_hero_frame_ratchet,
+# test_verify_hero_layout) auto-skip when the deps are missing.
+viz = [
     "manim>=0.20.1",
     # Step 2 typography drift gate — `verify_hero_layout.py` shapes every
     # ratchet site's text via HarfBuzz and stores the glyph cluster
@@ -202,7 +210,6 @@ dev = [
     # JS port, anti-aliasing-aware perceptual diff. See
     # .claude/skills/viz-frame-audit/rules/pixel-ratchet.md.
     "pixelmatch>=0.4.0",
-    "Pillow>=10.0.0",
 ]
 
 
