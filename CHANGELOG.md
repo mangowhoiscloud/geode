@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.45] - 2026-05-23
+
 ### Changed
 
 - **PR-TEMP — LLM sampling temperature is config-driven, no more hardcoded
