@@ -143,9 +143,13 @@ BUDGET_MINUTES = 5
 # PR-MINIMAL-2 — ``USE_OAUTH: bool`` replaced by ``SOURCE: str``
 # (one of "auto" / "api_key" / "claude-cli" / "openai-codex") to
 # match ``MutatorConfig.source`` / ``PetriRoleConfig.source`` shape.
-# ``_build_audit_command`` adds ``--use-oauth`` iff SOURCE is not
-# ``api_key``.
-SOURCE = "auto"
+# PR-SIL-5THEME C6 (2026-05-23) — default ``"auto" → "claude-cli"`` per
+# operator decision (``project_payg_exclusion_decision.md``). ``api_key`` 가
+# ``Source`` literal 에서 제거됐고, ``auto`` 는 manifest cascade silent
+# PAYG fallback risk — 명시 ``claude-cli`` 가 새 default.
+# ``_build_audit_command`` 의 ``--use-oauth`` 분기는 ``api_key`` 가 사라져
+# always-fire (모든 source 가 non-api_key).
+SOURCE = "claude-cli"
 SEED_LIMIT = 10
 SEED_SELECT = "plugins/petri_audit/seeds"
 """Default seed pool — hierarchical tree (post-PR-0). P0b adds the

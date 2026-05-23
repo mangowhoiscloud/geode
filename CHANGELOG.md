@@ -47,6 +47,84 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-SIL-5THEME C6 — D1 provider B/C closure (PAYG exclusion enforcement)**.
+  Operator decision (durable memory `project_payg_exclusion_decision.md`,
+  2026-05-23) 으로 autoresearch / Petri audit 의 provider 선택지에서
+  PAYG (Anthropic API key 직접 결제, `api_key`) 영구 exclude. 잔존 옵션:
+  `claude-cli` (Claude Code Max OAuth) / `openai-codex` (ChatGPT Plus
+  OAuth) / `auto` (manifest cascade). 잔존 인프라 코드 (`auth.toml`,
+  BillingError panel, `default_plan_for_payg`) 는 보존.
+
+  **`Source` literal narrowing**:
+  `Literal["claude-cli", "openai-codex", "api_key", "auto"]` →
+  `Literal["claude-cli", "openai-codex", "auto"]`. Operator 가
+  `~/.geode/config.toml` 에 `source = "api_key"` 명시 시 Pydantic
+  ValidationError 발화 + 어느 값이 invalid 인지 명시 (PR-C-P1 의
+  silent-fallback 차단 패턴 재사용). 분리된 `MutatorConfig.source`
+  (line 248 의 별도 Literal) 은 `api_key` 포함 4-element 유지 — mutator
+  LLM 호출은 audit role 과 별개, operator 가 Anthropic API key 로
+  mutator 운영 자유.
+
+  **Default change**: `PetriRoleConfig.source` + `AutoresearchConfig.source`
+  + `autoresearch/train.py:SOURCE` 모두 default `"auto" → "claude-cli"`.
+  `auto` 는 manifest cascade 가 silent PAYG fallback 가능 (`fallback_to_payg`
+  True 일 때) → 명시 `claude-cli` default 면 leak 0. operator 가 explicit
+  으로 `"auto"` 또는 `"openai-codex"` 명시 시 그대로 적용.
+
+  **`check_subscription_cli_for_source` pre-flight** (신규,
+  `autoresearch/prepare.py`): `source` setting 이 `claude-cli` 또는
+  `openai-codex` 일 때 해당 CLI binary 의 PATH 가용성 검증. 부재 시
+  actionable error (`GEODE_CLAUDE_CLI_BIN` / `GEODE_CODEX_CLI_BIN` env
+  override hint 포함). `auto` source 는 cascade 가 fallback 책임이라
+  pre-flight skip.
+
+  **`_read_role_from_self_improving_loop` 의 ValidationError graceful
+  fallback**: 기존 operator config 가 `source = "api_key"` 가진 채로
+  load 시 ValidationError 발화 → petri standalone CLI 의 user_overrides
+  read 는 graceful 하게 legacy `petri.toml` 로 fallback (`petri_role_legacy_fallback`
+  event emit 으로 추적 가능). autoresearch / mutator 의 직접 호출은
+  여전히 ValidationError 가 의도된 surface — 두 경로 의 의도 분리.
+
+  **Known-defaults filter expansion**: `_read_role_from_self_improving_loop`
+  의 source 필터가 `"auto"` 외 `"claude-cli"` 도 known-defaults set 에
+  추가 — override output 이 operator-explicit override 만 surface (default
+  값이 silent 하게 노출 안 됨). explicit `"claude-cli"` 설정의 silent corner
+  는 minor UX nit (효과 동일).
+
+  **Test guards** (`tests/test_d1_provider_closure.py` 신규, 14 tests):
+  - `Source` literal — `api_key` Pydantic reject (PetriRoleConfig +
+    AutoresearchConfig, 2 tests)
+  - 3 valid sources (`claude-cli` / `openai-codex` / `auto`) 수락 (3 tests)
+  - Default `claude-cli` (PetriRoleConfig + AutoresearchConfig, 2 tests)
+  - `check_subscription_cli_for_source` pre-flight: missing binary
+    actionable error (claude-cli + openai-codex), env override wins,
+    auto skip, unknown source graceful (5 tests)
+  - 4-backend matrix: `api_key` reject + 3 valid accept (2 tests for
+    both configs)
+
+  **Existing test updates**:
+  - `test_autoresearch_defaults_match_train_module` — expect `source ==
+    "claude-cli"` (was `"auto"`)
+  - `test_load_reads_autoresearch_subsection` — expect `source ==
+    "claude-cli"` for untouched field
+  - `test_petri_role_default_source_is_auto` → renamed
+    `test_petri_role_default_source_is_subscription_first` — expect
+    `claude-cli`
+  - `test_set_source_updates_override` (petri CLI) — use `"openai-codex"`
+    instead of `"api_key"` (latter rejected by Pydantic)
+  - `test_read_role_override_prefers_self_improving_loop` — use
+    `"openai-codex"` non-default source
+
+  **Backward compat**: `Mutator` source literal (mutator LLM, distinct
+  from audit roles) preserved with `api_key` — operator can still use
+  Anthropic API for mutator. `credential_source.py` 의 PAYG fallback
+  코드 경로 보존 (다른 caller 가 명시 호출 시 활성). 기존 `config.toml`
+  의 `api_key` 설정 operator: petri standalone CLI 는 graceful (legacy
+  fallback + telemetry event), autoresearch 직접 호출은 actionable
+  ValidationError 로 migrate 안내.
+
 ## [0.99.40] - 2026-05-23
 
 ### Added
