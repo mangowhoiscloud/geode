@@ -77,6 +77,7 @@ def _normalize_provider_for_registry(provider: str) -> str:
         return "openai"
     return provider
 
+
 log = logging.getLogger(__name__)
 
 

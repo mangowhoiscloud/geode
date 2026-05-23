@@ -336,9 +336,7 @@ def _install_reflection_stubs(
     monkeypatch.setattr(_reflection, "call_with_failover", _fake_call_with_failover, raising=False)
     # Step J-b.3 — Path-B resolver. ``resolve_for(provider, source)``
     # replaces the legacy ``resolve_agentic_adapter(provider)``.
-    monkeypatch.setattr(
-        _reflection, "resolve_for", lambda _p, _src="payg": adapter, raising=False
-    )
+    monkeypatch.setattr(_reflection, "resolve_for", lambda _p, _src="payg": adapter, raising=False)
     monkeypatch.setattr(_reflection, "_resolve_provider", lambda _m: "anthropic", raising=False)
 
 
