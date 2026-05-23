@@ -64,11 +64,14 @@ def test_concrete_source_each_anthropic_variant() -> None:
         assert loop._new_adapter.name == expected_name
 
 
-def test_non_anthropic_provider_skips_new_adapter() -> None:
-    """A2 follow-up scope — OpenAI/Codex providers still use legacy."""
+def test_openai_provider_attaches_new_adapter() -> None:
+    """A2 (v0.99.44) — OpenAI providers now resolve through the adapter
+    registry too. Pre-A2 the route was Anthropic-only; A2 ported the
+    multi-turn converters + Codex reasoning replay so the guard is gone."""
     loop = _make_loop(source="payg", provider="openai")
-    assert loop._new_adapter is None  # not yet on adapter route
-    assert loop._adapter is not None  # legacy path
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "openai-payg"
+    assert loop._adapter is not None  # legacy adapter still wired as fallback
 
 
 def test_unregistered_pair_hard_fails() -> None:

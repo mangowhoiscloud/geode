@@ -145,7 +145,7 @@ def test_resolve_for_duplicate_pair_raises() -> None:
         resolve_for("anthropic", SOURCE_PAYG)
 
 
-def test_bootstrap_builtins_registers_six() -> None:
+def test_bootstrap_builtins_registers_eight() -> None:
     bootstrap_builtins()
     names = {a.name for a in list_adapters()}
     assert names == {
@@ -155,13 +155,15 @@ def test_bootstrap_builtins_registers_six() -> None:
         "openai-payg",
         "codex-oauth",
         "codex-cli",
+        "glm-payg",
+        "glm-coding-plan",
     }
 
 
 def test_bootstrap_builtins_idempotent() -> None:
     bootstrap_builtins()
     bootstrap_builtins()  # Second call must not raise.
-    assert len(list_adapters()) == 6
+    assert len(list_adapters()) == 8
 
 
 def test_bootstrap_builtins_provider_source_pairs() -> None:
@@ -174,6 +176,8 @@ def test_bootstrap_builtins_provider_source_pairs() -> None:
         ("openai", "payg"),
         ("openai", "subscription"),
         ("openai", "adapter"),
+        ("glm", "payg"),
+        ("glm", "subscription"),
     }
 
 
