@@ -182,6 +182,110 @@ class Settings(BaseSettings):
             "before any throttling kicks in. PR-C (2026-05-21)."
         ),
     )
+    # Temperature — config-driven sampling (PR-TEMP, 2026-05-23).
+    # Replaces six hardcoded literals (agent_loop 0.0 / reflection 0.2 /
+    # verification 0.1 / commentary 0.4 / mutation 0.3 / compression 0.0)
+    # with operator-tunable knobs. Frontier API grounding:
+    #   * Anthropic: default 1.0, range 0.0-1.0. "closer to 0.0 for
+    #     analytical / multiple choice, closer to 1.0 for creative and
+    #     generative tasks."
+    #   * OpenAI: default 1.0, range 0.0-2.0. Reasoning models (o-series,
+    #     gpt-5 family) reject non-default sampling — the codex adapter's
+    #     ``_is_codex_reasoning_model`` path omits temperature for those.
+    #   * Gemini 3: docs strongly recommend keeping temperature at 1.0;
+    #     lowering "may lead to unexpected behavior, such as looping or
+    #     degraded performance, particularly in complex mathematical or
+    #     reasoning tasks."
+    # Most defaults sit at 1.0 (= provider default) so each provider's
+    # adaptive-sampling logic kicks in unmodified. Verification + budget
+    # compression default to 0.0 because their downstream consumers (cross-
+    # LLM agreement coefficient + reproducible summaries) are functional
+    # invariants where stochastic output is meaningless.
+    temperature_agent_loop: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_agent_loop",
+            "GEODE_TEMPERATURE_AGENT_LOOP",
+        ),
+        description=(
+            "Sampling temperature for the main agentic loop's tool-use "
+            "call. Previously hardcoded to 0.0; the new default 1.0 "
+            "matches Anthropic / OpenAI / Gemini provider defaults."
+        ),
+    )
+    temperature_reflection: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_reflection",
+            "GEODE_TEMPERATURE_REFLECTION",
+        ),
+        description=(
+            "Sampling temperature for the reflection node's hypothesis / "
+            "confidence call. Previously hardcoded to 0.2."
+        ),
+    )
+    temperature_verification: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_verification",
+            "GEODE_TEMPERATURE_VERIFICATION",
+        ),
+        description=(
+            "Sampling temperature for cross-LLM agreement rescoring. "
+            "Defaults to 0.0 because consensus needs determinism — "
+            "stochastic rescoring would make the G3 agreement coefficient "
+            "noisy. Operators may raise it if the secondary model rejects "
+            "0.0 sampling. Previously hardcoded to 0.1."
+        ),
+    )
+    temperature_commentary: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_commentary",
+            "GEODE_TEMPERATURE_COMMENTARY",
+        ),
+        description=(
+            "Sampling temperature for tool-result commentary generation. "
+            "Previously hardcoded to 0.4 (signature default)."
+        ),
+    )
+    temperature_self_improving_mutation: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_self_improving_mutation",
+            "GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION",
+        ),
+        description=(
+            "Sampling temperature for the self-improving-loop mutator "
+            "call. Previously hardcoded to 0.3."
+        ),
+    )
+    temperature_progressive_compression: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "temperature_progressive_compression",
+            "GEODE_TEMPERATURE_PROGRESSIVE_COMPRESSION",
+        ),
+        description=(
+            "Sampling temperature for budget-summarisation calls in "
+            "progressive context compression. Defaults to 0.0 so "
+            "summaries are reproducible across re-runs. Previously "
+            "hardcoded to 0.0."
+        ),
+    )
+
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 

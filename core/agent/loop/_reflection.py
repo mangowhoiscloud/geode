@@ -285,6 +285,8 @@ async def reflect_async(
             # ``_extract_reflection_input → None → keep previous
             # state``. Cross-provider: ``"auto"`` normalises to
             # ``"auto"`` on OpenAI/Codex via the shared normaliser.
+            from core.config import settings as _settings
+
             return await adapter.agentic_call(
                 model=m,
                 system=active_system,
@@ -292,7 +294,7 @@ async def reflect_async(
                 tools=[active_tool],
                 tool_choice="auto",
                 max_tokens=max_tokens,
-                temperature=0.2,
+                temperature=_settings.temperature_reflection,
             )
 
         response, _used_model = await call_with_failover([model], _do_call)

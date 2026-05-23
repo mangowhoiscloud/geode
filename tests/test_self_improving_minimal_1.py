@@ -5,8 +5,9 @@ Pins:
 - ``/self-improving rollback`` prints git revert recipes (B2)
 - ``/self-improving rollback <mutation_id>`` includes the grep form
 - ``_load_program_md`` actually reads ``autoresearch/program.md``
-  from disk (H4 regression guard for the PR-G5b incident in the
-  CLAUDE.md DONT table)
+  from disk (H4 regression guard for incident PR-G5b #1350, codified
+  in `CLAUDE.md` → Refactoring Deception Prevention →
+  "CHANGELOG/PR-body parity")
 """
 
 from __future__ import annotations
@@ -114,7 +115,8 @@ def test_unknown_action_help_line_lists_history_and_rollback(
 
 
 def test_load_program_md_actually_reads_disk_file() -> None:
-    """CLAUDE.md DONT table 2026-05-20 PR-G5b #1350 row:
+    """Incident PR-G5b #1350 (2026-05-20), codified in `CLAUDE.md` →
+    Refactoring Deception Prevention → "CHANGELOG/PR-body parity":
     ``_SYSTEM_PROMPT`` was a hardcoded f-string while the PR title
     claimed "program.md-driven". The G5b.fix1.b commit introduced
     ``_load_program_md`` which actually reads
