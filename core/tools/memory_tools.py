@@ -17,8 +17,8 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
+from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
-from core.hooks.utils import fire_hook
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory

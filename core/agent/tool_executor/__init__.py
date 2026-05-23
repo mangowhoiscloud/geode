@@ -21,10 +21,10 @@ from core.agent.safety import SAFE_TOOLS as SAFE_TOOLS
 from core.agent.safety import WRITE_TOOLS as WRITE_TOOLS
 from core.ui.console import console as console
 
-from ._helpers import _compute_model_tool_limit, _guard_tool_result
 from ._spinner import _tool_spinner
 from .executor import ToolExecutor
 from .processor import ToolCallProcessor
+from .result_token_guard import _compute_model_tool_limit, _guard_tool_result
 
 __all__ = [
     "AUTO_APPROVED_MCP_SERVERS",

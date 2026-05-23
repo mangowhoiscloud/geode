@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
-from core.hooks.utils import fire_hook
 
 log = logging.getLogger(__name__)
 

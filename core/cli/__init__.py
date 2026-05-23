@@ -67,7 +67,7 @@ from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
 from core.cli.welcome import _suppress_noisy_warnings as _suppress_noisy_warnings
 from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
-from core.hooks.utils import fire_hook
+from core.hooks.dispatch import fire_hook
 from core.llm.commentary import generate_commentary
 from core.ui.console import console
 from core.ui.status import GeodeStatus

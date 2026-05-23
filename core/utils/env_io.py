@@ -1,10 +1,11 @@
 """Environment + config IO helpers — pure utilities with no CLI dependencies.
 
-Extracted from ``core/cli/_helpers.py`` (v0.85.0) so that ``core/lifecycle/``
-modules and other layers can use them without crossing into the CLI layer.
-
-The CLI-specific helper ``parse_dry_run_flag`` stays in ``core/cli/_helpers.py``
-because it parses CLI arguments — that's a CLI concern, not a utility one.
+Originally extracted from ``core/cli/_helpers.py`` in v0.85.0 so that
+non-CLI layers (e.g. ``core/wiring/``) could use these IO helpers
+without crossing the CLI boundary. ``core/cli/_helpers.py`` was then
+removed entirely in PR-CLEANUP-6 (2026-05-23) — the one CLI-specific
+helper that remained (``parse_dry_run_flag``) turned out to be dead
+code with zero callers.
 """
 
 from __future__ import annotations

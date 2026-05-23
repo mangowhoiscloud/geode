@@ -47,6 +47,51 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **PR-CLEANUP-6 — file-name hygiene sweep: catch-all `_helpers` /
+  `utils` filename survivors.** Four targets, four different fates,
+  one rule (the new Naming CANNOT row that forbids ``_helpers`` /
+  ``_utils`` / ``_misc`` filenames once a caller appears):
+  - **`core/cli/_helpers.py` deleted** — 21-LOC file with one
+    function (``parse_dry_run_flag``) that had zero callers across
+    ``core/``, ``tests/``, ``plugins/``. Dead code; deletion is the
+    cleanest enforcement. ``core/utils/env_io.py``'s docstring (it
+    was the v0.85.0 split target of this file) updated to record
+    the removal.
+  - **`core/agent/tool_executor/_helpers.py` renamed to
+    `result_token_guard.py`** (60 LOC) — owns
+    ``_compute_model_tool_limit`` + ``_guard_tool_result``, which
+    together form the per-tool token-budget guard the
+    ``ToolExecutor`` runs on each result. Two relative imports
+    (``processor.py`` + package ``__init__``) updated.
+  - **`core/mcp/utils.py` renamed to `signal_fallback.py`** (78 LOC)
+    — owns ``parse_mcp_content`` + ``try_mcp_signal_async``, the
+    MCP-first / fixture-fallback shape extracted from
+    ``core/tools/signal_tools.py`` during the v0.66.2 step-5 split
+    so external plugins could adopt the same surface. Currently
+    zero in-tree callers (intentional public surface); kept (not
+    deleted) for the plugin contract.
+  - **`core/hooks/utils.py` renamed to `dispatch.py`** (36 LOC) —
+    owns ``fire_hook``, the cross-layer hook dispatch helper
+    consolidated from the four near-identical ``_fire_hook`` copies.
+    "dispatch" is what the function actually does; "utils" was a
+    placeholder. 4 importers (``core/tools/memory_tools.py``,
+    ``core/llm/provider_dispatch.py``, ``core/llm/router/_hooks.py``,
+    ``core/cli/__init__.py``) updated.
+
+  **Deferred (one file left over, on purpose)**:
+  ``core/agent/loop/_helpers.py`` (170 LOC, host of
+  ``get_agentic_tools`` + ``check_announced_results`` +
+  ``try_decompose``) was the consolidation target of PR-CLEANUP-1
+  and is genuinely multi-concern (tool factory + sub-agent announce
+  poller + planner dispatch). Any rename would either be vague
+  (``_internals.py``) or would force the PR-CLEANUP-1 fold to
+  reverse. The right move is to either (a) accept the catch-all as
+  load-bearing for this one case or (b) split the file along its
+  three sub-concerns in a separate PR — flagged for the next
+  cleanup sprint rather than rushed here.
+
 ### Changed
 
 - **PR-CLEANUP-5 — `core/cli/tool_handlers/` consolidation + `_helpers`
