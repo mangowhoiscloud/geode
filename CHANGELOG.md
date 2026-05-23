@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.46] - 2026-05-23
+
+> Cognitive Loop sprint release — 5-PR chain (BUDGET → A3 → A6 → A1 →
+> A1-followup) introduces session-wide wall-clock budget + auto handoff,
+> per-turn verify (Reflexion), Plan/Action/Judge model separation,
+> dynamic replan with explicit Plan object, and GoalDecomposer absorption
+> into Plan. Plus Step J-b.1 self-improving-loop model SoT relocation +
+> test isolation fix-up.
+
 ### Removed
 
 - **PR-CL-A1-followup — GoalDecomposer 제거 + Plan 흡수**. PR-CL-A1 의
