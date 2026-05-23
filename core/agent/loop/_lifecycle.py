@@ -163,6 +163,41 @@ def _final_hook_payloads(
     return session_ended, turn_completed, result.reasoning_metrics or {}
 
 
+def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
+    """PR-CL-A3 (2026-05-23) — per-turn verify dispatch.
+
+    Runs the configured verify mode (env knob ``GEODE_VERIFY_MODE``,
+    default ``rule_based``) over the just-finished turn, records the
+    outcome into ``SessionMetrics`` (Tier 2 aggregator) so the next-turn
+    caller can read ``last_verify_reflexion_hint`` to inject into
+    ``loop._system_suffix``, and returns a payload dict ready for the
+    ``TURN_VERIFY_PASSED`` / ``TURN_VERIFY_FAILED`` hook. ``None`` is
+    returned when verify mode is ``off`` (so the caller skips the hook
+    fire — no payload pollution).
+
+    Failures inside the verify path are swallowed in ``verify_turn``
+    itself — observability mustn't break the run it observes.
+    """
+    try:
+        from core.agent.verify import VerifyMode, verify_turn
+        from core.observability.session_metrics import current_session_metrics
+
+        vr = verify_turn(result, loop=loop)
+        if vr.mode is VerifyMode.OFF:
+            return None
+        current_session_metrics().record_verify(
+            passed=vr.passed,
+            mode=vr.mode.value,
+            effective_mode=vr.effective_mode.value,
+            rubric_misses=vr.rubric_misses,
+            reflexion_hint=vr.reflexion_hint,
+        )
+        return vr.to_payload()
+    except Exception:
+        log.warning("turn verify dispatch crashed; skipping", exc_info=True)
+        return None
+
+
 def finalize_and_return(
     loop: AgenticLoop,
     result: AgenticResult,
@@ -187,6 +222,18 @@ def finalize_and_return(
             HookEvent.REASONING_METRICS,
             reasoning_metrics,
         )
+    # PR-CL-A3 — verify must run even when ``loop._hooks is None`` so the
+    # reflexion hint reaches the next arun via SessionMetrics regardless of
+    # the hook system being wired (Codex MCP HIGH #1, 2026-05-23). Only the
+    # ``TURN_VERIFY_*`` hook fire is gated on hooks-present.
+    verify_payload = _run_turn_verify(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        loop._hooks.trigger(event, verify_payload)
     return result
 
 
@@ -205,6 +252,16 @@ async def finalize_and_return_async(
         await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
         await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
+    # PR-CL-A3 — see ``finalize_and_return`` rationale. The verify dispatch
+    # is sync; hooks (if any) fire async.
+    verify_payload = _run_turn_verify(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        await loop._hooks.trigger_async(event, verify_payload)
     return result
 
 

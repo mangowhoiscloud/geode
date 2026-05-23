@@ -693,6 +693,42 @@ class AgenticLoop:
                 return handoff_reason
         return None
 
+    def _consume_reflexion_hint(self) -> str:
+        """PR-CL-A3 — read+clear the verbal-RL hint left by the prior turn.
+
+        Returns the ``<reflexion>...</reflexion>`` block synthesised after
+        the previous turn's verify FAIL, or the empty string when verify
+        passed / didn't run. asyncio-task safe (no ``await`` between read
+        and clear); threaded fan-out sharing the same SessionMetrics could
+        race the read+clear, but the only consequence is one duplicate
+        prepend of the hint into a second arun — recoverable, not data
+        loss. The handoff latch in :class:`SessionMetrics` uses a
+        ``threading.Lock``; we deliberately *don't* mirror that here
+        because hint duplication is a much weaker race than handoff
+        double-fire. Failures NEVER raise — observability mustn't break
+        the run it observes.
+
+        **Scope note** (Codex MCP MEDIUM #2, 2026-05-23) — pre-finalize
+        exits (``BillingError`` / ``UserCancelledError`` raised before
+        ``finalize_and_return*``) skip verify by design. The next arun
+        starts with an empty hint slot because the prior turn never
+        wrote one — this is consistent with "verify never ran for the
+        failed turn" semantics. If a future PR needs verify on those
+        paths, finalize them through ``finalize_and_return*`` instead of
+        re-wiring this consumer.
+        """
+        try:
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            hint = metrics.last_verify_reflexion_hint
+            if hint:
+                metrics.last_verify_reflexion_hint = ""
+            return hint
+        except Exception:
+            log.warning("Reflexion hint consume failed", exc_info=True)
+            return ""
+
     def _maybe_start_session_budget(self) -> None:
         """Begin session-wide wall-clock budget if not already started.
 
@@ -950,6 +986,17 @@ class AgenticLoop:
         system_prompt = self._build_system_prompt()
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
+
+        # PR-CL-A3 (2026-05-23) — Reflexion verbal-RL hint injection. The
+        # *previous* arun's TURN_VERIFY_FAILED outcome (recorded by
+        # ``record_verify``) leaves a ``<reflexion>...</reflexion>`` block
+        # in SessionMetrics; we prepend it to this arun's system prompt so
+        # the model sees its own failure analysis at the start of the next
+        # attempt. ``consume`` semantics — the hint is cleared after read
+        # so it does not leak into subsequent arun's that should be clean.
+        reflexion_hint = self._consume_reflexion_hint()
+        if reflexion_hint:
+            system_prompt += "\n\n" + reflexion_hint
 
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)

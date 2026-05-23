@@ -49,6 +49,54 @@ functional change.
 
 ### Added
 
+- **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL)**. Per-turn
+  verification of agent action quality, fired at the ``TURN_COMPLETED``
+  hook boundary so it doesn't interrupt mid-turn execution. Outcome is
+  recorded into :class:`SessionMetrics` for PR-CL-A1 (Dynamic Replan) to
+  read; on verify FAIL the synthesised ``<reflexion>...</reflexion>``
+  block is consumed by the *next* ``arun`` and prepended to the system
+  prompt (verbal RL, Reflexion paper NeurIPS 2023).
+
+  - ``core/agent/verify.py`` (NEW) — :class:`VerifyMode` StrEnum
+    (``off`` / ``rule_based`` (default) / ``llm_judge``) +
+    :class:`VerifyResult` frozen dataclass + ``verify_turn`` dispatcher
+    + ``_verify_rule_based`` (structural checks: ``empty_turn`` /
+    ``short_output`` / ``tool_error`` / ``model_action_required``) +
+    ``synthesize_reflexion_hint`` (verbal-RL block renderer) +
+    ``_verify_llm_judge`` (wiring stub — falls back to rule_based until
+    PR-CL-A6 lands the judge-model knob).
+  - ``core/observability/session_metrics.py`` — extended ``SessionMetrics``
+    with ``verify_pass_count`` / ``verify_fail_count`` /
+    ``last_verify_passed`` / ``last_verify_mode`` /
+    ``last_verify_rubric_misses`` / ``last_verify_reflexion_hint`` +
+    new ``record_verify()`` mutator. ``to_session_row`` exposes all 5
+    telemetry keys.
+  - ``core/hooks/system.py`` — added ``TURN_VERIFY_PASSED`` /
+    ``TURN_VERIFY_FAILED`` events (distinct from the pipeline-level
+    ``VERIFICATION_PASS`` / ``VERIFICATION_FAIL`` pair which covers
+    node-level guardrails). ``HookEvent`` total 72 → 74.
+  - ``core/agent/loop/_lifecycle.py`` — new ``_run_turn_verify`` helper
+    dispatched from both ``finalize_and_return`` (sync) and
+    ``finalize_and_return_async`` (async) after the ``TURN_COMPLETED``
+    hook fires.
+  - ``core/agent/loop/agent_loop.py`` — ``arun`` reads + clears the
+    Reflexion hint via ``_consume_reflexion_hint`` and prepends to
+    ``system_prompt`` for the current attempt.
+  - ``tests/test_verify.py`` (NEW, 24 tests) — mode StrEnum, dataclass
+    shape, env knob parsing (default + override + invalid fallback),
+    rule-based catches (4 reason codes), reflexion-hint synthesis,
+    mode dispatch (OFF / RULE_BASED / LLM_JUDGE), SessionMetrics
+    integration, hint consume+clear, exception-safe dispatch.
+  - 4 hook-count tests bumped 72 → 74.
+
+  Three operator-tunable env knobs:
+  - ``GEODE_VERIFY_MODE`` — ``off`` / ``rule_based`` / ``llm_judge``
+  - ``GEODE_VERIFY_MIN_TEXT_CHARS`` — short-output threshold (default 10)
+
+  Frontier alignment (Socratic Q5): Reflexion paper (NeurIPS 2023, 91%
+  HumanEval pass@1 via verbal RL) + OpenAI o1 chain-of-verify + AgentHub
+  per-branch verify gate + Claude Code Plan/Edit implicit verify.
+
 - **PR-CL-BUDGET — 2-hour wall-clock cap + automatic T-10min hand-off**.
   Foundation PR for the Cognitive Loop sprint (A3 → A6 → A1). Replaces
   the per-AgenticLoop turn hard-cap with a session-wide wall-clock

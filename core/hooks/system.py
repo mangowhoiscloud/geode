@@ -197,6 +197,17 @@ class HookEvent(Enum):
     HANDOFF_COMPLETED = "handoff_completed"
     HANDOFF_FAILED = "handoff_failed"
 
+    # Per-turn verify telemetry (PR-CL-A3, 2026-05-23). Distinct from the
+    # pipeline-level ``VERIFICATION_PASS / VERIFICATION_FAIL`` pair (which
+    # covers node-level guardrail outcomes) — these fire once per
+    # AgenticLoop turn at the TURN_COMPLETED boundary so PR-CL-A1
+    # (Dynamic Replan) can read them to decide whether to replan the
+    # next round. Payload schema:
+    #   {"passed": bool, "mode": str, "score": float,
+    #    "rubric_misses": list[str], "reflexion_hint": str, "ts": float}
+    TURN_VERIFY_PASSED = "turn_verify_passed"
+    TURN_VERIFY_FAILED = "turn_verify_failed"
+
 
 @dataclass
 class HookResult:
