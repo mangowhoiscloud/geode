@@ -12,6 +12,14 @@ hf-release/
 .venv/
 .release-venv/
 
+# Manim render outputs — `scripts/visualizations/geode_hero.py` renders
+# to `media/videos/`. The storyboard MD + scene source are the only
+# versioned artifacts; rendered MP4s (1080p60 EN/KO + smoke 480p60) are
+# distribution assets, not source. The thumbnail PNG under
+# `docs/visualizations/` is exempted from the global `*.png` rule a few
+# lines below.
+media/
+
 # Cache
 .mypy_cache/
 .pytest_cache/
@@ -34,6 +42,22 @@ logs/
 # the rule it negates.
 !docs/petri-bundle/logs/
 !docs/petri-bundle/logs/**
+# CSP-14 (2026-05-23) — Pages-published seed-generation bundle. Same
+# bundle_sync pattern as the audit logs above: ``plugins/seed_generation/
+# bundle_sync.py`` auto-copies finished run artefacts (state.json,
+# survivors.json, meta_review.json, candidates/*.md) from
+# ``state/seed-generation/<run_id>/`` here. Without this exception
+# the gitignored ``state/*`` rule below would silently drop the
+# synced files (same anti-pattern as PR-G5b #1350).
+!docs/petri-bundle/seeds/
+!docs/petri-bundle/seeds/**
+# CSP-14 (2026-05-23) — Pages-published literature snapshots.
+# ``core/tools/literature_snapshot.py:FreezePaperSnapshotTool`` writes
+# directly to this directory; if the literature dir is ever moved
+# under a gitignored path the writer thinks it persisted but git
+# won't track it.
+!docs/petri-bundle/literature/
+!docs/petri-bundle/literature/**
 optimized_prompts/
 
 # OS
@@ -106,6 +130,11 @@ reports/
 *.png
 *.html
 !docs/**/*.html
+!docs/visualizations/*.png
+
+# Pixel-ratchet baselines (Step 3 — tests/test_hero_frame_ratchet.py)
+# must ship with the repo so the test has something to diff against.
+!tests/visualizations/baselines/*.png
 
 # v0.63.0 — agent-generated personal reports (subject names + date suffixes).
 # Pattern guard so trend/stock/etc. reports the user generates via /report

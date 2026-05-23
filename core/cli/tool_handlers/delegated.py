@@ -31,6 +31,14 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     # JSONL and signals continue/synthesize so the sub-agent's
     # AgenticLoop completes the N-turn budget before writing the seed.
     "seed_debate_turn": ("core.tools.seed_debate", "SeedDebateTurnTool"),
+    # CSP-14 (2026-05-23) — Loop 3 (paper-analysis) of the seed-generation
+    # 3-loop port. Freezes one fetched arXiv paper into a git-tracked
+    # snapshot under docs/petri-bundle/literature/. Cache-hit on
+    # content_hash short-circuits re-writes.
+    "freeze_paper_snapshot": (
+        "core.tools.literature_snapshot",
+        "FreezePaperSnapshotTool",
+    ),
     # profile
     "profile_show": ("core.tools.profile_tools", "ProfileShowTool"),
     "profile_update": ("core.tools.profile_tools", "ProfileUpdateTool"),

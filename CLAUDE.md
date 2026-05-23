@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.42
+- **Version**: 0.99.43
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -134,6 +134,7 @@ Append (don't rotate) — each row is a *frozen* lesson.
 | 2026-05-20 PR-G2 #1346 | Reader-assumption drift | "evidence in baseline.json reaches downstream" | Evidence only persists when the audit PROMOTES the baseline. A failing/regressed audit never updates `baseline.json` → downstream reads stale evidence forever. | "Latest" and "promoted" are different SoTs. Document which one each reader assumes; persist both if the loop needs them. |
 | 2026-05-21 PR-fallback-knob | Premature scope expansion (deletion vs knob) | "FALLBACK 체인과 레이어를 제거해. Self-improving Loop + Agentic Loop 스코프에 전역으로 지켜야할 사안" → interpreted as *delete every code path*. After Steps 1-8 finished (~30 files), the user clarified "사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성이야" — the intent was a *user-tunable knob*, not full deletion. | When a user directive says "제거" without specifying *what* is being removed (the silent default behaviour vs. the entire code path), pause to disambiguate: ask "should the chain be a knob the user can opt into, or should the chain code itself be deleted?" The cheap one-question gate would have saved ~30 edits + a `git checkout origin/develop -- <files>` revert. |
 | 2026-05-21 PR-MINIMAL-2 #1398 | Silent dual-prompt drift | The mutator runner reads `autoresearch/program.md` from disk via `_load_program_md()`; on `OSError` (missing file / unreadable) it falls back to the hardcoded `_FALLBACK_SYSTEM_PROMPT` literal. If an operator edits `program.md` but not the fallback (or vice versa), the LLM sees a different contract depending on whether the disk read succeeds — the loop continues running but with mismatched instructions. | Pin a stable anchor that BOTH paths must share (`## Setup` header in program.md, mutation-contract schema fields like `target_section`/`new_value`/`rationale` in the fallback) via a drift invariant test. Codified at `tests/test_self_improving_minimal_2.py::test_fallback_prompt_shares_setup_anchor_with_program_md` (PR-MINIMAL-2, 2026-05-21). |
+| 2026-05-23 PR-CSP-14-UI mockup | Slop UI signals — box-card + emoji | Initial literature-bundle mockup used emoji card icons (📊 audit / 📚 literature / 🧪 seeds / 🔬 validation) + rounded card boxes with hover-lift for the landing grid. User flagged as Slop signals — LLM-generated boilerplate aesthetic, not GEODE's dense-information style. | Never use emoji as section anchors / card titles / nav prefixes on docs/site/CLI surfaces. Prefer dense `<table>` + `<dl>` over decorative `<div class="card">` grids when content is data. Hierarchy via typography (h1/h2/h3 weight), not bordered card boxes. Emoji only allowed in opt-in report-generation outputs (CHANGELOG / blog posts). See `[[feedback-no-box-ui-no-emoji]]` for the full rule. |
 
 **How to use this table**:
 1. Before every PR push, scan the table for an analogous pattern. If your PR could match a row, it probably does.
@@ -358,5 +359,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 | `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
 | `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
 | `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Covers the Petri × GEODE N7' Monitor timeout case and stable watch patterns (cat-and-grep / stdbuf streaming / polling). |
+| `manim-scene-craft` | manim, scene, 영상, 비디오, 1080p60, EN/KO 렌더, GEODE_HERO_LANG | Manim Community Scene 작성 표준 — EN/KO 다국어 lang, Helvetica Neue + Pretendard 폰트 페어링, Anthropic-style 팔레트, layout ratchet + CI 가드. 4 검증 scene (`geode_hero` / `autoresearch_filewalk` / `autoresearch_compare` / `critical_floor`) 의 공통 패턴. |
+| `viz-frame-audit` | 노이즈, slop, 프레임 검수, 영상 audit, 글자 깨짐, 패딩 침범, frame extract, naive arrow | 영상 노이즈/slop 검수 워크플로우 — ffmpeg 프레임 추출 + Read 시각 확인 + 4 카테고리 결함 식별 (naive 화살표 / 패딩 침범 / 글자 깨짐 / 프레임 순서). 12+ 사례 카탈로그 (filewalk 7 + hero 7). |
 | `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |
 | `seed-generation-cycle` | seed-generation, sprint, cycle, S2, S3, …, scaffold cycle | Session 63 의 6-PR (S0/S1/S2/S2-wire/S2-fix/cycle-skill) 검증 사이클 — Phase A-F (Allocation / Implement+P1-P7 / Verify+Codex MCP / PR&CI / Merge / Optional Review). S2.5-S12 + 모든 fix-up PR 적용. |

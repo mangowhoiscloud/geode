@@ -103,6 +103,12 @@ class SelfImprovingLoopBindings(BaseModel):
     ``[self_improving_loop.seed_generation.roles.generator] num_turns``
     in ``~/.geode/config.toml``; manifest default flows through when
     omitted.
+
+    CSP-14 (2026-05-23) — adds ``max_papers`` + ``queries_per_run`` for
+    the Loop 3 (literature paper-analysis) port. Only the
+    ``literature_review`` role consults them; other roles ignore the
+    knobs. ``max_papers = 0`` (default) short-circuits the phase to a
+    no-op; 1-20 = active per-paper loop.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -110,6 +116,8 @@ class SelfImprovingLoopBindings(BaseModel):
     model: str
     source: Source
     num_turns: int = 0
+    max_papers: int = 0
+    queries_per_run: int = 3
 
     @model_validator(mode="after")
     def _num_turns_in_range(self) -> SelfImprovingLoopBindings:
@@ -121,6 +129,15 @@ class SelfImprovingLoopBindings(BaseModel):
         # per candidate) without any guardrail catching it.
         if self.num_turns != 0 and not (2 <= self.num_turns <= 6):
             raise ValueError(f"num_turns={self.num_turns} invalid; must be 0 (off) or in [2, 6]")
+        return self
+
+    @model_validator(mode="after")
+    def _max_papers_in_range(self) -> SelfImprovingLoopBindings:
+        # CSP-14 — mirror manifest-side bounds for literature_review.
+        if self.max_papers < 0 or self.max_papers > 20:
+            raise ValueError(f"max_papers={self.max_papers} invalid; must be 0 (off) or in [1, 20]")
+        if self.queries_per_run < 1 or self.queries_per_run > 10:
+            raise ValueError(f"queries_per_run={self.queries_per_run} invalid; must be in [1, 10]")
         return self
 
 

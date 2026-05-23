@@ -193,6 +193,7 @@ class Critic(BaseSeedAgent):
                 baseline_snapshot=state.baseline_snapshot,
                 meta_review_snapshot=state.meta_review_snapshot,
                 supervisor_guidance=state.supervisor_guidance,
+                articles_with_reasoning=state.articles_with_reasoning,
             )
             tasks.append(
                 SubTask(
@@ -219,6 +220,7 @@ class Critic(BaseSeedAgent):
         baseline_snapshot: Any = None,
         meta_review_snapshot: Any = None,
         supervisor_guidance: dict[str, Any] | None = None,
+        articles_with_reasoning: str = "",
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
@@ -251,6 +253,15 @@ class Critic(BaseSeedAgent):
                     prefix_blocks.append(supervisor_block)
             except ImportError:  # pragma: no cover — defensive
                 pass
+        # CSP-14 (2026-05-23) — Loop 3 literature evidence block. Same
+        # pattern as ``generator._format_literature``; empty string
+        # means Loop 3 short-circuited (max_papers=0 default) or the
+        # LiteratureReview agent ran but found no relevant papers.
+        if articles_with_reasoning and articles_with_reasoning.strip():
+            prefix_blocks.append(
+                "## Literature evidence (from LiteratureReview phase)\n\n"
+                + articles_with_reasoning.strip()
+            )
         if meta_review_snapshot is not None:
             try:
                 from plugins.seed_generation.baseline_reader import format_priors_block

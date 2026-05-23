@@ -27,14 +27,19 @@
 # gpt-5.4-mini / gpt-5.3-codex (see core/llm/model_pricing.toml).
 
 [seed_generation]
+# Sorted alphabetically for stable diffs + dedup auditability.
+# Validation: ``manifest.PetriSeedManifest._roles_match_enabled`` requires
+# ``set(enabled_roles) == set(role_keys)``, so the order is purely
+# canonical-presentation — runtime behaviour matches any permutation.
 enabled_roles = [
-    "generator",
     "critic",
-    "proximity",
-    "pilot",
-    "ranker",
     "evolver",
+    "generator",
+    "literature_review",
     "meta_reviewer",
+    "pilot",
+    "proximity",
+    "ranker",
 ]
 
 # ── Roles ────────────────────────────────────────────────────────────────────
@@ -118,6 +123,25 @@ allowed_models = [
     "gpt-5.5",
 ]
 role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
+
+# CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) role of the
+# 3-loop port. Runs once per run, after Supervisor + before Generator.
+# ``max_papers = 0`` is the default — the phase short-circuits to a
+# no-op so existing runs are byte-equivalent. Operators flip to ≥1
+# in ``[self_improving_loop.seed_generation.roles.literature_review] max_papers``
+# in ``~/.geode/config.toml`` to opt into the external arxiv fetch +
+# git-tracked snapshot loop.
+[seed_generation.role.literature_review]
+default_model = "claude-sonnet-4-6"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.5",
+    "gpt-5.4",
+]
+role_contract = "plugins/seed_generation/agents/literature_review.md"
+max_papers = 0
+queries_per_run = 3
 
 # ── Judge panel (Ranker sub-section, not a role) ─────────────────────────────
 #

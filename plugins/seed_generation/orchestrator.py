@@ -111,6 +111,12 @@ def _state_to_json(state: PipelineState) -> str:
         # downstream meta_reviewer / operator inspection can audit
         # the per-candidate reasoning trail.
         "debate_transcripts": state.debate_transcripts,
+        # CSP-14 (2026-05-23) — Loop 3 literature output. Both keys
+        # are empty when ``max_papers = 0`` (default back-compat); the
+        # synthesized block + per-paper snapshot paths persist so
+        # state.json replay shows what evidence Generator/Critic saw.
+        "articles_with_reasoning": state.articles_with_reasoning,
+        "literature_snapshots": state.literature_snapshots,
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -151,6 +157,14 @@ _PHASE_ORDER: tuple[str, ...] = (
     # Supervisor agent is registered (test fixtures that mock a
     # subset of roles) — see ``Pipeline._arun_phase``.
     "supervisor",
+    # CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) of the
+    # 3-loop port. Runs after Supervisor (which may emit a
+    # ``phase_guidance.literature_review`` block) but BEFORE Generator
+    # so the per-paper insights land in ``state.articles_with_reasoning``
+    # for the Generator's prompt prefix. Short-circuits when
+    # ``[seed_generation.role.literature_review] max_papers = 0``
+    # (default — back-compat for runs that don't want external lit).
+    "literature_review",
     "generator",
     "proximity",
     "critic",
@@ -257,6 +271,16 @@ class PipelineState:
     # ``_build_description`` so each spawn shares one canonical reading
     # of the run's priors.
     supervisor_guidance: dict[str, Any] = field(default_factory=dict)
+    # CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) of the
+    # 3-loop port. Populated by the ``literature_review`` phase.
+    # ``articles_with_reasoning`` is the markdown block consumed by
+    # downstream Generator / Critic / Evolver prompts as a literature
+    # evidence prefix; ``literature_snapshots`` is the arxiv_id →
+    # snapshot path map for cross-ref with mutations.jsonl evidence and
+    # the bundle's literature index. Both empty when the role's
+    # ``max_papers = 0`` (back-compat, the default).
+    articles_with_reasoning: str = ""
+    literature_snapshots: dict[str, str] = field(default_factory=dict)
     # CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the 3-loop port.
     # Maps ``candidate_id`` → ``[{turn, speaker, content, ts}, ...]``
     # parsed from the per-candidate ``.debate.jsonl`` sidecar the
@@ -304,6 +328,15 @@ class PipelineState:
             # update so iteration cycles can re-evolve the same
             # candidate ids without losing earlier transcripts.
             "debate_transcripts",
+            # CSP-14 (2026-05-23) — Loop 3 literature output. Both
+            # keys come from the ``literature_review`` agent. Merge
+            # semantics: ``articles_with_reasoning`` is a string —
+            # the merge handler overwrites with new value (the agent
+            # runs once per run, iteration cycles don't re-emit, so
+            # the second-write case is the test fixture path only).
+            # ``literature_snapshots`` is a dict updated additively.
+            "articles_with_reasoning",
+            "literature_snapshots",
         }
         unknown = set(output) - known
         if unknown:
@@ -485,6 +518,24 @@ class Pipeline:
         self._persist_meta_review()
         # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
+        # CSP-14 (2026-05-23) — auto-sync the publish-set of the run dir
+        # into ``docs/petri-bundle/seeds/<run_id>/`` so the Pages-published
+        # bundle picks it up on next deploy. Mirrors audit-side
+        # ``plugins.petri_audit.bundle_sync.sync_eval_to_bundle``.
+        # Failures are logged but don't break the run — the bundle is a
+        # publish convenience; the canonical artefacts live in
+        # ``state/seed-generation/<run_id>/`` regardless.
+        if self.state.run_dir is not None:
+            try:
+                from plugins.seed_generation.bundle_sync import sync_run_to_bundle
+
+                sync_run_to_bundle(self.state.run_dir)
+            except Exception:
+                log.warning(
+                    "seed-generation: bundle_sync failed for run_id=%s (non-fatal)",
+                    self.state.run_id,
+                    exc_info=True,
+                )
         log.info(
             "seed-generation run finished: run_id=%s survivors=%d usd=%.4f",
             self.state.run_id,
@@ -826,10 +877,16 @@ class Pipeline:
             # ``state.supervisor_guidance`` stays at its default
             # (empty dict) and downstream sub-agents detect "no
             # guidance" via that empty check rather than KeyError.
-            if role == "supervisor":
+            #
+            # CSP-14 (2026-05-23) — ``literature_review`` is also
+            # OPTIONAL (Loop 3 of the 3-loop port). The phase
+            # short-circuits when not registered so existing test
+            # fixtures + pre-CSP-14 callers keep working. The agent
+            # would have short-circuited on ``max_papers = 0`` anyway.
+            if role in ("supervisor", "literature_review"):
                 log.info(
-                    "seed-generation supervisor role not registered — "
-                    "skipping (state.supervisor_guidance stays empty)."
+                    "seed-generation %s role not registered — skipping.",
+                    role,
                 )
                 _emit_orchestrator_event(
                     "phase_skipped",

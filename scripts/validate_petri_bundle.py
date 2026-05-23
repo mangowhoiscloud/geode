@@ -183,8 +183,33 @@ def main() -> int:
         print("    (inspect_ai #1747 pattern).")
         return 1
 
+    # CSP-14 (2026-05-23) — also count literature snapshots under
+    # docs/petri-bundle/literature/. Empty dir = 0; the surface is
+    # opt-in (max_papers must be ≥ 1 for the literature_review phase
+    # to write anything) so 0 is a normal state, not a failure.
+    lit_count = 0
+    lit_dir = BUNDLE_DIR / "literature"
+    if lit_dir.is_dir():
+        lit_count = sum(1 for path in lit_dir.glob("*.json") if path.name != "listing.json")
+
+    # CSP-14 (2026-05-23) — also count synced seed runs under
+    # docs/petri-bundle/seeds/<run_id>/. Each run is a subdirectory
+    # containing state.json (+ optional survivors.json + meta_review.json
+    # + candidates/). bundle_sync (plugins/seed_generation/bundle_sync.py)
+    # auto-copies on Pipeline.arun finalization; 0 runs is a normal
+    # state on a fresh clone.
+    seeds_count = 0
+    seeds_dir = BUNDLE_DIR / "seeds"
+    if seeds_dir.is_dir():
+        seeds_count = sum(
+            1
+            for child in seeds_dir.iterdir()
+            if child.is_dir() and (child / "state.json").is_file()
+        )
+
     print(
-        f"OK: {len(data)} archive(s) — listing + zip header + scores + assets all valid.",
+        f"OK: {len(data)} archive(s), {lit_count} literature snapshot(s), "
+        f"{seeds_count} seed run(s) — listing + zip header + scores + assets all valid.",
     )
     return 0
 

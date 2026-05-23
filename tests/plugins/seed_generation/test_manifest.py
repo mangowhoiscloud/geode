@@ -110,13 +110,14 @@ def test_bundled_manifest_loads() -> None:
     clear_manifest_cache()
     manifest = load_manifest()
     assert set(manifest.enabled_roles) == {
-        "generator",
         "critic",
-        "proximity",
-        "pilot",
-        "ranker",
         "evolver",
+        "generator",
+        "literature_review",  # CSP-14 — Loop 3 phase
         "meta_reviewer",
+        "pilot",
+        "proximity",
+        "ranker",
     }
     assert manifest.voter_diversity() >= 2
 

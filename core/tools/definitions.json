@@ -1568,5 +1568,51 @@
         "max_turns"
       ]
     }
+  },
+  {
+    "name": "freeze_paper_snapshot",
+    "description": "Freeze one fetched arXiv paper into a git-tracked JSON snapshot under docs/petri-bundle/literature/. Call once per paper after arxiv_search + paper_fetch_arxiv. Computes a deterministic content_hash over the normalized abstract; returns cache_hit=true when an existing snapshot for the same arxiv_id has a matching hash (no rewrite). Refuses arxiv_id that doesn't match the arXiv pattern and paths that escape the bundle root. Used by the seed-generation Loop 3 (literature_review) per-paper analysis loop.",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "arxiv_id": {
+          "type": "string",
+          "description": "arXiv paper id matching the pattern NNNN.NNNN[N][vN] (e.g. '2502.18864' or '2502.18864v3'). Refused if it doesn't match."
+        },
+        "title": {
+          "type": "string",
+          "description": "Paper title from arxiv metadata. Non-empty."
+        },
+        "abstract": {
+          "type": "string",
+          "description": "Paper abstract. Non-empty. The content_hash is computed over the normalized form of this field (lowercase + collapsed whitespace), so an abstract change triggers a re-snapshot."
+        },
+        "authors": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of author name strings (optional, empty list OK)."
+        },
+        "categories": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "arXiv category codes (e.g. ['cs.AI', 'cs.CL']). Optional."
+        },
+        "published_at": {
+          "type": "string",
+          "description": "Publication date string from arxiv (e.g. '2025-02-26'). Optional."
+        },
+        "pdf_url": {
+          "type": "string",
+          "description": "Direct PDF URL from arxiv metadata. Optional."
+        }
+      },
+      "required": [
+        "arxiv_id",
+        "title",
+        "abstract"
+      ]
+    }
   }
 ]
