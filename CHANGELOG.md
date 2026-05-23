@@ -49,6 +49,28 @@ functional change.
 
 ### Added
 
+- **Follow-up B — Picker bindings propagation to SubTask.source.** Each
+  seed-generation agent now passes ``source=self.adapter_source`` on
+  ``SubTask`` construction so the picker-resolved per-role source
+  reaches the spawned worker's ``AgenticLoop``. ``BaseSeedAgent`` gained
+  an ``adapter_source`` property + ``picker_source_to_adapter_source``
+  free function that translates the picker's historical source names
+  (``api_key`` / ``claude-cli`` / ``openai-codex`` / ``auto``) into the
+  paperclip-aligned adapter source values (``payg`` / ``subscription`` /
+  ``adapter``) consumed by :func:`core.llm.adapters.resolve_for`. The
+  Ranker agent uses ``picker_source_to_adapter_source(voter.source)``
+  per voter so each judge follows its own binding. ``Pipeline`` gained
+  a ``bindings: dict[str, Any]`` kwarg (default ``{}``) that
+  ``cli._dispatch_pipeline`` populates from ``picker_result.bindings``
+  — stored for observability / journaling but NOT re-injected at
+  ``SubTask`` time (agents already carry the binding values).
+
+  Closes the Codex MCP 2026-05-23 BLOCKER 1 finding ("the main
+  seed-generation path appears unwired") from PR #1519: source now
+  reaches the worker for every role's ``SubTask`` creation site
+  (generator / critic / pilot / ranker / evolver / meta_reviewer /
+  supervisor / proximity).
+
 - **Follow-up A — AgenticLoop opt-in adapter route + source threading.**
   ``SubTask.source`` + ``WorkerRequest.source`` carry the picker-resolved
   adapter source (``payg`` / ``subscription`` / ``adapter``) through the

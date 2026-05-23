@@ -166,6 +166,7 @@ class MetaReviewer(BaseSeedAgent):
                 "snapshot": snapshot,
             },
             agent=_META_REVIEWER_AGENT_NAME,
+            source=self.adapter_source,
         )
 
     def _build_description(

@@ -198,6 +198,7 @@ class Pilot(BaseSeedAgent):
                         "target_dim": target_dim,
                     },
                     agent=_PILOT_AGENT_NAME,
+                    source=self.adapter_source,
                 )
             )
         return tasks

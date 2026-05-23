@@ -193,6 +193,7 @@ class Proximity(BaseSeedAgent):
                 "candidate_count": len(state.candidates),
             },
             agent=_PROXIMITY_AGENT_NAME,
+            source=self.adapter_source,
         )
 
     def _build_description(self, state: PipelineState, candidate_summary: str) -> str:

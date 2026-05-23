@@ -440,7 +440,7 @@ def _dispatch_pipeline(
     # — the Pipeline.arun() will raise a RuntimeError with an actionable
     # "no registered agent" message that the operator can map back to
     # the unwired phase.
-    pipeline = Pipeline(state=state, registry=registry)
+    pipeline = Pipeline(state=state, registry=registry, bindings=dict(picker_result.bindings))
     out.write(f"seed-generation: starting run {run_id!r}\n")
     out.write(f"seed-generation: run_dir={run_dir}\n")
     out.flush()
