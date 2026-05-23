@@ -12,17 +12,21 @@ Handler groups:
                            manage_auth, manage_login, doctor_slack
 - :mod:`execution`      — schedule_job, trigger_event
 - :mod:`delegated`      — registry-based wrappers for web/file/note/profile tools
-- :mod:`data`           — generate_data
 - :mod:`mcp`            — install_mcp_server
 - :mod:`context`        — manage_context (status/compact/clear)
 - :mod:`task`           — task_create/update/get/list/stop
-- :mod:`output`         — generate_report, export_json
-- :mod:`notification`   — send_notification
-- :mod:`calendar`       — calendar_list/create_event, calendar_sync_scheduler
-- :mod:`offload`        — recall_tool_result
-- :mod:`computer_use`   — computer (when enabled)
+- :mod:`audit`          — view_audit_log / audit-trail surface
+- :mod:`observability`  — observability tools
+- :mod:`single_tool`    — six handlers that each wrap exactly one
+                           tool class: generate_data, send_notification,
+                           generate_report/export_json,
+                           recall_tool_result, computer (env-gated),
+                           calendar_list/create_event/sync_scheduler
+                           (folded together in PR-CLEANUP-5).
 
-Plus shared utilities in :mod:`_helpers` (``_clarify``, ``_safe_delegate``).
+Plus shared clarification helpers in :mod:`clarification`
+(``_clarify``, ``_safe_delegate``) — renamed from the pre-PR-CLEANUP-5
+``_helpers.py``.
 
 The disk-persistent ``PlanStore`` singleton (``_PLAN_STORE`` /
 ``_get_plan_store``) lives at this package level so test fixtures can
@@ -34,15 +38,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.tool_handlers._helpers import (
+from core.cli.tool_handlers.audit import _build_audit_handlers
+from core.cli.tool_handlers.clarification import (
     _clarify,
     _safe_delegate,
 )
-from core.cli.tool_handlers.audit import _build_audit_handlers
-from core.cli.tool_handlers.calendar import _build_calendar_handlers
-from core.cli.tool_handlers.computer_use import _build_computer_use_handler
 from core.cli.tool_handlers.context import _build_context_handlers
-from core.cli.tool_handlers.data import _build_data_handlers
 from core.cli.tool_handlers.delegated import (
     _DELEGATED_TOOLS,
     _build_delegated_handlers,
@@ -52,11 +53,16 @@ from core.cli.tool_handlers.execution import _build_execution_handlers
 from core.cli.tool_handlers.hitl import _build_hitl_handlers
 from core.cli.tool_handlers.mcp import _build_mcp_handler
 from core.cli.tool_handlers.memory import _build_memory_handlers
-from core.cli.tool_handlers.notification import _build_notification_handlers
 from core.cli.tool_handlers.observability import _build_observability_handlers
-from core.cli.tool_handlers.offload import _build_offload_handlers
-from core.cli.tool_handlers.output import _build_output_handlers
 from core.cli.tool_handlers.plan import _build_plan_handlers
+from core.cli.tool_handlers.single_tool import (
+    _build_calendar_handlers,
+    _build_computer_use_handler,
+    _build_data_handlers,
+    _build_notification_handlers,
+    _build_offload_handlers,
+    _build_output_handlers,
+)
 from core.cli.tool_handlers.system import _build_system_handlers
 from core.cli.tool_handlers.task import _build_task_handlers
 

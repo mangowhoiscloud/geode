@@ -179,13 +179,13 @@ class TestSendNotificationTool:
         set_notification(None)
 
     def test_cli_handler_is_async_for_notification_tool(self):
-        from core.cli.tool_handlers.notification import _build_notification_handlers
+        from core.cli.tool_handlers.single_tool import _build_notification_handlers
 
         handlers = _build_notification_handlers()
         assert asyncio.iscoroutinefunction(handlers["send_notification"])
 
     def test_cli_output_handlers_are_async(self):
-        from core.cli.tool_handlers.output import _build_output_handlers
+        from core.cli.tool_handlers.single_tool import _build_output_handlers
 
         handlers = _build_output_handlers()
         assert asyncio.iscoroutinefunction(handlers["generate_report"])

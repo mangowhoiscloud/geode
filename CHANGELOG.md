@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-CLEANUP-5 — `core/cli/tool_handlers/` consolidation + `_helpers`
+  rename.** Two cleanups in this surface:
+  - **Six small handler files (each <50 LOC, each wrapping exactly
+    one tool class) folded into a single
+    ``core/cli/tool_handlers/single_tool.py``.** The files were
+    ``data.py`` / ``notification.py`` / ``output.py`` /
+    ``offload.py`` / ``computer_use.py`` / ``calendar.py``. Every
+    builder did the same thing (instantiate one Tool class, wrap
+    its ``aexecute`` in a closure, return ``{name: handler}``)
+    with zero shared state, so the per-tool split was pure noise.
+    The ``_build_<area>_handlers`` symbol names are preserved
+    verbatim, so the package ``__init__.py`` and external test
+    callers continue to import them unchanged — only the source
+    module-name differs.
+  - **``core/cli/tool_handlers/_helpers.py`` renamed to
+    ``clarification.py``** to satisfy the new Naming CANNOT row
+    that forbids ``_helpers`` / ``_utils`` filenames once a caller
+    appears. The file owns two functions — ``_clarify`` (builds
+    the ``clarification_needed`` follow-up-question response) and
+    ``_safe_delegate`` (turns missing-kwarg exceptions into
+    ``_clarify`` calls). Both functions are clarification-shaped
+    responses for tool dispatch, so the new name describes the
+    file's actual role. 6 importers + 2 docstring references
+    (``core/tools/arxiv.py``, ``core/tools/seed_pool_search.py``)
+    updated.
+
 ### Removed
 
 - **PR-CLEANUP-4 — `core/llm/client.py` re-export shim removed.** 162-LOC

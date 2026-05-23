@@ -388,7 +388,7 @@ class TestCalendarCreateEventTool:
         set_calendar(None)
 
     def test_cli_handlers_are_async_for_calendar_tools(self):
-        from core.cli.tool_handlers.calendar import _build_calendar_handlers
+        from core.cli.tool_handlers.single_tool import _build_calendar_handlers
 
         handlers = _build_calendar_handlers()
         assert asyncio.iscoroutinefunction(handlers["calendar_list_events"])
