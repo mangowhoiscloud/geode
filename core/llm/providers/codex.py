@@ -53,6 +53,22 @@ def _extract_account_id(token: str) -> str:
         return ""
 
 
+def build_codex_oauth_headers(token: str) -> dict[str, str]:
+    """Build the headers Codex OAuth requires on every Responses-API call.
+
+    The Codex backend (``chatgpt.com/backend-api/codex``) rejects requests
+    without the ``originator: codex_cli_rs`` marker and the
+    ``ChatGPT-Account-ID`` extracted from the OAuth JWT. Returning a fresh
+    dict (rather than caching) keeps the helper safe across threads — the
+    caller mutates the dict's lifetime as it pleases.
+    """
+    account_id = _extract_account_id(token)
+    headers: dict[str, str] = {"originator": "codex_cli_rs"}
+    if account_id:
+        headers["ChatGPT-Account-ID"] = account_id
+    return headers
+
+
 def _resolve_codex_token() -> str:
     """Resolve Codex OAuth token.
 
@@ -116,17 +132,10 @@ def _get_codex_client() -> Any:
                     log.warning("Codex OAuth token not available")
                     return None
 
-                account_id = _extract_account_id(token)
-                headers: dict[str, str] = {
-                    "originator": "codex_cli_rs",
-                }
-                if account_id:
-                    headers["ChatGPT-Account-ID"] = account_id
-
                 _codex_client = openai.OpenAI(
                     api_key=token,
                     base_url=CODEX_BASE_URL,
-                    default_headers=headers,
+                    default_headers=build_codex_oauth_headers(token),
                 )
     return _codex_client
 
@@ -144,17 +153,10 @@ def _get_async_codex_client() -> Any:
                     log.warning("Codex OAuth token not available")
                     return None
 
-                account_id = _extract_account_id(token)
-                headers: dict[str, str] = {
-                    "originator": "codex_cli_rs",
-                }
-                if account_id:
-                    headers["ChatGPT-Account-ID"] = account_id
-
                 _async_codex_client = openai.AsyncOpenAI(
                     api_key=token,
                     base_url=CODEX_BASE_URL,
-                    default_headers=headers,
+                    default_headers=build_codex_oauth_headers(token),
                 )
     return _async_codex_client
 

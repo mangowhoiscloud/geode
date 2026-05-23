@@ -63,16 +63,12 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     import openai
 
     from core.config import CODEX_BASE_URL
-    from core.llm.providers.codex import _extract_account_id
+    from core.llm.providers.codex import build_codex_oauth_headers
 
-    account_id = _extract_account_id(api_key)
-    headers: dict[str, str] = {"originator": "codex_cli_rs"}
-    if account_id:
-        headers["ChatGPT-Account-ID"] = account_id
     return openai.AsyncOpenAI(
         api_key=api_key,
         base_url=CODEX_BASE_URL,
-        default_headers=headers,
+        default_headers=build_codex_oauth_headers(api_key),
     )
 
 

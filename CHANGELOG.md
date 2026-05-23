@@ -47,6 +47,25 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Step I.a — Codex OAuth header construction collapsed onto one helper.**
+  Four call sites built the same
+  ``{"originator": "codex_cli_rs", "ChatGPT-Account-ID": <jwt-claim>}`` dict
+  inline: ``core.llm.providers.codex._get_codex_client`` /
+  ``_get_async_codex_client``, ``core.llm.adapters._openai_common.
+  build_async_codex_client``, and
+  ``plugins.petri_audit.codex_provider.OpenAICodexAPI.__init__``. The new
+  public ``core.llm.providers.codex.build_codex_oauth_headers(token)``
+  helper is now the single SoT — every caller routes through it and
+  receives a fresh dict (so per-thread mutation stays safe).
+  ``tests/test_codex_provider.py::TestCodexOAuthHeaders`` pins the
+  contract (4 cases: claim present / claim absent / malformed token /
+  fresh-dict-per-call). First commit of the
+  ``docs/plans/2026-05-23-adapter-wrap-petri-autoresearch.md`` Path-B
+  sequence; Step I.b (Codex reasoning replay extraction) + I.c
+  (credential source ↔ adapter health) are fast-follow PRs.
+
 ### Added
 
 - **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL) + sessions
