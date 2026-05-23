@@ -97,7 +97,7 @@ Phase F — fill-in
 | 4 | `--gen-tag` 포맷 | `<scheme>-<id>` 예: `autoresearch-176d8778` (commit hash 7 자), `seed-generation-gen1`. session_id 와 별개 |
 | 5 | session_id 포맷 | ISO date + short uuid: `2026-05-19T15:30Z-a1b2c3` |
 | 6 | survivors.json schema | `{"gen_tag": ..., "session_id": ..., "survivors": [{"path": ..., "score": ..., "elo_rating": ...}, ...]}` |
-| 7 | journal.jsonl schema | `{"ts", "session_id", "gen_tag", "component", "level", "event", "payload"}` |
+| 7 | transcript.jsonl schema | `{"ts", "session_id", "gen_tag", "component", "level", "event", "payload"}` — PR-SESSION-METRICS (2026-05-23) 으로 ``journal.jsonl`` → ``transcript.jsonl`` rename, ``SessionJournal`` 은 ``SessionTranscript`` 의 alias-shim. Schema 무변동. |
 | 8 | auto-promote rule | `fitness > baseline_fitness + stderr AND critical_min ≥ baseline_critical_min - margin`. `--promote` flag 는 manual override |
 | 9 | namespace 마이그레이션 호환성 | P2b 는 기존 경로에서 새 경로로 hard cut. 마이그레이션 헬퍼 1-shot 제공, 그 후 backwards-compat shim 없음 (CANNOT: backwards-compat hack 금지 per CLAUDE.md) |
 
@@ -119,7 +119,7 @@ Phase F — fill-in
 - [ ] `results.jsonl` 첫 줄 15-dim raw 검사
 - [ ] `--promote` 로 baseline.json 작성 (P0a 동작 확인)
 - [ ] cost ~$5 이하 (BUDGET_MINUTES=5, OAuth path)
-- [ ] `~/.geode/self-improving-loop/<session>/journal.jsonl` 에 P1c event 누적 확인
+- [ ] `~/.geode/self-improving-loop/<session>/transcript.jsonl` 에 P1c event 누적 확인 (PR-SESSION-METRICS 2026-05-23 rename — Schema 동일)
 - [ ] schema 미세조정 필요한지 검토 → 필요 시 P1a' fix-up PR
 
 ## Phase E (S12 execution) — 실행 체크리스트

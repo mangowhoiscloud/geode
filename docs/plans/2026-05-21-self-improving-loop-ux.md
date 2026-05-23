@@ -365,7 +365,7 @@ Operator-visible sub-panel (Tier 1 dashboard 의 stage ④ 카드 클릭 시):
 │     last promoted      2026-05-21T10:00  baseline.json fitness=0.7345       │
 │     last decision      promote · reject (margin 0.012 ≤ 0.05)                │
 │                                                                              │
-│   telemetry (G9 — last 9 journal events)                                     │
+│   telemetry (G9 — last 9 transcript events)                                  │
 │     12:34:00 audit_started   12:34:01 config_snapshot                        │
 │     12:34:01 wrapper_override_dumped  12:34:02 subprocess_started            │
 │     12:36:30 subprocess_finished  12:36:31 baseline_decision (promote)       │
@@ -389,7 +389,7 @@ Operator-visible sub-panel (Tier 1 dashboard 의 stage ④ 카드 클릭 시):
 | `_resolve_seed_select` 4-tier | (없음) | Stage ④ measurement scope | autoresearch (precedence resolver) |
 | `_dump_wrapper_override` env conveyor | (없음) | Stage ④ mutation delivery | autoresearch (mutation in-flight delivery) |
 | `_should_promote` 3-rule | "pure compute" 단순화 | Stage ④ promote decision | autoresearch (3-rule gate) |
-| 9개 SessionJournal event | (없음) | Stage ④ telemetry timeline | autoresearch (observability) |
+| 9개 SessionTranscript lifecycle event | (없음) | Stage ④ telemetry timeline | autoresearch (observability) — PR-SESSION-METRICS 2026-05-23 으로 SessionJournal 흡수 |
 | Subprocess timeout/failed branch | (없음) | Stage ④ subprocess lifecycle | autoresearch (lifecycle manager) |
 
 Petri-only 블록에 남는 것 (정합 유지):
@@ -409,7 +409,7 @@ Petri-only 블록에 남는 것 (정합 유지):
 | G6 | `seed_select` 4-tier resolution | autoresearch | (없음) | Stage ④ measurement scope (resolved path) |
 | G7 | `GEODE_WRAPPER_OVERRIDE` env conveyor | autoresearch | (없음) | Stage ④ mutation delivery |
 | G8 | `_should_promote` 3-rule | autoresearch | "pure compute" | Stage ④ promote decision (rule view) |
-| G9 | 9 SessionJournal event timeline | autoresearch | (없음) | Stage ④ telemetry |
+| G9 | 9 SessionTranscript lifecycle event timeline | autoresearch | (없음) | Stage ④ telemetry (PR-SESSION-METRICS 흡수) |
 | G10 | subprocess timeout/failed status | autoresearch | (없음) | Stage ④ subprocess lifecycle |
 | G11 | `results.tsv` / `.jsonl` viewer | autoresearch (stdout) | (없음) | PR-OPS-3 results viewer |
 | G12 | Git commit owner clarification | NOT autoresearch (post-audit agent) | 사용자 혼동 위험 | "외부 agent 책임" 라벨 |
