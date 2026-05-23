@@ -45,7 +45,32 @@ functional change.
 
 ---
 
+## [Unreleased]
+
 ### Changed
+
+- **PR-DOCS-CANT-CAN — CLAUDE.md restructure: CANNOT/CAN adjacency + 6 frontier-convergent CANNOT rows.**
+  The two governance tables (``### CANNOT`` and ``### CAN``) were
+  separated by ``### Wiring Verification`` + ``### Refactoring Deception
+  Prevention``, which broke the read-as-a-pair invariant that the rest
+  of the doc relies on. The two tables now sit next to each other; the
+  two diagnostic sections move down so the workflow narrative is
+  unchanged. Six new ``CANNOT`` rows codify patterns that came out of
+  a survey of 7 frontier autonomous-agent codebases (claude-code-ref,
+  openclaw, hermes-agent, open-coscientist, paperclip, crumb, cotton).
+  Convergence is cited per row in the table itself — domain naming
+  shows up in 4/7, while the same-name-nested folder anti-pattern is
+  0/7 (GEODE was the only one). The patterns already shaped
+  PR-CLEANUP-1 / PR-CLEANUP-2:
+  - **Naming**: no abstract-noun packages, no same-name-nested folders
+    (``X/X/``), no single-file packages, no ``_helpers``/``_utils``
+    once a caller exists.
+  - **Compat**: no re-export shim past a 1-release grace.
+  - **Registry**: no two registries for the same domain.
+  ``CAN`` also gains one row: cleanup / refactor PRs may bundle
+  aggressively (Socratic Q4 "minimum change" guard does not apply
+  when cleanup *is* the purpose). All new rows cite the specific
+  incident or frontier signal that justifies them.
 
 - **PR-CLEANUP-2 — fold three over-small packages into their natural homes.**
   ``core/`` drops from 25 to 22 top-level packages with zero behaviour

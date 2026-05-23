@@ -103,7 +103,26 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No leaving `[Unreleased]` on main | Release discipline |
 | | No version mismatch across 5 locations | Single source of truth |
 | | No emoji as section anchors / nav prefixes; no decorative card grids when content is data — dense table/list only on docs/site/CLI surfaces | Slop signal. *Incident: PR-CSP-14-UI mockup (2026-05-23) — see [[feedback-no-box-ui-no-emoji]]* |
+| **Naming** | No abstract-noun package names (`text`, `storage`, `runtime_state`, `helpers`, `common`, `lib`, `manager`) — use domain-verb / domain-noun (claude-code-ref / openclaw / hermes / crumb all converge). *Incident: PR-CLEANUP-2 #1562 (2026-05-23) folded 3 such packages.* | Frontier convergence + [[feedback-explicit-naming]] |
+| | No same-name-nested folders (`X/X/`) — flatten or rename inner | Frontier 0/7 do this; GEODE had `core/scheduler/scheduler/` |
+| | No single-file packages — fold into the nearest domain sibling | PR-CLEANUP-2 precedent (`core/text/`, `core/storage/`) |
+| | No `_helpers.py` / `_utils.py` / `_misc.py` filenames once a caller appears — rename to the actual responsibility (the catch-all suffix hides intent) | autoresearch / openclaw avoid; PR-CLEANUP-1 absorbed `_announce.py` + `_decomposition.py` for similar reason |
+| **Compat** | No re-export shim / backward-compat module past its 1-release grace — delete it and migrate callers in the same PR | *Incident: `core/llm/client.py` (0 callers but kept), `core/agent/loop/loop.py` (deleted PR-CLEANUP-1)* |
+| **Registry** | No two registries for the same domain (skill / tool / adapter / plugin) — one schema, one loader, one call surface | *Incident: `core/llm/skill_registry.py` ↔ `core/skills/skills.py` parsing the same `~/.geode/skills/*.md` twice* |
 | **PR** | No PR that violates the [§6 template](#6-pr--merge) (HEREDOC body with Summary/Why/Changes/Verification) or merges without CI 5/5 green | Format + traceability + Ratchet (P4) |
+
+### CAN — Permitted Freedoms
+
+Anything not in CANNOT is freely permitted. Specifically:
+
+| Freedom | Description |
+|---------|-------------|
+| Simple bug/doc fixes | Skip Plan, implement directly in worktree |
+| Discovering improvements not in plan | Handle in next iteration after completing current work |
+| Selective test execution | Run only tests relevant to changes first, full suite at the end |
+| Commit message language | Korean/English freely (maintain consistency only) |
+| Tool selection | Freely choose faster tool if results are equivalent |
+| Cleanup / refactor PRs may bundle aggressively | The Socratic Q4 "minimum change" guard does **not** apply when the PR's purpose *is* cleanup — find every fold, prune, and rename in scope and ship them together. (cf. [[feedback-cleanup-no-minimal-change]]) |
 
 ### Wiring Verification (Anti-Disconnection)
 
@@ -126,18 +145,6 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 |------|------|
 | **Implementation completeness** | No marking plan items complete when partially implemented, stubbed (`pass` only), or shelled out as re-exports while code remains in the original. An independent zero-context agent cross-checks plan + diff and FAILs on any omission. See `verification-team` + `anti-deception-checklist` skills for the operational checklist. |
 | **CHANGELOG/PR-body parity** | Every verb/adjective in the PR title + CHANGELOG ("git-tracked", "X-driven", "automatic", "committed") must be grep-provable in code. Run `git check-ignore`, `grep -rn "<source-doc>"`, and "is there a caller?" before push. *Incident: PR-G5b #1350 (2026-05-20) — both "git-tracked audit log" and "program.md-driven runner" were un-backed; fixed in `runner.py:_load_program_md` and pinned by `test_load_program_md_actually_reads_disk_file`.* |
-
-### CAN — Permitted Freedoms
-
-Anything not in CANNOT is freely permitted. Specifically:
-
-| Freedom | Description |
-|---------|-------------|
-| Simple bug/doc fixes | Skip Plan, implement directly in worktree |
-| Discovering improvements not in plan | Handle in next iteration after completing current work |
-| Selective test execution | Run only tests relevant to changes first, full suite at the end |
-| Commit message language | Korean/English freely (maintain consistency only) |
-| Tool selection | Freely choose faster tool if results are equivalent |
 
 ### Workflow Steps
 
