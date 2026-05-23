@@ -39,10 +39,10 @@ Outputs to ``media/videos/geode_hero/1080p60/GeodeHero-{EN,KO}.mp4``.
 
 from __future__ import annotations
 
+import math
 import os
 
-import math
-
+import numpy as np
 from manim import (
     DOWN,
     LEFT,
@@ -71,7 +71,6 @@ from manim import (
     Write,
     config,
 )
-import numpy as np
 
 # ───────────────────────────────────────────────────────────────────────
 # Configuration
@@ -424,10 +423,7 @@ def _dashed_arrow_with_head(
 
     direction = head_anchor - tail_pt
     norm = float(np.linalg.norm(direction))
-    if norm < 1e-6:
-        unit = np.array([1.0, 0.0, 0.0])
-    else:
-        unit = direction / norm
+    unit = np.array([1.0, 0.0, 0.0]) if norm < 1e-06 else direction / norm
     # Perpendicular (rotate 90° in the xy plane).
     perp = np.array([-unit[1], unit[0], 0.0])
     base_center = head_anchor - unit * head_size
@@ -680,7 +676,7 @@ class GeodeSelfImprovingHero(Scene):
         # explicitly wider so the verify_hero_layout ratchet doesn't fire
         # the OVERFLOW guard. Others stay at 1.05 to preserve grid look.
         agents = []
-        for key, offset in zip(agent_keys, layout_offsets):
+        for key, offset in zip(agent_keys, layout_offsets, strict=False):
             box = _agent_box(key, width=1.4 if key == "agent_meta_reviewer" else 1.05)
             box.move_to(outer_box.get_center() + offset)
             agents.append(box)
@@ -822,12 +818,10 @@ class GeodeSelfImprovingHero(Scene):
         self._set_title("bit_7")
 
         scores = (
-            [3.4, 2.8, 3.1, 2.5, 3.7]
-            + [4.2, 5.1, 3.8, 4.7, 5.3, 3.9, 4.4, 5.8, 4.1, 4.9, 5.2, 3.6]
-            + [5.5, 6.1, 5.8]
+            [3.4, 2.8, 3.1, 2.5, 3.7, 4.2, 5.1, 3.8, 4.7, 5.3, 3.9, 4.4, 5.8, 4.1, 4.9, 5.2, 3.6, 5.5, 6.1, 5.8]
         )
         score_texts = []
-        for cell, sc in zip(self.grid, scores):
+        for cell, sc in zip(self.grid, scores, strict=False):
             t = _make_text(f"{sc:.1f}", font_size=11, color=COLOR_TEXT).move_to(cell.get_center())
             score_texts.append(t)
         self.score_texts = score_texts
@@ -1259,7 +1253,7 @@ class GeodeSelfImprovingHero(Scene):
         # left the last dot visually disconnected during the trailing
         # frames, defect #5 in the 2026-05-21 noise audit).
         steps: list = []
-        for i, (dot, commit) in enumerate(zip(dots, commits)):
+        for i, (dot, commit) in enumerate(zip(dots, commits, strict=False)):
             if i == 0:
                 steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit)))
             else:

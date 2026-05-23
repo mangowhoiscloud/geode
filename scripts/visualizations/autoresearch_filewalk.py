@@ -498,8 +498,10 @@ class AutoresearchFilewalk(Scene):
         grid_center_y = -0.2
 
         # Cell column centers: index 0,1,2 → x − cell_size, x, x + cell_size
-        col_x = lambda j: grid_center_x + (j - 1) * cell_size
-        row_y = lambda i: grid_center_y - (i - 1) * cell_size
+        def col_x(j):
+            return grid_center_x + (j - 1) * cell_size
+        def row_y(i):
+            return grid_center_y - (i - 1) * cell_size
 
         # Column headers — each centered on the column x_center via VGroup arrange + move_to.
         col_headers = VGroup()

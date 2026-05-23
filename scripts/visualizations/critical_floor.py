@@ -23,7 +23,6 @@ Render::
 
 from __future__ import annotations
 
-import math
 import os
 
 import numpy as np
@@ -34,14 +33,12 @@ from manim import (
     ORIGIN,
     RIGHT,
     UP,
-    Circle,
     Create,
     DashedLine,
     FadeIn,
     FadeOut,
     Flash,
     LaggedStart,
-    Polygon,
     Rectangle,
     Scene,
     Text,
@@ -292,9 +289,8 @@ class CriticalFloorExplainer(Scene):
         # (but still below); the rest stay similar.
         new_means = (3.4, 4.1, 3.5, 3.3, 3.6)
         anims = []
-        for bar, new_m in zip(self._bars, new_means):
+        for bar, new_m in zip(self._bars, new_means, strict=False):
             new_h = (new_m / 10.0) * self._chart_h
-            cur_h = bar.height
             new_bar = Rectangle(
                 width=bar.width,
                 height=new_h,
@@ -315,7 +311,7 @@ class CriticalFloorExplainer(Scene):
         # Bar 2 (broken_tool_use) jumps past the floor.
         regressed_means = (3.4, 5.4, 3.5, 3.3, 3.6)  # 5.4 > 4.5 (floor)
         anims = []
-        for bar, new_m in zip(self._bars, regressed_means):
+        for bar, new_m in zip(self._bars, regressed_means, strict=False):
             new_h = (new_m / 10.0) * self._chart_h
             new_bar = Rectangle(
                 width=bar.width,
@@ -360,7 +356,7 @@ class CriticalFloorExplainer(Scene):
         # Bar 2 trimmed; everything below the floor → safe.
         safe_means = (3.4, 4.2, 3.5, 3.3, 3.6)
         anims = []
-        for bar, new_m in zip(self._bars, safe_means):
+        for bar, new_m in zip(self._bars, safe_means, strict=False):
             new_h = (new_m / 10.0) * self._chart_h
             new_bar = Rectangle(
                 width=bar.width,

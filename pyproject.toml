@@ -321,6 +321,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "S310", "B017", "E501", "PLR0915", "PLR0912", "PLR0913"]
 "core/agent/bash_tool.py" = ["S602"]  # shell=True is intentional for agentic bash tool
+# Manim visualization scripts use long literal vector / score lists; line-length not
+# enforced on this path (mirrors the tests/** allowance).
+"scripts/visualizations/**.py" = ["E501"]
 
 # Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
 # Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.
