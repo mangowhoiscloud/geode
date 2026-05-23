@@ -158,6 +158,49 @@ functional change.
   translated to the adapter Protocol's ``payg`` / ``subscription`` /
   ``adapter`` names via a single SoT table — both naming schemes are
   accepted in ``[seed_generation.role.<role>]`` overrides.
+- **PR-SIL-5THEME C5 — D4 X2 system-prompt model-identity injection telemetry**.
+  `HookEvent.PROMPT_ASSEMBLED` 가 `core/hooks/system.py:69` 에 정의됐
+  으나 fire 0회 였다 — X2 injection (Option B 의 단일-line model
+  identity statement, `core/agent/system_prompt.py:337`) 이 매 round
+  마다 발화하지만 관측 marker 0. v0.52.5-style stale-ack 회귀 발생 시
+  production debug 필요했다. C5 가 두 wiring point 활성:
+
+  **Wiring 1 — `_sync_model_and_rebuild_prompt` 가 PROMPT_ASSEMBLED 발화**.
+  System prompt rebuild 후 (drift detected OR prompt_dirty=True) hook
+  발화. Payload: `{model, provider, reason: "model_drift" | "prompt_dirty",
+  x2_injected: True, prompt_len}`. `_hooks` 부재 시 (stub loop / hook
+  system 미초기화) graceful skip — backward compat.
+
+  **Wiring 2 — `_inject_model_switch_breadcrumb` 의 purged_count
+  forward**. `purge_stale_model_switch_acks` 가 이전엔 `None` 반환했
+  으나 이제 purged ack 의 count (int). `_inject_model_switch_breadcrumb`
+  도 그 count 를 forward → `update_model_async` 가 `MODEL_SWITCHED`
+  hook payload 에 `purged_ack_count` 동봉. v0.52.5 incident style 회귀
+  (gpt-5.5 가 "I am gpt-5.4-mini" 식으로 식별 잘못) 발생 시 stream 으
+  로 추적 가능. Trigger 순서도 변경 — breadcrumb 가 끝난 *후* hook 발화
+  (이전엔 trigger 가 먼저였어서 purge 정보가 hook 에 안 들어갔다).
+
+  **`purge_stale_model_switch_acks` 의 return type 변경**: `None → int`.
+  Caller (이 PR 의 `_inject_model_switch_breadcrumb`) 만 활용, 기타
+  caller 는 결과 무시 (backward compat 보장 — return 값 무시는
+  Python 의 silent 동작).
+
+  **Test guards** (`tests/test_d4_x2_telemetry.py` 신규, 11 tests):
+  - `purge_stale_model_switch_acks` returns count: zero / str-form acks /
+    block-form acks (Anthropic) / user message untouched (4 tests)
+  - `_inject_model_switch_breadcrumb` forwards count: empty context → 0 /
+    non-empty with stale ack → count (2 tests)
+  - `update_model_async` fires `MODEL_SWITCHED` with `purged_ack_count`
+    payload (1 test, full async path)
+  - `_sync_model_and_rebuild_prompt` fires `PROMPT_ASSEMBLED`: drift case /
+    prompt_dirty case / no rebuild case / no hooks case (4 tests)
+
+  **Anti-deception**: existing `tests/test_arun_model_drift_sync.py` 의
+  6 tests 는 `_StubLoop` 가 `_hooks` 미정의 — `getattr(self, "_hooks",
+  None)` graceful default 로 기존 stub 호환성 보존.
+
+### Added
+
 - **PR-SIL-5THEME C4 — E1 mutation cost ledger**. `mutations.jsonl` 가
   git-tracked 으로 존재 (PR-G5b #1350 의 deception fix 으로 보장) 했으나
   cost 컬럼이 0건이라 operator 가 mutation ROI (cost vs fitness Δ) 볼

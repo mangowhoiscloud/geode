@@ -617,11 +617,35 @@ class AgenticLoop:
         after a rebuild. Behaviour preserved exactly from the
         pre-refactor inline block.
         """
-        if await self._sync_model_from_settings_async() or self._prompt_dirty:
+        drift_detected = await self._sync_model_from_settings_async()
+        prompt_dirty = self._prompt_dirty
+        if drift_detected or prompt_dirty:
             system_prompt = self._build_system_prompt()
             if decomposition_hint:
                 system_prompt += "\n\n" + decomposition_hint
             self._prompt_dirty = False
+            # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. ``HookEvent.PROMPT_ASSEMBLED``
+            # 가 ``core/hooks/system.py:69`` 에 정의됐으나 fire 0회 였다 → X2
+            # injection (Option B 의 ``You are <model> (<provider>).`` 한 줄
+            # statement) 이 매 round 마다 발화하지만 관측 marker 0. 이제 hook
+            # handler 가 등록되면 model / provider / reason / x2_injected /
+            # prompt_len payload 받음. ``_hooks`` 부재 (stub loop / hook
+            # system 미초기화) 시 noop (backward compat).
+            hooks = getattr(self, "_hooks", None)
+            if hooks:
+                from core.hooks import HookEvent
+
+                reason = "model_drift" if drift_detected else "prompt_dirty"
+                await hooks.trigger_async(
+                    HookEvent.PROMPT_ASSEMBLED,
+                    {
+                        "model": self.model,
+                        "provider": self._provider,
+                        "reason": reason,
+                        "x2_injected": True,  # Option B identity 한 줄 always present
+                        "prompt_len": len(system_prompt),
+                    },
+                )
         return system_prompt
 
     def _check_round_guards(self, round_idx: int) -> str | None:
@@ -760,8 +784,12 @@ class AgenticLoop:
         """Delegates to :func:`_model_switching.update_model_async`."""
         return await _model_switching.update_model_async(self, model, provider, reason)
 
-    def _purge_stale_model_switch_acks(self) -> None:
-        """Delegates to :func:`_model_switching.purge_stale_model_switch_acks`."""
+    def _purge_stale_model_switch_acks(self) -> int:
+        """Delegates to :func:`_model_switching.purge_stale_model_switch_acks`.
+
+        PR-SIL-5THEME C5 (2026-05-23) — returns purged count (was ``None``)
+        for D4 X2 telemetry — caller forwards to MODEL_SWITCHED payload.
+        """
         return _model_switching.purge_stale_model_switch_acks(self)
 
     def _adapt_context_for_model(self, target_model: str) -> None:
