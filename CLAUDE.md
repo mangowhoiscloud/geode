@@ -107,7 +107,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No same-name-nested folders (`X/X/`) — flatten or rename inner | Frontier 0/7 do this; GEODE had `core/scheduler/scheduler/` |
 | | No single-file packages — fold into the nearest domain sibling | PR-CLEANUP-2 precedent (`core/text/`, `core/storage/`) |
 | | No `_helpers.py` / `_utils.py` / `_misc.py` filenames once a caller appears — rename to the actual responsibility (the catch-all suffix hides intent) | autoresearch / openclaw avoid; PR-CLEANUP-1 absorbed `_announce.py` + `_decomposition.py` for similar reason |
-| **Compat** | No re-export shim / backward-compat module past its 1-release grace — delete it and migrate callers in the same PR | *Incident: `core/llm/client.py` (0 callers but kept), `core/agent/loop/loop.py` (deleted PR-CLEANUP-1)* |
+| **Compat** | No re-export shim / backward-compat module past its 1-release grace — delete it and migrate callers in the same PR | *Incidents: `core/llm/client.py` removed PR-CLEANUP-4, `core/agent/loop/loop.py` removed PR-CLEANUP-1* |
 | **Registry** | No two registries for the same domain (skill / tool / adapter / plugin) — one schema, one loader, one call surface | *Incident: `core/llm/skill_registry.py` ↔ `core/skills/skills.py` parsing the same `~/.geode/skills/*.md` twice* |
 | **PR** | No PR that violates the [§6 template](#6-pr--merge) (HEREDOC body with Summary/Why/Changes/Verification) or merges without CI 5/5 green | Format + traceability + Ratchet (P4) |
 
@@ -278,7 +278,7 @@ develop → main PRs may use abbreviated form (Summary + Verification only).
 |--------|-------------------|
 | New tool | `definitions.json` + handlers + E2E |
 | Pipeline node | `graph.py` + E2E |
-| LLM adapter | `client.py` + E2E |
+| LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
 
 #### 7. Rebuild & Restart
 
