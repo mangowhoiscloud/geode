@@ -117,13 +117,24 @@ SUBAGENT_DENIED_TOOLS: set[str] = {
 
 @dataclass
 class SubTask:
-    """A task to delegate to a sub-agent."""
+    """A task to delegate to a sub-agent.
+
+    ``source`` (v0.99.40 Follow-up A): one of
+    :data:`core.llm.adapters.CONCRETE_SOURCES` (``"payg"`` / ``"subscription"`` /
+    ``"adapter"``) or empty for legacy routing. When set, the spawned worker's
+    :class:`AgenticLoop` uses :func:`core.llm.adapters.resolve_for` to pick
+    the concrete :class:`LLMAdapter` instead of the legacy provider-only
+    ``resolve_agentic_adapter``. The picker (``plugins/seed_generation/
+    picker.py``) translates its ``RoleBinding.source`` into one of the
+    concrete values via :func:`binding_to_adapter_source`.
+    """
 
     task_id: str
     description: str
     task_type: str  # "analyze", "search", "compare"
     args: dict[str, Any] = field(default_factory=dict)
     agent: str | None = None  # Explicit agent override
+    source: str = ""  # adapter source; empty = legacy routing
 
 
 @dataclass
@@ -568,6 +579,7 @@ class SubAgentManager:
             toolkit=agent_toolkit,
             parent_session_key=self._parent_session_key,
             parent_session_id=parent_uuid,
+            source=task.source,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

@@ -49,6 +49,30 @@ functional change.
 
 ### Added
 
+- **Follow-up A — AgenticLoop opt-in adapter route + source threading.**
+  ``SubTask.source`` + ``WorkerRequest.source`` carry the picker-resolved
+  adapter source (``payg`` / ``subscription`` / ``adapter``) through the
+  parent → worker subprocess boundary into the spawned
+  :class:`AgenticLoop`. When ``source`` is set AND ``provider="anthropic"``,
+  ``AgenticLoop._call_llm`` routes through
+  :func:`core.llm.adapters.resolve_for(provider, source)` →
+  :meth:`LLMAdapter.acomplete` instead of the legacy
+  ``resolve_agentic_adapter(provider)`` path. Translation lives in
+  ``core/llm/adapters/_legacy_bridge.py``
+  (``build_adapter_request`` / ``agentic_response_from_adapter_result``);
+  ``AdapterCallRequest`` gained ``tool_choice`` + ``provider_options``
+  fields to carry the loop-side knobs. Anthropic adapters translate the
+  ``tool_choice`` value (``"auto"`` / ``"any"`` / ``"none"`` / ``"required"`` /
+  dict) into Anthropic's ``{"type": ...}`` payload so the loop's wrap-up
+  ``{"type": "none"}`` actually suppresses tool calls on the new route.
+  Concrete source with a missing registry entry HARD-FAILS — silent
+  fallback would mask operator misconfiguration (Codex MCP 2026-05-23
+  HIGH 2). Non-Anthropic providers (``openai`` / ``openai-codex`` /
+  ``glm``) thread ``source`` for observability but stay on the legacy
+  adapter — full OpenAI / Codex multi-turn translation + Codex
+  encrypted-reasoning replay lands as **Follow-up A2**. Legacy callers
+  (empty ``source``) see no behaviour change.
+
 - **LLM adapter abstraction (paperclip pattern) — Layer 4 Protocol +
   Layer 3 built-ins.** New :class:`core.llm.adapters.LLMAdapter`
   Protocol (paperclip ``ServerAdapterModule`` mirror) + mutable
