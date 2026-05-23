@@ -89,7 +89,11 @@ def serve(
     # Build SharedServices for serve mode (same factory as REPL)
     from core.server.supervised.services import SessionMode, build_shared_services
 
-    _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 20
+    # PR-CL-BUDGET — turn hard-cap removed; ``0`` means unlimited rounds. The
+    # session-wide 2-hour wall-clock budget (``core.agent.budget``) is the new
+    # global safety net. Fallback ``0`` for legacy ``gateway`` objects without
+    # the attribute matches the new default in :class:`GatewayManager`.
+    _gw_max_turns = gateway.gateway_max_turns if hasattr(gateway, "gateway_max_turns") else 0
     _gw_time_budget = (
         gateway.gateway_time_budget_s if hasattr(gateway, "gateway_time_budget_s") else 120.0
     )

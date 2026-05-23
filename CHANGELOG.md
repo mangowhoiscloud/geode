@@ -47,6 +47,83 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-CL-BUDGET — 2-hour wall-clock cap + automatic T-10min hand-off**.
+  Foundation PR for the Cognitive Loop sprint (A3 → A6 → A1). Replaces
+  the per-AgenticLoop turn hard-cap with a session-wide wall-clock
+  budget (default 7200s) and an automatic graceful exit at T-600s
+  remaining.
+
+  - ``core/agent/budget.py`` (NEW) — ``TimeBudget`` config dataclass +
+    ``start_session_budget()`` / ``check_session_budget()`` /
+    ``budget_summary()`` helpers. Budget *state* (start time, latch flag)
+    lives on the existing :class:`SessionMetrics` so the budget travels
+    with the ContextVar across nested loops. Defaults pulled from
+    ``GEODE_SESSION_TIME_BUDGET_S`` env knob.
+  - ``core/agent/handoff.py`` (NEW) — DB-backed state machine adapted
+    from hermes-agent ``hermes_state.py:218-220`` + ``gateway/run.py:
+    3712-3766`` watcher pattern. 5 states (NONE / PENDING / RUNNING /
+    COMPLETED / FAILED) with atomic CAS helpers
+    (``request_handoff`` / ``claim_handoff`` / ``complete_handoff`` /
+    ``fail_handoff`` / ``get_handoff`` / ``list_pending_handoffs``).
+    GEODE adapts the trigger from hermes's user-initiated
+    ``/handoff <platform>`` slash command to an *automatic* wall-clock
+    crossing (operator decision in
+    ``project_budget_handoff_decision`` memory).
+  - ``core/observability/session_metrics.py`` — extended ``SessionMetrics``
+    with 4 new fields (``time_budget_start_s`` / ``time_budget_total_s``
+    / ``handoff_threshold_s`` / ``handoff_triggered_at``) + 3 methods
+    (``start_time_budget`` / ``time_budget_remaining_s`` /
+    ``is_handoff_due``). ``is_handoff_due`` is **one-shot** — first
+    crossing latches ``handoff_triggered_at`` so the AgenticLoop fires
+    HANDOFF_TRIGGERED exactly once per session, not every round.
+  - ``core/memory/session_manager.py`` — schema extended with 4 columns
+    on the ``sessions`` table (``handoff_state TEXT`` /
+    ``handoff_platform TEXT`` / ``handoff_error TEXT`` /
+    ``handoff_triggered_at REAL``) + a partial index
+    (``idx_sessions_handoff_state``) for the watcher poll. Existing DBs
+    migrate via additive ALTER TABLE inside ``__init__`` —
+    ``PRAGMA table_info`` is the SoT for column presence (idempotent on
+    fresh + migrated DBs).
+  - ``core/hooks/system.py`` — added ``HANDOFF_TRIGGERED`` /
+    ``HANDOFF_COMPLETED`` / ``HANDOFF_FAILED`` events. Payload schema:
+    ``{session_id, platform, remaining_s, budget_total_s,
+    handoff_threshold_s, handoff_triggered_at, ts}``.
+  - ``core/agent/loop/agent_loop.py`` — ``_check_round_guards`` extended
+    to call the new ``_check_session_budget_and_maybe_handoff`` helper
+    after the existing ``round_limit`` / ``time_budget`` gates. The
+    ``arun`` entry now calls ``_maybe_start_session_budget`` once per
+    session (idempotent guard via ``time_budget_total_s > 0``). ``getattr``
+    guard preserves the ``_StubLoop`` test pattern from
+    ``tests/test_arun_round_guards.py``.
+  - ``core/channels/binding.py`` + ``core/cli/typer_serve.py`` —
+    ``gateway_max_turns`` default flipped from ``20`` to ``0`` (unlimited).
+    The session-wide 2h wall-clock budget is now the global safety net;
+    ``gateway_time_budget_s`` (120s per-message default) remains the
+    per-binding cap.
+  - ``tests/test_budget.py`` (NEW, 14 tests) — defaults, dataclass shape,
+    populate + check, one-shot handoff latch, hard expiry, ContextVar
+    isolation, explicit-target arg, ``to_session_row`` row shape.
+  - ``tests/test_handoff.py`` (NEW, 15 tests) — 5-state machine atomic
+    CAS verification, get/list contract, ``handoff_summary`` rendering,
+    legacy-DB migration adds columns, idempotent re-open.
+
+  Frontier alignment (4 systems, Socratic Q5):
+  - **Claude Code** ``agent-loop.ts:checkBudgetExhausted`` — wall-clock
+    + token budget per-turn boundary.
+  - **Codex CLI** ``--budget-seconds`` flag — single wall-clock knob.
+  - **OpenClaw** Lane TTL — per-lane time cap inside the gateway.
+  - **Hermes Agent** ``sessions.handoff_state`` 3-col DB state machine
+    + ``_handoff_watcher`` atomic-claim asyncio task.
+
+  Out of scope (separate PRs): asyncio ``_handoff_watcher`` background
+  task in ``typer_serve``'s ``_serve_loop`` (this PR lays the schema +
+  CAS helpers; the actual watcher follows once a consumer is wired).
+  Successor re-spawn from a hand-off record (the watcher logs + the
+  user manually invokes ``geode resume <session_id>`` for now). See
+  follow-up tasks in ``project_budget_handoff_decision`` memory.
+
 ## [0.99.43] - 2026-05-23
 
 ### Added

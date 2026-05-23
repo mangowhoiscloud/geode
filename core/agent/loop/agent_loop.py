@@ -679,6 +679,108 @@ class AgenticLoop:
             elapsed = _time.monotonic() - self._loop_start_time
             if elapsed >= self._time_budget_s:
                 return "time_budget"
+        # PR-CL-BUDGET — session-wide wall-clock cap (default 2h) with
+        # T-10min auto-handoff. ``handoff_due`` is one-shot per session;
+        # we fire HANDOFF_TRIGGERED on the boundary and break the loop
+        # so the caller drains gracefully. ``expired`` is the hard stop
+        # if the loop somehow runs past zero. ``getattr`` tolerates stub
+        # loops in unit tests that bind ``_check_round_guards`` to a
+        # minimal object (see tests/test_arun_round_guards.py::_StubLoop).
+        handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
+        if handoff_check is not None:
+            handoff_reason: str | None = handoff_check()
+            if handoff_reason is not None:
+                return handoff_reason
+        return None
+
+    def _maybe_start_session_budget(self) -> None:
+        """Begin session-wide wall-clock budget if not already started.
+
+        Idempotent — if a prior AgenticLoop in the same SessionMetrics
+        scope already started the budget (``time_budget_total_s > 0``),
+        this is a no-op so the elapsed clock keeps running across the
+        nested loops. ``GEODE_SESSION_TIME_BUDGET_S`` env knob overrides
+        the default (set to 0 to disable; set to a positive float to
+        change the cap). Failures NEVER raise — observability mustn't
+        break the run it observes.
+        """
+        import os
+
+        try:
+            from core.agent.budget import (
+                DEFAULT_HANDOFF_THRESHOLD_S,
+                DEFAULT_TIME_BUDGET_S,
+                start_session_budget,
+            )
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            if metrics.time_budget_total_s > 0.0:
+                return  # Already started in this session.
+            raw = os.environ.get("GEODE_SESSION_TIME_BUDGET_S")
+            if raw is not None:
+                try:
+                    total = float(raw)
+                except ValueError:
+                    total = DEFAULT_TIME_BUDGET_S
+            else:
+                total = DEFAULT_TIME_BUDGET_S
+            if total <= 0.0:
+                return  # Explicitly disabled.
+            start_session_budget(
+                total_seconds=total,
+                handoff_threshold_seconds=DEFAULT_HANDOFF_THRESHOLD_S,
+                metrics=metrics,
+            )
+        except Exception:
+            log.warning("Session budget start failed", exc_info=True)
+
+    def _check_session_budget_and_maybe_handoff(self) -> str | None:
+        """Check session-wide wall-clock budget. Returns a guard-string when
+        the loop must break, ``None`` otherwise. Fires ``HANDOFF_TRIGGERED``
+        on the first threshold crossing.
+
+        Returns:
+            * ``"session_time_budget_handoff"`` on first T-threshold crossing.
+            * ``"session_time_budget_expired"`` when fully past the cap.
+            * ``None`` when still within budget (or no budget set).
+        """
+        import time as _time
+
+        try:
+            from core.agent.budget import budget_summary, check_session_budget
+            from core.observability.session_metrics import current_session_metrics
+
+            check = check_session_budget()
+            if check.handoff_due:
+                metrics = current_session_metrics()
+                payload: dict[str, Any] = {
+                    "session_id": self._session_id,
+                    "platform": "",  # adapter binding can override
+                    "remaining_s": check.remaining_seconds,
+                    "ts": _time.time(),
+                    **budget_summary(metrics=metrics),
+                }
+                if self._hooks is not None:
+                    try:
+                        self._hooks.trigger(HookEvent.HANDOFF_TRIGGERED, payload)
+                    except Exception:
+                        log.warning("HANDOFF_TRIGGERED hook failed", exc_info=True)
+                if self._transcript is not None:
+                    try:
+                        self._transcript.record_lifecycle_event(
+                            event="handoff_triggered",
+                            component="agentic_loop",
+                            level="warning",
+                            payload=payload,
+                        )
+                    except Exception:
+                        log.warning("Transcript handoff_triggered record failed", exc_info=True)
+                return "session_time_budget_handoff"
+            if check.expired:
+                return "session_time_budget_expired"
+        except Exception:
+            log.warning("Session budget check failed", exc_info=True)
         return None
 
     def _overthinking_token_threshold(self) -> int:
@@ -855,6 +957,15 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
+        # PR-CL-BUDGET (2026-05-23) — start the session-wide 2-hour
+        # wall-clock budget on first ``arun`` within a SessionMetrics
+        # scope. Subsequent loops in the same session share the budget
+        # via the ContextVar-bound metrics (guard: only start if no
+        # prior budget). Env override: ``GEODE_SESSION_TIME_BUDGET_S=0``
+        # disables; positive float overrides the 7200s default. The
+        # session budget is *separate from* per-loop ``self._time_budget_s``
+        # — both gate the loop, whichever fires first wins.
+        self._maybe_start_session_budget()
         # Defect A F-A1 — capture tracker snapshot at the loop entry so
         # ``finalize_and_return`` can compute a per-arun usage delta
         # without double-counting calls from sibling loops sharing the

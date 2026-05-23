@@ -184,6 +184,19 @@ class HookEvent(Enum):
     SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR = "self_improving_auto_trigger_runner_error"
     SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR = "self_improving_auto_trigger_parse_error"
 
+    # Wall-clock budget hand-off (PR-CL-BUDGET, 2026-05-23). Replaces the
+    # prior turn hard-cap with a 2h time-cap + automatic T-10min hand-off.
+    # Payload schema (all variants):
+    #   {"session_id": str, "platform": str, "remaining_s": float,
+    #    "budget_total_s": float, "ts": float}
+    # ``HANDOFF_TRIGGERED`` fires once per session — at the threshold
+    # crossing — even if the round loop re-enters the budget check.
+    # ``HANDOFF_COMPLETED`` fires when the graceful exit has persisted
+    # transcript + DB state; ``HANDOFF_FAILED`` fires on watcher error.
+    HANDOFF_TRIGGERED = "handoff_triggered"
+    HANDOFF_COMPLETED = "handoff_completed"
+    HANDOFF_FAILED = "handoff_failed"
+
 
 @dataclass
 class HookResult:
