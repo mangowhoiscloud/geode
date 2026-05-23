@@ -62,8 +62,11 @@ def test_self_improving_loop_config_carries_mutator_section() -> None:
     )
 
     root = SelfImprovingLoopConfig()
-    assert isinstance(root.mutator, MutatorConfig)
-    assert root.mutator.default_model is None  # G1a inherit
+    # Step J-b.1 — MutatorConfig relocated under autoresearch namespace
+    # (control-layer SoT). Old location [self_improving_loop.mutator]
+    # auto-migrates with DeprecationWarning.
+    assert isinstance(root.autoresearch.mutator, MutatorConfig)
+    assert root.autoresearch.mutator.default_model is None  # G1a inherit
 
 
 def test_runner_default_llm_call_routes_through_call_with_failover() -> None:
@@ -113,9 +116,10 @@ def test_runner_default_llm_call_consumes_source() -> None:
     from core.self_improving_loop import runner
 
     src = inspect.getsource(runner._default_llm_call)
-    assert "cfg.mutator.source" in src, (
-        "_default_llm_call must read MutatorConfig.source — otherwise "
-        "the field is a silent declarative knob (Codex MCP anti-pattern)."
+    assert "cfg.autoresearch.mutator.source" in src, (
+        "_default_llm_call must read autoresearch.mutator.source (Step J-b.1 "
+        "relocation) — otherwise the field is a silent declarative knob "
+        "(Codex MCP anti-pattern)."
     )
     # role_contract removed — A1 (PR-MINIMAL-2)
     assert "role_contract" not in src, (
@@ -137,7 +141,7 @@ def test_mutator_default_model_inherits_settings() -> None:
     from core.self_improving_loop import runner
 
     src = _inspect.getsource(runner._default_llm_call)
-    # Inherit path: when cfg.mutator.default_model is None, use Settings.model
+    # Inherit path: when cfg.autoresearch.mutator.default_model is None, use Settings.model
     assert "settings.model" in src, (
         "_default_llm_call must fall back to Settings.model when "
         "MutatorConfig.default_model is None (G1a inherit)."
@@ -172,7 +176,7 @@ def test_runner_reads_default_model_from_config() -> None:
 
     src = inspect.getsource(runner._default_llm_call)
     assert "load_self_improving_loop_config" in src
-    assert "cfg.mutator.default_model" in src or "mutator.default_model" in src
+    assert "cfg.autoresearch.mutator.default_model" in src or "mutator.default_model" in src
 
 
 # ---------------------------------------------------------------------------

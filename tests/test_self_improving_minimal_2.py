@@ -56,7 +56,7 @@ def test_runner_default_llm_call_inherits_settings_model() -> None:
     assert "settings.model" in src
     # The inherit happens only when default_model is None — both
     # branches must be visible (truthy default_model + fallback).
-    assert "cfg.mutator.default_model" in src
+    assert "cfg.autoresearch.mutator.default_model" in src
 
 
 def test_build_audit_command_never_pins_role_models_on_argv() -> None:

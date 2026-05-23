@@ -215,7 +215,11 @@ def test_load_quoting_robust(petri_toml: Path):
 def test_read_role_override_prefers_self_improving_loop(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When [self_improving_loop.petri.<role>] is set, it wins over petri.toml."""
+    """When [self_improving_loop.autoresearch.<role>] is set, it wins over petri.toml.
+
+    Step J-b.1 — relocated SoT from ``[petri.<role>]`` (executor) up to
+    ``[autoresearch.<role>]`` (control).
+    """
     petri_toml.write_text(
         """
 [petri.auditor]
@@ -229,8 +233,8 @@ source = "api_key"
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
-            petri={
-                "auditor": SimpleNamespace(
+            autoresearch=SimpleNamespace(
+                auditor=SimpleNamespace(
                     model="new-from-config-toml",
                     source="openai-codex",  # PR-SIL-5THEME C6 — non-default
                     # subscription source. ``claude-cli`` 가 새 default 라
@@ -238,8 +242,10 @@ source = "api_key"
                     # surface 하려면 다른 값 필요. ``api_key`` 는 PR-SIL-5THEME
                     # C6 로 Source literal 에서 제거됐다.
                     fallback_to_payg=None,
-                )
-            }
+                ),
+                target=None,
+                judge=None,
+            ),
         ),
     )
     override = uo.read_role_override("auditor")
@@ -250,7 +256,7 @@ source = "api_key"
 def test_read_role_override_falls_back_to_petri_toml(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No [self_improving_loop.petri.<role>] section → legacy petri.toml wins."""
+    """No [self_improving_loop.autoresearch.<role>] section → legacy petri.toml wins."""
     petri_toml.write_text(
         """
 [petri.judge]
@@ -263,7 +269,13 @@ source = "claude-cli"
 
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
-        lambda: SimpleNamespace(petri={}),
+        lambda: SimpleNamespace(
+            autoresearch=SimpleNamespace(
+                auditor=None,
+                target=None,
+                judge=None,
+            ),
+        ),
     )
     override = uo.read_role_override("judge")
     assert override["model"] == "claude-opus-4-7"
@@ -287,13 +299,15 @@ model = "snapshot-model"
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
-            petri={
-                "auditor": SimpleNamespace(
+            autoresearch=SimpleNamespace(
+                auditor=SimpleNamespace(
                     model="self-improving-loop-model",
                     source="auto",
                     fallback_to_payg=None,
-                )
-            }
+                ),
+                target=None,
+                judge=None,
+            ),
         ),
     )
     override = uo.read_role_override("auditor", path=snap)
@@ -310,13 +324,15 @@ def test_read_role_override_auto_source_dropped(
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: SimpleNamespace(
-            petri={
-                "auditor": SimpleNamespace(
+            autoresearch=SimpleNamespace(
+                auditor=SimpleNamespace(
                     model="claude-sonnet-4-6",
                     source="auto",
                     fallback_to_payg=None,
-                )
-            }
+                ),
+                target=None,
+                judge=None,
+            ),
         ),
     )
     override = uo.read_role_override("auditor")

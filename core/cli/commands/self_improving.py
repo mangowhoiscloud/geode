@@ -326,8 +326,8 @@ def _resolve_run_summary_telemetry() -> tuple[str, str]:
         from core.config.self_improving_loop import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
-        model = cfg.mutator.default_model or settings.model
-        source = cfg.mutator.source
+        model = cfg.autoresearch.mutator.default_model or settings.model
+        source = cfg.autoresearch.mutator.source
         return (model, source)
     except Exception:
         import logging
@@ -439,8 +439,8 @@ def _render_preflight(flags: dict[str, Any]) -> None:
         # what the runner will actually invoke. Explicit override
         # (operator set ``[self_improving_loop.mutator] default_model``
         # in config.toml) still wins.
-        mutator_model = cfg.mutator.default_model or settings.model
-        mutator_source = cfg.mutator.source
+        mutator_model = cfg.autoresearch.mutator.default_model or settings.model
+        mutator_source = cfg.autoresearch.mutator.source
     except Exception:
         # Best-effort UI: missing config falls through to the "?" placeholders.
         import logging
@@ -789,13 +789,14 @@ def _render_source_table() -> None:
     inherit_model = settings.model
     rows: list[tuple[str, str, str]] = [
         (
-            "mutator",
-            cfg.mutator.default_model or f"{inherit_model}  [muted](inherit)[/muted]",
-            cfg.mutator.source,
+            "autoresearch.mutator",
+            cfg.autoresearch.mutator.default_model or f"{inherit_model}  [muted](inherit)[/muted]",
+            cfg.autoresearch.mutator.source,
         ),
     ]
-    for petri_name, petri_cfg in cfg.petri.items():
-        rows.append((f"petri.{petri_name}", petri_cfg.model, petri_cfg.source))
+    for role_name in ("auditor", "target", "judge"):
+        role_cfg = getattr(cfg.autoresearch, role_name)
+        rows.append((f"autoresearch.{role_name}", role_cfg.model, role_cfg.source))
     for seed_name, seed_cfg in cfg.seed_generation.roles.items():
         rows.append((f"seed_generation.{seed_name}", seed_cfg.model, seed_cfg.source))
     console.print(f"    {'component':32} {'model':28} source")
@@ -877,25 +878,26 @@ def _cmd_config() -> None:
 
     mutator_changes = _prompt_component(
         "mutator",
-        current_model=cfg.mutator.default_model or settings.model,
-        current_source=cfg.mutator.source,
-        model_is_inherited=cfg.mutator.default_model is None,
+        current_model=cfg.autoresearch.mutator.default_model or settings.model,
+        current_source=cfg.autoresearch.mutator.source,
+        model_is_inherited=cfg.autoresearch.mutator.default_model is None,
     )
     if mutator_changes is None:
         return  # aborted
 
     petri_changes: dict[str, dict[str, str]] = {}
-    for petri_name, petri_cfg in cfg.petri.items():
+    for role_name in ("auditor", "target", "judge"):
+        role_cfg = getattr(cfg.autoresearch, role_name)
         diff = _prompt_component(
-            f"petri.{petri_name}",
-            current_model=petri_cfg.model,
-            current_source=petri_cfg.source,
+            f"autoresearch.{role_name}",
+            current_model=role_cfg.model,
+            current_source=role_cfg.source,
             model_is_inherited=False,
         )
         if diff is None:
             return
         if diff:
-            petri_changes[petri_name] = diff
+            petri_changes[role_name] = diff
 
     seed_changes: dict[str, dict[str, str]] = {}
     for seed_name, seed_cfg in cfg.seed_generation.roles.items():
@@ -1010,8 +1012,16 @@ def _toml_escape(value: str) -> str:
 
 
 def _persist_mutator_updates(updates: dict[str, str]) -> None:
-    """Persist mutator-only `key = "value"` lines to config.toml."""
-    _persist_section_updates("self_improving_loop.mutator", updates)
+    """Persist mutator-only `key = "value"` lines to config.toml.
+
+    Step J-b.1 (2026-05-23) — writer target moved from
+    ``[self_improving_loop.mutator]`` to
+    ``[self_improving_loop.autoresearch.mutator]`` (control-layer SoT).
+    Old configs auto-migrate via the loader's
+    ``_migrate_legacy_role_namespaces`` validator with a
+    ``DeprecationWarning``.
+    """
+    _persist_section_updates("self_improving_loop.autoresearch.mutator", updates)
 
 
 def _persist_full_config(
@@ -1022,9 +1032,9 @@ def _persist_full_config(
 ) -> None:
     """Persist the interactive form's diff across every component."""
     if mutator:
-        _persist_section_updates("self_improving_loop.mutator", mutator)
+        _persist_section_updates("self_improving_loop.autoresearch.mutator", mutator)
     for role, diff in petri.items():
-        _persist_section_updates(f"self_improving_loop.petri.{role}", diff)
+        _persist_section_updates(f"self_improving_loop.autoresearch.{role}", diff)
     for role, diff in seed_generation.items():
         # Note: loader uses ``[self_improving_loop.seed_generation.roles.<role>]``
         # (plural ``roles``) — see ``SeedGenerationConfig.roles`` field. Singular

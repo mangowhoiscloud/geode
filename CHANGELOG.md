@@ -47,6 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Step J-b.1 fix-up — `test_diversity_hint_injected` xdist leak.**
+  PR-CL-A1 (#1548) added ``_maybe_replan_async`` which reads
+  ``current_session_metrics().last_verify_passed`` / ``.active_plan`` at
+  every round entry. ``current_session_metrics()`` lazy-inits and binds
+  to the ContextVar, so state from a prior test in the same xdist
+  worker (xdist ``loadfile`` packs all tests in
+  ``tests/test_autonomous_safety.py`` into one worker) leaks into the
+  next test. The canary was ``TestDiversityForcing.test_diversity_hint_injected``
+  — the leaked state intermittently tripped a verify_fail replan
+  trigger, the planner mock consumed the tool-response slot, and the
+  diversity tracker never advanced to 5. PR-CL-A1's author documented
+  the failure in 967927fa as "pre-existing xdist race, unrelated"; this
+  fix-up closes it. An ``autouse=True`` ``_isolated_session_metrics``
+  fixture wraps each test in this file with a fresh ``session_metrics_scope``
+  so every test sees default ``last_verify_passed=True`` and
+  ``active_plan=None``, keeping the replan trigger silent.
+
+### Changed
+
+- **Step J-b.1 — self-improving loop model SoT relocated to control layer.**
+  PR #1496 (2026-05-22) had collapsed audit role bindings into
+  ``[self_improving_loop.petri.<role>]`` (executor namespace). Step J-b.1
+  is the layer-aware mirror: the bindings move up to
+  ``[self_improving_loop.autoresearch.<role>]`` (control namespace) so
+  the model selection lives where the self-improving pipeline's control
+  actually runs — ``run → seed gen → petri baseline → autoresearch
+  surface engineering → petri audit → autoresearch Drop/commit``. The
+  mutator binding also relocates from ``[self_improving_loop.mutator]``
+  to ``[self_improving_loop.autoresearch.mutator]`` (autoresearch owns
+  its in-process engineering LLM). Legacy sections continue to load for
+  one release via the loader's
+  ``SelfImprovingLoopConfig._migrate_legacy_role_namespaces`` validator
+  with a ``DeprecationWarning``; the
+  ``SelfImprovingLoopConfig.petri`` / ``.mutator`` Python fields are
+  removed (``extra="forbid"`` keeps typos loud), so reader sites move
+  to ``cfg.autoresearch.target`` / ``.judge`` / ``.auditor`` /
+  ``.mutator``. Writer sites (``cmd_config.py``,
+  ``self_improving._persist_*``, ``geode config migrate-petri-toml``)
+  emit the new section names.
+
 ### Added
 
 - **PR-CL-A1 — Dynamic Replan**. Fourth (final) PR in the Cognitive

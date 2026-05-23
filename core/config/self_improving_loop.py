@@ -46,8 +46,9 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
+import warnings
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -184,44 +185,66 @@ class PetriRoleConfig(BaseModel):
 
 
 class AutoresearchConfig(BaseModel):
-    """autoresearch/train.py runtime knobs.
+    """autoresearch/train.py runtime knobs + per-role model bindings.
 
-    Single-SoT (2026-05-22) — ``[self_improving_loop.petri.<role>].model``
-    in ``~/.geode/config.toml`` is the **sole** model SoT for every audit
-    role (auditor / target / judge). The autoresearch outer loop reads
-    the role models through that section indirectly: it omits
-    ``--target`` / ``--judge`` / ``--auditor`` from the ``geode audit``
-    argv entirely, and the runner resolves each role via the binding
-    registry (which reads ``[petri.<role>]``).
+    Step J-b.1 (2026-05-23) — **autoresearch is the control-layer SoT**
+    for every model selection in the self-improving pipeline. Pipeline:
 
-    The ``target_model`` / ``judge_model`` fields survive as
-    **deprecated no-op slots** — silently accepted at load time so
-    existing ``~/.geode/config.toml`` files don't ``extra="forbid"``
-    on the loader, but never consulted at runtime. ``_build_audit_command``
-    no longer reads them; the next release will drop the fields
-    entirely after operators have migrated to ``[petri.<role>].model``.
+    ``run → seed gen → petri baseline → autoresearch [GEODE 노출 표면
+    조정] → petri audit → autoresearch [Drop | commit 판단] → 표면
+    재조정 (반복)``
 
-    Operators who want an autoresearch-only model now edit
-    ``[petri.target].model`` / ``[petri.judge].model`` directly;
-    standalone ``geode audit`` and the outer loop share the same
-    bindings end-to-end.
+    Control flows top-down — autoresearch is the upper layer that
+    decides what models the audit (executor) uses and what model the
+    mutator runner uses for surface engineering. The previous PR #1496
+    (2026-05-22) collapse moved the SoT *into* ``[petri.<role>]``, but
+    that placed config ownership in the executor layer. Step J-b.1
+    relocates the SoT back to the control layer while keeping a
+    1-release back-compat reader on the old sections.
+
+    Four sub-roles live here as nested objects:
+
+    - ``target`` / ``judge`` / ``auditor`` — petri eval roles. The
+      petri_audit role binding resolver (``get_binding``) reads from
+      these.
+    - ``mutator`` — autoresearch's own in-process LLM (the engineer
+      that proposes GEODE surface mutations). Consumed by
+      ``core/self_improving_loop/runner.py:_default_llm_call``.
+
+    Standalone ``geode audit`` (run outside the self-improving loop)
+    still reads the same sections — same single SoT, just different
+    invocation context.
+
+    The legacy ``target_model`` / ``judge_model`` string slots remain
+    as deprecated no-op fields (back-compat with pre-2026-05-22
+    configs); operators on those configs already see them silently
+    ignored, so this PR doesn't change that behaviour.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
+
+    # Step J-b.1 — role sub-fields (the SoT relocation).
+    target: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
+    """petri eval ``target`` role binding (model + source). Read by
+    :func:`plugins.petri_audit.registry.get_binding` when the runtime
+    resolves the audit target."""
+    judge: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
+    """petri eval ``judge`` role binding."""
+    auditor: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
+    """petri eval ``auditor`` role binding."""
+    mutator: MutatorConfig = Field(default_factory=lambda: MutatorConfig())
+    """In-process mutator runner binding. Consumed by
+    :func:`core.self_improving_loop.runner._default_llm_call`."""
+
     target_model: str | None = None
-    """**Deprecated** — surviving slot for back-compat config file load.
-    The runtime always resolves the target through
-    ``[self_improving_loop.petri.target].model`` via the binding
-    registry; this field is silently ignored. Will be dropped in a
-    future release once operator configs are migrated."""
+    """**Deprecated pre-PR #1496 slot** — surviving for back-compat
+    config file load. Never consulted at runtime. Will be dropped in a
+    future release once operator configs are migrated to the
+    ``[self_improving_loop.autoresearch.target] model = ...`` shape."""
     judge_model: str | None = None
-    """**Deprecated** — surviving slot for back-compat config file load.
-    The runtime resolves the judge through
-    ``[self_improving_loop.petri.judge].model`` via the binding
-    registry; this field is silently ignored. Will be dropped in a
-    future release once operator configs are migrated."""
+    """**Deprecated pre-PR #1496 slot** — see :attr:`target_model`."""
     # PR-SIL-5THEME C6 (2026-05-23) — default ``auto`` → ``claude-cli``.
     # Operator decision (``project_payg_exclusion_decision.md``, 2026-05-23)
     # 으로 ``api_key`` 는 ``Source`` literal 에서 제거. ``auto`` 는 manifest
@@ -387,19 +410,71 @@ class SelfImprovingLoopConfig(BaseModel):
 
     # Per-component sub-configs
     autoresearch: AutoresearchConfig = Field(default_factory=AutoresearchConfig)
-    petri: dict[str, PetriRoleConfig] = Field(default_factory=dict)
-    """Map of role name → PetriRoleConfig. Expected keys: auditor /
-    target / judge."""
+    """Control-layer SoT — owns ``target`` / ``judge`` / ``auditor`` /
+    ``mutator`` role bindings (Step J-b.1)."""
     seed_generation: SeedGenerationConfig = Field(default_factory=SeedGenerationConfig)
-    mutator: MutatorConfig = Field(default_factory=MutatorConfig)
-    """PR-1 G-A — mutator role manifest. Closes the hardcoded
-    ``model="claude-opus-4-7"`` + direct ``anthropic.Anthropic()``
-    call in ``core/self_improving_loop/runner.py``."""
 
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     """PR-OL-A1 — auto-trigger schedule. Default off; operator opts in
     via ``[self_improving_loop.scheduler] enabled = true``. The cron
     fires the mutator runner with lockfile + min-interval guards."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_role_namespaces(cls, data: Any) -> Any:
+        """Step J-b.1 — relocate model SoT from executor to control layer.
+
+        The previous layout placed audit role bindings under
+        ``[self_improving_loop.petri.<role>]`` (executor namespace)
+        and the mutator binding under ``[self_improving_loop.mutator]``
+        (top-level). Step J-b.1 reunites them inside
+        ``[self_improving_loop.autoresearch.<role>]`` because
+        autoresearch is the control layer that decides what runs.
+
+        This validator pops the legacy sections from the raw input dict
+        and grafts them under ``autoresearch`` so old configs keep
+        loading. A ``DeprecationWarning`` fires on each migration so
+        operators see the new location in their next config edit.
+
+        The fields are removed from the schema (``extra="forbid"``)
+        rather than kept as no-op slots so future operator typos
+        ``[self_improving_loop.petr.target]`` fail loudly instead of
+        silently ignoring the binding.
+        """
+        if not isinstance(data, dict):
+            return data
+        autoresearch_section = data.setdefault("autoresearch", {})
+        if not isinstance(autoresearch_section, dict):
+            return data  # let pydantic surface the type error
+
+        legacy_petri = data.pop("petri", None)
+        if isinstance(legacy_petri, dict) and legacy_petri:
+            for role_name in ("target", "judge", "auditor"):
+                if role_name in legacy_petri and role_name not in autoresearch_section:
+                    autoresearch_section[role_name] = legacy_petri[role_name]
+            warnings.warn(
+                "[self_improving_loop.petri.*] is deprecated; move audit "
+                "role bindings to [self_improving_loop.autoresearch.<role>] "
+                "(autoresearch is the control-layer SoT). The legacy "
+                "section will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        legacy_mutator = data.pop("mutator", None)
+        if isinstance(legacy_mutator, dict) and legacy_mutator:
+            if "mutator" not in autoresearch_section:
+                autoresearch_section["mutator"] = legacy_mutator
+            warnings.warn(
+                "[self_improving_loop.mutator] is deprecated; move the "
+                "mutator binding to [self_improving_loop.autoresearch.mutator] "
+                "(autoresearch owns its own engineering LLM). The legacy "
+                "section will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        return data
 
     @model_validator(mode="after")
     def _abort_above_warn(self) -> SelfImprovingLoopConfig:
