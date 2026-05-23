@@ -304,7 +304,7 @@ def _is_inspect_evals_installed() -> bool:
     (`livecodebench_pro_accuracy` / `tau2_bench_success` / `gpqa_diamond` /
     `hle_accuracy` / `osworld_success` / `mle_bench_medal`)."""
     try:
-        import inspect_evals  # type: ignore[import-not-found]  # noqa: F401
+        import inspect_evals  # noqa: F401
 
         return True
     except ImportError:
@@ -315,7 +315,7 @@ def _is_inspect_harbor_installed() -> bool:
     """``inspect-harbor`` PyPI 패키지의 import 가용성. SWE-bench Pro 만
     Harbor 의존 — 부재 시 `swe_bench_pro_pass` skip."""
     try:
-        import inspect_harbor  # type: ignore[import-not-found]  # noqa: F401
+        import inspect_harbor  # noqa: F401
 
         return True
     except ImportError:
@@ -398,8 +398,8 @@ def _run_bench_via_inspect_ai(
     package, task_path = BENCH_PORT_MAP[field_name]
     try:
         if package == "inspect_evals":
-            from inspect_ai import eval as inspect_eval  # type: ignore[import-not-found]
-            from inspect_evals import (  # type: ignore[import-not-found]
+            from inspect_ai import eval as inspect_eval
+            from inspect_evals import (
                 __dict__ as inspect_evals_ns,
             )
 
@@ -407,14 +407,14 @@ def _run_bench_via_inspect_ai(
             if task_factory is None:
                 log.warning("inspect_evals task %s not found", task_path)
                 return None
-            eval_logs = inspect_eval(  # type: ignore[no-untyped-call]
+            eval_logs = inspect_eval(
                 task_factory(),
                 model=target_model,
                 limit=sample_limit,
             )
         else:  # inspect_harbor
-            from inspect_ai import eval as inspect_eval  # type: ignore[import-not-found]
-            from inspect_harbor import (  # type: ignore[import-not-found]
+            from inspect_ai import eval as inspect_eval
+            from inspect_harbor import (
                 __dict__ as harbor_ns,
             )
 
@@ -422,7 +422,7 @@ def _run_bench_via_inspect_ai(
             if task_factory is None:
                 log.warning("inspect_harbor task %s not found", task_path)
                 return None
-            eval_logs = inspect_eval(  # type: ignore[no-untyped-call]
+            eval_logs = inspect_eval(
                 task_factory(),
                 model=target_model,
                 limit=sample_limit,
