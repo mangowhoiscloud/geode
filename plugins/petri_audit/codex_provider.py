@@ -172,8 +172,8 @@ def register() -> None:
         def __init__(self, *args: _Any, **kwargs: _Any) -> None:
             from core.config import CODEX_BASE_URL
             from core.llm.providers.codex import (
-                _extract_account_id,
                 _resolve_codex_token,
+                build_codex_oauth_headers,
             )
             from inspect_ai.model._providers.util import (
                 environment_prerequisite_error,
@@ -195,10 +195,7 @@ def register() -> None:
             # subclass attributes are normally set. We set them first
             # so the override is safe.
             self._codex_token = token
-            self._codex_headers: dict[str, str] = {"originator": "codex_cli_rs"}
-            account_id = _extract_account_id(token)
-            if account_id:
-                self._codex_headers["ChatGPT-Account-ID"] = account_id
+            self._codex_headers = build_codex_oauth_headers(token)
 
             kwargs["api_key"] = token
             kwargs["base_url"] = kwargs.get("base_url") or CODEX_BASE_URL
