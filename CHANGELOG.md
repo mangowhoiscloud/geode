@@ -49,6 +49,65 @@ functional change.
 
 ### Added
 
+- **Follow-up F — GLM adapter family.** Two new built-ins land the
+  ZhipuAI provider on the v0.99.39 :class:`LLMAdapter` registry:
+
+  - ``glm-payg`` (``provider=glm``, ``source=payg``,
+    ``billing_type=api``) — calls ``api.z.ai/api/paas/v4`` with
+    ``settings.zai_api_key``. PAYG metered.
+  - ``glm-coding-plan`` (``provider=glm``, ``source=subscription``,
+    ``billing_type=subscription``) — calls
+    ``api.z.ai/api/coding/paas/v4`` with the API key bound to a
+    Coding Plan profile resolved via
+    :func:`core.llm.routing.plan_registry.resolve_routing`. Refuses to
+    fall back to PAYG when no Plan is registered — the picker source
+    ``subscription`` means subscription.
+
+  Both share :func:`build_async_openai_client` (per-adapter fresh
+  client, no module-level singleton shadowing) and route
+  ``tool_choice`` through ``normalize("glm", ...)`` for the Chat
+  Completions nested ``function`` wire shape.
+
+- **Follow-up A2 — OpenAI + Codex adapter route closure.** Removes the
+  ``provider == "anthropic"`` guard from
+  ``AgenticLoop.__init__`` so concrete-source resolution now works for
+  every provider via :func:`core.llm.adapters.resolve_for`. The two
+  Codex MCP findings from PR #1519 are closed:
+
+  - **BLOCKER 2 (multi-turn translation).**
+    ``core/llm/adapters/_openai_common.py`` gained ports of
+    ``_convert_messages_to_openai`` / ``_convert_messages_to_responses``
+    from the legacy provider — assistant ``tool_use`` blocks re-encode
+    into Chat ``tool_calls`` (nested ``function``) or Codex Responses
+    ``function_call`` typed items; user ``tool_result`` blocks become
+    ``role: tool`` follow-ups with ``tool_call_id`` (Chat) or
+    ``function_call_output`` items with ``call_id`` (Codex). Pre-A2 the
+    adapter passed the Anthropic content list through verbatim and the
+    SDK returned 400.
+
+  - **HIGH 1 (Codex encrypted-reasoning replay).**
+    :class:`core.llm.adapters.AdapterCallResult` gained
+    ``reasoning_items`` + ``reasoning_summaries`` fields.
+    ``CodexOAuthAdapter.acomplete`` captures ``type: reasoning`` typed
+    items from the ``response.output_item.done`` SSE stream and
+    surfaces them on the result. ``_legacy_bridge.build_adapter_request``
+    pulls ``codex_reasoning_items`` off the prior assistant turn and
+    threads them via ``AdapterCallRequest.provider_options``;
+    ``_build_codex_call_kwargs`` calls
+    :func:`core.llm.adapters._openai_common.inject_reasoning_replay`
+    to prepend the encrypted_content blobs into the next-turn ``input``.
+    Without this chain gpt-5.x ``store=False`` models lose their chain
+    of thought across turns.
+
+  - Tool_choice translation now mirrors the Anthropic adapter pattern.
+    OpenAI Chat receives ``auto``/``none``/``required`` (the
+    adapter-neutral ``"any"`` maps to ``"required"``); Codex Responses
+    same mapping, with unknown literals defaulting to ``"auto"``.
+
+  Tests: ``tests/core/llm/adapters/test_openai_multi_turn.py`` (14
+  cases, Chat + Responses converters + reasoning replay) +
+  ``test_codex_reasoning_replay.py`` (12 cases — SSE accumulation →
+  result → bridge → next-turn provider_options chain).
 - **PR-CL-BUDGET — 2-hour wall-clock cap + automatic T-10min hand-off**.
   Foundation PR for the Cognitive Loop sprint (A3 → A6 → A1). Replaces
   the per-AgenticLoop turn hard-cap with a session-wide wall-clock

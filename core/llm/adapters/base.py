@@ -72,11 +72,21 @@ class Message:
     ``role`` is one of ``"user" | "assistant" | "tool"``; tool messages carry a
     ``tool_use_id`` so the adapter can wire results back to the originating
     tool_use block.
+
+    ``codex_reasoning_items`` (A2, v0.99.44): Codex backend gpt-5.x family
+    runs with ``store=False`` so the server cannot resolve encrypted
+    reasoning items by id across turns. Each prior assistant message that
+    emitted reasoning carries the items inline here so the Codex adapter
+    can replay them at the correct ordinal position when rebuilding the
+    next-turn ``input`` array. Pre-A2 callers populate this from the
+    AgenticLoop's per-message ``codex_reasoning_items`` annotation
+    (Anthropic-shape dict key on the assistant turn).
     """
 
     role: str
     content: str | list[dict[str, Any]]
     tool_use_id: str | None = None
+    codex_reasoning_items: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -131,6 +141,19 @@ class AdapterCallResult:
     so caller-side observability (token hooks, retry journals) can still extract
     provider-specific headers (Anthropic ``anthropic-priority-tier`` etc.)
     without bypassing the adapter.
+
+    ``reasoning_items`` (A2, v0.99.44): Codex backend emits encrypted reasoning
+    items (``{type: "reasoning", encrypted_content, summary?, id?}``) that the
+    next-turn ``input`` array must replay verbatim so gpt-5.x can resume its
+    chain of thought under ``store=False``. Codex adapters capture these from
+    ``response.output_item.done`` SSE events; non-Codex adapters leave the
+    tuple empty. The legacy bridge forwards this into
+    :attr:`core.llm.agentic_response.AgenticResponse.codex_reasoning_items`.
+
+    ``reasoning_summaries`` (A2, v0.99.44): Free-text reasoning summaries
+    surfaced for the live "thinking..." UI. Codex populates from
+    ``reasoning.summary[].text`` SSE events; Anthropic adapters populate from
+    ``thinking`` content blocks when available.
     """
 
     text: str
@@ -138,6 +161,8 @@ class AdapterCallResult:
     stop_reason: str
     tool_uses: tuple[dict[str, Any], ...] = ()
     raw_response: Any = None
+    reasoning_items: tuple[dict[str, Any], ...] = ()
+    reasoning_summaries: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

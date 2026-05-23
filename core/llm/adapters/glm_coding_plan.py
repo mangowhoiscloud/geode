@@ -1,14 +1,19 @@
-"""OpenAIPaygAdapter — PAYG (API-key) path to OpenAI models.
+"""GlmCodingPlanAdapter — Coding Plan (api/coding/paas/v4) subscription endpoint.
 
-Layer 3 adapter for OpenAI provider, source=payg. Owns its own
-``AsyncOpenAI`` client bound explicitly to ``OPENAI_API_KEY`` — bypasses the
-module-level singleton in ``core.llm.providers.openai`` which routes through
-``ProfileRotator`` and would prefer an OAuth profile if one existed. Codex
-MCP review 2026-05-23 flagged that singleton sharing as a BLOCKER for source
-isolation.
+Layer 3 adapter for the ``glm`` provider, source=subscription. ZhipuAI's
+Coding Plan binds an API key to a subscription that gets routed to the
+``api.z.ai/api/coding/paas/v4`` endpoint (distinct from PAYG's
+``/api/paas/v4``). Calling a Coding Plan key against the PAYG endpoint
+silently bypasses the subscription quota and incurs metered billing —
+that's why the picker / adapter source must be honoured.
 
-Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path) and
-:class:`CodexCliAdapter` (subprocess path).
+The bound Plan API key is resolved via
+:func:`core.llm.providers.glm._resolve_glm_endpoint` which checks the
+GEODE ``ProfileStore`` for a ``glm-coding-*`` Plan registered via
+``/login``. PAYG fallback explicitly excluded — the picker source
+``subscription`` means subscription, not "best effort".
+
+Codex MCP A2 (v0.99.44) Follow-up F.
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ from core.llm.adapters._openai_common import (
     translate_tool,
 )
 from core.llm.adapters.base import (
-    SOURCE_PAYG,
+    SOURCE_SUBSCRIPTION,
     AdapterBillingType,
     AdapterCallRequest,
     AdapterCallResult,
@@ -40,28 +45,32 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class OpenAIPaygAdapter:
-    """PAYG-routed OpenAI adapter — owns its own AsyncOpenAI client."""
+class GlmCodingPlanAdapter:
+    """Subscription-routed GLM adapter (Coding Plan endpoint).
 
-    name: str = "openai-payg"
-    provider: str = "openai"
-    source: str = SOURCE_PAYG
-    billing_type: AdapterBillingType = AdapterBillingType.API
+    Forces the Coding Plan binding from the ProfileStore — if no Plan
+    is registered (only PAYG api_key set), raises so the operator can't
+    silently fall back to PAYG when the picker resolved ``subscription``.
+    """
+
+    name: str = "glm-coding-plan"
+    provider: str = "glm"
+    source: str = SOURCE_SUBSCRIPTION
+    billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
-        from core.config import settings
-
-        if not settings.openai_api_key:
+        api_key, base_url = _resolve_coding_plan_endpoint()
+        if not api_key:
             raise RuntimeError(
-                "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
-                "an explicit API key — set ``openai_api_key`` in settings or use "
-                "the codex-oauth / codex-cli adapter instead."
+                "GlmCodingPlanAdapter: no GLM Coding Plan profile registered. "
+                "Run ``/login glm-coding-pro`` (or the matching Plan slug) inside "
+                "GEODE, or use the glm-payg adapter for the metered PAYG path."
             )
-        self._client = build_async_openai_client(settings.openai_api_key)
+        self._client = build_async_openai_client(api_key, base_url=base_url)
         return self._client
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
@@ -75,7 +84,9 @@ class OpenAIPaygAdapter:
             kwargs["temperature"] = req.temperature
         if req.tools:
             kwargs["tools"] = [translate_tool(t) for t in req.tools]
-            tc = _translate_tool_choice(req.tool_choice)
+            from core.llm.tool_choice import normalize
+
+            tc = normalize("glm", req.tool_choice)
             if tc is not None:
                 kwargs["tool_choice"] = tc
         if req.stop_sequences:
@@ -85,7 +96,7 @@ class OpenAIPaygAdapter:
         except Exception as exc:
             self._last_error = exc
             log.warning(
-                "openai-payg: chat.completions.create failed model=%s err=%s",
+                "glm-coding-plan: chat.completions.create failed model=%s err=%s",
                 req.model,
                 exc,
             )
@@ -115,26 +126,28 @@ class OpenAIPaygAdapter:
                 yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
 
     def test_environment(self) -> EnvironmentReport:
-        from core.config import settings
-
-        if not settings.openai_api_key:
+        api_key, base_url = _resolve_coding_plan_endpoint()
+        if not api_key:
             return EnvironmentReport(
                 ok=False,
-                checks=(("openai_api_key", "missing"),),
+                checks=(("glm_coding_plan_profile", "missing"),),
                 hints=(
-                    "Set ``OPENAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use codex-oauth (ChatGPT subscription) / codex-cli (local binary).",
+                    "Register a Coding Plan via ``/login glm-coding-pro`` inside GEODE.",
+                    "Or use glm-payg (PAYG api/paas/v4 endpoint).",
                 ),
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openai_api_key", f"set ({len(settings.openai_api_key)} chars)"),),
+            checks=(
+                ("glm_coding_plan_profile", f"key ({len(api_key)} chars)"),
+                ("endpoint", base_url),
+            ),
         )
 
     def list_models(self) -> list[ModelSpec]:
-        from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
+        from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
 
-        ids = [OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN]
+        ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
         seen: set[str] = set()
         models: list[ModelSpec] = []
         for mid in ids:
@@ -144,43 +157,49 @@ class OpenAIPaygAdapter:
             models.append(
                 ModelSpec(
                     id=mid,
-                    label=mid,
+                    label=f"{mid} (via Coding Plan)",
                     context_tokens=128_000,
-                    supports_thinking=mid.startswith(("o3", "o4")),
+                    supports_thinking=False,
                     supports_tools=True,
                 )
             )
         return models
 
     def get_quota_windows(self) -> QuotaWindows | None:
-        return None  # PAYG, metered per call
+        # GLM Coding Plan does not expose a programmatic quota surface yet.
+        return None
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import OPENAI_PRIMARY, settings
-
-        if not settings.openai_api_key:
+        api_key, base_url = _resolve_coding_plan_endpoint()
+        if not api_key:
             return None
+        from core.config import GLM_PRIMARY
+
         return CredentialDetection(
-            model=OPENAI_PRIMARY,
+            model=GLM_PRIMARY,
             provider=self.provider,
-            source_path="settings.openai_api_key",
+            source_path=f"ProfileStore (glm-coding-*) → {base_url}",
         )
 
 
-def _translate_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any] | None:
-    """Adapter-neutral ``tool_choice`` → Chat Completions wire shape.
+def _resolve_coding_plan_endpoint() -> tuple[str, str]:
+    """Return ``(api_key, base_url)`` for the registered Coding Plan, else
+    ``("", "")``.
 
-    Routes through :func:`core.llm.tool_choice.normalize` with
-    ``provider="glm"`` — Chat Completions uses the SAME nested
-    ``{"type": "function", "function": {"name": "..."}}`` shape that
-    GLM does. The legacy helper accepts the Anthropic-shape dicts the
-    AgenticLoop emits (``{"type": "auto"}`` / ``{"type": "none"}`` /
-    ``{"type": "any"}`` / ``{"type": "tool", "name": "..."}``) and
-    returns the Chat-correct payload (Codex MCP A2 BLOCKER 2).
+    Walks :func:`core.llm.routing.plan_registry.resolve_routing` for the
+    ``glm-coding-*`` Plan (the same path :func:`core.llm.providers.glm._resolve_glm_endpoint`
+    uses). If no Plan is bound, returns empty strings so the adapter
+    refuses rather than silently falling back to PAYG.
     """
-    from core.llm.tool_choice import normalize
+    try:
+        from core.llm.routing.plan_registry import resolve_routing
 
-    return normalize("glm", tc)
+        target = resolve_routing("glm-5.1")
+        if target is not None and target.profile.key:
+            return target.profile.key, target.base_url
+    except Exception:
+        log.debug("glm-coding-plan: ProfileStore lookup failed", exc_info=True)
+    return "", ""
 
 
-__all__ = ["OpenAIPaygAdapter"]
+__all__ = ["GlmCodingPlanAdapter"]
