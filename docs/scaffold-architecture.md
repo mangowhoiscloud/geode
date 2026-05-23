@@ -192,7 +192,6 @@ orchestration/
 ├── bootstrap.py         # 오케스트레이션 부트스트랩
 ├── compaction.py        # ★ 컨텍스트 압축 (80%/95%)
 ├── context_monitor.py   # 컨텍스트 모니터
-├── goal_decomposer.py   # 목표 분해기
 ├── hot_reload.py        # 핫 리로드
 ├── isolated_execution.py # 격리 실행 (ThreadPool)
 ├── lane_queue.py        # ★ LaneQueue (세마포어 동시성)
@@ -414,8 +413,8 @@ REODE에서 이식한 칸반 시스템:
 ### 5.4 워크플로우 자동화
 - `orchestration/task_system.py`: TaskGraph DAG 관리
 - `orchestration/plan_mode.py`: 플랜 모드 (create → approve/reject)
-- `orchestration/goal_decomposer.py`: 목표 → 서브태스크 분해
 - `orchestration/stuck_detection.py`: 스턱 감지 → 자동 복구
+- *목표 → 서브태스크 분해* — `core/agent/plan.py:decompose_async` (PR-CL-A1-followup 2026-05-23 에서 `orchestration/goal_decomposer.py` 삭제 후 흡수)
 
 ---
 

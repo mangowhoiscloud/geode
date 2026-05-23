@@ -1,19 +1,24 @@
-"""Goal decomposition helper — converts user input into an explicit ``Plan``.
+"""Goal decomposition helper — installs an explicit ``Plan`` on metrics.
 
-PR-CL-A1 (2026-05-23) rewrite — the helper now installs a structured
-:class:`core.agent.plan.Plan` on the current SessionMetrics instead of
-returning a system-prompt suffix string. Callers (``arun``) read the
-plan back via ``current_session_metrics().active_plan`` and render the
-current-step hint via :func:`core.agent.plan.render_plan_for_prompt`.
-That centralises plan state so the replan path (PR-CL-A1
-``_maybe_replan_async``) can swap the plan in place without
-re-decomposing from scratch.
+PR-CL-A1-followup (2026-05-23) rewrite — the helper now calls
+:func:`core.agent.plan.decompose_async` directly instead of going
+through the legacy ``core/orchestration/goal_decomposer.py`` (DELETED
+in this PR). The async dispatch matches the planner-LLM pattern already
+established by ``replan_async`` so the loop has a single planner code
+path.
 
-Pre-A1 callers that consumed the returned ``str`` suffix get ``None``
-when a Plan was installed (signalling "plan handled — no suffix
-needed"); existing tests asserting on the suffix still work because
-``GoalDecomposer.decompose`` returning ``None`` continues to short-circuit
-with ``None``.
+Side-effect contract (preserved from PR-CL-A1):
+
+- On a successful multi-step decomposition, installs the Plan on
+  ``current_session_metrics().active_plan`` and returns ``None``.
+- On a simple/single-tool request OR LLM failure, returns ``None``
+  without installing a Plan.
+- Caller (``arun``) reads the active Plan via
+  :func:`core.agent.plan.render_plan_for_prompt` and prepends a
+  ``<plan>...</plan>`` block to the system prompt.
+
+The helper is **async** because it awaits ``decompose_async``; the
+``AgenticLoop._try_decompose`` delegator is correspondingly async.
 """
 
 from __future__ import annotations
@@ -27,52 +32,22 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
-    """Decompose a compound user request into an explicit :class:`Plan`.
+async def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
+    """Run the planner LLM (when warranted) and install the Plan.
 
-    Returns ``None`` either when:
-
-    - The request is simple (single tool call) — ``GoalDecomposer`` itself
-      returns ``None`` and we propagate.
-    - A multi-step plan was produced and *installed on SessionMetrics* —
-      caller's system-prompt injection path then uses
-      :func:`core.agent.plan.render_plan_for_prompt` instead of receiving
-      a suffix string.
-
-    Pre-A1 callers received a markdown bullet list as the suffix; that
-    path is gone — the plan body now lives on ``SessionMetrics.active_plan``
-    and is rendered at ``arun`` entry via ``_consume_plan_hint``.
-
-    Uses ``settings.plan_model`` (PR-CL-A6 knob) so an operator running
-    Opus-plan + Sonnet-act sees the right cost/quality split for planning.
+    Returns ``None`` either way. Async because ``decompose_async``
+    awaits ``loop._call_llm``. Pre-A1 callers received a markdown
+    suffix string — that path is gone (Plan body now lives on
+    ``SessionMetrics.active_plan`` and is rendered at ``arun`` entry
+    via ``_consume_plan_hint``).
     """
     if not loop._enable_goal_decomposition:
         return None
-
     try:
-        from core.agent.plan import build_plan_from_decomposition
-        from core.config import settings
+        from core.agent.plan import decompose_async
         from core.observability.session_metrics import current_session_metrics
-        from core.orchestration.goal_decomposer import GoalDecomposer
 
-        plan_model_raw = getattr(settings, "plan_model", "")
-        plan_model = (
-            plan_model_raw.strip() if isinstance(plan_model_raw, str) else ""
-        ) or loop.model
-        if loop._goal_decomposer is None:
-            loop._goal_decomposer = GoalDecomposer(
-                model=plan_model,
-                tool_definitions=loop._tools,
-            )
-
-        result = loop._goal_decomposer.decompose(
-            user_input,
-            tool_definitions=loop._tools,
-        )
-        if result is None:
-            return None
-
-        plan = build_plan_from_decomposition(result)
+        plan = await decompose_async(loop, user_input, tools=loop._tools)
         if plan is None:
             return None
 
@@ -97,15 +72,10 @@ def try_decompose(loop: AgenticLoop, user_input: str) -> str | None:
                 revision=plan.revision,
             )
         log.info(
-            "GoalDecomposer: installed %d-step Plan on SessionMetrics",
+            "decompose_async: installed %d-step Plan on SessionMetrics",
             len(plan.steps),
         )
-        # Returning None signals "plan handled — caller skips the suffix".
-        # The system-prompt block is rendered from SessionMetrics in
-        # ``_consume_plan_hint`` at the start of every ``arun``, so we
-        # don't need to thread a suffix string through here.
         return None
-
     except Exception:
         log.debug("Goal decomposition skipped", exc_info=True)
         return None

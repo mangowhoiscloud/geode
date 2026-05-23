@@ -2,13 +2,14 @@
 
 5축 mutation 의 ``decomposition`` slot 은 PR-6 시점부터 SoT 파일
 (`autoresearch/decomposition.json`) 만 정의되고 인퍼런스 reader 가 부재였다.
-``core/orchestration/goal_decomposer.py:_llm_decompose:241`` 의
+``core/agent/plan.py:decompose_async`` (PR-CL-A1-followup, 2026-05-23 — 이전
+``core/orchestration/goal_decomposer.py:_llm_decompose`` 가 호출) 의
 ``load_prompt("decomposer", "system")`` 는 별도 prompt SoT 에서 system
 prompt 를 로드하지만 ``decomposition.json`` 과는 미연결 (PR-AUDIT-5SLOT
 2026-05-21 진단).
 
 이 모듈은 S0a/S0b 의 패턴을 그대로 차용해 ``decomposition.json`` 의
-정책을 GoalDecomposer 의 LLM 호출 직전에 적용한다.
+정책을 ``decompose_async`` 의 LLM 호출 직전에 적용한다.
 
 **SoT schema** (모든 field optional, string):
 

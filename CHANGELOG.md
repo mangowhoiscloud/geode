@@ -47,6 +47,55 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **PR-CL-A1-followup — GoalDecomposer 제거 + Plan 흡수**. PR-CL-A1 의
+  follow-up sprint. ``core/orchestration/goal_decomposer.py`` (321 LOC)
+  + ``tests/test_goal_decomposer.py`` 를 삭제하고 planner LLM 호출 path
+  를 ``core/agent/plan.py:decompose_async`` 로 흡수. 4-PR Cognitive Loop
+  sprint (BUDGET → A3 → A6 → A1) 와 같은 ``loop._call_llm(model=
+  settings.plan_model)`` async-native 패턴으로 통일.
+
+  변경:
+
+  - ``core/orchestration/goal_decomposer.py`` (DELETED, 321 LOC) — ``GoalDecomposer``
+    클래스 + ``DecomposerStats`` + ``_llm_decompose`` + ``_build_tool_summary``
+    + ``_is_clearly_simple`` / ``_has_compound_indicators`` 휴리스틱.
+  - ``tests/test_goal_decomposer.py`` (DELETED) — 모듈 자체 폐기로 함께 삭제.
+  - ``core/agent/plan.py`` (NEW additions, ~180 LOC) — ``SubGoal`` /
+    ``DecompositionResult`` pydantic 모델 (legacy schema 보존) +
+    ``_is_clearly_simple`` / ``_has_compound_indicators`` / ``_build_tool_summary``
+    휴리스틱 port + ``decompose_async`` 신설. ``decompose_async`` flow:
+    heuristic gate → ``load_prompt("decomposer", "system")`` +
+    ``apply_decomposition_policy`` (ADR-012 SoT 보존) → ``loop._call_llm(
+    model=settings.plan_model)`` (60s timeout, usage tracking) →
+    ``DecompositionResult.model_validate_json`` parse → ``build_plan_from_decomposition``.
+  - ``core/agent/loop/_decomposition.py`` — ``try_decompose`` 가 async
+    로 전환되고 ``decompose_async`` 를 호출. 사전 ``GoalDecomposer``
+    인스턴스화 제거.
+  - ``core/agent/loop/agent_loop.py`` — ``_try_decompose`` async 전환 +
+    ``arun`` 에서 ``await``. ``_goal_decomposer: Any | None = None`` 인스턴스
+    필드 제거 (stateless ``decompose_async`` 가 대체).
+  - ``core/agent/decomposition_policy.py`` — docstring 만 갱신 (호출 site
+    이전 명시). 코드 변경 없음 — ADR-012 의 4-axis SoT 중 하나로 KEEP.
+  - ``tests/test_model_split.py`` — ``test_try_decompose_uses_plan_model``
+    + ``test_try_decompose_falls_back_to_loop_model`` 두 테스트가
+    ``decompose_async`` mock 패턴으로 재작성됨.
+  - ``tests/test_s0c_decomposition_reader.py`` — wiring 검증 테스트가
+    ``goal_decomposer.py`` source-grep 에서 ``plan.py`` source-grep 으로 이전.
+  - ``tests/test_self_improving_5_slot_reader_audit.py`` —
+    ``test_decomposition_slot_is_now_alive_post_s0c`` 가 새 host 검증.
+  - ``docs/scaffold-architecture.md`` — orchestration tree 에서 ``goal_decomposer.py``
+    제거 + bullet 갱신.
+  - ``docs/adr/ADR-012-self-improvement-surface-tiers.md`` — `decomposition`
+    SoT row + S0a/S0b/S0c/S0d 후속 상태 문단에서 호출 site 이전 명시.
+
+  이유 (operator directive, 2026-05-23): PR-CL-A1 이 GoalDecomposer 를
+  underlying caller 로 유지했지만, ``decompose_async`` 와 ``replan_async``
+  가 같은 async LLM 호출 패턴을 사용하면서 두 path 가 직접 충돌. 단일
+  planner code path 로 흡수해 maintenance overhead 제거 + sprint 동안
+  반복적으로 발생한 "GoalDecomposer ↔ Plan 변환" boilerplate 축소.
+
 ### Fixed
 
 - **Step J-b.1 fix-up — `test_diversity_hint_injected` xdist leak.**

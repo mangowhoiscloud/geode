@@ -89,9 +89,11 @@ def test_adr_013_inference_entry_points_actually_exist_in_repo() -> None:
     # T5
     anth_src = (REPO_ROOT / "core/llm/providers/anthropic.py").read_text(encoding="utf-8")
     assert "apply_messages_cache_control" in anth_src
-    # T6
-    gd_src = (REPO_ROOT / "core/orchestration/goal_decomposer.py").read_text(encoding="utf-8")
-    assert "_is_clearly_simple" in gd_src
+    # T6 — heuristic host moved to core/agent/plan.py (PR-CL-A1-followup
+    # 2026-05-23 — goal_decomposer.py 삭제 후 흡수).
+    plan_src = (REPO_ROOT / "core/agent/plan.py").read_text(encoding="utf-8")
+    assert "_is_clearly_simple" in plan_src
+    assert "_has_compound_indicators" in plan_src
 
 
 # ---------------------------------------------------------------------------

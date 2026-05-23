@@ -529,6 +529,130 @@ def test_step_expected_mismatch_skipped_when_expected_empty() -> None:
         assert "step_expected_mismatch" not in vr.rubric_misses
 
 
+# -- Decomposition heuristics (PR-CL-A1-followup, 2026-05-23) ----------
+# Coverage migrated from tests/test_goal_decomposer.py (DELETED with
+# core/orchestration/goal_decomposer.py).
+
+
+def test_is_clearly_simple_slash_command() -> None:
+    """Slash commands always single-intent — bypass LLM."""
+    from core.agent.plan import _is_clearly_simple
+
+    assert _is_clearly_simple("/help") is True
+    assert _is_clearly_simple("/login") is True
+    assert _is_clearly_simple("/model claude-opus-4-7") is True
+
+
+def test_is_clearly_simple_short_input() -> None:
+    """Very short inputs (<15 chars) are almost always single-intent."""
+    from core.agent.plan import _is_clearly_simple
+
+    assert _is_clearly_simple("hi") is True
+    assert _is_clearly_simple("뭐해") is True
+    assert _is_clearly_simple("a" * 14) is True
+    # Boundary — exactly 15 chars is NOT simple.
+    assert _is_clearly_simple("a" * 15) is False
+
+
+def test_is_clearly_simple_long_input() -> None:
+    """Long, non-slash inputs require the compound check."""
+    from core.agent.plan import _is_clearly_simple
+
+    assert _is_clearly_simple("this is a longer request that needs analysis") is False
+
+
+def test_has_compound_indicators_korean() -> None:
+    """Korean compound markers fire."""
+    from core.agent.plan import _has_compound_indicators
+
+    assert _has_compound_indicators("Project Atlas 를 종합 평가") is True
+    assert _has_compound_indicators("분석하고 리포트 만들어줘") is True
+    assert _has_compound_indicators("검색하고 정리") is True
+    assert _has_compound_indicators("전반적인 점검") is True
+
+
+def test_has_compound_indicators_english() -> None:
+    """English connectors / multi-step keywords fire."""
+    from core.agent.plan import _has_compound_indicators
+
+    assert _has_compound_indicators("search and summarize") is True
+    assert _has_compound_indicators("comprehensive review") is True
+    assert _has_compound_indicators("analyze and compare options") is True
+
+
+def test_has_compound_indicators_negative() -> None:
+    """Single-intent requests return False — no compound marker."""
+    from core.agent.plan import _has_compound_indicators
+
+    assert _has_compound_indicators("what is the time") is False
+    assert _has_compound_indicators("show me the logs") is False
+
+
+def test_build_tool_summary_empty() -> None:
+    from core.agent.plan import _build_tool_summary
+
+    assert _build_tool_summary([]) == "(no tools available)"
+
+
+def test_build_tool_summary_cost_tier_label() -> None:
+    """``[cost_tier]`` label preserves planner cost-awareness (Codex LOW #3
+    parity with legacy goal_decomposer._build_tool_summary)."""
+    from core.agent.plan import _build_tool_summary
+
+    tools = [
+        {"name": "web_search", "description": "Search the web.", "cost_tier": "free"},
+        {
+            "name": "vision_analyze",
+            "description": "Analyze an image. Returns structured tags.",
+            "cost_tier": "expensive",
+        },
+        {"name": "memory_read", "description": "Read memory.", "cost_tier": ""},
+    ]
+    out = _build_tool_summary(tools)
+    assert "**web_search** [free]: Search the web" in out
+    assert "**vision_analyze** [expensive]: Analyze an image" in out
+    # First-sentence truncation drops "Returns structured tags.".
+    assert "Returns structured tags" not in out
+    # Empty cost_tier → no bracket label.
+    assert "**memory_read**: Read memory" in out
+
+
+def test_decompose_async_skips_simple_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Heuristic gate short-circuits — no LLM call for slash command."""
+    import asyncio
+
+    from core.agent.plan import decompose_async
+
+    called = {"hit": False}
+
+    async def _fake_call_llm(*_args: Any, **_kw: Any) -> Any:
+        called["hit"] = True
+        return None
+
+    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    result = asyncio.run(decompose_async(loop, "/help"))
+    assert result is None
+    assert called["hit"] is False
+
+
+def test_decompose_async_skips_no_compound(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No compound markers + long input → skip LLM (saves cost)."""
+    import asyncio
+
+    from core.agent.plan import decompose_async
+
+    called = {"hit": False}
+
+    async def _fake_call_llm(*_args: Any, **_kw: Any) -> Any:
+        called["hit"] = True
+        return None
+
+    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    result = asyncio.run(decompose_async(loop, "what is the weather forecast today"))
+    assert result is None
+    assert called["hit"] is False
+
+
 def test_step_expected_mismatch_in_retryable_set() -> None:
     """The new code is in the retryable allowlist so PR-CL-A1 replan
     can recover from it."""
