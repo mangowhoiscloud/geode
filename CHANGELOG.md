@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.42] - 2026-05-23
+
+> Observability central-isation release. ``SessionMetrics`` 신설 (Tier 2 of
+> 3-Tier preservation), ``SessionJournal`` → ``SessionTranscript`` alias-
+> shim 흡수, ``journal/`` directory depth 축소. PR-SIL-5THEME C4 의 sidecar
+> race 가 SessionMetrics ContextVar 단일 객체로 흡수되며 영구 해소. +15
+> tests (6834 → 6849).
+
 ### Added
 
 - **`SessionMetrics` — session-scoped state aggregator (Tier 2 of 3-Tier
