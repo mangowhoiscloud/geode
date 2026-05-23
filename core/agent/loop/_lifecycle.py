@@ -163,6 +163,92 @@ def _final_hook_payloads(
     return session_ended, turn_completed, result.reasoning_metrics or {}
 
 
+def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
+    """PR-CL-A3 (2026-05-23) — per-turn verify dispatch.
+
+    Runs the configured verify mode (env knob ``GEODE_VERIFY_MODE``,
+    default ``rule_based``) over the just-finished turn, records the
+    outcome into ``SessionMetrics`` (Tier 2 aggregator) so the next-turn
+    caller can read ``last_verify_reflexion_hint`` to inject into
+    ``loop._system_suffix``, and returns a payload dict ready for the
+    ``TURN_VERIFY_PASSED`` / ``TURN_VERIFY_FAILED`` hook. ``None`` is
+    returned when verify mode is ``off`` (so the caller skips the hook
+    fire — no payload pollution).
+
+    Failures inside the verify path are swallowed in ``verify_turn``
+    itself — observability mustn't break the run it observes.
+    """
+    try:
+        from core.agent.verify import VerifyMode, verify_turn
+        from core.observability.session_metrics import current_session_metrics
+
+        vr = verify_turn(result, loop=loop)
+        if vr.mode is VerifyMode.OFF:
+            return None
+        metrics = current_session_metrics()
+        metrics.record_verify(
+            passed=vr.passed,
+            mode=vr.mode.value,
+            effective_mode=vr.effective_mode.value,
+            rubric_misses=vr.rubric_misses,
+            reflexion_hint=vr.reflexion_hint,
+        )
+        # PR-CL-A3 persistence — mirror Tier 2 verify telemetry into the
+        # ``sessions`` SQLite row so resume / cross-process readers can
+        # consume it without replaying SessionMetrics. Silent no-op when
+        # the session row hasn't been ``upsert``-ed (mid-test scenario or
+        # callers that bypass the SessionManager) — observability mustn't
+        # break the run it observes.
+        _persist_verify_state(loop, metrics, vr.should_retry)
+        # Enrich payload with turn context (Codex MCP LOW #8, 2026-05-23) so
+        # external renderers (Inspect viewer / Slack notifier / Petri audit)
+        # can show the relevant turn alongside the verify result.
+        payload = vr.to_payload()
+        payload["session_id"] = getattr(loop, "_session_id", "")
+        payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
+        payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
+        payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
+        return payload
+    except Exception:
+        log.warning("turn verify dispatch crashed; skipping", exc_info=True)
+        return None
+
+
+def _persist_verify_state(loop: AgenticLoop, metrics: Any, should_retry: bool) -> None:
+    """Mirror SessionMetrics verify telemetry into the SessionManager DB row.
+
+    Failures NEVER raise (observability hygiene). Skipped silently when no
+    session_id is set or no SessionManager singleton exists.
+    """
+    session_id = getattr(loop, "_session_id", "")
+    if not session_id:
+        return
+    mgr = None
+    try:
+        from core.memory.session_manager import SessionManager
+
+        mgr = SessionManager()
+        mgr.upsert_verify_state(
+            session_id,
+            verify_pass_count=metrics.verify_pass_count,
+            verify_fail_count=metrics.verify_fail_count,
+            last_verify_passed=metrics.last_verify_passed,
+            last_verify_mode=metrics.last_verify_mode,
+            last_verify_effective_mode=metrics.last_verify_effective_mode,
+            last_verify_rubric_misses=metrics.last_verify_rubric_misses,
+            last_verify_should_retry=should_retry,
+        )
+    except Exception:
+        log.debug("verify state persistence skipped", exc_info=True)
+    finally:
+        # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
+        if mgr is not None:
+            try:
+                mgr.close()
+            except Exception:
+                log.debug("verify SessionManager close failed", exc_info=True)
+
+
 def finalize_and_return(
     loop: AgenticLoop,
     result: AgenticResult,
@@ -187,6 +273,18 @@ def finalize_and_return(
             HookEvent.REASONING_METRICS,
             reasoning_metrics,
         )
+    # PR-CL-A3 — verify must run even when ``loop._hooks is None`` so the
+    # reflexion hint reaches the next arun via SessionMetrics regardless of
+    # the hook system being wired (Codex MCP HIGH #1, 2026-05-23). Only the
+    # ``TURN_VERIFY_*`` hook fire is gated on hooks-present.
+    verify_payload = _run_turn_verify(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        loop._hooks.trigger(event, verify_payload)
     return result
 
 
@@ -205,6 +303,16 @@ async def finalize_and_return_async(
         await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
         await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
+    # PR-CL-A3 — see ``finalize_and_return`` rationale. The verify dispatch
+    # is sync; hooks (if any) fire async.
+    verify_payload = _run_turn_verify(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        await loop._hooks.trigger_async(event, verify_payload)
     return result
 
 

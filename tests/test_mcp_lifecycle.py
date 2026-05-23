@@ -37,7 +37,7 @@ class TestMCPHookEvents:
     def test_hook_event_count(self) -> None:
         """Total hook events — +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
         + 3 PR-CL-BUDGET handoff."""
-        assert len(HookEvent) == 72
+        assert len(HookEvent) == 74
 
 
 # ---------------------------------------------------------------------------

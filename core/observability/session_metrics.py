@@ -176,6 +176,21 @@ class SessionMetrics:
         default_factory=threading.Lock, repr=False, compare=False
     )
 
+    # J. Per-turn verify telemetry (PR-CL-A3, 2026-05-23) — feeds the
+    #    Dynamic Replan path (PR-CL-A1) and supplies the verbal-RL hint
+    #    callers prepend to the next round's ``loop._system_suffix``.
+    #    ``last_verify_passed`` defaults to True so a session with no
+    #    verify runs reads as "clean" (no false replan signal).
+    verify_pass_count: int = 0
+    verify_fail_count: int = 0
+    last_verify_passed: bool = True
+    last_verify_mode: str = ""  # off / rule_based / llm_judge — operator intent
+    last_verify_effective_mode: str = ""  # path that actually ran (LLM_JUDGE
+    # may fall back to RULE_BASED until PR-CL-A6 lands; preserves the
+    # distinction in sessions.jsonl telemetry — Codex MCP follow-up #1)
+    last_verify_rubric_misses: tuple[str, ...] = ()
+    last_verify_reflexion_hint: str = ""
+
     # ------------------------------------------------------------------
     # Mutation API
     # ------------------------------------------------------------------
@@ -288,6 +303,37 @@ class SessionMetrics:
                 return True
             return False
 
+    def record_verify(
+        self,
+        *,
+        passed: bool,
+        mode: str,
+        effective_mode: str = "",
+        rubric_misses: tuple[str, ...] = (),
+        reflexion_hint: str = "",
+    ) -> None:
+        """Record one per-turn verify outcome.
+
+        Increments pass/fail counters + stores the *latest* miss list and
+        reflexion hint. The next-turn caller reads
+        ``last_verify_reflexion_hint`` to decide whether to prepend a
+        reflexion block to ``loop._system_suffix`` (verbal RL pattern).
+
+        ``mode`` is the operator-requested mode (e.g. ``llm_judge``);
+        ``effective_mode`` is the path that actually ran (e.g. ``rule_based``
+        when LLM_JUDGE falls back). Defaults to ``mode`` when unspecified
+        so legacy callers don't lose the distinction silently.
+        """
+        if passed:
+            self.verify_pass_count += 1
+        else:
+            self.verify_fail_count += 1
+        self.last_verify_passed = bool(passed)
+        self.last_verify_mode = str(mode)
+        self.last_verify_effective_mode = str(effective_mode or mode)
+        self.last_verify_rubric_misses = tuple(rubric_misses)
+        self.last_verify_reflexion_hint = str(reflexion_hint)
+
     def record_goodhart(
         self,
         *,
@@ -341,6 +387,12 @@ class SessionMetrics:
             "time_budget_total_s": self.time_budget_total_s,
             "handoff_threshold_s": self.handoff_threshold_s,
             "handoff_triggered_at": self.handoff_triggered_at,
+            "verify_pass_count": self.verify_pass_count,
+            "verify_fail_count": self.verify_fail_count,
+            "last_verify_passed": self.last_verify_passed,
+            "last_verify_mode": self.last_verify_mode,
+            "last_verify_effective_mode": self.last_verify_effective_mode,
+            "last_verify_rubric_misses": list(self.last_verify_rubric_misses),
         }
 
 
