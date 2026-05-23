@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.44] - 2026-05-23
+
 ### Added
 
 - **Follow-up F — GLM adapter family.** Two new built-ins land the
