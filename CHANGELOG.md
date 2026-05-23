@@ -47,7 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **LLM adapter abstraction (paperclip pattern) — Layer 4 Protocol +
+  Layer 3 built-ins.** New :class:`core.llm.adapters.LLMAdapter`
+  Protocol (paperclip ``ServerAdapterModule`` mirror) + mutable
+  registry (``register_adapter`` / ``unregister_adapter`` /
+  ``resolve_for(provider, source)`` / ``bootstrap_builtins``). Six
+  built-in adapters covering all PAYG / Subscription / Adapter paths
+  for Anthropic + OpenAI:
+
+  | name | provider | source | billing_type |
+  |---|---|---|---|
+  | ``anthropic-payg`` | anthropic | payg | api |
+  | ``anthropic-oauth`` | anthropic | subscription | subscription |
+  | ``claude-cli`` | anthropic | adapter | subscription_included |
+  | ``openai-payg`` | openai | payg | api |
+  | ``codex-oauth`` | openai | subscription | subscription |
+  | ``codex-cli`` | openai | adapter | subscription_included |
+
+  Registry boot happens once at runtime construction via the
+  ``build_llm_adapters`` wiring step. External plugins implement the
+  Protocol and register via :func:`core.llm.adapters.register_adapter`
+  from their entry point (paperclip's external-adapter pattern).
+
+- **Picker → adapter resolution glue.** New
+  :func:`plugins.seed_generation.picker.binding_to_adapter_source` +
+  :func:`resolve_binding_to_adapter` collapse a :class:`RoleBinding`
+  into a concrete :class:`LLMAdapter`. The picker's historical source
+  strings (``api_key`` / ``claude-cli`` / ``openai-codex``) are
+  translated to the adapter Protocol's ``payg`` / ``subscription`` /
+  ``adapter`` names via a single SoT table — both naming schemes are
+  accepted in ``[seed_generation.role.<role>]`` overrides.
+
 ### Changed
+
+- **Config SoT consolidation — ``~/.geode/config.toml``
+  ``[seed_generation.role.<role>]``.** Mirrors the Session 66
+  ``[self_improving_loop.petri.<role>]`` consolidation
+  (PR #1496/#1498/#1499). ``picker.load_user_overrides`` now reads
+  ``config.toml`` first; the legacy ``~/.geode/seed-generation.toml``
+  is still honoured as a fallback with a one-time deprecation
+  warning. Removal target: v1.0.0.
 
 - **PR-C-P1 — autoresearch ``seed_limit`` lower bound bumped from
   ``ge=1`` to ``ge=5``**. Pydantic now rejects any
@@ -92,6 +133,30 @@ functional change.
   ``~/.geode/config.toml`` and raise
   ``[self_improving_loop.autoresearch] seed_limit`` to ``5`` or
   higher (10 is the default).
+
+### Deprecated
+
+- **``core.llm.credentials.resolve_provider_key(provider, fallback)``.**
+  Global type-priority (OAUTH > TOKEN > API_KEY) loses per-role source
+  information. New callers use the
+  :class:`core.llm.adapters.LLMAdapter` registry instead. Removal
+  target: v1.0.0.
+- **``core.config._resolve_provider(model)``.** Resolves only
+  ``provider`` from a model id string — cannot express the source axis
+  (PAYG vs Subscription vs Adapter). New callers use
+  :func:`core.llm.adapters.resolve_for(provider, source)`. Removal
+  target: v1.0.0.
+- **``~/.geode/seed-generation.toml``.** Per-role overrides migrate to
+  ``~/.geode/config.toml`` ``[seed_generation.role.<role>]``. The
+  legacy file is still read with a one-time deprecation warning until
+  v1.0.0.
+- **Layer 2 ``LLMClientPort`` / ``AgenticLLMPort`` /
+  ``resolve_agentic_adapter`` (re-exported via
+  ``core.llm.adapters._legacy``).** Pre-v0.99.39 paperclip-style
+  abstraction superseded by the unified :class:`LLMAdapter`. Kept
+  functional for in-tree callers (``core.agent.loop._reflection``,
+  ``core.llm.router``, ``plugins.petri_audit``); their migration to
+  ``resolve_for`` is the v1.0.0 milestone.
 
 ## [0.99.38] - 2026-05-23
 

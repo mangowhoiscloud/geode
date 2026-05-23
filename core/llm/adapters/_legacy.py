@@ -1,8 +1,29 @@
-"""LLM Protocol interfaces and adapter implementations.
+"""Legacy LLM Protocol interfaces — pre-v0.99.39 paperclip-style abstraction.
 
-Extracted from router.py. Contains Protocol definitions (LLMClientPort,
-AgenticLLMPort, etc.), the ClaudeAdapter concrete class, and the
-resolve_agentic_adapter() factory.
+DEPRECATED (v0.99.39, removal target: v1.0.0)
+===========================================
+
+This module holds the "PR-1 G-A" paperclip-style abstraction (referenced in
+``core/agent/loop/_reflection.py:48``) that defined ``LLMClientPort`` /
+``AgenticLLMPort`` / ``resolve_agentic_adapter`` for provider-agnostic agentic
+calls. It is superseded by the unified :class:`core.llm.adapters.LLMAdapter`
+Protocol + registry (Layer 4 of the v0.99.39 adapter abstraction) which folds
+PAYG / OAuth / local-agent-cli into a single contract.
+
+Why kept under ``_legacy``:
+
+- Many internal callers (``core/agent/loop/_reflection.py``, ``core/llm/router``,
+  ``plugins/petri_audit/*``) still call ``resolve_agentic_adapter(provider)``.
+  Renaming them is out of scope for the v0.99.39 PR — the migration is
+  tracked in ``docs/plans/2026-05-23-llm-adapter-abstraction.md`` § Out of
+  scope.
+- External plugins that import from ``core.llm.adapters`` keep working
+  (``__init__.py`` re-exports the legacy symbols).
+- The new :class:`LLMAdapter` is the canonical entry point for new callers.
+
+Removal plan (v1.0.0): the in-tree call sites are migrated to
+``resolve_for(provider, source)`` (which carries explicit source binding the
+legacy ``resolve_agentic_adapter`` cannot express). This file is then deleted.
 """
 
 from __future__ import annotations

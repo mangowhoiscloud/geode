@@ -378,9 +378,22 @@ def build_llm_adapters(
     tool_registry: ToolRegistry,
     policy_chain: PolicyChain,
 ) -> tuple[LLMClientPort, LLMClientPort | None]:
-    """Build LLM adapters and inject callables into contextvars."""
+    """Build LLM adapters and inject callables into contextvars.
+
+    CSP-15 (2026-05-23) — also registers the v0.99.39 :class:`LLMAdapter`
+    Protocol built-ins (anthropic-payg / anthropic-oauth / claude-cli /
+    openai-payg / codex-oauth / codex-cli) into the module-global adapter
+    registry. The new ``LLMAdapter`` surface is independent from the legacy
+    ``LLMClientPort`` returned here — both coexist until the AgenticLoop
+    migration lands (follow-up #A in
+    ``docs/plans/2026-05-23-llm-adapter-abstraction.md``).
+    """
     from core.config import settings
+    from core.llm.adapters.registry import bootstrap_builtins
     from core.llm.router import set_llm_callable
+
+    # Register the 6 Layer 3 adapters once per process. Idempotent.
+    bootstrap_builtins()
 
     llm_adapter: LLMClientPort = ClaudeAdapter()
     secondary_adapter: LLMClientPort | None = None

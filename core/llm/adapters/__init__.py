@@ -1,0 +1,96 @@
+"""LLM Adapter abstraction — paperclip pattern adoption (v0.99.39).
+
+Layer 4 of the design in
+``docs/plans/2026-05-23-llm-adapter-abstraction.md``:
+
+- :mod:`core.llm.adapters.base` — :class:`LLMAdapter` Protocol + request /
+  result / billing-type dataclasses (paperclip ``ServerAdapterModule`` mirror).
+- :mod:`core.llm.adapters.registry` — mutable global registry
+  (``register_adapter`` / ``resolve_for`` / ``bootstrap_builtins``).
+
+Layer 3 concrete adapters (one per provider × source pair):
+
+- ``anthropic_payg`` / ``anthropic_oauth`` / ``claude_cli``
+- ``openai_payg`` / ``codex_oauth`` / ``codex_cli``
+
+External plugins implement :class:`LLMAdapter` and register via
+:func:`register_adapter` from their entry point.
+"""
+
+from core.llm.adapters._legacy import (
+    _ADAPTER_MAP,
+    AgenticLLMPort,
+    ClaudeAdapter,
+    LLMClientPort,
+    LLMJsonCallable,
+    LLMParsedCallable,
+    LLMTextCallable,
+    infer_provider_from_model,
+    resolve_agentic_adapter,
+)
+from core.llm.adapters.base import (
+    CONCRETE_SOURCES,
+    SOURCE_ADAPTER,
+    SOURCE_AUTO,
+    SOURCE_PAYG,
+    SOURCE_SUBSCRIPTION,
+    AdapterBillingType,
+    AdapterCallRequest,
+    AdapterCallResult,
+    CredentialDetection,
+    EnvironmentReport,
+    LLMAdapter,
+    Message,
+    ModelSpec,
+    QuotaWindows,
+    StreamEvent,
+    ToolSpec,
+    UsageSummary,
+)
+from core.llm.adapters.registry import (
+    AdapterAlreadyRegisteredError,
+    AdapterNotFoundError,
+    bootstrap_builtins,
+    get_adapter,
+    list_adapters,
+    register_adapter,
+    resolve_for,
+    unregister_adapter,
+)
+
+__all__ = [
+    "CONCRETE_SOURCES",
+    "SOURCE_ADAPTER",
+    "SOURCE_AUTO",
+    "SOURCE_PAYG",
+    "SOURCE_SUBSCRIPTION",
+    "_ADAPTER_MAP",
+    "AdapterAlreadyRegisteredError",
+    "AdapterBillingType",
+    "AdapterCallRequest",
+    "AdapterCallResult",
+    "AdapterNotFoundError",
+    "AgenticLLMPort",
+    "ClaudeAdapter",
+    "CredentialDetection",
+    "EnvironmentReport",
+    "LLMAdapter",
+    "LLMClientPort",
+    "LLMJsonCallable",
+    "LLMParsedCallable",
+    "LLMTextCallable",
+    "Message",
+    "ModelSpec",
+    "QuotaWindows",
+    "StreamEvent",
+    "ToolSpec",
+    "UsageSummary",
+    "bootstrap_builtins",
+    "get_adapter",
+    "infer_provider_from_model",
+    "list_adapters",
+    "register_adapter",
+    "resolve_agentic_adapter",
+    "resolve_for",
+    "unregister_adapter",
+]

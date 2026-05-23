@@ -33,6 +33,13 @@ def resolve_provider_key(provider: str, settings_fallback: str) -> str:
     Stores the resolved profile in ``_last_profile`` for downstream
     ``on_llm_success``/``on_llm_failure`` callbacks.
 
+    .. deprecated:: v0.99.39
+       Global type-priority (OAUTH > TOKEN > API_KEY) loses per-role
+       source information. Use the :class:`core.llm.adapters.LLMAdapter`
+       registry instead — each concrete adapter (``anthropic-payg`` /
+       ``anthropic-oauth`` / ``claude-cli``) selects its credential
+       explicitly. Removal target: v1.0.0.
+
     Args:
         provider: Provider name for rotator lookup ("anthropic", "openai").
         settings_fallback: API key string from settings (used when rotator unavailable).
