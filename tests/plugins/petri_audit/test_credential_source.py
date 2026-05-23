@@ -475,7 +475,7 @@ def _emit_test_journal(tmp_path):
         session_id="s-p1b",
         gen_tag="gen-p1b",
         component="autoresearch",
-        path=sip_home / "s-p1b" / "journal.jsonl",
+        path=sip_home / "s-p1b" / "transcript.jsonl",
     )
     return journal, sip_home
 

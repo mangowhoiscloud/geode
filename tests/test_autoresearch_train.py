@@ -1678,7 +1678,7 @@ _SESSIONS_JSONL_CANONICAL_FIELDS = frozenset(
 
 
 def _journal_path(tmp_path: Path, session_id: str) -> Path:
-    return tmp_path / "self-improving-loop" / session_id / "journal.jsonl"
+    return tmp_path / "self-improving-loop" / session_id / "transcript.jsonl"
 
 
 def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1744,7 +1744,7 @@ def test_emit_journal_noops_on_empty_session_id(
     _emit_journal("", "gen-x", "audit_started", payload={"dry_run": True})
     # No journal file should be created.
     assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
     )
 
 
@@ -1756,7 +1756,7 @@ def test_emit_journal_noops_on_empty_gen_tag(
     _redirect_journal(tmp_path, monkeypatch)
     _emit_journal("s-x", "", "audit_started", payload={"dry_run": True})
     assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
     )
 
 
@@ -1806,7 +1806,7 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     # Find the single run dir under sip_home (session_id resolved at runtime).
     run_dirs = [p for p in sip_home.iterdir() if p.is_dir()]
     assert len(run_dirs) == 1, f"expected one run dir under {sip_home}, got {run_dirs}"
-    journal_path = run_dirs[0] / "journal.jsonl"
+    journal_path = run_dirs[0] / "transcript.jsonl"
     sessions_path = sip_home / "sessions.jsonl"
     return exit_code, journal_path, sessions_path
 
@@ -1859,7 +1859,14 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     }
     # PR-4 (2026-05-23) — per_dim_scores payload gains ``missing_dims``
     # Goodhart-risk surface alongside the score map.
-    assert set(by_event["per_dim_scores"].keys()) == {"dim_scores", "missing_dims"}
+    # PR-SIL-5THEME C2 (2026-05-23) — bench 측 symmetric Goodhart surface
+    # 추가 (``missing_benches`` + ``bench_rubric_version``).
+    assert set(by_event["per_dim_scores"].keys()) == {
+        "dim_scores",
+        "missing_dims",
+        "missing_benches",
+        "bench_rubric_version",
+    }
     # PR-4 Codex catch — pin actual content, not just key presence.
     # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
     # the missing list should hold all other ``AXIS_TIERS`` dims.

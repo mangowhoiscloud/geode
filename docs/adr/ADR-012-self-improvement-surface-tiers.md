@@ -68,22 +68,36 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 
 `tests/test_adr_012_tier_2_deny_list.py` (이 PR 에서 신설) 가 Tier 2 deny-list 를 강제한다 — Tier 2 파일이 `TARGET_KIND_TO_SOT_FILE` 또는 mutation dispatcher 의 target 목록에 등장하면 즉시 test 실패. PR-AUDIT-5SLOT 의 ratchet 패턴 (`test_ratchet_policies_in_repo.py`) 은 policy SoT 의 gitignore/migration 만 pin 하므로 별개의 deny-list 가 필요했고, 이 ADR PR 이 그 deny-list 의 첫 invariant 를 함께 도입한다.
 
-### 2. Fitness 다축화 — 3축 multi-axis strict-reject ratchet
+### 2. Fitness 다축화 — 4축 multi-axis strict-reject ratchet
 
-현재 `baseline.json` 의 fitness 는 `dim_means` 1축. 이 ADR 은 두 축을 추가한다.
+> **2026-05-23 amendment (PR-SIL-5THEME C1)** — 초안의 3축 (dim + ux + admire) 에서 **bench_means** 가 추가되어 **4축** 으로 확장됐다. 초기 운영의 `seed_pool_diversity` 슬롯은 cohort diversity 신호 readers 의 부재 + ELO tournament 가 panel diversity 를 이미 흡수하는 점이 확인돼 **명시적 deprecate**. 코드 상수 `FITNESS_DIM_4AX / FITNESS_UX_4AX / FITNESS_ADMIRE_4AX / FITNESS_BENCH_4AX` (`autoresearch/train.py:344-350`, sum=1.0 assert) 가 ground-truth.
+
+현재 `baseline.json` 의 fitness 는 `dim_means` 1축. 이 ADR 은 세 축을 추가한다 (S1 `ux_means`, S2 `admire_means`, S6 `bench_means`).
 
 ```
 baseline.json {
-  "dim_means":     {...17 dim...},                                     # Petri alignment (음의 압력)
-  "ux_means":      {success_rate, token_cost, revert_ratio, latency},  # 행동 (양의 압력)
-  "admire_means":  {pairwise_win_rate, human_calibration_corr},        # 체감 (양의 압력)
-  "seed_pool_diversity": {...}                                         # cohort 균형
+  "schema_version": 2,
+  "raw": {
+    "dim_means":     {...17-22 dim...},                                # Petri alignment (음의 압력)
+    "dim_stderr":    {...},                                            # PR-1 of petri-schema-v2
+    "sample_count":  {...},                                            # PR-1
+    "measurement_modality": {...},                                     # PR-1 (judge_llm / analytics)
+    "rubric_version": "v3-22dim-PR0",
+    "eval_archive":  "<path>"
+  },
+  "axes": {
+    "ux_means":      {success_rate, token_cost, revert_ratio, latency},          # S1 (행동, 양의 압력)
+    "admire_means":  {pairwise_win_rate, human_calibration_corr},                # S2 (체감, 양의 압력)
+    "bench_means":   {swe_bench_pro_pass, livecodebench_pro_accuracy, ...}       # S6 (capability, 양의 압력)
+  }
 }
 ```
 
-**Promote 규칙**: 4 묶음 모두 baseline 대비 monotonic 또는 within-stderr 일 때만. 한 축이라도 regress 면 strict reject — AlphaEvolve 식 다축 정책 그대로.
+> **Deprecated slot — `seed_pool_diversity`** (2026-05-23 amendment): 초안에 4번째 묶음으로 명시됐으나 코드 0 grep, ELO tournament 의 cross-provider panel (`required_diversity_providers ≥ 2`) 이 diversity 신호를 admire_means 안에 이미 흡수. 명시적 deprecate — fitness 축 산정 4축 (dim + ux + admire + bench) 에서 제외.
 
-축별 권장 가중치 (초기): `dim_means` 0.4, `ux_means` 0.3, `admire_means` 0.3. 운영하면서 `[self_improving_loop.fitness] axis_weights = {...}` TOML 으로 조정.
+**Promote 규칙**: 4 축 모두 baseline 대비 monotonic 또는 within-stderr 일 때만. 한 축이라도 regress 면 strict reject — AlphaEvolve 식 다축 정책 그대로. **§S6 (bench) 추가 후의 cross-validation 규칙**: dim promote + bench regress = `alignment_only_fooling`, bench promote + dim critical regress = `capability_at_alignment_cost`. 두 conflict 모두 strict-reject (`compute_fitness → 0.0`) — Goodhart 양방향 방어.
+
+축별 권장 가중치 (2026-05-23 amendment 후): `dim_means` 0.30, `ux_means` 0.25, `admire_means` 0.20, `bench_means` 0.25 (sum=1.0). 운영하면서 `[self_improving_loop.fitness] axis_weights = {...}` TOML 으로 조정.
 
 #### `ux_means` 구성 (S1 신설)
 
@@ -200,6 +214,97 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 
 → **결론: 옵션 A 채택**. `TARGET_KINDS` 에서 `retrieval` 제거, 5축 → 4축 명시 축소. path constant + dict 매핑 보존 (별도 ADR 로 복원 가능). 정직성 회복 — "되는 것만 명세" 가 self-improving loop 의 ratchet 정신과 일치.
 
+### S6. Bench fitness axis — 7-bench frontier federation (2026-05-23 신설)
+
+> **신설 근거**: 코드 (`autoresearch/bench_means.py` + `autoresearch/train.py` 의 `FITNESS_BENCH_4AX=0.25`) 가 4번째 fitness 축 `bench_means` 를 이미 정의했고 §Decision.2 가 그 사실을 명세화 했지만 (이 amendment), bench 축의 *구성* — 어느 7 benchmark, 가중치, frontier 갱신 근거 — 가 ADR 측에 누락돼 있었다. 본 §S6 가 그 빈자리를 채운다.
+
+#### S6.1 — Bench 의 역할
+
+`dim_means` (Petri alignment, 음의 압력) + `ux_means` / `admire_means` (양의 압력) 옆에 추가되는 **capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기), bench 는 real task completion (제대로 함) 의 ground-truth 평가.
+
+#### S6.2 — 7-bench schema (2026-05 frontier 갱신, F1.b LCB substitution 후 확정)
+
+| Field | weight | metric | inspect_ai port (2026-05-23) |
+|-------|--------|--------|-----------------------------|
+| `swe_bench_pro_pass` | 0.25 | resolve rate | `inspect-harbor==0.4.5` (third-party, Docker scaleapi 이미지) |
+| `livecodebench_pro_accuracy` | 0.15 | accuracy (LightCPVerifier C++ exec) | `inspect-evals==0.13.0` |
+| `tau2_bench_success` | 0.20 | pass^1 rate | `inspect-evals` |
+| `gpqa_diamond` | 0.15 | accuracy | `inspect-evals` |
+| `hle_accuracy` | 0.10 | accuracy | `inspect-evals` (multi-modal items: vision 모델 필요 가능) |
+| `osworld_success` | 0.10 | success rate | `inspect-evals` (VM/Docker sandbox) |
+| `mle_bench_medal` | 0.05 | medal rate | `inspect-evals` (Kaggle dataset + Docker exec) |
+| **합** | **1.00** | — | — |
+
+#### S6.3 — Frontier 갱신 history (2026-05)
+
+원본 S6 초안의 4 bench 는 모두 saturated / OpenAI retire / contamination 이슈로 outdated 됐다 — 2026 frontier (Claude Opus 4.5 system card + GPT-5 system card 공통 채택) 으로 7-field schema 갱신:
+
+- **SWE-bench (Verified) → SWE-bench Pro** (Scale AI): OpenAI 2026-02-23 공식 retire, saturated + contaminated
+- **HumanEval → LiveCodeBench-Pro** (F1.b 의 substitution): Top-4 93-95% saturated. *Vanilla LiveCodeBench* 가 contamination-defense 측면에서 후속이었으나 inspect_ai port 부재 — frontier consensus 는 `livecodebench_pro` (C++ 경쟁 프로그래밍, live-contest scrape, time-cutoff windowing, v2 2026 초에 ICPC WF/IOI/Chinese olympiad 추가) 가 그 niche 를 흡수
+- **TAU-bench → τ²-bench** (Sierra 2025): telecom domain 0.993 saturated, dual-control 후속
+- **GAIA → HLE + OSWorld 분할**: DeepAgent 91.69% saturated. HLE (Nature 2026-01) + OSWorld (computer-use) 로 도메인 분리
+- (신규) **GPQA Diamond**: Anthropic + OpenAI 카드 공통 PhD reasoning
+- (신규) **MLE-bench**: self-improving loop 도메인 정합 (ML engineering)
+
+#### S6.4 — Cross-validation gate (Goodhart 양방향 방어)
+
+- **alignment_only_fooling**: dim_means promote (Petri 개선) + bench_means regress (capability 저하) → fooling 의심, strict reject
+- **capability_at_alignment_cost**: bench_means promote + dim critical regress → capability gain at alignment cost, strict reject
+
+두 conflict 모두 `compute_fitness → 0.0` 발화 (`autoresearch/bench_means.py:detect_cross_validation_conflict` + `autoresearch/train.py:compute_fitness` 의 4-axis 분기에서 호출).
+
+#### S6.5 — Frontier sources (2026-05)
+
+- OpenAI SWE-bench retire 공지 — `https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/`
+- Scale AI SWE-bench Pro — `https://labs.scale.com/leaderboard/swe_bench_pro_public`
+- Sierra τ²-bench — `https://sierra.ai/resources/research/tau-squared-bench`
+- Humanity's Last Exam (Nature 2026-01) — `https://agi.safe.ai/`
+- LiveCodeBench-Pro 논문 — `https://arxiv.org/abs/2506.11928`
+- GPQA Diamond (NYU 2024)
+- OSWorld (2024 frontier computer-use agent benchmark)
+- MLE-bench (OpenAI 2024 ML engineering)
+- inspect_evals (UK AISI) — `https://github.com/UKGovernmentBEIS/inspect_evals`
+- inspect_harbor (meridianlabs-ai) — `https://github.com/meridianlabs-ai/inspect_harbor`
+- Claude Opus 4.5 system card — `https://www.anthropic.com/claude-opus-4-5-system-card`
+- GPT-5 system card — `https://cdn.openai.com/gpt-5-system-card.pdf`
+
+### S6b. Bench production wiring (2026-05-23 신설, PR-SIL-5THEME C2 의 명세)
+
+§S6 는 **schema + math + cross-validation gate** + **2026 frontier 갱신** 명세. §S6b 는 그 명세의 **실제 production wiring** — collector / dispatcher / persistence / observability / 누락 보고 — 전부.
+
+#### S6b.1 — `collect_bench_means_from_inspect_ai` 실구현
+
+- 7-bench dispatcher: 각 bench 의 inspect_ai task 호출 (`inspect_evals` 또는 `inspect_harbor`)
+- A1 graceful-skip 패턴: Docker / VM 미가용 시 해당 bench 만 skip, `missing_benches` 에 등록, neutral fallback (0.5) 으로 fitness 계산 진행
+- per-bench provenance 동시 emit: `bench_stderr` (sample-level pass/fail 에서 자동 산출) / `bench_sample_count` / `bench_rubric_version="v1-7bench-2026-05"`
+
+#### S6b.2 — `main()` 의 4-axis fitness 활성
+
+- `run_audit` 직후 `collect_bench_means_from_inspect_ai` 호출
+- `compute_fitness(... bench_means=current_bench, baseline_bench_means=baseline_bench)` 4-axis 분기 활성 (현재 분기는 정의돼 있으나 호출 0회, S6b 가 firing path 활성화)
+- `_baseline_provenance` dict 에 `bench_means` + provenance 슬롯 추가 → `_write_baseline` 가 axes.bench_means + raw.bench_provenance 영속화
+- `_should_promote` internal compute_fitness 에 bench 전달 → cross-validation gate 가 promote 결정에 영향
+
+#### S6b.3 — Observability 페이로드 확장
+
+- `format_results_jsonl_row`: `bench_means` / `ux_means` / `admire_means` + per-axis aggregate 컬럼 emit
+- OL-C1 eval emit (`eval_response_recorded`): `axis_scores["bench_means_aggregate"]` 를 baseline → **current** 로 교체 (M4.1 DPO pile 의 stale signal 해소)
+- `_emit_journal("baseline_decision")`: `baseline_axis_coverage` 에 bench count 외 per-bench breakdown 추가
+- conflict 발화 시 reason payload (`alignment_only_fooling` / `capability_at_alignment_cost`) journal + results.jsonl 보존 → fitness=0.0 의 원인 구분 가능
+
+#### S6b.4 — `prepare.py` 의 Docker pre-flight (A1 명세)
+
+`autoresearch/prepare.py` 에 신규 헬퍼:
+- `_check_docker_available()`: `docker --version` + image pull dry-run
+- `_check_inspect_evals_installed()`: `inspect_evals` / `inspect_harbor` import 가용성
+- 결과를 `missing_benches` 에 미리 등록 → collector 가 호출 안 함
+
+#### S6b.5 — 의존성 추가
+
+`pyproject.toml [audit]` extra 에:
+- `inspect-evals==0.13.0` — 6 bench (LCB-Pro + τ²/GPQA/HLE/OSWorld/MLE)
+- `inspect-harbor==0.4.5` — 1 bench (SWE-bench Pro)
+
 ### 4. 단기 → 중기 → 장기 성장 곡선
 
 #### S0 — Audit + Dead Slot 처치 (이미 진행 시작)
@@ -311,6 +416,8 @@ PR-AUDIT-5SLOT 으로 진단 완료. dead slot 별 reader 신설:
 4. **S0d** — `retrieval` 처치 결정 PR
 5. **S1** — `ux_means` fitness 축 신설
 6. **S2** — `admire_means` LLM-judge 채널
-7. (이후) S3-S5 / M1-M5 / 장기 시나리오
+7. **S6** — `bench_means` fitness 축 명세 (schema + math + cross-validation gate) — *이 amendment (PR-SIL-5THEME C1) 으로 ADR 측 명세 완료*
+8. **S6b** — `bench_means` production wiring (collector / dispatcher / persistence / observability / Docker graceful-skip) — *PR-SIL-5THEME C2*
+9. (이후) S3-S5 / M1-M5 / 장기 시나리오
 
 각 PR 은 단일 fitness 축 추가 / 단일 target_kind 추가 / 단일 surrogate 채널 가동을 원자 단위로 보장. 단계 사이마다 baseline.json 이 다축 monotonic 유지 검증.

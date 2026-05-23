@@ -41,17 +41,20 @@ def test_default_config_has_safe_defaults() -> None:
 def test_autoresearch_defaults_match_train_module() -> None:
     """Defaults mirror the existing autoresearch/train.py module constants.
 
-    PR-MINIMAL-2 (2026-05-21) — three semantic changes:
+    PR-MINIMAL-2 (2026-05-21):
     - ``target_model`` / ``judge_model`` defaults flipped to ``None``
       (G1a: inherit ``Settings.model`` when unset).
     - ``use_oauth: bool = True`` → ``source: Source = "auto"`` (B1).
     - ``fallback_to_payg`` per-component override removed (C2).
+    PR-SIL-5THEME C6 (2026-05-23):
+    - ``source`` default ``"auto"`` → ``"claude-cli"`` (operator decision
+      ``project_payg_exclusion_decision.md``).
     """
     a = AutoresearchConfig()
     assert a.budget_minutes == 5
     assert a.target_model is None  # G1a inherit
     assert a.judge_model is None  # G1a inherit
-    assert a.source == "auto"  # B1
+    assert a.source == "claude-cli"  # PR-SIL-5THEME C6 — subscription-first
     assert a.seed_limit == 10
     assert a.seed_select == "plugins/petri_audit/seeds"
     assert a.dim_set == "subset"
@@ -111,8 +114,9 @@ seed_limit = 25
     assert cfg.autoresearch.budget_minutes == 10
     assert cfg.autoresearch.seed_limit == 25
     # PR-MINIMAL-2 — untouched ``source`` field keeps its default
-    # (was ``use_oauth: bool = True``; now ``source: Source = "auto"``).
-    assert cfg.autoresearch.source == "auto"
+    # (was ``use_oauth: bool = True``; now ``source: Source``).
+    # PR-SIL-5THEME C6 (2026-05-23) — default ``"auto" → "claude-cli"``.
+    assert cfg.autoresearch.source == "claude-cli"
 
 
 # ---------------------------------------------------------------------------
@@ -339,10 +343,16 @@ def test_bindings_dataclass_round_trip() -> None:
     assert not hasattr(b, "fallback_to_payg")
 
 
-def test_petri_role_default_source_is_auto() -> None:
-    """PetriRoleConfig without explicit source picks 'auto' default."""
+def test_petri_role_default_source_is_subscription_first() -> None:
+    """PetriRoleConfig without explicit source picks ``claude-cli`` default.
+
+    PR-SIL-5THEME C6 (2026-05-23) — operator decision
+    (``project_payg_exclusion_decision.md``) 으로 default ``auto`` → ``claude-cli``.
+    ``auto`` 는 manifest cascade 가 PAYG 까지 fallback 가능 → 명시
+    subscription-first default 로 silent leak 차단.
+    """
     p = PetriRoleConfig(model="claude-sonnet-4-6")
-    assert p.source == "auto"
+    assert p.source == "claude-cli"
 
 
 def test_load_handles_empty_self_improving_loop_section(tmp_path: Path) -> None:
@@ -397,7 +407,7 @@ def _make_journal(tmp_path: Path):
         session_id="p2-test",
         gen_tag="test",
         component="config-test",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
 

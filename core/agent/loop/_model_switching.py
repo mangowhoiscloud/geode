@@ -126,20 +126,28 @@ def _apply_model_update(
     return old_model, old_model != model
 
 
-def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: str) -> None:
-    if not loop.context.is_empty:
-        # v0.52.8 — strip stale "Understood. I am now <prev>" acks
-        # left by earlier model switches in the same session. Without
-        # this, the new model reads "I am gpt-5.4-mini" assistant
-        # messages and asserts the wrong identity (production
-        # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
-        loop._purge_stale_model_switch_acks()
-        loop.context.add_user_message(
-            f"[system] Model switched: {old_model} -> {model}. "
-            "You are now the new model. Do not reference the previous "
-            "model's responses as current state."
-        )
-        loop.context.add_assistant_message(f"Understood. I am now {model}.")
+def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: str) -> int:
+    """PR-SIL-5THEME C5 (2026-05-23) — returns purged_count for X2 telemetry.
+
+    Pre-PR: `None` 반환 (caller 가 무시했었음). 이제 ``purge_stale_model_switch_acks``
+    의 count 를 forward 해서 update_model_async 가 ``MODEL_SWITCHED`` hook
+    payload 에 동봉 가능하게.
+    """
+    if loop.context.is_empty:
+        return 0
+    # v0.52.8 — strip stale "Understood. I am now <prev>" acks
+    # left by earlier model switches in the same session. Without
+    # this, the new model reads "I am gpt-5.4-mini" assistant
+    # messages and asserts the wrong identity (production
+    # incident 2026-04-27 — gpt-5.5 answered "I am gpt-5.4-mini").
+    purged = loop._purge_stale_model_switch_acks()
+    loop.context.add_user_message(
+        f"[system] Model switched: {old_model} -> {model}. "
+        "You are now the new model. Do not reference the previous "
+        "model's responses as current state."
+    )
+    loop.context.add_assistant_message(f"Understood. I am now {model}.")
+    return purged
 
 
 async def update_model_async(
@@ -154,6 +162,14 @@ async def update_model_async(
         from core.ui.agentic_ui import emit_model_switched
 
         emit_model_switched(old_model, model, reason)
+
+        # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. breadcrumb +
+        # stale-ack purge 가 끝난 *후* MODEL_SWITCHED 발화 → payload 에
+        # purged_count 동봉 가능. 이전엔 trigger 가 breadcrumb 보다 먼저
+        # 발화돼 purge 정보가 hook 에 안 들어갔다. operator 가
+        # v0.52.5-style stale-ack 회귀를 stream 으로 추적 가능.
+        purged_count = _inject_model_switch_breadcrumb(loop, old_model, model)
+
         if loop._hooks:
             from core.hooks import HookEvent
 
@@ -163,16 +179,18 @@ async def update_model_async(
                     "from_model": old_model,
                     "to_model": model,
                     "reason": reason,
+                    # PR-SIL-5THEME C5 — D4 X2 telemetry 의 stale-ack
+                    # 카운트. 0 면 첫 switch / clean 상태, ≥1 이면 직전
+                    # switch 의 ack 가 history 에 남아 있던 상태.
+                    "purged_ack_count": purged_count,
                 },
             )
-
-        _inject_model_switch_breadcrumb(loop, old_model, model)
 
     # Proactively adapt context for the new model's context window
     loop._adapt_context_for_model(model)
 
 
-def purge_stale_model_switch_acks(loop: AgenticLoop) -> None:
+def purge_stale_model_switch_acks(loop: AgenticLoop) -> int:
     """Remove prior ``Understood. I am now <prev_model>.`` assistant acks.
 
     v0.52.8 — added after a production incident where gpt-5.5 (post
@@ -189,16 +207,25 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> None:
     silently survived. Conservative: only matches the exact
     ``Understood. I am now `` prefix we ourselves emit, in either
     representation. Never touches user content.
+
+    PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. Returns purged
+    count so caller can forward to ``MODEL_SWITCHED`` hook payload.
+    이전엔 silent — operator 가 stale-ack purge fire 여부 추적 불가
+    (v0.52.5 같은 incident 의 회귀 발견이 매번 production debug 필요).
+    Backward compat: 기존 caller 가 ``None`` 반환 가정한 경우 없음
+    (이 함수는 caller 가 결과 무시했었음).
     """
     msgs = loop.context.messages
     prefix = "Understood. I am now "
     kept: list[Any] = []
+    purged = 0
     for msg in msgs:
         if msg.get("role") != "assistant":
             kept.append(msg)
             continue
         content = msg.get("content", "")
         if isinstance(content, str) and content.startswith(prefix):
+            purged += 1
             continue
         if isinstance(content, list):
             # Block-form (Anthropic / multimodal): drop the message
@@ -207,10 +234,12 @@ def purge_stale_model_switch_acks(loop: AgenticLoop) -> None:
             if any(
                 isinstance(b.get("text"), str) and b["text"].startswith(prefix) for b in text_blocks
             ):
+                purged += 1
                 continue
         kept.append(msg)
     msgs.clear()
     msgs.extend(kept)
+    return purged
 
 
 def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:

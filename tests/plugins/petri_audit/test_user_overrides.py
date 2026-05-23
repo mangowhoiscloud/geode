@@ -232,7 +232,11 @@ source = "api_key"
             petri={
                 "auditor": SimpleNamespace(
                     model="new-from-config-toml",
-                    source="claude-cli",
+                    source="openai-codex",  # PR-SIL-5THEME C6 — non-default
+                    # subscription source. ``claude-cli`` 가 새 default 라
+                    # known defaults filter 에 걸려서 explicit override 로
+                    # surface 하려면 다른 값 필요. ``api_key`` 는 PR-SIL-5THEME
+                    # C6 로 Source literal 에서 제거됐다.
                     fallback_to_payg=None,
                 )
             }
@@ -240,7 +244,7 @@ source = "api_key"
     )
     override = uo.read_role_override("auditor")
     assert override["model"] == "new-from-config-toml"
-    assert override["source"] == "claude-cli"
+    assert override["source"] == "openai-codex"
 
 
 def test_read_role_override_falls_back_to_petri_toml(
@@ -416,7 +420,7 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
         session_id="s-legacy",
         gen_tag="gen-legacy",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
     # Force the lazy import inside _read_role_from_self_improving_loop to fail
@@ -459,7 +463,7 @@ def test_read_role_no_emit_when_self_improving_loop_available(
         session_id="s-newpath",
         gen_tag="gen-newpath",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     with session_journal_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")

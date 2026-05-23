@@ -68,7 +68,20 @@ __all__ = [
 ]
 
 
-Source = Literal["claude-cli", "openai-codex", "api_key", "auto"]
+# PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure. PAYG (``api_key``)
+# 가 ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` 의 Literal
+# 에서 제거됨 (durable operator decision per ``project_payg_exclusion_decision.md``,
+# 2026-05-23) — autoresearch / Petri audit 의 provider 선택지에서 영구
+# exclude. 잔존 옵션: ``claude-cli`` (Claude Code Max OAuth) /
+# ``openai-codex`` (ChatGPT Plus OAuth) / ``auto`` (manifest cascade).
+# ``api_key`` 설정 시 Pydantic ValidationError 가 명시 PAYG 사용을 reject
+# — PR-C-P1 의 silent-fallback 차단 패턴 재사용.
+#
+# **인프라 보존**: ``MutatorConfig.source`` (line 248 의 별도 Literal) 는
+# api_key 포함 4-element 유지 — mutator LLM 호출은 audit role 과 별개,
+# operator 가 Anthropic API key 로 mutator 운영 자유. ``credential_source.py``
+# 의 PAYG fallback 코드 경로도 보존 (다른 caller 가 명시 호출 시 활성).
+Source = Literal["claude-cli", "openai-codex", "auto"]
 """Credential source label — matches ``plugins.petri_audit.petri.plugin.toml``."""
 
 
@@ -144,7 +157,13 @@ class PetriRoleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str = ""
-    source: Source = "auto"
+    # PR-SIL-5THEME C6 (2026-05-23) — default ``auto`` → ``claude-cli``.
+    # operator decision (``project_payg_exclusion_decision.md``, 2026-05-23)
+    # 으로 subscription-first 가 새 default. ``auto`` 는 manifest cascade
+    # 가 PAYG 까지 fallback 할 수 있어서 silent leak risk — 명시
+    # ``claude-cli`` (Claude Code Max OAuth) 이 default 면 leak 0. operator
+    # 가 explicit 으로 ``auto`` 또는 ``openai-codex`` 명시 시 그대로 적용.
+    source: Source = "claude-cli"
 
 
 class AutoresearchConfig(BaseModel):
@@ -186,11 +205,18 @@ class AutoresearchConfig(BaseModel):
     ``[self_improving_loop.petri.judge].model`` via the binding
     registry; this field is silently ignored. Will be dropped in a
     future release once operator configs are migrated."""
-    source: Source = "auto"
-    """Credential source for the audit subprocess. ``auto`` =
-    subscription-first with PAYG fallback per the global
-    ``fallback_to_payg`` flag. The argv translator maps non-``api_key``
-    sources to ``--use-oauth`` for the audit subprocess."""
+    # PR-SIL-5THEME C6 (2026-05-23) — default ``auto`` → ``claude-cli``.
+    # Operator decision (``project_payg_exclusion_decision.md``, 2026-05-23)
+    # 으로 ``api_key`` 는 ``Source`` literal 에서 제거. ``auto`` 는 manifest
+    # cascade 가 PAYG 까지 silent fallback 가능 → ``claude-cli`` (Claude
+    # Code Max OAuth) 가 새 default.
+    source: Source = "claude-cli"
+    """Credential source for the audit subprocess. PR-SIL-5THEME C6 후 PAYG
+    (``api_key``) 는 Source literal 에서 제거. ``claude-cli`` = Claude Code
+    Max OAuth (default), ``openai-codex`` = ChatGPT Plus OAuth, ``auto`` =
+    manifest cascade (subscription-first, ``fallback_to_payg`` 가 True 여야
+    PAYG 까지 fallback). argv translator 가 non-``api_key`` source 를
+    ``--use-oauth`` 로 매핑 (모든 source 가 이제 non-api_key 라 항상 fire)."""
     seed_limit: Annotated[int, Field(ge=5, le=1000)] = 10
     """Per-audit seed count — the N that ``dim_extractor._aggregate``
     feeds into ``statistics.stdev(ddof=1)``.

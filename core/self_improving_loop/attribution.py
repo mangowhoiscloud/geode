@@ -175,6 +175,8 @@ def compute_attribution(
     baseline_before: BaselineSnapshot | None,
     baseline_after: BaselineSnapshot | None,
     confidence_trajectory: list[float] | None = None,
+    fitness_before: float | None = None,
+    fitness_after: float | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -209,6 +211,15 @@ def compute_attribution(
         "confidence_trajectory": trajectory,
         "confidence_stability": stability,
     }
+    # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
+    # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
+    # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
+    # 명시되면 fitness_delta = after - before 계산해서 payload 에 동봉.
+    # 부재 시 키 자체 미출현 (legacy reader 무영향).
+    if fitness_before is not None and fitness_after is not None:
+        payload["fitness_before"] = round(float(fitness_before), 6)
+        payload["fitness_after"] = round(float(fitness_after), 6)
+        payload["fitness_delta"] = round(float(fitness_after) - float(fitness_before), 6)
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -250,6 +261,8 @@ def write_attribution(
     baseline_after: BaselineSnapshot | None,
     confidence_trajectory: list[float] | None = None,
     log_path: Path | None = None,
+    fitness_before: float | None = None,
+    fitness_after: float | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -261,6 +274,11 @@ def write_attribution(
     PR-E (2026-05-21) — accepts the optional
     ``confidence_trajectory`` and forwards it to
     :func:`compute_attribution`.
+
+    PR-SIL-5THEME C4 (2026-05-23) — ``fitness_before`` / ``fitness_after``
+    optional forward to ``compute_attribution`` — caller (autoresearch
+    run loop / scheduler) 가 둘 다 in-scope 일 때 (e.g. previous
+    audit's promoted fitness + current audit's fitness) 전달.
     """
     payload = compute_attribution(
         mutation_id=mutation_id,
@@ -268,6 +286,8 @@ def write_attribution(
         baseline_before=baseline_before,
         baseline_after=baseline_after,
         confidence_trajectory=confidence_trajectory,
+        fitness_before=fitness_before,
+        fitness_after=fitness_after,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload

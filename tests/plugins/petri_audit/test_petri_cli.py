@@ -155,9 +155,17 @@ def test_set_model_missing_args(captured):
 
 
 def test_set_source_updates_override(captured, monkeypatch):
+    """PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure 후 ``api_key``
+    가 Source literal 에서 제거됐다. Test 가 explicit override 의 SAVE +
+    READ round-trip 을 verify — ``openai-codex`` (non-default subscription
+    source) 으로 explicit override 시 read 가 그대로 반환."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    cmd_petri("source auditor api_key")
-    assert uo.read_role_override("auditor") == {"source": "api_key"}
+    # Switch auditor's default model to GPT-5 first (so openai-codex source
+    # is provider-compatible — auditor manifest default is claude-*).
+    cmd_petri("model auditor gpt-5.5")
+    cmd_petri("source auditor openai-codex")
+    override = uo.read_role_override("auditor")
+    assert override.get("source") == "openai-codex"
 
 
 def test_set_source_rejects_invalid(captured):

@@ -395,7 +395,7 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
     work begins. Verifies the outer-scope wiring introduced in PR-P2."""
     import json
 
-    journal_path = tmp_path / "journal.jsonl"
+    journal_path = tmp_path / "transcript.jsonl"
     with (
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
@@ -432,7 +432,7 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
 
 
 def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
-    journal_path = tmp_path / "journal.jsonl"
+    journal_path = tmp_path / "transcript.jsonl"
     from core.observability import SessionJournal as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
@@ -463,7 +463,7 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
 def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -> None:
     """The dominant pre-PR observability gap — preflight error path now
     surfaces the structured issue list before exit code 1."""
-    journal_path = tmp_path / "journal.jsonl"
+    journal_path = tmp_path / "transcript.jsonl"
     bad_report = PreFlightReport(
         issues=[
             PreFlightIssue(
@@ -518,7 +518,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
 
 def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
-    journal_path = tmp_path / "journal.jsonl"
+    journal_path = tmp_path / "transcript.jsonl"
     from core.observability import SessionJournal as RealJournal
 
     def _bind(**kwargs: Any) -> Any:

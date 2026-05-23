@@ -140,7 +140,7 @@ def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
                 elapsed_s=3.45,
                 error_type="InternalServerError",
             )
-        rows = (real_tmp / "s-retry" / "journal.jsonl").read_text().splitlines()
+        rows = (real_tmp / "s-retry" / "transcript.jsonl").read_text().splitlines()
         assert len(rows) == 1
         record = json.loads(rows[0])
         assert record["event"] == "llm_retry"
@@ -190,7 +190,7 @@ def test_on_retry_overloaded_emits_warn_level(monkeypatch: Any) -> None:
                 elapsed_s=0.5,
                 error_type="OverloadedError",
             )
-        rows = (real_tmp / "s-529" / "journal.jsonl").read_text().splitlines()
+        rows = (real_tmp / "s-529" / "transcript.jsonl").read_text().splitlines()
         record = json.loads(rows[0])
         assert record["event"] == "llm_retry"
         assert record["level"] == "warn"

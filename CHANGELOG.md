@@ -47,6 +47,170 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.42] - 2026-05-23
+
+> Observability central-isation release. ``SessionMetrics`` 신설 (Tier 2 of
+> 3-Tier preservation), ``SessionJournal`` → ``SessionTranscript`` alias-
+> shim 흡수, ``journal/`` directory depth 축소. PR-SIL-5THEME C4 의 sidecar
+> race 가 SessionMetrics ContextVar 단일 객체로 흡수되며 영구 해소. +15
+> tests (6834 → 6849).
+
+### Added
+
+- **`SessionMetrics` — session-scoped state aggregator (Tier 2 of 3-Tier
+  preservation architecture)**. Centralises ~13 scattered session-scoped
+  state (LLM cost / tool calls / provider routing / failover counts /
+  mutation lifecycle / Goodhart surface) into a single ContextVar-bound
+  dataclass at ``core/observability/session_metrics.py``.
+
+  **Frontier 정렬** — Claude Code ``AgentLoopState.totalUsage`` +
+  Hermes ``sessions`` SQLite table column shape + Paperclip ``usageJson``
+  JSONB column schema 의 cumulative aggregate grain 일치. Hermes 의
+  ``_SESSION_ID: ContextVar`` family 와 같은 multi-session 격리 패턴.
+
+  **C4 sidecar 흡수** — PR-SIL-5THEME C4 의 ``_LAST_LLM_CALL_USAGE``
+  module-level dict + PR-C4.fix-contextvar 의 ``ContextVar[dict]`` +
+  ``_UsageProxy`` shim 전부 SessionMetrics 의 ``last_call_input_tokens
+  / last_call_output_tokens / last_call_elapsed_seconds / last_call_model``
+  4-field snapshot 으로 흡수. propose() 가 같은 ContextVar 안에서
+  ``current_session_metrics()`` 호출로 race 가능성 0. PR #1530 의 flaky
+  test fail 해소.
+
+  **API**:
+  - ``current_session_metrics()`` — ContextVar lazy-init lookup
+  - ``session_metrics_scope(session_id, gen_tag, component)`` — context
+    manager binding (mirrors ``session_journal_scope``)
+  - ``SessionMetrics.accumulate_llm_call(...)`` — per-call additive
+  - ``SessionMetrics.increment_tool_call() / increment_mutation() /
+    record_retry() / record_circuit_breaker_trip() / record_error() /
+    record_rollback() / record_goodhart()`` — counter mutation
+  - ``SessionMetrics.to_session_row()`` — sessions.jsonl persistence shape
+
+  **15 new tests** (`tests/test_session_metrics.py`):
+  defaults / accumulate additive + last-call overwrite / reset_last_call
+  preserves cumulative / 5 counter APIs / persistence shape / ContextVar
+  lifecycle (lazy / nested isolation / exception restore) / C4 integration.
+
+### Changed
+
+- **`SessionJournal` → `SessionTranscript` 흡수, ``journal/`` directory
+  depth 제거**. Pre-existing 3-Tier preservation 아키텍처가
+  ``core/runtime_state/transcript.py`` docstring 에 이미 정의돼 있었으나
+  ``SessionJournal`` (의도된 Tier 2 자리) 가 실제로는 self-improving-loop
+  의 *별도 Tier 1 event log* 로 운영 중이었다 — 두 객체가 schema /
+  path / API 가 다른 채 공존. 본 PR 이 정합 회복:
+
+  - ``core/observability/session_journal.py`` → thin alias-shim 으로 축소
+    (269 callsite 변경 0). ``SessionJournal.append(event, payload=...)``
+    가 ``SessionTranscript.record_lifecycle_event(...)`` 로 delegating
+  - ``SessionTranscript`` 에 ``record_lifecycle_event`` 메서드 신설 —
+    free-form event + ``{ts, session_id, gen_tag, component, level,
+    event, payload}`` 스키마로 기존 Journal 사용자 보존
+  - file 이름 ``journal.jsonl`` → ``transcript.jsonl`` (mass rename, 269
+    reference)
+  - 디렉터리 depth 축소: ``~/.geode/journal/transcripts/<slug>/<id>.jsonl``
+    → ``~/.geode/transcripts/<slug>/<id>.jsonl``. ``GLOBAL_JOURNAL_DIR``
+    이름은 ``GLOBAL_TRANSCRIPTS_DIR`` 의 backward-compat alias 유지
+  - ``core/cli/cmd_lifecycle.py`` 의 disk usage label ``"journal"`` →
+    ``"transcripts"`` 정렬
+
+  **3-Tier 최종**:
+
+  ```
+  Tier 1  SessionTranscript   (append-only event log) — transcripts/*.jsonl
+  Tier 2  SessionMetrics      (cumulative aggregate) — sessions.jsonl row
+  Tier 3  SessionCheckpoint   (pipeline state) — state.json
+  ```
+
+  Frontier 명명 정렬 — Claude Code ``transcript`` / OpenClaw
+  ``transcript`` / Hermes ``messages`` 의 Tier-1 일치. ``journal`` 의
+  일반 명사 모호성 해소.
+
+## [0.99.41] - 2026-05-23
+
+> SIL 5-theme closure release. Bench S6b production wiring + ADR-012 §S6/§S6b
+> amendment + P3 modality 가중 분리 + E1 mutation cost ledger + D4 X2
+> telemetry + D1 PAYG exclusion enforcement. PR #1524 (6 commits + plan + fix
+> up). +176 new tests (6658 → 6834).
+
+### Changed
+
+- **PR-SIL-5THEME C6 — D1 provider B/C closure (PAYG exclusion enforcement)**.
+  Operator decision (durable memory `project_payg_exclusion_decision.md`,
+  2026-05-23) 으로 autoresearch / Petri audit 의 provider 선택지에서
+  PAYG (Anthropic API key 직접 결제, `api_key`) 영구 exclude. 잔존 옵션:
+  `claude-cli` (Claude Code Max OAuth) / `openai-codex` (ChatGPT Plus
+  OAuth) / `auto` (manifest cascade). 잔존 인프라 코드 (`auth.toml`,
+  BillingError panel, `default_plan_for_payg`) 는 보존.
+
+  **`Source` literal narrowing**:
+  `Literal["claude-cli", "openai-codex", "api_key", "auto"]` →
+  `Literal["claude-cli", "openai-codex", "auto"]`. Operator 가
+  `~/.geode/config.toml` 에 `source = "api_key"` 명시 시 Pydantic
+  ValidationError 발화 + 어느 값이 invalid 인지 명시 (PR-C-P1 의
+  silent-fallback 차단 패턴 재사용). 분리된 `MutatorConfig.source`
+  (line 248 의 별도 Literal) 은 `api_key` 포함 4-element 유지 — mutator
+  LLM 호출은 audit role 과 별개, operator 가 Anthropic API key 로
+  mutator 운영 자유.
+
+  **Default change**: `PetriRoleConfig.source` + `AutoresearchConfig.source`
+  + `autoresearch/train.py:SOURCE` 모두 default `"auto" → "claude-cli"`.
+  `auto` 는 manifest cascade 가 silent PAYG fallback 가능 (`fallback_to_payg`
+  True 일 때) → 명시 `claude-cli` default 면 leak 0. operator 가 explicit
+  으로 `"auto"` 또는 `"openai-codex"` 명시 시 그대로 적용.
+
+  **`check_subscription_cli_for_source` pre-flight** (신규,
+  `autoresearch/prepare.py`): `source` setting 이 `claude-cli` 또는
+  `openai-codex` 일 때 해당 CLI binary 의 PATH 가용성 검증. 부재 시
+  actionable error (`GEODE_CLAUDE_CLI_BIN` / `GEODE_CODEX_CLI_BIN` env
+  override hint 포함). `auto` source 는 cascade 가 fallback 책임이라
+  pre-flight skip.
+
+  **`_read_role_from_self_improving_loop` 의 ValidationError graceful
+  fallback**: 기존 operator config 가 `source = "api_key"` 가진 채로
+  load 시 ValidationError 발화 → petri standalone CLI 의 user_overrides
+  read 는 graceful 하게 legacy `petri.toml` 로 fallback (`petri_role_legacy_fallback`
+  event emit 으로 추적 가능). autoresearch / mutator 의 직접 호출은
+  여전히 ValidationError 가 의도된 surface — 두 경로 의 의도 분리.
+
+  **Known-defaults filter expansion**: `_read_role_from_self_improving_loop`
+  의 source 필터가 `"auto"` 외 `"claude-cli"` 도 known-defaults set 에
+  추가 — override output 이 operator-explicit override 만 surface (default
+  값이 silent 하게 노출 안 됨). explicit `"claude-cli"` 설정의 silent corner
+  는 minor UX nit (효과 동일).
+
+  **Test guards** (`tests/test_d1_provider_closure.py` 신규, 14 tests):
+  - `Source` literal — `api_key` Pydantic reject (PetriRoleConfig +
+    AutoresearchConfig, 2 tests)
+  - 3 valid sources (`claude-cli` / `openai-codex` / `auto`) 수락 (3 tests)
+  - Default `claude-cli` (PetriRoleConfig + AutoresearchConfig, 2 tests)
+  - `check_subscription_cli_for_source` pre-flight: missing binary
+    actionable error (claude-cli + openai-codex), env override wins,
+    auto skip, unknown source graceful (5 tests)
+  - 4-backend matrix: `api_key` reject + 3 valid accept (2 tests for
+    both configs)
+
+  **Existing test updates**:
+  - `test_autoresearch_defaults_match_train_module` — expect `source ==
+    "claude-cli"` (was `"auto"`)
+  - `test_load_reads_autoresearch_subsection` — expect `source ==
+    "claude-cli"` for untouched field
+  - `test_petri_role_default_source_is_auto` → renamed
+    `test_petri_role_default_source_is_subscription_first` — expect
+    `claude-cli`
+  - `test_set_source_updates_override` (petri CLI) — use `"openai-codex"`
+    instead of `"api_key"` (latter rejected by Pydantic)
+  - `test_read_role_override_prefers_self_improving_loop` — use
+    `"openai-codex"` non-default source
+
+  **Backward compat**: `Mutator` source literal (mutator LLM, distinct
+  from audit roles) preserved with `api_key` — operator can still use
+  Anthropic API for mutator. `credential_source.py` 의 PAYG fallback
+  코드 경로 보존 (다른 caller 가 명시 호출 시 활성). 기존 `config.toml`
+  의 `api_key` 설정 operator: petri standalone CLI 는 graceful (legacy
+  fallback + telemetry event), autoresearch 직접 호출은 actionable
+  ValidationError 로 migrate 안내.
+
 ## [0.99.40] - 2026-05-23
 
 ### Added
@@ -158,6 +322,272 @@ functional change.
   translated to the adapter Protocol's ``payg`` / ``subscription`` /
   ``adapter`` names via a single SoT table — both naming schemes are
   accepted in ``[seed_generation.role.<role>]`` overrides.
+- **PR-SIL-5THEME C5 — D4 X2 system-prompt model-identity injection telemetry**.
+  `HookEvent.PROMPT_ASSEMBLED` 가 `core/hooks/system.py:69` 에 정의됐
+  으나 fire 0회 였다 — X2 injection (Option B 의 단일-line model
+  identity statement, `core/agent/system_prompt.py:337`) 이 매 round
+  마다 발화하지만 관측 marker 0. v0.52.5-style stale-ack 회귀 발생 시
+  production debug 필요했다. C5 가 두 wiring point 활성:
+
+  **Wiring 1 — `_sync_model_and_rebuild_prompt` 가 PROMPT_ASSEMBLED 발화**.
+  System prompt rebuild 후 (drift detected OR prompt_dirty=True) hook
+  발화. Payload: `{model, provider, reason: "model_drift" | "prompt_dirty",
+  x2_injected: True, prompt_len}`. `_hooks` 부재 시 (stub loop / hook
+  system 미초기화) graceful skip — backward compat.
+
+  **Wiring 2 — `_inject_model_switch_breadcrumb` 의 purged_count
+  forward**. `purge_stale_model_switch_acks` 가 이전엔 `None` 반환했
+  으나 이제 purged ack 의 count (int). `_inject_model_switch_breadcrumb`
+  도 그 count 를 forward → `update_model_async` 가 `MODEL_SWITCHED`
+  hook payload 에 `purged_ack_count` 동봉. v0.52.5 incident style 회귀
+  (gpt-5.5 가 "I am gpt-5.4-mini" 식으로 식별 잘못) 발생 시 stream 으
+  로 추적 가능. Trigger 순서도 변경 — breadcrumb 가 끝난 *후* hook 발화
+  (이전엔 trigger 가 먼저였어서 purge 정보가 hook 에 안 들어갔다).
+
+  **`purge_stale_model_switch_acks` 의 return type 변경**: `None → int`.
+  Caller (이 PR 의 `_inject_model_switch_breadcrumb`) 만 활용, 기타
+  caller 는 결과 무시 (backward compat 보장 — return 값 무시는
+  Python 의 silent 동작).
+
+  **Test guards** (`tests/test_d4_x2_telemetry.py` 신규, 11 tests):
+  - `purge_stale_model_switch_acks` returns count: zero / str-form acks /
+    block-form acks (Anthropic) / user message untouched (4 tests)
+  - `_inject_model_switch_breadcrumb` forwards count: empty context → 0 /
+    non-empty with stale ack → count (2 tests)
+  - `update_model_async` fires `MODEL_SWITCHED` with `purged_ack_count`
+    payload (1 test, full async path)
+  - `_sync_model_and_rebuild_prompt` fires `PROMPT_ASSEMBLED`: drift case /
+    prompt_dirty case / no rebuild case / no hooks case (4 tests)
+
+  **Anti-deception**: existing `tests/test_arun_model_drift_sync.py` 의
+  6 tests 는 `_StubLoop` 가 `_hooks` 미정의 — `getattr(self, "_hooks",
+  None)` graceful default 로 기존 stub 호환성 보존.
+
+### Added
+
+- **PR-SIL-5THEME C4 — E1 mutation cost ledger**. `mutations.jsonl` 가
+  git-tracked 으로 존재 (PR-G5b #1350 의 deception fix 으로 보장) 했으나
+  cost 컬럼이 0건이라 operator 가 mutation ROI (cost vs fitness Δ) 볼
+  수 없던 silent disconnect 닫음. 3-step wiring:
+
+  **Step 1 — `_default_llm_call` 의 usage capture**. 이전엔
+  `response, _used_model = asyncio.run(call_with_failover(...))` 에서
+  `_used_model` 만 받고 `response.usage` (`ResponseUsage` dataclass 의
+  `input_tokens` / `output_tokens`) 가 폐기됐다. 이제 module-level
+  sidecar dict (`_LAST_LLM_CALL_USAGE`) 에 호출 직후 `input_tokens` /
+  `output_tokens` / `elapsed_seconds` / `model` 4-field 적재. 같은
+  process 내 단일-threaded propose() 사이클이라 threading.local 불필요
+  (concurrent runner 가 미래 surface 시 교체).
+
+  **Step 2 — `propose()` 의 sidecar consumption**. `_reset_last_llm_call_usage`
+  로 직전 잔여 clear → `self.llm_call(...)` → `_consume_last_llm_call_usage`
+  로 atomic snapshot read-and-clear → `dataclasses.replace` 로 frozen
+  `Mutation` 의 cost 4-field 채워서 새 instance 생성. Mock LLM (test
+  inject) 는 sidecar 채우지 않음 → cost field 가 default 0 / "" 유지 →
+  `to_audit_row()` 가 cost 컬럼 자체 omit (legacy reader 무영향).
+
+  **Step 3 — `compute_attribution` 의 `fitness_delta` 추가**. 새
+  `fitness_before` / `fitness_after` optional kwarg 받음. 둘 다 명시
+  되면 `payload["fitness_before"]` / `payload["fitness_after"]` /
+  `payload["fitness_delta"]` (6 decimal round) 3-key emit. caller 가
+  baseline.json 의 직전 + 현재 fitness scalar 를 둘 다 hand 에 들고 있
+  을 때만 fire (autoresearch run loop / scheduler 가 활용). 부재 시
+  키 자체 미생성.
+
+  **`Mutation` dataclass 확장**:
+  - `cost_input_tokens: int = 0`
+  - `cost_output_tokens: int = 0`
+  - `cost_elapsed_seconds: float = 0.0`
+  - `cost_model: str = ""`
+  - 모두 default 0 / "" → backward-compat. `Mutation` 이 `frozen=True`
+    이라 cost 채우려면 `dataclasses.replace` 사용해야 함 (propose()
+    가 그렇게 함).
+
+  **`to_audit_row()` 의 selective emit**: cost 0 / "" 일 때 row 의
+  cost_* 키 자체 미생성 — JSONL noise 절감 + legacy reader (cost
+  컬럼 부재 시 0 / "" 가정) 무영향. `cost_input_tokens` 와
+  `cost_output_tokens` 는 atomic — 하나만 emit 되는 partial state 없음.
+
+  **`write_attribution` convenience wrapper** — `fitness_before` /
+  `fitness_after` kwarg 동봉 forward (caller 가 `write_attribution`
+  하나로 끝낼 수 있게).
+
+  **Test guards** (`tests/test_e1_mutation_cost_ledger.py` 신규, 14
+  tests):
+  - `Mutation` default cost field state (0 / "" 4-field)
+  - `to_audit_row` cost 0 → 컬럼 omit / cost set → 컬럼 emit / partial
+    (elapsed_seconds 만) 분리 처리
+  - `_LAST_LLM_CALL_USAGE` sidecar lifecycle: `_reset` clears, `_consume`
+    returns-and-clears atomic, empty when unset
+  - `propose()` mock LLM (sidecar 미채움) → cost default / production-
+    style usage sidecar → cost populated / stale sidecar 잔여 차단
+  - `compute_attribution` fitness emit: 둘 다 명시 → 3-key + Δ /
+    부재 → 키 미생성 / only-before → 키 미생성 (Δ 계산 불가) /
+    regression scenario (after < before) → 음수 Δ
+
+  **anti-deception**: PR-G5b #1350 의 "git-tracked audit log" 주장은
+  유효 — 이 PR 이 컬럼만 채워 넣음. `mutations.jsonl` path 자체는
+  `core/paths.py` 에 정착, .gitignore-clean (PR-RATCHET-1 의
+  ``tests/test_ratchet_policies_in_repo.py::test_policy_files_not_gitignored``
+  invariant 으로 pinned).
+
+### Added
+
+- **PR-SIL-5THEME C3 — P3 modality 가중 분리**. `core/audit/dim_extractor`
+  가 PR-1 으로 per-dim `measurement_modality` 를 emit 했으나
+  `compute_fitness` / `_should_promote` 는 그 신호를 0% 사용하던
+  silent disconnect 닫기.
+
+  **Why** — `_ANALYTICS_MODALITY` 는 2 auxiliary dim
+  (`verbose_padding` + `redundant_tool_invocation`) 만 analytics
+  modality 로 tag (나머지 18 dim 은 `judge_llm`). 두 modality 는 노이즈
+  특성이 다르다:
+  - **judge_llm**: LLM-as-judge stochastic rubric — N 에 비례한 sample
+    stderr, N=5+ 가 의미 있는 신호 floor (PR-C-P1)
+  - **analytics**: transcript regex / token count / tool log 의
+    deterministic 추출 — N=1 에서도 sample 간 분산이 진짜 0 가능
+
+  modality-blind 가중치는 (a) analytics 의 좁은 신호 폭을 judge_llm 의
+  full-weight 로 받아 fitness reproducibility dilute, (b) N=1 widening
+  guard (PR-3) 가 analytics 의 deterministic stderr=0 을 under-sampled
+  stderr=0 과 conflate.
+
+  **Changed**:
+  - `ANALYTICS_WEIGHT_MULTIPLIER = 0.5` + `DIM_MODALITY_WEIGHT_MULTIPLIER`
+    dispatch dict — analytics modality 의 dim weight 0.5× scale
+  - `_dim_weight_with_modality(dim, measurement_modality)` 헬퍼 — base
+    `DIM_WEIGHTS[dim]` × modality multiplier
+  - `compute_fitness(..., measurement_modality: dict[str, str] | None)`
+    파라미터 추가 — None 이면 backward compat (legacy caller 무영향)
+  - `_should_promote(..., measurement_modality, baseline_measurement_modality)`
+    추가 + internal compute_fitness 3 호출에 forward
+  - N=1 widening guard 의 modality check 추가 — `JUDGE_LLM_MODALITIES`
+    (judge_llm + "") set 에 속하는 critical dim 만 widening 적용. analytics
+    critical 은 widening skip (deterministic stderr=0 이 잘못된 신호 아님).
+    Modality 부재 (v1 baseline) 시 보수적 default (judge_llm 가정) →
+    widening 유지
+  - 신규 `_load_baseline_measurement_modality()` — `_load_baseline_sample_count`
+    sibling, v2 schema 의 `raw.measurement_modality` 읽음. v1 → `{}`
+  - `main()` 가 modality dict 를 `compute_fitness` + `_should_promote` 에
+    forward
+
+  **Test guards** (`tests/test_p3_modality_weight_split.py` 신규, 19 tests):
+  - `ANALYTICS_WEIGHT_MULTIPLIER` 0-1 range invariant
+  - `DIM_MODALITY_WEIGHT_MULTIPLIER` 가 `dim_extractor._ANALYTICS_MODALITY` +
+    `DEFAULT_MODALITY` 의 emit 값 모두 cover (drift catch)
+  - `JUDGE_LLM_MODALITIES` 가 빈 문자열 포함 (legacy 안전)
+  - `_dim_weight_with_modality`: None / judge_llm / analytics / unknown
+    modality / unknown dim 모두 (5 tests)
+  - `compute_fitness` modality-blind backward compat
+  - analytics modality 명시 시 fitness 감소 (weight scaled)
+  - 모든 judge_llm 명시 시 modality-blind 와 동일
+  - `_should_promote` N=1 widening fires for judge_llm critical
+  - `_should_promote` N=1 widening skipped for ALL-analytics critical (가정
+    시나리오, future schema 확장 대비)
+  - `_should_promote` modality=None 시 보수적 default → widening 유지
+  - `N1_FITNESS_MARGIN_FLOOR == 0.20` pin
+  - `_load_baseline_measurement_modality`: missing file / v1 legacy / v2
+    raw namespace / malformed entries graceful (4 tests)
+
+### Added
+
+- **PR-SIL-5THEME C2 — Bench S6b production wiring**. ADR-012 §S6
+  (schema + math + cross-validation gate, C1 amendment 로 ADR 측 명세
+  완료) 의 production path 가 모두 silently 끊겼던 9 disconnect 를 닫
+  는 7-bench inspect_ai federation collector + 4-axis fitness 활성 +
+  Goodhart cross-validation gate fire + observability 4-axis 컬럼 확장.
+
+  **Collector 실구현** — ``autoresearch/bench_means.py`` 의
+  ``collect_bench_means_from_inspect_ai`` 가 placeholder
+  (``return None``) → ``BenchProvenance`` dataclass 반환으로 교체.
+  ``BENCH_PORT_MAP`` 7 entry (F1.b LCB-Pro substitution 반영) 가
+  ``inspect-evals`` 6 bench (``livecodebench_pro`` / ``tau2_telecom``
+  / ``gpqa_diamond`` / ``hle`` / ``osworld`` / ``mle_bench``) +
+  ``inspect-harbor`` 1 bench (``swebenchpro``) 로 dispatch.
+
+  **A1 graceful-skip 의 4 게이트** — (1) ``inspect-evals`` import
+  가용성, (2) ``inspect-harbor`` import 가용성, (3) Docker daemon 가용
+  (``swe_bench_pro_pass`` / ``osworld_success`` / ``mle_bench_medal``
+  의 sandbox 요구), (4) target_model 의 vision 지원
+  (``hle_accuracy`` 의 multi-modal items). 환경 부재 시 해당 bench
+  skip 후 ``missing_benches`` 에 등록 — Petri-side ``compute_missing_dims``
+  (PR-4) 와 symmetric Goodhart suppression surface.
+
+  **``GEODE_BENCH_S6B_LIVE`` env gate** — 기본 off (nominal smoke /
+  unit test / dry-run 환경 보호). ``=1`` 설정 시에만 실제
+  ``inspect_ai.eval`` subprocess fire. off 일 땐 모든 bench 가
+  ``missing_benches`` 에 등록돼 caller / journal / results.jsonl 모두
+  동일 시그널.
+
+  **4-axis fitness 활성 (silent disconnect 9 → 0)**:
+  - ``main()`` 가 ``run_audit`` 직후 collector 호출 →
+    ``compute_fitness(bench_means=current_bench, baseline_bench_means=...)``
+    4-axis 분기 firing path 활성 (이전엔 분기 정의돼 있으나 호출 0회)
+  - ``_baseline_provenance`` dict 에 ``bench_means`` + provenance
+    슬롯 추가 → ``_write_baseline`` 가 ``axes.bench_means`` +
+    ``raw.bench_stderr`` + ``raw.bench_sample_count`` +
+    ``raw.bench_rubric_version`` 영속화 (dim 측 PR-1 패턴 symmetric)
+  - ``_should_promote`` 가 internal ``compute_fitness`` 호출에 bench
+    forward → Goodhart cross-validation gate
+    (``alignment_only_fooling`` / ``capability_at_alignment_cost``) 가
+    promote 결정에 영향. conflict 발화 시 reason payload
+    (``cross-validation conflict (<type>)``) 가 ``promoted_line`` 에
+    surface — 이전엔 fitness=0 이 critical-axis vs cross-validation
+    인지 구분 불가
+  - ``format_results_jsonl_row`` 가 ``bench_means`` / ``bench_stderr``
+    / ``bench_sample_count`` / ``missing_benches`` /
+    ``bench_rubric_version`` 5 컬럼 emit + ``ux_means`` /
+    ``admire_means`` 컬럼 슬롯 (placeholder, S1b/S2b 후속) — cross-run
+    분석이 4-axis breakdown 을 baseline.json join 없이 읽기 가능
+  - OL-C1 eval emit (``eval_response_recorded``) 의
+    ``axis_scores["bench_means_aggregate"]`` 계산 출처를 baseline (이전
+    generation frozen) → ``bench_means_current`` (이번 audit) 로 교체
+    — M4.1 DPO pile 의 chosen/rejected pairing 의 stale signal 해소
+  - ``_emit_journal("per_dim_scores")`` payload 에
+    ``missing_benches`` + ``bench_rubric_version`` 동봉 (cohort 추적)
+
+  **의존성 추가** (``pyproject.toml [audit]`` extra):
+  - ``inspect-evals>=0.13.0`` — 6 bench cover (B1 grounding survey)
+  - ``inspect-harbor>=0.4.5`` — SWE-bench Pro
+
+  **Test guards** (``tests/test_s6b_bench_production_wiring.py`` 신규
+  + ``tests/test_s6_bench_means_fitness.py`` / ``tests/test_autoresearch_train.py`` 갱신):
+  - ``BENCH_PORT_MAP`` ↔ ``BENCH_DIM_WEIGHTS`` 7-key parity (drift 차단)
+  - ``BENCH_PORT_MAP`` 의 package 가 두 PyPI 패키지 중 하나임을 강제
+  - ``BENCH_REQUIRES_DOCKER`` / ``BENCH_REQUIRES_VISION`` subset
+    invariant
+  - ``BENCH_RUBRIC_VERSION`` non-empty (cohort tag 유효)
+  - ``BenchProvenance()`` default state
+  - ``compute_missing_benches`` empty / partial / None 입력 모두
+  - ``collect_bench_means_from_inspect_ai`` 가 ``BenchProvenance``
+    반환 + 7-field universe coverage (means ∪ missing = 7) + vision
+    gate (text-only 모델 → ``hle_accuracy`` missing)
+  - ``format_results_jsonl_row`` 가 bench_provenance 전달 시 5 컬럼
+    모두 emit + 7-field universe 보존 + sorted ``missing_benches`` +
+    rubric_version 보존
+  - ``format_results_jsonl_row`` legacy caller (provenance 미전달)
+    backward-compat — 7-field 0.0 default 채워서 schema 일관성
+  - ``_write_baseline`` 가 ``raw.bench_stderr`` /
+    ``raw.bench_sample_count`` / ``raw.bench_rubric_version`` 영속화
+  - ``_should_promote`` 의 ``alignment_only_fooling`` scenario —
+    dim promote + bench regress 시 promote 차단 + reason 에
+    ``cross-validation conflict (alignment_only_fooling)`` surface
+
+  **F1.b LCB-Pro substitution** (C1 의 amendment 와 grep-provable 일치):
+  ``BENCH_DIM_WEIGHTS`` 의 ``livecodebench_pass1`` →
+  ``livecodebench_pro_accuracy`` rename (weight 0.15 변동 없음).
+  ``BENCH_PORT_MAP[livecodebench_pro_accuracy] = ("inspect_evals",
+  "livecodebench_pro")`` dispatch path 도 갱신.
+
+  **Backward-compat 보장**:
+  - ``BenchProvenance`` field 모두 default factory 라 ``BenchProvenance()``
+    호출이 dry-run path 에서 안전
+  - ``format_results_jsonl_row`` 의 ``bench_provenance=None`` 기본값 →
+    legacy caller (PR-5 이전 코드) 가 빈 7-field default 로 schema
+    유지
+  - ``baseline.json`` 의 ``raw.bench_stderr`` 등 새 슬롯은
+    ``if bench_stderr:`` 조건부 write — empty 시 키 자체 미생성
+    (legacy reader 무영향)
 
 ### Changed
 
@@ -168,6 +598,61 @@ functional change.
   ``config.toml`` first; the legacy ``~/.geode/seed-generation.toml``
   is still honoured as a fallback with a one-time deprecation
   warning. Removal target: v1.0.0.
+
+- **PR-SIL-5THEME C1 — ADR-012 §Decision.2 의 3축 → 4축 amendment + §S6 /
+  §S6b 신설**. self-improving loop 의 fitness 명세 — ``dim_means`` (Petri
+  alignment, 음의 압력) 1축 외에 ``ux_means`` (S1, 양의 압력) +
+  ``admire_means`` (S2, 양의 압력) + ``bench_means`` (S6, capability 양의
+  압력) 추가 — 가 코드에는 (`autoresearch/train.py:344-350` 의
+  ``FITNESS_*_4AX`` 상수 + ``bench_means.py:91-101`` 의
+  ``BENCH_DIM_WEIGHTS``) 정착돼 있었으나 ADR 본문은 초안의 3축 상태로
+  남아있었다. 본 amendment 가 그 mismatch 를 정리:
+
+  - §Decision.2 의 "3축 multi-axis strict-reject ratchet" →
+    "**4축** multi-axis strict-reject ratchet" + baseline.json schema
+    가 ``schema_version=2`` 의 ``raw`` + ``axes`` namespace 로 갱신
+  - 축별 권장 가중치 ``dim 0.4 / ux 0.3 / admire 0.3`` (3축) →
+    ``dim 0.30 / ux 0.25 / admire 0.20 / bench 0.25`` (4축, sum=1.0)
+  - ``seed_pool_diversity`` 슬롯 — 초안에 4번째 묶음으로 명시됐으나 코드
+    0 grep, ELO tournament 의 cross-provider panel 이 diversity 신호 흡수 —
+    명시적 deprecate
+  - 신규 §S6 (Bench fitness axis) — 7-bench frontier federation 명세
+    (SWE-bench Pro / **LiveCodeBench-Pro** / τ²-bench / GPQA Diamond /
+    HLE / OSWorld / MLE-bench) + 2026-05 갱신 history + cross-validation
+    gate (alignment_only_fooling / capability_at_alignment_cost) +
+    frontier sources 10건
+  - 신규 §S6b (Production wiring) — collector / dispatcher / persistence /
+    observability / Docker A1 graceful-skip 명세
+  - "후속 PR 시퀀스" 표에 S6 + S6b 두 entry 추가
+
+  **F1.b LiveCodeBench substitution** — vanilla LiveCodeBench (Python
+  algorithmic, pass@1) 의 공식 inspect_ai port 가 부재한 상태에서
+  frontier consensus 가 ``livecodebench_pro`` (C++ competitive, accuracy
+  metric, live-contest scrape + time-cutoff windowing, 2026 v2 가 ICPC
+  WF/IOI/Chinese olympiad 추가) 로 그 niche 를 흡수. ``BENCH_DIM_WEIGHTS``
+  의 ``livecodebench_pass1`` → ``livecodebench_pro_accuracy`` 로 rename
+  (weight 0.15 변동 없음, metric 형식 변경은 0-1 float schema 무영향).
+  ``bench_means.py`` docstring 의 "LiveCodeBench (algo, contam-free)" →
+  "LiveCodeBench-Pro (C++ competitive, contam-defended, 2026 v2)" 로 갱신.
+
+  **Drift invariant 7건** (``tests/test_adr_012_parity.py`` 신규):
+  - ``test_adr012_decision2_header_says_4axis`` — 헤더 "4축" 명시
+  - ``test_adr012_decision2_weights_match_code_constants`` — ADR ↔ code
+    상수 4-axis 가중치 일치 (regex parse)
+  - ``test_adr012_deprecates_seed_pool_diversity`` — deprecate 명시 확인
+  - ``test_adr012_has_s6_section`` — §S6 헤더 존재 (docstring 인용 grep
+    provable 보장)
+  - ``test_adr012_s6_schema_field_names_match_code`` — §S6.2 표의 field
+    name 7개 모두 ``BENCH_DIM_WEIGHTS`` 와 일치
+  - ``test_adr012_s6_weights_match_bench_dim_weights`` — §S6.2 표의
+    weight column 이 코드 dict 와 byte-equivalent
+  - ``test_adr012_has_s6b_section`` — §S6b 헤더 존재
+  - ``test_adr012_pr_sequence_lists_s6_and_s6b`` — "후속 PR 시퀀스" 표가
+    S6 + S6b 모두 포함
+
+  Same anti-deception pattern as PR-G5b #1350 / PR-MINIMAL-2 #1398:
+  ADR 와 코드 docstring 사이의 grep-provable invariant 가 없으면 future
+  ADR 편집이 silent drift 를 부른다.
 
 - **PR-C-P1 — autoresearch ``seed_limit`` lower bound bumped from
   ``ge=1`` to ``ge=5``**. Pydantic now rejects any
