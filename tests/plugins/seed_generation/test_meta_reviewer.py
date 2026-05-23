@@ -221,3 +221,155 @@ def test_meta_reviewer_coverage_aggregates_target_dims() -> None:
     snapshot = manager.received_tasks[0].args["snapshot"]
     assert snapshot["coverage"]["broken_tool_use"] == 1
     assert snapshot["coverage"]["input_hallucination"] == 1
+
+
+# ── PR-CSP-13a — meta_reviewer reads state.debate_transcripts ─────────────
+
+
+def test_meta_reviewer_omits_debate_block_when_empty() -> None:
+    """``num_turns=0`` path: empty debate_transcripts → snapshot has no
+    ``debate_summary`` key and the description doesn't mention "Debate".
+
+    Pins read-write parity back-compat (Codex MCP MEDIUM fix-up): the
+    meta-reviewer prompt is byte-equivalent to pre-PR-CSP-13a behavior
+    when no debate ran. The snapshot dict is rendered into the worker's
+    "Parameters:" prompt line, so omitting the key entirely matters —
+    a ``debate_summary: None`` row would still break byte-equivalence.
+    """
+    state = _state_with_full_pipeline_data(3)
+    manager = _StubManager()
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "debate_summary" not in task.args["snapshot"]
+    assert "Debate (Loop 2)" not in task.description
+
+
+def test_meta_reviewer_filters_stale_debate_transcripts() -> None:
+    """Iteration cycle N≥1 — ``debate_transcripts`` accumulates entries
+    from prior iterations (PipelineState.merge uses dict.update), but
+    ``state.candidates`` was replaced on iteration promotion. The
+    summary must report only candidates in the *current* batch.
+    """
+    state = _state_with_full_pipeline_data(2)
+    # state.candidates ids look like ``cand-0``, ``cand-1`` per the fixture.
+    state.debate_transcripts = {
+        # Current batch — should count.
+        state.candidates[0]["id"]: [{"turn": 1, "speaker": "A", "content": "x"}],
+        # Stale — left over from a prior iteration's candidates pool.
+        "old-cand-from-iter-0": [{"turn": 1, "speaker": "A", "content": "ghost"}],
+    }
+    manager = _StubManager()
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    debate = task.args["snapshot"]["debate_summary"]
+    assert debate["candidates_with_debate"] == 1, (
+        "stale debate transcript leaked into current-iteration summary"
+    )
+    assert debate["sample_candidate_id"] == state.candidates[0]["id"]
+    assert "old-cand-from-iter-0" not in task.description
+
+
+def test_meta_reviewer_filters_all_stale_yields_no_block() -> None:
+    """Edge case — every transcript is stale → summary returns ``None``
+    and the description omits the block (back-compat preserved even
+    when the dict is non-empty)."""
+    state = _state_with_full_pipeline_data(2)
+    state.debate_transcripts = {
+        "old-cand-A": [{"turn": 1, "speaker": "A", "content": "x"}],
+        "old-cand-B": [{"turn": 1, "speaker": "B", "content": "y"}],
+    }
+    manager = _StubManager()
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    assert "debate_summary" not in task.args["snapshot"]
+    assert "Debate (Loop 2)" not in task.description
+
+
+def test_meta_reviewer_emits_debate_summary_when_populated() -> None:
+    """``num_turns >= 2`` path: snapshot carries aggregate counts; description
+    references the Loop 2 signal."""
+    state = _state_with_full_pipeline_data(3)
+    # Use the fixture's actual candidate ids so the staleness filter
+    # passes (Codex MCP MEDIUM fix-up).
+    cid0 = state.candidates[0]["id"]
+    cid1 = state.candidates[1]["id"]
+    # Two of the three candidates ran debates; pre-fill the state with the
+    # shape Generator writes via ``_read_debate_sidecars``.
+    state.debate_transcripts = {
+        cid0: [
+            {"turn": 1, "speaker": "A", "content": "x"},
+            {"turn": 2, "speaker": "B", "content": "y"},
+            {"turn": 3, "speaker": "A", "content": "z"},
+        ],
+        cid1: [
+            {"turn": 1, "speaker": "A", "content": "p"},
+            {"turn": 2, "speaker": "B", "content": "q"},
+        ],
+    }
+    manager = _StubManager()
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    debate = task.args["snapshot"]["debate_summary"]
+    assert debate is not None
+    assert debate["candidates_with_debate"] == 2
+    assert debate["total_turns"] == 5
+    assert debate["avg_turns"] == 2.5
+    # Deterministic sample picking — alphabetically first over filtered set.
+    assert debate["sample_candidate_id"] == min(cid0, cid1)
+    # Description references the debate signal so the LLM is forced
+    # to attribute its effect (per the system prompt's quality bar).
+    assert "Debate (Loop 2)" in task.description
+    assert "2 of 3 candidates" in task.description
+
+
+def test_meta_reviewer_debate_block_under_500_chars() -> None:
+    """Debate block must not blow the context budget — the snapshot is an
+    aggregate, not a transcript dump."""
+    state = _state_with_full_pipeline_data(3)
+    # Worst case: every current candidate has a max-budget (6-turn) debate.
+    # Use the fixture's actual ids so the staleness filter passes.
+    state.debate_transcripts = {
+        c["id"]: [
+            {"turn": t, "speaker": "A" if t % 2 else "B", "content": "x" * 500}
+            for t in range(1, 7)
+        ]
+        for c in state.candidates
+    }
+    manager = _StubManager()
+    asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    task = manager.received_tasks[0]
+    # Locate the debate block — everything between the first "Debate (Loop 2)"
+    # and the next sentence boundary. It must be small (the LLM should call
+    # read_document for the sidecar bodies if it wants the actual text).
+    desc = task.description
+    debate_start = desc.find("Debate (Loop 2)")
+    assert debate_start != -1
+    debate_block_len = len(desc) - debate_start
+    assert debate_block_len < 500, (
+        f"debate block grew to {debate_block_len} chars — aggregate must stay terse"
+    )
+
+
+def test_meta_reviewer_debate_summary_grep_provable_read_path() -> None:
+    """Read-write parity invariant: meta_reviewer.py must grep-prove that
+    it reads ``debate_transcripts``. Pins CSP-13a's closing of the
+    Phase 1 (PR #1504) Codex MCP MEDIUM defer."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[3]
+        / "plugins"
+        / "seed_generation"
+        / "agents"
+        / "meta_reviewer.py"
+    )
+    text = src.read_text(encoding="utf-8")
+    assert "debate_transcripts" in text, (
+        "meta_reviewer.py must reference debate_transcripts to close the "
+        "Loop 2 read-write parity gap"
+    )
+    assert "_debate_summary" in text
+
+
+# Reserved — unused JSON helper for follow-up debug ergonomics
+_ = json
