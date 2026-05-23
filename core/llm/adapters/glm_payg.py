@@ -1,14 +1,13 @@
-"""OpenAIPaygAdapter — PAYG (API-key) path to OpenAI models.
+"""GlmPaygAdapter — PAYG (api/paas/v4) endpoint for ZhipuAI GLM.
 
-Layer 3 adapter for OpenAI provider, source=payg. Owns its own
-``AsyncOpenAI`` client bound explicitly to ``OPENAI_API_KEY`` — bypasses the
-module-level singleton in ``core.llm.providers.openai`` which routes through
-``ProfileRotator`` and would prefer an OAuth profile if one existed. Codex
-MCP review 2026-05-23 flagged that singleton sharing as a BLOCKER for source
-isolation.
+Layer 3 adapter for the ``glm`` provider, source=payg. Uses
+``api.z.ai/api/paas/v4`` (PAYG, metered) with the API key in
+``settings.zai_api_key``. GLM speaks the OpenAI Chat Completions wire
+shape so the adapter reuses :mod:`core.llm.adapters._openai_common`
+helpers (``build_messages`` + ``translate_chat_response``).
 
-Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path) and
-:class:`CodexCliAdapter` (subprocess path).
+Pair with :class:`GlmCodingPlanAdapter` (same provider, subscription
+``api/coding/paas/v4`` endpoint). Codex MCP A2 (v0.99.44) Follow-up F.
 """
 
 from __future__ import annotations
@@ -40,11 +39,19 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class OpenAIPaygAdapter:
-    """PAYG-routed OpenAI adapter — owns its own AsyncOpenAI client."""
+class GlmPaygAdapter:
+    """PAYG-routed GLM adapter (api/paas/v4 endpoint).
 
-    name: str = "openai-payg"
-    provider: str = "openai"
+    Owns its own ``AsyncOpenAI`` client bound explicitly to
+    ``settings.zai_api_key`` + :data:`core.config.GLM_PAYG_BASE_URL` so a
+    subscription Coding Plan profile in :class:`ProfileStore` cannot
+    silently shadow the PAYG path (mirrors the
+    :class:`AnthropicPaygAdapter` isolation pattern — Codex MCP
+    2026-05-23 BLOCKER).
+    """
+
+    name: str = "glm-payg"
+    provider: str = "glm"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
     _last_error: Exception | None = field(default=None, init=False, repr=False)
@@ -53,15 +60,15 @@ class OpenAIPaygAdapter:
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
-        from core.config import settings
+        from core.config import GLM_PAYG_BASE_URL, settings
 
-        if not settings.openai_api_key:
+        if not settings.zai_api_key:
             raise RuntimeError(
-                "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
-                "an explicit API key — set ``openai_api_key`` in settings or use "
-                "the codex-oauth / codex-cli adapter instead."
+                "GlmPaygAdapter: ZAI_API_KEY not set. PAYG path requires "
+                "an explicit API key — set ``zai_api_key`` in settings or use "
+                "the glm-coding-plan adapter (subscription endpoint) instead."
             )
-        self._client = build_async_openai_client(settings.openai_api_key)
+        self._client = build_async_openai_client(settings.zai_api_key, base_url=GLM_PAYG_BASE_URL)
         return self._client
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
@@ -85,7 +92,7 @@ class OpenAIPaygAdapter:
         except Exception as exc:
             self._last_error = exc
             log.warning(
-                "openai-payg: chat.completions.create failed model=%s err=%s",
+                "glm-payg: chat.completions.create failed model=%s err=%s",
                 req.model,
                 exc,
             )
@@ -117,24 +124,24 @@ class OpenAIPaygAdapter:
     def test_environment(self) -> EnvironmentReport:
         from core.config import settings
 
-        if not settings.openai_api_key:
+        if not settings.zai_api_key:
             return EnvironmentReport(
                 ok=False,
-                checks=(("openai_api_key", "missing"),),
+                checks=(("zai_api_key", "missing"),),
                 hints=(
-                    "Set ``OPENAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
-                    "Or use codex-oauth (ChatGPT subscription) / codex-cli (local binary).",
+                    "Set ``ZAI_API_KEY`` in your environment or in ~/.geode/config.toml.",
+                    "Or use glm-coding-plan (Coding Plan subscription).",
                 ),
             )
         return EnvironmentReport(
             ok=True,
-            checks=(("openai_api_key", f"set ({len(settings.openai_api_key)} chars)"),),
+            checks=(("zai_api_key", f"set ({len(settings.zai_api_key)} chars)"),),
         )
 
     def list_models(self) -> list[ModelSpec]:
-        from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
+        from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
 
-        ids = [OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN]
+        ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
         seen: set[str] = set()
         models: list[ModelSpec] = []
         for mid in ids:
@@ -146,41 +153,38 @@ class OpenAIPaygAdapter:
                     id=mid,
                     label=mid,
                     context_tokens=128_000,
-                    supports_thinking=mid.startswith(("o3", "o4")),
+                    supports_thinking=False,
                     supports_tools=True,
                 )
             )
         return models
 
     def get_quota_windows(self) -> QuotaWindows | None:
-        return None  # PAYG, metered per call
+        return None  # PAYG metered per-call
 
     def detect_credential(self) -> CredentialDetection | None:
-        from core.config import OPENAI_PRIMARY, settings
+        from core.config import GLM_PRIMARY, settings
 
-        if not settings.openai_api_key:
+        if not settings.zai_api_key:
             return None
         return CredentialDetection(
-            model=OPENAI_PRIMARY,
+            model=GLM_PRIMARY,
             provider=self.provider,
-            source_path="settings.openai_api_key",
+            source_path="settings.zai_api_key",
         )
 
 
 def _translate_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any] | None:
-    """Adapter-neutral ``tool_choice`` → Chat Completions wire shape.
+    """Adapter-neutral ``tool_choice`` → GLM Chat Completions wire shape.
 
-    Routes through :func:`core.llm.tool_choice.normalize` with
-    ``provider="glm"`` — Chat Completions uses the SAME nested
-    ``{"type": "function", "function": {"name": "..."}}`` shape that
-    GLM does. The legacy helper accepts the Anthropic-shape dicts the
-    AgenticLoop emits (``{"type": "auto"}`` / ``{"type": "none"}`` /
-    ``{"type": "any"}`` / ``{"type": "tool", "name": "..."}``) and
-    returns the Chat-correct payload (Codex MCP A2 BLOCKER 2).
+    GLM is OpenAI-compatible (Chat Completions nested ``function`` shape).
+    Reuses the GLM helper in :func:`core.llm.tool_choice.normalize` to
+    accept the AgenticLoop's Anthropic-shape dicts (``{"type": "auto"}``
+    etc.).
     """
     from core.llm.tool_choice import normalize
 
     return normalize("glm", tc)
 
 
-__all__ = ["OpenAIPaygAdapter"]
+__all__ = ["GlmPaygAdapter"]
