@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **PR-CLEANUP-1 — over-split helper modules + 1-release-grace aliases.**
+  Three module files + one ``core.paths`` alias removed without
+  behavior change (and one test import migrated to the new host):
+  - ``core/agent/loop/loop.py`` (30 LOC) — re-export shim left over from
+    the Tier 3 #7 monolith split; 0 production callers (1 test caller
+    in ``tests/plugins/petri_audit/test_skeleton.py`` migrated to
+    ``core.agent.loop.agent_loop``). The package ``__init__`` already
+    re-exports the same symbols.
+  - ``core/agent/loop/_announce.py`` (41 LOC) and
+    ``core/agent/loop/_decomposition.py`` (81 LOC) absorbed into
+    ``core/agent/loop/_helpers.py``. All three were <100 LOC each and
+    shared exactly one caller (``agent_loop.py``); the sibling-module
+    split was over-engineered for the file size and obscured the
+    locality of the two helpers. ``_response.py`` (184 LOC, distinct
+    streaming responsibility) stays separate.
+  - ``core.paths.GLOBAL_JOURNAL_DIR`` legacy alias removed (1-release
+    grace expired; 0 external callers confirmed via grep).
+  No public symbol moves: ``check_announced_results`` /
+  ``try_decompose`` are accessed through the ``AgenticLoop`` delegator
+  methods (``_check_announced_results`` / ``_try_decompose``) which now
+  forward to ``_helpers`` instead of the two deleted modules.
+
 ### Changed
 
 - **Step J-b.2 — mutator runner API path migrated to the LLMAdapter Protocol.**

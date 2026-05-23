@@ -35,7 +35,7 @@ from core.llm.router import (
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
-from . import _announce, _context, _decomposition, _lifecycle, _model_switching, _response
+from . import _context, _helpers, _lifecycle, _model_switching, _response
 
 # Re-exported for backward-compat module-attribute access
 # (some tests/utilities reach into ``core.agent.loop.MAX_TOOL_RESULT_TOKENS``)
@@ -1868,25 +1868,27 @@ class AgenticLoop:
         return _context.build_system_prompt(self)
 
     # ------------------------------------------------------------------
-    # Goal decomposition — delegate to ``_decomposition``
+    # Goal decomposition — delegate to ``_helpers`` (PR-CLEANUP-1)
     # ------------------------------------------------------------------
 
     async def _try_decompose(self, user_input: str) -> str | None:
-        """Delegates to :func:`_decomposition.try_decompose`.
+        """Delegates to :func:`_helpers.try_decompose`.
 
         Async (PR-CL-A1-followup, 2026-05-23) because the new planner
         path awaits ``loop._call_llm`` — single async LLM dispatch,
-        no thread-pool hop.
+        no thread-pool hop. PR-CLEANUP-1 (2026-05-23): host moved from
+        ``_decomposition.py`` (deleted) to ``_helpers.py``.
         """
-        return await _decomposition.try_decompose(self, user_input)
+        return await _helpers.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------
-    # Sub-agent announce queue — delegate to ``_announce``
+    # Sub-agent announce queue — delegate to ``_helpers``
     # ------------------------------------------------------------------
 
     def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
-        """Delegates to :func:`_announce.check_announced_results`."""
-        return _announce.check_announced_results(self, messages)
+        """Delegates to :func:`_helpers.check_announced_results` (PR-CLEANUP-1
+        2026-05-23: host moved from ``_announce.py`` deleted)."""
+        return _helpers.check_announced_results(self, messages)
 
     # ------------------------------------------------------------------
     # LLM call (stays in this file — tightly coupled to ``arun`` body)
