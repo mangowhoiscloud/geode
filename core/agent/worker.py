@@ -75,6 +75,12 @@ class WorkerRequest:
     # cross-session attribution. Empty strings = top-level spawn.
     parent_session_key: str = ""
     parent_session_id: str = ""
+    # v0.99.40 Follow-up A — adapter source for the new
+    # :class:`core.llm.adapters.LLMAdapter` registry. Concrete value
+    # (``"payg"`` / ``"subscription"`` / ``"adapter"``) when the parent's
+    # picker / orchestrator resolved a specific path; empty string falls
+    # back to legacy ``resolve_agentic_adapter(provider)`` routing.
+    source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -106,6 +112,7 @@ class WorkerRequest:
             toolkit=data.get("toolkit", ""),
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
+            source=data.get("source", ""),
         )
 
 
@@ -312,6 +319,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         parent_session_id=request.parent_session_id,
         quiet=True,  # Suppress spinner — parent handles UI
         allowed_tool_names=allowed_tool_names,
+        source=request.source,
     )
 
     # 7. Build prompt

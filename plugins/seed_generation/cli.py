@@ -83,6 +83,49 @@ def _get_seed_generation_config() -> Any:
         return SimpleNamespace(candidates_default=15, default_gen_tag="gen1")
 
 
+@audit_seeds_app.command("config")
+def audit_seeds_config() -> None:
+    """Show the 7-role × (model, source) binding matrix.
+
+    Resolved by :func:`plugins.seed_generation.picker.pick_bindings`
+    after merging in user overrides from ``~/.geode/config.toml``
+    ``[seed_generation.role.<role>]`` (or the legacy
+    ``~/.geode/seed-generation.toml`` fallback).
+
+    Read-only — to change a role's source, edit
+    ``~/.geode/config.toml`` directly:
+
+      [seed_generation.role.generator]
+      source = "payg" | "subscription" | "adapter"
+
+    See ``geode adapters list`` for the available source names per
+    provider.
+    """
+    from plugins.seed_generation.picker import pick_bindings
+
+    picker = pick_bindings(auto_probe=False)
+    header = f"{'ROLE':<18} {'PROVIDER':<10} {'MODEL':<26} {'SOURCE':<14}"
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for role_name in sorted(picker.bindings):
+        b = picker.bindings[role_name]
+        typer.echo(f"{role_name:<18} {b.provider:<10} {b.model:<26} {b.source:<14}")
+
+    if picker.voters:
+        typer.echo("\nJudge panel voters:")
+        voter_header = f"  {'PROVIDER':<10} {'MODEL':<26} {'SOURCE':<14}"
+        typer.echo(voter_header)
+        typer.echo("  " + "-" * (len(voter_header) - 2))
+        for v in picker.voters:
+            typer.echo(f"  {v.provider:<10} {v.model:<26} {v.source:<14}")
+
+    typer.echo(
+        f"\n{len(picker.bindings)} role(s) bound; "
+        f"{len(picker.voters)} voter(s); "
+        f"{len(picker.subscription_paths_in_use)} subscription path(s) active."
+    )
+
+
 @audit_seeds_app.command("generate")
 def audit_seeds_generate(
     target_dim: str | None = typer.Option(
@@ -434,13 +477,16 @@ def _dispatch_pipeline(
         max_iterations=max_iterations,
     )
     registry = PipelineRegistry()
-    # NOTE: real registry population happens in S11-wire / S12 (per
-    # sprint plan §S6.5-wire and §S12 data run). For S11 the CLI flow
-    # surfaces every gate + abort path even when the registry is empty
-    # — the Pipeline.arun() will raise a RuntimeError with an actionable
-    # "no registered agent" message that the operator can map back to
-    # the unwired phase.
-    pipeline = Pipeline(state=state, registry=registry)
+    # v0.99.40 Follow-up C — S11 registry wire-up. Each enabled role's
+    # concrete agent is instantiated with the picker-resolved binding
+    # (``model`` + ``source``) and the shared SubAgentManager so the
+    # spawned worker's AgenticLoop receives the per-role source via
+    # SubTask.source threading (Follow-up A + B).
+    from plugins.seed_generation._registry_builder import populate_registry
+    from plugins.seed_generation.manifest import load_manifest
+
+    populate_registry(registry, picker_result=picker_result, manifest=load_manifest())
+    pipeline = Pipeline(state=state, registry=registry, bindings=dict(picker_result.bindings))
     out.write(f"seed-generation: starting run {run_id!r}\n")
     out.write(f"seed-generation: run_dir={run_dir}\n")
     out.flush()

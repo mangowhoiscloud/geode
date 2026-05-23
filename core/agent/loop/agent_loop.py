@@ -90,6 +90,7 @@ class AgenticLoop:
         quiet: bool = False,
         disable_settings_drift: bool = False,
         allowed_tool_names: set[str] | None = None,
+        source: str = "",
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -146,6 +147,39 @@ class AgenticLoop:
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message
+        # v0.99.40 Follow-up A — opt-in adapter route via the v0.99.39
+        # :class:`LLMAdapter` registry. Scope limited to ``provider="anthropic"``
+        # in this PR: the OpenAI / Codex adapter route needs full multi-turn
+        # message translation (Anthropic tool_use → ``tool_calls`` /
+        # ``function_call`` etc.) + Codex encrypted-reasoning replay, both
+        # tracked as Follow-up A2 (``docs/plans/2026-05-23-llm-adapter-
+        # abstraction.md`` § Scope cut). Concrete source values still thread
+        # through SubTask/WorkerRequest for observability on every provider,
+        # but the actual LLM call stays on the legacy adapter when the
+        # bridge is not yet wired for that provider.
+        #
+        # When ``source`` is concrete (one of CONCRETE_SOURCES) AND the
+        # provider is supported, ``_call_llm`` routes through
+        # ``LLMAdapter.acomplete``. A concrete source with a missing
+        # adapter HARD-FAILS in :func:`resolve_for` — silent fallback would
+        # mask operator misconfiguration (Codex MCP 2026-05-23 HIGH 2).
+        self._source = source
+        self._new_adapter: Any | None = None
+        if source:
+            from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+
+            if source in CONCRETE_SOURCES:
+                if self._provider == "anthropic":
+                    # Hard-fail on resolve mismatch — concrete source MUST resolve.
+                    self._new_adapter = resolve_for(self._provider, source)
+                else:
+                    log.info(
+                        "AgenticLoop: source=%s threaded through but provider=%s "
+                        "stays on legacy adapter — A2 follow-up adds OpenAI/Codex "
+                        "multi-turn translation + reasoning replay.",
+                        source,
+                        self._provider,
+                    )
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
@@ -1502,23 +1536,57 @@ class AgenticLoop:
             adaptive_thinking = 0
             adaptive_effort = "low"
 
-        response = await self._adapter.agentic_call(
-            model=self.model,
-            system=system,
-            messages=messages,
-            tools=self._tools,
-            tool_choice=tool_choice,
-            max_tokens=adaptive_max_tokens,
-            temperature=0.0,
-            thinking_budget=adaptive_thinking,
-            effort=adaptive_effort,
-        )
+        if self._new_adapter is not None:
+            # v0.99.40 Follow-up A — opt-in adapter route. Build adapter-neutral
+            # request, call ``LLMAdapter.acomplete``, translate result back to
+            # ``AgenticResponse`` so the rest of the loop (tool dispatch, cost
+            # tracking, retry budget) is unchanged.
+            from core.llm.adapters._legacy_bridge import (
+                agentic_response_from_adapter_result,
+                build_adapter_request,
+            )
+
+            req = build_adapter_request(
+                model=self.model,
+                system=system,
+                messages=messages,
+                tools=self._tools,
+                tool_choice=tool_choice,
+                max_tokens=adaptive_max_tokens,
+                temperature=0.0,
+                thinking_budget=adaptive_thinking,
+                effort=adaptive_effort,
+            )
+            try:
+                result = await self._new_adapter.acomplete(req)
+            except Exception as exc:
+                self._last_llm_error = str(exc)
+                log.warning(
+                    "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
+                    getattr(self._new_adapter, "name", "<unknown>"),
+                    exc,
+                )
+                response = None
+            else:
+                response = agentic_response_from_adapter_result(result)
+        else:
+            response = await self._adapter.agentic_call(
+                model=self.model,
+                system=system,
+                messages=messages,
+                tools=self._tools,
+                tool_choice=tool_choice,
+                max_tokens=adaptive_max_tokens,
+                temperature=0.0,
+                thinking_budget=adaptive_thinking,
+                effort=adaptive_effort,
+            )
 
         if response is None:
             adapter_err = getattr(self._adapter, "last_error", None)
             if adapter_err:
                 self._last_llm_error = str(adapter_err)
-            else:
+            elif not self._last_llm_error:
                 self._last_llm_error = f"All {self._provider} models exhausted"
 
         # v0.57.0 R6 — surface reasoning summaries to AgenticUI. Per-item

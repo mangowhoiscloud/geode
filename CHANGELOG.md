@@ -47,7 +47,86 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.40] - 2026-05-23
+
 ### Added
+
+- **Follow-up D — UI surface for the adapter registry.** Two new
+  read-only Typer subcommands:
+
+  - ``geode adapters list`` enumerates the 6 registered adapters with
+    ``billing_type`` and per-adapter ``test_environment`` status.
+  - ``geode adapters detect-model <name>`` reports the currently
+    configured model + provenance via the adapter's
+    ``detect_credential()`` hook.
+  - ``geode audit-seeds config`` shows the 7-role × (provider, model,
+    source) binding matrix resolved by the picker, plus the judge
+    panel voters.
+
+  UI follows the ``feedback_no_box_ui_no_emoji`` rule: dense aligned
+  table, plain text headers, no box-card / emoji decoration.
+
+- **Follow-up C — S11 PipelineRegistry wire-up.** ``cli._dispatch_pipeline``
+  now populates the ``PipelineRegistry`` with one concrete agent per
+  ``manifest.enabled_roles`` (generator / critic / proximity / pilot /
+  ranker / evolver / meta_reviewer) via the new
+  ``plugins/seed_generation/_registry_builder.py`` helper. Each agent
+  is instantiated with the picker binding's ``model`` + ``source``;
+  Ranker additionally receives ``picker_result.voters`` so each judge
+  follows its own binding. The pre-S11 placeholder
+  (``registry = PipelineRegistry()`` with a runtime "no registered
+  agent" error) is replaced — the production ``geode seeds run`` flow
+  can now actually invoke the pipeline end-to-end. The shared
+  ``SubAgentManager`` is built once via ``build_subagent_manager()``
+  with best-effort AgentRegistry + tool handlers + ``IsolatedRunner``;
+  observability hooks remain unattached (gateway runtime path is
+  Follow-up D).
+
+- **Follow-up B — Picker bindings propagation to SubTask.source.** Each
+  seed-generation agent now passes ``source=self.adapter_source`` on
+  ``SubTask`` construction so the picker-resolved per-role source
+  reaches the spawned worker's ``AgenticLoop``. ``BaseSeedAgent`` gained
+  an ``adapter_source`` property + ``picker_source_to_adapter_source``
+  free function that translates the picker's historical source names
+  (``api_key`` / ``claude-cli`` / ``openai-codex`` / ``auto``) into the
+  paperclip-aligned adapter source values (``payg`` / ``subscription`` /
+  ``adapter``) consumed by :func:`core.llm.adapters.resolve_for`. The
+  Ranker agent uses ``picker_source_to_adapter_source(voter.source)``
+  per voter so each judge follows its own binding. ``Pipeline`` gained
+  a ``bindings: dict[str, Any]`` kwarg (default ``{}``) that
+  ``cli._dispatch_pipeline`` populates from ``picker_result.bindings``
+  — stored for observability / journaling but NOT re-injected at
+  ``SubTask`` time (agents already carry the binding values).
+
+  Closes the Codex MCP 2026-05-23 BLOCKER 1 finding ("the main
+  seed-generation path appears unwired") from PR #1519: source now
+  reaches the worker for every role's ``SubTask`` creation site
+  (generator / critic / pilot / ranker / evolver / meta_reviewer /
+  supervisor / proximity).
+
+- **Follow-up A — AgenticLoop opt-in adapter route + source threading.**
+  ``SubTask.source`` + ``WorkerRequest.source`` carry the picker-resolved
+  adapter source (``payg`` / ``subscription`` / ``adapter``) through the
+  parent → worker subprocess boundary into the spawned
+  :class:`AgenticLoop`. When ``source`` is set AND ``provider="anthropic"``,
+  ``AgenticLoop._call_llm`` routes through
+  :func:`core.llm.adapters.resolve_for(provider, source)` →
+  :meth:`LLMAdapter.acomplete` instead of the legacy
+  ``resolve_agentic_adapter(provider)`` path. Translation lives in
+  ``core/llm/adapters/_legacy_bridge.py``
+  (``build_adapter_request`` / ``agentic_response_from_adapter_result``);
+  ``AdapterCallRequest`` gained ``tool_choice`` + ``provider_options``
+  fields to carry the loop-side knobs. Anthropic adapters translate the
+  ``tool_choice`` value (``"auto"`` / ``"any"`` / ``"none"`` / ``"required"`` /
+  dict) into Anthropic's ``{"type": ...}`` payload so the loop's wrap-up
+  ``{"type": "none"}`` actually suppresses tool calls on the new route.
+  Concrete source with a missing registry entry HARD-FAILS — silent
+  fallback would mask operator misconfiguration (Codex MCP 2026-05-23
+  HIGH 2). Non-Anthropic providers (``openai`` / ``openai-codex`` /
+  ``glm``) thread ``source`` for observability but stay on the legacy
+  adapter — full OpenAI / Codex multi-turn translation + Codex
+  encrypted-reasoning replay lands as **Follow-up A2**. Legacy callers
+  (empty ``source``) see no behaviour change.
 
 - **LLM adapter abstraction (paperclip pattern) — Layer 4 Protocol +
   Layer 3 built-ins.** New :class:`core.llm.adapters.LLMAdapter`

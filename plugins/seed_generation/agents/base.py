@@ -178,6 +178,23 @@ class BaseSeedAgent(abc.ABC):
         self.source = source
         self.manifest_role = manifest_role or {}
 
+    @property
+    def adapter_source(self) -> str:
+        """Picker-source → adapter-source translation for ``SubTask.source``.
+
+        v0.99.40 Follow-up B: the picker emits historical source names
+        (``api_key`` / ``claude-cli`` / ``openai-codex`` / ``auto``). The
+        v0.99.39 :class:`LLMAdapter` registry uses the paperclip-aligned
+        names (``payg`` / ``subscription`` / ``adapter``). This property
+        bridges the two so each agent's ``SubTask(source=...)`` call
+        produces a value the spawned worker's ``AgenticLoop`` can pass
+        directly into :func:`core.llm.adapters.resolve_for`.
+
+        Returns the empty string for ``"auto"`` so unresolved picker output
+        falls back to legacy routing rather than hard-failing.
+        """
+        return picker_source_to_adapter_source(self.source)
+
     @abc.abstractmethod
     async def aexecute(self, state: Any) -> SeedAgentResult:
         """Run one phase of the pipeline against ``state`` (async).
@@ -194,3 +211,20 @@ class BaseSeedAgent(abc.ABC):
             f"{type(self).__name__}(role={self.role!r}, "
             f"model={self.model!r}, source={self.source!r})"
         )
+
+
+def picker_source_to_adapter_source(picker_source: str) -> str:
+    """Free-function variant of :attr:`BaseSeedAgent.adapter_source`.
+
+    Used by agents that build per-voter ``SubTask`` instances (e.g.
+    :class:`RankerAgent`) where each voter carries its own picker source
+    name and the role-level ``self.source`` is not the right input.
+    """
+    if not picker_source or picker_source == "auto":
+        return ""
+    from plugins.seed_generation.picker import binding_to_adapter_source
+
+    try:
+        return binding_to_adapter_source(picker_source)
+    except ValueError:
+        return ""

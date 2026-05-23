@@ -205,6 +205,7 @@ class Critic(BaseSeedAgent):
                         "target_dim": target_dim,
                     },
                     agent=_CRITIC_AGENT_NAME,
+                    source=self.adapter_source,
                 )
             )
         return tasks
