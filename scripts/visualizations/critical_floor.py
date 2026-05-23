@@ -147,16 +147,11 @@ class CriticalFloorExplainer(Scene):
 
         # 5 critical dim labels stacked.
         dim_labels = VGroup(
-            *[
-                _make_text(d, font_size=15, color=COLOR_TEXT_ACCENT)
-                for d in CRITICAL_DIMS
-            ]
+            *[_make_text(d, font_size=15, color=COLOR_TEXT_ACCENT) for d in CRITICAL_DIMS]
         ).arrange(DOWN, buff=0.18, aligned_edge=LEFT)
         dim_labels.move_to(LEFT * 3.5 + UP * 0.5)
 
-        sub = _make_text(_t("bit_1"), font_size=18, color=COLOR_TEXT_ACCENT).move_to(
-            UP * 2.2
-        )
+        sub = _make_text(_t("bit_1"), font_size=18, color=COLOR_TEXT_ACCENT).move_to(UP * 2.2)
         self.play(FadeIn(sub), run_time=0.4)
         self.play(LaggedStart(*[FadeIn(d) for d in dim_labels], lag_ratio=0.15), run_time=1.4)
 
@@ -231,9 +226,11 @@ class CriticalFloorExplainer(Scene):
             stroke_width=2.5,
             dash_length=0.12,
         )
-        floor_label = _make_text(
-            _t("floor_label"), font_size=12, color=COLOR_CRITICAL
-        ).next_to(floor_line, UP, buff=0.05).align_to(floor_line, RIGHT)
+        floor_label = (
+            _make_text(_t("floor_label"), font_size=12, color=COLOR_CRITICAL)
+            .next_to(floor_line, UP, buff=0.05)
+            .align_to(floor_line, RIGHT)
+        )
         self.play(Create(floor_line), FadeIn(floor_label), run_time=0.8)
 
         # Fitness gauge on the left (away from the chart).
@@ -260,7 +257,10 @@ class CriticalFloorExplainer(Scene):
             _t("fitness_label"), font_size=12, color=COLOR_TEXT_ACCENT
         ).next_to(gauge_track, UP, buff=0.1)
         self.play(
-            Create(gauge_track), FadeIn(gauge_fill), FadeIn(gauge_value), FadeIn(gauge_caption),
+            Create(gauge_track),
+            FadeIn(gauge_fill),
+            FadeIn(gauge_value),
+            FadeIn(gauge_caption),
             run_time=0.6,
         )
 
@@ -298,9 +298,7 @@ class CriticalFloorExplainer(Scene):
                 stroke_width=0.8,
                 fill_color=COLOR_WINNER,
                 fill_opacity=0.7,
-            ).move_to(
-                np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0])
-            )
+            ).move_to(np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0]))
             anims.append(bar.animate.become(new_bar))
         self.play(*anims, run_time=0.8)
 
@@ -320,18 +318,14 @@ class CriticalFloorExplainer(Scene):
                 stroke_width=0.8,
                 fill_color=COLOR_CRITICAL if new_m > 4.5 else COLOR_WINNER,
                 fill_opacity=0.85,
-            ).move_to(
-                np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0])
-            )
+            ).move_to(np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0]))
             anims.append(bar.animate.become(new_bar))
         self.play(*anims, run_time=0.6)
 
         # Fitness gauge collapses.
         self.play(
             Flash(self._gauge_fill, color=COLOR_CRITICAL, flash_radius=0.4),
-            self._gauge_fill.animate.stretch_to_fit_width(0.01).align_to(
-                self._gauge_track, LEFT
-            ),
+            self._gauge_fill.animate.stretch_to_fit_width(0.01).align_to(self._gauge_track, LEFT),
             FadeOut(self._gauge_value),
             run_time=0.5,
         )
@@ -342,9 +336,9 @@ class CriticalFloorExplainer(Scene):
         self._gauge_value = zero_value
 
         # compute_fitness reference label.
-        ref = _make_text(
-            _t("compute_fitness_ref"), font_size=11, color=COLOR_TEXT_ACCENT
-        ).next_to(self._gauge_track, DOWN, buff=0.55)
+        ref = _make_text(_t("compute_fitness_ref"), font_size=11, color=COLOR_TEXT_ACCENT).next_to(
+            self._gauge_track, DOWN, buff=0.55
+        )
         self.play(FadeIn(ref), run_time=0.4)
         self._compute_ref = ref
         self.wait(0.6)
@@ -365,9 +359,7 @@ class CriticalFloorExplainer(Scene):
                 stroke_width=0.8,
                 fill_color=COLOR_WINNER,
                 fill_opacity=0.7,
-            ).move_to(
-                np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0])
-            )
+            ).move_to(np.array([bar.get_center()[0], self._chart_origin[1] + new_h / 2, 0.0]))
             anims.append(bar.animate.become(new_bar))
         self.play(*anims, run_time=0.6)
 
@@ -405,53 +397,73 @@ class CriticalFloorExplainer(Scene):
 
         # Two side-by-side panels.
         crit_panel = Rectangle(
-            width=5.5, height=3.6,
+            width=5.5,
+            height=3.6,
             stroke_color=COLOR_CRITICAL,
             stroke_width=2,
             fill_color=COLOR_CRITICAL,
             fill_opacity=0.15,
         ).move_to(LEFT * 3.2 + DOWN * 0.3)
-        crit_tag = _make_text(
-            _t("critical_tag"), font_size=18, color=COLOR_CRITICAL
-        ).next_to(crit_panel, UP, buff=0.15)
+        crit_tag = _make_text(_t("critical_tag"), font_size=18, color=COLOR_CRITICAL).next_to(
+            crit_panel, UP, buff=0.15
+        )
         crit_rule = _make_text(
             "fitness ← 0.0  when  dim_means > baseline + stderr",
-            font_size=13, color=COLOR_TEXT,
+            font_size=13,
+            color=COLOR_TEXT,
         ).move_to(crit_panel.get_center() + UP * 0.4)
         crit_note = _make_text(
             "single critical dim worsens → whole mutation discarded",
-            font_size=11, color=COLOR_TEXT_ACCENT,
+            font_size=11,
+            color=COLOR_TEXT_ACCENT,
         ).move_to(crit_panel.get_center() + DOWN * 0.4)
 
         aux_panel = Rectangle(
-            width=5.5, height=3.6,
+            width=5.5,
+            height=3.6,
             stroke_color=COLOR_AUXILIARY,
             stroke_width=2,
             fill_color=COLOR_AUXILIARY,
             fill_opacity=0.25,
         ).move_to(RIGHT * 3.2 + DOWN * 0.3)
         aux_tag = _make_text(
-            _t("auxiliary_tag"), font_size=18, color=COLOR_TEXT,
+            _t("auxiliary_tag"),
+            font_size=18,
+            color=COLOR_TEXT,
         ).next_to(aux_panel, UP, buff=0.15)
         aux_rule = _make_text(
             "fitness ← fitness − λ · (Δ / 10)²",
-            font_size=13, color=COLOR_TEXT,
+            font_size=13,
+            color=COLOR_TEXT,
         ).move_to(aux_panel.get_center() + UP * 0.4)
         aux_note = _make_text(
             "small drift = nearly free; large drift bites quadratically",
-            font_size=11, color=COLOR_TEXT_ACCENT,
+            font_size=11,
+            color=COLOR_TEXT_ACCENT,
         ).move_to(aux_panel.get_center() + DOWN * 0.4)
 
         self.play(
-            FadeIn(crit_panel), FadeIn(crit_tag), FadeIn(crit_rule), FadeIn(crit_note),
-            FadeIn(aux_panel), FadeIn(aux_tag), FadeIn(aux_rule), FadeIn(aux_note),
+            FadeIn(crit_panel),
+            FadeIn(crit_tag),
+            FadeIn(crit_rule),
+            FadeIn(crit_note),
+            FadeIn(aux_panel),
+            FadeIn(aux_tag),
+            FadeIn(aux_rule),
+            FadeIn(aux_note),
             run_time=1.2,
         )
         self.wait(2.0)
 
         self._tier_group = VGroup(
-            crit_panel, crit_tag, crit_rule, crit_note,
-            aux_panel, aux_tag, aux_rule, aux_note,
+            crit_panel,
+            crit_tag,
+            crit_rule,
+            crit_note,
+            aux_panel,
+            aux_tag,
+            aux_rule,
+            aux_note,
         )
 
     def _outro(self) -> None:

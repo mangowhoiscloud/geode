@@ -117,9 +117,7 @@ def _resolve_font(family: str) -> tuple[str, int]:
     return path, index
 
 
-def _shape_glyph_clusters(
-    family: str, font_size: int, text: str
-) -> list[list[int]]:
+def _shape_glyph_clusters(family: str, font_size: int, text: str) -> list[list[int]]:
     """HarfBuzz-shape ``text`` and return ``[[codepoint, x_advance], ...]``.
 
     ``x_advance`` is in HarfBuzz's 26.6 fixed-point font units; we keep
@@ -130,7 +128,7 @@ def _shape_glyph_clusters(
     """
     if not text:
         return []
-    import uharfbuzz as hb  # type: ignore[import-untyped]  # local import only when measuring
+    import uharfbuzz as hb  # local import only when measuring
 
     path, index = _resolve_font(family)
     blob = hb.Blob.from_file_path(path)
@@ -144,9 +142,7 @@ def _shape_glyph_clusters(
     hb.shape(font, buf)
     return [
         [int(info.codepoint), int(pos.x_advance)]
-        for info, pos in zip(
-            buf.glyph_infos, buf.glyph_positions, strict=True
-        )
+        for info, pos in zip(buf.glyph_infos, buf.glyph_positions, strict=True)
     ]
 
 
@@ -217,8 +213,7 @@ def _ensure_fonts_installed() -> None:
     """
     if shutil.which("fc-list") is None:
         print(
-            "verify_hero_layout: WARN fc-list not available; "
-            "skipping font-presence check.",
+            "verify_hero_layout: WARN fc-list not available; skipping font-presence check.",
             file=sys.stderr,
         )
         return
@@ -390,9 +385,7 @@ def _check(*, update_baseline: bool) -> int:
             try:
                 clusters = _glyph_clusters_for_site(site, lang)
             except Exception as exc:  # pragma: no cover - defensive
-                failures.append(
-                    f"[{lang}/{site.site_id}] HarfBuzz shape crashed: {exc!r}"
-                )
+                failures.append(f"[{lang}/{site.site_id}] HarfBuzz shape crashed: {exc!r}")
                 clusters = []
             ratio_w = w / site.container_width if site.container_width > 0 else 0.0
             ratio_h = h / site.container_height if site.container_height > 0 else 0.0

@@ -45,10 +45,12 @@ def _import_sites():
     """
     sys.path.insert(0, str(REPO_ROOT))
     from scripts.visualizations import verify_hero_layout as vhl
+
     return vhl.SITES
 
 
 # ---------------------------------------------------------------- baseline JSON
+
 
 def test_baseline_exists():
     assert BASELINE.is_file(), f"baseline missing at {BASELINE}"
@@ -94,8 +96,7 @@ def test_every_site_with_text_has_glyph_clusters():
                 "run `verify_hero_layout.py --update-baseline` locally"
             )
             assert isinstance(clusters, list) and clusters, (
-                f"[{lang}/{site.site_id}] empty glyph_clusters — "
-                "baseline is corrupt"
+                f"[{lang}/{site.site_id}] empty glyph_clusters — baseline is corrupt"
             )
             # Cluster entries are ``[codepoint:int, x_advance:int]`` pairs.
             for cluster in clusters:
@@ -108,6 +109,7 @@ def test_every_site_with_text_has_glyph_clusters():
 
 
 # ---------------------------------------------------------------- static check
+
 
 def test_static_check_exits_clean():
     """``--static-check`` against the committed baseline must exit 0."""
@@ -127,9 +129,8 @@ def test_static_check_exits_clean():
 
 # ---------------------------------------------------------------- HarfBuzz
 
-@pytest.mark.skipif(
-    shutil.which("fc-match") is None, reason="fc-match (fontconfig) not available"
-)
+
+@pytest.mark.skipif(shutil.which("fc-match") is None, reason="fc-match (fontconfig) not available")
 def test_glyph_cluster_shape_is_deterministic():
     """Same (family, font_size, text) must always shape to the same clusters.
 
@@ -150,9 +151,7 @@ def test_glyph_cluster_shape_is_deterministic():
     assert all(isinstance(c[0], int) and isinstance(c[1], int) for c in clusters_a)
 
 
-@pytest.mark.skipif(
-    shutil.which("fc-match") is None, reason="fc-match (fontconfig) not available"
-)
+@pytest.mark.skipif(shutil.which("fc-match") is None, reason="fc-match (fontconfig) not available")
 def test_glyph_cluster_drift_detected_when_text_changes():
     """Different text → different clusters → drift detected.
 

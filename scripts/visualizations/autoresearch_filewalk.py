@@ -65,12 +65,12 @@ config.frame_rate = 60
 LANG = os.environ.get("GEODE_HERO_LANG", "en").lower()
 
 # Anthropic-style palette (matches geode_hero.py / critical_floor.py).
-COLOR_BORROW = "#A4C2F4"      # blue — verbatim copy
-COLOR_SWAP = "#FFE599"        # yellow — same slot, different content
-COLOR_ADD = "#93C47D"         # green — GEODE-only addition
-COLOR_REMOVE = "#E06666"      # red — Karpathy-only / removed
-COLOR_KARPATHY = "#F4CCCC"    # light pink — Karpathy panel fill
-COLOR_GEODE = "#D5E8D4"       # very light green — GEODE panel fill
+COLOR_BORROW = "#A4C2F4"  # blue — verbatim copy
+COLOR_SWAP = "#FFE599"  # yellow — same slot, different content
+COLOR_ADD = "#93C47D"  # green — GEODE-only addition
+COLOR_REMOVE = "#E06666"  # red — Karpathy-only / removed
+COLOR_KARPATHY = "#F4CCCC"  # light pink — Karpathy panel fill
+COLOR_GEODE = "#D5E8D4"  # very light green — GEODE panel fill
 COLOR_ARROW = "#666666"
 COLOR_TEXT = "#000000"
 COLOR_TEXT_ACCENT = "#444444"
@@ -81,7 +81,7 @@ KOR_FONT = "Pretendard"
 # Source-of-truth LoC measurements (see module docstring).
 LOC = {
     "karpathy": {"prepare.py": 390, "train.py": 724, "program.md": 200},
-    "geode":    {"prepare.py": 203, "train.py": 1308, "program.md": 360},
+    "geode": {"prepare.py": 203, "train.py": 1308, "program.md": 360},
 }
 
 # Outline summaries (top symbols) per file.
@@ -142,7 +142,7 @@ OUTLINE_GEODE = {
 # Values in [0, 1] — bigger = stronger presence of that change kind.
 HEATMAP = {
     "prepare.py": (0.6, 0.7, 0.1),
-    "train.py":   (0.3, 0.5, 0.9),
+    "train.py": (0.3, 0.5, 0.9),
     "program.md": (0.3, 0.5, 0.8),
 }
 
@@ -328,7 +328,8 @@ class AutoresearchFilewalk(Scene):
 
         all_panels = VGroup(*[item for pair in cards for item in pair])
         self.play(
-            FadeIn(karpathy_label), FadeIn(geode_label),
+            FadeIn(karpathy_label),
+            FadeIn(geode_label),
             LaggedStart(*[FadeIn(card) for card in all_panels], lag_ratio=0.08),
             run_time=2.0,
         )
@@ -367,12 +368,12 @@ class AutoresearchFilewalk(Scene):
             header_lines_buff=0.30,
             outline_buff=0.18,
         ).move_to(RIGHT * 3.4 + DOWN * 0.2)
-        karpathy_label = _make_text(
-            _t("karpathy_label"), font_size=14, color=COLOR_TEXT
-        ).next_to(k_card, UP, buff=0.1)
-        geode_label = _make_text(
-            _t("geode_label"), font_size=14, color=COLOR_TEXT
-        ).next_to(g_card, UP, buff=0.1)
+        karpathy_label = _make_text(_t("karpathy_label"), font_size=14, color=COLOR_TEXT).next_to(
+            k_card, UP, buff=0.1
+        )
+        geode_label = _make_text(_t("geode_label"), font_size=14, color=COLOR_TEXT).next_to(
+            g_card, UP, buff=0.1
+        )
 
         k_loc = LOC["karpathy"][filename]
         g_loc = LOC["geode"][filename]
@@ -457,7 +458,9 @@ class AutoresearchFilewalk(Scene):
             loc_texts.extend([k_count, g_count])
 
         legend_k = VGroup(
-            Square(side_length=0.18, color=COLOR_ARROW, fill_color=COLOR_KARPATHY, fill_opacity=0.85),
+            Square(
+                side_length=0.18, color=COLOR_ARROW, fill_color=COLOR_KARPATHY, fill_opacity=0.85
+            ),
             _make_text(_t("karpathy_label"), font_size=12, color=COLOR_TEXT_ACCENT),
         ).arrange(RIGHT, buff=0.15)
         legend_g = VGroup(
@@ -494,12 +497,13 @@ class AutoresearchFilewalk(Scene):
         col_colors = (COLOR_BORROW, COLOR_SWAP, COLOR_ADD)
 
         cell_size = 1.05
-        grid_center_x = 0.4   # nudge grid right so left-side row labels clear cleanly
+        grid_center_x = 0.4  # nudge grid right so left-side row labels clear cleanly
         grid_center_y = -0.2
 
         # Cell column centers: index 0,1,2 → x − cell_size, x, x + cell_size
         def col_x(j):
             return grid_center_x + (j - 1) * cell_size
+
         def row_y(i):
             return grid_center_y - (i - 1) * cell_size
 
@@ -508,8 +512,10 @@ class AutoresearchFilewalk(Scene):
         header_y = row_y(0) + cell_size * 0.5 + 0.45
         for j, ckey in enumerate(cols):
             hdr_dot = Circle(
-                radius=0.09, color=col_colors[j],
-                fill_color=col_colors[j], fill_opacity=1.0,
+                radius=0.09,
+                color=col_colors[j],
+                fill_color=col_colors[j],
+                fill_opacity=1.0,
             )
             hdr_text = _make_text(_t(ckey), font_size=13, color=COLOR_TEXT_ACCENT)
             hdr_group = VGroup(hdr_dot, hdr_text).arrange(RIGHT, buff=0.08)
@@ -541,10 +547,14 @@ class AutoresearchFilewalk(Scene):
                 cells.add(cell_bg)
                 cells.add(txt)
 
-        legend_lines = VGroup(
-            _make_text("0.0 = absent", font_size=11, color=COLOR_TEXT_ACCENT),
-            _make_text("1.0 = dominant", font_size=11, color=COLOR_TEXT_ACCENT),
-        ).arrange(DOWN, buff=0.12).move_to([col_x(2) + cell_size * 0.5 + 1.2, row_y(1), 0])
+        legend_lines = (
+            VGroup(
+                _make_text("0.0 = absent", font_size=11, color=COLOR_TEXT_ACCENT),
+                _make_text("1.0 = dominant", font_size=11, color=COLOR_TEXT_ACCENT),
+            )
+            .arrange(DOWN, buff=0.12)
+            .move_to([col_x(2) + cell_size * 0.5 + 1.2, row_y(1), 0])
+        )
 
         self.play(
             LaggedStart(*[FadeIn(h) for h in col_headers], lag_ratio=0.08),
@@ -571,11 +581,15 @@ class AutoresearchFilewalk(Scene):
         sub = _make_text(_t("outro_sub"), font_size=12, color=COLOR_TEXT_ACCENT).next_to(
             main, DOWN, buff=0.35
         )
-        dots = VGroup(
-            Circle(radius=0.08, color=COLOR_BORROW, fill_color=COLOR_BORROW, fill_opacity=1.0),
-            Circle(radius=0.08, color=COLOR_SWAP, fill_color=COLOR_SWAP, fill_opacity=1.0),
-            Circle(radius=0.08, color=COLOR_ADD, fill_color=COLOR_ADD, fill_opacity=1.0),
-        ).arrange(RIGHT, buff=0.5).next_to(sub, DOWN, buff=0.5)
+        dots = (
+            VGroup(
+                Circle(radius=0.08, color=COLOR_BORROW, fill_color=COLOR_BORROW, fill_opacity=1.0),
+                Circle(radius=0.08, color=COLOR_SWAP, fill_color=COLOR_SWAP, fill_opacity=1.0),
+                Circle(radius=0.08, color=COLOR_ADD, fill_color=COLOR_ADD, fill_opacity=1.0),
+            )
+            .arrange(RIGHT, buff=0.5)
+            .next_to(sub, DOWN, buff=0.5)
+        )
 
         self.play(FadeIn(main), run_time=0.6)
         self.play(FadeIn(sub), FadeIn(dots), run_time=0.5)

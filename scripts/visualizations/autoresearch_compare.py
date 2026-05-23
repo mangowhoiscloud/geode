@@ -57,11 +57,11 @@ config.frame_rate = 60
 
 LANG = os.environ.get("GEODE_HERO_LANG", "en").lower()
 
-COLOR_BORROW = "#A4C2F4"      # blue — shared / copied verbatim
-COLOR_SWAP = "#FFE599"        # yellow — same slot, swapped content
-COLOR_ADD = "#93C47D"         # green — GEODE-only addition
-COLOR_KARPATHY = "#F4CCCC"    # light pink — Karpathy panel fill
-COLOR_GEODE = "#D5E8D4"       # very light green — GEODE panel fill
+COLOR_BORROW = "#A4C2F4"  # blue — shared / copied verbatim
+COLOR_SWAP = "#FFE599"  # yellow — same slot, swapped content
+COLOR_ADD = "#93C47D"  # green — GEODE-only addition
+COLOR_KARPATHY = "#F4CCCC"  # light pink — Karpathy panel fill
+COLOR_GEODE = "#D5E8D4"  # very light green — GEODE panel fill
 COLOR_ARROW = "#666666"
 COLOR_TEXT = "#000000"
 COLOR_TEXT_ACCENT = "#444444"
@@ -85,7 +85,7 @@ T = {
             "3-file shape (prepare.py / train.py / program.md)",
             "fixed 5-min wall-clock budget per run",
             "agent edits train.py only",
-            'git-as-optimiser idiom (branch tip = best)',
+            "git-as-optimiser idiom (branch tip = best)",
             "one-shot per invocation",
             "read-only harness (prepare.py immutable)",
             "self-contained, minimal external deps",
@@ -126,7 +126,7 @@ T = {
             "3-file 구조 (prepare.py / train.py / program.md)",
             "1 회당 고정 5-min wall-clock budget",
             "agent 는 train.py 만 수정",
-            'git-as-optimiser (branch tip = 최선)',
+            "git-as-optimiser (branch tip = 최선)",
             "1 회 invocation = 1 실험",
             "read-only harness (prepare.py 불변)",
             "self-contained, 최소 외부 의존",
@@ -206,18 +206,18 @@ class AutoresearchCompare(Scene):
             fill_color=COLOR_GEODE,
             fill_opacity=0.18,
         ).move_to(RIGHT * RIGHT_X + UP * PANEL_Y)
-        left_label = _make_text(
-            _t("karpathy_label"), font_size=16, color=COLOR_TEXT
-        ).next_to(left_panel, UP, buff=0.1)
-        right_label = _make_text(
-            _t("geode_label"), font_size=16, color=COLOR_TEXT
-        ).next_to(right_panel, UP, buff=0.1)
-        left_sub = _make_text(
-            _t("karpathy_sub"), font_size=12, color=COLOR_TEXT_ACCENT
-        ).next_to(left_panel, DOWN, buff=0.15)
-        right_sub = _make_text(
-            _t("geode_sub"), font_size=12, color=COLOR_TEXT_ACCENT
-        ).next_to(right_panel, DOWN, buff=0.15)
+        left_label = _make_text(_t("karpathy_label"), font_size=16, color=COLOR_TEXT).next_to(
+            left_panel, UP, buff=0.1
+        )
+        right_label = _make_text(_t("geode_label"), font_size=16, color=COLOR_TEXT).next_to(
+            right_panel, UP, buff=0.1
+        )
+        left_sub = _make_text(_t("karpathy_sub"), font_size=12, color=COLOR_TEXT_ACCENT).next_to(
+            left_panel, DOWN, buff=0.15
+        )
+        right_sub = _make_text(_t("geode_sub"), font_size=12, color=COLOR_TEXT_ACCENT).next_to(
+            right_panel, DOWN, buff=0.15
+        )
 
         self.left_panel = left_panel
         self.right_panel = right_panel
@@ -227,9 +227,12 @@ class AutoresearchCompare(Scene):
         self.right_sub = right_sub
 
         self.play(
-            Create(left_panel), Create(right_panel),
-            FadeIn(left_label), FadeIn(right_label),
-            FadeIn(left_sub), FadeIn(right_sub),
+            Create(left_panel),
+            Create(right_panel),
+            FadeIn(left_label),
+            FadeIn(right_label),
+            FadeIn(left_sub),
+            FadeIn(right_sub),
             run_time=0.8,
         )
 
@@ -258,12 +261,12 @@ class AutoresearchCompare(Scene):
         for i, item in enumerate(copies):
             y = 1.6 - i * 0.45
             # Identical text on both sides.
-            text_l = _make_text(
-                item, font_size=11, color=COLOR_TEXT
-            ).move_to(LEFT * abs(LEFT_X) + UP * y)
-            text_r = _make_text(
-                item, font_size=11, color=COLOR_TEXT
-            ).move_to(RIGHT * RIGHT_X + UP * y)
+            text_l = _make_text(item, font_size=11, color=COLOR_TEXT).move_to(
+                LEFT * abs(LEFT_X) + UP * y
+            )
+            text_r = _make_text(item, font_size=11, color=COLOR_TEXT).move_to(
+                RIGHT * RIGHT_X + UP * y
+            )
             # Dashed bridge connecting the two — signals "same".
             bridge = DashedLine(
                 text_l.get_right() + RIGHT * 0.15,
@@ -272,9 +275,9 @@ class AutoresearchCompare(Scene):
                 stroke_width=1.5,
                 dash_length=0.1,
             )
-            badge = _make_text(
-                "=", font_size=14, color=COLOR_BORROW
-            ).move_to((text_l.get_right() + text_r.get_left()) / 2)
+            badge = _make_text("=", font_size=14, color=COLOR_BORROW).move_to(
+                (text_l.get_right() + text_r.get_left()) / 2
+            )
             row = VGroup(text_l, text_r, bridge, badge)
             rows.append(row)
 
@@ -294,12 +297,12 @@ class AutoresearchCompare(Scene):
         rows = []
         for i, (l_text, r_text) in enumerate(swaps):
             y = 1.6 - i * 0.55
-            text_l = _make_text(
-                l_text, font_size=11, color=COLOR_TEXT
-            ).move_to(LEFT * abs(LEFT_X) + UP * y)
-            text_r = _make_text(
-                r_text, font_size=11, color=COLOR_TEXT
-            ).move_to(RIGHT * RIGHT_X + UP * y)
+            text_l = _make_text(l_text, font_size=11, color=COLOR_TEXT).move_to(
+                LEFT * abs(LEFT_X) + UP * y
+            )
+            text_r = _make_text(r_text, font_size=11, color=COLOR_TEXT).move_to(
+                RIGHT * RIGHT_X + UP * y
+            )
             arrow = DashedLine(
                 text_l.get_right() + RIGHT * 0.15,
                 text_r.get_left() + LEFT * 0.15,
@@ -307,9 +310,9 @@ class AutoresearchCompare(Scene):
                 stroke_width=1.8,
                 dash_length=0.1,
             )
-            badge = _make_text(
-                "⇄", font_size=18, color="#B45F06"
-            ).move_to((text_l.get_right() + text_r.get_left()) / 2)
+            badge = _make_text("⇄", font_size=18, color="#B45F06").move_to(
+                (text_l.get_right() + text_r.get_left()) / 2
+            )
             row = VGroup(text_l, text_r, arrow, badge)
             rows.append(row)
 
@@ -332,15 +335,15 @@ class AutoresearchCompare(Scene):
         for i, item in enumerate(additions):
             y = 1.85 - i * 0.36
             # Strikethrough/dimmed placeholder on the Karpathy side.
-            stub = _make_text(
-                "—", font_size=14, color=COLOR_TEXT_ACCENT
-            ).move_to(LEFT * abs(LEFT_X) + UP * y)
-            text_r = _make_text(
-                item, font_size=10, color=COLOR_TEXT
-            ).move_to(RIGHT * RIGHT_X + UP * y)
-            badge = _make_text(
-                "+", font_size=18, color=COLOR_ADD, weight=NORMAL
-            ).move_to(LEFT * 0.0 + UP * y)
+            stub = _make_text("—", font_size=14, color=COLOR_TEXT_ACCENT).move_to(
+                LEFT * abs(LEFT_X) + UP * y
+            )
+            text_r = _make_text(item, font_size=10, color=COLOR_TEXT).move_to(
+                RIGHT * RIGHT_X + UP * y
+            )
+            badge = _make_text("+", font_size=18, color=COLOR_ADD, weight=NORMAL).move_to(
+                LEFT * 0.0 + UP * y
+            )
             arrow = DashedLine(
                 LEFT * 0.4 + UP * y,
                 text_r.get_left() + LEFT * 0.15,
@@ -361,9 +364,12 @@ class AutoresearchCompare(Scene):
     def _outro(self) -> None:
         # Fade panels + section title to centre the takeaway.
         to_clear = [
-            self.left_panel, self.right_panel,
-            self.left_label, self.right_label,
-            self.left_sub, self.right_sub,
+            self.left_panel,
+            self.right_panel,
+            self.left_label,
+            self.right_label,
+            self.left_sub,
+            self.right_sub,
             self._section_title,
         ]
         if hasattr(self, "_panel_contents"):

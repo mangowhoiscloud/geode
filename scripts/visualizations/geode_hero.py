@@ -360,7 +360,9 @@ def _agent_box(label_key: str, *, color: str = COLOR_AGENT, width: float = 1.05)
 
 
 def _scientist_icon(scale: float = 1.0) -> VGroup:
-    head = Circle(radius=0.13 * scale, color=COLOR_WINNER, fill_color=COLOR_WINNER, fill_opacity=1.0)
+    head = Circle(
+        radius=0.13 * scale, color=COLOR_WINNER, fill_color=COLOR_WINNER, fill_opacity=1.0
+    )
     head.shift(UP * 0.2 * scale)
     body = Rectangle(
         width=0.4 * scale,
@@ -433,7 +435,9 @@ def _dashed_arrow_with_head(
 
     tip_color = head_color or color
     head = Polygon(
-        p1, p2, p3,
+        p1,
+        p2,
+        p3,
         color=tip_color,
         fill_color=tip_color,
         fill_opacity=1.0,
@@ -494,9 +498,7 @@ class GeodeSelfImprovingHero(Scene):
         leaves both visible mid-tween, which was the source of the
         text/box overlap before this rewrite.
         """
-        new_title = _make_text(_t(key), font_size=font_size, color=COLOR_TEXT).move_to(
-            UP * TITLE_Y
-        )
+        new_title = _make_text(_t(key), font_size=font_size, color=COLOR_TEXT).move_to(UP * TITLE_Y)
         if self.title is None:
             self.play(FadeIn(new_title), run_time=0.35)
         else:
@@ -531,18 +533,14 @@ class GeodeSelfImprovingHero(Scene):
                 fill_color=COLOR_UNFILLED,
                 fill_opacity=1.0,
             ).move_to(RIGHT * x + UP * FOOTER_Y)
-            hash_text = _make_text(
-                commit_hash, font_size=12, color=COLOR_TEXT_ACCENT
-            ).next_to(dot, UP, buff=0.05)
+            hash_text = _make_text(commit_hash, font_size=12, color=COLOR_TEXT_ACCENT).next_to(
+                dot, UP, buff=0.05
+            )
             # 2-line label: module name (top) + narrative role (bottom,
             # smaller + accent). Brings the "scenario → evaluate →
             # auto-improve" cycle vocabulary into the footer itself.
-            module_text = _make_text(
-                _t(label_key), font_size=13, color=COLOR_TEXT
-            )
-            role_text = _make_text(
-                _t(role_key), font_size=11, color=COLOR_TEXT_ACCENT
-            )
+            module_text = _make_text(_t(label_key), font_size=13, color=COLOR_TEXT)
+            role_text = _make_text(_t(role_key), font_size=11, color=COLOR_TEXT_ACCENT)
             label_group = VGroup(module_text, role_text).arrange(DOWN, buff=0.04)
             label_group.next_to(dot, DOWN, buff=0.12)
             dots[key] = dot
@@ -553,9 +551,7 @@ class GeodeSelfImprovingHero(Scene):
         for left_key, right_key in (("s1", "s2"), ("s2", "s3")):
             left = dots[left_key].get_right() + RIGHT * 0.02
             right = dots[right_key].get_left() + LEFT * 0.02
-            connectors.append(
-                Line(left, right, color=COLOR_ARROW, stroke_width=2)
-            )
+            connectors.append(Line(left, right, color=COLOR_ARROW, stroke_width=2))
 
         # HEAD pointer — small downward triangle + "HEAD" text above s1.
         head_anchor = dots["s1"].get_top() + UP * 0.18
@@ -568,9 +564,9 @@ class GeodeSelfImprovingHero(Scene):
             fill_opacity=1.0,
             stroke_width=1.0,
         )
-        head_label = _make_text(
-            "HEAD", font_size=11, color=COLOR_PROMOTED
-        ).next_to(head_triangle, UP, buff=0.04)
+        head_label = _make_text("HEAD", font_size=11, color=COLOR_PROMOTED).next_to(
+            head_triangle, UP, buff=0.04
+        )
         head_pointer = VGroup(head_triangle, head_label)
 
         self.stage_dots = dots
@@ -647,9 +643,9 @@ class GeodeSelfImprovingHero(Scene):
         # inserted a 0.06-unit space between "GE" and "ODE" on macOS
         # (defect #1 in the 2026-05-21 noise audit: "GE ODE" drift).
         # The title bar + footer chain still carry the GEODE wordmark.
-        outer_label = _make_text(
-            _t("stage_1"), font_size=15, color=COLOR_TEXT_ACCENT
-        ).next_to(outer_box, UP, buff=0.1)
+        outer_label = _make_text(_t("stage_1"), font_size=15, color=COLOR_TEXT_ACCENT).next_to(
+            outer_box, UP, buff=0.1
+        )
 
         agent_keys = (
             "agent_generator",
@@ -761,9 +757,9 @@ class GeodeSelfImprovingHero(Scene):
             fill_color=COLOR_PETRI,
             fill_opacity=0.85,
         ).move_to(RIGHT * STAGE_X["s2"] + UP * (CONTENT_TOP - 0.5))
-        petri_label = _make_text(
-            "Petri (geode audit)", font_size=18, color=COLOR_TEXT
-        ).move_to(petri_box.get_center())
+        petri_label = _make_text("Petri (geode audit)", font_size=18, color=COLOR_TEXT).move_to(
+            petri_box.get_center()
+        )
         self.petri_box = VGroup(petri_box, petri_label)
 
         # Yellow head = Petri-bound flow (O8 stage-coupled coloring).
@@ -804,10 +800,7 @@ class GeodeSelfImprovingHero(Scene):
                 fill_color=fill,
                 fill_opacity=0.6,
             )
-            cell.shift(
-                RIGHT * (STAGE_X["s2"] - 0.7 + col * 0.35)
-                + UP * (0.3 - row * 0.35)
-            )
+            cell.shift(RIGHT * (STAGE_X["s2"] - 0.7 + col * 0.35) + UP * (0.3 - row * 0.35))
             grid.add(cell)
         self.grid = grid
 
@@ -817,9 +810,28 @@ class GeodeSelfImprovingHero(Scene):
         """Each cell flashes a 1-10 score (lower is better)."""
         self._set_title("bit_7")
 
-        scores = (
-            [3.4, 2.8, 3.1, 2.5, 3.7, 4.2, 5.1, 3.8, 4.7, 5.3, 3.9, 4.4, 5.8, 4.1, 4.9, 5.2, 3.6, 5.5, 6.1, 5.8]
-        )
+        scores = [
+            3.4,
+            2.8,
+            3.1,
+            2.5,
+            3.7,
+            4.2,
+            5.1,
+            3.8,
+            4.7,
+            5.3,
+            3.9,
+            4.4,
+            5.8,
+            4.1,
+            4.9,
+            5.2,
+            3.6,
+            5.5,
+            6.1,
+            5.8,
+        ]
         score_texts = []
         for cell, sc in zip(self.grid, scores, strict=False):
             t = _make_text(f"{sc:.1f}", font_size=11, color=COLOR_TEXT).move_to(cell.get_center())
@@ -971,9 +983,9 @@ class GeodeSelfImprovingHero(Scene):
             stroke_width=2,
             dash_length=0.08,
         )
-        floor_label = _make_text(
-            "critical floor", font_size=11, color=COLOR_CRITICAL
-        ).next_to(floor_line, RIGHT, buff=0.05)
+        floor_label = _make_text("critical floor", font_size=11, color=COLOR_CRITICAL).next_to(
+            floor_line, RIGHT, buff=0.05
+        )
 
         self.play(Create(bars), Create(floor_line), Write(floor_label), run_time=0.7)
 
@@ -1057,9 +1069,9 @@ class GeodeSelfImprovingHero(Scene):
             fill_color=COLOR_PROMOTED,
             fill_opacity=0.4,
         ).move_to(RIGHT * STAGE_X["s3"] + DOWN * 1.6)
-        baseline_label = _make_text(
-            _t("baseline_json"), font_size=14, color=COLOR_TEXT
-        ).move_to(baseline_box.get_center())
+        baseline_label = _make_text(_t("baseline_json"), font_size=14, color=COLOR_TEXT).move_to(
+            baseline_box.get_center()
+        )
         self.baseline_box = VGroup(baseline_box, baseline_label)
         self.play(FadeIn(self.baseline_box), run_time=0.5)
         self.promote_label = delta_label_2
@@ -1084,9 +1096,9 @@ class GeodeSelfImprovingHero(Scene):
         # Position the cycle label well below the dim_extractor boxes
         # (which sit at y ≈ -0.6 / -1.15) so it never overlaps the
         # dict-literal text. STAGE 1's leaderboard ends at ~y = -2.85.
-        cycle_label = _make_text(
-            _t("arrow_cycle"), font_size=12, color=COLOR_PROMOTED
-        ).move_to(DOWN * 2.45)
+        cycle_label = _make_text(_t("arrow_cycle"), font_size=12, color=COLOR_PROMOTED).move_to(
+            DOWN * 2.45
+        )
         gen_label = _make_text(
             f"{_t('gen_n')} → {_t('gen_n_plus_1')}",
             font_size=18,
@@ -1113,12 +1125,12 @@ class GeodeSelfImprovingHero(Scene):
             fill_color=COLOR_PROMOTED,
             fill_opacity=1.0,
         ).move_to(new_dot_pos)
-        new_hash = _make_text(
-            "e15", font_size=11, color=COLOR_PROMOTED
-        ).next_to(new_dot, RIGHT, buff=0.1)
-        new_label = _make_text(
-            _t("gen_n_plus_1"), font_size=11, color=COLOR_PROMOTED
-        ).next_to(new_dot, LEFT, buff=0.12)
+        new_hash = _make_text("e15", font_size=11, color=COLOR_PROMOTED).next_to(
+            new_dot, RIGHT, buff=0.1
+        )
+        new_label = _make_text(_t("gen_n_plus_1"), font_size=11, color=COLOR_PROMOTED).next_to(
+            new_dot, LEFT, buff=0.12
+        )
         new_conn = Line(
             s3_dot.get_top() + UP * 0.02,
             new_dot.get_bottom() + DOWN * 0.02,
@@ -1196,9 +1208,7 @@ class GeodeSelfImprovingHero(Scene):
         # Title.
         if self.title is not None:
             self.play(FadeOut(self.title), run_time=0.3)
-        outro_title = _make_text(
-            _t("outro"), font_size=34, color=COLOR_TEXT
-        ).move_to(UP * TITLE_Y)
+        outro_title = _make_text(_t("outro"), font_size=34, color=COLOR_TEXT).move_to(UP * TITLE_Y)
         self.play(FadeIn(outro_title), run_time=0.6)
 
         # Axes.
@@ -1219,12 +1229,10 @@ class GeodeSelfImprovingHero(Scene):
         x_label = _make_text(
             _t("generations_label"), font_size=20, color=COLOR_TEXT_ACCENT
         ).next_to(x_axis, DOWN, buff=0.3)
-        y_label = _make_text(
-            _t("fitness_label"), font_size=20, color=COLOR_TEXT_ACCENT
-        ).next_to(y_axis, LEFT, buff=0.25)
-        self.play(
-            Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.7
+        y_label = _make_text(_t("fitness_label"), font_size=20, color=COLOR_TEXT_ACCENT).next_to(
+            y_axis, LEFT, buff=0.25
         )
+        self.play(Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.7)
 
         # Plot.
         fits = [0.54, 0.57, 0.62, 0.65, 0.69, 0.71, 0.74, 0.77, 0.79, 0.82]
@@ -1257,11 +1265,7 @@ class GeodeSelfImprovingHero(Scene):
             if i == 0:
                 steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit)))
             else:
-                steps.append(
-                    AnimationGroup(
-                        FadeIn(dot), FadeIn(commit), Create(connectors[i - 1])
-                    )
-                )
+                steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit), Create(connectors[i - 1])))
         self.play(LaggedStart(*steps, lag_ratio=0.18), run_time=3.0)
         self.wait(2.0)
 
@@ -1286,9 +1290,7 @@ class GeodeSelfImprovingHero(Scene):
         if hasattr(self, "_outro_artifacts"):
             self.play(FadeOut(self._outro_artifacts), run_time=0.4)
 
-        title = _make_text(_t("rubric_title"), font_size=30, color=COLOR_TEXT).move_to(
-            UP * TITLE_Y
-        )
+        title = _make_text(_t("rubric_title"), font_size=30, color=COLOR_TEXT).move_to(UP * TITLE_Y)
         self.play(FadeIn(title), run_time=0.4)
         self.rubric_title = title
 
@@ -1320,16 +1322,12 @@ class GeodeSelfImprovingHero(Scene):
             "unprompted_whistleblowing",
         )
 
-        def _tier_card(
-            label_key: str, dims: tuple[str, ...], fill: str
-        ) -> VGroup:
+        def _tier_card(label_key: str, dims: tuple[str, ...], fill: str) -> VGroup:
             # Font 9 → 11 (header 14 → 16). dim names like
             # "cooperation_with_harmful_sysprompt" need readable size
             # (defect #7 in the 2026-05-21 noise audit).
             header = _make_text(_t(label_key), font_size=16, color=COLOR_TEXT)
-            dim_text = _make_text(
-                "  ·  ".join(dims), font_size=11, color=COLOR_TEXT_ACCENT
-            )
+            dim_text = _make_text("  ·  ".join(dims), font_size=11, color=COLOR_TEXT_ACCENT)
             # Wrap dim list when wider than ~5 units by splitting at " · ".
             if dim_text.width > 5.5:
                 # Aim for ~3 dims per line so each line stays under the
@@ -1356,7 +1354,9 @@ class GeodeSelfImprovingHero(Scene):
         critical_card = _tier_card("rubric_critical_label", critical_dims, COLOR_CRITICAL)
         aux_card = _tier_card("rubric_auxiliary_label", auxiliary_dims, COLOR_PETRI)
         info_card = _tier_card("rubric_info_label", info_dims, COLOR_UNFILLED)
-        cards = VGroup(critical_card, aux_card, info_card).arrange(DOWN, buff=0.2, aligned_edge=LEFT)
+        cards = VGroup(critical_card, aux_card, info_card).arrange(
+            DOWN, buff=0.2, aligned_edge=LEFT
+        )
         cards.scale_to_fit_width(6.2)
         cards.move_to(LEFT * 3.6 + UP * 0.0)
 

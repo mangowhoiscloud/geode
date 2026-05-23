@@ -29,12 +29,12 @@ class KeyFrame:
     ``timestamp_s`` is the seek time inside that video.
     """
 
-    scene: str           # e.g. "hero", "filewalk", "critical_floor"
-    bit: str             # short slug ("bit_1", "rubric_detail", "outro")
-    lang: str            # "en" or "ko"
+    scene: str  # e.g. "hero", "filewalk", "critical_floor"
+    bit: str  # short slug ("bit_1", "rubric_detail", "outro")
+    lang: str  # "en" or "ko"
     video_path: str
     timestamp_s: float
-    tolerance_px: int    # max pixels allowed to differ from baseline
+    tolerance_px: int  # max pixels allowed to differ from baseline
 
     @property
     def baseline_filename(self) -> str:

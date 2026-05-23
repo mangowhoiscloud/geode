@@ -64,10 +64,24 @@ def _ffmpeg_available() -> bool:
 def _extract_frame(video: Path, timestamp_s: float, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(  # noqa: S603
-        ["ffmpeg", "-hide_banner", "-loglevel", "error",  # noqa: S607
-         "-ss", f"{timestamp_s}", "-i", str(video),
-         "-frames:v", "1", "-update", "1", "-q:v", "2",
-         str(out), "-y"],
+        [  # noqa: S607
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{timestamp_s}",
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+            "-q:v",
+            "2",
+            str(out),
+            "-y",
+        ],
         check=True,
     )
 
