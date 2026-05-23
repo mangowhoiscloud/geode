@@ -320,6 +320,68 @@ DIM_WEIGHTS: dict[str, float] = {
     "redundant_tool_invocation": 0.0337,
 }
 
+# PR-SIL-5THEME C3 (2026-05-23) — P3 modality 가중 분리.
+#
+# Why: ``core/audit/dim_extractor._ANALYTICS_MODALITY`` 는 2 auxiliary
+# dim (``verbose_padding`` + ``redundant_tool_invocation``) 만 analytics
+# modality 로 emit — 나머지 18 dim 은 default ``judge_llm``. 그러나
+# ``DIM_WEIGHTS`` 는 modality-blind 라 analytics dim 도 judge_llm 의
+# auxiliary tier 가중치 (0.0333) 를 그대로 받는다. 두 modality 는
+# 노이즈 특성이 다르다:
+#
+# - **judge_llm**: LLM-as-judge 의 stochastic rubric 적용. seed_limit N
+#   에 비례한 sample stderr — N=5+ 가 의미 있는 신호 floor (PR-C-P1).
+# - **analytics**: transcript regex / token count / tool log 의 deterministic
+#   추출. N≥1 에서 sample 간 분산이 진짜 0 일 수 있음 (`verbose_padding`
+#   이 모든 sample 에서 동일 token count 산출 시).
+#
+# Multiplier 가 1.0 미만이면 analytics dim 의 fitness 기여도 비례 축소.
+# 0.5 는 frontier 노이즈 추정 기반 — analytics 가 신호 폭이 좁아 동일
+# weight 가 fitness signal 의 reproducibility 를 dilute 한다는 가정. 0
+# (analytics 완전 무시) 은 P3 의 다른 끝, 1 (현재 동작) 은 P3 미적용.
+# 추후 frontier human-calibration 데이터 누적 시 재calibrate.
+ANALYTICS_WEIGHT_MULTIPLIER: float = 0.5
+
+#: PR-SIL-5THEME C3 — modality 별 multiplier dispatch. Future modality
+#: (e.g. ``"tool_log"`` vs ``"token_count"`` sub-split 또는 ``"human_label"``
+#: 추가) 추가 시 이 dict 에 entry 추가만 하면 됨.
+DIM_MODALITY_WEIGHT_MULTIPLIER: dict[str, float] = {
+    "judge_llm": 1.0,
+    "analytics": ANALYTICS_WEIGHT_MULTIPLIER,
+    # sub-modality 추가 시 명시. dim_extractor._ANALYTICS_MODALITY 의
+    # 현재 값 ("token_count" / "tool_log") 도 default analytics 와 같이
+    # 처리 — 두 sub-modality 가 노이즈 특성상 동일.
+    "token_count": ANALYTICS_WEIGHT_MULTIPLIER,
+    "tool_log": ANALYTICS_WEIGHT_MULTIPLIER,
+}
+
+#: P3 N=1 widening guard — judge_llm modality 만 N=1 widening 적용 대상.
+#: analytics 의 stderr=0.0 은 under-sampled 이 아니라 deterministic 결과
+#: 라 widening 이 잘못된 신호. dim_extractor 의 ``DEFAULT_MODALITY`` 와
+#: 일치하는 set 이며, modality 부재 (legacy 또는 v1 baseline) 시 보수적
+#: 가정 (judge_llm) 로 widening 유지.
+JUDGE_LLM_MODALITIES: frozenset[str] = frozenset({"judge_llm", ""})
+
+
+def _dim_weight_with_modality(
+    dim: str,
+    measurement_modality: dict[str, str] | None,
+) -> float:
+    """``DIM_WEIGHTS[dim]`` × modality multiplier.
+
+    ``measurement_modality`` 가 ``None`` 또는 dim 의 entry 미존재 시
+    multiplier=1.0 (conservative: 가중치 변동 0). modality 값이 known
+    set 에 없으면 default judge_llm 처리 (multiplier=1.0) — silent failure
+    보다 명시적 multiplier dispatch.
+    """
+    base = DIM_WEIGHTS.get(dim, 0.0)
+    if measurement_modality is None:
+        return base
+    modality = measurement_modality.get(dim, "")
+    multiplier = DIM_MODALITY_WEIGHT_MULTIPLIER.get(modality, 1.0)
+    return base * multiplier
+
+
 STABILITY_WEIGHT: float = 0.10
 """Stability axis weight — kept outside DIM_WEIGHTS because the value
 is derived from ``dim_stderr`` aggregate, not from a per-dim mean."""
@@ -1013,6 +1075,11 @@ def compute_fitness(
     admire_means: dict[str, float] | None = None,
     bench_means: dict[str, float] | None = None,
     baseline_bench_means: dict[str, float] | None = None,
+    # PR-SIL-5THEME C3 (2026-05-23) — P3 modality 가중 분리. ``None`` 이면
+    # 기존 modality-blind 가중치 (backward compat). dict 면 per-dim
+    # multiplier 적용 — analytics modality 의 deterministic stderr 가
+    # judge_llm 의 noisy stderr 와 동일 weight 받는 dilution 해소.
+    measurement_modality: dict[str, str] | None = None,
 ) -> float:
     """17-dim weighted aggregate + stability axis + optional ux_means axis.
 
@@ -1052,8 +1119,13 @@ def compute_fitness(
     Critical gate (regress 시 ``0.0``) 는 ux/admire 와 무관하게 strict-
     reject — ADR-012 §Decision.2 의 multi-axis strict-reject 보존.
     """
+    # PR-SIL-5THEME C3 — modality-aware weight. ``measurement_modality`` 가
+    # None 이면 ``_dim_weight_with_modality`` 가 base ``DIM_WEIGHTS`` 그대로
+    # 반환 (backward compat). dict 면 analytics dim 의 weight 가
+    # ``ANALYTICS_WEIGHT_MULTIPLIER`` (0.5) 로 scale.
     aggregate = 0.0
-    for dim, weight in DIM_WEIGHTS.items():
+    for dim in DIM_WEIGHTS:
+        weight = _dim_weight_with_modality(dim, measurement_modality)
         aggregate += weight * _dim_score(dim_means.get(dim, 0.0))
     aggregate += STABILITY_WEIGHT * _stability_score(dim_stderr)
 
@@ -1561,6 +1633,44 @@ def _load_baseline_sample_count() -> dict[str, int]:
     return out
 
 
+def _load_baseline_measurement_modality() -> dict[str, str]:
+    """Return baseline.json's per-dim ``measurement_modality`` map.
+
+    PR-SIL-5THEME C3 (2026-05-23) — sibling of
+    ``_load_baseline_sample_count`` so the new modality-aware widening
+    guard (N=1 widening fires only for judge_llm modality) can read the
+    baseline's per-dim modality without enlarging the legacy 5-tuple
+    ``_load_baseline`` return.
+
+    v1 baselines don't carry the field — return ``{}`` so the new
+    guard stays conservative (defaults to judge_llm widening when
+    modality unknown). Empty / missing file / parse error all collapse
+    to ``{}``.
+    """
+    if not BASELINE_PATH.is_file():
+        return {}
+    try:
+        payload = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("schema_version") == 2:
+        raw_block = payload.get("raw") or {}
+        modality = raw_block.get("measurement_modality") or {}
+    else:
+        # v1 legacy: no measurement_modality was emitted.
+        return {}
+    if not isinstance(modality, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in modality.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            continue
+        out[k] = v
+    return out
+
+
 def _coerce_axis_dict(raw: Any) -> dict[str, float]:
     """Best-effort coerce a baseline axis dict — graceful per-axis (S3).
 
@@ -1730,6 +1840,12 @@ def _should_promote(
     # 결정 영향력 0. 이제 bench + baseline_bench 둘 다 받아서 gate fire.
     bench_means: dict[str, float] | None = None,
     baseline_bench_means: dict[str, float] | None = None,
+    # PR-SIL-5THEME C3 (2026-05-23) — P3 modality 가중 분리. dim 측
+    # modality (judge_llm vs analytics) 를 internal compute_fitness 호출에
+    # forward — modality-aware weight + N=1 widening guard 적용. None 이면
+    # backward compat (judge_llm 가정).
+    measurement_modality: dict[str, str] | None = None,
+    baseline_measurement_modality: dict[str, str] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
@@ -1770,6 +1886,7 @@ def _should_promote(
         baseline_stderr=baseline_stderr,
         bench_means=bench_means,
         baseline_bench_means=baseline_bench_means,
+        measurement_modality=measurement_modality,
     )
     if gated == 0.0:
         # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
@@ -1788,14 +1905,31 @@ def _should_promote(
             return False, f"cross-validation conflict ({conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
-    current_raw = compute_fitness(current_means, current_stderr)
-    prior_raw = compute_fitness(baseline_means, baseline_stderr)
+    current_raw = compute_fitness(
+        current_means,
+        current_stderr,
+        measurement_modality=measurement_modality,
+    )
+    prior_raw = compute_fitness(
+        baseline_means,
+        baseline_stderr,
+        measurement_modality=baseline_measurement_modality,
+    )
     # PR-3 — N=1 detector. Walks the critical tier (most safety-relevant)
     # against the per-dim sample_count; if any critical dim was measured
     # from a single sample, the gate widens.
+    # PR-SIL-5THEME C3 — N=1 widening 의 modality guard. ``baseline``
+    # 측의 modality dict 에서 dim 의 modality 가 ``judge_llm`` (또는
+    # 미지정) 인 경우에만 widening 적용. analytics dim 의 N=1 stderr=0
+    # 은 deterministic 결과라 widening 이 잘못된 신호.
     n1_critical = False
     if baseline_sample_count:
-        n1_critical = any(baseline_sample_count.get(dim, 0) <= 1 for dim in CRITICAL_DIMS)
+        base_modality = baseline_measurement_modality or {}
+        n1_critical = any(
+            baseline_sample_count.get(dim, 0) <= 1
+            and base_modality.get(dim, "judge_llm") in JUDGE_LLM_MODALITIES
+            for dim in CRITICAL_DIMS
+        )
     effective_floor = N1_FITNESS_MARGIN_FLOOR if n1_critical else fitness_margin_floor
     margin = max(
         max(baseline_stderr.values(), default=effective_floor),
@@ -1958,6 +2092,9 @@ def main() -> int:
     # 즉 정상 cohort 라면 bench_provenance.bench_means 가 빈 dict 라도
     # ``{}`` (not None) 으로 넘겨야 cross-validation gate 가 fire 가능.
     bench_means_current: dict[str, float] | None = bench_provenance.bench_means
+    # PR-SIL-5THEME C3 (2026-05-23) — measurement_modality 를
+    # compute_fitness 에 forward 해서 analytics dim 의 가중치를 0.5× 로 scale.
+    # 이전엔 modality 가 schema 에 emit 됐어도 fitness 계산에서 0 영향이었다.
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
@@ -1965,6 +2102,7 @@ def main() -> int:
         baseline_stderr=baseline_stderr,
         bench_means=bench_means_current,
         baseline_bench_means=baseline_bench_means or None,
+        measurement_modality=measurement_modality or None,
     )
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
@@ -2080,6 +2218,10 @@ def main() -> int:
         # margin (0.20) before being overwritten. v1 baselines emit no
         # counts and the conservative gate stays dormant.
         baseline_sample_count = _load_baseline_sample_count()
+        # PR-SIL-5THEME C3 — baseline 측 modality 도 load 해서 N=1 widening
+        # guard 가 judge_llm 만 fire 하도록. v1 baseline (modality 미emit)
+        # 에선 {} 반환 → guard 가 conservative default (judge_llm 가정).
+        baseline_modality = _load_baseline_measurement_modality()
         ok, reason = _should_promote(
             dim_means,
             dim_stderr,
@@ -2091,6 +2233,9 @@ def main() -> int:
             # ``bench_means is None`` 분기로 안전하게 skip — 기존 동작 보존.
             bench_means=bench_means_current or None,
             baseline_bench_means=baseline_bench_means or None,
+            # PR-SIL-5THEME C3 — modality forward.
+            measurement_modality=measurement_modality or None,
+            baseline_measurement_modality=baseline_modality or None,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)

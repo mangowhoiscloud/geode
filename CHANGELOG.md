@@ -158,6 +158,63 @@ functional change.
   translated to the adapter Protocol's ``payg`` / ``subscription`` /
   ``adapter`` names via a single SoT table — both naming schemes are
   accepted in ``[seed_generation.role.<role>]`` overrides.
+- **PR-SIL-5THEME C3 — P3 modality 가중 분리**. `core/audit/dim_extractor`
+  가 PR-1 으로 per-dim `measurement_modality` 를 emit 했으나
+  `compute_fitness` / `_should_promote` 는 그 신호를 0% 사용하던
+  silent disconnect 닫기.
+
+  **Why** — `_ANALYTICS_MODALITY` 는 2 auxiliary dim
+  (`verbose_padding` + `redundant_tool_invocation`) 만 analytics
+  modality 로 tag (나머지 18 dim 은 `judge_llm`). 두 modality 는 노이즈
+  특성이 다르다:
+  - **judge_llm**: LLM-as-judge stochastic rubric — N 에 비례한 sample
+    stderr, N=5+ 가 의미 있는 신호 floor (PR-C-P1)
+  - **analytics**: transcript regex / token count / tool log 의
+    deterministic 추출 — N=1 에서도 sample 간 분산이 진짜 0 가능
+
+  modality-blind 가중치는 (a) analytics 의 좁은 신호 폭을 judge_llm 의
+  full-weight 로 받아 fitness reproducibility dilute, (b) N=1 widening
+  guard (PR-3) 가 analytics 의 deterministic stderr=0 을 under-sampled
+  stderr=0 과 conflate.
+
+  **Changed**:
+  - `ANALYTICS_WEIGHT_MULTIPLIER = 0.5` + `DIM_MODALITY_WEIGHT_MULTIPLIER`
+    dispatch dict — analytics modality 의 dim weight 0.5× scale
+  - `_dim_weight_with_modality(dim, measurement_modality)` 헬퍼 — base
+    `DIM_WEIGHTS[dim]` × modality multiplier
+  - `compute_fitness(..., measurement_modality: dict[str, str] | None)`
+    파라미터 추가 — None 이면 backward compat (legacy caller 무영향)
+  - `_should_promote(..., measurement_modality, baseline_measurement_modality)`
+    추가 + internal compute_fitness 3 호출에 forward
+  - N=1 widening guard 의 modality check 추가 — `JUDGE_LLM_MODALITIES`
+    (judge_llm + "") set 에 속하는 critical dim 만 widening 적용. analytics
+    critical 은 widening skip (deterministic stderr=0 이 잘못된 신호 아님).
+    Modality 부재 (v1 baseline) 시 보수적 default (judge_llm 가정) →
+    widening 유지
+  - 신규 `_load_baseline_measurement_modality()` — `_load_baseline_sample_count`
+    sibling, v2 schema 의 `raw.measurement_modality` 읽음. v1 → `{}`
+  - `main()` 가 modality dict 를 `compute_fitness` + `_should_promote` 에
+    forward
+
+  **Test guards** (`tests/test_p3_modality_weight_split.py` 신규, 19 tests):
+  - `ANALYTICS_WEIGHT_MULTIPLIER` 0-1 range invariant
+  - `DIM_MODALITY_WEIGHT_MULTIPLIER` 가 `dim_extractor._ANALYTICS_MODALITY` +
+    `DEFAULT_MODALITY` 의 emit 값 모두 cover (drift catch)
+  - `JUDGE_LLM_MODALITIES` 가 빈 문자열 포함 (legacy 안전)
+  - `_dim_weight_with_modality`: None / judge_llm / analytics / unknown
+    modality / unknown dim 모두 (5 tests)
+  - `compute_fitness` modality-blind backward compat
+  - analytics modality 명시 시 fitness 감소 (weight scaled)
+  - 모든 judge_llm 명시 시 modality-blind 와 동일
+  - `_should_promote` N=1 widening fires for judge_llm critical
+  - `_should_promote` N=1 widening skipped for ALL-analytics critical (가정
+    시나리오, future schema 확장 대비)
+  - `_should_promote` modality=None 시 보수적 default → widening 유지
+  - `N1_FITNESS_MARGIN_FLOOR == 0.20` pin
+  - `_load_baseline_measurement_modality`: missing file / v1 legacy / v2
+    raw namespace / malformed entries graceful (4 tests)
+
+### Added
 
 - **PR-SIL-5THEME C2 — Bench S6b production wiring**. ADR-012 §S6
   (schema + math + cross-validation gate, C1 amendment 로 ADR 측 명세
