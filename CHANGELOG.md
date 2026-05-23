@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Step J-b.2 — mutator runner API path migrated to the LLMAdapter Protocol.**
+  ``core/self_improving_loop/runner.py:_default_llm_call`` 's API path
+  (``source == "api_key"`` and the ``auto`` cascade fallback) now
+  resolves the mutator adapter via
+  :func:`core.llm.adapters.registry.resolve_for(provider, "payg")` and
+  calls :meth:`LLMAdapter.acomplete` with a typed
+  :class:`AdapterCallRequest` instead of the legacy
+  :class:`AgenticLLMPort.agentic_call`. The API path therefore inherits
+  F's GLM adapter family directly when ``source = "api_key"`` lands on
+  a glm model.
+  A new ``_normalize_provider_for_registry`` helper translates the
+  legacy ``_resolve_provider`` keys (which return ``openai-codex`` for
+  gpt-5.x ids) to the Path-B registry's narrower vocabulary
+  (``openai``). The CLI-subscription branches (``claude-cli`` /
+  ``openai-codex`` source) **deliberately remain on the dedicated
+  ``invoke_claude_cli`` / ``invoke_codex_cli`` helpers** in
+  :mod:`core.self_improving_loop.cli_subprocess` rather than going
+  through the ``ClaudeCliAdapter`` / ``CodexCliAdapter`` built-ins
+  because the built-in adapters speak the streaming-JSON event
+  protocol used by the agentic loop, whereas the mutator parser
+  consumes plain text. Migrating both CLI adapters to support a
+  text-output mode is a separate follow-up (Step I.c). Usage telemetry
+  continues to feed ``SessionMetrics.accumulate_llm_call``
+  (``input_tokens`` / ``output_tokens`` / ``cached_input_tokens``);
+  per-call elapsed + model captured the same way.
+
 ### Removed
 
 - **PR-CL-A1-followup — GoalDecomposer 제거 + Plan 흡수**. PR-CL-A1 의
