@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from core.cli.commands import MODEL_PROFILES
 from core.config import _resolve_provider
-from core.llm.adapters import _ADAPTER_MAP
 
 from core.llm import adapters as _adapters_mod
+from core.llm.adapters import _ADAPTER_MAP
 
 
 class TestProviderRouting:
