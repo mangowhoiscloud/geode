@@ -639,9 +639,12 @@ class AgenticLoop:
             # PR-CL-A1 (2026-05-23) — re-apply active Plan on rebuild so a
             # model drift or replan-triggered ``_prompt_dirty`` flag doesn't
             # silently drop the plan hint (parallels the reflexion_hint
-            # fix in PR-CL-A3 Codex MCP MEDIUM #6).
-            plan_hint = self._consume_plan_hint()
-            if plan_hint:
+            # fix in PR-CL-A3 Codex MCP MEDIUM #6). ``getattr`` guard
+            # tolerates stub loops in unit tests (see
+            # ``tests/test_arun_model_drift_sync.py::_StubLoop``).
+            _plan_consume = getattr(self, "_consume_plan_hint", None)
+            plan_hint = _plan_consume() if callable(_plan_consume) else ""
+            if isinstance(plan_hint, str) and plan_hint:
                 system_prompt += "\n\n" + plan_hint
             self._prompt_dirty = False
             # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. ``HookEvent.PROMPT_ASSEMBLED``

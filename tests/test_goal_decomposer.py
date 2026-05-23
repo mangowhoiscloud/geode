@@ -404,8 +404,11 @@ class TestAgenticLoopIntegration:
         assert result is None
 
     @patch("core.llm.router.call_llm_parsed")
-    def test_decomposition_returns_hint(self, mock_llm: MagicMock) -> None:
-        """Compound request should produce a system prompt hint."""
+    def test_decomposition_installs_plan_on_metrics(self, mock_llm: MagicMock) -> None:
+        """PR-CL-A1 (2026-05-23) — ``try_decompose`` no longer returns a
+        suffix string; it installs an explicit :class:`Plan` on
+        ``SessionMetrics.active_plan`` and returns None. Verify the
+        Plan carries the decomposed steps."""
         mock_llm.return_value = DecompositionResult(
             is_compound=True,
             goals=[
@@ -429,20 +432,27 @@ class TestAgenticLoopIntegration:
         from core.agent.conversation import ConversationContext
         from core.agent.loop import AgenticLoop
         from core.agent.tool_executor import ToolExecutor
+        from core.observability.session_metrics import (
+            current_session_metrics,
+            session_metrics_scope,
+        )
 
         context = ConversationContext()
         executor = ToolExecutor(auto_approve=True)
         loop = AgenticLoop(context, executor)
 
-        hint = loop._try_decompose("Project Atlas 분석하고 리포트 만들어줘")
-
-        assert hint is not None
-        assert "Goal Decomposition Plan" in hint
-        assert "step_1" in hint
-        assert "step_2" in hint
-        assert "analyze_subject" in hint
-        assert "generate_report" in hint
-        assert "depends on: step_1" in hint
+        with session_metrics_scope(session_id="t-decomp"):
+            hint = loop._try_decompose("Project Atlas 분석하고 리포트 만들어줘")
+            # PR-CL-A1 — return value is None (Plan installed via side-effect).
+            assert hint is None
+            plan = current_session_metrics().active_plan
+            assert plan is not None
+            assert len(plan.steps) == 2
+            assert plan.steps[0].id == "step_1"
+            assert plan.steps[1].id == "step_2"
+            assert plan.steps[0].tool_name == "analyze_subject"
+            assert plan.steps[1].depends_on == ("step_1",)
+            assert plan.reasoning == "Analysis then report"
 
     def test_simple_request_no_hint(self) -> None:
         """Simple requests should not produce a decomposition hint."""
