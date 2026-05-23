@@ -196,8 +196,10 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     """
     import inspect
 
+    # PR-CLEANUP-1 (2026-05-23) — ``core.agent.loop.loop`` shim removed;
+    # ``core.agent.loop.agent_loop`` is the canonical module.
     from core.agent.loop import _response
-    from core.agent.loop import loop as loop_mod
+    from core.agent.loop import agent_loop as loop_mod
     from plugins.petri_audit.targets import geode_target
 
     from core.llm import token_tracker
