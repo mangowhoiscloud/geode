@@ -117,7 +117,20 @@ class AgenticLoop:
         self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
-        self.model = model or ANTHROPIC_PRIMARY
+        # PR-CL-A6 (2026-05-23) — when the caller doesn't pass an explicit
+        # ``model``, prefer ``settings.act_model`` over the global default
+        # so operators can split Plan / Act per ReWOO. ``settings.act_model``
+        # default is empty string ("") which falls through to ``ANTHROPIC_PRIMARY``.
+        if model is None:
+            try:
+                from core.config import settings
+
+                act_model = (getattr(settings, "act_model", "") or "").strip()
+            except Exception:
+                act_model = ""
+            self.model = act_model or ANTHROPIC_PRIMARY
+        else:
+            self.model = model
         self._provider = provider  # "anthropic", "openai", or "glm"
         # When True, ``sync_model_from_settings`` becomes a no-op so the
         # caller's chosen ``model`` is sticky for the lifetime of the
@@ -1707,7 +1720,12 @@ class AgenticLoop:
     # ------------------------------------------------------------------
 
     async def _call_llm(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        *,
+        round_idx: int = 0,
+        model: str | None = None,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via adapter (P1 Gateway pattern).
 
@@ -1715,11 +1733,20 @@ class AgenticLoop:
         provider-specific message/tool conversion, retry, and failover.
         Returns a normalized ``AgenticResponse`` or None on failure.
         Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
+
+        PR-CL-A6 (2026-05-23) — optional ``model`` override lets callers
+        (verify judge, future Plan/Act split) request a non-default model
+        for one call without mutating ``self.model``. Falls back to
+        ``self.model`` when ``None``. The override threads through to
+        the adapter's ``agentic_call(model=...)`` parameter; the rest of
+        the loop (token tracker, retry budget, ContextVar metrics) is
+        unaffected.
         """
+        effective_model = model or self.model
         # Sandwich injection: prepend system reminder to messages (Claude Code pattern)
         from core.agent.system_injection import prepend_system_reminder
 
-        prepend_system_reminder(messages, model=self.model, round_idx=round_idx)
+        prepend_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # Context overflow detection (Karpathy P6 Context Budget)
         await self._check_context_overflow(system, messages)
@@ -1743,7 +1770,7 @@ class AgenticLoop:
         # so the only remaining adaptive case is wrap-up.
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
-        ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
+        ctx_window = MODEL_CONTEXT_WINDOW.get(effective_model, 200_000)
 
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
@@ -1766,7 +1793,7 @@ class AgenticLoop:
             )
 
             req = build_adapter_request(
-                model=self.model,
+                model=effective_model,
                 system=system,
                 messages=messages,
                 tools=self._tools,
@@ -1790,7 +1817,7 @@ class AgenticLoop:
                 response = agentic_response_from_adapter_result(result)
         else:
             response = await self._adapter.agentic_call(
-                model=self.model,
+                model=effective_model,
                 system=system,
                 messages=messages,
                 tools=self._tools,

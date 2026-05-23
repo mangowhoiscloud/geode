@@ -54,6 +54,11 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.secondary_model": "default_secondary_model",
     "llm.router_model": "router_model",
     "llm.learning_extract_model": "learning_extract_model",
+    # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model knobs. Empty
+    # string falls back to ``llm.primary_model``.
+    "llm.plan_model": "plan_model",
+    "llm.act_model": "act_model",
+    "llm.judge_model": "judge_model",
     "cognitive.reflection_enabled": "cognitive_reflection_enabled",
     "cognitive.reflection_model": "cognitive_reflection_model",
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",

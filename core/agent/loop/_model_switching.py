@@ -33,28 +33,39 @@ def _resolve_agentic_adapter(provider: str):  # type: ignore[no-untyped-def]
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:
-    """Return settings.model when drift should apply, otherwise None."""
+    """Return the action-model drift target when sync should apply, else None.
+
+    PR-CL-A6 (2026-05-23) — when ``settings.act_model`` is set, the drift
+    target is the action model (not ``settings.model``). Without this fix
+    a session that constructed the loop with ``act_model=sonnet`` would
+    revert to ``settings.model=opus`` on the next sync, undoing the
+    Plan/Act split (Codex MCP HIGH #1).
+    """
     if getattr(loop, "_disable_settings_drift", False):
         return None
 
     from core.config import settings
 
-    if settings.model == loop.model:
+    # Action loop's intended model — ``act_model`` wins when set; falls
+    # back to ``settings.model`` for callers that haven't configured the
+    # Plan/Act knob (pre-A6 behaviour).
+    target_model = (getattr(settings, "act_model", "") or "").strip() or settings.model
+    if target_model == loop.model:
         return None
-    if not loop._drift_target_is_healthy(settings.model):
+    if not loop._drift_target_is_healthy(target_model):
         log.warning(
             "Model drift refused: target=%s has no eligible profile — "
             "keeping loop=%s. Run `/login use <plan>` to enable target.",
-            settings.model,
+            target_model,
             loop.model,
         )
         return None
     log.info(
-        "Model drift detected: loop=%s settings=%s — syncing",
+        "Model drift detected: loop=%s target=%s — syncing",
         loop.model,
-        settings.model,
+        target_model,
     )
-    return str(settings.model)
+    return str(target_model)
 
 
 async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:

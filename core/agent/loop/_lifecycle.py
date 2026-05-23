@@ -163,54 +163,70 @@ def _final_hook_payloads(
     return session_ended, turn_completed, result.reasoning_metrics or {}
 
 
+def _finalize_verify_outcome(
+    loop: AgenticLoop, result: AgenticResult, vr: Any
+) -> dict[str, Any] | None:
+    """Shared SessionMetrics record + DB persist + payload-build path.
+
+    Called by both the sync and async ``_run_turn_verify*`` wrappers so
+    the bookkeeping stays identical regardless of how the verify outcome
+    was produced. ``None`` mirrors the "skip the hook" semantics for
+    OFF mode.
+    """
+    from core.agent.verify import VerifyMode
+    from core.observability.session_metrics import current_session_metrics
+
+    if vr.mode is VerifyMode.OFF:
+        return None
+    metrics = current_session_metrics()
+    metrics.record_verify(
+        passed=vr.passed,
+        mode=vr.mode.value,
+        effective_mode=vr.effective_mode.value,
+        rubric_misses=vr.rubric_misses,
+        reflexion_hint=vr.reflexion_hint,
+    )
+    _persist_verify_state(loop, metrics, vr.should_retry)
+    payload: dict[str, Any] = vr.to_payload()
+    payload["session_id"] = getattr(loop, "_session_id", "")
+    payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
+    payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
+    payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
+    return payload
+
+
 def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
-    """PR-CL-A3 (2026-05-23) — per-turn verify dispatch.
+    """PR-CL-A3 (2026-05-23) — sync per-turn verify dispatch.
 
-    Runs the configured verify mode (env knob ``GEODE_VERIFY_MODE``,
-    default ``rule_based``) over the just-finished turn, records the
-    outcome into ``SessionMetrics`` (Tier 2 aggregator) so the next-turn
-    caller can read ``last_verify_reflexion_hint`` to inject into
-    ``loop._system_suffix``, and returns a payload dict ready for the
-    ``TURN_VERIFY_PASSED`` / ``TURN_VERIFY_FAILED`` hook. ``None`` is
-    returned when verify mode is ``off`` (so the caller skips the hook
-    fire — no payload pollution).
-
-    Failures inside the verify path are swallowed in ``verify_turn``
-    itself — observability mustn't break the run it observes.
+    Sync variant used by ``finalize_and_return`` (legacy sync path) and
+    test fixtures. The async finalizer uses :func:`_run_turn_verify_async`
+    so the LLM-judge call can ``await`` cleanly (Codex MCP HIGH #2 fix,
+    PR-CL-A6).
     """
     try:
-        from core.agent.verify import VerifyMode, verify_turn
-        from core.observability.session_metrics import current_session_metrics
+        from core.agent.verify import verify_turn
 
         vr = verify_turn(result, loop=loop)
-        if vr.mode is VerifyMode.OFF:
-            return None
-        metrics = current_session_metrics()
-        metrics.record_verify(
-            passed=vr.passed,
-            mode=vr.mode.value,
-            effective_mode=vr.effective_mode.value,
-            rubric_misses=vr.rubric_misses,
-            reflexion_hint=vr.reflexion_hint,
-        )
-        # PR-CL-A3 persistence — mirror Tier 2 verify telemetry into the
-        # ``sessions`` SQLite row so resume / cross-process readers can
-        # consume it without replaying SessionMetrics. Silent no-op when
-        # the session row hasn't been ``upsert``-ed (mid-test scenario or
-        # callers that bypass the SessionManager) — observability mustn't
-        # break the run it observes.
-        _persist_verify_state(loop, metrics, vr.should_retry)
-        # Enrich payload with turn context (Codex MCP LOW #8, 2026-05-23) so
-        # external renderers (Inspect viewer / Slack notifier / Petri audit)
-        # can show the relevant turn alongside the verify result.
-        payload = vr.to_payload()
-        payload["session_id"] = getattr(loop, "_session_id", "")
-        payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
-        payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
-        payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
-        return payload
+        return _finalize_verify_outcome(loop, result, vr)
     except Exception:
         log.warning("turn verify dispatch crashed; skipping", exc_info=True)
+        return None
+
+
+async def _run_turn_verify_async(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
+    """Async per-turn verify dispatch (PR-CL-A6 — Codex MCP HIGH #2 fix).
+
+    Used by ``finalize_and_return_async`` so an LLM-judge mode call can
+    await ``loop._call_llm`` under the same event loop without the
+    cross-loop thread-pool hop the sync wrapper has to use.
+    """
+    try:
+        from core.agent.verify import verify_turn_async
+
+        vr = await verify_turn_async(result, loop=loop)
+        return _finalize_verify_outcome(loop, result, vr)
+    except Exception:
+        log.warning("turn verify (async) dispatch crashed; skipping", exc_info=True)
         return None
 
 
@@ -303,9 +319,11 @@ async def finalize_and_return_async(
         await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
         await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
-    # PR-CL-A3 — see ``finalize_and_return`` rationale. The verify dispatch
-    # is sync; hooks (if any) fire async.
-    verify_payload = _run_turn_verify(loop, result)
+    # PR-CL-A3 + PR-CL-A6 — async verify dispatch so LLM-judge mode can
+    # ``await loop._call_llm`` under the same event loop without the
+    # cross-loop thread hop the sync wrapper falls back to (Codex MCP
+    # HIGH #2 fix, 2026-05-23).
+    verify_payload = await _run_turn_verify_async(loop, result)
     if verify_payload is not None and loop._hooks:
         event = (
             HookEvent.TURN_VERIFY_PASSED

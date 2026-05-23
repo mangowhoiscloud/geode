@@ -49,6 +49,79 @@ functional change.
 
 ### Added
 
+- **PR-CL-A6 — Plan / Action / Judge model separation**. Third PR in
+  the Cognitive Loop sprint (A3 → **A6** → A1). Adds three operator-tunable
+  model knobs that let the loop's three LLM call sites pick the right
+  cost/quality point independently:
+
+  - ``settings.plan_model`` — used by goal decomposition
+    (``_decomposition.try_decompose``). Set to ``claude-opus-4-7`` for
+    reasoning-heavy plans; empty falls back to ``loop.model``.
+  - ``settings.act_model`` — used by the main action loop (per-round
+    ``_call_llm``). When ``AgenticLoop(model=None)`` (caller didn't pin
+    a model), the loop reads this instead of the legacy
+    ``ANTHROPIC_PRIMARY``. Set to ``claude-sonnet-4-6`` to keep planning
+    on Opus while action runs on Sonnet for cost.
+  - ``settings.judge_model`` — used by the per-turn verify LLM-judge mode
+    (``GEODE_VERIFY_MODE=llm_judge``). Closes the PR-CL-A3 stub —
+    ``_verify_llm_judge`` now actually calls an LLM via
+    ``loop._call_llm(model=judge_model)`` and parses the
+    ``{"passed", "score", "reason"}`` JSON response.
+
+  Each knob has env override (``GEODE_PLAN_MODEL`` / ``GEODE_ACT_MODEL`` /
+  ``GEODE_JUDGE_MODEL``) and TOML mapping (``llm.plan_model`` /
+  ``llm.act_model`` / ``llm.judge_model``). Defaults are the empty
+  string so existing callers see no behaviour change until a knob is
+  set; pre-A6 callers continue to use ``settings.model``.
+
+  Implementation:
+  - ``core/config/_settings.py`` — 3 new ``Field`` declarations with
+    ``AliasChoices`` (matches the existing ``cognitive_reflection_model``
+    pattern).
+  - ``core/config/__init__.py`` — 3 new ``_TOML_TO_SETTINGS`` mappings.
+  - ``core/agent/loop/agent_loop.py`` — ``AgenticLoop.__init__`` reads
+    ``settings.act_model`` when ``model`` is None; ``_call_llm`` exposes
+    optional ``model: str | None = None`` keyword override that threads
+    through to ``self._adapter.agentic_call(model=...)`` and the
+    ``build_adapter_request`` bridge path.
+  - ``core/agent/loop/_decomposition.py`` — ``try_decompose`` reads
+    ``settings.plan_model`` for ``GoalDecomposer(model=...)``.
+  - ``core/agent/verify.py`` — ``_verify_llm_judge`` no longer stubs out.
+    Builds a strict-JSON judge prompt, calls ``loop._call_llm(model=
+    settings.judge_model)``, parses the response via
+    ``_parse_judge_payload`` (tolerates code fences + bad JSON + non-
+    numeric scores via clamp-and-default), surfaces failed reason as a
+    ``judge_fail`` rubric_miss + reflexion_hint. New
+    ``verify_turn_async`` + ``_verify_llm_judge_async`` pair lets
+    ``finalize_and_return_async`` await the judge call under the same
+    event loop instead of hopping through a thread pool. The sync
+    wrapper retains a thread-pool fallback for sync callers. The judge
+    call is bounded by a 120s ``asyncio.wait_for`` timeout, and the
+    response's token usage is fed through ``loop._track_usage_async``
+    so judge cost surfaces in the session TokenTracker (Codex MCP
+    MEDIUM #4 fix; per-phase ``phase="judge"`` tagging deferred). 4
+    fallback paths to rule-based with ``effective_mode=RULE_BASED``:
+    loop ref is None, response is None, empty response text, LLM call
+    raises (TimeoutError or otherwise).
+  - ``core/agent/loop/_lifecycle.py`` — new ``_run_turn_verify_async``
+    + shared ``_finalize_verify_outcome`` helper. ``finalize_and_return_async``
+    awaits the async verify path (Codex MCP HIGH #2 fix); sync
+    ``finalize_and_return`` still uses the sync wrapper for legacy callers.
+  - ``core/agent/loop/_model_switching.py`` — drift-sync target reads
+    ``settings.act_model or settings.model`` so an Opus-primary + Sonnet-
+    act split doesn't revert mid-session (Codex MCP HIGH #1 fix).
+  - ``tests/test_model_split.py`` (NEW, 22 tests) — settings defaults +
+    env override + TOML mapping; ``AgenticLoop.__init__`` act_model
+    cascade + explicit-model precedence + empty-fallback; ``_call_llm``
+    signature contract; goal decomposition uses ``plan_model``;
+    ``_verify_llm_judge`` actual LLM call + judge_fail path + 4 fallback
+    cases (no loop / exception / None response / no judge_model);
+    ``_judge_prompt`` truncation; ``_parse_judge_payload`` 5 edge cases.
+
+  Frontier alignment (Socratic Q5): ReWOO (arxiv 2305.18323, 5x token
+  efficiency via plan/observation decouple) + Claude Code Plan/Edit mode
+  + Self-Discover (arxiv 2402.03620, task-level plan composition).
+
 - **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL) + sessions
   DB persistence**. Per-turn verification of agent action quality,
   fired at the ``TURN_COMPLETED`` hook boundary so it doesn't interrupt

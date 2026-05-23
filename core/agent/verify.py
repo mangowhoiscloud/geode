@@ -258,25 +258,197 @@ def synthesize_reflexion_hint(rubric_misses: tuple[str, ...]) -> str:
     return "\n".join(lines)
 
 
-def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
-    """LLM-self-judge mode — opt-in, one extra LLM call per turn.
+_LLM_JUDGE_SYSTEM_PROMPT = """\
+You are a strict, concise verifier for one agent turn. Read the turn output
+below and emit a single-line JSON object — nothing else — with these keys:
 
-    This PR ships the wiring stub (mode dispatch + result shape); the
-    actual LLM call follows in PR-CL-A6 (Plan / Action Model Separation)
-    which gives us a dedicated judge model knob. Until then, the stub
-    falls back to ``rule_based`` so the mode-knob doesn't break the loop
-    when an operator opts in early.
-    """
-    log.info(
-        "GEODE_VERIFY_MODE=llm_judge selected but the judge call is "
-        "scheduled to land in PR-CL-A6; falling back to rule_based."
+    {"passed": <true|false>, "score": <0.0-1.0>, "reason": "<short>"}
+
+Pass when the turn made measurable progress toward the user's request
+(tool used + text reflecting result, OR clean handoff). Fail when the
+turn was empty, returned only an error, or contradicted the prior plan.
+Score 1.0 = clearly correct, 0.5 = ambiguous, 0.0 = clearly wrong.
+"""
+
+
+def _judge_prompt(result: AgenticResult) -> str:
+    """Render the just-finished turn as input for the judge."""
+    tool_names = [tc.get("name", "?") for tc in (result.tool_calls or []) if isinstance(tc, dict)]
+    return (
+        "Turn output to evaluate:\n"
+        f"- termination_reason: {result.termination_reason!r}\n"
+        f"- rounds: {result.rounds}\n"
+        f"- tool_calls: {tool_names}\n"
+        f"- text (truncated 2000 chars):\n{(result.text or '')[:2000]}\n"
     )
+
+
+def _parse_judge_payload(raw: str) -> tuple[bool, float, str]:
+    """Extract ``(passed, score, reason)`` from the judge's single-line JSON.
+
+    Falls back to neutral pass with score=0.5 when parsing fails — judge
+    crashes must not break the agent run.
+    """
+    import json
+
+    text = (raw or "").strip()
+    # Some models wrap JSON in code fences; strip the obvious decorations.
+    if text.startswith("```"):
+        lines = [ln for ln in text.splitlines() if not ln.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    try:
+        obj = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        log.debug("LLM judge returned non-JSON; treating as pass", extra={"raw": text[:200]})
+        return True, 0.5, "judge_unparseable"
+    passed = bool(obj.get("passed", True))
+    raw_score = obj.get("score", 0.5)
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        score = 0.5
+    score = max(0.0, min(1.0, score))
+    reason = str(obj.get("reason", ""))[:200]
+    return passed, score, reason
+
+
+_JUDGE_CALL_TIMEOUT_S: float = 120.0
+
+
+def _build_judge_result_from_response(response: Any, result: AgenticResult) -> VerifyResult:
+    """Shared judge response → VerifyResult translation.
+
+    Pulled out of the call paths so sync and async wrappers parse identically.
+    Falls back to ``_llm_judge_fallback`` when the response carries no usable
+    text — caller already handled the network-level None.
+    """
+    raw_text = (getattr(response, "text", "") or "").strip()
+    if not raw_text:
+        return _llm_judge_fallback(result)
+    passed, score, reason = _parse_judge_payload(raw_text)
+    misses: tuple[str, ...] = ()
+    hint = ""
+    if not passed:
+        misses = ("judge_fail",) if not reason else ("judge_fail", reason[:40])
+        hint = synthesize_reflexion_hint(("judge_fail",)) + (
+            f"\nJudge reason: {reason}" if reason else ""
+        )
+    return VerifyResult(
+        passed=passed,
+        mode=VerifyMode.LLM_JUDGE,
+        effective_mode=VerifyMode.LLM_JUDGE,
+        score=score,
+        rubric_misses=misses,
+        reflexion_hint=hint,
+        should_retry=(not passed),
+        ts=time.monotonic(),
+    )
+
+
+async def _verify_llm_judge_async(
+    result: AgenticResult, *, loop: Any | None = None
+) -> VerifyResult:
+    """Async LLM-judge path — awaits ``loop._call_llm`` cleanly under the
+    same event loop the agentic finalizer runs on (Codex MCP HIGH #2 +
+    MEDIUM #3, 2026-05-23). Bounded by :data:`_JUDGE_CALL_TIMEOUT_S` via
+    :func:`asyncio.wait_for` so a stuck adapter cannot hang finalisation.
+
+    Judge token usage is recorded via the loop's ``_track_usage_async``
+    helper after a non-``None`` response so judge cost surfaces in the
+    session's TokenTracker (Codex MCP MEDIUM #4 fix, 2026-05-23). Cost
+    is currently aggregated into the same TokenTracker that handles the
+    action loop — per-phase tagging (``phase="judge"``) is a follow-up
+    that needs adapter-level API extension.
+    """
+    if loop is None:
+        return _llm_judge_fallback(result)
+    try:
+        import asyncio
+
+        from core.config import settings
+
+        judge_model = (getattr(settings, "judge_model", "") or "").strip() or loop.model
+        prompt = _judge_prompt(result)
+        response = await asyncio.wait_for(
+            loop._call_llm(
+                _LLM_JUDGE_SYSTEM_PROMPT,
+                [{"role": "user", "content": prompt}],
+                model=judge_model,
+            ),
+            timeout=_JUDGE_CALL_TIMEOUT_S,
+        )
+        if response is None:
+            log.debug("LLM judge (async): no response; falling back to rule_based")
+            return _llm_judge_fallback(result)
+        # Codex MCP MEDIUM #4 — record judge usage explicitly. Mirrors the
+        # action-loop path at ``agent_loop.py:_track_usage_async``. Failure
+        # is swallowed so judge usage accounting never breaks the run.
+        track = getattr(loop, "_track_usage_async", None)
+        if track is not None:
+            try:
+                await track(response)
+            except Exception:
+                log.debug("Judge usage tracking failed", exc_info=True)
+        return _build_judge_result_from_response(response, result)
+    except Exception:
+        log.warning(
+            "LLM judge (async) call failed; falling back to rule_based",
+            exc_info=True,
+        )
+        return _llm_judge_fallback(result)
+
+
+def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
+    """Sync LLM-self-judge mode — opt-in, one extra LLM call per turn.
+
+    PR-CL-A6 (2026-05-23) — sync wrapper for callers that aren't inside an
+    asyncio event loop (CLI smoke tests, pure-sync verify dispatch). The
+    async caller path (``_run_turn_verify_async`` from
+    ``finalize_and_return_async``) uses :func:`_verify_llm_judge_async`
+    directly to avoid the cross-loop thread-pool hop (Codex MCP HIGH #2
+    fix). When invoked from a sync context with no running event loop,
+    we use ``asyncio.run`` with the same :data:`_JUDGE_CALL_TIMEOUT_S`
+    timeout. When invoked from inside a running loop, the only safe sync
+    option is a thread pool — we keep it but with the explicit timeout.
+
+    Failures NEVER raise — observability mustn't break the run it observes.
+    """
+    if loop is None:
+        log.debug("LLM judge: no loop reference; falling back to rule_based")
+        return _llm_judge_fallback(result)
+    try:
+        import asyncio
+
+        try:
+            asyncio.get_running_loop()
+            running = True
+        except RuntimeError:
+            running = False
+        if running:
+            # Sync caller inside an active loop is a misuse — schedule the
+            # async path on a worker thread. ``asyncio.run`` inside that
+            # thread builds its own loop so adapter clients are not shared
+            # across loops. ``asyncio.wait_for`` inside ``_verify_llm_judge_async``
+            # bounds the actual LLM call; the thread join here trusts that.
+            import concurrent.futures
+
+            def _run_in_thread() -> VerifyResult:
+                return asyncio.run(_verify_llm_judge_async(result, loop=loop))
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(_run_in_thread).result(timeout=_JUDGE_CALL_TIMEOUT_S + 5.0)
+        return asyncio.run(_verify_llm_judge_async(result, loop=loop))
+    except Exception:
+        log.warning("LLM judge call failed; falling back to rule_based", exc_info=True)
+        return _llm_judge_fallback(result)
+
+
+def _llm_judge_fallback(result: AgenticResult) -> VerifyResult:
+    """Used when the LLM judge can't run (no loop ref / response None /
+    exception). Runs the rule-based path but tags the result mode as
+    LLM_JUDGE (operator intent) with ``effective_mode=RULE_BASED`` so
+    telemetry surfaces the downgrade."""
     rb = _verify_rule_based(result)
-    # ``mode`` reflects the operator's *requested* intent (LLM_JUDGE);
-    # ``effective_mode`` records the *path that actually ran* (RULE_BASED).
-    # Downstream telemetry can distinguish "operator asked for judge but
-    # got rule-based" from "operator asked for rule-based" (Codex MCP
-    # LOW #4 honesty fix, 2026-05-23).
     return VerifyResult(
         passed=rb.passed,
         mode=VerifyMode.LLM_JUDGE,
@@ -284,8 +456,27 @@ def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> Veri
         score=rb.score,
         rubric_misses=rb.rubric_misses,
         reflexion_hint=rb.reflexion_hint,
+        should_retry=rb.should_retry,
         ts=rb.ts,
     )
+
+
+async def verify_turn_async(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
+    """Async dispatcher — preferred for callers running inside an event
+    loop (e.g. ``finalize_and_return_async``). Avoids the cross-loop
+    thread-pool hop that the sync wrapper has to use for in-loop
+    invocation (Codex MCP HIGH #2 fix, 2026-05-23).
+    """
+    mode = get_verify_mode()
+    if mode is VerifyMode.OFF:
+        return VerifyResult(passed=True, mode=mode, effective_mode=mode, ts=time.monotonic())
+    try:
+        if mode is VerifyMode.LLM_JUDGE:
+            return await _verify_llm_judge_async(result, loop=loop)
+        return _verify_rule_based(result)
+    except Exception:
+        log.warning("verify_turn_async crashed; treating as pass", exc_info=True)
+        return VerifyResult(passed=True, mode=mode, effective_mode=mode, ts=time.monotonic())
 
 
 def verify_turn(result: AgenticResult, *, loop: Any | None = None) -> VerifyResult:
