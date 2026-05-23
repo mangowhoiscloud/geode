@@ -185,17 +185,68 @@ def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any]
         vr = verify_turn(result, loop=loop)
         if vr.mode is VerifyMode.OFF:
             return None
-        current_session_metrics().record_verify(
+        metrics = current_session_metrics()
+        metrics.record_verify(
             passed=vr.passed,
             mode=vr.mode.value,
             effective_mode=vr.effective_mode.value,
             rubric_misses=vr.rubric_misses,
             reflexion_hint=vr.reflexion_hint,
         )
-        return vr.to_payload()
+        # PR-CL-A3 persistence — mirror Tier 2 verify telemetry into the
+        # ``sessions`` SQLite row so resume / cross-process readers can
+        # consume it without replaying SessionMetrics. Silent no-op when
+        # the session row hasn't been ``upsert``-ed (mid-test scenario or
+        # callers that bypass the SessionManager) — observability mustn't
+        # break the run it observes.
+        _persist_verify_state(loop, metrics, vr.should_retry)
+        # Enrich payload with turn context (Codex MCP LOW #8, 2026-05-23) so
+        # external renderers (Inspect viewer / Slack notifier / Petri audit)
+        # can show the relevant turn alongside the verify result.
+        payload = vr.to_payload()
+        payload["session_id"] = getattr(loop, "_session_id", "")
+        payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
+        payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
+        payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
+        return payload
     except Exception:
         log.warning("turn verify dispatch crashed; skipping", exc_info=True)
         return None
+
+
+def _persist_verify_state(loop: AgenticLoop, metrics: Any, should_retry: bool) -> None:
+    """Mirror SessionMetrics verify telemetry into the SessionManager DB row.
+
+    Failures NEVER raise (observability hygiene). Skipped silently when no
+    session_id is set or no SessionManager singleton exists.
+    """
+    session_id = getattr(loop, "_session_id", "")
+    if not session_id:
+        return
+    mgr = None
+    try:
+        from core.memory.session_manager import SessionManager
+
+        mgr = SessionManager()
+        mgr.upsert_verify_state(
+            session_id,
+            verify_pass_count=metrics.verify_pass_count,
+            verify_fail_count=metrics.verify_fail_count,
+            last_verify_passed=metrics.last_verify_passed,
+            last_verify_mode=metrics.last_verify_mode,
+            last_verify_effective_mode=metrics.last_verify_effective_mode,
+            last_verify_rubric_misses=metrics.last_verify_rubric_misses,
+            last_verify_should_retry=should_retry,
+        )
+    except Exception:
+        log.debug("verify state persistence skipped", exc_info=True)
+    finally:
+        # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
+        if mgr is not None:
+            try:
+                mgr.close()
+            except Exception:
+                log.debug("verify SessionManager close failed", exc_info=True)
 
 
 def finalize_and_return(

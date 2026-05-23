@@ -394,3 +394,246 @@ def test_lifecycle_run_turn_verify_off_mode_skips(monkeypatch: pytest.MonkeyPatc
         payload = _run_turn_verify(loop, result)
         assert payload is None
         assert current_session_metrics().verify_fail_count == 0
+
+
+def test_should_retry_signal_for_recoverable_miss() -> None:
+    """Codex MCP MEDIUM #4 — ``should_retry`` True for recoverable misses
+    (``empty_turn`` / ``short_output`` / ``tool_error``)."""
+    result = _make_result(text="", tool_calls=[])
+    vr = verify_turn(result)
+    assert vr.passed is False
+    assert "empty_turn" in vr.rubric_misses
+    assert vr.should_retry is True
+
+
+def test_should_retry_false_for_hard_fail_only() -> None:
+    """``model_action_required`` alone is a hard fail — operator must
+    intervene (cost cap / billing). Retry would waste tokens."""
+    result = _make_result(
+        text="Cost cap hit",
+        tool_calls=[],
+        termination_reason="model_action_required",
+    )
+    vr = verify_turn(result)
+    assert "model_action_required" in vr.rubric_misses
+    # Hard fail only — no retryable miss accompanies it.
+    if vr.rubric_misses == ("model_action_required",):
+        assert vr.should_retry is False
+
+
+def test_should_retry_true_when_mixed_misses() -> None:
+    """If any miss in the result is in the retryable allowlist, retry True."""
+    result = _make_result(
+        text="",
+        tool_calls=[{"name": "search", "error": True}],
+        termination_reason="model_action_required",
+    )
+    vr = verify_turn(result)
+    assert "tool_error" in vr.rubric_misses
+    assert "model_action_required" in vr.rubric_misses
+    assert vr.should_retry is True  # tool_error makes it retryable
+    payload = vr.to_payload()
+    assert payload["should_retry"] is True
+
+
+def test_payload_includes_should_retry() -> None:
+    """Hook consumers read ``should_retry`` from the payload directly."""
+    vr = verify_turn(_make_result(text=""))
+    payload = vr.to_payload()
+    assert "should_retry" in payload
+    assert payload["should_retry"] is True
+
+
+# -- DB persistence (sessions table verify_* columns) ------------------
+
+
+def test_db_persistence_verify_state_round_trip(tmp_path) -> None:
+    """Codex MCP / user directive (2026-05-23): verify telemetry must
+    survive a SessionManager close+reopen cycle. Round-trip the verify
+    state through ``upsert_verify_state`` / ``get_verify_state``."""
+    from core.memory.session_manager import SessionManager, SessionMeta
+
+    db_path = tmp_path / "round_trip.db"
+    mgr = SessionManager(db_path=db_path)
+    mgr.upsert(
+        SessionMeta(
+            session_id="t-persist-vr",
+            created_at=1.0,
+            updated_at=1.0,
+            status="active",
+            model="claude-opus-4-7",
+        )
+    )
+    mgr.upsert_verify_state(
+        "t-persist-vr",
+        verify_pass_count=2,
+        verify_fail_count=1,
+        last_verify_passed=False,
+        last_verify_mode="rule_based",
+        last_verify_effective_mode="rule_based",
+        last_verify_rubric_misses=("empty_turn", "tool_error"),
+        last_verify_should_retry=True,
+    )
+    # Reopen — cross-process semantics simulated by a fresh manager.
+    mgr2 = SessionManager(db_path=db_path)
+    state = mgr2.get_verify_state("t-persist-vr")
+    assert state is not None
+    assert state["verify_pass_count"] == 2
+    assert state["verify_fail_count"] == 1
+    assert state["last_verify_passed"] is False
+    assert state["last_verify_mode"] == "rule_based"
+    assert state["last_verify_effective_mode"] == "rule_based"
+    assert state["last_verify_rubric_misses"] == ["empty_turn", "tool_error"]
+    assert state["last_verify_should_retry"] is True
+
+
+def test_db_persistence_no_session_row_returns_false(tmp_path) -> None:
+    """``upsert_verify_state`` returns False when the session row hasn't
+    been ``upsert``-ed — silent no-op so verify telemetry never breaks
+    the run it observes."""
+    from core.memory.session_manager import SessionManager
+
+    mgr = SessionManager(db_path=tmp_path / "ghost.db")
+    updated = mgr.upsert_verify_state(
+        "ghost-session",
+        verify_pass_count=0,
+        verify_fail_count=1,
+        last_verify_passed=False,
+        last_verify_mode="rule_based",
+        last_verify_effective_mode="rule_based",
+        last_verify_rubric_misses=("empty_turn",),
+        last_verify_should_retry=True,
+    )
+    assert updated is False
+    assert mgr.get_verify_state("ghost-session") is None
+
+
+def test_db_persistence_legacy_migration_adds_verify_cols(tmp_path) -> None:
+    """Pre-PR-CL-A3 DB lacking verify columns gets them via ALTER TABLE
+    when SessionManager opens it. Idempotent on re-open."""
+    import sqlite3
+
+    db_path = tmp_path / "legacy_a3.db"
+    # Build a legacy schema with only the handoff cols (post-BUDGET) but
+    # no verify cols.
+    conn = sqlite3.connect(str(db_path))
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            session_id TEXT PRIMARY KEY,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            model TEXT NOT NULL DEFAULT '',
+            provider TEXT NOT NULL DEFAULT 'anthropic',
+            user_input TEXT NOT NULL DEFAULT '',
+            round_count INTEGER NOT NULL DEFAULT 0,
+            message_count INTEGER NOT NULL DEFAULT 0,
+            handoff_state TEXT NOT NULL DEFAULT '',
+            handoff_platform TEXT NOT NULL DEFAULT '',
+            handoff_error TEXT NOT NULL DEFAULT '',
+            handoff_triggered_at REAL NOT NULL DEFAULT 0.0
+        );
+        INSERT INTO sessions (session_id, created_at, updated_at)
+        VALUES ('legacy-a3', 1.0, 1.0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    from core.memory.session_manager import SessionManager
+
+    mgr = SessionManager(db_path=db_path)
+    cols = {r[1] for r in mgr._conn.execute("PRAGMA table_info(sessions)").fetchall()}
+    for new_col in (
+        "verify_pass_count",
+        "verify_fail_count",
+        "last_verify_passed",
+        "last_verify_mode",
+        "last_verify_effective_mode",
+        "last_verify_rubric_misses",
+        "last_verify_should_retry",
+    ):
+        assert new_col in cols, f"migration missed {new_col}"
+    state = mgr.get_verify_state("legacy-a3")
+    assert state is not None
+    assert state["verify_pass_count"] == 0  # defaults
+    assert state["last_verify_passed"] is True  # default 1
+
+
+def test_lifecycle_persists_to_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end: ``_run_turn_verify`` calls ``_persist_verify_state``
+    which writes to the SessionManager's sessions row. Verify the row
+    reflects the verify outcome after one turn."""
+    from types import SimpleNamespace
+
+    from core.agent.loop._lifecycle import _run_turn_verify
+    from core.memory.session_manager import SessionManager, SessionMeta
+
+    # Redirect the default sessions DB into tmp_path so we don't touch
+    # the user's real ~/.geode/projects/.../sessions.db.
+    monkeypatch.setattr(
+        "core.memory.session_manager._get_default_db_path",
+        lambda: tmp_path / "lifecycle.db",
+    )
+    mgr = SessionManager()
+    mgr.upsert(
+        SessionMeta(
+            session_id="t-lc-persist",
+            created_at=1.0,
+            updated_at=1.0,
+            status="active",
+        )
+    )
+    loop = SimpleNamespace(_hooks=None, _session_id="t-lc-persist")
+    result = _make_result(text="", tool_calls=[])  # rule-based: empty_turn fail
+    with session_metrics_scope(session_id="t-lc-persist"):
+        payload = _run_turn_verify(loop, result)
+        assert payload is not None
+        assert payload["passed"] is False
+        assert payload["should_retry"] is True
+        # Enriched payload (LOW #8).
+        assert payload["session_id"] == "t-lc-persist"
+        assert "rounds" in payload
+        assert "termination_reason" in payload
+        assert "tool_call_count" in payload
+    state = SessionManager().get_verify_state("t-lc-persist")
+    assert state is not None
+    assert state["verify_fail_count"] == 1
+    assert state["last_verify_passed"] is False
+    assert state["last_verify_should_retry"] is True
+    assert state["last_verify_rubric_misses"] == ["empty_turn"]
+
+
+def test_handoff_db_wiring(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-CL-BUDGET wiring fix (2026-05-23) — when the loop's
+    ``_persist_handoff_request`` fires, the sessions row's
+    ``handoff_state`` transitions empty → ``pending`` via the DB CAS."""
+    from types import SimpleNamespace
+
+    from core.agent.handoff import HandoffState, get_handoff
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.memory.session_manager import SessionManager, SessionMeta
+
+    monkeypatch.setattr(
+        "core.memory.session_manager._get_default_db_path",
+        lambda: tmp_path / "handoff_wiring.db",
+    )
+    mgr = SessionManager()
+    mgr.upsert(
+        SessionMeta(
+            session_id="t-handoff-wire",
+            created_at=1.0,
+            updated_at=1.0,
+            status="active",
+        )
+    )
+
+    # Bind ``_persist_handoff_request`` to a stub with the session_id field.
+    stub = SimpleNamespace(_session_id="t-handoff-wire")
+    bound = AgenticLoop._persist_handoff_request.__get__(stub, SimpleNamespace)
+    bound()
+    snap = get_handoff(SessionManager()._conn, session_id="t-handoff-wire")
+    assert snap is not None
+    assert snap.state is HandoffState.PENDING
+    assert snap.platform == "agentic_loop"

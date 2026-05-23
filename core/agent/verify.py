@@ -75,6 +75,12 @@ class VerifyMode(StrEnum):
 # via ``GEODE_VERIFY_MIN_TEXT_CHARS`` env knob.
 DEFAULT_MIN_TEXT_CHARS: int = 10
 
+# Rubric misses that PR-CL-A1 (Dynamic Replan) should retry from. Hard
+# failures like ``model_action_required`` request operator intervention
+# (cost cap / billing) so retry would just burn more tokens. The other
+# three codes are recoverable via a different prompt or tool path.
+_RETRYABLE_MISSES: frozenset[str] = frozenset({"empty_turn", "short_output", "tool_error"})
+
 
 @dataclass(frozen=True, slots=True)
 class VerifyResult:
@@ -108,6 +114,14 @@ class VerifyResult:
     # path is ``llm_judge`` → ``rule_based`` (Codex MCP LOW #4 honesty
     # fix, 2026-05-23). Equal to ``mode`` when no fallback occurred.
     effective_mode: VerifyMode = VerifyMode.RULE_BASED
+    # ``should_retry`` is the machine-readable replan signal for PR-CL-A1
+    # (Dynamic Replan) — agentic-loop-evolution.md A3 spec calls for a
+    # "pass / fail / retry" signal, distinct from the human-readable
+    # ``reflexion_hint`` (Codex MCP MEDIUM #4, 2026-05-23). Set True when
+    # a verify failure is recoverable (any rubric_miss is in the
+    # ``_RETRYABLE_MISSES`` allowlist); set False on a hard fail (e.g.
+    # ``model_action_required`` indicates operator intervention needed).
+    should_retry: bool = False
 
     def to_payload(self) -> dict[str, Any]:
         """Render as a hook-payload-friendly dict."""
@@ -118,6 +132,7 @@ class VerifyResult:
             "score": round(self.score, 4),
             "rubric_misses": list(self.rubric_misses),
             "reflexion_hint": self.reflexion_hint,
+            "should_retry": self.should_retry,
             "ts": self.ts,
         }
 
@@ -191,6 +206,10 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
 
     passed = not misses
     hint = "" if passed else synthesize_reflexion_hint(tuple(misses))
+    # Retry signal: any retryable miss → True; pure hard-fail (e.g. only
+    # ``model_action_required``) → False so PR-CL-A1 doesn't loop on an
+    # operator-action item. Pass → False (nothing to retry).
+    retry = (not passed) and any(m in _RETRYABLE_MISSES for m in misses)
     return VerifyResult(
         passed=passed,
         mode=VerifyMode.RULE_BASED,
@@ -198,6 +217,7 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
         score=1.0 if passed else 0.0,
         rubric_misses=tuple(misses),
         reflexion_hint=hint,
+        should_retry=retry,
         ts=time.monotonic(),
     )
 

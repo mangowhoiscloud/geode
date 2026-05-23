@@ -49,13 +49,19 @@ functional change.
 
 ### Added
 
-- **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL)**. Per-turn
-  verification of agent action quality, fired at the ``TURN_COMPLETED``
-  hook boundary so it doesn't interrupt mid-turn execution. Outcome is
-  recorded into :class:`SessionMetrics` for PR-CL-A1 (Dynamic Replan) to
-  read; on verify FAIL the synthesised ``<reflexion>...</reflexion>``
-  block is consumed by the *next* ``arun`` and prepended to the system
-  prompt (verbal RL, Reflexion paper NeurIPS 2023).
+- **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL) + sessions
+  DB persistence**. Per-turn verification of agent action quality,
+  fired at the ``TURN_COMPLETED`` hook boundary so it doesn't interrupt
+  mid-turn execution. Outcome is recorded into both :class:`SessionMetrics`
+  (Tier 2 in-process aggregator) **and the ``sessions`` SQLite row**
+  (durable across process restarts) so PR-CL-A1 (Dynamic Replan) can
+  read it from either source; on verify FAIL the synthesised
+  ``<reflexion>...</reflexion>`` block is consumed by the *next* ``arun``
+  and prepended to the system prompt (verbal RL, Reflexion paper NeurIPS
+  2023). The PR also closes the PR-CL-BUDGET handoff DB wiring gap —
+  ``_check_session_budget_and_maybe_handoff`` now calls ``request_handoff``
+  so the sessions row's ``handoff_state`` actually transitions to
+  ``pending``.
 
   - ``core/agent/verify.py`` (NEW) — :class:`VerifyMode` StrEnum
     (``off`` / ``rule_based`` (default) / ``llm_judge``) +
@@ -63,8 +69,13 @@ functional change.
     + ``_verify_rule_based`` (structural checks: ``empty_turn`` /
     ``short_output`` / ``tool_error`` / ``model_action_required``) +
     ``synthesize_reflexion_hint`` (verbal-RL block renderer) +
-    ``_verify_llm_judge`` (wiring stub — falls back to rule_based until
-    PR-CL-A6 lands the judge-model knob).
+    ``_verify_llm_judge`` (**stub** — falls back to rule_based and
+    surfaces ``effective_mode=RULE_BASED`` in the payload; the real
+    judge LLM call lands in PR-CL-A6 with the judge-model knob).
+    Adds ``should_retry`` machine-readable signal (Codex MCP MEDIUM #4)
+    — recoverable misses (``empty_turn`` / ``short_output`` / ``tool_error``)
+    flip True; ``model_action_required`` alone keeps it False so PR-CL-A1
+    doesn't loop on an operator-action item.
   - ``core/observability/session_metrics.py`` — extended ``SessionMetrics``
     with ``verify_pass_count`` / ``verify_fail_count`` /
     ``last_verify_passed`` / ``last_verify_mode`` /
@@ -82,11 +93,38 @@ functional change.
   - ``core/agent/loop/agent_loop.py`` — ``arun`` reads + clears the
     Reflexion hint via ``_consume_reflexion_hint`` and prepends to
     ``system_prompt`` for the current attempt.
-  - ``tests/test_verify.py`` (NEW, 24 tests) — mode StrEnum, dataclass
-    shape, env knob parsing (default + override + invalid fallback),
-    rule-based catches (4 reason codes), reflexion-hint synthesis,
-    mode dispatch (OFF / RULE_BASED / LLM_JUDGE), SessionMetrics
-    integration, hint consume+clear, exception-safe dispatch.
+  - ``core/memory/session_manager.py`` — ``sessions`` table extended
+    with 7 verify columns (``verify_pass_count`` / ``verify_fail_count`` /
+    ``last_verify_passed`` / ``last_verify_mode`` /
+    ``last_verify_effective_mode`` / ``last_verify_rubric_misses`` /
+    ``last_verify_should_retry``) + ``upsert_verify_state()`` mutator
+    + ``get_verify_state()`` reader. Idempotent ALTER TABLE migration
+    inside the existing ``BEGIN IMMEDIATE`` transaction handles both
+    fresh DBs and pre-A3 legacy DBs.
+  - ``core/agent/loop/_lifecycle.py`` — ``_persist_verify_state`` mirror
+    function writes Tier 2 SessionMetrics state to the ``sessions``
+    row after every TURN_COMPLETED. Enriched ``TURN_VERIFY_*`` hook
+    payload (Codex MCP LOW #8) includes ``session_id`` / ``rounds`` /
+    ``termination_reason`` / ``tool_call_count`` so external renderers
+    have full turn context.
+  - ``core/agent/loop/agent_loop.py`` — ``_persist_handoff_request``
+    closes the PR-CL-BUDGET DB wiring gap. The 2h-cap T-10min trigger
+    in ``_check_session_budget_and_maybe_handoff`` now actually calls
+    ``request_handoff`` so the sessions row transitions to ``pending``
+    (was schema-only / unwired before).
+    ``_sync_model_and_rebuild_prompt`` re-applies the reflexion hint
+    on model drift / prompt-dirty rebuild (Codex MCP MEDIUM #6 — was
+    silently dropping the hint).
+  - ``core/wiring/bootstrap.py`` — default audit handlers registered
+    for ``TURN_VERIFY_PASSED`` / ``TURN_VERIFY_FAILED`` (Codex MCP
+    MEDIUM #7) matching the existing ``VERIFICATION_FAIL`` pattern.
+  - ``tests/test_verify.py`` (NEW, 38 tests) — mode StrEnum, dataclass
+    shape, env knob parsing, rule-based catches (4 reason codes +
+    multi-miss combination), reflexion-hint synthesis, mode dispatch,
+    SessionMetrics integration, hint consume+clear, exception-safe
+    dispatch, ``should_retry`` allowlist semantics, DB persistence
+    round-trip, legacy DB migration adds verify cols, end-to-end
+    lifecycle → DB write, and handoff DB wiring (PR-CL-BUDGET closure).
   - 4 hook-count tests bumped 72 → 74.
 
   Three operator-tunable env knobs:
