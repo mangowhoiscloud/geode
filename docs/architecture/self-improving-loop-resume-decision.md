@@ -32,7 +32,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 
 | Layer | Surface | Persist | Load | Resume-ready |
 |---|---|---|---|---|
-| C3 | `core/runtime_state/session_checkpoint.py` `SessionCheckpoint` | ✅ atomic_write_json + SQLite | ✅ `load()` / `list_resumable()` | ✅ `/resume <session_id>` CLI |
+| C3 | `core/memory/session_checkpoint.py` `SessionCheckpoint` | ✅ atomic_write_json + SQLite | ✅ `load()` / `list_resumable()` | ✅ `/resume <session_id>` CLI |
 | C2 | `core/memory/project_journal.py` ProjectJournal | ✅ fsync + append | tail/aggregate only | ❌ audit only |
 | Outer | `~/.geode/self-improving-loop/sessions.jsonl` (P1a) | ✅ append | tail only | ❌ index only |
 | Outer | `~/.geode/self-improving-loop/<session>/journal.jsonl` (P1c) | ✅ append | tail only | ❌ event audit |
@@ -195,7 +195,7 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 - Codex CLI `forced_login_method`: https://developers.openai.com/codex/config-reference
 - Hermes credential_pools (negative reference): https://hermes-agent.nousresearch.com/docs/user-guide/features/credential-pools
 - OpenAI Agents SDK issue #2172 (closed as not planned): https://github.com/openai/openai-agents-python/issues/2172
-- GEODE `SessionCheckpoint`: `core/runtime_state/session_checkpoint.py`
+- GEODE `SessionCheckpoint`: `core/memory/session_checkpoint.py`
 - GEODE `atomic_io`: `core/utils/atomic_io.py`
 - Predecessor plan: `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`
 - Predecessor ADRs: `docs/architecture/seed-generation-decision.md`, `docs/architecture/autoresearch-axis-decision.md`

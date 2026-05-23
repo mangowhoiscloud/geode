@@ -386,7 +386,7 @@ class Evolver(BaseSeedAgent):
         """
         from pathlib import Path
 
-        from core.text.similarity import jaccard_similarity, shingles
+        from core.utils.similarity import jaccard_similarity, shingles
 
         evolved_path = parsed.get("evolved_path")
         parent_id = parsed.get("parent_id")

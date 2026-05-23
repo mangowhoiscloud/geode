@@ -28,13 +28,13 @@ import pytest
 
 
 def test_sanitize_empty_returns_empty() -> None:
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     assert sanitize_fts5_query("") == ""
 
 
 def test_sanitize_passes_bare_alnum_tokens() -> None:
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     assert sanitize_fts5_query("hello world") == "hello world"
 
@@ -42,7 +42,7 @@ def test_sanitize_passes_bare_alnum_tokens() -> None:
 def test_sanitize_wraps_hyphenated_token() -> None:
     """``file-not-found`` would be parsed as ``file NOT not NOT found`` —
     must be wrapped."""
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     out = sanitize_fts5_query("file-not-found")
     assert out == '"file-not-found"'
@@ -50,14 +50,14 @@ def test_sanitize_wraps_hyphenated_token() -> None:
 
 def test_sanitize_wraps_dotted_token() -> None:
     """Version strings like ``v3.34`` get token-split otherwise."""
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     out = sanitize_fts5_query("v3.34")
     assert out == '"v3.34"'
 
 
 def test_sanitize_escapes_internal_double_quote() -> None:
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     out = sanitize_fts5_query('she said "hi"')
     assert '""hi""' in out
@@ -65,7 +65,7 @@ def test_sanitize_escapes_internal_double_quote() -> None:
 
 def test_sanitize_drops_pure_meta_token() -> None:
     """Bare ``-`` after splitting must NOT survive (would mean NOT)."""
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     assert sanitize_fts5_query("foo - bar") == "foo bar"
 
@@ -73,7 +73,7 @@ def test_sanitize_drops_pure_meta_token() -> None:
 def test_sanitize_keeps_unicode_letters_bare() -> None:
     """Non-ASCII letters / digits should NOT trigger quote-wrapping —
     that would defeat the unicode61 tokenizer."""
-    from core.storage.fts_helpers import sanitize_fts5_query
+    from core.memory.fts_helpers import sanitize_fts5_query
 
     out = sanitize_fts5_query("안녕하세요 セッション")
     assert out == "안녕하세요 セッション"
@@ -84,7 +84,7 @@ def test_sanitize_keeps_unicode_letters_bare() -> None:
 
 def test_has_trigram_support_on_modern_sqlite() -> None:
     """SQLite 3.34+ ships trigram; the test runner is modern enough."""
-    from core.storage.fts_helpers import has_trigram_support
+    from core.memory.fts_helpers import has_trigram_support
 
     conn = sqlite3.connect(":memory:")
     try:
@@ -95,7 +95,7 @@ def test_has_trigram_support_on_modern_sqlite() -> None:
 
 def test_has_trigram_support_graceful_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """If ``execute`` raises, the probe returns False — caller still works."""
-    from core.storage.fts_helpers import has_trigram_support
+    from core.memory.fts_helpers import has_trigram_support
 
     class _BadConn:
         def execute(self, *_a: object, **_kw: object) -> None:

@@ -19,7 +19,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.runtime_state.session_checkpoint import SessionState
+    from core.memory.session_checkpoint import SessionState
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def cmd_resume(args: str) -> SessionState | None:
     into ConversationContext, or None if no session was selected.
     """
     from core.cli import commands as _pkg
-    from core.runtime_state.session_checkpoint import SessionCheckpoint
+    from core.memory.session_checkpoint import SessionCheckpoint
 
     checkpoint = SessionCheckpoint()
 

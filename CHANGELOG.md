@@ -45,7 +45,36 @@ functional change.
 
 ---
 
-## [Unreleased]
+### Changed
+
+- **PR-CLEANUP-2 — fold three over-small packages into their natural homes.**
+  ``core/`` drops from 25 to 22 top-level packages with zero behaviour
+  change; every move keeps the file's module-level surface intact, only
+  the import prefix changes:
+  - ``core/text/similarity.py`` → ``core/utils/similarity.py`` (single
+    file, 64 LOC). Removes a 1-module package whose abstract name
+    (``text``) added a namespace level with no information value.
+    Callers: ``plugins/seed_generation/agents/evolver.py``,
+    ``tests/core/utils/test_similarity.py`` (test path mirrored).
+  - ``core/storage/fts_helpers.py`` → ``core/memory/fts_helpers.py``
+    (single file, 134 LOC). The only consumer was
+    ``core/memory/session_manager.py``'s FTS5 search index — siting the
+    helper inside ``core/memory/`` removes the cross-package dependency
+    that justified the standalone package.
+  - ``core/runtime_state/`` (two domains under one abstract name) split
+    along the actual ownership line:
+    - ``session_checkpoint.py`` → ``core/memory/session_checkpoint.py``
+      (resume artefact lives next to ``SessionManager``).
+    - ``transcript.py`` → ``core/observability/transcript.py``
+      (Tier-1 event log lives next to ``SessionJournal``).
+  Caller updates spread over the surrounding tree (``git diff --name-only``
+  vs ``origin/develop``): 14 ``core/`` files (3 renames + 3 ``__init__.py``
+  deletions + 8 import-only edits), 9 ``tests/`` files (1 rename + 8
+  import-only edits), 2 live ``docs/`` files (the architecture +
+  audit pages — historical CHANGELOG entries are left as a
+  record-of-time, per the standing convention). Type-check, lint,
+  ``lint-imports``, and the scoped test sweep (143 tests across the
+  four affected packages) all green post-move.
 
 ## [0.99.47] - 2026-05-23
 

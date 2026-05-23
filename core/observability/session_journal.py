@@ -1,8 +1,8 @@
 """Backward-compat alias — ``SessionJournal`` is now a thin wrapper over the
-canonical :class:`core.runtime_state.transcript.SessionTranscript`.
+canonical :class:`core.observability.transcript.SessionTranscript`.
 
 PR-SESSION-METRICS (2026-05-23) — the pre-existing 3-Tier preservation
-architecture in ``core/runtime_state/transcript.py`` calls out:
+architecture in ``core/observability/transcript.py`` calls out:
 
 * Tier 1 — :class:`SessionTranscript` (event log, append-only JSONL)
 * Tier 2 — Journal (summaries)
@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from core.runtime_state.transcript import SessionTranscript
+from core.observability.transcript import SessionTranscript
 
 __all__ = [
     "SessionJournal",

@@ -20,8 +20,8 @@ _test_transcript_dir = os.path.join(tempfile.gettempdir(), "geode_test_transcrip
 
 from pathlib import Path  # noqa: E402
 
-import core.runtime_state.session_checkpoint as _cp_mod  # noqa: E402
-import core.runtime_state.transcript as _tx_mod  # noqa: E402
+import core.memory.session_checkpoint as _cp_mod  # noqa: E402
+import core.observability.transcript as _tx_mod  # noqa: E402
 
 _cp_mod.DEFAULT_SESSION_DIR = Path(_test_session_dir)
 _tx_mod.DEFAULT_TRANSCRIPT_DIR = Path(_test_transcript_dir)
