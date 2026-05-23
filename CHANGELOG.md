@@ -49,6 +49,22 @@ functional change.
 
 ### Added
 
+- **Follow-up C — S11 PipelineRegistry wire-up.** ``cli._dispatch_pipeline``
+  now populates the ``PipelineRegistry`` with one concrete agent per
+  ``manifest.enabled_roles`` (generator / critic / proximity / pilot /
+  ranker / evolver / meta_reviewer) via the new
+  ``plugins/seed_generation/_registry_builder.py`` helper. Each agent
+  is instantiated with the picker binding's ``model`` + ``source``;
+  Ranker additionally receives ``picker_result.voters`` so each judge
+  follows its own binding. The pre-S11 placeholder
+  (``registry = PipelineRegistry()`` with a runtime "no registered
+  agent" error) is replaced — the production ``geode seeds run`` flow
+  can now actually invoke the pipeline end-to-end. The shared
+  ``SubAgentManager`` is built once via ``build_subagent_manager()``
+  with best-effort AgentRegistry + tool handlers + ``IsolatedRunner``;
+  observability hooks remain unattached (gateway runtime path is
+  Follow-up D).
+
 - **Follow-up B — Picker bindings propagation to SubTask.source.** Each
   seed-generation agent now passes ``source=self.adapter_source`` on
   ``SubTask`` construction so the picker-resolved per-role source
