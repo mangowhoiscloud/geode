@@ -117,7 +117,23 @@ class AgenticLoop:
         self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
-        self.model = model or ANTHROPIC_PRIMARY
+        # PR-CL-A6 (2026-05-23) — when the caller doesn't pass an explicit
+        # ``model``, prefer ``settings.act_model`` over the global default
+        # so operators can split Plan / Act per ReWOO. ``settings.act_model``
+        # default is empty string ("") which falls through to ``ANTHROPIC_PRIMARY``.
+        if model is None:
+            try:
+                from core.config import settings
+
+                # ``isinstance(..., str)`` filters MagicMock-auto-attrs in
+                # test fixtures that don't seed ``act_model`` explicitly.
+                act_raw = getattr(settings, "act_model", "")
+                act_model = act_raw.strip() if isinstance(act_raw, str) else ""
+            except Exception:
+                act_model = ""
+            self.model = act_model or ANTHROPIC_PRIMARY
+        else:
+            self.model = model
         self._provider = provider  # "anthropic", "openai", or "glm"
         # When True, ``sync_model_from_settings`` becomes a no-op so the
         # caller's chosen ``model`` is sticky for the lifetime of the
@@ -583,7 +599,10 @@ class AgenticLoop:
             )
 
     async def _sync_model_and_rebuild_prompt(
-        self, system_prompt: str, decomposition_hint: str | None
+        self,
+        system_prompt: str,
+        decomposition_hint: str | None,
+        reflexion_hint: str | None = None,
     ) -> str:
         """PR-D Phase 2b — model-drift sync + system_prompt rebuild
         extracted from ``arun``'s while-loop body.
@@ -600,6 +619,9 @@ class AgenticLoop:
         the previous model after a switch.
         ``v0.90.0`` — auto-escalation paths removed; the only such
         callers now are user-initiated ``/model`` switches.
+        ``PR-CL-A3 (2026-05-23)`` — ``reflexion_hint`` is re-applied on
+        rebuild so a model drift mid-arun does not silently drop the
+        verbal-RL hint (Codex MCP MEDIUM #6, 2026-05-23).
 
         Returns the (possibly-rebuilt) ``system_prompt`` so ``arun``
         can rebind its local. Side-effect: clears ``_prompt_dirty``
@@ -612,6 +634,8 @@ class AgenticLoop:
             system_prompt = self._build_system_prompt()
             if decomposition_hint:
                 system_prompt += "\n\n" + decomposition_hint
+            if reflexion_hint:
+                system_prompt += "\n\n" + reflexion_hint
             self._prompt_dirty = False
             # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. ``HookEvent.PROMPT_ASSEMBLED``
             # 가 ``core/hooks/system.py:69`` 에 정의됐으나 fire 0회 였다 → X2
@@ -681,6 +705,71 @@ class AgenticLoop:
             if handoff_reason is not None:
                 return handoff_reason
         return None
+
+    def _persist_handoff_request(self) -> None:
+        """PR-CL-BUDGET wiring (closed 2026-05-23) — flip the ``sessions``
+        row to ``handoff_state='pending'`` via the DB CAS helper. Called
+        once per session at the T-threshold crossing.
+
+        Failures NEVER raise — observability hygiene. Skips when no
+        session_id is bound (mid-test stub) or when the session row
+        hasn't been ``upsert``-ed yet (request_handoff returns False).
+        """
+        session_id = getattr(self, "_session_id", "")
+        if not session_id:
+            return
+        mgr = None
+        try:
+            from core.agent.handoff import request_handoff
+            from core.memory.session_manager import SessionManager
+
+            mgr = SessionManager()
+            request_handoff(mgr._conn, session_id=session_id, platform="agentic_loop")
+        except Exception:
+            log.debug("Handoff DB request skipped", exc_info=True)
+        finally:
+            # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
+            if mgr is not None:
+                try:
+                    mgr.close()
+                except Exception:
+                    log.debug("Handoff SessionManager close failed", exc_info=True)
+
+    def _consume_reflexion_hint(self) -> str:
+        """PR-CL-A3 — read+clear the verbal-RL hint left by the prior turn.
+
+        Returns the ``<reflexion>...</reflexion>`` block synthesised after
+        the previous turn's verify FAIL, or the empty string when verify
+        passed / didn't run. asyncio-task safe (no ``await`` between read
+        and clear); threaded fan-out sharing the same SessionMetrics could
+        race the read+clear, but the only consequence is one duplicate
+        prepend of the hint into a second arun — recoverable, not data
+        loss. The handoff latch in :class:`SessionMetrics` uses a
+        ``threading.Lock``; we deliberately *don't* mirror that here
+        because hint duplication is a much weaker race than handoff
+        double-fire. Failures NEVER raise — observability mustn't break
+        the run it observes.
+
+        **Scope note** (Codex MCP MEDIUM #2, 2026-05-23) — pre-finalize
+        exits (``BillingError`` / ``UserCancelledError`` raised before
+        ``finalize_and_return*``) skip verify by design. The next arun
+        starts with an empty hint slot because the prior turn never
+        wrote one — this is consistent with "verify never ran for the
+        failed turn" semantics. If a future PR needs verify on those
+        paths, finalize them through ``finalize_and_return*`` instead of
+        re-wiring this consumer.
+        """
+        try:
+            from core.observability.session_metrics import current_session_metrics
+
+            metrics = current_session_metrics()
+            hint = metrics.last_verify_reflexion_hint
+            if hint:
+                metrics.last_verify_reflexion_hint = ""
+            return hint
+        except Exception:
+            log.warning("Reflexion hint consume failed", exc_info=True)
+            return ""
 
     def _maybe_start_session_budget(self) -> None:
         """Begin session-wide wall-clock budget if not already started.
@@ -765,6 +854,13 @@ class AgenticLoop:
                         )
                     except Exception:
                         log.warning("Transcript handoff_triggered record failed", exc_info=True)
+                # PR-CL-A3 persistence — flip the ``sessions`` row's
+                # ``handoff_state`` to PENDING via the DB CAS helper from
+                # PR-CL-BUDGET. Without this call the schema is wired but
+                # the actual DB-backed state machine never runs (read-write
+                # parity violation flagged 2026-05-23). Safe no-op when no
+                # session row exists yet (mid-test scenario).
+                self._persist_handoff_request()
                 return "session_time_budget_handoff"
             if check.expired:
                 return "session_time_budget_expired"
@@ -940,6 +1036,17 @@ class AgenticLoop:
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
 
+        # PR-CL-A3 (2026-05-23) — Reflexion verbal-RL hint injection. The
+        # *previous* arun's TURN_VERIFY_FAILED outcome (recorded by
+        # ``record_verify``) leaves a ``<reflexion>...</reflexion>`` block
+        # in SessionMetrics; we prepend it to this arun's system prompt so
+        # the model sees its own failure analysis at the start of the next
+        # attempt. ``consume`` semantics — the hint is cleared after read
+        # so it does not leak into subsequent arun's that should be clean.
+        reflexion_hint = self._consume_reflexion_hint()
+        if reflexion_hint:
+            system_prompt += "\n\n" + reflexion_hint
+
         # Prune old messages to stay within context budget (Karpathy P6)
         self._maybe_prune_messages(messages)
 
@@ -983,7 +1090,7 @@ class AgenticLoop:
             # updated model card. Behaviour preserved exactly — the
             # _prompt_dirty side-effect reset still happens inside.
             system_prompt = await self._sync_model_and_rebuild_prompt(
-                system_prompt, decomposition_hint
+                system_prompt, decomposition_hint, reflexion_hint=reflexion_hint
             )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)
@@ -1616,7 +1723,12 @@ class AgenticLoop:
     # ------------------------------------------------------------------
 
     async def _call_llm(
-        self, system: str, messages: list[dict[str, Any]], *, round_idx: int = 0
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        *,
+        round_idx: int = 0,
+        model: str | None = None,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via adapter (P1 Gateway pattern).
 
@@ -1624,11 +1736,20 @@ class AgenticLoop:
         provider-specific message/tool conversion, retry, and failover.
         Returns a normalized ``AgenticResponse`` or None on failure.
         Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
+
+        PR-CL-A6 (2026-05-23) — optional ``model`` override lets callers
+        (verify judge, future Plan/Act split) request a non-default model
+        for one call without mutating ``self.model``. Falls back to
+        ``self.model`` when ``None``. The override threads through to
+        the adapter's ``agentic_call(model=...)`` parameter; the rest of
+        the loop (token tracker, retry budget, ContextVar metrics) is
+        unaffected.
         """
+        effective_model = model or self.model
         # Sandwich injection: prepend system reminder to messages (Claude Code pattern)
         from core.agent.system_injection import prepend_system_reminder
 
-        prepend_system_reminder(messages, model=self.model, round_idx=round_idx)
+        prepend_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # Context overflow detection (Karpathy P6 Context Budget)
         await self._check_context_overflow(system, messages)
@@ -1650,9 +1771,10 @@ class AgenticLoop:
         # v0.90.0 — the prior overthinking effort-downgrade branch is gone:
         # the post-response check now exits the loop on the same condition,
         # so the only remaining adaptive case is wrap-up.
+        from core.config import settings as _settings
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
-        ctx_window = MODEL_CONTEXT_WINDOW.get(self.model, 200_000)
+        ctx_window = MODEL_CONTEXT_WINDOW.get(effective_model, 200_000)
 
         adaptive_max_tokens = self.max_tokens
         adaptive_thinking = self._thinking_budget
@@ -1663,6 +1785,11 @@ class AgenticLoop:
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
             adaptive_effort = "low"
+
+        # PR-TEMP (2026-05-23) — config-driven temperature, replacing the
+        # prior hardcoded 0.0. See ``Settings.temperature_agent_loop`` for
+        # the frontier-API grounding behind the new 1.0 default.
+        loop_temperature = _settings.temperature_agent_loop
 
         if self._new_adapter is not None:
             # v0.99.40 Follow-up A — opt-in adapter route. Build adapter-neutral
@@ -1675,13 +1802,13 @@ class AgenticLoop:
             )
 
             req = build_adapter_request(
-                model=self.model,
+                model=effective_model,
                 system=system,
                 messages=messages,
                 tools=self._tools,
                 tool_choice=tool_choice,
                 max_tokens=adaptive_max_tokens,
-                temperature=0.0,
+                temperature=loop_temperature,
                 thinking_budget=adaptive_thinking,
                 effort=adaptive_effort,
             )
@@ -1699,13 +1826,13 @@ class AgenticLoop:
                 response = agentic_response_from_adapter_result(result)
         else:
             response = await self._adapter.agentic_call(
-                model=self.model,
+                model=effective_model,
                 system=system,
                 messages=messages,
                 tools=self._tools,
                 tool_choice=tool_choice,
                 max_tokens=adaptive_max_tokens,
-                temperature=0.0,
+                temperature=loop_temperature,
                 thinking_budget=adaptive_thinking,
                 effort=adaptive_effort,
             )

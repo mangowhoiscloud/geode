@@ -10,7 +10,7 @@ from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 class TestHookEvent:
     def test_all_events_exist(self):
         assert (
-            len(HookEvent) == 72
+            len(HookEvent) == 74
         )  # +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger + 3 PR-CL-BUDGET handoff
 
     def test_event_values(self):

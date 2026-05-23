@@ -28,7 +28,7 @@ class TestLLMLifecycleEvents:
     def test_event_count_includes_llm_events(self) -> None:
         """72 events total — +6 cognitive (PR-2) + 5 auto-trigger (OL-A1.5)
         + 3 handoff (PR-CL-BUDGET)."""
-        assert len(HookEvent) == 72
+        assert len(HookEvent) == 74
 
 
 class TestFireHook:

@@ -39,12 +39,20 @@ def generate_commentary(
     *,
     model: str | None = None,
     max_tokens: int = 256,
-    temperature: float = 0.4,
+    temperature: float | None = None,
 ) -> str | None:
     """Generate a brief LLM commentary for tool call results.
 
+    ``temperature`` defaults to ``Settings.temperature_commentary`` when
+    omitted (PR-TEMP, 2026-05-23). Callers can still pass an explicit
+    value to override.
+
     Returns the commentary text, or None if generation fails for any reason.
     """
+    if temperature is None:
+        from core.config import settings as _settings
+
+        temperature = _settings.temperature_commentary
     try:
         context_summary = _format_context(context)
         user_prompt = COMMENTARY_USER.format(

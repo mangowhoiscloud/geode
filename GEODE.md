@@ -21,7 +21,10 @@ analysis, automation, scheduling, and multi-step tool work.
 4. **Graceful Degradation**: Guarantees fallback paths even during API failures or model errors.
 5. **Reproducibility**: Maintains reproducibility through prompt hashes, seeds, and snapshots.
 
-## CANNOT
+## RUNTIME CANNOT
+
+> Runtime guardrails — what GEODE the *agent* refuses to do at execution time.
+> For development-time guardrails (what the *engineer* must not do when building GEODE), see `CLAUDE.md` → `### CANNOT`.
 
 - Never makes judgments without evidence (G3 Grounding violation)
 - Never finalizes a single LLM output as the definitive result (cross-validation required)

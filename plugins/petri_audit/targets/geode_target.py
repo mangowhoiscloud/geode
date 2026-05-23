@@ -188,7 +188,8 @@ async def _default_geode_runner(
     Live LLM authorisation: this function will trigger live API calls
     when the bootstrapped readiness lacks ``force_dry_run``. Callers
     embedding it in a ``geode/<base>`` audit MUST have explicit user
-    authorisation per CLAUDE.md L99.
+    authorisation per `CLAUDE.md` → CANNOT → Quality:
+    "No unauthorized live test execution".
     """
     if not messages:
         raise ValueError(

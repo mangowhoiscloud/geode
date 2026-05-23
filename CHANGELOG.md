@@ -47,6 +47,249 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.45] - 2026-05-23
+
+### Changed
+
+- **PR-TEMP — LLM sampling temperature is config-driven, no more hardcoded
+  constants.** Six call sites previously held literal floats (agent loop
+  ``0.0`` × 2, reflection ``0.2``, cross-LLM verification ``0.1`` × 2,
+  commentary signature default ``0.4``, self-improving mutation ``0.3``,
+  progressive compression ``0.0``). Each one now reads from a new
+  ``Settings.temperature_*`` knob, exposed via ``~/.geode/config.toml`` or
+  the matching ``GEODE_TEMPERATURE_*`` env var. Defaults reflect a frontier-
+  API grounding pass (Anthropic / OpenAI / Gemini docs + Moonshot/Kimi):
+  most paths land on ``1.0`` (provider default — Gemini 3 explicitly warns
+  against lowering temperature; OpenAI reasoning models reject ≠ 1);
+  ``temperature_verification`` and ``temperature_progressive_compression``
+  default to ``0.0`` because cross-LLM agreement and reproducible summaries
+  are functional invariants where stochastic output is meaningless.
+  ``tests/test_temperature_config_invariants.py`` (NEW, 19 cases) ratchets
+  the migration: Settings keys + defaults + range validation, plus a per-
+  site grep guard that fails if a literal ``temperature=<float>`` kwarg
+  sneaks back into any of the six policy sites. ``Settings.temperature_*``
+  fields enforce ``ge=0.0, le=2.0``; per-provider clamping (Opus 4.x adaptive
+  models stripping sampling params, Codex gpt-5.x omitting temperature
+  entirely) is untouched and still kicks in downstream.
+
+- **Step I.a — Codex OAuth header construction collapsed onto one helper.**
+  Four call sites built the same
+  ``{"originator": "codex_cli_rs", "ChatGPT-Account-ID": <jwt-claim>}`` dict
+  inline: ``core.llm.providers.codex._get_codex_client`` /
+  ``_get_async_codex_client``, ``core.llm.adapters._openai_common.
+  build_async_codex_client``, and
+  ``plugins.petri_audit.codex_provider.OpenAICodexAPI.__init__``. The new
+  public ``core.llm.providers.codex.build_codex_oauth_headers(token)``
+  helper is now the single SoT — every caller routes through it and
+  receives a fresh dict (so per-thread mutation stays safe).
+  ``tests/test_codex_provider.py::TestCodexOAuthHeaders`` pins the
+  contract (4 cases: claim present / claim absent / malformed token /
+  fresh-dict-per-call). First commit of the
+  ``docs/plans/2026-05-23-adapter-wrap-petri-autoresearch.md`` Path-B
+  sequence; Step I.b (Codex reasoning replay extraction) + I.c
+  (credential source ↔ adapter health) are fast-follow PRs.
+
+### Added
+
+- **PR-CL-A6 — Plan / Action / Judge model separation**. Third PR in
+  the Cognitive Loop sprint (A3 → **A6** → A1). Adds three operator-tunable
+  model knobs that let the loop's three LLM call sites pick the right
+  cost/quality point independently:
+
+  - ``settings.plan_model`` — used by goal decomposition
+    (``_decomposition.try_decompose``). Set to ``claude-opus-4-7`` for
+    reasoning-heavy plans; empty falls back to ``loop.model``.
+  - ``settings.act_model`` — used by the main action loop (per-round
+    ``_call_llm``). When ``AgenticLoop(model=None)`` (caller didn't pin
+    a model), the loop reads this instead of the legacy
+    ``ANTHROPIC_PRIMARY``. Set to ``claude-sonnet-4-6`` to keep planning
+    on Opus while action runs on Sonnet for cost.
+  - ``settings.judge_model`` — used by the per-turn verify LLM-judge mode
+    (``GEODE_VERIFY_MODE=llm_judge``). Closes the PR-CL-A3 stub —
+    ``_verify_llm_judge`` now actually calls an LLM via
+    ``loop._call_llm(model=judge_model)`` and parses the
+    ``{"passed", "score", "reason"}`` JSON response.
+
+  Each knob has env override (``GEODE_PLAN_MODEL`` / ``GEODE_ACT_MODEL`` /
+  ``GEODE_JUDGE_MODEL``) and TOML mapping (``llm.plan_model`` /
+  ``llm.act_model`` / ``llm.judge_model``). Defaults are the empty
+  string so existing callers see no behaviour change until a knob is
+  set; pre-A6 callers continue to use ``settings.model``.
+
+  Implementation:
+  - ``core/config/_settings.py`` — 3 new ``Field`` declarations with
+    ``AliasChoices`` (matches the existing ``cognitive_reflection_model``
+    pattern).
+  - ``core/config/__init__.py`` — 3 new ``_TOML_TO_SETTINGS`` mappings.
+  - ``core/agent/loop/agent_loop.py`` — ``AgenticLoop.__init__`` reads
+    ``settings.act_model`` when ``model`` is None; ``_call_llm`` exposes
+    optional ``model: str | None = None`` keyword override that threads
+    through to ``self._adapter.agentic_call(model=...)`` and the
+    ``build_adapter_request`` bridge path.
+  - ``core/agent/loop/_decomposition.py`` — ``try_decompose`` reads
+    ``settings.plan_model`` for ``GoalDecomposer(model=...)``.
+  - ``core/agent/verify.py`` — ``_verify_llm_judge`` no longer stubs out.
+    Builds a strict-JSON judge prompt, calls ``loop._call_llm(model=
+    settings.judge_model)``, parses the response via
+    ``_parse_judge_payload`` (tolerates code fences + bad JSON + non-
+    numeric scores via clamp-and-default), surfaces failed reason as a
+    ``judge_fail`` rubric_miss + reflexion_hint. New
+    ``verify_turn_async`` + ``_verify_llm_judge_async`` pair lets
+    ``finalize_and_return_async`` await the judge call under the same
+    event loop instead of hopping through a thread pool. The sync
+    wrapper retains a thread-pool fallback for sync callers. The judge
+    call is bounded by a 120s ``asyncio.wait_for`` timeout, and the
+    response's token usage is fed through ``loop._track_usage_async``
+    so judge cost surfaces in the session TokenTracker (Codex MCP
+    MEDIUM #4 fix; per-phase ``phase="judge"`` tagging deferred). 4
+    fallback paths to rule-based with ``effective_mode=RULE_BASED``:
+    loop ref is None, response is None, empty response text, LLM call
+    raises (TimeoutError or otherwise).
+  - ``core/agent/loop/_lifecycle.py`` — new ``_run_turn_verify_async``
+    + shared ``_finalize_verify_outcome`` helper. ``finalize_and_return_async``
+    awaits the async verify path (Codex MCP HIGH #2 fix); sync
+    ``finalize_and_return`` still uses the sync wrapper for legacy callers.
+  - ``core/agent/loop/_model_switching.py`` — drift-sync target reads
+    ``settings.act_model or settings.model`` so an Opus-primary + Sonnet-
+    act split doesn't revert mid-session (Codex MCP HIGH #1 fix).
+  - ``tests/test_model_split.py`` (NEW, 22 tests) — settings defaults +
+    env override + TOML mapping; ``AgenticLoop.__init__`` act_model
+    cascade + explicit-model precedence + empty-fallback; ``_call_llm``
+    signature contract; goal decomposition uses ``plan_model``;
+    ``_verify_llm_judge`` actual LLM call + judge_fail path + 4 fallback
+    cases (no loop / exception / None response / no judge_model);
+    ``_judge_prompt`` truncation; ``_parse_judge_payload`` 5 edge cases.
+
+  Frontier alignment (Socratic Q5): ReWOO (arxiv 2305.18323, 5x token
+  efficiency via plan/observation decouple) + Claude Code Plan/Edit mode
+  + Self-Discover (arxiv 2402.03620, task-level plan composition).
+
+- **PR-CL-A3 — In-loop Verify (Reflexion-style verbal RL) + sessions
+  DB persistence**. Per-turn verification of agent action quality,
+  fired at the ``TURN_COMPLETED`` hook boundary so it doesn't interrupt
+  mid-turn execution. Outcome is recorded into both :class:`SessionMetrics`
+  (Tier 2 in-process aggregator) **and the ``sessions`` SQLite row**
+  (durable across process restarts) so PR-CL-A1 (Dynamic Replan) can
+  read it from either source; on verify FAIL the synthesised
+  ``<reflexion>...</reflexion>`` block is consumed by the *next* ``arun``
+  and prepended to the system prompt (verbal RL, Reflexion paper NeurIPS
+  2023). The PR also closes the PR-CL-BUDGET handoff DB wiring gap —
+  ``_check_session_budget_and_maybe_handoff`` now calls ``request_handoff``
+  so the sessions row's ``handoff_state`` actually transitions to
+  ``pending``.
+
+  - ``core/agent/verify.py`` (NEW) — :class:`VerifyMode` StrEnum
+    (``off`` / ``rule_based`` (default) / ``llm_judge``) +
+    :class:`VerifyResult` frozen dataclass + ``verify_turn`` dispatcher
+    + ``_verify_rule_based`` (structural checks: ``empty_turn`` /
+    ``short_output`` / ``tool_error`` / ``model_action_required``) +
+    ``synthesize_reflexion_hint`` (verbal-RL block renderer) +
+    ``_verify_llm_judge`` (**stub** — falls back to rule_based and
+    surfaces ``effective_mode=RULE_BASED`` in the payload; the real
+    judge LLM call lands in PR-CL-A6 with the judge-model knob).
+    Adds ``should_retry`` machine-readable signal (Codex MCP MEDIUM #4)
+    — recoverable misses (``empty_turn`` / ``short_output`` / ``tool_error``)
+    flip True; ``model_action_required`` alone keeps it False so PR-CL-A1
+    doesn't loop on an operator-action item.
+  - ``core/observability/session_metrics.py`` — extended ``SessionMetrics``
+    with ``verify_pass_count`` / ``verify_fail_count`` /
+    ``last_verify_passed`` / ``last_verify_mode`` /
+    ``last_verify_rubric_misses`` / ``last_verify_reflexion_hint`` +
+    new ``record_verify()`` mutator. ``to_session_row`` exposes all 5
+    telemetry keys.
+  - ``core/hooks/system.py`` — added ``TURN_VERIFY_PASSED`` /
+    ``TURN_VERIFY_FAILED`` events (distinct from the pipeline-level
+    ``VERIFICATION_PASS`` / ``VERIFICATION_FAIL`` pair which covers
+    node-level guardrails). ``HookEvent`` total 72 → 74.
+  - ``core/agent/loop/_lifecycle.py`` — new ``_run_turn_verify`` helper
+    dispatched from both ``finalize_and_return`` (sync) and
+    ``finalize_and_return_async`` (async) after the ``TURN_COMPLETED``
+    hook fires.
+  - ``core/agent/loop/agent_loop.py`` — ``arun`` reads + clears the
+    Reflexion hint via ``_consume_reflexion_hint`` and prepends to
+    ``system_prompt`` for the current attempt.
+  - ``core/memory/session_manager.py`` — ``sessions`` table extended
+    with 7 verify columns (``verify_pass_count`` / ``verify_fail_count`` /
+    ``last_verify_passed`` / ``last_verify_mode`` /
+    ``last_verify_effective_mode`` / ``last_verify_rubric_misses`` /
+    ``last_verify_should_retry``) + ``upsert_verify_state()`` mutator
+    + ``get_verify_state()`` reader. Idempotent ALTER TABLE migration
+    inside the existing ``BEGIN IMMEDIATE`` transaction handles both
+    fresh DBs and pre-A3 legacy DBs.
+  - ``core/agent/loop/_lifecycle.py`` — ``_persist_verify_state`` mirror
+    function writes Tier 2 SessionMetrics state to the ``sessions``
+    row after every TURN_COMPLETED. Enriched ``TURN_VERIFY_*`` hook
+    payload (Codex MCP LOW #8) includes ``session_id`` / ``rounds`` /
+    ``termination_reason`` / ``tool_call_count`` so external renderers
+    have full turn context.
+  - ``core/agent/loop/agent_loop.py`` — ``_persist_handoff_request``
+    closes the PR-CL-BUDGET DB wiring gap. The 2h-cap T-10min trigger
+    in ``_check_session_budget_and_maybe_handoff`` now actually calls
+    ``request_handoff`` so the sessions row transitions to ``pending``
+    (was schema-only / unwired before).
+    ``_sync_model_and_rebuild_prompt`` re-applies the reflexion hint
+    on model drift / prompt-dirty rebuild (Codex MCP MEDIUM #6 — was
+    silently dropping the hint).
+  - ``core/wiring/bootstrap.py`` — default audit handlers registered
+    for ``TURN_VERIFY_PASSED`` / ``TURN_VERIFY_FAILED`` (Codex MCP
+    MEDIUM #7) matching the existing ``VERIFICATION_FAIL`` pattern.
+  - ``tests/test_verify.py`` (NEW, 38 tests) — mode StrEnum, dataclass
+    shape, env knob parsing, rule-based catches (4 reason codes +
+    multi-miss combination), reflexion-hint synthesis, mode dispatch,
+    SessionMetrics integration, hint consume+clear, exception-safe
+    dispatch, ``should_retry`` allowlist semantics, DB persistence
+    round-trip, legacy DB migration adds verify cols, end-to-end
+    lifecycle → DB write, and handoff DB wiring (PR-CL-BUDGET closure).
+  - 4 hook-count tests bumped 72 → 74.
+
+  Three operator-tunable env knobs:
+  - ``GEODE_VERIFY_MODE`` — ``off`` / ``rule_based`` / ``llm_judge``
+  - ``GEODE_VERIFY_MIN_TEXT_CHARS`` — short-output threshold (default 10)
+
+  Frontier alignment (Socratic Q5): Reflexion paper (NeurIPS 2023, 91%
+  HumanEval pass@1 via verbal RL) + OpenAI o1 chain-of-verify + AgentHub
+  per-branch verify gate + Claude Code Plan/Edit implicit verify.
+
+### Changed
+
+- **Scaffold consolidation — `CLAUDE.md` + `GEODE.md` 정돈.** Absorbed the
+  free-standing `### DONT — Real Incidents` table into the structured
+  `### CANNOT` + `### Wiring Verification` + `### Refactoring Deception
+  Prevention` tables so every prohibition rule lives in one indexable
+  place with the originating sprint incident attached. Five new CANNOT
+  rows distilled from prior incidents (graceful-contract scope / latest
+  vs promoted SoT / dual-SoT drift invariant / 제거 disambiguation /
+  no-emoji-no-card UI). Consolidated the triple-listed Quality Gates
+  recipe (was duplicated across §3 Implement, §4b Correctness, and the
+  trailing `### Quality Gates` table) into a single trailing SoT with
+  the two earlier locations now linking back. Compressed `Refactoring
+  Deception Prevention` (5 rows → 2: implementation-completeness +
+  CHANGELOG/PR-body parity) and `§4c Cleanliness` (4-row table → one
+  line delegating to the `anti-deception-checklist` skill) so the
+  scaffold no longer duplicates skill content. Added cross-reference
+  banners on `### CANNOT`, `### Wiring Verification`, the worktree row,
+  the PR row, and the `4-layer stack` line so each scaffold table now
+  names the skill or sibling document it pairs with.
+- **`GEODE.md` runtime-vs-dev scope disambiguation.** Renamed
+  `## CANNOT` → `## RUNTIME CANNOT` so the runtime agent-guardrail
+  table is no longer confusable with the scaffold's development-time
+  `### CANNOT`. Both headers now carry a one-line banner pointing at
+  the sibling document.
+
+### Fixed
+
+- **G1 identity context — `RUNTIME CANNOT` header parity.**
+  `core/agent/system_prompt.py:_build_identity_context` looked for the
+  hardcoded literal `"## CANNOT"` when extracting the agent-identity
+  block from `GEODE.md`. The scaffold-consolidation rename to
+  `## RUNTIME CANNOT` would have silently dropped the 4-line CANNOT
+  section (G3 Grounding / cross-validation / Confidence loopback /
+  sub-agent delegation) from every LLM system prompt's
+  `<agent_identity>` block. `target_sections` (line 477) and the
+  surrounding module + function docstrings now reference
+  `## RUNTIME CANNOT`. Verified by direct call — the block still
+  contains all 4 RUNTIME CANNOT bullets after the rename.
+
 ## [0.99.44] - 2026-05-23
 
 ### Added
@@ -110,6 +353,7 @@ functional change.
   cases, Chat + Responses converters + reasoning replay) +
   ``test_codex_reasoning_replay.py`` (12 cases — SSE accumulation →
   result → bridge → next-turn provider_options chain).
+
 - **PR-CL-BUDGET — 2-hour wall-clock cap + automatic T-10min hand-off**.
   Foundation PR for the Cognitive Loop sprint (A3 → A6 → A1). Replaces
   the per-AgenticLoop turn hard-cap with a session-wide wall-clock

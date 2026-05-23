@@ -502,6 +502,21 @@ def build_hooks(
             "Verification failed: %s — %s",
             ["node", "subject_id"],
         ),
+        # PR-CL-A3 (2026-05-23) — per-turn verify telemetry. Mirrors the
+        # ``VERIFICATION_FAIL`` audit handler pattern so the journal /
+        # downstream subscriber gets a structured row per turn outcome.
+        (
+            _E.TURN_VERIFY_FAILED,
+            "turn_verify_fail",
+            "Per-turn verify failed (%s): %s",
+            ["mode", "rubric_misses"],
+        ),
+        (
+            _E.TURN_VERIFY_PASSED,
+            "turn_verify_pass",
+            "Per-turn verify passed (%s, score=%s)",
+            ["mode", "score"],
+        ),
         (_E.TOOL_RECOVERY_ATTEMPTED, "recovery_try", "Tool recovery attempted: %s", ["tool_name"]),
         (
             _E.TOOL_RECOVERY_FAILED,

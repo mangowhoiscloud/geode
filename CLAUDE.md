@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.44
+- **Version**: 0.99.45
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -44,7 +44,7 @@ uv run geode "schedule daily standup reminder at 9am"
 ## Project Structure
 
 Production code splits into two top-level Python packages:
-- `core/` — general-purpose autonomous agent runtime. 4-layer stack.
+- `core/` — general-purpose autonomous agent runtime. 4-layer stack (layer diagram → `GEODE.md` → Architecture).
 - `plugins/` — first-party auxiliary plugins.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.
@@ -74,11 +74,15 @@ own fixture/E2E gates.
 
 ### CANNOT — Absolute Prohibition Rules
 
+> Development-time guardrails — what the *engineer* must not do when building GEODE.
+> For runtime guardrails (what GEODE the *agent* refuses to do at execution time), see `GEODE.md` → `## RUNTIME CANNOT`.
+
 These cannot be violated at any stage. Violations must be immediately halted and corrected.
+Rationale cites the originating incident when one exists. The `karpathy-patterns` skill's "Anti-patterns" table is the abstract counterpart — this table holds the concrete project-level rules and the sprint incidents that produced them. Before every PR push, scan for an analogous pattern; if your PR could match a row, it probably does.
 
 | Area | Rule | Rationale |
 |------|------|-----------|
-| **Git** | No code work without a worktree | Isolated execution (OpenClaw Session) |
+| **Git** | No code work without a worktree (allocation procedure → [§0](#0-board--worktree-alloc)) | Isolated execution (OpenClaw Session) |
 | | No direct push to main/develop — PR → CI → merge | Ratchet (P4) |
 | | No deleting other sessions' worktrees (`.owner` mismatch) | Ownership protection |
 | | No `git checkout` switching within a worktree | Isolation maintenance |
@@ -86,20 +90,26 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | | No branch creation when remote is out of sync | Conflict prevention |
 | | No claiming "branch needs sync" from commit count alone — verify content with `git diff A B --stat` first | Graph asymmetry ≠ content asymmetry (gitflow merge commits) |
 | **Planning** | No starting implementation without Socratic Gate (except bugs/docs) | Prevent over-engineering |
+| | No interpreting ambiguous "제거"/"remove" as code-path deletion — disambiguate first (knob vs deletion) | Avoid wasted reverts. *Incident: PR-fallback-knob ~30-file revert (2026-05-21)* |
 | **Quality** | No committing with lint/type/test failures | Ratchet (P4) |
 | | No placeholders (XXXX) in metrics — measured values only | Truth guarantee |
 | | No excessive `# type: ignore` — fix type errors instead | Correctness |
 | | No bare `_` for unused variables — use `_prefix` naming (e.g. `_tok_before`) | Readability |
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
+| | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
+| | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
+| | No dual SoT (disk + fallback literal) without shared anchor + drift invariant test | Drift prevention. *Incident: PR-MINIMAL-2 #1398 (2026-05-21) — `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` divergence* |
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
 | | No leaving `[Unreleased]` on main | Release discipline |
 | | No version mismatch across 5 locations | Single source of truth |
-| **PR** | No PR body without HEREDOC | Format consistency |
-| | No PR without a "Why" rationale | Decision record |
-| | No PR body without Summary/Why/Changes/Verification sections | Information completeness |
-| | No merging PRs that haven't passed CI guardrails | Ratchet (P4) |
+| | No emoji as section anchors / nav prefixes; no decorative card grids when content is data — dense table/list only on docs/site/CLI surfaces | Slop signal. *Incident: PR-CSP-14-UI mockup (2026-05-23) — see [[feedback-no-box-ui-no-emoji]]* |
+| **PR** | No PR that violates the [§6 template](#6-pr--merge) (HEREDOC body with Summary/Why/Changes/Verification) or merges without CI 5/5 green | Format + traceability + Ratchet (P4) |
 
 ### Wiring Verification (Anti-Disconnection)
+
+> Static parity invariants for runtime wiring (writer-reader, hook-bootstrap, ContextVar set-get).
+> For *pre-change* workflow (read-before-write, hypothesis), see `explore-reason-act` skill.
+> For *static dependency health* (layer violations, circular imports, eager loading), see `dependency-review` skill.
 
 | Item | Rule |
 |------|------|
@@ -107,39 +117,15 @@ These cannot be violated at any stage. Violations must be immediately halted and
 | **Hook registration** | Every hook handler must be registered in bootstrap.py. Handler exists ≠ handler fires. |
 | **ContextVar injection** | Every `get_*()` accessor must have a corresponding `set_*()` call in bootstrap. Unset ContextVar → None → silent skip. |
 | **Singleton lifecycle** | Singleton created at startup may use stale data. Verify refresh/invalidation path exists for mutable state (OAuth tokens, config). |
-| **Conditional read parity** | A reader that loads context in ONE branch (e.g. auto-pick) must load it in the SYMMETRIC branch (explicit input) too — otherwise the feature half-disconnects depending on call shape. |
-| **Writer destination tracked** | Every file the code writes for "audit / history / ledger" must be `git check-ignore`-clean. An ignored path silently breaks `git add`; the writer thinks it persisted, history doesn't. |
+| **Conditional read parity** | A reader that loads context in ONE branch (e.g. auto-pick) must load it in the SYMMETRIC branch (explicit input) too — otherwise the feature half-disconnects depending on call shape. *Incident: PR-G3 #1347 (2026-05-20) — `_resolve_target_dim` loaded baseline only for `--target-dim auto`.* |
+| **Writer destination tracked** | Every file the code writes for "audit / history / ledger" must be `git check-ignore`-clean. An ignored path silently breaks `git add`; the writer thinks it persisted, history doesn't. *Incident: PR-G5b #1350 (2026-05-20) — `autoresearch/state/mutations.jsonl` silently ignored, caught by Codex MCP after 8/8 CI green; pinned by `test_policy_files_not_gitignored`.* |
 
 ### Refactoring Deception Prevention
 
 | Item | Rule |
 |------|------|
-| **Partial implementation disguise** | No marking plan items complete when only partially implemented |
-| **Stub disguise** | No claiming extraction is complete with empty modules (`pass` only) |
-| **Original residue** | No marking "extraction complete" while code remains in the original (re-export only is allowed) |
-| **Zero-context verification** | Independent agent cross-checks plan document + diff → confirms all items implemented → FAIL on any omission |
-| **CHANGELOG/PR-body parity** | Every verb/adjective in the PR title + CHANGELOG ("git-tracked", "X-driven", "automatic", "committed") must be grep-provable in code. Run `git check-ignore`, `grep -rn "<source-doc>"`, and "is there a caller?" before push. |
-
-### DONT — Real Incidents (case studies)
-
-Karpathy program.md style: paste the failure verbatim so future-you doesn't repeat it.
-Append (don't rotate) — each row is a *frozen* lesson.
-
-| Date | Anti-pattern | What you said | What the code did | Lesson |
-|------|--------------|---------------|-------------------|--------|
-| 2026-05-20 PR-G5b #1350 | CHANGELOG/PR-body parity violation | "git-tracked audit log of every applied mutation" | `MUTATION_AUDIT_LOG_PATH = autoresearch/state/mutations.jsonl`, but `.gitignore` matches `autoresearch/state/*`. `git add` fails silently; `_git_commit_audit_log` returns False; ledger never enters git. | Run `git check-ignore <path>` on every path the PR claims is "tracked / committed / persisted". Caught by Codex MCP, missed by ruff/mypy/pytest/CI 8-of-8. Codified as test guard in `tests/test_ratchet_policies_in_repo.py::test_policy_files_not_gitignored` after PR-RATCHET-1 (2026-05-21). |
-| 2026-05-20 PR-G5b #1350 | CHANGELOG/PR-body parity violation | "program.md-driven self-improving loop runner" | `_SYSTEM_PROMPT` is a hardcoded f-string; `grep -rn "program.md" core/ autoresearch/` shows zero reads. PR title overstates implementation. | Any "X-driven" claim → `grep` for X. If the file isn't loaded, the claim is fiction. Fixed in `runner.py:_load_program_md` (G5b.fix1.b); pinned by `tests/test_self_improving_minimal_1.py::test_load_program_md_actually_reads_disk_file` (PR-MINIMAL-1, 2026-05-21). |
-| 2026-05-20 PR-G3 #1347 | Conditional read parity | "seed-generation reads baseline.json evidence" | `_resolve_target_dim` loads baseline ONLY in the `--target-dim auto` branch; explicit `--target-dim <name>` returns `(dim, None)`. Half the call sites get no evidence. | A new context-loading feature must work for ALL call shapes that touch the same downstream prompt. Symmetric branches > one-sided wiring. |
-| 2026-05-20 PR-G3 #1347 | Graceful-contract violation | "`load_baseline` returns `None` on unparseable JSON" | True for malformed JSON, but `float(v)` on non-numeric `dim_means` raises `ValueError` before the contract kicks in. | "Graceful" must be defined at every input boundary, not just the outer try. Schema-typed casts need their own try. |
-| 2026-05-20 PR-G2 #1346 | Reader-assumption drift | "evidence in baseline.json reaches downstream" | Evidence only persists when the audit PROMOTES the baseline. A failing/regressed audit never updates `baseline.json` → downstream reads stale evidence forever. | "Latest" and "promoted" are different SoTs. Document which one each reader assumes; persist both if the loop needs them. |
-| 2026-05-21 PR-fallback-knob | Premature scope expansion (deletion vs knob) | "FALLBACK 체인과 레이어를 제거해. Self-improving Loop + Agentic Loop 스코프에 전역으로 지켜야할 사안" → interpreted as *delete every code path*. After Steps 1-8 finished (~30 files), the user clarified "사용자가 명시적으로 튜닝할 여지를 남겨두는거면 찬성이야" — the intent was a *user-tunable knob*, not full deletion. | When a user directive says "제거" without specifying *what* is being removed (the silent default behaviour vs. the entire code path), pause to disambiguate: ask "should the chain be a knob the user can opt into, or should the chain code itself be deleted?" The cheap one-question gate would have saved ~30 edits + a `git checkout origin/develop -- <files>` revert. |
-| 2026-05-21 PR-MINIMAL-2 #1398 | Silent dual-prompt drift | The mutator runner reads `autoresearch/program.md` from disk via `_load_program_md()`; on `OSError` (missing file / unreadable) it falls back to the hardcoded `_FALLBACK_SYSTEM_PROMPT` literal. If an operator edits `program.md` but not the fallback (or vice versa), the LLM sees a different contract depending on whether the disk read succeeds — the loop continues running but with mismatched instructions. | Pin a stable anchor that BOTH paths must share (`## Setup` header in program.md, mutation-contract schema fields like `target_section`/`new_value`/`rationale` in the fallback) via a drift invariant test. Codified at `tests/test_self_improving_minimal_2.py::test_fallback_prompt_shares_setup_anchor_with_program_md` (PR-MINIMAL-2, 2026-05-21). |
-| 2026-05-23 PR-CSP-14-UI mockup | Slop UI signals — box-card + emoji | Initial literature-bundle mockup used emoji card icons (📊 audit / 📚 literature / 🧪 seeds / 🔬 validation) + rounded card boxes with hover-lift for the landing grid. User flagged as Slop signals — LLM-generated boilerplate aesthetic, not GEODE's dense-information style. | Never use emoji as section anchors / card titles / nav prefixes on docs/site/CLI surfaces. Prefer dense `<table>` + `<dl>` over decorative `<div class="card">` grids when content is data. Hierarchy via typography (h1/h2/h3 weight), not bordered card boxes. Emoji only allowed in opt-in report-generation outputs (CHANGELOG / blog posts). See `[[feedback-no-box-ui-no-emoji]]` for the full rule. |
-
-**How to use this table**:
-1. Before every PR push, scan the table for an analogous pattern. If your PR could match a row, it probably does.
-2. When a new incident lands, append (don't rewrite). The table is the project's accumulated immune system.
-3. The `karpathy-patterns` skill's "Anti-patterns" table is the abstract counterpart; this table holds the concrete sprint-level evidence.
+| **Implementation completeness** | No marking plan items complete when partially implemented, stubbed (`pass` only), or shelled out as re-exports while code remains in the original. An independent zero-context agent cross-checks plan + diff and FAILs on any omission. See `verification-team` + `anti-deception-checklist` skills for the operational checklist. |
+| **CHANGELOG/PR-body parity** | Every verb/adjective in the PR title + CHANGELOG ("git-tracked", "X-driven", "automatic", "committed") must be grep-provable in code. Run `git check-ignore`, `grep -rn "<source-doc>"`, and "is there a caller?" before push. *Incident: PR-G5b #1350 (2026-05-20) — both "git-tracked audit log" and "program.md-driven runner" were un-backed; fixed in `runner.py:_load_program_md` and pinned by `test_load_program_md_actually_reads_disk_file`.* |
 
 ### CAN — Permitted Freedoms
 
@@ -207,13 +193,7 @@ Record on Progress Board then allocate Worktree. On completion: `git push` → `
 
 #### 3. Implement → Unit Verify (iterate)
 
-Code changes → repeat 3 quality gates. Fix on failure.
-
-```bash
-uv run ruff check core/ tests/ plugins/      # Lint: 0 errors
-uv run mypy core/ plugins/                    # Type: 0 errors
-uv run pytest tests/ -m "not live"            # Test: 3900+ pass
-```
+Code changes → re-run the [Quality Gates](#quality-gates) on each iteration. Fix on failure before continuing.
 
 #### 4. Verify (Implementation GAP Audit)
 
@@ -230,21 +210,11 @@ uv run pytest tests/ -m "not live"            # Test: 3900+ pass
 
 **4b. Correctness — Quality gates + E2E**
 
-```bash
-uv run ruff check core/ tests/                      # Lint: 0 errors
-uv run mypy core/                                    # Type: 0 errors
-uv run pytest tests/ -m "not live"                   # Test: 3900+ pass
-uv run geode version                                 # CLI smoke
-```
+All 4 [Quality Gates](#quality-gates) must pass (lint / type / test / CLI smoke) plus any E2E relevant to the change.
 
 **4c. Cleanliness — Dead code & regression audit**
 
-| Check | FAIL condition |
-|-------|---------------|
-| Dead code | Unused import, unreachable function |
-| Test deletion | Test file line count decreased |
-| Lint bypass | New `# noqa`, `# type: ignore` added |
-| Secret exposure | Credentials in committed code |
+Run the `anti-deception-checklist` skill — it covers test deletion/disabling, lint bypass (`# noqa`, `# type: ignore`), coverage regression, secret exposure, and dependency downgrade. Any FAIL verdict blocks merge.
 
 **4d. Verification team (large-scale changes only)**
 

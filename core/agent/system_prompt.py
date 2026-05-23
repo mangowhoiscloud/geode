@@ -4,7 +4,7 @@ Builds the base system prompt from the router.md template, enriched with
 project memory context.
 
 Memory hierarchy injected into the system prompt (G1-G3):
-  G1: GEODE.md  — Agent identity (Core Principles + CANNOT + Defaults, ~20 lines)
+  G1: GEODE.md  — Agent identity (Core Principles + RUNTIME CANNOT + Defaults, ~20 lines)
   G2: .geode/MEMORY.md — Project meta-index (architecture, pipelines, key files)
   G3: .geode/LEARNING.md — Agent learning (patterns, corrections, preferences)
   G4: .geode/memory/PROJECT.md — Runtime insights + rules
@@ -460,7 +460,7 @@ def _build_user_context() -> str:
 
 
 def _build_identity_context() -> str:
-    """G1: Extract core identity from GEODE.md (Core Principles + CANNOT + Defaults).
+    """G1: Extract core identity from GEODE.md (Core Principles + RUNTIME CANNOT + Defaults).
 
     Reads GEODE.md via OrganizationMemory.get_soul() and extracts only the
     essential sections to stay within context budget (~20 lines).
@@ -473,8 +473,8 @@ def _build_identity_context() -> str:
         if not soul:
             return ""
 
-        # Extract targeted sections: Core Principles, CANNOT, Defaults
-        target_sections = {"## Core Principles", "## CANNOT", "## Defaults"}
+        # Extract targeted sections: Core Principles, RUNTIME CANNOT, Defaults
+        target_sections = {"## Core Principles", "## RUNTIME CANNOT", "## Defaults"}
         extracted_lines: list[str] = []
 
         current_in_target = False

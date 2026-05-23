@@ -163,6 +163,108 @@ def _final_hook_payloads(
     return session_ended, turn_completed, result.reasoning_metrics or {}
 
 
+def _finalize_verify_outcome(
+    loop: AgenticLoop, result: AgenticResult, vr: Any
+) -> dict[str, Any] | None:
+    """Shared SessionMetrics record + DB persist + payload-build path.
+
+    Called by both the sync and async ``_run_turn_verify*`` wrappers so
+    the bookkeeping stays identical regardless of how the verify outcome
+    was produced. ``None`` mirrors the "skip the hook" semantics for
+    OFF mode.
+    """
+    from core.agent.verify import VerifyMode
+    from core.observability.session_metrics import current_session_metrics
+
+    if vr.mode is VerifyMode.OFF:
+        return None
+    metrics = current_session_metrics()
+    metrics.record_verify(
+        passed=vr.passed,
+        mode=vr.mode.value,
+        effective_mode=vr.effective_mode.value,
+        rubric_misses=vr.rubric_misses,
+        reflexion_hint=vr.reflexion_hint,
+    )
+    _persist_verify_state(loop, metrics, vr.should_retry)
+    payload: dict[str, Any] = vr.to_payload()
+    payload["session_id"] = getattr(loop, "_session_id", "")
+    payload["rounds"] = int(getattr(result, "rounds", 0) or 0)
+    payload["termination_reason"] = getattr(result, "termination_reason", "") or ""
+    payload["tool_call_count"] = len(getattr(result, "tool_calls", []) or [])
+    return payload
+
+
+def _run_turn_verify(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
+    """PR-CL-A3 (2026-05-23) — sync per-turn verify dispatch.
+
+    Sync variant used by ``finalize_and_return`` (legacy sync path) and
+    test fixtures. The async finalizer uses :func:`_run_turn_verify_async`
+    so the LLM-judge call can ``await`` cleanly (Codex MCP HIGH #2 fix,
+    PR-CL-A6).
+    """
+    try:
+        from core.agent.verify import verify_turn
+
+        vr = verify_turn(result, loop=loop)
+        return _finalize_verify_outcome(loop, result, vr)
+    except Exception:
+        log.warning("turn verify dispatch crashed; skipping", exc_info=True)
+        return None
+
+
+async def _run_turn_verify_async(loop: AgenticLoop, result: AgenticResult) -> dict[str, Any] | None:
+    """Async per-turn verify dispatch (PR-CL-A6 — Codex MCP HIGH #2 fix).
+
+    Used by ``finalize_and_return_async`` so an LLM-judge mode call can
+    await ``loop._call_llm`` under the same event loop without the
+    cross-loop thread-pool hop the sync wrapper has to use.
+    """
+    try:
+        from core.agent.verify import verify_turn_async
+
+        vr = await verify_turn_async(result, loop=loop)
+        return _finalize_verify_outcome(loop, result, vr)
+    except Exception:
+        log.warning("turn verify (async) dispatch crashed; skipping", exc_info=True)
+        return None
+
+
+def _persist_verify_state(loop: AgenticLoop, metrics: Any, should_retry: bool) -> None:
+    """Mirror SessionMetrics verify telemetry into the SessionManager DB row.
+
+    Failures NEVER raise (observability hygiene). Skipped silently when no
+    session_id is set or no SessionManager singleton exists.
+    """
+    session_id = getattr(loop, "_session_id", "")
+    if not session_id:
+        return
+    mgr = None
+    try:
+        from core.memory.session_manager import SessionManager
+
+        mgr = SessionManager()
+        mgr.upsert_verify_state(
+            session_id,
+            verify_pass_count=metrics.verify_pass_count,
+            verify_fail_count=metrics.verify_fail_count,
+            last_verify_passed=metrics.last_verify_passed,
+            last_verify_mode=metrics.last_verify_mode,
+            last_verify_effective_mode=metrics.last_verify_effective_mode,
+            last_verify_rubric_misses=metrics.last_verify_rubric_misses,
+            last_verify_should_retry=should_retry,
+        )
+    except Exception:
+        log.debug("verify state persistence skipped", exc_info=True)
+    finally:
+        # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
+        if mgr is not None:
+            try:
+                mgr.close()
+            except Exception:
+                log.debug("verify SessionManager close failed", exc_info=True)
+
+
 def finalize_and_return(
     loop: AgenticLoop,
     result: AgenticResult,
@@ -187,6 +289,18 @@ def finalize_and_return(
             HookEvent.REASONING_METRICS,
             reasoning_metrics,
         )
+    # PR-CL-A3 — verify must run even when ``loop._hooks is None`` so the
+    # reflexion hint reaches the next arun via SessionMetrics regardless of
+    # the hook system being wired (Codex MCP HIGH #1, 2026-05-23). Only the
+    # ``TURN_VERIFY_*`` hook fire is gated on hooks-present.
+    verify_payload = _run_turn_verify(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        loop._hooks.trigger(event, verify_payload)
     return result
 
 
@@ -205,6 +319,18 @@ async def finalize_and_return_async(
         await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
         await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
+    # PR-CL-A3 + PR-CL-A6 — async verify dispatch so LLM-judge mode can
+    # ``await loop._call_llm`` under the same event loop without the
+    # cross-loop thread hop the sync wrapper falls back to (Codex MCP
+    # HIGH #2 fix, 2026-05-23).
+    verify_payload = await _run_turn_verify_async(loop, result)
+    if verify_payload is not None and loop._hooks:
+        event = (
+            HookEvent.TURN_VERIFY_PASSED
+            if verify_payload.get("passed")
+            else HookEvent.TURN_VERIFY_FAILED
+        )
+        await loop._hooks.trigger_async(event, verify_payload)
     return result
 
 

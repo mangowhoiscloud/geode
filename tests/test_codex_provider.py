@@ -103,6 +103,75 @@ class TestAccountIdExtraction:
         assert _extract_account_id("") == ""
 
 
+class TestCodexOAuthHeaders:
+    """``build_codex_oauth_headers`` is the single SoT for the
+    ``originator`` + ``ChatGPT-Account-ID`` pair that the Codex backend
+    requires. Four call sites (``_get_codex_client``,
+    ``_get_async_codex_client``, ``build_async_codex_client`` adapter
+    builder, ``OpenAICodexAPI`` inspect_ai subclass) all go through it."""
+
+    def _build_token(self, account_id: str | None) -> str:
+        import base64
+
+        header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+        payload_data: dict = {}
+        if account_id is not None:
+            payload_data["https://api.openai.com/auth"] = {
+                "chatgpt_account_id": account_id,
+            }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).rstrip(b"=").decode()
+        return f"{header}.{payload}.signature"
+
+    def test_header_includes_account_id_when_jwt_carries_claim(self):
+        from core.llm.providers.codex import build_codex_oauth_headers
+
+        token = self._build_token("acct-77")
+        headers = build_codex_oauth_headers(token)
+
+        assert headers == {
+            "originator": "codex_cli_rs",
+            "ChatGPT-Account-ID": "acct-77",
+        }
+
+    def test_header_omits_account_id_when_jwt_lacks_claim(self):
+        from core.llm.providers.codex import build_codex_oauth_headers
+
+        token = self._build_token(None)
+        headers = build_codex_oauth_headers(token)
+
+        assert headers == {"originator": "codex_cli_rs"}
+        assert "ChatGPT-Account-ID" not in headers
+
+    def test_header_safe_on_malformed_token(self):
+        """``_extract_account_id`` swallows ``ValueError`` /
+        ``json.JSONDecodeError`` / ``UnicodeDecodeError`` from bad base64
+        decoding and returns ``""`` — so the helper must still ship a
+        valid ``originator``-only dict rather than crashing."""
+        from core.llm.providers.codex import build_codex_oauth_headers
+
+        # Early-return: token has fewer than 2 dotted parts.
+        assert build_codex_oauth_headers("not-a-jwt") == {"originator": "codex_cli_rs"}
+        assert build_codex_oauth_headers("") == {"originator": "codex_cli_rs"}
+        # Dotted but the middle segment is not valid base64 — exercises the
+        # ``except (json.JSONDecodeError, ValueError, UnicodeDecodeError)``
+        # branch of ``_extract_account_id``.
+        assert build_codex_oauth_headers("h.%%%.s") == {"originator": "codex_cli_rs"}
+        # Dotted but the middle segment decodes to non-JSON bytes.
+        assert build_codex_oauth_headers("h.bm9wZQ.s") == {"originator": "codex_cli_rs"}
+
+    def test_returns_fresh_dict_per_call(self):
+        """Caller may mutate the returned dict — the helper must not hand
+        out a cached reference shared across threads."""
+        from core.llm.providers.codex import build_codex_oauth_headers
+
+        token = self._build_token("acct-77")
+        first = build_codex_oauth_headers(token)
+        first["X-Test-Mutation"] = "y"
+        second = build_codex_oauth_headers(token)
+
+        assert "X-Test-Mutation" not in second
+
+
 class TestCodexAdapterProperties:
     def test_provider_name(self):
         from core.llm.providers.codex import CodexAgenticAdapter

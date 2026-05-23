@@ -53,32 +53,50 @@ class SessionMeta:
 
 _CREATE_TABLE_SQL = """\
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id            TEXT PRIMARY KEY,
-    created_at            REAL NOT NULL,
-    updated_at            REAL NOT NULL,
-    status                TEXT NOT NULL DEFAULT 'active',
-    model                 TEXT NOT NULL DEFAULT '',
-    provider              TEXT NOT NULL DEFAULT 'anthropic',
-    user_input            TEXT NOT NULL DEFAULT '',
-    round_count           INTEGER NOT NULL DEFAULT 0,
-    message_count         INTEGER NOT NULL DEFAULT 0,
-    handoff_state         TEXT NOT NULL DEFAULT '',
-    handoff_platform      TEXT NOT NULL DEFAULT '',
-    handoff_error         TEXT NOT NULL DEFAULT '',
-    handoff_triggered_at  REAL NOT NULL DEFAULT 0.0
+    session_id                  TEXT PRIMARY KEY,
+    created_at                  REAL NOT NULL,
+    updated_at                  REAL NOT NULL,
+    status                      TEXT NOT NULL DEFAULT 'active',
+    model                       TEXT NOT NULL DEFAULT '',
+    provider                    TEXT NOT NULL DEFAULT 'anthropic',
+    user_input                  TEXT NOT NULL DEFAULT '',
+    round_count                 INTEGER NOT NULL DEFAULT 0,
+    message_count               INTEGER NOT NULL DEFAULT 0,
+    handoff_state               TEXT NOT NULL DEFAULT '',
+    handoff_platform            TEXT NOT NULL DEFAULT '',
+    handoff_error               TEXT NOT NULL DEFAULT '',
+    handoff_triggered_at        REAL NOT NULL DEFAULT 0.0,
+    verify_pass_count           INTEGER NOT NULL DEFAULT 0,
+    verify_fail_count           INTEGER NOT NULL DEFAULT 0,
+    last_verify_passed          INTEGER NOT NULL DEFAULT 1,
+    last_verify_mode            TEXT NOT NULL DEFAULT '',
+    last_verify_effective_mode  TEXT NOT NULL DEFAULT '',
+    last_verify_rubric_misses   TEXT NOT NULL DEFAULT '',
+    last_verify_should_retry    INTEGER NOT NULL DEFAULT 0
 )
 """
 
-# Existing-DB migration: legacy schemas (pre PR-CL-BUDGET) lack the four
-# handoff columns. ``PRAGMA table_info`` is the SoT for present columns;
-# we add only those that are missing. Idempotent on schemas already
-# carrying the columns. Defaults match ``_CREATE_TABLE_SQL`` so a fresh
-# DB and a migrated DB produce identical rows.
+# Existing-DB migration: legacy schemas (pre PR-CL-BUDGET / PR-CL-A3) lack
+# the handoff + verify columns. ``PRAGMA table_info`` is the SoT for
+# present columns; we add only those that are missing. Idempotent on
+# schemas already carrying the columns. Defaults match ``_CREATE_TABLE_SQL``
+# so a fresh DB and a migrated DB produce identical rows. Boolean fields
+# encoded as INTEGER (0 / 1) — SQLite has no native bool.
 _HANDOFF_COLUMNS: tuple[tuple[str, str], ...] = (
     ("handoff_state", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_platform", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_error", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_triggered_at", "REAL NOT NULL DEFAULT 0.0"),
+)
+
+_VERIFY_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("verify_pass_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("verify_fail_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("last_verify_passed", "INTEGER NOT NULL DEFAULT 1"),
+    ("last_verify_mode", "TEXT NOT NULL DEFAULT ''"),
+    ("last_verify_effective_mode", "TEXT NOT NULL DEFAULT ''"),
+    ("last_verify_rubric_misses", "TEXT NOT NULL DEFAULT ''"),
+    ("last_verify_should_retry", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 _CREATE_INDEX_SQL = """\
@@ -306,19 +324,19 @@ class SessionManager:
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE_SQL)
-        # PR-CL-BUDGET — additive ALTER TABLE for handoff cols on legacy DBs.
-        # ``PRAGMA table_info`` is the SoT for column presence; sqlite has
-        # no native ``ADD COLUMN IF NOT EXISTS`` so we filter ourselves.
-        # ``BEGIN IMMEDIATE`` + commit wraps the read+writes so concurrent
-        # startup processes can't observe a half-migrated schema (Codex MCP
-        # 2026-05-23 LOW #3). The transaction is no-op-cheap on fresh DBs
-        # where every column already exists.
+        # PR-CL-BUDGET + PR-CL-A3 — additive ALTER TABLE for handoff +
+        # verify cols on legacy DBs. ``PRAGMA table_info`` is the SoT
+        # for column presence; sqlite has no native ``ADD COLUMN IF NOT
+        # EXISTS`` so we filter ourselves. ``BEGIN IMMEDIATE`` + commit
+        # wraps the read+writes so concurrent startup processes can't
+        # observe a half-migrated schema. The transaction is no-op-cheap
+        # on fresh DBs where every column already exists.
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             existing_cols = {
                 str(r[1]) for r in self._conn.execute("PRAGMA table_info(sessions)").fetchall()
             }
-            for col_name, col_decl in _HANDOFF_COLUMNS:
+            for col_name, col_decl in (*_HANDOFF_COLUMNS, *_VERIFY_COLUMNS):
                 if col_name not in existing_cols:
                     # col_name + col_decl sourced from a module-level constant — not user input.
                     self._conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_decl}")
@@ -432,6 +450,90 @@ class SessionManager:
             )
             self._conn.commit()
             return cursor.rowcount
+
+    # ------------------------------------------------------------------
+    # PR-CL-A3 — verify telemetry persistence (sessions table columns)
+    # ------------------------------------------------------------------
+
+    def upsert_verify_state(
+        self,
+        session_id: str,
+        *,
+        verify_pass_count: int,
+        verify_fail_count: int,
+        last_verify_passed: bool,
+        last_verify_mode: str,
+        last_verify_effective_mode: str,
+        last_verify_rubric_misses: tuple[str, ...] | list[str],
+        last_verify_should_retry: bool,
+    ) -> bool:
+        """Persist per-turn verify state to the ``sessions`` row.
+
+        ``rubric_misses`` is JSON-serialised so the round-trip preserves
+        the list shape (sqlite has no native list type). Returns ``True``
+        when the row was updated (session exists), ``False`` when no row
+        matched (caller hasn't run ``upsert(SessionMeta)`` yet — silent
+        no-op so verify telemetry never breaks the run it observes).
+        """
+        misses_json = json.dumps(list(last_verify_rubric_misses), ensure_ascii=False)
+        with self._lock:
+            cursor = self._conn.execute(
+                """\
+                UPDATE sessions SET
+                    verify_pass_count = ?,
+                    verify_fail_count = ?,
+                    last_verify_passed = ?,
+                    last_verify_mode = ?,
+                    last_verify_effective_mode = ?,
+                    last_verify_rubric_misses = ?,
+                    last_verify_should_retry = ?,
+                    updated_at = ?
+                WHERE session_id = ?
+                """,
+                (
+                    int(verify_pass_count),
+                    int(verify_fail_count),
+                    1 if last_verify_passed else 0,
+                    str(last_verify_mode),
+                    str(last_verify_effective_mode),
+                    misses_json,
+                    1 if last_verify_should_retry else 0,
+                    time.time(),
+                    session_id,
+                ),
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
+
+    def get_verify_state(self, session_id: str) -> dict[str, Any] | None:
+        """Read the persisted verify state for a session. Returns None when
+        the row is missing. Decodes ``last_verify_rubric_misses`` JSON back
+        to a list."""
+        row = self._conn.execute(
+            """\
+            SELECT verify_pass_count, verify_fail_count, last_verify_passed,
+                   last_verify_mode, last_verify_effective_mode,
+                   last_verify_rubric_misses, last_verify_should_retry
+            FROM sessions WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        misses_raw = row[5] or ""
+        try:
+            misses = json.loads(misses_raw) if misses_raw else []
+        except json.JSONDecodeError:
+            misses = []
+        return {
+            "verify_pass_count": int(row[0]),
+            "verify_fail_count": int(row[1]),
+            "last_verify_passed": bool(row[2]),
+            "last_verify_mode": str(row[3] or ""),
+            "last_verify_effective_mode": str(row[4] or ""),
+            "last_verify_rubric_misses": misses,
+            "last_verify_should_retry": bool(row[6]),
+        }
 
     # ------------------------------------------------------------------
     # Phase 1a: messages mirror (dual-write target)
