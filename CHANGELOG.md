@@ -47,6 +47,77 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **`SessionMetrics` — session-scoped state aggregator (Tier 2 of 3-Tier
+  preservation architecture)**. Centralises ~13 scattered session-scoped
+  state (LLM cost / tool calls / provider routing / failover counts /
+  mutation lifecycle / Goodhart surface) into a single ContextVar-bound
+  dataclass at ``core/observability/session_metrics.py``.
+
+  **Frontier 정렬** — Claude Code ``AgentLoopState.totalUsage`` +
+  Hermes ``sessions`` SQLite table column shape + Paperclip ``usageJson``
+  JSONB column schema 의 cumulative aggregate grain 일치. Hermes 의
+  ``_SESSION_ID: ContextVar`` family 와 같은 multi-session 격리 패턴.
+
+  **C4 sidecar 흡수** — PR-SIL-5THEME C4 의 ``_LAST_LLM_CALL_USAGE``
+  module-level dict + PR-C4.fix-contextvar 의 ``ContextVar[dict]`` +
+  ``_UsageProxy`` shim 전부 SessionMetrics 의 ``last_call_input_tokens
+  / last_call_output_tokens / last_call_elapsed_seconds / last_call_model``
+  4-field snapshot 으로 흡수. propose() 가 같은 ContextVar 안에서
+  ``current_session_metrics()`` 호출로 race 가능성 0. PR #1530 의 flaky
+  test fail 해소.
+
+  **API**:
+  - ``current_session_metrics()`` — ContextVar lazy-init lookup
+  - ``session_metrics_scope(session_id, gen_tag, component)`` — context
+    manager binding (mirrors ``session_journal_scope``)
+  - ``SessionMetrics.accumulate_llm_call(...)`` — per-call additive
+  - ``SessionMetrics.increment_tool_call() / increment_mutation() /
+    record_retry() / record_circuit_breaker_trip() / record_error() /
+    record_rollback() / record_goodhart()`` — counter mutation
+  - ``SessionMetrics.to_session_row()`` — sessions.jsonl persistence shape
+
+  **15 new tests** (`tests/test_session_metrics.py`):
+  defaults / accumulate additive + last-call overwrite / reset_last_call
+  preserves cumulative / 5 counter APIs / persistence shape / ContextVar
+  lifecycle (lazy / nested isolation / exception restore) / C4 integration.
+
+### Changed
+
+- **`SessionJournal` → `SessionTranscript` 흡수, ``journal/`` directory
+  depth 제거**. Pre-existing 3-Tier preservation 아키텍처가
+  ``core/runtime_state/transcript.py`` docstring 에 이미 정의돼 있었으나
+  ``SessionJournal`` (의도된 Tier 2 자리) 가 실제로는 self-improving-loop
+  의 *별도 Tier 1 event log* 로 운영 중이었다 — 두 객체가 schema /
+  path / API 가 다른 채 공존. 본 PR 이 정합 회복:
+
+  - ``core/observability/session_journal.py`` → thin alias-shim 으로 축소
+    (269 callsite 변경 0). ``SessionJournal.append(event, payload=...)``
+    가 ``SessionTranscript.record_lifecycle_event(...)`` 로 delegating
+  - ``SessionTranscript`` 에 ``record_lifecycle_event`` 메서드 신설 —
+    free-form event + ``{ts, session_id, gen_tag, component, level,
+    event, payload}`` 스키마로 기존 Journal 사용자 보존
+  - file 이름 ``journal.jsonl`` → ``transcript.jsonl`` (mass rename, 269
+    reference)
+  - 디렉터리 depth 축소: ``~/.geode/journal/transcripts/<slug>/<id>.jsonl``
+    → ``~/.geode/transcripts/<slug>/<id>.jsonl``. ``GLOBAL_JOURNAL_DIR``
+    이름은 ``GLOBAL_TRANSCRIPTS_DIR`` 의 backward-compat alias 유지
+  - ``core/cli/cmd_lifecycle.py`` 의 disk usage label ``"journal"`` →
+    ``"transcripts"`` 정렬
+
+  **3-Tier 최종**:
+
+  ```
+  Tier 1  SessionTranscript   (append-only event log) — transcripts/*.jsonl
+  Tier 2  SessionMetrics      (cumulative aggregate) — sessions.jsonl row
+  Tier 3  SessionCheckpoint   (pipeline state) — state.json
+  ```
+
+  Frontier 명명 정렬 — Claude Code ``transcript`` / OpenClaw
+  ``transcript`` / Hermes ``messages`` 의 Tier-1 일치. ``journal`` 의
+  일반 명사 모호성 해소.
+
 ## [0.99.41] - 2026-05-23
 
 > SIL 5-theme closure release. Bench S6b production wiring + ADR-012 §S6/§S6b

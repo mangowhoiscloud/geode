@@ -1678,7 +1678,7 @@ _SESSIONS_JSONL_CANONICAL_FIELDS = frozenset(
 
 
 def _journal_path(tmp_path: Path, session_id: str) -> Path:
-    return tmp_path / "self-improving-loop" / session_id / "journal.jsonl"
+    return tmp_path / "self-improving-loop" / session_id / "transcript.jsonl"
 
 
 def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1744,7 +1744,7 @@ def test_emit_journal_noops_on_empty_session_id(
     _emit_journal("", "gen-x", "audit_started", payload={"dry_run": True})
     # No journal file should be created.
     assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
     )
 
 
@@ -1756,7 +1756,7 @@ def test_emit_journal_noops_on_empty_gen_tag(
     _redirect_journal(tmp_path, monkeypatch)
     _emit_journal("s-x", "", "audit_started", payload={"dry_run": True})
     assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("journal.jsonl")
+        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
     )
 
 
@@ -1806,7 +1806,7 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     # Find the single run dir under sip_home (session_id resolved at runtime).
     run_dirs = [p for p in sip_home.iterdir() if p.is_dir()]
     assert len(run_dirs) == 1, f"expected one run dir under {sip_home}, got {run_dirs}"
-    journal_path = run_dirs[0] / "journal.jsonl"
+    journal_path = run_dirs[0] / "transcript.jsonl"
     sessions_path = sip_home / "sessions.jsonl"
     return exit_code, journal_path, sessions_path
 

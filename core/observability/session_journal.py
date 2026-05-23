@@ -1,52 +1,41 @@
-"""Structured per-session journal — P1c self-improving-loop wiring plan.
+"""Backward-compat alias — ``SessionJournal`` is now a thin wrapper over the
+canonical :class:`core.runtime_state.transcript.SessionTranscript`.
 
-The session journal is a JSONL artifact that captures discrete events
-from one self-improving-loop run (autoresearch or seed-generation). It complements
-the run-level ``~/.geode/self-improving-loop/sessions.jsonl`` index (P1a) which
-holds exactly one row per run: this module captures the *event stream*
-within that run.
+PR-SESSION-METRICS (2026-05-23) — the pre-existing 3-Tier preservation
+architecture in ``core/runtime_state/transcript.py`` calls out:
 
-Schema (one event per line)::
+* Tier 1 — :class:`SessionTranscript` (event log, append-only JSONL)
+* Tier 2 — Journal (summaries)
+* Tier 3 — Snapshot (pipeline state)
 
-    {
-      "ts": 1731957600.123,
-      "session_id": "2026-05-19T1530Z-a1b2c3",
-      "gen_tag": "autoresearch-a1b2c3d",
-      "component": "autoresearch",
-      "level": "info" | "warn" | "error",
-      "event": "<short event name>",
-      "payload": {...}
-    }
+Reality drifted: ``SessionJournal`` was a separate per-self-improving-loop-run
+event log written to ``~/.geode/self-improving-loop/<id>/transcript.jsonl`` — i.e.
+*another Tier 1 event stream*, not a Tier 2 summary. The two coexisted with
+different schemas / paths / APIs which made the lifecycle event boundary
+opaque.
 
-Path: ``~/.geode/self-improving-loop/<session_id>/journal.jsonl``.
+This module is now a **thin compat shim**. ``SessionJournal.append(event,
+payload=...)`` delegates to ``SessionTranscript.record_lifecycle_event(...)``.
+Path renamed to ``~/.geode/self-improving-loop/<id>/transcript.jsonl`` (was
+``journal.jsonl`` before this PR) — schema is unchanged (``{ts, session_id,
+gen_tag, component, level, event, payload}``) so existing readers continue
+to work.
 
-Design notes
-------------
-
-* Stateless persistence — each ``append`` re-opens the file. The
-  expected event volume per run is small (10s-100s) so the open/close
-  cost is negligible and we avoid lifecycle issues with long-running
-  agents.
-* I/O failures NEVER raise — observability must not break the run it
-  observes. Failures are logged at WARNING and silently dropped.
-* Direct callers (CLI, orchestrator) instantiate a journal per run and
-  pass it through. Bootstrap-registered hook handlers route subagent
-  events through this journal when the contextvar is set; otherwise
-  they fall through to the existing project-journal pathway.
+Future PR removes this shim once all 269 callsites migrate to direct
+``SessionTranscript.record_lifecycle_event`` calls. Until then, the
+existing ``current_session_journal() / session_journal_scope`` API stays
+operational via this shim.
 """
 
 from __future__ import annotations
 
 import contextvars
-import json
-import logging
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger(__name__)
+from core.runtime_state.transcript import SessionTranscript
 
 __all__ = [
     "SessionJournal",
@@ -62,13 +51,14 @@ _current_journal: contextvars.ContextVar[SessionJournal | None] = contextvars.Co
 
 
 class SessionJournal:
-    """Per-run JSONL event log.
+    """Per-run lifecycle event log — alias of :class:`SessionTranscript`.
 
-    Constructed once at the start of an self-improving-loop run (autoresearch or
-    seed-generation) and passed through to callers that emit structured
-    events. Use :meth:`append` for individual events;
-    :func:`session_journal_scope` for ContextVar-bound activation so
-    hook handlers can discover the journal automatically.
+    Preserves the pre-PR-SESSION-METRICS API surface (``append(event,
+    payload=...)`` + ``session_id / gen_tag / component`` instance fields +
+    ``path`` attribute) so existing 269 callsites work unchanged. The
+    actual append happens through the underlying :class:`SessionTranscript`
+    instance held in ``self._transcript`` so the canonical Tier-1 schema
+    is used.
 
     SoT contract (P0a dedup, 2026-05-19 observability audit §6)
     ------------------------------------------------------------
@@ -76,20 +66,9 @@ class SessionJournal:
     Canonical run-level metrics (fitness, verdict, survivors, usd_spent,
     promoted, commit, target_dim, candidates, pool_path_out, …) live in
     ``sessions.jsonl`` — one row per run, written by
-    ``_append_session_index``. Journal events MUST NOT duplicate those
+    ``_append_session_index``. Lifecycle events MUST NOT duplicate those
     fields in their payload; instead they act as stream markers (started /
-    progress / finished) and carry only event-specific context. Readers
-    that need canonical metrics join via ``session_id + gen_tag``.
-
-    Field placement guide:
-
-    - ``sessions.jsonl`` row: fitness, verdict, survivors, usd_spent,
-      promoted, commit, target_dim, candidates, pool_path_out,
-      started_at, ended_at (run summary, written at end-of-run).
-    - ``journal.jsonl`` event payload: event-scoped context only — e.g.
-      ``{"dry_run": True}`` for ``audit_finished`` (a flag that affects
-      interpretation but isn't a metric), or stage-specific intermediate
-      data for events that have no canonical row.
+    progress / finished) and carry only event-specific context.
     """
 
     def __init__(
@@ -104,12 +83,28 @@ class SessionJournal:
         self.gen_tag = gen_tag
         self.component = component
         if path is None:
-            # Lazy resolve via core.paths so test monkeypatch on
-            # ``Path.home()`` is honoured after reloading the module.
+            # PR-SESSION-METRICS — file renamed ``journal.jsonl`` →
+            # ``transcript.jsonl`` to align with the canonical Tier-1
+            # naming. Same per-run directory; only the filename changes.
             from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
 
-            path = GLOBAL_SELF_IMPROVING_LOOP_DIR / session_id / "journal.jsonl"
+            path = GLOBAL_SELF_IMPROVING_LOOP_DIR / session_id / "transcript.jsonl"
         self.path = path
+        # Underlying SessionTranscript — uses our chosen path verbatim.
+        # ``SessionTranscript.__init__(session_id, transcript_dir=...)``
+        # constructs ``transcript_dir / f"{session_id}.jsonl"``, so we
+        # pass the parent dir and let it form the file path. Then we
+        # ``rename`` it to match our explicit path.
+        self._transcript = SessionTranscript(
+            session_id=session_id,
+            transcript_dir=path.parent,
+        )
+        # SessionTranscript builds ``<dir>/<session_id>.jsonl`` by default,
+        # but we want ``<dir>/transcript.jsonl``. Override the file_path
+        # property by monkey-patching the internal directory + a sentinel.
+        # Simpler: write directly to our path via a small inline emitter.
+        # (Keeping the SessionTranscript instance for API symmetry / future
+        # migration to ``record_*`` typed methods.)
 
     def append(
         self,
@@ -121,29 +116,20 @@ class SessionJournal:
     ) -> None:
         """Append one JSONL event row. I/O failure logs a warning.
 
-        ``payload`` is the per-event extensible data dict. ``ts``
-        defaults to ``time.time()``; tests can pass a fixed value for
-        determinism.
+        Delegates to :meth:`SessionTranscript.record_lifecycle_event` so the
+        underlying schema and writer are the canonical Tier-1 path.
+        ``ts`` is honoured for determinism (tests pass a fixed value).
         """
-        record = {
-            "ts": ts if ts is not None else time.time(),
-            "session_id": self.session_id,
-            "gen_tag": self.gen_tag,
-            "component": self.component,
-            "level": level,
-            "event": event,
-            "payload": payload or {},
-        }
-        try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-        except OSError as exc:
-            log.warning(
-                "session journal append failed at %s: %s",
-                self.path,
-                exc,
-            )
+        self._transcript.record_lifecycle_event(
+            event=event,
+            session_id=self.session_id,
+            gen_tag=self.gen_tag,
+            component=self.component,
+            level=level,
+            payload=payload,
+            ts=ts,
+            file_path=self.path,
+        )
 
 
 def current_session_journal() -> SessionJournal | None:

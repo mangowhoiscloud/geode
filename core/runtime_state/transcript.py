@@ -1,15 +1,19 @@
 """SessionTranscript — JSONL event stream for session audit trail.
 
 Tier 1 preservation: records every event in a session as an append-only
-JSONL file. Complementary to Journal (Tier 2, summaries) and Snapshot
-(Tier 3, pipeline state).
+JSONL file. Complementary to :class:`SessionMetrics` (Tier 2, cumulative
+aggregate roll-up) and Snapshot (Tier 3, pipeline state).
 
 Captures: user messages, assistant responses, tool calls/results,
-vault saves, costs, errors — everything needed to reconstruct
+vault saves, costs, errors, **lifecycle events** (audit_started /
+config_snapshot / per_dim_scores 등 — pre-PR-SESSION-METRICS 의
+``SessionJournal`` 에서 흡수) — everything needed to reconstruct
 "what exactly happened in this session."
 
-Storage: ~/.geode/journal/transcripts/{project-slug}/{session_id}.jsonl
-(user home, not project dir — matches Claude Code / Codex CLI pattern)
+PR-SESSION-METRICS (2026-05-23) — ``SessionJournal`` folded into this
+Tier-1 surface via :meth:`record_lifecycle_event`. Legacy
+``~/.geode/journal/transcripts/<slug>/`` 디렉터리 한 depth 줄어서
+``~/.geode/transcripts/<slug>/<session_id>.jsonl`` 로 단순화.
 """
 
 from __future__ import annotations
@@ -25,19 +29,24 @@ log = logging.getLogger(__name__)
 
 
 def _get_default_transcript_dir() -> Path:
-    """Return ~/.geode/journal/transcripts/{project-slug}/.
+    """Return ``~/.geode/transcripts/<project-slug>/``.
 
     Project slug is derived from CWD (same pattern as Claude Code).
     Falls back to 'default' if CWD cannot be resolved.
+
+    PR-SESSION-METRICS (2026-05-23) — depth 한 단계 줄임. 이전엔
+    ``~/.geode/journal/transcripts/<slug>/`` 였으나 ``journal/`` 디렉터리의
+    의미가 SessionJournal alias-shim 이후 사라져서 ``transcripts/`` 만으로
+    self-evident. Legacy ``~/.geode/journal/transcripts/`` 안에 있는 파일은
+    layout migrator 가 옮기지 않음 — 30-day cleanup 이 자연 회수.
     """
-    from core.paths import GLOBAL_JOURNAL_DIR
+    from core.paths import GLOBAL_TRANSCRIPTS_DIR
 
     try:
         slug = str(Path.cwd()).replace("/", "-")
     except OSError:
         slug = "default"
-    # P2 (v0.95.x) — was literal `Path.home() / ".geode" / "journal" / "transcripts"`
-    return GLOBAL_JOURNAL_DIR / "transcripts" / slug
+    return GLOBAL_TRANSCRIPTS_DIR / slug
 
 
 DEFAULT_TRANSCRIPT_DIR = _get_default_transcript_dir()
@@ -211,6 +220,53 @@ class SessionTranscript:
                 "summary": _truncate(summary, MAX_INPUT_CHARS),
             }
         )
+
+    def record_lifecycle_event(
+        self,
+        *,
+        event: str,
+        session_id: str = "",
+        gen_tag: str = "",
+        component: str = "",
+        level: str = "info",
+        payload: dict[str, Any] | None = None,
+        ts: float | None = None,
+        file_path: Path | None = None,
+    ) -> None:
+        """Record a free-form lifecycle event — replaces the legacy
+        ``SessionJournal.append(event, payload=...)`` path.
+
+        PR-SESSION-METRICS (2026-05-23) — folded ``SessionJournal`` into the
+        Tier-1 :class:`SessionTranscript`. Schema preserved
+        (``{ts, session_id, gen_tag, component, level, event, payload}``)
+        so existing readers (``tests/core/observability/test_session_journal.py``,
+        operator grep on ``transcript.jsonl`` / legacy ``transcript.jsonl``)
+        keep working.
+
+        ``file_path`` overrides the default ``<dir>/<session_id>.jsonl``
+        layout — used by :class:`SessionJournal` to write to
+        ``<self-improving-loop-dir>/<session_id>/transcript.jsonl`` while
+        still using this Tier-1 schema.
+        """
+        record: dict[str, Any] = {
+            "ts": ts if ts is not None else time.time(),
+            "session_id": session_id or self._session_id,
+            "gen_tag": gen_tag,
+            "component": component,
+            "level": level,
+            "event": event,
+            "payload": payload or {},
+        }
+        target_path = file_path if file_path is not None else self.file_path
+        line = json.dumps(record, ensure_ascii=False)
+        with self._lock:
+            try:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with target_path.open("a", encoding="utf-8") as fh:
+                    fh.write(line + "\n")
+                self._event_count += 1
+            except OSError as exc:
+                log.warning("Transcript lifecycle-event write failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Read

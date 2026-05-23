@@ -245,7 +245,7 @@ def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None
         session_id="t-p1c",
         gen_tag="gen2",
         component="seed-generation",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     with session_journal_scope(journal):
         asyncio.run(Pipeline(state, registry).arun())
@@ -293,7 +293,7 @@ def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
         session_id="t-soft",
         gen_tag="gen2",
         component="seed-generation",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     with session_journal_scope(journal):
         asyncio.run(Pipeline(state, registry).arun())
@@ -320,7 +320,7 @@ def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
         session_id="t-hard",
         gen_tag="gen2",
         component="seed-generation",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     with (
         session_journal_scope(journal),
@@ -343,7 +343,7 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
         session_id="t-rereg",
         gen_tag="gen2",
         component="seed-generation",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
     registry = PipelineRegistry()
     registry.register(_StubAgent("generator"))

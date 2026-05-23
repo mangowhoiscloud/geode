@@ -28,7 +28,7 @@ def _journal_with_path(tmp_path: Path) -> SessionJournal:
         session_id="ol-c1-test",
         gen_tag="auto-test",
         component="autoresearch",
-        path=tmp_path / "journal.jsonl",
+        path=tmp_path / "transcript.jsonl",
     )
 
 
