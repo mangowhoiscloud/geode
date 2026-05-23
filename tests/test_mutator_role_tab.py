@@ -4,7 +4,7 @@ Pins:
 - ``mutator`` role registered in ``AGENT_ROLES``.
 - The role has ``settings_field=""`` (sentinel — mutator lives in
   ``MutatorConfig.default_model``, not Settings).
-- ``toml_section="self_improving_loop.mutator"`` / ``toml_key="default_model"``
+- ``toml_section="self_improving_loop.autoresearch.mutator"`` / ``toml_key="default_model"``
   matches the runner's lazy ``load_self_improving_loop_config()`` reader.
 - ``_current_model_for_role(mutator)`` reads the toml value (or empty
   when unset, signalling inherit-Settings.model).
@@ -37,7 +37,7 @@ def test_mutator_role_has_empty_settings_field() -> None:
     role = role_by_name("mutator")
     assert role.settings_field == ""
     # toml routing points at the self-improving-loop section
-    assert role.toml_section == "self_improving_loop.mutator"
+    assert role.toml_section == "self_improving_loop.autoresearch.mutator"
     assert role.toml_key == "default_model"
     # No effort axis on the mutator role
     assert role.has_effort is False
@@ -53,7 +53,7 @@ def test_current_model_for_mutator_reads_toml_when_set(
 
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text(
-        '[self_improving_loop.mutator]\ndefault_model = "claude-haiku-4-5-20251001"\n',
+        '[self_improving_loop.autoresearch.mutator]\ndefault_model = "claude-haiku-4-5-20251001"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
@@ -97,7 +97,10 @@ def test_read_toml_value_handles_malformed_toml(
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text("[broken section\nkey = value\n", encoding="utf-8")
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
-    assert model_mod._read_toml_value("self_improving_loop.mutator", "default_model") == ""
+    assert (
+        model_mod._read_toml_value("self_improving_loop.autoresearch.mutator", "default_model")
+        == ""
+    )
 
 
 def test_apply_model_for_mutator_skips_settings_write(

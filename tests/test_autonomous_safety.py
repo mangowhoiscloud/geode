@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,31 @@ import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop, AgenticResult
 from core.agent.tool_executor import ToolExecutor
+from core.observability.session_metrics import session_metrics_scope
+
+
+@pytest.fixture(autouse=True)
+def _isolated_session_metrics() -> Iterator[None]:
+    """Step J-b.1 fix-up (2026-05-23) — isolate SessionMetrics per test.
+
+    PR-CL-A1 (#1548) added ``_maybe_replan_async`` which reads
+    ``current_session_metrics().last_verify_passed`` / ``.active_plan`` at
+    every round entry. The ContextVar's lazy-init pattern means state
+    from a prior test in the same xdist worker (xdist ``loadfile``
+    packs all tests in this file into one worker) leaks into the next
+    test's ``arun``. ``test_diversity_hint_injected`` is the canary —
+    when the leaked state trips a verify_fail replan trigger, the
+    planner mock consumes the tool-response slot and the diversity
+    tracker never advances to 5.
+
+    Wrapping every test in this file with a fresh ``session_metrics_scope``
+    closes the leak. Each test sees a clean SessionMetrics with default
+    ``last_verify_passed=True`` and ``active_plan=None`` so the replan
+    trigger stays silent.
+    """
+    with session_metrics_scope():
+        yield
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -212,19 +238,6 @@ class TestDiversityForcing:
         handler = MagicMock(return_value={"status": "ok"})
         return ToolExecutor(action_handlers={"web_search": handler})
 
-    @pytest.mark.skip(
-        reason=(
-            "PR-CL-A1-followup (2026-05-23) — test design depends on the "
-            "diversity logic INSIDE ``_call_llm`` (agent_loop.py:1757-1782) "
-            "running, but the test mocks ``_call_llm`` via patch.object so "
-            "the real body never executes. Tracker stays at the pre-filled "
-            "4 items, assertion ``== []`` fails. Passes locally via "
-            "ordering luck, fails deterministically under CI xdist loadfile. "
-            "Properly rewriting needs the diversity logic extracted from "
-            "``_call_llm`` into a standalone function the test can mock + "
-            "exercise. Tagged for cleanup-codebase sprint (TODO)."
-        )
-    )
     def test_diversity_hint_injected(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:

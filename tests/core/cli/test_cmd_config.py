@@ -34,7 +34,7 @@ def test_render_single_role_emits_section_with_model_and_source() -> None:
     rendered = _render_petri_sections(
         {"auditor": {"model": "claude-sonnet-4-6", "source": "claude-cli"}}
     )
-    assert "[self_improving_loop.petri.auditor]" in rendered
+    assert "[self_improving_loop.autoresearch.auditor]" in rendered
     assert 'model = "claude-sonnet-4-6"' in rendered
     assert 'source = "claude-cli"' in rendered
 
@@ -46,9 +46,9 @@ def test_render_preserves_role_insertion_order() -> None:
         "target": {"source": "openai-codex"},
     }
     rendered = _render_petri_sections(plan)
-    j_idx = rendered.index("[self_improving_loop.petri.judge]")
-    a_idx = rendered.index("[self_improving_loop.petri.auditor]")
-    t_idx = rendered.index("[self_improving_loop.petri.target]")
+    j_idx = rendered.index("[self_improving_loop.autoresearch.judge]")
+    a_idx = rendered.index("[self_improving_loop.autoresearch.auditor]")
+    t_idx = rendered.index("[self_improving_loop.autoresearch.target]")
     assert j_idx < a_idx < t_idx
 
 
@@ -77,7 +77,7 @@ def test_migrate_dry_run_prints_preview_and_does_not_write(
     result = runner.invoke(app, [])
     assert result.exit_code == 0, result.output
     assert "Re-run with --yes" in result.output
-    assert "[self_improving_loop.petri.auditor]" in result.output
+    assert "[self_improving_loop.autoresearch.auditor]" in result.output
     assert not target.exists(), "dry-run must not create destination"
 
 
@@ -100,8 +100,8 @@ def test_migrate_yes_appends_to_config_when_destination_absent(
     assert "Appended 2 role(s)" in result.output
     assert target.is_file()
     content = target.read_text(encoding="utf-8")
-    assert "[self_improving_loop.petri.auditor]" in content
-    assert "[self_improving_loop.petri.judge]" in content
+    assert "[self_improving_loop.autoresearch.auditor]" in content
+    assert "[self_improving_loop.autoresearch.judge]" in content
     assert 'model = "claude-opus-4-7"' in content
 
 
@@ -122,7 +122,7 @@ def test_migrate_yes_preserves_existing_unrelated_sections(
     content = target.read_text(encoding="utf-8")
     # Existing content stays intact + new section appended.
     assert "[mcp.servers.calendar]" in content
-    assert "[self_improving_loop.petri.target]" in content
+    assert "[self_improving_loop.autoresearch.target]" in content
 
 
 def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
@@ -132,7 +132,7 @@ def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
 
     target = tmp_path / "config.toml"
     target.write_text(
-        '[self_improving_loop.petri.auditor]\nmodel = "old-model"\n',
+        '[self_improving_loop.autoresearch.auditor]\nmodel = "old-model"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
@@ -149,7 +149,7 @@ def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
     assert "Refusing to append" in normalised
     # Destination MUST NOT be modified — guard against partial double-write.
     assert target.read_text(encoding="utf-8") == (
-        '[self_improving_loop.petri.auditor]\nmodel = "old-model"\n'
+        '[self_improving_loop.autoresearch.auditor]\nmodel = "old-model"\n'
     )
 
 
@@ -191,7 +191,7 @@ def test_render_escapes_embedded_double_quote() -> None:
         {"target": {"model": 'gpt-5.5 "tactical"', "source": "openai-codex"}}
     )
     parsed = tomllib.loads(rendered)
-    assert parsed["self_improving_loop"]["petri"]["target"]["model"] == 'gpt-5.5 "tactical"'
+    assert parsed["self_improving_loop"]["autoresearch"]["target"]["model"] == 'gpt-5.5 "tactical"'
 
 
 def test_render_escapes_backslash() -> None:
@@ -201,7 +201,7 @@ def test_render_escapes_backslash() -> None:
 
     rendered = _render_petri_sections({"auditor": {"source": "claude\\backslash"}})
     parsed = tomllib.loads(rendered)
-    assert parsed["self_improving_loop"]["petri"]["auditor"]["source"] == "claude\\backslash"
+    assert parsed["self_improving_loop"]["autoresearch"]["auditor"]["source"] == "claude\\backslash"
 
 
 def test_render_escapes_control_characters() -> None:
@@ -210,7 +210,7 @@ def test_render_escapes_control_characters() -> None:
 
     rendered = _render_petri_sections({"x": {"model": "a\x01b"}})
     parsed = tomllib.loads(rendered)
-    assert parsed["self_improving_loop"]["petri"]["x"]["model"] == "a\x01b"
+    assert parsed["self_improving_loop"]["autoresearch"]["x"]["model"] == "a\x01b"
 
 
 def test_yes_migration_with_embedded_quotes_writes_valid_toml(
@@ -231,7 +231,7 @@ def test_yes_migration_with_embedded_quotes_writes_valid_toml(
     result = runner.invoke(app, ["--yes"])
     assert result.exit_code == 0, result.output
     parsed = tomllib.loads(target.read_text(encoding="utf-8"))
-    assert parsed["self_improving_loop"]["petri"]["target"]["model"] == 'gpt-5.5 "tactical"'
+    assert parsed["self_improving_loop"]["autoresearch"]["target"]["model"] == 'gpt-5.5 "tactical"'
 
 
 # ── atomic write / failure rollback (Codex CRITICAL #2) ─────────────────
@@ -278,8 +278,8 @@ def test_yes_accepts_source_only_legacy_entry(
     result = runner.invoke(app, ["--yes"])
     assert result.exit_code == 0, result.output
     parsed = tomllib.loads(target.read_text(encoding="utf-8"))
-    assert parsed["self_improving_loop"]["petri"]["judge"]["source"] == "claude-cli"
-    assert "model" not in parsed["self_improving_loop"]["petri"]["judge"]
+    assert parsed["self_improving_loop"]["autoresearch"]["judge"]["source"] == "claude-cli"
+    assert "model" not in parsed["self_improving_loop"]["autoresearch"]["judge"]
 
 
 def test_yes_schema_validation_blocks_invalid_source(
@@ -327,7 +327,7 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
     monkeypatch.setattr(
         cmd_config,
         "_render_petri_sections",
-        lambda plan: "[self_improving_loop.petri.target]\nmodel = unbalanced\n",
+        lambda plan: "[self_improving_loop.autoresearch.target]\nmodel = unbalanced\n",
     )
     result = runner.invoke(app, ["--yes"])
     assert result.exit_code == 3, result.output

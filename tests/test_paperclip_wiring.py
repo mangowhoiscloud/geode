@@ -138,9 +138,9 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
-    cfg_mock.mutator.default_model = "claude-opus-4-7"
-    cfg_mock.mutator.source = "claude-cli"
-    cfg_mock.mutator.max_tokens = 1024
+    cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"
+    cfg_mock.autoresearch.mutator.source = "claude-cli"
+    cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: cfg_mock,
@@ -169,9 +169,9 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
-    cfg_mock.mutator.default_model = "gpt-5-codex"
-    cfg_mock.mutator.source = "openai-codex"
-    cfg_mock.mutator.max_tokens = 1024
+    cfg_mock.autoresearch.mutator.default_model = "gpt-5-codex"
+    cfg_mock.autoresearch.mutator.source = "openai-codex"
+    cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: cfg_mock,
@@ -192,9 +192,9 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     from core.self_improving_loop import runner
 
     cfg_mock = MagicMock()
-    cfg_mock.mutator.default_model = "claude-opus-4-7"
-    cfg_mock.mutator.source = "api_key"
-    cfg_mock.mutator.max_tokens = 1024
+    cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"
+    cfg_mock.autoresearch.mutator.source = "api_key"
+    cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
         "core.config.self_improving_loop.load_self_improving_loop_config",
         lambda: cfg_mock,
@@ -331,7 +331,8 @@ def test_cmd_source_set_persists_valid_source(
     monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._cmd_source_set(["source=claude-cli"])
     text = fake_toml.read_text(encoding="utf-8")
-    assert "[self_improving_loop.mutator]" in text
+    # Step J-b.1 — writer target moved to autoresearch.mutator.
+    assert "[self_improving_loop.autoresearch.mutator]" in text
     assert 'source = "claude-cli"' in text
 
 

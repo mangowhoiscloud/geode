@@ -69,17 +69,23 @@ _console = Console()
 
 
 def _render_petri_sections(plan: dict[str, dict[str, str]]) -> str:
-    """Render ``plan`` as ``[self_improving_loop.petri.<role>]`` TOML blocks.
+    """Render ``plan`` as ``[self_improving_loop.autoresearch.<role>]`` TOML blocks.
 
     Each block carries ``model`` / ``source`` lines for the role. Empty
     plan yields an empty string. Roles iterate in dict insertion order so
     the operator's existing ``~/.geode/petri.toml`` ordering is preserved.
+
+    Step J-b.1 (2026-05-23) — destination relocated from
+    ``[self_improving_loop.petri.<role>]`` (executor namespace) to
+    ``[self_improving_loop.autoresearch.<role>]`` (control namespace).
+    autoresearch is the upper layer that owns model selection;
+    petri_audit is the executor that reads.
     """
     if not plan:
         return ""
     lines: list[str] = []
     for role, override in plan.items():
-        lines.append(f"[self_improving_loop.petri.{role}]")
+        lines.append(f"[self_improving_loop.autoresearch.{role}]")
         for key, value in override.items():
             lines.append(f'{key} = "{_toml_escape_basic_string(value)}"')
         lines.append("")
@@ -87,9 +93,14 @@ def _render_petri_sections(plan: dict[str, dict[str, str]]) -> str:
 
 
 def _config_already_has_petri_section(path: Path) -> list[str]:
-    """Return the role names whose ``[self_improving_loop.petri.<role>]``
+    """Return role names whose ``[self_improving_loop.autoresearch.<role>]``
     section is already present in ``path``. Empty list when ``path`` is
-    absent or no overlapping sections exist."""
+    absent or no overlapping sections exist.
+
+    Step J-b.1 — checks the new namespace + the legacy
+    ``[self_improving_loop.petri.<role>]`` namespace so a re-run of
+    ``migrate-petri-toml`` does not double-write either layout.
+    """
     if not path.is_file():
         return []
     try:
@@ -101,10 +112,16 @@ def _config_already_has_petri_section(path: Path) -> list[str]:
     sip = raw.get("self_improving_loop")
     if not isinstance(sip, dict):
         return []
-    petri = sip.get("petri")
-    if not isinstance(petri, dict):
-        return []
-    return list(petri.keys())
+    overlap: set[str] = set()
+    autoresearch = sip.get("autoresearch")
+    if isinstance(autoresearch, dict):
+        for role_name in ("target", "judge", "auditor"):
+            if isinstance(autoresearch.get(role_name), dict):
+                overlap.add(role_name)
+    legacy_petri = sip.get("petri")
+    if isinstance(legacy_petri, dict):
+        overlap.update(legacy_petri.keys())
+    return sorted(overlap)
 
 
 @app.command("migrate-petri-toml")
@@ -121,7 +138,8 @@ def migrate_petri_toml(
     ),
 ) -> None:
     """Move petri.* sections from ~/.geode/petri.toml into
-    self_improving_loop.petri.* sections of ~/.geode/config.toml.
+    ``[self_improving_loop.autoresearch.<role>]`` sections of
+    ``~/.geode/config.toml`` (control-layer SoT, Step J-b.1).
 
     Dry-run by default — prints the TOML snippets the operator should
     append. With --yes, the snippets are appended to
@@ -130,7 +148,8 @@ def migrate_petri_toml(
     it is the operator's call after verifying the new path resolves.
 
     Refuses --yes when the destination already contains overlapping
-    self_improving_loop.petri.<role> sections — prevents accidental
+    role sections (either the new ``autoresearch.<role>`` namespace or
+    the legacy ``petri.<role>`` namespace) — prevents accidental
     double-write on re-run.
     """
     from plugins.petri_audit.user_overrides import migration_plan_from_petri_toml
@@ -147,7 +166,7 @@ def migrate_petri_toml(
     if not yes:
         _console.print(
             "# Migration plan from ~/.geode/petri.toml → "
-            "~/.geode/config.toml [self_improving_loop.petri.*]"
+            "~/.geode/config.toml [self_improving_loop.autoresearch.<role>]"
         )
         _console.print("# Re-run with --yes to append automatically.")
         _console.print("")
@@ -168,11 +187,12 @@ def migrate_petri_toml(
 
     overlap = sorted(set(existing_roles) & set(plan.keys()))
     if overlap:
-        # markup=False so literal ``[self_improving_loop.petri.X]`` is not
-        # interpreted by rich as a (missing) style tag and stripped.
+        # markup=False so literal ``[self_improving_loop.autoresearch.X]``
+        # is not interpreted by rich as a (missing) style tag and stripped.
         _console.print(
-            f"{target} already has [self_improving_loop.petri.{{{','.join(overlap)}}}] "
-            "section(s). Refusing to append — remove the existing entries first "
+            f"{target} already has [self_improving_loop.autoresearch.{{{','.join(overlap)}}}] "
+            "(or legacy [petri.<role>]) section(s). Refusing to append — "
+            "remove the existing entries first "
             "or apply the migration plan manually.",
             markup=False,
             style="red",
