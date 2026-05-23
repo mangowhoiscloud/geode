@@ -1,4 +1,15 @@
-"""Shared utilities used by multiple tool-handler groups."""
+"""Clarification-shaped responses for tool dispatch.
+
+``_clarify`` builds the canonical ``clarification_needed`` dict that the
+agent loop renders as a follow-up question; ``_safe_delegate`` translates
+the standard ``KeyError`` / ``TypeError`` raised by missing required
+kwargs into a ``_clarify`` call so a single missing parameter doesn't
+crash the round-trip — the user just gets asked for it.
+
+Renamed from ``_helpers.py`` (PR-CLEANUP-5, 2026-05-23) per the new
+CLAUDE.md Naming CANNOT row: catch-all suffixes (``_helpers`` /
+``_utils``) hide intent once any caller depends on the module.
+"""
 
 from __future__ import annotations
 
