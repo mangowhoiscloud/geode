@@ -73,7 +73,7 @@ functional change.
     discriminated dispatch + generic fall-through + 74/74 cover) and
     M1-M3 (union channel mirror + no-op outside scope + malformed
     payload still emits row).
-  - Frontier alignment: paperclip `as const` 33 event tuple
+  - Frontier alignment: paperclip `as const` event tuple
     (`packages/shared/src/constants.ts:1029`), paperclip `PluginEvent`
     generic envelope (`packages/plugins/sdk/src/types.ts:180`),
     openclaw `NormalizedEventSchema = z.discriminatedUnion("type", [...])`

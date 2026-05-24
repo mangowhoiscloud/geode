@@ -121,6 +121,7 @@ def test_g_d_learning_extract_model_is_config_overridable() -> None:
     ``[llm] learning_extract_model`` config.
     """
     from core.config import settings
+
     from core.hooks import llm_extract_learning
 
     # 1. Settings field exists.

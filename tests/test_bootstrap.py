@@ -1,5 +1,6 @@
-from core.hooks import HookEvent, HookSystem
 from core.orchestration.bootstrap import BootstrapContext, BootstrapManager
+
+from core.hooks import HookEvent, HookSystem
 
 
 def test_bootstrap_context_defaults_to_generic_subject() -> None:

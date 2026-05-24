@@ -139,6 +139,66 @@ def test_m3_malformed_payload_still_produces_a_row() -> None:
         assert row["level"] == "error"
 
 
+def test_m3_malformed_value_still_produces_a_row() -> None:
+    """Codex MCP review of #1587 caught this: pre-pydantic coercion
+    (``float(data["duration_ms"])``) raises ``ValueError`` *before*
+    pydantic's ``ValidationError`` when the payload carries a bad
+    value (e.g. ``{"duration_ms": "bad"}``). The original M3 test only
+    covered missing fields (which get defaulted). This pins the broader
+    contract: malformed *values* must also fall through to
+    ``GenericActivityRow`` so the timeline stays complete."""
+    with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
+        journal = RunTranscript(
+            session_id="gen1-X",
+            gen_tag="gen1",
+            component="seed-generation",
+            path=Path(tmp) / "transcript.jsonl",
+        )
+        with run_transcript_scope(journal):
+            hs = HookSystem()
+            # ``duration_ms="bad"`` triggers ValueError inside the
+            # _lifecycle_completed builder. Pre-Codex-catch the row
+            # would have been dropped entirely.
+            hs.trigger(
+                HookEvent.LLM_CALL_ENDED,
+                {"session_id": "s1", "call_id": "c1", "duration_ms": "bad"},
+            )
+        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        assert len(rows) == 1
+        row = rows[0]
+        # The row landed via GenericActivityRow fall-through (the builder
+        # raised ValueError → registry caught it → generic emit).
+        # The action keeps the dotted-name convention.
+        assert row["action"] == "llm.call.end"
+
+
+def test_m1_async_mirror_appends_one_row() -> None:
+    """``trigger_async`` must call the same mirror as ``trigger`` —
+    otherwise the async dispatch path silently drops events. Codex
+    MCP review of #1587 flagged this as a missing test."""
+    import asyncio
+
+    with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
+        journal = RunTranscript(
+            session_id="gen1-X",
+            gen_tag="gen1",
+            component="seed-generation",
+            path=Path(tmp) / "transcript.jsonl",
+        )
+        with run_transcript_scope(journal):
+            hs = HookSystem()
+            asyncio.run(
+                hs.trigger_async(
+                    HookEvent.SUBAGENT_STARTED,
+                    {"task_id": "gen-async-001", "task_type": "seed_generator"},
+                )
+            )
+        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        assert len(rows) == 1
+        assert rows[0]["action"] == "subagent.started"
+        assert rows[0]["task_id"] == "gen-async-001"
+
+
 def test_m1_hook_handler_failure_does_not_break_mirror() -> None:
     """If a registered hook handler raises, the union-channel mirror
     must still run — we're capturing observability, not gating on

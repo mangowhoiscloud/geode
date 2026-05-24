@@ -96,8 +96,9 @@ def test_state_to_hook_event_map_covers_five_states_only() -> None:
 
 def test_state_to_hook_event_values_resolve_via_getattr() -> None:
     """Each mapped string MUST resolve via `getattr(HookEvent, name)`."""
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import STATE_TO_HOOK_EVENT
+
+    from core.hooks import HookEvent
 
     for hook_name in STATE_TO_HOOK_EVENT.values():
         assert hasattr(HookEvent, hook_name), f"HookEvent missing {hook_name}"
@@ -194,8 +195,9 @@ def test_history_entry_graceful_on_oserror(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_fired_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+
+    from core.hooks import HookEvent
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(target_section="wrapper.intro")
@@ -227,12 +229,13 @@ def test_fired_emits_hook_and_appends_history(
 def test_lock_busy_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import (
         acquire_auto_trigger_lock,
         auto_trigger_mutator,
         release_auto_trigger_lock,
     )
+
+    from core.hooks import HookEvent
 
     lock, ts, hist = trigger_paths
     held = acquire_auto_trigger_lock(lock)
@@ -259,11 +262,12 @@ def test_lock_busy_emits_hook_and_appends_history(
 def test_interval_blocked_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import (
         auto_trigger_mutator,
         write_last_run_timestamp,
     )
+
+    from core.hooks import HookEvent
 
     lock, ts, hist = trigger_paths
     now = 1000000.0
@@ -287,8 +291,9 @@ def test_interval_blocked_emits_hook_and_appends_history(
 def test_runner_error_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+
+    from core.hooks import HookEvent
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(raises=RuntimeError("boom"))
@@ -310,8 +315,9 @@ def test_runner_error_emits_hook_and_appends_history(
 def test_parse_error_emits_hook_and_appends_history(
     trigger_paths: tuple[Path, Path, Path],
 ) -> None:
-    from core.hooks import HookEvent
     from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+
+    from core.hooks import HookEvent
 
     lock, ts, hist = trigger_paths
     runner = _FakeRunner(raises=ValueError("malformed mutation"))

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.hooks import HookEvent, HookSystem
 from core.memory.session import InMemorySessionStore
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
@@ -22,6 +21,8 @@ from core.runtime import (
 )
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
+
+from core.hooks import HookEvent, HookSystem
 
 
 class TestGeodeRuntimeCreate:

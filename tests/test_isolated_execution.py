@@ -7,13 +7,14 @@ import time
 from typing import Any
 
 import pytest
-from core.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import (
     IsolatedRunner,
     IsolationConfig,
     IsolationResult,
     PostToMainMode,
 )
+
+from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Helpers

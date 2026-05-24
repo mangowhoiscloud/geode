@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.hooks import HookEvent, HookSystem
 from core.llm.router import _fire_hook, set_router_hooks
+
+from core.hooks import HookEvent, HookSystem
 
 
 class TestLLMLifecycleEvents:

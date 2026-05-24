@@ -15,9 +15,9 @@ After PR-COMM-1 (S2 scope):
     ``LifecycleFailedRow`` / ``LifecycleRetriedRow`` / ``CognitiveStepRow`` /
     ``AutoTriggerRow`` / ``StateChangeRow`` / ``CostBudgetRow`` /
     ``MemoryMutationRow`` / ``McpServerRow`` / ``GenericActivityRow``)
-  - 31 lifecycle-pair concrete classes (A+B+C+D groups) with
-    discriminator on ``action``
-  - 43 non-lifecycle events fall through to ``GenericActivityRow``
+  - 32 lifecycle-pair concrete classes (A+B+C+D groups: 9 started + 13
+    completed + 9 failed + 1 retried) with discriminator on ``action``
+  - 42 non-lifecycle events fall through to ``GenericActivityRow``
 
 Subsequent PRs (not in S2) will add concrete subclasses for the E-K
 groups as their schemas stabilise.
@@ -242,7 +242,7 @@ class GenericActivityRow(ActivityRowBase):
 
 
 # ---------------------------------------------------------------------------
-# Tier 3 — 31 lifecycle concrete classes (A + B + C + D groups, S2 scope)
+# Tier 3 — 32 lifecycle concrete classes (A + B + C + D groups, S2 scope)
 # ---------------------------------------------------------------------------
 
 # A — Lifecycle started (9)
@@ -463,7 +463,7 @@ TypedActivityRow = Annotated[
     ],
     Field(discriminator="action"),
 ]
-"""Discriminated union of 31 typed lifecycle ActivityRow subclasses.
+"""Discriminated union of 32 typed lifecycle ActivityRow subclasses.
 
 Mirrors openclaw's ``NormalizedEventSchema = z.discriminatedUnion("type", [...])``.
 The ``action`` field is the discriminator — pydantic dispatches to the

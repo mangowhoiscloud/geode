@@ -120,7 +120,7 @@ class GenericActivityRow(ActivityRowBase):
     details: dict[str, Any] = Field(default_factory=dict)
 ```
 
-### 2.3 Tier 3 — 31 concrete lifecycle classes (S2 scope)
+### 2.3 Tier 3 — 32 concrete lifecycle classes (S2 scope)
 
 ```python
 class PipelineStartedRow(LifecycleStartedRow):
@@ -147,8 +147,8 @@ class SubAgentStartedRow(LifecycleStartedRow):
 
 ActivityRow = Annotated[
     Union[
-        PipelineStartedRow, NodeBootstrapRow, ...,  # 31 concrete
-        GenericActivityRow,  # 43 non-lifecycle fall-through
+        PipelineStartedRow, NodeBootstrapRow, ...,  # 32 concrete
+        GenericActivityRow,  # 42 non-lifecycle fall-through
     ],
     Field(discriminator="action"),
 ]
@@ -163,7 +163,7 @@ ActivityRow = Annotated[
 HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any]], ActivityRowBase]] = {
     HookEvent.PIPELINE_STARTED: _build_pipeline_started,
     HookEvent.PIPELINE_ENDED: _build_pipeline_ended,
-    # ... 31 lifecycle ...
+    # ... 32 lifecycle ...
     # nothing for K-group events — bridge falls back to GenericActivityRow
 }
 
@@ -174,7 +174,7 @@ def map_hook_to_activity(
 ) -> ActivityRowBase:
     """Convert a HookEvent + data dict into a typed ActivityRow.
 
-    Lifecycle events (31) get concrete subclass with full validation;
+    Lifecycle events (32) get concrete subclass with full validation;
     rest fall through to GenericActivityRow. Pre-PR-COMM-1 the data
     payload was never validated — typed lifecycle subclasses surface
     payload bugs at dispatch time."""
@@ -241,7 +241,7 @@ def _mirror_to_active_transcript(self, event: HookEvent, data: dict[str, Any]) -
 ### 5.2 신규 테스트
 - `tests/core/observability/test_activity_schema.py`:
   - I1: 11 base classes 정의 + Tier 1 envelope 필드 검증
-  - I2: 31 lifecycle concrete 의 action literal 정합 + entity_type literal 정합
+  - I2: 32 lifecycle concrete 의 action literal 정합 + entity_type literal 정합
   - I3: ActivityRow discriminated union 의 model_validate (PipelineStartedRow 입력 → 정확한 subclass)
   - I4: GenericActivityRow fall-through (typed lifecycle 외 event 가 generic 으로 라우팅)
   - I5: 74 HookEvent 전체가 매핑 cover (HOOK_EVENT_TO_ROW_BUILDER 누락 → generic, 매핑 있으면 concrete)
@@ -258,8 +258,8 @@ def _mirror_to_active_transcript(self, event: HookEvent, data: dict[str, Any]) -
 
 ## 6. Anti-deception 체크리스트
 
-- [ ] 11 base classes + 31 lifecycle concrete + 1 generic = 43 ActivityRow classes 가 union 에 모두 등록
-- [ ] HOOK_EVENT_TO_ROW_BUILDER 의 키 31 + generic fall-through 43 = 74 (전체 cover)
+- [ ] 11 base classes + 32 lifecycle concrete + 1 generic = 44 ActivityRow classes 가 union 에 모두 등록
+- [ ] HOOK_EVENT_TO_ROW_BUILDER 의 키 32 + generic fall-through 42 = 74 (전체 cover)
 - [ ] Pydantic ValidationError 가 trigger 자체를 break 하지 않음 (silent no-op + warning log)
 - [ ] 기존 SessionTranscript 의 4 mirror (PR-U) 는 그대로 동작
 - [ ] backwards-compat: `journal.append(event, payload=...)` 기존 patterns 회귀 없음
@@ -272,7 +272,7 @@ def _mirror_to_active_transcript(self, event: HookEvent, data: dict[str, Any]) -
 |---|---|
 | Spec doc | DONE (이 파일) |
 | Tier 1 + Tier 2 (11 base) | PENDING |
-| Tier 3 (31 lifecycle concrete) | PENDING |
+| Tier 3 (32 lifecycle concrete) | PENDING |
 | Registry (HOOK_EVENT_TO_ROW_BUILDER) | PENDING |
 | Union channel wiring | PENDING |
 | Tests (I1-I5 + M1-M3) | PENDING |

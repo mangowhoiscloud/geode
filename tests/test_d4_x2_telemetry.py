@@ -23,6 +23,7 @@ from core.agent.loop._model_switching import (
     purge_stale_model_switch_acks,
     update_model_async,
 )
+
 from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------

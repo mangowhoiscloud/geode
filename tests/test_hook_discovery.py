@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.hooks import HookEvent, HookSystem
 from core.hooks.discovery import HookPluginLoader, discover_hooks
+
+from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Fixtures for creating temporary plugin directories

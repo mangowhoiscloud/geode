@@ -2,9 +2,9 @@
 
 Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3.
 
-Each of the 31 lifecycle events maps to a builder that produces the
+Each of the 32 lifecycle events maps to a builder that produces the
 appropriate concrete ``ActivityRow`` subclass with validated payload.
-The 43 non-lifecycle events fall through to
+The 42 non-lifecycle events fall through to
 :class:`GenericActivityRow` so they still land in the timeline — but
 without the type-safety + IDE autocomplete benefit. Subsequent PRs
 (E-K group concretes) will move events out of the fall-through.
@@ -71,7 +71,7 @@ __all__ = ["map_hook_to_activity"]
 
 
 # ---------------------------------------------------------------------------
-# Per-event row builders (31 lifecycle events typed in S2 scope)
+# Per-event row builders (32 lifecycle events typed in S2 scope)
 # ---------------------------------------------------------------------------
 
 
@@ -193,7 +193,7 @@ def _infer_actor_type(default: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 31 lifecycle event → builder mapping
+# 32 lifecycle event → builder mapping
 # ---------------------------------------------------------------------------
 
 
@@ -309,7 +309,7 @@ def map_hook_to_activity(
     """Convert a ``HookEvent`` + ``data`` dict into a typed
     :class:`ActivityRowBase` subclass.
 
-    Lifecycle events (31, see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get
+    Lifecycle events (32, see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get
     full pydantic validation against their per-event details schema —
     a payload bug surfaces at dispatch time with a precise
     ``ValidationError`` instead of much later at the handler. The 43
@@ -329,10 +329,19 @@ def map_hook_to_activity(
     if builder is not None:
         try:
             return builder(payload, run_id)
-        except ValidationError as exc:
+        except (ValidationError, ValueError, TypeError) as exc:
+            # PR-COMM-1 fix-up (Codex MCP review M3): typed-row builders
+            # do pre-pydantic coercion (``float()`` / ``int()`` /
+            # ``str()``) before constructing the model, so malformed
+            # *values* (e.g. ``{"duration_ms": "bad"}``) raise plain
+            # ``ValueError`` / ``TypeError`` before pydantic's
+            # ``ValidationError``. Catching all three preserves the
+            # "always emit a row" contract — the timeline stays
+            # complete even when an upstream caller sends garbage.
             log.warning(
-                "ActivityRow builder for %s failed validation; falling back to generic: %s",
+                "ActivityRow builder for %s failed (%s); falling back to generic row: %s",
                 event.value,
+                type(exc).__name__,
                 exc,
             )
     return _build_generic(event, payload, run_id=run_id)
@@ -368,7 +377,7 @@ def _build_generic(
 def _infer_actor_type_from_event(event: HookEvent) -> str:
     """Best-effort actor classification for the generic fall-through.
 
-    The 43 non-lifecycle events span four actor types — pre-typing the
+    The 42 non-lifecycle events span four actor types — pre-typing the
     fall-through helps operators filter the timeline by ``actor_type``
     without waiting for the per-event concrete class. ``GenericActivityRow``
     rows should still be considered "untyped" — promoting them to a
