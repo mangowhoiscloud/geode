@@ -1,4 +1,4 @@
-"""inspect_ai ModelAPI for OpenAI Codex (ChatGPT Plus OAuth subscription).
+"""inspect_ai ModelAPI for OpenAI Codex (ChatGPT subscription).
 
 # OAuth 제약 + 검증 일정 (2026-05-14)
 #
@@ -16,7 +16,7 @@
 Bridges ``inspect_ai`` (and therefore inspect-petri's judge / auditor)
 into the Codex OAuth path that already lives in
 ``core/llm/providers/codex.py`` so judge calls consume the user's
-ChatGPT Plus subscription quota instead of per-token billing.
+ChatGPT subscription quota instead of per-token billing.
 
 Registered as ``@modelapi(name="openai-codex")`` from
 ``plugins/petri_audit/__init__.py`` (under the same try/except guard
@@ -35,11 +35,11 @@ grounded in ``docs/research/codex-oauth-request-spec.md``):
 - ``client.responses.create(**)`` (non-streaming) → ``responses.stream``
   required by chatgpt.com/backend-api/codex.
 - ``max_output_tokens`` parameter → 400 ``Unsupported parameter`` on
-  the Plus backend. Must be stripped.
+  the subscription backend. Must be stripped.
 - System prompt in ``input`` list as ``role:developer`` → Codex backend
   expects ``instructions=<system>`` field. Hermes / Codex Rust both
   shift system out of input.
-- ``response.completed`` event from the Plus backend omits the
+- ``response.completed`` event from the subscription backend omits the
   ``output`` field, so ``stream.get_final_response().output == []``
   even when output items were emitted. Must accumulate
   ``response.output_item.done`` events (codex.py:331-344 pattern).
@@ -161,9 +161,9 @@ def register() -> None:
           ``OPENAI_API_KEY`` env probe is short-circuited because we
           pre-populate ``kwargs["api_key"]``.
         - ``responses_api`` is forced ``True`` — Chat Completions is
-          unsupported on the Plus backend.
+          unsupported on the subscription backend.
         - ``responses_store`` is forced ``False`` — server-side state
-          is rejected by the Plus backend.
+          is rejected by the subscription backend.
         - ``generate()`` is overridden to use streaming, strip
           ``max_output_tokens``, move system into ``instructions=``,
           and apply the codex-rs output-item accumulator workaround.
@@ -182,7 +182,7 @@ def register() -> None:
             token = kwargs.get("api_key") or _resolve_codex_token()
             if not token:
                 raise environment_prerequisite_error(
-                    "OpenAI Codex (ChatGPT Plus)",
+                    "OpenAI Codex (ChatGPT subscription)",
                     [
                         "~/.codex/auth.json (Codex CLI login)",
                         "openai-codex profile in GEODE ProfileStore",
@@ -232,7 +232,7 @@ def register() -> None:
 
             Stock ``OpenAIAPI.count_tokens`` hits
             ``client.responses.input_tokens.count`` when ``responses_api=True``,
-            but the ChatGPT Plus backend returns
+            but the ChatGPT subscription backend returns
             ``PermissionDeniedError`` on that endpoint. tiktoken handles
             local counting for gpt-5.x and avoids the round-trip, which
             also keeps subscription quota free for actual generations.
@@ -351,7 +351,7 @@ def register() -> None:
                 extra_headers={"X-Inspect-Request-Id": request_id} | (config.extra_headers or {}),
                 **params,
             )
-            # ChatGPT Plus backend's /responses endpoint rejects requests
+            # ChatGPT subscription backend's /responses endpoint rejects requests
             # missing the ``instructions`` field with
             # ``BadRequestError: 'Instructions are required'``. Stock OpenAI
             # API treats it as optional, but the Codex backend is strict.

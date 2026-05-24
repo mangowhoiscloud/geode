@@ -159,8 +159,28 @@ def _get_provider_client(provider: str) -> Any:
 
 
 def _get_fallback_chain(provider: str) -> list[str]:
-    result: list[str] = _get_provider_config(provider, "fallback_chain")
-    return result
+    """**DEPRECATED — returns empty list (PR-DRIFT-CUT, 2026-05-24).**
+
+    Pre-PR: looked up a configured fallback chain per provider so that
+    when the primary model returned a retryable error the dispatcher
+    would silently try the next model in the chain (and even cross
+    providers in the case of GLM → OpenAI). In production that meant
+    a single 400 on Anthropic could cascade to a z.ai call that
+    succeeded but surfaced the *Anthropic* error to the user — see
+    the v0.99.52 smoke (gpt-5.5 ``Unsupported parameter`` → context
+    overflow misclassification → z.ai 200 OK → UI showed "Context
+    window exhausted"). The chain was the *amplifier*; cutting it at
+    the source isolates failures to their actual provider.
+
+    The function signature is preserved so callers don't fork on the
+    rollout. Operators wanting an alternative model must invoke
+    ``/model <id>`` explicitly — there is no silent auto-fallback.
+    The legacy chain constants in :mod:`core.config`
+    (``ANTHROPIC_FALLBACK_CHAIN`` etc.) are still imported by the
+    dispatch table above to keep test fixtures + introspection
+    working, but their content is no longer consulted at call time.
+    """
+    return []
 
 
 def _get_provider_retryable_errors(provider: str) -> tuple[type[Exception], ...]:

@@ -232,7 +232,7 @@ def build_default_lanes() -> LaneQueue:
     )
     # PR-LQ-Phase3 (2026-05-22) — Codex CLI parity. Sibling lane to
     # ``claude-cli-subagent``; separate semaphore because the two
-    # provider buckets (Anthropic vs ChatGPT-Plus OAuth) are
+    # provider buckets (Anthropic vs ChatGPT subscription OAuth) are
     # independent. Operator tunes via ``GEODE_CODEX_CLI_LANE_MAX``.
     from core.orchestration.codex_cli_lane import (
         CODEX_CLI_LANE_NAME,

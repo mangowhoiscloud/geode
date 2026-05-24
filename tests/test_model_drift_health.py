@@ -1,21 +1,23 @@
-"""Bug class B3 — model drift sync must check target health.
+"""Bug class B3 — model drift sync was the silent-revert load-bearer.
 
-The v0.52.1 incident: User completed `/login openai` (Codex Plus
-registered). Same session immediately started a new prompt. Settings
-store still pointed at the old `glm-4.7-flash`. Loop started with
-`glm-5.1`, detected drift, **silently overwrote loop's choice with
-`glm-4.7-flash`** even though GLM had no quota left. Result: 5×4 retry
-storm on a model the user did not pick and which had no available
-profile.
+Historical context (kept for the post-mortem trail): the v0.52.1
+incident saw a stale ``settings.model`` overwrite a freshly registered
+``loop.model`` because the drift sync ran on every turn and trusted
+``settings.model`` over the operator's most-recent choice. The original
+fix here was a *health-check guard* (consult ``ProfileRotator.resolve``
+before allowing the drift to proceed).
 
-Invariant: ``_sync_model_from_settings_async()`` must consult
-``ProfileRotator.resolve(target_provider)`` and **refuse** the drift
-when the rotator returns None (no eligible profile for the target).
-The loop's currently-chosen model is preserved instead.
+PR-DRIFT-CUT (2026-05-24) cut the entire drift surface — the root
+cause was that drift sync existed at all in a daemon process whose
+``settings`` snapshot can never be authoritative. These tests now pin
+the no-op contract: ``_sync_model_from_settings_async()`` always
+returns ``False`` and never invokes ``update_model_async``.
 
-Pattern source: OpenClaw ``evaluate_eligibility`` + ``_LAST_VERDICTS``
-cached health view (referenced in `core/auth/rotation.py`,
-`core/auth/profiles.py:176`).
+We retain the test file (rather than delete it) because the
+regressions it prevents are still real — they will surface the day
+anyone tries to revive auto-revert under the old name. The new tests
+that pin the *positive* contract (drift sync is dead) live in
+``tests/test_drift_fallback_cut.py``.
 """
 
 from __future__ import annotations
@@ -33,23 +35,22 @@ from core.agent.loop import _model_switching
 
 
 def test_sync_calls_health_check_before_update() -> None:
-    """Source-level: the drift branch must call ``_drift_target_is_healthy``
-    before ``self.update_model`` so an unhealthy drift target cannot
-    silently overwrite the loop's choice."""
+    """PR-DRIFT-CUT (2026-05-24) — drift sync entry point is a no-op.
+
+    Pre-PR this test asserted that ``_settings_model_target`` consulted
+    ``_drift_target_is_healthy`` *before* invoking ``update_model_async``.
+    The drift surface is now cut entirely, so the test pins the
+    stronger invariant: the function source must NOT call
+    ``update_model_async`` at all (it must be a permanent no-op so a
+    future revival has to use a new entry-point name).
+    """
     src = inspect.getsource(_model_switching._settings_model_target) + inspect.getsource(
         _model_switching.sync_model_from_settings_async
     )
-    health_pos = src.find("_drift_target_is_healthy")
-    update_pos = src.find("update_model_async")
-    assert health_pos >= 0, (
-        "_sync_model_from_settings must call _drift_target_is_healthy. "
-        "Without the check the v0.51-incident regression returns: stale "
-        "settings.model overwrites loop.model when target is unhealthy."
-    )
-    assert update_pos >= 0
-    assert health_pos < update_pos, (
-        "Health check must come BEFORE update_model — otherwise we swap "
-        "the adapter and only then discover there's no profile to use."
+    assert "update_model_async" not in src, (
+        "PR-DRIFT-CUT contract: ``sync_model_from_settings_async`` must "
+        "NEVER invoke ``update_model_async``. Reviving auto-revert under "
+        "this name re-introduces the v0.99.52 incident."
     )
 
 
@@ -138,8 +139,15 @@ def test_drift_refused_when_rotator_returns_none(monkeypatch) -> None:
     stub.update_model_async.assert_not_called()
 
 
-def test_drift_accepted_when_rotator_returns_profile(monkeypatch) -> None:
-    """Same setup but rotator returns a valid profile → drift proceeds."""
+def test_drift_is_noop_even_when_rotator_returns_profile(monkeypatch) -> None:
+    """PR-DRIFT-CUT (2026-05-24) — even a healthy rotator + settings
+    divergence must NOT trigger an auto-swap.
+
+    Pre-PR this asserted that a valid profile combined with
+    ``settings.model`` divergence drove ``update_model_async``. With
+    drift sync removed, the rotator state is irrelevant — the loop
+    waits for an explicit ``/model`` from the operator.
+    """
     stub = _make_loop_stub("glm-5.1")
 
     fake_rotator = MagicMock()
@@ -152,14 +160,14 @@ def test_drift_accepted_when_rotator_returns_profile(monkeypatch) -> None:
     with patch("core.config.settings", fake_settings):
         changed = asyncio.run(stub._sync_model_from_settings_async())
 
-    assert changed is True
-    # PR-MIC (2026-05-23) — drift sync now passes ``reason="drift_sync"``.
-    stub.update_model_async.assert_awaited_once_with("glm-4.7-flash", reason="drift_sync")
+    assert changed is False
+    stub.update_model_async.assert_not_awaited()
 
 
-def test_drift_accepted_when_rotator_not_initialised(monkeypatch) -> None:
-    """Early bootstrap: rotator singleton is None. Drift must NOT be blocked
-    (would prevent legitimate model switches before bootstrap completes).
+def test_drift_is_noop_when_rotator_not_initialised(monkeypatch) -> None:
+    """Early-bootstrap state was previously the lone exception that let
+    drift sync proceed even without a rotator. Post PR-DRIFT-CUT there
+    are no exceptions — drift never proceeds.
     """
     stub = _make_loop_stub("glm-5.1")
 
@@ -170,8 +178,8 @@ def test_drift_accepted_when_rotator_not_initialised(monkeypatch) -> None:
     with patch("core.config.settings", fake_settings):
         changed = asyncio.run(stub._sync_model_from_settings_async())
 
-    assert changed is True
-    stub.update_model_async.assert_awaited_once()
+    assert changed is False
+    stub.update_model_async.assert_not_awaited()
 
 
 def test_drift_no_op_when_models_match(monkeypatch) -> None:

@@ -113,8 +113,9 @@ def _has_any_llm_key() -> bool:
 def detect_subscription_oauth() -> str | None:
     """Detect a usable subscription-OAuth credential before any wizard runs.
 
-    Currently supports Codex CLI OAuth (ChatGPT Plus / Pro / Business / Edu /
-    Enterprise). Anthropic OAuth is intentionally excluded — Anthropic's
+    Currently supports Codex CLI OAuth (ChatGPT subscription — Plus /
+    Pro / Business / Edu / Enterprise). Anthropic OAuth is intentionally
+    excluded — Anthropic's
     terms of service (effective 2026-01-09) prohibit third-party tools from
     reusing the Claude Code OAuth token; ``core/lifecycle/container.py:271``
     documents the policy decision.

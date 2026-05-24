@@ -1160,7 +1160,7 @@ class AgenticLoop:
         silently swap to the next model, surface enough context for the
         user to pick one with ``/model``.
         """
-        from core.llm.errors import build_model_action_message
+        from core.llm.errors import build_model_action_message, summarize_error_detail
 
         cost: float | None = None
         try:
@@ -1169,6 +1169,12 @@ class AgenticLoop:
             cost = float(get_tracker().accumulator.total_cost_usd)
         except Exception:
             cost = None
+        # PR-DRIFT-CUT (2026-05-24) — strip raw SDK exception JSON
+        # ("Error code: 400 - {'error': {'message': ...}}") down to the
+        # underlying message before forwarding to the user-facing message
+        # builder. ``summarize_error_detail`` is a no-op when it cannot
+        # prove a clean extraction, so we never accidentally lose context.
+        clean_detail = summarize_error_detail(detail) if detail else None
         text = build_model_action_message(
             error_type=error_type,
             severity=severity,
@@ -1178,7 +1184,7 @@ class AgenticLoop:
             attempts=self._consecutive_llm_failures,
             cost_so_far_usd=cost,
             suggested_models=self._fallback_chain_suggestions() or None,
-            detail=detail,
+            detail=clean_detail,
         )
         return AgenticResult(
             text=text,
@@ -1541,17 +1547,26 @@ class AgenticLoop:
                         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
                     # Non-retryable errors → immediate exit (no retry budget waste)
+                    # PR-DRIFT-CUT (2026-05-24) — replaced the raw
+                    # ``f"LLM call failed ({detail})."`` text emission with
+                    # the structured ``build_model_action_message`` shared
+                    # with the auth / convergence-break branches. Operators
+                    # were seeing the unfiltered SDK exception (e.g.
+                    # ``{'error': {'message': "Invalid 'tools': ..."}}``)
+                    # leak into the assistant transcript; the structured
+                    # message exposes the classified hint + a concrete
+                    # next-action (``/model <id>``) without the raw JSON.
                     if _et == "bad_request":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
-                        detail = self._last_llm_error or str(adapter_exc)
-                        result = AgenticResult(
-                            text=f"LLM call failed ({detail}).",
+                        result = self._build_model_action_result(
+                            error_type=_et,
+                            severity=_sev,
+                            hint=_hint,
                             rounds=round_idx + 1,
-                            error="llm_call_failed",
-                            termination_reason="llm_error",
+                            detail=self._last_llm_error or str(adapter_exc),
                         )
                         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
@@ -1789,7 +1804,7 @@ class AgenticLoop:
                     "role": "assistant",
                     "content": assistant_content,
                 }
-                # v0.55.0 — Codex Plus encrypted reasoning passthrough.
+                # v0.55.0 — Codex subscription encrypted reasoning passthrough.
                 # Sidecar stays on the assistant message and is consumed
                 # by ``_convert_messages_to_responses`` (Codex adapter)
                 # to echo the reasoning items back into the next-turn

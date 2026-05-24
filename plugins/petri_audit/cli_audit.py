@@ -268,7 +268,7 @@ def audit(
         None,
         "--use-oauth/--no-oauth",
         help="Route gpt-5.x judge / auditor calls through the Codex OAuth "
-        "path (ChatGPT Plus subscription quota) instead of per-token "
+        "path (ChatGPT subscription quota) instead of per-token "
         "OpenAI PAYG billing. Default: auto-detect based on Codex token "
         "presence (~/.codex/auth.json or GEODE openai-codex profile). "
         "Use --no-oauth to force per-token billing even with a token. "

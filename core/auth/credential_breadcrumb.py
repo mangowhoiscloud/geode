@@ -105,7 +105,7 @@ def format(
         # v0.52.2 — when the active provider is fully exhausted, scan OTHER
         # providers for healthy profiles and surface them. Pre-fix the LLM
         # only saw rejections in the current provider and had no way to know
-        # that e.g. Codex Plus OAuth was registered and ready to take over.
+        # that e.g. Codex subscription OAuth was registered and ready to take over.
         # Pattern source: OpenClaw Lane fail-over (Session Lane → Global
         # Lane re-route when one Lane is unhealthy).
         alt = _suggest_alternative_providers(exclude=attempted_provider)

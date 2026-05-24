@@ -204,8 +204,18 @@ class TestUpdateModelIntegration:
             asyncio.run(loop.update_model_async("glm-5", "zhipuai"))
         # No crash
 
-    def test_sync_model_from_settings_detects_drift(self):
-        """_sync_model_from_settings picks up settings.model change."""
+    def test_sync_model_from_settings_no_longer_detects_drift(self):
+        """PR-DRIFT-CUT (2026-05-24) — drift sync is a permanent no-op.
+
+        Pre-PR this asserted that updating ``settings.model`` made
+        ``_sync_model_from_settings_async`` swap ``loop.model``. That
+        auto-revert behaviour silently overrode operator ``/model``
+        selections (the CLI process updates settings on disk; the
+        daemon's in-memory copy stays stale; the next round's drift
+        sync "synced" the loop back to the stale value). Drift is
+        cut at the source — ``loop.model`` must persist regardless
+        of how ``settings.model`` changes.
+        """
         ctx = ConversationContext()
         loop = _make_loop(ctx, model="claude-opus-4-6")
         assert loop.model == "claude-opus-4-6"
@@ -217,7 +227,7 @@ class TestUpdateModelIntegration:
             settings.model = "glm-5"
             with patch("core.ui.agentic_ui.update_session_model"):
                 asyncio.run(loop._sync_model_from_settings_async())
-            assert loop.model == "glm-5"
+            assert loop.model == "claude-opus-4-6"  # PR-DRIFT-CUT: no auto-swap
         finally:
             settings.model = old
 
