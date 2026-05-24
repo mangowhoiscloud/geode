@@ -85,15 +85,19 @@ def build_subagent_manager() -> Any:
         agent_registry=agent_registry,
         hooks=hooks,
         max_depth=settings.max_subagent_depth,
-        # SubAgentManager default ``timeout_s=120.0`` clips opus-class
-        # generations at the ``claude-binary-spawn + OAuth + first-token``
-        # latency boundary (v0.99.52 smoke regression). Seed-generation
-        # routinely routes critic / proximity on opus-4.7 via
-        # ``claude-cli`` subprocess, so we bump the gate to 600s — well
-        # above the observed p95 cold-start path but still tight enough
-        # to surface a hung subprocess. Cheap-fast pilot calls finish
-        # in << 120s either way, so the looser cap is benign there.
-        timeout_s=600.0,
+        # GEODE policy: 30-minute time-cap (no turn-cap). Matches the
+        # ``claude-cli`` adapter's ``_run_claude_subprocess`` ceiling
+        # so the parent and child wall-clock gates trip together
+        # rather than producing a window where the parent gives up
+        # before the subprocess does. The pre-fix default
+        # ``timeout_s=120.0`` clipped opus-class generations at the
+        # ``claude-binary-spawn + OAuth + first-token`` latency
+        # boundary (v0.99.52 smoke regression). 1800s accommodates
+        # multi-tool-round seed-generation agents (Glob → Read → Write
+        # sequences within a single adapter call). Cheap-fast pilot
+        # calls finish in << 120s either way, so the looser cap is
+        # benign there.
+        timeout_s=1800.0,
     )
 
 

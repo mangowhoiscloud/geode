@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-TIMECAP** — unify claude-cli + seed-generation sub-agent
+  wall-clock gates to a **30-minute time-cap**, dropping the residual
+  turn-cap on the claude-cli adapter path. GEODE's policy is
+  "no turn-cap, run on time-cap"; the v0.99.52 → v0.99.53 smoke
+  surfaced two leaks of that policy:
+  - `core/llm/adapters/claude_cli.py:_call_llm` was passing
+    `max_turns=1` to `build_claude_cli_argv` — an inspect_ai
+    contract leak (that path owns its own iteration loop and expects
+    `generate()` to return after a single turn). AgenticLoop's adapter
+    call does the opposite: claude-cli must run its internal tool-loop
+    until it produces a terminal `stop_reason`. The previous cap
+    produced `error_max_turns` on the first tool call of every
+    seed-generation generator (Glob → Read → Write sequences need
+    multiple internal turns within a single adapter call). Now passes
+    `max_turns=100` — high enough that the 30-minute time-cap always
+    trips first, effectively turning the flag into a safety ceiling.
+  - `core/llm/adapters/claude_cli.py:_run_claude_subprocess` bumped
+    `timeout_s` from 600s to 1800s (10min → 30min).
+  - `plugins/seed_generation/_registry_builder.py` bumped
+    `SubAgentManager.timeout_s` from 600s to 1800s to match.
+  - All three caps now trip together at the 1800s boundary rather
+    than producing a window where the parent gives up before the
+    subprocess does (or vice versa).
+
 ## [0.99.53] - 2026-05-24
 
 > Drift / fallback / model-spec / settings-sync bundle. PR-DRIFT-CUT
