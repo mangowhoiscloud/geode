@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **claude-cli silent-success / "ghost candidate" path** — ``ClaudeCliAdapter.acomplete``
+  was returning raw ``--output-format stream-json`` stdout as
+  ``AdapterCallResult.text``. When claude-cli's internal retry layer
+  surfaced ``! Unexpected error. Auto-retrying.`` as its only output
+  (verified during the 2026-05-24 seed-generation smoke — ``state.json``
+  recorded 2 candidates with 170s/186s durations but ``candidates/`` was
+  empty and ``elo_log.tsv`` had no match rows), the caller's AgenticLoop
+  treated that error text as the LLM's reply, terminated with no tool
+  calls, and the parent recorded a candidate that was never written.
+  Adapter now parses stream-json via ``parse_stream_json_events`` and
+  classifies the result through a new
+  ``is_claude_transient_upstream_error`` regex ported from paperclip
+  ``packages/adapters/claude-local/src/server/parse.ts:12``. Hits raise
+  ``ClaudeCliTransientUpstreamError`` (a ``ClaudeCliInvocationError``
+  subclass) instead of returning the error text as content. ``rc=0`` with
+  zero events now also fails loud. ``_extract_assistant_text`` extended
+  to handle claude-cli's aggregated ``assistant`` event shape
+  (``message.content[].text``) in addition to the existing
+  ``content_block_delta`` and ``result`` fallback paths.
+
 ### Changed
 
 - **PR-HELPERS-3SPLIT — `core/agent/loop/_helpers.py` split into three
