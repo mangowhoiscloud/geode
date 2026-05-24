@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.agent.loop._helpers import get_agentic_tools
+from core.agent.loop._tool_factory import get_agentic_tools
 from core.agent.tool_policy import _load_tool_policy_override, apply_tool_policy
 
 from core.agent import tool_policy

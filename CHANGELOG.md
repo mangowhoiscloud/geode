@@ -47,6 +47,43 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-HELPERS-3SPLIT — `core/agent/loop/_helpers.py` split into three
+  domain-named siblings.** PR-CLEANUP-6 (v0.99.48) had flagged this
+  file as the lone deferred holdout from the file-name hygiene sweep:
+  the new Naming CANNOT row forbids ``_helpers`` filenames once a
+  caller appears, but the catch-all here genuinely hosted three
+  unrelated sub-systems (tool factory + sub-agent announce queue
+  poller + planner LLM dispatcher) under one umbrella. Naming it to
+  any single domain would have buried the other two; folding back
+  into ``agent_loop.py`` would have grown that file by 170 LOC.
+  This PR reverses the PR-CLEANUP-1 fold along the actual ownership
+  line — three new sibling modules, each name-matched to its
+  sub-system:
+  - ``core/agent/loop/_tool_factory.py`` (95 LOC, new) — owns
+    ``get_agentic_tools`` + ``AGENTIC_TOOLS`` + the
+    ``MAX_TOOL_RESULT_TOKENS`` / ``TOOL_LAZY_LOAD_THRESHOLD``
+    constants (the latter two still re-exported from
+    ``core.agent.loop`` for legacy module-attribute access).
+  - ``core/agent/loop/_sub_agent_announce.py`` (55 LOC, new) — owns
+    ``check_announced_results``, the OpenClaw Spawn+Announce queue
+    poller invoked once per round by the AgenticLoop delegator.
+  - ``core/agent/loop/_planner_dispatch.py`` (79 LOC, new) — owns
+    ``try_decompose``, the async planner LLM dispatcher that
+    installs the Plan on ``SessionMetrics.active_plan``.
+  ``_helpers.py`` deleted (170 LOC). ``AgenticLoop._try_decompose``
+  + ``_check_announced_results`` delegator methods rewired to the
+  new module names (full host history preserved in their docstrings:
+  Tier-3-split sibling → PR-CLEANUP-1 fold → this 3-split). The
+  package ``__init__`` re-exports ``AGENTIC_TOOLS`` /
+  ``MAX_TOOL_RESULT_TOKENS`` / ``get_agentic_tools`` from the new
+  ``_tool_factory`` module so external imports
+  (``tests/test_s0a_tool_policy_reader.py``, ``_response.py``,
+  ``agent_loop.py``) only need their import paths rewritten — no
+  symbol-name change visible to consumers.
+  Resolves the **last deferred-item from the v0.99.48 cleanup arc**.
+
 ## [0.99.49] - 2026-05-24
 
 > AgenticLoop main-path Path-B migration sprint — 4 PRs that retire
