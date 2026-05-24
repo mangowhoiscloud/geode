@@ -53,7 +53,7 @@ except ImportError:
 
 # PR #6 (2026-05-14) — register the ``openai-codex`` ModelAPI alongside
 # ``geode``. ``OpenAICodexAPI`` routes ``openai-codex/<model>`` ids
-# through the ChatGPT Plus OAuth path so judge / auditor calls consume
+# through the ChatGPT subscription OAuth path so judge / auditor calls consume
 # the user's subscription quota instead of per-token billing. Same
 # try/except guard so the default ``uv sync`` (no [audit] extra) is
 # unaffected.

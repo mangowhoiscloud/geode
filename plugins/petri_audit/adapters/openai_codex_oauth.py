@@ -1,4 +1,4 @@
-"""OpenAI Codex OAuth (ChatGPT Plus quota) adapter — manifest-bound facade.
+"""OpenAI Codex OAuth (ChatGPT subscription quota) adapter — manifest-bound facade.
 
 CSA-3 (2026-05-22) — flipped to register the paperclip-style
 :mod:`plugins.petri_audit.codex_cli_provider` (``codex-cli``

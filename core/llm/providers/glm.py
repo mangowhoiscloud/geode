@@ -247,7 +247,15 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
 
     @property
     def fallback_chain(self) -> list[str]:
-        return list(GLM_FALLBACK_CHAIN)
+        """**DEPRECATED — returns ``[]`` (PR-DRIFT-CUT, 2026-05-24).**
+
+        See :func:`core.llm.provider_dispatch._get_fallback_chain` for
+        rationale. ``GLM_FALLBACK_CHAIN`` is intentionally still imported
+        at module scope so tests + introspection that examine the
+        constant directly keep working — the value is just no longer
+        consulted by the runtime failover loop.
+        """
+        return []
 
     def _resolve_config(self, model: str) -> tuple[str, str | None]:
         return _resolve_glm_endpoint()
@@ -298,7 +306,7 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             # because openai-python's ``ChatCompletion.create`` doesn't know
             # about it). Default ``clear_thinking=False`` — keep prior-turn
             # ``reasoning_content`` in context across rounds (matches the
-            # multi-turn-reasoning-preservation goal of R1 on Codex Plus).
+            # multi-turn-reasoning-preservation goal of R1 on Codex subscription).
             # Per-failover-model gate: drop the field on pre-GLM-4.5
             # models so the request is accepted.
             local_extra: dict[str, Any] = {}

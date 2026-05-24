@@ -41,7 +41,7 @@ def _context_exhausted_message(user_input: str) -> str:
     anthropic key, returns the static fallback — graceful, the loop
     surfaces the static notice to the user. No silent failure.
 
-    TODO (follow-up PR): add a Codex OAuth path so ChatGPT Plus
+    TODO (follow-up PR): add a Codex OAuth path so ChatGPT subscription
     subscription quota can drive the language-matching call. The Codex
     ``/v1/responses`` streaming request shape lives in
     ``plugins/petri_audit/codex_provider.py`` and would need to be

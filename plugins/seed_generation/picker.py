@@ -28,7 +28,7 @@ ToS notice
 ==========
 
 Subscription-backed OAuth paths (``claude-cli``, ``openai-codex``) drive
-LLM calls through the user's Claude.ai / ChatGPT Plus quota. Anthropic
+LLM calls through the user's Claude.ai / ChatGPT subscription quota. Anthropic
 and OpenAI's Terms of Service permit individual programmatic use but
 discourage automation at scale, so the picker surfaces a one-time
 warning when any role resolves to a subscription path. The notice is
@@ -599,7 +599,7 @@ def print_tos_notice(
         "\n"
         "─── seed-generation ToS notice ─────────────────────────────────────\n"
         f"Subscription-backed auth path(s) in use: {paths_in_use}\n"
-        "These paths charge the run against your Claude.ai / ChatGPT Plus\n"
+        "These paths charge the run against your Claude.ai / ChatGPT subscription\n"
         "quota. The vendors' Terms of Service permit individual programmatic\n"
         "use but discourage automation at scale; review the linked policies\n"
         "before running unattended.\n"

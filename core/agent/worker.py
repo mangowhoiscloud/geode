@@ -22,10 +22,13 @@ import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.async_runtime import run_process_coroutine
 from core.paths import GLOBAL_WORKERS_DIR
+
+if TYPE_CHECKING:
+    from core.agent.loop.models import AgenticResult
 
 log = logging.getLogger(__name__)
 
@@ -368,15 +371,91 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     agentic_result = run_process_coroutine(loop.arun(prompt))
 
     elapsed_ms = (time.time() - started) * 1000
-    text = agentic_result.text if agentic_result else ""
+    success, summary, text = _resolve_worker_outcome(agentic_result)
 
     return WorkerResult(
         task_id=request.task_id,
-        success=bool(text),
+        success=success,
         output=text,
-        summary=text[:500] if text else "No response from sub-agent",
+        summary=summary,
         duration_ms=elapsed_ms,
     )
+
+
+# PR-DEFECT-AB (2026-05-24) — propagate AgenticLoop failures past the
+# sub-agent IPC boundary. Pre-fix ``success=bool(text)`` returned True
+# whenever the loop produced any string at all, including the
+# ``_build_model_action_result`` fallback UI text
+# ("! Unexpected error. Auto-retrying.") that agent_loop emits when
+# every retry attempt has failed but the orchestrator still needs a
+# non-empty payload to keep the timeline coherent. Downstream phase
+# agents (proximity / critic) then ingested that fallback as
+# legitimate content and produced malformed JSON.
+#
+# The fallback path always sets ``termination_reason`` to one of the
+# explicit failure sentinels below — gate ``success`` on the absence of
+# those plus the absence of ``error``. Sentinels enumerated from
+# ``agent_loop.py`` (search ``termination_reason="``):
+#
+# * Failure exits (text is fallback / diagnostic UI, NOT a real answer):
+#   ``model_action_required``, ``context_exhausted``, ``llm_error``,
+#   ``billing_error``, ``cost_budget_exceeded``, ``convergence_detected``
+#   (loop bailed after detecting a repeating error pattern — see
+#   ``agent_loop.py`` ~1828 where ``error="convergence_detected"`` is
+#   set alongside termination_reason).
+# * Success exits (text IS the legitimate output):
+#   ``unknown`` (default success exit), ``input_blocked`` (text is the
+#   block diagnostic that the parent expects to surface),
+#   ``user_clarification_needed`` (text IS the follow-up question),
+#   ``user_cancelled`` (operator-requested halt — text is "Interrupted.").
+_FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
+    {
+        "model_action_required",
+        "context_exhausted",
+        "llm_error",
+        "billing_error",
+        "cost_budget_exceeded",
+        "convergence_detected",
+    }
+)
+
+
+def _resolve_worker_outcome(
+    agentic_result: AgenticResult | None,
+) -> tuple[bool, str, str]:
+    """Translate an :class:`AgenticResult` into ``(success, summary, text)``.
+
+    Extracted from :func:`_run_agentic` so tests can pin the
+    failure-propagation contract without spinning up the full sub-agent
+    bootstrap pipeline.
+    """
+    text = agentic_result.text if agentic_result else ""
+    termination_reason = agentic_result.termination_reason if agentic_result else "unknown"
+    error = agentic_result.error if agentic_result else None
+
+    success = bool(text) and not error and termination_reason not in _FAILURE_TERMINATION_REASONS
+
+    # Summary surfaces the actual failure cause when ``success`` is False so
+    # parent timeline rows ("Tool returned: ...") explain WHY the sub-agent
+    # produced no usable output instead of echoing the fallback UI string.
+    # The legacy "No response from sub-agent" string is reserved for the
+    # "no signal at all" case (empty text + no error + no failure
+    # termination) so existing graders/log-greppers keep working.
+    cause_bits: list[str] = []
+    if not success and agentic_result is not None:
+        if error:
+            cause_bits.append(error)
+        if termination_reason and termination_reason != "unknown":
+            cause_bits.append(f"termination_reason={termination_reason}")
+
+    if cause_bits:
+        summary = "Sub-agent failed: " + "; ".join(cause_bits)
+    elif text:
+        summary = text[:500]
+    else:
+        summary = "No response from sub-agent"
+
+    return success, summary, text
 
 
 def main() -> None:

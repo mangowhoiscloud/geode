@@ -405,9 +405,9 @@ def estimate_cost_usd(
 
     **PR #6 (2026-05-14) — OAuth zeroing**: when ``judge_oauth`` /
     ``auditor_oauth`` is True (caller already classified the role as
-    Codex Plus OAuth-routed via ``is_oauth_routed``), the per-token
+    Codex subscription OAuth-routed via ``is_oauth_routed``), the per-token
     contribution for that role is set to zero. Subscription quota is
-    not billed per token; the only cost is the user's monthly Plus
+    not billed per token; the only cost is the user's monthly subscription
     fee, which is out of band for this estimator.
     """
 

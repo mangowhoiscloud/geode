@@ -56,7 +56,8 @@ def env_setup_wizard() -> bool:
         Panel(
             "[bold]Welcome to GEODE.[/bold]\n\n"
             "Pick how you want to talk to the model:\n"
-            "  [cyan]1[/cyan]  ChatGPT subscription (Plus / Pro / Business / Edu / Enterprise)\n"
+            "  [cyan]1[/cyan]  ChatGPT subscription (Plus / Pro / Business / Edu / Enterprise) "
+            "or Claude subscription (Pro / Max ×5 / Max ×20 / Team / Enterprise)\n"
             "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / ZhipuAI GLM)\n"
             "  [cyan]3[/cyan]  Skip — explore in dry-run mode (fixture data, no LLM)\n\n"
             "[muted]Press Ctrl+C to abort at any time.[/muted]",
@@ -241,7 +242,7 @@ def key_registration_gate() -> str | None:
             "[bold]GEODE needs a credential to talk to an LLM.[/bold]\n\n"
             "  [cyan]/login add[/cyan]                — Interactive wizard "
             "(plans + keys + OAuth)\n"
-            "  [cyan]/login openai[/cyan]             — Codex OAuth (Plus quota)\n"
+            "  [cyan]/login openai[/cyan]             — Codex OAuth (subscription quota)\n"
             "  [cyan]/login anthropic[/cyan]          — Claude subscription OAuth\n"
             "  [cyan]/key <sk-ant-...>[/cyan]        — Quick paste (Anthropic)\n"
             "  [cyan]/key openai <sk-...>[/cyan]     — Quick paste (OpenAI)\n"

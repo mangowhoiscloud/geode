@@ -141,6 +141,102 @@ _CREATE_MESSAGES_TOOL_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_messages_tool_name ON messages (tool_name)
 """
 
+# PR-COMM-3 (2026-05-24) — per-agent cumulative state. Mirrors paperclip
+# ``agent_runtime_state`` table (Anthropic-internal docs §session-state):
+# one row per agent_id carrying the claude-cli sessionId for the next
+# ``--resume``, cumulative token / cost totals, and the last error.
+#
+# Two extra columns split the cumulative state along orthogonal axes
+# (see docs/plans/2026-05-24-pr-comm-3-runtime-db-integration-audit.md §9):
+#
+# * ``agent_kind`` — process origin: ``subagent`` / ``repl`` / ``gateway`` /
+#   ``scheduler``. Answers "where was this loop spawned from" — quota
+#   throttling separates origins.
+# * ``component`` — GEODE subsystem: ``seed-generation`` /
+#   ``self-improving-loop`` / ``petri-audit`` / ``autoresearch`` /
+#   ``agentic_loop`` / ``serve`` / ``scheduler``. Answers "what is this
+#   loop doing" — reuses ``RunTranscript.component`` SoT (no separate
+#   enum).
+#
+# ``last_run_id`` is a soft FK into ``run_lineage`` for seed-generation
+# style multi-cycle agents; empty string for REPL / gateway / one-shot
+# spawns. Stored in the SAME sessions.db so cross-table joins
+# (e.g. "what was this agent doing during session X") are local.
+_CREATE_AGENT_RUNTIME_STATE_TABLE_SQL = """\
+CREATE TABLE IF NOT EXISTS agent_runtime_state (
+    agent_id                  TEXT PRIMARY KEY,
+    agent_kind                TEXT NOT NULL DEFAULT 'subagent',
+    component                 TEXT NOT NULL DEFAULT 'agentic_loop',
+    adapter_type              TEXT NOT NULL DEFAULT '',
+    claude_cli_session_id     TEXT NOT NULL DEFAULT '',
+    last_run_id               TEXT NOT NULL DEFAULT '',
+    last_run_status           TEXT NOT NULL DEFAULT '',
+    total_input_tokens        INTEGER NOT NULL DEFAULT 0,
+    total_output_tokens       INTEGER NOT NULL DEFAULT 0,
+    total_cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost_cents          INTEGER NOT NULL DEFAULT 0,
+    last_error                TEXT NOT NULL DEFAULT '',
+    created_at                REAL NOT NULL,
+    updated_at                REAL NOT NULL
+)
+"""
+
+_CREATE_AGENT_RUNTIME_KIND_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_kind
+    ON agent_runtime_state (agent_kind, updated_at DESC)
+"""
+
+_CREATE_AGENT_RUNTIME_COMPONENT_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_component
+    ON agent_runtime_state (component, updated_at DESC)
+"""
+
+_CREATE_AGENT_RUNTIME_UPDATED_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_updated
+    ON agent_runtime_state (updated_at DESC)
+"""
+
+_CREATE_AGENT_RUNTIME_SESSION_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_session
+    ON agent_runtime_state (claude_cli_session_id)
+    WHERE claude_cli_session_id != ''
+"""
+
+# PR-COMM-3 (2026-05-24) — per-cycle run lineage for multi-cycle agents
+# (seed-generation, self-improving-loop). One row per logical "run", with
+# parent_run_id forming a retry / refinement chain (Karpathy P5 lineage
+# tracking). Seed-gen-only today; REPL / gateway / one-shot agents
+# leave this empty.
+_CREATE_RUN_LINEAGE_TABLE_SQL = """\
+CREATE TABLE IF NOT EXISTS run_lineage (
+    run_id          TEXT PRIMARY KEY,
+    component       TEXT NOT NULL,
+    agent_id        TEXT NOT NULL,
+    parent_run_id   TEXT NOT NULL DEFAULT '',
+    root_run_id     TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'started',
+    started_at      REAL NOT NULL,
+    ended_at        REAL,
+    metadata        TEXT NOT NULL DEFAULT '{}'
+)
+"""
+
+_CREATE_RUN_LINEAGE_AGENT_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_run_lineage_agent
+    ON run_lineage (agent_id, started_at DESC)
+"""
+
+_CREATE_RUN_LINEAGE_PARENT_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_run_lineage_parent
+    ON run_lineage (parent_run_id)
+    WHERE parent_run_id != ''
+"""
+
+_CREATE_RUN_LINEAGE_ROOT_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_run_lineage_root
+    ON run_lineage (root_run_id, started_at)
+"""
+
 # Phase 1c (Hermes absorption, 2026-05-22) — full-text search indices over
 # the messages table. ``content``, ``tool_name``, and ``tool_calls`` are
 # all indexed so a single query surfaces text matches AND tool-name
@@ -349,6 +445,20 @@ class SessionManager:
         self._conn.execute(_CREATE_MESSAGES_TABLE_SQL)
         self._conn.execute(_CREATE_MESSAGES_SESSION_INDEX_SQL)
         self._conn.execute(_CREATE_MESSAGES_TOOL_INDEX_SQL)
+        # PR-COMM-3 (2026-05-24) — per-agent runtime state + per-run
+        # lineage. Co-located in sessions.db rather than a separate
+        # runtime.db so cross-table joins (agent → its messages → its
+        # runs) stay local. ``IF NOT EXISTS`` keeps the bootstrap
+        # idempotent on legacy DBs.
+        self._conn.execute(_CREATE_AGENT_RUNTIME_STATE_TABLE_SQL)
+        self._conn.execute(_CREATE_AGENT_RUNTIME_KIND_INDEX_SQL)
+        self._conn.execute(_CREATE_AGENT_RUNTIME_COMPONENT_INDEX_SQL)
+        self._conn.execute(_CREATE_AGENT_RUNTIME_UPDATED_INDEX_SQL)
+        self._conn.execute(_CREATE_AGENT_RUNTIME_SESSION_INDEX_SQL)
+        self._conn.execute(_CREATE_RUN_LINEAGE_TABLE_SQL)
+        self._conn.execute(_CREATE_RUN_LINEAGE_AGENT_INDEX_SQL)
+        self._conn.execute(_CREATE_RUN_LINEAGE_PARENT_INDEX_SQL)
+        self._conn.execute(_CREATE_RUN_LINEAGE_ROOT_INDEX_SQL)
         # Phase 1c (Hermes absorption, 2026-05-22) — FTS5 indices.
         # unicode61 is always created. trigram is probed at runtime and
         # skipped on SQLite builds that don't ship it; ``self._has_trigram``

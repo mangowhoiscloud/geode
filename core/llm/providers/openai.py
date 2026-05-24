@@ -513,7 +513,12 @@ class OpenAIAgenticAdapter:
 
     @property
     def fallback_chain(self) -> list[str]:
-        return list(OPENAI_FALLBACK_CHAIN)
+        """**DEPRECATED — returns ``[]`` (PR-DRIFT-CUT, 2026-05-24).**
+
+        See :func:`core.llm.provider_dispatch._get_fallback_chain` for
+        rationale.
+        """
+        return []
 
     def _resolve_config(self, model: str) -> tuple[str, str | None]:
         """Return (api_key, base_url) for this provider. Override in subclasses."""
@@ -602,7 +607,7 @@ class OpenAIAgenticAdapter:
 
         # Convert messages to Responses API input format, then inject any
         # prior-turn encrypted reasoning blobs so gpt-5.x can resume
-        # state across turns (R3-mini parity with Codex Plus).
+        # state across turns (R3-mini parity with Codex subscription).
         from core.llm.agentic_response import inject_reasoning_replay
 
         oai_messages = _convert_messages_to_responses(system, messages)
@@ -618,7 +623,7 @@ class OpenAIAgenticAdapter:
                 "max_output_tokens": max_tokens,
                 "temperature": temperature,
                 # v0.61.0 — explicit ``store=False`` for parity with the
-                # Codex Plus path (``codex.py:331``). We feed conversations
+                # Codex subscription path (``codex.py:331``). We feed conversations
                 # via the ``input`` array + encrypted-content replay rather
                 # than ``previous_response_id``, so server-side storage is
                 # unused; opting out avoids unnecessary OpenAI-side
@@ -636,7 +641,7 @@ class OpenAIAgenticAdapter:
             # ``store=False`` so the server returns the opaque
             # continuation blob; ``summary="auto"`` opts the response into
             # reasoning summaries so the R6 surfacing path can render
-            # "live thinking..." for PAYG users (Codex Plus already had this).
+            # "live thinking..." for PAYG users (Codex subscription already had this).
             _EFFORT_MAP = {"low": "low", "medium": "medium", "high": "high", "max": "high"}
             if _is_payg_reasoning_model(m):
                 oai_effort = _EFFORT_MAP.get(effort, "medium")

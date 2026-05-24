@@ -130,7 +130,7 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
     **PR #6 (2026-05-14) — OAuth routing**: ``gpt-5.*`` ids (``gpt-5.5``,
     ``gpt-5.4``, ``gpt-5.4-mini``, ``gpt-5.3-codex``) re-route to
     ``openai-codex/<model>`` so judge / auditor calls consume ChatGPT
-    Plus quota instead of per-token billing. ``use_oauth`` controls
+    subscription quota instead of per-token billing. ``use_oauth`` controls
     the auto-detect:
 
     - ``None`` (default) → auto-detect: re-route when a Codex OAuth

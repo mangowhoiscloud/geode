@@ -443,14 +443,17 @@ def test_update_model_swaps_adapter_on_provider_change(
     assert stub._tool_processor._model == "claude-opus-4-7"
 
 
-def test_drift_sync_emits_drift_sync_reason(isolated_auth, monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-MIC (2026-05-23) — ``sync_model_from_settings_async`` must
-    label the switch as ``reason="drift_sync"``. Pre-fix, the helper
-    omitted the kwarg so ``update_model_async``'s default
-    ``"user_switch"`` reached the MODEL_SWITCHED hook + UI, making
-    automatic settings drift look like an operator action.
-    Reproduces the 2026-05-23 production incident
-    (``gpt-5.5 → claude-opus-4-6 (user_switch)`` REPL header).
+def test_drift_sync_is_a_no_op_after_drift_cut(
+    isolated_auth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-DRIFT-CUT (2026-05-24) — ``sync_model_from_settings_async``
+    no longer rewrites ``loop.model``. Pre-PR the helper compared
+    ``loop.model`` against ``settings.model`` and called
+    ``update_model_async`` to swap back, which silently reverted the
+    operator's most-recent ``/model`` choice (the CLI process writes
+    settings to disk while the daemon's in-memory copy stays stale).
+    The function is now a permanent no-op — operators must invoke
+    ``/model`` themselves.
     """
     from unittest.mock import AsyncMock, MagicMock
 
@@ -466,16 +469,12 @@ def test_drift_sync_emits_drift_sync_reason(isolated_auth, monkeypatch: pytest.M
     original_model = settings.model
     object.__setattr__(settings, "model", "claude-opus-4-6")
     try:
-        asyncio.run(_ms.sync_model_from_settings_async(stub))
+        result = asyncio.run(_ms.sync_model_from_settings_async(stub))
     finally:
         object.__setattr__(settings, "model", original_model)
 
-    stub.update_model_async.assert_awaited_once()
-    _args, kwargs = stub.update_model_async.await_args
-    assert kwargs.get("reason") == "drift_sync", (
-        "drift sync path must surface a distinct reason — UI mis-labels "
-        "as 'user_switch' otherwise (regression of 2026-05-23 incident)."
-    )
+    assert result is False, "drift sync must be a permanent no-op"
+    stub.update_model_async.assert_not_awaited()
 
 
 def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(

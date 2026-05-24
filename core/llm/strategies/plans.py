@@ -29,7 +29,7 @@ class PlanKind(Enum):
     """How the user obtained this credential."""
 
     PAYG = "payg"  # pay-as-you-go API key (default for env-var seeded keys)
-    SUBSCRIPTION = "subscription"  # flat-fee plan with quota (GLM Coding, ChatGPT Plus)
+    SUBSCRIPTION = "subscription"  # flat-fee plan with quota (GLM Coding, ChatGPT subscription)
     OAUTH_BORROWED = "oauth_borrowed"  # token sourced from an external CLI (Codex CLI)
     CLOUD_PROVIDER = "cloud_provider"  # AWS Bedrock / GCP Vertex etc.
 
@@ -79,7 +79,7 @@ class Plan:
     base_url: str  # endpoint (may override ProviderSpec.default_base_url)
     auth_type: str = "bearer"
     quota: Quota | None = None
-    subscription_tier: str | None = None  # "Lite", "Pro", "Max", "ChatGPT Plus"
+    subscription_tier: str | None = None  # "Lite", "Pro", "Max", "ChatGPT subscription"
     upgrade_url: str | None = None  # surfaced in error hints when quota hits
 
 

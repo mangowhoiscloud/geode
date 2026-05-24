@@ -13,11 +13,20 @@ Completions wire shape (``tool_calls`` on assistant + ``role: tool`` with
 (``function_call`` / ``function_call_output`` typed items). Pre-A2 the
 adapter passed Anthropic content lists through verbatim → OpenAI/Codex
 SDK rejected with 400. Codex MCP review 2026-05-23 BLOCKER 2.
+
+PR-DRIFT-CUT (2026-05-24) — adds shared spec helpers (model-family
+detection + tools-array cap) for the OpenAI / Codex / GLM adapter
+family so spec quirks (max_completion_tokens, 128 tool cap, reasoning
+sampling-param ban) are honoured uniformly. Triggered by the post-v0.99.52
+smoke that hit both ``Unsupported parameter: 'max_tokens'`` and
+``array_above_max_length`` 400 in a single gpt-5.5 turn.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
@@ -27,6 +36,170 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Cross-adapter spec constants — verified 2026-05-24 against public docs
+# ---------------------------------------------------------------------------
+# OpenAI Chat Completions + Codex Responses both reject ``tools`` arrays
+# longer than 128 entries with 400 ``array_above_max_length``. The cap
+# is empirical (gpt-5.5 + gpt-5-mini both hit 129 → 400 in production
+# evidence). GLM endpoints (z.ai) are OpenAI-compatible and have not
+# published a cap, but we apply the same defensive limit to keep
+# behaviour predictable across the OpenAI-family adapter set.
+OPENAI_TOOLS_MAX = 128
+
+
+# ---------------------------------------------------------------------------
+# Explicit per-model spec registry — replaces the brittle prefix-match
+# (``startswith("gpt-5")``) approach. Grounded 2026-05-24 against:
+#   * https://developers.openai.com/api/docs/models
+#   * https://developers.openai.com/codex/models
+#   * https://developers.openai.com/api/docs/guides/reasoning
+# Add a new entry whenever GEODE wires a new OpenAI / Codex model — the
+# default (``_OPENAI_LEGACY_DEFAULT``) emits a WARNING on first use so
+# silent drift is impossible.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OpenAIModelSpec:
+    """Per-model API quirks for the OpenAI Chat Completions + Codex Responses surface."""
+
+    model_id: str
+    uses_max_completion_tokens: bool
+    """True → API expects ``max_completion_tokens`` (GPT-5.x + o-series).
+    False → legacy ``max_tokens`` (gpt-4.x and earlier)."""
+
+    accepts_temperature: bool
+    """False → API rejects ``temperature`` (reasoning models with active reasoning).
+    True → caller may pass ``temperature`` freely."""
+
+    reasoning_effort_values: tuple[str, ...] | None
+    """Valid values for ``reasoning_effort`` / ``reasoning.effort``.
+    ``None`` → parameter not supported by this model."""
+
+    context_window: int
+    """Total context window (input + output) in tokens — for guard logging only."""
+
+
+# Registry — keep alphabetically sorted within each family for stable diffs.
+_OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
+    # ── GPT-5 family (reasoning, max_completion_tokens, temperature blocked) ──
+    "gpt-5.3-codex": OpenAIModelSpec(
+        model_id="gpt-5.3-codex",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=200_000,
+    ),
+    "gpt-5.4": OpenAIModelSpec(
+        model_id="gpt-5.4",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=1_050_000,
+    ),
+    "gpt-5.4-mini": OpenAIModelSpec(
+        model_id="gpt-5.4-mini",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=1_050_000,
+    ),
+    "gpt-5.5": OpenAIModelSpec(
+        model_id="gpt-5.5",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=1_050_000,
+    ),
+    # ── o-series (always-on reasoning, no temperature, no "none" effort) ──
+    "o3": OpenAIModelSpec(
+        model_id="o3",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("low", "medium", "high"),
+        context_window=200_000,
+    ),
+    "o4-mini": OpenAIModelSpec(
+        model_id="o4-mini",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("low", "medium", "high"),
+        context_window=200_000,
+    ),
+}
+
+
+_OPENAI_LEGACY_DEFAULT = OpenAIModelSpec(
+    # Used when a model id isn't in the registry — assumes legacy gpt-4.x
+    # semantics (``max_tokens`` + ``temperature`` allowed). Warned on first
+    # use per (model_id, process) so adding a new model can't silently drift.
+    model_id="<unknown>",
+    uses_max_completion_tokens=False,
+    accepts_temperature=True,
+    reasoning_effort_values=None,
+    context_window=128_000,
+)
+
+# Process-scoped dedup so the warning fires once per unknown model_id,
+# not on every LLM call.
+_UNKNOWN_MODEL_WARNED: set[str] = set()
+
+
+def get_openai_model_spec(model_id: str) -> OpenAIModelSpec:
+    """Look up the explicit spec for an OpenAI / Codex model.
+
+    Unknown models fall back to :data:`_OPENAI_LEGACY_DEFAULT` with a
+    one-shot WARNING per ``model_id`` — the warning is the operator's
+    cue to add a registry entry. The fallback assumes gpt-4.x semantics
+    because that surface is the older, more permissive one and least
+    likely to break a brand-new model that the registry doesn't know.
+    """
+    spec = _OPENAI_MODELS.get(model_id)
+    if spec is not None:
+        return spec
+    if model_id not in _UNKNOWN_MODEL_WARNED:
+        _UNKNOWN_MODEL_WARNED.add(model_id)
+        log.warning(
+            "OpenAI model %r not in _OPENAI_MODELS registry — falling back "
+            "to legacy gpt-4.x defaults (max_tokens + temperature). Add a "
+            "spec entry to core/llm/adapters/_openai_common.py for "
+            "deterministic behaviour.",
+            model_id,
+        )
+    return _OPENAI_LEGACY_DEFAULT
+
+
+def cap_tools(
+    tools: list[dict[str, Any]], *, model: str, adapter_name: str
+) -> list[dict[str, Any]]:
+    """Truncate ``tools`` to :data:`OPENAI_TOOLS_MAX` with a logged warning.
+
+    Defensive guard at the adapter edge — the registry layer should
+    already deliver ≤128 tools, but a slow MCP-aggregation regression
+    or a per-session MCP burst can still push the array over. Hitting
+    this path means the operator should prune MCP servers in
+    ``~/.geode/config.toml [mcp.servers.*]`` or
+    ``.claude/mcp_servers.json``.
+    """
+    if len(tools) <= OPENAI_TOOLS_MAX:
+        return tools
+    log.warning(
+        "%s: tools array length %d > %d cap for model=%s — truncating to "
+        "first %d. Operator action: prune MCP servers in "
+        "``~/.geode/config.toml [mcp.servers.*]`` or "
+        "``.claude/mcp_servers.json``.",
+        adapter_name,
+        len(tools),
+        OPENAI_TOOLS_MAX,
+        model,
+        OPENAI_TOOLS_MAX,
+    )
+    return tools[:OPENAI_TOOLS_MAX]
+
 
 if TYPE_CHECKING:
     import openai

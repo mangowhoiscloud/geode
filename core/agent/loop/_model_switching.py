@@ -54,63 +54,45 @@ def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-unty
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:
-    """Return the action-model drift target when sync should apply, else None.
+    """**DEPRECATED — returns None unconditionally as of PR-DRIFT-CUT (2026-05-24).**
 
-    PR-CL-A6 (2026-05-23) — when ``settings.act_model`` is set, the drift
-    target is the action model (not ``settings.model``). Without this fix
-    a session that constructed the loop with ``act_model=sonnet`` would
-    revert to ``settings.model=opus`` on the next sync, undoing the
-    Plan/Act split (Codex MCP HIGH #1).
+    Pre-PR behaviour: compared ``loop.model`` against ``settings.model``
+    (or ``settings.act_model``) and forced the loop to swap back to the
+    settings value at the start of every round. The intent was to keep
+    the runtime aligned with the operator's persisted preference, but
+    in practice it *reverted* the operator's most-recent ``/model``
+    selection because the CLI process updates settings on disk while
+    the daemon's in-memory ``settings`` object stays stale — drift sync
+    then "synced" the loop back to the stale daemon value, and the
+    operator's choice silently evaporated until a second turn was
+    issued. Post-mortem: 2026-05-24 v0.99.52 smoke (gpt-5.5 picked
+    via ``/model`` → first turn reverted to ``claude-opus-4-7``).
+
+    The drift surface is intentionally cut at the root (this function)
+    rather than at each caller so the deprecation point is single. The
+    function is retained as a no-op so existing tests / callers keep
+    compiling without a same-PR rewrite. A future re-introduction of
+    *operator-explicit* drift sync should live behind a new opt-in
+    entry point — do not revive this name.
     """
-    if getattr(loop, "_disable_settings_drift", False):
-        return None
-
-    from core.config import settings
-
-    # Action loop's intended model — ``act_model`` wins when set; falls
-    # back to ``settings.model`` for callers that haven't configured the
-    # Plan/Act knob (pre-A6 behaviour). ``isinstance(..., str)`` filters
-    # MagicMock attrs in test fixtures that auto-create non-string values
-    # (Codex MCP CI catch 2026-05-23).
-    act_raw = getattr(settings, "act_model", "")
-    act_model = act_raw.strip() if isinstance(act_raw, str) else ""
-    target_model = act_model or settings.model
-    if target_model == loop.model:
-        return None
-    if not loop._drift_target_is_healthy(target_model):
-        log.warning(
-            "Model drift refused: target=%s has no eligible profile — "
-            "keeping loop=%s. Run `/login use <plan>` to enable target.",
-            target_model,
-            loop.model,
-        )
-        return None
-    log.info(
-        "Model drift detected: loop=%s target=%s — syncing",
-        loop.model,
-        target_model,
-    )
-    return str(target_model)
+    return None
 
 
 async def sync_model_from_settings_async(loop: AgenticLoop) -> bool:
-    """Async variant of ``sync_model_from_settings`` for the agent loop.
+    """**DEPRECATED — always returns ``False`` (PR-DRIFT-CUT, 2026-05-24).**
 
-    PR-MIC (2026-05-23) — passes ``reason="drift_sync"`` so the
-    ``MODEL_SWITCHED`` hook + UI surface the actual trigger (Settings
-    drift between rounds) instead of the default ``"user_switch"``
-    label, which mis-attributed automatic sync to the operator and
-    surfaced as a confusing ``Model: gpt-5.5 → claude-opus-4-6
-    (user_switch)`` line in the REPL header.
+    Was the per-turn entry point that called
+    :func:`_settings_model_target` and (when a target was returned)
+    rewrote ``loop.model`` to match ``settings.model``. The function is
+    now a no-op for the same reason that ``_settings_model_target``
+    short-circuits: settings-driven auto-revert was the load-bearing
+    cause of the v0.99.52 smoke incident. ``/model`` is the operator's
+    sole entry point — drift is no longer inferred.
+
+    The signature is kept so :class:`AgenticLoop` callers don't fork
+    on the rollout, and so a forensic ``grep`` can locate every site
+    that *used* to be touched by drift sync.
     """
-    try:
-        target = _settings_model_target(loop)
-        if target is None:
-            return False
-        await loop.update_model_async(target, reason="drift_sync")
-        return True
-    except Exception:
-        log.debug("Model drift check failed", exc_info=True)
     return False
 
 

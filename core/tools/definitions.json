@@ -249,7 +249,7 @@
   },
   {
     "name": "manage_login",
-    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a subscription (GLM Coding Lite/Pro/Max, ChatGPT Plus, Claude Pro), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. Mirrors the /login slash command (see `core.cli.commands.cmd_login`).",
+    "description": "Unified credentials/plans command — Plans + API keys + OAuth + routing in one tool. Use whenever the user says login/logout, sets up a subscription (GLM Coding Lite/Pro/Max, ChatGPT Plus/Pro/Business/Enterprise, Claude Pro/Max ×5/Max ×20/Team), changes credentials, asks about quota, switches active plan, or pastes an API key with intent. Mirrors the /login slash command (see `core.cli.commands.cmd_login`).",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {

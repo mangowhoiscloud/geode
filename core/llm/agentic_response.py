@@ -77,7 +77,7 @@ class AgenticResponse:
     with the same attribute names (.type, .text, .name, .input, .id).
 
     ``codex_reasoning_items`` (v0.55.0): sidecar list of opaque
-    Reasoning items extracted from a Codex Plus stream. Each entry is
+    Reasoning items extracted from a Codex subscription stream. Each entry is
     a dict with ``{type:"reasoning", encrypted_content, summary?, id?}``
     fit for re-injection into the next-turn ``input`` array. Present
     only on responses from ``CodexAgenticAdapter``; ``None`` for every
@@ -114,7 +114,7 @@ def inject_reasoning_replay(
     lookup — mirrors Hermes ``codex_responses_adapter.py:228-246``.
 
     Both lists must preserve order (one Anthropic message → ≥1 entries
-    in oai_messages). Used by Codex Plus and PAYG OpenAI Responses
+    in oai_messages). Used by Codex subscription and PAYG OpenAI Responses
     adapters; without this, gpt-5.x loses reasoning state every turn
     when ``store=False`` (no server-side item resolution).
     """
@@ -284,7 +284,7 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     - ``web_search_call`` items → skipped (server-side, transparent)
 
     v0.53.3 — usage is always extracted (even when ``output`` is empty)
-    so cost/token telemetry survives the Codex Plus
+    so cost/token telemetry survives the Codex subscription
     ``response.completed``-with-empty-output edge case. The CodexAgenticAdapter
     pre-populates ``response.output`` from accumulated
     ``response.output_item.done`` events before calling this normaliser
@@ -294,7 +294,7 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     has_function_calls = False
     # v0.57.0 R6 — sidecar accumulator for the "live thinking..." UI surface.
     reasoning_summaries: list[str] = []
-    # v0.55.0 — sidecar accumulator for Codex Plus encrypted reasoning.
+    # v0.55.0 — sidecar accumulator for Codex subscription encrypted reasoning.
     # Hermes pattern (codex_responses_adapter.py:720-738): capture every
     # ``reasoning`` item the server emits so the loop can echo it back
     # in the next-turn ``input`` array. Without this, multi-turn gpt-5.x
@@ -389,7 +389,7 @@ def normalize_openai_responses(response: Any) -> AgenticResponse:
     if not blocks and (usage.output_tokens or 0) > (usage.thinking_tokens or 0):
         # The model produced visible output tokens but the normaliser
         # extracted no blocks. This is anomalous — most likely the
-        # Codex Plus accumulator missed an item type, or a future
+        # Codex subscription accumulator missed an item type, or a future
         # message sub-type. Surface as a single warning rather than
         # silently dropping a paid response.
         log.warning(

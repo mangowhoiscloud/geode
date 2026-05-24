@@ -404,7 +404,16 @@ class SubAgentManager:
                 self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
             else:
                 graph.mark_failed(task.task_id, error=sub_result.error or "unknown")
-                self._emit_hook(HookEvent.SUBAGENT_FAILED, task, error=sub_result.error)
+                # PR-COMM-3b — pass ``sub_result`` so the agent_runtime_state
+                # writer receives ``status="failed"``. Pre-fix only ``error``
+                # was passed and the status field was silently missing on
+                # production failures (Codex MCP review catch).
+                self._emit_hook(
+                    HookEvent.SUBAGENT_FAILED,
+                    task,
+                    sub_result=sub_result,
+                    error=sub_result.error,
+                )
             if on_progress is not None:
                 try:
                     on_progress(sub_result)
@@ -659,9 +668,28 @@ class SubAgentManager:
             "task_type": task.task_type,
             "description": task.description,
         }
+        # PR-COMM-3b (2026-05-24) — surface the active RunTranscript's
+        # ``component`` so the SQLite agent_runtime_state writer (registered
+        # below in this PR) can persist "what subsystem this sub-agent was
+        # serving" (seed-generation / petri-audit / agentic_loop / ...).
+        # Falls back to "agentic_loop" when there's no active transcript
+        # (REPL / ad-hoc spawn outside an orchestrator scope).
+        try:
+            from core.self_improving_loop.run_transcript import current_run_transcript
+
+            run_transcript = current_run_transcript()
+            data["component"] = (
+                run_transcript.component if run_transcript is not None else "agentic_loop"
+            )
+        except Exception:
+            data["component"] = "agentic_loop"
         if sub_result is not None:
             data["duration_ms"] = sub_result.duration_ms
             data["success"] = sub_result.success
+            # PR-COMM-3b — derive a stable status string for the
+            # ``last_run_status`` column. Matches the seed-generation
+            # cycle's own status vocabulary.
+            data["status"] = "completed" if sub_result.success else "failed"
             # Include result summary in SUBAGENT_COMPLETED hook data
             # (OpenClaw Announce pattern — hooks carry the completion summary)
             if event == HookEvent.SUBAGENT_COMPLETED:

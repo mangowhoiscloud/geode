@@ -83,9 +83,11 @@ class GlmCodingPlanAdapter:
         if req.temperature is not None:
             kwargs["temperature"] = req.temperature
         if req.tools:
-            kwargs["tools"] = [translate_tool(t) for t in req.tools]
+            from core.llm.adapters._openai_common import cap_tools
             from core.llm.tool_choice import normalize
 
+            translated = [translate_tool(t) for t in req.tools]
+            kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name="glm-coding-plan")
             tc = normalize("glm", req.tool_choice)
             if tc is not None:
                 kwargs["tool_choice"] = tc

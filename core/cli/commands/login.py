@@ -53,7 +53,7 @@ def cmd_login(args: str) -> None:
 
     Providers (case-insensitive, aliases accepted)::
 
-        /login openai      — Codex Plus device-code flow (aliases: codex, chatgpt)
+        /login openai      — Codex subscription device-code flow (aliases: codex, chatgpt)
         /login anthropic   — Claude subscription login via local `claude` CLI
                              (aliases: claude, claude-code)
 
@@ -238,7 +238,7 @@ def _login_help() -> None:
         "\n  [header]/login[/header] — credentials & subscription plans\n"
         "\n"
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
-        "  [label]/login openai[/label]                OAuth flow (Codex Plus quota)\n"
+        "  [label]/login openai[/label]                OAuth flow (Codex subscription quota)\n"
         "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
@@ -471,7 +471,12 @@ def _login_add_interactive(_args: str) -> None:
         return
 
     kinds = [
-        ("subscription", "Subscription (GLM Coding Plan, ChatGPT Plus, Claude Pro)"),
+        (
+            "subscription",
+            "Subscription (GLM Coding Lite/Pro/Max · "
+            "ChatGPT Plus/Pro/Business/Enterprise · "
+            "Claude Pro/Max ×5/Max ×20/Team)",
+        ),
         ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, GLM PAYG)"),
         ("oauth", "OAuth borrowed (Codex CLI / Claude Code)"),
     ]
@@ -628,7 +633,7 @@ def _login_oauth(target: str) -> None:
     caller has already resolved aliases via :data:`_PROVIDER_ALIASES`.
     Each branch is responsible for the provider-specific flow:
 
-    - ``openai``: GEODE-native device-code flow (Codex Plus quota).
+    - ``openai``: GEODE-native device-code flow (Codex subscription quota).
     - ``anthropic``: delegate to the local ``claude`` CLI's
       ``claude /login`` browser flow, then sync the keychain blob into
       ``ProfileStore`` so other parts of the system see the credential.
@@ -663,7 +668,7 @@ def _login_oauth(target: str) -> None:
 
     _pkg.console.print(
         f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
-        "  [muted]Available: openai (Codex Plus), anthropic (Claude subscription)[/muted]\n"
+        "  [muted]Available: openai (Codex subscription), anthropic (Claude subscription)[/muted]\n"
     )
 
 
@@ -1278,7 +1283,7 @@ def _login_providers() -> None:
     X3 — pre-fix the equivalence map (``openai ↔ openai-codex``,
     ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users
     saw the ``provider`` label in ``/login`` / ``/model`` and had no way
-    to discover that a Codex Plus token and an OpenAI PAYG key both
+    to discover that a Codex subscription token and an OpenAI PAYG key both
     serve a ``gpt-5.x`` request, or that a GLM Coding key shadows the
     PAYG endpoint. Surfacing the table makes the policy auditable
     without grep'ing ``PROVIDER_EQUIVALENCE`` in code.

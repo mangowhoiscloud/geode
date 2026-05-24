@@ -47,6 +47,354 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.53] - 2026-05-24
+
+> Drift / fallback / model-spec / settings-sync bundle. PR-DRIFT-CUT
+> (#1598) cut the per-turn auto-revert that silently reverted operator
+> ``/model`` selections + the cross-provider fallback chains that
+> cascaded a single 400 into z.ai 200, and grounded OpenAI / Codex /
+> GLM adapter quirks (``max_completion_tokens`` / temperature /
+> 128-tool cap) in an explicit per-model registry. PR-R6 (#1599)
+> closed the CLI ↔ daemon ``settings.model`` drift with a
+> Hermes-style ``reload_settings_from_disk()`` boundary read at
+> ``services.create_session`` + bridged ``settings.agentic_effort``
+> into the ``AgenticLoop`` constructor so the operator's picker
+> choice propagates end-to-end. 2 PRs, 6+ regression categories
+> closed.
+
+### Fixed (PR-R6, 2026-05-24)
+
+- **CLI ↔ daemon `settings.model` drift closed via Hermes-style boundary
+  read.** PR-DRIFT-CUT removed the per-turn auto-revert (drift sync) that
+  was silently re-syncing daemon's stale ``settings.model`` to disk, which
+  surfaced a latent gap: the CLI process writes ``GEODE_MODEL`` to ``.env``
+  and ``primary_model`` to ``config.toml`` via ``_apply_model``, but the
+  daemon's pydantic ``Settings`` singleton kept its boot-time snapshot —
+  so ``/model gpt-5.5`` was ignored at the next session start (the
+  v0.99.52 smoke regression). New helper
+  ``core.config.reload_settings_from_disk()`` mutates the live singleton
+  in place from ``.env`` + ``config.toml`` + ``GEODE_*`` env vars (Hermes
+  pattern: "fresh read at session boundary"), and
+  ``services.create_session`` calls it before reading ``settings.model``
+  to construct the next ``AgenticLoop``. Idempotent + cheap; no
+  file-watcher dependency (chokidar/inotify deliberately avoided — the
+  watcher race conditions don't compose with GEODE's multi-trigger
+  autonomous paths). Pinned by ``tests/test_settings_reload_from_disk.py``
+  (5 cases — singleton identity preserved, env-var pickup, idempotent,
+  fresh-process safe, **effort bridge end-to-end**) + updated
+  ``test_model_switch_propagates_across_sessions`` to flip
+  ``GEODE_MODEL`` (the disk surface ``_apply_model`` actually writes)
+  instead of mutating ``settings.model`` directly.
+
+- **Operator's effort choice now reaches the live ``AgenticLoop``.**
+  ``services.create_session`` was passing ``model=settings.model`` but
+  not ``effort=settings.agentic_effort`` — the loop's
+  ``effort: str = "high"`` constructor default won by omission, so the
+  ``/model`` picker's effort axis was effectively a no-op on the main
+  REPL/IPC path (sub-agents already read ``settings.agentic_effort``
+  directly via ``core/agent/sub_agent.py:533``). R6 reload now correctly
+  picks up the operator's choice into ``settings.agentic_effort``, and
+  the new constructor arg bridges it into ``loop._effort`` so the next
+  session honors low/medium/high/xhigh end-to-end.
+
+### Added
+- **PR-COMM-4** — transcript `seq` column + liveness watchdog API on
+  `SessionTranscript` and `RunTranscript`. Two coupled observability
+  improvements:
+  - Per-instance monotonic `seq` stamped on every JSONL row
+    (`_append` + `record_lifecycle_event`). Lets multi-event timelines
+    sort deterministically when `ts` ties (sub-second clock drift /
+    NTP reset). Per-instance, not cross-process atomic — multi-writer
+    files produce interleaved seqs that readers re-sort by `(ts, seq)`.
+  - `last_touched_at()` returns the transcript file's mtime; `None`
+    when the file doesn't exist (a never-started run isn't "stale").
+    `is_stale(threshold_s, *, now=None)` checks if no event arrived
+    in the threshold window; `now` injectable for deterministic
+    tests. `RunTranscript` exposes the same passthrough so seed-gen
+    operators can poll `run_transcript.is_stale(900)` directly without
+    poking at the wrapped `SessionTranscript`.
+  - Existing `tests/core/self_improving_loop/test_run_transcript.py::test_append_writes_jsonl_row`
+    updated to include the new `"seq": 1` field in its exact-match
+    assertion (full-row regression pin — every existing field is
+    still grep-provable in the diff).
+  - **Thread-safety fix** (Codex MCP review catch): pre-fix the seq
+    stamp lock was released before the write lock was re-acquired,
+    letting concurrent same-instance callers allocate seq N+1 / N+2
+    and then write in the opposite order (seq monotonic but file
+    order broken). Now seq stamping + write are held under a single
+    `self._lock` acquisition. Pinned by
+    `test_seq_holds_under_concurrent_threads` (10 threads × 10
+    appends → 100 rows with seqs 1..100 in exact file order).
+  - Pinned by `tests/test_transcript_seq_liveness.py` (13 cases —
+    seq monotonic × 4, seq under threads × 1, seq across instances
+    × 1, last_touched_at × 2, is_stale × 3, RunTranscript passthrough
+    × 3).
+
+- **PR-COMM-3d** — AgenticLoop's main `_call_llm` path now emits
+  `LLM_CALL_STARTED` / `LLM_CALL_ENDED` hooks with `session_id` +
+  `usage` + `cost_usd` so the SQLite `agent_runtime_state.total_*_tokens`
+  cumulative writer (registered in PR-COMM-3b but unwired for the
+  main loop path) actually accumulates per-call traffic. Pre-fix
+  only the `router/calls/*.py` one-off helpers fired LLM_CALL_ENDED,
+  and they didn't carry the agent context the writer needed.
+  - `core/agent/loop/agent_loop.py:_call_llm` wraps the
+    `adapter.acomplete()` call with `LLM_CALL_STARTED` (before) and
+    `LLM_CALL_ENDED` (after — success and error paths). The success
+    payload carries `session_id`, `model`, `provider`, `adapter`,
+    `latency_ms`, `usage` dict (`input_tokens` / `output_tokens` /
+    `cached_input_tokens`), and `cost_usd` (computed locally via
+    `token_tracker.calculate_cost`). Hook trigger failures are
+    swallow-and-warn so a broken handler never blocks the loop.
+  - `core/wiring/bootstrap.py` registers
+    `agent_runtime_llm_call_ended` → `accumulate_tokens_and_cost`
+    under the existing `agent_runtime_state` plugin. Ignores
+    zero-token / missing-`session_id` payloads so legacy
+    `router/calls/*.py` emitters don't pollute the table.
+  - Pinned by `tests/test_llm_call_ended_cumulative.py` (5 cases —
+    single-call cumulative write × 1, multi-call sum × 1, legacy
+    payload no-op × 1, zero-token no-op × 1, missing-session_id
+    no-op × 1).
+
+### Changed
+- **PR-COMM-3c** — migrates `core/agent/loop/agent_loop.py` claude-cli
+  sessionId persistence from file-based
+  `<run_dir>/sub_agents/<task_id>/session.json` (PR-V) to the SQLite
+  `agent_runtime_state.claude_cli_session_id` column landed by
+  PR-COMM-3 / PR-COMM-3b. Dual-write during the 1-release grace
+  window; legacy file path slated for deletion in v0.99.54.
+  - `_persist_session_id` writes to SQLite primary (via
+    `record_agent_session_end(agent_id, claude_cli_session_id=...)`)
+    then writes the legacy `session.json` file so existing on-disk
+    caches keep working through deploys that haven't ingested the
+    SQLite writer yet. Empty `emitted_session_id` is a no-op for both
+    stores (preserves prior cached values across cross-cycle adapter
+    switches).
+  - `_load_prior_session_id` reads SQLite first, falls back to
+    `session.json` on miss or SQLite error. REPL / gateway paths that
+    have no `run_dir` scope still get SQLite persistence (file write
+    no-ops, SQLite write lands) — that's the migration's whole point.
+  - Pinned by `tests/test_session_id_persistence.py` (9 cases —
+    SQLite-primary read × 1, file-fallback read × 2, dual-write × 3,
+    empty-noop × 2, SQLite-failure-falls-back × 1, plus a fresh
+    `isolate_sessions_db` autouse fixture added to
+    `tests/core/llm/adapters/test_claude_cli_resume.py` so the
+    existing V.4 round-trip tests no longer pollute the developer's
+    real `~/.geode/projects/.../sessions.db`).
+
+### Added
+- **PR-COMM-3b** — wires the PR-COMM-3 SQLite `agent_runtime_state`
+  writers into the running AgenticLoop. Three coupled changes:
+  - `core/agent/loop/_lifecycle.py:_final_hook_payloads` enriches the
+    `SESSION_ENDED` payload with `agent_kind` (derived from
+    `_parent_session_id` — `"subagent"` when set, `"repl"` otherwise),
+    `component` (from `current_run_transcript().component`, fallback
+    `"agentic_loop"`), `adapter_type` (from `_new_adapter.name`), and
+    `claude_cli_session_id` (cached on the loop by the PR-V
+    `_persist_session_id` helper — new `_last_emitted_session_id`
+    field on `AgenticLoop`).
+  - `core/agent/sub_agent.py:_emit_hook` adds `component` (same
+    derivation) and `status` (`"completed"` / `"failed"` from
+    `sub_result.success`) to every SUBAGENT_* trigger.
+  - `core/wiring/bootstrap.py` registers two HookSystem handlers
+    under the `agent_runtime_state` plugin name:
+    `agent_runtime_session_end` → `record_agent_session_end` on
+    SESSION_ENDED, `agent_runtime_subagent_completed` →
+    `record_subagent_completed` on SUBAGENT_COMPLETED. Handlers no-op
+    on missing `session_id` / `task_id` keys (defensive).
+  - **LLM_CALL_ENDED cumulative tokens deferred to PR-COMM-3d**:
+    AgenticLoop's main `_call_llm` path does not yet emit
+    LLM_CALL_ENDED (only `router/calls/*.py` one-off calls do), so
+    the `accumulate_tokens_and_cost` writer remains unwired.
+  - **Production SUBAGENT_FAILED fix**: pre-PR the failure call site
+    `sub_agent.py:407` passed only `error=` — Codex MCP catch — so
+    the writer's `last_run_status` column was never stamped "failed"
+    on production failures. Now passes `sub_result=` alongside.
+  - Pinned by `tests/test_agent_runtime_state_wiring.py` (13 cases —
+    SESSION_ENDED enrichment × 6 across REPL / sub-agent / bare-loop
+    paths, SUBAGENT_STARTED/COMPLETED/FAILED enrichment × 3,
+    bootstrap handler wiring × 4 end-to-end).
+
+- **PR-COMM-3** — per-agent cumulative runtime state in SQLite.
+  Adds `agent_runtime_state` (14 cols) + `run_lineage` (9 cols) tables
+  to `sessions.db` (audit doc §4 Option A — co-located with `sessions`
+  and `messages` rather than a separate `runtime.db` so cross-table
+  joins stay local). Schema:
+  - `agent_runtime_state` carries the claude-cli sessionId for the
+    next `--resume`, cumulative tokens / cost (`total_input_tokens` /
+    `total_output_tokens` / `total_cached_input_tokens` /
+    `total_cost_cents`), and the last error. Two orthogonal-axis
+    columns (`agent_kind`: subagent/repl/gateway/scheduler;
+    `component`: seed-generation/self-improving-loop/petri-audit/
+    autoresearch/agentic_loop/serve/scheduler) separate process
+    origin from GEODE subsystem.
+  - `run_lineage` tracks per-cycle retry/refinement chains
+    (`parent_run_id` → `root_run_id`) for multi-cycle agents
+    (seed-generation, self-improving-loop).
+  - 7 indexes (idx_agent_runtime_kind / _component / _updated /
+    _session; idx_run_lineage_agent / _parent / _root) for the
+    expected query shapes.
+  - `core/observability/agent_runtime_state.py` (NEW) — writer/reader
+    API: `record_agent_session_end`, `record_subagent_completed`,
+    `accumulate_tokens_and_cost`, `record_run_lineage`, `mark_run_ended`,
+    `get_agent_runtime_state`, `get_retry_chain`, `get_root_run`.
+    Failures swallow-and-warn so the upstream hook never breaks.
+  - Pinned by `tests/test_agent_runtime_state.py` (17 cases —
+    schema bootstrap × 4, writers × 8, lineage × 5).
+  - **Deferred to PR-COMM-3b**: bootstrap hook handler registration +
+    emit-site augmentation. The current `SESSION_ENDED` /
+    `SUBAGENT_COMPLETED` / `LLM_CALL_ENDED` payloads do NOT carry the
+    fields the writers need (`agent_kind`, `component`,
+    `adapter_type`, `claude_cli_session_id`, `usage`, `session_id`) —
+    Codex MCP review caught the gap. Wiring handlers without
+    augmenting the emit sites would silently no-op in production,
+    violating the Read-Write parity guard. PR-COMM-3b will augment
+    `_lifecycle.py:_final_hook_payloads`, `sub_agent.py:_emit_completed`,
+    and the six `router/calls/*.py` `LLM_CALL_ENDED` sites, then wire
+    the handlers — both ends of the wire grep-provable in the same
+    diff.
+  - **Deferred to PR-COMM-3c**: migrating
+    `core/agent/loop/agent_loop.py:_persist_session_id` from
+    `<run_dir>/sub_agents/<task_id>/session.json` to the SQLite
+    `agent_runtime_state.claude_cli_session_id` column. Ships once
+    the writer is verified producing the expected row shape in the
+    wild (post-COMM-3b).
+
+- **PR-COMM-2** — `HookSystem.register_prefix()` + `unregister_prefix()`
+  for wildcard event subscriptions. Pre-fix the bootstrap had to enumerate
+  every `HookEvent` value to attach a global `run_log` handler:
+  ```python
+  for event in HookEvent:
+      hooks.register(event, handler_fn, name=handler_name, priority=50)
+  ```
+  Adding a new event silently bypassed the run log (no compile-time
+  check). The new API collapses the loop to one call:
+  ```python
+  hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
+  ```
+  Match rule: `"*"` matches every event; any other prefix matches when
+  `HookEvent.name == prefix` OR `name.startswith(prefix + "_")` — the
+  trailing-`_` segment boundary prevents `"NODE"` from accidentally
+  matching a future `NODELESS_*` event. Internal storage is a separate
+  `_prefix_hooks: dict[str, list[_RegisteredHook]]` consulted by a new
+  `_resolve_hooks_for()` helper, so all six trigger paths (`trigger`,
+  `trigger_async`, `trigger_with_result`, `trigger_with_result_async`,
+  `trigger_interceptor`, `trigger_interceptor_async`) share one
+  dispatch table. Exact + wildcard handlers compose in a single
+  priority-sorted execution order; same `name` across exact and
+  wildcard dedups to one invocation (exact wins). `list_hooks()`
+  introspection surfaces wildcards under `"*<prefix>"` keys; `clear()`
+  with no event drops both exact + wildcard tables (Codex MCP review
+  catch — pre-fix wildcards survived `clear()` invisibly). Pinned by
+  `tests/test_hooks.py::TestRegisterPrefix` (15 cases). Migrated
+  `core/wiring/bootstrap.py:168` from the enum loop.
+
+### Fixed
+- **PR-DEFECT-AB** — sub-agent failure signal propagation across the
+  worker IPC boundary. Two coupled regressions surfaced by the
+  v0.99.52 seed-generation smoke (proximity 111s + critic 66s both
+  returned malformed JSON that downstream phase agents then ingested
+  as legitimate content):
+  - **Defect A** (`core/llm/errors.py:classify_llm_error`):
+    `ClaudeCliTransientUpstreamError` (raised by PR-T's claude-cli
+    transient classifier) fell through to the generic `unknown`
+    classification, which routed claude-cli 429s / overload / quota
+    signatures through the AgenticLoop's "Unexpected error.
+    Auto-retrying." fallback path instead of the dedicated
+    `rate_limit` branch at `agent_loop.py:1595`. Now lazy-imports the
+    plugin exception and maps it to `rate_limit` so the loop fails
+    fast with the same diagnostic as native SDK 429s — paperclip
+    parity (`execute.ts:809` tags identical signatures with
+    `errorCode = "claude_transient_upstream"`).
+  - **Defect B** (`core/agent/worker.py:_run_agentic`):
+    `WorkerResult.success = bool(text)` reported True whenever the
+    sub-agent loop produced any non-empty string, including the
+    `_build_model_action_result` fallback UI text the loop emits on
+    `model_action_required` / `context_exhausted` / `llm_error` /
+    `billing_error` / `cost_budget_exceeded` / `convergence_detected`
+    terminations. Now gates `success` on the absence of
+    `AgenticResult.error` AND the termination_reason not being one of
+    those six failure sentinels. `summary` now surfaces the actual
+    cause ("Sub-agent failed: model_action_required;
+    termination_reason=model_action_required") so parent timeline rows
+    explain WHY the spawn produced no usable output. The legacy "No
+    response from sub-agent" string is preserved for the
+    empty-text + no-error + unknown-termination case so existing log
+    greppers keep working.
+  - Pinned by `tests/core/llm/test_classify_llm_error.py` (19 cases —
+    PR-T mapping + every Anthropic + OpenAI SDK branch +
+    parametric unknown-fallback smoke) +
+    `tests/test_worker.py::TestResolveWorkerOutcome` (16 cases —
+    every failure sentinel + clarification / input_blocked /
+    user_cancelled exemptions + convergence-as-failure pin +
+    summary contract).
+
+### Changed (PR-DRIFT-CUT, 2026-05-24)
+
+- **Drift sync + provider fallback chains deprecated.** The runtime no
+  longer reverts an operator's ``/model`` selection in the daemon
+  process. ``_settings_model_target`` /
+  ``sync_model_from_settings_async`` are now no-ops and clearly marked
+  deprecated. Cross-provider and same-provider automatic model
+  fallback is also cut at every site (``_get_fallback_chain``,
+  per-provider ``fallback_chain`` properties) so a 400 / credit /
+  rate-limit on the primary model never silently cascades to another
+  provider. Operators must invoke ``/model <id>`` explicitly. Trigger:
+  v0.99.52 post-merge smoke (gpt-5.5 selection reverted to
+  claude-opus-4-7 on first turn; a stale Anthropic credit-low cascaded
+  into a z.ai 200 but the UI surfaced the Anthropic error).
+
+- **OpenAI / Codex / GLM adapters now ground per-model API quirks in
+  an explicit registry** (``_OPENAI_MODELS`` in
+  ``core/llm/adapters/_openai_common.py``) instead of
+  ``startswith("gpt-5")`` prefix checks. Each entry records
+  ``uses_max_completion_tokens`` (replaces ``max_tokens`` for the
+  reasoning family), ``accepts_temperature`` (False for active
+  reasoning), ``reasoning_effort_values``, and the model's context
+  window. Unknown model ids fall back to legacy gpt-4.x semantics
+  with a one-shot WARNING so adding a new model cannot silently
+  drift behaviour. Replaces the prefix heuristic that mis-routed
+  ``max_tokens`` for gpt-5.5 → 400 ``Unsupported parameter``.
+
+- **Tools array hard-capped at 128 entries at the OpenAI-family
+  adapter edge.** Shared ``cap_tools`` truncates with an
+  operator-actionable warning when the registry layer delivers more
+  than the spec maximum (verified 2026-05-24 against OpenAI Chat
+  Completions + Codex Responses + applied defensively to GLM PAYG /
+  Coding Plan endpoints). Prevents the ``array_above_max_length``
+  400 the v0.99.52 smoke hit on gpt-5.5 with 176 tools.
+
+- **``classify_llm_error`` no longer mis-flags ``max_tokens`` errors
+  as context overflow.** The previous heuristic was a substring
+  match (``"token" in msg``) that fired on any 400 mentioning a
+  ``max_tokens`` parameter — including OpenAI's gpt-5.x
+  "Unsupported parameter: 'max_tokens'" 400. A new
+  ``_looks_like_context_overflow`` helper prefers the structured
+  ``error.code`` field (``context_length_exceeded`` /
+  ``prompt_too_long``) and falls back to a tight word-anchored
+  regex on the message body. Misclassification caused the v0.99.52
+  smoke to render "Context window exhausted" while the actual
+  cause was a parameter-name mismatch.
+
+- **Subscription terminology generalised.** Operator-facing copy +
+  comments + UI no longer hard-codes "ChatGPT Plus" / "Plus quota" /
+  "Plus subscription" — the Codex CLI works with Plus / Pro /
+  Business / Edu / Enterprise tiers, and the ``/login`` menu now
+  lists Claude Pro / Max ×5 / Max ×20 / Team alongside the ChatGPT
+  tiers for parity. Free-form mentions of "Plus" are replaced with
+  "subscription" so future tier additions do not require chasing
+  strings.
+
+### Fixed (PR-DRIFT-CUT, 2026-05-24)
+
+- **Raw SDK exception JSON no longer leaks into the assistant
+  transcript.** The bad_request termination branch in
+  ``AgenticLoop`` used to emit
+  ``"LLM call failed (Error code: 400 - {...})"`` verbatim. It now
+  routes through ``_build_model_action_result`` like the auth /
+  convergence branches, and ``summarize_error_detail`` strips the
+  raw exception body down to the underlying ``error.message`` so
+  the user sees a clean diagnostic + ``/model`` hint.
+
 ## [0.99.52] - 2026-05-24
 
 > 2-PR bundle. PR-COMM-1 (#1587): 74 HookEvent → 11 group patterns

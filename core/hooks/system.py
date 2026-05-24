@@ -330,6 +330,13 @@ class HookSystem:
 
     def __init__(self) -> None:
         self._hooks: dict[HookEvent, list[_RegisteredHook]] = {}
+        # PR-COMM-2 (2026-05-24) — prefix-keyed wildcard subscriptions.
+        # ``"*"`` is the all-events sentinel; other keys match by
+        # ``HookEvent.name == prefix`` or ``name.startswith(prefix + "_")``
+        # so e.g. ``"PIPELINE"`` covers ``PIPELINE_STARTED`` / ``PIPELINE_ENDED``
+        # / ``PIPELINE_ERROR`` / ``PIPELINE_TIMEOUT`` without matching
+        # ``PIPELINE_RUNNERV2`` if such a value is ever added.
+        self._prefix_hooks: dict[str, list[_RegisteredHook]] = {}
         self._lock = threading.Lock()
 
     def register(
@@ -366,6 +373,47 @@ class HookSystem:
             # Keep sorted by priority (stable sort)
             self._hooks[event].sort(key=lambda h: h.priority)
 
+    def register_prefix(
+        self,
+        prefix: str,
+        handler: HookHandler,
+        *,
+        name: str | None = None,
+        priority: int = 100,
+    ) -> None:
+        """Register a handler for every :class:`HookEvent` whose name matches ``prefix``.
+
+        Match rule (see :meth:`_matches_prefix`):
+
+        * ``prefix == "*"`` → matches every event (replaces the bootstrap
+          ``for event in HookEvent: hooks.register(event, ...)`` loop).
+        * Otherwise → matches when ``HookEvent.name == prefix`` OR
+          ``HookEvent.name.startswith(prefix + "_")``. The trailing-``_``
+          guard prevents ``"NODE"`` from accidentally matching a future
+          ``NODELESS_*`` event.
+
+        Args:
+            prefix: ``"*"`` or a HookEvent name fragment without the trailing ``_``.
+            handler: Callback function. Same shape as :meth:`register`.
+            name: Unique handler name (defaults to ``handler.__name__``).
+            priority: Lower runs first (default 100). Priorities are
+                merged across exact + wildcard subscribers at trigger time.
+        """
+        hook_name = name or handler.__name__
+        entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority, matcher="")
+
+        with self._lock:
+            if prefix not in self._prefix_hooks:
+                self._prefix_hooks[prefix] = []
+            # Dedup against the SAME prefix (mirrors :meth:`register`'s
+            # per-event dedup). Cross-prefix duplicate names are
+            # resolved at trigger time by :meth:`_resolve_hooks_for`.
+            self._prefix_hooks[prefix] = [
+                h for h in self._prefix_hooks[prefix] if h.name != hook_name
+            ]
+            self._prefix_hooks[prefix].append(entry)
+            self._prefix_hooks[prefix].sort(key=lambda h: h.priority)
+
     def unregister(self, event: HookEvent, name: str) -> bool:
         """Remove a named hook. Returns True if found and removed."""
         with self._lock:
@@ -374,6 +422,37 @@ class HookSystem:
             self._hooks[event] = [h for h in hooks if h.name != name]
             return len(self._hooks[event]) < before
 
+    def unregister_prefix(self, prefix: str, name: str) -> bool:
+        """Remove a named wildcard hook. Returns True if found and removed."""
+        with self._lock:
+            hooks = self._prefix_hooks.get(prefix, [])
+            before = len(hooks)
+            self._prefix_hooks[prefix] = [h for h in hooks if h.name != name]
+            return len(self._prefix_hooks[prefix]) < before
+
+    @staticmethod
+    def _matches_prefix(prefix: str, event: HookEvent) -> bool:
+        """Return True if ``event`` is subscribed by a handler under ``prefix``."""
+        if prefix == "*":
+            return True
+        return event.name == prefix or event.name.startswith(prefix + "_")
+
+    def _resolve_hooks_for(self, event: HookEvent) -> list[_RegisteredHook]:
+        """Merge exact-match + matching wildcard subscribers, sorted by priority.
+
+        Dedup rule: when the same ``name`` appears in both the exact list
+        and a wildcard list (or in multiple wildcard lists), the
+        first-encountered entry wins — exact-match entries take priority
+        over wildcards, then prefixes are scanned in insertion order.
+        Callers therefore see at most one ``_RegisteredHook`` per name
+        per event, matching :meth:`register`'s per-event dedup semantics.
+
+        Trigger paths call this from outside the lock; :meth:`list_hooks`
+        calls the ``_locked`` variant while holding ``self._lock``.
+        """
+        with self._lock:
+            return self._resolve_hooks_for_locked(event)
+
     def trigger(self, event: HookEvent, data: dict[str, Any] | None = None) -> list[HookResult]:
         """Trigger all hooks for an event in priority order.
 
@@ -381,8 +460,7 @@ class HookSystem:
         """
         data = data or {}
         results: list[HookResult] = []
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -421,8 +499,7 @@ class HookSystem:
         """
         data = data or {}
         results: list[HookResult] = []
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -458,8 +535,7 @@ class HookSystem:
         """
         data = data or {}
         results: list[HookResult] = []
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -493,8 +569,7 @@ class HookSystem:
         """Async variant of trigger_with_result()."""
         data = data or {}
         results: list[HookResult] = []
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -541,8 +616,7 @@ class HookSystem:
             InterceptResult with blocked status, reason, and final data.
         """
         data = dict(data) if data else {}  # defensive copy
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -569,8 +643,7 @@ class HookSystem:
     ) -> InterceptResult:
         """Async variant of trigger_interceptor()."""
         data = dict(data) if data else {}
-        with self._lock:
-            hooks = list(self._hooks.get(event, []))
+        hooks = self._resolve_hooks_for(event)
         hooks = self._filter_by_matcher(hooks, event, data)
 
         for hook in hooks:
@@ -705,20 +778,63 @@ class HookSystem:
         return await ret
 
     def list_hooks(self, event: HookEvent | None = None) -> dict[str, list[str]]:
-        """List registered hook names, optionally filtered by event."""
+        """List registered hook names, optionally filtered by event.
+
+        PR-COMM-2 (2026-05-24) — output includes matching wildcard
+        subscribers (via :meth:`_resolve_hooks_for`) so introspection
+        accurately reports every handler that would fire on a trigger.
+        Wildcard-only registrations land under the ``"*<prefix>"`` keys
+        when ``event`` is not specified, so callers can still
+        distinguish exact from wildcard sources.
+        """
         with self._lock:
             if event is not None:
-                hooks = self._hooks.get(event, [])
+                hooks = self._resolve_hooks_for_locked(event)
                 return {event.value: [h.name for h in hooks]}
-            return {e.value: [h.name for h in hooks] for e, hooks in self._hooks.items() if hooks}
+            exact = {e.value: [h.name for h in hooks] for e, hooks in self._hooks.items() if hooks}
+            wildcard = {
+                f"*{prefix}": [h.name for h in hooks]
+                for prefix, hooks in self._prefix_hooks.items()
+                if hooks
+            }
+            return {**exact, **wildcard}
+
+    def _resolve_hooks_for_locked(self, event: HookEvent) -> list[_RegisteredHook]:
+        """Lock-free variant of :meth:`_resolve_hooks_for` for callers that
+        already hold ``self._lock``."""
+        exact = list(self._hooks.get(event, []))
+        wildcard: list[_RegisteredHook] = []
+        for prefix, hooks in self._prefix_hooks.items():
+            if self._matches_prefix(prefix, event):
+                wildcard.extend(hooks)
+        if not wildcard:
+            return exact
+        merged = exact + wildcard
+        seen: set[str] = set()
+        unique: list[_RegisteredHook] = []
+        for hook in merged:
+            if hook.name in seen:
+                continue
+            seen.add(hook.name)
+            unique.append(hook)
+        unique.sort(key=lambda h: h.priority)
+        return unique
 
     def clear(self, event: HookEvent | None = None) -> None:
-        """Clear hooks for a specific event, or all hooks."""
+        """Clear hooks for a specific event, or all hooks.
+
+        PR-COMM-2 (2026-05-24) — when ``event`` is None, wildcard
+        subscriptions are cleared alongside exact registrations so
+        ``HookSystem.clear()`` actually drops every handler. The
+        ``event``-specific variant keeps wildcards intact (they aren't
+        bound to a single event by definition).
+        """
         with self._lock:
             if event is not None:
                 self._hooks.pop(event, None)
             else:
                 self._hooks.clear()
+                self._prefix_hooks.clear()
 
 
 # Populate _TOOL_EVENTS after HookEvent members are available.

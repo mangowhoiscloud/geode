@@ -6,6 +6,7 @@ so that no consumer needs to import provider SDKs directly.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -256,14 +257,35 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
 def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     """Classify an LLM exception into (error_type, severity, hint).
 
-    Handles both Anthropic SDK and OpenAI SDK (used by GLM/OpenAI providers)
-    exception types.
+    Handles Anthropic SDK, OpenAI SDK (used by GLM/OpenAI providers),
+    and the PR-T subprocess transient classifier
+    (``ClaudeCliTransientUpstreamError``) so claude-cli stream-json
+    upstream signatures dispatch through the same ``rate_limit``
+    retry path as native SDK 429s. Without this mapping the
+    AgenticLoop's generic ``unknown`` branch produces the
+    "! Unexpected error. Auto-retrying." fallback UI which downstream
+    phase agents (proximity / critic) then mis-parse as content.
 
     Returns a tuple of:
       - error_type: machine-readable category
       - severity: "info" | "warning" | "error" | "critical"
       - hint: user-facing actionable message
     """
+    # --- PR-DEFECT-AB (2026-05-24) — paperclip execute.ts:809 parity ---
+    # ``ClaudeCliTransientUpstreamError`` lives under ``plugins/petri_audit``
+    # so core can't unconditionally import it (layer-violation +
+    # plugin-as-optional-dep). Lazy-import + isinstance gate — when the
+    # plugin isn't loaded, falls through to the SDK branches.
+    try:
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+        )
+
+        if isinstance(exc, ClaudeCliTransientUpstreamError):
+            return _ERROR_CLASSIFICATION["rate_limit"]
+    except ImportError:
+        pass
+
     # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]
@@ -283,8 +305,7 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     if isinstance(exc, anthropic.InternalServerError):
         return _ERROR_CLASSIFICATION["server"]
     if isinstance(exc, anthropic.BadRequestError):
-        msg = str(exc).lower()
-        if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
+        if _looks_like_context_overflow(exc):
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
 
@@ -382,6 +403,63 @@ def extract_billing_message(exc: Exception) -> str:
     return str(msg) or str(exc)
 
 
+def summarize_error_detail(raw: str | Exception) -> str:
+    """Strip raw SDK exception JSON down to the underlying ``error.message``.
+
+    PR-DRIFT-CUT (2026-05-24) — the bad_request branch in
+    :class:`AgenticLoop` used to emit the raw exception ``str()`` as
+    the assistant transcript line, which looked like
+    ``"Error code: 400 - {'error': {'message': "Unsupported parameter:
+    'max_tokens' ...", 'type': 'invalid_request_error', ...}}"``. That
+    is operator-grade noise — the user just needs the underlying
+    sentence. We try, in order:
+
+      1. Parse a real ``Exception`` and pull ``body['error']['message']``.
+      2. Regex-match a ``"message": "<msg>"`` field in the raw string.
+      3. Strip a leading ``Error code: NNN - `` prefix.
+
+    If none match we return the input untouched so we never *lose*
+    information — only filter when we can prove a clean extraction.
+    """
+    if isinstance(raw, Exception):
+        body = _extract_error_body(raw) or {}
+        err_obj = body.get("error")
+        if isinstance(err_obj, dict):
+            msg = err_obj.get("message")
+            if isinstance(msg, str) and msg:
+                return msg.strip()
+        msg = body.get("message")
+        if isinstance(msg, str) and msg:
+            return msg.strip()
+        raw = str(raw)
+
+    text = str(raw)
+
+    # Try to pull the inner ``'message': "<value>"`` or
+    # ``"message": '<value>'`` from a stringified dict body. The OpenAI
+    # SDK emits Python-dict repr where the value uses whichever quote
+    # the inner content does NOT use (e.g. value contains 'max_tokens'
+    # → outer quotes are ``"``), so we need to match both styles and
+    # tolerate escaped occurrences of the outer quote.
+    inner = re.search(
+        r"['\"]message['\"]\s*:\s*"
+        r"(?:\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)')",
+        text,
+    )
+    if inner:
+        captured = inner.group(1) if inner.group(1) is not None else inner.group(2)
+        if captured:
+            return captured.strip()
+    # Strip the leading "Error code: NNN - " preamble if present and the
+    # remainder is short enough to be a sentence (not the full JSON).
+    preamble = re.match(r"^Error code:\s*\d+\s*-\s*(.+)$", text, re.DOTALL)
+    if preamble:
+        remainder = preamble.group(1).strip()
+        if len(remainder) <= 240 and remainder.startswith(("{", "[")) is False:
+            return remainder
+    return text
+
+
 def build_model_action_message(
     *,
     error_type: str,
@@ -460,8 +538,84 @@ def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
     if isinstance(exc, openai.InternalServerError):
         return _ERROR_CLASSIFICATION["server"]
     if isinstance(exc, openai.BadRequestError):
-        msg = str(exc).lower()
-        if "token" in msg or "context" in msg or "prompt exceeds" in msg or "max length" in msg:
+        if _looks_like_context_overflow(exc):
             return _ERROR_CLASSIFICATION["context_overflow"]
         return _ERROR_CLASSIFICATION["bad_request"]
     return None
+
+
+# ---------------------------------------------------------------------------
+# Context-overflow detection — strict, code-first, regex-anchored
+# ---------------------------------------------------------------------------
+# PR-DRIFT-CUT (2026-05-24) — the previous heuristic was a substring
+# match (``"token" in msg``) that misclassified *every* 400 mentioning
+# ``max_tokens``, including the gpt-5.5 "Unsupported parameter:
+# 'max_tokens'" error. That false-positive triggered the context-recovery
+# path, which dropped messages and surfaced "Context window exhausted"
+# to the user despite the real cause being a parameter-name mismatch.
+#
+# New strategy:
+#   1. Prefer the structured ``error.code`` field (provider-specific
+#      machine-readable name — OpenAI ``context_length_exceeded``,
+#      Anthropic ``prompt_too_long``, etc.).
+#   2. Fall back to word-anchored phrase matching on the message body
+#      with patterns that only match true overflow language.
+#
+# Adding a new provider: extend ``_CONTEXT_OVERFLOW_CODES`` /
+# ``_CONTEXT_OVERFLOW_PHRASES`` rather than relaxing the heuristic.
+
+_CONTEXT_OVERFLOW_CODES: frozenset[str] = frozenset(
+    {
+        "context_length_exceeded",  # OpenAI
+        "prompt_too_long",  # Anthropic
+        "context_window_exceeded",  # GLM / future
+    }
+)
+
+# Word-anchored phrases — every entry must describe context overflow
+# unambiguously. ``max_tokens`` parameter errors (Unsupported parameter,
+# Unknown parameter, etc.) must NOT match. Patterns kept narrow:
+# they describe length-of-input language, not parameter-name language.
+_CONTEXT_OVERFLOW_RE = re.compile(
+    r"\b("
+    r"context\s+length\s+exceeded|"
+    r"context\s+window\s+exceeded|"
+    r"maximum\s+context\s+length|"
+    r"prompt\s+is\s+too\s+long|"
+    # "prompt exceeds the model's context window of 200000 tokens" —
+    # tolerate up to 3 natural-language words between "exceeds" and
+    # "context" so possessives ("the model's") + adjectives ("the
+    # maximum") don't break the match.
+    r"prompt\s+exceeds(?:\s+\S+){0,3}\s+context|"
+    r"exceeds\s+the\s+(?:maximum\s+)?context|"
+    r"input\s+is\s+too\s+long|"
+    r"too\s+many\s+input\s+tokens|"
+    r"too\s+many\s+tokens"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_context_overflow(exc: Exception) -> bool:
+    """Return True when the 400 is a true context-overflow signal.
+
+    Prefers the structured ``error.code`` field; falls back to a tight
+    regex on the message. NEVER matches ``max_tokens`` /
+    ``Unsupported parameter`` / generic "tokens" mentions.
+    """
+    body = _extract_error_body(exc) or {}
+    err_obj = body.get("error") if isinstance(body.get("error"), dict) else None
+    code = ""
+    if err_obj is not None:
+        code = str(err_obj.get("code") or err_obj.get("type") or "").lower()
+    if not code:
+        code = str(body.get("code") or body.get("type") or "").lower()
+    if code in _CONTEXT_OVERFLOW_CODES:
+        return True
+
+    detail = ""
+    if err_obj is not None:
+        detail = str(err_obj.get("message") or "")
+    if not detail:
+        detail = str(body.get("message") or "") or str(exc)
+    return bool(_CONTEXT_OVERFLOW_RE.search(detail))

@@ -74,7 +74,7 @@ __all__ = [
 # 에서 제거됨 (durable operator decision per ``project_payg_exclusion_decision.md``,
 # 2026-05-23) — autoresearch / Petri audit 의 provider 선택지에서 영구
 # exclude. 잔존 옵션: ``claude-cli`` (Claude Code Max OAuth) /
-# ``openai-codex`` (ChatGPT Plus OAuth) / ``auto`` (manifest cascade).
+# ``openai-codex`` (ChatGPT subscription OAuth) / ``auto`` (manifest cascade).
 # ``api_key`` 설정 시 Pydantic ValidationError 가 명시 PAYG 사용을 reject
 # — PR-C-P1 의 silent-fallback 차단 패턴 재사용.
 #
@@ -253,7 +253,7 @@ class AutoresearchConfig(BaseModel):
     source: Source = "claude-cli"
     """Credential source for the audit subprocess. PR-SIL-5THEME C6 후 PAYG
     (``api_key``) 는 Source literal 에서 제거. ``claude-cli`` = Claude Code
-    Max OAuth (default), ``openai-codex`` = ChatGPT Plus OAuth, ``auto`` =
+    Max OAuth (default), ``openai-codex`` = ChatGPT subscription OAuth, ``auto`` =
     manifest cascade (subscription-first, ``fallback_to_payg`` 가 True 여야
     PAYG 까지 fallback). argv translator 가 non-``api_key`` source 를
     ``--use-oauth`` 로 매핑 (모든 source 가 이제 non-api_key 라 항상 fire)."""

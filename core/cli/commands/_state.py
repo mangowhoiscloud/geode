@@ -48,7 +48,7 @@ class ModelProfile:
 #
 # Label = canonical provider ID + cost ($) tier.
 # `gpt-5.5` default routes to `openai-codex` per equivalence-class
-# scan when Codex Plus OAuth is registered (v0.52.4 routing policy);
+# scan when Codex subscription OAuth is registered (v0.52.4 routing policy);
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
 MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile(ANTHROPIC_PRIMARY, "anthropic", "Opus 4.7", "$$$"),
@@ -232,7 +232,7 @@ def show_help() -> None:
     console.print("  [header]Commands[/header]")
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
     console.print("  [label]/login[/label]              — Plans + credentials dashboard (unified)")
-    console.print("  [label]/login openai[/label]       — Codex OAuth (Plus quota)")
+    console.print("  [label]/login openai[/label]       — Codex OAuth (subscription quota)")
     console.print("  [label]/login anthropic[/label]    — Claude subscription OAuth")
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
@@ -300,7 +300,7 @@ def model_available(model_id: str) -> bool:
 # the ``/model`` picker. Pre-fix the picker silently honoured the user's
 # escape hatch (Codex CLI parity) so a user with
 # ``forced_login_method = {"openai": "apikey"}`` would pick ``gpt-5.5``
-# expecting Codex Plus and get PAYG instead. The badge below makes the
+# expecting Codex subscription and get PAYG instead. The badge below makes the
 # override visible at selection time.
 _FORCED_METHOD_DEFAULTS: frozenset[str] = frozenset({"subscription", "auto", ""})
 _FORCED_METHOD_APIKEY_ALIASES: frozenset[str] = frozenset({"apikey", "api", "api_key", "key"})
