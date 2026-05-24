@@ -211,7 +211,8 @@ class AgenticLoop:
             # the helper is 4 lines and PR-MAINPATH-4 (the
             # ``_model_switching`` migration) will fold all three into
             # one helper at that stage.
-            registry_provider = "openai" if self._provider == "openai-codex" else self._provider
+            _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
+            registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
             self._new_adapter = resolve_for(registry_provider, self._source)
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)

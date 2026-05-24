@@ -59,7 +59,11 @@ def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-unty
 
     if source not in CONCRETE_SOURCES:
         return None
-    registry_provider = "openai" if provider == "openai-codex" else provider
+    # Legacy ``_resolve_provider`` returns ``openai-codex`` for gpt-5.x
+    # and ``zhipuai`` for GLM models; the Path-B registry uses the
+    # narrower vocabulary (``openai`` / ``glm``).
+    _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
+    registry_provider = _PROVIDER_NORMALIZATION.get(provider, provider)
     return resolve_for(registry_provider, source)
 
 
