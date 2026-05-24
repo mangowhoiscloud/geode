@@ -1660,7 +1660,7 @@ def test_append_session_index_swallows_oserror(
 # P0b — autoresearch journal event coverage
 # ---------------------------------------------------------------------------
 #
-# These tests guard the SessionJournal emission contract documented in
+# These tests guard the RunTranscript emission contract documented in
 # docs/audits/2026-05-19-self-improving-loop-observability-gap.md §4 (event
 # coverage) and §6 (SoT dedup: journal payloads must not duplicate
 # sessions.jsonl canonical fields). Regression here means a future writer

@@ -1,12 +1,12 @@
-"""``eval_response_recorded`` SessionJournal event — ADR-012 M4.0.
+"""``eval_response_recorded`` RunTranscript event — ADR-012 M4.0.
 
 M4.1 의 DPO canonical pack JSONL writer 의 *source* 가 되는 단일 event.
 각 (prompt, response) turn 마다 fitness 측정값 + 평가 metadata 를 active
-SessionJournal 에 emit — M4.1 이 journal stream 을 따라가며 pack
+RunTranscript 에 emit — M4.1 이 journal stream 을 따라가며 pack
 candidate 를 누적.
 
 **Event schema** — ``record.payload`` only (``session_id`` / ``gen_tag`` /
-``ts`` / ``component`` / ``event`` / ``level`` are top-level SessionJournal
+``ts`` / ``component`` / ``event`` / ``level`` are top-level RunTranscript
 record fields, not payload fields):
 
 .. code-block:: json
@@ -28,7 +28,7 @@ record fields, not payload fields):
 ``rollback_flag`` 는 사용자가 그 응답을 revert 했는지 — M4.1 의
 chosen/rejected 라벨링 핵심 신호 (revert=True → rejected).
 
-**No journal scope = no-op**. ``current_session_journal()`` 이 ``None``
+**No journal scope = no-op**. ``current_run_transcript()`` 이 ``None``
 이면 emit 자체가 안 일어남 (BACKFILL-SOT 의 contextvar 패턴 동일).
 """
 
@@ -40,7 +40,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 EVENT_NAME = "eval_response_recorded"
-"""SessionJournal event name — M4.1 reader 가 이 이름으로 filter."""
+"""RunTranscript event name — M4.1 reader 가 이 이름으로 filter."""
 
 
 def emit_eval_response_recorded(
@@ -52,11 +52,11 @@ def emit_eval_response_recorded(
     source: str = "",
     rollback_flag: bool = False,
 ) -> bool:
-    """Emit one ``eval_response_recorded`` event to the active SessionJournal.
+    """Emit one ``eval_response_recorded`` event to the active RunTranscript.
 
     Returns ``True`` if the event was appended, ``False`` if no journal
     is bound in the current ContextVar scope (graceful no-op — caller can
-    safely invoke even outside an explicit ``session_journal_scope``).
+    safely invoke even outside an explicit ``run_transcript_scope``).
 
     Args:
         prompt: User-side message verbatim (M4.1 will use as DPO ``prompt``).
@@ -73,9 +73,9 @@ def emit_eval_response_recorded(
             response. Signals "rejected" for DPO pack labeling.
     """
     # Lazy import — keep this module cheap when no journal is bound.
-    from core.observability.session_journal import current_session_journal
+    from core.self_improving_loop.run_transcript import current_run_transcript
 
-    journal = current_session_journal()
+    journal = current_run_transcript()
     if journal is None:
         return False
     payload: dict[str, Any] = {

@@ -199,7 +199,7 @@ def test_to_session_row_rounds_cost_and_elapsed() -> None:
 
 def test_current_session_metrics_lazy_init_when_unscoped() -> None:
     """Scope 밖에서 ``current_session_metrics()`` 호출 → 빈 SessionMetrics() 반환
-    (SessionJournal 의 no-op fallback 패턴 일치)."""
+    (RunTranscript 의 no-op fallback 패턴 일치)."""
     set_current_session_metrics(None)
     m = current_session_metrics()
     assert isinstance(m, SessionMetrics)

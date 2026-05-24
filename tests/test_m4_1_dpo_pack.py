@@ -22,16 +22,16 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.observability.session_journal import (
-    SessionJournal,
-    session_journal_scope,
-)
 from core.self_improving_loop.dpo_pack import (
     BuildResult,
     build_dpo_pack,
     pair_signature,
 )
 from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
+from core.self_improving_loop.run_transcript import (
+    RunTranscript,
+    run_transcript_scope,
+)
 
 
 @pytest.fixture
@@ -44,8 +44,8 @@ def pack_path(tmp_path: Path) -> Iterator[Path]:
     yield tmp_path / "dpo" / "pack.jsonl"
 
 
-def _journal(path: Path, session_id: str = "test") -> SessionJournal:
-    return SessionJournal(
+def _journal(path: Path, session_id: str = "test") -> RunTranscript:
+    return RunTranscript(
         session_id=session_id,
         gen_tag="auto",
         component="test",
@@ -104,7 +104,7 @@ def test_build_with_missing_journal_file_graceful(tmp_path: Path, pack_path: Pat
 
 
 def test_pairs_chosen_with_rejected_for_same_prompt(journal_path: Path, pack_path: Path) -> None:
-    with session_journal_scope(_journal(journal_path)):
+    with run_transcript_scope(_journal(journal_path)):
         emit_eval_response_recorded(prompt="explain DPO", response="good answer", fitness_score=0.9)
         emit_eval_response_recorded(
             prompt="explain DPO",
@@ -127,7 +127,7 @@ def test_pairs_chosen_with_rejected_for_same_prompt(journal_path: Path, pack_pat
 
 def test_picks_highest_chosen_and_lowest_rejected(journal_path: Path, pack_path: Path) -> None:
     """Three chosen + three rejected → top × bottom (steepest margin)."""
-    with session_journal_scope(_journal(journal_path)):
+    with run_transcript_scope(_journal(journal_path)):
         for resp, fit in [("good_low", 0.5), ("good_top", 0.95), ("good_mid", 0.7)]:
             emit_eval_response_recorded(prompt="q", response=resp, fitness_score=fit)
         for resp, fit in [("bad_high", 0.4), ("bad_bottom", 0.05), ("bad_mid", 0.2)]:
@@ -144,7 +144,7 @@ def test_picks_highest_chosen_and_lowest_rejected(journal_path: Path, pack_path:
 
 def test_chosen_only_prompt_counted_as_unpaired(journal_path: Path, pack_path: Path) -> None:
     """No rollback → no rejected → no pair, but events still counted."""
-    with session_journal_scope(_journal(journal_path)):
+    with run_transcript_scope(_journal(journal_path)):
         emit_eval_response_recorded(prompt="q", response="a", fitness_score=0.8)
     result = build_dpo_pack(journal_paths=[journal_path], pack_path=pack_path)
     assert result.events_seen == 1
@@ -154,7 +154,7 @@ def test_chosen_only_prompt_counted_as_unpaired(journal_path: Path, pack_path: P
 
 
 def test_rejected_only_prompt_counted_as_unpaired(journal_path: Path, pack_path: Path) -> None:
-    with session_journal_scope(_journal(journal_path)):
+    with run_transcript_scope(_journal(journal_path)):
         emit_eval_response_recorded(prompt="q", response="a", fitness_score=0.1, rollback_flag=True)
     result = build_dpo_pack(journal_paths=[journal_path], pack_path=pack_path)
     assert result.prompts_unpaired == 1
@@ -166,7 +166,7 @@ def test_rejected_only_prompt_counted_as_unpaired(journal_path: Path, pack_path:
 
 def test_rerun_skips_duplicates(journal_path: Path, pack_path: Path) -> None:
     """Re-running the builder over the same journal appends zero new rows."""
-    with session_journal_scope(_journal(journal_path)):
+    with run_transcript_scope(_journal(journal_path)):
         emit_eval_response_recorded(prompt="q", response="good", fitness_score=0.9)
         emit_eval_response_recorded(
             prompt="q", response="bad", fitness_score=0.1, rollback_flag=True
@@ -182,13 +182,13 @@ def test_rerun_skips_duplicates(journal_path: Path, pack_path: Path) -> None:
 def test_new_pair_appended_on_rerun(journal_path: Path, pack_path: Path) -> None:
     """Fresh prompt added to journal → second invocation appends just that pair."""
     journal = _journal(journal_path)
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         emit_eval_response_recorded(prompt="q1", response="g", fitness_score=0.9)
         emit_eval_response_recorded(
             prompt="q1", response="b", fitness_score=0.1, rollback_flag=True
         )
     build_dpo_pack(journal_paths=[journal_path], pack_path=pack_path)
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         emit_eval_response_recorded(prompt="q2", response="g2", fitness_score=0.8)
         emit_eval_response_recorded(
             prompt="q2", response="b2", fitness_score=0.2, rollback_flag=True
@@ -208,11 +208,11 @@ def test_multi_journal_merge(tmp_path: Path, pack_path: Path) -> None:
     """Two journals (different sessions) feed the same prompt → cross-session pair."""
     j1 = tmp_path / "s1" / "transcript.jsonl"
     j2 = tmp_path / "s2" / "transcript.jsonl"
-    with session_journal_scope(_journal(j1, session_id="s1")):
+    with run_transcript_scope(_journal(j1, session_id="s1")):
         emit_eval_response_recorded(
             prompt="shared", response="great", fitness_score=0.95, source="petri_audit"
         )
-    with session_journal_scope(_journal(j2, session_id="s2")):
+    with run_transcript_scope(_journal(j2, session_id="s2")):
         emit_eval_response_recorded(
             prompt="shared",
             response="awful",

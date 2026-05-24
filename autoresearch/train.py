@@ -628,11 +628,11 @@ def _emit_journal(
     level: str = "info",
     payload: dict[str, object] | None = None,
 ) -> None:
-    """Emit one SessionJournal event for this audit run.
+    """Emit one RunTranscript event for this audit run.
 
     P0b — autoresearch event coverage (docs/audits/2026-05-19-
     self-improving-loop-observability-gap.md §4). Centralises the
-    SessionJournal lazy-import + payload SoT contract (P0a §6: journal
+    RunTranscript lazy-import + payload SoT contract (P0a §6: journal
     events MUST NOT duplicate sessions.jsonl canonical fields). No-op
     when ``session_id`` / ``gen_tag`` are empty (run_audit called from
     tests without them) or when ``core.observability`` is unavailable
@@ -641,10 +641,10 @@ def _emit_journal(
     if not session_id or not gen_tag:
         return
     try:
-        from core.observability import SessionJournal
+        from core.self_improving_loop.run_transcript import RunTranscript
     except ImportError:
         return
-    SessionJournal(
+    RunTranscript(
         session_id=session_id,
         gen_tag=gen_tag,
         component="autoresearch",
@@ -748,7 +748,7 @@ def run_audit(
     falls back to the placeholder constant and the v2 schema records
     no provenance for synthesized data.
 
-    ``session_id`` / ``gen_tag`` are forwarded for SessionJournal emission
+    ``session_id`` / ``gen_tag`` are forwarded for RunTranscript emission
     (P0b — wrapper_override_dumped / subprocess_started / subprocess_finished
     / subprocess_timeout events). Both default to empty so unit tests that
     call ``run_audit(dry_run=...)`` directly stay unchanged — emission is

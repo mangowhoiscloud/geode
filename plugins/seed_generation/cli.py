@@ -308,7 +308,7 @@ def run_audit_seeds(
     ``stderr`` to capture the rendered summary, and (via monkeypatch)
     swap out the picker / pipeline factory.
 
-    PR-P2 — the SessionJournal scope is opened here (was previously
+    PR-P2 — the RunTranscript scope is opened here (was previously
     inside ``_dispatch_pipeline``) so cost-preview, pre-flight, and
     user-abort events also land in the per-session journal. Pre-flight
     failures (the dominant pre-PR observability gap) now emit
@@ -327,15 +327,15 @@ def run_audit_seeds(
     # generator / critic prompts.
     meta_review_snapshot = _load_priors_snapshot(err=err)
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     run_id = f"{gen_tag}-{resolved_dim}"
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id=run_id,
         gen_tag=gen_tag,
         component="seed-generation",
     )
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         picker_result = pick_bindings()
         print_tos_notice(picker_result, file=err, quiet=quiet)
 
@@ -443,12 +443,12 @@ def _dispatch_pipeline(
     cost. The function is monkeypatched in tests to assert the gate
     flow before the heavy import.
 
-    PR-P2 — the SessionJournal scope is now opened by the caller
+    PR-P2 — the RunTranscript scope is now opened by the caller
     (``run_audit_seeds``) so cost-preview / pre-flight events emitted
     before this dispatch land in the same per-session journal.
     Pipeline lifecycle markers (``pipeline_started`` /
     ``pipeline_finished``) and the post-run ``cost_divergence`` event
-    are emitted via :func:`core.observability.current_session_journal`.
+    are emitted via :func:`core.self_improving_loop.run_transcript.current_run_transcript`.
     """
     # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
     # under ``state/seed-generation/`` (env-overridable via
@@ -456,8 +456,8 @@ def _dispatch_pipeline(
     # ``~/.geode/seed-generation/`` — machine-specific, broke
     # cross-host reproducibility.
     from core.paths import STATE_SEED_GENERATION_DIR
+    from core.self_improving_loop.run_transcript import current_run_transcript
 
-    from core.observability import current_session_journal
     from plugins.seed_generation.orchestrator import (
         Pipeline,
         PipelineRegistry,
@@ -491,7 +491,7 @@ def _dispatch_pipeline(
     out.write(f"seed-generation: run_dir={run_dir}\n")
     out.flush()
 
-    journal = current_session_journal()
+    journal = current_run_transcript()
     if journal is not None:
         journal.append("pipeline_started", payload={"target_dim": target_dim})
 

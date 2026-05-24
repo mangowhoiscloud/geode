@@ -1,6 +1,6 @@
 """DPO canonical pack JSONL writer — ADR-012 M4.1.
 
-Consumes the ``eval_response_recorded`` SessionJournal event stream
+Consumes the ``eval_response_recorded`` RunTranscript event stream
 (M4.0) and emits a canonical preference pack — one JSONL row per
 ``(prompt, chosen, rejected)`` tuple — that any downstream DPO trainer
 (OpenAI fine-tuning, Bedrock DPO, HuggingFace TRL ``DPOTrainer``)

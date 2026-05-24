@@ -105,15 +105,14 @@ def test_anthropic_retryable_errors_contains_internal_server_error() -> None:
 
 def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
     """The ``on_retry`` callback wired into retry_with_backoff_generic must
-    append an ``llm_retry`` event to the active SessionJournal so silent
+    append an ``llm_retry`` event to the active RunTranscript so silent
     retries (esp. 529 Overloaded) become observable."""
     import json
     from pathlib import Path
 
     import core.paths
     from core.llm.providers.anthropic import _on_retry_journal_emit
-
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     # Redirect journal writes into a tmp dir without touching real
     # ~/.geode/self-improving-loop/.
@@ -126,12 +125,12 @@ def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
     real_tmp = Path(tempfile.mkdtemp(prefix="p1a-journal-"))
     monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", real_tmp)
     try:
-        journal = SessionJournal(
+        journal = RunTranscript(
             session_id="s-retry",
             gen_tag="gen-retry",
             component="autoresearch",
         )
-        with session_journal_scope(journal):
+        with run_transcript_scope(journal):
             _on_retry_journal_emit(
                 model="claude-opus-4-7",
                 attempt=2,
@@ -170,18 +169,17 @@ def test_on_retry_overloaded_emits_warn_level(monkeypatch: Any) -> None:
 
     import core.paths
     from core.llm.providers.anthropic import _on_retry_journal_emit
-
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     real_tmp = Path(tempfile.mkdtemp(prefix="p1a-overloaded-"))
     monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", real_tmp)
     try:
-        journal = SessionJournal(
+        journal = RunTranscript(
             session_id="s-529",
             gen_tag="gen-529",
             component="autoresearch",
         )
-        with session_journal_scope(journal):
+        with run_transcript_scope(journal):
             _on_retry_journal_emit(
                 model="claude-opus-4-7",
                 attempt=1,
@@ -205,7 +203,7 @@ def test_on_retry_noop_when_no_journal_in_scope(monkeypatch: Any) -> None:
     don't crash on every retry."""
     from core.llm.providers.anthropic import _on_retry_journal_emit
 
-    # No session_journal_scope active — must not raise.
+    # No run_transcript_scope active — must not raise.
     _on_retry_journal_emit(
         model="claude-opus-4-7",
         attempt=1,

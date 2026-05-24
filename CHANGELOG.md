@@ -49,6 +49,49 @@ functional change.
 
 ### Changed
 
+- **PR-CLEANUP-7 — ``SessionJournal`` renamed + relocated to
+  ``RunTranscript`` under ``core/self_improving_loop/``.** The class
+  hosted in ``core/observability/session_journal.py`` was misnamed
+  twice over: "journal" collided with the 3-Tier preservation
+  architecture's Tier 2 (summaries) when this class actually wrote
+  Tier 1 (event logs), and "observability" was the wrong location
+  because every caller (25 files across ``core/self_improving_loop/``,
+  ``plugins/seed_generation/``, ``plugins/petri_audit/``, plus the
+  ``autoresearch/`` package's emitter) lives inside the
+  self-improving-loop surface — no generic ``AgenticLoop`` consumer
+  ever bound one.
+  Move + rename:
+  - ``core/observability/session_journal.py`` →
+    ``core/self_improving_loop/run_transcript.py``.
+  - ``SessionJournal`` → ``RunTranscript``; ``current_session_journal``
+    → ``current_run_transcript``; ``session_journal_scope`` →
+    ``run_transcript_scope``; ``set_current_session_journal`` →
+    ``set_current_run_transcript``. The ContextVar key
+    (``"self_improving_loop_session_journal"`` →
+    ``"self_improving_loop_run_transcript"``) follows.
+  - Tests path mirror: ``tests/core/observability/test_session_journal.py``
+    → ``tests/core/self_improving_loop/test_run_transcript.py``.
+  ``core/observability/__init__.py`` drops the 4 re-exports
+  (``SessionJournal`` / ``current_session_journal`` /
+  ``session_journal_scope`` / ``set_current_session_journal``) — the
+  package is back to OTel + per-session metrics only. Callers that
+  reached the class through the ``core.observability`` re-export
+  migrate to the canonical
+  ``core.self_improving_loop.run_transcript`` import path.
+  Migration scope: ~30 files touched across ``core/``, ``plugins/``,
+  ``autoresearch/``, ``scripts/``, ``tests/``. The on-disk file
+  (``~/.geode/self-improving-loop/<id>/transcript.jsonl``) and the
+  JSONL schema (``{ts, session_id, gen_tag, component, level, event,
+  payload}``) are unchanged — no operator-visible data migration.
+  One test (``test_run_audit_seeds_emits_cost_preview_into_session_journal``
+  + 3 siblings) needed the ``RealJournal`` reference hoisted out of
+  the ``patch()`` context to avoid recursion (the pre-PR test relied
+  on the now-removed ``core.observability`` re-export holding the
+  canonical class while the inner ``session_journal`` attribute was
+  patched; with the canonical class now in one place, the test
+  pattern has to capture the unpatched class before entering the
+  patch context).
+
 - **Step J-b.3 — reflection node migrated to the LLMAdapter Protocol.**
   ``core/agent/loop/_reflection.py`` 's dispatch path moves off the
   legacy ``AgenticLLMPort.agentic_call`` surface (resolved via

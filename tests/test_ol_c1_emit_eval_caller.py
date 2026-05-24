@@ -2,7 +2,7 @@
 
 Pins:
 - ``autoresearch/train.py`` main() emits one ``eval_response_recorded``
-  event per audit cycle inside the active SessionJournal scope.
+  event per audit cycle inside the active RunTranscript scope.
 - Payload schema matches PR-M4.0 contract: ``prompt`` / ``response``
   / ``fitness_score`` / ``axis_scores`` / ``source`` / ``rollback_flag``.
 - ``source`` field == ``"autoresearch_audit"``.
@@ -17,14 +17,14 @@ import json
 from pathlib import Path
 
 import pytest
-from core.observability.session_journal import (
-    SessionJournal,
-    session_journal_scope,
+from core.self_improving_loop.run_transcript import (
+    RunTranscript,
+    run_transcript_scope,
 )
 
 
-def _journal_with_path(tmp_path: Path) -> SessionJournal:
-    return SessionJournal(
+def _journal_with_path(tmp_path: Path) -> RunTranscript:
+    return RunTranscript(
         session_id="ol-c1-test",
         gen_tag="auto-test",
         component="autoresearch",
@@ -55,7 +55,7 @@ def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
     from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         ok = emit_eval_response_recorded(
             prompt="autoresearch audit cycle on commit abc123 "
             "(seed_select='default', description='gen-1')",
@@ -81,7 +81,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
     from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         emit_eval_response_recorded(
             prompt="autoresearch audit cycle on commit def456 "
             "(seed_select='default', description='gen-2-bad')",
@@ -99,7 +99,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
 
 
 def test_autoresearch_emit_pattern_no_journal_scope_is_noop() -> None:
-    """No session_journal_scope → emit returns False, no file written, no raise."""
+    """No run_transcript_scope → emit returns False, no file written, no raise."""
     from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
 
     ok = emit_eval_response_recorded(

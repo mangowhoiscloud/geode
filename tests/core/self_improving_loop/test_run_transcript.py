@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 from core.hooks import HookEvent
-from core.observability.session_journal import (
-    SessionJournal,
-    current_session_journal,
-    session_journal_scope,
+from core.self_improving_loop.run_transcript import (
+    RunTranscript,
+    current_run_transcript,
+    run_transcript_scope,
 )
 
 
-def _make_journal(tmp_path: Path) -> SessionJournal:
-    return SessionJournal(
+def _make_journal(tmp_path: Path) -> RunTranscript:
+    return RunTranscript(
         session_id="s-test",
         gen_tag="autoresearch-test",
         component="autoresearch",
@@ -57,7 +57,7 @@ def test_append_supports_level_and_default_payload(tmp_path: Path) -> None:
 def test_append_creates_parent_dirs(tmp_path: Path) -> None:
     """Nested paths are auto-mkdir'd before write."""
     deep = tmp_path / "nested" / "deeper" / "transcript.jsonl"
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="s",
         gen_tag="g",
         component="autoresearch",
@@ -88,7 +88,7 @@ def test_append_swallows_oserror(
         raise OSError("simulated")
 
     monkeypatch.setattr(Path, "mkdir", _raise)
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="s",
         gen_tag="g",
         component="autoresearch",
@@ -97,42 +97,42 @@ def test_append_swallows_oserror(
     journal.append("event")  # Must not raise.
 
 
-def test_current_session_journal_returns_none_outside_scope() -> None:
+def test_current_run_transcript_returns_none_outside_scope() -> None:
     """ContextVar default is None when no scope is active."""
-    assert current_session_journal() is None
+    assert current_run_transcript() is None
 
 
-def test_session_journal_scope_binds_and_resets(tmp_path: Path) -> None:
+def test_run_transcript_scope_binds_and_resets(tmp_path: Path) -> None:
     """The context manager binds the journal and restores prior value on exit."""
     journal = _make_journal(tmp_path)
-    assert current_session_journal() is None
-    with session_journal_scope(journal):
-        assert current_session_journal() is journal
-    assert current_session_journal() is None
+    assert current_run_transcript() is None
+    with run_transcript_scope(journal):
+        assert current_run_transcript() is journal
+    assert current_run_transcript() is None
 
 
-def test_session_journal_scope_restores_on_exception(tmp_path: Path) -> None:
+def test_run_transcript_scope_restores_on_exception(tmp_path: Path) -> None:
     """Exception inside the scope still restores the ContextVar."""
     journal = _make_journal(tmp_path)
-    with pytest.raises(RuntimeError, match="boom"), session_journal_scope(journal):
+    with pytest.raises(RuntimeError, match="boom"), run_transcript_scope(journal):
         raise RuntimeError("boom")
-    assert current_session_journal() is None
+    assert current_run_transcript() is None
 
 
 def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Unset path falls back to ``GLOBAL_SELF_IMPROVING_LOOP_DIR`` / <session> / transcript.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
-    # Reload both core.paths and core.observability.session_journal so
+    # Reload both core.paths and core.self_improving_loop.run_transcript so
     # the lazy import resolves under the monkeypatched Path.home().
     import importlib
 
-    import core.observability.session_journal as journal_mod
     import core.paths as paths_mod
+    import core.self_improving_loop.run_transcript as journal_mod
 
     importlib.reload(paths_mod)
     importlib.reload(journal_mod)
-    journal = journal_mod.SessionJournal(
+    journal = journal_mod.RunTranscript(
         session_id="s-default",
         gen_tag="g",
         component="autoresearch",
@@ -148,7 +148,7 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
-    """journal_hooks._on_subagent_* writes to the active SessionJournal."""
+    """journal_hooks._on_subagent_* writes to the active RunTranscript."""
     from unittest.mock import MagicMock
 
     from core.memory.journal_hooks import make_journal_handlers
@@ -164,7 +164,7 @@ def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
         assert name in handlers, f"missing handler {name!r}"
 
     journal = _make_journal(tmp_path)
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         handlers["journal_subagent_started"](
             HookEvent.SUBAGENT_STARTED,
             {"task_id": "t-1", "task_type": "seed-generator-spawn"},
@@ -186,7 +186,7 @@ def test_hook_handlers_route_subagent_events_to_journal(tmp_path: Path) -> None:
 
 
 def test_hook_handlers_noop_without_active_journal() -> None:
-    """Outside session_journal_scope, the hooks fall through silently."""
+    """Outside run_transcript_scope, the hooks fall through silently."""
     from unittest.mock import MagicMock
 
     from core.memory.journal_hooks import make_journal_handlers
