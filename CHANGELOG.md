@@ -47,6 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-DEFECT-AB** — sub-agent failure signal propagation across the
+  worker IPC boundary. Two coupled regressions surfaced by the
+  v0.99.52 seed-generation smoke (proximity 111s + critic 66s both
+  returned malformed JSON that downstream phase agents then ingested
+  as legitimate content):
+  - **Defect A** (`core/llm/errors.py:classify_llm_error`):
+    `ClaudeCliTransientUpstreamError` (raised by PR-T's claude-cli
+    transient classifier) fell through to the generic `unknown`
+    classification, which routed claude-cli 429s / overload / quota
+    signatures through the AgenticLoop's "Unexpected error.
+    Auto-retrying." fallback path instead of the dedicated
+    `rate_limit` branch at `agent_loop.py:1595`. Now lazy-imports the
+    plugin exception and maps it to `rate_limit` so the loop fails
+    fast with the same diagnostic as native SDK 429s — paperclip
+    parity (`execute.ts:809` tags identical signatures with
+    `errorCode = "claude_transient_upstream"`).
+  - **Defect B** (`core/agent/worker.py:_run_agentic`):
+    `WorkerResult.success = bool(text)` reported True whenever the
+    sub-agent loop produced any non-empty string, including the
+    `_build_model_action_result` fallback UI text the loop emits on
+    `model_action_required` / `context_exhausted` / `llm_error` /
+    `billing_error` / `cost_budget_exceeded` / `convergence_detected`
+    terminations. Now gates `success` on the absence of
+    `AgenticResult.error` AND the termination_reason not being one of
+    those six failure sentinels. `summary` now surfaces the actual
+    cause ("Sub-agent failed: model_action_required;
+    termination_reason=model_action_required") so parent timeline rows
+    explain WHY the spawn produced no usable output. The legacy "No
+    response from sub-agent" string is preserved for the
+    empty-text + no-error + unknown-termination case so existing log
+    greppers keep working.
+  - Pinned by `tests/core/llm/test_classify_llm_error.py` (19 cases —
+    PR-T mapping + every Anthropic + OpenAI SDK branch +
+    parametric unknown-fallback smoke) +
+    `tests/test_worker.py::TestResolveWorkerOutcome` (16 cases —
+    every failure sentinel + clarification / input_blocked /
+    user_cancelled exemptions + convergence-as-failure pin +
+    summary contract).
+
 ## [0.99.52] - 2026-05-24
 
 > 2-PR bundle. PR-COMM-1 (#1587): 74 HookEvent → 11 group patterns
