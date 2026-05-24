@@ -48,6 +48,38 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-COMM-4** — transcript `seq` column + liveness watchdog API on
+  `SessionTranscript` and `RunTranscript`. Two coupled observability
+  improvements:
+  - Per-instance monotonic `seq` stamped on every JSONL row
+    (`_append` + `record_lifecycle_event`). Lets multi-event timelines
+    sort deterministically when `ts` ties (sub-second clock drift /
+    NTP reset). Per-instance, not cross-process atomic — multi-writer
+    files produce interleaved seqs that readers re-sort by `(ts, seq)`.
+  - `last_touched_at()` returns the transcript file's mtime; `None`
+    when the file doesn't exist (a never-started run isn't "stale").
+    `is_stale(threshold_s, *, now=None)` checks if no event arrived
+    in the threshold window; `now` injectable for deterministic
+    tests. `RunTranscript` exposes the same passthrough so seed-gen
+    operators can poll `run_transcript.is_stale(900)` directly without
+    poking at the wrapped `SessionTranscript`.
+  - Existing `tests/core/self_improving_loop/test_run_transcript.py::test_append_writes_jsonl_row`
+    updated to include the new `"seq": 1` field in its exact-match
+    assertion (full-row regression pin — every existing field is
+    still grep-provable in the diff).
+  - **Thread-safety fix** (Codex MCP review catch): pre-fix the seq
+    stamp lock was released before the write lock was re-acquired,
+    letting concurrent same-instance callers allocate seq N+1 / N+2
+    and then write in the opposite order (seq monotonic but file
+    order broken). Now seq stamping + write are held under a single
+    `self._lock` acquisition. Pinned by
+    `test_seq_holds_under_concurrent_threads` (10 threads × 10
+    appends → 100 rows with seqs 1..100 in exact file order).
+  - Pinned by `tests/test_transcript_seq_liveness.py` (13 cases —
+    seq monotonic × 4, seq under threads × 1, seq across instances
+    × 1, last_touched_at × 2, is_stale × 3, RunTranscript passthrough
+    × 3).
+
 - **PR-COMM-3d** — AgenticLoop's main `_call_llm` path now emits
   `LLM_CALL_STARTED` / `LLM_CALL_ENDED` hooks with `session_id` +
   `usage` + `cost_usd` so the SQLite `agent_runtime_state.total_*_tokens`
