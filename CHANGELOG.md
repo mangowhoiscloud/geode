@@ -48,6 +48,69 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-PERMS-FLAG-FIX** — two coupled fixes for the v0.99.53
+  sub-agent isolation surface (caught by smoke 5 / Codex MCP review):
+  - **A: actual permission bypass flag.** `build_claude_cli_argv()`
+    previously emitted `--allow-dangerously-skip-permissions` which
+    is `claude --help`'s meta ENABLE flag, NOT the actual bypass.
+    The v0.99.53 smoke surfaced this when 1st sub-agent passed
+    (Bash tools went through a lighter check) and 2nd hit Write
+    denial on the same path. Now emits `--dangerously-skip-permissions`
+    (no `--allow-` prefix) which is the documented bypass flag.
+  - **B: claude-cli session cache isolation.** `build_claude_cli_argv()`
+    gains a `disable_session_persistence: bool = False` knob that
+    appends `--no-session-persistence`. claude-cli's own
+    `~/.claude/projects/<cwd-hash>/sessions/` cache is keyed on
+    *cwd*, not on GEODE's per-agent `task_id`, so successive smoke
+    runs in the same cwd silently shared cached conversation
+    context — surfaced in smoke 5's proximity sub-agent response
+    ("the excerpt mentions a scenario from a different smoke").
+    AgenticLoop adapter opts in via True since the sub-agent
+    dispatch model is "one task_id, one spawn" — there is no
+    cross-turn resume to optimize at that layer. PR-V's
+    `--resume <id>` path stays intact for callers that explicitly
+    thread a `resume_session_id` (none do at sub-agent dispatch
+    today; preserved for future explicit-id callers).
+  - Pinned by 4 new argv unit tests:
+    `test_argv_skip_permissions_uses_real_bypass_flag_not_meta`,
+    `test_argv_disable_session_persistence_default_false`,
+    `test_argv_disable_session_persistence_true_appends_flag`,
+    `test_argv_session_persistence_composes_with_skip_permissions`.
+    Existing PR-SKIP-PERMS argv tests updated to the new flag
+    literal.
+
+### Added
+- **PR-PERMS-FLAG-FIX (JSON-forcing bundle)** — `AdapterCallRequest`
+  gains a `response_schema: dict | None = None` field that threads
+  JSON Schema structured-output forcing through both subprocess
+  adapter paths:
+  - **claude-cli** (`plugins/petri_audit/claude_cli_provider.py`):
+    new `json_schema: dict | None = None` param on
+    `build_claude_cli_argv()` appends `--json-schema <inline-json>`
+    when set. Mirrors Anthropic SDK
+    `messages.parse(output_format=PydanticModel)` →
+    `JSONOutputFormatParam(schema=..., type="json_schema")`.
+  - **codex-cli** (`core/llm/adapters/codex_cli.py`): when
+    `req.response_schema` is set, the adapter materialises the
+    schema into a tempfile and appends `--output-schema <FILE>`
+    (codex-cli takes a file path, claude-cli takes inline — both
+    surface map to the same provider-side structured-output API
+    that the OpenAI SDK exposes as
+    `chat.completions.parse(response_format=PydanticModel)`).
+    Tempfile cleanup via try/finally so a subprocess crash doesn't
+    leak `/tmp` artefacts.
+  - Default `None` preserves back-compat (callers that don't need
+    structured output get free-form text responses).
+  - Eliminates the "LLM returns natural language + code block
+    instead of pure JSON" failure that clipped proximity / critic /
+    pilot / meta_reviewer in the v0.99.53 smoke 5. Wire-through from
+    seed-generation orchestrator → role-specific schema is a
+    follow-up PR (this PR lands the infrastructure).
+  - Pinned by 3 new argv unit tests for claude-cli:
+    `test_argv_json_schema_default_none_omits_flag`,
+    `test_argv_json_schema_dict_appends_serialized_inline`,
+    `test_argv_json_schema_composes_with_all_other_flags`.
+
 - **PR-PRT-STATUS** — claude-cli transient classifier no longer
   false-matches the informational `rate_limit_event` payload as a
   rejection signal. Pre-fix the regex's first alternative was

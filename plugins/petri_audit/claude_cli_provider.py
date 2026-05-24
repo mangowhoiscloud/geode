@@ -336,6 +336,8 @@ def build_claude_cli_argv(
     extra_args: Iterable[str] | None = None,
     resume_session_id: str | None = None,
     skip_permissions: bool = False,
+    disable_session_persistence: bool = False,
+    json_schema: dict[str, Any] | None = None,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
 
@@ -366,12 +368,44 @@ def build_claude_cli_argv(
             ``execute.ts:697`` "instructions are already in the
             session cache").
         skip_permissions: When True append the
-            ``--allow-dangerously-skip-permissions`` flag. Required
-            for headless sub-agent execution (operator can't approve
+            ``--dangerously-skip-permissions`` flag. Required for
+            headless sub-agent execution (operator can't approve
             file-system permission prompts in a background spawn).
             GEODE's AgenticLoop adapter call passes True; inspect_ai
             / petri_audit interactive paths leave it False so the
             CLI's permission prompts still gate writes.
+
+            Note: ``claude --help`` lists two related flags. The
+            ``--allow-dangerously-skip-permissions`` variant only
+            *enables the option*; ``--dangerously-skip-permissions``
+            (no ``--allow-`` prefix) actually performs the bypass.
+            PR-PERMS-FLAG-FIX (2026-05-25) corrected from the former
+            to the latter after the v0.99.53 smoke surfaced the
+            difference (1st sub-agent passed, 2nd hit Write denial
+            because the meta-flag didn't actually bypass).
+        disable_session_persistence: When True append
+            ``--no-session-persistence``. claude-cli's own
+            ``~/.claude/projects/<cwd-hash>/sessions/`` cache is keyed
+            on cwd, NOT on GEODE's per-agent task_id, so successive
+            smoke runs sharing the same cwd would read each other's
+            cached conversation context — surfaced as "the excerpt
+            mentions a scenario from a different smoke" in the v0.99.53
+            smoke. Setting True turns off the persistence side-channel
+            entirely, restoring strict per-spawn isolation at the cost
+            of giving up PR-V's cross-turn cached-marker billing
+            optimization. GEODE's AgenticLoop adapter call passes True
+            because the sub-agent execution model is "one task_id, one
+            spawn" — there is no cross-turn resume to optimize.
+        json_schema: JSON Schema dict that constrains the model's
+            final response shape. When set, appends
+            ``--json-schema <json>`` (inline). Mirrors the Anthropic
+            SDK's ``messages.parse(output_format=PydanticModel)`` →
+            ``JSONOutputFormatParam(schema=..., type="json_schema")``
+            structured-output API. Eliminates the "LLM returns natural
+            language + code block instead of pure JSON" failure that
+            clipped proximity / critic / pilot / meta_reviewer in the
+            v0.99.53 smoke. Callers pass the dict; this helper handles
+            serialisation.
 
     The output format is pinned to ``stream-json`` + ``--verbose`` —
     we need every event to construct ``ModelOutput`` faithfully.
@@ -414,16 +448,40 @@ def build_claude_cli_argv(
         # subprocess, so any tool that requires interactive permission
         # approval (Write outside cwd, Bash dangerous commands, etc.)
         # would hang the subprocess on a prompt no one can answer.
-        # The v0.99.53 smoke surfaced this as Write-tool permission
-        # denials on every seed candidate generation (claude-cli's
-        # LLM tried 3 Write attempts + Bash-cat-redirect + Agent
-        # delegation, all blocked, then exited cleanly with a "please
-        # grant write access" final message — but with empty
-        # candidates downstream). This flag is recommended only for
-        # sandboxes with no internet access per ``claude --help``;
-        # GEODE's sub-agent dispatch IS such a sandbox (denied_tools
-        # set + working_dirs whitelist + isolated subprocess).
-        argv += ["--allow-dangerously-skip-permissions"]
+        # PR-PERMS-FLAG-FIX (2026-05-25): the original
+        # ``--allow-dangerously-skip-permissions`` is only the meta
+        # ENABLE flag; ``--dangerously-skip-permissions`` (no
+        # ``--allow-`` prefix) is the one that ACTUALLY bypasses.
+        # v0.99.53 smoke caught this — 1st sub-agent passed (Bash
+        # tools bypassed under a lighter check) while 2nd hit Write
+        # denial because the meta-flag never enabled the bypass.
+        # ``claude --help`` documents both: this flag is recommended
+        # only for sandboxes; GEODE's sub-agent dispatch IS such a
+        # sandbox (denied_tools set + working_dirs whitelist +
+        # isolated subprocess).
+        argv += ["--dangerously-skip-permissions"]
+    if disable_session_persistence:
+        # PR-PERMS-FLAG-FIX (2026-05-25) — claude-cli's own session
+        # cache (``~/.claude/projects/<cwd-hash>/sessions/``) is keyed
+        # on cwd, NOT on GEODE's per-agent ``task_id``. v0.99.53
+        # smoke surfaced this as cross-smoke conversation leakage —
+        # the proximity sub-agent in smoke 5 responded with "the
+        # excerpt mentions a scenario from a different smoke" because
+        # claude-cli auto-resumed a cached session from smoke 3 / 4
+        # that happened to share the same cwd. Disabling persistence
+        # restores strict per-spawn isolation at the cost of PR-V's
+        # cross-turn cached-marker billing — acceptable for sub-agent
+        # spawns which run once and exit. ``--no-session-persistence``
+        # is documented in ``claude --help``: "Disable session
+        # persistence ... only works with --print".
+        argv += ["--no-session-persistence"]
+    if json_schema is not None:
+        # PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) — pass
+        # the schema inline so claude-cli's structured-output
+        # validator constrains the model's final response. Mirrors
+        # paperclip / Anthropic SDK
+        # ``messages.parse(output_format=...)`` → JSONOutputFormat.
+        argv += ["--json-schema", json.dumps(json_schema, separators=(",", ":"))]
     if extra_args:
         argv += list(extra_args)
     return argv
