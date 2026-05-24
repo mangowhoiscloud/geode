@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.50] - 2026-05-24
+
+> Two-PR bundle. PR-HELPERS-3SPLIT (#1578) splits the deferred-from-v0.99.48
+> ``core/agent/loop/_helpers.py`` umbrella into three domain-named
+> siblings (``_tool_factory`` / ``_sub_agent_announce`` /
+> ``_planner_dispatch``) and closes the last item from the cleanup arc.
+> PR #1579 fixes the claude-cli silent-success path discovered during
+> the 2026-05-24 seed-generation smoke — ``ClaudeCliAdapter.acomplete``
+> was returning raw stream-json stdout as the LLM's reply, so claude-cli's
+> ``! Unexpected error. Auto-retrying.`` retry-storm text was being
+> treated as a normal empty turn and the parent recorded a candidate
+> that was never written. Adapter now parses events through a
+> paperclip-ported transient-upstream classifier and raises loud.
+
 ### Fixed
 - **claude-cli silent-success / "ghost candidate" path** — ``ClaudeCliAdapter.acomplete``
   was returning raw ``--output-format stream-json`` stdout as
