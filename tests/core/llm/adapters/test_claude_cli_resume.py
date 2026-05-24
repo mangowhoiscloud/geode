@@ -3,6 +3,14 @@
 Pins invariants from
 ``docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`` §3.4
 (V.1 contract + V.2 argv + V.2 parser + V.3 round-trip + V.4 persistence).
+
+PR-COMM-3c (2026-05-24) — adds the ``isolate_sessions_db`` autouse
+fixture so the V.4 round-trip tests don't pollute the developer's
+``~/.geode/projects/.../sessions.db`` via the dual-write path. The
+``_persist_session_id`` helper now writes to BOTH the legacy
+``session.json`` AND the SQLite ``agent_runtime_state.claude_cli_session_id``
+column; without isolation the SQLite write would land in the user's
+real DB.
 """
 
 from __future__ import annotations
@@ -10,6 +18,26 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_sessions_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect the sessions.db default path to ``tmp_path`` for the
+    duration of each test + reset the ``agent_runtime_state`` module's
+    cached connection so it picks up the override."""
+    from core.memory.session_manager import SessionManager
+
+    from core.observability import agent_runtime_state as ars
+
+    db = tmp_path / "sessions.db"
+    SessionManager(db_path=db)
+    monkeypatch.setattr("core.memory.session_manager._get_default_db_path", lambda: db)
+    ars._reset_for_tests(db_path=db)
+    yield db
+    ars._reset_for_tests()
+
 
 # ---------------------------------------------------------------------------
 # V.1 — AdapterCallRequest / AdapterCallResult new fields
