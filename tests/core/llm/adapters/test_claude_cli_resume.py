@@ -230,8 +230,12 @@ def test_v3_adapter_round_trip_threads_resume_and_emits_session_id() -> None:
     captured_argv: list[str] = []
 
     async def _fake_subprocess(
-        argv: list[str], stdin_text: str, timeout_s: float
+        argv: list[str], stdin_text: str, timeout_s: float, **kwargs: object
     ) -> tuple[str, str, int]:
+        # PR-RESUME-NO-PERSIST-FIX (2026-05-25) added a keyword-only
+        # ``cwd`` parameter to ``_run_claude_subprocess``. Accept
+        # **kwargs so this fixture stays compatible with current and
+        # future keyword-only additions.
         captured_argv.extend(argv)
         return (stdout, "", 0)
 
