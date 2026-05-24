@@ -172,6 +172,20 @@ def build_hooks(
     # missing event simply never reached the run log).
     hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
 
+    # PR-COMM-3 (2026-05-24) — the ``agent_runtime_state`` schema +
+    # writer module are landed in this PR; the bootstrap hook
+    # registration that calls those writers is deferred to PR-COMM-3b.
+    # Reason (Codex MCP review catch): the current emit payloads for
+    # SESSION_ENDED (``_lifecycle.py:_final_hook_payloads``),
+    # SUBAGENT_COMPLETED (``sub_agent.py:_emit_completed``), and
+    # LLM_CALL_ENDED (``router/calls/*.py``) do NOT carry the
+    # ``agent_kind`` / ``component`` / ``adapter_type`` /
+    # ``claude_cli_session_id`` / ``usage`` / ``session_id`` fields the
+    # writers need. Wiring handlers now would silently no-op in
+    # production — violating Read-Write parity. PR-COMM-3b will
+    # augment those emit sites and then register the handlers, keeping
+    # both ends of the wire grep-provable in the same diff.
+
     # Stuck detector + hook handler
     stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)
     stuck_name, stuck_fn = _make_stuck_hook_handler(stuck_detector)
