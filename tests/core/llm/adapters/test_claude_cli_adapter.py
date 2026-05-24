@@ -246,9 +246,13 @@ def test_adapter_transient_writes_postmortem_dump(tmp_path) -> None:  # type: ig
     # write doesn't pollute the home tree.
     diagnostics_root = tmp_path
     adapter = ClaudeCliAdapter()
-    stdout = _make_stream_json(
-        [{"type": "result", "error": "anthropic.RateLimitError: 429", "result": ""}]
-    )
+    # PR-TRANSIENT-BARE-HTTP-CODES — was
+    # ``"anthropic.RateLimitError: 429"`` which matched the bare
+    # ``\b429\b`` alternative. That alternative is now removed; use
+    # the phrase-form signal that real claude-cli rate-limit errors
+    # carry.
+    error_message = "anthropic.RateLimitError: rate_limit_error too many requests"
+    stdout = _make_stream_json([{"type": "result", "error": error_message, "result": ""}])
     with (
         patch(
             "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
@@ -290,9 +294,9 @@ def test_adapter_transient_writes_postmortem_dump(tmp_path) -> None:  # type: ig
             # walk to the structured event regardless.
             assert data["signal"]["source"] in {"stdout", "event"}
             assert (
-                "RateLimitError" in data["signal"]["matched_text"]
-                or "429" in data["signal"]["matched_text"]
+                "rate_limit_error" in data["signal"]["matched_text"]
+                or "too many requests" in data["signal"]["matched_text"]
             )
             assert len(data["events"]) == 1
             assert data["events"][0]["type"] == "result"
-            assert data["events"][0]["payload"]["error"] == "anthropic.RateLimitError: 429"
+            assert data["events"][0]["payload"]["error"] == error_message
