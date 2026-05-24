@@ -95,3 +95,64 @@ def test_parse_empty_required_fields_accepts_any_dict() -> None:
         required_fields=(),
     )
     assert out == {"anything": "goes"}
+
+
+def test_parse_text_json_codeblock_fence_with_lang_tag() -> None:
+    """Smoke 6 regression — critic/proximity LLM wrapped JSON in
+    ```json ... ``` fence; the parser must strip the fence before
+    json.loads()."""
+    out = parse_structured_output(
+        {"text": '```json\n{"a": 1, "b": 2}\n```'},
+        required_fields=("a", "b"),
+    )
+    assert out == {"a": 1, "b": 2}
+
+
+def test_parse_text_json_codeblock_fence_no_lang_tag() -> None:
+    """Bare ``` fence (no language tag) must also unwrap."""
+    out = parse_structured_output(
+        {"text": '```\n{"a": 1}\n```'},
+        required_fields=("a",),
+    )
+    assert out == {"a": 1}
+
+
+def test_parse_text_json_codeblock_fence_with_leading_prose() -> None:
+    """LLM may prepend prose before the fence — the regex skips to the
+    block and unwraps it."""
+    payload = (
+        'Sure, here is the analysis:\n\n```json\n{"candidate_id": "gen1-000", "score": 7}\n```'
+    )
+    out = parse_structured_output(
+        {"text": payload},
+        required_fields=("candidate_id", "score"),
+    )
+    assert out == {"candidate_id": "gen1-000", "score": 7}
+
+
+def test_parse_text_json_codeblock_fence_uppercase_lang_tag() -> None:
+    out = parse_structured_output(
+        {"text": '```JSON\n{"x": 99}\n```'},
+        required_fields=("x",),
+    )
+    assert out == {"x": 99}
+
+
+def test_parse_text_json_codeblock_inline_no_newline() -> None:
+    """Some LLMs collapse the fence to a single line — still unwrap."""
+    out = parse_structured_output(
+        {"text": '```json {"a": 1, "b": 2} ```'},
+        required_fields=("a", "b"),
+    )
+    assert out == {"a": 1, "b": 2}
+
+
+def test_parse_text_plain_json_still_works_after_fence_helper() -> None:
+    """Regression — plain (un-fenced) JSON must still parse correctly
+    when the helper is active. No fence in input → helper returns the
+    string unchanged."""
+    out = parse_structured_output(
+        {"text": '{"a": 1, "b": 2}'},
+        required_fields=("a", "b"),
+    )
+    assert out == {"a": 1, "b": 2}
