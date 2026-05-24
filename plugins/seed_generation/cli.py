@@ -327,6 +327,7 @@ def run_audit_seeds(
     # generator / critic prompts.
     meta_review_snapshot = _load_priors_snapshot(err=err)
 
+    from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
     from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
@@ -348,7 +349,16 @@ def run_audit_seeds(
         component="seed-generation",
         path=run_dir / "transcript.jsonl",
     )
-    with run_transcript_scope(journal):
+    # PR-Q.5 + PR-U (2026-05-24, Codex MCP review of #1584 caught this
+    # gap) — wrap the orchestrator body in BOTH ``run_dir_scope`` and
+    # ``run_transcript_scope`` so downstream writers (IsolatedRunner's
+    # ``GEODE_RUN_DIR`` env-forward, SessionTranscript's
+    # ``resolve_sub_agent_path`` lookup, RunTranscript mirror from the
+    # worker subprocess) all see the binding. Pre-fix the cli only
+    # opened ``run_transcript_scope`` and the ContextVar binding for
+    # run_dir was never set, so PR-Q's redirect path silently fell back
+    # to legacy ``~/.geode/workers/`` + ``~/.geode/transcripts/`` globals.
+    with run_dir_scope(run_dir), run_transcript_scope(journal):
         picker_result = pick_bindings()
         print_tos_notice(picker_result, file=err, quiet=quiet)
 

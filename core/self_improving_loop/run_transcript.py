@@ -107,13 +107,33 @@ class RunTranscript:
         level: str = "info",
         payload: dict[str, Any] | None = None,
         ts: float | None = None,
+        actor_type: str = "orchestrator",
+        actor_id: str = "pipeline",
+        action: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        task_id: str | None = None,
     ) -> None:
         """Append one JSONL event row. I/O failure logs a warning.
 
         Delegates to :meth:`SessionTranscript.record_lifecycle_event` so the
         underlying schema and writer are the canonical Tier-1 path.
         ``ts`` is honoured for determinism (tests pass a fixed value).
+
+        PR-U (2026-05-24, paperclip activity_log parity, F3 in
+        docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
+        the optional ``actor_type`` / ``actor_id`` / ``action`` /
+        ``entity_type`` / ``entity_id`` / ``task_id`` carry the same
+        classification quintuple paperclip's ``activity_log`` table
+        does. Existing orchestrator callers
+        (``journal.append("phase_started", payload={...})``) keep working
+        — the defaults auto-infer ``actor_type="orchestrator"``,
+        ``actor_id="pipeline"``, ``action=f"pipeline.{event}"`` so legacy
+        rows still classify cleanly. SessionTranscript's mirror path
+        (F4) populates these explicitly with
+        ``actor_type="agent"`` / ``action="agent.user_message"`` etc.
         """
+        inferred_action = action if action is not None else f"pipeline.{event}"
         self._transcript.record_lifecycle_event(
             event=event,
             session_id=self.session_id,
@@ -123,6 +143,12 @@ class RunTranscript:
             payload=payload,
             ts=ts,
             file_path=self.path,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            action=inferred_action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            task_id=task_id,
         )
 
 

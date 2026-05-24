@@ -48,6 +48,56 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-Q.5 + PR-U — transcript 표준화 (식별자 정렬 + paperclip-style timeline mirror).**
+  ``docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`` 의
+  PR1 구현. Post-PR-Q audit 에서 발견한 식별자 단절 (sub-agent 의 result+stderr 는
+  ``sub_agents/<task_id>/`` 에 가는데 dialogue 만 ``sub_agents/s-<uuid>/`` 별도
+  폴더로 빠짐) + pipeline transcript 가 phase 마커만 들고 agent dialogue 가
+  inline 안 보이는 GAP 두 가지를 함께 해결.
+  - **F1 (Q.5)** ``core/agent/loop/agent_loop.py`` — ``AgenticLoop.__init__``
+    에 ``session_id: str = ""`` 인자 추가. 비어있으면 legacy ``s-<uuid>``,
+    채워지면 그 값을 그대로 SessionTranscript 의 session_id 로.
+  - **F2 (Q.5)** ``core/agent/worker.py`` — worker subprocess 의 AgenticLoop
+    call site 가 ``session_id=request.task_id`` 명시. WorkerRequest.task_id 가
+    AgenticLoop / SessionTranscript / dialogue.jsonl path 의 단일 anchor 로
+    수렴. 결과: ``sub_agents/<task_id>/result.json + stderr.log +
+    dialogue.jsonl`` 단일 폴더 (PR-Q 의 의도 회복).
+  - **F3 (U)** ``core/self_improving_loop/run_transcript.py``,
+    ``core/observability/transcript.py`` — ``RunTranscript.append`` 와
+    ``SessionTranscript.record_lifecycle_event`` 가 paperclip
+    ``activity_log`` schema 의 ``actor_type`` / ``actor_id`` / ``action`` /
+    ``entity_type`` / ``entity_id`` / ``task_id`` 옵션 필드 추가. 기존
+    caller (``journal.append("phase_started", payload={...})``) 는 default
+    auto-infer (``orchestrator`` / ``pipeline`` / ``f"pipeline.{event}"``)
+    로 무변경 동작.
+  - **F4 (U)** ``SessionTranscript.record_user_message`` /
+    ``record_assistant_message`` / ``record_tool_call`` / ``record_tool_result``
+    가 active ``RunTranscript`` 에 truncated mirror append. pipeline
+    transcript 가 phase events + agent dialogue 통합 timeline 으로 동작.
+    풀 본문은 dialogue.jsonl 에 유지 (paperclip activity_log ↔
+    issue_comments 동등 navigation).
+  - 8 새 invariant 테스트 (``tests/core/observability/test_unified_timeline.py``
+    I1-I6) — single-anchor / single-dir / navigation 결정성 / backwards-compat
+    + I5 (subprocess RunTranscript rebind via env) + I6 (cli.py grep-pin).
+    기존 ``test_run_transcript.py`` 회귀 schema-additive fix 1건
+    (orchestrator default auto-infer 노출).
+  - **Codex MCP review** (post-#1584 push) caught two production gaps
+    initial tests masked: (FAIL-1) ContextVars don't cross subprocess
+    boundaries → SessionTranscript mirror was silently no-op in worker
+    subprocesses (production path); (FAIL-2) ``plugins/seed_generation/
+    cli.py`` opened ``run_transcript_scope`` but NOT ``run_dir_scope``,
+    so PR-Q's redirect path silently fell back to legacy
+    ``~/.geode/`` globals. Both fixed in the same PR:
+    - ``cli.py:351`` now wraps in ``with run_dir_scope(run_dir),
+      run_transcript_scope(journal):`` — env-bridge propagates.
+    - ``worker.py:main()`` re-creates a thin ``RunTranscript`` pointing
+      at the same ``<run_dir>/transcript.jsonl`` and binds
+      ``set_current_run_transcript`` so cross-process mirror appends
+      atomically (line < PIPE_BUF on macOS/Linux).
+  - paperclip parity: ``packages/db/src/schema/activity_log.ts`` 의 12-field
+    schema 매핑, ``packages/adapters/claude-local/src/server/parse.ts`` 의
+    session_id 추출 패턴은 PR2 (V) 에서 이어짐.
+
 - **PR-Q — observability 일원화 (run-dir-as-anchor).** Pre-PR-Q 한
   seed-generation cycle 의 산출물 + 트랜스크립트가 5 prefix 에 분산
   (``state/seed-generation/<run_id>/`` + ``~/.geode/self-improving-loop/<run_id>/``

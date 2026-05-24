@@ -95,6 +95,7 @@ class AgenticLoop:
         disable_settings_drift: bool = False,
         allowed_tool_names: set[str] | None = None,
         source: str = "",
+        session_id: str = "",
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -221,7 +222,19 @@ class AgenticLoop:
 
             from core.observability.transcript import SessionTranscript
 
-            self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
+            # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
+            # docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
+            # caller-provided ``session_id`` wins over the auto-generated
+            # ephemeral uuid. The worker subprocess passes
+            # ``WorkerRequest.task_id`` so result.json + stderr.log +
+            # dialogue.jsonl all land under the SAME
+            # ``<run_dir>/sub_agents/<task_id>/`` directory. Empty
+            # ``session_id`` (REPL / gateway / tests with no per-task identity)
+            # falls back to ``s-<uuid>`` so non-worker callers are unaffected.
+            if session_id:
+                self._session_id = session_id
+            else:
+                self._session_id = f"s-{_uuid.uuid4().hex[:12]}"
             self._transcript = SessionTranscript(self._session_id)
         except Exception:
             log.warning("Transcript init failed", exc_info=True)
