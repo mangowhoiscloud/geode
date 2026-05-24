@@ -573,14 +573,21 @@ _CONTEXT_OVERFLOW_CODES: frozenset[str] = frozenset(
 )
 
 # Word-anchored phrases — every entry must describe context overflow
-# unambiguously. ``max_tokens`` parameter errors must NOT match.
+# unambiguously. ``max_tokens`` parameter errors (Unsupported parameter,
+# Unknown parameter, etc.) must NOT match. Patterns kept narrow:
+# they describe length-of-input language, not parameter-name language.
 _CONTEXT_OVERFLOW_RE = re.compile(
     r"\b("
     r"context\s+length\s+exceeded|"
     r"context\s+window\s+exceeded|"
+    r"maximum\s+context\s+length|"
     r"prompt\s+is\s+too\s+long|"
-    r"prompt\s+exceeds\s+the\s+(?:maximum\s+)?context|"
-    r"exceeds\s+the\s+maximum\s+context\s+length|"
+    # "prompt exceeds the model's context window of 200000 tokens" —
+    # tolerate up to 3 natural-language words between "exceeds" and
+    # "context" so possessives ("the model's") + adjectives ("the
+    # maximum") don't break the match.
+    r"prompt\s+exceeds(?:\s+\S+){0,3}\s+context|"
+    r"exceeds\s+the\s+(?:maximum\s+)?context|"
     r"input\s+is\s+too\s+long|"
     r"too\s+many\s+input\s+tokens|"
     r"too\s+many\s+tokens"
