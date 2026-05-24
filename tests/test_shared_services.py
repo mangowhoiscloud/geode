@@ -167,33 +167,39 @@ class TestBuildSharedServices:
         _, loop = services.create_session(SessionMode.DAEMON)
         assert loop.model == settings.model
 
-    def test_model_switch_propagates_across_sessions(self) -> None:
-        """v0.82.0 staleness regression — mid-flight `settings.model`
+    def test_model_switch_propagates_across_sessions(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """v0.82.0 + PR-R6 staleness regression — disk-side ``GEODE_MODEL``
         mutation must reach the next session.
 
         Initial single-session check (``test_model_resolved_per_session``)
-        only proves boot-time consistency. The original v0.82.0 bug
-        survived that check because the cached ``_model`` field happened
-        to match ``settings.model`` at boot — divergence only emerged
-        after ``cmd_model`` mutated ``settings.model`` mid-flight. This
-        test reproduces that scenario without invoking the LLM.
+        only proves boot-time consistency. The v0.82.0 bug survived that
+        check because the cached ``_model`` field happened to match
+        ``settings.model`` at boot — divergence only emerged after
+        ``cmd_model`` mutated state mid-flight.
+
+        PR-R6 (2026-05-24) — rewritten to mutate ``GEODE_MODEL`` (the disk
+        surface ``_apply_model`` actually writes) rather than an in-process
+        ``settings.model`` attribute. The previous test mutated the
+        in-process attribute directly, which silently reverts now that
+        ``services.create_session`` calls
+        ``reload_settings_from_disk()`` first (the env-var mutation is the
+        whole point — that's how operator ``/model`` reaches the daemon).
         """
-        from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY, settings
+        from core.config import ANTHROPIC_PRIMARY, OPENAI_PRIMARY
         from core.server.supervised.services import SessionMode
 
         services = build_shared_services()
-        original = settings.model
-        try:
-            settings.model = ANTHROPIC_PRIMARY
-            _, loop_a = services.create_session(SessionMode.DAEMON)
-            assert loop_a.model == ANTHROPIC_PRIMARY
+        monkeypatch.setenv("GEODE_MODEL", ANTHROPIC_PRIMARY)
+        _, loop_a = services.create_session(SessionMode.DAEMON)
+        assert loop_a.model == ANTHROPIC_PRIMARY
 
-            settings.model = OPENAI_PRIMARY
-            _, loop_b = services.create_session(SessionMode.DAEMON)
-            assert loop_b.model == OPENAI_PRIMARY
-            assert loop_a.model == ANTHROPIC_PRIMARY
-        finally:
-            settings.model = original
+        monkeypatch.setenv("GEODE_MODEL", OPENAI_PRIMARY)
+        _, loop_b = services.create_session(SessionMode.DAEMON)
+        assert loop_b.model == OPENAI_PRIMARY
+        # ``loop_a`` is a separate AgenticLoop instance constructed before
+        # the env flip — its captured ``model`` field stays at the value
+        # it was built with (no auto-revert).
+        assert loop_a.model == ANTHROPIC_PRIMARY
 
     def test_no_agentic_ref_attribute(self) -> None:
         """SharedServices should not have agentic_ref (removed in system-hardening)."""

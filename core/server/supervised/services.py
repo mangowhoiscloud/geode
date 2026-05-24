@@ -184,8 +184,30 @@ class SharedServices:
         # mutations propagate to every new AgenticLoop. Previously the
         # boot-time `self._model` was used and `/model gpt-5.5` was
         # silently ignored by every subsequent session.
-        from core.config import _resolve_provider, settings
+        #
+        # PR-R6 (2026-05-24) — "fresh per session" was reading the daemon's
+        # *in-memory* ``settings.model``, which itself goes stale because
+        # ``_apply_model`` writes to disk + the CLI process's settings,
+        # but never touched the daemon's pydantic singleton. PR-DRIFT-CUT
+        # removed the auto-revert drift sync that silently masked the gap,
+        # surfacing the bug: ``/model gpt-5.5`` was ignored at the next
+        # session start because daemon.settings.model was still its
+        # boot-time value. ``reload_settings_from_disk()`` mutates the
+        # singleton in place from ``.env`` + ``config.toml`` so the read
+        # below sees what disk actually says. Hermes-style boundary read.
+        from core.config import _resolve_provider, reload_settings_from_disk, settings
 
+        reload_settings_from_disk()
+
+        # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
+        # picker (writes ``GEODE_AGENTIC_EFFORT`` + ``[agentic].effort``)
+        # was caught by ``reload_settings_from_disk`` above but never
+        # crossed the AgenticLoop boundary — the loop's
+        # ``effort: str = "high"`` constructor default won by omission.
+        # Bridging here closes the gap so the model + effort axes both
+        # honor Hermes-style boundary read end-to-end (sub-agents already
+        # do via ``sub_agent.py:533``'s direct ``settings.agentic_effort``
+        # read).
         loop = AgenticLoop(
             conversation,
             executor,
@@ -194,6 +216,7 @@ class SharedServices:
             cost_budget=self._cost_budget,
             model=settings.model,
             provider=_resolve_provider(settings.model),
+            effort=settings.agentic_effort,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
             hooks=self.hook_system,
