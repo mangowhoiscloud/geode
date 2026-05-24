@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from core.config import ANTHROPIC_PRIMARY
-from core.llm.client import LLMUsage, LLMUsageAccumulator
+from core.llm.router import LLMUsage, LLMUsageAccumulator
 from core.ui.status import GeodeStatus, TextSpinner, _snapshot, _UsageSnapshot
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 
-from core.runtime_state.transcript import (
+from core.observability.transcript import (
     MAX_INPUT_CHARS,
     MAX_TEXT_CHARS,
     SessionTranscript,

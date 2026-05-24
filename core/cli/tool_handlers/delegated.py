@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from core.cli.tool_handlers._helpers import _safe_delegate
+from core.cli.tool_handlers.clarification import _safe_delegate
 
 _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     # web / document / note

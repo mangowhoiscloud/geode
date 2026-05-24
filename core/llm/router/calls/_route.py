@@ -30,7 +30,7 @@ def _route_provider(model: str) -> str:
     consults the same ProfileStore, so the path is end-to-end coherent.
     """
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         target = resolve_routing(model)
         if target is not None:

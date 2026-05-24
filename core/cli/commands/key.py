@@ -153,8 +153,8 @@ def _seed_payg_plan_from_key(provider: str, key: str) -> None:
 
     try:
         from core.auth.profiles import AuthProfile, CredentialType
-        from core.llm.routing.plan_registry import get_plan_registry
-        from core.llm.routing.plans import default_plan_for_payg
+        from core.llm.strategies.plan_registry import get_plan_registry
+        from core.llm.strategies.plans import default_plan_for_payg
         from core.wiring.container import ensure_profile_store
 
         registry = get_plan_registry()

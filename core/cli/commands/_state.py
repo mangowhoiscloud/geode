@@ -289,7 +289,7 @@ def model_available(model_id: str) -> bool:
     routing raises so a broken plan registry does not lock the picker.
     """
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         return resolve_routing(model_id) is not None
     except Exception:
@@ -315,7 +315,7 @@ def forced_login_method_for(provider: str) -> str | None:
     bit that surprises them.
 
     Mirrors the normalisation in
-    ``core.llm.routing.plan_registry._apply_forced_login_method`` so the
+    ``core.llm.strategies.plan_registry._apply_forced_login_method`` so the
     badge stays in lockstep with the actual sort behaviour: any of
     ``apikey`` / ``api`` / ``api_key`` / ``key`` collapse to the
     ``"apikey"`` label that the underlying sort uses.

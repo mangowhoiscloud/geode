@@ -198,8 +198,10 @@ class TestToolRegistry:
         set_async_tool_executor(None)
 
     def test_migrated_tool_handlers_do_not_call_sync_execute(self):
-        from core.cli.tool_handlers.calendar import _build_calendar_handlers
-        from core.cli.tool_handlers.notification import _build_notification_handlers
+        from core.cli.tool_handlers.single_tool import (
+            _build_calendar_handlers,
+            _build_notification_handlers,
+        )
         from core.runtime import GeodeRuntime
         from core.wiring.container import build_llm_adapters
 

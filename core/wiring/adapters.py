@@ -134,8 +134,8 @@ def build_gateway() -> None:
     which pollers to register. Defaults to all three (slack, discord,
     telegram) when the config key is absent.
     """
-    from core.channels.binding import ChannelManager, set_gateway
     from core.config import settings
+    from core.integrations.messaging.binding import ChannelManager, set_gateway
     from core.mcp.notification_port import get_notification
 
     if not settings.gateway_enabled:

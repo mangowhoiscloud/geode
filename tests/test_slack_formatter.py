@@ -1,8 +1,8 @@
-"""Tests for core.channels.slack_formatter — Markdown → Slack mrkdwn conversion."""
+"""Tests for core.integrations.messaging.slack_formatter — Markdown → Slack mrkdwn conversion."""
 
 from __future__ import annotations
 
-from core.channels.slack_formatter import markdown_to_slack_mrkdwn
+from core.integrations.messaging.slack_formatter import markdown_to_slack_mrkdwn
 
 _ZWS = "\u200b"
 

@@ -2,10 +2,10 @@
 
 ``pyproject.toml`` 의 ``[tool.importlinter]`` contracts 가 다음을 강제한다:
 
-  1. core.cli ↛ core.server, core.channels (CLI 가 daemon 의존 금지)
+  1. core.cli ↛ core.server, core.integrations.messaging (CLI 가 daemon 의존 금지)
   2. core.agent ↛ core.cli, core.server (agent loop 은 process-pure)
   3. core.server ↛ core.cli (server 는 agent 만 host, CLI 모름)
-  4. core.channels ↛ core.cli, core.server, core.agent (외부 IO 추상화 순수)
+  4. core.integrations.messaging ↛ core.cli, core.server, core.agent (외부 IO 추상화 순수)
 
 Pre-v0.52 결함이었던 "/login openai 가 daemon RPC 로 가서 OAuth UI 안 보임"
 같은 process binding 위반은 PR 단계에서 lint-imports 로 즉시 차단된다.

@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from core.scheduler.scheduler.models import DEFAULT_LOG_DIR
+from core.scheduler.models import DEFAULT_LOG_DIR
 
 log = logging.getLogger(__name__)
 

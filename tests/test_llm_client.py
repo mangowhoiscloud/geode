@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
-from core.llm.client import (
+from core.llm.router import (
     LLMUsage,
     LLMUsageAccumulator,
     calculate_cost,
@@ -171,7 +171,7 @@ class TestUsageAccumulatorContext:
 
 class TestCallLLMParsed:
     def test_parsed_output_success(self):
-        from core.llm.client import call_llm_parsed
+        from core.llm.router import call_llm_parsed
         from pydantic import BaseModel
 
         class DummyOutput(BaseModel):
@@ -199,7 +199,7 @@ class TestCallLLMParsed:
         assert result.score == 4.2
 
     def test_parsed_output_none_raises(self):
-        from core.llm.client import call_llm_parsed
+        from core.llm.router import call_llm_parsed
         from pydantic import BaseModel
 
         class DummyOutput(BaseModel):
@@ -229,7 +229,7 @@ class TestCallLLMParsed:
             )
 
     def test_parsed_output_with_cache(self):
-        from core.llm.client import call_llm_parsed
+        from core.llm.router import call_llm_parsed
         from pydantic import BaseModel
 
         class DummyOutput(BaseModel):
@@ -278,7 +278,7 @@ class TestLLMUsageEdgeCases:
         assert d["call_count"] == 1
 
     def test_calculate_cost_all_models(self):
-        from core.llm.client import MODEL_PRICING
+        from core.llm.router import MODEL_PRICING
 
         for model_name in MODEL_PRICING:
             cost = calculate_cost(model_name, 1000, 1000)
@@ -310,7 +310,7 @@ class TestProviderRouting:
             mock_client.messages.parse.return_value = mock_response
             mock_get.return_value = mock_client
 
-            from core.llm.client import call_llm_parsed
+            from core.llm.router import call_llm_parsed
 
             result = call_llm_parsed(
                 "system",
@@ -343,7 +343,7 @@ class TestProviderRouting:
         with patch(
             "core.llm.router.calls.parsed._get_provider_client", return_value=mock_glm_client
         ):
-            from core.llm.client import call_llm_parsed
+            from core.llm.router import call_llm_parsed
 
             result = call_llm_parsed(
                 "system",
@@ -376,7 +376,7 @@ class TestProviderRouting:
         with patch(
             "core.llm.router.calls.parsed._get_provider_client", return_value=mock_openai_client
         ):
-            from core.llm.client import call_llm_parsed
+            from core.llm.router import call_llm_parsed
 
             result = call_llm_parsed(
                 "system",
@@ -401,7 +401,7 @@ class TestProviderRouting:
         mock_glm_client.chat.completions.create.return_value = mock_response
 
         with patch("core.llm.router.calls.text._get_provider_client", return_value=mock_glm_client):
-            from core.llm.client import call_llm
+            from core.llm.router import call_llm
 
             result = call_llm("system", "user", model="glm-5")
 
@@ -427,7 +427,7 @@ class TestProviderRouting:
             mock_client.messages.create.return_value = mock_response
             mock_get.return_value = mock_client
 
-            from core.llm.client import call_llm
+            from core.llm.router import call_llm
 
             result = call_llm("system", "user", model="claude-opus-4-6")
 

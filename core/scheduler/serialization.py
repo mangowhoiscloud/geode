@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from core.scheduler.scheduler.models import (
+from core.scheduler.models import (
     ActiveHours,
     Schedule,
     ScheduledJob,

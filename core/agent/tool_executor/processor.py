@@ -22,8 +22,8 @@ from core.agent.safety import (
 )
 from core.hooks.system import HookEvent
 
-from ._helpers import _compute_model_tool_limit, _guard_tool_result
 from .executor import ToolExecutor
+from .result_token_guard import _compute_model_tool_limit, _guard_tool_result
 
 log = logging.getLogger(__name__)
 

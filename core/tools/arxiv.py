@@ -98,7 +98,7 @@ class ArxivSearchTool:
         """Async entry point — required by ``_safe_delegate`` worker path.
 
         CSP-2 fix-up (Codex MCP CRITICAL): the delegated handler in
-        ``core/cli/tool_handlers/_helpers.py:_safe_delegate`` looks up
+        ``core/cli/tool_handlers/clarification.py:_safe_delegate`` looks up
         a callable ``aexecute`` on the tool instance; tools that expose
         only ``_execute_sync`` fail at spawn time with "must implement
         aexecute()". We wrap the sync body via ``asyncio.to_thread`` so

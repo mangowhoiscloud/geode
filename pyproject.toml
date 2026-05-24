@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.47"
+version = "0.99.48"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -220,10 +220,10 @@ viz = [
 root_package = "core"
 
 [[tool.importlinter.contracts]]
-name = "CLI must not import server/channels (process boundary)"
+name = "CLI must not import server/messaging (process boundary)"
 type = "forbidden"
 source_modules = ["core.cli"]
-forbidden_modules = ["core.server", "core.channels"]
+forbidden_modules = ["core.server", "core.integrations.messaging"]
 # v0.52 phase 6 — geode serve 명령이 cli/__init__.py 안에 있어서
 # daemon entry 가 cli/ 의 일부로 남아있음. v0.53 에서 server/entrypoint.py
 # 로 분리하면 이들 ignore 제거.
@@ -231,9 +231,9 @@ ignore_imports = [
     "core.cli.typer_serve -> core.server.supervised.services",
     "core.cli.typer_serve -> core.server.supervised.webhook_handler",
     "core.cli.typer_serve -> core.server.ipc_server.poller",
-    "core.cli.typer_serve -> core.channels.binding",
+    "core.cli.typer_serve -> core.integrations.messaging.binding",
     "core.cli.scheduler_drain -> core.server.supervised.services",
-    "core.wiring.adapters -> core.channels.binding",
+    "core.wiring.adapters -> core.integrations.messaging.binding",
 ]
 
 [[tool.importlinter.contracts]]
@@ -273,15 +273,15 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Channels are capability-pure (no process imports)"
+name = "Messaging integration is capability-pure (no process imports)"
 type = "forbidden"
-source_modules = ["core.channels"]
+source_modules = ["core.integrations.messaging"]
 forbidden_modules = ["core.cli", "core.server", "core.agent"]
 # v0.52 phase 6 — channel_manager (구) 의 BasePoller 의존은 사실 channels 가
 # poller 추상화를 알아야 함. v0.53 에서 poller_base 를 channels/ 로 승격할지
 # server/ 에 둘지 결정.
 ignore_imports = [
-    "core.channels.binding -> core.server.supervised.poller_base",
+    "core.integrations.messaging.binding -> core.server.supervised.poller_base",
 ]
 
 [tool.ruff]

@@ -47,6 +47,306 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.48] - 2026-05-24
+
+> Cleanup-arc release — 7 PRs (PR-DOCS-CANT-CAN + PR-CLEANUP-3
+> through 7 + Step J-b.3) plus a single naming-pivot follow-up. The
+> arc started from a 25-package `core/` audit against 7 frontier
+> agents and ended with `core/` at 22 packages, 4 `_helpers`/`_utils`
+> survivors renamed or pruned, 2 backward-compat shims removed
+> (`core/llm/client.py`, the `core.observability` re-exports), 6 new
+> Naming/Compat/Registry CANNOT rows landed in CLAUDE.md, and the
+> reflection node migrated to the Path-B `LLMAdapter` Protocol. The
+> SessionJournal → RunTranscript relocation follow-up (PR-CLEANUP-7
+> #1569) closes the operator catch on the misleading "journal" name
+> that the 3-Tier preservation architecture reserves for Tier 2
+> summaries.
+
+### Changed
+
+- **PR-CLEANUP-7 — ``SessionJournal`` renamed + relocated to
+  ``RunTranscript`` under ``core/self_improving_loop/``.** The class
+  hosted in ``core/observability/session_journal.py`` was misnamed
+  twice over: "journal" collided with the 3-Tier preservation
+  architecture's Tier 2 (summaries) when this class actually wrote
+  Tier 1 (event logs), and "observability" was the wrong location
+  because every caller (25 files across ``core/self_improving_loop/``,
+  ``plugins/seed_generation/``, ``plugins/petri_audit/``, plus the
+  ``autoresearch/`` package's emitter) lives inside the
+  self-improving-loop surface — no generic ``AgenticLoop`` consumer
+  ever bound one.
+  Move + rename:
+  - ``core/observability/session_journal.py`` →
+    ``core/self_improving_loop/run_transcript.py``.
+  - ``SessionJournal`` → ``RunTranscript``; ``current_session_journal``
+    → ``current_run_transcript``; ``session_journal_scope`` →
+    ``run_transcript_scope``; ``set_current_session_journal`` →
+    ``set_current_run_transcript``. The ContextVar key
+    (``"self_improving_loop_session_journal"`` →
+    ``"self_improving_loop_run_transcript"``) follows.
+  - Tests path mirror: ``tests/core/observability/test_session_journal.py``
+    → ``tests/core/self_improving_loop/test_run_transcript.py``.
+  ``core/observability/__init__.py`` drops the 4 re-exports
+  (``SessionJournal`` / ``current_session_journal`` /
+  ``session_journal_scope`` / ``set_current_session_journal``) — the
+  package is back to OTel + per-session metrics only. Callers that
+  reached the class through the ``core.observability`` re-export
+  migrate to the canonical
+  ``core.self_improving_loop.run_transcript`` import path.
+  Migration scope: ~30 files touched across ``core/``, ``plugins/``,
+  ``autoresearch/``, ``scripts/``, ``tests/``. The on-disk file
+  (``~/.geode/self-improving-loop/<id>/transcript.jsonl``) and the
+  JSONL schema (``{ts, session_id, gen_tag, component, level, event,
+  payload}``) are unchanged — no operator-visible data migration.
+  One test (``test_run_audit_seeds_emits_cost_preview_into_session_journal``
+  + 3 siblings) needed the ``RealJournal`` reference hoisted out of
+  the ``patch()`` context to avoid recursion (the pre-PR test relied
+  on the now-removed ``core.observability`` re-export holding the
+  canonical class while the inner ``session_journal`` attribute was
+  patched; with the canonical class now in one place, the test
+  pattern has to capture the unpatched class before entering the
+  patch context).
+
+- **Step J-b.3 — reflection node migrated to the LLMAdapter Protocol.**
+  ``core/agent/loop/_reflection.py`` 's dispatch path moves off the
+  legacy ``AgenticLLMPort.agentic_call`` surface (resolved via
+  :func:`core.llm.adapters.resolve_agentic_adapter`) and onto the
+  v0.99.39 Path-B Protocol — :func:`~core.llm.adapters.registry.resolve_for`
+  + :meth:`~core.llm.adapters.base.LLMAdapter.acomplete` with a typed
+  :class:`~core.llm.adapters.base.AdapterCallRequest`. The reflection
+  call therefore inherits I.a's Codex OAuth header dedup and F's GLM
+  adapter family on the same code path the J-b.2 mutator runner now
+  uses (so the agentic loop and the self-improving-loop mutator share
+  one credential / adapter surface for the API path).
+
+  Translation: the in-source ``_REFLECTION_TOOL`` dict (kept as SoT so
+  the ADR-012 ``reflection`` policy override path keeps working) is
+  converted to a :class:`~core.llm.adapters.base.ToolSpec` at request
+  time. The ``strict: True`` field the legacy dict carried is dropped
+  in translation — ``ToolSpec`` does not surface it today, and
+  ``_anthropic_common.translate_tool`` would strip it anyway. The
+  client-side ``_apply_reflection`` isinstance + range checks already
+  enforce the same payload contract, so the regression is a soft
+  degrade from "server-rejects-malformed" to "client-coerces-silently"
+  rather than a fail-open. Restoring server-side strict validation is
+  tracked as a future ``ToolSpec`` Protocol extension.
+
+  Result-side: ``_extract_reflection_input`` now reads from
+  :attr:`AdapterCallResult.tool_uses` (tuple of ``{id, name, input}``
+  dicts) but tolerates the legacy ``AgenticResponse.content`` list-of-
+  ``ToolUseBlock`` shape for back-compat. A ``_normalize_provider_for_registry``
+  helper (4 lines, duplicated from
+  :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
+  per the "no premature hoisting" principle — both callers can
+  diverge later if their needs split) translates
+  ``"openai-codex"`` → ``"openai"`` so the registry's narrower
+  vocabulary lands on the right adapter.
+
+  Tests: ``tests/test_reflection_node.py`` 's ``_StubAdapter`` now
+  implements ``acomplete(AdapterCallRequest)`` instead of
+  ``agentic_call(**kwargs)``, ``_install_reflection_stubs``
+  monkeypatches ``resolve_for`` instead of ``resolve_agentic_adapter``,
+  the happy-path + tool-schema assertions move to the new
+  ``AdapterCallResult(tool_uses=(...))`` / ``ToolSpec`` shape. The
+  ``tools[0].get("strict") is True`` assertion is removed alongside
+  the dict→ToolSpec translation; a comment in the test calls out the
+  intentional contract narrowing.
+  ``tests/test_s0b_reflection_reader.py`` 's source-substring
+  assertions move from ``system=active_system`` / ``tools=[active_tool]``
+  to ``system_prompt=active_system`` / ``tools=(tool_spec,)`` to
+  match the dataclass field names.
+
+  **Out of scope (intentional)**: the AgenticLoop's main call path
+  (``core/agent/loop/agent_loop.py``, ``_model_switching.py``,
+  package ``__init__``) still uses
+  :func:`~core.llm.router.resolve_agentic_adapter` +
+  ``adapter.agentic_call(...)``. That migration is its own sprint —
+  the agentic call surface is materially larger (streaming +
+  ``tool_use_id`` round-trip + retry orchestration) than the
+  reflection call and needs separate Codex-MCP review. J-b.3 stops
+  at the reflection node.
+
+### Removed
+
+- **PR-CLEANUP-6 — file-name hygiene sweep: catch-all `_helpers` /
+  `utils` filename survivors.** Four targets, four different fates,
+  one rule (the new Naming CANNOT row that forbids ``_helpers`` /
+  ``_utils`` / ``_misc`` filenames once a caller appears):
+  - **`core/cli/_helpers.py` deleted** — 21-LOC file with one
+    function (``parse_dry_run_flag``) that had zero callers across
+    ``core/``, ``tests/``, ``plugins/``. Dead code; deletion is the
+    cleanest enforcement. ``core/utils/env_io.py``'s docstring (it
+    was the v0.85.0 split target of this file) updated to record
+    the removal.
+  - **`core/agent/tool_executor/_helpers.py` renamed to
+    `result_token_guard.py`** (60 LOC) — owns
+    ``_compute_model_tool_limit`` + ``_guard_tool_result``, which
+    together form the per-tool token-budget guard the
+    ``ToolExecutor`` runs on each result. Two relative imports
+    (``processor.py`` + package ``__init__``) updated.
+  - **`core/mcp/utils.py` renamed to `signal_fallback.py`** (78 LOC)
+    — owns ``parse_mcp_content`` + ``try_mcp_signal_async``, the
+    MCP-first / fixture-fallback shape extracted from
+    ``core/tools/signal_tools.py`` during the v0.66.2 step-5 split
+    so external plugins could adopt the same surface. Currently
+    zero in-tree callers (intentional public surface); kept (not
+    deleted) for the plugin contract.
+  - **`core/hooks/utils.py` renamed to `dispatch.py`** (36 LOC) —
+    owns ``fire_hook``, the cross-layer hook dispatch helper
+    consolidated from the four near-identical ``_fire_hook`` copies.
+    "dispatch" is what the function actually does; "utils" was a
+    placeholder. 4 importers (``core/tools/memory_tools.py``,
+    ``core/llm/provider_dispatch.py``, ``core/llm/router/_hooks.py``,
+    ``core/cli/__init__.py``) updated.
+
+  **Deferred (one file left over, on purpose)**:
+  ``core/agent/loop/_helpers.py`` (170 LOC, host of
+  ``get_agentic_tools`` + ``check_announced_results`` +
+  ``try_decompose``) was the consolidation target of PR-CLEANUP-1
+  and is genuinely multi-concern (tool factory + sub-agent announce
+  poller + planner dispatch). Any rename would either be vague
+  (``_internals.py``) or would force the PR-CLEANUP-1 fold to
+  reverse. The right move is to either (a) accept the catch-all as
+  load-bearing for this one case or (b) split the file along its
+  three sub-concerns in a separate PR — flagged for the next
+  cleanup sprint rather than rushed here.
+
+### Changed
+
+- **PR-CLEANUP-5 — `core/cli/tool_handlers/` consolidation + `_helpers`
+  rename.** Two cleanups in this surface:
+  - **Six small handler files (each <50 LOC, each wrapping exactly
+    one tool class) folded into a single
+    ``core/cli/tool_handlers/single_tool.py``.** The files were
+    ``data.py`` / ``notification.py`` / ``output.py`` /
+    ``offload.py`` / ``computer_use.py`` / ``calendar.py``. Every
+    builder did the same thing (instantiate one Tool class, wrap
+    its ``aexecute`` in a closure, return ``{name: handler}``)
+    with zero shared state, so the per-tool split was pure noise.
+    The ``_build_<area>_handlers`` symbol names are preserved
+    verbatim, so the package ``__init__.py`` and external test
+    callers continue to import them unchanged — only the source
+    module-name differs.
+  - **``core/cli/tool_handlers/_helpers.py`` renamed to
+    ``clarification.py``** to satisfy the new Naming CANNOT row
+    that forbids ``_helpers`` / ``_utils`` filenames once a caller
+    appears. The file owns two functions — ``_clarify`` (builds
+    the ``clarification_needed`` follow-up-question response) and
+    ``_safe_delegate`` (turns missing-kwarg exceptions into
+    ``_clarify`` calls). Both functions are clarification-shaped
+    responses for tool dispatch, so the new name describes the
+    file's actual role. 6 importers + 2 docstring references
+    (``core/tools/arxiv.py``, ``core/tools/seed_pool_search.py``)
+    updated.
+
+### Removed
+
+- **PR-CLEANUP-4 — `core/llm/client.py` re-export shim removed.** 162-LOC
+  backward-compatibility module that re-exported 30+ symbols from
+  ``core.llm.router``, ``core.llm.fallback``, ``core.llm.providers.anthropic``,
+  and ``core.llm.errors``. The new "Compat" CANNOT row (added in
+  PR-DOCS-CANT-CAN) forbids re-export shims past their 1-release
+  grace, and this module had outlived its purpose — every production
+  path already imported from the canonical modules; only 6 test files
+  still routed through the shim.
+  Migration: 15 import sites across 6 test files
+  (``tests/test_failover.py``, ``tests/test_agentic_loop.py``,
+  ``tests/test_model_failover.py``, ``tests/test_tool_use.py``,
+  ``tests/test_status.py``, ``tests/test_llm_client.py``) rewrote
+  ``core.llm.client`` → ``core.llm.router`` (where every symbol they
+  reached for actually lives). ``tests/test_failover.py`` separately
+  imports ``retry_with_backoff`` from
+  ``core.llm.providers.anthropic`` (aliased ``_retry_with_backoff``
+  to keep the test-internal name stable). 190 tests across the
+  affected files pass post-migration. CLAUDE.md's
+  "Cascading Updates" table updated to point at the real LLM-adapter
+  layout (``core/llm/router/`` + ``core/llm/providers/``) instead of
+  the deleted shim.
+
+### Changed
+
+- **PR-CLEANUP-3 — three structural renames driven by the new CLAUDE.md
+  Naming CANNOTs.** Pure structural moves, no behaviour change; every
+  import prefix updated in lock-step with the move.
+  - **`core/scheduler/scheduler/` flattened to `core/scheduler/`.** The
+    inner package was a same-name-nested folder (`X/X/`) — the
+    pre-flatten state was the outer `core/scheduler/__init__.py` being
+    empty while the inner one carried the 81-line re-export surface.
+    All 8 source modules (factory, jitter, lock, models, run_log,
+    serialization, service, timezone) move up one level; the re-export
+    `__init__.py` follows them; internal cross-references rewrite
+    `core.scheduler.scheduler.X` → `core.scheduler.X`. 12 external
+    consumers updated (4 production + 8 tests). The pre-split-monolith
+    historical reference (`core/scheduler/scheduler.py — pre-split
+    monolith`) is preserved verbatim in the new `__init__` docstring.
+  - **`core/channels/` renamed to `core/integrations/messaging/`.** The
+    package only ever contained Slack / Discord / Telegram bindings; the
+    abstract name "channels" suggested a more general capability than
+    actually existed. The new `core/integrations/` parent leaves room
+    for sibling integrations (calendar, etc.) without re-introducing
+    the same abstract noun. `pyproject.toml`'s import-linter contracts
+    update accordingly (rule name + `forbidden_modules` /
+    `source_modules` lists); the 4 contracts still all KEPT.
+  - **`core/llm/routing/` renamed to `core/llm/strategies/`.** Sat
+    next to `core/llm/router/`, which is the main LLM call dispatch
+    surface — the two were near-synonymous package names doing
+    different jobs ("router" = call API, "routing" = plan dispatch /
+    provider selection). `strategies` describes the actual content
+    (plan registries, provider routing policies) without colliding
+    with `router`. All 14 callers updated.
+
+- **PR-DOCS-CANT-CAN — CLAUDE.md restructure: CANNOT/CAN adjacency + 6 frontier-convergent CANNOT rows.**
+  The two governance tables (``### CANNOT`` and ``### CAN``) were
+  separated by ``### Wiring Verification`` + ``### Refactoring Deception
+  Prevention``, which broke the read-as-a-pair invariant that the rest
+  of the doc relies on. The two tables now sit next to each other; the
+  two diagnostic sections move down so the workflow narrative is
+  unchanged. Six new ``CANNOT`` rows codify patterns that came out of
+  a survey of 7 frontier autonomous-agent codebases (claude-code-ref,
+  openclaw, hermes-agent, open-coscientist, paperclip, crumb, cotton).
+  Convergence is cited per row in the table itself — domain naming
+  shows up in 4/7, while the same-name-nested folder anti-pattern is
+  0/7 (GEODE was the only one). The patterns already shaped
+  PR-CLEANUP-1 / PR-CLEANUP-2:
+  - **Naming**: no abstract-noun packages, no same-name-nested folders
+    (``X/X/``), no single-file packages, no ``_helpers``/``_utils``
+    once a caller exists.
+  - **Compat**: no re-export shim past a 1-release grace.
+  - **Registry**: no two registries for the same domain.
+  ``CAN`` also gains one row: cleanup / refactor PRs may bundle
+  aggressively (Socratic Q4 "minimum change" guard does not apply
+  when cleanup *is* the purpose). All new rows cite the specific
+  incident or frontier signal that justifies them.
+
+- **PR-CLEANUP-2 — fold three over-small packages into their natural homes.**
+  ``core/`` drops from 25 to 22 top-level packages with zero behaviour
+  change; every move keeps the file's module-level surface intact, only
+  the import prefix changes:
+  - ``core/text/similarity.py`` → ``core/utils/similarity.py`` (single
+    file, 64 LOC). Removes a 1-module package whose abstract name
+    (``text``) added a namespace level with no information value.
+    Callers: ``plugins/seed_generation/agents/evolver.py``,
+    ``tests/core/utils/test_similarity.py`` (test path mirrored).
+  - ``core/storage/fts_helpers.py`` → ``core/memory/fts_helpers.py``
+    (single file, 134 LOC). The only consumer was
+    ``core/memory/session_manager.py``'s FTS5 search index — siting the
+    helper inside ``core/memory/`` removes the cross-package dependency
+    that justified the standalone package.
+  - ``core/runtime_state/`` (two domains under one abstract name) split
+    along the actual ownership line:
+    - ``session_checkpoint.py`` → ``core/memory/session_checkpoint.py``
+      (resume artefact lives next to ``SessionManager``).
+    - ``transcript.py`` → ``core/observability/transcript.py``
+      (Tier-1 event log lives next to ``SessionJournal``).
+  Caller updates spread over the surrounding tree (``git diff --name-only``
+  vs ``origin/develop``): 14 ``core/`` files (3 renames + 3 ``__init__.py``
+  deletions + 8 import-only edits), 9 ``tests/`` files (1 rename + 8
+  import-only edits), 2 live ``docs/`` files (the architecture +
+  audit pages — historical CHANGELOG entries are left as a
+  record-of-time, per the standing convention). Type-check, lint,
+  ``lint-imports``, and the scoped test sweep (143 tests across the
+  four affected packages) all green post-move.
+
 ## [0.99.47] - 2026-05-23
 
 > Path-B ``LLMAdapter`` sprint package — 4 PRs that close the

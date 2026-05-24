@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.scheduler.scheduler import (
+from core.scheduler import (
     Schedule,
     ScheduledJob,
     ScheduleKind,

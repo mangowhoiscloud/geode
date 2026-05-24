@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import anthropic
 import pytest
 from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY
-from core.llm.client import call_with_failover
+from core.llm.router import call_with_failover
 
 # ---------------------------------------------------------------------------
 # Helper: construct retryable/non-retryable errors

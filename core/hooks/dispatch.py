@@ -1,4 +1,4 @@
-"""core.hooks.utils — small helpers for firing hooks from any layer.
+"""core.hooks.dispatch — small helpers for firing hooks from any layer.
 
 Eliminates the four near-identical ``_fire_hook`` copies that lived in
 ``tools/memory_tools.py``, ``llm/router.py``, ``llm/provider_dispatch.py``,

@@ -69,7 +69,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.channels.binding import get_gateway
+    from core.integrations.messaging.binding import get_gateway
 
     gateway = get_gateway()
     if gateway is None:
@@ -115,7 +115,7 @@ def serve(
     _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
     _sched_svc = None
     try:
-        from core.scheduler.scheduler import create_scheduler
+        from core.scheduler import create_scheduler
 
         _sched_svc = create_scheduler(
             on_job_fired=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),

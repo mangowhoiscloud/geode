@@ -205,7 +205,7 @@ class _RecordingHookSystem:
         return []
 
 
-# ── P1c — per-stage SessionJournal emit ─────────────────────────────────
+# ── P1c — per-stage RunTranscript emit ─────────────────────────────────
 
 
 class _FailingAgent(BaseSeedAgent):
@@ -237,17 +237,17 @@ def test_pipeline_emits_phase_started_finished_for_every_phase(tmp_path) -> None
     """Every phase fires phase_started + phase_finished in order."""
     import json
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-p1c", target_dim="broken_tool_use", gen_tag="gen2")
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="t-p1c",
         gen_tag="gen2",
         component="seed-generation",
         path=tmp_path / "transcript.jsonl",
     )
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         asyncio.run(Pipeline(state, registry).arun())
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     started = [r for r in rows if r["event"] == "phase_started"]
@@ -282,20 +282,20 @@ def test_pipeline_emits_phase_failed_soft_failure(tmp_path) -> None:
     raised=False + error head."""
     import json
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     registry = PipelineRegistry()
     registry.register(_FailingAgent("generator"))
     for r in ("proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
         registry.register(_StubAgent(r))
     state = PipelineState(run_id="t-soft", target_dim="x", gen_tag="gen2")
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="t-soft",
         gen_tag="gen2",
         component="seed-generation",
         path=tmp_path / "transcript.jsonl",
     )
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         asyncio.run(Pipeline(state, registry).arun())
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     failed = [r for r in rows if r["event"] == "phase_failed"]
@@ -311,19 +311,19 @@ def test_pipeline_emits_phase_failed_hard_failure(tmp_path) -> None:
     exception bubbles."""
     import json
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     registry = PipelineRegistry()
     registry.register(_RaisingAgent("generator"))
     state = PipelineState(run_id="t-hard", target_dim="x", gen_tag="gen2")
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="t-hard",
         gen_tag="gen2",
         component="seed-generation",
         path=tmp_path / "transcript.jsonl",
     )
     with (
-        session_journal_scope(journal),
+        run_transcript_scope(journal),
         pytest.raises(RuntimeError, match="stub-induced hard failure"),
     ):
         asyncio.run(Pipeline(state, registry).arun())
@@ -337,9 +337,9 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
     """Re-registering an existing role emits agent_reregistered (warn level)."""
     import json
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="t-rereg",
         gen_tag="gen2",
         component="seed-generation",
@@ -347,7 +347,7 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
     )
     registry = PipelineRegistry()
     registry.register(_StubAgent("generator"))
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         registry.register(_StubAgent("generator"))
     rows = [json.loads(line) for line in journal.path.read_text().splitlines()]
     rereg = [r for r in rows if r["event"] == "agent_reregistered"]
@@ -357,9 +357,9 @@ def test_registry_register_replace_emits_agent_reregistered(tmp_path) -> None:
 
 
 def test_orchestrator_emits_noop_outside_journal_scope() -> None:
-    """When no SessionJournal is in scope, emits must silently no-op so
+    """When no RunTranscript is in scope, emits must silently no-op so
     the orchestrator contract is unchanged."""
     registry, _ = _make_registry_with_all_stubs()
     state = PipelineState(run_id="t-noscope", target_dim="x", gen_tag="gen2")
-    # No session_journal_scope active — must not raise.
+    # No run_transcript_scope active — must not raise.
     asyncio.run(Pipeline(state, registry).arun())

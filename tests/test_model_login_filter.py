@@ -38,7 +38,7 @@ def test_model_available_true_when_resolve_routing_returns_target() -> None:
     from core.cli.commands import _state
 
     with patch(
-        "core.llm.routing.plan_registry.resolve_routing",
+        "core.llm.strategies.plan_registry.resolve_routing",
         return_value=MagicMock(),  # any non-None RoutingTarget stand-in
     ):
         assert _state.model_available("claude-opus-4-7") is True
@@ -49,7 +49,7 @@ def test_model_available_false_when_resolve_routing_returns_none() -> None:
     flag the entry as (login required)."""
     from core.cli.commands import _state
 
-    with patch("core.llm.routing.plan_registry.resolve_routing", return_value=None):
+    with patch("core.llm.strategies.plan_registry.resolve_routing", return_value=None):
         assert _state.model_available("claude-opus-4-7") is False
 
 
@@ -58,7 +58,7 @@ def test_model_available_swallows_routing_exceptions() -> None:
     from core.cli.commands import _state
 
     with patch(
-        "core.llm.routing.plan_registry.resolve_routing",
+        "core.llm.strategies.plan_registry.resolve_routing",
         side_effect=RuntimeError("plan registry unavailable"),
     ):
         assert _state.model_available("claude-opus-4-7") is False

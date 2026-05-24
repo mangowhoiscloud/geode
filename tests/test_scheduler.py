@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from core.scheduler.scheduler import (
+from core.scheduler import (
     ActiveHours,
     JobRunLog,
     Schedule,
@@ -902,7 +902,7 @@ class TestMaxJobs:
 class TestAgeOut:
     def test_aged_recurring_deleted(self, svc: SchedulerService) -> None:
         """Recurring jobs older than RECURRING_MAX_AGE_MS should fire once then delete."""
-        from core.scheduler.scheduler import RECURRING_MAX_AGE_MS
+        from core.scheduler import RECURRING_MAX_AGE_MS
 
         now = time.time() * 1000
         old_created = now - RECURRING_MAX_AGE_MS - 1_000  # Beyond age limit
@@ -923,7 +923,7 @@ class TestAgeOut:
 
     def test_permanent_exempt_from_ageout(self, svc: SchedulerService) -> None:
         """Permanent jobs should never be aged out."""
-        from core.scheduler.scheduler import RECURRING_MAX_AGE_MS
+        from core.scheduler import RECURRING_MAX_AGE_MS
 
         now = time.time() * 1000
         old_created = now - RECURRING_MAX_AGE_MS - 1_000
@@ -945,7 +945,7 @@ class TestAgeOut:
 
     def test_at_job_not_aged(self, svc: SchedulerService) -> None:
         """AT jobs should not be subject to age-out."""
-        from core.scheduler.scheduler import RECURRING_MAX_AGE_MS
+        from core.scheduler import RECURRING_MAX_AGE_MS
 
         now = time.time() * 1000
         old_created = now - RECURRING_MAX_AGE_MS - 1_000

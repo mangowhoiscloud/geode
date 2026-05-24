@@ -30,8 +30,8 @@ import pytest
 from core.auth.auth_toml import save_auth_toml
 from core.auth.profiles import AuthProfile, CredentialType
 from core.cli.commands import cmd_login
-from core.llm.routing.plan_registry import get_plan_registry
-from core.llm.routing.plans import Plan, PlanKind
+from core.llm.strategies.plan_registry import get_plan_registry
+from core.llm.strategies.plans import Plan, PlanKind
 from core.wiring.container import ensure_profile_store
 
 import core.cli as _cli_pkg
@@ -109,7 +109,7 @@ def test_cmd_login_refresh_reloads_auth_toml(
     _seed_auth_toml_with_plan("plan-from-thin")
 
     # Step 2 — daemon-side singletons start fresh (mimic restart)
-    from core.llm.routing import plan_registry as _pr
+    from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
     _infra._profile_store = None
@@ -205,7 +205,7 @@ def test_cmd_login_refresh_emits_observability_log(
     _seed_auth_toml_with_plan("plan-observability")
 
     # Reset singletons so the reload actually merges new entries.
-    from core.llm.routing import plan_registry as _pr
+    from core.llm.strategies import plan_registry as _pr
     from core.wiring import container as _infra
 
     _infra._profile_store = None

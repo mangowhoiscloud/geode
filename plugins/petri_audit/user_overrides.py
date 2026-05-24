@@ -47,7 +47,7 @@ def _emit_user_overrides_event(
     level: str = "info",
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Emit a user-overrides event into the active SessionJournal.
+    """Emit a user-overrides event into the active RunTranscript.
 
     P1b — closes the silent legacy-petri.toml fallback gap from the
     2026-05-19 observability audit §5. Discovered via the ContextVar
@@ -56,9 +56,9 @@ def _emit_user_overrides_event(
     override resolver — exception swallowed.
     """
     try:
-        from core.observability import current_session_journal
+        from core.self_improving_loop.run_transcript import current_run_transcript
 
-        journal = current_session_journal()
+        journal = current_run_transcript()
         if journal is None:
             return
         journal.append(event, level=level, payload=payload or {})

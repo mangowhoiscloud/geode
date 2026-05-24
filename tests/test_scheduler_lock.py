@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import pytest
-from core.scheduler.scheduler import SchedulerLock, _is_pid_alive
+from core.scheduler import SchedulerLock, _is_pid_alive
 
 
 class TestSchedulerLock:

@@ -10,7 +10,7 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from core.llm.client import ToolCallRecord, ToolUseResult
+from core.llm.router import ToolCallRecord, ToolUseResult
 
 # ---------------------------------------------------------------------------
 # Helpers: mock Anthropic responses

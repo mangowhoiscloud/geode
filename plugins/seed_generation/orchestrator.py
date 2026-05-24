@@ -127,7 +127,7 @@ def _emit_orchestrator_event(
     level: str = "info",
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Emit a seed-generation event into the active SessionJournal.
+    """Emit a seed-generation event into the active RunTranscript.
 
     P1c — closes the "per-stage transition silent" gap from the
     2026-05-19 observability audit §4. Discovered via the ContextVar
@@ -139,9 +139,9 @@ def _emit_orchestrator_event(
     swallowed so the pipeline contract is unchanged.
     """
     try:
-        from core.observability import current_session_journal
+        from core.self_improving_loop.run_transcript import current_run_transcript
 
-        journal = current_session_journal()
+        journal = current_run_transcript()
         if journal is None:
             return
         journal.append(event, level=level, payload=payload or {})

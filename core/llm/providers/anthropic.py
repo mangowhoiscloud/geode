@@ -228,7 +228,7 @@ def _feed_banner_from_anthropic_response(response: object) -> None:
     No-op when no banner is installed (CLI front-end didn't start one) or
     when the response carries no rate-limit headers. Defensive: any
     exception here is swallowed because observability MUST NOT break the
-    response path it observes (parity with SessionJournal.append).
+    response path it observes (parity with RunTranscript.append).
     """
     try:
         headers = getattr(response, "headers", None)
@@ -274,14 +274,14 @@ def _on_retry_journal_emit(
     retry itself was previously silent — operators saw the final outcome
     but not the retry count or the triggering error.
 
-    Discovered via the ContextVar set in ``session_journal_scope``; no-op
+    Discovered via the ContextVar set in ``run_transcript_scope``; no-op
     when not in scope (single REPL invocation outside an autoresearch /
     seed-generation run) so the helper is safe to wire unconditionally.
     """
     try:
-        from core.observability import current_session_journal
+        from core.self_improving_loop.run_transcript import current_run_transcript
 
-        journal = current_session_journal()
+        journal = current_run_transcript()
         if journal is None:
             return
         # Treat overload / rate-limit / 5xx as warning level; connection
@@ -1007,7 +1007,7 @@ def _resolve_plan_meta(model: str) -> dict[str, str]:
     path (``call_with_failover``) instead of ``retry_with_backoff_generic``.
     """
     try:
-        from core.llm.routing.plan_registry import resolve_routing
+        from core.llm.strategies.plan_registry import resolve_routing
 
         target = resolve_routing(model)
         if target is None:

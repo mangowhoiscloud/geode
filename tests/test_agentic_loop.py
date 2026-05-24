@@ -806,7 +806,7 @@ class TestAgenticLoop:
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
         """Test _track_usage records to accumulator."""
-        from core.llm.client import get_usage_accumulator, reset_usage_accumulator
+        from core.llm.router import get_usage_accumulator, reset_usage_accumulator
 
         reset_usage_accumulator()
         loop = AgenticLoop(context, executor, quiet=True)
