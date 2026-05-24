@@ -4,7 +4,7 @@ S0a 검증된 5-element 패턴 (SoT + path + reader + entry + env) 의 T1 적용
 - SoT: tool-descriptions.json
 - Path: GLOBAL_TOOL_DESCRIPTIONS_PATH
 - Reader: core/agent/tool_descriptions_policy.py
-- Entry: core/agent/loop/_helpers.py:get_agentic_tools
+- Entry: core/agent/loop/_tool_factory.py:get_agentic_tools
 - Env: GEODE_TOOL_DESCRIPTIONS_OVERRIDE
 """
 
@@ -172,7 +172,7 @@ def test_apply_deepcopies_so_input_not_mutated() -> None:
 
 def test_helpers_imports_tool_descriptions_reader() -> None:
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/agent/loop/_helpers.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/agent/loop/_tool_factory.py").read_text(encoding="utf-8")
     assert "_load_tool_descriptions_override" in src
     assert "apply_tool_descriptions_policy" in src
 
@@ -181,7 +181,7 @@ def test_helpers_applies_descriptions_before_tool_policy() -> None:
     """tool_descriptions 가 tool_policy 보다 먼저 적용돼야 함 — policy 의
     forbidden/priority 가 갱신된 description 기반으로 판단 가능."""
     repo_root = Path(__file__).resolve().parent.parent
-    src = (repo_root / "core/agent/loop/_helpers.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/agent/loop/_tool_factory.py").read_text(encoding="utf-8")
     desc_pos = src.find("apply_tool_descriptions_policy(tools,")
     policy_pos = src.find("apply_tool_policy(tools,")
     assert desc_pos > 0 and policy_pos > 0
