@@ -92,8 +92,14 @@ TransientClass = Literal["burst", "quota", "auth", "deterministic", "unknown"]
 # Ported from paperclip parse.ts:12 (CLAUDE_TRANSIENT_UPSTREAM_RE).
 # Matches the broad transient family — keep in lockstep with paperclip
 # so the GEODE classifier sees the same set of upstream signals.
+# PR-PRT-STATUS (2026-05-25) — first alternative tightened from
+# ``rate[-\s]?limit(?:ed)?`` to ``rate[-_\s]limit(?:ed|_error)?`` so
+# a camelCase ``rateLimitType`` (inside claude-cli's informational
+# ``rate_limit_event`` payload with ``status="allowed"``) no longer
+# false-matches as a rejection signal. See sibling regex at
+# ``plugins/petri_audit/claude_cli_provider.py``.
 _TRANSIENT_UPSTREAM_RE = re.compile(
-    r"(?:rate[-\s]?limit(?:ed)?|rate_limit_error|too\s+many\s+requests|\b429\b"
+    r"(?:rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))|too\s+many\s+requests|\b429\b"
     r"|overloaded(?:_error)?|server\s+overloaded|service\s+unavailable|\b503\b"
     r"|\b529\b|high\s+demand|try\s+again\s+later|temporarily\s+unavailable"
     r"|throttl(?:ed|ing)|throttlingexception|servicequotaexceededexception"

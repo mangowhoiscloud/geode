@@ -86,6 +86,33 @@ class TestIsTransientUpstream:
         assert is_transient_upstream() is False
         assert is_transient_upstream(stderr="") is False
 
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            # PR-PRT-STATUS (2026-05-25) — claude-cli emits an
+            # INFORMATIONAL ``rate_limit_event`` JSON line on every
+            # turn with ``status="allowed"`` + ``isUsingOverage=false``.
+            # Pre-fix the regex matched the camelCase ``rateLimitType``
+            # inside that payload as a rejection signal, producing the
+            # v0.99.53 smoke false-positive that clipped every generator
+            # candidate with a fake "rate_limit" classification.
+            '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1779639600,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false}}',
+            '"rateLimitType":"five_hour"',
+            '"rate_limit_event"',
+            'rate_limit_event',
+            'rate_limit_info',
+            'rateLimit',
+        ],
+    )
+    def test_informational_rate_limit_event_is_not_transient(self, stdout: str) -> None:
+        """Regression pin: the informational ``rate_limit_event`` event
+        type + its ``rateLimitType`` / ``rate_limit_info`` sub-fields
+        must NOT be classified as a transient upstream rejection. Only
+        actual ``rate_limit`` / ``rate-limit`` / ``rate_limit_error``
+        text counts (see TestIsTransientUpstream above for the
+        positive cases)."""
+        assert is_transient_upstream(stdout=stdout) is False
+
 
 class TestClassifyTransient:
     def test_classifies_burst(self) -> None:
