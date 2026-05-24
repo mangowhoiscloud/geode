@@ -48,6 +48,29 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-JSON-CODEBLOCK-STRIP** — `parse_structured_output()` (shared
+  parser used by Critic / Pilot / Ranker / Evolver / Meta-review)
+  now strips ```` ```json ... ``` ```` markdown code fences before
+  `json.loads()`. The v0.99.53 smoke 6 surfaced critic / proximity /
+  meta_reviewer phases failing on otherwise-valid JSON because the
+  LLM (claude-cli with `--json-schema` not yet wired through the
+  orchestrator) wrapped its response in a markdown code block. The
+  pre-fix path called `json.loads(raw_output["text"])` directly,
+  which rejects the wrapper with `JSONDecodeError`, so the result
+  was dropped and the phase aborted with "malformed payload".
+  New `_strip_json_codeblock()` helper at the top of `base.py`
+  uses a `re.DOTALL` regex to unwrap `` ```json `` / `` ```JSON `` /
+  bare `` ``` `` fences (optional language tag + optional newline
+  variants), returning the inner body. Plain (un-fenced) JSON
+  passes through unchanged. Pinned by 6 new regression tests in
+  `tests/plugins/seed_generation/test_base.py`:
+  `test_parse_text_json_codeblock_fence_with_lang_tag`,
+  `test_parse_text_json_codeblock_fence_no_lang_tag`,
+  `test_parse_text_json_codeblock_fence_with_leading_prose`,
+  `test_parse_text_json_codeblock_fence_uppercase_lang_tag`,
+  `test_parse_text_json_codeblock_inline_no_newline`,
+  `test_parse_text_plain_json_still_works_after_fence_helper`.
+
 - **PR-PERMS-FLAG-FIX** — two coupled fixes for the v0.99.53
   sub-agent isolation surface (caught by smoke 5 / Codex MCP review):
   - **A: actual permission bypass flag.** `build_claude_cli_argv()`
