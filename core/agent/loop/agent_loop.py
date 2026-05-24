@@ -2170,16 +2170,58 @@ class AgenticLoop:
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
         )
+        # PR-COMM-3d (2026-05-24) — emit LLM_CALL_STARTED / LLM_CALL_ENDED
+        # for the AgenticLoop's main dispatch path. Pre-fix only the
+        # ``router/calls/*.py`` one-off helpers fired these events, so
+        # the SQLite ``agent_runtime_state.total_*_tokens`` cumulative
+        # writer (registered in PR-COMM-3d's bootstrap.py addition
+        # below) saw zero traffic from the real per-turn loop. Payload
+        # carries ``session_id`` + ``usage`` + ``cost_usd`` so the
+        # writer's ``accumulate_tokens_and_cost`` call has the data it
+        # needs.
+        import time as _llm_call_time
+
+        _llm_t0 = _llm_call_time.monotonic()
+        adapter_name = getattr(self._new_adapter, "name", "<unknown>")
+        if self._hooks:
+            try:
+                await self._hooks.trigger_async(
+                    HookEvent.LLM_CALL_STARTED,
+                    {
+                        "session_id": self._session_id,
+                        "model": effective_model,
+                        "provider": self._provider,
+                        "adapter": adapter_name,
+                    },
+                )
+            except Exception:
+                log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
+
         try:
             result = await self._new_adapter.acomplete(req)
         except Exception as exc:
             self._last_llm_error = str(exc)
             log.warning(
                 "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
-                getattr(self._new_adapter, "name", "<unknown>"),
+                adapter_name,
                 exc,
             )
             response = None
+            if self._hooks:
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            "session_id": self._session_id,
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
+                            "error": str(exc),
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_ENDED (error) hook trigger failed", exc_info=True)
         else:
             response = agentic_response_from_adapter_result(result)
             # PR-V — persist the newly-emitted session_id so the next
@@ -2193,6 +2235,51 @@ class AgenticLoop:
             # to populate ``claude_cli_session_id`` on the SQLite write).
             if emitted_sid:
                 self._last_emitted_session_id = emitted_sid
+            # PR-COMM-3d — emit LLM_CALL_ENDED with usage + cost so the
+            # cumulative writer accumulates correctly. ``cost_usd`` is
+            # computed locally via the same ``calculate_cost`` helper
+            # the token tracker uses (no double-counting — the
+            # accumulator already records; this hook payload exists
+            # purely to surface the per-call snapshot for SQLite
+            # accumulation and any future per-call observers).
+            if self._hooks:
+                usage = getattr(result, "usage", None)
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                try:
+                    from core.llm.token_tracker import calculate_cost
+
+                    cost_usd = float(
+                        calculate_cost(
+                            effective_model,
+                            input_tokens,
+                            output_tokens,
+                            cache_read_tokens=cached_input_tokens,
+                        )
+                    )
+                except Exception:
+                    cost_usd = 0.0
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            "session_id": self._session_id,
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
+                            "error": None,
+                            "usage": {
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "cached_input_tokens": cached_input_tokens,
+                            },
+                            "cost_usd": cost_usd,
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_ENDED (success) hook trigger failed", exc_info=True)
 
         if response is None:
             adapter_err = getattr(self._new_adapter, "_last_error", None)

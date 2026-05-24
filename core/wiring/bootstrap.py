@@ -183,6 +183,7 @@ def build_hooks(
     # (router/calls/* fires it only for one-off LLM calls).
     def _reg_agent_runtime_state() -> None:
         from core.observability.agent_runtime_state import (
+            accumulate_tokens_and_cost,
             record_agent_session_end,
             record_subagent_completed,
         )
@@ -211,6 +212,36 @@ def build_hooks(
                 last_error=str(data.get("error", "")),
             )
 
+        # PR-COMM-3d (2026-05-24) — accumulate per-call token + cost
+        # into the agent_runtime_state row. Payload shape comes from
+        # AgenticLoop's main ``_call_llm`` emit site (this PR added
+        # the augmentation); zero-token / empty-payload triggers are
+        # silently skipped so router/calls/* one-off LLM calls (which
+        # don't yet carry usage) don't create placeholder rows.
+        def _on_llm_call_ended(_event: HookEvent, data: dict[str, Any]) -> None:
+            agent_id = str(data.get("session_id") or data.get("agent_id") or "")
+            if not agent_id:
+                return
+            usage = data.get("usage") or {}
+            if not isinstance(usage, dict):
+                return
+            try:
+                input_tokens = int(usage.get("input_tokens", 0) or 0)
+                output_tokens = int(usage.get("output_tokens", 0) or 0)
+                cached = int(usage.get("cached_input_tokens", 0) or 0)
+                cost_usd = float(data.get("cost_usd", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                return
+            if input_tokens == 0 and output_tokens == 0 and cached == 0 and cost_usd == 0:
+                return
+            accumulate_tokens_and_cost(
+                agent_id=agent_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_input_tokens=cached,
+                cost_usd=cost_usd,
+            )
+
         hooks.register(
             HookEvent.SESSION_ENDED,
             _on_session_ended,
@@ -221,6 +252,12 @@ def build_hooks(
             HookEvent.SUBAGENT_COMPLETED,
             _on_subagent_completed,
             name="agent_runtime_subagent_completed",
+            priority=55,
+        )
+        hooks.register(
+            HookEvent.LLM_CALL_ENDED,
+            _on_llm_call_ended,
+            name="agent_runtime_llm_call_ended",
             priority=55,
         )
 
