@@ -48,6 +48,35 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-CLEANUP-WORKER-REQUEST-RUN-DIR** — delete dead
+  `WorkerRequest.run_dir` field + wire B2 per-task cwd binding to
+  the live SoT (`core.observability.run_dir.get_active_run_dir`).
+  PR-RESUME-NO-PERSIST-FIX's first cut read `request.run_dir` which
+  is **never populated** by any producer (verified via grep —
+  PR-Q chose env-var transport via `GEODE_RUN_DIR` instead). Smoke
+  11 confirmed the wiring gap: no `cwd/` subdir was ever created
+  under `sub_agents/<task_id>/`, so claude-cli subprocess ran in
+  the worktree root and the per-task cache-pool isolation was a
+  no-op. Migration:
+  - `core/agent/worker.py` `_run_agentic` now imports
+    `get_active_run_dir()` (re-bound by `worker.main()` from the
+    `GEODE_RUN_DIR` env var on entry) and uses the returned `Path`
+    to compute `<run_dir>/sub_agents/<task_id>/cwd/`. The dead
+    field `WorkerRequest.run_dir: str = ""` + its
+    `from_dict("run_dir", "")` echo are removed. Field's docstring
+    that suggested it was the SoT is replaced with a comment
+    pointing the next reader to `RUN_DIR_ENV` /
+    `get_active_run_dir`.
+  - 8 new regression tests across 2 files:
+    `tests/core/agent/test_worker_task_isolation_binding.py`
+    rewritten to mirror the corrected bind sequence (5 tests —
+    happy path, idempotent, disjoint pools, noop without run_dir,
+    noop without task_id);
+    `tests/core/agent/test_worker_request_no_run_dir_field.py`
+    (new — 3 anti-relapse tests pinning that the dataclass field
+    is gone, `from_dict` silently drops legacy `run_dir` payloads,
+    `to_dict` no longer encodes it).
+
 - **PR-RESUME-NO-PERSIST-FIX (B2)** — sub-agent claude-cli adapter no
   longer passes `--no-session-persistence`. Smoke 10 (v0.99.53,
   post-PR-TRANSIENT-* chain) surfaced a regression: generator

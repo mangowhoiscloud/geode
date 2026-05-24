@@ -87,17 +87,18 @@ class WorkerRequest:
     # (PR-MAINPATH-67 deleted the legacy ``resolve_agentic_adapter``
     # fallback route — all dispatch now goes through Path-B).
     source: str = ""
-    # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. When the
-    # parent orchestrator runs inside a per-cycle directory (e.g.
-    # seed-generation's ``state/seed-generation/<run_id>/``) it sets
-    # this so the worker's result.json + stderr.log + per-agent
-    # dialogue.jsonl all land *inside* the run dir instead of the
-    # global ``~/.geode/workers/`` + ``~/.geode/transcripts/`` pools.
-    # Empty string = legacy behaviour (global pools), so callers that
-    # don't run inside a cycle dir (gateway, REPL, ad-hoc CLI) are
-    # unaffected. Each writer reads this and walks
-    # ``<run_dir>/sub_agents/<task_id>/`` for its specific output.
-    run_dir: str = ""
+    # PR-Q (2026-05-24) chose to carry the orchestrator's active run_dir
+    # across the parent → worker boundary via the ``GEODE_RUN_DIR``
+    # environment variable (see
+    # ``core.observability.run_dir.RUN_DIR_ENV`` +
+    # ``IsolatedRunner._aexecute_subprocess``). The worker's
+    # ``main()`` re-binds the ContextVar from that env on entry, so
+    # every observability writer reads the live value via
+    # ``get_active_run_dir()``. The earlier ``run_dir: str = ""``
+    # field on this dataclass was orphaned dead code — no producer
+    # ever populated it, only ``from_dict`` echoed its missing-default
+    # — and a dual-SoT trap for the next reader (see
+    # PR-CLEANUP-WORKER-REQUEST-RUN-DIR, 2026-05-25). Removed.
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -130,7 +131,6 @@ class WorkerRequest:
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
             source=data.get("source", ""),
-            run_dir=data.get("run_dir", ""),
         )
 
 
@@ -288,12 +288,24 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # via cwd-cache auto-pickup is now prevented because each task_id
     # has its own cache pool; within-task continuity still works
     # because turn N+1 sees the same cwd as turn N.
-    if request.run_dir and request.task_id:
-        from pathlib import Path
+    #
+    # PR-CLEANUP-WORKER-REQUEST-RUN-DIR (2026-05-25) — the first cut
+    # of this binding read ``request.run_dir`` (a dead field on
+    # ``WorkerRequest`` that no producer ever populated), so the
+    # guard never fired and the mkdir never ran. Smoke 11 confirmed
+    # the wiring gap (no ``cwd/`` subdir in ``sub_agents/<task_id>/``).
+    # The live SoT for an orchestrator-bound run_dir at the worker
+    # side is :func:`core.observability.run_dir.get_active_run_dir`
+    # — ``worker.main()`` already re-binds the ContextVar from the
+    # ``GEODE_RUN_DIR`` env var on entry, so by the time
+    # ``_run_agentic`` runs the value is available.
+    from core.observability.run_dir import get_active_run_dir
 
+    active_run_dir = get_active_run_dir()
+    if active_run_dir is not None and request.task_id:
         from core.agent.task_isolation import set_task_isolated_cwd
 
-        task_cwd_path = Path(request.run_dir) / "sub_agents" / request.task_id / "cwd"
+        task_cwd_path = active_run_dir / "sub_agents" / request.task_id / "cwd"
         task_cwd_path.mkdir(parents=True, exist_ok=True)
         set_task_isolated_cwd(task_cwd_path)
 
