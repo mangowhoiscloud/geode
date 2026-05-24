@@ -59,16 +59,35 @@ log = logging.getLogger(__name__)
 
 def _load_prior_session_id(session_id: str) -> str:
     """Return the claude-cli session_id from the prior turn of this
-    sub-agent, or empty string when no prior session exists / outside
-    a run_dir scope.
+    sub-agent, or empty string when no prior session exists.
 
-    PR-V (2026-05-24, spec doc §3 V.4). Reads
-    ``<run_dir>/sub_agents/<session_id>/session.json``. Mirrors
-    paperclip's ``agent_runtime_state.sessionId`` SELECT — a per-agent
-    single-row store of "the sessionId my next ``--resume`` should use".
-    Returns empty on any I/O / parse error so the call falls back to
-    a fresh session rather than crashing.
+    PR-COMM-3c (2026-05-24) — SQLite primary, file fallback.
+    Reads ``agent_runtime_state.claude_cli_session_id`` first
+    (single source of truth introduced by PR-COMM-3 / PR-COMM-3b).
+    Falls back to the legacy
+    ``<run_dir>/sub_agents/<session_id>/session.json`` file from PR-V
+    so existing on-disk caches keep working through the 1-release
+    grace window (slated for removal in v0.99.54). Returns empty on
+    any I/O / parse error so the call falls back to a fresh session
+    rather than crashing.
     """
+    # SQLite primary — read from the per-agent row landed by
+    # PR-COMM-3b's record_agent_session_end hook handler.
+    try:
+        from core.observability.agent_runtime_state import get_agent_runtime_state
+
+        state = get_agent_runtime_state(session_id)
+        if state is not None and state.claude_cli_session_id:
+            return state.claude_cli_session_id
+    except Exception:
+        log.debug(
+            "agent_runtime_state read failed for %s — falling back to session.json",
+            session_id,
+            exc_info=True,
+        )
+
+    # Legacy file fallback (PR-V) — kept for 1 release so deploys that
+    # haven't ingested the SQLite writer yet still resume cleanly.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
@@ -93,17 +112,40 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
     turn of this sub-agent (or the same sub-agent in the next cycle)
     can ``--resume <id>``.
 
-    PR-V (2026-05-24, spec doc §3 V.4). Writes
-    ``<run_dir>/sub_agents/<session_id>/session.json``. The on-disk
-    schema is intentionally one field (``claude_cli_session_id``) for
-    now; PR-COMM-3 (SQLite agent_runtime_state) replaces the file with
-    a DB row carrying the full paperclip
-    ``agent_runtime_state`` columns (totalInputTokens / lastError /
-    lastRunStatus / ...). Empty ``emitted_session_id`` is a no-op
-    (non-claude-cli adapters or claude-cli crash before init).
+    PR-COMM-3c (2026-05-24) — dual-write. The primary store is the
+    SQLite ``agent_runtime_state.claude_cli_session_id`` column
+    (populated end-to-end by PR-COMM-3b's SESSION_ENDED hook handler
+    via the loop's ``_last_emitted_session_id`` cache; this function's
+    direct write covers the early-turn case where the loop emits a
+    session_id BEFORE its lifecycle hook fires for the round). The
+    legacy ``<run_dir>/sub_agents/<session_id>/session.json`` file
+    keeps being written for one release as a fallback so existing
+    deploys/readers don't break — scheduled for deletion in v0.99.54.
+    Empty ``emitted_session_id`` is a no-op (non-claude-cli adapters
+    or claude-cli crash before init).
     """
     if not emitted_session_id:
         return
+
+    # SQLite primary write — directly upsert the resumable session_id
+    # so the next turn's _load_prior_session_id sees it even if the
+    # round's SESSION_ENDED hook hasn't fired yet (early termination,
+    # round-budget exhaustion mid-turn, etc).
+    try:
+        from core.observability.agent_runtime_state import record_agent_session_end
+
+        record_agent_session_end(
+            agent_id=session_id,
+            claude_cli_session_id=emitted_session_id,
+        )
+    except Exception:
+        log.debug(
+            "agent_runtime_state write failed for %s — file fallback only",
+            session_id,
+            exc_info=True,
+        )
+
+    # Legacy file write (PR-V) — retained for 1-release grace.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 

@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-COMM-3c** — migrates `core/agent/loop/agent_loop.py` claude-cli
+  sessionId persistence from file-based
+  `<run_dir>/sub_agents/<task_id>/session.json` (PR-V) to the SQLite
+  `agent_runtime_state.claude_cli_session_id` column landed by
+  PR-COMM-3 / PR-COMM-3b. Dual-write during the 1-release grace
+  window; legacy file path slated for deletion in v0.99.54.
+  - `_persist_session_id` writes to SQLite primary (via
+    `record_agent_session_end(agent_id, claude_cli_session_id=...)`)
+    then writes the legacy `session.json` file so existing on-disk
+    caches keep working through deploys that haven't ingested the
+    SQLite writer yet. Empty `emitted_session_id` is a no-op for both
+    stores (preserves prior cached values across cross-cycle adapter
+    switches).
+  - `_load_prior_session_id` reads SQLite first, falls back to
+    `session.json` on miss or SQLite error. REPL / gateway paths that
+    have no `run_dir` scope still get SQLite persistence (file write
+    no-ops, SQLite write lands) — that's the migration's whole point.
+  - Pinned by `tests/test_session_id_persistence.py` (9 cases —
+    SQLite-primary read × 1, file-fallback read × 2, dual-write × 3,
+    empty-noop × 2, SQLite-failure-falls-back × 1, plus a fresh
+    `isolate_sessions_db` autouse fixture added to
+    `tests/core/llm/adapters/test_claude_cli_resume.py` so the
+    existing V.4 round-trip tests no longer pollute the developer's
+    real `~/.geode/projects/.../sessions.db`).
+
 ### Added
 - **PR-COMM-3b** — wires the PR-COMM-3 SQLite `agent_runtime_state`
   writers into the running AgenticLoop. Three coupled changes:
