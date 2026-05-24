@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.48] - 2026-05-24
+
+> Cleanup-arc release — 7 PRs (PR-DOCS-CANT-CAN + PR-CLEANUP-3
+> through 7 + Step J-b.3) plus a single naming-pivot follow-up. The
+> arc started from a 25-package `core/` audit against 7 frontier
+> agents and ended with `core/` at 22 packages, 4 `_helpers`/`_utils`
+> survivors renamed or pruned, 2 backward-compat shims removed
+> (`core/llm/client.py`, the `core.observability` re-exports), 6 new
+> Naming/Compat/Registry CANNOT rows landed in CLAUDE.md, and the
+> reflection node migrated to the Path-B `LLMAdapter` Protocol. The
+> SessionJournal → RunTranscript relocation follow-up (PR-CLEANUP-7
+> #1569) closes the operator catch on the misleading "journal" name
+> that the 3-Tier preservation architecture reserves for Tier 2
+> summaries.
+
 ### Changed
 
 - **PR-CLEANUP-7 — ``SessionJournal`` renamed + relocated to
