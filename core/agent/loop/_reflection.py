@@ -56,8 +56,27 @@ from typing import Any
 
 from core.agent.cognitive_state import CognitiveState
 from core.config import _resolve_provider
-from core.llm.adapters import resolve_agentic_adapter
+from core.llm.adapters import resolve_for
+from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
 from core.llm.router import call_with_failover
+
+
+def _normalize_provider_for_registry(provider: str) -> str:
+    """Translate :func:`core.config._resolve_provider` output to the
+    Path-B :func:`~core.llm.adapters.registry.resolve_for` registry's
+    provider-key vocabulary.
+
+    Step J-b.3 (2026-05-23) — duplicates the same translation used by
+    :func:`core.self_improving_loop.runner._normalize_provider_for_registry`.
+    The legacy resolver returns ``"openai-codex"`` for gpt-5.x; the
+    Path-B registry collapses that to ``"openai"`` and lets the
+    ``source`` axis pick between ``payg`` / ``subscription`` /
+    ``adapter``.
+    """
+    if provider == "openai-codex":
+        return "openai"
+    return provider
+
 
 log = logging.getLogger(__name__)
 
@@ -161,15 +180,32 @@ def _build_user_prompt(state: CognitiveState, tool_summary: str) -> str:
     )
 
 
-def _extract_reflection_input(response: Any) -> dict[str, Any] | None:
-    """Find the ``record_reflection`` tool_use block in the response.
+def _extract_reflection_input(result: Any) -> dict[str, Any] | None:
+    """Find the ``record_reflection`` tool_use block in the adapter result.
 
-    Returns the tool's ``input`` dict (already parsed by the adapter
-    normalizer — see :class:`core.llm.agentic_response.ToolUseBlock`).
-    Returns ``None`` when the model declined to invoke the tool;
-    callers swallow this case with a WARN.
+    Step J-b.3 (2026-05-23) — reads from
+    :attr:`core.llm.adapters.base.AdapterCallResult.tool_uses` (tuple of
+    ``{id, name, input}`` dicts) instead of the legacy
+    ``AgenticResponse.content`` list of :class:`ToolUseBlock` objects.
+    Both surfaces carry the same parsed payload; only the container
+    shape changes with the Path-B Protocol.
+
+    Returns the tool's ``input`` dict, or ``None`` when the model
+    declined to invoke the tool (callers swallow this case with a
+    WARN). Also tolerates the pre-Path-B object shape (``.type`` /
+    ``.name`` / ``.input``) so tests that mock the legacy
+    ``AgenticResponse`` keep passing during the rollout.
     """
-    for block in getattr(response, "content", []) or []:
+    # Path-B shape: ``AdapterCallResult.tool_uses: tuple[dict, ...]``.
+    tool_uses = getattr(result, "tool_uses", None)
+    if isinstance(tool_uses, tuple | list):
+        for entry in tool_uses:
+            if isinstance(entry, dict) and entry.get("name") == REFLECTION_TOOL_NAME:
+                payload = entry.get("input")
+                if isinstance(payload, dict):
+                    return payload
+    # Legacy shape: ``AgenticResponse.content: list[ToolUseBlock]``.
+    for block in getattr(result, "content", []) or []:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", "") == (
             REFLECTION_TOOL_NAME
         ):
@@ -248,7 +284,12 @@ async def reflect_async(
     # swallowed at WARN" guarantee).
     try:
         provider = _resolve_provider(model)
-        adapter = resolve_agentic_adapter(provider)
+        # Step J-b.3 (2026-05-23) — Path-B Protocol dispatch. The
+        # registry's ``payg`` source covers both API-key and OAuth
+        # subscription paths for our reflection model surface;
+        # downstream credential rotation still happens inside the
+        # adapter.
+        adapter = resolve_for(_normalize_provider_for_registry(provider), "payg")
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(state, tool_summary)
 
@@ -287,15 +328,32 @@ async def reflect_async(
             # ``"auto"`` on OpenAI/Codex via the shared normaliser.
             from core.config import settings as _settings
 
-            return await adapter.agentic_call(
+            # Step J-b.3 (2026-05-23) — translate the reflection tool
+            # dict (kept as the in-module SoT for policy override
+            # compatibility) into a Path-B :class:`ToolSpec`. The
+            # ``strict: True`` flag the dict carried is intentionally
+            # dropped here: ``ToolSpec`` does not currently surface it
+            # and ``_anthropic_common.translate_tool`` would strip it
+            # anyway. The downstream :func:`_apply_reflection`
+            # isinstance + range checks already enforce the same
+            # contract client-side, so the behaviour degrades from
+            # "server-rejects-malformed" to "client-coerces-silently"
+            # rather than failing open.
+            tool_spec = ToolSpec(
+                name=active_tool["name"],
+                description=active_tool["description"],
+                input_schema=active_tool["input_schema"],
+            )
+            req = AdapterCallRequest(
                 model=m,
-                system=active_system,
-                messages=[{"role": "user", "content": user_prompt}],
-                tools=[active_tool],
+                messages=(Message(role="user", content=user_prompt),),
+                system_prompt=active_system,
+                tools=(tool_spec,),
                 tool_choice="auto",
                 max_tokens=max_tokens,
                 temperature=_settings.temperature_reflection,
             )
+            return await adapter.acomplete(req)
 
         response, _used_model = await call_with_failover([model], _do_call)
     except Exception:

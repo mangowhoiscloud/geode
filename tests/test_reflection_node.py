@@ -288,6 +288,15 @@ def test_run_cognitive_act_observe_cycle_calls_maybe_reflect() -> None:
 
 
 class _StubAdapter:
+    """Step J-b.3 (2026-05-23) — stub matches the
+    :class:`~core.llm.adapters.base.LLMAdapter` Protocol surface
+    (``acomplete(AdapterCallRequest)``) instead of the legacy
+    ``AgenticLLMPort.agentic_call(**kwargs)``. ``last_kwargs`` is
+    rebuilt from the request dataclass so existing assertions
+    (``tools``, ``tool_choice``, …) keep working as a wire-up invariant
+    without leaking the dataclass type into the test body.
+    """
+
     def __init__(
         self,
         response: Any = None,
@@ -297,8 +306,16 @@ class _StubAdapter:
         self._raise = raise_exc
         self.last_kwargs: dict[str, Any] = {}
 
-    async def agentic_call(self, **kwargs: Any) -> Any:
-        self.last_kwargs = dict(kwargs)
+    async def acomplete(self, req: Any) -> Any:
+        self.last_kwargs = {
+            "model": getattr(req, "model", None),
+            "system": getattr(req, "system_prompt", None),
+            "messages": list(getattr(req, "messages", ())),
+            "tools": list(getattr(req, "tools", ())),
+            "tool_choice": getattr(req, "tool_choice", None),
+            "max_tokens": getattr(req, "max_tokens", None),
+            "temperature": getattr(req, "temperature", None),
+        }
         if self._raise is not None:
             raise self._raise
         return self._response
@@ -317,7 +334,9 @@ def _install_reflection_stubs(
         return result, _models[0]
 
     monkeypatch.setattr(_reflection, "call_with_failover", _fake_call_with_failover, raising=False)
-    monkeypatch.setattr(_reflection, "resolve_agentic_adapter", lambda _p: adapter, raising=False)
+    # Step J-b.3 — Path-B resolver. ``resolve_for(provider, source)``
+    # replaces the legacy ``resolve_agentic_adapter(provider)``.
+    monkeypatch.setattr(_reflection, "resolve_for", lambda _p, _src="payg": adapter, raising=False)
     monkeypatch.setattr(_reflection, "_resolve_provider", lambda _m: "anthropic", raising=False)
 
 
@@ -339,9 +358,15 @@ def test_reflect_async_swallows_response_without_tool_use(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """If the LLM ignores the forced tool_choice and returns only
-    text (or some other tool), keep previous state."""
+    text (or some other tool), keep previous state.
+
+    Step J-b.3 (2026-05-23) — empty ``tool_uses`` tuple on
+    :class:`AdapterCallResult` is how the Path-B Protocol surfaces
+    "model returned only text". The extractor must fall through to
+    ``None`` and the caller must preserve previous state.
+    """
     state = CognitiveState(hypotheses=["keep"], confidence=0.4)
-    response = SimpleNamespace(content=[_text_block("I have nothing to say")])
+    response = SimpleNamespace(tool_uses=(), text="I have nothing to say")
     _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
 
     asyncio.run(_reflection.reflect_async(state, [], model="m", max_tokens=128))
@@ -350,20 +375,28 @@ def test_reflect_async_swallows_response_without_tool_use(
 
 
 def test_reflect_async_applies_tool_use_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Happy path — adapter returns a ToolUseBlock with the parsed
-    input dict; reflect_async applies it to state."""
+    """Happy path — adapter returns an :class:`AdapterCallResult` with a
+    ``tool_uses`` tuple containing the parsed payload; reflect_async
+    applies it to state.
+
+    Step J-b.3 (2026-05-23) — moved from the legacy
+    ``AgenticResponse.content`` shape to the Path-B
+    ``AdapterCallResult.tool_uses`` shape that ``adapter.acomplete``
+    actually returns.
+    """
     state = CognitiveState(goal="x")
     response = SimpleNamespace(
-        content=[
-            _tool_use_block(
-                REFLECTION_TOOL_NAME,
-                {
+        tool_uses=(
+            {
+                "id": "tu_1",
+                "name": REFLECTION_TOOL_NAME,
+                "input": {
                     "hypotheses": ["h1", "h2"],
                     "confidence": 0.7,
                     "next_action_hint": "do it",
                 },
-            )
-        ]
+            },
+        ),
     )
     _install_reflection_stubs(monkeypatch, adapter=_StubAdapter(response=response))
 
@@ -383,12 +416,13 @@ def test_reflect_async_passes_tool_schema_to_adapter(
     state = CognitiveState()
     adapter = _StubAdapter(
         response=SimpleNamespace(
-            content=[
-                _tool_use_block(
-                    REFLECTION_TOOL_NAME,
-                    {"hypotheses": [], "confidence": 0.5},
-                )
-            ]
+            tool_uses=(
+                {
+                    "id": "tu_1",
+                    "name": REFLECTION_TOOL_NAME,
+                    "input": {"hypotheses": [], "confidence": 0.5},
+                },
+            ),
         )
     )
     _install_reflection_stubs(monkeypatch, adapter=adapter)
@@ -397,8 +431,15 @@ def test_reflect_async_passes_tool_schema_to_adapter(
 
     tools = adapter.last_kwargs.get("tools")
     assert isinstance(tools, list) and len(tools) == 1
-    assert tools[0]["name"] == REFLECTION_TOOL_NAME
-    assert tools[0].get("strict") is True
+    # Step J-b.3 (2026-05-23) — ``tools`` is now a tuple of
+    # :class:`~core.llm.adapters.base.ToolSpec` instances, not raw
+    # dicts. The ``strict`` field that the reflection module's
+    # in-source ``_REFLECTION_TOOL`` dict carries is intentionally
+    # dropped at the dict→ToolSpec translation (documented in
+    # ``_reflection.py``); the contract degrades to client-side
+    # coercion via ``_apply_reflection``'s isinstance checks. That
+    # narrowing is a tracked follow-up — see CHANGELOG.
+    assert tools[0].name == REFLECTION_TOOL_NAME
     # PR-B fix-up #2 — ``tool_choice="auto"``. Anthropic docs mark
     # both ``"any"`` and named-tool forcing as incompatible with
     # adaptive/extended thinking, so only ``"auto"`` is safe across
