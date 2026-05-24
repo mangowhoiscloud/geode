@@ -48,6 +48,34 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR2 (V) — paperclip `--resume <sessionId>` + per-agent session.json.**
+  Spec doc §3 of `docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`.
+  paperclip `agent_runtime_state.sessionId` + `--resume` parity → quota
+  cache hit (5-10K tokens saved per turn per paperclip `execute.ts:680`).
+  Pre-PR-V every claude-cli call started a fresh backend session and
+  re-sent the full system prompt; PR-V threads the prior session_id
+  through `AdapterCallRequest.resume_session_id` → `--resume <id>` argv
+  → `system.init` event's `session_id` → persisted to
+  `<run_dir>/sub_agents/<task_id>/session.json` → loaded on the next turn.
+  - **V.1** `core/llm/adapters/base.py` — `AdapterCallRequest.resume_session_id`
+    + `AdapterCallResult.session_id` fields (backwards-compat empty default).
+  - **V.2** `plugins/petri_audit/claude_cli_provider.py` —
+    `build_claude_cli_argv(resume_session_id=...)` prepends `--resume <id>`
+    before `--model`. New `extract_session_id_from_events()` walks the
+    `system.init` event (paperclip `parse.ts:30-33` parity).
+  - **V.3** `core/llm/adapters/claude_cli.py` — `acomplete` wires both
+    directions (req → argv, events → result.session_id).
+  - **V.4** `core/agent/loop/agent_loop.py` — `_load_prior_session_id`
+    + `_persist_session_id` helpers read/write
+    `<run_dir>/sub_agents/<task_id>/session.json` (PR-Q's resolver
+    anchor). `_call_llm` reads before the adapter call, writes after.
+    Empty session_id is no-op (non-claude-cli / first turn / outside scope).
+  - `core/llm/adapters/translation.py` — `build_adapter_request`
+    threads the new `resume_session_id` kwarg.
+  - 11 new tests pin V.1 contract, V.2 argv ordering + parser, V.4
+    persistence round-trip + no-op semantics.
+
+### Added
 - **PR-COMM-1 — HookEvent → ActivityRow schema + union channel.**
   Spec doc at `docs/plans/2026-05-24-hookevent-activity-schema.md`
   (S2 scope: 32 lifecycle typed + 42 generic fall-through).

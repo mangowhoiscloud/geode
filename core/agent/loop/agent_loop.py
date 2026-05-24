@@ -57,6 +57,77 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _load_prior_session_id(session_id: str) -> str:
+    """Return the claude-cli session_id from the prior turn of this
+    sub-agent, or empty string when no prior session exists / outside
+    a run_dir scope.
+
+    PR-V (2026-05-24, spec doc §3 V.4). Reads
+    ``<run_dir>/sub_agents/<session_id>/session.json``. Mirrors
+    paperclip's ``agent_runtime_state.sessionId`` SELECT — a per-agent
+    single-row store of "the sessionId my next ``--resume`` should use".
+    Returns empty on any I/O / parse error so the call falls back to
+    a fresh session rather than crashing.
+    """
+    try:
+        from core.observability.run_dir import resolve_sub_agent_path
+
+        session_path = resolve_sub_agent_path(session_id, "session.json")
+    except Exception:
+        return ""
+    if session_path is None or not session_path.exists():
+        return ""
+    try:
+        import json
+
+        payload = json.loads(session_path.read_text(encoding="utf-8"))
+        cached = payload.get("claude_cli_session_id", "")
+        return str(cached) if cached else ""
+    except Exception:
+        log.debug("session.json read failed for %s", session_id, exc_info=True)
+        return ""
+
+
+def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
+    """Persist the claude-cli session_id this turn emitted so the next
+    turn of this sub-agent (or the same sub-agent in the next cycle)
+    can ``--resume <id>``.
+
+    PR-V (2026-05-24, spec doc §3 V.4). Writes
+    ``<run_dir>/sub_agents/<session_id>/session.json``. The on-disk
+    schema is intentionally one field (``claude_cli_session_id``) for
+    now; PR-COMM-3 (SQLite agent_runtime_state) replaces the file with
+    a DB row carrying the full paperclip
+    ``agent_runtime_state`` columns (totalInputTokens / lastError /
+    lastRunStatus / ...). Empty ``emitted_session_id`` is a no-op
+    (non-claude-cli adapters or claude-cli crash before init).
+    """
+    if not emitted_session_id:
+        return
+    try:
+        from core.observability.run_dir import resolve_sub_agent_path
+
+        session_path = resolve_sub_agent_path(session_id, "session.json")
+    except Exception:
+        return
+    if session_path is None:
+        return
+    try:
+        import json
+        import time
+
+        payload = {
+            "claude_cli_session_id": emitted_session_id,
+            "updated_at": time.time(),
+        }
+        session_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        log.debug("session.json write failed for %s", session_id, exc_info=True)
+
+
 class AgenticLoop:
     """Claude Code-style agentic execution loop.
 
@@ -2027,6 +2098,17 @@ class AgenticLoop:
             build_adapter_request,
         )
 
+        # PR-V (2026-05-24, spec doc §3 V.4) — paperclip
+        # ``agent_runtime_state.sessionId`` parity. Read the prior
+        # session_id from ``<run_dir>/sub_agents/<task_id>/session.json``
+        # so the adapter resumes via ``--resume <id>``. claude-cli then
+        # reuses the cached system prompt + prior conversation context
+        # for the cached-marker input billing tier (5-10K tokens saved
+        # per turn per paperclip ``execute.ts:680``). Empty when no
+        # prior session (first turn of a fresh sub-agent or outside a
+        # run_dir scope) so first-call behaviour is unchanged.
+        prior_session_id = _load_prior_session_id(self._session_id)
+
         req = build_adapter_request(
             model=effective_model,
             system=system,
@@ -2037,6 +2119,7 @@ class AgenticLoop:
             temperature=loop_temperature,
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
+            resume_session_id=prior_session_id,
         )
         try:
             result = await self._new_adapter.acomplete(req)
@@ -2050,6 +2133,11 @@ class AgenticLoop:
             response = None
         else:
             response = agentic_response_from_adapter_result(result)
+            # PR-V — persist the newly-emitted session_id so the next
+            # turn of THIS sub-agent (or the same sub-agent in the next
+            # cycle) can resume. Non-claude-cli adapters return empty
+            # session_id; the persistence helper is a no-op there.
+            _persist_session_id(self._session_id, getattr(result, "session_id", ""))
 
         if response is None:
             adapter_err = getattr(self._new_adapter, "_last_error", None)

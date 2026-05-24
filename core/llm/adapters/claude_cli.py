@@ -85,7 +85,19 @@ class ClaudeCliAdapter:
         from core.orchestration.claude_cli_lane import acquire_claude_cli_lane_async
 
         binary = _resolve_claude_binary()
-        argv = build_claude_cli_argv(binary=binary, model_name=req.model, max_turns=1)
+        # PR-V (2026-05-24) — paperclip `--resume <sessionId>` parity.
+        # ``req.resume_session_id`` is non-empty when the caller has a
+        # prior session from this sub-agent's previous turn (or a
+        # cross-cycle continuity slot like
+        # ``<run_dir>/sub_agents/<task_id>/session.json``); claude-cli
+        # then reuses the cached system prompt + conversation context,
+        # dropping input billing to the cached-marker tier.
+        argv = build_claude_cli_argv(
+            binary=binary,
+            model_name=req.model,
+            max_turns=1,
+            resume_session_id=req.resume_session_id or None,
+        )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"
         try:
@@ -164,10 +176,20 @@ class ClaudeCliAdapter:
         # ``("tool_use" | "tool_calls")`` branch isn't tripped.
         if stop_reason == "unknown":
             stop_reason = "end_turn"
+        # PR-V (2026-05-24) — paperclip ``parse.ts:30`` parity.
+        # Capture the session_id claude-cli emitted in its
+        # ``system.init`` event so the caller can persist it for the
+        # next turn's ``resume_session_id`` (cross-call cache hit).
+        from plugins.petri_audit.claude_cli_provider import (
+            extract_session_id_from_events,
+        )
+
+        emitted_session_id = extract_session_id_from_events(stream_events)
         return AdapterCallResult(
             text=assistant_text,
             usage=UsageSummary(),  # subscription path does not expose token usage
             stop_reason=stop_reason,
+            session_id=emitted_session_id,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
