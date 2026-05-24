@@ -167,9 +167,7 @@ class TestBuildSharedServices:
         _, loop = services.create_session(SessionMode.DAEMON)
         assert loop.model == settings.model
 
-    def test_model_switch_propagates_across_sessions(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_model_switch_propagates_across_sessions(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """v0.82.0 + PR-R6 staleness regression — disk-side ``GEODE_MODEL``
         mutation must reach the next session.
 
