@@ -42,7 +42,6 @@ def test_session_metrics_defaults_zero_or_empty() -> None:
     assert m.billing_provider == ""
     assert m.billing_mode == ""
     assert m.retry_count == 0
-    assert m.circuit_breaker_trips == {}
     assert m.error_count_by_type == {}
     assert m.rollback_count == 0
     assert m.fitness_before is None
@@ -111,15 +110,11 @@ def test_increment_apis() -> None:
     assert m.audit_call_count == 2
 
 
-def test_record_retry_and_circuit_breaker() -> None:
+def test_record_retry() -> None:
     m = SessionMetrics()
     m.record_retry()
     m.record_retry("anthropic")
-    m.record_circuit_breaker_trip("anthropic")
-    m.record_circuit_breaker_trip("anthropic")
-    m.record_circuit_breaker_trip("openai")
     assert m.retry_count == 2
-    assert m.circuit_breaker_trips == {"anthropic": 2, "openai": 1}
 
 
 def test_record_error_by_type() -> None:
@@ -169,7 +164,6 @@ def test_to_session_row_has_all_expected_keys() -> None:
         "billing_provider",
         "billing_mode",
         "retry_count",
-        "circuit_breaker_trips",
         "error_count_by_type",
         "rollback_count",
         "fitness_before",

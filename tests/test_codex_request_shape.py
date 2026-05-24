@@ -167,7 +167,7 @@ def test_fallback_loop_calls_is_request_fatal_in_bad_request_branch() -> None:
 def test_fallback_loop_reraises_on_unsupported_parameter() -> None:
     """End-to-end: a fake openai.BadRequestError-style exception with
     400 + ``Unsupported parameter`` body must NOT trigger any retries."""
-    from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+    from core.llm.fallback import retry_with_backoff_generic
 
     call_count = 0
 
@@ -182,13 +182,11 @@ def test_fallback_loop_reraises_on_unsupported_parameter() -> None:
         exc.body = {"detail": "Unsupported parameter: max_output_tokens"}  # type: ignore[attr-defined]
         raise exc
 
-    cb = CircuitBreaker()
     with pytest.raises(FakeBadRequestError):
         retry_with_backoff_generic(
             fn,
             model="gpt-5.5",
             fallback_models=["gpt-5.4-mini", "gpt-5.3-codex"],
-            circuit_breaker=cb,
             retryable_errors=(),  # 400 not in this tuple — falls into bad_request branch
             bad_request_error=FakeBadRequestError,
             billing_message="OpenAI billing exhausted",

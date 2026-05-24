@@ -132,7 +132,6 @@ class SessionMetrics:
 
     # D. Resilience metrics
     retry_count: int = 0
-    circuit_breaker_trips: dict[str, int] = field(default_factory=dict)
     error_count_by_type: dict[str, int] = field(default_factory=dict)
     rollback_count: int = 0
 
@@ -267,9 +266,6 @@ class SessionMetrics:
 
     def record_retry(self, provider: str = "") -> None:
         self.retry_count += 1
-
-    def record_circuit_breaker_trip(self, provider: str) -> None:
-        self.circuit_breaker_trips[provider] = self.circuit_breaker_trips.get(provider, 0) + 1
 
     def record_error(self, error_type: str) -> None:
         self.error_count_by_type[error_type] = self.error_count_by_type.get(error_type, 0) + 1
@@ -429,7 +425,6 @@ class SessionMetrics:
             "billing_provider": self.billing_provider,
             "billing_mode": self.billing_mode,
             "retry_count": self.retry_count,
-            "circuit_breaker_trips": dict(self.circuit_breaker_trips),
             "error_count_by_type": dict(self.error_count_by_type),
             "rollback_count": self.rollback_count,
             "fitness_before": self.fitness_before,

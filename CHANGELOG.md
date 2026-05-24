@@ -47,6 +47,44 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+
+- **PR-MAINPATH-5 — `CircuitBreaker` removed entirely.** The
+  module-level breaker singleton in
+  ``core/llm/fallback.py:CircuitBreaker`` (62 LOC) plus every
+  ``can_execute()`` / ``record_failure()`` / ``record_success()`` call
+  site across the 4 provider modules
+  (``core/llm/providers/{anthropic,openai,glm,codex}.py``), the
+  shared ``_get_provider_circuit_breaker`` dispatch helper in
+  ``core/llm/provider_dispatch.py``, the streaming-call breaker hooks
+  in ``core/llm/router/calls/streaming.py``, and the
+  ``CircuitBreaker`` re-export from ``core/llm/router/__init__.py``
+  are all gone. ``retry_with_backoff_generic`` + ``_async`` lose
+  their ``circuit_breaker=`` kwarg.
+  Per operator direction ("circuit-breaker는 제거해줘"), the original
+  PR-MAINPATH-5 plan to "verify circuit-breaker compatibility" is
+  replaced with full removal. Cooldown semantics still live on the
+  separate :class:`core.auth.cooldown.CooldownTracker` (per-key
+  auth-error cooldown, unrelated to the breaker) and on the
+  provider-internal retry/backoff loop.
+  Test scaffolding stripped in lock-step:
+  ``tests/conftest.py`` autouse ``_reset_circuit_breakers`` fixture
+  deleted; ``tests/test_circuit_breaker_isolation.py`` deleted
+  (75 LOC, contract no longer exists); ``test_provider_parity_v0532.py``
+  D1 section (CircuitBreaker call-pattern parity) dropped with a
+  one-line historical note; ``test_billing_fatal.py``,
+  ``test_codex_request_shape.py``, ``test_codex_normalize_parity.py``,
+  ``test_codex_responses_shape.py``, ``test_profile_wiring.py`` all
+  stripped of the ``CircuitBreaker()`` + ``circuit_breaker=cb``
+  scaffolding that was peripheral to each test's core assertion.
+  The orphaned ``SessionMetrics.circuit_breaker_trips`` counter +
+  ``record_circuit_breaker_trip()`` method removed (no production
+  caller after the breaker is gone); ``test_session_metrics.py``
+  follows. **Cumulative impact**: 18 source files touched + CHANGELOG
+  entry = 19 files total in the diff; -386 net LOC across the source
+  files (-406 deletions / +20 insertions), -351 net LOC including the
+  CHANGELOG entry's added lines.
+
 ### Changed
 
 - **PR-MAINPATH-234 — bundle of three main-path sprint steps.**
