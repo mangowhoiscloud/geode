@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.hooks import HookEvent, HookSystem
 from core.wiring.automation import build_automation
+
+from core.hooks import HookEvent, HookSystem
 
 
 class TestPipelineEndMemoryWrite:

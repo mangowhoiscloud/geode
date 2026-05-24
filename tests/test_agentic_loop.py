@@ -21,9 +21,10 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.tools.base import ToolContext
+
+from core.hooks import HookEvent, HookSystem
 
 
 def _run_executor(

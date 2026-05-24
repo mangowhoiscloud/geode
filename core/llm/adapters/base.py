@@ -117,6 +117,13 @@ class AdapterCallRequest:
     stop_sequences: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
     provider_options: dict[str, Any] = field(default_factory=dict)
+    # PR-V (2026-05-24, spec doc §3 — paperclip `--resume <sessionId>`
+    # parity). When non-empty the adapter passes ``--resume <session_id>``
+    # to claude-cli so the backend reuses the cached system prompt +
+    # prior conversation context — paperclip ``execute.ts:680`` says
+    # this saves 5-10K tokens per heartbeat. Empty = fresh session
+    # (pre-PR-V behaviour). Non-claude-cli adapters ignore this field.
+    resume_session_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -163,6 +170,13 @@ class AdapterCallResult:
     raw_response: Any = None
     reasoning_items: tuple[dict[str, Any], ...] = ()
     reasoning_summaries: tuple[str, ...] = ()
+    # PR-V (2026-05-24, spec doc §3) — sessionId emitted by claude-cli's
+    # ``system.init`` event (paperclip ``parse.ts:30``). Callers persist
+    # this so the next turn can resume the same backend session via
+    # ``AdapterCallRequest.resume_session_id``. Mirrors paperclip's
+    # ``heartbeat_runs.sessionIdBefore/After`` capture. Empty for
+    # non-claude-cli adapters (they don't have a resumable session).
+    session_id: str = ""
 
 
 @dataclass(frozen=True)

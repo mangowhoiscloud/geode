@@ -28,8 +28,9 @@ from core.agent.sub_agent import (
     drain_announced_results,
 )
 from core.agent.tool_executor import ToolExecutor
-from core.hooks import HookEvent, HookSystem
 from core.orchestration.isolated_execution import IsolatedRunner
+
+from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Fixtures

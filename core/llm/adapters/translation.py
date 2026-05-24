@@ -41,6 +41,7 @@ def build_adapter_request(
     temperature: float,
     thinking_budget: int,
     effort: str,
+    resume_session_id: str = "",
 ) -> AdapterCallRequest:
     """Translate AgenticLoop's call-site args → :class:`AdapterCallRequest`.
 
@@ -95,6 +96,7 @@ def build_adapter_request(
         temperature=temperature,
         thinking_budget=thinking_budget,
         effort=effort,
+        resume_session_id=resume_session_id,
     )
 
 

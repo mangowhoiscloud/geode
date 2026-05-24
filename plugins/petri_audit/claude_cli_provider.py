@@ -93,6 +93,7 @@ __all__ = [
     "TransientSignal",
     "build_claude_cli_argv",
     "classify_transient_signal",
+    "extract_session_id_from_events",
     "is_claude_transient_upstream_error",
     "parse_stream_json_events",
     "register",
@@ -320,6 +321,7 @@ def build_claude_cli_argv(
     allowed_tools: list[str] | None = None,
     disable_builtin_tools: bool = False,
     extra_args: Iterable[str] | None = None,
+    resume_session_id: str | None = None,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
 
@@ -339,6 +341,16 @@ def build_claude_cli_argv(
             ``mcp_config_path``.
         extra_args: Additional flags to append (test injection,
             operator hooks). Validated only by claude CLI itself.
+        resume_session_id: PR-V (2026-05-24) paperclip parity. When
+            non-empty/non-None claude-cli resumes the named session —
+            the backend reuses the cached system prompt + prior
+            conversation context so input billing drops to the
+            cached-marker tier (paperclip ``execute.ts:680``: 5-10K
+            tokens saved per heartbeat). When supplied alongside
+            ``mcp_config_path`` the system prompt is NOT re-injected;
+            claude-cli pulls the cached one (paperclip
+            ``execute.ts:697`` "instructions are already in the
+            session cache").
 
     The output format is pinned to ``stream-json`` + ``--verbose`` —
     we need every event to construct ``ModelOutput`` faithfully.
@@ -350,6 +362,13 @@ def build_claude_cli_argv(
         "--output-format",
         "stream-json",
         "--verbose",
+    ]
+    if resume_session_id:
+        # PR-V — paperclip ``execute.ts:680`` argv parity. ``--resume``
+        # must precede ``--model`` because claude-cli pulls the cached
+        # model when the session is resumed.
+        argv += ["--resume", resume_session_id]
+    argv += [
         "--model",
         model_name,
         "--max-turns",
@@ -371,6 +390,27 @@ def build_claude_cli_argv(
     if extra_args:
         argv += list(extra_args)
     return argv
+
+
+def extract_session_id_from_events(events: list[StreamJsonEvent]) -> str:
+    """Pull the ``session_id`` claude-cli emits in its ``system.init``
+    event. Mirrors paperclip ``parse.ts:30-33`` — the first event
+    claude-cli emits is always ``{type:"system", subtype:"init", session_id:"..."}``
+    carrying the freshly-allocated session_id for this turn. Callers
+    persist this so the next turn can resume via ``--resume <id>``.
+
+    PR-V (2026-05-24). Returns empty string when no system.init event
+    was seen (e.g. claude-cli crashed before init) so caller can
+    distinguish "session unknown" from "session zero"."""
+    for event in events:
+        if event.type != "system":
+            continue
+        if event.payload.get("subtype") != "init":
+            continue
+        session_id = event.payload.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            return session_id
+    return ""
 
 
 # ---------------------------------------------------------------------------

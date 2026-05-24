@@ -118,8 +118,9 @@ class TestProjectJournal:
 
 class TestJournalHooks:
     def test_pipeline_end_records_run(self, tmp_path):
-        from core.hooks import HookEvent
         from core.memory.journal_hooks import make_journal_handlers
+
+        from core.hooks import HookEvent
 
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
@@ -150,8 +151,9 @@ class TestJournalHooks:
         assert any("demo-subject" in p for p in patterns)
 
     def test_pipeline_error_records(self, tmp_path):
-        from core.hooks import HookEvent
         from core.memory.journal_hooks import make_journal_handlers
+
+        from core.hooks import HookEvent
 
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
@@ -171,8 +173,9 @@ class TestJournalHooks:
         assert runs[0].status == "error"
 
     def test_wrong_event_ignored(self, tmp_path):
-        from core.hooks import HookEvent
         from core.memory.journal_hooks import make_journal_handlers
+
+        from core.hooks import HookEvent
 
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
