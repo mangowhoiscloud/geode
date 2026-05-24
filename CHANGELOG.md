@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.51] - 2026-05-24
+
+> PR-T + PR-Q + PR-Q.5/U 3-PR bundle. PR-T (#1582): claude-cli transient
+> classifier observability — structured `TransientSignal` + full
+> post-mortem JSON dump under `~/.geode/diagnostics/`. PR-Q (#1583):
+> run-dir-as-anchor consolidation — 4 observability writers redirect
+> into `state/seed-generation/<run_id>/sub_agents/<task_id>/` via new
+> `core/observability/run_dir.py` ContextVar + `GEODE_RUN_DIR` env
+> bridge. PR-Q.5 + PR-U (#1584): single-anchor `task_id` invariant +
+> paperclip-style activity_log mirror in pipeline transcript. Spec doc
+> at `docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`
+> (PR1 = this release, PR2 queued). Codex MCP review of #1584 caught
+> ContextVar cross-process gap and got fixed in the same PR.
+
 ### Changed
 - **PR-Q.5 + PR-U — transcript 표준화 (식별자 정렬 + paperclip-style timeline mirror).**
   ``docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`` 의
