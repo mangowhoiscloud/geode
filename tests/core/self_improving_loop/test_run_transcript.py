@@ -10,12 +10,13 @@ import json
 from pathlib import Path
 
 import pytest
-from core.hooks import HookEvent
 from core.self_improving_loop.run_transcript import (
     RunTranscript,
     current_run_transcript,
     run_transcript_scope,
 )
+
+from core.hooks import HookEvent
 
 
 def _make_journal(tmp_path: Path) -> RunTranscript:

@@ -1,6 +1,7 @@
-from core.hooks import HookEvent, HookSystem
 from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import Task, TaskGraph, TaskStatus
+
+from core.hooks import HookEvent, HookSystem
 
 
 def test_bridge_marks_node_enter_exit_complete() -> None:

@@ -8,12 +8,13 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from core.hooks import HookEvent, HookSystem
 from core.hooks.plugins.notification_hook.hook import (
     _format_message,
     register_notification_hooks,
 )
 from core.mcp.notification_port import NotificationResult, set_notification
+
+from core.hooks import HookEvent, HookSystem
 
 # ---------------------------------------------------------------------------
 # Message formatting

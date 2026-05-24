@@ -27,6 +27,60 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) -> None:
+    """Mirror a HookSystem trigger into the active RunTranscript as a
+    paperclip-style activity_log row.
+
+    PR-COMM-1 (2026-05-24, spec doc §4). Pre-PR-COMM-1 the pipeline
+    transcript only carried 4 SessionTranscript mirrors (record_user_message
+    / record_assistant_message / record_tool_call / record_tool_result)
+    from PR-U + orchestrator phase events from cli.py. The remaining 70
+    HookEvent triggers were invisible in the unified timeline. Routing
+    every trigger through this helper closes that gap.
+
+    No-op when no orchestrator is bound (REPL / gateway / tests). Any
+    builder / registry / append failure is swallow-and-warn so a failed
+    mirror never breaks the upstream caller — same contract paperclip's
+    ``logActivity`` uses (``activity-log.ts:65``).
+    """
+    try:
+        from core.observability.activity_registry import map_hook_to_activity
+        from core.self_improving_loop.run_transcript import current_run_transcript
+
+        run_transcript = current_run_transcript()
+        if run_transcript is None:
+            return
+        row = map_hook_to_activity(event, data, run_id=run_transcript.session_id)
+        # Coerce details to a plain dict for the JSONL row. ``details``
+        # lives on every concrete ``ActivityRowBase`` subclass (typed
+        # rows carry pydantic ``BaseModel`` sub-schemas; generic rows
+        # carry a free-form ``dict``); we access via ``getattr`` so
+        # mypy doesn't trip over the base class's missing field.
+        row_details = getattr(row, "details", None)
+        details_payload: dict[str, Any]
+        if row_details is None:
+            details_payload = {}
+        elif hasattr(row_details, "model_dump"):
+            details_payload = row_details.model_dump()
+        elif isinstance(row_details, dict):
+            details_payload = row_details
+        else:
+            details_payload = {"_repr": repr(row_details)}
+        run_transcript.append(
+            event=event.value,
+            actor_type=row.actor_type,
+            actor_id=row.actor_id,
+            action=row.action,
+            entity_type=row.entity_type,
+            entity_id=row.entity_id,
+            task_id=row.task_id,
+            level=row.level,
+            payload=details_payload,
+        )
+    except Exception as exc:
+        log.debug("HookEvent → ActivityRow mirror failed for %s: %s", event.value, exc)
+
+
 class HookEvent(Enum):
     """Pipeline lifecycle events."""
 
@@ -346,6 +400,15 @@ class HookSystem:
                     )
                 )
 
+        # PR-COMM-1 (2026-05-24, spec doc §4 union channel wiring) —
+        # mirror this trigger into the active RunTranscript as a typed
+        # ActivityRow so the pipeline transcript carries every hook
+        # event, not just the 4 SessionTranscript record_* mirrors PR-U
+        # landed. No-op when no orchestrator is bound (REPL / gateway /
+        # tests). Failures are silent + warning-logged so the union
+        # channel never breaks an upstream hook handler.
+        _mirror_hook_to_active_transcript(event, data)
+
         return results
 
     async def trigger_async(
@@ -376,6 +439,11 @@ class HookSystem:
                         error=str(exc),
                     )
                 )
+
+        # PR-COMM-1 (2026-05-24) — async-path parity with the sync
+        # mirror call in :meth:`trigger` so both dispatch paths produce
+        # the same unified timeline.
+        _mirror_hook_to_active_transcript(event, data)
 
         return results
 
