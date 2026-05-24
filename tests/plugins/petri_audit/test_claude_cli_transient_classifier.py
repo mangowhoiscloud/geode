@@ -194,3 +194,177 @@ def test_transient_classifier_subclass_caught_by_invocation_error() -> None:
     )
 
     assert issubclass(ClaudeCliTransientUpstreamError, ClaudeCliInvocationError)
+
+
+# ---------------------------------------------------------------------------
+# PR T — classify_transient_signal returns structured TransientSignal
+# (replaces the bool-only is_claude_transient_upstream_error so callers
+# can act on which signature fired — rate_limit vs overloaded vs quota).
+# ---------------------------------------------------------------------------
+
+
+def test_classify_signal_stdout_source() -> None:
+    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+
+    signal = classify_transient_signal(
+        stdout="oops! Unexpected error. Auto-retrying.\n",
+        stderr="",
+    )
+    assert signal is not None
+    assert signal.source == "stdout"
+    assert "Unexpected error. Auto-retrying" in signal.matched_text
+    assert signal.event_type is None
+    assert signal.event_field is None
+
+
+def test_classify_signal_stderr_source() -> None:
+    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+
+    signal = classify_transient_signal(
+        stdout="",
+        stderr="HTTP 429 rate_limit_error from upstream\n",
+    )
+    assert signal is not None
+    assert signal.source == "stderr"
+    # Both '429' and 'rate_limit_error' match — whichever the engine
+    # picks first is fine; the assertion is just that the surrounding
+    # context made it into the excerpt.
+    assert "rate_limit" in signal.matched_text or "429" in signal.matched_text
+
+
+def test_classify_signal_result_event_with_field() -> None:
+    """``result`` event hit must carry the ``event_field`` so the
+    operator can tell whether the upstream error landed in
+    ``result.error`` vs ``result.message`` vs ``result.stderr``."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [{"type": "result", "error": "overloaded_error: upstream busy", "result": ""}]
+    )
+    signal = classify_transient_signal(
+        stdout="", stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.source == "event"
+    assert signal.event_type == "result"
+    assert signal.event_field == "error"
+    assert "overloaded_error" in signal.matched_text
+
+
+def test_classify_signal_assistant_event_no_field() -> None:
+    """``assistant`` events carry text in ``message.content[].text`` —
+    the ``event_field`` is ``None`` because there's only one canonical
+    text location."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Claude usage limit reached. Resets at 4pm.",
+                        }
+                    ]
+                },
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout="", stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.source == "event"
+    assert signal.event_type == "assistant"
+    assert signal.event_field is None
+    assert "usage limit reached" in signal.matched_text
+
+
+def test_classify_signal_negative_returns_none() -> None:
+    """Normal successful output must return ``None`` (not bool ``False``)
+    so callers can use ``if signal is not None:`` for clarity."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Hello"}]}},
+            {"type": "result", "result": "Hello", "stop_reason": "end_turn"},
+        ]
+    )
+    assert (
+        classify_transient_signal(stdout=stdout, stderr="", events=parse_stream_json_events(stdout))
+        is None
+    )
+
+
+def test_classify_signal_search_order_stdout_first() -> None:
+    """Raw stdout match wins over any event match — paperclip's
+    ``buildClaudeTransientHaystack`` walks raw fields first because
+    they're the rawest evidence (no parser intermediate)."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout_with_match = "429 throttling at the wrapper layer\n"
+    events_with_match = parse_stream_json_events(
+        _make_stream_json([{"type": "result", "error": "overloaded_error", "result": ""}])
+    )
+    signal = classify_transient_signal(
+        stdout=stdout_with_match, stderr="", events=events_with_match
+    )
+    assert signal is not None
+    assert signal.source == "stdout"
+    # Verifies stdout hit takes precedence — event hit (overloaded_error)
+    # is not the matched_text.
+    assert "overloaded" not in signal.matched_text
+
+
+def test_signal_excerpt_bounded_to_200_chars() -> None:
+    """``matched_text`` must stay ≤ 200 chars so log lines remain
+    readable even when claude-cli emits multi-KB error blobs."""
+    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+
+    long_pad = "x" * 500
+    stdout = f"{long_pad} 429 {long_pad}"
+    signal = classify_transient_signal(stdout=stdout, stderr="")
+    assert signal is not None
+    assert len(signal.matched_text) <= 200
+
+
+def test_transient_exception_carries_signal_and_dump_path() -> None:
+    """Structured fields on ``ClaudeCliTransientUpstreamError`` —
+    these are the diagnostic the bool-only path lost. ``signal`` and
+    ``dump_path`` together let downstream callers route on the
+    actual upstream signature without re-running the cycle."""
+    from plugins.petri_audit.claude_cli_provider import (
+        ClaudeCliTransientUpstreamError,
+        TransientSignal,
+    )
+
+    sig = TransientSignal(matched_text="429 rate_limit", source="stderr")
+    fixture_path = "/var/tmp/dump.json"  # noqa: S108 — symbolic fixture path; the file is never opened
+    exc = ClaudeCliTransientUpstreamError("test message", signal=sig, dump_path=fixture_path)
+    assert exc.signal is sig
+    assert exc.dump_path == fixture_path
+
+
+def test_transient_exception_default_signal_none_for_backwards_compat() -> None:
+    """Pre-PR-T callers that raise without keyword args must still
+    work — ``signal`` and ``dump_path`` default to ``None``."""
+    from plugins.petri_audit.claude_cli_provider import ClaudeCliTransientUpstreamError
+
+    exc = ClaudeCliTransientUpstreamError("legacy")
+    assert exc.signal is None
+    assert exc.dump_path is None

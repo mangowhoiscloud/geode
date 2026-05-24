@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.llm.adapters._subprocess_common import build_subprocess_stdin
 from core.llm.adapters.base import (
@@ -33,6 +35,9 @@ from core.llm.adapters.base import (
     StreamEvent,
     UsageSummary,
 )
+
+if TYPE_CHECKING:
+    from plugins.petri_audit.claude_cli_provider import StreamJsonEvent, TransientSignal
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +78,7 @@ class ClaudeCliAdapter:
             _resolve_claude_binary,
             _run_claude_subprocess,
             build_claude_cli_argv,
-            is_claude_transient_upstream_error,
+            classify_transient_signal,
             parse_stream_json_events,
         )
 
@@ -90,12 +95,50 @@ class ClaudeCliAdapter:
             self._last_error = exc
             raise
 
-        events = parse_stream_json_events(stdout)
-        if is_claude_transient_upstream_error(stdout=stdout, stderr=stderr, events=events):
-            stderr_tail = stderr.strip().splitlines()[-1] if stderr.strip() else "<empty>"
+        # ``stream_events`` is the parsed stream-json sequence — used for
+        # both the transient classifier walk and (on the happy path) the
+        # assistant-text + stop_reason extractors. Renamed from the
+        # naive ``events`` to make the lifecycle (parse once, consume
+        # in two branches) obvious to the next reader.
+        stream_events = parse_stream_json_events(stdout)
+        # ``transient_signal`` is non-None when ``stdout``/``stderr``/
+        # any parsed event carried an upstream rate-limit / overload /
+        # quota / retry-failure signature (see classifier docstring).
+        # ``None`` = healthy call, continue to text extraction below.
+        transient_signal = classify_transient_signal(
+            stdout=stdout, stderr=stderr, events=stream_events
+        )
+        if transient_signal is not None:
+            # ``postmortem_path`` is the on-disk JSON dump under
+            # ``~/.geode/diagnostics/claude-cli-transient/`` carrying
+            # the full ``(stdout, stderr, parsed events, classifier
+            # signal, rc)`` — the four diagnostic dimensions the
+            # pre-PR-T ``stderr_tail`` log line discarded. ``None``
+            # when the dump write itself failed (disk full / permission
+            # denied) — diagnostic is best-effort, never blocks the
+            # raise below.
+            postmortem_path = _dump_transient_postmortem(
+                model=req.model,
+                rc=rc,
+                stdout=stdout,
+                stderr=stderr,
+                events=stream_events,
+                signal=transient_signal,
+            )
             transient_exc = ClaudeCliTransientUpstreamError(
-                f"claude-cli upstream transient error (rc={rc}, model={req.model}). "
-                f"stderr_tail={stderr_tail!r}"
+                f"claude-cli upstream transient (rc={rc}, model={req.model}, "
+                f"source={transient_signal.source}"
+                + (
+                    f"/{transient_signal.event_type}"
+                    + (f".{transient_signal.event_field}" if transient_signal.event_field else "")
+                    if transient_signal.event_type
+                    else ""
+                )
+                + f", matched={transient_signal.matched_text!r}"
+                + (f", dump={postmortem_path}" if postmortem_path else "")
+                + ")",
+                signal=transient_signal,
+                dump_path=str(postmortem_path) if postmortem_path else None,
             )
             self._last_error = transient_exc
             raise transient_exc
@@ -107,14 +150,14 @@ class ClaudeCliAdapter:
         # No events but rc==0 means claude-cli emitted nothing — treat
         # as a hard failure so the caller doesn't process empty text
         # as a legitimate assistant reply.
-        if not events:
+        if not stream_events:
             raise ClaudeCliInvocationError(
                 f"claude-cli rc=0 but emitted no stream-json events. "
                 f"stderr={stderr.strip()[:200]!r}"
             )
 
-        text = _extract_assistant_text(events)
-        stop_reason = _extract_stop_reason(events)
+        assistant_text = _extract_assistant_text(stream_events)
+        stop_reason = _extract_stop_reason(stream_events)
         # ``_extract_stop_reason`` returns ``"unknown"`` when no
         # ``message_delta`` / ``result`` stop event was seen; coerce
         # to the adapter-canonical ``"end_turn"`` so the translator's
@@ -122,7 +165,7 @@ class ClaudeCliAdapter:
         if stop_reason == "unknown":
             stop_reason = "end_turn"
         return AdapterCallResult(
-            text=text,
+            text=assistant_text,
             usage=UsageSummary(),  # subscription path does not expose token usage
             stop_reason=stop_reason,
         )
@@ -237,6 +280,84 @@ class ClaudeCliAdapter:
             provider=self.provider,
             source_path="~/.claude/oauth-token.json (via claude binary)",
         )
+
+
+def _dump_transient_postmortem(
+    *,
+    model: str,
+    rc: int,
+    stdout: str,
+    stderr: str,
+    events: list[StreamJsonEvent],
+    signal: TransientSignal,
+) -> Path | None:
+    """Persist a full post-mortem for every claude-cli transient hit so
+    operators can recover the upstream error message the classifier
+    matched on (which is otherwise discarded). Returns the dump path on
+    success, ``None`` on any I/O error (best-effort — diagnostic, not
+    correctness-critical).
+
+    Pre-PR-T the adapter discarded stdout / parsed events after the
+    classifier hit, surfacing only ``stderr_tail`` in the log line —
+    but claude-cli writes its errors to stdout, not stderr, so the
+    tail was invariably ``<empty>``. The dump records everything the
+    classifier saw so operators can identify the actual upstream
+    signature (5-hour quota vs RPM cap vs backend 5xx vs OAuth slot
+    cap) without re-running the cycle.
+    """
+    import json
+    import time
+
+    from core.paths import GLOBAL_DIAGNOSTICS_DIR
+
+    try:
+        # ``postmortem_dir`` is the parent of every transient dump.
+        # Co-located under ``~/.geode/diagnostics/`` with the existing
+        # smoke/oauth diagnostic outputs (see ``core.paths.GLOBAL_DIAGNOSTICS_DIR``)
+        # so the operator's "diagnostics tar-up" command catches it
+        # without a separate registration.
+        postmortem_dir = GLOBAL_DIAGNOSTICS_DIR / "claude-cli-transient"
+        postmortem_dir.mkdir(parents=True, exist_ok=True)
+        # ``hit_ts`` = wall-clock seconds of the transient hit. Used as
+        # the filename prefix so directory listing sorts chronologically
+        # (newest last), and as the ``ts`` field in the payload so a
+        # consumer reading multiple dumps can reconstruct the cycle's
+        # transient timeline without filesystem mtime ambiguity.
+        hit_ts = int(time.time())
+        # ``postmortem_path`` = absolute path the JSON will land at.
+        # Filename pattern ``<ts>-<model>.json`` lets ``ls -t`` show
+        # newest first and groups by model when sorted alphabetically.
+        postmortem_path = postmortem_dir / f"{hit_ts}-{model}.json"
+        # ``payload`` is the JSON body. Carries the four diagnostic
+        # dimensions the pre-PR-T ``stderr_tail`` log line discarded:
+        # (1) signal — which regex / which source fired
+        # (2) stdout — raw stream-json bytes claude-cli emitted
+        # (3) stderr — empty in practice but kept for completeness
+        # (4) events — parsed StreamJsonEvent sequence for structured
+        #     post-mortem analysis (which result.error / result.message
+        #     carried the upstream message). ``rc`` + ``model`` round
+        #     out the run identity.
+        payload = {
+            "ts": hit_ts,
+            "model": model,
+            "rc": rc,
+            "signal": {
+                "matched_text": signal.matched_text,
+                "source": signal.source,
+                "event_type": signal.event_type,
+                "event_field": signal.event_field,
+            },
+            "stdout": stdout,
+            "stderr": stderr,
+            "events": [{"type": e.type, "payload": e.payload} for e in events],
+        }
+        postmortem_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return postmortem_path
+    except Exception:
+        log.debug("claude-cli transient post-mortem dump failed", exc_info=True)
+        return None
 
 
 __all__ = ["ClaudeCliAdapter"]
