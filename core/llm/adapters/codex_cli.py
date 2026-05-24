@@ -54,6 +54,9 @@ class CodexCliAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         import asyncio
+        import json as _json
+        import tempfile
+        from pathlib import Path as _Path
 
         from core.orchestration.codex_cli_lane import acquire_codex_cli_lane_async
 
@@ -64,40 +67,65 @@ class CodexCliAdapter:
                 "Install the Codex CLI or use the openai-payg / codex-oauth adapter."
             )
         argv = [binary, "exec", "--model", req.model, "--full-auto"]
+        # PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) —
+        # ``codex exec --output-schema <FILE>`` takes a JSON Schema
+        # FILE path (vs claude-cli's ``--json-schema <inline>``
+        # string). Materialise the schema into a tempfile when
+        # ``req.response_schema`` is set, clean up after the
+        # subprocess exits. Mirrors the same structured-output forcing
+        # the OpenAI SDK does via
+        # ``chat.completions.parse(response_format=PydanticModel)`` →
+        # ``json_schema`` with ``strict=true``.
+        _schema_tmp: _Path | None = None
+        if req.response_schema is not None:
+            _fd, _path = tempfile.mkstemp(prefix="codex-cli-schema-", suffix=".json")
+            _schema_tmp = _Path(_path)
+            try:
+                with open(_fd, "w", encoding="utf-8") as fh:
+                    _json.dump(req.response_schema, fh, separators=(",", ":"))
+            except Exception:
+                _schema_tmp.unlink(missing_ok=True)
+                _schema_tmp = None
+                raise
+            argv += ["--output-schema", str(_schema_tmp)]
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"codex-cli:{req.model}"
-        async with acquire_codex_cli_lane_async(lane_key):
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *argv,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-            except (FileNotFoundError, OSError) as exc:
-                self._last_error = exc
-                raise RuntimeError(f"codex-cli: spawn failed — {exc!r}") from exc
-            try:
-                stdout_b, stderr_b = await asyncio.wait_for(
-                    proc.communicate(stdin_text.encode("utf-8")),
-                    timeout=600.0,
-                )
-            except TimeoutError as exc:
-                proc.kill()
-                await proc.wait()
-                self._last_error = exc
-                raise RuntimeError("codex-cli: subprocess timeout after 600s") from exc
-        stdout = stdout_b.decode("utf-8", errors="replace")
-        stderr = stderr_b.decode("utf-8", errors="replace")
-        rc = proc.returncode or 0
-        if rc != 0:
-            err_excerpt = stderr.strip().splitlines()[-1] if stderr.strip() else "<no stderr>"
-            raise RuntimeError(f"codex-cli subprocess exited rc={rc}: {err_excerpt}")
-        return AdapterCallResult(
-            text=stdout,
-            usage=UsageSummary(),
-            stop_reason="end_turn",
-        )
+        try:
+            async with acquire_codex_cli_lane_async(lane_key):
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        *argv,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                except (FileNotFoundError, OSError) as exc:
+                    self._last_error = exc
+                    raise RuntimeError(f"codex-cli: spawn failed — {exc!r}") from exc
+                try:
+                    stdout_b, stderr_b = await asyncio.wait_for(
+                        proc.communicate(stdin_text.encode("utf-8")),
+                        timeout=600.0,
+                    )
+                except TimeoutError as exc:
+                    proc.kill()
+                    await proc.wait()
+                    self._last_error = exc
+                    raise RuntimeError("codex-cli: subprocess timeout after 600s") from exc
+            stdout = stdout_b.decode("utf-8", errors="replace")
+            stderr = stderr_b.decode("utf-8", errors="replace")
+            rc = proc.returncode or 0
+            if rc != 0:
+                err_excerpt = stderr.strip().splitlines()[-1] if stderr.strip() else "<no stderr>"
+                raise RuntimeError(f"codex-cli subprocess exited rc={rc}: {err_excerpt}")
+            return AdapterCallResult(
+                text=stdout,
+                usage=UsageSummary(),
+                stop_reason="end_turn",
+            )
+        finally:
+            if _schema_tmp is not None:
+                _schema_tmp.unlink(missing_ok=True)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         result = await self.acomplete(req)

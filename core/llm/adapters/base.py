@@ -124,6 +124,23 @@ class AdapterCallRequest:
     # this saves 5-10K tokens per heartbeat. Empty = fresh session
     # (pre-PR-V behaviour). Non-claude-cli adapters ignore this field.
     resume_session_id: str = ""
+    # PR-PERMS-FLAG-FIX (2026-05-25) — JSON-schema forcing parity
+    # across both Anthropic + OpenAI structured-output APIs:
+    # * Anthropic SDK ``messages.parse(output_format=PydanticModel)`` →
+    #   ``JSONOutputFormatParam(schema=..., type="json_schema")``.
+    # * OpenAI SDK ``chat.completions.parse(response_format=PydanticModel)`` →
+    #   ``json_schema`` with ``strict=true``.
+    # * claude-cli (``--print``) flag ``--json-schema <schema>`` (inline string).
+    # * codex-cli (``exec``) flag ``--output-schema <FILE>`` (path-based).
+    #
+    # Set this dict (a JSON Schema object) when the caller expects a
+    # validated JSON shape — eliminates the "LLM returns natural
+    # language + code block instead of pure JSON" failure that
+    # clipped proximity / critic / pilot / meta_reviewer in the
+    # v0.99.53 smoke. Adapters that don't support structured outputs
+    # ignore this field and fall back to prompt-engineered JSON
+    # discipline.
+    response_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

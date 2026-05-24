@@ -208,7 +208,7 @@ def test_argv_skip_permissions_default_false() -> None:
     from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
 
     argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
-    assert "--allow-dangerously-skip-permissions" not in argv
+    assert "--dangerously-skip-permissions" not in argv
 
 
 def test_argv_skip_permissions_true_appends_flag() -> None:
@@ -223,7 +223,7 @@ def test_argv_skip_permissions_true_appends_flag() -> None:
         model_name="claude-opus-4-7",
         skip_permissions=True,
     )
-    assert "--allow-dangerously-skip-permissions" in argv
+    assert "--dangerously-skip-permissions" in argv
 
 
 def test_argv_skip_permissions_order_after_tools_block() -> None:
@@ -239,7 +239,7 @@ def test_argv_skip_permissions_order_after_tools_block() -> None:
         skip_permissions=True,
     )
     tools_idx = argv.index("--tools")
-    skip_idx = argv.index("--allow-dangerously-skip-permissions")
+    skip_idx = argv.index("--dangerously-skip-permissions")
     assert tools_idx < skip_idx
 
 
@@ -256,7 +256,129 @@ def test_argv_skip_permissions_composes_with_extra_args() -> None:
         extra_args=["--reasoning-effort", "high"],
     )
     assert argv[-2:] == ["--reasoning-effort", "high"]
-    assert "--allow-dangerously-skip-permissions" in argv[:-2]
+    assert "--dangerously-skip-permissions" in argv[:-2]
+
+
+def test_argv_skip_permissions_uses_real_bypass_flag_not_meta() -> None:
+    """PR-PERMS-FLAG-FIX (2026-05-25) — the v0.99.53 smoke surfaced
+    that the former ``--allow-dangerously-skip-permissions`` flag is
+    only the meta ENABLE flag, while ``--dangerously-skip-permissions``
+    (no ``--allow-`` prefix) is the one that actually performs the
+    bypass. Pin the active flag name so a future refactor doesn't
+    silently regress to the meta-flag and produce mixed-result smoke
+    runs (1st sub-agent passes via lighter checks, 2nd fails on
+    Write denial)."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        skip_permissions=True,
+    )
+    assert "--dangerously-skip-permissions" in argv
+    # The meta-only "allow-" variant must NEVER appear — it doesn't
+    # bypass anything by itself and would just confuse log readers.
+    assert "--allow-dangerously-skip-permissions" not in argv
+
+
+def test_argv_disable_session_persistence_default_false() -> None:
+    """PR-PERMS-FLAG-FIX (2026-05-25) — default off so callers that
+    rely on PR-V's `--resume`-based cross-turn cached-marker billing
+    optimization (5-10K tokens saved per heartbeat) are unaffected.
+    Sub-agent dispatch explicitly opts in via True."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
+    assert "--no-session-persistence" not in argv
+
+
+def test_argv_disable_session_persistence_true_appends_flag() -> None:
+    """Explicit True appends the flag so sub-agent spawns get strict
+    per-process isolation (no cwd-keyed claude-cli session cache
+    leaking conversation context across smokes)."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        disable_session_persistence=True,
+    )
+    assert "--no-session-persistence" in argv
+
+
+def test_argv_session_persistence_composes_with_skip_permissions() -> None:
+    """Both new flags can be enabled simultaneously — both are
+    sub-agent dispatch policy defaults — and they retain a stable
+    ordering relative to ``--tools "" `` and ``extra_args``."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        skip_permissions=True,
+        disable_session_persistence=True,
+        extra_args=["--reasoning-effort", "high"],
+    )
+    assert "--dangerously-skip-permissions" in argv
+    assert "--no-session-persistence" in argv
+    # extra_args still tail-anchored
+    assert argv[-2:] == ["--reasoning-effort", "high"]
+
+
+def test_argv_json_schema_default_none_omits_flag() -> None:
+    """PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) — default
+    None means callers that don't need structured output retain
+    free-form text responses."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
+    assert "--json-schema" not in argv
+
+
+def test_argv_json_schema_dict_appends_serialized_inline() -> None:
+    """When ``json_schema`` is set, claude-cli's ``--json-schema``
+    flag receives the schema serialised as inline JSON. Pinned shape
+    so a future refactor doesn't accidentally pass a file path
+    (claude-cli accepts inline only; codex-cli is the path-based one)."""
+    import json
+
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    schema = {
+        "type": "object",
+        "properties": {"verdict": {"type": "string"}},
+        "required": ["verdict"],
+    }
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        json_schema=schema,
+    )
+    assert "--json-schema" in argv
+    idx = argv.index("--json-schema")
+    parsed = json.loads(argv[idx + 1])
+    assert parsed == schema
+
+
+def test_argv_json_schema_composes_with_all_other_flags() -> None:
+    """All three new dispatch-policy flags (skip_permissions,
+    disable_session_persistence, json_schema) can be applied in the
+    same call without disturbing the existing ``extra_args``
+    tail-anchor invariant."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        skip_permissions=True,
+        disable_session_persistence=True,
+        json_schema={"type": "object"},
+        extra_args=["--reasoning-effort", "high"],
+    )
+    assert "--dangerously-skip-permissions" in argv
+    assert "--no-session-persistence" in argv
+    assert "--json-schema" in argv
+    assert argv[-2:] == ["--reasoning-effort", "high"]
 
 
 # ---------------------------------------------------------------------------
