@@ -121,7 +121,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 | Discovering improvements not in plan | Handle in next iteration after completing current work |
 | Selective test execution | Run only tests relevant to changes first, full suite at the end |
 | Commit message language | Korean/English freely (maintain consistency only) |
-| Tool selection | Freely choose faster tool if results are equivalent |
+| Tool selection | Freely choose faster tool if results are equivalent. For external library/SDK API questions, ground via `ctx7 library <name>` → `ctx7 docs <id>` before quoting (avoid recalled-from-training hallucination). |
 | Cleanup / refactor PRs may bundle aggressively | The Socratic Q4 "minimum change" guard does **not** apply when the PR's purpose *is* cleanup — find every fold, prune, and rename in scope and ship them together. (cf. [[feedback-cleanup-no-minimal-change]]) |
 
 ### Wiring Verification (Anti-Disconnection)

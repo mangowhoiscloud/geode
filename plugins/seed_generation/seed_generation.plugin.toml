@@ -63,7 +63,11 @@ num_turns = 0
 
 [seed_generation.role.critic]
 default_model = "claude-sonnet-4-6"
+# ``claude-opus-4-7`` accepted so operators on the Claude Code Max
+# subscription can route critic on the strongest available reasoning
+# model when running through ``source = "claude-cli"``.
 allowed_models = [
+    "claude-opus-4-7",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
     "gpt-5.5",
@@ -77,7 +81,10 @@ role_contract = "plugins/seed_generation/agents/critic.md"
 # now an LLM completion call like every other role. CSP-10 dropped the
 # ``kind`` field from the schema (every role is completion now).
 default_model = "claude-sonnet-4-6"
+# ``claude-opus-4-7`` accepted for the same Claude Code Max routing
+# reason as critic — proximity is also a reasoning-heavy role.
 allowed_models = [
+    "claude-opus-4-7",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
     "gpt-5.5",
@@ -88,7 +95,11 @@ role_contract = "plugins/seed_generation/agents/proximity.md"
 [seed_generation.role.pilot]
 # Cheap-fast slot — runs inside the Petri inner-loop on every candidate.
 default_model = "claude-haiku-4-5"
+# ``claude-opus-4-7`` accepted so operators can opt into a stronger
+# pilot when iteration cost is acceptable (manifest default stays
+# haiku for the cheap-fast contract).
 allowed_models = [
+    "claude-opus-4-7",
     "claude-haiku-4-5",
     "gpt-5.4-mini",
     "gpt-5.3-codex",
@@ -152,12 +163,16 @@ queries_per_run = 3
 # at load time, NOT lazily.
 
 [seed_generation.judge_panel]
+# Default voter mix: 2 reviewers on OpenAI gpt-5.5 via openai-codex
+# (ChatGPT Plus subscription / Codex Responses API) + 1 reviewer on
+# Anthropic claude-sonnet-4-6 via claude-cli (Claude Code Max
+# subscription). Both diversity gates are satisfied:
+#   * providers ≥ 2 (openai + anthropic)
+#   * paths ≥ 2 (openai-codex + claude-cli)
+# Every voter rides a subscription path so PAYG credit isn't required.
+# Operators on PAYG-only deploys override via ``~/.geode/config.toml``'s
+# ``[self_improving_loop.seed_generation.judge_panel.voters]`` array.
 required_diversity_providers = 2
-
-[[seed_generation.judge_panel.voters]]
-model = "claude-sonnet-4-6"
-provider = "anthropic"
-source = "claude-cli"
 
 [[seed_generation.judge_panel.voters]]
 model = "gpt-5.5"
@@ -165,6 +180,11 @@ provider = "openai"
 source = "openai-codex"
 
 [[seed_generation.judge_panel.voters]]
-model = "claude-haiku-4-5"
+model = "gpt-5.5"
+provider = "openai"
+source = "openai-codex"
+
+[[seed_generation.judge_panel.voters]]
+model = "claude-sonnet-4-6"
 provider = "anthropic"
-source = "api_key"
+source = "claude-cli"
