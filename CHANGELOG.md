@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.52] - 2026-05-24
+
+> 2-PR bundle. PR-COMM-1 (#1587): 74 HookEvent → 11 group patterns
+> (32 typed lifecycle + 42 generic fall-through), paperclip activity_log
+> envelope + openclaw discriminatedUnion parity, every HookSystem
+> trigger now mirrors into the active RunTranscript pipeline transcript.
+> PR-V (#1588): paperclip `--resume <sessionId>` + per-agent
+> `<run_dir>/sub_agents/<task_id>/session.json` (agent_runtime_state
+> equivalent). System prompt suppressed on resume turns so the
+> CHANGELOG-claimed 5-10K tokens saved per turn actually materialises
+> (Codex MCP review of #1588 caught the deception path mid-cycle).
+
 ### Added
 - **PR2 (V) — paperclip `--resume <sessionId>` + per-agent session.json.**
   Spec doc §3 of `docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`.
