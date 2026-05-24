@@ -48,6 +48,51 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-COMM-3** — per-agent cumulative runtime state in SQLite.
+  Adds `agent_runtime_state` (14 cols) + `run_lineage` (9 cols) tables
+  to `sessions.db` (audit doc §4 Option A — co-located with `sessions`
+  and `messages` rather than a separate `runtime.db` so cross-table
+  joins stay local). Schema:
+  - `agent_runtime_state` carries the claude-cli sessionId for the
+    next `--resume`, cumulative tokens / cost (`total_input_tokens` /
+    `total_output_tokens` / `total_cached_input_tokens` /
+    `total_cost_cents`), and the last error. Two orthogonal-axis
+    columns (`agent_kind`: subagent/repl/gateway/scheduler;
+    `component`: seed-generation/self-improving-loop/petri-audit/
+    autoresearch/agentic_loop/serve/scheduler) separate process
+    origin from GEODE subsystem.
+  - `run_lineage` tracks per-cycle retry/refinement chains
+    (`parent_run_id` → `root_run_id`) for multi-cycle agents
+    (seed-generation, self-improving-loop).
+  - 7 indexes (idx_agent_runtime_kind / _component / _updated /
+    _session; idx_run_lineage_agent / _parent / _root) for the
+    expected query shapes.
+  - `core/observability/agent_runtime_state.py` (NEW) — writer/reader
+    API: `record_agent_session_end`, `record_subagent_completed`,
+    `accumulate_tokens_and_cost`, `record_run_lineage`, `mark_run_ended`,
+    `get_agent_runtime_state`, `get_retry_chain`, `get_root_run`.
+    Failures swallow-and-warn so the upstream hook never breaks.
+  - Pinned by `tests/test_agent_runtime_state.py` (17 cases —
+    schema bootstrap × 4, writers × 8, lineage × 5).
+  - **Deferred to PR-COMM-3b**: bootstrap hook handler registration +
+    emit-site augmentation. The current `SESSION_ENDED` /
+    `SUBAGENT_COMPLETED` / `LLM_CALL_ENDED` payloads do NOT carry the
+    fields the writers need (`agent_kind`, `component`,
+    `adapter_type`, `claude_cli_session_id`, `usage`, `session_id`) —
+    Codex MCP review caught the gap. Wiring handlers without
+    augmenting the emit sites would silently no-op in production,
+    violating the Read-Write parity guard. PR-COMM-3b will augment
+    `_lifecycle.py:_final_hook_payloads`, `sub_agent.py:_emit_completed`,
+    and the six `router/calls/*.py` `LLM_CALL_ENDED` sites, then wire
+    the handlers — both ends of the wire grep-provable in the same
+    diff.
+  - **Deferred to PR-COMM-3c**: migrating
+    `core/agent/loop/agent_loop.py:_persist_session_id` from
+    `<run_dir>/sub_agents/<task_id>/session.json` to the SQLite
+    `agent_runtime_state.claude_cli_session_id` column. Ships once
+    the writer is verified producing the expected row shape in the
+    wild (post-COMM-3b).
+
 - **PR-COMM-2** — `HookSystem.register_prefix()` + `unregister_prefix()`
   for wildcard event subscriptions. Pre-fix the bootstrap had to enumerate
   every `HookEvent` value to attach a global `run_log` handler:
