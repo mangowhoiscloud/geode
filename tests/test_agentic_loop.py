@@ -1387,10 +1387,16 @@ class TestAgenticLoopEdgeCases:
     def test_adapter_initialized_at_construction(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Verify agentic adapter is created at construction time."""
+        """Verify the Path-B adapter is resolved at construction time.
+
+        PR-MAINPATH-67 (2026-05-24) — the legacy ``self._adapter``
+        field was deleted alongside ``resolve_agentic_adapter``; the
+        loop now exposes the resolved Path-B ``LLMAdapter`` via
+        ``self._new_adapter``.
+        """
         loop = AgenticLoop(context, executor, quiet=True)
-        assert loop._adapter is not None
-        assert loop._adapter.provider_name == "anthropic"
+        assert loop._new_adapter is not None
+        assert loop._new_adapter.provider == "anthropic"
 
 
 class TestSubAgentEdgeCases:

@@ -516,8 +516,8 @@ def _normalize_provider_for_registry(provider: str) -> str:
     Path-B registry's provider key vocabulary.
 
     Step J-b.2 (2026-05-23, Codex MCP HIGH fix-up) —
-    :func:`_resolve_provider` returns the legacy AgenticLLMPort provider
-    keys (``anthropic`` / ``openai`` / ``openai-codex`` / ``glm``). The
+    :func:`_resolve_provider` returns the broader provider keys
+    (``anthropic`` / ``openai`` / ``openai-codex`` / ``glm``). The
     Path-B :func:`~core.llm.adapters.registry.resolve_for` registry uses
     a narrower set: ``anthropic`` / ``openai`` / ``glm``. The Codex
     distinction is encoded on the ``source`` axis instead (``CodexOAuthAdapter``

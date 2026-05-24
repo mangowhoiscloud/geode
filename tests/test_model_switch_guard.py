@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop
@@ -321,15 +321,17 @@ class TestConversationContextWired:
 
 
 def _make_loop(ctx: ConversationContext, model: str = "claude-opus-4-6") -> AgenticLoop:
-    """Create a minimal AgenticLoop for testing context adaptation."""
-    adapter = MagicMock()
-    adapter.fallback_chain = [model]
-    executor = ToolExecutor()
+    """Create a minimal AgenticLoop for testing context adaptation.
 
-    with patch("core.agent.loop.resolve_agentic_adapter", return_value=adapter):
-        loop = AgenticLoop(
-            model=model,
-            context=ctx,
-            tool_executor=executor,
-        )
+    PR-MAINPATH-67 (2026-05-24) — the legacy ``resolve_agentic_adapter``
+    factory was deleted; the loop now resolves Path-B adapters via
+    ``core.llm.adapters.resolve_for``. ``conftest.py`` already calls
+    ``bootstrap_builtins`` so the registry is populated.
+    """
+    executor = ToolExecutor()
+    loop = AgenticLoop(
+        model=model,
+        context=ctx,
+        tool_executor=executor,
+    )
     return loop

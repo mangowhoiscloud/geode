@@ -49,6 +49,61 @@ functional change.
 
 ### Removed
 
+- **PR-MAINPATH-67 — final delete of the legacy `AgenticLLMPort` surface.**
+  Closes the AgenticLoop main-path migration sprint started by
+  PR-MAINPATH-1. Two source files deleted (599 LOC total):
+  ``core/llm/adapters/_legacy.py`` (422 LOC; held the
+  ``AgenticLLMPort`` Protocol, ``resolve_agentic_adapter`` factory,
+  ``_ADAPTER_MAP`` registry) and ``core/llm/adapters/_legacy_bridge.py``
+  (177 LOC; held ``build_adapter_request`` +
+  ``agentic_response_from_adapter_result``).
+  Symbols still in production use that lived in the deleted file
+  moved to **domain-named modules** per the Naming CANNOTs (no
+  ``_legacy`` / ``_helpers`` suffix once a caller appears):
+  - ``core/llm/adapters/paperclip.py`` (285 LOC, new) — host of
+    ``LLMClientPort`` Protocol + ``ClaudeAdapter`` wrapper +
+    ``LLM*Callable`` Protocols. Name borrows from the paperclip-style
+    abstraction the J-b.1 series established.
+  - ``core/llm/adapters/provider_inference.py`` (68 LOC, new) — host
+    of ``infer_provider_from_model`` (used by ``plugins/petri_audit``).
+  - ``core/llm/adapters/translation.py`` (173 LOC, new) — host of
+    ``build_adapter_request`` + ``agentic_response_from_adapter_result``
+    (sole consumer is now ``AgenticLoop._call_llm``).
+  Re-exports stripped: ``core/llm/adapters/__init__.py`` drops
+  ``AgenticLLMPort`` + ``resolve_agentic_adapter`` + ``_ADAPTER_MAP``;
+  ``core/llm/router/__init__.py`` + ``core/agent/loop/__init__.py``
+  drop ``resolve_agentic_adapter`` re-export.
+  AgenticLoop:
+  - ``core/agent/loop/agent_loop.py.__init__`` no longer constructs
+    ``self._adapter``. ``_call_llm`` is Path-B-only — the
+    ``if self._new_adapter is not None:`` guard + the
+    ``else: response = await self._adapter.agentic_call(...)``
+    fallback branch are both gone. ``last_error`` reads
+    ``self._new_adapter._last_error`` / ``self._last_llm_error``
+    directly.
+  - ``core/agent/loop/_model_switching.py`` — the
+    ``_resolve_agentic_adapter`` shim deleted; ``_apply_model_update``
+    only re-resolves ``_new_adapter``.
+  Provider-level ``agentic_call`` methods (in
+  ``core/llm/providers/{anthropic,openai,glm,codex}.py``) **stay**
+  because they're independently tested and not in the AgenticLoop's
+  call path — their migration is out of scope for this PR.
+  Test rewires: ``tests/test_model_failover.py::TestAgenticLoopFailover``
+  4 tests now mock ``_new_adapter.acomplete`` via a new
+  ``_install_acomplete_stub`` helper; ``tests/test_provider_switching.py``
+  no longer asserts on ``resolve_agentic_adapter``;
+  ``tests/core/llm/adapters/test_legacy_bridge.py`` →
+  ``tests/core/llm/adapters/test_translation.py`` (file moved + import
+  paths updated); ``tests/test_agentic_loop.py::test_adapter_initialized_at_construction``
+  now asserts ``_new_adapter.provider == "anthropic"``;
+  ``tests/test_model_escalation.py``, ``tests/test_startup.py``,
+  ``tests/test_provider_label_consistency.py``, ``tests/test_codex_provider.py``,
+  ``tests/test_model_switch_guard.py``, ``tests/core/agent/test_agent_loop_source_route.py``
+  all migrate to read ``_new_adapter``. **Resolves deferred-item #4
+  from the v0.99.48 sprint summary.**
+
+### Removed
+
 - **PR-MAINPATH-5 — `CircuitBreaker` removed entirely.** The
   module-level breaker singleton in
   ``core/llm/fallback.py:CircuitBreaker`` (62 LOC) plus every

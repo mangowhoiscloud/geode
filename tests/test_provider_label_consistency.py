@@ -6,6 +6,10 @@ in the dispatch but `"zhipuai"` in the UI store). The Codex OAuth token
 therefore matched `ProfileRotator.resolve("openai")` and poisoned every
 plain GPT call. These tests pin the labels so a future rename can't
 silently re-open the cross-provider leak.
+
+PR-MAINPATH-67 (2026-05-24) — the legacy ``_ADAPTER_MAP`` was deleted
+alongside ``resolve_agentic_adapter``; the adapter alignment test now
+walks the Path-B registry (``list_adapters``) instead.
 """
 
 from __future__ import annotations
@@ -14,7 +18,10 @@ from core.cli.commands import MODEL_PROFILES
 from core.config import _resolve_provider
 
 from core.llm import adapters as _adapters_mod
-from core.llm.adapters import _ADAPTER_MAP
+
+# Path-B registry collapses ``openai-codex`` onto ``openai`` (the source
+# axis encodes the Codex distinction) and ``zhipuai`` onto ``glm``.
+_LEGACY_TO_REGISTRY = {"openai-codex": "openai", "zhipuai": "glm"}
 
 
 class TestProviderRouting:
@@ -35,8 +42,18 @@ class TestProviderRouting:
             assert _resolve_provider(model) == "anthropic", model
 
 
-class TestAdapterMapAlignment:
-    def test_every_resolver_target_has_an_adapter(self) -> None:
+class TestAdapterRegistryAlignment:
+    def test_every_resolver_target_has_a_registered_adapter(self) -> None:
+        """Every provider returned by :func:`_resolve_provider` must be
+        registered in the Path-B adapter registry (after the
+        ``openai-codex`` / ``zhipuai`` normalisation that
+        ``AgenticLoop.__init__`` applies)."""
+        from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins, list_adapters
+
+        _reset_for_test()
+        bootstrap_builtins()
+        registered = {entry.provider for entry in list_adapters()}
+
         targets = {
             _resolve_provider(m)
             for m in (
@@ -47,7 +64,8 @@ class TestAdapterMapAlignment:
             )
         }
         for provider in targets:
-            assert provider in _ADAPTER_MAP, provider
+            registry_key = _LEGACY_TO_REGISTRY.get(provider, provider)
+            assert registry_key in registered, (provider, registry_key, registered)
 
 
 class TestCrossProviderFallbackSafety:

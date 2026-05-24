@@ -245,12 +245,23 @@ class TestNormalizeResponsesApi:
         assert tool_blocks[0].input == {"query": "test"}
 
 
-class TestAdapterMap:
-    def test_codex_in_adapter_map(self):
-        from core.llm.adapters import _ADAPTER_MAP
+class TestAdapterRegistry:
+    def test_codex_oauth_in_path_b_registry(self):
+        """PR-MAINPATH-67 (2026-05-24) — the legacy ``_ADAPTER_MAP``
+        was deleted; Codex routing now lives in the Path-B registry
+        under ``(provider="openai", source="subscription")``."""
+        from core.llm.adapters.registry import (
+            _reset_for_test,
+            bootstrap_builtins,
+            list_adapters,
+        )
 
-        assert "openai-codex" in _ADAPTER_MAP
-        assert "CodexAgenticAdapter" in _ADAPTER_MAP["openai-codex"]
+        _reset_for_test()
+        bootstrap_builtins()
+        entries = {(a.provider, a.source): a for a in list_adapters()}
+        assert ("openai", "subscription") in entries
+        codex = entries[("openai", "subscription")]
+        assert codex.__class__.__name__ == "CodexOAuthAdapter"
 
     def test_no_cross_provider_fallback_shim(self):
         """v0.99.19 — the empty-dict ``CROSS_PROVIDER_FALLBACK`` shim is

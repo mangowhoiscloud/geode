@@ -3,20 +3,18 @@
 Pins:
 - Empty source → PR-MAINPATH-1 (2026-05-24) cutover defaults source
   to ``"payg"``; ``_new_adapter`` is resolved through the Path-B
-  registry. Pre-cutover, empty source meant ``_new_adapter is None``
-  and the loop ran on the legacy ``resolve_agentic_adapter`` route.
+  registry. PR-MAINPATH-67 (2026-05-24) deleted the legacy
+  ``self._adapter`` field alongside ``resolve_agentic_adapter``, so
+  ``_new_adapter`` is now the sole dispatch surface.
 - Concrete source + ``provider="anthropic"`` → ``resolve_for`` resolves and
-  attaches a new_adapter; legacy adapter still constructed for the fallback
-  surface (unused on this path).
+  attaches a new_adapter.
 - Concrete source + ``provider="openai"`` → A2 (v0.99.44) extended the
   Path-B registry beyond Anthropic; OpenAI providers now also resolve
-  (`test_openai_provider_attaches_new_adapter`). The pre-A2 "anthropic
-  only" claim that lived in this docstring header is gone.
+  (`test_openai_provider_attaches_new_adapter`).
 - Concrete source + unregistered (provider, source) pair → hard-fail
-  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback). The cutover preserves
-  this contract: if the Path-B default ``"payg"`` doesn't match a
-  registered adapter for the requested provider, ``AgenticLoop.__init__``
-  raises rather than silently routing through the legacy adapter.
+  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback). Post-MAINPATH-67
+  this is the only failure mode — there is no longer a legacy adapter
+  to fall back to.
 """
 
 from __future__ import annotations
@@ -50,22 +48,20 @@ def _make_loop(*, source: str = "", provider: str = "anthropic") -> AgenticLoop:
 
 def test_empty_source_defaults_to_payg_after_mainpath_cutover() -> None:
     """PR-MAINPATH-1 (2026-05-24) — empty source defaults to "payg" and
-    resolves through the Path-B registry. Pre-cutover, this test asserted
-    the opposite (``_new_adapter is None``) because empty source landed
-    on the legacy ``resolve_agentic_adapter`` route.
+    resolves through the Path-B registry. PR-MAINPATH-67 (2026-05-24)
+    deleted the legacy ``_adapter`` field; ``_new_adapter`` is the
+    only dispatch surface.
     """
     loop = _make_loop(source="")
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "anthropic-payg"
     assert loop._source == "payg"
-    assert loop._adapter is not None  # legacy still wired for error surface
 
 
 def test_concrete_source_attaches_anthropic_adapter() -> None:
     loop = _make_loop(source="payg")
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "anthropic-payg"
-    assert loop._adapter is not None  # legacy also wired for fallback
 
 
 def test_concrete_source_each_anthropic_variant() -> None:
@@ -86,7 +82,6 @@ def test_openai_provider_attaches_new_adapter() -> None:
     loop = _make_loop(source="payg", provider="openai")
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "openai-payg"
-    assert loop._adapter is not None  # legacy adapter still wired as fallback
 
 
 def test_unregistered_pair_hard_fails() -> None:
@@ -100,13 +95,9 @@ def test_unregistered_pair_hard_fails() -> None:
 
 def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
     """PR-MAINPATH-4 (2026-05-24) — ``/model`` between providers must
-    re-resolve ``_new_adapter`` alongside the legacy ``_adapter``.
-
-    Pre-PR-MAINPATH-4 the runtime switch only updated ``_adapter``
-    (legacy ``resolve_agentic_adapter`` route); ``_new_adapter``
-    stayed pointed at the previous provider's Path-B adapter, so the
-    next ``_call_llm`` would dispatch to the wrong API. This test
-    pins the dual-adapter re-resolution invariant.
+    re-resolve ``_new_adapter``. PR-MAINPATH-67 (2026-05-24) deleted
+    the legacy ``_adapter`` re-resolution alongside the resolver, so
+    Path-B is now the sole adapter swapped on provider change.
     """
     from core.agent.loop._model_switching import _apply_model_update
 
@@ -123,4 +114,3 @@ def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
     assert loop._provider == "openai-codex"
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "openai-payg"
-    assert loop._adapter is not None  # legacy adapter also updated
