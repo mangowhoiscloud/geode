@@ -48,6 +48,33 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-SUB-AGENT-CODEBLOCK-STRIP** — `SubAgentManager._to_sub_result`
+  / `_to_agent_result` (`core/agent/sub_agent.py`) now strip
+  ```` ```json ... ``` ```` markdown code fences before
+  `json.loads(isolation.output)`. Smoke 7 (v0.99.53, post
+  PR-JSON-CODEBLOCK-STRIP) surfaced proximity + critic phases
+  still failing — the consumer-side strip in
+  `parse_structured_output()` doesn't help when the producer
+  (sub_agent) wraps the fenced text into `{"raw": <wrapped-text>}`
+  before the consumer sees it. Proximity's consumer (which
+  expects either required fields or a `text` key) cannot recover
+  from `{"raw": ...}`; critic's consumer also has no path to
+  unwrap inside a `raw` envelope. Applying the strip at the
+  producer layer eliminates the `{"raw": ...}` fallback for
+  fenced JSON, so downstream agents see a proper dict.
+  New module-level `_JSON_CODEBLOCK_RE` + `_strip_json_codeblock()`
+  helper (sister regex to the one in
+  `plugins/seed_generation/agents/base.py` from
+  PR-JSON-CODEBLOCK-STRIP). Plain (un-fenced) JSON passes through
+  unchanged; non-JSON text still falls back to `{"raw": <text>}`
+  (preserving the original raw envelope behaviour). Pinned by 9
+  new regression tests in
+  `tests/core/agent/test_subagent_json_codeblock_strip.py`:
+  fence with `json` tag, fence with prose preamble, plain JSON
+  regression, non-JSON raw fallback, empty output, bare ``` fence,
+  `_to_agent_result` fence unwrap, `_to_agent_result` plain JSON,
+  `_to_agent_result` raw fallback.
+
 - **PR-JSON-CODEBLOCK-STRIP** — `parse_structured_output()` (shared
   parser used by Critic / Pilot / Ranker / Evolver / Meta-review)
   now strips ```` ```json ... ``` ```` markdown code fences before
