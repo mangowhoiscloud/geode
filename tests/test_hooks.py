@@ -287,6 +287,272 @@ class TestHookSystem:
         assert received == [{}]
 
 
+class TestRegisterPrefix:
+    """PR-COMM-2 (2026-05-24) — wildcard prefix subscriptions.
+
+    Replaces the bootstrap pattern ``for event in HookEvent:
+    hooks.register(event, handler, ...)`` with a single
+    ``register_prefix("*", handler, ...)`` call. Future HookEvent
+    additions automatically extend subscriber coverage instead of
+    silently bypassing every wildcard handler.
+    """
+
+    def test_star_subscribes_to_every_event(self):
+        hooks = HookSystem()
+        seen: list[HookEvent] = []
+
+        def universal(event, _data):
+            seen.append(event)
+
+        hooks.register_prefix("*", universal)
+
+        for event in (
+            HookEvent.PIPELINE_STARTED,
+            HookEvent.NODE_ENTERED,
+            HookEvent.SUBAGENT_FAILED,
+            HookEvent.LLM_CALL_ENDED,
+        ):
+            hooks.trigger(event)
+
+        assert seen == [
+            HookEvent.PIPELINE_STARTED,
+            HookEvent.NODE_ENTERED,
+            HookEvent.SUBAGENT_FAILED,
+            HookEvent.LLM_CALL_ENDED,
+        ]
+
+    def test_prefix_match_segment_boundary(self):
+        """``"NODE"`` matches ``NODE_ENTERED`` but not ``NODELESS_*``
+        (none such today — the test guards against a future regression
+        where someone replaces the ``+ "_"`` boundary with a bare
+        ``startswith``)."""
+        hooks = HookSystem()
+        seen: list[HookEvent] = []
+
+        def node_handler(event, _data):
+            seen.append(event)
+
+        hooks.register_prefix("NODE", node_handler)
+
+        hooks.trigger(HookEvent.NODE_ENTERED)
+        hooks.trigger(HookEvent.NODE_EXITED)
+        hooks.trigger(HookEvent.PIPELINE_STARTED)  # must NOT fire
+
+        assert seen == [HookEvent.NODE_ENTERED, HookEvent.NODE_EXITED]
+
+    def test_exact_event_name_matches_prefix(self):
+        """``prefix == event.name`` matches the exact event (not just
+        ``<prefix>_<suffix>`` shapes). Allows a handler to subscribe to
+        a single event via the prefix API for consistency with
+        :meth:`register`."""
+        hooks = HookSystem()
+        seen: list[HookEvent] = []
+
+        def handler(event, _data):
+            seen.append(event)
+
+        hooks.register_prefix("PIPELINE_TIMEOUT", handler)
+
+        hooks.trigger(HookEvent.PIPELINE_TIMEOUT)
+        hooks.trigger(HookEvent.PIPELINE_STARTED)  # different event
+
+        assert seen == [HookEvent.PIPELINE_TIMEOUT]
+
+    def test_dedup_across_exact_and_prefix(self):
+        """When the same handler name is registered as both exact and
+        wildcard, only ONE invocation fires per trigger (the exact-match
+        entry wins — see ``_resolve_hooks_for`` dedup contract)."""
+        hooks = HookSystem()
+        call_count = [0]
+
+        def shared_handler(_event, _data):
+            call_count[0] += 1
+
+        hooks.register(HookEvent.PIPELINE_STARTED, shared_handler, name="dup_handler")
+        hooks.register_prefix("PIPELINE", shared_handler, name="dup_handler")
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+
+        assert call_count[0] == 1
+
+    def test_priority_merged_across_exact_and_prefix(self):
+        """Exact-registered and prefix-registered handlers compose in a
+        single priority-sorted execution order, NOT exact-first then
+        wildcards. Ensures wildcards aren't relegated to "always last"."""
+        hooks = HookSystem()
+        order: list[str] = []
+
+        def low_exact(_event, _data):
+            order.append("low_exact")
+
+        def high_prefix(_event, _data):
+            order.append("high_prefix")
+
+        hooks.register(HookEvent.PIPELINE_STARTED, low_exact, priority=200)
+        hooks.register_prefix("PIPELINE", high_prefix, priority=10)
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+
+        assert order == ["high_prefix", "low_exact"]
+
+    def test_unregister_prefix_removes_subscriber(self):
+        hooks = HookSystem()
+        fired = [0]
+
+        def handler(_e, _d):
+            fired[0] += 1
+
+        hooks.register_prefix("*", handler, name="watchall")
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        assert fired[0] == 1
+
+        removed = hooks.unregister_prefix("*", "watchall")
+        assert removed is True
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        assert fired[0] == 1  # no change after unregister
+
+    def test_unregister_prefix_returns_false_when_missing(self):
+        hooks = HookSystem()
+        assert hooks.unregister_prefix("PIPELINE", "ghost") is False
+
+    def test_dedup_within_same_prefix_replaces_handler(self):
+        """Re-registering with the same name under the same prefix
+        replaces (matches :meth:`register`'s per-event dedup)."""
+        hooks = HookSystem()
+        seen: list[str] = []
+
+        def v1(_e, _d):
+            seen.append("v1")
+
+        def v2(_e, _d):
+            seen.append("v2")
+
+        hooks.register_prefix("PIPELINE", v1, name="versioned")
+        hooks.register_prefix("PIPELINE", v2, name="versioned")
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+
+        assert seen == ["v2"]
+
+    def test_prefix_handler_fires_on_async_trigger(self):
+        """The async trigger path must consult the same wildcard table
+        as the sync trigger path — otherwise async-using callers would
+        see different coverage."""
+        import asyncio
+
+        hooks = HookSystem()
+        seen: list[HookEvent] = []
+
+        def handler(event, _data):
+            seen.append(event)
+
+        hooks.register_prefix("*", handler)
+        asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_ENDED))
+        assert seen == [HookEvent.PIPELINE_ENDED]
+
+    def test_prefix_handler_fires_on_interceptor_trigger(self):
+        """Same coverage invariant for the interceptor channel."""
+        hooks = HookSystem()
+        seen: list[HookEvent] = []
+
+        def handler(event, _data):
+            seen.append(event)
+
+        hooks.register_prefix("*", handler)
+        hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"user_input": "hi"})
+        assert seen == [HookEvent.USER_INPUT_RECEIVED]
+
+    def test_list_hooks_includes_wildcard_subscribers(self):
+        """``list_hooks()`` introspection must surface wildcard handlers
+        — pre-fix they were invisible (registered in ``_prefix_hooks``
+        which ``list_hooks`` didn't consult). The wildcard channel is
+        keyed as ``"*<prefix>"`` so callers can distinguish it from the
+        exact-match channels."""
+        hooks = HookSystem()
+
+        def watcher(_e, _d):
+            pass
+
+        hooks.register_prefix("*", watcher, name="run_log_handler")
+
+        all_hooks = hooks.list_hooks()
+        assert "**" in all_hooks
+        assert "run_log_handler" in all_hooks["**"]
+
+    def test_list_hooks_event_specific_includes_matching_wildcards(self):
+        """When ``list_hooks(event)`` is called, the result lists every
+        handler that would fire on a trigger of that event — including
+        wildcard subscribers whose prefix matches."""
+        hooks = HookSystem()
+
+        def exact(_e, _d):
+            pass
+
+        def wild(_e, _d):
+            pass
+
+        hooks.register(HookEvent.NODE_ENTERED, exact, name="exact_h")
+        hooks.register_prefix("NODE", wild, name="wild_h")
+
+        listing = hooks.list_hooks(HookEvent.NODE_ENTERED)
+        names = listing[HookEvent.NODE_ENTERED.value]
+        assert "exact_h" in names
+        assert "wild_h" in names
+
+    def test_clear_all_drops_wildcards_too(self):
+        """``clear()`` with no event must drop wildcard subscriptions
+        alongside exact registrations — otherwise wildcards survive
+        ``clear()`` and pollute the next test / serve restart."""
+        hooks = HookSystem()
+        fired = [0]
+
+        def watcher(_e, _d):
+            fired[0] += 1
+
+        hooks.register_prefix("*", watcher)
+        hooks.clear()
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        assert fired[0] == 0
+
+    def test_clear_specific_event_keeps_wildcards(self):
+        """Per-event ``clear(EVENT)`` only drops handlers registered
+        directly against that event; wildcards remain bound and
+        continue firing on subsequent triggers of that event."""
+        hooks = HookSystem()
+        fired = [0]
+
+        def watcher(_e, _d):
+            fired[0] += 1
+
+        hooks.register_prefix("*", watcher)
+        hooks.register(HookEvent.PIPELINE_STARTED, lambda *_: None, name="exact_only")
+        hooks.clear(HookEvent.PIPELINE_STARTED)
+
+        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        assert fired[0] == 1  # wildcard survived
+
+    def test_replaces_bootstrap_for_event_loop(self):
+        """Regression pin for the bootstrap migration:
+        ``hooks.register_prefix("*", handler)`` must produce the same
+        observable behaviour as the pre-fix ``for event in HookEvent:
+        hooks.register(event, handler, ...)`` loop. Triggering EVERY
+        event must invoke the handler EVERY time."""
+        hooks = HookSystem()
+        call_count = [0]
+
+        def handler(_event, _data):
+            call_count[0] += 1
+
+        hooks.register_prefix("*", handler, name="run_log_handler")
+
+        for event in HookEvent:
+            hooks.trigger(event)
+
+        assert call_count[0] == len(HookEvent)
+
+
 class TestAsyncHookSystem:
     def test_trigger_async_awaits_async_handler(self):
         hooks = HookSystem()

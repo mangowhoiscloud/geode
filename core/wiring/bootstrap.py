@@ -165,8 +165,12 @@ def build_hooks(
     # Run log + hook handler
     run_log = RunLog(session_key, log_dir=log_dir)
     handler_name, handler_fn = _make_run_log_handler(run_log, session_key, run_id)
-    for event in HookEvent:
-        hooks.register(event, handler_fn, name=handler_name, priority=50)
+    # PR-COMM-2 (2026-05-24) — replace the pre-fix 74-entry registration
+    # loop with a single ``"*"`` wildcard subscription. Adding a new
+    # HookEvent value now extends run_log coverage automatically instead
+    # of requiring a bootstrap edit (which was previously silent — the
+    # missing event simply never reached the run log).
+    hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
 
     # Stuck detector + hook handler
     stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)
