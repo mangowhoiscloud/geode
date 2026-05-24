@@ -1,4 +1,4 @@
-"""LLM fallback infrastructure — CircuitBreaker + retry with backoff.
+"""LLM fallback infrastructure — retry with backoff.
 
 Shared by all providers (Anthropic, OpenAI, GLM).
 """
@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import threading
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -140,76 +139,11 @@ def _resolve_plan_for_billing_error(model: str) -> dict[str, str]:
         return {}
 
 
-class CircuitBreaker:
-    """Thread-safe circuit breaker for LLM API calls.
-
-    Used in ThreadPoolExecutor contexts (sub-agent MAX_CONCURRENT=5),
-    so all state mutations are protected by a threading.Lock.
-    """
-
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0) -> None:
-        self._lock = threading.Lock()
-        self._failures = 0
-        self._threshold = failure_threshold
-        self._recovery_timeout = recovery_timeout
-        self._last_failure: float = 0.0
-        self._state: str = "closed"  # closed, open, half-open
-
-    def record_failure(self) -> None:
-        with self._lock:
-            self._failures += 1
-            self._last_failure = time.time()
-            if self._failures >= self._threshold:
-                self._state = "open"
-                log.warning(
-                    "Circuit breaker OPEN after %d failures (threshold=%d)",
-                    self._failures,
-                    self._threshold,
-                )
-
-    def record_success(self) -> None:
-        with self._lock:
-            prev_state = self._state
-            self._failures = 0
-            self._state = "closed"
-            if prev_state == "half-open":
-                log.info("Circuit breaker CLOSED (recovered from half-open)")
-
-    def can_execute(self) -> bool:
-        with self._lock:
-            if self._state == "closed":
-                return True
-            if self._state == "open":
-                if time.time() - self._last_failure > self._recovery_timeout:
-                    self._state = "half-open"
-                    log.info("Circuit breaker HALF-OPEN (cooldown expired, testing)")
-                    return True
-                return False
-            return True  # half-open: allow one attempt
-
-    def reset(self) -> None:
-        """Force-clear breaker state. Test-only — drops all accumulated failure history.
-
-        Production code should rely on natural recovery via the
-        ``recovery_timeout`` half-open path. The pytest autouse fixture
-        in ``tests/conftest.py`` calls this between tests so module-level
-        breaker singletons don't leak failure counters across unrelated
-        suites when xdist's ``loadfile`` distribution puts a
-        failure-injecting test (e.g. ``test_failover``) on the same
-        worker as a downstream consumer (e.g. ``test_tool_use``).
-        """
-        with self._lock:
-            self._failures = 0
-            self._state = "closed"
-            self._last_failure = 0.0
-
-
 def retry_with_backoff_generic(
     fn: Any,
     *,
     model: str,
     fallback_models: list[str],
-    circuit_breaker: CircuitBreaker,
     retryable_errors: tuple[type[Exception], ...],
     bad_request_error: type[Exception] | None = None,
     billing_message: str = "API billing/credit error.",
@@ -219,20 +153,18 @@ def retry_with_backoff_generic(
     provider_label: str = "LLM",
     on_retry: Any | None = None,
 ) -> Any:
-    """Generic retry with exponential backoff + model fallback + circuit breaker.
+    """Generic retry with exponential backoff + model fallback.
 
     Shared by Anthropic (``_retry_with_backoff``) and OpenAI
     (``OpenAIAdapter._retry_with_backoff``) to eliminate DRY violation.
 
     Stage 1: Retry same model with exponential backoff.
     Stage 2: On persistent failure, try fallback models.
-    Stage 3: Circuit breaker prevents calls when API is down.
 
     Args:
         fn: Callable accepting ``model`` keyword argument.
         model: Primary model name.
         fallback_models: Ordered fallback model chain.
-        circuit_breaker: CircuitBreaker instance for this provider.
         retryable_errors: Tuple of exception types that trigger retry.
         bad_request_error: Exception type for bad-request errors (e.g.
             ``anthropic.BadRequestError``, ``openai.BadRequestError``).
@@ -243,12 +175,6 @@ def retry_with_backoff_generic(
         retry_max_delay: Max delay cap in seconds.
         provider_label: Label for log messages (e.g. "LLM", "OpenAI").
     """
-    if not circuit_breaker.can_execute():
-        raise RuntimeError(
-            f"Circuit breaker is open — {provider_label} API calls are temporarily blocked. "
-            "Too many consecutive failures detected."
-        )
-
     models_to_try = [model] + [m for m in fallback_models if m != model]
 
     # Resolve None defaults from settings (function defaults stay lazy so the
@@ -295,7 +221,6 @@ def retry_with_backoff_generic(
         for attempt in range(max_retries):
             try:
                 result = fn(model=current_model)
-                circuit_breaker.record_success()
                 _notify_success(_provider_for_rotator)
                 return result
             except retryable_errors as exc:
@@ -357,11 +282,8 @@ def retry_with_backoff_generic(
                 if bad_request_error is not None and isinstance(exc, bad_request_error):
                     # v0.52.6 — short-circuit "Unsupported parameter" /
                     # "Invalid value" 400-class errors. Same backend will
-                    # reject every retry with the same body; the v0.52.5
-                    # incident burned 30s on Codex's
-                    # ``Unsupported parameter: max_output_tokens`` before
-                    # the circuit breaker tripped. Re-raise so the
-                    # outer except (non-retryable_errors) catches and
+                    # reject every retry with the same body. Re-raise so
+                    # the outer except (non-retryable_errors) catches and
                     # surfaces the original message.
                     from core.llm.errors import is_request_fatal
 
@@ -408,7 +330,6 @@ def retry_with_backoff_generic(
 
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
-    circuit_breaker.record_failure()
     _notify_failure(_provider_for_rotator, last_error)
     log.error("All %s models and retries exhausted. Last error: %s", provider_label, last_error)
     raise last_error
@@ -419,7 +340,6 @@ async def retry_with_backoff_generic_async(
     *,
     model: str,
     fallback_models: list[str],
-    circuit_breaker: CircuitBreaker,
     retryable_errors: tuple[type[Exception], ...],
     bad_request_error: type[Exception] | None = None,
     billing_message: str = "API billing/credit error.",
@@ -429,13 +349,7 @@ async def retry_with_backoff_generic_async(
     provider_label: str = "LLM",
     on_retry: Any | None = None,
 ) -> Any:
-    """Async retry with exponential backoff + model fallback + circuit breaker."""
-    if not circuit_breaker.can_execute():
-        raise RuntimeError(
-            f"Circuit breaker is open — {provider_label} API calls are temporarily blocked. "
-            "Too many consecutive failures detected."
-        )
-
+    """Async retry with exponential backoff + model fallback."""
     models_to_try = [model] + [m for m in fallback_models if m != model]
 
     from core.config import settings as _cfg
@@ -477,7 +391,6 @@ async def retry_with_backoff_generic_async(
         for attempt in range(max_retries):
             try:
                 result = await fn(model=current_model)
-                circuit_breaker.record_success()
                 _notify_success(_provider_for_rotator)
                 return result
             except retryable_errors as exc:
@@ -571,7 +484,6 @@ async def retry_with_backoff_generic_async(
 
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
-    circuit_breaker.record_failure()
     _notify_failure(_provider_for_rotator, last_error)
     log.error(
         "All %s models and async retries exhausted. Last error: %s",

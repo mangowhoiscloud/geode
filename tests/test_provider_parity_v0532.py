@@ -2,10 +2,6 @@
 
 Pre-fix gaps surfaced by ``docs/research/v0531-defect-scan.md``:
 
-  D1 — Anthropic agentic_call never called ``_circuit_breaker.record_failure``
-       / ``record_success`` (OpenAI/Codex/GLM did). Breadcrumb-only
-       observability gap.
-
   D2 — Only Anthropic's BillingError reached ``AgenticLoop._emit_quota_panel``
        because OpenAI/Codex/GLM had a generic ``except Exception:`` that
        swallowed BillingError into ``self.last_error`` and returned None.
@@ -18,7 +14,9 @@ Pre-fix gaps surfaced by ``docs/research/v0531-defect-scan.md``:
        ``_resolve_provider("gpt-5.5")`` returned ``"openai-codex"`` (the
        v0.53.0 _CODEX_ONLY_MODELS map). UI picker showed wrong label.
 
-This file pins all four contracts so the parity gaps can't recur.
+D1 (CircuitBreaker call-pattern parity) was dropped when the breaker was
+removed from the LLM path (PR-MAINPATH-5-CB) — see ``core/llm/fallback.py``
+history. The three remaining contracts (D2/D3/D4) are still pinned below.
 """
 
 from __future__ import annotations
@@ -30,34 +28,6 @@ import core.llm.providers.codex as _codex_mod
 import core.llm.providers.glm as _glm_mod
 import core.llm.providers.openai as _openai_mod
 from core.llm.errors import BillingError
-
-# ---------------------------------------------------------------------------
-# D1 — Anthropic agentic_call records circuit breaker state
-# ---------------------------------------------------------------------------
-
-
-def test_anthropic_agentic_call_records_circuit_breaker_failure() -> None:
-    """Source-level: Anthropic agentic_call must call
-    ``_circuit_breaker.record_failure()`` on the exception path. Pre-fix
-    only the sync path through ``retry_with_backoff_generic`` recorded
-    CB state — the async agentic path was invisible to the CB."""
-    src = inspect.getsource(_anthropic_mod.ClaudeAgenticAdapter.agentic_call)
-    assert "_circuit_breaker.record_failure" in src, (
-        "Anthropic agentic_call must call _circuit_breaker.record_failure() "
-        "on exception/failure paths — without it the CB never trips for "
-        "async LLM call failures (OpenAI/Codex/GLM already do this)"
-    )
-
-
-def test_anthropic_agentic_call_records_circuit_breaker_success() -> None:
-    """Source-level: Anthropic agentic_call must call
-    ``_circuit_breaker.record_success()`` on the happy path."""
-    src = inspect.getsource(_anthropic_mod.ClaudeAgenticAdapter.agentic_call)
-    assert "_circuit_breaker.record_success" in src, (
-        "Anthropic agentic_call must call _circuit_breaker.record_success() "
-        "after a successful response — without it the CB stays open"
-    )
-
 
 # ---------------------------------------------------------------------------
 # D2 — All adapters re-raise BillingError so the loop can render the panel

@@ -40,12 +40,10 @@ async def call_llm_streaming_async(
     from core.llm.providers.anthropic import (
         RETRYABLE_ERRORS as _RETRYABLE_ERRORS,
     )
-    from core.llm.providers.anthropic import get_circuit_breaker
 
     client = get_async_anthropic_client()
     target_model = model or settings.model
     provider = _route_provider(target_model)
-    circuit_breaker = get_circuit_breaker()
 
     # Hook: LLM_CALL_START
     _fire_hook(
@@ -65,9 +63,6 @@ async def call_llm_streaming_async(
         ) as stream:
             async for text in stream.text_stream:
                 yield text
-
-            # Record success AFTER stream completes
-            circuit_breaker.record_success()
 
             # Capture token usage from the stream's final response
             final = await stream.get_final_message()
@@ -105,13 +100,6 @@ async def call_llm_streaming_async(
                 },
             )
 
-    # Circuit breaker check
-    if not circuit_breaker.can_execute():
-        raise RuntimeError(
-            "Circuit breaker is open — LLM API calls are temporarily blocked. "
-            "Too many consecutive failures detected."
-        )
-
     # For streaming, retry at connection level only
     models_to_try = [target_model] + [m for m in FALLBACK_MODELS if m != target_model]
     last_error: Exception | None = None
@@ -136,7 +124,6 @@ async def call_llm_streaming_async(
 
     if last_error is None:
         raise RuntimeError("All retries exhausted with no error recorded")
-    circuit_breaker.record_failure()
     raise last_error
 
 

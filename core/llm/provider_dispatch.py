@@ -1,7 +1,7 @@
 """Provider dispatch — per-provider configuration and failover helpers.
 
-Extracted from router.py to reduce module size. Contains circuit breaker
-singletons, provider dispatch table, and retry helpers.
+Extracted from router.py to reduce module size. Contains the provider
+dispatch table and retry helpers.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from core.config import (
 )
 from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
-from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+from core.llm.fallback import retry_with_backoff_generic
 
 
 def __getattr__(name: str) -> Any:
@@ -60,10 +60,6 @@ def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
 # Provider dispatch — single source of truth for per-provider configurations.
 # Replaces 6 individual _get_provider_*() functions (Kent Beck DRY).
 # ---------------------------------------------------------------------------
-
-# Per-provider circuit breakers (must be module-level singletons)
-_openai_cb = CircuitBreaker()
-_glm_cb = CircuitBreaker()
 
 
 def _openai_retryable() -> tuple[type[Exception], ...]:
@@ -112,9 +108,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "fallback_chain": lambda: list(ANTHROPIC_FALLBACK_CHAIN),
         "retryable_errors": _anthropic_retryable,
         "bad_request_error": _anthropic_bad_request,
-        "circuit_breaker": lambda: __import__(
-            "core.llm.providers.anthropic", fromlist=["get_circuit_breaker"]
-        ).get_circuit_breaker(),
     },
     "openai": {
         "get_client": lambda: __import__(
@@ -123,7 +116,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "fallback_chain": lambda: list(OPENAI_FALLBACK_CHAIN),
         "retryable_errors": _openai_retryable,
         "bad_request_error": _openai_bad_request,
-        "circuit_breaker": lambda: _openai_cb,
     },
     "glm": {
         "get_client": lambda: __import__(
@@ -132,7 +124,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "fallback_chain": lambda: list(GLM_FALLBACK_CHAIN),
         "retryable_errors": _openai_retryable,  # GLM uses openai SDK
         "bad_request_error": _openai_bad_request,
-        "circuit_breaker": lambda: _glm_cb,
     },
     "openai-codex": {
         "get_client": lambda: __import__(
@@ -143,9 +134,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         ),
         "retryable_errors": _openai_retryable,
         "bad_request_error": _openai_bad_request,
-        "circuit_breaker": lambda: __import__(
-            "core.llm.providers.codex", fromlist=["get_circuit_breaker"]
-        ).get_circuit_breaker(),
     },
 }
 
@@ -154,7 +142,7 @@ def _get_provider_config(provider: str, key: str) -> Any:
     """Lookup a provider-specific configuration by key.
 
     Valid keys: get_client, fallback_chain, retryable_errors,
-    bad_request_error, circuit_breaker.
+    bad_request_error.
     """
     dispatch = _PROVIDER_DISPATCH.get(provider)
     if dispatch is None:
@@ -185,11 +173,6 @@ def _get_provider_bad_request_error(provider: str) -> type[Exception] | None:
     return result
 
 
-def _get_provider_circuit_breaker(provider: str) -> CircuitBreaker:
-    result: CircuitBreaker = _get_provider_config(provider, "circuit_breaker")
-    return result
-
-
 def _retry_provider_aware(
     fn: Any,
     *,
@@ -207,7 +190,6 @@ def _retry_provider_aware(
         fn,
         model=models_to_try[0],
         fallback_models=models_to_try[1:],
-        circuit_breaker=_get_provider_circuit_breaker(provider),
         retryable_errors=_get_provider_retryable_errors(provider),
         bad_request_error=_get_provider_bad_request_error(provider),
         billing_message=f"{provider} API billing/credit error.",

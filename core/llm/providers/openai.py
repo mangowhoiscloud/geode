@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import (
-    CircuitBreaker,
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
@@ -51,9 +50,6 @@ _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
 _async_openai_client: Any = None  # openai.AsyncOpenAI | None — lazy import
 _async_openai_lock = threading.Lock()
-
-# Circuit breaker for OpenAI API calls
-_openai_circuit_breaker = CircuitBreaker()
 
 
 def _resolve_openai_key() -> str:
@@ -106,11 +102,6 @@ def _get_retryable_errors() -> tuple[type[Exception], ...]:
         openai.APIConnectionError,
         openai.InternalServerError,
     )
-
-
-def get_circuit_breaker() -> CircuitBreaker:
-    """Return the module-level OpenAI circuit breaker."""
-    return _openai_circuit_breaker
 
 
 def _build_prompt_cache_key(system: str, tools: list[dict[str, Any]]) -> str:
@@ -405,7 +396,7 @@ class OpenAIAdapter:
         )
 
     def _retry_with_backoff(self, fn: Any, *, model: str) -> Any:
-        """Retry with exponential backoff + model fallback + circuit breaker.
+        """Retry with exponential backoff + model fallback.
 
         Delegates to the shared ``retry_with_backoff_generic`` from fallback.py.
         """
@@ -415,7 +406,6 @@ class OpenAIAdapter:
             fn,
             model=model,
             fallback_models=list(OPENAI_FALLBACK_MODELS),
-            circuit_breaker=_openai_circuit_breaker,
             retryable_errors=_get_retryable_errors(),
             bad_request_error=openai.BadRequestError,
             billing_message=(
@@ -425,14 +415,13 @@ class OpenAIAdapter:
         )
 
     async def _aretry_with_backoff(self, fn: Any, *, model: str) -> Any:
-        """Async retry with exponential backoff + model fallback + circuit breaker."""
+        """Async retry with exponential backoff + model fallback."""
         import openai
 
         return await retry_with_backoff_generic_async(
             fn,
             model=model,
             fallback_models=list(OPENAI_FALLBACK_MODELS),
-            circuit_breaker=_openai_circuit_breaker,
             retryable_errors=_get_retryable_errors(),
             bad_request_error=openai.BadRequestError,
             billing_message=(
@@ -510,14 +499,12 @@ class OpenAIAgenticAdapter:
     - Anthropic->OpenAI Responses API input format conversion
     - Native hosted tool injection (web_search)
     - httpx connection pool (parity with Anthropic adapter)
-    - CircuitBreaker
     - KeyboardInterrupt -> UserCancelledError
     """
 
     def __init__(self) -> None:
         self._client: Any | None = None
         self._client_lock = threading.Lock()
-        self._circuit_breaker = CircuitBreaker()
         self.last_error: Exception | None = None
 
     @property
@@ -582,11 +569,6 @@ class OpenAIAgenticAdapter:
         if client is None:
             self.last_error = ValueError(f"{self.provider_name} API key not configured")
             log.warning("No API key for %s agentic loop", self.provider_name)
-            return None
-
-        if not self._circuit_breaker.can_execute():
-            self.last_error = RuntimeError(f"{self.provider_name} circuit breaker is OPEN")
-            log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
             return None
 
         # PR-M4.4 (2026-05-21) — 4-slot in-context wiring. No-op fast
@@ -677,18 +659,13 @@ class OpenAIAgenticAdapter:
             from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):
-                self._circuit_breaker.record_failure()
                 raise
             self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
-            self._circuit_breaker.record_failure()
             return None
 
         if response is None:
-            self._circuit_breaker.record_failure()
             return None
-
-        self._circuit_breaker.record_success()
 
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)

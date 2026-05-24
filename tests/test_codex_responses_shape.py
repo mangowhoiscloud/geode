@@ -105,13 +105,6 @@ def _capture_codex_kwargs(
     fake_client.responses.stream = _fake_stream
 
     monkeypatch.setattr("core.llm.providers.codex._get_async_codex_client", lambda: fake_client)
-    # Bypass circuit breaker for the test.
-    monkeypatch.setattr(
-        "core.llm.providers.codex._codex_circuit_breaker",
-        MagicMock(
-            can_execute=lambda: True, record_success=lambda: None, record_failure=lambda: None
-        ),
-    )
 
     async def _run() -> None:
         adapter = CodexAgenticAdapter()
