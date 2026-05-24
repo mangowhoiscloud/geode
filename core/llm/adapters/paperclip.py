@@ -1,39 +1,28 @@
-"""Legacy LLM Protocol interfaces — pre-v0.99.39 paperclip-style abstraction.
+"""Paperclip-style LLM port protocols + :class:`ClaudeAdapter` wrapper.
 
-DEPRECATED (v0.99.39, removal target: v1.0.0)
-===========================================
+PR-MAINPATH-67 (2026-05-24) — surviving half of the deleted ``_legacy``
+module. The legacy ``AgenticLLMPort`` / ``resolve_agentic_adapter`` /
+``_ADAPTER_MAP`` symbols were deleted alongside the agentic-loop fallback
+branch; the symbols here remain in active use:
 
-This module holds the "PR-1 G-A" paperclip-style abstraction (referenced in
-``core/agent/loop/_reflection.py:48``) that defined ``LLMClientPort`` /
-``AgenticLLMPort`` / ``resolve_agentic_adapter`` for provider-agnostic agentic
-calls. It is superseded by the unified :class:`core.llm.adapters.LLMAdapter`
-Protocol + registry (Layer 4 of the v0.99.39 adapter abstraction) which folds
-PAYG / OAuth / local-agent-cli into a single contract.
+- :class:`LLMClientPort` — Protocol consumed by ``core/runtime.py``,
+  ``core/wiring/container.py``, ``core/verification/cross_llm.py``.
+- :class:`LLMJsonCallable` / :class:`LLMTextCallable` /
+  :class:`LLMParsedCallable` — node-level DI Protocols consumed by
+  ``core/llm/router/_di.py``.
+- :class:`ClaudeAdapter` — thin wrapper that adapts the Protocol surface
+  to the router functions, consumed by ``core/wiring/container.py`` as
+  the default ``LLMClientPort`` implementation.
 
-Why kept under ``_legacy``:
-
-- Many internal callers (``core/agent/loop/_reflection.py``, ``core/llm/router``,
-  ``plugins/petri_audit/*``) still call ``resolve_agentic_adapter(provider)``.
-  Renaming them is out of scope for the v0.99.39 PR — the migration is
-  tracked in ``docs/plans/2026-05-23-llm-adapter-abstraction.md`` § Out of
-  scope.
-- External plugins that import from ``core.llm.adapters`` keep working
-  (``__init__.py`` re-exports the legacy symbols).
-- The new :class:`LLMAdapter` is the canonical entry point for new callers.
-
-Removal plan (v1.0.0): the in-tree call sites are migrated to
-``resolve_for(provider, source)`` (which carries explicit source binding the
-legacy ``resolve_agentic_adapter`` cannot express). This file is then deleted.
+This is **not** the Layer 4 ``LLMAdapter`` Protocol (``base.py``) used
+for agentic loop dispatch; the two contracts are independent and stay
+side-by-side until the paperclip surface is also migrated.
 """
 
 from __future__ import annotations
 
-import importlib
-import logging
 from collections.abc import AsyncIterator, Callable
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
-
-from core.llm.agentic_response import AgenticResponse
 
 if TYPE_CHECKING:
     # Pydantic is a heavy import (~100 ms cumulative). Push it behind
@@ -42,8 +31,6 @@ if TYPE_CHECKING:
     # forward-reference string at runtime so the annotation still type-
     # checks under mypy.
     from pydantic import BaseModel
-
-log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # LLMClientPort — Protocol interface for LLM provider adapters
@@ -168,139 +155,6 @@ class LLMParsedCallable(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# AgenticLLMPort — Protocol interface for agentic loop LLM adapters
-# ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class AgenticLLMPort(Protocol):
-    """Protocol for agentic loop LLM calls.
-
-    Implementations: ClaudeAgenticAdapter, OpenAIAgenticAdapter, GlmAgenticAdapter.
-
-    ``fallback_chain`` stays as an opt-in knob (v0.99.19): the shipped
-    default in ``core/config/routing.toml`` is an empty list (no
-    silent fallback), but users can populate ``~/.geode/routing.toml``
-    ``[model.fallbacks]`` to explicitly opt into a same-provider chain.
-    """
-
-    @property
-    def provider_name(self) -> str: ...
-
-    @property
-    def fallback_chain(self) -> list[str]: ...
-
-    last_error: Exception | None
-
-    async def agentic_call(
-        self,
-        *,
-        model: str,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        tool_choice: dict[str, str] | str,
-        max_tokens: int,
-        temperature: float,
-        thinking_budget: int = 0,
-        effort: str = "high",
-    ) -> AgenticResponse | None: ...
-
-    async def areset_client(self) -> None: ...
-
-
-# ---------------------------------------------------------------------------
-# resolve_agentic_adapter — factory
-# ---------------------------------------------------------------------------
-
-# Provider -> "module_path:ClassName"
-_ADAPTER_MAP: dict[str, str] = {
-    "anthropic": "core.llm.providers.anthropic:ClaudeAgenticAdapter",
-    "openai": "core.llm.providers.openai:OpenAIAgenticAdapter",
-    "glm": "core.llm.providers.glm:GlmAgenticAdapter",
-    "openai-codex": "core.llm.providers.codex:CodexAgenticAdapter",
-}
-
-# v0.53.0 removed cross-provider auto-swap; v0.99.19 removed the
-# empty-dict back-compat shim ``CROSS_PROVIDER_FALLBACK``. Quota
-# exhaustion surfaces ``BillingError`` → ``quota_exhausted`` IPC event
-# and the user picks the next provider via ``/model``.
-
-
-def resolve_agentic_adapter(provider: str) -> AgenticLLMPort:
-    """Create an agentic adapter for the given provider.
-
-    Uses dynamic import to avoid loading unused providers.
-    """
-    entry = _ADAPTER_MAP.get(provider)
-    if entry is None:
-        # Unknown provider -> default to OpenAI-compatible
-        log.warning("Unknown provider '%s', defaulting to openai adapter", provider)
-        entry = _ADAPTER_MAP["openai"]
-
-    module_path, class_name = entry.rsplit(":", 1)
-    mod = importlib.import_module(module_path)
-    cls = getattr(mod, class_name)
-    adapter: AgenticLLMPort = cls()
-    return adapter
-
-
-def infer_provider_from_model(model: str) -> str:
-    """Return the agentic provider key for a model id.
-
-    Maps a GEODE / inspect_ai model identifier to the matching
-    ``_ADAPTER_MAP`` key. Used by callers that pin a model (e.g. the
-    Petri audit target ``geode/gpt-5.5``) but did not pin a provider —
-    without this helper, ``AgenticLoop`` falls back to its
-    ``provider="anthropic"`` default and the orchestration layer
-    (GoalDecomposer, extract hooks) silent-fails on ``ANTHROPIC_API_KEY``
-    when the OAuth-only environment never had one.
-
-    Rules:
-
-    - ``gpt-*`` / ``o3`` / ``o4-mini`` → ``"openai-codex"`` when a
-      Codex OAuth token is resolvable, else ``"openai"`` (PAYG path).
-    - ``claude-*`` → ``"anthropic"``.
-    - ``glm-*`` → ``"glm"``.
-    - Provider-prefixed ids (``anthropic/...``, ``openai/...``,
-      ``openai-codex/...``, ``geode/<base>``) — the prefix wins for
-      ``openai-codex`` (OAuth-routed), otherwise the bare model id is
-      reclassified by the provider rules above.
-
-    The OAuth probe is read-only and tolerates a missing
-    ``plugins.petri_audit`` package (the predicate lives there because
-    the bridge is plugin-scoped). When the import fails the function
-    falls back to the per-token ``openai`` path.
-    """
-    if not model:
-        return "anthropic"
-
-    raw_prefix = model.split("/", 1)[0] if "/" in model else ""
-    if raw_prefix == "openai-codex":
-        return "openai-codex"
-    if raw_prefix == "anthropic":
-        return "anthropic"
-    if raw_prefix in ("openai", "openai-api"):
-        return "openai"
-
-    base = model.rsplit("/", 1)[-1]
-    if base.startswith("claude-"):
-        return "anthropic"
-    if base.startswith("glm-"):
-        return "glm"
-    if base.startswith("gpt-") or base in ("o3", "o4-mini"):
-        try:
-            from plugins.petri_audit.codex_provider import is_codex_oauth_available
-
-            if is_codex_oauth_available():
-                return "openai-codex"
-        except ImportError:
-            pass
-        return "openai"
-    return "anthropic"
-
-
-# ---------------------------------------------------------------------------
 # ClaudeAdapter — thin wrapper that delegates to router functions
 # ---------------------------------------------------------------------------
 
@@ -308,10 +162,10 @@ T = TypeVar("T", bound="BaseModel")
 
 
 class ClaudeAdapter:
-    """Anthropic Claude adapter implementing LLMClientPort.
+    """Anthropic Claude adapter implementing :class:`LLMClientPort`.
 
     Wraps the router functions into the port interface.
-    Uses lazy imports from core.llm.router to avoid circular imports.
+    Uses lazy imports from :mod:`core.llm.router` to avoid circular imports.
     """
 
     @property
@@ -420,3 +274,12 @@ class ClaudeAdapter:
             max_tool_rounds=max_tool_rounds,
         )
         return result
+
+
+__all__ = [
+    "ClaudeAdapter",
+    "LLMClientPort",
+    "LLMJsonCallable",
+    "LLMParsedCallable",
+    "LLMTextCallable",
+]

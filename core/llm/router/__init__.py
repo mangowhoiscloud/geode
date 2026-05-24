@@ -48,13 +48,11 @@ if TYPE_CHECKING:
 # name on the package. ``calls._route_provider`` calls the leaf binding from
 # ``core.config`` directly, so the supported test path is the leaf module.
 from core.config import _resolve_provider as _resolve_provider
-from core.llm.adapters import AgenticLLMPort as AgenticLLMPort
 from core.llm.adapters import ClaudeAdapter as ClaudeAdapter
 from core.llm.adapters import LLMClientPort as LLMClientPort
 from core.llm.adapters import LLMJsonCallable as LLMJsonCallable
 from core.llm.adapters import LLMParsedCallable as LLMParsedCallable
 from core.llm.adapters import LLMTextCallable as LLMTextCallable
-from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 
 # v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
 # LLMBadRequestError, LLMConnectionError, LLMInternalServerError,

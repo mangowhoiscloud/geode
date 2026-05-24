@@ -315,7 +315,7 @@ class MutatorConfig(BaseModel):
     """Mirrors :data:`Source`. The router's credential rotator
     consumes the same enum implicitly via ``[petri.source.<provider>]``."""
     max_tokens: Annotated[int, Field(ge=128, le=200_000)] = 1024
-    """Passed through to ``adapter.agentic_call``."""
+    """Passed through to ``adapter.acomplete``."""
 
 
 class SeedGenerationConfig(BaseModel):

@@ -15,19 +15,15 @@ Layer 3 concrete adapters (one per provider × source pair):
 
 External plugins implement :class:`LLMAdapter` and register via
 :func:`register_adapter` from their entry point.
+
+PR-MAINPATH-67 (2026-05-24) — the legacy ``AgenticLLMPort`` /
+``resolve_agentic_adapter`` / ``_ADAPTER_MAP`` surface was deleted
+alongside the AgenticLoop fallback branch. Surviving paperclip
+contracts moved to :mod:`core.llm.adapters.paperclip` and
+:mod:`core.llm.adapters.provider_inference`; the AgenticLoop
+translation helpers moved to :mod:`core.llm.adapters.translation`.
 """
 
-from core.llm.adapters._legacy import (
-    _ADAPTER_MAP,
-    AgenticLLMPort,
-    ClaudeAdapter,
-    LLMClientPort,
-    LLMJsonCallable,
-    LLMParsedCallable,
-    LLMTextCallable,
-    infer_provider_from_model,
-    resolve_agentic_adapter,
-)
 from core.llm.adapters.base import (
     CONCRETE_SOURCES,
     SOURCE_ADAPTER,
@@ -47,6 +43,14 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+from core.llm.adapters.paperclip import (
+    ClaudeAdapter,
+    LLMClientPort,
+    LLMJsonCallable,
+    LLMParsedCallable,
+    LLMTextCallable,
+)
+from core.llm.adapters.provider_inference import infer_provider_from_model
 from core.llm.adapters.registry import (
     AdapterAlreadyRegisteredError,
     AdapterNotFoundError,
@@ -65,13 +69,11 @@ __all__ = [
     "SOURCE_AUTO",
     "SOURCE_PAYG",
     "SOURCE_SUBSCRIPTION",
-    "_ADAPTER_MAP",
     "AdapterAlreadyRegisteredError",
     "AdapterBillingType",
     "AdapterCallRequest",
     "AdapterCallResult",
     "AdapterNotFoundError",
-    "AgenticLLMPort",
     "ClaudeAdapter",
     "CredentialDetection",
     "EnvironmentReport",
@@ -92,7 +94,6 @@ __all__ = [
     "infer_provider_from_model",
     "list_adapters",
     "register_adapter",
-    "resolve_agentic_adapter",
     "resolve_for",
     "unregister_adapter",
 ]

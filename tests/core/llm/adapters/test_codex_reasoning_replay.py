@@ -30,13 +30,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from core.llm.adapters._legacy_bridge import (
-    agentic_response_from_adapter_result,
-    build_adapter_request,
-)
 from core.llm.adapters._openai_common import translate_codex_response
 from core.llm.adapters.base import AdapterCallResult, UsageSummary
 from core.llm.adapters.codex_oauth import _build_codex_call_kwargs
+from core.llm.adapters.translation import (
+    agentic_response_from_adapter_result,
+    build_adapter_request,
+)
 
 
 def test_translate_codex_response_extracts_reasoning_items() -> None:

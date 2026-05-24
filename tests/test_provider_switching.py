@@ -18,7 +18,7 @@ endpoint, or A's credentials into B's call?
 
 Each path asserts five contracts:
   1. ``_route_provider(target_model)`` returns the destination provider.
-  2. ``AgenticLoop.update_model`` swaps ``self._adapter`` to the
+  2. ``AgenticLoop.update_model`` swaps ``self._new_adapter`` to the
      destination provider's adapter class (cross-provider) or keeps
      the same class (within-provider Plan switch).
   3. ``resolve_routing(target_model)`` resolves to the destination
@@ -229,17 +229,6 @@ def test_path_a_codex_oauth_to_anthropic_apikey(isolated_auth) -> None:
     # No token leak from Codex into Anthropic.
     assert "oauth-codex-token" not in dest.profile.key
 
-    # Adapter swap: from CodexAgenticAdapter to ClaudeAgenticAdapter.
-    from core.llm.adapters import resolve_agentic_adapter
-
-    a_origin = resolve_agentic_adapter("openai-codex")
-    a_dest = resolve_agentic_adapter("anthropic")
-    assert type(a_origin).__name__ == "CodexAgenticAdapter"
-    assert type(a_dest).__name__ == "ClaudeAgenticAdapter"
-    # Round-trsubject: switching back returns a Codex adapter again
-    a_back = resolve_agentic_adapter("openai-codex")
-    assert type(a_back).__name__ == "CodexAgenticAdapter"
-
 
 # ---------------------------------------------------------------------------
 # Path B — Codex Plus OAuth → GLM Coding Plan (cross-provider)
@@ -261,10 +250,6 @@ def test_path_b_codex_oauth_to_glm_coding(isolated_auth) -> None:
     assert dest.profile.key == "glm-coding-key"
     assert "oauth-codex-token" not in dest.profile.key
 
-    from core.llm.adapters import resolve_agentic_adapter
-
-    assert type(resolve_agentic_adapter("glm")).__name__ == "GlmAgenticAdapter"
-
 
 # ---------------------------------------------------------------------------
 # Path C — Anthropic → GLM (cross-provider)
@@ -285,13 +270,6 @@ def test_path_c_anthropic_to_glm(isolated_auth) -> None:
     # Anthropic key must not leak into GLM call.
     assert "sk-ant" not in dest.profile.key
     assert dest.profile.key == "glm-coding-key"
-
-    from core.llm.adapters import resolve_agentic_adapter
-
-    a_origin = resolve_agentic_adapter("anthropic")
-    a_dest = resolve_agentic_adapter("glm")
-    assert type(a_origin).__name__ == "ClaudeAgenticAdapter"
-    assert type(a_dest).__name__ == "GlmAgenticAdapter"
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +395,13 @@ def test_update_model_swaps_adapter_on_provider_change(
     isolated_auth, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end on AgenticLoop: starting with Codex adapter, calling
-    update_model('claude-opus-4-7') must swap the adapter to Claude."""
+    update_model('claude-opus-4-7') must swap the Path-B adapter to Claude.
+
+    PR-MAINPATH-67 (2026-05-24) — the legacy
+    ``resolve_agentic_adapter`` factory was deleted; ``/model``
+    re-resolution now goes through ``_resolve_path_b_adapter`` in
+    ``_model_switching``.
+    """
     _register_codex_oauth()
     _register_anthropic_payg()
 
@@ -430,8 +414,9 @@ def test_update_model_swaps_adapter_on_provider_change(
     stub = MagicMock()
     stub.model = "gpt-5.5"
     stub._provider = "openai-codex"
-    stub._adapter = MagicMock(name="CodexAgenticAdapter")
-    type(stub._adapter).__name__ = "CodexAgenticAdapter"  # type: ignore[misc]
+    stub._source = "payg"
+    stub._new_adapter = MagicMock(name="CodexOAuthAdapter")
+    type(stub._new_adapter).__name__ = "CodexOAuthAdapter"  # type: ignore[misc]
     stub._tool_processor = MagicMock()
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
@@ -441,15 +426,18 @@ def test_update_model_swaps_adapter_on_provider_change(
 
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "anthropic")
 
-    # Patch the factory so we can assert it was called with the new provider.
-    fake_claude = MagicMock(name="ClaudeAgenticAdapter")
-    type(fake_claude).__name__ = "ClaudeAgenticAdapter"  # type: ignore[misc]
-    monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", lambda p: fake_claude)
+    # Patch the Path-B factory so we can assert it was called with the new provider.
+    fake_claude = MagicMock(name="AnthropicPaygAdapter")
+    type(fake_claude).__name__ = "AnthropicPaygAdapter"  # type: ignore[misc]
+    monkeypatch.setattr(
+        "core.agent.loop._model_switching._resolve_path_b_adapter",
+        lambda p, s: fake_claude,
+    )
 
     asyncio.run(stub.update_model_async("claude-opus-4-7"))
 
     assert stub._provider == "anthropic"
-    assert stub._adapter is fake_claude
+    assert stub._new_adapter is fake_claude
     assert stub.model == "claude-opus-4-7"
     # Tool processor must see the new model so retries don't reuse the old name.
     assert stub._tool_processor._model == "claude-opus-4-7"
@@ -511,7 +499,8 @@ def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     stub = MagicMock()
     stub.model = "gpt-5.4"
     stub._provider = "openai"
-    stub._adapter = MagicMock()
+    stub._source = "payg"
+    stub._new_adapter = MagicMock()
     stub._tool_processor = MagicMock()
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
@@ -520,7 +509,10 @@ def test_update_model_marks_prompt_dirty_so_escalation_rebuilds(
     stub._adapt_context_for_model = MagicMock()
 
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "openai")
-    monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", lambda p: MagicMock())
+    monkeypatch.setattr(
+        "core.agent.loop._model_switching._resolve_path_b_adapter",
+        lambda p, s: MagicMock(),
+    )
 
     asyncio.run(stub.update_model_async("gpt-5.3-codex", reason="failure_escalation"))
 
@@ -541,13 +533,14 @@ def test_update_model_keeps_adapter_on_within_provider_switch(
 
     import core.agent.loop as _loop_mod
 
-    initial_adapter = MagicMock(name="CodexAgenticAdapter")
-    type(initial_adapter).__name__ = "CodexAgenticAdapter"  # type: ignore[misc]
+    initial_adapter = MagicMock(name="CodexOAuthAdapter")
+    type(initial_adapter).__name__ = "CodexOAuthAdapter"  # type: ignore[misc]
 
     stub = MagicMock()
     stub.model = "gpt-5.5"
     stub._provider = "openai-codex"
-    stub._adapter = initial_adapter
+    stub._source = "payg"
+    stub._new_adapter = initial_adapter
     stub._tool_processor = MagicMock()
     stub._hooks = None
     stub.context = MagicMock(is_empty=True)
@@ -557,16 +550,16 @@ def test_update_model_keeps_adapter_on_within_provider_switch(
     monkeypatch.setattr("core.agent.loop._resolve_provider", lambda _m: "openai-codex")
 
     # Track factory calls — should NOT be invoked since provider unchanged.
-    factory_calls = []
+    factory_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        "core.agent.loop.resolve_agentic_adapter",
-        lambda p: factory_calls.append(p) or MagicMock(),
+        "core.agent.loop._model_switching._resolve_path_b_adapter",
+        lambda p, s: factory_calls.append((p, s)) or MagicMock(),
     )
 
     asyncio.run(stub.update_model_async("gpt-5.4"))
 
     assert stub.model == "gpt-5.4"
-    assert stub._adapter is initial_adapter, "adapter rebuilt on within-provider switch"
+    assert stub._new_adapter is initial_adapter, "adapter rebuilt on within-provider switch"
     assert factory_calls == [], (
-        f"resolve_agentic_adapter called {factory_calls} for within-provider switch"
+        f"_resolve_path_b_adapter called {factory_calls} for within-provider switch"
     )

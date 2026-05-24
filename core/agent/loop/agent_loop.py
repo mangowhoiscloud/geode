@@ -29,9 +29,6 @@ from core.config import (
 from core.hooks import HookEvent, HookSystem
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
-from core.llm.router import (
-    resolve_agentic_adapter,
-)
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
@@ -179,42 +176,33 @@ class AgenticLoop:
         # misconfiguration (Codex MCP 2026-05-23 HIGH 2).
         # PR-MAINPATH-1 (2026-05-24) — Path-B default cutover. The
         # ``source=""`` default previously landed on the legacy
-        # ``resolve_agentic_adapter`` branch; only sub-agent workers
-        # (``WorkerRequest.source``) explicitly opted into the Path-B
-        # route via ``resolve_for``. Step 1 of the AgenticLoop main-path
-        # migration makes Path-B the resolver default ("payg" matches
-        # the J-b.2 mutator runner + J-b.3 reflection node, so all three
-        # main callers now share one registry surface).
+        # ``resolve_agentic_adapter`` branch; Step 1 of the AgenticLoop
+        # main-path migration made Path-B the resolver default ("payg"
+        # matches the J-b.2 mutator runner + J-b.3 reflection node, so
+        # all three main callers share one registry surface).
+        # PR-MAINPATH-67 (2026-05-24) — final cutover: the legacy
+        # ``AgenticLLMPort`` resolver + ``self._adapter`` field were
+        # deleted. ``self._last_llm_error`` is now the sole error
+        # surface that feeds the agentic UI (see :meth:`_call_llm`).
         # The hard-fail contract from the Codex MCP 2026-05-23 HIGH 2
         # review ("no silent fallback") is preserved — if the requested
         # ``(provider, source)`` isn't in the registry, ``resolve_for``
-        # raises and the loop refuses to start rather than silently
-        # routing through the legacy adapter. The legacy ``self._adapter``
-        # stays initialised because ``getattr(self._adapter, "last_error", None)``
-        # at lines 1372 / 2013 still feeds the agentic UI's error
-        # surface; subsequent main-path PRs delete it once the error
-        # surface migrates.
+        # raises and the loop refuses to start.
         self._source = source or "payg"
-        self._new_adapter: Any | None = None
-        from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+        from core.llm.adapters import resolve_for
 
-        if self._source in CONCRETE_SOURCES:
-            # Hard-fail on resolve mismatch — concrete source MUST resolve.
-            # The Path-B registry uses a narrower provider vocabulary
-            # than ``_resolve_provider``: gpt-5.x models map to
-            # ``openai-codex`` in the legacy AgenticLLMPort path but
-            # collapse to ``openai`` in the registry (the Codex source is
-            # encoded on the ``source`` axis as ``subscription``).
-            # Same shape as :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
-            # and :func:`core.agent.loop._reflection._normalize_provider_for_registry`;
-            # this third copy stays inline rather than hoisted because
-            # the helper is 4 lines and PR-MAINPATH-4 (the
-            # ``_model_switching`` migration) will fold all three into
-            # one helper at that stage.
-            _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
-            registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
-            self._new_adapter = resolve_for(registry_provider, self._source)
-        self._adapter = resolve_agentic_adapter(self._provider)
+        # The Path-B registry uses a narrower provider vocabulary than
+        # ``_resolve_provider``: gpt-5.x models map to ``openai-codex``
+        # in the legacy provider key but collapse to ``openai`` in the
+        # registry (the Codex source is encoded on the ``source`` axis
+        # as ``subscription``).
+        # Same shape as :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
+        # and :func:`core.agent.loop._reflection._normalize_provider_for_registry`;
+        # this third copy stays inline rather than hoisted because the
+        # helper is 4 lines.
+        _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
+        registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
+        self._new_adapter: Any = resolve_for(registry_provider, self._source)
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -1396,9 +1384,13 @@ class AgenticLoop:
                 # Classify error for type-specific retry strategy.
                 # Defaults cover the case where the adapter swallowed the
                 # original exception (None response without a trailing
-                # ``last_error``); the diagnostic builder still needs
-                # ``_sev`` / ``_hint`` populated.
-                adapter_exc = getattr(self._adapter, "last_error", None)
+                # ``_last_error``); the diagnostic builder still needs
+                # ``_sev`` / ``_hint`` populated. PR-MAINPATH-67
+                # (2026-05-24) — reads from the Path-B adapter's
+                # ``_last_error`` (preserved across providers); legacy
+                # ``self._adapter.last_error`` access was deleted with
+                # the resolver.
+                adapter_exc = getattr(self._new_adapter, "_last_error", None)
                 from core.llm.errors import _ERROR_CLASSIFICATION
 
                 _et, _sev, _hint = _ERROR_CLASSIFICATION["unknown"]
@@ -1931,9 +1923,9 @@ class AgenticLoop:
         round_idx: int = 0,
         model: str | None = None,
     ) -> AgenticResponse | None:
-        """Multi-provider LLM call via adapter (P1 Gateway pattern).
+        """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
-        Delegates to ``self._adapter.agentic_call()`` which handles
+        Delegates to ``self._new_adapter.acomplete()`` which handles
         provider-specific message/tool conversion, retry, and failover.
         Returns a normalized ``AgenticResponse`` or None on failure.
         Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
@@ -1942,9 +1934,14 @@ class AgenticLoop:
         (verify judge, future Plan/Act split) request a non-default model
         for one call without mutating ``self.model``. Falls back to
         ``self.model`` when ``None``. The override threads through to
-        the adapter's ``agentic_call(model=...)`` parameter; the rest of
-        the loop (token tracker, retry budget, ContextVar metrics) is
-        unaffected.
+        the adapter request's ``model`` field; the rest of the loop
+        (token tracker, retry budget, ContextVar metrics) is unaffected.
+
+        PR-MAINPATH-67 (2026-05-24) — the legacy ``_adapter.agentic_call``
+        fallback branch was deleted; all dispatch now routes through the
+        Path-B ``LLMAdapter.acomplete`` surface unconditionally
+        (``self._new_adapter`` is resolved in :meth:`__init__` and
+        hard-fails on missing registration).
         """
         effective_model = model or self.model
         # Sandwich injection: prepend system reminder to messages (Claude Code pattern)
@@ -1992,54 +1989,44 @@ class AgenticLoop:
         # the frontier-API grounding behind the new 1.0 default.
         loop_temperature = _settings.temperature_agent_loop
 
-        if self._new_adapter is not None:
-            # v0.99.40 Follow-up A — opt-in adapter route. Build adapter-neutral
-            # request, call ``LLMAdapter.acomplete``, translate result back to
-            # ``AgenticResponse`` so the rest of the loop (tool dispatch, cost
-            # tracking, retry budget) is unchanged.
-            from core.llm.adapters._legacy_bridge import (
-                agentic_response_from_adapter_result,
-                build_adapter_request,
-            )
+        # PR-MAINPATH-67 (2026-05-24) — Path-B only. Build
+        # adapter-neutral request, call ``LLMAdapter.acomplete``,
+        # translate result back to ``AgenticResponse`` so the rest of
+        # the loop (tool dispatch, cost tracking, retry budget) is
+        # unchanged. The legacy ``self._adapter.agentic_call`` branch
+        # was deleted; ``self._new_adapter`` is guaranteed non-None by
+        # ``__init__``'s hard-fail :func:`resolve_for` call.
+        from core.llm.adapters.translation import (
+            agentic_response_from_adapter_result,
+            build_adapter_request,
+        )
 
-            req = build_adapter_request(
-                model=effective_model,
-                system=system,
-                messages=messages,
-                tools=self._tools,
-                tool_choice=tool_choice,
-                max_tokens=adaptive_max_tokens,
-                temperature=loop_temperature,
-                thinking_budget=adaptive_thinking,
-                effort=adaptive_effort,
+        req = build_adapter_request(
+            model=effective_model,
+            system=system,
+            messages=messages,
+            tools=self._tools,
+            tool_choice=tool_choice,
+            max_tokens=adaptive_max_tokens,
+            temperature=loop_temperature,
+            thinking_budget=adaptive_thinking,
+            effort=adaptive_effort,
+        )
+        try:
+            result = await self._new_adapter.acomplete(req)
+        except Exception as exc:
+            self._last_llm_error = str(exc)
+            log.warning(
+                "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
+                getattr(self._new_adapter, "name", "<unknown>"),
+                exc,
             )
-            try:
-                result = await self._new_adapter.acomplete(req)
-            except Exception as exc:
-                self._last_llm_error = str(exc)
-                log.warning(
-                    "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
-                    getattr(self._new_adapter, "name", "<unknown>"),
-                    exc,
-                )
-                response = None
-            else:
-                response = agentic_response_from_adapter_result(result)
+            response = None
         else:
-            response = await self._adapter.agentic_call(
-                model=effective_model,
-                system=system,
-                messages=messages,
-                tools=self._tools,
-                tool_choice=tool_choice,
-                max_tokens=adaptive_max_tokens,
-                temperature=loop_temperature,
-                thinking_budget=adaptive_thinking,
-                effort=adaptive_effort,
-            )
+            response = agentic_response_from_adapter_result(result)
 
         if response is None:
-            adapter_err = getattr(self._adapter, "last_error", None)
+            adapter_err = getattr(self._new_adapter, "_last_error", None)
             if adapter_err:
                 self._last_llm_error = str(adapter_err)
             elif not self._last_llm_error:

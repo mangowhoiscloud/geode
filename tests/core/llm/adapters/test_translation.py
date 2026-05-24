@@ -1,18 +1,22 @@
-"""Legacy bridge tests — AgenticLoop ↔ LLMAdapter translation.
+"""Translation tests — AgenticLoop ↔ :class:`LLMAdapter` round-trip.
 
-Pins the contract between the new ``LLMAdapter.acomplete`` surface and the
-legacy ``AgenticResponse`` consumed by the agentic loop. Regression here
-means the v0.99.40 Follow-up A path silently drops tool_use blocks or
-mangles message content during the round trip.
+Pins the contract between :meth:`LLMAdapter.acomplete` and the
+``AgenticResponse`` consumed by the agentic loop. Regression here means
+the Path-B route silently drops tool_use blocks or mangles message
+content during the round trip.
+
+PR-MAINPATH-67 (2026-05-24) — file renamed from
+``test_legacy_bridge.py`` after the bridge module was inlined into
+:mod:`core.llm.adapters.translation`.
 """
 
 from __future__ import annotations
 
-from core.llm.adapters._legacy_bridge import (
+from core.llm.adapters.base import AdapterCallResult, UsageSummary
+from core.llm.adapters.translation import (
     agentic_response_from_adapter_result,
     build_adapter_request,
 )
-from core.llm.adapters.base import AdapterCallResult, UsageSummary
 
 
 def test_build_request_translates_user_message() -> None:

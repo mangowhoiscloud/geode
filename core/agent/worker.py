@@ -78,8 +78,10 @@ class WorkerRequest:
     # v0.99.40 Follow-up A — adapter source for the new
     # :class:`core.llm.adapters.LLMAdapter` registry. Concrete value
     # (``"payg"`` / ``"subscription"`` / ``"adapter"``) when the parent's
-    # picker / orchestrator resolved a specific path; empty string falls
-    # back to legacy ``resolve_agentic_adapter(provider)`` routing.
+    # picker / orchestrator resolved a specific path; empty string is
+    # normalised to ``"payg"`` by ``AgenticLoop.__init__``
+    # (PR-MAINPATH-67 deleted the legacy ``resolve_agentic_adapter``
+    # fallback route — all dispatch now goes through Path-B).
     source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
