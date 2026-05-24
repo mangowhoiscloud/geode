@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.54] - 2026-05-25
+
 ### Fixed
 - **PR-CLEANUP-WORKER-REQUEST-RUN-DIR** — delete dead
   `WorkerRequest.run_dir` field + wire B2 per-task cwd binding to
