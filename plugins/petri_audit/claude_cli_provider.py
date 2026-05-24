@@ -90,7 +90,9 @@ __all__ = [
     "CLAUDE_TRANSIENT_UPSTREAM_RE",
     "ClaudeCliInvocationError",
     "ClaudeCliTransientUpstreamError",
+    "TransientSignal",
     "build_claude_cli_argv",
+    "classify_transient_signal",
     "is_claude_transient_upstream_error",
     "parse_stream_json_events",
     "register",
@@ -143,7 +145,66 @@ class ClaudeCliTransientUpstreamError(ClaudeCliInvocationError):
     as the LLM's assistant message — the worker then terminated
     "successfully" with no tool calls and the caller recorded a
     ghost candidate. Failing loud here is the only way the parent
-    sees an actual error to react to."""
+    sees an actual error to react to.
+
+    ``signal`` (added 2026-05-24) carries the *matched* classifier hit
+    so log readers can tell *which* upstream signature fired. The
+    pre-signal path emitted only ``stderr_tail`` — invariably ``<empty>``
+    because claude-cli writes its errors to stdout, not stderr — and
+    log readers had to guess between rate_limit / overloaded / quota.
+
+    ``dump_path`` is the optional full ``(stdout, stderr, parsed events,
+    classifier signal, rc)`` post-mortem JSON that the adapter writes to
+    ``~/.geode/diagnostics/`` on every transient hit. Reading the dump
+    recovers the upstream error message claude-cli emitted in its
+    ``result`` event (which is otherwise discarded after classification).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        signal: TransientSignal | None = None,
+        dump_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.signal = signal
+        self.dump_path = dump_path
+
+
+@dataclass(frozen=True, slots=True)
+class TransientSignal:
+    """One classifier hit on the transient-upstream regex.
+
+    Returned by :func:`classify_transient_signal`. Pre-PR-T the
+    classifier returned ``bool`` so callers could not distinguish
+    *rate_limit* from *overloaded* from *quota-reset* — the diagnostic
+    that drives the operator's next action (wait vs retry vs swap
+    account) was lost. This dataclass carries the matched substring
+    + the *source field* (stdout / stderr / which event type) so
+    post-mortem operators can act on the actual upstream signature.
+    """
+
+    matched_text: str
+    """The exact substring that matched ``CLAUDE_TRANSIENT_UPSTREAM_RE``,
+    bounded to the first 200 chars to keep log lines tractable."""
+
+    source: str
+    """One of ``"stdout"`` / ``"stderr"`` / ``"event"`` — which raw
+    field the regex hit."""
+
+    event_type: str | None = None
+    """When ``source == "event"`` this is the ``type`` of the
+    :class:`StreamJsonEvent` carrying the matched text
+    (``"result"`` / ``"assistant"`` / etc.). ``None`` for raw
+    stdout/stderr hits."""
+
+    event_field: str | None = None
+    """When ``source == "event"`` and ``event_type == "result"`` this
+    is the inner field key that carried the matched text
+    (``"result"`` / ``"error"`` / ``"message"`` / ``"stderr"``).
+    ``None`` for assistant events (those always carry the text in
+    ``message.content[].text``)."""
 
 
 # Ported from paperclip ``packages/adapters/claude-local/src/server/
@@ -445,35 +506,57 @@ def _extract_assistant_text(events: list[StreamJsonEvent]) -> str:
     return ""
 
 
-def is_claude_transient_upstream_error(
+def classify_transient_signal(
     *,
     stdout: str,
     stderr: str,
     events: list[StreamJsonEvent] | None = None,
-) -> bool:
-    """True when claude-cli's output matches an upstream rate-limit
-    / overload / quota signature (see :data:`CLAUDE_TRANSIENT_UPSTREAM_RE`).
+) -> TransientSignal | None:
+    """Return the first :class:`TransientSignal` hit on the union of
+    raw stdout, raw stderr, every parsed ``result`` event's free-text
+    fields, and every ``assistant`` text block's ``text``. ``None``
+    when nothing matches.
 
-    Matches the union of: raw stdout, raw stderr, every parsed
-    ``result`` event's free-text fields (``result``, ``error``,
-    ``message``, ``stderr``), and every ``assistant`` text block's
-    ``text``. The wide haystack mirrors paperclip's
-    ``buildClaudeTransientHaystack`` — claude-cli has shipped the
-    same phrase to four different fields across versions and we want
-    a single classifier that covers all of them.
+    Pre-PR-T this was :func:`is_claude_transient_upstream_error`
+    returning ``bool`` — callers couldn't tell which signal fired so
+    the post-mortem could not act on the actual upstream signature
+    (rate_limit vs overloaded vs quota-reset). The dataclass-returning
+    form preserves the matched substring + source field so
+    log readers and operators get an actionable diagnostic.
+
+    Search order matches paperclip's ``buildClaudeTransientHaystack``:
+    raw stdout / stderr first, then events in arrival order.
     """
-    if CLAUDE_TRANSIENT_UPSTREAM_RE.search(stdout or ""):
-        return True
-    if CLAUDE_TRANSIENT_UPSTREAM_RE.search(stderr or ""):
-        return True
+    if stdout:
+        match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(stdout)
+        if match:
+            return TransientSignal(
+                matched_text=_signal_excerpt(stdout, match),
+                source="stdout",
+            )
+    if stderr:
+        match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(stderr)
+        if match:
+            return TransientSignal(
+                matched_text=_signal_excerpt(stderr, match),
+                source="stderr",
+            )
     if not events:
-        return False
+        return None
     for event in events:
         if event.type == "result":
             for key in ("result", "error", "message", "stderr"):
                 value = event.payload.get(key)
-                if isinstance(value, str) and CLAUDE_TRANSIENT_UPSTREAM_RE.search(value):
-                    return True
+                if not isinstance(value, str):
+                    continue
+                match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(value)
+                if match:
+                    return TransientSignal(
+                        matched_text=_signal_excerpt(value, match),
+                        source="event",
+                        event_type="result",
+                        event_field=key,
+                    )
         elif event.type == "assistant":
             message = event.payload.get("message", {})
             if not isinstance(message, dict):
@@ -487,9 +570,59 @@ def is_claude_transient_upstream_error(
                 if block.get("type") != "text":
                     continue
                 text = block.get("text", "")
-                if isinstance(text, str) and CLAUDE_TRANSIENT_UPSTREAM_RE.search(text):
-                    return True
-    return False
+                if not isinstance(text, str):
+                    continue
+                match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
+                if match:
+                    return TransientSignal(
+                        matched_text=_signal_excerpt(text, match),
+                        source="event",
+                        event_type="assistant",
+                    )
+    return None
+
+
+def is_claude_transient_upstream_error(
+    *,
+    stdout: str,
+    stderr: str,
+    events: list[StreamJsonEvent] | None = None,
+) -> bool:
+    """Backwards-compatible ``bool`` wrapper around
+    :func:`classify_transient_signal`. New callers should use the
+    classifier directly so they keep the diagnostic context (matched
+    text, source field, event type) instead of throwing it away.
+    """
+    return classify_transient_signal(stdout=stdout, stderr=stderr, events=events) is not None
+
+
+def _signal_excerpt(haystack: str, match: re.Match[str], radius: int = 80) -> str:
+    """Slice ``[match.start()-radius : match.end()+radius]`` from
+    ``haystack`` so the log line carries the surrounding error sentence
+    without flooding when claude-cli emits a multi-KB result event.
+
+    Args:
+        haystack: The full text the classifier ran the regex against
+            (stdout / stderr / one event field). Named ``haystack``
+            instead of ``text`` because the same name appears in event
+            payloads (``content[].text``) and the alias keeps the two
+            distinct at the call site.
+        match: The ``re.Match`` object the classifier obtained.
+        radius: Characters of pre/post context to include around the
+            matched span. ``80`` is empirically enough to capture one
+            sentence on either side of common Anthropic upstream
+            errors (``rate_limit_error: ...``, ``overloaded_error: ...``).
+
+    Returns:
+        Whitespace-normalised excerpt bounded to 200 chars so the
+        eventual log line stays a single row.
+    """
+    excerpt_start = max(0, match.start() - radius)
+    excerpt_end = min(len(haystack), match.end() + radius)
+    raw_excerpt = haystack[excerpt_start:excerpt_end]
+    # Collapse whitespace runs so the log line is one row.
+    collapsed = " ".join(raw_excerpt.split())
+    return collapsed[:200]
 
 
 def _extract_stop_reason(events: list[StreamJsonEvent]) -> str:

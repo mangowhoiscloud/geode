@@ -86,7 +86,26 @@ class SessionTranscript:
         transcript_dir: Path | str | None = None,
     ) -> None:
         self._session_id = session_id
-        self._dir = Path(transcript_dir) if transcript_dir else DEFAULT_TRANSCRIPT_DIR
+        # PR-Q (2026-05-24) — when an active run_dir is bound and the
+        # caller didn't pass an explicit transcript_dir, route the
+        # per-session jsonl into ``<run_dir>/sub_agents/<session_id>/``
+        # and override the filename to ``dialogue.jsonl`` (vs the
+        # legacy ``<session_id>.jsonl`` under the cwd-slug global).
+        # Explicit ``transcript_dir=`` overrides this (orchestrator
+        # paths like RunTranscript still control their own location).
+        self._dialogue_filename_override: str | None = None
+        if transcript_dir is not None:
+            self._dir = Path(transcript_dir)
+        else:
+            from core.observability.run_dir import resolve_sub_agent_path
+
+            consolidated_dialogue = resolve_sub_agent_path(session_id, "dialogue.jsonl")
+            if consolidated_dialogue is not None:
+                # ``resolve_sub_agent_path`` already mkdir'd the parent.
+                self._dir = consolidated_dialogue.parent
+                self._dialogue_filename_override = consolidated_dialogue.name
+            else:
+                self._dir = DEFAULT_TRANSCRIPT_DIR
         self._lock = threading.Lock()
         self._event_count = 0
 
@@ -100,6 +119,14 @@ class SessionTranscript:
 
     @property
     def file_path(self) -> Path:
+        # PR-Q — when ``_dialogue_filename_override`` is set the
+        # SessionTranscript was bound to a run_dir-anchored location and
+        # writes ``<dir>/dialogue.jsonl`` instead of the legacy
+        # ``<dir>/<session_id>.jsonl``. The override is only set by
+        # ``__init__`` when ``transcript_dir`` was left empty AND
+        # :func:`resolve_sub_agent_path` returned a binding.
+        if self._dialogue_filename_override is not None:
+            return self._dir / self._dialogue_filename_override
         return self._dir / f"{self._session_id}.jsonl"
 
     # ------------------------------------------------------------------
@@ -134,39 +161,109 @@ class SessionTranscript:
         self._update_index()
 
     def record_user_message(self, text: str) -> None:
-        self._append(
-            {
-                "event": "user_message",
-                "text": _truncate(text, MAX_TEXT_CHARS),
-            }
+        truncated = _truncate(text, MAX_TEXT_CHARS)
+        self._append({"event": "user_message", "text": truncated})
+        self._mirror_to_run_transcript(
+            action="agent.user_message",
+            entity_type="task",
+            entity_id=self._session_id,
+            details={"text": truncated},
         )
 
     def record_assistant_message(self, text: str) -> None:
-        self._append(
-            {
-                "event": "assistant_message",
-                "text": _truncate(text, MAX_TEXT_CHARS),
-            }
+        truncated = _truncate(text, MAX_TEXT_CHARS)
+        self._append({"event": "assistant_message", "text": truncated})
+        self._mirror_to_run_transcript(
+            action="agent.assistant_message",
+            entity_type="task",
+            entity_id=self._session_id,
+            details={"text": truncated},
         )
 
     def record_tool_call(self, tool: str, tool_input: dict[str, Any]) -> None:
         input_str = json.dumps(tool_input, ensure_ascii=False, default=str)
-        self._append(
-            {
-                "event": "tool_call",
-                "tool": tool,
-                "input": _truncate(input_str, MAX_INPUT_CHARS),
-            }
+        truncated_input = _truncate(input_str, MAX_INPUT_CHARS)
+        self._append({"event": "tool_call", "tool": tool, "input": truncated_input})
+        self._mirror_to_run_transcript(
+            action="agent.tool_call",
+            entity_type="task",
+            entity_id=self._session_id,
+            details={"tool": tool, "input": truncated_input},
         )
 
     def record_tool_result(self, tool: str, status: str, summary: str = "") -> None:
+        truncated_summary = _truncate(summary, MAX_INPUT_CHARS)
         self._append(
             {
                 "event": "tool_result",
                 "tool": tool,
                 "status": status,
-                "summary": _truncate(summary, MAX_INPUT_CHARS),
+                "summary": truncated_summary,
             }
+        )
+        self._mirror_to_run_transcript(
+            action="agent.tool_result",
+            entity_type="task",
+            entity_id=self._session_id,
+            details={"tool": tool, "status": status, "summary": truncated_summary},
+        )
+
+    def _mirror_to_run_transcript(
+        self,
+        *,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        details: dict[str, Any],
+    ) -> None:
+        """Mirror this SessionTranscript event into the active RunTranscript
+        as a paperclip-style activity_log row.
+
+        PR-U (2026-05-24, F4 in docs/plans/2026-05-24-transcript-
+        standardization-and-claude-resume.md). Pre-PR-U the pipeline
+        transcript at ``<run_dir>/transcript.jsonl`` only carried
+        orchestrator phase events (phase_started / phase_finished /
+        cost_preview / preflight_passed); the per-sub-agent dialogue
+        lived in a separate ``sub_agents/<task_id>/dialogue.jsonl`` with
+        no inline reference in the pipeline timeline. Operators
+        following ``tail -F transcript.jsonl`` saw 4 markers per cycle
+        but no agent dialogue, even though that was the highest-value
+        signal.
+
+        This mirror lifts a truncated preview of every agent dialogue
+        event up into the pipeline transcript with the
+        ``actor_type="agent"`` + ``action="agent.<verb>"`` classification
+        quintuple paperclip's activity_log uses, so the timeline is
+        unified without duplicating the full body (which stays in
+        dialogue.jsonl — paperclip-style activity_log ↔ issue_comments
+        navigation). ``actor_id == entity_id == task_id == self._session_id``
+        because PR-Q.5's single-anchor invariant (I1) collapsed the four
+        identifiers (WorkerRequest.task_id / IsolationConfig.session_id
+        / AgenticLoop.session_id / SessionTranscript._session_id) into
+        one value.
+
+        No-op when no active RunTranscript is bound — outside the
+        seed-generation orchestrator (REPL / gateway / tests) the
+        pipeline transcript SoT does not exist, so the mirror has
+        nowhere to go.
+        """
+        from core.self_improving_loop.run_transcript import current_run_transcript
+
+        run_transcript = current_run_transcript()
+        if run_transcript is None:
+            return
+        # ``event`` field uses the verb portion of the dotted action so
+        # legacy ``.event`` readers see a meaningful tag.
+        verb = action.split(".", 1)[1] if "." in action else action
+        run_transcript.append(
+            verb,
+            actor_type="agent",
+            actor_id=self._session_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            task_id=self._session_id,
+            payload=details,
         )
 
     def record_vault_save(self, path: str, category: str) -> None:
@@ -234,6 +331,12 @@ class SessionTranscript:
         payload: dict[str, Any] | None = None,
         ts: float | None = None,
         file_path: Path | None = None,
+        actor_type: str | None = None,
+        actor_id: str | None = None,
+        action: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        task_id: str | None = None,
     ) -> None:
         """Record a free-form lifecycle event — replaces the legacy
         ``SessionJournal.append(event, payload=...)`` path (renamed to
@@ -253,6 +356,16 @@ class SessionTranscript:
         ``SessionJournal``) to write to
         ``<self-improving-loop-dir>/<session_id>/transcript.jsonl``
         while still using this Tier-1 schema.
+
+        PR-U (2026-05-24, paperclip activity_log parity, F3 in
+        docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
+        the optional ``actor_type`` / ``actor_id`` / ``action`` /
+        ``entity_type`` / ``entity_id`` / ``task_id`` fields land in the
+        row when supplied (orchestrator's explicit
+        ``RunTranscript.append`` + SessionTranscript's mirror path
+        both fill them). Omitted keys are simply absent from the row so
+        legacy readers that only look at ``event`` / ``payload`` /
+        ``session_id`` keep working.
         """
         record: dict[str, Any] = {
             "ts": ts if ts is not None else time.time(),
@@ -263,6 +376,18 @@ class SessionTranscript:
             "event": event,
             "payload": payload or {},
         }
+        # PR-U classification quintuple — only emit when caller supplied
+        # them so legacy rows stay compact.
+        for field_name, field_value in (
+            ("actor_type", actor_type),
+            ("actor_id", actor_id),
+            ("action", action),
+            ("entity_type", entity_type),
+            ("entity_id", entity_id),
+            ("task_id", task_id),
+        ):
+            if field_value is not None:
+                record[field_name] = field_value
         target_path = file_path if file_path is not None else self.file_path
         line = json.dumps(record, ensure_ascii=False)
         with self._lock:

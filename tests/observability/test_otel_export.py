@@ -6,13 +6,14 @@ import os
 import sys
 
 import pytest
+from core.observability.otel_export import resolve_endpoint
+
 from core.observability import (
     OtelExportError,
     disable,
     enable,
     status,
 )
-from core.observability.otel_export import resolve_endpoint
 
 
 def test_status_default_disabled() -> None:

@@ -47,6 +47,135 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.51] - 2026-05-24
+
+> PR-T + PR-Q + PR-Q.5/U 3-PR bundle. PR-T (#1582): claude-cli transient
+> classifier observability — structured `TransientSignal` + full
+> post-mortem JSON dump under `~/.geode/diagnostics/`. PR-Q (#1583):
+> run-dir-as-anchor consolidation — 4 observability writers redirect
+> into `state/seed-generation/<run_id>/sub_agents/<task_id>/` via new
+> `core/observability/run_dir.py` ContextVar + `GEODE_RUN_DIR` env
+> bridge. PR-Q.5 + PR-U (#1584): single-anchor `task_id` invariant +
+> paperclip-style activity_log mirror in pipeline transcript. Spec doc
+> at `docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`
+> (PR1 = this release, PR2 queued). Codex MCP review of #1584 caught
+> ContextVar cross-process gap and got fixed in the same PR.
+
+### Changed
+- **PR-Q.5 + PR-U — transcript 표준화 (식별자 정렬 + paperclip-style timeline mirror).**
+  ``docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md`` 의
+  PR1 구현. Post-PR-Q audit 에서 발견한 식별자 단절 (sub-agent 의 result+stderr 는
+  ``sub_agents/<task_id>/`` 에 가는데 dialogue 만 ``sub_agents/s-<uuid>/`` 별도
+  폴더로 빠짐) + pipeline transcript 가 phase 마커만 들고 agent dialogue 가
+  inline 안 보이는 GAP 두 가지를 함께 해결.
+  - **F1 (Q.5)** ``core/agent/loop/agent_loop.py`` — ``AgenticLoop.__init__``
+    에 ``session_id: str = ""`` 인자 추가. 비어있으면 legacy ``s-<uuid>``,
+    채워지면 그 값을 그대로 SessionTranscript 의 session_id 로.
+  - **F2 (Q.5)** ``core/agent/worker.py`` — worker subprocess 의 AgenticLoop
+    call site 가 ``session_id=request.task_id`` 명시. WorkerRequest.task_id 가
+    AgenticLoop / SessionTranscript / dialogue.jsonl path 의 단일 anchor 로
+    수렴. 결과: ``sub_agents/<task_id>/result.json + stderr.log +
+    dialogue.jsonl`` 단일 폴더 (PR-Q 의 의도 회복).
+  - **F3 (U)** ``core/self_improving_loop/run_transcript.py``,
+    ``core/observability/transcript.py`` — ``RunTranscript.append`` 와
+    ``SessionTranscript.record_lifecycle_event`` 가 paperclip
+    ``activity_log`` schema 의 ``actor_type`` / ``actor_id`` / ``action`` /
+    ``entity_type`` / ``entity_id`` / ``task_id`` 옵션 필드 추가. 기존
+    caller (``journal.append("phase_started", payload={...})``) 는 default
+    auto-infer (``orchestrator`` / ``pipeline`` / ``f"pipeline.{event}"``)
+    로 무변경 동작.
+  - **F4 (U)** ``SessionTranscript.record_user_message`` /
+    ``record_assistant_message`` / ``record_tool_call`` / ``record_tool_result``
+    가 active ``RunTranscript`` 에 truncated mirror append. pipeline
+    transcript 가 phase events + agent dialogue 통합 timeline 으로 동작.
+    풀 본문은 dialogue.jsonl 에 유지 (paperclip activity_log ↔
+    issue_comments 동등 navigation).
+  - 8 새 invariant 테스트 (``tests/core/observability/test_unified_timeline.py``
+    I1-I6) — single-anchor / single-dir / navigation 결정성 / backwards-compat
+    + I5 (subprocess RunTranscript rebind via env) + I6 (cli.py grep-pin).
+    기존 ``test_run_transcript.py`` 회귀 schema-additive fix 1건
+    (orchestrator default auto-infer 노출).
+  - **Codex MCP review** (post-#1584 push) caught two production gaps
+    initial tests masked: (FAIL-1) ContextVars don't cross subprocess
+    boundaries → SessionTranscript mirror was silently no-op in worker
+    subprocesses (production path); (FAIL-2) ``plugins/seed_generation/
+    cli.py`` opened ``run_transcript_scope`` but NOT ``run_dir_scope``,
+    so PR-Q's redirect path silently fell back to legacy
+    ``~/.geode/`` globals. Both fixed in the same PR:
+    - ``cli.py:351`` now wraps in ``with run_dir_scope(run_dir),
+      run_transcript_scope(journal):`` — env-bridge propagates.
+    - ``worker.py:main()`` re-creates a thin ``RunTranscript`` pointing
+      at the same ``<run_dir>/transcript.jsonl`` and binds
+      ``set_current_run_transcript`` so cross-process mirror appends
+      atomically (line < PIPE_BUF on macOS/Linux).
+  - paperclip parity: ``packages/db/src/schema/activity_log.ts`` 의 12-field
+    schema 매핑, ``packages/adapters/claude-local/src/server/parse.ts`` 의
+    session_id 추출 패턴은 PR2 (V) 에서 이어짐.
+
+- **PR-Q — observability 일원화 (run-dir-as-anchor).** Pre-PR-Q 한
+  seed-generation cycle 의 산출물 + 트랜스크립트가 5 prefix 에 분산
+  (``state/seed-generation/<run_id>/`` + ``~/.geode/self-improving-loop/<run_id>/``
+  + ``~/.geode/transcripts/<host>/s-*.jsonl`` +
+  ``~/.geode/workers/<task_id>.{result.json,stderr.log}``), 3 식별자
+  (run_id / task-id / session-hash) 가 join key 없이 흩어짐. 한 cycle
+  회수 하려면 5 grep + 수동 식별자 매칭. open-coscientist /
+  paperclip / crumb / claude-code-ref 4/4 frontier 가 *단일 anchor +
+  단일 디렉터리* — GEODE 만 분산. 정정:
+  - 새 `core/observability/run_dir.py` 가 단일 SoT ContextVar
+    (`set_active_run_dir` / `get_active_run_dir` / `run_dir_scope`)
+    + cross-process bridge env (``GEODE_RUN_DIR``) + path resolver
+    (`resolve_sub_agent_path(task_id, filename)` → ``<run_dir>/
+    sub_agents/<task_id>/<filename>``) 제공.
+  - `RunTranscript` (W1): `plugins/seed_generation/cli.py` 가
+    ``run_dir / "transcript.jsonl"`` 명시 path 로 binding —
+    ``~/.geode/self-improving-loop/<run>/`` 에서 run-dir 안으로 이동.
+  - `WorkerResult.backup` (W2): `core/agent/worker.py:_save_result_backup`
+    가 `resolve_sub_agent_path` 우선 → ``<run_dir>/sub_agents/<task_id>/
+    result.json``. unbound 시 ``~/.geode/workers/`` fallback.
+  - `IsolatedRunner.stderr` (W3): `_save_stderr` 도 동일 resolver →
+    ``<run_dir>/sub_agents/<task_id>/stderr.log``. spawn 시 parent
+    의 active run_dir 을 ``GEODE_RUN_DIR`` env 로 child 에 전달.
+  - `SessionTranscript` (W4): `__init__` 의 `transcript_dir=None`
+    branch 가 `resolve_sub_agent_path` 우선 → ``<run_dir>/sub_agents/
+    <session_id>/dialogue.jsonl``. 명시적 `transcript_dir=` 는
+    그대로 (RunTranscript 의 명시 path override 영향 없음).
+  - `WorkerRequest.run_dir` field 추가 (process-boundary carrier).
+  - `core/agent/worker.py:main()` 가 `GEODE_RUN_DIR` env 인헤리트해서
+    child ContextVar 재바인딩 (cross-process 일관성).
+  - **bonus fix**: develop 의 `worker.py:main()` 가 post-MAINPATH-1
+    (#1572) 이후 `bootstrap_builtins()` 호출 빠져서 sub-agent dispatch
+    가 ``AdapterNotFoundError: Known pairs: []`` 으로 즉시 crash 하던
+    것을 함께 fix (smoke 때 local hack 으로 임시 우회 중이던 패치 가
+    이제 develop 에 정상 통합).
+  - 9개 신규 테스트 — unbound fallback / scope bind+restore /
+    SessionTranscript redirect / explicit transcript_dir override /
+    worker backup redirect / 기본 pool fallback / stderr redirect / env
+    constant. 76 broader test 회귀 없음.
+
+- **PR-T — claude-cli transient classifier observability 보강.** Pre-PR-T
+  `is_claude_transient_upstream_error` 는 ``bool`` 만 반환했고
+  `ClaudeCliTransientUpstreamError` 는 ``stderr_tail`` 만 메시지에
+  넣었음. claude-cli 가 stderr 에 안 쓰니 항상 ``<empty>`` —
+  진단 가치 0 (5-hour quota vs RPM cap vs backend 5xx vs OAuth slot
+  cap 식별 불가). 변경:
+  - 새 `classify_transient_signal(...) -> TransientSignal | None` 이
+    matched substring + source (``stdout`` / ``stderr`` / ``event``) +
+    event_type + event_field 의 structured dataclass 반환. 기존
+    `is_claude_transient_upstream_error` 는 backwards-compat
+    ``bool`` wrapper 로 유지.
+  - `ClaudeCliTransientUpstreamError` 에 ``signal: TransientSignal |
+    None`` + ``dump_path: str | None`` structured field 추가. 메시지에
+    ``source=`` / ``matched=`` / ``dump=`` 인라인 노출 → log 한 줄로
+    즉시 triage.
+  - `ClaudeCliAdapter.acomplete` 가 transient hit 시 full
+    ``(stdout, stderr, parsed events, classifier signal, rc)`` 를
+    ``~/.geode/diagnostics/claude-cli-transient/<ts>-<model>.json`` 에
+    dump. classification 이후 버리던 raw 데이터 영구화 → 사후 분석으로
+    claude-cli 가 ``result`` event 에 실은 실제 upstream message 회수.
+  - 11개 신규 테스트 + 변수 alias 정리
+    (`stream_events` / `transient_signal` / `postmortem_path` /
+    `assistant_text` / `hit_ts` — feedback_no_naive_variable_names).
+
 ## [0.99.50] - 2026-05-24
 
 > Two-PR bundle. PR-HELPERS-3SPLIT (#1578) splits the deferred-from-v0.99.48

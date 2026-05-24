@@ -385,6 +385,18 @@ class IsolatedRunner:
                 return slot_error
             acquired = True
             safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
+            # PR-Q (2026-05-24) — forward the parent's active run_dir
+            # binding to the subprocess so its observability writers
+            # (``_save_result_backup``, ``SessionTranscript``) land
+            # output under ``<run_dir>/sub_agents/<task_id>/`` instead
+            # of the legacy ``~/.geode/workers/`` + ``~/.geode/transcripts/``
+            # global pools. Empty when no orchestrator opened a
+            # ``run_dir_scope`` — child falls back to legacy paths.
+            from core.observability.run_dir import RUN_DIR_ENV, get_active_run_dir
+
+            active_run_dir = get_active_run_dir()
+            if active_run_dir is not None:
+                safe_env[RUN_DIR_ENV] = str(active_run_dir)
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
@@ -542,14 +554,23 @@ class IsolatedRunner:
 
     @staticmethod
     def _save_stderr(session_id: str, stderr_bytes: bytes) -> None:
-        """Save subprocess stderr to ~/.geode/workers/ for debugging."""
+        """Persist subprocess stderr for debugging.
+
+        PR-Q (2026-05-24) — when an active run_dir is bound, the stderr
+        log lands under ``<run_dir>/sub_agents/<session_id>/stderr.log``
+        so it's co-located with the sub-agent's ``result.json`` +
+        ``dialogue.jsonl`` for that cycle. Otherwise falls back to the
+        legacy global ``~/.geode/workers/<session_id>.stderr.log`` pool.
+        """
+        from core.observability.run_dir import resolve_sub_agent_path
         from core.paths import GLOBAL_WORKERS_DIR
 
         try:
-            worker_dir = GLOBAL_WORKERS_DIR
-            worker_dir.mkdir(parents=True, exist_ok=True)
-            path = worker_dir / f"{session_id}.stderr.log"
-            path.write_bytes(stderr_bytes)
+            stderr_path = resolve_sub_agent_path(session_id, "stderr.log")
+            if stderr_path is None:
+                GLOBAL_WORKERS_DIR.mkdir(parents=True, exist_ok=True)
+                stderr_path = GLOBAL_WORKERS_DIR / f"{session_id}.stderr.log"
+            stderr_path.write_bytes(stderr_bytes)
         except Exception:
             log.debug("Failed to save stderr for %s", session_id, exc_info=True)
 

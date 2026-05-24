@@ -327,15 +327,38 @@ def run_audit_seeds(
     # generator / critic prompts.
     meta_review_snapshot = _load_priors_snapshot(err=err)
 
+    from core.observability.run_dir import run_dir_scope
+    from core.paths import STATE_SEED_GENERATION_DIR
     from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     run_id = f"{gen_tag}-{resolved_dim}"
+    # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
+    # transcript lives inside the run directory (not the legacy
+    # ~/.geode/self-improving-loop/<run>/transcript.jsonl) so every
+    # artifact for one cycle — state.json, candidates/, survivors/,
+    # elo_log.tsv, sub_agents/, transcript.jsonl — is co-located under
+    # state/seed-generation/<run_id>/ and ``tar czf run.tgz state/
+    # seed-generation/<run_id>/`` recovers the entire cycle. The
+    # cross-cutting hook journal / RunLog / monthly usage still live
+    # under ~/.geode/ because they aren't run-scoped.
+    run_dir = STATE_SEED_GENERATION_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
     journal = RunTranscript(
         session_id=run_id,
         gen_tag=gen_tag,
         component="seed-generation",
+        path=run_dir / "transcript.jsonl",
     )
-    with run_transcript_scope(journal):
+    # PR-Q.5 + PR-U (2026-05-24, Codex MCP review of #1584 caught this
+    # gap) — wrap the orchestrator body in BOTH ``run_dir_scope`` and
+    # ``run_transcript_scope`` so downstream writers (IsolatedRunner's
+    # ``GEODE_RUN_DIR`` env-forward, SessionTranscript's
+    # ``resolve_sub_agent_path`` lookup, RunTranscript mirror from the
+    # worker subprocess) all see the binding. Pre-fix the cli only
+    # opened ``run_transcript_scope`` and the ContextVar binding for
+    # run_dir was never set, so PR-Q's redirect path silently fell back
+    # to legacy ``~/.geode/workers/`` + ``~/.geode/transcripts/`` globals.
+    with run_dir_scope(run_dir), run_transcript_scope(journal):
         picker_result = pick_bindings()
         print_tos_notice(picker_result, file=err, quiet=quiet)
 
