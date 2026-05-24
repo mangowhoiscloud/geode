@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SKIP-PERMS** — `build_claude_cli_argv()` accepts a new
+  `skip_permissions: bool = False` parameter that appends
+  `--allow-dangerously-skip-permissions` to the claude-cli argv when
+  True. GEODE's AgenticLoop adapter (`core/llm/adapters/claude_cli.py`)
+  passes True so headless sub-agent subprocesses don't hang on
+  interactive permission prompts (Write outside cwd, Bash dangerous
+  commands, etc.).
+  - **Smoke-blocking issue** (v0.99.53 smoke after PR-TIMECAP): every
+    seed-generation generator candidate tried Write → got permission
+    denied → tried Bash-cat-redirect → denied → tried Agent
+    delegation → denied → exited cleanly with a "please grant write
+    access" final message → pipeline saw empty candidates → aborted.
+    claude-cli rc=0 + is_error=false the whole way (no claude-cli
+    bug, just an interactive-prompt-in-headless-subprocess mismatch).
+  - **Default off** so inspect_ai / petri_audit interactive paths
+    keep their permission prompts; AgenticLoop adapter explicitly
+    opts in. The CLI flag is `--allow-dangerously-skip-permissions`
+    (recommended only for sandboxes per `claude --help`) — GEODE's
+    sub-agent dispatch IS such a sandbox (denied_tools set +
+    working_dirs whitelist + isolated subprocess).
+  - Pinned by `tests/plugins/petri_audit/test_claude_cli_provider.py`
+    (4 cases — default-off, explicit-on, ordering vs `--tools`,
+    composes-with-extra_args).
+
 ### Changed
 - **PR-TIMECAP** — unify claude-cli + seed-generation sub-agent
   wall-clock gates to a **30-minute time-cap**, dropping the residual
