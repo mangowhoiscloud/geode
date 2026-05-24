@@ -48,6 +48,46 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-Q — observability 일원화 (run-dir-as-anchor).** Pre-PR-Q 한
+  seed-generation cycle 의 산출물 + 트랜스크립트가 5 prefix 에 분산
+  (``state/seed-generation/<run_id>/`` + ``~/.geode/self-improving-loop/<run_id>/``
+  + ``~/.geode/transcripts/<host>/s-*.jsonl`` +
+  ``~/.geode/workers/<task_id>.{result.json,stderr.log}``), 3 식별자
+  (run_id / task-id / session-hash) 가 join key 없이 흩어짐. 한 cycle
+  회수 하려면 5 grep + 수동 식별자 매칭. open-coscientist /
+  paperclip / crumb / claude-code-ref 4/4 frontier 가 *단일 anchor +
+  단일 디렉터리* — GEODE 만 분산. 정정:
+  - 새 `core/observability/run_dir.py` 가 단일 SoT ContextVar
+    (`set_active_run_dir` / `get_active_run_dir` / `run_dir_scope`)
+    + cross-process bridge env (``GEODE_RUN_DIR``) + path resolver
+    (`resolve_sub_agent_path(task_id, filename)` → ``<run_dir>/
+    sub_agents/<task_id>/<filename>``) 제공.
+  - `RunTranscript` (W1): `plugins/seed_generation/cli.py` 가
+    ``run_dir / "transcript.jsonl"`` 명시 path 로 binding —
+    ``~/.geode/self-improving-loop/<run>/`` 에서 run-dir 안으로 이동.
+  - `WorkerResult.backup` (W2): `core/agent/worker.py:_save_result_backup`
+    가 `resolve_sub_agent_path` 우선 → ``<run_dir>/sub_agents/<task_id>/
+    result.json``. unbound 시 ``~/.geode/workers/`` fallback.
+  - `IsolatedRunner.stderr` (W3): `_save_stderr` 도 동일 resolver →
+    ``<run_dir>/sub_agents/<task_id>/stderr.log``. spawn 시 parent
+    의 active run_dir 을 ``GEODE_RUN_DIR`` env 로 child 에 전달.
+  - `SessionTranscript` (W4): `__init__` 의 `transcript_dir=None`
+    branch 가 `resolve_sub_agent_path` 우선 → ``<run_dir>/sub_agents/
+    <session_id>/dialogue.jsonl``. 명시적 `transcript_dir=` 는
+    그대로 (RunTranscript 의 명시 path override 영향 없음).
+  - `WorkerRequest.run_dir` field 추가 (process-boundary carrier).
+  - `core/agent/worker.py:main()` 가 `GEODE_RUN_DIR` env 인헤리트해서
+    child ContextVar 재바인딩 (cross-process 일관성).
+  - **bonus fix**: develop 의 `worker.py:main()` 가 post-MAINPATH-1
+    (#1572) 이후 `bootstrap_builtins()` 호출 빠져서 sub-agent dispatch
+    가 ``AdapterNotFoundError: Known pairs: []`` 으로 즉시 crash 하던
+    것을 함께 fix (smoke 때 local hack 으로 임시 우회 중이던 패치 가
+    이제 develop 에 정상 통합).
+  - 9개 신규 테스트 — unbound fallback / scope bind+restore /
+    SessionTranscript redirect / explicit transcript_dir override /
+    worker backup redirect / 기본 pool fallback / stderr redirect / env
+    constant. 76 broader test 회귀 없음.
+
 - **PR-T — claude-cli transient classifier observability 보강.** Pre-PR-T
   `is_claude_transient_upstream_error` 는 ``bool`` 만 반환했고
   `ClaudeCliTransientUpstreamError` 는 ``stderr_tail`` 만 메시지에

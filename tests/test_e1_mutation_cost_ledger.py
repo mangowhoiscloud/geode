@@ -16,13 +16,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-from core.observability import current_session_metrics, session_metrics_scope
 from core.self_improving_loop.attribution import compute_attribution
 from core.self_improving_loop.runner import (
     Mutation,
     _consume_last_llm_call_usage,
     _reset_last_llm_call_usage,
 )
+
+from core.observability import current_session_metrics, session_metrics_scope
 
 # ---------------------------------------------------------------------------
 # 1. Mutation cost fields
