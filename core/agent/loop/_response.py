@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.hooks import HookEvent
 
-from ._helpers import get_agentic_tools
+from ._tool_factory import get_agentic_tools
 
 if TYPE_CHECKING:
     from .agent_loop import AgenticLoop
