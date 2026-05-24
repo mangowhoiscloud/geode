@@ -1,14 +1,22 @@
 """AgenticLoop source-route behavioural invariants.
 
 Pins:
-- Empty source → legacy adapter only, no new_adapter attached.
+- Empty source → PR-MAINPATH-1 (2026-05-24) cutover defaults source
+  to ``"payg"``; ``_new_adapter`` is resolved through the Path-B
+  registry. Pre-cutover, empty source meant ``_new_adapter is None``
+  and the loop ran on the legacy ``resolve_agentic_adapter`` route.
 - Concrete source + ``provider="anthropic"`` → ``resolve_for`` resolves and
   attaches a new_adapter; legacy adapter still constructed for the fallback
   surface (unused on this path).
-- Concrete source + provider != anthropic → new_adapter stays None (A2
-  follow-up scope); legacy adapter is the only route.
+- Concrete source + ``provider="openai"`` → A2 (v0.99.44) extended the
+  Path-B registry beyond Anthropic; OpenAI providers now also resolve
+  (`test_openai_provider_attaches_new_adapter`). The pre-A2 "anthropic
+  only" claim that lived in this docstring header is gone.
 - Concrete source + unregistered (provider, source) pair → hard-fail
-  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback).
+  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback). The cutover preserves
+  this contract: if the Path-B default ``"payg"`` doesn't match a
+  registered adapter for the requested provider, ``AgenticLoop.__init__``
+  raises rather than silently routing through the legacy adapter.
 """
 
 from __future__ import annotations
@@ -40,10 +48,17 @@ def _make_loop(*, source: str = "", provider: str = "anthropic") -> AgenticLoop:
     )
 
 
-def test_empty_source_leaves_new_adapter_none() -> None:
+def test_empty_source_defaults_to_payg_after_mainpath_cutover() -> None:
+    """PR-MAINPATH-1 (2026-05-24) — empty source defaults to "payg" and
+    resolves through the Path-B registry. Pre-cutover, this test asserted
+    the opposite (``_new_adapter is None``) because empty source landed
+    on the legacy ``resolve_agentic_adapter`` route.
+    """
     loop = _make_loop(source="")
-    assert loop._new_adapter is None
-    assert loop._adapter is not None  # legacy still wired
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "anthropic-payg"
+    assert loop._source == "payg"
+    assert loop._adapter is not None  # legacy still wired for error surface
 
 
 def test_concrete_source_attaches_anthropic_adapter() -> None:

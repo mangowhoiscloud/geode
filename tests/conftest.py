@@ -87,6 +87,29 @@ def _reset_auth_singletons():
 
 
 @pytest.fixture(autouse=True)
+def _bootstrap_adapter_registry():
+    """Populate the Path-B adapter registry before each test.
+
+    PR-MAINPATH-1 (2026-05-24) — AgenticLoop now resolves its
+    ``_new_adapter`` through ``core.llm.adapters.registry.resolve_for``
+    by default (source defaults to ``"payg"``). Production runtime
+    calls :func:`bootstrap_builtins` from ``core/wiring/container.py``
+    at startup; tests need the same registration so
+    ``AgenticLoop.__init__`` doesn't raise ``AdapterNotFoundError``
+    with the registry in its empty initial state.
+    The reset on the way out prevents per-test registrations from
+    leaking into the next test (matches the existing
+    ``test_agent_loop_source_route.py`` fixture pattern).
+    """
+    from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
+
+    _reset_for_test()
+    bootstrap_builtins()
+    yield
+    _reset_for_test()
+
+
+@pytest.fixture(autouse=True)
 def _reset_circuit_breakers():
     """Reset module-level CircuitBreaker singletons before & after each test.
 

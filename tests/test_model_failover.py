@@ -369,7 +369,16 @@ class TestAgenticLoopFailover:
         )
 
     def test_call_llm_uses_adapter(self) -> None:
-        """_call_llm should delegate to adapter.agentic_call() and return AgenticResponse."""
+        """_call_llm should delegate to adapter.agentic_call() and return AgenticResponse.
+
+        PR-MAINPATH-1 (2026-05-24) — AgenticLoop now defaults to the
+        Path-B route (``_new_adapter.acomplete``); the legacy branch
+        (``_adapter.agentic_call``) only runs when ``_new_adapter`` is
+        ``None``. This test still asserts the legacy delegation
+        contract, so we force ``_new_adapter = None`` to drive the
+        fallback path. A sibling test for the Path-B branch lives in
+        ``tests/core/agent/test_agent_loop_source_route.py``.
+        """
         from core.cli.agentic_response import AgenticResponse, ResponseUsage, TextBlock
 
         mock_response = AgenticResponse(
@@ -378,6 +387,7 @@ class TestAgenticLoopFailover:
             usage=ResponseUsage(input_tokens=100, output_tokens=50),
         )
         loop = self._make_loop()
+        loop._new_adapter = None  # force legacy branch
 
         async def fake_call(**kwargs: Any) -> AgenticResponse:
             return mock_response
