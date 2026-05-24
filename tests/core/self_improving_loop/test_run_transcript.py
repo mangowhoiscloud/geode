@@ -47,6 +47,9 @@ def test_append_writes_jsonl_row(tmp_path: Path) -> None:
     payload = json.loads(rows[0])
     assert payload == {
         "ts": 1700000000.0,
+        # PR-COMM-4 (2026-05-24) — per-instance monotonic seq is now
+        # stamped on every row. First append in a fresh transcript = 1.
+        "seq": 1,
         "session_id": "s-test",
         "gen_tag": "autoresearch-test",
         "component": "autoresearch",

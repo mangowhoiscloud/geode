@@ -100,6 +100,43 @@ class RunTranscript:
             transcript_dir=path.parent,
         )
 
+    # ------------------------------------------------------------------
+    # PR-COMM-4 (2026-05-24) — liveness watchdog passthrough
+    # ------------------------------------------------------------------
+
+    def last_touched_at(self) -> float | None:
+        """Delegate to the underlying SessionTranscript's mtime probe.
+
+        Operator watchdogs (stuck-run detectors, external monitors)
+        use this to spot self-improving-loop runs that have stopped
+        producing events.
+        """
+        # The underlying SessionTranscript was constructed with
+        # ``transcript_dir=path.parent`` and inherits the default
+        # ``<dir>/<session_id>.jsonl`` filename, but RunTranscript writes
+        # to ``self.path`` explicitly via ``file_path=`` on every
+        # ``record_lifecycle_event`` call (see :meth:`append`). So the
+        # mtime to consult is the run-level transcript path, NOT
+        # ``SessionTranscript.file_path`` which would point at a
+        # different (potentially nonexistent) sibling file.
+        try:
+            return self.path.stat().st_mtime
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return None
+
+    def is_stale(self, threshold_s: float, *, now: float | None = None) -> bool:
+        """Return True if this run's transcript hasn't received an event
+        in ``threshold_s`` seconds. False on never-started runs."""
+        import time as _time
+
+        touched = self.last_touched_at()
+        if touched is None:
+            return False
+        current = now if now is not None else _time.time()
+        return (current - touched) > threshold_s
+
     def append(
         self,
         event: str,
