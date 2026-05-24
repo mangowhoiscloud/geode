@@ -200,7 +200,19 @@ class AgenticLoop:
 
         if self._source in CONCRETE_SOURCES:
             # Hard-fail on resolve mismatch — concrete source MUST resolve.
-            self._new_adapter = resolve_for(self._provider, self._source)
+            # The Path-B registry uses a narrower provider vocabulary
+            # than ``_resolve_provider``: gpt-5.x models map to
+            # ``openai-codex`` in the legacy AgenticLLMPort path but
+            # collapse to ``openai`` in the registry (the Codex source is
+            # encoded on the ``source`` axis as ``subscription``).
+            # Same shape as :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
+            # and :func:`core.agent.loop._reflection._normalize_provider_for_registry`;
+            # this third copy stays inline rather than hoisted because
+            # the helper is 4 lines and PR-MAINPATH-4 (the
+            # ``_model_switching`` migration) will fold all three into
+            # one helper at that stage.
+            registry_provider = "openai" if self._provider == "openai-codex" else self._provider
+            self._new_adapter = resolve_for(registry_provider, self._source)
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
