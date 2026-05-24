@@ -59,16 +59,35 @@ log = logging.getLogger(__name__)
 
 def _load_prior_session_id(session_id: str) -> str:
     """Return the claude-cli session_id from the prior turn of this
-    sub-agent, or empty string when no prior session exists / outside
-    a run_dir scope.
+    sub-agent, or empty string when no prior session exists.
 
-    PR-V (2026-05-24, spec doc §3 V.4). Reads
-    ``<run_dir>/sub_agents/<session_id>/session.json``. Mirrors
-    paperclip's ``agent_runtime_state.sessionId`` SELECT — a per-agent
-    single-row store of "the sessionId my next ``--resume`` should use".
-    Returns empty on any I/O / parse error so the call falls back to
-    a fresh session rather than crashing.
+    PR-COMM-3c (2026-05-24) — SQLite primary, file fallback.
+    Reads ``agent_runtime_state.claude_cli_session_id`` first
+    (single source of truth introduced by PR-COMM-3 / PR-COMM-3b).
+    Falls back to the legacy
+    ``<run_dir>/sub_agents/<session_id>/session.json`` file from PR-V
+    so existing on-disk caches keep working through the 1-release
+    grace window (slated for removal in v0.99.54). Returns empty on
+    any I/O / parse error so the call falls back to a fresh session
+    rather than crashing.
     """
+    # SQLite primary — read from the per-agent row landed by
+    # PR-COMM-3b's record_agent_session_end hook handler.
+    try:
+        from core.observability.agent_runtime_state import get_agent_runtime_state
+
+        state = get_agent_runtime_state(session_id)
+        if state is not None and state.claude_cli_session_id:
+            return state.claude_cli_session_id
+    except Exception:
+        log.debug(
+            "agent_runtime_state read failed for %s — falling back to session.json",
+            session_id,
+            exc_info=True,
+        )
+
+    # Legacy file fallback (PR-V) — kept for 1 release so deploys that
+    # haven't ingested the SQLite writer yet still resume cleanly.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
@@ -93,17 +112,40 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
     turn of this sub-agent (or the same sub-agent in the next cycle)
     can ``--resume <id>``.
 
-    PR-V (2026-05-24, spec doc §3 V.4). Writes
-    ``<run_dir>/sub_agents/<session_id>/session.json``. The on-disk
-    schema is intentionally one field (``claude_cli_session_id``) for
-    now; PR-COMM-3 (SQLite agent_runtime_state) replaces the file with
-    a DB row carrying the full paperclip
-    ``agent_runtime_state`` columns (totalInputTokens / lastError /
-    lastRunStatus / ...). Empty ``emitted_session_id`` is a no-op
-    (non-claude-cli adapters or claude-cli crash before init).
+    PR-COMM-3c (2026-05-24) — dual-write. The primary store is the
+    SQLite ``agent_runtime_state.claude_cli_session_id`` column
+    (populated end-to-end by PR-COMM-3b's SESSION_ENDED hook handler
+    via the loop's ``_last_emitted_session_id`` cache; this function's
+    direct write covers the early-turn case where the loop emits a
+    session_id BEFORE its lifecycle hook fires for the round). The
+    legacy ``<run_dir>/sub_agents/<session_id>/session.json`` file
+    keeps being written for one release as a fallback so existing
+    deploys/readers don't break — scheduled for deletion in v0.99.54.
+    Empty ``emitted_session_id`` is a no-op (non-claude-cli adapters
+    or claude-cli crash before init).
     """
     if not emitted_session_id:
         return
+
+    # SQLite primary write — directly upsert the resumable session_id
+    # so the next turn's _load_prior_session_id sees it even if the
+    # round's SESSION_ENDED hook hasn't fired yet (early termination,
+    # round-budget exhaustion mid-turn, etc).
+    try:
+        from core.observability.agent_runtime_state import record_agent_session_end
+
+        record_agent_session_end(
+            agent_id=session_id,
+            claude_cli_session_id=emitted_session_id,
+        )
+    except Exception:
+        log.debug(
+            "agent_runtime_state write failed for %s — file fallback only",
+            session_id,
+            exc_info=True,
+        )
+
+    # Legacy file write (PR-V) — retained for 1-release grace.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
@@ -282,6 +324,13 @@ class AgenticLoop:
         _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
         registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
         self._new_adapter: Any = resolve_for(registry_provider, self._source)
+        # PR-COMM-3b (2026-05-24) — cache the latest claude-cli sessionId
+        # the adapter emitted so the SESSION_ENDED hook payload can carry
+        # it through to the agent_runtime_state SQLite writer (registered
+        # in this PR). Non-claude-cli adapters leave this empty; the
+        # writer's CASE-WHEN guard then preserves whatever prior value
+        # the row carries.
+        self._last_emitted_session_id: str = ""
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -2136,23 +2185,116 @@ class AgenticLoop:
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
         )
+        # PR-COMM-3d (2026-05-24) — emit LLM_CALL_STARTED / LLM_CALL_ENDED
+        # for the AgenticLoop's main dispatch path. Pre-fix only the
+        # ``router/calls/*.py`` one-off helpers fired these events, so
+        # the SQLite ``agent_runtime_state.total_*_tokens`` cumulative
+        # writer (registered in PR-COMM-3d's bootstrap.py addition
+        # below) saw zero traffic from the real per-turn loop. Payload
+        # carries ``session_id`` + ``usage`` + ``cost_usd`` so the
+        # writer's ``accumulate_tokens_and_cost`` call has the data it
+        # needs.
+        import time as _llm_call_time
+
+        _llm_t0 = _llm_call_time.monotonic()
+        adapter_name = getattr(self._new_adapter, "name", "<unknown>")
+        if self._hooks:
+            try:
+                await self._hooks.trigger_async(
+                    HookEvent.LLM_CALL_STARTED,
+                    {
+                        "session_id": self._session_id,
+                        "model": effective_model,
+                        "provider": self._provider,
+                        "adapter": adapter_name,
+                    },
+                )
+            except Exception:
+                log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
+
         try:
             result = await self._new_adapter.acomplete(req)
         except Exception as exc:
             self._last_llm_error = str(exc)
             log.warning(
                 "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
-                getattr(self._new_adapter, "name", "<unknown>"),
+                adapter_name,
                 exc,
             )
             response = None
+            if self._hooks:
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            "session_id": self._session_id,
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
+                            "error": str(exc),
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_ENDED (error) hook trigger failed", exc_info=True)
         else:
             response = agentic_response_from_adapter_result(result)
             # PR-V — persist the newly-emitted session_id so the next
             # turn of THIS sub-agent (or the same sub-agent in the next
             # cycle) can resume. Non-claude-cli adapters return empty
             # session_id; the persistence helper is a no-op there.
-            _persist_session_id(self._session_id, getattr(result, "session_id", ""))
+            emitted_sid = getattr(result, "session_id", "")
+            _persist_session_id(self._session_id, emitted_sid)
+            # PR-COMM-3b — cache for SESSION_ENDED payload (the
+            # ``_final_hook_payloads`` reader walks ``loop._last_emitted_session_id``
+            # to populate ``claude_cli_session_id`` on the SQLite write).
+            if emitted_sid:
+                self._last_emitted_session_id = emitted_sid
+            # PR-COMM-3d — emit LLM_CALL_ENDED with usage + cost so the
+            # cumulative writer accumulates correctly. ``cost_usd`` is
+            # computed locally via the same ``calculate_cost`` helper
+            # the token tracker uses (no double-counting — the
+            # accumulator already records; this hook payload exists
+            # purely to surface the per-call snapshot for SQLite
+            # accumulation and any future per-call observers).
+            if self._hooks:
+                usage = getattr(result, "usage", None)
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                cached_input_tokens = int(getattr(usage, "cached_input_tokens", 0) or 0)
+                try:
+                    from core.llm.token_tracker import calculate_cost
+
+                    cost_usd = float(
+                        calculate_cost(
+                            effective_model,
+                            input_tokens,
+                            output_tokens,
+                            cache_read_tokens=cached_input_tokens,
+                        )
+                    )
+                except Exception:
+                    cost_usd = 0.0
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_ENDED,
+                        {
+                            "session_id": self._session_id,
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
+                            "error": None,
+                            "usage": {
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "cached_input_tokens": cached_input_tokens,
+                            },
+                            "cost_usd": cost_usd,
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_ENDED (success) hook trigger failed", exc_info=True)
 
         if response is None:
             adapter_err = getattr(self._new_adapter, "_last_error", None)

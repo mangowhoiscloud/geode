@@ -257,14 +257,35 @@ _ERROR_CLASSIFICATION: dict[str, tuple[str, str, str]] = {
 def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     """Classify an LLM exception into (error_type, severity, hint).
 
-    Handles both Anthropic SDK and OpenAI SDK (used by GLM/OpenAI providers)
-    exception types.
+    Handles Anthropic SDK, OpenAI SDK (used by GLM/OpenAI providers),
+    and the PR-T subprocess transient classifier
+    (``ClaudeCliTransientUpstreamError``) so claude-cli stream-json
+    upstream signatures dispatch through the same ``rate_limit``
+    retry path as native SDK 429s. Without this mapping the
+    AgenticLoop's generic ``unknown`` branch produces the
+    "! Unexpected error. Auto-retrying." fallback UI which downstream
+    phase agents (proximity / critic) then mis-parse as content.
 
     Returns a tuple of:
       - error_type: machine-readable category
       - severity: "info" | "warning" | "error" | "critical"
       - hint: user-facing actionable message
     """
+    # --- PR-DEFECT-AB (2026-05-24) — paperclip execute.ts:809 parity ---
+    # ``ClaudeCliTransientUpstreamError`` lives under ``plugins/petri_audit``
+    # so core can't unconditionally import it (layer-violation +
+    # plugin-as-optional-dep). Lazy-import + isinstance gate — when the
+    # plugin isn't loaded, falls through to the SDK branches.
+    try:
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+        )
+
+        if isinstance(exc, ClaudeCliTransientUpstreamError):
+            return _ERROR_CLASSIFICATION["rate_limit"]
+    except ImportError:
+        pass
+
     # --- Anthropic SDK errors ---
     if isinstance(exc, BillingError):
         return _ERROR_CLASSIFICATION["billing"]

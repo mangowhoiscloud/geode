@@ -67,6 +67,22 @@ def _truncate(text: str, max_len: int) -> str:
 class SessionTranscript:
     """Append-only JSONL event recorder for a single session.
 
+    PR-COMM-4 (2026-05-24) — every row now carries a per-instance
+    monotonic ``seq`` field (starts at 1, increments by 1 per
+    appended event) under :attr:`_event_count`. Concurrent same-
+    instance callers are serialised by ``self._lock`` so seq order
+    matches file write order. Multiple SessionTranscript instances
+    (different processes / different in-process objects) writing to
+    the *same* file each maintain their own counter, so cross-writer
+    timelines must be re-sorted by ``(ts, seq)`` — a fundamental
+    consequence of having no cross-process coordination on the seq
+    counter, intentional to keep the hot path lock-free across
+    process boundaries.
+
+    ``last_touched_at()`` + ``is_stale(threshold_s)`` expose the file
+    mtime so external watchdogs can detect hung runs that stopped
+    appending events without firing PIPELINE_TIMEOUT / PIPELINE_ERROR.
+
     Usage::
 
         tx = SessionTranscript("s-abc123")
@@ -78,6 +94,10 @@ class SessionTranscript:
         tx.record_vault_save("vault/profile/signal-report.md", "profile")
         tx.record_cost("claude-opus-4-6", 1200, 350, 0.015)
         tx.record_session_end(duration_s=20, total_cost=0.015, rounds=3)
+
+        # PR-COMM-4 liveness:
+        if tx.is_stale(threshold_s=300):
+            log.warning("Transcript %s has been idle for 5+ minutes", tx.session_id)
     """
 
     def __init__(
@@ -367,41 +387,85 @@ class SessionTranscript:
         legacy readers that only look at ``event`` / ``payload`` /
         ``session_id`` keep working.
         """
-        record: dict[str, Any] = {
-            "ts": ts if ts is not None else time.time(),
-            "session_id": session_id or self._session_id,
-            "gen_tag": gen_tag,
-            "component": component,
-            "level": level,
-            "event": event,
-            "payload": payload or {},
-        }
-        # PR-U classification quintuple — only emit when caller supplied
-        # them so legacy rows stay compact.
-        for field_name, field_value in (
-            ("actor_type", actor_type),
-            ("actor_id", actor_id),
-            ("action", action),
-            ("entity_type", entity_type),
-            ("entity_id", entity_id),
-            ("task_id", task_id),
-        ):
-            if field_value is not None:
-                record[field_name] = field_value
+        # PR-COMM-4 (2026-05-24) — seq stamping + write held under a
+        # single lock so concurrent same-instance callers can't
+        # interleave (Codex MCP review catch: releasing the seq lock
+        # before re-acquiring the write lock would let thread A stamp
+        # seq=N+1 then thread B stamp seq=N+2 and write before A).
+        # Per-instance counter; cross-process writers to the SAME file
+        # still produce interleaved seqs that readers must re-sort by
+        # ``(ts, seq)`` — documented at the class docstring.
         target_path = file_path if file_path is not None else self.file_path
-        line = json.dumps(record, ensure_ascii=False)
         with self._lock:
+            self._event_count += 1
+            record: dict[str, Any] = {
+                "ts": ts if ts is not None else time.time(),
+                "seq": self._event_count,
+                "session_id": session_id or self._session_id,
+                "gen_tag": gen_tag,
+                "component": component,
+                "level": level,
+                "event": event,
+                "payload": payload or {},
+            }
+            # PR-U classification quintuple — only emit when caller
+            # supplied them so legacy rows stay compact.
+            for field_name, field_value in (
+                ("actor_type", actor_type),
+                ("actor_id", actor_id),
+                ("action", action),
+                ("entity_type", entity_type),
+                ("entity_id", entity_id),
+                ("task_id", task_id),
+            ):
+                if field_value is not None:
+                    record[field_name] = field_value
+            line = json.dumps(record, ensure_ascii=False)
             try:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 with target_path.open("a", encoding="utf-8") as fh:
                     fh.write(line + "\n")
-                self._event_count += 1
             except OSError as exc:
                 log.warning("Transcript lifecycle-event write failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # PR-COMM-4 (2026-05-24) — liveness watchdog API
+    # ------------------------------------------------------------------
+
+    def last_touched_at(self) -> float | None:
+        """Return the transcript file's mtime, or None if the file
+        doesn't exist yet (no events appended in this run).
+
+        External watchdogs (operator daemons, stuck-run detectors) use
+        this to spot transcripts that have stopped receiving events —
+        evidence that the run hung or crashed without firing
+        ``PIPELINE_TIMEOUT`` / ``PIPELINE_ERROR``.
+        """
+        try:
+            return self.file_path.stat().st_mtime
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.debug("Transcript stat failed for %s: %s", self.file_path, exc)
+            return None
+
+    def is_stale(self, threshold_s: float, *, now: float | None = None) -> bool:
+        """Return True if the transcript hasn't been touched in
+        ``threshold_s`` seconds. False when the file doesn't exist
+        (a never-started run isn't "stale" — it just hasn't begun).
+
+        ``now`` is an injectable wall-clock for deterministic tests;
+        defaults to ``time.time()``.
+        """
+        touched = self.last_touched_at()
+        if touched is None:
+            return False
+        current = now if now is not None else time.time()
+        return (current - touched) > threshold_s
 
     def read_events(self, limit: int = 100) -> list[dict[str, Any]]:
         """Read most recent N events from this transcript."""
@@ -428,9 +492,16 @@ class SessionTranscript:
     # ------------------------------------------------------------------
 
     def _append(self, data: dict[str, Any]) -> None:
-        data["ts"] = time.time()
-        line = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        # PR-COMM-4 (2026-05-24) — seq stamping + write held under a
+        # single lock so concurrent same-instance callers can't
+        # interleave (Codex MCP review catch). Per-instance monotonic;
+        # cross-process writers must re-sort by ``(ts, seq)`` —
+        # documented at the class docstring.
         with self._lock:
+            self._event_count += 1
+            data["seq"] = self._event_count
+            data["ts"] = time.time()
+            line = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
             self._dir.mkdir(parents=True, exist_ok=True)
             fpath = self.file_path
             # Size guard
@@ -439,7 +510,6 @@ class SessionTranscript:
             try:
                 with open(fpath, "a", encoding="utf-8") as f:
                     f.write(line + "\n")
-                self._event_count += 1
             except OSError as e:
                 log.warning("Transcript write failed: %s", e)
 
