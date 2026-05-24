@@ -244,7 +244,7 @@ ANTHROPIC_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.anthropic)
 OPENAI_PRIMARY: str = _routing.defaults.openai
 OPENAI_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.openai)
 
-# OpenAI Codex — Plus quota via chatgpt.com/backend-api/codex (Responses API).
+# OpenAI Codex — subscription quota via chatgpt.com/backend-api/codex (Responses API).
 CODEX_PRIMARY: str = _routing.defaults.codex
 CODEX_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.codex)
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"

@@ -447,7 +447,7 @@ class Settings(BaseSettings):
     # can serve the requested model (matches openai/codex CLI default).
     # Override per provider when the user deliberately wants metered PAYG:
     #   forced_login_method = {"openai": "apikey"}    # use OPENAI_API_KEY even
-    #                                                  # if Codex Plus OAuth is registered
+    #                                                  # if Codex subscription OAuth is registered
     # Valid values: "subscription" (default), "apikey", "auto" (alias).
     # Reference: openai/codex#2733, #3286.
     forced_login_method: dict[str, str] = {}

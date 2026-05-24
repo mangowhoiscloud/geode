@@ -8,7 +8,7 @@ admission control + dashboard mirror in ``build_default_lanes``.
 Why a separate lane (not just ``global`` or the Claude lane)
 ============================================================
 
-Codex CLI's ``codex exec`` reaches the operator's ChatGPT-Plus OAuth
+Codex CLI's ``codex exec`` reaches the operator's ChatGPT subscription OAuth
 bucket (different from Anthropic's). Combining it with the
 ``claude-cli-subagent`` lane would cap the two providers against a
 single semaphore, blocking Codex spawns when Claude is busy and
@@ -21,7 +21,7 @@ The cap matches the Claude side for now
 1. Codex CLI's per-account burst limiter isn't publicly documented;
    the conservative public-doc-grounded cap leaves headroom for a
    host ``codex`` session.
-2. ChatGPT-Plus + Codex CLI behaviour under fan-out lacks the
+2. ChatGPT subscription + Codex CLI behaviour under fan-out lacks the
    paperclip-style empirical study Claude has. Until measurements
    land, "small + tunable" beats "high + untested".
 
@@ -73,7 +73,7 @@ CODEX_CLI_LANE_MAX_ENV = "GEODE_CODEX_CLI_LANE_MAX"
 """Operator override for :data:`DEFAULT_CODEX_CLI_LANE_MAX`."""
 
 DEFAULT_CODEX_CLI_LANE_MAX = 2
-"""Conservative cap until ChatGPT-Plus / Codex CLI burst-limit
+"""Conservative cap until ChatGPT subscription / Codex CLI burst-limit
 behaviour is measured. Same value as the Claude side; the per-
 provider knob lets operators tune independently as data accumulates."""
 

@@ -79,7 +79,7 @@ def _call_budget_llm(prompt: str) -> str | None:
     extraction as a soft hint and proceeds without it.
 
     TODO (follow-up PR): add a ``_call_codex_oauth`` path so a ChatGPT
-    Plus subscription quota can drive the extraction (matches the
+    subscription quota can drive the extraction (matches the
     PR #1133 OAuth bridge for Petri's judge/auditor). The Codex
     ``/v1/responses`` streaming-only request shape lives in
     ``plugins/petri_audit/codex_provider.py`` and would need to be

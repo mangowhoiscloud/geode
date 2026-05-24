@@ -462,9 +462,16 @@ def test_verify_turn_async_off_mode_returns_pass(
 
 
 def test_drift_target_uses_act_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The model-drift sync targets ``settings.act_model`` (not
-    ``settings.model``) so an Opus-primary + Sonnet-act split doesn't
-    revert mid-session."""
+    """PR-DRIFT-CUT (2026-05-24) — drift target is unconditionally None.
+
+    Pre-PR this returned ``settings.act_model`` (or ``settings.model``)
+    so the per-turn drift sync would revert ``loop.model`` to the
+    settings value. The auto-revert silently overrode operator
+    ``/model`` selections and was cut at the source. The test now
+    pins the no-op contract — the function must NEVER return a
+    drift target, regardless of how settings diverge from
+    ``loop.model``.
+    """
     from core.agent.loop._model_switching import _settings_model_target
 
     fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="claude-sonnet-4-6")
@@ -476,14 +483,13 @@ def test_drift_target_uses_act_model(monkeypatch: pytest.MonkeyPatch) -> None:
         _drift_target_is_healthy=lambda _m: True,
     )
     target = _settings_model_target(loop_stub)
-    assert target == "claude-sonnet-4-6"  # act_model wins over model
+    assert target is None  # PR-DRIFT-CUT — auto-revert disabled
 
 
-def test_drift_target_falls_back_to_primary_model(
+def test_drift_target_is_none_regardless_of_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty ``act_model`` → drift target is ``settings.model`` (pre-A6
-    behaviour preserved)."""
+    """Companion to the above — empty ``act_model`` also gets no target."""
     from core.agent.loop._model_switching import _settings_model_target
 
     fake_settings = SimpleNamespace(model="claude-opus-4-7", act_model="")
@@ -495,7 +501,7 @@ def test_drift_target_falls_back_to_primary_model(
         _drift_target_is_healthy=lambda _m: True,
     )
     target = _settings_model_target(loop_stub)
-    assert target == "claude-opus-4-7"
+    assert target is None
 
 
 def test_drift_target_no_drift_when_already_matched(

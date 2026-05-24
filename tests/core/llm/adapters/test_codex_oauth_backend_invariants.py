@@ -62,9 +62,31 @@ def test_codex_kwargs_gpt5_omits_temperature_adds_reasoning() -> None:
     assert kwargs["include"] == ["reasoning.encrypted_content"]
 
 
-def test_codex_kwargs_non_gpt5_keeps_temperature() -> None:
-    """Non-gpt-5 models (e.g. o3) keep the temperature path."""
+def test_codex_kwargs_o_series_also_omits_temperature() -> None:
+    """PR-DRIFT-CUT (2026-05-24) — registry-driven reasoning detection.
+
+    Pre-PR the codex branch keyed on ``startswith("gpt-5")``, so o3 /
+    o4-mini fell into the "keep temperature" path. The registry now
+    treats every model with a ``reasoning_effort_values`` tuple as a
+    reasoning model — o3 and o4-mini included — so they correctly
+    omit ``temperature`` and add the ``reasoning`` block. Verified
+    2026-05-24 against OpenAI reasoning-models guide.
+    """
     kwargs = _build_codex_call_kwargs(_req(model="o3", temperature=0.3))
+    assert "temperature" not in kwargs
+    assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
+    assert kwargs["include"] == ["reasoning.encrypted_content"]
+
+
+def test_codex_kwargs_legacy_model_keeps_temperature() -> None:
+    """Models NOT in the registry fall back to legacy gpt-4.x defaults.
+
+    Those defaults accept temperature, so the legacy branch is still
+    exercised — we just no longer reach it via prefix-heuristic. An
+    unknown model id (e.g. ``gpt-4o`` until it's registered) keeps
+    the temperature path.
+    """
+    kwargs = _build_codex_call_kwargs(_req(model="gpt-4o-legacy", temperature=0.3))
     assert kwargs["temperature"] == 0.3
     assert "reasoning" not in kwargs
 

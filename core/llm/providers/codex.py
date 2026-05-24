@@ -1,7 +1,7 @@
-"""OpenAI Codex provider — Plus quota via chatgpt.com/backend-api/codex.
+"""OpenAI Codex provider — subscription quota via chatgpt.com/backend-api/codex.
 
 Uses Codex OAuth token (from ~/.codex/auth.json) to call OpenAI models
-through ChatGPT's backend API, consuming Plus subscription quota instead
+through ChatGPT's backend API, consuming subscription quota instead
 of API billing.
 
 Requires:
@@ -181,19 +181,24 @@ from core.llm.providers.openai import (  # noqa: E402
 from core.llm.router import call_with_failover  # noqa: E402
 
 
-# v0.52.7 — gpt-5.x family supports reasoning + omits temperature on Codex
-# backend. Pattern from Hermes ``_fixed_temperature_for_model`` (which returns
-# OMIT for these models) + Codex Rust ``Reasoning`` field on ResponsesApiRequest.
-# All current Codex-routed models (gpt-5.5, gpt-5.4, gpt-5.4-mini,
-# gpt-5.3-codex) are gpt-5.x — we gate by prefix so future spec additions
-# (gpt-5.6, gpt-5.x-codex-spark, etc.) inherit the same handling.
+# PR-DRIFT-CUT (2026-05-24) — replaced the v0.52.7 ``startswith("gpt-5")``
+# prefix heuristic with the explicit per-model registry in
+# :mod:`core.llm.adapters._openai_common`. A reasoning model is one whose
+# spec exposes a ``reasoning_effort_values`` tuple — that flag is the
+# single source of truth for "accepts ``reasoning`` + omits ``temperature``".
+# Adding a new Codex model only requires registering its spec; no string
+# matching needs to chase the catalog. Future ``gpt-5.x-codex-spark``,
+# ``gpt-5.6``, ``o5`` etc. inherit the right behaviour the moment they
+# appear in the registry.
 def _is_codex_reasoning_model(model: str) -> bool:
     """Return True for Codex models that accept ``reasoning`` + omit temperature."""
-    return model.startswith("gpt-5")
+    from core.llm.adapters._openai_common import get_openai_model_spec
+
+    return get_openai_model_spec(model).reasoning_effort_values is not None
 
 
 class CodexAgenticAdapter(OpenAIAgenticAdapter):
-    """OpenAI Codex adapter — Plus quota via Responses API streaming.
+    """OpenAI Codex adapter — subscription quota via Responses API streaming.
 
     Uses chatgpt.com/backend-api/codex with Codex OAuth token.
     """
@@ -204,7 +209,12 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
 
     @property
     def fallback_chain(self) -> list[str]:
-        return list(CODEX_FALLBACK_CHAIN)
+        """**DEPRECATED — returns ``[]`` (PR-DRIFT-CUT, 2026-05-24).**
+
+        See :func:`core.llm.provider_dispatch._get_fallback_chain` for
+        rationale.
+        """
+        return []
 
     def _resolve_config(self, model: str) -> tuple[str, str | None]:
         token = _resolve_codex_token()
@@ -233,13 +243,13 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         # v0.53.3 — use the Responses-API converter (was previously the
         # Chat-Completions converter ``_convert_messages_to_openai``,
         # which produced ``{role:"assistant", content:None,
-        # tool_calls:[...]}`` shapes that Codex Plus rejects with
+        # tool_calls:[...]}`` shapes that Codex subscription rejects with
         # ``input[i].content must be array or string, got null``). The
         # Responses API expects per-item-type wire shapes:
         # function_call (no content field), function_call_output
         # (output not content), message (content always string/array,
         # never null). OpenAI PAYG already used this converter
-        # (``openai.py:496``); Codex Plus inherits the same behaviour
+        # (``openai.py:496``); Codex subscription inherits the same behaviour
         # now. Spec-grounded against openai-python TypedDicts
         # ResponseFunctionToolCallParam / FunctionCallOutput /
         # ResponseOutputMessageParam.
@@ -313,7 +323,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         async def _do_call(m: str) -> Any:
             # v0.52.6 hotfix — chatgpt.com/backend-api/codex/responses
             # rejects ``max_output_tokens`` with 400 ("Unsupported
-            # parameter"). The Plus subscription manages output limits
+            # parameter"). The subscription manages output limits
             # server-side; client cap is forbidden. PAYG
             # ``OpenAIAgenticAdapter`` still sends it for api.openai.com.
             kwargs: dict[str, Any] = {
@@ -325,7 +335,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
             # v0.52.7 — function-calling parity with Hermes / Codex Rust.
             # Pre-fix ``tools`` was dropped silently → Codex agentic loop
             # had no way to invoke any tool, breaking the entire native
-            # tool dispatch path on Plus subscriptions.
+            # tool dispatch path on subscriptions.
             if oai_tools:
                 kwargs["tools"] = oai_tools
                 kwargs["tool_choice"] = tc_val or "auto"
@@ -353,7 +363,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
                             accumulated_items.append(item)
                 final = await stream.get_final_response()
                 # Always overwrite — never trust SDK's reconstructed output
-                # for Codex Plus (it's structurally empty per the backend's
+                # for Codex subscription (it's structurally empty per the backend's
                 # SSE contract).
                 if accumulated_items:
                     final.output = accumulated_items
@@ -368,7 +378,7 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
             # renders the quota_exhausted IPC panel. Pre-fix the generic
             # Exception catch swallowed BillingError into self.last_error
             # and returned None, breaking the v0.53.0 fail-fast governance
-            # for Codex Plus quota exhaustion.
+            # for Codex subscription quota exhaustion.
             from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):

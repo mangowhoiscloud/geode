@@ -501,7 +501,7 @@ def register() -> None:
             prompt = serialise_messages_to_prompt(input)
             # PR-LQ-Phase3 (2026-05-22) — share the
             # codex-cli-subagent lane with the self-improving-loop
-            # mutator path so the host ChatGPT-Plus OAuth bucket
+            # mutator path so the host ChatGPT subscription OAuth bucket
             # sees at most ``DEFAULT_CODEX_CLI_LANE_MAX`` (=2)
             # concurrent ``codex exec`` subprocesses. Parity with the
             # Claude-side wiring in ``ClaudeCliAPI.generate``.

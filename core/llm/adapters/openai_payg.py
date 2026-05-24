@@ -21,6 +21,8 @@ from typing import Any
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
     build_messages,
+    cap_tools,
+    get_openai_model_spec,
     translate_chat_response,
     translate_tool,
 )
@@ -64,22 +66,50 @@ class OpenAIPaygAdapter:
         self._client = build_async_openai_client(settings.openai_api_key)
         return self._client
 
-    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
-        client = self._get_client()
+    def _build_kwargs(self, req: AdapterCallRequest, *, stream: bool) -> dict[str, Any]:
+        """Compose Chat Completions kwargs honouring per-model spec quirks.
+
+        PR-DRIFT-CUT (2026-05-24) consults
+        :func:`core.llm.adapters._openai_common.get_openai_model_spec`
+        for the per-model API surface (rather than the previous
+        ``startswith("gpt-5")`` heuristic):
+
+          * ``spec.uses_max_completion_tokens`` chooses between
+            ``max_completion_tokens`` (GPT-5.x + o-series) and the
+            legacy ``max_tokens`` key.
+          * ``spec.accepts_temperature`` is False for reasoning models,
+            so ``temperature`` is omitted entirely.
+          * ``tools`` array hard-caps at 128 entries via shared
+            :func:`cap_tools` with an operator-actionable log.
+
+        Unknown ``req.model`` falls back to legacy gpt-4.x defaults
+        with a one-shot WARNING so silent drift on new models is
+        impossible.
+        """
+        spec = get_openai_model_spec(req.model)
+        token_key = "max_completion_tokens" if spec.uses_max_completion_tokens else "max_tokens"
         kwargs: dict[str, Any] = {
             "model": req.model,
             "messages": build_messages(req),
-            "max_tokens": req.max_tokens,
+            token_key: req.max_tokens,
         }
-        if req.temperature is not None:
+        if stream:
+            kwargs["stream"] = True
+        if req.temperature is not None and spec.accepts_temperature:
             kwargs["temperature"] = req.temperature
         if req.tools:
-            kwargs["tools"] = [translate_tool(t) for t in req.tools]
+            translated = [translate_tool(t) for t in req.tools]
+            kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name=self.name)
             tc = _translate_tool_choice(req.tool_choice)
             if tc is not None:
                 kwargs["tool_choice"] = tc
         if req.stop_sequences:
             kwargs["stop"] = list(req.stop_sequences)
+        return kwargs
+
+    async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
+        client = self._get_client()
+        kwargs = self._build_kwargs(req, stream=False)
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -94,14 +124,7 @@ class OpenAIPaygAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(req),
-            "max_tokens": req.max_tokens,
-            "stream": True,
-        }
-        if req.temperature is not None:
-            kwargs["temperature"] = req.temperature
+        kwargs = self._build_kwargs(req, stream=True)
         async for chunk in await client.chat.completions.create(**kwargs):
             choice = chunk.choices[0] if chunk.choices else None
             if choice is None:

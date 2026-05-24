@@ -1,7 +1,7 @@
 """Provider resolution — Plan-aware routing for LLM call dispatch.
 
 Wraps ``resolve_routing(model)`` so the LLM call dispatch sees the
-actually-routed provider (e.g. ``openai-codex`` when a Plus OAuth Plan is
+actually-routed provider (e.g. ``openai-codex`` when a subscription OAuth Plan is
 registered) instead of the static ``_resolve_provider`` mapping.
 """
 

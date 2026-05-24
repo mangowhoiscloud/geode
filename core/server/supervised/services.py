@@ -114,7 +114,7 @@ class SharedServices:
     # User saw "Already using GPT-5.5" in the prompt header but every
     # LLM call still routed to `claude-opus-4-7` — silently using a
     # different provider (paid Anthropic API instead of OAuth-borrowed
-    # Codex Plus). `create_session()` now reads `settings.model` directly
+    # Codex subscription). `create_session()` now reads `settings.model` directly
     # so each session reflects the latest user intent.
     _cost_budget: float = 0.0
 

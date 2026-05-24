@@ -83,7 +83,7 @@ default = "auto"
 allowed = ["claude-cli", "api_key", "auto"]
 
 [petri.source.openai]
-# Same priority model as anthropic — OAuth (Codex / ChatGPT Plus quota) first.
+# Same priority model as anthropic — OAuth (Codex / ChatGPT subscription quota) first.
 default = "auto"
 allowed = ["openai-codex", "api_key", "auto"]
 

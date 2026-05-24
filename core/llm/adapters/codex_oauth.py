@@ -84,7 +84,7 @@ class CodexOAuthAdapter:
         :meth:`core.llm.providers.codex.CodexAgenticAdapter.agentic_call`
         — Codex backend has 4 mandatory differences vs. PAYG Responses API:
 
-        - ``max_output_tokens`` is forbidden (server-managed under the Plus
+        - ``max_output_tokens`` is forbidden (server-managed under the subscription
           quota; sending it returns 400 ``Unsupported parameter``).
         - ``store = False`` is required.
         - ``instructions`` field carries the system prompt (Responses API's
@@ -219,11 +219,13 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
       :func:`build_codex_input` which re-encodes Anthropic content blocks
       into Codex typed items (``function_call`` / ``function_call_output``)
     - ``store=False`` is mandatory
-    - ``max_output_tokens`` is FORBIDDEN — Plus subscription manages it
+    - ``max_output_tokens`` is FORBIDDEN — Subscription manages it
       server-side, sending the field returns 400
     - Tools use the FLAT shape (``translate_tool_for_codex``)
-    - gpt-5.x family omits ``temperature`` and adds ``reasoning`` +
-      ``include: ["reasoning.encrypted_content"]``
+    - Reasoning models (per
+      :func:`core.llm.adapters._openai_common.get_openai_model_spec`)
+      omit ``temperature`` and add ``reasoning`` + ``include:
+      ["reasoning.encrypted_content"]``
     - A2 (v0.99.44): previous-turn reasoning items replay inline via
       :func:`build_codex_input` — each assistant :class:`Message` carries
       its own ``codex_reasoning_items`` (populated by the bridge from the
@@ -232,7 +234,13 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
       correct ordinal position. The legacy whole-input prepend approach
       lost per-turn association for multi-assistant histories — Codex
       MCP A2 BLOCKER 3.
+    - PR-DRIFT-CUT (2026-05-24): replaced ``req.model.startswith("gpt-5")``
+      heuristic with explicit registry lookup so o3 / o4-mini / new
+      reasoning models go through the same branch automatically.
     """
+    from core.llm.adapters._openai_common import cap_tools, get_openai_model_spec
+
+    spec = get_openai_model_spec(req.model)
     resp_input = build_codex_input(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
@@ -241,14 +249,16 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         "store": False,
     }
     if req.tools:
-        kwargs["tools"] = [translate_tool_for_codex(t) for t in req.tools]
+        translated = [translate_tool_for_codex(t) for t in req.tools]
+        kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name="codex-oauth")
         kwargs["tool_choice"] = _translate_codex_tool_choice(req.tool_choice)
         kwargs["parallel_tool_calls"] = True
-    if req.model.startswith("gpt-5"):
-        # gpt-5.x family — encrypted reasoning passthrough; temperature omitted.
+    if spec.reasoning_effort_values is not None:
+        # Reasoning-model branch — encrypted reasoning passthrough +
+        # reasoning effort. Temperature is dropped per spec.
         kwargs["include"] = ["reasoning.encrypted_content"]
         kwargs["reasoning"] = {"effort": req.effort, "summary": "auto"}
-    elif req.temperature is not None:
+    elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
     return kwargs
 

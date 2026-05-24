@@ -278,6 +278,73 @@ functional change.
     user_cancelled exemptions + convergence-as-failure pin +
     summary contract).
 
+### Changed (PR-DRIFT-CUT, 2026-05-24)
+
+- **Drift sync + provider fallback chains deprecated.** The runtime no
+  longer reverts an operator's ``/model`` selection in the daemon
+  process. ``_settings_model_target`` /
+  ``sync_model_from_settings_async`` are now no-ops and clearly marked
+  deprecated. Cross-provider and same-provider automatic model
+  fallback is also cut at every site (``_get_fallback_chain``,
+  per-provider ``fallback_chain`` properties) so a 400 / credit /
+  rate-limit on the primary model never silently cascades to another
+  provider. Operators must invoke ``/model <id>`` explicitly. Trigger:
+  v0.99.52 post-merge smoke (gpt-5.5 selection reverted to
+  claude-opus-4-7 on first turn; a stale Anthropic credit-low cascaded
+  into a z.ai 200 but the UI surfaced the Anthropic error).
+
+- **OpenAI / Codex / GLM adapters now ground per-model API quirks in
+  an explicit registry** (``_OPENAI_MODELS`` in
+  ``core/llm/adapters/_openai_common.py``) instead of
+  ``startswith("gpt-5")`` prefix checks. Each entry records
+  ``uses_max_completion_tokens`` (replaces ``max_tokens`` for the
+  reasoning family), ``accepts_temperature`` (False for active
+  reasoning), ``reasoning_effort_values``, and the model's context
+  window. Unknown model ids fall back to legacy gpt-4.x semantics
+  with a one-shot WARNING so adding a new model cannot silently
+  drift behaviour. Replaces the prefix heuristic that mis-routed
+  ``max_tokens`` for gpt-5.5 → 400 ``Unsupported parameter``.
+
+- **Tools array hard-capped at 128 entries at the OpenAI-family
+  adapter edge.** Shared ``cap_tools`` truncates with an
+  operator-actionable warning when the registry layer delivers more
+  than the spec maximum (verified 2026-05-24 against OpenAI Chat
+  Completions + Codex Responses + applied defensively to GLM PAYG /
+  Coding Plan endpoints). Prevents the ``array_above_max_length``
+  400 the v0.99.52 smoke hit on gpt-5.5 with 176 tools.
+
+- **``classify_llm_error`` no longer mis-flags ``max_tokens`` errors
+  as context overflow.** The previous heuristic was a substring
+  match (``"token" in msg``) that fired on any 400 mentioning a
+  ``max_tokens`` parameter — including OpenAI's gpt-5.x
+  "Unsupported parameter: 'max_tokens'" 400. A new
+  ``_looks_like_context_overflow`` helper prefers the structured
+  ``error.code`` field (``context_length_exceeded`` /
+  ``prompt_too_long``) and falls back to a tight word-anchored
+  regex on the message body. Misclassification caused the v0.99.52
+  smoke to render "Context window exhausted" while the actual
+  cause was a parameter-name mismatch.
+
+- **Subscription terminology generalised.** Operator-facing copy +
+  comments + UI no longer hard-codes "ChatGPT Plus" / "Plus quota" /
+  "Plus subscription" — the Codex CLI works with Plus / Pro /
+  Business / Edu / Enterprise tiers, and the ``/login`` menu now
+  lists Claude Pro / Max ×5 / Max ×20 / Team alongside the ChatGPT
+  tiers for parity. Free-form mentions of "Plus" are replaced with
+  "subscription" so future tier additions do not require chasing
+  strings.
+
+### Fixed (PR-DRIFT-CUT, 2026-05-24)
+
+- **Raw SDK exception JSON no longer leaks into the assistant
+  transcript.** The bad_request termination branch in
+  ``AgenticLoop`` used to emit
+  ``"LLM call failed (Error code: 400 - {...})"`` verbatim. It now
+  routes through ``_build_model_action_result`` like the auth /
+  convergence branches, and ``summarize_error_detail`` strips the
+  raw exception body down to the underlying ``error.message`` so
+  the user sees a clean diagnostic + ``/model`` hint.
+
 ## [0.99.52] - 2026-05-24
 
 > 2-PR bundle. PR-COMM-1 (#1587): 74 HookEvent → 11 group patterns
