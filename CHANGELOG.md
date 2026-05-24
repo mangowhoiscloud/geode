@@ -48,6 +48,34 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-TRANSIENT-WORD-BOUNDARIES** — single-word alternatives in the
+  claude-cli transient classifier regex now anchor on `\b`. Smoke 8
+  (v0.99.53, post-PR-TRANSIENT-BARE-HTTP-CODES) pilot sub-agent
+  surfaced `throttl(?:ed|ing)` matching `THROTTLED` inside the Python
+  constant `CODEX_CLI_LANE_THROTTLED_MSG` (from `core/orchestration/
+  codex_cli_lane.py`) that the LLM was quoting in a stack-trace
+  fragment. Identifier-internal hits previously slipped the regex
+  because the alternatives had no trailing `\b`. Four alternatives
+  tightened in both sibling sites (`plugins/petri_audit/
+  claude_cli_provider.py:CLAUDE_TRANSIENT_UPSTREAM_RE` +
+  `core/llm/claude_cli_errors.py:_TRANSIENT_UPSTREAM_RE`):
+  `throttl(?:ed|ing)` → `throttl(?:ed|ing)\b`,
+  `overloaded(?:_error)?` → `overloaded(?:_error)?\b`,
+  `throttlingexception` → `throttlingexception\b`,
+  `servicequotaexceededexception` → `servicequotaexceededexception\b`.
+  Real signals like `request was throttled` / `ThrottlingException` /
+  `overloaded_error` (with adjacent whitespace, quote, newline, or
+  punctuation) still match — only identifier-internal matches
+  (e.g. `THROTTLED_MSG`, `OVERLOADED_ERROR_MSG`) are excluded.
+  Pinned by 6 new regression tests in
+  `tests/plugins/petri_audit/test_claude_cli_transient_classifier.py`:
+  `test_throttled_inside_identifier_does_not_match` (literal smoke 8
+  stack-trace excerpt), `test_throttled_real_phrase_still_matches`,
+  `test_overloaded_inside_identifier_does_not_match`,
+  `test_overloaded_error_real_phrase_still_matches`,
+  `test_throttling_exception_inside_identifier_does_not_match`,
+  `test_throttling_exception_real_phrase_still_matches`.
+
 - **PR-TRANSIENT-BARE-HTTP-CODES** — claude-cli transient classifier
   regex drops the bare numeric alternatives `\b429\b` / `\b503\b` /
   `\b529\b` (two sibling sites: `plugins/petri_audit/

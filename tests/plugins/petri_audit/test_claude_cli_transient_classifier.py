@@ -454,3 +454,58 @@ def test_too_many_requests_phrase_still_matches() -> None:
     # The HTTP 429 status text is the phrase-form equivalent of the
     # bare-digit alternative we removed — must still match.
     assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("HTTP 429 Too Many Requests") is not None
+
+
+# ────────────────────────── PR-TRANSIENT-WORD-BOUNDARIES ──────────────────────
+# Smoke 8 (v0.99.53, post-PR-TRANSIENT-BARE-HTTP-CODES) pilot
+# sub-agent surfaced single-word alternatives matching inside
+# identifiers (e.g. ``CODEX_CLI_LANE_THROTTLED_MSG`` — a Python
+# constant the LLM was quoting from a stack-trace fragment).
+# Anchoring on ``\b`` keeps real phrases matching while excluding
+# identifier-internal hits.
+
+
+def test_throttled_inside_identifier_does_not_match() -> None:
+    """Smoke 8 pilot regression — the literal stack-trace fragment
+    that misfired previously."""
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    stack_trace = (
+        "│ ❱ 171 │ │ raise TimeoutError(CODEX_CLI_LANE_THROTTLED_MSG) │\n"
+        "│ 172 │ lane = get_codex_cli_lane()"
+    )
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search(stack_trace) is None
+
+
+def test_throttled_real_phrase_still_matches() -> None:
+    """Real signal — phrase form with whitespace boundary."""
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("request was throttled") is not None
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("Throttling exception thrown") is not None
+
+
+def test_overloaded_inside_identifier_does_not_match() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("OVERLOADED_ERROR_MSG = '...'") is None
+
+
+def test_overloaded_error_real_phrase_still_matches() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("upstream returned overloaded_error\n") is not None
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("status: overloaded") is not None
+
+
+def test_throttling_exception_inside_identifier_does_not_match() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("THROTTLINGEXCEPTION_DEFAULT_MSG") is None
+
+
+def test_throttling_exception_real_phrase_still_matches() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("ThrottlingException ") is not None
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search('"errorCode": "ThrottlingException"') is not None
