@@ -122,6 +122,17 @@ class ClaudeCliAdapter:
             # working_dirs whitelist + isolated subprocess), so the
             # skip-permissions surface is sound.
             skip_permissions=True,
+            # PR-PERMS-FLAG-FIX (2026-05-25) — claude-cli's own
+            # session cache is keyed on cwd, NOT GEODE's task_id, so
+            # successive smoke runs in the same cwd leaked their
+            # cached conversation context across spawns. Strict
+            # per-spawn isolation > PR-V's cross-turn cached-marker
+            # optimization for the sub-agent dispatch model (each
+            # task_id spawns once and exits). PR-V's `--resume <id>`
+            # path still works for callers that explicitly thread a
+            # ``resume_session_id`` (none do at sub-agent dispatch
+            # today; preserved for future explicit-id callers).
+            disable_session_persistence=True,
         )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"

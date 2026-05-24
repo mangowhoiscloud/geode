@@ -48,6 +48,37 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-PERMS-FLAG-FIX** — two coupled fixes for the v0.99.53
+  sub-agent isolation surface (caught by smoke 5 / Codex MCP review):
+  - **A: actual permission bypass flag.** `build_claude_cli_argv()`
+    previously emitted `--allow-dangerously-skip-permissions` which
+    is `claude --help`'s meta ENABLE flag, NOT the actual bypass.
+    The v0.99.53 smoke surfaced this when 1st sub-agent passed
+    (Bash tools went through a lighter check) and 2nd hit Write
+    denial on the same path. Now emits `--dangerously-skip-permissions`
+    (no `--allow-` prefix) which is the documented bypass flag.
+  - **B: claude-cli session cache isolation.** `build_claude_cli_argv()`
+    gains a `disable_session_persistence: bool = False` knob that
+    appends `--no-session-persistence`. claude-cli's own
+    `~/.claude/projects/<cwd-hash>/sessions/` cache is keyed on
+    *cwd*, not on GEODE's per-agent `task_id`, so successive smoke
+    runs in the same cwd silently shared cached conversation
+    context — surfaced in smoke 5's proximity sub-agent response
+    ("the excerpt mentions a scenario from a different smoke").
+    AgenticLoop adapter opts in via True since the sub-agent
+    dispatch model is "one task_id, one spawn" — there is no
+    cross-turn resume to optimize at that layer. PR-V's
+    `--resume <id>` path stays intact for callers that explicitly
+    thread a `resume_session_id` (none do at sub-agent dispatch
+    today; preserved for future explicit-id callers).
+  - Pinned by 4 new argv unit tests:
+    `test_argv_skip_permissions_uses_real_bypass_flag_not_meta`,
+    `test_argv_disable_session_persistence_default_false`,
+    `test_argv_disable_session_persistence_true_appends_flag`,
+    `test_argv_session_persistence_composes_with_skip_permissions`.
+    Existing PR-SKIP-PERMS argv tests updated to the new flag
+    literal.
+
 - **PR-PRT-STATUS** — claude-cli transient classifier no longer
   false-matches the informational `rate_limit_event` payload as a
   rejection signal. Pre-fix the regex's first alternative was
