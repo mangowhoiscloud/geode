@@ -198,6 +198,45 @@ def _get_settings() -> Settings:
         return _settings_instance
 
 
+def reload_settings_from_disk() -> None:
+    """Re-read ``.env`` + ``config.toml`` + ``GEODE_*`` env vars into the live
+    settings singleton.
+
+    **Hermes-style "fresh read at session boundary" fix** for the post-PR-DRIFT-CUT
+    incident where CLI and daemon processes diverged on ``settings.model``:
+    the CLI process updated disk via ``_apply_model`` after the daemon's
+    pydantic Settings had cached its boot-time snapshot, and PR-DRIFT-CUT
+    removed the per-turn auto-revert (drift sync) that had been silently
+    re-syncing them. Re-reading at session start brings the daemon back in
+    sync with disk without re-introducing the auto-revert footgun.
+
+    Why mutate in place instead of replacing the singleton: every module that
+    holds a captured reference (``from core.config import settings`` returns
+    the current singleton at the moment of import) keeps observing the new
+    values. Replacing the binding would leave stale references unfixed.
+
+    Idempotent — calling on a fresh process is a no-op (the new Settings()
+    just re-reads the same disk). Cheap: ~ms-scale (pydantic_settings re-init
+    + TOML re-parse).
+    """
+    import contextlib
+
+    from core.config._settings import Settings as _Settings
+
+    current = _get_settings()
+    fresh = _Settings()  # re-reads .env + GEODE_* env vars
+    # Pydantic V2.11 deprecated instance-level ``.model_fields`` access; read
+    # the field map off the class. Both branches of the assignment / setattr
+    # below are isolated with ``contextlib.suppress`` because a pydantic
+    # validator may refuse certain reassignments (e.g. computed fields) and
+    # we'd rather keep the existing value than crash the session start.
+    for field_name in type(fresh).model_fields:
+        with contextlib.suppress(Exception):
+            new_value = getattr(fresh, field_name)
+            object.__setattr__(current, field_name, new_value)
+    _apply_toml_overlay(current)
+
+
 def __getattr__(name: str) -> Any:
     """PEP 562 lazy attribute access for ``settings`` and ``Settings``.
 

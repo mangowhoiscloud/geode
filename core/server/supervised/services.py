@@ -184,7 +184,20 @@ class SharedServices:
         # mutations propagate to every new AgenticLoop. Previously the
         # boot-time `self._model` was used and `/model gpt-5.5` was
         # silently ignored by every subsequent session.
-        from core.config import _resolve_provider, settings
+        #
+        # PR-R6 (2026-05-24) — "fresh per session" was reading the daemon's
+        # *in-memory* ``settings.model``, which itself goes stale because
+        # ``_apply_model`` writes to disk + the CLI process's settings,
+        # but never touched the daemon's pydantic singleton. PR-DRIFT-CUT
+        # removed the auto-revert drift sync that silently masked the gap,
+        # surfacing the bug: ``/model gpt-5.5`` was ignored at the next
+        # session start because daemon.settings.model was still its
+        # boot-time value. ``reload_settings_from_disk()`` mutates the
+        # singleton in place from ``.env`` + ``config.toml`` so the read
+        # below sees what disk actually says. Hermes-style boundary read.
+        from core.config import _resolve_provider, reload_settings_from_disk, settings
+
+        reload_settings_from_disk()
 
         loop = AgenticLoop(
             conversation,

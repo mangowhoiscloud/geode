@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed (PR-R6, 2026-05-24)
+
+- **CLI ↔ daemon `settings.model` drift closed via Hermes-style boundary
+  read.** PR-DRIFT-CUT removed the per-turn auto-revert (drift sync) that
+  was silently re-syncing daemon's stale ``settings.model`` to disk, which
+  surfaced a latent gap: the CLI process writes ``GEODE_MODEL`` to ``.env``
+  and ``primary_model`` to ``config.toml`` via ``_apply_model``, but the
+  daemon's pydantic ``Settings`` singleton kept its boot-time snapshot —
+  so ``/model gpt-5.5`` was ignored at the next session start (the
+  v0.99.52 smoke regression). New helper
+  ``core.config.reload_settings_from_disk()`` mutates the live singleton
+  in place from ``.env`` + ``config.toml`` + ``GEODE_*`` env vars (Hermes
+  pattern: "fresh read at session boundary"), and
+  ``services.create_session`` calls it before reading ``settings.model``
+  to construct the next ``AgenticLoop``. Idempotent + cheap; no
+  file-watcher dependency (chokidar/inotify deliberately avoided — the
+  watcher race conditions don't compose with GEODE's multi-trigger
+  autonomous paths). Pinned by ``tests/test_settings_reload_from_disk.py``
+  (4 cases — singleton identity preserved, env-var pickup, idempotent,
+  fresh-process safe) + updated ``test_model_switch_propagates_across_sessions``
+  to flip ``GEODE_MODEL`` (the disk surface ``_apply_model`` actually
+  writes) instead of mutating ``settings.model`` directly.
+
 ### Added
 - **PR-COMM-4** — transcript `seq` column + liveness watchdog API on
   `SessionTranscript` and `RunTranscript`. Two coupled observability
