@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -38,6 +39,39 @@ if TYPE_CHECKING:
     from core.skills.agents import AgentRegistry
 
 log = logging.getLogger(__name__)
+
+
+# Matches a fenced code block (optional `json` / `JSON` lang tag, optional
+# surrounding newlines). Smoke 7 surfaced both proximity and critic
+# failing because the LLM (claude-cli without --json-schema wired
+# through) returned otherwise-valid JSON wrapped in a ```json``` fence
+# plus narrative prose. The pre-fix `json.loads(isolation.output)`
+# rejected the wrapper and the SubAgentManager fell back to
+# `{"raw": <wrapped-text>}` — which downstream consumers cannot
+# interpret. Sister regex lives in
+# `plugins/seed_generation/agents/base.py` (consumer-side defence
+# from PR-JSON-CODEBLOCK-STRIP); this producer-side strip eliminates
+# the {"raw": ...} fallback so all sub-agent consumers see a proper
+# dict.
+_JSON_CODEBLOCK_RE = re.compile(
+    r"```(?:json|JSON)?\s*\n?(.*?)\n?\s*```",
+    re.DOTALL,
+)
+
+
+def _strip_json_codeblock(text: str) -> str:
+    """Unwrap a leading/trailing ```json``` fence around an LLM response.
+
+    Returns the inner body if a fenced block is found (whitespace
+    stripped), otherwise the original text unchanged. Plain (un-fenced)
+    output passes through. The regex uses `re.search`, so prose
+    preceding the fence is discarded.
+    """
+    match = _JSON_CODEBLOCK_RE.search(text)
+    if match is None:
+        return text
+    return match.group(1).strip()
+
 
 # Thread-local storage for subagent context (OpenClaw Spawn pattern)
 _subagent_context = threading.local()
@@ -773,11 +807,13 @@ class SubAgentManager:
                 duration_ms=isolation.duration_ms,
             )
         output: dict[str, Any]
+        raw_text = isolation.output or ""
+        candidate_text = _strip_json_codeblock(raw_text) if raw_text else raw_text
         try:
-            parsed = json.loads(isolation.output) if isolation.output else {}
+            parsed = json.loads(candidate_text) if candidate_text else {}
             output = parsed if isinstance(parsed, dict) else {"raw": parsed}
         except (json.JSONDecodeError, RecursionError):
-            output = {"raw": isolation.output}
+            output = {"raw": raw_text}
         return SubResult(
             task_id=task.task_id,
             description=task.description,
@@ -811,11 +847,13 @@ class SubAgentManager:
                 duration_ms=isolation.duration_ms,
             )
         data: dict[str, Any]
+        raw_text = isolation.output or ""
+        candidate_text = _strip_json_codeblock(raw_text) if raw_text else raw_text
         try:
-            parsed = json.loads(isolation.output) if isolation.output else {}
+            parsed = json.loads(candidate_text) if candidate_text else {}
             data = parsed if isinstance(parsed, dict) else {"raw": parsed}
         except (json.JSONDecodeError, RecursionError):
-            data = {"raw": isolation.output}
+            data = {"raw": raw_text}
         summary = data.get("summary", "")
         if not summary:
             summary = str(data.get("tier", data.get("status", "")))[:200]
