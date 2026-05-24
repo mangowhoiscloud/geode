@@ -46,6 +46,7 @@ from __future__ import annotations
 import abc
 import json
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -53,6 +54,30 @@ from typing import Any, Literal
 log = logging.getLogger(__name__)
 
 __all__ = ["BaseSeedAgent", "SeedAgentResult", "parse_structured_output"]
+
+
+# Matches a fenced code block containing JSON. The optional language tag
+# (`json` / `JSON`) and surrounding whitespace/newlines are stripped; the
+# captured group is the inner JSON body. Smoke 6 surfaced critic /
+# proximity / meta_reviewer responses wrapped in ```json``` fences that
+# json.loads() rejects — this helper unwraps them before parsing.
+_JSON_CODEBLOCK_RE = re.compile(
+    r"```(?:json|JSON)?\s*\n?(.*?)\n?\s*```",
+    re.DOTALL,
+)
+
+
+def _strip_json_codeblock(text: str) -> str:
+    """Strip a leading/trailing ```json``` fence from an LLM response.
+
+    Returns the inner body if a fenced block is found, otherwise the
+    original string unchanged. The body itself is whitespace-stripped so
+    json.loads() sees `{...}` without leading/trailing newlines.
+    """
+    match = _JSON_CODEBLOCK_RE.search(text)
+    if match is None:
+        return text
+    return match.group(1).strip()
 
 
 def parse_structured_output(
@@ -96,8 +121,9 @@ def parse_structured_output(
     if has_required or (not required_fields and not has_text):
         parsed = dict(raw_output)
     elif has_text:
+        candidate_text = _strip_json_codeblock(raw_output["text"])
         try:
-            candidate = json.loads(raw_output["text"])
+            candidate = json.loads(candidate_text)
         except json.JSONDecodeError:
             return None
         if isinstance(candidate, dict):
