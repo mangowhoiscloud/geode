@@ -322,6 +322,7 @@ def build_claude_cli_argv(
     disable_builtin_tools: bool = False,
     extra_args: Iterable[str] | None = None,
     resume_session_id: str | None = None,
+    skip_permissions: bool = False,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
 
@@ -351,6 +352,13 @@ def build_claude_cli_argv(
             claude-cli pulls the cached one (paperclip
             ``execute.ts:697`` "instructions are already in the
             session cache").
+        skip_permissions: When True append the
+            ``--allow-dangerously-skip-permissions`` flag. Required
+            for headless sub-agent execution (operator can't approve
+            file-system permission prompts in a background spawn).
+            GEODE's AgenticLoop adapter call passes True; inspect_ai
+            / petri_audit interactive paths leave it False so the
+            CLI's permission prompts still gate writes.
 
     The output format is pinned to ``stream-json`` + ``--verbose`` —
     we need every event to construct ``ModelOutput`` faithfully.
@@ -387,6 +395,22 @@ def build_claude_cli_argv(
         # over mcp__bridge__send_message). ``--tools ""`` disables
         # the built-in set so only MCP tools remain.
         argv += ["--tools", ""]
+    if skip_permissions:
+        # PR-SKIP-PERMS (2026-05-24) — operator directive: GEODE's
+        # AgenticLoop adapter spawns claude-cli as a headless
+        # subprocess, so any tool that requires interactive permission
+        # approval (Write outside cwd, Bash dangerous commands, etc.)
+        # would hang the subprocess on a prompt no one can answer.
+        # The v0.99.53 smoke surfaced this as Write-tool permission
+        # denials on every seed candidate generation (claude-cli's
+        # LLM tried 3 Write attempts + Bash-cat-redirect + Agent
+        # delegation, all blocked, then exited cleanly with a "please
+        # grant write access" final message — but with empty
+        # candidates downstream). This flag is recommended only for
+        # sandboxes with no internet access per ``claude --help``;
+        # GEODE's sub-agent dispatch IS such a sandbox (denied_tools
+        # set + working_dirs whitelist + isolated subprocess).
+        argv += ["--allow-dangerously-skip-permissions"]
     if extra_args:
         argv += list(extra_args)
     return argv
