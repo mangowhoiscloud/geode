@@ -79,6 +79,38 @@ functional change.
     Existing PR-SKIP-PERMS argv tests updated to the new flag
     literal.
 
+### Added
+- **PR-PERMS-FLAG-FIX (JSON-forcing bundle)** — `AdapterCallRequest`
+  gains a `response_schema: dict | None = None` field that threads
+  JSON Schema structured-output forcing through both subprocess
+  adapter paths:
+  - **claude-cli** (`plugins/petri_audit/claude_cli_provider.py`):
+    new `json_schema: dict | None = None` param on
+    `build_claude_cli_argv()` appends `--json-schema <inline-json>`
+    when set. Mirrors Anthropic SDK
+    `messages.parse(output_format=PydanticModel)` →
+    `JSONOutputFormatParam(schema=..., type="json_schema")`.
+  - **codex-cli** (`core/llm/adapters/codex_cli.py`): when
+    `req.response_schema` is set, the adapter materialises the
+    schema into a tempfile and appends `--output-schema <FILE>`
+    (codex-cli takes a file path, claude-cli takes inline — both
+    surface map to the same provider-side structured-output API
+    that the OpenAI SDK exposes as
+    `chat.completions.parse(response_format=PydanticModel)`).
+    Tempfile cleanup via try/finally so a subprocess crash doesn't
+    leak `/tmp` artefacts.
+  - Default `None` preserves back-compat (callers that don't need
+    structured output get free-form text responses).
+  - Eliminates the "LLM returns natural language + code block
+    instead of pure JSON" failure that clipped proximity / critic /
+    pilot / meta_reviewer in the v0.99.53 smoke 5. Wire-through from
+    seed-generation orchestrator → role-specific schema is a
+    follow-up PR (this PR lands the infrastructure).
+  - Pinned by 3 new argv unit tests for claude-cli:
+    `test_argv_json_schema_default_none_omits_flag`,
+    `test_argv_json_schema_dict_appends_serialized_inline`,
+    `test_argv_json_schema_composes_with_all_other_flags`.
+
 - **PR-PRT-STATUS** — claude-cli transient classifier no longer
   false-matches the informational `rate_limit_event` payload as a
   rejection signal. Pre-fix the regex's first alternative was

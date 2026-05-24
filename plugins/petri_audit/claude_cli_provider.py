@@ -337,6 +337,7 @@ def build_claude_cli_argv(
     resume_session_id: str | None = None,
     skip_permissions: bool = False,
     disable_session_persistence: bool = False,
+    json_schema: dict[str, Any] | None = None,
 ) -> list[str]:
     """Construct the ``claude --print`` argv.
 
@@ -395,6 +396,16 @@ def build_claude_cli_argv(
             optimization. GEODE's AgenticLoop adapter call passes True
             because the sub-agent execution model is "one task_id, one
             spawn" — there is no cross-turn resume to optimize.
+        json_schema: JSON Schema dict that constrains the model's
+            final response shape. When set, appends
+            ``--json-schema <json>`` (inline). Mirrors the Anthropic
+            SDK's ``messages.parse(output_format=PydanticModel)`` →
+            ``JSONOutputFormatParam(schema=..., type="json_schema")``
+            structured-output API. Eliminates the "LLM returns natural
+            language + code block instead of pure JSON" failure that
+            clipped proximity / critic / pilot / meta_reviewer in the
+            v0.99.53 smoke. Callers pass the dict; this helper handles
+            serialisation.
 
     The output format is pinned to ``stream-json`` + ``--verbose`` —
     we need every event to construct ``ModelOutput`` faithfully.
@@ -464,6 +475,13 @@ def build_claude_cli_argv(
         # is documented in ``claude --help``: "Disable session
         # persistence ... only works with --print".
         argv += ["--no-session-persistence"]
+    if json_schema is not None:
+        # PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) — pass
+        # the schema inline so claude-cli's structured-output
+        # validator constrains the model's final response. Mirrors
+        # paperclip / Anthropic SDK
+        # ``messages.parse(output_format=...)`` → JSONOutputFormat.
+        argv += ["--json-schema", json.dumps(json_schema, separators=(",", ":"))]
     if extra_args:
         argv += list(extra_args)
     return argv

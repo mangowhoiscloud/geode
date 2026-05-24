@@ -133,6 +133,15 @@ class ClaudeCliAdapter:
             # ``resume_session_id`` (none do at sub-agent dispatch
             # today; preserved for future explicit-id callers).
             disable_session_persistence=True,
+            # PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) —
+            # thread ``req.response_schema`` through to claude-cli's
+            # ``--json-schema`` flag so callers that need a validated
+            # JSON shape (seed-generation proximity / critic / pilot /
+            # meta_reviewer, autoresearch judges, etc.) get structured
+            # output instead of natural-language wrappers. None = no
+            # forcing (back-compat: relies on prompt-engineered JSON
+            # discipline).
+            json_schema=req.response_schema,
         )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"
