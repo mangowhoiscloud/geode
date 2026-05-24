@@ -32,11 +32,18 @@ from core.llm.errors import BillingError, UserCancelledError
 from core.ui.agentic_ui import OperationLogger
 from core.ui.status import TextSpinner
 
-from . import _context, _helpers, _lifecycle, _model_switching, _response
+from . import (
+    _context,
+    _lifecycle,
+    _model_switching,
+    _planner_dispatch,
+    _response,
+    _sub_agent_announce,
+)
 
 # Re-exported for backward-compat module-attribute access
 # (some tests/utilities reach into ``core.agent.loop.MAX_TOOL_RESULT_TOKENS``)
-from ._helpers import (
+from ._tool_factory import (
     AGENTIC_TOOLS,
     MAX_TOOL_RESULT_TOKENS,
     TOOL_LAZY_LOAD_THRESHOLD,
@@ -1889,27 +1896,33 @@ class AgenticLoop:
         return _context.build_system_prompt(self)
 
     # ------------------------------------------------------------------
-    # Goal decomposition — delegate to ``_helpers`` (PR-CLEANUP-1)
+    # Goal decomposition — delegate to ``_planner_dispatch``
     # ------------------------------------------------------------------
 
     async def _try_decompose(self, user_input: str) -> str | None:
-        """Delegates to :func:`_helpers.try_decompose`.
+        """Delegates to :func:`_planner_dispatch.try_decompose`.
 
-        Async (PR-CL-A1-followup, 2026-05-23) because the new planner
-        path awaits ``loop._call_llm`` — single async LLM dispatch,
-        no thread-pool hop. PR-CLEANUP-1 (2026-05-23): host moved from
-        ``_decomposition.py`` (deleted) to ``_helpers.py``.
+        Async (PR-CL-A1-followup, 2026-05-23) because the planner path
+        awaits ``loop._call_llm`` — single async LLM dispatch, no
+        thread-pool hop. Host history:
+        ``_decomposition.py`` (Tier 3 #7) → ``_helpers.py`` (PR-CLEANUP-1,
+        2026-05-23) → ``_planner_dispatch.py`` (PR-HELPERS-3SPLIT,
+        2026-05-24, current).
         """
-        return await _helpers.try_decompose(self, user_input)
+        return await _planner_dispatch.try_decompose(self, user_input)
 
     # ------------------------------------------------------------------
-    # Sub-agent announce queue — delegate to ``_helpers``
+    # Sub-agent announce queue — delegate to ``_sub_agent_announce``
     # ------------------------------------------------------------------
 
     def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
-        """Delegates to :func:`_helpers.check_announced_results` (PR-CLEANUP-1
-        2026-05-23: host moved from ``_announce.py`` deleted)."""
-        return _helpers.check_announced_results(self, messages)
+        """Delegates to :func:`_sub_agent_announce.check_announced_results`.
+
+        Host history: ``_announce.py`` (Tier 3 #7) → ``_helpers.py``
+        (PR-CLEANUP-1, 2026-05-23) → ``_sub_agent_announce.py``
+        (PR-HELPERS-3SPLIT, 2026-05-24, current).
+        """
+        return _sub_agent_announce.check_announced_results(self, messages)
 
     # ------------------------------------------------------------------
     # LLM call (stays in this file — tightly coupled to ``arun`` body)

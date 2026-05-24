@@ -176,7 +176,7 @@ def test_tool_policy_slot_is_now_alive_post_s0a() -> None:
         f"tool-policy.json 이 core/agent/tool_policy.py 에서 발견되어야 함. hits={hits}"
     )
     # Call chain 검증 — _helpers.get_agentic_tools 가 _load_tool_policy_override 를 호출.
-    helpers_src = (REPO_ROOT / "core/agent/loop/_helpers.py").read_text(encoding="utf-8")
+    helpers_src = (REPO_ROOT / "core/agent/loop/_tool_factory.py").read_text(encoding="utf-8")
     assert "_load_tool_policy_override" in helpers_src, (
         "_helpers.py 가 _load_tool_policy_override 를 import/호출해야 함 — "
         "reader 가 inference 경로에 실제로 wired 됐는지 검증."

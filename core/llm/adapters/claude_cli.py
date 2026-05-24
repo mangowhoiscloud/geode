@@ -54,12 +54,27 @@ class ClaudeCliAdapter:
         — the canonical Claude OAuth-subprocess path. LaneQueue
         (``core.orchestration.claude_cli_lane``) gates concurrency so multiple
         adapter callers don't burst-overload the local binary.
+
+        The stdout is parsed via ``parse_stream_json_events`` and the
+        assistant text extracted before being returned. Pre-classifier
+        this method passed raw stream-json stdout as ``AdapterCallResult.text``
+        so when claude-cli surfaced ``! Unexpected error. Auto-retrying.``
+        as its only output the caller's AgenticLoop treated that error
+        text as the LLM's reply, terminated with no tool calls, and
+        the parent recorded a ghost candidate. The transient-upstream
+        classifier closes that path by raising
+        :class:`ClaudeCliTransientUpstreamError` instead.
         """
         from plugins.petri_audit.claude_cli_provider import (
             ClaudeCliInvocationError,
+            ClaudeCliTransientUpstreamError,
+            _extract_assistant_text,
+            _extract_stop_reason,
             _resolve_claude_binary,
             _run_claude_subprocess,
             build_claude_cli_argv,
+            is_claude_transient_upstream_error,
+            parse_stream_json_events,
         )
 
         from core.orchestration.claude_cli_lane import acquire_claude_cli_lane_async
@@ -74,13 +89,42 @@ class ClaudeCliAdapter:
         except ClaudeCliInvocationError as exc:
             self._last_error = exc
             raise
+
+        events = parse_stream_json_events(stdout)
+        if is_claude_transient_upstream_error(stdout=stdout, stderr=stderr, events=events):
+            stderr_tail = stderr.strip().splitlines()[-1] if stderr.strip() else "<empty>"
+            transient_exc = ClaudeCliTransientUpstreamError(
+                f"claude-cli upstream transient error (rc={rc}, model={req.model}). "
+                f"stderr_tail={stderr_tail!r}"
+            )
+            self._last_error = transient_exc
+            raise transient_exc
+
         if rc != 0:
             err_excerpt = stderr.strip().splitlines()[-1] if stderr.strip() else "<no stderr>"
             raise RuntimeError(f"claude-cli subprocess exited rc={rc}: {err_excerpt}")
+
+        # No events but rc==0 means claude-cli emitted nothing — treat
+        # as a hard failure so the caller doesn't process empty text
+        # as a legitimate assistant reply.
+        if not events:
+            raise ClaudeCliInvocationError(
+                f"claude-cli rc=0 but emitted no stream-json events. "
+                f"stderr={stderr.strip()[:200]!r}"
+            )
+
+        text = _extract_assistant_text(events)
+        stop_reason = _extract_stop_reason(events)
+        # ``_extract_stop_reason`` returns ``"unknown"`` when no
+        # ``message_delta`` / ``result`` stop event was seen; coerce
+        # to the adapter-canonical ``"end_turn"`` so the translator's
+        # ``("tool_use" | "tool_calls")`` branch isn't tripped.
+        if stop_reason == "unknown":
+            stop_reason = "end_turn"
         return AdapterCallResult(
-            text=stdout,
+            text=text,
             usage=UsageSummary(),  # subscription path does not expose token usage
-            stop_reason="end_turn",
+            stop_reason=stop_reason,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:

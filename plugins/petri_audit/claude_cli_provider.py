@@ -75,6 +75,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -86,8 +87,11 @@ __all__ = [
     "CLAUDE_CLI_BIN_ENV",
     "CLAUDE_CLI_MODEL_NOT_FOUND",
     "CLAUDE_CLI_SUBPROCESS_TIMEOUT_S",
+    "CLAUDE_TRANSIENT_UPSTREAM_RE",
     "ClaudeCliInvocationError",
+    "ClaudeCliTransientUpstreamError",
     "build_claude_cli_argv",
+    "is_claude_transient_upstream_error",
     "parse_stream_json_events",
     "register",
     "serialise_messages_to_prompt",
@@ -124,6 +128,58 @@ class ClaudeCliInvocationError(RuntimeError):
     diagnose without re-running the audit. inspect_ai's harness
     wraps this into a ``ModelEvent`` with the error string visible
     in the Inspect viewer."""
+
+
+class ClaudeCliTransientUpstreamError(ClaudeCliInvocationError):
+    """Raised when claude-cli's stdout/stderr matches an upstream
+    rate-limit / overload / quota-reset signature.
+
+    Subclass of :class:`ClaudeCliInvocationError` so existing
+    ``except ClaudeCliInvocationError`` blocks still catch it; callers
+    that want retry-with-backoff can dispatch on the subclass.
+
+    Why it has its own class: the pre-classifier path was returning
+    claude-cli's *error text* (``! Unexpected error. Auto-retrying.``)
+    as the LLM's assistant message — the worker then terminated
+    "successfully" with no tool calls and the caller recorded a
+    ghost candidate. Failing loud here is the only way the parent
+    sees an actual error to react to."""
+
+
+# Ported from paperclip ``packages/adapters/claude-local/src/server/
+# parse.ts:12`` ``CLAUDE_TRANSIENT_UPSTREAM_RE``. The set of phrases
+# claude-cli (or the upstream Anthropic gateway it talks to) prints
+# when a request was throttled, rejected by an overload guard, or
+# bumped against the OAuth subscription's hourly / weekly quota.
+# Matching is case-insensitive over the union of stdout, stderr, and
+# the parsed ``result`` event's free-text fields.
+CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
+    r"(?:rate[-\s]?limit(?:ed)?"
+    r"|rate_limit_error"
+    r"|too\s+many\s+requests"
+    r"|\b429\b"
+    r"|overloaded(?:_error)?"
+    r"|server\s+overloaded"
+    r"|service\s+unavailable"
+    r"|\b503\b"
+    r"|\b529\b"
+    r"|high\s+demand"
+    r"|try\s+again\s+later"
+    r"|temporarily\s+unavailable"
+    r"|throttl(?:ed|ing)"
+    r"|throttlingexception"
+    r"|servicequotaexceededexception"
+    r"|out\s+of\s+extra\s+usage"
+    r"|extra\s+usage\b"
+    r"|claude\s+usage\s+limit\s+reached"
+    r"|5[-\s]?hour\s+limit\s+reached"
+    r"|weekly\s+limit\s+reached"
+    r"|usage\s+limit\s+reached"
+    r"|usage\s+cap\s+reached"
+    r"|unexpected\s+error.*auto[-\s]?retrying"
+    r")",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,28 +397,99 @@ def parse_stream_json_events(stdout: str) -> list[StreamJsonEvent]:
 def _extract_assistant_text(events: list[StreamJsonEvent]) -> str:
     """Concatenate the assistant text from a stream-json event sequence.
 
-    Looks for ``content_block_delta`` events with ``delta.type ==
-    "text_delta"`` (canonical claude CLI streaming shape) AND for the
-    terminal ``result`` event's ``result`` field (a single-shot
-    fallback some CLI versions emit). The first non-empty source wins.
+    Three sources are tried in order, and the first non-empty wins:
+
+    1. ``content_block_delta`` with ``delta.type == "text_delta"`` —
+       the Anthropic SSE shape that ``--output-format stream-json``
+       passes through verbatim.
+    2. ``assistant`` event with ``message.content[].text`` — claude-cli's
+       aggregated shape (one event per finished assistant message).
+       Mirrors paperclip ``parse.ts:36-49`` which is the only shape
+       that path ever sees.
+    3. Terminal ``result`` event's ``result`` field — single-shot
+       fallback some CLI versions emit when the stream is empty.
     """
-    chunks: list[str] = []
+    delta_chunks: list[str] = []
+    assistant_chunks: list[str] = []
     for event in events:
         if event.type == "content_block_delta":
             delta = event.payload.get("delta", {})
             if isinstance(delta, dict) and delta.get("type") == "text_delta":
                 text = delta.get("text", "")
                 if isinstance(text, str):
-                    chunks.append(text)
-    if chunks:
-        return "".join(chunks)
-    # Fallback — `result` event carries the final text directly
+                    delta_chunks.append(text)
+        elif event.type == "assistant":
+            message = event.payload.get("message", {})
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "text":
+                    continue
+                text = block.get("text", "")
+                if isinstance(text, str) and text:
+                    assistant_chunks.append(text)
+    if delta_chunks:
+        return "".join(delta_chunks)
+    if assistant_chunks:
+        return "".join(assistant_chunks)
     for event in events:
         if event.type == "result":
             text = event.payload.get("result", "")
             if isinstance(text, str) and text:
                 return text
     return ""
+
+
+def is_claude_transient_upstream_error(
+    *,
+    stdout: str,
+    stderr: str,
+    events: list[StreamJsonEvent] | None = None,
+) -> bool:
+    """True when claude-cli's output matches an upstream rate-limit
+    / overload / quota signature (see :data:`CLAUDE_TRANSIENT_UPSTREAM_RE`).
+
+    Matches the union of: raw stdout, raw stderr, every parsed
+    ``result`` event's free-text fields (``result``, ``error``,
+    ``message``, ``stderr``), and every ``assistant`` text block's
+    ``text``. The wide haystack mirrors paperclip's
+    ``buildClaudeTransientHaystack`` — claude-cli has shipped the
+    same phrase to four different fields across versions and we want
+    a single classifier that covers all of them.
+    """
+    if CLAUDE_TRANSIENT_UPSTREAM_RE.search(stdout or ""):
+        return True
+    if CLAUDE_TRANSIENT_UPSTREAM_RE.search(stderr or ""):
+        return True
+    if not events:
+        return False
+    for event in events:
+        if event.type == "result":
+            for key in ("result", "error", "message", "stderr"):
+                value = event.payload.get(key)
+                if isinstance(value, str) and CLAUDE_TRANSIENT_UPSTREAM_RE.search(value):
+                    return True
+        elif event.type == "assistant":
+            message = event.payload.get("message", {})
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "text":
+                    continue
+                text = block.get("text", "")
+                if isinstance(text, str) and CLAUDE_TRANSIENT_UPSTREAM_RE.search(text):
+                    return True
+    return False
 
 
 def _extract_stop_reason(events: list[StreamJsonEvent]) -> str:
