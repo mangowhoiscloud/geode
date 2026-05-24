@@ -47,6 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-COMM-2** — `HookSystem.register_prefix()` + `unregister_prefix()`
+  for wildcard event subscriptions. Pre-fix the bootstrap had to enumerate
+  every `HookEvent` value to attach a global `run_log` handler:
+  ```python
+  for event in HookEvent:
+      hooks.register(event, handler_fn, name=handler_name, priority=50)
+  ```
+  Adding a new event silently bypassed the run log (no compile-time
+  check). The new API collapses the loop to one call:
+  ```python
+  hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
+  ```
+  Match rule: `"*"` matches every event; any other prefix matches when
+  `HookEvent.name == prefix` OR `name.startswith(prefix + "_")` — the
+  trailing-`_` segment boundary prevents `"NODE"` from accidentally
+  matching a future `NODELESS_*` event. Internal storage is a separate
+  `_prefix_hooks: dict[str, list[_RegisteredHook]]` consulted by a new
+  `_resolve_hooks_for()` helper, so all six trigger paths (`trigger`,
+  `trigger_async`, `trigger_with_result`, `trigger_with_result_async`,
+  `trigger_interceptor`, `trigger_interceptor_async`) share one
+  dispatch table. Exact + wildcard handlers compose in a single
+  priority-sorted execution order; same `name` across exact and
+  wildcard dedups to one invocation (exact wins). `list_hooks()`
+  introspection surfaces wildcards under `"*<prefix>"` keys; `clear()`
+  with no event drops both exact + wildcard tables (Codex MCP review
+  catch — pre-fix wildcards survived `clear()` invisibly). Pinned by
+  `tests/test_hooks.py::TestRegisterPrefix` (15 cases). Migrated
+  `core/wiring/bootstrap.py:168` from the enum loop.
+
 ### Fixed
 - **PR-DEFECT-AB** — sub-agent failure signal propagation across the
   worker IPC boundary. Two coupled regressions surfaced by the
