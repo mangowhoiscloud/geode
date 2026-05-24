@@ -47,6 +47,37 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-PRT-STATUS** — claude-cli transient classifier no longer
+  false-matches the informational `rate_limit_event` payload as a
+  rejection signal. Pre-fix the regex's first alternative was
+  `rate[-\s]?limit(?:ed)?` with `IGNORECASE`: the `?` made the
+  separator optional, so the camelCase `rateLimitType` (inside the
+  informational `rate_limit_event` JSON line that claude-cli emits
+  on every turn with `status="allowed"` + `isUsingOverage=false`)
+  matched as if it were a quota rejection. The v0.99.53 smoke
+  surfaced this on every generator candidate: claude-cli ran cleanly
+  through 10-12 tool calls (rc=0 + `is_error=false` +
+  `subtype="success"`) and wrote the seed markdown, but the
+  classifier still flagged the stdout's embedded `rateLimitType` and
+  the adapter raised `ClaudeCliTransientUpstreamError` — empty
+  candidates downstream.
+  - Both sibling regexes tightened to `rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))`:
+    requires a real separator (hyphen/underscore/whitespace, not
+    optional), and the trailing alternation explicitly handles
+    `ed` / `_error` word-boundaries OR a negative-lookahead that
+    rejects further word-char continuation (so `rate_limit_event`,
+    `rate_limit_info`, `rateLimit` all fall through cleanly).
+  - Sites: `plugins/petri_audit/claude_cli_provider.py:CLAUDE_TRANSIENT_UPSTREAM_RE`
+    and `core/llm/claude_cli_errors.py:_TRANSIENT_UPSTREAM_RE`
+    (must stay in lockstep per paperclip parity).
+  - Pinned by `tests/core/llm/test_claude_cli_errors.py::TestIsTransientUpstream::test_informational_rate_limit_event_is_not_transient`
+    (6 parametric cases — the full `rate_limit_event` JSON,
+    `rateLimitType` quoted field, bare `rate_limit_event` /
+    `rate_limit_info`, `rateLimit` camelCase) on top of the existing
+    8 positive-match parametric cases (real "rate limited" /
+    "5-hour limit reached" / etc) that still match.
+
 ### Added
 - **PR-SKIP-PERMS** — `build_claude_cli_argv()` accepts a new
   `skip_permissions: bool = False` parameter that appends

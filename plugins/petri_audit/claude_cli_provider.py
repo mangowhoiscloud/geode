@@ -215,9 +215,22 @@ class TransientSignal:
 # bumped against the OAuth subscription's hourly / weekly quota.
 # Matching is case-insensitive over the union of stdout, stderr, and
 # the parsed ``result`` event's free-text fields.
+# PR-PRT-STATUS (2026-05-25) — the first alternative was previously
+# ``rate[-\s]?limit(?:ed)?`` with ``IGNORECASE``: the ``?`` made the
+# separator optional, so a camelCase token like ``rateLimitType``
+# (which appears inside claude-cli's INFORMATIONAL
+# ``rate_limit_event`` payload — ``status="allowed"``) was matched
+# as if it were a rejection signal. The v0.99.53 smoke surfaced this:
+# every generator candidate produced a 12-turn successful claude-cli
+# run (rc=0 + ``is_error=false`` + ``subtype="success"``) writing
+# the seed markdown, but the classifier still flagged the stdout's
+# embedded ``rateLimitType`` and the adapter raised
+# ``ClaudeCliTransientUpstreamError`` — empty candidates downstream.
+# The new ``[-_\s]`` (no ``?``) requires an actual separator, so
+# ``rateLimit`` no longer matches while real "rate limited" / "rate
+# limit error" / "rate-limit" / "rate_limit" messages still do.
 CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
-    r"(?:rate[-\s]?limit(?:ed)?"
-    r"|rate_limit_error"
+    r"(?:rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))"
     r"|too\s+many\s+requests"
     r"|\b429\b"
     r"|overloaded(?:_error)?"
