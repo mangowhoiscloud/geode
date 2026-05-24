@@ -49,6 +49,41 @@ functional change.
 
 ### Changed
 
+- **PR-MAINPATH-234 — bundle of three main-path sprint steps.**
+  - **Step 2 (streaming path) — no-op**: scanned for AgenticLoop
+    references to ``call_llm_streaming_async`` and found none. The
+    streaming surface in ``core/llm/router/calls/streaming.py`` is
+    only consumed by ``core/llm/adapters/_legacy.py`` 's adapter
+    wrapper + ``tests/test_claude_adapter.py``; the AgenticLoop main
+    inference path is non-streaming (`acomplete` only, per the
+    "rationale on not streaming per-delta" comment at
+    ``agent_loop.py``). No migration needed; PR-MAINPATH-7 will
+    delete the legacy streaming surface alongside ``_legacy.py``.
+  - **Step 3 (tool_use_id round-trip) — verified, no code change**:
+    the invariant is already pinned at the bridge boundary by
+    :func:`tests.core.llm.adapters.test_legacy_bridge.test_build_request_carries_tool_use_id_for_tool_messages`
+    (introduced when PR-MAINPATH-1's parent stack landed). The test
+    proves ``build_adapter_request`` extracts ``tool_use_id`` from
+    each ``{"role": "tool", ...}`` dict and threads it into the
+    typed :class:`Message(tool_use_id=...)`. AgenticLoop's main path
+    just passes messages through, so the bridge-level pin covers the
+    full round-trip.
+  - **Step 4 (``/model`` switch on Path-B)**:
+    ``core/agent/loop/_model_switching.py:_apply_model_update`` now
+    re-resolves ``loop._new_adapter`` whenever the provider changes,
+    via the new ``_resolve_path_b_adapter(provider, source)`` helper.
+    Pre-PR the function only updated the legacy ``loop._adapter``,
+    so a ``/model`` switch between providers (e.g. claude-opus-4-7
+    → gpt-5.5) would leave the Path-B adapter pointing at the
+    previous provider's API; the next ``_call_llm`` round would
+    dispatch through the wrong endpoint. The new helper mirrors the
+    ``AgenticLoop.__init__`` normalisation
+    (``openai-codex`` → ``openai``, source preserved from
+    ``loop._source``). Hard-fail contract preserved per Codex MCP
+    2026-05-23 HIGH 2. A new
+    ``test_runtime_model_switch_re_resolves_path_b_adapter``
+    invariant test pins the dual-adapter re-resolution.
+
 - **PR-MAINPATH-1 — AgenticLoop main-path Path-B default cutover.**
   Step 1 of the multi-PR sprint that retires the legacy
   ``AgenticLLMPort`` surface. ``AgenticLoop.__init__`` 's ``source``

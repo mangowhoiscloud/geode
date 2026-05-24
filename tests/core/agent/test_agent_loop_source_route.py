@@ -96,3 +96,31 @@ def test_unregistered_pair_hard_fails() -> None:
     unregister_adapter("anthropic-payg")
     with pytest.raises(AdapterNotFoundError):
         _make_loop(source="payg")
+
+
+def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
+    """PR-MAINPATH-4 (2026-05-24) — ``/model`` between providers must
+    re-resolve ``_new_adapter`` alongside the legacy ``_adapter``.
+
+    Pre-PR-MAINPATH-4 the runtime switch only updated ``_adapter``
+    (legacy ``resolve_agentic_adapter`` route); ``_new_adapter``
+    stayed pointed at the previous provider's Path-B adapter, so the
+    next ``_call_llm`` would dispatch to the wrong API. This test
+    pins the dual-adapter re-resolution invariant.
+    """
+    from core.agent.loop._model_switching import _apply_model_update
+
+    loop = _make_loop(provider="anthropic")
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "anthropic-payg"
+
+    # Switch to an OpenAI model — ``_apply_model_update`` resolves
+    # ``provider`` via ``_resolve_provider("gpt-5.5")`` →
+    # ``openai-codex``. The Path-B helper normalises to ``openai``
+    # internally, so we end up on ``openai-payg``.
+    _apply_model_update(loop, "gpt-5.5")
+
+    assert loop._provider == "openai-codex"
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "openai-payg"
+    assert loop._adapter is not None  # legacy adapter also updated
