@@ -95,14 +95,33 @@ class ClaudeCliAdapter:
         argv = build_claude_cli_argv(
             binary=binary,
             model_name=req.model,
-            max_turns=1,
+            # GEODE policy: no turn-cap, run on time-cap. claude-cli's
+            # ``--max-turns`` flag still requires a positive integer, so
+            # set it high enough that the 30-minute time-cap on
+            # ``_run_claude_subprocess`` (matched to the
+            # ``SubAgentManager.timeout_s=1800.0`` ceiling) always
+            # trips first. 100 turns × claude-cli's typical 5-10s per
+            # turn ≫ 1800s — the option becomes a safety ceiling, not
+            # the operational limit. The previous ``max_turns=1`` was
+            # an inspect_ai contract leak (that path owns its own
+            # iteration loop); AgenticLoop's adapter call does the
+            # opposite, letting claude-cli run its internal tool-loop
+            # until it produces a terminal ``stop_reason``.
+            max_turns=100,
             resume_session_id=req.resume_session_id or None,
         )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"
         try:
             async with acquire_claude_cli_lane_async(lane_key):
-                stdout, stderr, rc = await _run_claude_subprocess(argv, stdin_text, timeout_s=600.0)
+                # GEODE policy: 30-minute time-cap. Matches the
+                # ``SubAgentManager.timeout_s=1800.0`` ceiling so the
+                # subprocess and the parent-process wall-clock gates
+                # trip together rather than producing a 1200s window
+                # where the parent gives up before the subprocess does.
+                stdout, stderr, rc = await _run_claude_subprocess(
+                    argv, stdin_text, timeout_s=1800.0
+                )
         except ClaudeCliInvocationError as exc:
             self._last_error = exc
             raise
