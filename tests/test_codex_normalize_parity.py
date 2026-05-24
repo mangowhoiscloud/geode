@@ -123,12 +123,6 @@ def test_codex_agentic_call_returns_agentic_response(monkeypatch) -> None:
     fake_client.responses.stream = MagicMock(return_value=_FakeStream())
 
     monkeypatch.setattr("core.llm.providers.codex._get_async_codex_client", lambda: fake_client)
-    monkeypatch.setattr(
-        "core.llm.providers.codex._codex_circuit_breaker",
-        MagicMock(
-            can_execute=lambda: True, record_success=lambda: None, record_failure=lambda: None
-        ),
-    )
 
     async def _direct(failover_models: list[str], do_call: Any) -> tuple[Any, str]:
         result = await do_call(failover_models[0])

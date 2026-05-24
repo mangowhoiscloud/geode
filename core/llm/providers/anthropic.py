@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed
 from core.llm.fallback import (
-    CircuitBreaker,
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
@@ -147,9 +146,6 @@ _sync_client_lock = threading.Lock()
 
 _async_client: anthropic.AsyncAnthropic | None = None
 _async_client_lock = threading.Lock()
-
-# Circuit breaker for Anthropic API calls
-_circuit_breaker = CircuitBreaker()
 
 
 # ---------------------------------------------------------------------------
@@ -499,11 +495,6 @@ def apply_messages_cache_control(
     return out
 
 
-def get_circuit_breaker() -> CircuitBreaker:
-    """Return the module-level Anthropic circuit breaker."""
-    return _circuit_breaker
-
-
 def retry_with_backoff(
     fn: Any,
     *,
@@ -536,7 +527,6 @@ def retry_with_backoff(
         fn,
         model=models_to_try[0],
         fallback_models=models_to_try[1:],
-        circuit_breaker=_circuit_breaker,
         retryable_errors=_retryable_errors,
         bad_request_error=anthropic.BadRequestError,
         billing_message=(
@@ -576,7 +566,6 @@ async def retry_with_backoff_async(
         fn,
         model=models_to_try[0],
         fallback_models=models_to_try[1:],
-        circuit_breaker=_circuit_breaker,
         retryable_errors=_retryable_errors,
         bad_request_error=anthropic.BadRequestError,
         billing_message=(
@@ -925,7 +914,6 @@ class ClaudeAgenticAdapter:
             if "credit balance" in msg.lower() or "billing" in msg.lower():
                 from core.llm.errors import BillingError
 
-                _circuit_breaker.record_failure()
                 plan_meta = _resolve_plan_meta(model)
                 raise BillingError(
                     "Anthropic API credit balance too low. "
@@ -952,18 +940,15 @@ class ClaudeAgenticAdapter:
                 log.info("Repaired orphaned tool_result in conversation history")
                 try:
                     response = await _do_call(model)
-                    _circuit_breaker.record_success()
                     return normalize_anthropic(response)
                 except Exception:
                     log.warning("Retry after repair failed", exc_info=True)
-                    _circuit_breaker.record_failure()
                     return None
             if "input_schema" in msg:
                 log.error(
                     "Tool schema error — likely an MCP tool missing input_schema. tools=%d",
                     len(tools),
                 )
-            _circuit_breaker.record_failure()
             return None
         except Exception as exc:
             # v0.53.2 — preserve BillingError propagation (mirror of the
@@ -973,7 +958,6 @@ class ClaudeAgenticAdapter:
             from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):
-                _circuit_breaker.record_failure()
                 raise
             self.last_error = exc
             log.warning("Agentic LLM call failed", exc_info=True)
@@ -982,17 +966,14 @@ class ClaudeAgenticAdapter:
                 from core.audit.diagnostics import diag
 
                 diag("petri.anthropic", f"call_failed model={model}: {exc!r}")
-            _circuit_breaker.record_failure()
             return None
 
         if response is None:
-            _circuit_breaker.record_failure()
             return None
 
         if used_model and used_model != model:
             log.warning("Model failover: %s -> %s", model, used_model)
 
-        _circuit_breaker.record_success()
         return normalize_anthropic(response)
 
     async def areset_client(self) -> None:

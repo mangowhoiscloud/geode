@@ -495,6 +495,8 @@ class TestUpdateModel:
     """Test AgenticLoop.update_model method."""
 
     def test_update_model_changes_provider(self):
+        """PR-MAINPATH-67 (2026-05-24) — reads the Path-B
+        ``_new_adapter`` field (legacy ``_adapter`` was deleted)."""
         from unittest.mock import MagicMock
 
         from core.agent.conversation import ConversationContext
@@ -510,9 +512,11 @@ class TestUpdateModel:
         asyncio.run(loop.update_model_async(GLM_PRIMARY))
         assert loop.model == GLM_PRIMARY
         assert loop._provider == "glm"
-        assert loop._adapter.provider_name == "glm"  # adapter re-created
+        assert loop._new_adapter.provider == "glm"  # adapter re-resolved
 
     def test_update_model_same_provider_keeps_adapter(self):
+        """PR-MAINPATH-67 (2026-05-24) — reads the Path-B
+        ``_new_adapter`` field (legacy ``_adapter`` was deleted)."""
         from unittest.mock import MagicMock
 
         from core.agent.conversation import ConversationContext
@@ -522,12 +526,12 @@ class TestUpdateModel:
         ctx = ConversationContext()
         executor = MagicMock(spec=ToolExecutor)
         loop = AgenticLoop(ctx, executor)
-        original_adapter = loop._adapter
+        original_adapter = loop._new_adapter
 
         asyncio.run(loop.update_model_async("claude-sonnet-4-6"))
         assert loop.model == "claude-sonnet-4-6"
         assert loop._provider == "anthropic"
-        assert loop._adapter is original_adapter  # kept — same provider
+        assert loop._new_adapter is original_adapter  # kept — same provider
 
 
 class TestGlmClient:

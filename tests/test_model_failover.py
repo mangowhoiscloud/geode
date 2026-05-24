@@ -351,7 +351,12 @@ class TestFallbackChainConfig:
 
 
 class TestAgenticLoopFailover:
-    """Verify AgenticLoop._call_llm delegates to adapter.agentic_call()."""
+    """Verify ``AgenticLoop._call_llm`` delegates to ``_new_adapter.acomplete()``.
+
+    PR-MAINPATH-67 (2026-05-24) — the legacy ``_adapter.agentic_call``
+    fallback branch was deleted; all dispatch now flows through the
+    Path-B ``LLMAdapter.acomplete`` surface unconditionally.
+    """
 
     def _make_loop(self, model: str | None = None) -> Any:
         """Create a minimal AgenticLoop instance for testing."""
@@ -368,39 +373,48 @@ class TestAgenticLoopFailover:
             max_rounds=5,
         )
 
-    def test_call_llm_uses_adapter(self) -> None:
-        """_call_llm should delegate to adapter.agentic_call() and return AgenticResponse."""
-        from core.cli.agentic_response import AgenticResponse, ResponseUsage, TextBlock
+    def _install_acomplete_stub(self, loop: Any, result: Any) -> MagicMock:
+        """Replace ``loop._new_adapter`` with a stub whose ``acomplete``
+        coroutine returns ``result`` (or raises if ``result`` is an
+        Exception).
+        """
 
-        mock_response = AgenticResponse(
-            content=[TextBlock(text="Hello")],
+        async def fake_acomplete(_req: Any) -> Any:
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        stub = MagicMock()
+        stub.name = "stub-adapter"
+        stub.acomplete = MagicMock(side_effect=fake_acomplete)
+        loop._new_adapter = stub
+        return stub
+
+    def test_call_llm_uses_adapter(self) -> None:
+        """``_call_llm`` should delegate to ``acomplete`` and return
+        ``AgenticResponse``."""
+        from core.llm.adapters.base import AdapterCallResult, UsageSummary
+
+        adapter_result = AdapterCallResult(
+            text="Hello",
+            usage=UsageSummary(input_tokens=100, output_tokens=50),
             stop_reason="end_turn",
-            usage=ResponseUsage(input_tokens=100, output_tokens=50),
         )
         loop = self._make_loop()
-
-        async def fake_call(**kwargs: Any) -> AgenticResponse:
-            return mock_response
-
-        loop._adapter = MagicMock()
-        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
+        stub = self._install_acomplete_stub(loop, adapter_result)
 
         result = asyncio.run(
             loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
         )
         assert result is not None
         assert result.stop_reason == "end_turn"
-        loop._adapter.agentic_call.assert_called_once()
+        stub.acomplete.assert_called_once()
 
     def test_call_llm_returns_none_on_chain_exhaustion(self) -> None:
-        """When adapter returns None, _call_llm returns None with error message."""
+        """When ``acomplete`` raises, ``_call_llm`` returns None with an
+        error message."""
         loop = self._make_loop()
-
-        async def fake_call(**kwargs: Any) -> None:
-            return None
-
-        loop._adapter = MagicMock()
-        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
+        self._install_acomplete_stub(loop, RuntimeError("chain exhausted"))
 
         result = asyncio.run(
             loop._call_llm("system prompt", [{"role": "user", "content": "hello"}])
@@ -409,27 +423,26 @@ class TestAgenticLoopFailover:
         assert loop._last_llm_error is not None
 
     def test_call_llm_no_api_key_returns_none(self) -> None:
-        """When adapter returns None (no key), _call_llm returns None."""
+        """When ``acomplete`` raises an auth-style failure, ``_call_llm``
+        returns None."""
         loop = self._make_loop()
-
-        async def fake_call(**kwargs: Any) -> None:
-            return None
-
-        loop._adapter = MagicMock()
-        loop._adapter.agentic_call = MagicMock(side_effect=fake_call)
+        self._install_acomplete_stub(loop, RuntimeError("missing api key"))
 
         result = asyncio.run(loop._call_llm("system", [{"role": "user", "content": "hi"}]))
         assert result is None
 
     def test_failover_chain_available_on_adapter(self) -> None:
-        """The adapter exposes a ``fallback_chain`` knob (opt-in).
+        """The Path-B adapter exposes (or does not expose) a
+        ``fallback_chain`` knob — ``fallback_chain_suggestions`` reads
+        the attribute defensively.
 
-        v0.99.19 — shipped default is an empty list (no silent fallback).
-        The property must still exist on the adapter so user-tuned chains
-        from ``~/.geode/routing.toml`` propagate; verify type only.
+        v0.99.19 — shipped default is an empty list (no silent
+        fallback). Path-B adapters that don't override the attribute
+        return an empty list via the ``getattr(..., [])`` defensive
+        read in :func:`fallback_chain_suggestions`.
         """
         loop = self._make_loop(model=ANTHROPIC_PRIMARY)
-        chain = loop._adapter.fallback_chain
+        chain = list(getattr(loop._new_adapter, "fallback_chain", []) or [])
         assert isinstance(chain, list)
         # If the user opts in, the chain must be unique and start with primary.
         # If the default (empty list) holds, both checks are trivially true.

@@ -87,50 +87,23 @@ def _reset_auth_singletons():
 
 
 @pytest.fixture(autouse=True)
-def _reset_circuit_breakers():
-    """Reset module-level CircuitBreaker singletons before & after each test.
+def _bootstrap_adapter_registry():
+    """Populate the Path-B adapter registry before each test.
 
-    Failure-injecting tests (e.g. ``test_failover.py::test_no_silent_fallback_to_other_models``)
-    raise ``MAX_RETRIES`` RateLimitErrors per invocation, which pushes the
-    shared anthropic / openai / glm / codex breakers to the OPEN state.
-    When pytest-xdist's ``loadfile`` distribution colocates a failure-
-    injecting test with a downstream consumer on the same worker, the
-    consumer's first ``can_execute()`` check returns False and the test
-    fails with "Circuit breaker is open" — a cascade flake that has
-    nothing to do with the consumer's PR.
-
-    Reset both pre- and post-test so accumulated state from prior runs
-    can't bleed in either direction.
+    PR-MAINPATH-1 (2026-05-24) — AgenticLoop now resolves its
+    ``_new_adapter`` through ``core.llm.adapters.registry.resolve_for``
+    by default (source defaults to ``"payg"``). Production runtime
+    calls :func:`bootstrap_builtins` from ``core/wiring/container.py``
+    at startup; tests need the same registration so
+    ``AgenticLoop.__init__`` doesn't raise ``AdapterNotFoundError``
+    with the registry in its empty initial state.
+    The reset on the way out prevents per-test registrations from
+    leaking into the next test (matches the existing
+    ``test_agent_loop_source_route.py`` fixture pattern).
     """
+    from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
 
-    def _reset_all() -> None:
-        # Import lazily and tolerate ImportError so the reset survives the
-        # case where a vendored SDK isn't installed in a stripped-down
-        # test environment. AttributeError tolerated for the same reason
-        # — a future refactor that renames a singleton shouldn't break
-        # the whole conftest.
-        with contextlib.suppress(ImportError, AttributeError):
-            from core.llm.providers import anthropic as _anth
-
-            _anth._circuit_breaker.reset()
-        with contextlib.suppress(ImportError, AttributeError):
-            from core.llm.providers import openai as _oai
-
-            _oai._openai_circuit_breaker.reset()
-        with contextlib.suppress(ImportError, AttributeError):
-            from core.llm.providers import glm as _glm
-
-            _glm._glm_circuit_breaker.reset()
-        with contextlib.suppress(ImportError, AttributeError):
-            from core.llm.providers import codex as _cdx
-
-            _cdx._codex_circuit_breaker.reset()
-        with contextlib.suppress(ImportError, AttributeError):
-            from core.llm import provider_dispatch as _disp
-
-            _disp._openai_cb.reset()
-            _disp._glm_cb.reset()
-
-    _reset_all()
+    _reset_for_test()
+    bootstrap_builtins()
     yield
-    _reset_all()
+    _reset_for_test()

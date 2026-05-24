@@ -1,14 +1,20 @@
 """AgenticLoop source-route behavioural invariants.
 
 Pins:
-- Empty source → legacy adapter only, no new_adapter attached.
+- Empty source → PR-MAINPATH-1 (2026-05-24) cutover defaults source
+  to ``"payg"``; ``_new_adapter`` is resolved through the Path-B
+  registry. PR-MAINPATH-67 (2026-05-24) deleted the legacy
+  ``self._adapter`` field alongside ``resolve_agentic_adapter``, so
+  ``_new_adapter`` is now the sole dispatch surface.
 - Concrete source + ``provider="anthropic"`` → ``resolve_for`` resolves and
-  attaches a new_adapter; legacy adapter still constructed for the fallback
-  surface (unused on this path).
-- Concrete source + provider != anthropic → new_adapter stays None (A2
-  follow-up scope); legacy adapter is the only route.
+  attaches a new_adapter.
+- Concrete source + ``provider="openai"`` → A2 (v0.99.44) extended the
+  Path-B registry beyond Anthropic; OpenAI providers now also resolve
+  (`test_openai_provider_attaches_new_adapter`).
 - Concrete source + unregistered (provider, source) pair → hard-fail
-  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback).
+  (Codex MCP 2026-05-23 HIGH 2 — no silent fallback). Post-MAINPATH-67
+  this is the only failure mode — there is no longer a legacy adapter
+  to fall back to.
 """
 
 from __future__ import annotations
@@ -40,17 +46,22 @@ def _make_loop(*, source: str = "", provider: str = "anthropic") -> AgenticLoop:
     )
 
 
-def test_empty_source_leaves_new_adapter_none() -> None:
+def test_empty_source_defaults_to_payg_after_mainpath_cutover() -> None:
+    """PR-MAINPATH-1 (2026-05-24) — empty source defaults to "payg" and
+    resolves through the Path-B registry. PR-MAINPATH-67 (2026-05-24)
+    deleted the legacy ``_adapter`` field; ``_new_adapter`` is the
+    only dispatch surface.
+    """
     loop = _make_loop(source="")
-    assert loop._new_adapter is None
-    assert loop._adapter is not None  # legacy still wired
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "anthropic-payg"
+    assert loop._source == "payg"
 
 
 def test_concrete_source_attaches_anthropic_adapter() -> None:
     loop = _make_loop(source="payg")
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "anthropic-payg"
-    assert loop._adapter is not None  # legacy also wired for fallback
 
 
 def test_concrete_source_each_anthropic_variant() -> None:
@@ -71,7 +82,6 @@ def test_openai_provider_attaches_new_adapter() -> None:
     loop = _make_loop(source="payg", provider="openai")
     assert loop._new_adapter is not None
     assert loop._new_adapter.name == "openai-payg"
-    assert loop._adapter is not None  # legacy adapter still wired as fallback
 
 
 def test_unregistered_pair_hard_fails() -> None:
@@ -81,3 +91,26 @@ def test_unregistered_pair_hard_fails() -> None:
     unregister_adapter("anthropic-payg")
     with pytest.raises(AdapterNotFoundError):
         _make_loop(source="payg")
+
+
+def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
+    """PR-MAINPATH-4 (2026-05-24) — ``/model`` between providers must
+    re-resolve ``_new_adapter``. PR-MAINPATH-67 (2026-05-24) deleted
+    the legacy ``_adapter`` re-resolution alongside the resolver, so
+    Path-B is now the sole adapter swapped on provider change.
+    """
+    from core.agent.loop._model_switching import _apply_model_update
+
+    loop = _make_loop(provider="anthropic")
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "anthropic-payg"
+
+    # Switch to an OpenAI model — ``_apply_model_update`` resolves
+    # ``provider`` via ``_resolve_provider("gpt-5.5")`` →
+    # ``openai-codex``. The Path-B helper normalises to ``openai``
+    # internally, so we end up on ``openai-payg``.
+    _apply_model_update(loop, "gpt-5.5")
+
+    assert loop._provider == "openai-codex"
+    assert loop._new_adapter is not None
+    assert loop._new_adapter.name == "openai-payg"

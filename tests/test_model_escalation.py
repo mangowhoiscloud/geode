@@ -65,9 +65,13 @@ class TestNoAutoEscalation:
 
     def test_fallback_chain_suggestions_replaces_escalation(self) -> None:
         """The remaining chain is exposed only as *suggestions* for the
-        diagnostic, not as an auto-swap target."""
+        diagnostic, not as an auto-swap target.
+
+        PR-MAINPATH-67 (2026-05-24) — reads ``fallback_chain`` from the
+        Path-B ``_new_adapter`` (legacy ``_adapter`` was deleted).
+        """
         loop = _make_loop()
-        loop._adapter = MagicMock(fallback_chain=["a", "b", "c"])
+        loop._new_adapter = MagicMock(fallback_chain=["a", "b", "c"])
         loop.model = "a"
         assert loop._fallback_chain_suggestions() == ["b", "c"]
 
@@ -77,7 +81,7 @@ class TestModelActionDiagnostic:
 
     def test_build_model_action_result_carries_full_context(self) -> None:
         loop = _make_loop()
-        loop._adapter = MagicMock(fallback_chain=[ANTHROPIC_PRIMARY, "claude-sonnet-4-6"])
+        loop._new_adapter = MagicMock(fallback_chain=[ANTHROPIC_PRIMARY, "claude-sonnet-4-6"])
         loop._consecutive_llm_failures = 5
 
         result = loop._build_model_action_result(

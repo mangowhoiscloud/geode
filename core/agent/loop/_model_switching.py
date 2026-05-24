@@ -24,12 +24,33 @@ def _resolve_provider(model: str) -> str:
     return _loop_pkg._resolve_provider(model)
 
 
-def _resolve_agentic_adapter(provider: str):  # type: ignore[no-untyped-def]
-    """Late-bound lookup so ``monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", ...)``
-    reaches this module's call sites."""
-    from core.agent import loop as _loop_pkg
+def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-untyped-def]
+    """Resolve a Path-B :class:`LLMAdapter` for ``(provider, source)``.
 
-    return _loop_pkg.resolve_agentic_adapter(provider)
+    PR-MAINPATH-4 (2026-05-24) — mirrors the
+    ``AgenticLoop.__init__``-side normalisation introduced in
+    PR-MAINPATH-1's fix-up commit (``openai-codex`` → ``openai``
+    because the Path-B registry uses a narrower provider vocabulary,
+    with the Codex source encoded on the ``source`` axis as
+    ``subscription``). Hard-fail contract preserved per Codex MCP
+    2026-05-23 HIGH 2 — ``resolve_for`` raises when the registered
+    ``(provider, source)`` pair is missing.
+
+    PR-MAINPATH-67 (2026-05-24) — the legacy
+    ``_resolve_agentic_adapter`` shim was deleted alongside the rest
+    of the legacy resolver surface; this function is now the sole
+    adapter factory used by ``/model`` switching.
+    """
+    from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+
+    if source not in CONCRETE_SOURCES:
+        return None
+    # Legacy ``_resolve_provider`` returns ``openai-codex`` for gpt-5.x
+    # and ``zhipuai`` for GLM models; the Path-B registry uses the
+    # narrower vocabulary (``openai`` / ``glm``).
+    _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
+    registry_provider = _PROVIDER_NORMALIZATION.get(provider, provider)
+    return resolve_for(registry_provider, source)
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:
@@ -127,7 +148,17 @@ def _apply_model_update(
     new_provider = provider or _resolve_provider(model)
     if new_provider != loop._provider:
         loop._provider = new_provider
-        loop._adapter = _resolve_agentic_adapter(new_provider)
+        # PR-MAINPATH-4 (2026-05-24) — re-resolve the Path-B adapter
+        # on a provider change so ``/model`` between providers points
+        # ``loop._new_adapter`` at the new provider's adapter (else the
+        # next ``_call_llm`` would dispatch to the wrong API).
+        # ``loop._source`` was set at init (defaults to ``"payg"``)
+        # and stays constant across the switch — operators don't
+        # expect ``/model`` to also flip the source axis.
+        # PR-MAINPATH-67 (2026-05-24) — the legacy ``loop._adapter``
+        # re-resolution was deleted with the rest of the resolver
+        # surface; Path-B is now the sole call path.
+        loop._new_adapter = _resolve_path_b_adapter(new_provider, loop._source)
     loop.model = model
     loop._tool_processor._model = model
     if old_model != model:
@@ -313,9 +344,14 @@ def fallback_chain_suggestions(loop: AgenticLoop) -> list[str]:
     Used by the loop to populate ``suggested_models`` in the
     ``model_action_required`` diagnostic. The user picks one and runs
     ``/model <id>``; we never auto-switch.
+
+    PR-MAINPATH-67 (2026-05-24) — reads from the Path-B adapter
+    (``loop._new_adapter``). Path-B adapters that don't expose a
+    ``fallback_chain`` attribute return an empty list, matching the
+    v0.99.19 shipped default (no silent fallback).
     """
     current = loop.model
-    chain = list(getattr(loop._adapter, "fallback_chain", []) or [])
+    chain = list(getattr(loop._new_adapter, "fallback_chain", []) or [])
     if current in chain:
         idx = chain.index(current)
         return chain[idx + 1 :]

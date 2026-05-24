@@ -2,8 +2,7 @@
 
 Separate provider for GLM models (glm-5.1, glm-5, glm-5-turbo,
 glm-5v-turbo, glm-4.7-flash).  Uses OpenAI SDK but managed as an
-independent provider with its own client lifecycle, circuit breaker,
-and failover chain.
+independent provider with its own client lifecycle and failover chain.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY
-from core.llm.fallback import CircuitBreaker
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +27,6 @@ _glm_client: Any = None  # openai.OpenAI | None — GLM via OpenAI-compatible AP
 _glm_lock = threading.Lock()
 _async_glm_client: Any = None  # openai.AsyncOpenAI | None — GLM via OpenAI-compatible API
 _async_glm_lock = threading.Lock()
-
-# Circuit breaker for GLM API calls
-_glm_circuit_breaker = CircuitBreaker()
 
 
 def _resolve_glm_endpoint() -> tuple[str, str]:
@@ -97,11 +92,6 @@ def reset_glm_client() -> None:
         _glm_client = None
     with _async_glm_lock:
         _async_glm_client = None
-
-
-def get_circuit_breaker() -> CircuitBreaker:
-    """Return the module-level GLM circuit breaker."""
-    return _glm_circuit_breaker
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +272,6 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             log.warning("No API key for %s agentic loop", self.provider_name)
             return None
 
-        if not self._circuit_breaker.can_execute():
-            self.last_error = RuntimeError(f"{self.provider_name} circuit breaker is OPEN")
-            log.warning("%s circuit breaker is OPEN, skipping call", self.provider_name)
-            return None
-
         # GAP-T1 — normalize cross-provider tool_choice into the Chat Completions
         # nested shape (string or {"type": "function", "function": {"name": "..."}}).
         from core.llm.tool_choice import normalize as _normalize_tool_choice
@@ -359,18 +344,13 @@ class GlmAgenticAdapter(OpenAIAgenticAdapter):
             from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):
-                self._circuit_breaker.record_failure()
                 raise
             self.last_error = exc
             log.warning("%s agentic LLM call failed", self.provider_name, exc_info=True)
-            self._circuit_breaker.record_failure()
             return None
 
         if response is None:
-            self._circuit_breaker.record_failure()
             return None
-
-        self._circuit_breaker.record_success()
 
         # Token usage is recorded once by the agentic loop's ``_track_usage``
         # on the normalized AgenticResponse below — recording here as well

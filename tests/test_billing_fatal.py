@@ -126,7 +126,7 @@ def test_fallback_loop_calls_is_billing_fatal_before_retry() -> None:
 def test_fallback_loop_raises_billing_error_on_glm_1113() -> None:
     """End-to-end: a fake fn() that raises a 429-with-code-1113 must propagate
     as BillingError out of run_with_retries, no retries observed."""
-    from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+    from core.llm.fallback import retry_with_backoff_generic
 
     call_count = 0
 
@@ -140,13 +140,11 @@ def test_fallback_loop_raises_billing_error_on_glm_1113() -> None:
         exc.body = {"error": {"code": "1113", "message": "Insufficient balance"}}  # type: ignore[attr-defined]
         raise exc
 
-    cb = CircuitBreaker()
     with pytest.raises(BillingError) as exc_info:
         retry_with_backoff_generic(
             fn,
             model="glm-5.1",
             fallback_models=["glm-5", "glm-5-turbo"],
-            circuit_breaker=cb,
             retryable_errors=(FakeRateLimitError,),
             bad_request_error=None,
             billing_message="GLM billing exhausted",

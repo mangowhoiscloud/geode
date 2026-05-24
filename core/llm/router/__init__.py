@@ -48,13 +48,11 @@ if TYPE_CHECKING:
 # name on the package. ``calls._route_provider`` calls the leaf binding from
 # ``core.config`` directly, so the supported test path is the leaf module.
 from core.config import _resolve_provider as _resolve_provider
-from core.llm.adapters import AgenticLLMPort as AgenticLLMPort
 from core.llm.adapters import ClaudeAdapter as ClaudeAdapter
 from core.llm.adapters import LLMClientPort as LLMClientPort
 from core.llm.adapters import LLMJsonCallable as LLMJsonCallable
 from core.llm.adapters import LLMParsedCallable as LLMParsedCallable
 from core.llm.adapters import LLMTextCallable as LLMTextCallable
-from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 
 # v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
 # LLMBadRequestError, LLMConnectionError, LLMInternalServerError,
@@ -68,7 +66,6 @@ from core.llm.adapters import resolve_agentic_adapter as resolve_agentic_adapter
 # preserved via the module-level ``__getattr__`` hook below: any future
 # ``from core.llm.router import LLMRateLimitError`` still resolves on
 # demand, deferring the SDK load until first access.
-from core.llm.fallback import CircuitBreaker as CircuitBreaker
 from core.llm.fallback import retry_with_backoff_generic as retry_with_backoff_generic
 from core.llm.provider_dispatch import _get_fallback_chain as _get_fallback_chain
 from core.llm.provider_dispatch import _get_provider_client as _get_provider_client

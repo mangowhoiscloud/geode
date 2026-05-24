@@ -47,6 +47,192 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.49] - 2026-05-24
+
+> AgenticLoop main-path Path-B migration sprint — 4 PRs that retire
+> the legacy ``AgenticLLMPort`` Protocol entirely. PR-MAINPATH-1
+> (#1572) flipped ``AgenticLoop.__init__`` to resolve ``_new_adapter``
+> via the Path-B registry by default with a hard-fail contract;
+> PR-MAINPATH-234 (#1573) bundled the runtime ``/model`` switch
+> migration with verification-only steps for streaming + tool_use_id
+> round-trip; PR-MAINPATH-5 (#1574) removed ``CircuitBreaker``
+> entirely (-386 LOC; per operator instruction in place of the
+> original "verify compatibility" plan); PR-MAINPATH-67 (#1575)
+> deleted ``core/llm/adapters/_legacy.py`` + ``_legacy_bridge.py``
+> (-599 LOC), migrating still-needed symbols to three new
+> domain-named modules (``paperclip.py`` / ``provider_inference.py``
+> / ``translation.py``). Resolves deferred-item #4 from the
+> v0.99.48 sprint summary. AgenticLoop is now Path-B-only — the
+> ``self._adapter`` field and the ``agentic_call`` fallback branch
+> are gone.
+
+### Removed
+
+- **PR-MAINPATH-67 — final delete of the legacy `AgenticLLMPort` surface.**
+  Closes the AgenticLoop main-path migration sprint started by
+  PR-MAINPATH-1. Two source files deleted (599 LOC total):
+  ``core/llm/adapters/_legacy.py`` (422 LOC; held the
+  ``AgenticLLMPort`` Protocol, ``resolve_agentic_adapter`` factory,
+  ``_ADAPTER_MAP`` registry) and ``core/llm/adapters/_legacy_bridge.py``
+  (177 LOC; held ``build_adapter_request`` +
+  ``agentic_response_from_adapter_result``).
+  Symbols still in production use that lived in the deleted file
+  moved to **domain-named modules** per the Naming CANNOTs (no
+  ``_legacy`` / ``_helpers`` suffix once a caller appears):
+  - ``core/llm/adapters/paperclip.py`` (285 LOC, new) — host of
+    ``LLMClientPort`` Protocol + ``ClaudeAdapter`` wrapper +
+    ``LLM*Callable`` Protocols. Name borrows from the paperclip-style
+    abstraction the J-b.1 series established.
+  - ``core/llm/adapters/provider_inference.py`` (68 LOC, new) — host
+    of ``infer_provider_from_model`` (used by ``plugins/petri_audit``).
+  - ``core/llm/adapters/translation.py`` (173 LOC, new) — host of
+    ``build_adapter_request`` + ``agentic_response_from_adapter_result``
+    (sole consumer is now ``AgenticLoop._call_llm``).
+  Re-exports stripped: ``core/llm/adapters/__init__.py`` drops
+  ``AgenticLLMPort`` + ``resolve_agentic_adapter`` + ``_ADAPTER_MAP``;
+  ``core/llm/router/__init__.py`` + ``core/agent/loop/__init__.py``
+  drop ``resolve_agentic_adapter`` re-export.
+  AgenticLoop:
+  - ``core/agent/loop/agent_loop.py.__init__`` no longer constructs
+    ``self._adapter``. ``_call_llm`` is Path-B-only — the
+    ``if self._new_adapter is not None:`` guard + the
+    ``else: response = await self._adapter.agentic_call(...)``
+    fallback branch are both gone. ``last_error`` reads
+    ``self._new_adapter._last_error`` / ``self._last_llm_error``
+    directly.
+  - ``core/agent/loop/_model_switching.py`` — the
+    ``_resolve_agentic_adapter`` shim deleted; ``_apply_model_update``
+    only re-resolves ``_new_adapter``.
+  Provider-level ``agentic_call`` methods (in
+  ``core/llm/providers/{anthropic,openai,glm,codex}.py``) **stay**
+  because they're independently tested and not in the AgenticLoop's
+  call path — their migration is out of scope for this PR.
+  Test rewires: ``tests/test_model_failover.py::TestAgenticLoopFailover``
+  4 tests now mock ``_new_adapter.acomplete`` via a new
+  ``_install_acomplete_stub`` helper; ``tests/test_provider_switching.py``
+  no longer asserts on ``resolve_agentic_adapter``;
+  ``tests/core/llm/adapters/test_legacy_bridge.py`` →
+  ``tests/core/llm/adapters/test_translation.py`` (file moved + import
+  paths updated); ``tests/test_agentic_loop.py::test_adapter_initialized_at_construction``
+  now asserts ``_new_adapter.provider == "anthropic"``;
+  ``tests/test_model_escalation.py``, ``tests/test_startup.py``,
+  ``tests/test_provider_label_consistency.py``, ``tests/test_codex_provider.py``,
+  ``tests/test_model_switch_guard.py``, ``tests/core/agent/test_agent_loop_source_route.py``
+  all migrate to read ``_new_adapter``. **Resolves deferred-item #4
+  from the v0.99.48 sprint summary.**
+
+### Removed
+
+- **PR-MAINPATH-5 — `CircuitBreaker` removed entirely.** The
+  module-level breaker singleton in
+  ``core/llm/fallback.py:CircuitBreaker`` (62 LOC) plus every
+  ``can_execute()`` / ``record_failure()`` / ``record_success()`` call
+  site across the 4 provider modules
+  (``core/llm/providers/{anthropic,openai,glm,codex}.py``), the
+  shared ``_get_provider_circuit_breaker`` dispatch helper in
+  ``core/llm/provider_dispatch.py``, the streaming-call breaker hooks
+  in ``core/llm/router/calls/streaming.py``, and the
+  ``CircuitBreaker`` re-export from ``core/llm/router/__init__.py``
+  are all gone. ``retry_with_backoff_generic`` + ``_async`` lose
+  their ``circuit_breaker=`` kwarg.
+  Per operator direction ("circuit-breaker는 제거해줘"), the original
+  PR-MAINPATH-5 plan to "verify circuit-breaker compatibility" is
+  replaced with full removal. Cooldown semantics still live on the
+  separate :class:`core.auth.cooldown.CooldownTracker` (per-key
+  auth-error cooldown, unrelated to the breaker) and on the
+  provider-internal retry/backoff loop.
+  Test scaffolding stripped in lock-step:
+  ``tests/conftest.py`` autouse ``_reset_circuit_breakers`` fixture
+  deleted; ``tests/test_circuit_breaker_isolation.py`` deleted
+  (75 LOC, contract no longer exists); ``test_provider_parity_v0532.py``
+  D1 section (CircuitBreaker call-pattern parity) dropped with a
+  one-line historical note; ``test_billing_fatal.py``,
+  ``test_codex_request_shape.py``, ``test_codex_normalize_parity.py``,
+  ``test_codex_responses_shape.py``, ``test_profile_wiring.py`` all
+  stripped of the ``CircuitBreaker()`` + ``circuit_breaker=cb``
+  scaffolding that was peripheral to each test's core assertion.
+  The orphaned ``SessionMetrics.circuit_breaker_trips`` counter +
+  ``record_circuit_breaker_trip()`` method removed (no production
+  caller after the breaker is gone); ``test_session_metrics.py``
+  follows. **Cumulative impact**: 18 source files touched + CHANGELOG
+  entry = 19 files total in the diff; -386 net LOC across the source
+  files (-406 deletions / +20 insertions), -351 net LOC including the
+  CHANGELOG entry's added lines.
+
+### Changed
+
+- **PR-MAINPATH-234 — bundle of three main-path sprint steps.**
+  - **Step 2 (streaming path) — no-op**: scanned for AgenticLoop
+    references to ``call_llm_streaming_async`` and found none. The
+    streaming surface in ``core/llm/router/calls/streaming.py`` is
+    only consumed by ``core/llm/adapters/_legacy.py`` 's adapter
+    wrapper + ``tests/test_claude_adapter.py``; the AgenticLoop main
+    inference path is non-streaming (`acomplete` only, per the
+    "rationale on not streaming per-delta" comment at
+    ``agent_loop.py``). No migration needed; PR-MAINPATH-7 will
+    delete the legacy streaming surface alongside ``_legacy.py``.
+  - **Step 3 (tool_use_id round-trip) — verified, no code change**:
+    the invariant is already pinned at the bridge boundary by
+    :func:`tests.core.llm.adapters.test_legacy_bridge.test_build_request_carries_tool_use_id_for_tool_messages`
+    (introduced when PR-MAINPATH-1's parent stack landed). The test
+    proves ``build_adapter_request`` extracts ``tool_use_id`` from
+    each ``{"role": "tool", ...}`` dict and threads it into the
+    typed :class:`Message(tool_use_id=...)`. AgenticLoop's main path
+    just passes messages through, so the bridge-level pin covers the
+    full round-trip.
+  - **Step 4 (``/model`` switch on Path-B)**:
+    ``core/agent/loop/_model_switching.py:_apply_model_update`` now
+    re-resolves ``loop._new_adapter`` whenever the provider changes,
+    via the new ``_resolve_path_b_adapter(provider, source)`` helper.
+    Pre-PR the function only updated the legacy ``loop._adapter``,
+    so a ``/model`` switch between providers (e.g. claude-opus-4-7
+    → gpt-5.5) would leave the Path-B adapter pointing at the
+    previous provider's API; the next ``_call_llm`` round would
+    dispatch through the wrong endpoint. The new helper mirrors the
+    ``AgenticLoop.__init__`` normalisation
+    (``openai-codex`` → ``openai``, source preserved from
+    ``loop._source``). Hard-fail contract preserved per Codex MCP
+    2026-05-23 HIGH 2. A new
+    ``test_runtime_model_switch_re_resolves_path_b_adapter``
+    invariant test pins the dual-adapter re-resolution.
+
+- **PR-MAINPATH-1 — AgenticLoop main-path Path-B default cutover.**
+  Step 1 of the multi-PR sprint that retires the legacy
+  ``AgenticLLMPort`` surface. ``AgenticLoop.__init__`` 's ``source``
+  parameter now defaults to ``"payg"`` (matching the J-b.2 mutator
+  runner and J-b.3 reflection node) instead of the empty string
+  that previously landed every caller on the legacy
+  ``resolve_agentic_adapter`` route; sub-agent workers continue to
+  override via :attr:`WorkerRequest.source`. With a concrete source
+  always present, ``self._new_adapter`` is resolved through
+  :func:`core.llm.adapters.registry.resolve_for` at init time —
+  ``AgenticLoop._call_llm`` 's pre-existing
+  ``if self._new_adapter is not None:`` branch (the Path-B
+  ``acomplete`` + ``_legacy_bridge`` translation path) becomes the
+  de-facto default; the legacy ``self._adapter.agentic_call``
+  fall-through stays as the safety branch for ``_new_adapter is None``
+  and continues to feed ``getattr(self._adapter, "last_error", None)``
+  into the agentic UI's error surface.
+  Hard-fail contract preserved per Codex MCP 2026-05-23 HIGH 2 — the
+  registry's ``AdapterNotFoundError`` propagates if the
+  ``(provider, source)`` pair is unregistered rather than silently
+  routing through the legacy adapter.
+  Tests: ``tests/core/agent/test_agent_loop_source_route.py``
+  ``test_empty_source_leaves_new_adapter_none`` flipped to
+  ``test_empty_source_defaults_to_payg_after_mainpath_cutover``
+  with the new contract pinned (``_new_adapter.name ==
+  "anthropic-payg"``, ``_source == "payg"``).
+  ``tests/test_model_failover.py::test_call_llm_uses_adapter``
+  forces ``_new_adapter = None`` before mocking the legacy adapter
+  so the legacy-delegation invariant it pins keeps running on the
+  fallback branch.
+  ``tests/conftest.py`` gains an autouse
+  ``_bootstrap_adapter_registry`` fixture that calls
+  :func:`bootstrap_builtins` before each test — production runtime
+  already calls this from ``core/wiring/container.py`` at startup,
+  but the test harness used to construct ``AgenticLoop`` without it,
+  which now raises ``AdapterNotFoundError`` for the cutover default.
+
 ## [0.99.48] - 2026-05-24
 
 > Cleanup-arc release — 7 PRs (PR-DOCS-CANT-CAN + PR-CLEANUP-3

@@ -1,17 +1,14 @@
-"""Translation between the new :class:`LLMAdapter` Protocol and the legacy
-``AgenticResponse`` shape consumed by :class:`AgenticLoop`.
+"""Translation between :class:`LLMAdapter` and AgenticLoop's call surface.
 
-Used by ``AgenticLoop._call_llm`` when an explicit ``source`` is set: the loop
-builds an :class:`AdapterCallRequest`, calls ``adapter.acomplete``, and feeds
-the result back through :func:`agentic_response_from_adapter_result` so the
-downstream tool-use / cost / observability pipeline keeps the same data
-shape.
+Used by :meth:`core.agent.loop.agent_loop.AgenticLoop._call_llm`: the loop
+builds an :class:`AdapterCallRequest`, calls :meth:`LLMAdapter.acomplete`,
+and feeds the result back through :func:`agentic_response_from_adapter_result`
+so the downstream tool-use / cost / observability pipeline keeps the same
+data shape.
 
-This bridge is intentionally minimal — it does NOT replicate the full
-``AgenticLLMPort.agentic_call`` (retry, failover, streaming) surface. Those
-behaviours stay in the legacy adapter for callers that don't set ``source``.
-The new path is an opt-in alternative; once every in-tree caller has migrated
-(v1.0.0), the bridge + legacy path are removed together.
+PR-MAINPATH-67 (2026-05-24) — extracted from the deleted ``_legacy_bridge``
+module after the legacy ``AgenticLLMPort.agentic_call`` fallback branch
+was removed; this is now the sole call-site for both helpers.
 """
 
 from __future__ import annotations
@@ -102,15 +99,14 @@ def build_adapter_request(
 
 
 def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticResponse:
-    """Translate :class:`AdapterCallResult` → legacy :class:`AgenticResponse`.
+    """Translate :class:`AdapterCallResult` → :class:`AgenticResponse`.
 
-    The new adapter call returns a flat ``(text, usage, stop_reason,
-    tool_uses, raw_response)`` envelope; the legacy ``AgenticResponse`` is a
-    list of typed content blocks plus normalised usage. We rebuild the
-    content list — text block first (when non-empty), then one
+    :meth:`LLMAdapter.acomplete` returns a flat ``(text, usage, stop_reason,
+    tool_uses, raw_response)`` envelope; :class:`AgenticResponse` is a list
+    of typed content blocks plus normalised usage. We rebuild the content
+    list — text block first (when non-empty), then one
     :class:`ToolUseBlock` per tool_use entry — so ``ToolCallProcessor`` and
-    the rest of the loop see the same shape they did under the legacy
-    adapter.
+    the rest of the loop see the canonical shape.
     """
     blocks: list[TextBlock | ToolUseBlock] = []
     if result.text:
@@ -158,7 +154,7 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
 def _translate_stop_reason(stop: str) -> str:
     """Map provider-flavoured stop reasons → AgenticLoop's two-value enum.
 
-    Legacy ``AgenticResponse.stop_reason`` is one of ``"tool_use"`` /
+    :attr:`AgenticResponse.stop_reason` is one of ``"tool_use"`` /
     ``"end_turn"``. Provider strings map as follows:
 
     - Anthropic ``"tool_use"`` → ``"tool_use"``

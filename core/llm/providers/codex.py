@@ -22,7 +22,6 @@ import threading
 from typing import Any
 
 from core.config import CODEX_BASE_URL, CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
-from core.llm.fallback import CircuitBreaker
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +32,6 @@ _codex_client: Any = None
 _codex_lock = threading.Lock()
 _async_codex_client: Any = None
 _async_codex_lock = threading.Lock()
-_codex_circuit_breaker = CircuitBreaker()
 
 
 def _extract_account_id(token: str) -> str:
@@ -170,11 +168,6 @@ def reset_codex_client() -> None:
         _async_codex_client = None
 
 
-def get_circuit_breaker() -> CircuitBreaker:
-    """Return the module-level Codex circuit breaker."""
-    return _codex_circuit_breaker
-
-
 # ---------------------------------------------------------------------------
 # CodexAgenticAdapter — Responses API streaming adapter
 # ---------------------------------------------------------------------------
@@ -235,11 +228,6 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
         if client is None:
             self.last_error = ValueError("Codex OAuth token not configured")
             log.warning("No Codex OAuth token for agentic loop")
-            return None
-
-        if not _codex_circuit_breaker.can_execute():
-            self.last_error = RuntimeError("Codex circuit breaker is OPEN")
-            log.warning("Codex circuit breaker is OPEN, skipping call")
             return None
 
         # v0.53.3 — use the Responses-API converter (was previously the
@@ -384,18 +372,13 @@ class CodexAgenticAdapter(OpenAIAgenticAdapter):
             from core.llm.errors import BillingError
 
             if isinstance(exc, BillingError):
-                _codex_circuit_breaker.record_failure()
                 raise
             self.last_error = exc
             log.warning("Codex agentic LLM call failed", exc_info=True)
-            _codex_circuit_breaker.record_failure()
             return None
 
         if response is None:
-            _codex_circuit_breaker.record_failure()
             return None
-
-        _codex_circuit_breaker.record_success()
 
         # Token usage is recorded once by the agentic loop's ``_track_usage``
         # on the normalized AgenticResponse below — recording here as well

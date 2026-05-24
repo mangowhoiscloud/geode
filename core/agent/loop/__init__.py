@@ -11,13 +11,18 @@ external callers rely on::
         get_agentic_tools,
     )
 
-Some lower-level names (``_resolve_provider``, ``resolve_agentic_adapter``,
-``_EFFORT_LEVELS``) are also addressable on the package because tests
-monkey-patch them via the legacy dotted path
-``core.agent.loop.<name>``. v0.57.0 R6 — the run loop emits each
-reasoning summary the adapter attaches via ``emit_reasoning_summary``;
-the call site lives in ``agent_loop._call_llm`` but the symbol is
-mentioned here so introspection tests reading this file can find it.
+The lower-level ``_resolve_provider`` / ``_EFFORT_LEVELS`` names are
+also addressable on the package because tests monkey-patch them via the
+legacy dotted path ``core.agent.loop.<name>``. v0.57.0 R6 — the run
+loop emits each reasoning summary the adapter attaches via
+``emit_reasoning_summary``; the call site lives in
+``agent_loop._call_llm`` but the symbol is mentioned here so
+introspection tests reading this file can find it.
+
+PR-MAINPATH-67 (2026-05-24) — the legacy ``resolve_agentic_adapter``
+re-export was deleted alongside the AgenticLoop fallback branch; all
+dispatch now flows through ``LLMAdapter.acomplete`` via
+``core.llm.adapters.resolve_for``.
 """
 
 from __future__ import annotations
@@ -28,7 +33,6 @@ from __future__ import annotations
 # similar patches reach the call sites in ``_model_switching``. The
 # split-into-package refactor preserves this surface.
 from core.config import _resolve_provider as _resolve_provider
-from core.llm.router import resolve_agentic_adapter as resolve_agentic_adapter
 
 from ._helpers import AGENTIC_TOOLS, MAX_TOOL_RESULT_TOKENS, get_agentic_tools
 from .agent_loop import AgenticLoop
@@ -49,5 +53,4 @@ __all__ = [
     "_context_exhausted_message",
     "_resolve_provider",
     "get_agentic_tools",
-    "resolve_agentic_adapter",
 ]

@@ -159,9 +159,8 @@ class TestFallbackIntegration:
     """Verify _notify_success/_notify_failure are called from retry_with_backoff_generic."""
 
     def test_success_path_calls_notify(self):
-        from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+        from core.llm.fallback import retry_with_backoff_generic
 
-        cb = CircuitBreaker()
         calls: list[str] = []
 
         with patch(
@@ -171,7 +170,6 @@ class TestFallbackIntegration:
                 lambda model: "response",
                 model="test-model",
                 fallback_models=[],
-                circuit_breaker=cb,
                 retryable_errors=(ConnectionError,),
                 provider_label="openai",
             )
@@ -180,9 +178,8 @@ class TestFallbackIntegration:
         assert calls == ["ok:openai"]
 
     def test_failure_path_calls_notify(self):
-        from core.llm.fallback import CircuitBreaker, retry_with_backoff_generic
+        from core.llm.fallback import retry_with_backoff_generic
 
-        cb = CircuitBreaker()
         calls: list[str] = []
 
         def failing_fn(model: str) -> None:
@@ -199,7 +196,6 @@ class TestFallbackIntegration:
                     failing_fn,
                     model="test-model",
                     fallback_models=[],
-                    circuit_breaker=cb,
                     retryable_errors=(ConnectionError,),
                     provider_label="LLM",
                     max_retries=1,
