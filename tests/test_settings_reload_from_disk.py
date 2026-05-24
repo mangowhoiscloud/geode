@@ -96,3 +96,29 @@ def test_reload_handles_fresh_process_call() -> None:
     reload_settings_from_disk()
     # Field access proves the singleton is valid after the call.
     assert isinstance(settings.model, str)
+
+
+def test_create_session_bridges_effort_to_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-R6 — operator's effort choice must reach the live ``AgenticLoop``.
+
+    Pre-PR ``services.create_session`` constructed ``AgenticLoop(...)`` with
+    only ``model=`` from settings — the ``effort`` axis fell through to the
+    constructor's ``"high"`` default regardless of operator selection. The
+    ``/model`` picker writes ``GEODE_AGENTIC_EFFORT`` to disk + mutates
+    ``settings.agentic_effort``, ``reload_settings_from_disk`` correctly
+    picks it back up on the next session, but the missing constructor arg
+    meant the loop never observed the change. This test pins both ends of
+    the wire: ``settings.agentic_effort`` change → ``loop._effort`` reflects.
+    """
+    from core.server.supervised.services import SessionMode, build_shared_services
+
+    services = build_shared_services()
+    monkeypatch.setenv("GEODE_AGENTIC_EFFORT", "low")
+    _, loop_low = services.create_session(SessionMode.DAEMON)
+    assert loop_low._effort == "low"
+
+    monkeypatch.setenv("GEODE_AGENTIC_EFFORT", "high")
+    _, loop_high = services.create_session(SessionMode.DAEMON)
+    assert loop_high._effort == "high"
+    # Prior loop preserved its captured value (no auto-revert side effect).
+    assert loop_low._effort == "low"

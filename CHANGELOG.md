@@ -65,10 +65,22 @@ functional change.
   file-watcher dependency (chokidar/inotify deliberately avoided — the
   watcher race conditions don't compose with GEODE's multi-trigger
   autonomous paths). Pinned by ``tests/test_settings_reload_from_disk.py``
-  (4 cases — singleton identity preserved, env-var pickup, idempotent,
-  fresh-process safe) + updated ``test_model_switch_propagates_across_sessions``
-  to flip ``GEODE_MODEL`` (the disk surface ``_apply_model`` actually
-  writes) instead of mutating ``settings.model`` directly.
+  (5 cases — singleton identity preserved, env-var pickup, idempotent,
+  fresh-process safe, **effort bridge end-to-end**) + updated
+  ``test_model_switch_propagates_across_sessions`` to flip
+  ``GEODE_MODEL`` (the disk surface ``_apply_model`` actually writes)
+  instead of mutating ``settings.model`` directly.
+
+- **Operator's effort choice now reaches the live ``AgenticLoop``.**
+  ``services.create_session`` was passing ``model=settings.model`` but
+  not ``effort=settings.agentic_effort`` — the loop's
+  ``effort: str = "high"`` constructor default won by omission, so the
+  ``/model`` picker's effort axis was effectively a no-op on the main
+  REPL/IPC path (sub-agents already read ``settings.agentic_effort``
+  directly via ``core/agent/sub_agent.py:533``). R6 reload now correctly
+  picks up the operator's choice into ``settings.agentic_effort``, and
+  the new constructor arg bridges it into ``loop._effort`` so the next
+  session honors low/medium/high/xhigh end-to-end.
 
 ### Added
 - **PR-COMM-4** — transcript `seq` column + liveness watchdog API on

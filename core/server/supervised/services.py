@@ -199,6 +199,15 @@ class SharedServices:
 
         reload_settings_from_disk()
 
+        # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
+        # picker (writes ``GEODE_AGENTIC_EFFORT`` + ``[agentic].effort``)
+        # was caught by ``reload_settings_from_disk`` above but never
+        # crossed the AgenticLoop boundary — the loop's
+        # ``effort: str = "high"`` constructor default won by omission.
+        # Bridging here closes the gap so the model + effort axes both
+        # honor Hermes-style boundary read end-to-end (sub-agents already
+        # do via ``sub_agent.py:533``'s direct ``settings.agentic_effort``
+        # read).
         loop = AgenticLoop(
             conversation,
             executor,
@@ -207,6 +216,7 @@ class SharedServices:
             cost_budget=self._cost_budget,
             model=settings.model,
             provider=_resolve_provider(settings.model),
+            effort=settings.agentic_effort,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
             hooks=self.hook_system,
