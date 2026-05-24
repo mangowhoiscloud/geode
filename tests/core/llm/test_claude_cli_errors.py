@@ -99,9 +99,9 @@ class TestIsTransientUpstream:
             '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1779639600,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false}}',
             '"rateLimitType":"five_hour"',
             '"rate_limit_event"',
-            'rate_limit_event',
-            'rate_limit_info',
-            'rateLimit',
+            "rate_limit_event",
+            "rate_limit_info",
+            "rateLimit",
         ],
     )
     def test_informational_rate_limit_event_is_not_transient(self, stdout: str) -> None:
