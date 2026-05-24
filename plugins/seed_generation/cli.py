@@ -327,13 +327,26 @@ def run_audit_seeds(
     # generator / critic prompts.
     meta_review_snapshot = _load_priors_snapshot(err=err)
 
+    from core.paths import STATE_SEED_GENERATION_DIR
     from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
     run_id = f"{gen_tag}-{resolved_dim}"
+    # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
+    # transcript lives inside the run directory (not the legacy
+    # ~/.geode/self-improving-loop/<run>/transcript.jsonl) so every
+    # artifact for one cycle — state.json, candidates/, survivors/,
+    # elo_log.tsv, sub_agents/, transcript.jsonl — is co-located under
+    # state/seed-generation/<run_id>/ and ``tar czf run.tgz state/
+    # seed-generation/<run_id>/`` recovers the entire cycle. The
+    # cross-cutting hook journal / RunLog / monthly usage still live
+    # under ~/.geode/ because they aren't run-scoped.
+    run_dir = STATE_SEED_GENERATION_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
     journal = RunTranscript(
         session_id=run_id,
         gen_tag=gen_tag,
         component="seed-generation",
+        path=run_dir / "transcript.jsonl",
     )
     with run_transcript_scope(journal):
         picker_result = pick_bindings()

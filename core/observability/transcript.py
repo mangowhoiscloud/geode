@@ -86,7 +86,26 @@ class SessionTranscript:
         transcript_dir: Path | str | None = None,
     ) -> None:
         self._session_id = session_id
-        self._dir = Path(transcript_dir) if transcript_dir else DEFAULT_TRANSCRIPT_DIR
+        # PR-Q (2026-05-24) — when an active run_dir is bound and the
+        # caller didn't pass an explicit transcript_dir, route the
+        # per-session jsonl into ``<run_dir>/sub_agents/<session_id>/``
+        # and override the filename to ``dialogue.jsonl`` (vs the
+        # legacy ``<session_id>.jsonl`` under the cwd-slug global).
+        # Explicit ``transcript_dir=`` overrides this (orchestrator
+        # paths like RunTranscript still control their own location).
+        self._dialogue_filename_override: str | None = None
+        if transcript_dir is not None:
+            self._dir = Path(transcript_dir)
+        else:
+            from core.observability.run_dir import resolve_sub_agent_path
+
+            consolidated_dialogue = resolve_sub_agent_path(session_id, "dialogue.jsonl")
+            if consolidated_dialogue is not None:
+                # ``resolve_sub_agent_path`` already mkdir'd the parent.
+                self._dir = consolidated_dialogue.parent
+                self._dialogue_filename_override = consolidated_dialogue.name
+            else:
+                self._dir = DEFAULT_TRANSCRIPT_DIR
         self._lock = threading.Lock()
         self._event_count = 0
 
@@ -100,6 +119,14 @@ class SessionTranscript:
 
     @property
     def file_path(self) -> Path:
+        # PR-Q — when ``_dialogue_filename_override`` is set the
+        # SessionTranscript was bound to a run_dir-anchored location and
+        # writes ``<dir>/dialogue.jsonl`` instead of the legacy
+        # ``<dir>/<session_id>.jsonl``. The override is only set by
+        # ``__init__`` when ``transcript_dir`` was left empty AND
+        # :func:`resolve_sub_agent_path` returned a binding.
+        if self._dialogue_filename_override is not None:
+            return self._dir / self._dialogue_filename_override
         return self._dir / f"{self._session_id}.jsonl"
 
     # ------------------------------------------------------------------
