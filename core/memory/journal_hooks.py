@@ -165,16 +165,16 @@ def _journal_to_session(
     level: str,
     payload: dict[str, Any],
 ) -> None:
-    """Forward an event to the active SessionJournal if one is bound.
+    """Forward an event to the active RunTranscript if one is bound.
 
     No-op when no journal is bound to the ContextVar. Import is local
     so journal_hooks stays import-light when observability is unused.
     """
     try:
-        from core.observability.session_journal import current_session_journal
+        from core.self_improving_loop.run_transcript import current_run_transcript
     except ImportError:
         return
-    sj = current_session_journal()
-    if sj is None:
+    rt = current_run_transcript()
+    if rt is None:
         return
-    sj.append(event, level=level, payload=payload)
+    rt.append(event, level=level, payload=payload)

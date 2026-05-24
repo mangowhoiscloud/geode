@@ -7,6 +7,12 @@ is unaffected (the ``[obs]`` extra is opt-in via
 :func:`enable`, which the ``obs_otel_export`` tool calls when the user
 explicitly enables tracing.
 
+PR-CLEANUP-7 (2026-05-23): the per-self-improving-loop-run lifecycle
+writer (``SessionJournal`` re-exported from here, since renamed to
+:class:`~core.self_improving_loop.run_transcript.RunTranscript`)
+moved into :mod:`core.self_improving_loop.run_transcript`; this
+package is back to OTel + per-session metrics only.
+
 See ``docs/plans/eval-petri-p3b-2-execution.md`` § Future tooling —
 Observability.
 """
@@ -19,12 +25,6 @@ from core.observability.otel_export import (
     enable,
     status,
 )
-from core.observability.session_journal import (
-    SessionJournal,
-    current_session_journal,
-    session_journal_scope,
-    set_current_session_journal,
-)
 from core.observability.session_metrics import (
     SessionMetrics,
     current_session_metrics,
@@ -34,15 +34,11 @@ from core.observability.session_metrics import (
 
 __all__ = [
     "OtelExportError",
-    "SessionJournal",
     "SessionMetrics",
-    "current_session_journal",
     "current_session_metrics",
     "disable",
     "enable",
-    "session_journal_scope",
     "session_metrics_scope",
-    "set_current_session_journal",
     "set_current_session_metrics",
     "status",
 ]

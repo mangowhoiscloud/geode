@@ -505,20 +505,20 @@ def _resolve_config_path(path: Path | str | None) -> Path:
 
 
 def _emit_defaults_notice(reason: str, path: Path) -> None:
-    """Notify the active SessionJournal that the loader fell back to defaults.
+    """Notify the active RunTranscript that the loader fell back to defaults.
 
     P2 — closes the "config loader default sub silent" gap from the
     2026-05-19 observability audit §4. ``reason`` is one of
     ``file_missing`` / ``read_error`` / ``section_missing`` so the
     operator can tell which fallback fired without re-reading the file.
-    The emit is a no-op outside an :func:`session_journal_scope` so
+    The emit is a no-op outside an :func:`run_transcript_scope` so
     callers that load the config without an active audit run (REPL
     bootstrap, petri user-overrides) stay unaffected.
     """
     try:
-        from core.observability import current_session_journal
+        from core.self_improving_loop.run_transcript import current_run_transcript
 
-        journal = current_session_journal()
+        journal = current_run_transcript()
         if journal is None:
             return
         journal.append(

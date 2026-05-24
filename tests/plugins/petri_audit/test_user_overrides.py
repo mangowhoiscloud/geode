@@ -430,9 +430,9 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
     import json
     import sys
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="s-legacy",
         gen_tag="gen-legacy",
         component="autoresearch",
@@ -443,7 +443,7 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
     # by inserting None into sys.modules — the `from … import …` then raises.
     monkeypatch.setitem(sys.modules, "core.config.self_improving_loop", None)
 
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
 
     assert result == {}
@@ -473,15 +473,15 @@ def test_read_role_no_emit_when_self_improving_loop_available(
     """
     import json
 
-    from core.observability import SessionJournal, session_journal_scope
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
 
-    journal = SessionJournal(
+    journal = RunTranscript(
         session_id="s-newpath",
         gen_tag="gen-newpath",
         component="autoresearch",
         path=tmp_path / "transcript.jsonl",
     )
-    with session_journal_scope(journal):
+    with run_transcript_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")
     assert result == {}
     if journal.path.exists():

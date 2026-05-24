@@ -7,8 +7,10 @@ aggregate roll-up) and Snapshot (Tier 3, pipeline state).
 Captures: user messages, assistant responses, tool calls/results,
 vault saves, costs, errors, **lifecycle events** (audit_started /
 config_snapshot / per_dim_scores 등 — pre-PR-SESSION-METRICS 의
-``SessionJournal`` 에서 흡수) — everything needed to reconstruct
-"what exactly happened in this session."
+``SessionJournal`` 에서 흡수, 이후 PR-CLEANUP-7 에서
+:class:`~core.self_improving_loop.run_transcript.RunTranscript` 로
+이름·위치 정리) — everything needed to reconstruct "what exactly
+happened in this session."
 
 PR-SESSION-METRICS (2026-05-23) — ``SessionJournal`` folded into this
 Tier-1 surface via :meth:`record_lifecycle_event`. Legacy
@@ -234,19 +236,23 @@ class SessionTranscript:
         file_path: Path | None = None,
     ) -> None:
         """Record a free-form lifecycle event — replaces the legacy
-        ``SessionJournal.append(event, payload=...)`` path.
+        ``SessionJournal.append(event, payload=...)`` path (renamed to
+        :meth:`~core.self_improving_loop.run_transcript.RunTranscript.append`
+        in PR-CLEANUP-7).
 
         PR-SESSION-METRICS (2026-05-23) — folded ``SessionJournal`` into the
         Tier-1 :class:`SessionTranscript`. Schema preserved
         (``{ts, session_id, gen_tag, component, level, event, payload}``)
-        so existing readers (``tests/core/observability/test_session_journal.py``,
-        operator grep on ``transcript.jsonl`` / legacy ``transcript.jsonl``)
-        keep working.
+        so existing readers (``tests/core/self_improving_loop/test_run_transcript.py``,
+        operator grep on ``transcript.jsonl``) keep working.
 
         ``file_path`` overrides the default ``<dir>/<session_id>.jsonl``
-        layout — used by :class:`SessionJournal` to write to
-        ``<self-improving-loop-dir>/<session_id>/transcript.jsonl`` while
-        still using this Tier-1 schema.
+        layout — used by
+        :class:`~core.self_improving_loop.run_transcript.RunTranscript`
+        (the post-PR-CLEANUP-7 name for the per-run binding that was
+        ``SessionJournal``) to write to
+        ``<self-improving-loop-dir>/<session_id>/transcript.jsonl``
+        while still using this Tier-1 schema.
         """
         record: dict[str, Any] = {
             "ts": ts if ts is not None else time.time(),
