@@ -28,7 +28,17 @@ def _make_journal(tmp_path: Path) -> RunTranscript:
 
 
 def test_append_writes_jsonl_row(tmp_path: Path) -> None:
-    """append() writes one JSONL row with the full schema."""
+    """append() writes one JSONL row with the full schema.
+
+    PR-U (2026-05-24, see docs/plans/2026-05-24-transcript-
+    standardization-and-claude-resume.md) — the schema gained paperclip
+    activity_log fields (``actor_type`` / ``actor_id`` / ``action``).
+    Legacy ``append(event, payload=)`` callers (this test) get them
+    auto-inferred as ``orchestrator`` / ``pipeline`` /
+    ``f"pipeline.{event}"`` so the classification quintuple is uniform
+    across every row without forcing every existing caller to add the
+    new kwargs.
+    """
     journal = _make_journal(tmp_path)
     journal.append("audit_finished", payload={"fitness": 0.5}, ts=1700000000.0)
     rows = (tmp_path / "transcript.jsonl").read_text().splitlines()
@@ -42,6 +52,9 @@ def test_append_writes_jsonl_row(tmp_path: Path) -> None:
         "level": "info",
         "event": "audit_finished",
         "payload": {"fitness": 0.5},
+        "actor_type": "orchestrator",
+        "actor_id": "pipeline",
+        "action": "pipeline.audit_finished",
     }
 
 

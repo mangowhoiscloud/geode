@@ -347,6 +347,16 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         quiet=True,  # Suppress spinner — parent handles UI
         allowed_tool_names=allowed_tool_names,
         source=request.source,
+        # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
+        # docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
+        # the sub-agent's task_id becomes the AgenticLoop's session_id so
+        # the worker's SessionTranscript (dialogue.jsonl) lands in the
+        # SAME ``<run_dir>/sub_agents/<task_id>/`` directory as
+        # result.json + stderr.log. Without this the AgenticLoop generates
+        # a fresh ``s-<uuid>`` and dialogue.jsonl falls into a sibling
+        # directory that the operator cannot reach from the timeline's
+        # ``details.task_id`` reference.
+        session_id=request.task_id,
     )
 
     # 7. Build prompt
