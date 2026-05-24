@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-COMM-3d** — AgenticLoop's main `_call_llm` path now emits
+  `LLM_CALL_STARTED` / `LLM_CALL_ENDED` hooks with `session_id` +
+  `usage` + `cost_usd` so the SQLite `agent_runtime_state.total_*_tokens`
+  cumulative writer (registered in PR-COMM-3b but unwired for the
+  main loop path) actually accumulates per-call traffic. Pre-fix
+  only the `router/calls/*.py` one-off helpers fired LLM_CALL_ENDED,
+  and they didn't carry the agent context the writer needed.
+  - `core/agent/loop/agent_loop.py:_call_llm` wraps the
+    `adapter.acomplete()` call with `LLM_CALL_STARTED` (before) and
+    `LLM_CALL_ENDED` (after — success and error paths). The success
+    payload carries `session_id`, `model`, `provider`, `adapter`,
+    `latency_ms`, `usage` dict (`input_tokens` / `output_tokens` /
+    `cached_input_tokens`), and `cost_usd` (computed locally via
+    `token_tracker.calculate_cost`). Hook trigger failures are
+    swallow-and-warn so a broken handler never blocks the loop.
+  - `core/wiring/bootstrap.py` registers
+    `agent_runtime_llm_call_ended` → `accumulate_tokens_and_cost`
+    under the existing `agent_runtime_state` plugin. Ignores
+    zero-token / missing-`session_id` payloads so legacy
+    `router/calls/*.py` emitters don't pollute the table.
+  - Pinned by `tests/test_llm_call_ended_cumulative.py` (5 cases —
+    single-call cumulative write × 1, multi-call sum × 1, legacy
+    payload no-op × 1, zero-token no-op × 1, missing-session_id
+    no-op × 1).
+
 ### Changed
 - **PR-COMM-3c** — migrates `core/agent/loop/agent_loop.py` claude-cli
   sessionId persistence from file-based
