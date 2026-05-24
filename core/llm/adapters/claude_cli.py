@@ -109,6 +109,19 @@ class ClaudeCliAdapter:
             # until it produces a terminal ``stop_reason``.
             max_turns=100,
             resume_session_id=req.resume_session_id or None,
+            # PR-SKIP-PERMS (2026-05-24) — operator directive: GEODE's
+            # AgenticLoop spawns claude-cli as a headless subprocess.
+            # Permission prompts (Write outside cwd, Bash dangerous
+            # commands, etc.) would hang the subprocess on an
+            # interactive prompt that no one can answer. The v0.99.53
+            # smoke surfaced this as Write-tool denials on every seed
+            # candidate generation — claude-cli exited cleanly with a
+            # "please grant write access" final message but the
+            # downstream pipeline saw empty candidates. Sub-agents
+            # already run inside the GEODE sandbox (denied_tools set +
+            # working_dirs whitelist + isolated subprocess), so the
+            # skip-permissions surface is sound.
+            skip_permissions=True,
         )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"

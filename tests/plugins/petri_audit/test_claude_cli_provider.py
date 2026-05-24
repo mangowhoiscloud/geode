@@ -201,6 +201,64 @@ def test_argv_extra_args_appended() -> None:
     assert argv[-2:] == ["--reasoning-effort", "high"]
 
 
+def test_argv_skip_permissions_default_false() -> None:
+    """PR-SKIP-PERMS (2026-05-24) — default-off so legacy
+    inspect_ai / petri_audit interactive paths keep their permission
+    prompts. AgenticLoop adapter explicitly opts in via True."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(binary="/x/claude", model_name="claude-opus-4-7")
+    assert "--allow-dangerously-skip-permissions" not in argv
+
+
+def test_argv_skip_permissions_true_appends_flag() -> None:
+    """PR-SKIP-PERMS — explicit True appends the flag so headless
+    sub-agent subprocesses don't hang on interactive permission
+    prompts (v0.99.53 smoke regression: Write tool denials clipped
+    every generator candidate)."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        skip_permissions=True,
+    )
+    assert "--allow-dangerously-skip-permissions" in argv
+
+
+def test_argv_skip_permissions_order_after_tools_block() -> None:
+    """The flag lands AFTER the optional ``--tools "" `` block (set
+    by ``disable_builtin_tools=True``) so the argv shape stays
+    deterministic for the CSA-2 MCP bridge path."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        disable_builtin_tools=True,
+        skip_permissions=True,
+    )
+    tools_idx = argv.index("--tools")
+    skip_idx = argv.index("--allow-dangerously-skip-permissions")
+    assert tools_idx < skip_idx
+
+
+def test_argv_skip_permissions_composes_with_extra_args() -> None:
+    """``extra_args`` still appends LAST so operator overrides /
+    test injection points stay at the tail of the argv even when
+    skip_permissions is on."""
+    from plugins.petri_audit.claude_cli_provider import build_claude_cli_argv
+
+    argv = build_claude_cli_argv(
+        binary="/x/claude",
+        model_name="claude-opus-4-7",
+        skip_permissions=True,
+        extra_args=["--reasoning-effort", "high"],
+    )
+    assert argv[-2:] == ["--reasoning-effort", "high"]
+    assert "--allow-dangerously-skip-permissions" in argv[:-2]
+
+
 # ---------------------------------------------------------------------------
 # Message serialiser
 # ---------------------------------------------------------------------------
