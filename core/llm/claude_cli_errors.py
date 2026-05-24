@@ -100,11 +100,15 @@ TransientClass = Literal["burst", "quota", "auth", "deterministic", "unknown"]
 # signals. See sibling regex at
 # ``plugins/petri_audit/claude_cli_provider.py`` for the full
 # rationale.
+# PR-TRANSIENT-WORD-BOUNDARIES (2026-05-25) — single-word
+# alternatives anchor on ``\b``. See sibling regex at
+# ``plugins/petri_audit/claude_cli_provider.py`` for the full
+# smoke 8 pilot evidence.
 _TRANSIENT_UPSTREAM_RE = re.compile(
     r"(?:rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))|too\s+many\s+requests"
-    r"|overloaded(?:_error)?|server\s+overloaded|service\s+unavailable"
+    r"|overloaded(?:_error)?\b|server\s+overloaded|service\s+unavailable"
     r"|high\s+demand|try\s+again\s+later|temporarily\s+unavailable"
-    r"|throttl(?:ed|ing)|throttlingexception|servicequotaexceededexception"
+    r"|throttl(?:ed|ing)\b|throttlingexception\b|servicequotaexceededexception\b"
     r"|out\s+of\s+extra\s+usage|extra\s+usage\b|claude\s+usage\s+limit\s+reached"
     r"|5[-\s]?hour\s+limit\s+reached|weekly\s+limit\s+reached"
     r"|usage\s+limit\s+reached|usage\s+cap\s+reached)",
