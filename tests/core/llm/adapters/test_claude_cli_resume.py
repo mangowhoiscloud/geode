@@ -176,6 +176,113 @@ def test_v4_persist_empty_session_id_is_noop() -> None:
         assert _load_prior_session_id(task_id) == "sess-original-789"
 
 
+def test_v3_adapter_round_trip_threads_resume_and_emits_session_id() -> None:
+    """V.3 — request.resume_session_id → ``--resume`` argv → claude-cli
+    emits system.init session_id → result.session_id. Codex MCP review
+    of #1588 flagged this round-trip was implemented but not directly
+    tested."""
+    import asyncio
+    from unittest.mock import patch
+
+    from core.llm.adapters.base import AdapterCallRequest
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+
+    adapter = ClaudeCliAdapter()
+    # claude-cli stdout: system.init carries session_id + assistant + result
+    stdout = (
+        json.dumps({"type": "system", "subtype": "init", "session_id": "emitted-session-789"})
+        + "\n"
+        + json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        )
+        + "\n"
+        + json.dumps({"type": "result", "stop_reason": "end_turn", "result": "hi"})
+        + "\n"
+    )
+    captured_argv: list[str] = []
+
+    async def _fake_subprocess(
+        argv: list[str], stdin_text: str, timeout_s: float
+    ) -> tuple[str, str, int]:
+        captured_argv.extend(argv)
+        return (stdout, "", 0)
+
+    def _passthrough_lane(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        # Sync function returning an async context manager — matches
+        # the actual ``acquire_claude_cli_lane_async`` shape (it's a
+        # sync helper that returns the CM, not itself an awaitable).
+        class _Ctx:
+            async def __aenter__(self):  # type: ignore[no-untyped-def]
+                return None
+
+            async def __aexit__(self, *_exc):  # type: ignore[no-untyped-def]
+                return None
+
+        return _Ctx()
+
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value="/fake/claude",
+        ),
+        patch(
+            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            _fake_subprocess,
+        ),
+        patch(
+            "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+            _passthrough_lane,
+        ),
+    ):
+        req = AdapterCallRequest(
+            model="claude-opus-4-7", messages=(), resume_session_id="prior-sess-xyz"
+        )
+        result = asyncio.run(adapter.acomplete(req))
+    # argv must carry --resume <prior-sess-xyz>
+    assert "--resume" in captured_argv
+    assert captured_argv[captured_argv.index("--resume") + 1] == "prior-sess-xyz"
+    # result must carry the new session_id from system.init
+    assert result.session_id == "emitted-session-789"
+
+
+def test_v3_subprocess_stdin_skips_system_prompt_when_resuming() -> None:
+    """paperclip ``execute.ts:694-698`` parity (Codex MCP fix of #1588):
+    when resuming a session the system prompt is in the backend cache
+    — re-injecting via stdin wastes 5-10K tokens per turn. This is the
+    actual mechanism by which PR-V's CHANGELOG-claimed quota savings
+    materialise. First-turn callers (empty resume_session_id) must
+    still send the prompt so claude-cli caches it for next turn."""
+    from core.llm.adapters._subprocess_common import build_subprocess_stdin
+    from core.llm.adapters.base import AdapterCallRequest, Message
+
+    system_prompt = "You are a Petri seed generator. Output JSON only."
+    user_msg = Message(role="user", content="Generate seed for X")
+
+    # First turn — system prompt MUST be in stdin (cache priming).
+    req_first = AdapterCallRequest(
+        model="claude-opus-4-7",
+        messages=[user_msg],
+        system_prompt=system_prompt,
+        resume_session_id="",
+    )
+    stdin_first = build_subprocess_stdin(req_first)
+    assert "[SYSTEM]" in stdin_first
+    assert system_prompt in stdin_first
+
+    # Resume turn — system prompt MUST NOT be re-sent (cache hit).
+    req_resume = AdapterCallRequest(
+        model="claude-opus-4-7",
+        messages=[user_msg],
+        system_prompt=system_prompt,
+        resume_session_id="prior-sess-xyz",
+    )
+    stdin_resume = build_subprocess_stdin(req_resume)
+    assert "[SYSTEM]" not in stdin_resume
+    assert system_prompt not in stdin_resume
+    # User turn must still be present (only system is skipped).
+    assert "Generate seed for X" in stdin_resume
+
+
 def test_v4_load_prior_session_id_returns_empty_when_file_missing() -> None:
     """First turn of a fresh sub-agent — no session.json yet.
     Must return empty so the adapter falls back to fresh session."""
