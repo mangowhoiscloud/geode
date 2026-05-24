@@ -47,6 +47,38 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-COMM-1 — HookEvent → ActivityRow schema + union channel.**
+  Spec doc at `docs/plans/2026-05-24-hookevent-activity-schema.md`
+  (S2 scope: 32 lifecycle typed + 42 generic fall-through).
+  3-codebase audit GAP 1 + 4 (P1). Pre-PR-COMM-1 the pipeline transcript
+  carried 4 SessionTranscript mirrors + orchestrator phase events; the
+  remaining 70 HookEvent triggers were invisible in the unified timeline.
+  - `core/observability/activity.py` (NEW) — paperclip
+    `PluginEvent<TPayload>` envelope + openclaw `discriminatedUnion`
+    pattern: `ActivityRowBase` + 11 group base classes + 32 lifecycle
+    concrete classes (groups A/B/C/D) + `GenericActivityRow` escape
+    hatch + `TypedActivityRow` discriminator on `action`.
+  - `core/observability/activity_registry.py` (NEW) —
+    `HOOK_EVENT_TO_ROW_BUILDER` (32 typed) +
+    `map_hook_to_activity(event, data, run_id)` (typed dispatch +
+    generic fall-through for 42 non-lifecycle events).
+  - `core/hooks/system.py` — new `_mirror_hook_to_active_transcript`
+    helper called at the end of both `trigger()` and `trigger_async()`.
+    No-op outside an active `RunTranscript` scope (REPL / gateway /
+    tests unaffected). Swallow-and-warn contract (paperclip
+    `activity-log.ts:65` parity) so a mirror failure never breaks the
+    upstream caller.
+  - 17 new tests pin I1-I5 (envelope quintuple + concrete literals +
+    discriminated dispatch + generic fall-through + 74/74 cover) and
+    M1-M3 (union channel mirror + no-op outside scope + malformed
+    payload still emits row).
+  - Frontier alignment: paperclip `as const` 33 event tuple
+    (`packages/shared/src/constants.ts:1029`), paperclip `PluginEvent`
+    generic envelope (`packages/plugins/sdk/src/types.ts:180`),
+    openclaw `NormalizedEventSchema = z.discriminatedUnion("type", [...])`
+    (`extensions/voice-call/src/types.ts:90`).
+
 ## [0.99.51] - 2026-05-24
 
 > PR-T + PR-Q + PR-Q.5/U 3-PR bundle. PR-T (#1582): claude-cli transient
