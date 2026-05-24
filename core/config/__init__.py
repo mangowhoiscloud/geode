@@ -235,6 +235,11 @@ def reload_settings_from_disk() -> None:
             new_value = getattr(fresh, field_name)
             object.__setattr__(current, field_name, new_value)
     _apply_toml_overlay(current)
+    log.info(
+        "reload_settings_from_disk applied: model=%r (pid=%d)",
+        getattr(current, "model", "?"),
+        os.getpid(),
+    )
 
 
 def __getattr__(name: str) -> Any:
