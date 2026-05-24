@@ -26,10 +26,41 @@ def _resolve_provider(model: str) -> str:
 
 def _resolve_agentic_adapter(provider: str):  # type: ignore[no-untyped-def]
     """Late-bound lookup so ``monkeypatch.setattr("core.agent.loop.resolve_agentic_adapter", ...)``
-    reaches this module's call sites."""
+    reaches this module's call sites.
+
+    PR-MAINPATH-1 (2026-05-24) flipped ``AgenticLoop.__init__`` to
+    populate the Path-B ``_new_adapter`` by default. PR-MAINPATH-4
+    (2026-05-24) extends the same routing to ``_apply_model_update``
+    so a runtime ``/model`` switch updates *both* the legacy adapter
+    surface (``loop._adapter``) and the Path-B adapter
+    (``loop._new_adapter``). Without that, ``/model`` between providers
+    would leave the agentic loop calling the previous provider's
+    Path-B adapter on the next round.
+    """
     from core.agent import loop as _loop_pkg
 
     return _loop_pkg.resolve_agentic_adapter(provider)
+
+
+def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-untyped-def]
+    """Path-B counterpart of :func:`_resolve_agentic_adapter`.
+
+    PR-MAINPATH-4 (2026-05-24) — mirrors the
+    ``AgenticLoop.__init__``-side normalisation introduced in
+    PR-MAINPATH-1's fix-up commit (``openai-codex`` → ``openai``
+    because the Path-B registry uses a narrower provider vocabulary,
+    with the Codex source encoded on the ``source`` axis as
+    ``subscription``). Hard-fail contract preserved per Codex MCP
+    2026-05-23 HIGH 2 — ``resolve_for`` raises when the registered
+    ``(provider, source)`` pair is missing rather than silently
+    falling back to the legacy adapter.
+    """
+    from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+
+    if source not in CONCRETE_SOURCES:
+        return None
+    registry_provider = "openai" if provider == "openai-codex" else provider
+    return resolve_for(registry_provider, source)
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:
@@ -128,6 +159,15 @@ def _apply_model_update(
     if new_provider != loop._provider:
         loop._provider = new_provider
         loop._adapter = _resolve_agentic_adapter(new_provider)
+        # PR-MAINPATH-4 (2026-05-24) — re-resolve the Path-B adapter
+        # alongside the legacy one. Without this, ``/model`` between
+        # providers would leave ``loop._new_adapter`` pointing at the
+        # previous provider's adapter and the next ``_call_llm`` would
+        # dispatch to the wrong API. ``loop._source`` was set at init
+        # (defaults to ``"payg"``) and stays constant across the
+        # switch — operators don't expect ``/model`` to also flip the
+        # source axis.
+        loop._new_adapter = _resolve_path_b_adapter(new_provider, loop._source)
     loop.model = model
     loop._tool_processor._model = model
     if old_model != model:
