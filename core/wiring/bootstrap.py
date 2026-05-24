@@ -172,19 +172,59 @@ def build_hooks(
     # missing event simply never reached the run log).
     hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
 
-    # PR-COMM-3 (2026-05-24) — the ``agent_runtime_state`` schema +
-    # writer module are landed in this PR; the bootstrap hook
-    # registration that calls those writers is deferred to PR-COMM-3b.
-    # Reason (Codex MCP review catch): the current emit payloads for
-    # SESSION_ENDED (``_lifecycle.py:_final_hook_payloads``),
-    # SUBAGENT_COMPLETED (``sub_agent.py:_emit_completed``), and
-    # LLM_CALL_ENDED (``router/calls/*.py``) do NOT carry the
+    # PR-COMM-3b (2026-05-24) — wire the SQLite ``agent_runtime_state``
+    # writers landed by PR-COMM-3 into the now-augmented SESSION_ENDED
+    # and SUBAGENT_COMPLETED payloads (this PR added the required
     # ``agent_kind`` / ``component`` / ``adapter_type`` /
-    # ``claude_cli_session_id`` / ``usage`` / ``session_id`` fields the
-    # writers need. Wiring handlers now would silently no-op in
-    # production — violating Read-Write parity. PR-COMM-3b will
-    # augment those emit sites and then register the handlers, keeping
-    # both ends of the wire grep-provable in the same diff.
+    # ``claude_cli_session_id`` / ``status`` fields at the emit sites).
+    # The ``LLM_CALL_ENDED`` cumulative-tokens handler is deferred to a
+    # follow-up because AgenticLoop's main path does NOT yet emit
+    # LLM_CALL_ENDED — that's a separate emit-augmentation PR
+    # (router/calls/* fires it only for one-off LLM calls).
+    def _reg_agent_runtime_state() -> None:
+        from core.observability.agent_runtime_state import (
+            record_agent_session_end,
+            record_subagent_completed,
+        )
+
+        def _on_session_ended(_event: HookEvent, data: dict[str, Any]) -> None:
+            agent_id = str(data.get("session_id") or data.get("agent_id") or "")
+            if not agent_id:
+                return
+            record_agent_session_end(
+                agent_id=agent_id,
+                agent_kind=str(data.get("agent_kind", "repl")),
+                component=str(data.get("component", "agentic_loop")),
+                adapter_type=str(data.get("adapter_type", "")),
+                claude_cli_session_id=str(data.get("claude_cli_session_id", "")),
+            )
+
+        def _on_subagent_completed(_event: HookEvent, data: dict[str, Any]) -> None:
+            agent_id = str(data.get("task_id") or data.get("agent_id") or "")
+            if not agent_id:
+                return
+            record_subagent_completed(
+                agent_id=agent_id,
+                component=str(data.get("component", "agentic_loop")),
+                last_run_id=str(data.get("run_id", "")),
+                last_run_status=str(data.get("status", "completed")),
+                last_error=str(data.get("error", "")),
+            )
+
+        hooks.register(
+            HookEvent.SESSION_ENDED,
+            _on_session_ended,
+            name="agent_runtime_session_end",
+            priority=55,
+        )
+        hooks.register(
+            HookEvent.SUBAGENT_COMPLETED,
+            _on_subagent_completed,
+            name="agent_runtime_subagent_completed",
+            priority=55,
+        )
+
+    _register_plugin("agent_runtime_state", _reg_agent_runtime_state)
 
     # Stuck detector + hook handler
     stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)

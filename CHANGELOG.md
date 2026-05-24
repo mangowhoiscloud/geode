@@ -48,6 +48,38 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-COMM-3b** — wires the PR-COMM-3 SQLite `agent_runtime_state`
+  writers into the running AgenticLoop. Three coupled changes:
+  - `core/agent/loop/_lifecycle.py:_final_hook_payloads` enriches the
+    `SESSION_ENDED` payload with `agent_kind` (derived from
+    `_parent_session_id` — `"subagent"` when set, `"repl"` otherwise),
+    `component` (from `current_run_transcript().component`, fallback
+    `"agentic_loop"`), `adapter_type` (from `_new_adapter.name`), and
+    `claude_cli_session_id` (cached on the loop by the PR-V
+    `_persist_session_id` helper — new `_last_emitted_session_id`
+    field on `AgenticLoop`).
+  - `core/agent/sub_agent.py:_emit_hook` adds `component` (same
+    derivation) and `status` (`"completed"` / `"failed"` from
+    `sub_result.success`) to every SUBAGENT_* trigger.
+  - `core/wiring/bootstrap.py` registers two HookSystem handlers
+    under the `agent_runtime_state` plugin name:
+    `agent_runtime_session_end` → `record_agent_session_end` on
+    SESSION_ENDED, `agent_runtime_subagent_completed` →
+    `record_subagent_completed` on SUBAGENT_COMPLETED. Handlers no-op
+    on missing `session_id` / `task_id` keys (defensive).
+  - **LLM_CALL_ENDED cumulative tokens deferred to PR-COMM-3d**:
+    AgenticLoop's main `_call_llm` path does not yet emit
+    LLM_CALL_ENDED (only `router/calls/*.py` one-off calls do), so
+    the `accumulate_tokens_and_cost` writer remains unwired.
+  - **Production SUBAGENT_FAILED fix**: pre-PR the failure call site
+    `sub_agent.py:407` passed only `error=` — Codex MCP catch — so
+    the writer's `last_run_status` column was never stamped "failed"
+    on production failures. Now passes `sub_result=` alongside.
+  - Pinned by `tests/test_agent_runtime_state_wiring.py` (13 cases —
+    SESSION_ENDED enrichment × 6 across REPL / sub-agent / bare-loop
+    paths, SUBAGENT_STARTED/COMPLETED/FAILED enrichment × 3,
+    bootstrap handler wiring × 4 end-to-end).
+
 - **PR-COMM-3** — per-agent cumulative runtime state in SQLite.
   Adds `agent_runtime_state` (14 cols) + `run_lineage` (9 cols) tables
   to `sessions.db` (audit doc §4 Option A — co-located with `sessions`

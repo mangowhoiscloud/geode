@@ -282,6 +282,13 @@ class AgenticLoop:
         _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
         registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
         self._new_adapter: Any = resolve_for(registry_provider, self._source)
+        # PR-COMM-3b (2026-05-24) — cache the latest claude-cli sessionId
+        # the adapter emitted so the SESSION_ENDED hook payload can carry
+        # it through to the agent_runtime_state SQLite writer (registered
+        # in this PR). Non-claude-cli adapters leave this empty; the
+        # writer's CASE-WHEN guard then preserves whatever prior value
+        # the row carries.
+        self._last_emitted_session_id: str = ""
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
@@ -2137,7 +2144,13 @@ class AgenticLoop:
             # turn of THIS sub-agent (or the same sub-agent in the next
             # cycle) can resume. Non-claude-cli adapters return empty
             # session_id; the persistence helper is a no-op there.
-            _persist_session_id(self._session_id, getattr(result, "session_id", ""))
+            emitted_sid = getattr(result, "session_id", "")
+            _persist_session_id(self._session_id, emitted_sid)
+            # PR-COMM-3b — cache for SESSION_ENDED payload (the
+            # ``_final_hook_payloads`` reader walks ``loop._last_emitted_session_id``
+            # to populate ``claude_cli_session_id`` on the SQLite write).
+            if emitted_sid:
+                self._last_emitted_session_id = emitted_sid
 
         if response is None:
             adapter_err = getattr(self._new_adapter, "_last_error", None)

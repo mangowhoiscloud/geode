@@ -143,7 +143,32 @@ def _final_hook_payloads(
     result: AgenticResult,
     user_input: str,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Build final lifecycle hook payloads once for sync and async callers."""
+    """Build final lifecycle hook payloads once for sync and async callers.
+
+    PR-COMM-3b (2026-05-24) enriches SESSION_ENDED with four columns the
+    SQLite ``agent_runtime_state`` writer needs: ``agent_kind`` (process
+    origin), ``component`` (GEODE subsystem), ``adapter_type`` (adapter
+    name), and ``claude_cli_session_id`` (the resumable session captured
+    by the loop's PR-V persistence helper). Falls back to safe defaults
+    when the loop is bare (REPL without orchestrator, tests).
+    """
+    agent_kind = "subagent" if getattr(loop, "_parent_session_id", "") else "repl"
+    component = "agentic_loop"
+    try:
+        from core.self_improving_loop.run_transcript import current_run_transcript
+
+        run_transcript = current_run_transcript()
+        if run_transcript is not None:
+            component = run_transcript.component
+    except Exception:
+        # RunTranscript module is optional in tests / REPL — falls back to the
+        # default already assigned above.
+        component = "agentic_loop"
+    adapter_type = ""
+    new_adapter = getattr(loop, "_new_adapter", None)
+    if new_adapter is not None:
+        adapter_type = str(getattr(new_adapter, "name", ""))
+
     session_ended = {
         "model": loop.model,
         "provider": loop._provider,
@@ -152,6 +177,11 @@ def _final_hook_payloads(
         "rounds": result.rounds,
         "tool_count": len(result.tool_calls),
         "error": result.error,
+        # PR-COMM-3b additions for the agent_runtime_state writer:
+        "agent_kind": agent_kind,
+        "component": component,
+        "adapter_type": adapter_type,
+        "claude_cli_session_id": getattr(loop, "_last_emitted_session_id", ""),
     }
     turn_completed = {
         "user_input": user_input,
