@@ -235,18 +235,30 @@ class TransientSignal:
 # reading. If a real signal is later found to lack a phrase, add a
 # more specific alternative (e.g. ``API returned 429``) rather than
 # re-introducing a bare digit run.
+# PR-TRANSIENT-WORD-BOUNDARIES (2026-05-25) — single-word alternatives
+# now anchor on ``\b`` so they don't match inside identifiers like
+# ``CODEX_CLI_LANE_THROTTLED_MSG`` (a constant in
+# ``core/orchestration/codex_cli_lane.py``). v0.99.53 smoke 8 pilot
+# sub-agent surfaced this: the LLM was reading or quoting a Python
+# stack-trace fragment containing that constant name, and
+# ``throttl(?:ed|ing)`` matched ``THROTTLED`` inside it (case-
+# insensitive). Real signals like "request was throttled" /
+# "Throttling exception thrown" still match because the next char
+# is space / punctuation. ``overloaded(?:_error)?`` /
+# ``throttlingexception`` / ``servicequotaexceededexception`` get
+# the same ``\b`` treatment for parallel safety.
 CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
     r"(?:rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))"
     r"|too\s+many\s+requests"
-    r"|overloaded(?:_error)?"
+    r"|overloaded(?:_error)?\b"
     r"|server\s+overloaded"
     r"|service\s+unavailable"
     r"|high\s+demand"
     r"|try\s+again\s+later"
     r"|temporarily\s+unavailable"
-    r"|throttl(?:ed|ing)"
-    r"|throttlingexception"
-    r"|servicequotaexceededexception"
+    r"|throttl(?:ed|ing)\b"
+    r"|throttlingexception\b"
+    r"|servicequotaexceededexception\b"
     r"|out\s+of\s+extra\s+usage"
     r"|extra\s+usage\b"
     r"|claude\s+usage\s+limit\s+reached"
