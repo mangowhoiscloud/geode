@@ -864,13 +864,24 @@ def _is_expected_tool_use_boundary(events: list[StreamJsonEvent]) -> bool:
 
 
 async def _run_claude_subprocess(
-    argv: list[str], stdin_text: str, timeout_s: float
+    argv: list[str],
+    stdin_text: str,
+    timeout_s: float,
+    *,
+    cwd: str | None = None,
 ) -> tuple[str, str, int]:
     """Spawn ``claude`` subprocess, pipe stdin, capture stdout+stderr.
 
     Returns ``(stdout, stderr, returncode)``. Raises
     :class:`ClaudeCliInvocationError` on timeout or process spawn
     failure (NOT on non-zero returncode — caller decides).
+
+    ``cwd`` — PR-RESUME-NO-PERSIST-FIX (2026-05-25). When set, the
+    subprocess runs in that directory so claude-cli's cwd-keyed
+    session cache (``~/.claude/projects/<cwd-hash>/sessions/``) lives
+    in a per-task pool. ``None`` (default) inherits the caller's cwd
+    — used by inspect_ai audit lane + one-shot diagnostic callers
+    that don't go through the sub-agent worker.
     """
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -878,6 +889,7 @@ async def _run_claude_subprocess(
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
         )
     except (FileNotFoundError, OSError) as exc:
         raise ClaudeCliInvocationError(f"failed to spawn `claude`: {exc!r}") from exc

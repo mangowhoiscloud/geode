@@ -300,3 +300,135 @@ def test_adapter_transient_writes_postmortem_dump(tmp_path) -> None:  # type: ig
             assert len(data["events"]) == 1
             assert data["events"][0]["type"] == "result"
             assert data["events"][0]["payload"]["error"] == error_message
+
+
+# ────────────────────────── PR-RESUME-NO-PERSIST-FIX (B2) ─────────────────────
+# Smoke 10 surfaced --no-session-persistence ↔ --resume conflict:
+# pre-fix the adapter unconditionally appended --no-session-persistence
+# which broke PR-V's turn-N→turn-N+1 resume path. The B2 fix replaces
+# the blunt flag with per-task cwd isolation. These tests pin both
+# sides of the contract.
+
+
+def test_adapter_argv_no_longer_contains_no_session_persistence() -> None:
+    """PR-RESUME-NO-PERSIST-FIX — the adapter must NOT inject
+    --no-session-persistence into argv. Cross-sub-agent leak is
+    prevented by per-task cwd isolation instead (see
+    ``test_adapter_passes_task_isolated_cwd_to_subprocess``)."""
+    import contextlib
+
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+
+    captured_argv: list[str] = []
+
+    async def _fake_subprocess(argv: list[str], stdin: str, **kwargs: Any) -> tuple[str, str, int]:
+        captured_argv.extend(argv)
+        # rc=0 + no events → adapter raises ClaudeCliInvocationError;
+        # argv is already captured so suppressing is fine.
+        return ("", "", 0)
+
+    adapter = ClaudeCliAdapter()
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value="/fake/claude",
+        ),
+        patch(
+            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            _fake_subprocess,
+        ),
+        patch(
+            "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+            _passthrough_lane,
+        ),
+        contextlib.suppress(ClaudeCliInvocationError),
+    ):
+        asyncio.run(adapter.acomplete(_build_request()))
+
+    assert captured_argv, "expected _run_claude_subprocess to be called"
+    assert "--no-session-persistence" not in captured_argv
+
+
+def test_adapter_passes_task_isolated_cwd_to_subprocess() -> None:
+    """PR-RESUME-NO-PERSIST-FIX — when the ContextVar is set, the
+    adapter forwards the value as the subprocess cwd= kwarg. This is
+    the only mechanism by which the per-task cache-pool isolation
+    propagates from worker startup down to claude-cli."""
+    import contextlib
+
+    from core.agent.task_isolation import set_task_isolated_cwd
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+
+    captured_kwargs: dict[str, Any] = {}
+
+    async def _fake_subprocess(
+        argv: list[str], stdin: str, *args: Any, **kwargs: Any
+    ) -> tuple[str, str, int]:
+        captured_kwargs.update(kwargs)
+        return ("", "", 0)
+
+    adapter = ClaudeCliAdapter()
+    set_task_isolated_cwd("/tmp/per-task-cwd-test")  # noqa: S108 — string probe, not a real dir
+    try:
+        with (
+            patch(
+                "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+                return_value="/fake/claude",
+            ),
+            patch(
+                "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+                _fake_subprocess,
+            ),
+            patch(
+                "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+                _passthrough_lane,
+            ),
+            contextlib.suppress(ClaudeCliInvocationError),
+        ):
+            asyncio.run(adapter.acomplete(_build_request()))
+    finally:
+        set_task_isolated_cwd(None)
+
+    assert captured_kwargs.get("cwd") == "/tmp/per-task-cwd-test"  # noqa: S108
+
+
+def test_adapter_passes_none_cwd_when_context_var_unset() -> None:
+    """Direct-call path (inspect_ai audit lane, one-shot diagnostic) —
+    no sub-agent worker bound the ContextVar, so cwd= should be None
+    and the subprocess inherits the caller's cwd."""
+    import contextlib
+
+    from core.agent.task_isolation import set_task_isolated_cwd
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+    from plugins.petri_audit.claude_cli_provider import ClaudeCliInvocationError
+
+    captured_kwargs: dict[str, Any] = {}
+
+    async def _fake_subprocess(
+        argv: list[str], stdin: str, *args: Any, **kwargs: Any
+    ) -> tuple[str, str, int]:
+        captured_kwargs.update(kwargs)
+        return ("", "", 0)
+
+    set_task_isolated_cwd(None)  # explicit clear for determinism
+    adapter = ClaudeCliAdapter()
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value="/fake/claude",
+        ),
+        patch(
+            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            _fake_subprocess,
+        ),
+        patch(
+            "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+            _passthrough_lane,
+        ),
+        contextlib.suppress(ClaudeCliInvocationError),
+    ):
+        asyncio.run(adapter.acomplete(_build_request()))
+
+    assert captured_kwargs.get("cwd") is None

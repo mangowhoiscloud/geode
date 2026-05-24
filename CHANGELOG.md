@@ -48,6 +48,46 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-RESUME-NO-PERSIST-FIX (B2)** — sub-agent claude-cli adapter no
+  longer passes `--no-session-persistence`. Smoke 10 (v0.99.53,
+  post-PR-TRANSIENT-* chain) surfaced a regression: generator
+  `gen-gen1-000-c885bc29` + evolver `evolve-gen1-001-c252e5eb` both
+  failed after 5 retries with `claude-cli subprocess exited rc=1:
+  No conversation found with session ID <uuid>`. Root cause —
+  PR-PERMS-FLAG-FIX B (`--no-session-persistence`) was incompatible
+  with PR-V (`--resume <session_id>`) when both fired in the same
+  sub-agent's turn N+1: turn N could not save (persistence
+  disabled) so turn N+1's resume target did not exist. Replacement
+  is per-task cwd isolation via new `core/agent/task_isolation.py`:
+  the sub-agent worker binds `<run_dir>/sub_agents/<task_id>/cwd/`
+  to a ContextVar at startup (`_run_agentic` in
+  `core/agent/worker.py`); the claude-cli adapter
+  (`core/llm/adapters/claude_cli.py`) reads the ContextVar and
+  forwards as `cwd=` to `_run_claude_subprocess`
+  (`plugins/petri_audit/claude_cli_provider.py`); the subprocess
+  runs with that cwd, so claude-cli's session cache
+  (`~/.claude/projects/<cwd-hash>/sessions/`) is unique per task_id.
+  Cross-sub-agent leak prevented (each task_id has its own pool)
+  AND within-task continuity works (turn N+1 sees the same cwd as
+  turn N, so `--resume <id>` finds the session). Direct callers
+  outside sub-agent dispatch (inspect_ai audit lane, one-shot
+  diagnostic) get ContextVar=None → subprocess inherits caller cwd
+  (back-compat). Pinned by 19 new regression tests across 4 files:
+  `tests/core/agent/test_task_isolation.py` (5 tests — ContextVar
+  set/get/None/asyncio-isolation),
+  `tests/core/agent/test_worker_task_isolation_binding.py` (3
+  tests — worker mirrors the bind sequence, mkdir + ContextVar +
+  per-task disjoint cwds),
+  `tests/plugins/petri_audit/test_run_claude_subprocess_cwd.py` (2
+  tests — `cwd=` forwarded to `asyncio.create_subprocess_exec`,
+  default None preserved),
+  `tests/core/llm/adapters/test_claude_cli_adapter.py` (3 tests —
+  argv no longer carries `--no-session-persistence`, adapter
+  forwards ContextVar value, unset ContextVar = `cwd=None`).
+  Existing `build_claude_cli_argv` flag tests unchanged — the
+  function-level opt-in is retained for explicit callers that
+  need it.
+
 - **PR-TRANSIENT-WORD-BOUNDARIES** — single-word alternatives in the
   claude-cli transient classifier regex now anchor on `\b`. Smoke 8
   (v0.99.53, post-PR-TRANSIENT-BARE-HTTP-CODES) pilot sub-agent
