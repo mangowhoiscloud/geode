@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-T — claude-cli transient classifier observability 보강.** Pre-PR-T
+  `is_claude_transient_upstream_error` 는 ``bool`` 만 반환했고
+  `ClaudeCliTransientUpstreamError` 는 ``stderr_tail`` 만 메시지에
+  넣었음. claude-cli 가 stderr 에 안 쓰니 항상 ``<empty>`` —
+  진단 가치 0 (5-hour quota vs RPM cap vs backend 5xx vs OAuth slot
+  cap 식별 불가). 변경:
+  - 새 `classify_transient_signal(...) -> TransientSignal | None` 이
+    matched substring + source (``stdout`` / ``stderr`` / ``event``) +
+    event_type + event_field 의 structured dataclass 반환. 기존
+    `is_claude_transient_upstream_error` 는 backwards-compat
+    ``bool`` wrapper 로 유지.
+  - `ClaudeCliTransientUpstreamError` 에 ``signal: TransientSignal |
+    None`` + ``dump_path: str | None`` structured field 추가. 메시지에
+    ``source=`` / ``matched=`` / ``dump=`` 인라인 노출 → log 한 줄로
+    즉시 triage.
+  - `ClaudeCliAdapter.acomplete` 가 transient hit 시 full
+    ``(stdout, stderr, parsed events, classifier signal, rc)`` 를
+    ``~/.geode/diagnostics/claude-cli-transient/<ts>-<model>.json`` 에
+    dump. classification 이후 버리던 raw 데이터 영구화 → 사후 분석으로
+    claude-cli 가 ``result`` event 에 실은 실제 upstream message 회수.
+  - 11개 신규 테스트 + 변수 alias 정리
+    (`stream_events` / `transient_signal` / `postmortem_path` /
+    `assistant_text` / `hit_ts` — feedback_no_naive_variable_names).
+
 ## [0.99.50] - 2026-05-24
 
 > Two-PR bundle. PR-HELPERS-3SPLIT (#1578) splits the deferred-from-v0.99.48
