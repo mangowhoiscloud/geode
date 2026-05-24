@@ -47,6 +47,45 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-MAINPATH-1 — AgenticLoop main-path Path-B default cutover.**
+  Step 1 of the multi-PR sprint that retires the legacy
+  ``AgenticLLMPort`` surface. ``AgenticLoop.__init__`` 's ``source``
+  parameter now defaults to ``"payg"`` (matching the J-b.2 mutator
+  runner and J-b.3 reflection node) instead of the empty string
+  that previously landed every caller on the legacy
+  ``resolve_agentic_adapter`` route; sub-agent workers continue to
+  override via :attr:`WorkerRequest.source`. With a concrete source
+  always present, ``self._new_adapter`` is resolved through
+  :func:`core.llm.adapters.registry.resolve_for` at init time —
+  ``AgenticLoop._call_llm`` 's pre-existing
+  ``if self._new_adapter is not None:`` branch (the Path-B
+  ``acomplete`` + ``_legacy_bridge`` translation path) becomes the
+  de-facto default; the legacy ``self._adapter.agentic_call``
+  fall-through stays as the safety branch for ``_new_adapter is None``
+  and continues to feed ``getattr(self._adapter, "last_error", None)``
+  into the agentic UI's error surface.
+  Hard-fail contract preserved per Codex MCP 2026-05-23 HIGH 2 — the
+  registry's ``AdapterNotFoundError`` propagates if the
+  ``(provider, source)`` pair is unregistered rather than silently
+  routing through the legacy adapter.
+  Tests: ``tests/core/agent/test_agent_loop_source_route.py``
+  ``test_empty_source_leaves_new_adapter_none`` flipped to
+  ``test_empty_source_defaults_to_payg_after_mainpath_cutover``
+  with the new contract pinned (``_new_adapter.name ==
+  "anthropic-payg"``, ``_source == "payg"``).
+  ``tests/test_model_failover.py::test_call_llm_uses_adapter``
+  forces ``_new_adapter = None`` before mocking the legacy adapter
+  so the legacy-delegation invariant it pins keeps running on the
+  fallback branch.
+  ``tests/conftest.py`` gains an autouse
+  ``_bootstrap_adapter_registry`` fixture that calls
+  :func:`bootstrap_builtins` before each test — production runtime
+  already calls this from ``core/wiring/container.py`` at startup,
+  but the test harness used to construct ``AgenticLoop`` without it,
+  which now raises ``AdapterNotFoundError`` for the cutover default.
+
 ## [0.99.48] - 2026-05-24
 
 > Cleanup-arc release — 7 PRs (PR-DOCS-CANT-CAN + PR-CLEANUP-3

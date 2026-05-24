@@ -177,14 +177,42 @@ class AgenticLoop:
         # concrete source with a missing adapter HARD-FAILS in
         # :func:`resolve_for` — silent fallback would mask operator
         # misconfiguration (Codex MCP 2026-05-23 HIGH 2).
-        self._source = source
+        # PR-MAINPATH-1 (2026-05-24) — Path-B default cutover. The
+        # ``source=""`` default previously landed on the legacy
+        # ``resolve_agentic_adapter`` branch; only sub-agent workers
+        # (``WorkerRequest.source``) explicitly opted into the Path-B
+        # route via ``resolve_for``. Step 1 of the AgenticLoop main-path
+        # migration makes Path-B the resolver default ("payg" matches
+        # the J-b.2 mutator runner + J-b.3 reflection node, so all three
+        # main callers now share one registry surface).
+        # The hard-fail contract from the Codex MCP 2026-05-23 HIGH 2
+        # review ("no silent fallback") is preserved — if the requested
+        # ``(provider, source)`` isn't in the registry, ``resolve_for``
+        # raises and the loop refuses to start rather than silently
+        # routing through the legacy adapter. The legacy ``self._adapter``
+        # stays initialised because ``getattr(self._adapter, "last_error", None)``
+        # at lines 1372 / 2013 still feeds the agentic UI's error
+        # surface; subsequent main-path PRs delete it once the error
+        # surface migrates.
+        self._source = source or "payg"
         self._new_adapter: Any | None = None
-        if source:
-            from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+        from core.llm.adapters import CONCRETE_SOURCES, resolve_for
 
-            if source in CONCRETE_SOURCES:
-                # Hard-fail on resolve mismatch — concrete source MUST resolve.
-                self._new_adapter = resolve_for(self._provider, source)
+        if self._source in CONCRETE_SOURCES:
+            # Hard-fail on resolve mismatch — concrete source MUST resolve.
+            # The Path-B registry uses a narrower provider vocabulary
+            # than ``_resolve_provider``: gpt-5.x models map to
+            # ``openai-codex`` in the legacy AgenticLLMPort path but
+            # collapse to ``openai`` in the registry (the Codex source is
+            # encoded on the ``source`` axis as ``subscription``).
+            # Same shape as :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
+            # and :func:`core.agent.loop._reflection._normalize_provider_for_registry`;
+            # this third copy stays inline rather than hoisted because
+            # the helper is 4 lines and PR-MAINPATH-4 (the
+            # ``_model_switching`` migration) will fold all three into
+            # one helper at that stage.
+            registry_provider = "openai" if self._provider == "openai-codex" else self._provider
+            self._new_adapter = resolve_for(registry_provider, self._source)
         self._adapter = resolve_agentic_adapter(self._provider)
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
