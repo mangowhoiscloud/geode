@@ -279,6 +279,24 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
 
+    # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — bind a per-task isolated
+    # working directory so claude-cli's cwd-keyed session cache
+    # (``~/.claude/projects/<cwd-hash>/sessions/``) is unique per
+    # ``task_id``. This replaces the blunt ``--no-session-persistence``
+    # flag from PR-PERMS-FLAG-FIX B (which disabled ALL persistence and
+    # broke PR-V's intra-task ``--resume`` path). Cross-sub-agent leak
+    # via cwd-cache auto-pickup is now prevented because each task_id
+    # has its own cache pool; within-task continuity still works
+    # because turn N+1 sees the same cwd as turn N.
+    if request.run_dir and request.task_id:
+        from pathlib import Path
+
+        from core.agent.task_isolation import set_task_isolated_cwd
+
+        task_cwd_path = Path(request.run_dir) / "sub_agents" / request.task_id / "cwd"
+        task_cwd_path.mkdir(parents=True, exist_ok=True)
+        set_task_isolated_cwd(task_cwd_path)
+
     # 1. Build tool handlers (same factory as CLI)
     from core.cli.tool_handlers import _build_tool_handlers
 

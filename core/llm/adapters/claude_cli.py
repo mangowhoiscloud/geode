@@ -122,17 +122,21 @@ class ClaudeCliAdapter:
             # working_dirs whitelist + isolated subprocess), so the
             # skip-permissions surface is sound.
             skip_permissions=True,
-            # PR-PERMS-FLAG-FIX (2026-05-25) — claude-cli's own
-            # session cache is keyed on cwd, NOT GEODE's task_id, so
-            # successive smoke runs in the same cwd leaked their
-            # cached conversation context across spawns. Strict
-            # per-spawn isolation > PR-V's cross-turn cached-marker
-            # optimization for the sub-agent dispatch model (each
-            # task_id spawns once and exits). PR-V's `--resume <id>`
-            # path still works for callers that explicitly thread a
-            # ``resume_session_id`` (none do at sub-agent dispatch
-            # today; preserved for future explicit-id callers).
-            disable_session_persistence=True,
+            # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — pre-fix the
+            # adapter passed ``disable_session_persistence=True`` to
+            # block cross-sub-agent cwd-cache leak. But that broke
+            # PR-V's intra-task ``--resume`` path: claude-cli was
+            # told "don't save" on turn N then "resume <id>" on turn
+            # N+1 → "No conversation found with session ID <uuid>".
+            # The v0.99.53 smoke 10 surfaced this as generator
+            # gen-gen1-000 + evolver evolve-gen1-001 both failing
+            # after 5 retries. Replacement: per-task cwd isolation
+            # via :mod:`core.agent.task_isolation` (see ``cwd=``
+            # below) — the sub-agent worker binds
+            # ``<run_dir>/sub_agents/<task_id>/cwd/`` at startup,
+            # claude-cli's cwd-keyed session cache is unique per
+            # task, AND within-task continuity works because turn
+            # N+1 sees the same cwd as turn N.
             # PR-PERMS-FLAG-FIX (2026-05-25, JSON-forcing bundle) —
             # thread ``req.response_schema`` through to claude-cli's
             # ``--json-schema`` flag so callers that need a validated
@@ -145,6 +149,14 @@ class ClaudeCliAdapter:
         )
         stdin_text = build_subprocess_stdin(req)
         lane_key = f"claude-cli:{req.model}"
+        # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — read per-task cwd
+        # bound by the sub-agent worker at startup. ``None`` for
+        # direct callers outside sub-agent dispatch (inspect_ai
+        # audit lane, one-shot diagnostic) — subprocess inherits
+        # caller cwd just as it did pre-fix.
+        from core.agent.task_isolation import get_task_isolated_cwd
+
+        subprocess_cwd = get_task_isolated_cwd()
         try:
             async with acquire_claude_cli_lane_async(lane_key):
                 # GEODE policy: 30-minute time-cap. Matches the
@@ -153,7 +165,7 @@ class ClaudeCliAdapter:
                 # trip together rather than producing a 1200s window
                 # where the parent gives up before the subprocess does.
                 stdout, stderr, rc = await _run_claude_subprocess(
-                    argv, stdin_text, timeout_s=1800.0
+                    argv, stdin_text, timeout_s=1800.0, cwd=subprocess_cwd
                 )
         except ClaudeCliInvocationError as exc:
             self._last_error = exc
