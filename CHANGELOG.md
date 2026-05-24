@@ -47,6 +47,25 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.49] - 2026-05-24
+
+> AgenticLoop main-path Path-B migration sprint — 4 PRs that retire
+> the legacy ``AgenticLLMPort`` Protocol entirely. PR-MAINPATH-1
+> (#1572) flipped ``AgenticLoop.__init__`` to resolve ``_new_adapter``
+> via the Path-B registry by default with a hard-fail contract;
+> PR-MAINPATH-234 (#1573) bundled the runtime ``/model`` switch
+> migration with verification-only steps for streaming + tool_use_id
+> round-trip; PR-MAINPATH-5 (#1574) removed ``CircuitBreaker``
+> entirely (-386 LOC; per operator instruction in place of the
+> original "verify compatibility" plan); PR-MAINPATH-67 (#1575)
+> deleted ``core/llm/adapters/_legacy.py`` + ``_legacy_bridge.py``
+> (-599 LOC), migrating still-needed symbols to three new
+> domain-named modules (``paperclip.py`` / ``provider_inference.py``
+> / ``translation.py``). Resolves deferred-item #4 from the
+> v0.99.48 sprint summary. AgenticLoop is now Path-B-only — the
+> ``self._adapter`` field and the ``agentic_call`` fallback branch
+> are gone.
+
 ### Removed
 
 - **PR-MAINPATH-67 — final delete of the legacy `AgenticLLMPort` surface.**
