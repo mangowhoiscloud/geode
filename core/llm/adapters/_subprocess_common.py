@@ -21,7 +21,16 @@ def build_subprocess_stdin(req: AdapterCallRequest) -> str:
     output).
     """
     parts: list[str] = []
-    if req.system_prompt:
+    # PR-V (2026-05-24, Codex MCP review of #1588) — paperclip
+    # ``execute.ts:694-698`` parity. When resuming a prior claude-cli
+    # session the system prompt is already in the backend's session
+    # cache; re-injecting it via stdin wastes 5-10K tokens per turn
+    # (the exact saving PR-V's CHANGELOG claims). Skip the [SYSTEM]
+    # block when ``resume_session_id`` is set so the quota cache hit
+    # actually materialises. First-turn callers (empty
+    # ``resume_session_id``) keep the legacy behaviour — the prompt
+    # must be sent so claude-cli can cache it for the next turn.
+    if req.system_prompt and not req.resume_session_id:
         parts.append("[SYSTEM]")
         parts.append(req.system_prompt)
         parts.append("")
