@@ -76,10 +76,24 @@ functional change.
     transcript 가 phase events + agent dialogue 통합 timeline 으로 동작.
     풀 본문은 dialogue.jsonl 에 유지 (paperclip activity_log ↔
     issue_comments 동등 navigation).
-  - 6 새 invariant 테스트 (``tests/core/observability/test_unified_timeline.py``
-    I1-I4) — single-anchor / single-dir / navigation 결정성 / backwards-compat
-    네 가지를 pin. 기존 ``test_run_transcript.py`` 회귀 schema-additive
-    fix 1건 (orchestrator default auto-infer 노출).
+  - 8 새 invariant 테스트 (``tests/core/observability/test_unified_timeline.py``
+    I1-I6) — single-anchor / single-dir / navigation 결정성 / backwards-compat
+    + I5 (subprocess RunTranscript rebind via env) + I6 (cli.py grep-pin).
+    기존 ``test_run_transcript.py`` 회귀 schema-additive fix 1건
+    (orchestrator default auto-infer 노출).
+  - **Codex MCP review** (post-#1584 push) caught two production gaps
+    initial tests masked: (FAIL-1) ContextVars don't cross subprocess
+    boundaries → SessionTranscript mirror was silently no-op in worker
+    subprocesses (production path); (FAIL-2) ``plugins/seed_generation/
+    cli.py`` opened ``run_transcript_scope`` but NOT ``run_dir_scope``,
+    so PR-Q's redirect path silently fell back to legacy
+    ``~/.geode/`` globals. Both fixed in the same PR:
+    - ``cli.py:351`` now wraps in ``with run_dir_scope(run_dir),
+      run_transcript_scope(journal):`` — env-bridge propagates.
+    - ``worker.py:main()`` re-creates a thin ``RunTranscript`` pointing
+      at the same ``<run_dir>/transcript.jsonl`` and binds
+      ``set_current_run_transcript`` so cross-process mirror appends
+      atomically (line < PIPE_BUF on macOS/Linux).
   - paperclip parity: ``packages/db/src/schema/activity_log.ts`` 의 12-field
     schema 매핑, ``packages/adapters/claude-local/src/server/parse.ts`` 의
     session_id 추출 패턴은 PR2 (V) 에서 이어짐.

@@ -412,6 +412,38 @@ def main() -> None:
     inherited_run_dir = os.environ.get(RUN_DIR_ENV, "")
     if inherited_run_dir:
         set_active_run_dir(inherited_run_dir)
+        # PR-U (2026-05-24, Codex MCP catch of #1584) — ContextVars do
+        # NOT cross subprocess boundaries. The parent's
+        # ``run_transcript_scope(journal)`` binding is invisible here, so
+        # ``SessionTranscript._mirror_to_run_transcript`` would silently
+        # no-op for every worker-side agent event. Re-create a thin
+        # ``RunTranscript`` instance that points at the SAME
+        # ``<run_dir>/transcript.jsonl`` the parent's RunTranscript
+        # writes to, and bind it to this subprocess's ContextVar so the
+        # mirror path actually appends. JSONL row size (≤ 800 bytes) is
+        # well under PIPE_BUF (4 KiB on macOS/Linux), so cross-process
+        # append-to-same-file is line-atomic. ``session_id`` /
+        # ``gen_tag`` / ``component`` on this child-side instance are
+        # cosmetic — the actual row classification comes from the
+        # mirror's explicit ``actor_type="agent"`` / ``action=...``
+        # kwargs which override the orchestrator defaults.
+        from pathlib import Path
+
+        from core.self_improving_loop.run_transcript import (
+            RunTranscript,
+            set_current_run_transcript,
+        )
+
+        run_dir_path = Path(inherited_run_dir)
+        worker_run_transcript = RunTranscript(
+            session_id=run_dir_path.name,
+            gen_tag="",
+            component="seed-generation",
+            path=run_dir_path / "transcript.jsonl",
+        )
+        # No need to capture the reset token — subprocess process exits
+        # at the bottom of main(); the OS reclaims the ContextVar.
+        set_current_run_transcript(worker_run_transcript)
 
     result: WorkerResult | None = None
     try:

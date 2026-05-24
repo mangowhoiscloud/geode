@@ -20,6 +20,7 @@ section 2.2 — drift here means the doc's spec and the code diverged.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -205,6 +206,90 @@ def test_i4_legacy_run_transcript_append_still_works() -> None:
             assert "payload" in row
         assert rows[0]["action"] == "pipeline.phase_started"
         assert rows[1]["action"] == "pipeline.preflight_passed"
+
+
+def test_i5_worker_subprocess_rebinds_run_transcript_from_env() -> None:
+    """Codex MCP review of #1584 caught that ContextVars don't cross
+    subprocess boundaries — the parent's ``run_transcript_scope`` is
+    invisible to worker subprocesses, so SessionTranscript mirrors
+    would silently no-op in production. Worker.main() must re-create a
+    ``RunTranscript`` pointing at the same ``transcript.jsonl`` when
+    ``GEODE_RUN_DIR`` env is set. This test asserts that bridge."""
+    import subprocess
+    import sys
+
+    from core.observability.run_dir import RUN_DIR_ENV
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Worker subprocess script: simulates what worker.main() does at
+        # entry — read env, set ContextVar + RunTranscript, then call
+        # SessionTranscript.record_user_message to trigger the mirror.
+        worker_script = (
+            "import os, sys; "
+            "from core.observability.run_dir import RUN_DIR_ENV, set_active_run_dir; "
+            "from core.self_improving_loop.run_transcript import RunTranscript, set_current_run_transcript; "
+            "from core.observability.transcript import SessionTranscript; "
+            "from pathlib import Path; "
+            "inherited = os.environ.get(RUN_DIR_ENV, ''); "
+            "set_active_run_dir(inherited); "
+            "rd = Path(inherited); "
+            "rt = RunTranscript(session_id=rd.name, gen_tag='', component='seed-generation', "
+            "                   path=rd / 'transcript.jsonl'); "
+            "set_current_run_transcript(rt); "
+            "tx = SessionTranscript('gen-task-001'); "
+            "tx.record_user_message('hello from worker subprocess'); "
+            "sys.exit(0)"
+        )
+        env = {**os.environ, RUN_DIR_ENV: tmp}
+        result = subprocess.run(  # noqa: S603 — sys.executable + fixed -c, no shell, no user input
+            [sys.executable, "-c", worker_script],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert result.returncode == 0, f"worker subprocess failed: stderr={result.stderr!r}"
+
+        # The mirror MUST have appended to the same transcript.jsonl the
+        # parent would write to. Pre-Codex-catch this assertion failed
+        # silently because the mirror's ContextVar lookup returned None.
+        transcript_path = Path(tmp) / "transcript.jsonl"
+        assert transcript_path.exists(), (
+            "worker did not rebind RunTranscript — mirror is broken across process boundary"
+        )
+        rows = [
+            json.loads(line) for line in transcript_path.read_text().splitlines() if line.strip()
+        ]
+        agent_rows = [r for r in rows if r.get("actor_type") == "agent"]
+        assert len(agent_rows) == 1
+        assert agent_rows[0]["action"] == "agent.user_message"
+        assert agent_rows[0]["task_id"] == "gen-task-001"
+
+        # Sub-agent dialogue.jsonl ALSO landed in run_dir/sub_agents/<task_id>/
+        dialogue_path = Path(tmp) / "sub_agents" / "gen-task-001" / "dialogue.jsonl"
+        assert dialogue_path.exists()
+
+
+def test_i6_seed_generation_cli_opens_run_dir_scope() -> None:
+    """Codex MCP review of #1584 caught that
+    ``plugins/seed_generation/cli.py:run_audit_seeds`` was computing
+    ``run_dir`` but never opening ``run_dir_scope`` on it — so
+    ``IsolatedRunner._aexecute_subprocess`` saw ``get_active_run_dir()
+    == None`` and never forwarded ``GEODE_RUN_DIR`` to the child. The
+    fix wraps the orchestrator body in both ``run_dir_scope`` and
+    ``run_transcript_scope``. This test grep-pins that wrapping so the
+    binding doesn't silently drop in a future refactor."""
+    cli_source = Path(__file__).resolve().parents[3] / "plugins" / "seed_generation" / "cli.py"
+    source = cli_source.read_text(encoding="utf-8")
+    # Both scopes must appear, and run_dir_scope must wrap the
+    # run_transcript_scope (same `with` line or earlier).
+    assert "from core.observability.run_dir import run_dir_scope" in source
+    assert "with run_dir_scope(run_dir), run_transcript_scope(journal):" in source, (
+        "cli.py must wrap the orchestrator body in both scopes — pre-Codex-catch "
+        "only run_transcript_scope was opened and PR-Q's redirect path silently "
+        "fell back to legacy ~/.geode/ globals."
+    )
 
 
 def test_i4_mirror_no_op_outside_run_transcript_scope() -> None:
