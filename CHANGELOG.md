@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.53] - 2026-05-24
+
+> Drift / fallback / model-spec / settings-sync bundle. PR-DRIFT-CUT
+> (#1598) cut the per-turn auto-revert that silently reverted operator
+> ``/model`` selections + the cross-provider fallback chains that
+> cascaded a single 400 into z.ai 200, and grounded OpenAI / Codex /
+> GLM adapter quirks (``max_completion_tokens`` / temperature /
+> 128-tool cap) in an explicit per-model registry. PR-R6 (#1599)
+> closed the CLI ↔ daemon ``settings.model`` drift with a
+> Hermes-style ``reload_settings_from_disk()`` boundary read at
+> ``services.create_session`` + bridged ``settings.agentic_effort``
+> into the ``AgenticLoop`` constructor so the operator's picker
+> choice propagates end-to-end. 2 PRs, 6+ regression categories
+> closed.
+
 ### Fixed (PR-R6, 2026-05-24)
 
 - **CLI ↔ daemon `settings.model` drift closed via Hermes-style boundary
