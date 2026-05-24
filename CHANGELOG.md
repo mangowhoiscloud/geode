@@ -48,6 +48,36 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-TRANSIENT-BARE-HTTP-CODES** — claude-cli transient classifier
+  regex drops the bare numeric alternatives `\b429\b` / `\b503\b` /
+  `\b529\b` (two sibling sites: `plugins/petri_audit/
+  claude_cli_provider.py:CLAUDE_TRANSIENT_UPSTREAM_RE` +
+  `core/llm/claude_cli_errors.py:_TRANSIENT_UPSTREAM_RE`).
+  v0.99.53 smoke 7 pilot phase surfaced a fresh false-positive:
+  claude-cli completed cleanly (rc=0, subtype=success,
+  terminal_reason=completed, $0.21 cost), but stdout serialised
+  the LLM's narrative containing a Python source-code comment
+  `# POST /v1/messages (auditor + judge + target × 10) → instant
+  429`. The bare `\b429\b` alternative matched the literal digit
+  run and the adapter raised `ClaudeCliTransientUpstreamError`
+  against an otherwise-successful execution. Real rate-limit
+  signals always carry a phrase (`rate_limit_error`, `too many
+  requests`, `service unavailable`, `server overloaded`,
+  `throttled`, …) — the named alternatives left in place still
+  catch those without matching arbitrary HTTP-status digit runs
+  the LLM may quote from documentation or source code it is
+  reading. Pinned by 6 new regression tests in
+  `tests/plugins/petri_audit/test_claude_cli_transient_classifier.py`:
+  `test_bare_429_in_source_code_comment_does_not_match` (the
+  literal smoke 7 stdout excerpt),
+  `test_bare_503_in_code_does_not_match`,
+  `test_bare_529_in_code_does_not_match`,
+  `test_real_rate_limit_signal_still_matches_after_bare_removal`,
+  `test_overloaded_error_still_matches_after_bare_removal`,
+  `test_too_many_requests_phrase_still_matches`. Existing
+  `test_signal_excerpt_bounded_to_200_chars` updated to use a
+  phrase-form signal instead of the now-removed bare-`429`.
+
 - **PR-SUB-AGENT-CODEBLOCK-STRIP** — `SubAgentManager._to_sub_result`
   / `_to_agent_result` (`core/agent/sub_agent.py`) now strip
   ```` ```json ... ``` ```` markdown code fences before

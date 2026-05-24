@@ -337,7 +337,11 @@ def test_signal_excerpt_bounded_to_200_chars() -> None:
     from plugins.petri_audit.claude_cli_provider import classify_transient_signal
 
     long_pad = "x" * 500
-    stdout = f"{long_pad} 429 {long_pad}"
+    # PR-TRANSIENT-BARE-HTTP-CODES — was "429" (bare digit run); that
+    # alternative is no longer in the regex. Use a phrase-form
+    # signal that still matches — the test only cares about the
+    # excerpt-length bound, not which alternative fires.
+    stdout = f"{long_pad} too many requests {long_pad}"
     signal = classify_transient_signal(stdout=stdout, stderr="")
     assert signal is not None
     assert len(signal.matched_text) <= 200
@@ -368,3 +372,85 @@ def test_transient_exception_default_signal_none_for_backwards_compat() -> None:
     exc = ClaudeCliTransientUpstreamError("legacy")
     assert exc.signal is None
     assert exc.dump_path is None
+
+
+# ────────────────────────── PR-TRANSIENT-BARE-HTTP-CODES ──────────────────────
+# Smoke 7 (v0.99.53) pilot phase surfaced a fresh false-positive in
+# the bare ``\b429\b`` / ``\b503\b`` / ``\b529\b`` alternatives —
+# claude-cli completed successfully but its stdout serialised the
+# LLM's narrative that quoted a Python source-code comment with the
+# digit run ``# instant 429``. Dropping the bare digits removes the
+# whole class of false-positives. Real signals always carry a
+# phrase (named alternatives below still match them).
+
+
+def test_bare_429_in_source_code_comment_does_not_match() -> None:
+    """Smoke 7 pilot regression — the literal stdout substring that
+    misfired previously. Bare digit alone must not classify as a
+    transient signal."""
+    from plugins.petri_audit.claude_cli_provider import (
+        CLAUDE_TRANSIENT_UPSTREAM_RE,
+        classify_transient_signal,
+    )
+
+    pilot_stdout_excerpt = (
+        "current\n252\t # POST /v1/messages (auditor + judge + target × 10) → "
+        "instant 429\n253\t # storm → 769s retry-after backoff → 17-min timeout "
+        "with 0 samples.\n"
+    )
+    # Direct regex search — no match.
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search(pilot_stdout_excerpt) is None
+    # Classifier helper — None means "no signal, ok to ship as success".
+    assert classify_transient_signal(stdout=pilot_stdout_excerpt, stderr="") is None
+
+
+def test_bare_503_in_code_does_not_match() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    payload = "if response.status == 503:  # service unavailable on upstream"
+    # The named phrase 'service unavailable' WILL match — verify the
+    # bare 503 alone (without the phrase) does not.
+    bare_only = "if response.status == 503:  # upstream gave us this code"
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search(bare_only) is None
+    # And confirm the phrase form (which is what real signals carry)
+    # still matches.
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search(payload) is not None
+
+
+def test_bare_529_in_code_does_not_match() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("retry_codes = {429, 503, 529}") is None
+
+
+def test_real_rate_limit_signal_still_matches_after_bare_removal() -> None:
+    """Regression — the canonical Anthropic-API rate-limit signal
+    must still classify. The named ``rate_limit_error`` alternative
+    catches this even without the bare ``\\b429\\b`` fallback."""
+    from plugins.petri_audit.claude_cli_provider import (
+        is_claude_transient_upstream_error,
+    )
+
+    assert is_claude_transient_upstream_error(
+        stdout="",
+        stderr="Anthropic API returned 429 rate_limit_error\n",
+    )
+
+
+def test_overloaded_error_still_matches_after_bare_removal() -> None:
+    from plugins.petri_audit.claude_cli_provider import (
+        is_claude_transient_upstream_error,
+    )
+
+    assert is_claude_transient_upstream_error(
+        stdout="overloaded_error from upstream",
+        stderr="",
+    )
+
+
+def test_too_many_requests_phrase_still_matches() -> None:
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    # The HTTP 429 status text is the phrase-form equivalent of the
+    # bare-digit alternative we removed — must still match.
+    assert CLAUDE_TRANSIENT_UPSTREAM_RE.search("HTTP 429 Too Many Requests") is not None

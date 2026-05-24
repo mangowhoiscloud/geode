@@ -215,29 +215,32 @@ class TransientSignal:
 # bumped against the OAuth subscription's hourly / weekly quota.
 # Matching is case-insensitive over the union of stdout, stderr, and
 # the parsed ``result`` event's free-text fields.
-# PR-PRT-STATUS (2026-05-25) — the first alternative was previously
-# ``rate[-\s]?limit(?:ed)?`` with ``IGNORECASE``: the ``?`` made the
-# separator optional, so a camelCase token like ``rateLimitType``
-# (which appears inside claude-cli's INFORMATIONAL
-# ``rate_limit_event`` payload — ``status="allowed"``) was matched
-# as if it were a rejection signal. The v0.99.53 smoke surfaced this:
-# every generator candidate produced a 12-turn successful claude-cli
-# run (rc=0 + ``is_error=false`` + ``subtype="success"``) writing
-# the seed markdown, but the classifier still flagged the stdout's
-# embedded ``rateLimitType`` and the adapter raised
-# ``ClaudeCliTransientUpstreamError`` — empty candidates downstream.
-# The new ``[-_\s]`` (no ``?``) requires an actual separator, so
-# ``rateLimit`` no longer matches while real "rate limited" / "rate
-# limit error" / "rate-limit" / "rate_limit" messages still do.
+# PR-PRT-STATUS (2026-05-25) — tightened the rate-limit alternative
+# so claude-cli's informational ``rate_limit_event`` (status=allowed)
+# no longer false-matched.
+# PR-TRANSIENT-BARE-HTTP-CODES (2026-05-25) — dropped the bare
+# numeric alternatives ``\b429\b`` / ``\b503\b`` / ``\b529\b``. The
+# v0.99.53 smoke 7 pilot phase surfaced a fresh false-positive:
+# claude-cli completed successfully (rc=0, subtype=success,
+# terminal_reason=completed, $0.21 cost), but its stdout serialised
+# the LLM's narrative containing a Python source-code comment
+# ``# POST /v1/messages (auditor + judge + target × 10) → instant
+# 429`` — the bare ``\b429\b`` matched that literal digit run and
+# the classifier raised ``ClaudeCliTransientUpstreamError`` against
+# an otherwise-clean execution. Real rate-limit signals always carry
+# a phrase (``rate_limit_error``, ``too many requests``, ``service
+# unavailable``, ``server overloaded``, …) — the named alternatives
+# below cover those without matching arbitrary HTTP-status digit
+# runs the LLM may quote from documentation or source code it is
+# reading. If a real signal is later found to lack a phrase, add a
+# more specific alternative (e.g. ``API returned 429``) rather than
+# re-introducing a bare digit run.
 CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
     r"(?:rate[-_\s]limit(?:ed\b|_error\b|(?![_a-zA-Z]))"
     r"|too\s+many\s+requests"
-    r"|\b429\b"
     r"|overloaded(?:_error)?"
     r"|server\s+overloaded"
     r"|service\s+unavailable"
-    r"|\b503\b"
-    r"|\b529\b"
     r"|high\s+demand"
     r"|try\s+again\s+later"
     r"|temporarily\s+unavailable"
