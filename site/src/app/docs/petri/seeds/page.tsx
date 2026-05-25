@@ -177,8 +177,11 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
       <summary className="cursor-pointer px-4 py-3 hover:bg-white/[0.03] select-none">
         <code className="text-[#A573E8]">{run.run_id}</code>
         <span className="ml-3 text-white/50 text-sm">{headerKo}</span>
+        {/* GitHub Pages does not serve directory listings, so we link a
+            concrete served file (state.json) inside the per-run directory
+            instead of `<run_id>/`. PR-SEEDS-PER-RUN-LINK (2026-05-25). */}
         <a
-          href={`${RAW_BUNDLE_URL}${run.run_id}/`}
+          href={`${RAW_BUNDLE_URL}${run.run_id}/state.json`}
           className="ml-3 text-white/40 text-xs hover:text-[#A573E8]"
         >
           [{rawLinkLabel} ↗]
@@ -359,8 +362,9 @@ export default function Page() {
               을 읽어 dashboard 로 렌더링합니다.
             </p>
             <p>
-              raw 파일을 직접 보려면 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> 의 정적 viewer 또는 per-run
-              디렉토리를 사용. inspect_ai <code>.eval</code> 아카이브 viewer 는 <a href="/petri-bundle/">/geode/petri-bundle/</a> 에 별도.
+              raw 파일을 직접 보려면 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> 의 정적 viewer 또는
+              per-run <code>state.json</code> / <code>survivors.json</code> 파일 (디렉토리 listing 은 Pages 에서 제공 X).
+              inspect_ai <code>.eval</code> 아카이브 viewer 는 <a href="/petri-bundle/">/geode/petri-bundle/</a> 에 별도.
             </p>
 
             <h2>전체 Run</h2>
@@ -391,8 +395,9 @@ export default function Page() {
               at build time and renders them as a dashboard.
             </p>
             <p>
-              For raw files use the static viewer at <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> or browse the
-              per-run directory. The inspect_ai <code>.eval</code> archive viewer lives separately at <a href="/petri-bundle/">/geode/petri-bundle/</a>.
+              For raw files use the static viewer at <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> or open
+              per-run <code>state.json</code> / <code>survivors.json</code> directly (Pages does not serve directory listings).
+              The inspect_ai <code>.eval</code> archive viewer lives separately at <a href="/petri-bundle/">/geode/petri-bundle/</a>.
             </p>
 
             <h2>All runs</h2>

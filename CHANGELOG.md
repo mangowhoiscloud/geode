@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.57] - 2026-05-25
+
+Patch release bundling PR-11 anchor-confidence multiplier wiring + PR-SEEDS-PER-RUN-LINK (Pages directory-listing 404 fix on the seed listing).
+
 ### Added
 - **PR-11 P3.1 anchor confidence multiplier wiring** — `autoresearch/train.py
   compute_fitness` now accepts `anchor_means` + `anchor_confidence_mode`
@@ -67,6 +71,18 @@ functional change.
   promotion decision compares fitness on the same scale as the
   caller-side logged fitness (Codex MCP review fix; previously
   half-wired: caller multiplied, promote compared raw).
+
+### Fixed
+- **PR-SEEDS-PER-RUN-LINK** — seed listing `[raw 번들 ↗]` link
+  per row pointed at the run's directory (`/petri-bundle/seeds/
+  <run_id>/`). GitHub Pages does not serve directory listings,
+  so it returned HTTP 404 on click. The link now targets the
+  run's served `state.json` instead (`/petri-bundle/seeds/
+  <run_id>/state.json`). Prose mentions on the same page (KO +
+  EN) were updated to point at the concrete files
+  (`state.json` / `survivors.json`) instead of "per-run 디렉토리"
+  / "per-run directory" since the directory itself is not
+  reachable.
 
 ## [0.99.56] - 2026-05-25
 
