@@ -48,6 +48,8 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-23 A.2 Tchebycheff scalarization helper** —
+  `core/self_improving_loop/tchebycheff.py` adds `compute_tchebycheff(fitness_dim, weights, ideal_point)` and `compute_ideal_point(vectors)` pure helpers. Linear scalarization (`f_total = sum(w*r)`) cannot reach concave Pareto-front regions (Das & Dennis 1997); Tchebycheff (`-max_d w_d * (ideal[d] - fitness[d])`) closes that gap by penalizing the worst dim relative to the ideal point. Pareto-front advantage invariant test pins the canonical 3-point concave example (extreme points tie under linear, B beats both under Tchebycheff). Caller wiring into `apply_group_proposals` 의 pareto_mode 분기 is deferred — PR-15 의 lineage writer 와 짝지을 다음 PR 가 필요.
 - **PR-22 B.4 F1 cross-run SoT 3중첩 invariants** —
   `tests/core/self_improving_loop/test_cross_run_sot_invariant.py` pins the
   schema parity invariants between the three cross-run SoTs that the
