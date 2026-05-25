@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-16 C.4 credit_assignment module** —
+  `core/self_improving_loop/credit_assignment.py` adds two pure
+  functions for selection-layer observability:
+  `compute_credit_assignment(mutation, group_advantage)` partitions a
+  single mutation's `group_advantage` across its `expected_dim` keys
+  by magnitude-weighted share (`credit[d] = group_advantage *
+  |expected_dim[d]| / sum(|expected_dim|)`), and
+  `aggregate_credit_history(records)` sums these contributions across
+  an iterable of `ApplyRecord` rows (e.g. PR-12
+  `read_recent_applies` output) for a per-dim cumulative credit
+  ranking. Records with `group_advantage=None` (legacy single-mutation
+  mode) or empty `expected_dim` are skipped silently. Sign convention:
+  credit magnitude tracks `group_advantage` sign; intent direction
+  stays encoded in the original `expected_dim` sign. Frontier:
+  Quality-Diversity behavior-characterization mapping + DAPO/GRPO
+  advantage decomposition.
+
 ## [0.99.58] - 2026-05-25
 
 Bundles PR-SG-SELECTION-ALIGN + PR-12/13/14 from develop (mutations_reader + meta_judge + propose_swarm wiring). seed-gen now surfaces the same selection-layer signals (anchor 3 / scenario_realism / tier model / Pareto front / target_dims_attribution) that autoresearch fitness reads.
