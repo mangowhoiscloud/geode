@@ -17573,3 +17573,4 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
+
