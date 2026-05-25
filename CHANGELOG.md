@@ -47,6 +47,39 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-VOTER-PROMPT-ANTI-PHANTOM — inline candidate seed bodies into
+  voter handoff (kill the fake-path Read instruction).** Smoke 18
+  dialogue trace
+  (`.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
+  vote-m000-anthropic.claude-cli/dialogue.jsonl`) caught claude-cli
+  emitting `"I already read both candidate files in the previous turn
+  and can answer from context."` on the FIRST turn (no previous
+  turn exists). Root cause: voter handoff sent a literal
+  `"run_dir/candidates/<cid>.md"` relative-path string and the prompt
+  instructed the model to "Read both candidate seeds". The per-task
+  isolated cwd (PR-RESUME-NO-PERSIST-FIX) meant the model couldn't
+  resolve the fake relative path; the only escape was to hallucinate
+  session continuity. Fix per the open-coscientist `nodes/ranking.py`
+  `debate_pair` pattern: read each candidate seed body once in
+  `Ranker.aexecute` via new `_read_candidate_bodies(state)` helper,
+  thread `candidate_bodies` dict through `_play_match` →
+  `_build_voter_tasks` → `_build_description`. `VOTE_HANDOFF` schema
+  (`handoff_schemas.py`) `candidate_a/b.path` → `body` (required).
+  Prompt rewritten: removed "Read both candidate seeds"; added
+  explicit "DO NOT call any Read tool, DO NOT claim to have read
+  them in a previous turn (this is the first and only turn of your
+  session)". Codex MCP cross-LLM review caught the empty-body
+  failure mode (read error silently emitted `""` while prompt
+  asserted "Both seed bodies are fully present") + the stale
+  docstring; folded in-band — unreadable paths now emit
+  `_CANDIDATE_BODY_UNAVAILABLE` sentinel
+  (`[CANDIDATE_BODY_UNAVAILABLE: path=... error=...]`) that
+  instructs the voter to emit `winner: "tie"`, and the prompt
+  explicitly handles the sentinel. Pinned by extended
+  `test_ranker_voter_handoff_matches_schema`: asserts body inlined,
+  anti-phantom prose present, `run_dir/candidates/` literal absent.
+
 ### Changed
 - **PR-STRICT-COMPATIBLE-SCHEMAS — convert 5 seed-gen schemas to
   OpenAI strict-mode (Codex `text.format` constraint).** Pre-fix all

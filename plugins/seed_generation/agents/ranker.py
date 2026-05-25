@@ -74,6 +74,21 @@ _TASK_TYPE = "seed-ranker-vote"
 _REQUIRED_VOTE_FIELDS = ("match_id", "winner", "rationale")
 _VALID_WINNER_LABELS = frozenset({"A", "B", "tie"})
 
+# PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26, Codex MCP catch) — explicit
+# sentinel body when ``_read_candidate_bodies`` can't open or decode a
+# candidate .md file. Pre-fix the helper emitted ``""`` and the prompt
+# still asserted "Both seed bodies are fully present", so the voter
+# would judge against an invisible mismatch. The sentinel surfaces the
+# gap directly in the dialogue.jsonl trace + lets a future ranker
+# guard escalate to "quorum impossible for this match" rather than
+# dispatching a body-less voter call.
+_CANDIDATE_BODY_UNAVAILABLE = (
+    "[CANDIDATE_BODY_UNAVAILABLE: path={path!r} error={exc!r}]\n"
+    "(The orchestrator could not read this candidate's seed body. "
+    'Treat this match as ambiguous — emit ``winner: "tie"`` and note '
+    "the unavailability in your rationale.)"
+)
+
 
 class Ranker(BaseSeedAgent):
     """Elo tournament orchestrator with 3-voter judge panel.
@@ -147,6 +162,24 @@ class Ranker(BaseSeedAgent):
             means = entry.get("dim_means", {}) if isinstance(entry, dict) else {}
             if isinstance(means, dict):
                 pilot_means[cid] = means
+        # PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — pre-fix the
+        # voter handoff sent a *literal* relative path string
+        # ``"run_dir/candidates/<cid>.md"`` and instructed the model
+        # to "Read both candidate seeds". The model could neither
+        # resolve nor read that fake path, so it hallucinated
+        # session continuity ("I already read both candidate files
+        # in the previous turn and can answer from context") and
+        # exited on turn 1 with empty output (smoke 18
+        # vote-m000-anthropic.claude-cli/dialogue.jsonl). Co-scientist
+        # (open-coscientist/src/open_coscientist/nodes/ranking.py
+        # ``debate_pair`` flow) instead inlines the full hypothesis
+        # body in the user_message — no Read tool needed, no
+        # phantom-continuity confusion. Mirror that pattern: read
+        # each candidate body once here, pass through ``_play_match``
+        # into the handoff. Bounded by ``len(state.candidates) * len(
+        # candidate.md)`` ≈ 15 × 2 KB = 30 KB per Ranker invocation;
+        # well under any LLM context budget.
+        candidate_bodies = self._read_candidate_bodies(state)
 
         ratings = initial_ratings(candidate_ids)
         # CSP-8 (2026-05-22) — Proximity now emits clusters
@@ -165,7 +198,11 @@ class Ranker(BaseSeedAgent):
 
         outcomes: list[MatchOutcome] = []
         for match in match_plan:
-            outcome = await self._play_match(match, pilot_means=pilot_means)
+            outcome = await self._play_match(
+                match,
+                pilot_means=pilot_means,
+                candidate_bodies=candidate_bodies,
+            )
             if outcome is None:
                 continue
             outcomes.append(outcome)
@@ -188,14 +225,64 @@ class Ranker(BaseSeedAgent):
             },
         )
 
+    def _read_candidate_bodies(self, state: PipelineState) -> dict[str, str]:
+        """Read each candidate's seed .md body once, keyed by candidate id.
+
+        PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — replaces the
+        fake-relative-path handoff with inlined seed bodies so the
+        voter sub-agent doesn't need (and can't be tricked into
+        hallucinating) a Read tool call.
+
+        Missing / unreadable paths emit a ``_UNAVAILABLE_SENTINEL``
+        body (not empty string) — Codex MCP catch (2026-05-26):
+        the voter prompt says "Both seed bodies are fully present in
+        the handoff", which would be falsely advertised if the body
+        silently became ``""``. The sentinel makes the gap visible
+        in the dialogue trace + lets a future ranker guard escalate
+        to "quorum impossible" rather than dispatching a
+        body-less voter call.
+
+        Each candidate .md is read at most once per Ranker
+        invocation; for a typical 15-candidate, ~3-5 KB-per-seed run
+        that's ~60 KB of disk I/O before the tournament loop kicks
+        in. Cumulative voter prompt size is bounded per-call (each
+        voter sees exactly two bodies), not aggregated; so the per-
+        call context budget is the constraint, not total disk read.
+        """
+        from pathlib import Path
+
+        bodies: dict[str, str] = {}
+        for candidate in state.candidates:
+            cid = candidate.get("id")
+            path = candidate.get("path")
+            if not cid or not path:
+                continue
+            try:
+                bodies[cid] = Path(path).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                log.warning(
+                    "seed-generation ranker: failed to read candidate %s body "
+                    "from %s — %s; voter will see UNAVAILABLE sentinel",
+                    cid,
+                    path,
+                    exc,
+                )
+                bodies[cid] = _CANDIDATE_BODY_UNAVAILABLE.format(path=path, exc=exc)
+        return bodies
+
     async def _play_match(
         self,
         match: MatchPlan,
         *,
         pilot_means: dict[str, dict[str, Any]] | None = None,
+        candidate_bodies: dict[str, str] | None = None,
     ) -> MatchOutcome | None:
         """Dispatch the 3 voters for one match; return ``None`` on quorum loss."""
-        tasks = self._build_voter_tasks(match, pilot_means=pilot_means or {})
+        tasks = self._build_voter_tasks(
+            match,
+            pilot_means=pilot_means or {},
+            candidate_bodies=candidate_bodies or {},
+        )
         results = await self._manager.adelegate(tasks, announce=False)
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
 
@@ -251,12 +338,15 @@ class Ranker(BaseSeedAgent):
         match: MatchPlan,
         *,
         pilot_means: dict[str, dict[str, Any]],
+        candidate_bodies: dict[str, str],
     ) -> list[SubTask]:
         """One SubTask per voter for one match."""
         from core.agent.sub_agent import SubTask
 
         means_a = pilot_means.get(match.a, {})
         means_b = pilot_means.get(match.b, {})
+        body_a = candidate_bodies.get(match.a, "")
+        body_b = candidate_bodies.get(match.b, "")
         tasks: list[SubTask] = []
         from plugins.seed_generation.agents.base import picker_source_to_adapter_source
 
@@ -270,6 +360,8 @@ class Ranker(BaseSeedAgent):
                         voter=voter,
                         means_a=means_a,
                         means_b=means_b,
+                        body_a=body_a,
+                        body_b=body_b,
                     ),
                     task_type=_TASK_TYPE,
                     args={
@@ -310,24 +402,51 @@ class Ranker(BaseSeedAgent):
         voter: VoterBinding,
         means_a: dict[str, Any],
         means_b: dict[str, Any],
+        body_a: str = "",
+        body_b: str = "",
     ) -> str:
         """Compose the per-voter user message for the sub-agent.
 
-        Includes Pilot dim_means alongside the seed paths so the judge
-        (per ``plugins/seed_generation/agents/ranker.md``) can weigh empirical
-        engagement signal against the seed body. When pilot_scores is
-        missing for a candidate, the corresponding dim_means is empty
-        and the judge falls back to seed body alone.
+        Includes Pilot dim_means alongside the *inlined* seed bodies so
+        the judge (per ``plugins/seed_generation/agents/ranker.md``)
+        can weigh empirical engagement signal against the seed text.
+        When pilot_scores is missing for a candidate, the
+        corresponding dim_means is empty and the judge falls back to
+        seed body alone.
+
+        PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — pre-fix the
+        handoff sent a *literal* ``run_dir/candidates/<cid>.md``
+        relative-path string and instructed the model to "Read both
+        candidate seeds". The model could neither resolve the path
+        (cwd was a per-task isolated dir per PR-RESUME-NO-PERSIST-FIX,
+        not the orchestrator run_dir) nor call Read with that fake
+        path, so it hallucinated session continuity ("I already read
+        both candidate files in the previous turn and can answer
+        from context") and exited turn 1 with empty output. Now the
+        full seed body is inlined per co-scientist
+        (open-coscientist/src/open_coscientist/nodes/ranking.py
+        debate_pair pattern) — no Read tool needed, no
+        phantom-continuity confusion.
         """
         from plugins.seed_generation.handoff_schemas import embed_handoff
 
         prose = (
             f"Judge ONE seed-candidate match for the seed-generation Elo "
             f"tournament. See the HANDOFF CONTEXT block below for match_id, "
-            f"target_dim, and the two candidates' paths + pilot dim_means. "
-            f"You are voter {voter.provider}.{voter.source} ({voter.model!r}). "
-            "Read both candidate seeds, weigh the dim_means signal, apply "
-            "the rubric in your system prompt.\n\n"
+            f"target_dim, the two candidates' inlined seed bodies "
+            f"(``candidate_a.body`` / ``candidate_b.body``), and per-candidate "
+            f"pilot dim_means. You are voter "
+            f"{voter.provider}.{voter.source} ({voter.model!r}). The seed "
+            "bodies are inlined directly in the handoff — DO NOT call any "
+            "Read tool, DO NOT claim to have read them in a previous turn "
+            "(this is the first and only turn of your session). Weigh the "
+            "inlined bodies + dim_means signal and apply the rubric in your "
+            "system prompt.\n\n"
+            "If either candidate's body starts with "
+            "``[CANDIDATE_BODY_UNAVAILABLE:`` the orchestrator failed to "
+            "read it from disk — follow the sentinel's instructions "
+            '(``winner: "tie"`` + note the unavailability in your '
+            "rationale).\n\n"
             "Your FINAL response must be ONLY the JSON object matching the "
             "VOTE_SCHEMA: "
             '`{"match_id": "<id>", "winner": "A"|"B"|"tie", "rationale": "<= 200 tokens"}`. '
@@ -341,12 +460,12 @@ class Ranker(BaseSeedAgent):
             "target_dim": getattr(match, "target_dim", "") or "",
             "candidate_a": {
                 "id": match.a,
-                "path": f"run_dir/candidates/{match.a}.md",
+                "body": body_a,
                 "pilot_means": means_a_clean,
             },
             "candidate_b": {
                 "id": match.b,
-                "path": f"run_dir/candidates/{match.b}.md",
+                "body": body_b,
                 "pilot_means": means_b_clean,
             },
         }

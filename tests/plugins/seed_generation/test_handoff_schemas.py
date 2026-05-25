@@ -181,12 +181,27 @@ class TestRoleHandoffDrift:
             voter=voter,
             means_a={"redundant_tool_invocation": 1.2},
             means_b={"redundant_tool_invocation": 0.9},
+            body_a="# Candidate A seed body\nPretend this is the seed.\n",
+            body_b="# Candidate B seed body\nWith different prose.\n",
         )
         handoff = self._extract_handoff(desc)
         for key in VOTE_HANDOFF["required"]:
             assert key in handoff, f"voter handoff missing required key: {key}"
         assert handoff["candidate_a"]["id"] == "cand-a"
         assert handoff["candidate_b"]["pilot_means"]["redundant_tool_invocation"] == 0.9
+        # PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — inlined body
+        # replaces the literal ``run_dir/candidates/<cid>.md`` path
+        # string. Pin both candidates carry the full body.
+        assert (
+            handoff["candidate_a"]["body"] == "# Candidate A seed body\nPretend this is the seed.\n"
+        )
+        assert handoff["candidate_b"]["body"] == "# Candidate B seed body\nWith different prose.\n"
+        # The prose must NOT instruct the model to call Read, and must
+        # explicitly disclaim phantom prior-turn continuity.
+        assert "DO NOT call any Read tool" in desc
+        assert "first and only turn" in desc
+        # The pre-fix ``run_dir/candidates/`` literal path must be gone.
+        assert "run_dir/candidates/" not in desc
 
 
 # ─────────────────────────── Prompt-md JSON skeleton ──────────────────────────
