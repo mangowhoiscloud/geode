@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-11 P3.1 anchor confidence multiplier wiring** — `autoresearch/train.py
+  compute_fitness` now accepts `anchor_means` + `anchor_confidence_mode`
+  parameters and applies a `[0.7, 1.0]` multiplier to the final fitness
+  scalar across all 4 dim_part return branches (dim-only / 2-axis / 3-axis /
+  4-axis). Multiplier source: `core/self_improving_loop/anchor_confidence.
+  compute_anchor_confidence_multiplier` (added in PR-9, previously dead).
+  Caller (train.py:2102) extracts `ANCHOR_DIMS` subset from `dim_means`
+  (`admirable` / `disappointing` / `needs_attention`, already emitted by
+  `dim_extractor._walk_dim_values` indiscriminate collect) and reads
+  `GEODE_SIL_ANCHOR_CONFIDENCE_MODE=1` env to gate the mode. `runner.py
+  _run_autoresearch_subprocess` forwards the env from `AutoresearchConfig.
+  anchor_confidence_mode`. Critical gate (return 0.0) untouched — strict
+  reject is anchor-independent.
+
 ## [0.99.56] - 2026-05-25
 
 Patch release shipping PR-DETAIL-LINK-FIX so the seeds listing → detail click flow on the live Pages site stops returning 404. Single-PR rotation to fix a user-visible regression from v0.99.55.
