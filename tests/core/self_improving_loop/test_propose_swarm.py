@@ -280,14 +280,17 @@ def test_swarm_n1_mvp_path_writes_swarm_metadata_to_mutations_jsonl(
     group_size=1`` 에서 apply_group_proposals 가 singleton shortcut 으로
     apply_proposal 호출 시 swarm_id + sub_agent_index 가 누락되면 안 됨.
 
-    Real audit-row 검증 — propose_swarm(3, 1) → apply_swarm_proposals →
-    3 sub-agent 별 apply_group_proposals(1 proposal) → apply_proposal
-    singleton path. mutations.jsonl 의 모든 row 가 동일 swarm_id +
-    distinct sub_agent_index (0, 1, 2) 보유해야.
+    apply_proposal 의 SoT write 만 stub (canonical wrapper.json 을
+    안 건드리도록) — append_audit_log 자체는 real 호출해서 mutations.jsonl
+    의 swarm_id + sub_agent_index emit 을 end-to-end 검증.
     """
     import json as _json
 
-    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+    from core.self_improving_loop.runner import (
+        Proposal,
+        SelfImprovingLoopRunner,
+        append_audit_log,
+    )
 
     runner = SelfImprovingLoopRunner(rerun_enabled=False)
     runner.audit_log_path = tmp_path / "mutations.jsonl"
@@ -296,13 +299,32 @@ def test_swarm_n1_mvp_path_writes_swarm_metadata_to_mutations_jsonl(
     groups = [[_fake_proposal()], [_fake_proposal()], [_fake_proposal()]]
     runner.propose_group = lambda n: groups.pop(0)  # type: ignore[method-assign]
 
+    # Stub apply_proposal — write the apply row to OUR test log_path (not
+    # canonical SoT) so the test does not touch wrappers/policies. Forwards
+    # swarm_id + sub_agent_index just like the production singleton
+    # shortcut does after the Codex MCP fix.
+    def fake_apply_proposal(
+        proposal: Proposal,
+        *,
+        swarm_id: str = "",
+        sub_agent_index: int | None = None,
+    ):
+        append_audit_log(
+            proposal.mutation,
+            previous_value="x",
+            log_path=runner.audit_log_path,
+            swarm_id=swarm_id,
+            sub_agent_index=sub_agent_index,
+        )
+        return proposal.mutation
+
+    runner.apply_proposal = fake_apply_proposal  # type: ignore[method-assign]
+
     result = runner.apply_swarm_proposals(runner.propose_swarm(3, 1))
     assert result is not None
 
     # Read mutations.jsonl — should have 3 apply rows
-    rows = [
-        _json.loads(line) for line in runner.audit_log_path.read_text().splitlines() if line
-    ]
+    rows = [_json.loads(line) for line in runner.audit_log_path.read_text().splitlines() if line]
     assert len(rows) == 3
     swarm_ids = {r.get("swarm_id") for r in rows}
     assert len(swarm_ids) == 1  # all 3 share single swarm_id
