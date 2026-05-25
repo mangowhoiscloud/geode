@@ -227,6 +227,159 @@ def audit_seeds_generate(
     raise typer.Exit(code=exit_code)
 
 
+@audit_seeds_app.command("resume")
+def audit_seeds_resume(
+    run_id: str = typer.Argument(
+        ...,
+        help=(
+            "Run id to resume — the ``<gen_tag>-<target_dim>`` directory "
+            "under ``state/seed-generation/``. The pipeline reads the "
+            "latest ``checkpoints/<phase>.json`` for hydration and "
+            "continues from the next pending phase."
+        ),
+    ),
+) -> None:
+    """Resume an interrupted run from per-phase checkpoints.
+
+    PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — when a prior
+    ``audit-seeds generate`` aborted mid-pipeline (e.g.
+    ``plan.decompose_async`` timeout, claude-cli network hang, OS
+    crash), the per-phase checkpoints under
+    ``state/seed-generation/<run_id>/checkpoints/`` let a follow-up
+    invocation skip the already-completed phases instead of paying for
+    them again. Phases without a checkpoint are re-run from the
+    rehydrated state.
+    """
+    exit_code = run_audit_seeds_resume(run_id=run_id)
+    raise typer.Exit(code=exit_code)
+
+
+def run_audit_seeds_resume(
+    *,
+    run_id: str,
+    stdout: IO[str] | None = None,
+    stderr: IO[str] | None = None,
+) -> int:
+    """Pure-function entry point for ``audit-seeds resume``.
+
+    Returns the exit code (0 = pipeline succeeded or run already
+    complete; 1 = run_dir missing or checkpoint hydration failure;
+    2 = pipeline run error). Tests inject ``stdout`` / ``stderr`` to
+    capture the rendered summary.
+    """
+    out = stdout if stdout is not None else sys.stdout
+    err = stderr if stderr is not None else sys.stderr
+
+    from core.observability.run_dir import run_dir_scope
+    from core.paths import STATE_SEED_GENERATION_DIR
+    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+
+    from plugins.seed_generation.resume import (
+        ResumeError,
+        resolve_resume_target,
+    )
+
+    run_dir = STATE_SEED_GENERATION_DIR / run_id
+    if not run_dir.is_dir():
+        err.write(f"seed-generation resume: run_dir not found at {run_dir}\n")
+        return 1
+
+    try:
+        state, resume_from_phase = resolve_resume_target(run_dir)
+    except ResumeError as exc:
+        err.write(f"seed-generation resume: cannot resume — {exc}\n")
+        return 1
+
+    if resume_from_phase is None:
+        out.write(
+            f"seed-generation resume: run {run_id!r} already complete "
+            f"(every phase has a checkpoint); nothing to do.\n"
+        )
+        return 0
+
+    journal = RunTranscript(
+        session_id=run_id,
+        gen_tag=state.gen_tag,
+        component="seed-generation",
+        path=run_dir / "transcript.jsonl",
+    )
+    with run_dir_scope(run_dir), run_transcript_scope(journal):
+        picker_result = pick_bindings()
+        journal.append(
+            "resume_started",
+            payload={
+                "resume_from_phase": resume_from_phase,
+                "completed_phases": list(state.completed_phases),
+                "candidates": len(state.candidates),
+                "survivors": len(state.survivors),
+            },
+        )
+        out.write(
+            f"seed-generation resume: run_id={run_id!r} resume_from={resume_from_phase!r} "
+            f"completed={list(state.completed_phases)}\n"
+        )
+        out.flush()
+        try:
+            _dispatch_pipeline_resume(
+                picker_result=picker_result,
+                state=state,
+                resume_from_phase=resume_from_phase,
+                out=out,
+                err=err,
+            )
+        except Exception as exc:  # pragma: no cover - bubbles up rich error
+            journal.append(
+                "pipeline_run_failed",
+                level="error",
+                payload={"error": repr(exc)[:200]},
+            )
+            err.write(f"seed-generation resume: run failed — {exc}\n")
+            return 2
+        journal.append("resume_finished", payload={})
+    return 0
+
+
+def _dispatch_pipeline_resume(
+    *,
+    picker_result: PickerResult,
+    state: Any,
+    resume_from_phase: str,
+    out: IO[str],
+    err: IO[str],
+) -> None:
+    """Build orchestrator + run with a pre-hydrated state + resume cursor.
+
+    Skips the cost-preview / pre-flight / confirm gates (the run was
+    already past those when it aborted). The picker IS re-resolved
+    against the current ``~/.geode/config.toml`` because the
+    SubAgentManager + per-role agents need live bindings for the
+    phases that still have to run; if the operator edited config
+    between the abort and the resume, the new bindings win.
+    """
+    from plugins.seed_generation.orchestrator import (
+        Pipeline,
+        PipelineRegistry,
+    )
+
+    registry = PipelineRegistry()
+    from plugins.seed_generation._registry_builder import populate_registry
+    from plugins.seed_generation.manifest import load_manifest
+
+    populate_registry(registry, picker_result=picker_result, manifest=load_manifest())
+    pipeline = Pipeline(state=state, registry=registry, bindings=dict(picker_result.bindings))
+    out.write(f"seed-generation resume: starting from {resume_from_phase!r}\n")
+    out.flush()
+
+    from core.async_runtime import run_process_coroutine
+
+    run_process_coroutine(pipeline.arun(resume_from_phase=resume_from_phase))
+
+    out.write(
+        f"seed-generation resume: run {state.run_id!r} finished; "
+        f"survivors={len(state.survivors)} usd={state.usd_spent:.4f}\n"
+    )
+
+
 def _resolve_target_dim(
     target_dim: str | None,
     *,

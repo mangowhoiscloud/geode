@@ -50,7 +50,11 @@ class WorkerRequest:
     denied_tools: list[str] = field(default_factory=list)
     model: str = "claude-opus-4-6"
     provider: str = "anthropic"
-    timeout_s: float = 120.0
+    # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — default raised
+    # 120 → 600 to match SubAgentManager default (env-tunable via
+    # ``GEODE_SUBAGENT_TIMEOUT_S``). Smoke 16 evolver hit 122s in
+    # plan.decompose_async on the prior cap.
+    timeout_s: float = 600.0
     time_budget_s: float = 0.0  # 0 = inherit parent's budget
     thinking_budget: int = 0  # 0 = disabled; >0 = thinking tokens per call (legacy)
     effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh" (v0.56.0)
@@ -123,7 +127,7 @@ class WorkerRequest:
             denied_tools=data.get("denied_tools", []),
             model=data.get("model", "claude-opus-4-6"),
             provider=data.get("provider", "anthropic"),
-            timeout_s=data.get("timeout_s", 120.0),
+            timeout_s=data.get("timeout_s", 600.0),
             # v0.55.0 R5 — reasoning depth fields were declared on the
             # dataclass since v0.50.x but never deserialised, so every
             # sub-agent ran at the dataclass defaults regardless of

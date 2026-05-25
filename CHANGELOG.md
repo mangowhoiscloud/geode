@@ -47,6 +47,96 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.60] - 2026-05-25
+
+Sprint bundle closing the 전소 self-improving-loop backlog: PR-20 (A.6 CRM causal_hypothesis) + PR-21 (A.8 sub_agent_slice) + PR-22 (B.4 F1 cross-run SoT invariants) + PR-23 (A.2 Tchebycheff) + PR-24 (A.3 MAP-Elites) + PR-25 (A.4 GEPA sampler) + PR-26 (C.6 cross-run SoT unification) + PR-27 (C.7 unified MutatorContextView) + PR-CHECKPOINT-RESUME-TIMEBUDGET (seed-gen per-phase checkpoint + 600s wall-clock) + PR-28 (C.8 silent fallback STRICT mode parity invariants). 9 fragmentation-audit signals closed, Codex MCP catches averaged 1.6/PR.
+
+### Added
+- **PR-28 C.8 silent fallback STRICT mode parity invariants** —
+  `tests/core/self_improving_loop/test_strict_mode_parity.py` pins the
+  fragmentation-audit F5 fix (ADR-012 S0a/S0b) as a drift invariant.
+  `autoresearch/train.py` sets `GEODE_<KIND>_OVERRIDE` together with
+  `GEODE_<KIND>_STRICT=1` for the 12 mutation-surface kinds so the
+  audit subprocess fails fast instead of silently falling back to the
+  in-repo SoT; `core/self_improving_loop/sot_resolution.py` reads the
+  matching `_STRICT_SUFFIX` via `removesuffix(_OVERRIDE_SUFFIX) +
+  _STRICT_SUFFIX`. The 9 invariants cover override↔strict pairing
+  (drift detection, RHS-agnostic regex so a future kind using a
+  helper-call/Path-literal RHS cannot evade the pairing check),
+  strict-kind count floor (>=12), suffix derivation pattern, and
+  end-to-end `resolve_sot` strict-flag propagation for the 4 layer
+  outcomes (env+STRICT / env-only / operator-local / in-repo). A
+  future kind addition that forgets STRICT trips the pairing
+  invariant. Memory `project_autoresearch_fragmentation_audit.md` F5
+  closed.
+- **PR-CHECKPOINT-RESUME-TIMEBUDGET — per-phase checkpoints + lifted
+  sub-agent wall-clock defaults.** `plugins/seed_generation/checkpointer.py`
+  writes `<run_dir>/checkpoints/<phase>.json` after each successful seed-
+  generation phase (atomic via `os.replace` of a tmp file); the orchestrator
+  appends to `state.completed_phases` on success. New
+  `plugins/seed_generation/resume.py` + `geode audit-seeds resume <run_id>`
+  CLI hydrate `PipelineState` from the latest checkpoint and continue from
+  the first phase without an on-disk record. Wall-clock budgets:
+  `core/agent/sub_agent.py` `SubAgentManager.timeout_s` default 120s → 600s
+  with new `GEODE_SUBAGENT_TIMEOUT_S` env override (clamp `[10, 3600]`);
+  `core/agent/worker.py` `WorkerRequest.timeout_s` default mirrors the
+  bump; `core/agent/plan.py` `_DECOMPOSE_CALL_TIMEOUT_S` 60s → 180s so
+  multi-tool plan.decompose calls under load (smoke-16 evolver
+  `asyncio.CancelledError` at 122s wall-time) don't trip the inner cap.
+  The seed-generation registry keeps its explicit `timeout_s=1800.0`
+  override in `plugins/seed_generation/_registry_builder.py` — the new
+  600s is the default for callers that don't override.
+  Convergence basis: paperclip session JSONL resume + LangGraph SqliteSaver
+  thread/checkpoint keying + openclaw per-agent wall-clock + hermes
+  IterationBudget. Plan SoT: `docs/plans/2026-05-25-structured-output-3-axis-fix.md`
+  §5 + §6.
+- **PR-27 C.7 unified MutatorContextView** —
+  `core/self_improving_loop/mutator_context_view.py` composes the 5+ mutator-context sources into a single frozen Pydantic view: `baseline_snapshot` / `policy_snapshots` (5 kind policies) / `program_md` / `meta_review_snapshot` / `recent_mutations` (PR-12 reader output) / `cross_run_key` (PR-26 CrossRunJoinKey). `compose_mutator_context_view(...)` packs the loaded sources with safe defaults (None or empty container for missing sources); `source_count(view)` returns the count of populated sources for operator diagnostics. `extra="allow"` so future sources can be carried without schema migration. Pure helper, caller wiring (runner.py build_runner_context) deferred. Resolves F2 fragmentation signal.
+- **PR-26 C.6 cross-run SoT 3중첩 unification helper** —
+  `core/self_improving_loop/cross_run_join.py` consolidates the three cross-run SoT readers (latest_pointer.json / MetaReviewSnapshot / sessions.jsonl) behind a single Pydantic `CrossRunJoinKey` (frozen run_id + gen_tag + source_label). `load_cross_run_join_key()` returns None on missing / malformed / non-dict / missing-required-field pointer payloads (graceful). `keys_match(a, b)` compares by value (source_label ignored). `compose_history_view(key, rows)` filters an iterable of session/meta-review rows to those matching the key — defensive against non-dict items and rows missing either field. Builds on PR-22 invariant tests with an actual unification helper. Pure functions, caller deferred.
+- **PR-25 A.4 GEPA Pareto sampler helper** —
+  `core/self_improving_loop/gepa_sampler.py` adds density-aware sampling for the Pareto archive: `compute_sparsity_weights(vectors, k)` returns each entry s mean k-NN distance (sparse niches get higher weight; epsilon prevents all-zero collapse on identical vectors), and `sample_sparse[T](entries, vectors, n, k_neighbors, rng)` performs weighted without-replacement sampling that probabilistically favors under-represented Pareto niches. Replaces the uniform-random `PareteArchive.sample` baseline (PR-15) — caller wiring follows. Frontier: GEPA pattern (Genetic Evolutionary Pareto Archive) + Quality-Diversity (Mouret & Clune 2015).
+- **PR-24 A.3 MAP-Elites niche grid helper** —
+  `core/self_improving_loop/map_elites.py` adds Quality-Diversity (Mouret & Clune 2015) niche-archive helpers: `MapElitesGrid` (sparse 2D dict — each cell holds the highest-fitness payload, ties rejected), `compute_cell_index(value, bounds, resolution)` for behavior discretization (clamps out-of-range, value at upper bound maps to last cell), `compute_grid_coverage(grid)` (occupied/total ratio), and `insert_many` batch. Complements PR-15 Pareto archive — Pareto prunes by global dominance, MAP-Elites preserves per-niche elites so behavior diversity stays in the archive. Pure helper, caller wiring (archive niche-aware sampling) deferred. Frontier: AlphaEvolve (DeepMind 2025-05).
+- **PR-23 A.2 Tchebycheff scalarization helper** —
+  `core/self_improving_loop/tchebycheff.py` adds `compute_tchebycheff(fitness_dim, weights, ideal_point)` and `compute_ideal_point(vectors)` pure helpers. Linear scalarization (`f_total = sum(w*r)`) cannot reach concave Pareto-front regions (Das & Dennis 1997); Tchebycheff (`-max_d w_d * (ideal[d] - fitness[d])`) closes that gap by penalizing the worst dim relative to the ideal point. Pareto-front advantage invariant test pins the canonical 3-point concave example (extreme points tie under linear, B beats both under Tchebycheff). Caller wiring into `apply_group_proposals` 의 pareto_mode 분기 is deferred — PR-15 의 lineage writer 와 짝지을 다음 PR 가 필요.
+- **PR-22 B.4 F1 cross-run SoT 3중첩 invariants** —
+  `tests/core/self_improving_loop/test_cross_run_sot_invariant.py` pins the
+  schema parity invariants between the three cross-run SoTs that the
+  `project_autoresearch_fragmentation_audit.md` F1 signal calls out:
+  `latest_pointer.json` (paths.write_latest_pointer / read_latest_pointer),
+  the `MetaReviewSnapshot` (plugins.seed_generation.baseline_reader), and
+  `sessions.jsonl` (plugins.seed_generation.orchestrator). 10 invariants
+  cover: write/read roundtrip, required-key schema (version/run_id/gen_tag/
+  updated_at), optional-field omission, missing/malformed/non-dict graceful
+  None return, STATE_ROOT-relative path resolution, sessions.jsonl source
+  contains the canonical `run_id` cross-ref key, MetaReviewSnapshot reachable,
+  and a drift invariant blocking rename to `cycle_id` / `session_id`. Any
+  future SoT key rename fails fast here instead of silently breaking the
+  cross-run join.
+- **PR-21 A.8 sub_agent_slice helper** —
+  `core/self_improving_loop/sub_agent_slice.py` defines a 5-stage
+  deterministic round-robin slice mapping (role / tools / reflection
+  / decomposition / interlocutor) keyed on `sub_agent_index`.
+  `compute_sub_agent_slice(idx, total)` returns the slice name;
+  `derive_slice_prompt_hint(slice)` returns a one-line mutator
+  system-prompt hint that the eventual `propose_swarm` wiring can
+  prepend to diversify sub-agent focus beyond temperature
+  stochasticity. Pure functions, no caller wired yet (deferred to a
+  follow-up PR). Frontier: Kimi K2.6 PARL post-trained decomposition,
+  inference-time variant.
+- **PR-20 A.6 CRM causal_hypothesis field** —
+  `Mutation` dataclass + `ApplyRecord` Pydantic schema +
+  `parse_mutation` + `to_audit_row` 가 새로운 optional
+  `causal_hypothesis` field (max 500 chars) 를 cover. mutator 가
+  mutation 직전 명시한 인과사슬 — "dim X 의 Y 효과 → fitness Z 변화"
+  — 가 mutations.jsonl 의 apply row 에 emit 되어 post-audit
+  observed_dim 과 cross-check 가능 (별도 wiring 은 follow-up).
+  principle (SPCT) 이 judging criterion 이라면 causal_hypothesis 는
+  causal trace — 두 field 는 독립적, 둘 다 emit 가능. Legacy mutator
+  (key 미포함) → 빈 문자열 → row column 미생성. Frontier: CRM
+  (Conditional Reward Modeling, arXiv 2509.26578).
+
 ## [0.99.59] - 2026-05-25
 
 Patch bundling PR-16 (C.4 credit_assignment) + PR-17 (C.5 kind×dim matrix) + PR-SG-SELECTION-ALIGN-FIX (V3/V4/V5 Codex MCP fixes on PR-SG-SELECTION-ALIGN).
