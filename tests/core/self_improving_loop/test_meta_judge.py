@@ -162,13 +162,29 @@ def test_parse_total_failure_returns_zero_and_empty() -> None:
 
 
 def test_parse_non_numeric_score_falls_through() -> None:
+    """JSON loads succeeds but ``drift_score`` is non-numeric → regex
+    fallback tries to find numeric pattern → fails → returns (0.0, "").
+
+    Codex MCP WARN #3 tighten — earlier wording allowed `summary == "x"`
+    via regex even when JSON path rejected score; actual behaviour is
+    score_match=None → entire return is (0.0, ""). Pin the exact tuple.
+    """
     raw = '{"drift_score": "high", "drift_summary": "x"}'
     score, summary = parse_meta_judge_response(raw)
-    # JSON loads succeeds but score is not numeric → regex fallback tries,
-    # finds nothing matching the numeric pattern → returns (0.0, "")
     assert score == 0.0
-    # summary may be "x" via regex even when JSON path rejected score
-    assert summary in {"", "x"}
+    assert summary == ""
+
+
+def test_parse_negative_score_in_json_clamped_not_regex_fallback() -> None:
+    """Codex MCP WARN #4 — regex 가 negative number 매칭 안 함 (-? 미포함).
+    JSON 경로에서 negative 는 ``_clamp_score`` 가 0.0 으로 clamp. 본 test 가
+    JSON 경로 lower-bound clamp 의 정확한 동작 pin — regex fallback 로
+    falling through 하지 않음을 보장.
+    """
+    raw = '{"drift_score": -0.4, "drift_summary": "neg"}'
+    score, summary = parse_meta_judge_response(raw)
+    assert score == 0.0  # clamped from -0.4
+    assert summary == "neg"  # summary 보존 — regex 로 fall through 하지 않음
 
 
 # ---------------------------------------------------------------------------
