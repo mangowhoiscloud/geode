@@ -8,16 +8,19 @@ on three envs being set:
 
 Operator standalone runs (``uv run python autoresearch/train.py``,
 ``--promote``) had none of those envs, so the attribution row was
-silently skipped — the credit_assignment helper (PR-16) lost the
-manual-cycle corpus and the operator-side ledger was incomplete.
+silently skipped — downstream consumers (operator analytics; a
+future source-aware ``compute_credit_assignment`` variant) had no
+ledger visibility into manual runs.
 
 PR-AR-L6 splits the gate:
 
 - envs set → ``source="mutator"`` (current behaviour, mutator-driven cycle)
 - envs absent + not dry-run → ``source="manual"`` with synthetic
   ``mutation_id = f"manual-{commit[:8]}-{audit_uuid[:8]}"`` so the
-  ledger still records the cycle. ``compute_credit_assignment`` can
-  filter on ``source`` when an operator wants mutator-only signal.
+  ledger still records the cycle. Downstream consumers filter the
+  JSONL stream on ``source`` when they want a mutator-only signal —
+  the source-aware filter itself is a downstream caller concern, not
+  implemented in this PR.
 
 This file pins the schema additions + the two writer paths.
 """
@@ -106,11 +109,15 @@ def test_manual_synthetic_id_format() -> None:
     assert pattern.match(sample) is not None
 
 
-def test_credit_assignment_can_filter_manual_rows(tmp_path: Path) -> None:
-    """Downstream consumers must be able to filter on ``source`` to
-    exclude manual rows when learning from mutator-driven cycles only.
-    Pin the filter shape — a future PR can't drop the field without
-    also updating downstream callers."""
+def test_jsonl_rows_can_be_filtered_by_source(tmp_path: Path) -> None:
+    """Row-level filtering contract — downstream consumers must be able
+    to filter on ``source`` to exclude manual rows when learning from
+    mutator-driven cycles only. Pin the JSONL shape — a future PR
+    can't drop the field without also updating downstream filters.
+
+    Note: this tests the *data-availability* contract. The actual
+    source-aware variant of ``compute_credit_assignment`` is downstream
+    work (see CHANGELOG)."""
     log_path = tmp_path / "mutations.jsonl"
     # 1 mutator row + 1 manual row.
     write_attribution(

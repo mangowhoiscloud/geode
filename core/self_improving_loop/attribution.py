@@ -76,10 +76,14 @@ class AttributionRecord(BaseModel):
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
     (``"mutator"``) from operator manual ``--promote`` rows
-    (``"manual"``). Legacy rows omit the field → ``None`` (caller
-    treats as ``"mutator"`` for backward compat). Used by
-    ``compute_credit_assignment`` to filter the learning corpus when
-    operator wants mutator-only signal."""
+    (``"manual"``). Legacy rows omit the field → ``None`` (downstream
+    consumers can treat as ``"mutator"`` for backward compat).
+
+    The field is a row-level *tag*; current downstream consumers
+    (``compute_credit_assignment``, operator analytics) can opt to
+    filter the JSONL stream on it before aggregation — the source-aware
+    filtering itself is a downstream caller concern, not implemented in
+    this module."""
     """P1-revised (2026-05-25 baseline RL grounding) — group sampling 의
     cross-ref key. 같은 cycle 의 N sibling mutation 의 attribution row 가
     모두 같은 group_id 를 가져 group statistic 재구성 가능. group_size=1
@@ -274,10 +278,11 @@ def compute_attribution(
         payload["group_id"] = group_id
     # PR-AR-L6 (2026-05-26) — source distinguishes mutator-driven cycle
     # rows ("mutator") from operator manual --promote rows ("manual").
-    # ``compute_credit_assignment`` can filter the learning corpus on
-    # this field when the operator wants mutator-only signal. Default
-    # "mutator" matches every pre-existing caller — legacy rows that
-    # omit the field will read as "mutator" via the schema default.
+    # Downstream consumers (operator analytics; a future source-aware
+    # variant of compute_credit_assignment) filter the JSONL stream on
+    # this tag. Default "mutator" matches every pre-existing caller —
+    # legacy on-disk rows that omit the field validate as ``None`` via
+    # the schema default.
     payload["source"] = source
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
     # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
