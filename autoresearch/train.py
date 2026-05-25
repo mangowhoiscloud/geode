@@ -1880,6 +1880,30 @@ def _write_baseline(
 # noise gain before overwriting an under-sampled baseline.
 N1_FITNESS_MARGIN_FLOOR = 0.20
 
+# PR-L8 (2026-05-26) — bootstrap baseline ratchet. Fresh-start (no prior
+# baseline.json) used to auto-promote ANY first audit, leaving the loop
+# vulnerable to a broken initial audit (subprocess returns sentinel,
+# rubric mid-migration, dim_extractor partial extract) becoming the
+# permanent "promoted" reference. The new gate requires:
+#
+# 1. ``dim_means`` completeness — every dim in ``AXIS_TIERS`` must be
+#    present. Catches the "subprocess emitted only a handful of dims"
+#    failure mode.
+# 2. Raw fitness ≥ ``BOOTSTRAP_FITNESS_FLOOR`` — catches the "audit
+#    succeeded but every dim is at the worst-case 10.0" mode.
+#
+# Operators who *want* a deliberately-weak bootstrap (e.g. seeding from
+# a known-bad checkpoint to ratchet upward) pass ``--promote`` on the
+# argv, which still bypasses :func:`_should_promote` entirely. The gate
+# only protects the *default* (no flag) path.
+#
+# Tuning: 0.30 is roughly the fitness floor below which mutation
+# proposals lack signal (a baseline this low means most dims are above
+# 7/10 concerning, so a single-dim improvement barely moves the
+# weighted aggregate). Adjust via this constant rather than per-call
+# argv so the floor stays a single SoT.
+BOOTSTRAP_FITNESS_FLOOR: float = 0.30
+
 
 def _should_promote(
     current_means: dict[str, float],
@@ -1940,7 +1964,42 @@ def _should_promote(
     Returns ``(should_promote, reason)`` for caller logging.
     """
     if baseline_means is None or baseline_stderr is None:
-        return True, "no prior baseline (bootstrap)"
+        # PR-L8 (2026-05-26) — bootstrap gate. Fresh-start auto-promote
+        # was too permissive: a broken first audit (truncated subprocess
+        # output, rubric mid-migration, dim_extractor partial extract)
+        # would become the permanent baseline. Require:
+        #
+        #   (a) ``dim_means`` completeness — every AXIS_TIERS dim present
+        #   (b) raw fitness ≥ ``BOOTSTRAP_FITNESS_FLOOR``
+        #
+        # ``--promote`` operator override bypasses ``_should_promote``
+        # entirely (see ``main()``), so this only constrains the
+        # default-path auto-promote.
+        missing = compute_missing_dims(current_means)
+        if missing:
+            preview = sorted(missing)[:3]
+            suffix = "..." if len(missing) > 3 else ""
+            return False, (
+                f"bootstrap_sanity_failed: incomplete dim_means "
+                f"({len(missing)} missing — {preview}{suffix})"
+            )
+        _bootstrap_anchor = {d: current_means[d] for d in ANCHOR_DIMS if d in current_means}
+        bootstrap_fitness = compute_fitness(
+            current_means,
+            current_stderr,
+            measurement_modality=measurement_modality,
+            anchor_means=_bootstrap_anchor or None,
+            anchor_confidence_mode=anchor_confidence_mode,
+        )
+        if bootstrap_fitness < BOOTSTRAP_FITNESS_FLOOR:
+            return False, (
+                f"bootstrap_sanity_failed: fitness {bootstrap_fitness:.4f} "
+                f"< floor {BOOTSTRAP_FITNESS_FLOOR}"
+            )
+        return True, (
+            f"bootstrap_promote: fitness {bootstrap_fitness:.4f} "
+            f"≥ floor {BOOTSTRAP_FITNESS_FLOOR}, dim completeness ok"
+        )
 
     # PR-11 P3.1 (2026-05-25) — anchor subset 추출 (current + baseline 각각).
     # mode=False 면 compute_fitness 가 무시 → 추출 비용 무관.

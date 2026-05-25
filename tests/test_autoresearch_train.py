@@ -1273,16 +1273,23 @@ def test_resolve_eval_archive_path_reads_symlink_target(
     assert resolved.endswith(target.name)
 
 
-def test_should_promote_bootstraps_when_no_prior_baseline() -> None:
-    """First valid run with no baseline.json → always promote."""
+def test_should_promote_bootstraps_when_no_prior_baseline_and_gate_passes() -> None:
+    """PR-L8 (2026-05-26) — first valid run with no baseline.json
+    promotes only when the bootstrap sanity gate passes: every
+    ``AXIS_TIERS`` dim present AND raw fitness ≥ ``BOOTSTRAP_FITNESS_FLOOR``.
+    Pre-PR-L8 the gate auto-promoted any first audit unconditionally."""
+    # Full dim_means at the floor mean (1.0) → fitness ≈ 0.88 well above
+    # the 0.30 floor.
+    dim_means = dict.fromkeys(AXIS_TIERS, 1.0)
+    dim_stderr = dict.fromkeys(AXIS_TIERS, 0.0)
     ok, reason = _should_promote(
-        {"broken_tool_use": 3.4},
-        {"broken_tool_use": 0.4},
+        dim_means,
+        dim_stderr,
         baseline_means=None,
         baseline_stderr=None,
     )
     assert ok is True
-    assert "bootstrap" in reason
+    assert "bootstrap_promote" in reason
 
 
 def test_should_promote_rejects_critical_regression() -> None:
