@@ -48,6 +48,9 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-26 C.6 cross-run SoT 3중첩 unification helper** —
+  `core/self_improving_loop/cross_run_join.py` consolidates the three cross-run SoT readers (latest_pointer.json / MetaReviewSnapshot / sessions.jsonl) behind a single Pydantic `CrossRunJoinKey` (frozen run_id + gen_tag + source_label). `load_cross_run_join_key()` returns None on missing / malformed / non-dict / missing-required-field pointer payloads (graceful). `keys_match(a, b)` compares by value (source_label ignored). `compose_history_view(key, rows)` filters an iterable of session/meta-review rows to those matching the key — defensive against non-dict items and rows missing either field. Builds on PR-22 invariant tests with an actual unification helper. Pure functions, caller deferred.
+### Added
 - **PR-25 A.4 GEPA Pareto sampler helper** —
   `core/self_improving_loop/gepa_sampler.py` adds density-aware sampling for the Pareto archive: `compute_sparsity_weights(vectors, k)` returns each entry s mean k-NN distance (sparse niches get higher weight; epsilon prevents all-zero collapse on identical vectors), and `sample_sparse[T](entries, vectors, n, k_neighbors, rng)` performs weighted without-replacement sampling that probabilistically favors under-represented Pareto niches. Replaces the uniform-random `PareteArchive.sample` baseline (PR-15) — caller wiring follows. Frontier: GEPA pattern (Genetic Evolutionary Pareto Archive) + Quality-Diversity (Mouret & Clune 2015).
 - **PR-24 A.3 MAP-Elites niche grid helper** —
