@@ -48,6 +48,20 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-22 B.4 F1 cross-run SoT 3중첩 invariants** —
+  `tests/core/self_improving_loop/test_cross_run_sot_invariant.py` pins the
+  schema parity invariants between the three cross-run SoTs that the
+  `project_autoresearch_fragmentation_audit.md` F1 signal calls out:
+  `latest_pointer.json` (paths.write_latest_pointer / read_latest_pointer),
+  the `MetaReviewSnapshot` (plugins.seed_generation.baseline_reader), and
+  `sessions.jsonl` (plugins.seed_generation.orchestrator). 10 invariants
+  cover: write/read roundtrip, required-key schema (version/run_id/gen_tag/
+  updated_at), optional-field omission, missing/malformed/non-dict graceful
+  None return, STATE_ROOT-relative path resolution, sessions.jsonl source
+  contains the canonical `run_id` cross-ref key, MetaReviewSnapshot reachable,
+  and a drift invariant blocking rename to `cycle_id` / `session_id`. Any
+  future SoT key rename fails fast here instead of silently breaking the
+  cross-run join.
 - **PR-21 A.8 sub_agent_slice helper** —
   `core/self_improving_loop/sub_agent_slice.py` defines a 5-stage
   deterministic round-robin slice mapping (role / tools / reflection
