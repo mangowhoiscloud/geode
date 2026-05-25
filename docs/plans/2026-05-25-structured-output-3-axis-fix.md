@@ -142,16 +142,140 @@ CLI: `audit-seeds config`, `audit-seeds generate` 2개만. **`resume` 명령 없
 - **mid-phase crash (예: Pipeline 외 raise)** 시 → state.json 미작성, run_dir 의 candidates/ 등 disk 산출만 남음.
 - Per-candidate / per-phase checkpoint 없어 같은 운영 비용으로 재개 불가.
 
-### 5.3 권장 (별도 sprint 후보)
+### 5.3 Frontier reference grounding
 
-| 항목 | LOC |
-|------|-----|
-| Per-phase `_persist_state()` 호출 (각 phase 종료 후 incremental save) | ~30 |
-| `resume` CLI 명령 — `audit-seeds resume <run_id>` → `state.json` 로드 → 다음 phase 부터 재개 | ~150 |
-| Phase 의 idempotency 보장 (이미 작성된 candidate skip, 이미 ranked 면 skip 등) | ~100 |
-| Tests | ~150 |
+| Source | 패턴 | 비고 |
+|--------|------|------|
+| open-coscientist (origin) | LangGraph `ainvoke()` in-memory, 체크포인트 없음 (`generator.py:473`) | crash 시 전부 손실 — GEODE 와 동일 한계 |
+| paperclip (Claude Code) | `~/.claude/projects/<hash>/<session>.jsonl` per-event append-only, resume via session_id | event-level granularity, replay = re-stream |
+| LangGraph `SqliteSaver` | thread_id + checkpoint_id keying, per-node 단위 | API: `aput()` / `aget()` / `alist()` 의 state CRUD |
+| GEODE 현재 | run 끝에 1회 state.json | 인프라 있지만 wire 안 됨 (`pyproject.toml` 에 `langgraph-checkpoint-sqlite>=3.0.0` 명시) |
 
-**Total: ~430 LOC, 별도 PR sprint.**
+**수렴 verdict:** per-phase JSON append-only — paperclip 의 event-level 보다는 거칠지만, GEODE 의 phase 단위 atomic 처리에 fit. LangGraph SqliteSaver 의 thread_id ↔ GEODE 의 run_id 1:1 매핑.
+
+### 5.4 수렴 디자인 (S5 sprint)
+
+**파일 추가:**
+
+```
+plugins/seed_generation/
+├─ checkpointer.py     # NEW — per-phase JSON 작성
+└─ resume.py           # NEW — hydration + skip-completed 로직
+```
+
+**스키마:**
+
+```python
+# checkpointer.py
+@dataclass(frozen=True)
+class PhaseCheckpoint:
+    phase: str                # 'literature_review' | 'generator' | ... | 'meta_reviewer'
+    completed_at: float       # Unix epoch
+    duration_ms: float
+    state_snapshot: dict      # _state_to_json(state) — full PipelineState as JSON
+    error: str | None         # phase 가 error 로 끝났으면 사유, 정상이면 None
+
+def write_checkpoint(run_dir: Path, ck: PhaseCheckpoint) -> Path:
+    """Write to <run_dir>/checkpoints/<phase>.json. Atomic via tmp+rename."""
+
+def list_completed_phases(run_dir: Path) -> list[str]:
+    """Return phase names in order they were completed (mtime sort)."""
+
+# orchestrator.py — PipelineState 에 추가
+completed_phases: list[str] = field(default_factory=list)
+```
+
+**Orchestrator wiring:**
+
+```python
+# arun() 루프 안, await self._arun_phase(phase) 직후
+await self._record_checkpoint(phase)
+
+# resume_from_phase 인자 추가 + 루프 시작 시 skip
+async def arun(self, *, resume_from_phase: str | None = None) -> PipelineState:
+    start_idx = 0
+    if resume_from_phase:
+        start_idx = _PHASE_ORDER.index(resume_from_phase)
+    for phase in _PHASE_ORDER[start_idx:]:
+        ...
+```
+
+**CLI:**
+
+```python
+@audit_seeds_app.command("resume")
+def audit_seeds_resume(
+    run_id: str = typer.Argument(...),
+    from_phase: str | None = typer.Option(None, "--from-phase"),
+) -> None:
+    """Resume a partial run from its last completed checkpoint.
+
+    Auto-detects the next uncompleted phase from
+    ``state/seed-generation/<run_id>/checkpoints/`` unless
+    ``--from-phase`` overrides.
+    """
+```
+
+**Idempotency:**
+
+- Each phase reads `state.candidates`/`reflections`/`pilot_scores` and tolerates already-populated rows.
+- Critic/Pilot/Evolver skip work for candidate_ids already in their respective output dict (state already has the result from a prior checkpoint).
+
+**LOC: ~430**
+- checkpointer.py: ~80
+- resume.py: ~80
+- orchestrator.py modifications: ~60
+- cli.py resume command: ~50
+- Tests (atomic write, list ordering, resume hydration, idempotency × 3 phases): ~160
+
+## 6. time_budget hard cap (사용자 요청)
+
+### 6.1 현 상태
+
+| 위치 | 값 | 단위 | 만료 시 |
+|------|----|------|---------|
+| `core/agent/sub_agent.py:344 SubAgentManager.__init__ timeout_s` | **120.0** | per-subprocess wall-clock | raise TimeoutError |
+| `core/agent/plan.py:657 plan.decompose_async` | **60.0** | per-LLM-call (asyncio.wait_for) | raise TimeoutError → catch + raise sub_agent fail |
+| `core/agent/worker.py:54 WorkerRequest.time_budget_s` | 0.0 (default) | (unused) | **enforced 안 됨** |
+| `core/orchestration/isolated_execution.py IsolationConfig.timeout_s` | 300.0 default | per-subprocess | wait_for timeout |
+
+smoke 16 evolver: plan.decompose_async 122s 만에 timeout. 120s SubAgentManager + 60s plan.decompose 두 cap 모두 짧음.
+
+### 6.2 Frontier reference grounding
+
+| Source | Cap | Granularity | 만료 |
+|--------|-----|-------------|------|
+| hermes-agent | iteration budget (50 turns/sub-agent, `IterationBudget` `run_agent.py:520`) | per-LLM-call | graceful refund |
+| openclaw | **48시간** default (`agents/timeout.ts:3`) | per-agent-run wall-clock | graceful + optional retry |
+| LangGraph | 명시적 wall-time cap 없음 — recursion_limit (default 25 노드) 만 | per-graph traversal | exception |
+| GEODE 현재 | 120s SubAgent + 60s plan.decompose | per-subprocess | raise |
+
+**수렴 verdict:** openclaw 의 per-agent-run wall-clock 모델 — iteration counting 보다 tool-using 에 fit. 48시간은 너무 길지만 GEODE 120s 는 짧음. 중간값 **5분 (300s)** 가 IsolationConfig default 와도 일치.
+
+### 6.3 수렴 디자인 (S6 sprint)
+
+**변경:**
+
+1. `core/agent/sub_agent.py:344` — `timeout_s: float = 120.0` → **300.0** (5분).
+2. env override: `GEODE_SUBAGENT_TIMEOUT_S` 읽어 `[10, 3600]` clamp.
+3. `core/agent/worker.py` — `WorkerRequest.time_budget_s` 를 IsolatedRunner 에 wire-through (현재 dead field). orchestrator/SubAgentManager 가 per-task budget 설정 가능 (예: pilot 300s, critic 120s).
+4. `core/agent/plan.py:657` — `decompose_async` wait_for timeout **60s → 90s** (smoke 16 의 122s 는 plan + tool 합쳐서 — plan 단독은 90s 면 충분 추정).
+
+**Tests:**
+- `SubAgentManager.timeout_s` default = 300 invariant
+- `GEODE_SUBAGENT_TIMEOUT_S` env clamp 동작 (10 / 1800 / 9999 → 3600)
+- `WorkerRequest.time_budget_s` 가 0 이 아니면 IsolationConfig 우선
+- `plan.decompose_async` 90s default
+
+**LOC: ~120**
+- sub_agent.py: ~25 (env override + clamp)
+- worker.py: ~15 (wire-through)
+- plan.py: ~5 (constant raise)
+- Tests: ~75
+
+### 6.4 우선순위
+
+S5 / S6 모두 inter-dependent 한 영역 없음 — 묶거나 분리 자유.
 
 ## 6. Sprint 분해 (제안)
 
