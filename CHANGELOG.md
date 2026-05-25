@@ -47,6 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now honors
+  `req.response_schema`.** `core/llm/adapters/codex_oauth.py` was the
+  only PR-JSON-WIRE (#79) adapter that silently dropped the schema field;
+  claude-cli wires through `--json-schema` and codex-cli writes
+  `--output-schema <FILE>`, but codex-oauth's `_build_codex_call_kwargs`
+  never emitted the OpenAI Responses API equivalent
+  (`text.format = {"type": "json_schema", "name": ..., "strict": true,
+  "schema": ...}`). Without API-level enforcement, gpt-5.x reasoning
+  models would spend the entire `output_tokens` budget on encrypted
+  reasoning items and skip the visible answer block — server returned
+  `stop_reason=completed` + empty `output_text`, which `AgenticLoop`
+  classified as `unknown` → retried 5× with the same prompt + same
+  effort → produced ~10 `~/.geode/diagnostics/codex-oauth-empty-text/`
+  dumps per ranker match (smoke 17 evidence). Fix: append `text.format`
+  per the Responses API spec (ctx7-grounded via
+  `/websites/developers_openai_api` `responses-vs-chat-completions`
+  guide) with `strict=true` so the server rejects reasoning-only
+  responses for callers that pin a schema. Schema name derived from
+  the schema's `title` field (fallback `"response"`). Pinned by 4 new
+  invariant tests in
+  `tests/core/llm/adapters/test_codex_oauth_backend_invariants.py`.
+
 ## [0.99.60] - 2026-05-25
 
 Sprint bundle closing the 전소 self-improving-loop backlog: PR-20 (A.6 CRM causal_hypothesis) + PR-21 (A.8 sub_agent_slice) + PR-22 (B.4 F1 cross-run SoT invariants) + PR-23 (A.2 Tchebycheff) + PR-24 (A.3 MAP-Elites) + PR-25 (A.4 GEPA sampler) + PR-26 (C.6 cross-run SoT unification) + PR-27 (C.7 unified MutatorContextView) + PR-CHECKPOINT-RESUME-TIMEBUDGET (seed-gen per-phase checkpoint + 600s wall-clock) + PR-28 (C.8 silent fallback STRICT mode parity invariants). 9 fragmentation-audit signals closed, Codex MCP catches averaged 1.6/PR.

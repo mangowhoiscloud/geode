@@ -285,6 +285,28 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["reasoning"] = {"effort": req.effort, "summary": "auto"}
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
+    # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API
+    # structured-output enforcement. PR-JSON-WIRE (#79) routed
+    # ``req.response_schema`` through claude-cli (--json-schema) and
+    # codex-cli (--output-schema <FILE>) but silently dropped the
+    # codex-oauth path. Without API-level schema enforcement, gpt-5.x
+    # reasoning models can return ``stop_reason=completed`` with the
+    # entire output budget spent on encrypted reasoning items + empty
+    # ``output_text`` (smoke 17: 20+ codex-oauth-empty-text dumps,
+    # ~10 per match). Adding ``text.format = {type:"json_schema", ...}``
+    # forces the server to reject reasoning-only responses for callers
+    # that wired a schema. Spec: OpenAI Responses API
+    # ``text.format`` (replaces Chat Completions ``response_format``).
+    if req.response_schema is not None:
+        schema_name = str(req.response_schema.get("title") or "response")
+        kwargs["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": schema_name,
+                "strict": True,
+                "schema": req.response_schema,
+            }
+        }
     return kwargs
 
 

@@ -111,3 +111,63 @@ def test_codex_kwargs_no_tools_when_none_provided() -> None:
     kwargs = _build_codex_call_kwargs(_req())
     assert "tools" not in kwargs
     assert "parallel_tool_calls" not in kwargs
+
+
+# --- PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) ---------------------------
+
+
+_VOTE_SCHEMA: dict[str, object] = {
+    "title": "vote",
+    "type": "object",
+    "properties": {
+        "match_id": {"type": "string"},
+        "winner": {"type": "string", "enum": ["A", "B", "tie"]},
+        "rationale": {"type": "string"},
+    },
+    "required": ["match_id", "winner", "rationale"],
+}
+
+
+def test_codex_kwargs_omits_text_format_when_no_response_schema() -> None:
+    """Back-compat: callers that don't pin a schema keep the pre-fix shape."""
+    kwargs = _build_codex_call_kwargs(_req())
+    assert "text" not in kwargs
+
+
+def test_codex_kwargs_wires_response_schema_to_text_format() -> None:
+    """Responses API structured output: ``text.format = {type:"json_schema", ...}``.
+
+    PR-CODEX-OAUTH-RESPONSE-SCHEMA — codex-oauth was the only PR-JSON-WIRE
+    adapter that silently dropped ``req.response_schema``. Smoke 17
+    evidence: 20+ ``codex-oauth-empty-text`` dumps because gpt-5.5
+    burned the output budget on encrypted reasoning with no API-level
+    JSON enforcement. This test pins the wire-through.
+    """
+    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    assert "text" in kwargs, "text.format missing — codex-oauth silently dropped response_schema"
+    text = kwargs["text"]
+    assert isinstance(text, dict)
+    fmt = text["format"]
+    assert fmt["type"] == "json_schema"
+    assert fmt["strict"] is True
+    assert fmt["schema"] == _VOTE_SCHEMA
+    # Name derived from schema title when present.
+    assert fmt["name"] == "vote"
+
+
+def test_codex_kwargs_text_format_name_fallback_when_no_title() -> None:
+    """Schemas without ``title`` get a generic ``response`` name."""
+    untitled = {k: v for k, v in _VOTE_SCHEMA.items() if k != "title"}
+    kwargs = _build_codex_call_kwargs(_req(response_schema=untitled))
+    assert kwargs["text"]["format"]["name"] == "response"
+
+
+def test_codex_kwargs_text_format_coexists_with_reasoning() -> None:
+    """Voter call shape: gpt-5.5 reasoning model + structured output.
+
+    The fix must not regress the reasoning kwargs — both blocks coexist.
+    """
+    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
+    assert kwargs["include"] == ["reasoning.encrypted_content"]
+    assert kwargs["text"]["format"]["type"] == "json_schema"
