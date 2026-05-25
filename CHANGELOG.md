@@ -47,6 +47,41 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-RANKER-MUTATION-EVAL — seed-gen `evaluate_mutation_pairwise()`
+  handoff entry point for autoresearch admire_means.** New module
+  `plugins/seed_generation/mutation_eval.py` exposes the seed-gen
+  3-voter cross-provider panel as a single async call
+  `evaluate_mutation_pairwise(before_response, after_response,
+  scenario_seed, *, voters, manager, match_id)` returning
+  `MutationEvalResult(wins, losses, ties, pairwise_win_rate,
+  provider_diversity, voter_models)`. Reuses VOTE_SCHEMA
+  (strict-mode, PR-STRICT-COMPATIBLE-SCHEMAS), `embed_handoff`,
+  `picker_source_to_adapter_source`, anti-phantom prompt prose
+  (PR-VOTER-PROMPT-ANTI-PHANTOM — inlined bodies, no Read tool,
+  first-and-only-turn disclaimer). Autoresearch
+  (`autoresearch/admire_means.py:ADMIRE_DIM_WEIGHTS`) drops
+  `MutationEvalResult.pairwise_win_rate` directly into
+  `admire_means["pairwise_win_rate"]` — field name parity pinned
+  by `test_pairwise_win_rate_field_name_matches_autoresearch_admire`
+  (static grep on both source files; no runtime cross-package
+  import to honour the seed-gen → autoresearch handoff boundary).
+  Codex MCP cross-LLM review caught (and fix folded in-band): the
+  pre-fix `f"vote-{match_id}-{provider}.{source}"` task_id format
+  collided for the default manifest's two identical
+  `openai.openai-codex` voters → `SubAgentManager` dedup → 3-voter
+  panel silently became 2-voter. Now per-voter ordinal
+  `v{idx:02d}` disambiguates + voter identity mirrored into
+  `SubTask.args` for typed reverse-lookup. Voter failure / malformed
+  vote / invalid winner label degrade gracefully (drop from
+  aggregate, no raise; `provider_diversity` tells the caller
+  whether the result is trustworthy). 7 tests:
+  cross-module-contract field-name parity, no-autoresearch-import
+  static grep, default-panel-not-deduplicated 3-voter dispatch,
+  happy-path 2-of-3 aggregation, partial-failure graceful drop,
+  all-fail neutral 0.5, invalid-winner-label silent rejection,
+  anti-phantom prompt prose pin.
+
 ### Fixed
 - **PR-VOTER-PROMPT-ANTI-PHANTOM — inline candidate seed bodies into
   voter handoff (kill the fake-path Read instruction).** Smoke 18
