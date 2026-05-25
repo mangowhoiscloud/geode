@@ -120,7 +120,32 @@ class CodexOAuthAdapter:
             self._last_error = exc
             log.warning("codex-oauth: responses.stream failed model=%s err=%s", req.model, exc)
             raise
-        return translate_codex_response(final, accumulated_items=accumulated)
+        result = translate_codex_response(final, accumulated_items=accumulated)
+        # PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex sometimes
+        # returns ``output_text=""`` while emitting reasoning-only items
+        # (gpt-5.x reasoning mode skipping the visible-answer block).
+        # The downstream worker treats empty text as failure
+        # (``worker.py:_persist_outcome: success = bool(text)``), and
+        # the user only sees ``summary="termination_reason=natural"``
+        # with no clue why. Smoke 11/12/13 vote-m000-openai.openai-codex
+        # all failed in this pattern (10s elapsed, $0.04 billed, zero
+        # assistant_message events). Dump a postmortem so the operator
+        # can recover the (usage / reasoning_items / reasoning_summaries
+        # / stop_reason) without re-running the cycle, and log the dump
+        # path on the warning line that surfaces alongside the
+        # worker-level failure.
+        if not result.text:
+            dump_path = _dump_empty_text_postmortem(model=req.model, result=result)
+            log.warning(
+                "codex-oauth: empty output_text model=%s "
+                "reasoning_items=%d reasoning_summaries=%d stop_reason=%s dump=%s",
+                req.model,
+                len(result.reasoning_items),
+                len(result.reasoning_summaries),
+                result.stop_reason,
+                dump_path or "<dump failed>",
+            )
+        return result
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
@@ -278,6 +303,66 @@ def _translate_codex_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, An
 
     normalised = normalize("openai", tc)
     return normalised if normalised is not None else "auto"
+
+
+def _dump_empty_text_postmortem(
+    *,
+    model: str,
+    result: AdapterCallResult,
+) -> str | None:
+    """Persist a JSON post-mortem for every codex-oauth empty-text
+    response so operators can diagnose without re-running the cycle.
+    Returns the dump path (str) on success, ``None`` on any I/O error
+    (best-effort — diagnostic, not correctness-critical). Mirrors
+    ``claude_cli._dump_transient_postmortem`` shape so the same
+    operator's ``diagnostics tar-up`` workflow catches both.
+
+    PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex gpt-5.x
+    sometimes returns reasoning items with no visible-answer text;
+    the worker treats that as failure with no actionable surface.
+    The dump records the four diagnostic dimensions:
+
+    (1) ``usage`` — input/output token counts the upstream billed
+    (2) ``reasoning_items`` — typed encrypted_content blobs (raw)
+    (3) ``reasoning_summaries`` — the model's plain-text chain of thought
+    (4) ``stop_reason`` — Codex backend's terminal status
+
+    Future ratchet: if a category of empty-text responses turns out
+    to be recoverable (e.g. ``reasoning_summaries`` carries the
+    actual answer in a parseable shape), add a text fallback inside
+    ``acomplete`` keyed on the dump's payload shape.
+    """
+    import json
+    import time
+
+    from core.paths import GLOBAL_DIAGNOSTICS_DIR
+
+    try:
+        postmortem_dir = GLOBAL_DIAGNOSTICS_DIR / "codex-oauth-empty-text"
+        postmortem_dir.mkdir(parents=True, exist_ok=True)
+        hit_ts = int(time.time())
+        postmortem_path = postmortem_dir / f"{hit_ts}-{model}.json"
+        payload: dict[str, Any] = {
+            "ts": hit_ts,
+            "model": model,
+            "stop_reason": result.stop_reason,
+            "usage": {
+                "input_tokens": result.usage.input_tokens,
+                "output_tokens": result.usage.output_tokens,
+            },
+            "reasoning_items_count": len(result.reasoning_items),
+            "reasoning_summaries_count": len(result.reasoning_summaries),
+            "reasoning_items": list(result.reasoning_items),
+            "reasoning_summaries": list(result.reasoning_summaries),
+        }
+        postmortem_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        return str(postmortem_path)
+    except OSError as exc:
+        log.debug("codex-oauth: postmortem dump write failed: %s", exc)
+        return None
 
 
 __all__ = ["CodexOAuthAdapter"]
