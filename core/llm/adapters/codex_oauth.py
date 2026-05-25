@@ -315,26 +315,38 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
             "format": {
                 "type": "json_schema",
                 "name": schema_name,
-                "strict": _is_strict_compatible(req.response_schema),
+                "strict": _is_openai_strict_compatible(req.response_schema),
                 "schema": req.response_schema,
             }
         }
     return kwargs
 
 
-def _is_strict_compatible(schema: Any) -> bool:
+def _is_openai_strict_compatible(schema: Any) -> bool:
     """Check whether ``schema`` satisfies OpenAI's strict Structured Outputs subset.
 
-    Per the public Responses API docs, ``strict: True`` requires that
-    every ``type: "object"`` subschema:
+    Provider-specific (OpenAI Responses API only). Do NOT reuse from
+    other adapters without verifying the target API's subset rules —
+    Anthropic Structured Outputs (Claude API) shares the
+    ``additionalProperties: false`` constraint but DIVERGES on:
+
+    - ``required`` completeness: OpenAI requires every property key to
+      appear in ``required``; Anthropic allows up to 24 optional
+      properties.
+    - ``oneOf``: OpenAI supports; Anthropic does not.
+    - Numerical / string constraints (``minimum`` / ``maxLength`` …):
+      OpenAI supports; Anthropic does not.
+
+    Codex OAuth hits the OpenAI Responses API, so this helper enforces
+    OpenAI's stricter rule set. Per OpenAI docs (ctx7 `/websites/
+    developers_openai_api`, responses-vs-chat-completions guide),
+    ``strict: True`` requires every ``type: "object"`` subschema:
 
     - sets ``additionalProperties: false`` (typed-additional or True is rejected)
     - lists ALL declared property keys in ``required``
 
     Plus array ``items`` and nested objects must satisfy the same recursively.
-    Anything else (``oneOf`` / ``anyOf`` with mixed types, ``allOf``,
-    pattern-only schemas, unconstrained ``object``) is conservatively
-    treated as non-strict.
+    ``oneOf`` / ``anyOf`` / ``allOf`` branches must each be strict-compatible.
 
     Returns ``True`` when the schema is safe to send with ``strict: True``;
     ``False`` when ``strict: False`` should be used instead. This keeps
@@ -353,16 +365,16 @@ def _is_strict_compatible(schema: Any) -> bool:
         if set(properties.keys()) != required:
             return False
         for prop_schema in properties.values():
-            if not _is_strict_compatible(prop_schema):
+            if not _is_openai_strict_compatible(prop_schema):
                 return False
-    if "items" in schema and not _is_strict_compatible(schema["items"]):
+    if "items" in schema and not _is_openai_strict_compatible(schema["items"]):
         return False
     for combinator_key in ("oneOf", "anyOf", "allOf"):
         # Combinators are accepted only when every branch is strict-compatible.
         branches = schema.get(combinator_key)
         if isinstance(branches, list):
             for branch in branches:
-                if not _is_strict_compatible(branch):
+                if not _is_openai_strict_compatible(branch):
                     return False
     return True
 
