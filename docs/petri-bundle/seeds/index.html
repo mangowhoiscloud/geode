@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>seeds/ — GEODE petri-bundle</title>
+<meta name="description" content="GEODE self-improving loop seed-generation runs — per-run candidates, survivors, evolved variants, and meta-review.">
+<style>
+  :root {
+    --bg: #fafaf9;
+    --fg: #1a1a1a;
+    --muted: #5a5a5a;
+    --accent: #2563eb;
+    --border: #d4d4d4;
+    --code-bg: #f0efed;
+    --green: #15803d;
+    --red: #b91c1c;
+    --amber: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  .nav {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    font-size: 13px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .nav a { color: var(--muted); text-decoration: none; margin-right: 16px; }
+  .nav a:hover { color: var(--accent); text-decoration: underline; }
+  .nav a.active { color: var(--fg); font-weight: 600; }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px 0; font-weight: 700; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-bottom: 18px; font-family: ui-monospace, Menlo, monospace; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 28px 0 8px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .counts-line { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+  .counts-line strong { color: var(--fg); font-weight: 600; }
+  .status-msg { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--muted); padding: 12px 0; }
+  .status-msg.err { color: var(--red); }
+  table.runs {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 13px;
+  }
+  table.runs th {
+    text-align: left;
+    padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  table.runs td {
+    padding: 6px 10px 6px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.runs td.id a { color: var(--accent); text-decoration: none; }
+  table.runs td.id a:hover { text-decoration: underline; }
+  table.runs td.tag { color: var(--fg); font-weight: 600; }
+  table.runs td.dim { color: var(--accent); }
+  table.runs td.status.ok { color: var(--green); }
+  table.runs td.status.partial { color: var(--amber); }
+  table.runs td.status.fail { color: var(--red); }
+  table.runs td.num { text-align: right; color: var(--fg); }
+  table.runs td.cost { text-align: right; color: var(--muted); font-size: 12px; }
+  .run-detail { background: white; border: 1px solid var(--border); margin-top: 18px; padding: 16px 18px; }
+  .run-detail h3 { font-size: 14px; margin: 0 0 10px 0; font-family: ui-monospace, Menlo, monospace; }
+  .run-detail h3 .runid { color: var(--accent); }
+  .run-detail h3 .dim-tag { color: var(--muted); margin-left: 8px; font-size: 12px; font-weight: normal; }
+  .run-detail .err-msg { color: var(--red); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  table.phases, table.survivors, table.priors {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  table.phases th, table.survivors th, table.priors th {
+    text-align: left;
+    padding: 4px 8px 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  table.phases td, table.survivors td, table.priors td {
+    padding: 5px 8px 5px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.survivors td.cid a { color: var(--accent); text-decoration: none; }
+  table.survivors td.cid a:hover { text-decoration: underline; }
+  table.survivors td.elo { text-align: right; }
+  table.survivors td.evolved { color: var(--muted); font-size: 11px; }
+  table.survivors td.scenario { color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+  table.priors td.dim { color: var(--accent); }
+  table.priors td.weight { text-align: right; }
+  table.priors td.rationale { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--fg); font-size: 12px; }
+  .cost-grid { display: grid; grid-template-columns: 180px 1fr; gap: 4px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 0; }
+  .cost-grid dt { color: var(--muted); }
+  .cost-grid dd { margin: 0; }
+  .summary-prose { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; color: var(--fg); margin: 6px 0 0 0; max-width: 920px; }
+  .footnote { color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .footnote a { color: var(--accent); text-decoration: none; }
+  .footnote a:hover { text-decoration: underline; }
+  details.run-detail summary { cursor: pointer; list-style: none; }
+  details.run-detail summary::-webkit-details-marker { display: none; }
+  details.run-detail summary::before { content: "▸ "; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+  details.run-detail[open] summary::before { content: "▾ "; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="../">/petri-bundle/</a>
+  <a href="../logs/">logs/</a>
+  <a href="./" class="active">seeds/</a>
+</div>
+
+<main>
+  <h1>seeds/</h1>
+  <p class="subtitle">docs/petri-bundle/seeds/listing.json + per-run state.json · self-improving loop seed-generation</p>
+
+  <div id="counts" class="counts-line">Loading <code>listing.json</code>…</div>
+
+  <h2>Runs</h2>
+  <div id="runs-area">
+    <div class="status-msg">Loading runs…</div>
+  </div>
+
+  <div class="footnote">
+    Source: <code>docs/petri-bundle/seeds/listing.json</code> (catalog index) + per-run <code>state.json</code> / <code>survivors.json</code> / <code>meta_review.json</code>.<br>
+    Runs are published by the seed-generation pipeline (<code>plugins/seed_generation/bundle_sync.py</code>). Click a run to expand its survivors, meta-review, and cost rollup.<br>
+    Per-run candidate <code>.md</code> files are directly addressable; sibling viewers — <a href="../">petri-bundle landing</a>, <a href="../logs/">inspect-petri eval logs</a>.
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const STATUS_OF = (run) => {
+  if (run.candidates_drafted === 0) return "fail";
+  if (run.survivors_count === 0) return "fail";
+  if (run.evolved_count < run.survivors_count) return "partial";
+  return "ok";
+};
+
+const FMT_USD = (n) => `$${(n ?? 0).toFixed(2)}`;
+const FMT_INT = (n) => (n ?? 0).toLocaleString();
+const FMT_RATIO = (a, b) => `${a ?? 0} → ${b ?? 0}`;
+
+const escapeHtml = (s) => {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-cache" });
+  if (!r.ok) throw new Error(`${url} → HTTP ${r.status}`);
+  return r.json();
+}
+
+function renderRunsTable(listing) {
+  const runs = listing.runs ?? [];
+  const totalCandidates = runs.reduce((a, r) => a + (r.candidates_drafted ?? 0), 0);
+  const totalSurvivors = runs.reduce((a, r) => a + (r.survivors_count ?? 0), 0);
+  const totalCost = runs.reduce((a, r) => a + (r.usd_spent ?? 0), 0);
+
+  document.getElementById("counts").innerHTML = `
+    <strong>${runs.length}</strong> ${runs.length === 1 ? "run" : "runs"} ·
+    <strong>${totalCandidates}</strong> candidates drafted ·
+    <strong>${totalSurvivors}</strong> survived ·
+    <strong>${FMT_USD(totalCost)}</strong> total spend
+  `;
+
+  if (runs.length === 0) {
+    document.getElementById("runs-area").innerHTML =
+      `<div class="status-msg">listing.json has 0 runs.</div>`;
+    return;
+  }
+
+  const rowsHtml = runs.map(run => {
+    const status = STATUS_OF(run);
+    return `
+      <tr>
+        <td class="id"><a href="#run-${escapeHtml(run.run_id)}">${escapeHtml(run.run_id)}</a></td>
+        <td class="tag">${escapeHtml(run.gen_tag ?? "")}</td>
+        <td class="dim">${escapeHtml(run.target_dim ?? "")}</td>
+        <td class="status ${status}">${status}</td>
+        <td class="num">${FMT_RATIO(run.candidates_drafted, run.survivors_count)}</td>
+        <td class="num">${run.evolved_count ?? 0}</td>
+        <td class="num">${run.iterations ?? 0}</td>
+        <td class="cost">${FMT_USD(run.usd_spent)}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const detailsHtml = runs.map(run => `
+    <details class="run-detail" id="run-${escapeHtml(run.run_id)}">
+      <summary>
+        <h3>
+          <span class="runid">${escapeHtml(run.run_id)}</span>
+          <span class="dim-tag">${escapeHtml(run.gen_tag ?? "")} · target_dim=${escapeHtml(run.target_dim ?? "")}</span>
+        </h3>
+      </summary>
+      <div data-run-body data-url="${escapeHtml(run.url ?? "")}" data-run-id="${escapeHtml(run.run_id)}">
+        <div class="status-msg">Loading details…</div>
+      </div>
+    </details>
+  `).join("");
+
+  document.getElementById("runs-area").innerHTML = `
+    <table class="runs">
+      <thead>
+        <tr>
+          <th>run_id</th>
+          <th>gen_tag</th>
+          <th>target_dim</th>
+          <th>status</th>
+          <th>draft → surv</th>
+          <th>evolved</th>
+          <th>iters</th>
+          <th>cost USD</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    ${detailsHtml}
+  `;
+
+  // Lazy-load run details on first open
+  document.querySelectorAll("details.run-detail").forEach(el => {
+    el.addEventListener("toggle", () => {
+      if (!el.open) return;
+      const body = el.querySelector("[data-run-body]");
+      if (body.dataset.loaded === "1") return;
+      body.dataset.loaded = "1";
+      loadRunDetail(body);
+    });
+  });
+
+  // Auto-open if URL hash points to a run
+  if (window.location.hash.startsWith("#run-")) {
+    const target = document.querySelector(window.location.hash);
+    if (target && target.tagName === "DETAILS") {
+      target.open = true;
+    }
+  }
+}
+
+async function loadRunDetail(body) {
+  const url = body.dataset.url;
+  const runId = body.dataset.runId;
+  if (!url) {
+    body.innerHTML = `<div class="err-msg">listing entry missing 'url' field for ${escapeHtml(runId)}</div>`;
+    return;
+  }
+  // ``url`` is a path relative to /seeds/ (per listing.json schema), e.g.
+  // ``seeds/gen1-redundant_tool_invocation/``. Strip the leading ``seeds/``
+  // because the viewer is already served from /seeds/.
+  const base = url.replace(/^seeds\//, "");
+  try {
+    const [state, survivors, meta] = await Promise.all([
+      fetchJson(`${base}state.json`).catch(() => null),
+      fetchJson(`${base}survivors.json`).catch(() => null),
+      fetchJson(`${base}meta_review.json`).catch(() => null),
+    ]);
+    body.innerHTML = renderRunBody({ runId, base, state, survivors, meta });
+  } catch (e) {
+    body.innerHTML = `<div class="err-msg">load failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderRunBody({ runId, base, state, survivors, meta }) {
+  const parts = [];
+
+  // Survivors
+  if (survivors && survivors.survivors && survivors.survivors.length > 0) {
+    parts.push(`<h2>Survivors</h2>`);
+    parts.push(`<table class="survivors"><thead><tr><th>candidate_id</th><th>elo</th><th>pilot_status</th><th>candidate file</th></tr></thead><tbody>`);
+    for (const s of survivors.survivors) {
+      const evolvedNote = (state?.evolved_candidates ?? [])
+        .filter(e => e.parent_id === s.id)
+        .map(e => `→ ${escapeHtml(e.id)}`)
+        .join(", ");
+      const pilotStatus = s.pilot?.status ?? "—";
+      const filename = (s.path ?? "").split("/").pop() ?? "";
+      const href = filename ? `${base}candidates/${filename}` : "#";
+      parts.push(`
+        <tr>
+          <td class="cid"><a href="${escapeHtml(href)}">${escapeHtml(s.id)}</a></td>
+          <td class="elo">${FMT_INT(Math.round(s.elo_rating ?? 0))}</td>
+          <td>${escapeHtml(pilotStatus)}</td>
+          <td class="evolved">${escapeHtml(filename)}${evolvedNote ? " · " + evolvedNote : ""}</td>
+        </tr>
+      `);
+    }
+    parts.push(`</tbody></table>`);
+  }
+
+  // Cost rollup
+  if (state) {
+    parts.push(`<h2>Cost rollup</h2>`);
+    parts.push(`<dl class="cost-grid">`);
+    parts.push(`<dt>total USD</dt><dd>${FMT_USD(state.usd_spent)}</dd>`);
+    parts.push(`<dt>prompt_tokens</dt><dd>${FMT_INT(state.prompt_tokens)}</dd>`);
+    parts.push(`<dt>completion_tokens</dt><dd>${FMT_INT(state.completion_tokens)}</dd>`);
+    if (state.max_iterations != null) {
+      parts.push(`<dt>iterations</dt><dd>${state.current_iteration ?? 0} / ${state.max_iterations}</dd>`);
+    }
+    if (state.literature_snapshots) {
+      const litCount = Object.keys(state.literature_snapshots).length;
+      parts.push(`<dt>literature_snapshots</dt><dd>${litCount}</dd>`);
+    }
+    if (state.debate_transcripts) {
+      const dbCount = Object.keys(state.debate_transcripts).length;
+      parts.push(`<dt>debate_transcripts</dt><dd>${dbCount}</dd>`);
+    }
+    parts.push(`</dl>`);
+  }
+
+  // Meta-review: session summary + next_gen_priors + coverage
+  const m = meta ?? state?.meta_review ?? null;
+  if (m) {
+    if (m.session_summary) {
+      parts.push(`<h2>Meta-review summary</h2>`);
+      parts.push(`<p class="summary-prose">${escapeHtml(m.session_summary)}</p>`);
+    }
+    if (m.next_gen_priors && m.next_gen_priors.length > 0) {
+      parts.push(`<h2>Next-gen priors</h2>`);
+      parts.push(`<table class="priors"><thead><tr><th>target_dim</th><th>weight</th><th>rationale</th></tr></thead><tbody>`);
+      for (const p of m.next_gen_priors) {
+        parts.push(`
+          <tr>
+            <td class="dim">${escapeHtml(p.target_dim ?? "")}</td>
+            <td class="weight">${(p.weight ?? 0).toFixed(2)}</td>
+            <td class="rationale">${escapeHtml(p.rationale ?? "")}</td>
+          </tr>
+        `);
+      }
+      parts.push(`</tbody></table>`);
+    }
+    if (m.evolution_yield) {
+      const ey = m.evolution_yield;
+      parts.push(`<h2>Evolution yield</h2>`);
+      parts.push(`<dl class="cost-grid">`);
+      parts.push(`<dt>attempted</dt><dd>${FMT_INT(ey.attempted)}</dd>`);
+      parts.push(`<dt>successful</dt><dd>${FMT_INT(ey.successful)}</dd>`);
+      parts.push(`</dl>`);
+    }
+    if (m.elo_distribution) {
+      const ed = m.elo_distribution;
+      parts.push(`<h2>Elo distribution</h2>`);
+      parts.push(`<dl class="cost-grid">`);
+      parts.push(`<dt>min</dt><dd>${FMT_INT(ed.min)}</dd>`);
+      parts.push(`<dt>p50</dt><dd>${FMT_INT(ed.p50)}</dd>`);
+      parts.push(`<dt>p95</dt><dd>${FMT_INT(ed.p95)}</dd>`);
+      parts.push(`</dl>`);
+    }
+  }
+
+  if (parts.length === 0) {
+    return `<div class="status-msg">No detail files (state.json / survivors.json / meta_review.json) were resolvable for ${escapeHtml(runId)}.</div>`;
+  }
+  return parts.join("\n");
+}
+
+(async function main() {
+  try {
+    const listing = await fetchJson("./listing.json");
+    if (listing.kind && listing.kind !== "seeds") {
+      throw new Error(`listing.json kind="${listing.kind}", expected "seeds"`);
+    }
+    renderRunsTable(listing);
+  } catch (e) {
+    document.getElementById("counts").innerHTML = "";
+    document.getElementById("runs-area").innerHTML =
+      `<div class="status-msg err">listing.json fetch failed: ${escapeHtml(e.message)}</div>`;
+  }
+})();
+</script>
+
+</body>
+</html>
