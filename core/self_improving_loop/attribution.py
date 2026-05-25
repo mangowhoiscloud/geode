@@ -75,11 +75,14 @@ class AttributionRecord(BaseModel):
     group_id: str | None = None
     """P1-revised (2026-05-25 baseline RL grounding) — group sampling 의
     cross-ref key. 같은 cycle 의 N sibling mutation 의 attribution row 가
-    모두 같은 group_id 를 가져 group statistic (mean / std / advantage) 재구성
-    가능. group_size=1 (legacy) 일 때 None."""
-    group_advantage: float | None = None
-    """P1-revised — advantage normalization 의 z-score. ``(fitness_i - μ) /
-    (σ + ε)`` over group. group_id 부재 (legacy) 일 때 None."""
+    모두 같은 group_id 를 가져 group statistic 재구성 가능. group_size=1
+    (legacy) 일 때 None.
+
+    ``group_advantage`` 는 attribution row 에 emit 하지 않음 — variance
+    filter + advantage 는 audit 종료 후 caller (apply_group_proposals) 에서
+    계산되며, attribution write 시점에는 아직 산출 안 됨. apply row
+    (``kind="applied"`` / ``applied_sibling``) 의 ApplyRecord 에만 group_advantage
+    field 가 있음 (audit 종료 후 mint). Codex MCP review (Dedup) 정합."""
 
 
 log = logging.getLogger(__name__)

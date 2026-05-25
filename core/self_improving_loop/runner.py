@@ -1330,13 +1330,28 @@ class SelfImprovingLoopRunner:
         spawns N sequential audit subprocesses); mutator LLM cost is N ×
         per-call cost (parallel here).
         """
-        if n <= 1:
+        if n < 1:
+            # Codex MCP review (slop) — n=0/negative 의 silent single propose
+            # 는 misleading. config knob 은 ``Field(ge=1, le=8)`` 라 정상
+            # path 에서 도달 안 함, 단 direct call 의 type-confusion 방지.
+            raise ValueError(f"propose_group: n must be >= 1, got {n}")
+        if n == 1:
             return [self.propose()]
         import concurrent.futures
+        import contextvars
+
+        # Codex MCP review (slop) — ThreadPoolExecutor 는 ContextVar 를 자동
+        # 전파하지 않는다. session metrics / cost ledger ContextVar 가 thread
+        # 안에서 unset → parent session aggregate 와 분리될 위험. copy_context()
+        # 로 명시 전파.
+        parent_ctx = contextvars.copy_context()
+
+        def _propose_in_ctx() -> Proposal:
+            return parent_ctx.run(self.propose)
 
         proposals: list[Proposal] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=n) as executor:
-            futures = [executor.submit(self.propose) for _ in range(n)]
+            futures = [executor.submit(_propose_in_ctx) for _ in range(n)]
             for future in concurrent.futures.as_completed(futures):
                 proposals.append(future.result())
         return proposals
@@ -1430,14 +1445,16 @@ class SelfImprovingLoopRunner:
         fitness_values: list[float] = []
         audit_run_ids: list[str] = []
         sibling_sot_paths: list[Path] = []
+        sibling_previous_values: list[str] = []
 
         try:
             for idx, proposal in enumerate(proposals):
                 # In-memory (= OS temp file) sibling SoT
-                new_sections, _previous_value, sibling_sot_path = (
+                new_sections, previous_value, sibling_sot_path = (
                     _apply_sibling_in_memory_with_value(proposal)
                 )
                 sibling_sot_paths.append(sibling_sot_path)
+                sibling_previous_values.append(previous_value)
 
                 audit_run_id = uuid.uuid4().hex[:12]
                 audit_run_ids.append(audit_run_id)
@@ -1517,12 +1534,15 @@ class SelfImprovingLoopRunner:
                 raise
 
             # Sibling rows (kind="applied_sibling")
+            # Codex MCP review (slop) — previous_value 를 보존 (이전 ""
+            # placeholder 였음). sibling 의 in-memory SoT 의 mutation 직전
+            # 값 → history audit + dedup detection 에 의미.
             for i, sibling_proposal in enumerate(proposals):
                 if i == best_idx:
                     continue
                 append_audit_log(
                     sibling_proposal.mutation,
-                    previous_value="",
+                    previous_value=sibling_previous_values[i],
                     log_path=self.audit_log_path,
                     audit_run_id=audit_run_ids[i],
                     kind="applied_sibling",
