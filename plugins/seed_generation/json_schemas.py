@@ -81,6 +81,18 @@ CRITIQUE_SCHEMA: Final[dict[str, Any]] = _additive(
         "strengths": {"type": "array", "items": {"type": "string"}},
         "weaknesses": {"type": "array", "items": {"type": "string"}},
         "judge_risk": {"type": "string"},
+        # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — pre-fix
+        # ``_REQUIRED_CRITIQUE_FIELDS`` (critic.py:70) gated this field
+        # but ``CRITIQUE_SCHEMA.required`` omitted it. The worker-side
+        # ``_needs_schema_retry`` only fires when a schema ``required``
+        # key is missing, so the retry NEVER fired for missing
+        # discrimination_estimate — the parent parser then rejected the
+        # otherwise-valid payload (smoke 18: 4/12 critic sub-agents
+        # malformed_critique with discrimination_estimate omitted).
+        # Float 0.0-1.0 — prior on stderr-across-models per
+        # ``critic.md`` (used by ``eval_export.py`` to compute
+        # ``avg_discrimination_estimate``).
+        "discrimination_estimate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
     },
     required=[
         "candidate_id",
@@ -89,6 +101,7 @@ CRITIQUE_SCHEMA: Final[dict[str, Any]] = _additive(
         "strengths",
         "weaknesses",
         "judge_risk",
+        "discrimination_estimate",
     ],
 )
 """Critic agent — per-candidate critique."""
@@ -193,6 +206,45 @@ LITERATURE_REVIEW_SCHEMA: Final[dict[str, Any]] = _additive(
 """Literature review — augmentation snapshots."""
 
 
+# PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — supervisor was the only
+# Loop-1 phase with ``_REQUIRED_*_FIELDS`` (supervisor.py:86) but no
+# corresponding ``*_SCHEMA``. Its SubTask spawned without
+# ``response_schema=``, so the worker-side
+# ``_needs_schema_retry`` never fired on supervisor failures; the
+# parent parser then dropped any payload not matching the 3-key shape
+# (research_goal_analysis / phase_guidance / session_summary). This
+# also explains the supervisor.json checkpoint regression in smoke 18
+# (vs smoke 17 archive) — soft-failure supervisor output never made
+# the schema-gated path, leaving ``phase_result.success`` False and
+# the checkpoint un-written (PR-CHECKPOINT-ON-FAILURE invariant).
+# Sub-property structure mirrors ``supervisor.md`` 's typed contract.
+SUPERVISOR_SCHEMA: Final[dict[str, Any]] = _additive(
+    properties={
+        "research_goal_analysis": {
+            "type": "object",
+            "properties": {
+                "target_dim_focus": {"type": "string"},
+                "sub_dim_priorities": {"type": "array", "items": {"type": "string"}},
+                "key_constraints": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["target_dim_focus", "sub_dim_priorities", "key_constraints"],
+        },
+        "phase_guidance": {
+            "type": "object",
+            "properties": {
+                "generation": {"type": "string"},
+                "critique": {"type": "string"},
+                "evolution": {"type": "string"},
+            },
+            "required": ["generation", "critique", "evolution"],
+        },
+        "session_summary": {"type": "string"},
+    },
+    required=["research_goal_analysis", "phase_guidance", "session_summary"],
+)
+"""Supervisor agent — run-level strategy synthesis."""
+
+
 __all__ = [
     "CRITIQUE_SCHEMA",
     "EVOLVE_SCHEMA",
@@ -200,5 +252,6 @@ __all__ = [
     "META_REVIEW_SCHEMA",
     "PILOT_SCHEMA",
     "PROXIMITY_SCHEMA",
+    "SUPERVISOR_SCHEMA",
     "VOTE_SCHEMA",
 ]

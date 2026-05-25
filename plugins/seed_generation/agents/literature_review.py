@@ -52,6 +52,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import LITERATURE_REVIEW_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -211,6 +212,14 @@ class LiteratureReview(BaseSeedAgent):
                 "queries_per_run": queries,
             },
             agent=_LITERATURE_REVIEW_AGENT_NAME,
+            # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — pre-fix this
+            # spawn omitted ``response_schema=`` so the worker-side
+            # ``_needs_schema_retry`` never fired when the literature
+            # review LLM dropped one of the two required keys
+            # (``articles_with_reasoning`` / ``snapshots``). The schema
+            # itself has existed since PR-JSON-WIRE (#79) but was
+            # un-wired at the spawn site.
+            response_schema=LITERATURE_REVIEW_SCHEMA,
         )
 
     def _build_description(
