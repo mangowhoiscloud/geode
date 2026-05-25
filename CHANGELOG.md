@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.56] - 2026-05-25
+
+Patch release shipping PR-DETAIL-LINK-FIX so the seeds listing → detail click flow on the live Pages site stops returning 404. Single-PR rotation to fix a user-visible regression from v0.99.55.
+
 ### Fixed
 - **PR-DETAIL-LINK-FIX** — seed detail links now match
   `next.config.ts: trailingSlash: false`. Four hrefs in
