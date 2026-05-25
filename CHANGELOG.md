@@ -47,7 +47,7 @@ functional change.
 
 ## [Unreleased]
 
-## [v0.99.55] - 2026-05-25
+## [0.99.55] - 2026-05-25
 
 Bundles 3 PRs: PR-EVOLVER-JACCARD-OBS, PR-PETRI-BUNDLE-LANDING, PR-HANDOFF-SCHEMAS. Smoke-15-driven defence against tool-using sub-agents emitting prose instead of JSON, plus Petri bundle bridge UI and Jaccard threshold tune.
 
