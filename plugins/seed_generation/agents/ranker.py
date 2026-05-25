@@ -306,21 +306,38 @@ class Ranker(BaseSeedAgent):
         missing for a candidate, the corresponding dim_means is empty
         and the judge falls back to seed body alone.
         """
-        means_summary_a = ", ".join(f"{k}={v}" for k, v in means_a.items()) or "n/a"
-        means_summary_b = ", ".join(f"{k}={v}" for k, v in means_b.items()) or "n/a"
-        return (
+        from plugins.seed_generation.handoff_schemas import embed_handoff
+
+        prose = (
             f"Judge ONE seed-candidate match for the seed-generation Elo "
-            f"tournament. Match id: {match.match_id}. Candidate A: "
-            f"{match.a!r} (run_dir/candidates/{match.a}.md, pilot "
-            f"dim_means: {means_summary_a}). Candidate B: "
-            f"{match.b!r} (run_dir/candidates/{match.b}.md, pilot "
-            f"dim_means: {means_summary_b}). You are voter "
-            f"{voter.provider}.{voter.source} ({voter.model!r}). Read both "
-            "candidate seeds, weigh dim_means signal, apply the rubric in "
-            'your system prompt, and return JSON `{"match_id": "<id>", '
-            '"winner": "A"|"B"|"tie", "rationale": "<= 200 tokens"}`. '
+            f"tournament. See the HANDOFF CONTEXT block below for match_id, "
+            f"target_dim, and the two candidates' paths + pilot dim_means. "
+            f"You are voter {voter.provider}.{voter.source} ({voter.model!r}). "
+            "Read both candidate seeds, weigh the dim_means signal, apply "
+            "the rubric in your system prompt.\n\n"
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "VOTE_SCHEMA: "
+            '`{"match_id": "<id>", "winner": "A"|"B"|"tie", "rationale": "<= 200 tokens"}`. '
+            "No prose summary, no preamble. Start with `{` and end with `}`. "
             "Do not skip the rationale."
         )
+        means_a_clean = {k: v for k, v in means_a.items() if isinstance(v, (int, float))}
+        means_b_clean = {k: v for k, v in means_b.items() if isinstance(v, (int, float))}
+        handoff: dict[str, Any] = {
+            "match_id": match.match_id,
+            "target_dim": getattr(match, "target_dim", "") or "",
+            "candidate_a": {
+                "id": match.a,
+                "path": f"run_dir/candidates/{match.a}.md",
+                "pilot_means": means_a_clean,
+            },
+            "candidate_b": {
+                "id": match.b,
+                "path": f"run_dir/candidates/{match.b}.md",
+                "pilot_means": means_b_clean,
+            },
+        }
+        return embed_handoff(prose, handoff)
 
     def _emit_elo_log(
         self,

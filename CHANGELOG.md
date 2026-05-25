@@ -238,6 +238,35 @@ functional change.
   extended with a literature column without schema churn.
 
 ### Fixed
+- **PR-HANDOFF-SCHEMAS** — three-layer defence against the
+  smoke 15 "tool-using sub-agent ends in prose, not JSON" failure:
+  (1) New `plugins/seed_generation/handoff_schemas.py` declares
+  8 INPUT JSON Schemas (`GENERATOR_HANDOFF` / `LITERATURE_REVIEW_
+  HANDOFF` / `PROXIMITY_HANDOFF` / `CRITIC_HANDOFF` /
+  `PILOT_HANDOFF` / `VOTE_HANDOFF` / `EVOLVE_HANDOFF` /
+  `META_REVIEW_HANDOFF`) — symmetric counterpart to the OUTPUT
+  schemas in `json_schemas.py`. Helper `embed_handoff(description,
+  handoff)` appends a `## HANDOFF CONTEXT` fenced JSON block to
+  the user message so the LLM gets accurate values (candidate_id,
+  rewrite_section, pilot dim_means) alongside the prose
+  instruction. `pilot.py` / `evolver.py` / `ranker.py` now emit
+  typed handoff dicts via this helper.
+  (2) `pilot.md` / `evolver.md` gain `## Output JSON (structured)`
+  sections with concrete JSON skeletons and explicit "FINAL
+  response must be ONLY the JSON object" directive — mirrors the
+  critic.md pattern that smoke 15 confirmed worked (critic passed,
+  pilot/evolver failed; the prompt skeleton was the difference).
+  (3) New `core/agent/sub_agent._last_balanced_json_object`
+  scanner falls back to the LAST balanced `{...}` block in prose
+  when `json.loads` of the codeblock-stripped text fails. Handles
+  string escapes and nested objects. Both `_to_sub_result` and
+  `_to_agent_result` paths use it before reaching the legacy
+  `{"raw": ...}` quarantine.
+  Tests: 27 in `tests/plugins/seed_generation/test_handoff_schemas.
+  py` covering schema shape, embed format, role↔schema drift,
+  prompt skeleton presence, fallback parser edge cases (string-
+  escaped braces, nested objects, multi-block selection), and an
+  end-to-end SubAgentManager parse recovery.
 - **PR-EVOLVER-JACCARD-OBS** — Evolver anti-convergence guard
   observability + threshold tune. The CSP-6 Jaccard guard now logs
   the actual measured score and the offending comparison target
