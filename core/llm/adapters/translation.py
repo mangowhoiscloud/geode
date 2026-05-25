@@ -42,6 +42,7 @@ def build_adapter_request(
     thinking_budget: int,
     effort: str,
     resume_session_id: str = "",
+    response_schema: dict[str, Any] | None = None,
 ) -> AdapterCallRequest:
     """Translate AgenticLoop's call-site args → :class:`AdapterCallRequest`.
 
@@ -97,6 +98,7 @@ def build_adapter_request(
         thinking_budget=thinking_budget,
         effort=effort,
         resume_session_id=resume_session_id,
+        response_schema=response_schema,
     )
 
 

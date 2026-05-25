@@ -171,6 +171,17 @@ class SubTask:
     args: dict[str, Any] = field(default_factory=dict)
     agent: str | None = None  # Explicit agent override
     source: str = ""  # adapter source; empty falls back to "payg"
+    # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema that constrains
+    # the spawned LLM call's response to the role's expected shape.
+    # Threads through ``WorkerRequest.response_schema`` →
+    # ``AgenticLoop.response_schema`` → ``AdapterCallRequest.response_schema``
+    # → claude-cli ``--json-schema`` / codex-cli ``--output-schema``.
+    # Without forcing, structured-output roles (pilot / proximity /
+    # critic / evolver / meta_reviewer) regularly hit invalid-JSON
+    # responses (smoke 14 pilot: LLM emitted ``...all zero...``
+    # prose ellipsis inside a JSON object). Empty None preserves
+    # back-compat — caller without a schema still gets free-form text.
+    response_schema: dict[str, Any] | None = None
 
 
 @dataclass
@@ -625,6 +636,10 @@ class SubAgentManager:
             parent_session_key=self._parent_session_key,
             parent_session_id=parent_uuid,
             source=task.source,
+            # PR-JSON-WIRE (2026-05-25) — thread per-task JSON Schema
+            # from SubTask down to the worker subprocess for
+            # structured-output forcing.
+            response_schema=task.response_schema,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

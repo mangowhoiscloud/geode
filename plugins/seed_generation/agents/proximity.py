@@ -53,6 +53,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import PROXIMITY_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -194,6 +195,8 @@ class Proximity(BaseSeedAgent):
             },
             agent=_PROXIMITY_AGENT_NAME,
             source=self.adapter_source,
+            # PR-JSON-WIRE (2026-05-25) — force similarity_clusters JSON shape.
+            response_schema=PROXIMITY_SCHEMA,
         )
 
     def _build_description(self, state: PipelineState, candidate_summary: str) -> str:

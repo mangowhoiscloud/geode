@@ -47,6 +47,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.json_schemas import CRITIQUE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -207,6 +208,8 @@ class Critic(BaseSeedAgent):
                     },
                     agent=_CRITIC_AGENT_NAME,
                     source=self.adapter_source,
+                    # PR-JSON-WIRE (2026-05-25) — force critique JSON shape.
+                    response_schema=CRITIQUE_SCHEMA,
                 )
             )
         return tasks

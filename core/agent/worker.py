@@ -87,6 +87,16 @@ class WorkerRequest:
     # (PR-MAINPATH-67 deleted the legacy ``resolve_agentic_adapter``
     # fallback route — all dispatch now goes through Path-B).
     source: str = ""
+    # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema for
+    # structured-output forcing on the spawned LLM call. Threads
+    # through ``AgenticLoop.response_schema`` →
+    # ``AdapterCallRequest.response_schema`` → claude-cli
+    # ``--json-schema`` / codex-cli ``--output-schema``. ``None``
+    # preserves back-compat (caller without a schema gets free-form
+    # text). Per-role schemas live in
+    # ``plugins/seed_generation/json_schemas.py`` and are wired in
+    # each role's ``_build_tasks``.
+    response_schema: dict[str, Any] | None = None
     # PR-Q (2026-05-24) chose to carry the orchestrator's active run_dir
     # across the parent → worker boundary via the ``GEODE_RUN_DIR``
     # environment variable (see
@@ -131,6 +141,7 @@ class WorkerRequest:
             parent_session_key=data.get("parent_session_key", ""),
             parent_session_id=data.get("parent_session_id", ""),
             source=data.get("source", ""),
+            response_schema=data.get("response_schema"),
         )
 
 
@@ -390,6 +401,12 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # directory that the operator cannot reach from the timeline's
         # ``details.task_id`` reference.
         session_id=request.task_id,
+        # PR-JSON-WIRE (2026-05-25) — thread the per-task JSON Schema
+        # to the AgenticLoop so every spawned adapter call carries
+        # ``AdapterCallRequest.response_schema``. Empty / None
+        # preserves legacy free-form text responses for callers that
+        # didn't declare a schema (REPL, gateway, ad-hoc CLI).
+        response_schema=request.response_schema,
     )
 
     # 7. Build prompt
