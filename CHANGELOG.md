@@ -107,6 +107,29 @@ functional change.
   extended with a literature column without schema churn.
 
 ### Fixed
+- **PR-EVOLVER-JACCARD-OBS** — Evolver anti-convergence guard
+  observability + threshold tune. The CSP-6 Jaccard guard now logs
+  the actual measured score and the offending comparison target
+  (`parent:<id>` or `sibling:<evolved_id>`) when it coerces a
+  verdict to `evolution_skipped`, replacing the previous log line
+  that only reported the static threshold. The threshold itself was
+  raised 0.70 → 0.90 to match the prompt's single-section ±20%
+  rewrite contract (`plugins/seed_generation/agents/evolver.md`) —
+  under that constraint, two compliant evolutions naturally share
+  80-90% of their 5-grams. The original 0.70 mirrored
+  co-scientist's pool-deduplication threshold (where the evolver
+  was free to rewrite the entire body). Smoke 14 (archive
+  `.audit/smoke-archives/smoke-14-1779674544/`) iter-2 evolver
+  measured 5-gram Jaccard **0.8437** between parent
+  `gen1-002-e2b9f471` and its single-bullet rewrite ("all other
+  bullets preserved verbatim" per the LLM's own notes); the 0.70
+  threshold falsely rejected it as a near-duplicate, surfacing as
+  `verdict_not_ok` phase failure. The internal API renamed from
+  `_is_near_duplicate(parsed, ..., ...) -> bool` to
+  `_check_near_duplicate(...) -> tuple[bool, float, str]`. Tests:
+  8 in `tests/plugins/seed_generation/test_evolver_anti_convergence
+  .py` including a smoke-14 replay that pins the empirical anchor
+  (Jaccard ≈ 0.85 admitted at 0.90, rejected at 0.70).
 - **PR-JSON-WIRE** — per-role JSON Schema wire-through. New
   `plugins/seed_generation/json_schemas.py` declares 7 schemas
   (PROXIMITY / CRITIQUE / PILOT / VOTE / EVOLVE / META_REVIEW /

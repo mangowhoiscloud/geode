@@ -72,13 +72,27 @@ _VALID_VERDICTS = frozenset({"ok", "evolution_skipped", "failed"})
 # seed body whose 5-gram Jaccard against any sibling evolved (or
 # pre-existing) candidate exceeds this is treated as "too close" —
 # the verdict gets coerced to ``evolution_skipped`` so the parent
-# candidate stays. 0.70 mirrors the original co-scientist
-# ``DUPLICATE_SIMILARITY_THRESHOLD`` (``open-coscientist/nodes/
-# evolve.py:14``). Proximity uses a stricter 0.40 because it's
-# deduping against the entire pool; this guard fires AFTER the
-# Evolver writes the file, so it tolerates more overlap and only
-# flips on near-duplicates.
-ANTI_CONVERGENCE_JACCARD_THRESHOLD = 0.70
+# candidate stays.
+#
+# Raised 0.70 → 0.90 in PR-EVOLVER-JACCARD-OBS (2026-05-25). The
+# original 0.70 mirrored co-scientist's ``DUPLICATE_SIMILARITY_
+# THRESHOLD`` (``open-coscientist/nodes/evolve.py:14``), but
+# co-scientist's evolver was free to rewrite the entire body.
+# ``plugins/seed_generation/agents/evolver.md`` instead mandates
+# *single-section* rewrite with ±20% body-token budget — under that
+# contract, two compliant evolutions naturally share 80-90% of their
+# 5-grams. Smoke 14 (archive ``.audit/smoke-archives/
+# smoke-14-1779674544/``) iter-2 evolver returned ``verdict: "ok"``
+# for parent ``gen1-002-e2b9f471``; the evolved body's 5-gram Jaccard
+# against the parent measured **0.8437** (single bullet rewrite,
+# "all other bullets preserved verbatim" per the LLM's own
+# ``notes``), and the 0.70 threshold falsely coerced it to
+# ``evolution_skipped`` → ``verdict_not_ok`` phase failure. Raising
+# to 0.90 admits compliant section-rewrites while still catching the
+# "barely changed" failure mode (Jaccard > 0.95). Proximity keeps
+# its stricter 0.40 because it's deduping against the entire pool;
+# this guard fires AFTER the Evolver writes the file.
+ANTI_CONVERGENCE_JACCARD_THRESHOLD = 0.90
 
 
 class Evolver(BaseSeedAgent):
@@ -188,12 +202,21 @@ class Evolver(BaseSeedAgent):
             # The Evolver's verdict is best-effort LLM intent; this
             # guard is a deterministic safety net for the case where
             # the model thinks it diversified but actually didn't.
-            if self._is_near_duplicate(parsed, evolved_rows, candidates_by_id):
+            is_dup, score, against = self._check_near_duplicate(
+                parsed, evolved_rows, candidates_by_id
+            )
+            if is_dup:
+                # PR-EVOLVER-JACCARD-OBS (2026-05-25) — log the actual
+                # Jaccard score + the offending comparison target
+                # ("parent" or "sibling:<id>") so future threshold
+                # tuning has empirical data, not just the static cutoff.
                 log.info(
                     "seed-generation evolver: parent=%s evolved body too close "
-                    "to sibling (Jaccard ≥ %.2f) — coercing verdict to "
-                    "evolution_skipped.",
+                    "to %s (Jaccard %.4f ≥ threshold %.2f) — coercing verdict "
+                    "to evolution_skipped.",
                     task.args["parent_id"],
+                    against,
+                    score,
                     ANTI_CONVERGENCE_JACCARD_THRESHOLD,
                 )
                 continue
@@ -366,26 +389,42 @@ class Evolver(BaseSeedAgent):
             "notes": parsed.get("notes", ""),
         }
 
-    def _is_near_duplicate(
+    def _check_near_duplicate(
         self,
         parsed: dict[str, Any],
         already_admitted: list[dict[str, Any]],
         candidates_by_id: dict[str, dict[str, Any]],
-    ) -> bool:
-        """Return True iff the evolved body is too close to a sibling.
+    ) -> tuple[bool, float, str]:
+        """Compare the evolved body to siblings + parent; return verdict
+        + the offending Jaccard score + a label for the comparison
+        target so the caller can log empirical data (not just the
+        static threshold).
 
-        CSP-6 (2026-05-22) — reads the evolved file body and compares
+        CSP-6 (2026-05-22) reads the evolved file body and compares
         its 5-gram Jaccard against:
 
         1. Every already-admitted evolved row (the sibling spawns this
-           run already accepted).
+           run already accepted) — ``against = "sibling:<evolved_id>"``.
         2. The parent candidate's body (to catch the "evolution returned
-           almost the same text" failure mode the LLM verdict can miss).
+           almost the same text" failure mode the LLM verdict can miss)
+           — ``against = "parent:<parent_id>"``.
 
-        Returns True as soon as ANY comparison exceeds
-        :data:`ANTI_CONVERGENCE_JACCARD_THRESHOLD`. Returns False when
-        the evolved file is unreadable (defensive — failing closed
-        on every IO blip would mask legitimate evolutions).
+        Returns ``(True, score, against)`` as soon as ANY comparison
+        exceeds :data:`ANTI_CONVERGENCE_JACCARD_THRESHOLD`. Returns
+        ``(False, max_score_seen, against_or_"")`` when no comparison
+        crosses the threshold — ``max_score_seen`` is the highest
+        Jaccard observed across all comparisons (or 0.0 when no
+        comparison ran), so even non-dup admissions surface their
+        closest-neighbor score in logs if a caller wants to record it.
+
+        Returns ``(False, 0.0, "")`` when the evolved file is
+        unreadable (defensive — failing closed on every IO blip
+        would mask legitimate evolutions, per CSP-6 docstring).
+
+        PR-EVOLVER-JACCARD-OBS (2026-05-25) — refactored from the
+        boolean ``_is_near_duplicate`` so callers can log the actual
+        score + comparison target. Threshold raised 0.70 → 0.90 to
+        match the prompt's single-section ±20% rewrite contract.
         """
         from pathlib import Path
 
@@ -394,7 +433,7 @@ class Evolver(BaseSeedAgent):
         evolved_path = parsed.get("evolved_path")
         parent_id = parsed.get("parent_id")
         if not evolved_path:
-            return False
+            return (False, 0.0, "")
         try:
             evolved_body = Path(str(evolved_path)).read_text(encoding="utf-8")
         except OSError as exc:
@@ -404,8 +443,10 @@ class Evolver(BaseSeedAgent):
                 evolved_path,
                 exc,
             )
-            return False
+            return (False, 0.0, "")
         evolved_shingles = shingles(evolved_body)
+        max_score = 0.0
+        max_against = ""
         # Sibling check.
         for row in already_admitted:
             other_path = row.get("path")
@@ -416,8 +457,12 @@ class Evolver(BaseSeedAgent):
             except OSError:
                 continue
             score = jaccard_similarity(evolved_shingles, shingles(other_body))
+            label = f"sibling:{row.get('id', '<unknown>')}"
+            if score > max_score:
+                max_score = score
+                max_against = label
             if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
-                return True
+                return (True, score, label)
         # Parent-vs-evolved check — catches the "barely changed" LLM
         # output the verdict didn't flag.
         if parent_id:
@@ -431,6 +476,10 @@ class Evolver(BaseSeedAgent):
                         parent_body = ""
                     if parent_body:
                         score = jaccard_similarity(evolved_shingles, shingles(parent_body))
+                        label = f"parent:{parent_id}"
+                        if score > max_score:
+                            max_score = score
+                            max_against = label
                         if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
-                            return True
-        return False
+                            return (True, score, label)
+        return (False, max_score, max_against)
