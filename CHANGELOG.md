@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-AR-L6 attribution writer standalone graceful** —
+  Pre-PR-AR-L6 ``autoresearch/train.py``'s W2 attribution block was
+  gated on three envs (``GEODE_SIL_MUTATION_ID`` /
+  ``GEODE_SIL_AUDIT_RUN_ID`` / ``GEODE_SIL_EXPECTED_DIM``) — operator
+  standalone runs (``uv run python autoresearch/train.py``,
+  ``--promote``) had none of those, so the attribution row was
+  silently skipped. Downstream consumers (a future source-aware
+  ``compute_credit_assignment`` variant, operator analytics) had no
+  ledger visibility into manual runs.
+  New ``source`` field on ``AttributionRecord`` /
+  ``compute_attribution`` / ``write_attribution`` distinguishes
+  mutator-driven (``"mutator"``, default) from manual (``"manual"``)
+  rows. Standalone runs synthesize ``mutation_id =
+  manual-{commit[:8]}-{audit_uuid[:8]}`` + ``audit_run_id =
+  manual-audit-{audit_uuid[:8]}`` so the ledger keeps a permanent
+  row, and downstream consumers (operator analytics; a future
+  source-aware ``compute_credit_assignment`` variant) can filter the
+  JSONL stream on ``source`` when they want a mutator-only signal. Legacy on-disk rows omit ``source`` → reads
+  back as ``None`` → schema treats as "mutator" for backward compat.
+  7 invariants in
+  ``tests/autoresearch/test_attribution_standalone_manual.py`` pin
+  the schema additions, the synthetic-id format, and the
+  filter-by-source contract.
+
 ### Fixed
 - **PR-VOTER-PROMPT-ANTI-PHANTOM — inline candidate seed bodies into
   voter handoff (kill the fake-path Read instruction).** Smoke 18
