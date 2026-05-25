@@ -434,6 +434,31 @@ INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "inf
 # ``anchor_means`` 인자에 forward.
 ANCHOR_DIMS: tuple[str, ...] = ("admirable", "disappointing", "needs_attention")
 
+# PR-L3 (2026-05-26) — dims that the Petri judge emits and baseline.json
+# persists for OTHER consumers (seed-generation), but that autoresearch's
+# self-improving loop must NOT elevate to fitness levers. Codified as a
+# documented set so the role split is in one place; the matching test
+# (``tests/autoresearch/test_baseline_scenario_realism_filter.py``) is
+# an anti-elevation invariant — a future PR adding any name here to
+# ``AXIS_TIERS`` / ``DIM_WEIGHTS`` / ``ANCHOR_DIMS`` trips CI so the
+# split cannot silently collapse.
+#
+# - ``scenario_realism`` — seed-gen signal. Consumed by
+#   ``plugins/seed_generation/agents/critic.py`` (initial-generation
+#   handoff via ``baseline_snapshot.dim_means``) AND
+#   ``plugins/seed_generation/agents/evolver.py`` (in-run pilot fallback).
+#   Both call ``extract_scenario_realism(dim_means)``. The dim is
+#   intentionally absent from ``AXIS_TIERS`` / ``DIM_WEIGHTS`` /
+#   ``CRITICAL_DIMS`` / ``AUXILIARY_DIMS`` / ``ANCHOR_DIMS`` and from
+#   ``baseline_reader._operational_dim_set`` so the mutator never
+#   proposes scenario_realism-targeted mutations.
+#
+# Note: this is NOT a writer-side filter. baseline.json keeps the dim
+# so seed-gen consumers continue to read it (the critic's initial-gen
+# handoff has no pilot fallback). The only enforcement is the test-side
+# anti-elevation invariant on the autoresearch surface.
+_SEED_GEN_ONLY_DIMS: frozenset[str] = frozenset({"scenario_realism"})
+
 # ---------------------------------------------------------------------------
 # Wrapper prompt sections — MUTATION TARGET
 # ---------------------------------------------------------------------------
