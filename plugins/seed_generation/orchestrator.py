@@ -99,6 +99,13 @@ def _state_to_json(state: PipelineState) -> str:
         # replay knows how many iteration cycles already ran.
         "max_iterations": state.max_iterations,
         "current_iteration": state.current_iteration,
+        # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — per-phase
+        # checkpoint audit trail. ``audit-seeds resume <run_id>`` reads
+        # this list (or the union with on-disk checkpoints/<phase>.json
+        # via ``checkpointer.list_completed_phases``) to skip
+        # already-completed phases on the second walk through
+        # ``_PHASE_ORDER``.
+        "completed_phases": list(state.completed_phases),
         # CSP-8 (2026-05-22) — proximity LLM-clustering output. The
         # meta_reviewer + operator-readable summary both consume these
         # as a coverage signal (replaces the pre-CSP-8 proximity_graph).
@@ -237,6 +244,12 @@ class PipelineState:
     # the cursor (0 = initial draft batch).
     max_iterations: int = 0
     current_iteration: int = 0
+    # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — audit trail
+    # of phases that have written a per-phase checkpoint under
+    # ``<run_dir>/checkpoints/<phase>.json``. ``arun(resume_from_phase=...)``
+    # consults this list (post-hydrate) so a re-run is idempotent —
+    # already-completed phases are skipped on the second pass.
+    completed_phases: list[str] = field(default_factory=list)
     pool_path_in: Path | None = None
     pool_path_out: Path | None = None
     run_dir: Path | None = None
@@ -431,8 +444,17 @@ class Pipeline:
         # inject the values into SubTask creation.
         self.bindings = bindings or {}
 
-    async def arun(self) -> PipelineState:
+    async def arun(self, *, resume_from_phase: str | None = None) -> PipelineState:
         """Walk the 7 phases (then optional iteration cycles). Returns the final state.
+
+        PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — when
+        ``resume_from_phase`` is set, iteration 0 starts at that phase
+        and earlier phases are skipped (idempotent — their checkpoints
+        already populated ``state.candidates`` / ``reflections`` /
+        ``pilot_scores`` etc.). The caller (CLI ``audit-seeds resume``)
+        is responsible for hydrating ``state`` from
+        ``<run_dir>/checkpoints/<phase>.json`` before invoking
+        ``arun``. Pass ``None`` (default) for a fresh run.
 
         PR-Async-Phase-C step 2 (2026-05-22) — async-native pipeline
         walker. Replaces sync ``run`` which is now a deprecation
@@ -487,8 +509,41 @@ class Pipeline:
                     },
                 )
             order = _PHASE_ORDER if iteration == 0 else _ITERATION_PHASE_ORDER
-            for phase in order:
+            # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) —
+            # resume cursor only affects iteration 0; iteration >= 1
+            # is a fresh cycle by design (evolved candidates replace
+            # the prior pool). When ``resume_from_phase`` names a
+            # phase in the current order, skip everything before it.
+            resume_idx = 0
+            if iteration == 0 and resume_from_phase and resume_from_phase in order:
+                resume_idx = order.index(resume_from_phase)
+                if resume_idx > 0:
+                    log.info(
+                        "seed-generation resume: skipping %d completed phase(s) before %r",
+                        resume_idx,
+                        resume_from_phase,
+                    )
+                    _emit_orchestrator_event(
+                        "resume_skipped_phases",
+                        payload={
+                            "skipped": list(order[:resume_idx]),
+                            "resume_from": resume_from_phase,
+                        },
+                    )
+            for phase in order[resume_idx:]:
+                phase_started = time.time()
                 await self._arun_phase(phase)
+                # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) —
+                # checkpoint the post-phase state so a downstream
+                # crash doesn't lose this phase's work. Failures
+                # here are logged but don't abort the run (the
+                # checkpoint is a recovery convenience, not a hard
+                # contract — the run continues either way).
+                if iteration == 0 and self.state.run_dir is not None:
+                    self._record_checkpoint(
+                        phase,
+                        duration_ms=(time.time() - phase_started) * 1000.0,
+                    )
                 # PR-COSCI-1 (2026-05-21) — abort early when the
                 # candidates pool is empty after a phase that should
                 # have populated or filtered it. The check is scoped
@@ -832,6 +887,37 @@ class Pipeline:
             survivors_dir=self.state.pool_path_out,
             meta_review_path=meta_review_path,
         )
+
+    def _record_checkpoint(self, phase: str, *, duration_ms: float) -> None:
+        """Write a ``<run_dir>/checkpoints/<phase>.json`` snapshot.
+
+        PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — recovery
+        path: a future ``audit-seeds resume <run_id>`` invocation
+        reads these files to skip already-completed phases. Failures
+        log a WARNING and continue — the run's primary state lives
+        in memory + final ``state.json``; checkpoints are a
+        convenience for crash recovery.
+        """
+        if self.state.run_dir is None:
+            return
+        try:
+            from plugins.seed_generation.checkpointer import write_checkpoint
+
+            snapshot = json.loads(_state_to_json(self.state))
+            write_checkpoint(
+                self.state.run_dir,
+                phase=phase,
+                state_snapshot=snapshot,
+                duration_ms=duration_ms,
+            )
+            if phase not in self.state.completed_phases:
+                self.state.completed_phases.append(phase)
+        except Exception as exc:  # pragma: no cover — defensive
+            log.warning(
+                "seed-generation: failed to write %s checkpoint — %s",
+                phase,
+                exc,
+            )
 
     def _persist_state(self) -> None:
         """Write a JSON snapshot of state to ``<run_dir>/state.json``.

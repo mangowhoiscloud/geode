@@ -654,7 +654,14 @@ def _build_tool_summary(tools: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-_DECOMPOSE_CALL_TIMEOUT_S: float = 60.0
+# PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — raised 60 → 180
+# (3 min) on operator directive ("야심차게 잡아도 돼"). Smoke 16
+# evolver's `decompose_async` timed out at 122s on the prior 60s cap.
+# The decomposer LLM call can be slow on complex compound requests
+# (multi-tool DAG generation, baseline evidence preamble, etc.); 180s
+# matches the per-LLM-call generosity of openclaw's agent timeout
+# minimum while leaving headroom under the SubAgentManager 600s cap.
+_DECOMPOSE_CALL_TIMEOUT_S: float = 180.0
 
 
 async def decompose_async(

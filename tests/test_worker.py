@@ -43,7 +43,10 @@ class TestWorkerRequest:
         req = WorkerRequest.from_dict({"task_id": "t-002"})
         assert req.model == "claude-opus-4-6"
         assert req.provider == "anthropic"
-        assert req.timeout_s == 120.0
+        # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — default
+        # wall-clock cap lifted 120s → 600s. Operator overrides via
+        # GEODE_SUBAGENT_TIMEOUT_S env or per-request payload.
+        assert req.timeout_s == 600.0
         assert req.denied_tools == []
         assert req.isolation == ""
 
