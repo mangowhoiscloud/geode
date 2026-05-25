@@ -1571,7 +1571,7 @@
   },
   {
     "name": "freeze_paper_snapshot",
-    "description": "Freeze one fetched arXiv paper into a git-tracked JSON snapshot under docs/petri-bundle/literature/. Call once per paper after arxiv_search + paper_fetch_arxiv. Computes a deterministic content_hash over the normalized abstract; returns cache_hit=true when an existing snapshot for the same arxiv_id has a matching hash (no rewrite). Refuses arxiv_id that doesn't match the arXiv pattern and paths that escape the bundle root. Used by the seed-generation Loop 3 (literature_review) per-paper analysis loop.",
+    "description": "Freeze one fetched arXiv paper into a git-tracked JSON snapshot under docs/self-improving/petri-bundle/literature/. Call once per paper after arxiv_search + paper_fetch_arxiv. Computes a deterministic content_hash over the normalized abstract; returns cache_hit=true when an existing snapshot for the same arxiv_id has a matching hash (no rewrite). Refuses arxiv_id that doesn't match the arXiv pattern and paths that escape the bundle root. Used by the seed-generation Loop 3 (literature_review) per-paper analysis loop.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {

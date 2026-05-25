@@ -1,7 +1,7 @@
 {
   "$comment": [
     "Render-lint config for GitHub Pages-published markdown under",
-    "docs/audits/ and docs/petri-bundle/README.md. The goal is to",
+    "docs/audits/ and docs/self-improving/petri-bundle/README.md. The goal is to",
     "catch syntax/structure issues that break Pages rendering — not",
     "to enforce English-prose cosmetics.",
     "",

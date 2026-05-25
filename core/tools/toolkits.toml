@@ -67,7 +67,7 @@ includes = ["common_read"]
 tools = ["arxiv_search", "paper_fetch_arxiv", "geode_seed_pool_search"]
 
 [toolkits.seed_literature_review]
-description = "LiteratureReview agent — Loop 3 (paper-analysis) of the seed-generation 3-loop port (PR-CSP-14, 2026-05-23). arxiv_search + paper_fetch_arxiv for fetch + freeze_paper_snapshot to commit each paper to docs/petri-bundle/literature/ as a git-tracked JSON snapshot. Common_read for ad-hoc inspection of cached snapshots."
+description = "LiteratureReview agent — Loop 3 (paper-analysis) of the seed-generation 3-loop port (PR-CSP-14, 2026-05-23). arxiv_search + paper_fetch_arxiv for fetch + freeze_paper_snapshot to commit each paper to docs/self-improving/petri-bundle/literature/ as a git-tracked JSON snapshot. Common_read for ad-hoc inspection of cached snapshots."
 includes = ["common_read"]
 tools = ["arxiv_search", "paper_fetch_arxiv", "freeze_paper_snapshot"]
 

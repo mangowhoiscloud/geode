@@ -4,7 +4,7 @@ CSP-14 (2026-05-23) — auto-disable the bundle_sync side-effect for all
 seed_generation tests that exercise ``Pipeline.arun`` end-to-end.
 Without this fixture, the orchestrator's ``sync_run_to_bundle`` call
 runs after every test pipeline and writes to the real repo's
-``docs/petri-bundle/seeds/<test_run_id>/`` — leaking test artefacts
+``docs/self-improving/petri-bundle/seeds/<test_run_id>/`` — leaking test artefacts
 into the git-tracked publish surface.
 
 The bundle_sync behaviour itself is covered by the dedicated

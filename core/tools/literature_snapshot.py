@@ -24,7 +24,7 @@ calls ``freeze_paper_snapshot`` once per fetched paper. The tool:
   abstract,
 - short-circuits on cache hit (same arxiv_id + same content_hash),
 - atomically writes the snapshot JSON to
-  ``docs/petri-bundle/literature/<arxiv_id>-<retrieved_at>.json``,
+  ``docs/self-improving/petri-bundle/literature/<arxiv_id>-<retrieved_at>.json``,
 - enforces path containment so the LLM cannot redirect writes.
 
 Cache hit semantics
@@ -48,7 +48,7 @@ Bounds + safety (Phase 1 PR-CSP-13 lessons applied)
 - Atomic write (``tmp + rename``) so a crashed editor never leaves a
   partial json.
 - Path containment: resolved snapshot must live under
-  ``<repo_root>/docs/petri-bundle/literature/``.
+  ``<repo_root>/docs/self-improving/petri-bundle/literature/``.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ __all__ = ["FreezePaperSnapshotTool", "compute_content_hash"]
 
 
 _ARXIV_ID_RE = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
-_SNAPSHOT_DIR_NAME = "docs/petri-bundle/literature"
+_SNAPSHOT_DIR_NAME = "docs/self-improving/petri-bundle/literature"
 
 
 def compute_content_hash(abstract: str) -> str:
@@ -87,11 +87,11 @@ def compute_content_hash(abstract: str) -> str:
 
 
 def _resolve_snapshot_root() -> Path:
-    """Locate the docs/petri-bundle/literature/ directory.
+    """Locate the docs/self-improving/petri-bundle/literature/ directory.
 
     Resolution order:
       1. ``GEODE_REPO_ROOT`` env var (test fixture override) →
-         ``<root>/docs/petri-bundle/literature``
+         ``<root>/docs/self-improving/petri-bundle/literature``
       2. Working directory ancestor that contains ``pyproject.toml``.
       3. Last-resort cwd.
 
@@ -132,7 +132,7 @@ class FreezePaperSnapshotTool:
     def description(self) -> str:
         return (
             "Freeze one fetched arXiv paper into a git-tracked JSON snapshot "
-            "under docs/petri-bundle/literature/. Call once per paper after "
+            "under docs/self-improving/petri-bundle/literature/. Call once per paper after "
             "arxiv_search + paper_fetch_arxiv. Computes a content_hash over the "
             "normalized abstract; returns cache_hit=true when an existing "
             "snapshot for the same arxiv_id has a matching hash (no rewrite). "

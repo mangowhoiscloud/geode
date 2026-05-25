@@ -20,7 +20,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
-      - "docs/petri-bundle/**"
+      - "docs/self-improving/petri-bundle/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
       - "CHANGELOG.md"
@@ -32,7 +32,7 @@ on:
   pull_request:
     paths:
       - "site/**"
-      - "docs/petri-bundle/**"
+      - "docs/self-improving/petri-bundle/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
       - ".pymarkdown.json"
@@ -79,8 +79,8 @@ jobs:
           targets=(
             plugins/petri_audit/judge_dims/*.yaml
             plugins/petri_audit/judge_dims/*.yml
-            docs/petri-bundle/*.yaml
-            docs/petri-bundle/*.yml
+            docs/self-improving/petri-bundle/*.yaml
+            docs/self-improving/petri-bundle/*.yml
           )
           if [ "${#targets[@]}" -eq 0 ]; then
             echo "no YAML targets — skipping"
@@ -99,7 +99,7 @@ jobs:
       - name: JSON parse — petri bundle assets
         run: |
           shopt -s globstar nullglob
-          targets=( docs/petri-bundle/**/*.json )
+          targets=( docs/self-improving/petri-bundle/**/*.json )
           if [ "${#targets[@]}" -eq 0 ]; then
             echo "no JSON targets — skipping"
             exit 0
@@ -140,7 +140,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv sync
 
-      - name: Validate docs/petri-bundle (deep — pre-build gate)
+      - name: Validate docs/self-improving/petri-bundle (deep — pre-build gate)
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/validate_petri_bundle.py
 
@@ -163,16 +163,24 @@ jobs:
       - name: Build static export
         run: npm run build
 
-      - name: Copy docs/petri-bundle into site/out
+      - name: Copy docs/self-improving into site/out (hub root + petri-bundle)
         working-directory: ${{ github.workspace }}
         run: |
+          if [ -d docs/self-improving ]; then
+            mkdir -p site/out/self-improving
+            cp -R docs/self-improving/. site/out/self-improving/
+            echo "self-improving copied to site/out/self-improving/"
+            ls -la site/out/self-improving/ | head -20
+          else
+            echo "docs/self-improving missing — skipping copy"
+          fi
+          # Legacy URL redirect: /geode/petri-bundle/ -> /geode/self-improving/petri-bundle/
+          # Single static index.html with meta-refresh; preserves SPA #hash deep links.
           if [ -d docs/petri-bundle ]; then
             mkdir -p site/out/petri-bundle
             cp -R docs/petri-bundle/. site/out/petri-bundle/
-            echo "petri-bundle copied:"
-            ls -la site/out/petri-bundle/ | head -20
-          else
-            echo "docs/petri-bundle missing — skipping copy"
+            echo "legacy petri-bundle redirect copied to site/out/petri-bundle/"
+            ls -la site/out/petri-bundle/ | head
           fi
 
       - uses: actions/configure-pages@v5

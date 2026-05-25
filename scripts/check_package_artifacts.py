@@ -81,7 +81,7 @@ BANNED_SDIST_PREFIXES = (
     "docs/diagrams/",
     "docs/e2e/",
     "docs/eval/",
-    "docs/petri-bundle/",
+    "docs/self-improving/petri-bundle/",
     "docs/plans/",
     "docs/research/",
     "docs/superpowers/",

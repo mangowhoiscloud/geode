@@ -120,14 +120,14 @@ def test_pages_workflow_has_lint_gate() -> None:
         "docs/audits/2026-05-12-petri-geode-audit-v3.md",
         "docs/audits/2026-05-12-petri-insights.md",
         "docs/audits/2026-05-12-petri-multi-model-partial.md",
-        "docs/petri-bundle/README.md",
+        "docs/self-improving/petri-bundle/README.md",
     ],
 )
 def test_caveat_files_exist(path: str) -> None:
     """The 4 caveat-bearing markdown files the lint gate protects must exist.
 
     If any of these are renamed or moved, the README cross-links in
-    docs/petri-bundle/README.md (which Pages serves verbatim) start
+    docs/self-improving/petri-bundle/README.md (which Pages serves verbatim) start
     404-ing — fix the README at the same time as the rename.
     """
 
@@ -137,7 +137,7 @@ def test_caveat_files_exist(path: str) -> None:
 def test_petri_bundle_json_parses() -> None:
     """listing.json is the entry point inspect_ai's viewer reads first."""
 
-    listing = REPO_ROOT / "docs" / "petri-bundle" / "logs" / "listing.json"
+    listing = REPO_ROOT / "docs" / "self-improving/petri-bundle" / "logs" / "listing.json"
     assert listing.is_file(), f"missing {listing}"
     data = json.loads(listing.read_text(encoding="utf-8"))
     assert isinstance(data, dict)

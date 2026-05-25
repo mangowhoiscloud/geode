@@ -1,0 +1,387 @@
+/* GEODE Self-Improving Hub — production CSS.
+ *
+ * Distilled from /tmp/geode-hub-mockups-v2/_shared.css and validated against
+ *   docs/design/self-improving-hub-system.md (master DESIGN.md §3 tokens, §4
+ *   typography, §5 layout, §6 components, §12 a11y).
+ *
+ * No web fonts, no animations except :hover color transition (<200ms per §12).
+ * No card-lifts, no gradients, no shadows, no emoji.
+ * Bootstrap-light + cotton single-substrate discipline.
+ */
+
+/* ============================================================ */
+/* §3 Tokens                                                    */
+/* ============================================================ */
+:root {
+  /* Ink / paper / rule */
+  --ink: #1a1f29;
+  --ink-soft: #4a5260;
+  --ink-faint: #7d8694;
+  --rule: #e5e8ec;
+  --rule-soft: #f1f3f5;
+  --paper: #ffffff;
+  --paper-tint: #f8f9fa;
+
+  /* Accent (Bootstrap --bs-blue) */
+  --accent: #0d6efd;
+  --accent-faint: #e7f1ff;
+
+  /* Harness chip palette (§3 — 4 chips, palette explosion forbidden) */
+  --chip-payg-bg: #f1f3f5;
+  --chip-payg-fg: #4a5260;
+  --chip-claude-bg: #efe7fb;
+  --chip-claude-fg: #5a2ca0;
+  --chip-codex-bg: #d1e7dd;
+  --chip-codex-fg: #0a3622;
+  --chip-geode-bg: #cfe2ff;
+  --chip-geode-fg: #052c65;
+
+  /* Surface bucket palette (§3 — 3 buckets) */
+  --bucket-petri: #0d6efd;
+  --bucket-seedgen: #198754;
+  --bucket-autoresearch: #b45309;
+
+  /* Warning / stale baseline banner (reuses autoresearch tone per §3 strict-rule 2) */
+  --warning-bg: #fff4e6;
+  --warning-fg: #7a3e08;
+  --warning-rule: #f4cd9d;
+
+  /* Type scale (§4) */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, Menlo, "SF Mono", monospace;
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --content-max: 1100px;
+  --content-pad-y: 2rem;
+  --content-pad-x: 2.5rem;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--accent); text-decoration: none; transition: color .15s; }
+a:hover { text-decoration: underline; }
+
+code {
+  background: var(--rule-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* ============================================================ */
+/* §5 Layout shell                                              */
+/* ============================================================ */
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  min-height: 100vh;
+}
+
+/* ============================================================ */
+/* §6 Sidebar                                                   */
+/* ============================================================ */
+aside.sidebar {
+  border-right: 1px solid var(--rule);
+  background: var(--paper-tint);
+  padding: 1.5rem 1rem;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+aside .brand {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: .2rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+aside .brand-sub {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  margin-bottom: 1.5rem;
+}
+
+aside .nav-section {
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  margin: 1.15rem 0 .35rem;
+  font-family: var(--font-mono);
+}
+
+aside ul.nav-list,
+aside ul.sub-nav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+aside ul.nav-list a {
+  display: block;
+  padding: .3rem .55rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: .83rem;
+  border-radius: 3px;
+  transition: color .15s, background-color .15s;
+}
+
+aside ul.nav-list a:hover {
+  background: var(--accent-faint);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+aside ul.nav-list a.active,
+aside ul.nav-list a[aria-current="page"] {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+aside ul.nav-list .count {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  margin-left: .35rem;
+}
+
+aside ul.nav-list ul.sub-nav {
+  padding: 0 0 0 .8rem;
+  margin: .15rem 0 .35rem;
+  border-left: 1px solid var(--rule);
+}
+
+aside ul.nav-list ul.sub-nav a {
+  font-size: .76rem;
+  padding: .15rem .45rem;
+}
+
+/* ============================================================ */
+/* §5 Main content                                              */
+/* ============================================================ */
+main.content {
+  padding: var(--content-pad-y) var(--content-pad-x);
+  max-width: var(--content-max);
+}
+
+h1.page-title {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 0 0 .35rem;
+  color: var(--ink);
+  line-height: 1.30;
+}
+
+.page-sub {
+  color: var(--ink-soft);
+  margin: 0 0 1.5rem;
+  font-size: .95rem;
+  line-height: 1.55;
+  max-width: 780px;
+}
+
+h2.section {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  margin: 1.75rem 0 .55rem;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  line-height: 1.20;
+}
+
+h2.section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+h3.subsection {
+  font-size: .9rem;
+  font-weight: 600;
+  margin: 1rem 0 .35rem;
+  font-family: var(--font-mono);
+  line-height: 1.35;
+}
+
+/* ============================================================ */
+/* §6 Records table                                             */
+/* ============================================================ */
+table.records {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  border-collapse: collapse;
+}
+
+table.records thead th {
+  text-align: left;
+  padding: .35rem .6rem .35rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+table.records tbody td {
+  padding: .45rem .6rem .45rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+table.records tbody tr:hover td {
+  background: var(--rule-soft);
+}
+
+table.records td.id a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+table.records td.id a:hover {
+  text-decoration: underline;
+}
+
+table.records td.num {
+  text-align: right;
+  color: var(--ink);
+}
+
+table.records td.muted {
+  color: var(--ink-soft);
+}
+
+table.records td.empty {
+  text-align: center;
+  color: var(--ink-faint);
+  font-style: italic;
+  padding: 1rem;
+}
+
+table.records .sub-row .id {
+  padding-left: 1.5rem;
+}
+
+/* ============================================================ */
+/* §3 Harness chips (4)                                         */
+/* ============================================================ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: .08rem .42rem;
+  border-radius: 3px;
+  font-size: .62rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: .02em;
+  margin-right: .25rem;
+  margin-bottom: .12rem;
+  line-height: 1.0;
+}
+
+.chip.payg   { background: var(--chip-payg-bg);   color: var(--chip-payg-fg); }
+.chip.claude { background: var(--chip-claude-bg); color: var(--chip-claude-fg); }
+.chip.codex  { background: var(--chip-codex-bg);  color: var(--chip-codex-fg); }
+.chip.geode  { background: var(--chip-geode-bg);  color: var(--chip-geode-fg); }
+
+/* ============================================================ */
+/* §3 Surface bucket chips (3)                                  */
+/* ============================================================ */
+.bucket {
+  display: inline-block;
+  padding: .08rem .4rem;
+  border-radius: 3px;
+  font-size: .58rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: .35rem;
+  line-height: 1.0;
+}
+
+.bucket.petri        { background: rgba(13,110,253,.12);  color: var(--bucket-petri); }
+.bucket.seedgen      { background: rgba(25,135,84,.12);   color: var(--bucket-seedgen); }
+.bucket.autoresearch { background: rgba(180,83,9,.12);    color: var(--bucket-autoresearch); }
+
+/* ============================================================ */
+/* §4 Role label                                                */
+/* ============================================================ */
+.role-label {
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  margin-right: .25rem;
+  font-family: var(--font-mono);
+  line-height: 1.0;
+}
+
+/* ============================================================ */
+/* §10 Stale baseline warning banner                            */
+/* ============================================================ */
+.warning {
+  margin: 0 0 1.5rem;
+  padding: .55rem .8rem;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 1px solid var(--warning-rule);
+  border-radius: 3px;
+  font-size: .82rem;
+  font-family: var(--font-mono);
+}
+
+.warning code { background: rgba(255,255,255,.55); }
+
+/* ============================================================ */
+/* §9 Build info footer                                         */
+/* ============================================================ */
+.build-info {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-size: .7rem;
+  font-family: var(--font-mono);
+}
+
+.build-info p { margin: .25rem 0; }
+.build-info code { background: var(--paper-tint); }
+
+.version-stamp {
+  margin-top: .5rem;
+  color: var(--ink-soft);
+}
+
+/* Footer chip legend keeps chip spacing tighter inline */
+.build-info .chip { margin-right: .15rem; }

@@ -49,7 +49,7 @@ repos:
       - id: yamllint
         name: yamllint (petri YAML)
         args: [-c, .yamllint.yaml, --strict]
-        files: ^(plugins/petri_audit/judge_dims/.*\.ya?ml|docs/petri-bundle/.*\.ya?ml)$
+        files: ^(plugins/petri_audit/judge_dims/.*\.ya?ml|docs/self-improving/petri-bundle/.*\.ya?ml)$
 
   # pymarkdownlnt — markdown render gate for the docs that get published
   # to GitHub Pages or linked from the petri-bundle README. Scope is
@@ -64,7 +64,7 @@ repos:
         entry: scripts/lint_pages_markdown.sh
         language: system
         pass_filenames: false
-        files: ^(docs/audits/.*\.md|docs/petri-bundle/README\.md|docs/architecture/render-lint\.md|\.pymarkdown\.json)$
+        files: ^(docs/audits/.*\.md|docs/self-improving/petri-bundle/README\.md|docs/architecture/render-lint\.md|\.pymarkdown\.json)$
 
   # Local hooks — use project virtualenv (uv run) for full dependency access
   - repo: local

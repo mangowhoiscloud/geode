@@ -6,7 +6,7 @@ Checks
 - Dangling symlinks (target does not exist).
 - Absolute symlinks (path leaks to a specific machine).
 - Orphan worktrees (.claude/worktrees/<name>/ missing .owner).
-- Petri bundle file-count ratchet — guards docs/petri-bundle/logs/*.eval
+- Petri bundle file-count ratchet — guards docs/self-improving/petri-bundle/logs/*.eval
   against accidental deletion during non-petri refactors. The PR that
   drops bundle archives must also lower the floor here, making the
   removal explicit (Karpathy P4 Ratchet).
@@ -23,11 +23,11 @@ import os
 import sys
 from pathlib import Path
 
-# Lower bound for archive files under docs/petri-bundle/logs/. Pinned to
+# Lower bound for archive files under docs/self-improving/petri-bundle/logs/. Pinned to
 # the count present on main (9 .eval archives, see audits PR #1130). Raise
 # this number when adding archives; lowering it requires explicit review.
 PETRI_EVAL_FLOOR = 9
-PETRI_LOGS_DIR = Path("docs/petri-bundle/logs")
+PETRI_LOGS_DIR = Path("docs/self-improving/petri-bundle/logs")
 
 EXCLUDED_DIRS: frozenset[tuple[str, ...]] = frozenset(
     {

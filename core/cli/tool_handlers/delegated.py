@@ -33,7 +33,7 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "seed_debate_turn": ("core.tools.seed_debate", "SeedDebateTurnTool"),
     # CSP-14 (2026-05-23) — Loop 3 (paper-analysis) of the seed-generation
     # 3-loop port. Freezes one fetched arXiv paper into a git-tracked
-    # snapshot under docs/petri-bundle/literature/. Cache-hit on
+    # snapshot under docs/self-improving/petri-bundle/literature/. Cache-hit on
     # content_hash short-circuits re-writes.
     "freeze_paper_snapshot": (
         "core.tools.literature_snapshot",

@@ -3,7 +3,7 @@
 Covers:
 - Sync copies state.json + survivors.json + meta_review.json
 - Selective candidate copy (survivors only, drafts skipped)
-- Containment guard (resolved path under docs/petri-bundle/seeds/)
+- Containment guard (resolved path under docs/self-improving/petri-bundle/seeds/)
 - Env knob ``GEODE_SEED_BUNDLE_SYNC_DISABLED`` short-circuit
 - Idempotency (re-sync overwrites)
 - Defensive read of malformed state.json
@@ -25,7 +25,7 @@ def _make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     The conftest's autouse fixture sets ``GEODE_SEED_BUNDLE_SYNC_DISABLED=1``
     to prevent unrelated tests from leaking into the real repo's
-    docs/petri-bundle/seeds/. Bundle-sync's own tests need to actually
+    docs/self-improving/petri-bundle/seeds/. Bundle-sync's own tests need to actually
     exercise the sync, so we clear that knob here.
     """
     (tmp_path / "pyproject.toml").write_text("# fake\n", encoding="utf-8")
@@ -48,7 +48,7 @@ def test_sync_copies_state_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     run = _make_run_dir(repo, "r-001", state={"run_id": "r-001"})
     dst = sync_run_to_bundle(run)
     assert dst is not None
-    assert (repo / "docs/petri-bundle/seeds/r-001/state.json").is_file()
+    assert (repo / "docs/self-improving/petri-bundle/seeds/r-001/state.json").is_file()
 
 
 def test_sync_copies_optional_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,7 +58,7 @@ def test_sync_copies_optional_files(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     (run / "survivors.json").write_text('{"survivors": []}', encoding="utf-8")
     (run / "meta_review.json").write_text('{"coverage": {}}', encoding="utf-8")
     sync_run_to_bundle(run)
-    bundle = repo / "docs/petri-bundle/seeds/r-002"
+    bundle = repo / "docs/self-improving/petri-bundle/seeds/r-002"
     assert (bundle / "state.json").is_file()
     assert (bundle / "survivors.json").is_file()
     assert (bundle / "meta_review.json").is_file()
@@ -86,7 +86,7 @@ def test_sync_copies_only_survivor_candidates(
     for cid in ("c-1", "c-2", "c-3"):
         (run / "candidates" / f"{cid}.md").write_text(f"# {cid}\n", encoding="utf-8")
     sync_run_to_bundle(run)
-    bundle_cands = repo / "docs/petri-bundle/seeds/r-003/candidates"
+    bundle_cands = repo / "docs/self-improving/petri-bundle/seeds/r-003/candidates"
     assert (bundle_cands / "c-1.md").is_file()
     assert not (bundle_cands / "c-2.md").exists(), "non-survivor draft leaked into publish bundle"
     assert (bundle_cands / "c-3.md").is_file()
@@ -99,7 +99,7 @@ def test_sync_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     sync_run_to_bundle(run)
     sync_run_to_bundle(run)
     # Single state.json — re-sync overwrote.
-    assert (repo / "docs/petri-bundle/seeds/r-004/state.json").is_file()
+    assert (repo / "docs/self-improving/petri-bundle/seeds/r-004/state.json").is_file()
 
 
 def test_sync_env_knob_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -109,7 +109,7 @@ def test_sync_env_knob_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     run = _make_run_dir(repo, "r-005", state={"run_id": "r-005"})
     result = sync_run_to_bundle(run)
     assert result is None
-    assert not (repo / "docs/petri-bundle/seeds/r-005").exists()
+    assert not (repo / "docs/self-improving/petri-bundle/seeds/r-005").exists()
 
 
 def test_sync_missing_state_json_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,9 +139,9 @@ def test_sync_malformed_state_json_recovers(
     (run_dir / "candidates" / "c-x.md").write_text("# c-x\n", encoding="utf-8")
     sync_run_to_bundle(run_dir)
     # state.json still copied (verbatim) — only survivor enumeration is best-effort.
-    assert (repo / "docs/petri-bundle/seeds/r-007/state.json").is_file()
+    assert (repo / "docs/self-improving/petri-bundle/seeds/r-007/state.json").is_file()
     # No survivor list → candidates dir is empty / absent.
-    assert not (repo / "docs/petri-bundle/seeds/r-007/candidates").exists()
+    assert not (repo / "docs/self-improving/petri-bundle/seeds/r-007/candidates").exists()
 
 
 # ── iter_synced_runs ──────────────────────────────────────────────────────
@@ -169,10 +169,10 @@ def test_iter_synced_runs_skips_unparseable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _make_repo(tmp_path, monkeypatch)
-    bundle = repo / "docs/petri-bundle/seeds/r-bad"
+    bundle = repo / "docs/self-improving/petri-bundle/seeds/r-bad"
     bundle.mkdir(parents=True)
     (bundle / "state.json").write_text("not json", encoding="utf-8")
-    bundle2 = repo / "docs/petri-bundle/seeds/r-good"
+    bundle2 = repo / "docs/self-improving/petri-bundle/seeds/r-good"
     bundle2.mkdir(parents=True)
     (bundle2 / "state.json").write_text(json.dumps({"run_id": "r-good"}), encoding="utf-8")
     runs = iter_synced_runs()

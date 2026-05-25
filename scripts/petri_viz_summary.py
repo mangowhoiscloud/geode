@@ -15,7 +15,7 @@ Output:
 from pathlib import Path
 
 WORKTREE = Path(__file__).resolve().parent.parent
-LOGS_DIR = WORKTREE / "docs/petri-bundle/logs"
+LOGS_DIR = WORKTREE / "docs/self-improving/petri-bundle/logs"
 
 ARCHIVES = {
     "opus_v3_G": LOGS_DIR / "geode-13-v3.eval",
