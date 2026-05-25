@@ -48,6 +48,47 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-SEEDS-EVAL-EXPORT** — seed-generation runs now surface as native
+  inspect_ai tasks inside the SPA bundle viewer at
+  `https://mangowhoiscloud.github.io/geode/petri-bundle/#/tasks/`.
+  Previously the SPA only recognised `inspect_petri/audit` `.eval`
+  archives shipped from `geode audit` runs; the seed-generation
+  pipeline's JSON-only output (`docs/petri-bundle/seeds/<run_id>/*.
+  json`) was invisible to it.
+
+  New module `plugins/seed_generation/eval_export.py:export_run_to_evals`
+  reads a run's `state.json` + `survivors.json` + `meta_review.json`
+  and synthesises **one `.eval` per non-empty pipeline phase** of the
+  8 phases (`supervisor` / `generator` / `proximity` / `critic` /
+  `pilot` / `ranker` / `evolver` / `meta_reviewer`). Each phase
+  becomes a task whose samples are the natural unit for that phase
+  (candidates, reflections, pilot evaluations, etc.), with a single
+  meaningful score derived from the phase's own semantics (draft-to-
+  survive ratio, dedupe ratio, avg discrimination_estimate, target-
+  dim pilot mean, survival ratio, evolution yield, dim-coverage
+  breadth). Each emitted archive passes the strict
+  `scripts/validate_petri_bundle.py` invariants (status='success',
+  non-empty `results.scores` with metrics).
+
+  Wired into `plugins/seed_generation/bundle_sync.py:sync_run_to_bundle`
+  as a best-effort secondary publish step after the JSON sync, so
+  every newly-published seed-generation run automatically gains 7-8
+  phase task cards in the viewer. An export failure does not block
+  the JSON sync that already succeeded; operators can opt out per-
+  environment via `GEODE_SEED_EVAL_EXPORT_DISABLED=1`.
+
+  Listing-entry merge re-uses the audit-side helpers
+  (`plugins/petri_audit/bundle_sync._extract_listing_entry` +
+  `_merge_listing`) so the produced `.eval` lands in
+  `docs/petri-bundle/logs/listing.json` with the same schema the SPA
+  already reads. 6 new tests
+  (`tests/test_seed_eval_export.py`) pin: per-phase produce count,
+  validator-required header invariants, listing-entry merge,
+  PHASE_TASKS name discipline, empty-run skip, missing-state-json
+  skip. Verified end-to-end with the gen1 sample run already in the
+  bundle (`gen1-redundant_tool_invocation`): 7 cards now appear in
+  the SPA tasks view alongside the 11 existing audit cards.
+
 - **PR-SEEDS-PETRI-NEXTJS-PAGE** — new Next.js docs page
   `site/src/app/docs/petri/seeds/page.tsx` renders the self-improving
   loop's seed-generation runs as a first-class GEODE docs surface,
