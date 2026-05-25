@@ -244,6 +244,24 @@ def load_policy(kind: str) -> dict[str, str]:
     return {k: str(v) for k, v in payload.items() if isinstance(k, str)}
 
 
+def _serialize_policy_payload(kind: str, sections: dict[str, str]) -> str:
+    """Codex MCP review F4 (Dedup) — ``write_policy`` 와 ``write_sibling_in_memory``
+    가 동일한 serialization (``_NESTED_KINDS`` flatten + JSON sort_keys) 을
+    중복 구현하던 것을 helper 로 추출. 두 caller 가 same payload format 보장.
+    """
+    serializable: dict[str, object]
+    if kind in _NESTED_KINDS:
+        serializable = dict(_unflatten_nested(sections, kind=kind))
+    else:
+        serializable = {k: v for k, v in sections.items() if isinstance(k, str)}
+    return json.dumps(
+        serializable,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+
+
 def write_sibling_in_memory(kind: str, sections: dict[str, str]) -> Path:
     """Write policy sections to a TEMPORARY file (not the SoT path).
 
@@ -269,17 +287,7 @@ def write_sibling_in_memory(kind: str, sections: dict[str, str]) -> Path:
         raise ValueError(f"unknown target_kind {kind!r}, expected one of {TARGET_KINDS!r}")
     import tempfile
 
-    serializable: dict[str, object]
-    if kind in _NESTED_KINDS:
-        serializable = dict(_unflatten_nested(sections, kind=kind))
-    else:
-        serializable = {k: v for k, v in sections.items() if isinstance(k, str)}
-    payload = json.dumps(
-        serializable,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    )
+    payload = _serialize_policy_payload(kind, sections)
     fd, temp_path_str = tempfile.mkstemp(
         suffix=f"-{kind}-sibling.json",
         prefix="geode-sibling-",
@@ -315,20 +323,9 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    serializable: dict[str, object]
-    if kind in _NESTED_KINDS:
-        # ``_unflatten_nested`` returns ``dict[str, dict[str, object]]`` —
-        # widen to ``dict[str, object]`` so the type matches the legacy
-        # ``dict[str, str]`` branch under a common annotation.
-        serializable = dict(_unflatten_nested(sections, kind=kind))
-    else:
-        serializable = {k: v for k, v in sections.items() if isinstance(k, str)}
-    payload = json.dumps(
-        serializable,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    )
+    # Codex MCP review F4 (Dedup) — _serialize_policy_payload 가
+    # write_sibling_in_memory 와 같은 serialization 보장.
+    payload = _serialize_policy_payload(kind, sections)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(payload + "\n", encoding="utf-8")
     tmp.replace(path)
