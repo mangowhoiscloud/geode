@@ -54,7 +54,7 @@ Your FINAL response — after the candidate file has been written — must be ON
 - `evolved_path` (string) is the absolute path of the file you just wrote.
 - `rewrite_section` (string) names the section you rewrote (mirrors the input).
 - `verdict` (one of `ok`, `evolution_skipped`, `failed`).
-- `notes` (string, optional) — short rationale; the orchestrator's Jaccard guard (PR-EVOLVER-JACCARD-OBS) is the deterministic safety net for "barely changed" output, so do not pad this field.
+- `notes` (string, required, may be `""`) — short rationale; the orchestrator's Jaccard guard (PR-EVOLVER-JACCARD-OBS) is the deterministic safety net for "barely changed" output, so do not pad this field. Emit an empty string `""` when there is nothing worth surfacing (strict-mode schema requires the key be present per PR-STRICT-COMPATIBLE-SCHEMAS).
 
 ## Quality bar
 
