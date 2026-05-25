@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.63] - 2026-05-26
+
+Scope B (Petri × autoresearch) full wiring sprint — 5 PR closing the multi-axis fitness leaks identified by the petri × autoresearch GAP audit: PR-AR-L6 (attribution standalone graceful with synthetic mutation_id + `source` field) + PR-AR-L4a (ux_means 4-reader collector consuming `mutations.jsonl`) + PR-AR-L4b (5-caller `ux_means` / `admire_means` forward through `compute_fitness`) + PR-AR-L4c (admire_means consumer for seed-gen `evaluate_mutation_pairwise` handoff, Krippendorff-grounded calibration proxy) + PR-AR-L4d (UX Goodhart bidirectional gate mirroring bench pattern). Cross-vertex contract with seed-gen (Scope A, PR-RANKER-MUTATION-EVAL #1704) honored as a data-only handoff — `MutationEvalResult.pairwise_win_rate` field-name parity pinned on both sides, no runtime cross-package import. Codex MCP review caught 7 issues across the 5 PRs (all fixed in-band).
+
 ### Added
 - **PR-AR-L4c ``admire_means`` consumer for seed-gen handoff (ADR-012 S2b)** —
   Scope A (PR-RANKER-MUTATION-EVAL #1704) shipped
