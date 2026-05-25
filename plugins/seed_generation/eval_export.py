@@ -202,9 +202,7 @@ def export_run_to_evals(
                 EvalScore(
                     name=phase,
                     scorer=f"seed-generation/{phase}",
-                    metrics={
-                        "mean": EvalMetric(name="mean", value=float(score_value))
-                    },
+                    metrics={"mean": EvalMetric(name="mean", value=float(score_value))},
                 )
             ],
         )

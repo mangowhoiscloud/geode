@@ -31,15 +31,41 @@ def _write_run(run_dir: Path) -> Path:
         "gen_tag": "gen-test",
         "candidates_requested": 2,
         "candidates": [
-            {"id": "c-001", "path": str(run_dir / "candidates/c-001.md"), "target_dim": "redundant_tool_invocation", "duration_ms": 1.0},
-            {"id": "c-002", "path": str(run_dir / "candidates/c-002.md"), "target_dim": "redundant_tool_invocation", "duration_ms": 2.0},
+            {
+                "id": "c-001",
+                "path": str(run_dir / "candidates/c-001.md"),
+                "target_dim": "redundant_tool_invocation",
+                "duration_ms": 1.0,
+            },
+            {
+                "id": "c-002",
+                "path": str(run_dir / "candidates/c-002.md"),
+                "target_dim": "redundant_tool_invocation",
+                "duration_ms": 2.0,
+            },
         ],
         "reflections": {
-            "c-001": {"candidate_id": "c-001", "strengths": ["a"], "weaknesses": ["b"], "discrimination_estimate": 0.6, "judge_risk": "low"},
-            "c-002": {"candidate_id": "c-002", "strengths": ["c"], "weaknesses": ["d"], "discrimination_estimate": 0.4, "judge_risk": "med"},
+            "c-001": {
+                "candidate_id": "c-001",
+                "strengths": ["a"],
+                "weaknesses": ["b"],
+                "discrimination_estimate": 0.6,
+                "judge_risk": "low",
+            },
+            "c-002": {
+                "candidate_id": "c-002",
+                "strengths": ["c"],
+                "weaknesses": ["d"],
+                "discrimination_estimate": 0.4,
+                "judge_risk": "med",
+            },
         },
         "pilot_scores": {
-            "c-001": {"candidate_id": "c-001", "dim_means": {"redundant_tool_invocation": 2.5}, "status": "ok"}
+            "c-001": {
+                "candidate_id": "c-001",
+                "dim_means": {"redundant_tool_invocation": 2.5},
+                "status": "ok",
+            }
         },
         "similarity_clusters": [
             {"cluster_id": "cluster-0", "topic": "x", "similar_hypotheses": []}
@@ -54,9 +80,7 @@ def _write_run(run_dir: Path) -> Path:
             "coverage": {"redundant_tool_invocation": 2, "broken_tool_use": 0},
             "underrepresented_dims": ["broken_tool_use"],
             "overrepresented_dims": [],
-            "next_gen_priors": [
-                {"target_dim": "broken_tool_use", "weight": 0.5, "rationale": "x"}
-            ],
+            "next_gen_priors": [{"target_dim": "broken_tool_use", "weight": 0.5, "rationale": "x"}],
             "elo_distribution": {"min": 990, "p50": 1000, "p95": 1010},
             "evolution_yield": {"attempted": 1, "successful": 1},
             "session_summary": "summary",
@@ -67,9 +91,7 @@ def _write_run(run_dir: Path) -> Path:
         json.dumps({"survivors": [{"id": "c-001", "elo_rating": 1010, "pilot": None}]}),
         encoding="utf-8",
     )
-    (run_dir / "meta_review.json").write_text(
-        json.dumps(state["meta_review"]), encoding="utf-8"
-    )
+    (run_dir / "meta_review.json").write_text(json.dumps(state["meta_review"]), encoding="utf-8")
     (run_dir / "candidates").mkdir(exist_ok=True)
     (run_dir / "candidates/c-001.md").write_text("seed body 1", encoding="utf-8")
     (run_dir / "candidates/c-002.md").write_text("seed body 2", encoding="utf-8")
@@ -93,7 +115,15 @@ def test_export_produces_one_eval_per_nonempty_phase(tmp_path: Path) -> None:
     tasks = {listing[p.name]["task"] for p in written}
     expected = {
         f"seed-generation/{phase}"
-        for phase in ("generator", "proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer")
+        for phase in (
+            "generator",
+            "proximity",
+            "critic",
+            "pilot",
+            "ranker",
+            "evolver",
+            "meta_reviewer",
+        )
     }
     assert tasks == expected
 
