@@ -335,8 +335,9 @@ def test_evolver_injects_baseline_evidence_into_description(monkeypatch: Any) ->
     for task in manager.received_tasks:
         assert "Recent audit evidence" in task.description
         assert "seed-evolver" in task.description
-        # Original pilot signals still present.
-        assert "Pilot dim_means" in task.description
+        # PR-HANDOFF-SCHEMAS (2026-05-25) — pilot signals now live inside
+        # the `## HANDOFF CONTEXT` JSON block as `pilot_dim_means`.
+        assert "pilot_dim_means" in task.description
 
 
 def test_evolver_no_evidence_block_without_snapshot() -> None:
