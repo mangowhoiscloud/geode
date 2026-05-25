@@ -558,11 +558,7 @@ class Pipeline:
                 # checkpoint is gated on ``phase_result.success`` so
                 # resume re-runs failed phases instead of pretending
                 # they completed.
-                if (
-                    iteration == 0
-                    and self.state.run_dir is not None
-                    and phase_result.success
-                ):
+                if iteration == 0 and self.state.run_dir is not None and phase_result.success:
                     self._record_checkpoint(
                         phase,
                         duration_ms=(time.time() - phase_started) * 1000.0,
