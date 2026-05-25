@@ -119,6 +119,13 @@ class ApplyRecord(BaseModel):
     한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
     None 일 때 legacy (P3 이전 mutation row). max 500 chars (parse_mutation
     guard)."""
+    causal_hypothesis: str | None = Field(default=None, max_length=500)
+    """A.6 (PR-20, 2026-05-25) — Conditional Reward Modeling (CRM, arXiv
+    2509.26578) 패턴. mutator 가 mutation 직전 명시한 "dim X 의 Y 효과
+    → fitness Z 변화" 인과사슬. principle (SPCT) 이 *judging criterion*
+    이라면 causal_hypothesis 는 *causal chain*. post-audit observed_dim
+    이 hypothesis 와 일치하는지 cross-check (별도 wiring). None 일 때
+    legacy (CRM 이전). max 500 chars (parse_mutation guard)."""
     swarm_id: str | None = None
     """P4 (2026-05-25, Kimi K2.6 PARL inference-time) — swarm-level grouping
     key. multi-level: swarm_id (level 2) + group_id (level 1). 1=disabled
@@ -186,6 +193,15 @@ class Mutation:
     principle → critique → reward chain 의 입구. parse_mutation 이
     LLM response 의 ``principle`` key 에서 추출 (max 500자). 빈 문자열
     일 때 legacy mutator (P3 이전) 호환."""
+
+    causal_hypothesis: str = ""
+    """A.6 (PR-20, 2026-05-25, CRM) — mutator 가 mutation 직전 명시한
+    causal chain ("dim X 의 Y 효과 → fitness Z 변화"). CRM (Conditional
+    Reward Modeling, arXiv 2509.26578) 패턴. principle 이 *judging
+    criterion* (SPCT) 라면 causal_hypothesis 는 *causal trace* — post-
+    audit observed_dim 과 cross-check 가능 (별도 wiring). parse_mutation
+    이 LLM response 의 ``causal_hypothesis`` key 에서 추출 (max 500자).
+    빈 문자열 = legacy mutator (CRM 이전) 호환."""
 
     def to_audit_row(
         self,
@@ -257,6 +273,9 @@ class Mutation:
         # 무영향).
         if self.principle:
             row["principle"] = self.principle
+        # A.6 (PR-20) — CRM causal_hypothesis non-empty 시만 emit.
+        if self.causal_hypothesis:
+            row["causal_hypothesis"] = self.causal_hypothesis
         return row
 
 
@@ -871,6 +890,17 @@ def parse_mutation(raw: str) -> Mutation:
             f"(SPCT principle must be concise — frontier reference: "
             f"DeepSeek-GRM)"
         )
+    # A.6 (PR-20, 2026-05-25, CRM pattern) — causal_hypothesis 추출. LLM 이
+    # 명시 안 하면 빈 문자열. max 500 chars guard (principle 패턴 동일).
+    causal_hypothesis_raw = payload.get("causal_hypothesis", "")
+    causal_hypothesis = (
+        causal_hypothesis_raw.strip() if isinstance(causal_hypothesis_raw, str) else ""
+    )
+    if len(causal_hypothesis) > 500:
+        raise ValueError(
+            f"causal_hypothesis length {len(causal_hypothesis)} exceeds 500 char "
+            f"cap (CRM causal chain must be concise — frontier: arXiv 2509.26578)"
+        )
     # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
@@ -896,6 +926,7 @@ def parse_mutation(raw: str) -> Mutation:
             expected_dim=expected_dim,
             rollback_condition=rollback_condition,
             principle=principle,
+            causal_hypothesis=causal_hypothesis,
         )
     return Mutation(
         target_section=target_section.strip(),
@@ -906,6 +937,7 @@ def parse_mutation(raw: str) -> Mutation:
         expected_dim=expected_dim,
         rollback_condition=rollback_condition,
         principle=principle,
+        causal_hypothesis=causal_hypothesis,
     )
 
 

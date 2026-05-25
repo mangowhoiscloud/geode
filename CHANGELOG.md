@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-20 A.6 CRM causal_hypothesis field** —
+  `Mutation` dataclass + `ApplyRecord` Pydantic schema +
+  `parse_mutation` + `to_audit_row` 가 새로운 optional
+  `causal_hypothesis` field (max 500 chars) 를 cover. mutator 가
+  mutation 직전 명시한 인과사슬 — "dim X 의 Y 효과 → fitness Z 변화"
+  — 가 mutations.jsonl 의 apply row 에 emit 되어 post-audit
+  observed_dim 과 cross-check 가능 (별도 wiring 은 follow-up).
+  principle (SPCT) 이 judging criterion 이라면 causal_hypothesis 는
+  causal trace — 두 field 는 독립적, 둘 다 emit 가능. Legacy mutator
+  (key 미포함) → 빈 문자열 → row column 미생성. Frontier: CRM
+  (Conditional Reward Modeling, arXiv 2509.26578).
+
 ## [0.99.59] - 2026-05-25
 
 Patch bundling PR-16 (C.4 credit_assignment) + PR-17 (C.5 kind×dim matrix) + PR-SG-SELECTION-ALIGN-FIX (V3/V4/V5 Codex MCP fixes on PR-SG-SELECTION-ALIGN).
