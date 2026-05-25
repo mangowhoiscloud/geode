@@ -48,6 +48,21 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-CODEX-OAUTH-EMPTY-TEXT-DUMP** — codex_oauth adapter writes a
+  postmortem dump to `~/.geode/diagnostics/codex-oauth-empty-text/
+  <ts>-<model>.json` when the upstream returns `output_text=""`.
+  Smoke 11/12/13 vote-m000-openai.openai-codex consistently failed
+  in this shape (10s elapsed, ~$0.04 billed, zero
+  assistant_message events, `termination_reason="natural"`) — the
+  worker treated empty text as failure with no diagnostic surface.
+  Dump captures (usage / reasoning_items raw + count /
+  reasoning_summaries / stop_reason) and the adapter logs the dump
+  path on the warning line alongside the worker-level failure.
+  Mirrors `claude_cli._dump_transient_postmortem` shape so
+  `~/.geode/diagnostics/` houses both diagnostic categories under
+  one tar-up. Pinned by 5 regression tests in
+  `tests/core/llm/adapters/test_codex_oauth_empty_text_dump.py`.
+
 - **PR-ENV-WHITELIST-CODEX-BYPASS** — add
   `GEODE_CODEX_OAUTH_POLL_DISABLED` to
   `IsolatedRunner._SUBPROCESS_ENV_WHITELIST`. Smoke 13 vote-m000-*
