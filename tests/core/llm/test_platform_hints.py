@@ -100,6 +100,14 @@ def test_render_unknown_surface_returns_empty_string():
     assert render_platform_hint("telegram") == ""
 
 
+@pytest.mark.parametrize("surface", sorted(VALID_SURFACES))
+def test_render_returns_xml_block_for_each_surface(surface: str):
+    block = render_platform_hint(surface)
+    assert block.startswith(f"<platform_hint surface={surface!r}>"), f"surface={surface}"
+    assert block.rstrip().endswith("</platform_hint>"), f"surface={surface}"
+    assert PLATFORM_HINTS[surface] in block, f"surface={surface} body missing"
+
+
 def test_module_exports_stable():
     expected = {
         "GEODE_SURFACE_TYPE_ENV",

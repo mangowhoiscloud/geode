@@ -52,16 +52,26 @@ functional change.
   prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
   surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,
   `mcp_remote`) to short directive blocks; `core/llm/model_guidance.py`
-  (131 LOC) maps the 4 LLM families (Anthropic / OpenAI / Google / xAI)
-  to tool-grammar + reasoning-visibility directives. Surface resolution
-  is env-override (`$GEODE_SURFACE_TYPE`) → ContextVar → default
-  `"cli"`; family resolution is a heuristic substring match against the
-  model string. Both are wired into
+  (~180 LOC) maps 5 LLM families (Anthropic / OpenAI / Google / xAI /
+  GLM-5+) to tool-grammar + reasoning-visibility directives. Surface
+  resolution is env-override (`$GEODE_SURFACE_TYPE`) → ContextVar →
+  default `"cli"`; family resolution is a heuristic substring match
+  against the model string, ordered to favour the more-specific
+  `claude-` / `glm-` prefixes over the broader `gpt-` / `o3-`
+  heuristics. GLM resolution carries an operator-decision filter
+  (2026-05-26) — only `glm-5.0+` resolves to `FAMILY_GLM`; older
+  `glm-4.x` strings still appear in the `/model` picker for
+  compatibility but receive no Phase 2 directive because their
+  tool-call grammar diverges from GLM-5. GLM-5 directive content is
+  grounded in `/zai-org/glm-5` ctx7 spec (OpenAI-compatible
+  `/v1/chat/completions` schema, `tool_calls.function.arguments` as
+  JSON-encoded string). Both renderers are wired into
   `core/agent/system_prompt.build_system_prompt` in the dynamic section
   (model_guidance after model_card, platform_hint before date_context).
   Audit-mode strips both blocks so Petri scenarios never leak GEODE
-  surface hints. 23 invariant tests pin module exports, resolution
-  order, block shape, and wiring symmetry.
+  surface hints. 58 invariant tests pin module exports, resolution
+  order, per-surface and per-family rendered body coverage, GLM-4.x
+  rejection, and wiring symmetry.
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
   `/geode/petri-bundle/` as the primary entry point for Petri audit /

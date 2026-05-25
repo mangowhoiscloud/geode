@@ -28,11 +28,13 @@ uses for the routing manifest. Unknown family → no hint block
 from __future__ import annotations
 
 import logging
+import re
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     "FAMILY_ANTHROPIC",
+    "FAMILY_GLM",
     "FAMILY_GOOGLE",
     "FAMILY_OPENAI",
     "FAMILY_XAI",
@@ -46,9 +48,10 @@ FAMILY_ANTHROPIC = "anthropic"
 FAMILY_OPENAI = "openai"
 FAMILY_GOOGLE = "google"
 FAMILY_XAI = "xai"
+FAMILY_GLM = "glm"
 
 VALID_FAMILIES: frozenset[str] = frozenset(
-    {FAMILY_ANTHROPIC, FAMILY_OPENAI, FAMILY_GOOGLE, FAMILY_XAI}
+    {FAMILY_ANTHROPIC, FAMILY_OPENAI, FAMILY_GOOGLE, FAMILY_XAI, FAMILY_GLM}
 )
 
 MODEL_GUIDANCE: dict[str, str] = {
@@ -78,17 +81,30 @@ MODEL_GUIDANCE: dict[str, str] = {
         "structured response per turn. Reasoning is verbose by default; "
         "keep the final answer block concise for the operator."
     ),
+    FAMILY_GLM: (
+        "You are a GLM-5+ model (Zhipu — 744B sparse-attention, optimised "
+        "for long-horizon agentic tasks). Tool calls follow the "
+        "OpenAI-compatible ``/v1/chat/completions`` schema — emit a "
+        "``tool_calls`` array whose ``function.arguments`` is a "
+        "JSON-encoded string, not a dict. Reasoning interleaves with the "
+        "assistant turn during streaming; finalise structured outputs "
+        "before closing the turn so downstream parsers can extract them."
+    ),
 }
 
 
 # Heuristic prefix / suffix patterns. Keep in sync with the routing
-# manifest at ``core/config/routing_manifest.py`` for consistency.
+# manifest at ``core/config/routing.toml`` ``[router.prefix_map]`` for
+# consistency.
 _FAMILY_PATTERNS: list[tuple[str, str]] = [
-    # (substring, family) — first match wins; ordered by specificity.
+    # (substring, family) — first match wins; ordered by specificity so
+    # the more-specific ``claude-`` / ``glm-`` prefixes resolve before
+    # the broader ``gpt-`` / ``o3-`` heuristics.
     ("claude", FAMILY_ANTHROPIC),
     ("opus", FAMILY_ANTHROPIC),
     ("sonnet", FAMILY_ANTHROPIC),
     ("haiku", FAMILY_ANTHROPIC),
+    ("glm", FAMILY_GLM),
     ("gpt", FAMILY_OPENAI),
     ("o1", FAMILY_OPENAI),
     ("o3", FAMILY_OPENAI),
@@ -98,6 +114,38 @@ _FAMILY_PATTERNS: list[tuple[str, str]] = [
     ("grok", FAMILY_XAI),
 ]
 
+# 2026-05-26 operator decision: only GLM-5.0+ is in scope for the
+# Phase 2 guidance (older 4.x variants are still exposed via the
+# ``/model`` picker for compatibility, but their tool-call grammar is
+# different enough that the GLM-5 directives would mislead). Anything
+# matching ``glm`` is filtered through this regex before being labelled
+# :data:`FAMILY_GLM` — a non-match falls through to no-hint.
+_GLM_SUPPORTED_RE = re.compile(r"glm-(\d+)")
+_GLM_MIN_MAJOR = 5
+
+
+def _is_supported_glm(lowered_model: str) -> bool:
+    """Return True for ``glm-5.x`` / ``glm-6.x`` / ... and False for
+    ``glm-4.x`` or any GLM string lacking a parseable major version.
+
+    Examples:
+        >>> _is_supported_glm("glm-5.1")
+        True
+        >>> _is_supported_glm("glm-5")
+        True
+        >>> _is_supported_glm("glm-4.7-flash")
+        False
+        >>> _is_supported_glm("glm-ocr")
+        False
+    """
+    match = _GLM_SUPPORTED_RE.search(lowered_model)
+    if not match:
+        return False
+    try:
+        return int(match.group(1)) >= _GLM_MIN_MAJOR
+    except ValueError:
+        return False
+
 
 def resolve_family(model: str) -> str | None:
     """Return the family identifier for ``model``, or ``None`` if unrecognised.
@@ -105,12 +153,22 @@ def resolve_family(model: str) -> str | None:
     Match is case-insensitive substring against
     :data:`_FAMILY_PATTERNS`. Unknown / empty model → ``None`` (caller
     falls through to no-hint).
+
+    GLM is special-cased — only ``glm-5.0+`` resolves to
+    :data:`FAMILY_GLM` (per operator decision on 2026-05-26). Older
+    ``glm-4.x`` variants stay exposed in the ``/model`` picker but
+    receive no Phase 2 directive because their tool-call grammar
+    diverges from GLM-5.
     """
     if not model:
         return None
     lowered = model.lower()
     for needle, family in _FAMILY_PATTERNS:
         if needle in lowered:
+            if family == FAMILY_GLM and not _is_supported_glm(lowered):
+                # Fall through — the older GLM string carries no Phase 2
+                # directive and must not match a later pattern either.
+                return None
             return family
     return None
 

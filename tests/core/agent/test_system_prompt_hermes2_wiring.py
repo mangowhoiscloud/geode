@@ -40,11 +40,12 @@ def test_model_guidance_omitted_for_unknown_model(monkeypatch: pytest.MonkeyPatc
     assert "<model_guidance" not in prompt
 
 
-def test_platform_hint_omitted_when_resolution_unknown(monkeypatch: pytest.MonkeyPatch):
+def test_unknown_env_surface_falls_through_to_cli_block(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(GEODE_SURFACE_TYPE_ENV, "telegram")
     prompt = system_prompt.build_system_prompt(model="claude-opus-4-7")
     # Unknown env value → fall-through to default "cli", which is mapped → block appears.
     assert "<platform_hint surface='cli'>" in prompt
+    assert "<platform_hint surface='telegram'>" not in prompt
 
 
 def test_audit_mode_strips_both_blocks(monkeypatch: pytest.MonkeyPatch):
