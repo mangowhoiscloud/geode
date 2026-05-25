@@ -48,6 +48,9 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-27 C.7 unified MutatorContextView** —
+  `core/self_improving_loop/mutator_context_view.py` composes the 5+ mutator-context sources into a single frozen Pydantic view: `baseline_snapshot` / `policy_snapshots` (5 kind policies) / `program_md` / `meta_review_snapshot` / `recent_mutations` (PR-12 reader output) / `cross_run_key` (PR-26 CrossRunJoinKey). `compose_mutator_context_view(...)` packs the loaded sources with safe defaults (None or empty container for missing sources); `source_count(view)` returns the count of populated sources for operator diagnostics. `extra="allow"` so future sources can be carried without schema migration. Pure helper, caller wiring (runner.py build_runner_context) deferred. Resolves F2 fragmentation signal.
+### Added
 - **PR-26 C.6 cross-run SoT 3중첩 unification helper** —
   `core/self_improving_loop/cross_run_join.py` consolidates the three cross-run SoT readers (latest_pointer.json / MetaReviewSnapshot / sessions.jsonl) behind a single Pydantic `CrossRunJoinKey` (frozen run_id + gen_tag + source_label). `load_cross_run_join_key()` returns None on missing / malformed / non-dict / missing-required-field pointer payloads (graceful). `keys_match(a, b)` compares by value (source_label ignored). `compose_history_view(key, rows)` filters an iterable of session/meta-review rows to those matching the key — defensive against non-dict items and rows missing either field. Builds on PR-22 invariant tests with an actual unification helper. Pure functions, caller deferred.
 ### Added
