@@ -210,7 +210,8 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                     ? `${RAW_BUNDLE_URL}${run.run_id}/candidates/${filename}`
                     : undefined;
                   const evolved = evolvedByParent.get(sid) ?? [];
-                  const detailHref = `/docs/petri/seeds/${run.run_id}/${sid}/`;
+                  // next.config.ts has `trailingSlash: false` so links must NOT end in `/`.
+                  const detailHref = `/docs/petri/seeds/${run.run_id}/${sid}`;
                   return (
                     <tr key={sid}>
                       <td>
@@ -227,7 +228,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                         {evolved.length > 0 && (
                           <span className="ml-2 text-white/40 text-xs">
                             → {evolved.map((e) => {
-                              const eHref = `/docs/petri/seeds/${run.run_id}/${e}/`;
+                              const eHref = `/docs/petri/seeds/${run.run_id}/${e}`;
                               return (
                                 <a key={e} href={eHref} className="mr-1"><code>{e}</code></a>
                               );
