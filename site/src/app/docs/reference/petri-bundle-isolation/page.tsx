@@ -23,7 +23,7 @@ export default function Page() {
             <table>
               <thead><tr><th>파일</th><th>역할</th></tr></thead>
               <tbody>
-                <tr><td><code>.github/workflows/petri-publish.yml</code></td><td>전용 PR-gate + 매일 cron. docs/petri-bundle/** + validator + hygiene 변경 시 가동</td></tr>
+                <tr><td><code>.github/workflows/petri-publish.yml</code></td><td>전용 PR-gate + 매일 cron. docs/self-improving/petri-bundle/** + validator + hygiene 변경 시 가동</td></tr>
                 <tr><td><code>.github/workflows/pages.yml</code></td><td>validator 호출을 npm install/build 직전 으로 이동. 빌드 비용 낭비 차단</td></tr>
                 <tr><td><code>scripts/validate_petri_bundle.py</code></td><td>zip 내부 header.json.results 까지 검증 (results=None / empty scores / empty metrics 거부)</td></tr>
                 <tr><td><code>scripts/check_repo_hygiene.py</code></td><td>PETRI_EVAL_FLOOR=9 삭제 보호 ratchet</td></tr>
@@ -61,7 +61,7 @@ gh run list --workflow=petri-publish.yml --limit=10`}</pre>
             <table>
               <thead><tr><th>file</th><th>role</th></tr></thead>
               <tbody>
-                <tr><td><code>.github/workflows/petri-publish.yml</code></td><td>dedicated PR gate + daily cron. fires on docs/petri-bundle/**, validator, hygiene</td></tr>
+                <tr><td><code>.github/workflows/petri-publish.yml</code></td><td>dedicated PR gate + daily cron. fires on docs/self-improving/petri-bundle/**, validator, hygiene</td></tr>
                 <tr><td><code>.github/workflows/pages.yml</code></td><td>validator now runs before npm install/build, so a broken bundle aborts cheaply</td></tr>
                 <tr><td><code>scripts/validate_petri_bundle.py</code></td><td>opens each .eval zip and rejects results=None, empty scores, empty metrics</td></tr>
                 <tr><td><code>scripts/check_repo_hygiene.py</code></td><td>PETRI_EVAL_FLOOR=9 delete-protection ratchet</td></tr>

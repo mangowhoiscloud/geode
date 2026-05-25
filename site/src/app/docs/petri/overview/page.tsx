@@ -51,7 +51,7 @@ export default function Page() {
             <h2>GEODE에서의 위치</h2>
             <ul>
               <li>코드: <code>plugins/petri_audit/</code> (runner, judge_dims, schema, audit mode)</li>
-              <li>최신 audit bundle: <a href="/petri-bundle/">/geode/petri-bundle/</a> 외부 viewer</li>
+              <li>최신 audit bundle: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 외부 viewer</li>
               <li>CHANGELOG entry: v0.92.0+ 에서 Petri × GEODE 통합 (PR #1024 등)</li>
             </ul>
 
@@ -101,7 +101,7 @@ export default function Page() {
             <h2>Where this lives in GEODE</h2>
             <ul>
               <li>Code: <code>plugins/petri_audit/</code> (runner, judge_dims, schema, audit mode)</li>
-              <li>Latest bundle: <a href="/petri-bundle/">/geode/petri-bundle/</a> external viewer</li>
+              <li>Latest bundle: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> external viewer</li>
               <li>CHANGELOG entries: Petri × GEODE integration since v0.92.0 (PR #1024 et al.)</li>
             </ul>
 

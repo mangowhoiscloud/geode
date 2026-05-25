@@ -1,10 +1,10 @@
-"""Build ``docs/petri-bundle/literature/listing.json`` from individual snapshots.
+"""Build ``docs/self-improving/petri-bundle/literature/listing.json`` from individual snapshots.
 
 Run from Pages workflow (and locally via ``uv run python scripts/build_literature_listing.py``).
 
 Algorithm (per ``docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`` § 6):
 
-1. Scan ``docs/petri-bundle/literature/*.json`` (skip ``listing.json``).
+1. Scan ``docs/self-improving/petri-bundle/literature/*.json`` (skip ``listing.json``).
 2. For each snapshot, extract the lightweight row fields (arxiv_id, title,
    retrieved_at, content_hash short, categories, url).
 3. Scan ``autoresearch/state/mutations.jsonl`` (if present) for evidence
@@ -35,7 +35,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-LITERATURE_DIR = "docs/petri-bundle/literature"
+LITERATURE_DIR = "docs/self-improving/petri-bundle/literature"
 MUTATIONS_LOG = "autoresearch/state/mutations.jsonl"
 SEED_GLOB = "plugins/petri_audit/seeds_gen*/**/*.md"
 LISTING_FILENAME = "listing.json"
@@ -199,7 +199,7 @@ def _build_row(
         else content_hash
     )
     source_path: Path = snapshot["__source_path"]
-    # ``url`` is a relative path under ``docs/petri-bundle/`` so the
+    # ``url`` is a relative path under ``docs/self-improving/petri-bundle/`` so the
     # Next.js export resolves it without an absolute prefix.
     rel = source_path.relative_to(literature_dir.parent)
     mut_citers = mutation_citations.get(arxiv_id, [])
@@ -239,7 +239,7 @@ def build_listing(
 
 
 def write_listing(repo_root: Path | None = None) -> Path | None:
-    """Build the listing and write it to ``docs/petri-bundle/literature/listing.json``.
+    """Build the listing and write it to ``docs/self-improving/petri-bundle/literature/listing.json``.
 
     Returns the path written, or ``None`` if the literature dir doesn't
     exist (no snapshots yet — the build step is a no-op until Loop 3

@@ -47,6 +47,79 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
+  full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
+  `/geode/petri-bundle/` as the primary entry point for Petri audit /
+  seed-generation / autoresearch telemetry. Operator selected the
+  "surface-first" Option 1 layout (2026-05-26) after reviewing 3
+  editorial-sidebar mockups.
+
+  **Page**: built by the new `scripts/build_self_improving_hub.py` from
+  `docs/self-improving/index.html.template` + `docs/self-improving/assets/hub.css`.
+  Renders 4 sections (Petri Audit / Seed Generation / Autoresearch /
+  Documentation) with harness-aware model chips
+  (`anthropic/`/`openai/` → PAYG, `claude-cli/` → Claude Code,
+  `codex/`/`openai-codex/` → Codex Plus, `geode/` → GEODE wrapper).
+  Sidebar carries a `Meta` section linking to the GEODE GitHub repo.
+  Build-time version stamp ("Rendered against GEODE v0.99.63 · DESIGN.md
+  schema 1 · built YYYY-MM-DD") pulled from `pyproject.toml`.
+
+  **DESIGN.md scaffolding** (10 docs total under `docs/design/`):
+  - `self-improving-hub-system.md` — master design system (tokens,
+    typography, components, layout grid, navigation contract, URL
+    contract, per-row metadata schema, accessibility minimum,
+    implementation stack, page inventory, **versioning policy with
+    pinned-constants table**, verification ratchet).
+  - `self-improving-hub.md` — Hub page contract (data sources, sections,
+    columns, sidebar `.active`, empty states, outgoing links).
+  - `self-improving-hub-visual-spec.md` (38KB) — concrete visual spec
+    produced by paired designer agent: per-token hex values, sRGB
+    luminance + WCAG contrast for every chip, sidebar HTML structure,
+    7 build-time PLACEHOLDER tokens for the version stamp.
+  - 7 sibling per-page docs covering petri-bundle (relocation contract),
+    seed-generation index + per-run detail, autoresearch landing +
+    baseline + mutations + results + policies sub-pages.
+  - Each carries `geode_version: 0.99.62 / schema_version: 1` in
+    frontmatter — when dim sets / axes / schemas evolve, downstream
+    readers can pin behavior to the GEODE version that authored the doc.
+
+  **Paired-agent workflow**: designer agent (visual spec) +
+  frontend agent (HTML/CSS/builder) processed the hub page in
+  parallel per operator directive 2026-05-26.
+
+### Changed
+- **PR-SELF-IMPROVING-HUB · URL relocation** —
+  `docs/petri-bundle/` → `docs/self-improving/petri-bundle/`. The
+  inspect_ai SPA log viewer moves wholesale, preserving its asset
+  bundle / logs / seeds catalog / seed-gen `.eval` archives. The old
+  URL `/geode/petri-bundle/` now serves a meta-refresh redirect HTML
+  that preserves SPA `#/tasks/<id>` deep-links via JS hash forwarding.
+  All 30+ active-code references updated in a single mechanical pass:
+
+  | Category | Files | Update |
+  |----------|-------|--------|
+  | Publisher path constants | `plugins/petri_audit/bundle_sync.py`, `plugins/seed_generation/bundle_sync.py`, `plugins/seed_generation/eval_export.py`, `plugins/seed_generation/orchestrator.py`, `plugins/seed_generation/literature_snapshot.py`, `core/tools/literature_snapshot.py`, `core/cli/tool_handlers/delegated.py`, `core/tools/definitions.json`, `core/tools/toolkits.toml` | path string |
+  | Scripts | 9 files in `scripts/` | path string |
+  | Tests | 6 files (`tests/test_validate_petri_bundle.py`, `tests/test_check_repo_hygiene.py`, `tests/test_literature_snapshot_tool.py`, `tests/test_render_lint_config.py`, `tests/plugins/seed_generation/conftest.py`, `tests/plugins/seed_generation/test_seed_bundle_sync.py`) | path string |
+  | Site Next.js | 8 `page.tsx` + `sitemap.ts` | `BUNDLE_URL`/`RAW_BUNDLE_URL`/`SEEDS_DIR` constants + JSX href |
+  | Workflows | `.github/workflows/pages.yml` (path filter + copy step splits the old URL into a separate `site/out/petri-bundle/` redirect-only copy), `.github/workflows/petri-publish.yml` (path filter) | path filter |
+  | Config | `.pre-commit-config.yaml`, `.pymarkdown.json` | path string |
+  | `scripts/check_docs_links.py` | known-URL set | dual-add `/petri-bundle/` (redirect) + `/self-improving/petri-bundle/` (real) |
+
+  Historical references in `site/src/data/geode/changelog.ts`,
+  `docs/audits/*`, `docs/plans/*`, and `CHANGELOG.md` itself were
+  intentionally left untouched — they document past state and rewriting
+  them retroactively would be ahistorical.
+
+  Quality gates after the move: `ruff check` clean, `mypy core/ plugins/`
+  clean across 452 files, `scripts/validate_petri_bundle.py` OK
+  (18 archives), `pytest tests/test_validate_petri_bundle.py
+  tests/test_check_repo_hygiene.py tests/test_literature_snapshot_tool.py
+  tests/plugins/seed_generation/` 590 passed / 3 skipped / 0 failed.
+  Local SPA preview verified both `/geode/petri-bundle/` (redirect HTML
+  with meta-refresh + JS hash forwarding) and
+  `/geode/self-improving/petri-bundle/` (inspect_ai SPA renders).
 ## [0.99.63] - 2026-05-26
 
 Scope B (Petri × autoresearch) full wiring sprint — 5 PR closing the multi-axis fitness leaks identified by the petri × autoresearch GAP audit: PR-AR-L6 (attribution standalone graceful with synthetic mutation_id + `source` field) + PR-AR-L4a (ux_means 4-reader collector consuming `mutations.jsonl`) + PR-AR-L4b (5-caller `ux_means` / `admire_means` forward through `compute_fitness`) + PR-AR-L4c (admire_means consumer for seed-gen `evaluate_mutation_pairwise` handoff, Krippendorff-grounded calibration proxy) + PR-AR-L4d (UX Goodhart bidirectional gate mirroring bench pattern). Cross-vertex contract with seed-gen (Scope A, PR-RANKER-MUTATION-EVAL #1704) honored as a data-only handoff — `MutationEvalResult.pairwise_win_rate` field-name parity pinned on both sides, no runtime cross-package import. Codex MCP review caught 7 issues across the 5 PRs (all fixed in-band).

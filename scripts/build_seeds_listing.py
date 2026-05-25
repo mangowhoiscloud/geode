@@ -1,4 +1,4 @@
-"""Build ``docs/petri-bundle/seeds/listing.json`` from synced seed runs.
+"""Build ``docs/self-improving/petri-bundle/seeds/listing.json`` from synced seed runs.
 
 Mirrors ``scripts/build_literature_listing.py`` — runs from
 ``.github/workflows/pages.yml`` at Pages build time, and locally via
@@ -7,7 +7,7 @@ Mirrors ``scripts/build_literature_listing.py`` — runs from
 Algorithm
 =========
 
-1. Scan ``docs/petri-bundle/seeds/<run_id>/`` for per-run dirs (each
+1. Scan ``docs/self-improving/petri-bundle/seeds/<run_id>/`` for per-run dirs (each
    carries ``state.json`` + optional ``survivors.json`` +
    ``meta_review.json`` + ``candidates/<id>.md``).
 2. Build a compact row per run for the listing.json:
@@ -43,7 +43,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 LISTING_FILENAME = "listing.json"
-SEEDS_DIR = "docs/petri-bundle/seeds"
+SEEDS_DIR = "docs/self-improving/petri-bundle/seeds"
 
 
 def _resolve_repo_root() -> Path:

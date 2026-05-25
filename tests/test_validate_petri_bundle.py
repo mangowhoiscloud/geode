@@ -1,6 +1,6 @@
 """Unit tests for scripts/validate_petri_bundle.py ratchet.
 
-Validator gates the GitHub Pages deploy of docs/petri-bundle/. Failure modes
+Validator gates the GitHub Pages deploy of docs/self-improving/petri-bundle/. Failure modes
 exercised here mirror the regressions that previously broke the live viewer
 (PR #1129 partial archive, PR #1130 error archive, results=None TypeError).
 """
@@ -46,8 +46,8 @@ def _write_eval(path: Path, header: dict[str, object]) -> None:
 
 
 def _scaffold_bundle(root: Path, listing: dict[str, dict[str, object]]) -> Path:
-    """Build a minimal docs/petri-bundle/ scaffold under root."""
-    bundle = root / "docs" / "petri-bundle"
+    """Build a minimal docs/self-improving/petri-bundle/ scaffold under root."""
+    bundle = root / "docs" / "self-improving/petri-bundle"
     (bundle / "logs").mkdir(parents=True)
     (bundle / "assets").mkdir(parents=True)
     (bundle / "index.html").write_text("<html></html>")
@@ -74,7 +74,7 @@ def test_missing_listing_fails(tmp_path: Path) -> None:
 
 
 def test_listing_invalid_json_fails(tmp_path: Path) -> None:
-    bundle = tmp_path / "docs" / "petri-bundle" / "logs"
+    bundle = tmp_path / "docs" / "self-improving/petri-bundle" / "logs"
     bundle.mkdir(parents=True)
     (bundle / "listing.json").write_text("{not json")
     result = run_validator(tmp_path)
@@ -202,7 +202,7 @@ def test_archive_header_missing_inside_fails(tmp_path: Path) -> None:
 def test_real_bundle_passes() -> None:
     """Smoke test against the committed bundle. Guards against silent drift."""
     repo_root = Path(__file__).resolve().parent.parent
-    if not (repo_root / "docs" / "petri-bundle" / "logs" / "listing.json").exists():
+    if not (repo_root / "docs" / "self-improving/petri-bundle" / "logs" / "listing.json").exists():
         pytest.skip("petri-bundle not present in this checkout")
     result = run_validator(repo_root)
     assert result.returncode == 0, result.stdout + result.stderr

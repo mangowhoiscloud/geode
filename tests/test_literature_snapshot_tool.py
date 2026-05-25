@@ -5,7 +5,7 @@ Covers:
 - content_hash determinism + normalization
 - cache-hit short-circuit
 - atomic write (no partial file on failure)
-- path containment (resolved path under docs/petri-bundle/literature/)
+- path containment (resolved path under docs/self-improving/petri-bundle/literature/)
 - empty / malformed args
 """
 
@@ -26,7 +26,7 @@ from core.tools.literature_snapshot import (
 def _make_repo_root(tmp_path: Path) -> Path:
     """Create a fake repo root with the literature bundle directory."""
     (tmp_path / "pyproject.toml").write_text("# fake\n", encoding="utf-8")
-    bundle = tmp_path / "docs" / "petri-bundle" / "literature"
+    bundle = tmp_path / "docs" / "self-improving/petri-bundle" / "literature"
     bundle.mkdir(parents=True)
     return tmp_path
 
@@ -133,7 +133,7 @@ def test_tool_writes_snapshot_to_bundle_dir(
     assert result["result"]["cache_hit"] is False
     snapshot_path = Path(result["result"]["snapshot_path"])
     assert snapshot_path.is_file()
-    assert snapshot_path.parent == repo / "docs" / "petri-bundle" / "literature"
+    assert snapshot_path.parent == repo / "docs" / "self-improving/petri-bundle" / "literature"
     data = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert data["arxiv_id"] == "2502.18864"
     assert data["content_hash"].startswith("sha256:")
@@ -167,7 +167,7 @@ def test_tool_cache_hit_on_matching_hash(tmp_path: Path, monkeypatch: pytest.Mon
     # Path points at the original snapshot (not a fresh re-write).
     assert second["result"]["snapshot_path"] == str(first_path)
     # Only one snapshot file in the dir.
-    snapshots = list((repo / "docs" / "petri-bundle" / "literature").glob("2412.13371-*.json"))
+    snapshots = list((repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2412.13371-*.json"))
     assert len(snapshots) == 1
 
 
@@ -196,7 +196,7 @@ def test_tool_writes_new_snapshot_on_changed_abstract(
         abstract="version two — substantially revised",
     )
     assert result["result"]["cache_hit"] is False
-    snapshots = list((repo / "docs" / "petri-bundle" / "literature").glob("2502.18864-*.json"))
+    snapshots = list((repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2502.18864-*.json"))
     assert len(snapshots) == 2
 
 
@@ -211,7 +211,7 @@ def test_tool_refuses_when_repo_root_lacks_pyproject(
     bad.mkdir()
     monkeypatch.setenv("GEODE_REPO_ROOT", str(bad))
     tool = FreezePaperSnapshotTool()
-    # Tool creates the directory under bad/docs/petri-bundle/literature
+    # Tool creates the directory under bad/docs/self-improving/petri-bundle/literature
     # — the containment is the *suffix* check + the resolve()-parents
     # check, not a pyproject probe. The tool DOES write here (env override
     # honored), but the snapshot lands under the correct relative path.
@@ -224,7 +224,7 @@ def test_tool_refuses_when_repo_root_lacks_pyproject(
     )
     assert result["result"]["ok"] is True
     snapshot_path = Path(result["result"]["snapshot_path"])
-    assert "docs/petri-bundle/literature" in str(snapshot_path)
+    assert "docs/self-improving/petri-bundle/literature" in str(snapshot_path)
     assert str(snapshot_path).startswith(str(bad))
 
 

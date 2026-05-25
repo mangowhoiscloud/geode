@@ -1,10 +1,10 @@
-"""Seed-generation bundle sync — auto-copy finished runs to docs/petri-bundle/seeds/.
+"""Seed-generation bundle sync — auto-copy finished runs to docs/self-improving/petri-bundle/seeds/.
 
 Mirrors the audit-side pattern in ``plugins/petri_audit/bundle_sync.py``
 (``sync_eval_to_bundle``). When a seed-generation run finishes, the
 orchestrator calls :func:`sync_run_to_bundle` which selectively copies
 the publishable subset of ``state/seed-generation/<run_id>/`` into the
-Pages-tracked ``docs/petri-bundle/seeds/<run_id>/``:
+Pages-tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/``:
 
 - ``state.json``      — full pipeline snapshot (phase progress, costs)
 - ``survivors.json``  — top-K candidate metadata
@@ -33,9 +33,9 @@ the run-directory layout from this module's sync surface.
 Gitignore exception
 ===================
 
-``.gitignore`` carries ``!docs/petri-bundle/seeds/**`` so the synced
+``.gitignore`` carries ``!docs/self-improving/petri-bundle/seeds/**`` so the synced
 files actually enter git (parity with the audit-side
-``!docs/petri-bundle/logs/**`` rule). Without it the
+``!docs/self-improving/petri-bundle/logs/**`` rule). Without it the
 ``state/*`` blanket gitignore would silently drop the syncs — same
 anti-pattern as PR-G5b #1350's mutation audit ledger.
 """
@@ -78,7 +78,7 @@ def _bundle_seeds_dir() -> Path:
 
     Lazy resolution so ``GEODE_REPO_ROOT`` test fixtures take effect.
     """
-    return _resolve_repo_root() / "docs" / "petri-bundle" / "seeds"
+    return _resolve_repo_root() / "docs" / "self-improving/petri-bundle" / "seeds"
 
 
 # Public constant — readers usually want to import this directly.
@@ -131,14 +131,14 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
         return None
 
     # Containment guard — same shape as literature_snapshot's check.
-    # Resolved bundle dir must live under docs/petri-bundle/seeds/. An
+    # Resolved bundle dir must live under docs/self-improving/petri-bundle/seeds/. An
     # absurd ``GEODE_REPO_ROOT`` override that points outside the repo
     # would still pass the mkdir but we want the sync to refuse it.
     resolved = bundle_dir.resolve()
-    if "docs/petri-bundle/seeds" not in str(resolved):
+    if "docs/self-improving/petri-bundle/seeds" not in str(resolved):
         log.warning(
             "bundle_sync: resolved bundle dir %s does not contain the canonical "
-            "docs/petri-bundle/seeds path; refusing sync",
+            "docs/self-improving/petri-bundle/seeds path; refusing sync",
             resolved,
         )
         return None
@@ -175,7 +175,7 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
 
     # PR-SEEDS-EVAL-EXPORT (2026-05-25) — additionally synthesise per-
     # phase inspect_ai ``.eval`` archives so the SPA viewer at
-    # ``docs/petri-bundle/index.html`` (and the live Pages mirror) shows
+    # ``docs/self-improving/petri-bundle/index.html`` (and the live Pages mirror) shows
     # each phase of the run as a task card alongside the audit ones.
     # Best-effort: a converter failure does not block the JSON sync that
     # already succeeded above. ``GEODE_SEED_EVAL_EXPORT_DISABLED=1`` lets

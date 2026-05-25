@@ -3,9 +3,9 @@
 PR-SEEDS-EVAL-EXPORT (2026-05-25). The self-improving loop's
 seed-generation pipeline produces JSON artefacts under
 ``state/seed-generation/<run_id>/`` and mirrors a publishable subset
-into ``docs/petri-bundle/seeds/<run_id>/`` (handled by
+into ``docs/self-improving/petri-bundle/seeds/<run_id>/`` (handled by
 :mod:`plugins.seed_generation.bundle_sync`). The inspect_ai SPA viewer
-that ships under ``docs/petri-bundle/index.html`` only recognises
+that ships under ``docs/self-improving/petri-bundle/index.html`` only recognises
 ``.eval`` log archives, so the JSON-only seed runs never appeared in the
 viewer's task list. This module bridges that gap.
 

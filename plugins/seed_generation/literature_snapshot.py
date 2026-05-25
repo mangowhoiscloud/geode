@@ -11,7 +11,7 @@ Two read shapes:
   dict (or ``None``). Used by per-paper analysis sub-agents that want to
   skip re-fetching when an unchanged snapshot exists.
 - :func:`iter_snapshots` — yield every snapshot under
-  ``docs/petri-bundle/literature/`` in deterministic order. Used by the
+  ``docs/self-improving/petri-bundle/literature/`` in deterministic order. Used by the
   build step + the orchestrator's state.json serialization (rolls a
   count into the final report).
 
@@ -40,7 +40,7 @@ __all__ = [
 ]
 
 
-_SNAPSHOT_DIR_NAME = "docs/petri-bundle/literature"
+_SNAPSHOT_DIR_NAME = "docs/self-improving/petri-bundle/literature"
 
 
 def resolve_snapshot_root() -> Path:

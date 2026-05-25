@@ -2,9 +2,9 @@ import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Audit Bundle Viewer — GEODE Docs" };
 
-const BUNDLE_URL = "/petri-bundle/";
-const LANDING_URL = "/petri-bundle/landing.html";
-const SEEDS_URL = "/petri-bundle/seeds/";
+const BUNDLE_URL = "/self-improving/petri-bundle/";
+const LANDING_URL = "/self-improving/petri-bundle/landing.html";
+const SEEDS_URL = "/self-improving/petri-bundle/seeds/";
 
 export default function Page() {
   return (
