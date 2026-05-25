@@ -48,27 +48,39 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
-- **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now honors
+- **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now forwards
   `req.response_schema`.** `core/llm/adapters/codex_oauth.py` was the
   only PR-JSON-WIRE (#79) adapter that silently dropped the schema field;
   claude-cli wires through `--json-schema` and codex-cli writes
   `--output-schema <FILE>`, but codex-oauth's `_build_codex_call_kwargs`
   never emitted the OpenAI Responses API equivalent
-  (`text.format = {"type": "json_schema", "name": ..., "strict": true,
-  "schema": ...}`). Without API-level enforcement, gpt-5.x reasoning
-  models would spend the entire `output_tokens` budget on encrypted
-  reasoning items and skip the visible answer block — server returned
-  `stop_reason=completed` + empty `output_text`, which `AgenticLoop`
-  classified as `unknown` → retried 5× with the same prompt + same
-  effort → produced ~10 `~/.geode/diagnostics/codex-oauth-empty-text/`
+  (`text.format = {"type": "json_schema", "name": ..., "strict": ...,
+  "schema": ...}`). Without that field, gpt-5.x reasoning models on
+  the Codex backend could return `stop_reason=completed` + empty
+  `output_text` (entire output budget consumed by encrypted reasoning
+  items), surfacing as `unknown` failures that `AgenticLoop` retried
+  5× and produced ~10 `~/.geode/diagnostics/codex-oauth-empty-text/`
   dumps per ranker match (smoke 17 evidence). Fix: append `text.format`
   per the Responses API spec (ctx7-grounded via
   `/websites/developers_openai_api` `responses-vs-chat-completions`
-  guide) with `strict=true` so the server rejects reasoning-only
-  responses for callers that pin a schema. Schema name derived from
-  the schema's `title` field (fallback `"response"`). Pinned by 4 new
-  invariant tests in
-  `tests/core/llm/adapters/test_codex_oauth_backend_invariants.py`.
+  guide). Schema name derived from the schema's `title` field
+  (fallback `"response"`).
+
+  Per Codex MCP review of PR #1687, `strict: True` is auto-detected
+  by `_is_strict_compatible(schema)` rather than hard-coded.
+  OpenAI Structured Outputs strict mode requires every object schema
+  to set `additionalProperties: false` AND list every property in
+  `required` (recursively into nested objects + array items). GEODE's
+  seed-generation schemas in `plugins/seed_generation/json_schemas.py`
+  use an additive helper that intentionally omits both — unconditional
+  `strict=True` would have caused the server to reject the request
+  (400) before generation, a worse retry storm than the empty-text
+  path. Non-compatible schemas fall back to `strict: False` (schema
+  still forwarded as a server hint). 9 new invariant + retry-edge
+  tests in
+  `tests/core/llm/adapters/test_codex_oauth_backend_invariants.py`
+  and
+  `tests/core/llm/adapters/test_codex_oauth_empty_text_retry_edge.py`.
 
 ## [0.99.60] - 2026-05-25
 

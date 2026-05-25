@@ -177,7 +177,14 @@ def test_acomplete_empty_response_with_schema_still_dumps(tmp_path: Path) -> Non
     # dump can correlate by checking the kwargs path.
     assert "text" in capture.last_kwargs
     assert capture.last_kwargs["text"]["format"]["type"] == "json_schema"
-    assert capture.last_kwargs["text"]["format"]["strict"] is True
+    # ``_VOTE_SCHEMA`` is not strict-compatible (no
+    # ``additionalProperties: false``) so the adapter falls back to
+    # ``strict: False`` — schema still forwarded as a server hint but
+    # without the request-side rejection that strict=True triggers on
+    # GEODE schemas. The strict=True path is exercised separately by
+    # ``test_codex_kwargs_text_format_strict_true_for_strict_compat_schema``
+    # in test_codex_oauth_backend_invariants.py.
+    assert capture.last_kwargs["text"]["format"]["strict"] is False
     assert capture.last_kwargs["text"]["format"]["schema"] == _VOTE_SCHEMA
 
 

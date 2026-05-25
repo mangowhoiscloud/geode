@@ -294,20 +294,77 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     # entire output budget spent on encrypted reasoning items + empty
     # ``output_text`` (smoke 17: 20+ codex-oauth-empty-text dumps,
     # ~10 per match). Adding ``text.format = {type:"json_schema", ...}``
-    # forces the server to reject reasoning-only responses for callers
-    # that wired a schema. Spec: OpenAI Responses API
-    # ``text.format`` (replaces Chat Completions ``response_format``).
+    # forwards the schema for server-side enforcement. Spec: OpenAI
+    # Responses API ``text.format`` (replaces Chat Completions
+    # ``response_format``).
+    #
+    # Codex MCP review of PR #1687: ``strict: True`` requires the schema
+    # to satisfy OpenAI's Structured Outputs subset (all object schemas
+    # set ``additionalProperties: false`` AND every property listed in
+    # ``required``). GEODE's seed-generation schemas in
+    # ``plugins/seed_generation/json_schemas.py`` intentionally use the
+    # additive helper that omits both, so unconditional strict=True would
+    # cause the server to **reject the request** (400) before generation
+    # — a worse retry storm than the empty-text path. Auto-detect strict
+    # compatibility per schema and fall through to ``strict: False`` for
+    # non-compatible schemas (still forwards the shape as a strong hint,
+    # but server treats it as informational rather than gated).
     if req.response_schema is not None:
         schema_name = str(req.response_schema.get("title") or "response")
         kwargs["text"] = {
             "format": {
                 "type": "json_schema",
                 "name": schema_name,
-                "strict": True,
+                "strict": _is_strict_compatible(req.response_schema),
                 "schema": req.response_schema,
             }
         }
     return kwargs
+
+
+def _is_strict_compatible(schema: Any) -> bool:
+    """Check whether ``schema`` satisfies OpenAI's strict Structured Outputs subset.
+
+    Per the public Responses API docs, ``strict: True`` requires that
+    every ``type: "object"`` subschema:
+
+    - sets ``additionalProperties: false`` (typed-additional or True is rejected)
+    - lists ALL declared property keys in ``required``
+
+    Plus array ``items`` and nested objects must satisfy the same recursively.
+    Anything else (``oneOf`` / ``anyOf`` with mixed types, ``allOf``,
+    pattern-only schemas, unconstrained ``object``) is conservatively
+    treated as non-strict.
+
+    Returns ``True`` when the schema is safe to send with ``strict: True``;
+    ``False`` when ``strict: False`` should be used instead. This keeps
+    legacy GEODE schemas (designed for additive-output tolerance) from
+    causing 400 rejections while still forwarding the schema shape as a
+    server hint.
+    """
+    if not isinstance(schema, dict):
+        return True
+    schema_type = schema.get("type")
+    if schema_type == "object":
+        if schema.get("additionalProperties") is not False:
+            return False
+        properties = schema.get("properties") or {}
+        required = set(schema.get("required") or [])
+        if set(properties.keys()) != required:
+            return False
+        for prop_schema in properties.values():
+            if not _is_strict_compatible(prop_schema):
+                return False
+    if "items" in schema and not _is_strict_compatible(schema["items"]):
+        return False
+    for combinator_key in ("oneOf", "anyOf", "allOf"):
+        # Combinators are accepted only when every branch is strict-compatible.
+        branches = schema.get(combinator_key)
+        if isinstance(branches, list):
+            for branch in branches:
+                if not _is_strict_compatible(branch):
+                    return False
+    return True
 
 
 def _translate_codex_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any]:
