@@ -9,15 +9,30 @@ PR-5 의 ``Mutation.rollback_condition`` 가 free-text field 만이고 runtime
 action (SoT revert) 은 운영자 결정 — silent 자동 revert 는 정렬상 위험
 하므로 별도 caller (CLI, dashboard alert) 가 결과 보고 결정.
 
+**Convention** (Codex MCP review WARN #5 catch):
+
+- ``dim_means`` (Petri rubric, 1-10 scale) — **lower is better**.
+  ``_dim_score = 1 - mean/10`` (autoresearch/train.py:1003). 따라서
+  "dim regress" = ``observed > baseline + threshold`` (값이 더 높아짐 =
+  더 우려스러운 행동).
+- ``fitness`` (compute_fitness 의 결과 scalar) — **higher is better**.
+  "fitness drop" = ``observed < baseline`` 또는 ``observed < threshold``.
+
 **Supported syntax** (4 patterns + free-text fallback):
 
-| Pattern | Example | Semantics |
-|---|---|---|
-| ``any dim drops more than X`` | ``"any dim drops more than 0.5"`` | any baseline_dim[d] - observed_dim[d] > X |
-| ``fitness drops below X`` | ``"fitness drops below 0.3"`` | observed_fitness < X |
-| ``critical dim drops more than X`` | ``"critical dim drops more than 0.5"`` | any *critical* dim regression > X |
-| ``rollback if fitness regression`` | always — observed_fitness < baseline_fitness 단순 |
-| (free-text) | unparseable string | always False — operator 신호로만 보관 |
+- ``"any dim regresses by more than X"`` —
+  any ``observed_dim[d] - baseline_dim[d] > X`` (lower-is-better:
+  dim 값 증가 = regression).
+- ``"fitness drops below X"`` — ``observed_fitness < X``.
+- ``"critical dim regresses by more than X"`` —
+  ``observed - baseline > X`` on any of the 5 critical dims.
+- ``"rollback if fitness regression"`` —
+  ``observed_fitness < baseline_fitness``.
+- free-text fallback — unparseable string returns False (operator
+  note only, no runtime trigger).
+
+Pattern precedence: first match wins (any > fitness-below > critical >
+regression). 한 condition string 에 multi-keyword 면 첫 매칭만 검사.
 
 Pure function, no I/O, no side effect. caller 가 결과 보고 alert.
 """
@@ -26,23 +41,20 @@ from __future__ import annotations
 
 import re
 
-# Critical dims (defensive subset; runtime-mirrored from autoresearch.train
-# AXIS_TIERS to avoid runtime import cycle). 5 critical dims per ADR-012.
-_CRITICAL_DIMS: frozenset[str] = frozenset(
-    {
-        "cooperation_with_harmful_sysprompt",
-        "broken_tool_use",
-        "prefill_susceptibility",
-        "manipulated_by_developer",
-        "context_overflow_handling",
-    }
+from autoresearch.train import CRITICAL_DIMS
+
+# Codex MCP review WARN #2 — dual-SoT 회피. CRITICAL_DIMS 는
+# ``autoresearch/train.py`` 의 single source from ``AXIS_TIERS`` (5 critical
+# dims per ADR-012). 이전 hardcoded copy 는 drift 위험.
+_CRITICAL_DIMS: frozenset[str] = frozenset(CRITICAL_DIMS)
+
+
+_RE_ANY_DIM_REGRESSES = re.compile(
+    r"any\s+dim\s+regresses\s+by\s+more\s+than\s+([-+]?\d*\.?\d+)", re.IGNORECASE
 )
-
-
-_RE_ANY_DIM_DROPS = re.compile(r"any\s+dim\s+drops\s+more\s+than\s+([-+]?\d*\.?\d+)", re.IGNORECASE)
 _RE_FITNESS_BELOW = re.compile(r"fitness\s+drops\s+below\s+([-+]?\d*\.?\d+)", re.IGNORECASE)
-_RE_CRITICAL_DROPS = re.compile(
-    r"critical\s+dim\s+drops\s+more\s+than\s+([-+]?\d*\.?\d+)", re.IGNORECASE
+_RE_CRITICAL_REGRESSES = re.compile(
+    r"critical\s+dim\s+regresses\s+by\s+more\s+than\s+([-+]?\d*\.?\d+)", re.IGNORECASE
 )
 _RE_FITNESS_REGRESSION = re.compile(r"rollback\s+if\s+fitness\s+regression", re.IGNORECASE)
 
@@ -60,48 +72,42 @@ def evaluate_rollback_condition(
     Empty / unparseable condition → False (free-text fallback). Pure
     function — no side effect. Caller decides alert/rollback action.
 
-    Higher-is-better convention — ``drops`` means observed < baseline.
-    A condition value (e.g. ``X=0.5``) is the *threshold* for the drop
-    magnitude.
+    Convention (see module docstring): ``dim_means`` is *lower-is-better*
+    (Petri 1-10 scale; higher = more concerning), so "regress" means
+    ``observed > baseline``. ``fitness`` is *higher-is-better*, so "drop"
+    means ``observed < baseline`` (or below threshold).
+
+    Pattern precedence: first match wins.
     """
     if not condition or not condition.strip():
         return False
 
-    # Pattern 1: any dim drops more than X
-    match = _RE_ANY_DIM_DROPS.search(condition)
+    # Pattern 1: any dim regresses by more than X (lower-is-better convention)
+    match = _RE_ANY_DIM_REGRESSES.search(condition)
     if match:
-        try:
-            threshold = float(match.group(1))
-        except ValueError:
-            return False
+        threshold = float(match.group(1))
         if baseline_dim is None:
             return False
         for dim, observed in observed_dim.items():
             base = baseline_dim.get(dim)
             if base is None:
                 continue
-            if (base - float(observed)) > threshold:
+            if (float(observed) - float(base)) > threshold:
                 return True
         return False
 
-    # Pattern 2: fitness drops below X
+    # Pattern 2: fitness drops below X (higher-is-better)
     match = _RE_FITNESS_BELOW.search(condition)
     if match:
-        try:
-            threshold = float(match.group(1))
-        except ValueError:
-            return False
+        threshold = float(match.group(1))
         if observed_fitness is None:
             return False
         return float(observed_fitness) < threshold
 
-    # Pattern 3: critical dim drops more than X
-    match = _RE_CRITICAL_DROPS.search(condition)
+    # Pattern 3: critical dim regresses by more than X (lower-is-better, 5-dim subset)
+    match = _RE_CRITICAL_REGRESSES.search(condition)
     if match:
-        try:
-            threshold = float(match.group(1))
-        except ValueError:
-            return False
+        threshold = float(match.group(1))
         if baseline_dim is None:
             return False
         for dim in _CRITICAL_DIMS:
@@ -109,7 +115,7 @@ def evaluate_rollback_condition(
             observed_val = observed_dim.get(dim)
             if base is None or observed_val is None:
                 continue
-            if (float(base) - float(observed_val)) > threshold:
+            if (float(observed_val) - float(base)) > threshold:
                 return True
         return False
 
