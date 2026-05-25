@@ -48,6 +48,22 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-14 A.7 propose_swarm + apply_swarm_proposals wiring** —
+  `SelfImprovingLoopRunner` gains `propose_swarm(m, n)` (returns
+  `list[list[Proposal]]` — M sub-agents × N siblings, sequential) and
+  `apply_swarm_proposals(swarm_proposals)` which mints a single
+  `swarm_id`, forwards `swarm_id` + `sub_agent_index` to each
+  sub-agent's `apply_group_proposals`, and returns the last-committed
+  sub-agent's mutation (MVP last-wins). `Mutation.to_audit_row` +
+  `append_audit_log` + `apply_group_proposals` all accept `swarm_id` +
+  `sub_agent_index` (default `""` / `None` → row column omitted, legacy
+  unchanged). `run_once` dispatches to swarm mode when
+  `AutoresearchConfig.sub_agent_count >= 2`. Swarm-level fitness
+  aggregation via `aggregate_swarm_fitness` deferred to a follow-up
+  that pairs PR-12 `mutations_reader` with the helper — current MVP
+  surfaces swarm metadata in mutations.jsonl rows for cross-sub-agent
+  grep analysis (no runtime aggregation). Frontier: Kimi K2.6 PARL
+  inference-time variant.
 - **PR-13 A.5 meta-judge module** — `core/self_improving_loop/meta_judge.py`
   invokes a meta-judge LLM on the most-recent N attribution rows (via
   PR-12 `read_recent_attributions`) and returns `MetaJudgeResult` with a

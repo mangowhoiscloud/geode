@@ -197,6 +197,8 @@ class Mutation:
         kind: str = "applied",
         group_id: str = "",
         group_advantage: float | None = None,
+        swarm_id: str = "",
+        sub_agent_index: int | None = None,
     ) -> dict[str, Any]:
         """Render the mutation as one audit-log row.
 
@@ -234,6 +236,13 @@ class Mutation:
             row["group_id"] = group_id
         if group_advantage is not None:
             row["group_advantage"] = round(float(group_advantage), 6)
+        # P4 (2026-05-25, PR-14 wiring) — multi-level swarm grouping.
+        # ``sub_agent_index=0`` 이 valid (첫 sub-agent) 이므로 None 으로
+        # 구분 — legacy non-swarm mode 는 None.
+        if swarm_id:
+            row["swarm_id"] = swarm_id
+        if sub_agent_index is not None:
+            row["sub_agent_index"] = int(sub_agent_index)
         # PR-SIL-5THEME C4 — cost 컬럼은 non-zero 일 때만 emit. 0 값
         # (legacy 또는 mock LLM 호출) 은 column 자체 생략 — JSONL 의
         # noise 절감 + legacy reader 무영향.
@@ -1077,6 +1086,8 @@ def append_audit_log(
     kind: str = "applied",
     group_id: str = "",
     group_advantage: float | None = None,
+    swarm_id: str = "",
+    sub_agent_index: int | None = None,
 ) -> Path:
     """Append one mutation row to the git-tracked audit jsonl.
 
@@ -1101,6 +1112,8 @@ def append_audit_log(
         kind=kind,
         group_id=group_id,
         group_advantage=group_advantage,
+        swarm_id=swarm_id,
+        sub_agent_index=sub_agent_index,
     )
     # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
     # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
@@ -1418,7 +1431,13 @@ class SelfImprovingLoopRunner:
                 proposals.append(future.result())
         return proposals
 
-    def apply_group_proposals(self, proposals: list[Proposal]) -> Mutation | None:
+    def apply_group_proposals(
+        self,
+        proposals: list[Proposal],
+        *,
+        swarm_id: str = "",
+        sub_agent_index: int | None = None,
+    ) -> Mutation | None:
         """P1-revised (2026-05-25) — apply N sibling proposals → audit →
         variance filter → advantage normalization → top-1 commit.
 
@@ -1586,6 +1605,8 @@ class SelfImprovingLoopRunner:
                     kind="applied",
                     group_id=group_id,
                     group_advantage=advantages[best_idx],
+                    swarm_id=swarm_id,
+                    sub_agent_index=sub_agent_index,
                 )
             except OSError as exc:
                 self._rollback_sot(
@@ -1610,6 +1631,8 @@ class SelfImprovingLoopRunner:
                     kind="applied_sibling",
                     group_id=group_id,
                     group_advantage=advantages[i],
+                    swarm_id=swarm_id,
+                    sub_agent_index=sub_agent_index,
                 )
 
             if self.commit_enabled:
@@ -1626,6 +1649,102 @@ class SelfImprovingLoopRunner:
                         "self-improving-loop: sibling temp file cleanup failed for %s",
                         sibling_path,
                     )
+
+    def propose_swarm(self, m: int, n: int) -> list[list[Proposal]]:
+        """P4 (PR-14, 2026-05-25) — multi-level swarm propose.
+
+        M sub-agent × N sibling = M groups of N proposals. Each sub-agent
+        runs an independent :meth:`propose_group` call. Sub-agent slice
+        differentiation (per-sub-agent agent_contract policy) is deferred
+        to A.8 follow-up — this PR keeps the same prompt across all
+        sub-agents and lets stochasticity (temperature >= 0.1) provide
+        the inter-agent diversity. Kimi K2.6 의 inference-time PARL 패턴.
+
+        Sequential (not parallel) for cost predictability — propose_group
+        already parallelises N sibling LLM calls inside one sub-agent, so
+        running M sub-agents sequentially keeps the parallelism bounded
+        at N (no M×N thread pool explosion).
+        """
+        if m < 1:
+            raise ValueError(f"propose_swarm: m must be >= 1, got {m}")
+        if n < 1:
+            raise ValueError(f"propose_swarm: n must be >= 1, got {n}")
+        swarm_groups: list[list[Proposal]] = []
+        for sub_agent_index in range(m):
+            log.info(
+                "self-improving-loop: swarm sub-agent %d/%d — propose_group(n=%d)",
+                sub_agent_index + 1,
+                m,
+                n,
+            )
+            swarm_groups.append(self.propose_group(n))
+        return swarm_groups
+
+    def apply_swarm_proposals(self, swarm_proposals: list[list[Proposal]]) -> Mutation | None:
+        """P4 (PR-14, 2026-05-25) — apply M sub-agent groups → return
+        last-committed sub-agent's chosen mutation (MVP last-wins).
+
+        Steps:
+
+        1. Mint single ``swarm_id`` for the cycle (shared by all sub-
+           agents' apply / sibling rows in mutations.jsonl).
+        2. For each sub-agent group → :meth:`apply_group_proposals` with
+           ``swarm_id`` + ``sub_agent_index`` forwarded. Each sub-agent
+           returns the group's best Mutation (or None on variance-filter
+           skip).
+        3. Returns the last sub-agent's mutation (last-wins commit on
+           canonical SoT). When all sub-agents skipped via variance
+           filter → returns ``None`` (full-swarm cycle skip).
+
+        MVP scope (deliberate) — swarm-level fitness aggregation via
+        :func:`aggregate_swarm_fitness` is *not* applied here because
+        ``Mutation`` doesn't carry post-audit fitness back through
+        ``apply_group_proposals``; the helper exists in
+        ``core/self_improving_loop/swarm_scaffolding.py`` and is used
+        out-of-band by callers that read mutations.jsonl ApplyRecord
+        rows via PR-12 ``mutations_reader`` (each row carries
+        ``baseline_fitness`` + ``group_advantage``). A.8 follow-up will
+        wire sub-agent contract slices so the "last-wins" commit becomes
+        per-slice (no SoT collision), and a downstream wrapper will use
+        the reader + ``aggregate_swarm_fitness`` to produce an explicit
+        swarm-level fitness scalar. Until then, swarm mode's primary
+        value is the mutations.jsonl observability surface — operators
+        can grep ``swarm_id`` + ``sub_agent_index`` for cross-sub-agent
+        analysis even without runtime aggregation.
+        """
+        if not swarm_proposals:
+            raise ValueError("apply_swarm_proposals: empty swarm")
+        swarm_id = _mint_audit_run_id()
+        log.info(
+            "self-improving-loop: swarm %s — M=%d sub-agents (sequential)",
+            swarm_id,
+            len(swarm_proposals),
+        )
+
+        sub_agent_mutations: list[Mutation | None] = []
+        for sub_agent_index, group in enumerate(swarm_proposals):
+            chosen = self.apply_group_proposals(
+                group, swarm_id=swarm_id, sub_agent_index=sub_agent_index
+            )
+            sub_agent_mutations.append(chosen)
+
+        # Filter sub-agents that returned None (variance-filter skip).
+        valid_mutations = [m for m in sub_agent_mutations if m is not None]
+        if not valid_mutations:
+            log.info(
+                "self-improving-loop: swarm %s — all sub-agents skipped "
+                "(variance filter); no swarm commit",
+                swarm_id,
+            )
+            return None
+
+        log.info(
+            "self-improving-loop: swarm %s — %d/%d sub-agents committed",
+            swarm_id,
+            len(valid_mutations),
+            len(swarm_proposals),
+        )
+        return valid_mutations[-1]
 
     def apply_proposal(self, proposal: Proposal) -> Mutation:
         """Apply a previously-proposed mutation — write SoT, audit
@@ -1696,7 +1815,16 @@ class SelfImprovingLoopRunner:
         """
         from core.config.self_improving_loop import load_self_improving_loop_config
 
-        group_size = load_self_improving_loop_config().autoresearch.group_size
+        cfg = load_self_improving_loop_config()
+        group_size = cfg.autoresearch.group_size
+        sub_agent_count = cfg.autoresearch.sub_agent_count
+        if sub_agent_count >= 2:
+            # P4 (PR-14, 2026-05-25) — multi-level swarm mode. Cost cap is
+            # ``sub_agent_count * group_size`` audits per cycle; operator
+            # is expected to keep ``group_size=1`` when ``sub_agent_count>=2``
+            # to bound cost to M audits, unless they explicitly want M×N.
+            swarm_proposals = self.propose_swarm(sub_agent_count, group_size)
+            return self.apply_swarm_proposals(swarm_proposals)
         if group_size <= 1:
             return self.apply_proposal(self.propose())
         proposals = self.propose_group(group_size)
