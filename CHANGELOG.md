@@ -52,6 +52,20 @@ functional change.
 Patch bundling PR-16 (C.4 credit_assignment) + PR-17 (C.5 kind×dim matrix) + PR-SG-SELECTION-ALIGN-FIX (V3/V4/V5 Codex MCP fixes on PR-SG-SELECTION-ALIGN).
 
 ### Added
+- **PR-18 C.3 rollback_condition parser + evaluator** —
+  `core/self_improving_loop/rollback_condition.py` turns the
+  free-text `Mutation.rollback_condition` field (PR-5) into a runtime
+  signal via a single pure function
+  `evaluate_rollback_condition(condition, observed_dim, baseline_dim,
+  observed_fitness, baseline_fitness)`. Four supported syntax
+  patterns: `any dim drops more than X`, `fitness drops below X`,
+  `critical dim drops more than X` (5 critical dims from
+  `AXIS_TIERS`), and `rollback if fitness regression`. Patterns are
+  case-insensitive and can be embedded in longer operator notes.
+  Free-text fallback returns False — by design, automatic SoT
+  reversion is *not* triggered; the result is a signal for an
+  alerting CLI / dashboard, leaving the rollback action to the
+  operator. Missing baseline / fitness → False (graceful).
 - **PR-17 C.5 kind × dim cross-effect matrix** —
   `core/self_improving_loop/kind_dim_matrix.py` inner-joins apply rows
   (PR-12 `read_recent_applies`) with attribution rows (PR-12
