@@ -292,6 +292,25 @@ class AutoresearchConfig(BaseModel):
     point 는 unreachable worst-case (e.g., dim 별 0).
     """
 
+    sub_agent_count: Annotated[int, Field(ge=1, le=5)] = 1
+    """P4 (2026-05-25, Kimi K2.6 PARL inference-time 변형) — swarm-level
+    sub-agent 개수. plan ``docs/plans/2026-05-25-p4-parl-swarm-scaffolding.md``.
+
+    - ``1`` (default, legacy): single mutation chain. P1-revised group
+      sampling (group_size) 만 활성.
+    - ``3``: MVP — 3 sub-agent 가 각자 다른 agent_contract policy slice
+      로 mutation chain 진행. swarm-mean baseline.
+    - ``5``: full — Kimi K2.6 PARL 의 inference-time 축소판.
+
+    audit cost = sub_agent_count × group_size × per-cycle cost. config
+    cap = 5 로 unconstrained cost explosion 방지.
+    """
+
+    swarm_aggregation: Literal["mean", "median", "max"] = "mean"
+    """P4 — sub-agent fitness aggregation strategy. ``mean`` 이 PARL 의
+    swarm-mean 패턴 (Kimi K2.6 추정). ``median`` 은 outlier-resilient,
+    ``max`` 는 best-of-M exploration."""
+
     anchor_confidence_mode: bool = False
     """P3-revised (2026-05-25, SPCT + Meta-Rewarding) — anchor 3
     (admirable / disappointing / needs_attention) → fitness 의 confidence

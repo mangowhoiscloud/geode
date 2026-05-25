@@ -119,6 +119,13 @@ class ApplyRecord(BaseModel):
     한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
     None 일 때 legacy (P3 이전 mutation row). max 500 chars (parse_mutation
     guard)."""
+    swarm_id: str | None = None
+    """P4 (2026-05-25, Kimi K2.6 PARL inference-time) — swarm-level grouping
+    key. multi-level: swarm_id (level 2) + group_id (level 1). 1=disabled
+    legacy."""
+    sub_agent_index: int | None = None
+    """P4 — sub-agent index (0..sub_agent_count-1) in the swarm.
+    contribution decomposition 시 식별 key."""
 
 
 @dataclass(frozen=True)
