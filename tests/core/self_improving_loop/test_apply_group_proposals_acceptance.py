@@ -55,15 +55,30 @@ def _fake_proposal(mid: str, new_value: str = "v") -> Proposal:
     )
 
 
-class _NullResult:
-    """Minimal CompletedProcess stand-in (stdout/stderr empty)."""
+def _stub_subprocess_factory(fitness_iter):
+    """Build a stub that emits a real FITNESS_RESULT sentinel on stdout —
+    real ``_parse_fitness_from_subprocess_stdout`` 가 parse 가능하도록.
 
-    stdout = ""
-    stderr = ""
+    CI fix (2nd push) — ``patch(_parse_fitness_from_subprocess_stdout)``
+    이 xdist parallel + coverage 환경에서 bare-name reference 안 잡힘.
+    sentinel format 직접 emit 으로 patch dependency 제거.
+    """
 
+    def _stub(**kwargs):
+        fitness = next(fitness_iter)
+        audit_run_id = kwargs.get("audit_run_id", "")
+        sentinel = (
+            f'FITNESS_RESULT: {{"fitness": {fitness:.4f}, '
+            f'"audit_run_id": "{audit_run_id}"}}'
+        )
 
-def _stub_subprocess(**_kwargs):
-    return _NullResult()
+        class _Result:
+            stdout = sentinel
+            stderr = ""
+
+        return _Result()
+
+    return _stub
 
 
 def _stub_sibling_sot(p, *, tmp_path: Path):
@@ -87,11 +102,7 @@ def test_acceptance_group_top1_and_siblings_kind_ordering(tmp_path: Path) -> Non
     with (
         patch(
             "core.self_improving_loop.runner._run_autoresearch_subprocess",
-            side_effect=_stub_subprocess,
-        ),
-        patch(
-            "core.self_improving_loop.runner._parse_fitness_from_subprocess_stdout",
-            side_effect=lambda stdout, **_kw: next(fitness_iter),
+            side_effect=_stub_subprocess_factory(fitness_iter),
         ),
         patch(
             "core.self_improving_loop.runner._apply_sibling_in_memory_with_value",
@@ -128,11 +139,7 @@ def test_acceptance_all_mutation_ids_distinct_in_group(tmp_path: Path) -> None:
     with (
         patch(
             "core.self_improving_loop.runner._run_autoresearch_subprocess",
-            side_effect=_stub_subprocess,
-        ),
-        patch(
-            "core.self_improving_loop.runner._parse_fitness_from_subprocess_stdout",
-            side_effect=lambda stdout, **_kw: next(fitness_iter),
+            side_effect=_stub_subprocess_factory(fitness_iter),
         ),
         patch(
             "core.self_improving_loop.runner._apply_sibling_in_memory_with_value",
@@ -163,11 +170,7 @@ def test_acceptance_group_advantage_emitted_on_rows(tmp_path: Path) -> None:
     with (
         patch(
             "core.self_improving_loop.runner._run_autoresearch_subprocess",
-            side_effect=_stub_subprocess,
-        ),
-        patch(
-            "core.self_improving_loop.runner._parse_fitness_from_subprocess_stdout",
-            side_effect=lambda stdout, **_kw: next(fitness_iter),
+            side_effect=_stub_subprocess_factory(fitness_iter),
         ),
         patch(
             "core.self_improving_loop.runner._apply_sibling_in_memory_with_value",
@@ -194,15 +197,12 @@ def test_acceptance_variance_filter_trigger_no_commit(tmp_path: Path) -> None:
     runner = SelfImprovingLoopRunner(rerun_enabled=True, rerun_dry_run=False)
     runner.audit_log_path = tmp_path / "mutations.jsonl"
     proposals = [_fake_proposal(f"m{i}", f"v{i}") for i in range(2)]
+    fitness_iter = iter([0.5, 0.5])  # identical → variance 0
 
     with (
         patch(
             "core.self_improving_loop.runner._run_autoresearch_subprocess",
-            side_effect=_stub_subprocess,
-        ),
-        patch(
-            "core.self_improving_loop.runner._parse_fitness_from_subprocess_stdout",
-            side_effect=lambda stdout, **_kw: 0.5,  # identical → variance 0
+            side_effect=_stub_subprocess_factory(fitness_iter),
         ),
         patch(
             "core.self_improving_loop.runner._apply_sibling_in_memory_with_value",
@@ -234,11 +234,7 @@ def test_acceptance_sibling_temp_files_cleaned_up(tmp_path: Path) -> None:
     with (
         patch(
             "core.self_improving_loop.runner._run_autoresearch_subprocess",
-            side_effect=_stub_subprocess,
-        ),
-        patch(
-            "core.self_improving_loop.runner._parse_fitness_from_subprocess_stdout",
-            side_effect=lambda stdout, **_kw: next(fitness_iter),
+            side_effect=_stub_subprocess_factory(fitness_iter),
         ),
         patch(
             "core.self_improving_loop.runner._apply_sibling_in_memory_with_value",
