@@ -103,9 +103,7 @@ class TestCheckNearDuplicate:
         assert is_dup is False, f"score={score:.4f} should admit at 0.90"
         assert 0.70 <= score < 0.90, f"score={score:.4f} should sit in the 0.70-0.90 band"
 
-    def test_unreadable_evolved_returns_admitting(
-        self, tmp_path: Path, evolver: Evolver
-    ) -> None:
+    def test_unreadable_evolved_returns_admitting(self, tmp_path: Path, evolver: Evolver) -> None:
         """IO failure on the evolved path → admit (fail open, defensive
         per CSP-6 docstring; failing closed on every blip would mask
         legitimate evolutions)."""
