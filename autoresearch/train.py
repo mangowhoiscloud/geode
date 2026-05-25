@@ -2035,17 +2035,30 @@ def _should_promote(
         # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
         # 가 fire 했으면 (bench 측 conflict) 그 reason 을 보고. dim critical
         # gate 만 fire 했으면 기존 메시지 보존.
+        # PR-AR-L4d (2026-05-26) — UX 축 Goodhart bidirectional gate 추가.
+        # bench 와 동일 패턴으로 dim ↔ ux cross-validation. ux 가 있을 때만
+        # fire (data 없으면 graceful skip — bench 와 동일).
         from autoresearch.bench_means import detect_cross_validation_conflict
+        from autoresearch.ux_means import detect_ux_conflict
 
-        conflict = detect_cross_validation_conflict(
+        bench_conflict = detect_cross_validation_conflict(
             dim_means=current_means,
             baseline_dim_means=baseline_means,
             bench_means=bench_means,
             baseline_bench_means=baseline_bench_means,
             critical_dims=CRITICAL_DIMS,
         )
-        if conflict is not None:
-            return False, f"cross-validation conflict ({conflict})"
+        if bench_conflict is not None:
+            return False, f"cross-validation conflict ({bench_conflict})"
+        ux_conflict = detect_ux_conflict(
+            dim_means=current_means,
+            baseline_dim_means=baseline_means,
+            ux_means=ux_means,
+            baseline_ux_means=baseline_ux_means,
+            critical_dims=CRITICAL_DIMS,
+        )
+        if ux_conflict is not None:
+            return False, f"cross-validation conflict ({ux_conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
     current_raw = compute_fitness(
