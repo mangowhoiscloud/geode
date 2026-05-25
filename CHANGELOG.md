@@ -107,6 +107,27 @@ functional change.
   extended with a literature column without schema churn.
 
 ### Fixed
+- **PR-JSON-WIRE** — per-role JSON Schema wire-through. New
+  `plugins/seed_generation/json_schemas.py` declares 7 schemas
+  (PROXIMITY / CRITIQUE / PILOT / VOTE / EVOLVE / META_REVIEW /
+  LITERATURE_REVIEW). `SubTask` gains an optional `response_schema`
+  field, propagated through `WorkerRequest` → `AgenticLoop` →
+  `build_adapter_request` → `AdapterCallRequest.response_schema`,
+  which the claude-cli / codex-cli adapters already forward as
+  `--json-schema` / `--output-schema`. Each role's
+  `_build_tasks` populates the field with its schema so the
+  provider rejects malformed responses before they reach the parser.
+  Smoke 14 surfaced the concrete failure mode this fixes: pilot
+  candidate `pilot-gen1-000-...` returned `"...all zero..."` prose
+  ellipsis inside a JSON object, breaking `json.loads` after
+  codeblock unwrap (`Expecting property name enclosed in double
+  quotes line 32 column 5`). The schema's
+  `dim_means.additionalProperties: {"type": "number"}` rejects the
+  string ellipsis at provider-level. Test coverage: 15 tests in
+  `tests/plugins/seed_generation/test_json_schemas_wire.py` —
+  schema↔parser required-fields drift (6), per-role
+  `_build_tasks` schema attachment (3), end-to-end wire-through
+  (6 including default-None back-compat).
 - **PR-CODEX-OAUTH-EMPTY-TEXT-DUMP** — codex_oauth adapter writes a
   postmortem dump to `~/.geode/diagnostics/codex-oauth-empty-text/
   <ts>-<model>.json` when the upstream returns `output_text=""`.

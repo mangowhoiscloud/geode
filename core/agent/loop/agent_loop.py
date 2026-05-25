@@ -288,6 +288,7 @@ class AgenticLoop:
         allowed_tool_names: set[str] | None = None,
         source: str = "",
         session_id: str = "",
+        response_schema: dict[str, Any] | None = None,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -389,6 +390,14 @@ class AgenticLoop:
         # ``(provider, source)`` isn't in the registry, ``resolve_for``
         # raises and the loop refuses to start.
         self._source = source or "payg"
+        # PR-JSON-WIRE (2026-05-25) — per-loop structured-output JSON
+        # Schema. When non-None, every ``_call_llm`` populates
+        # ``AdapterCallRequest.response_schema`` with this value so
+        # the underlying provider (claude-cli ``--json-schema`` /
+        # codex-cli ``--output-schema``) constrains the model's
+        # response to the declared shape. None = free-form text
+        # (legacy back-compat).
+        self._response_schema: dict[str, Any] | None = response_schema
         from core.llm.adapters import resolve_for
 
         # The Path-B registry uses a narrower provider vocabulary than
@@ -2263,6 +2272,10 @@ class AgenticLoop:
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
+            # PR-JSON-WIRE (2026-05-25) — pass the per-loop schema
+            # so claude-cli ``--json-schema`` / codex-cli
+            # ``--output-schema`` constrains the response.
+            response_schema=self._response_schema,
         )
         # PR-COMM-3d (2026-05-24) — emit LLM_CALL_STARTED / LLM_CALL_ENDED
         # for the AgenticLoop's main dispatch path. Pre-fix only the

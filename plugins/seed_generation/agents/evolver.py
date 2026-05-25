@@ -44,6 +44,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import EVOLVE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -267,6 +268,8 @@ class Evolver(BaseSeedAgent):
                     },
                     agent=_EVOLVER_AGENT_NAME,
                     source=self.adapter_source,
+                    # PR-JSON-WIRE (2026-05-25) — force evolve JSON shape.
+                    response_schema=EVOLVE_SCHEMA,
                 )
             )
         return tasks

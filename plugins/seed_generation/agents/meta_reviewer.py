@@ -49,6 +49,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import META_REVIEW_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -167,6 +168,8 @@ class MetaReviewer(BaseSeedAgent):
             },
             agent=_META_REVIEWER_AGENT_NAME,
             source=self.adapter_source,
+            # PR-JSON-WIRE (2026-05-25) — force meta_review JSON shape.
+            response_schema=META_REVIEW_SCHEMA,
         )
 
     def _build_description(
