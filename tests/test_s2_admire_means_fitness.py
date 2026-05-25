@@ -10,7 +10,6 @@ import pytest
 from autoresearch.admire_means import (
     ADMIRE_DIM_WEIGHTS,
     CALIBRATION_THRESHOLD,
-    collect_admire_means_from_ranker,
     compute_admire_aggregate,
     validate_admire_schema,
 )
@@ -54,9 +53,12 @@ def test_calibration_threshold_in_valid_range() -> None:
 
 
 def test_calibration_threshold_exact_value() -> None:
-    """CALIBRATION_THRESHOLD == 0.7 — Goodhart 방어 핵심 anchor (Codex
-    MCP catch). 변경 시 test + docstring + ADR 모두 동기 갱신 필요."""
-    assert CALIBRATION_THRESHOLD == 0.7
+    """CALIBRATION_THRESHOLD == 0.667 — Krippendorff 2004 *Content
+    Analysis* 2nd ed (p.241) substantial-agreement floor for nominal
+    IRR. PR-AR-L4c operator decision: ground via Krippendorff instead
+    of the prior magic 0.7. 변경 시 test + docstring + ADR + 새 Krippendorff
+    constant 모두 동기 갱신 필요."""
+    assert pytest.approx(0.667) == CALIBRATION_THRESHOLD
 
 
 def test_calibration_dampening_at_exact_threshold_full_signal() -> None:
@@ -160,14 +162,10 @@ def test_validate_rejects_non_dict() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. collect_admire_means_from_ranker — S2b placeholder
+# 4. collect_admire_means_from_ranker — replaced by
+#    admire_means_from_eval_result in PR-AR-L4c. Coverage moved to
+#    tests/autoresearch/test_admire_handoff_consume.py.
 # ---------------------------------------------------------------------------
-
-
-def test_collect_returns_none_in_s2() -> None:
-    """S2 (이 PR) 단계 — ranker.py 의 ELO + voter panel 실제 호출은 S2b.
-    이 함수는 ``None`` 반환으로 compute_fitness 가 2축 fallback (S1 동일)."""
-    assert collect_admire_means_from_ranker() is None
 
 
 # ---------------------------------------------------------------------------
@@ -252,15 +250,6 @@ def test_compute_fitness_dim_weight_redistributed_when_admire_active() -> None:
 # ---------------------------------------------------------------------------
 # 6. Ranker hook contract — ADR cross-reference
 # ---------------------------------------------------------------------------
-
-
-def test_collect_admire_means_signature_matches_s1_pattern() -> None:
-    """S1 의 collect_ux_means_from_sources 와 동일 시그니처 패턴 —
-    ``_placeholder=True`` 기본값, ``None`` 반환."""
-    import inspect
-
-    sig = inspect.signature(collect_admire_means_from_ranker)
-    assert "_placeholder" in sig.parameters
 
 
 @pytest.mark.parametrize(
