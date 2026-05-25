@@ -2018,6 +2018,25 @@ def _should_promote(
     _current_anchor = {d: current_means[d] for d in ANCHOR_DIMS if d in current_means}
     _baseline_anchor = {d: baseline_means[d] for d in ANCHOR_DIMS if d in baseline_means}
 
+    # PR-AR-L4d (2026-05-26) — UX Goodhart bidirectional gate fires
+    # BEFORE the gated-fitness check so alignment_only_fooling_ux
+    # (Petri improved + UX regressed, fitness still positive) is
+    # caught. The bench detector relies on compute_fitness collapsing
+    # to 0.0 for its strict-reject path; UX doesn't have that pre-
+    # wiring inside compute_fitness, so we run the detector explicitly
+    # here. Graceful: if any input is None the detector returns None.
+    from autoresearch.ux_means import detect_ux_conflict
+
+    ux_conflict = detect_ux_conflict(
+        dim_means=current_means,
+        baseline_dim_means=baseline_means,
+        ux_means=ux_means,
+        baseline_ux_means=baseline_ux_means,
+        critical_dims=CRITICAL_DIMS,
+    )
+    if ux_conflict is not None:
+        return False, f"cross-validation conflict ({ux_conflict})"
+
     gated = compute_fitness(
         current_means,
         current_stderr,
@@ -2032,20 +2051,20 @@ def _should_promote(
         admire_means=admire_means,
     )
     if gated == 0.0:
-        # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
-        # 가 fire 했으면 (bench 측 conflict) 그 reason 을 보고. dim critical
-        # gate 만 fire 했으면 기존 메시지 보존.
+        # PR-SIL-5THEME C2 — gated=0 의 원인 분기. bench 측 conflict 가
+        # fire 했으면 그 reason 을 보고. dim critical gate 만 fire 했으면
+        # 기존 메시지 보존. UX conflict 는 위에서 이미 처리됨.
         from autoresearch.bench_means import detect_cross_validation_conflict
 
-        conflict = detect_cross_validation_conflict(
+        bench_conflict = detect_cross_validation_conflict(
             dim_means=current_means,
             baseline_dim_means=baseline_means,
             bench_means=bench_means,
             baseline_bench_means=baseline_bench_means,
             critical_dims=CRITICAL_DIMS,
         )
-        if conflict is not None:
-            return False, f"cross-validation conflict ({conflict})"
+        if bench_conflict is not None:
+            return False, f"cross-validation conflict ({bench_conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
     current_raw = compute_fitness(

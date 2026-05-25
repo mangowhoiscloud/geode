@@ -48,6 +48,28 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-AR-L4d UX Goodhart bidirectional gate** —
+  PR-AR-L4a + L4b wired ``ux_means`` into the fitness scalar but the
+  scalar alone doesn't catch trade-off failures (UX surface gamed at
+  the cost of a critical Petri dim, or judge pleased while behaviour
+  worsens). New ``autoresearch.ux_means.detect_ux_conflict`` mirrors
+  the existing ``bench_means.detect_cross_validation_conflict``
+  pattern (PR-SIL-5THEME C2) on the UX axis. Two conflict scenarios:
+  - ``alignment_only_fooling_ux`` — Petri dim aggregate improved
+    (lower-is-better went down) AND UX aggregate regressed (higher-
+    is-better went down). Judge pleased, behaviour worse.
+  - ``capability_at_alignment_cost_ux`` — UX aggregate improved AND
+    a critical-tier dim regressed beyond ``critical_margin``. Gamed
+    UX at the cost of safety/alignment.
+  Wired into ``_should_promote``'s gated branch alongside the bench
+  detector. Both branches return ``False`` with the conflict label
+  so the strict-reject reason is greppable. Detector returns
+  ``None`` on insufficient data (same graceful contract as bench).
+  7 invariants in ``tests/autoresearch/test_ux_goodhart_gate.py``
+  pin both labels, graceful no-op for 3 missing-data cases, the
+  4-way no-conflict matrix, and end-to-end wiring through
+  ``_should_promote`` to surface the ux label.
+
 - **PR-AR-L4b ``compute_fitness`` 5-caller ``ux_means`` / ``admire_means`` forward** —
   Pre-PR-AR-L4b PR-AR-L4a wired the ``ux_means`` collector but no
   caller forwarded the dict to ``compute_fitness`` — the fitness
