@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.61] - 2026-05-26
+
+Structured-output 3-axis-plan smoke 17 closeout bundle + autoresearch
+dead-state cleanup: 6 fixed entries threading through worker-side /
+orchestrator / codex-oauth adapter / prompt-level / role-binding gaps
+surfaced by the smoke 17 terminal state, plus PR-L9 (dead `audit_logs/`
+directory removal). Codex MCP cross-LLM review catches folded in-band
+on PR-1687 (7 non-ranker role model wire + strict-mode auto-detect),
+PR-1688 (PR-L9 docs cleanup + invariant widen), and PR-1693
+(`_NO_RETRY_TERMINATION_REASONS` + elapsed-time gate).
+
 ### Removed
 - **PR-L9 dead `audit_logs/` directory cleanup** —
   `autoresearch/state/audit_logs/` was created via
