@@ -57,8 +57,13 @@ functional change.
     shape with field-name parity (``pairwise_win_rate``).
   - ``derive_inter_voter_agreement(wins, losses, ties)`` proxies
     ``human_calibration_corr`` until quarterly human L4 batch lands.
-    Operator-grounded via Krippendorff 2004 *Content Analysis* 2nd ed
-    (p.241): α ≥ 0.667 = substantial-agreement floor for nominal IRR.
+    Two-factor formula (``majority_share × decisive_share``) penalizes
+    low-decisiveness panels — Codex MCP review §3 caught the case
+    where ``wins=1, losses=0, ties=2`` returned 1.0 (degenerate
+    single-voter unanimity); fixed to 0.333. Krippendorff 2004
+    *Content Analysis* 2nd ed (p.241) thresholds (α ≥ 0.667 tentative
+    / α ≥ 0.800 reliable) are the *interpretation thresholds* the
+    proxy is checked against — the proxy itself is not Krippendorff α.
   - New ``KRIPPENDORFF_TENTATIVE_FLOOR = 0.667`` and
     ``KRIPPENDORFF_DEFINITIVE_FLOOR = 0.800`` constants documenting
     the source.

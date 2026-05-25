@@ -16,9 +16,11 @@ cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 — mu
                                          # (분기 단위 50-100 sample 로 측정, Goodhart 방어)
     }
 
-``human_calibration_corr`` 가 0.7 미만이면 LLM-judge 가 human 기준에서
-벗어나는 신호 — Goodhart fooling 위험. ``compute_admire_aggregate`` 가
-이 축으로 win-rate 를 가중치 dampen 하는 방식으로 처리.
+``human_calibration_corr`` 가 ``KRIPPENDORFF_TENTATIVE_FLOOR`` (0.667,
+Krippendorff 2004 *Content Analysis* 2nd ed p.241 의 tentative-
+conclusions α floor) 미만이면 LLM-judge 가 human 기준에서 벗어나는
+신호 — Goodhart fooling 위험. ``compute_admire_aggregate`` 가 이 축으로
+win-rate 를 가중치 dampen 하는 방식으로 처리.
 
 **ADR-012 §Decision.2 의 fitness 3축 다축화**:
 
@@ -26,18 +28,22 @@ cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 — mu
 - ``ux_means`` (행동 4-field, 양의 압력, S1 신설) — 가중치 0.3
 - ``admire_means`` (체감 2-field, 양의 압력, 이 모듈) — 가중치 0.3
 
-S2 (이 PR) 는 **schema + math + ranker hook interface** 만 신설. 실제
-ranker.py 의 ELO + voter panel 호출 wiring 은 S2b (별도 PR) —
-``collect_admire_means_from_ranker`` 가 placeholder 로 ``None`` 반환,
-``compute_fitness`` 의 3축 다축화는 즉시 가동.
+S2 + PR-AR-L4c (2026-05-26) 로 schema + math + ranker handoff
+converter (``admire_means_from_eval_result``) 가 모두 wire. 실제 ranker
+``evaluate_mutation_pairwise`` 호출 — 즉 mutation 의 before/after 응답
+캡처 → panel dispatch — 는 mutator runner (별도 PR) 가 담당. 본
+모듈은 *consumer 측* 변환 + 임시 calibration 프록시 (panel inter-voter
+agreement → ``human_calibration_corr``) 만 제공.
 
 **Goodhart 방어 (ADR-012 의 Risks 표)**:
 1. judge model 의 주기적 교체 — ``required_diversity_providers`` 규약
    재사용 (PR-COSCI-1)
 2. ranker.py 의 3-voter cross-provider panel — single-judge sycophancy
    회피
-3. ``human_calibration_corr`` < 0.7 시 win-rate dampening
-4. 분기 human L4 batch refresh (S2b 의 calibration pipeline)
+3. ``human_calibration_corr`` < ``KRIPPENDORFF_TENTATIVE_FLOOR`` 시
+   win-rate dampening
+4. 분기 human L4 batch refresh (calibration pipeline) — Pearson r
+   로 프록시 교체
 """
 
 from __future__ import annotations
@@ -57,23 +63,31 @@ assert abs(sum(ADMIRE_DIM_WEIGHTS.values()) - 1.0) < 1e-9, "ADMIRE_DIM_WEIGHTS m
 # 가 human 기준에서 drift — pairwise_win_rate 를 dampen.
 #
 # PR-AR-L4c (2026-05-26) operator-grounded: Krippendorff 2004
-# *Content Analysis* 2nd ed (p.241) — α ≥ 0.667 = tentative conclusions
-# floor (substantial inter-rater agreement), α ≥ 0.800 = definitive
-# conclusions floor. The threshold is the *tentative* floor since the
+# *Content Analysis* 2nd ed (p.241) — α ≥ 0.667 = *tentative
+# conclusions* floor for nominal IRR; α ≥ 0.800 = *reliable / definitive
+# conclusions* floor. The threshold is the tentative floor since the
 # autoresearch loop is closed-loop with manual rollback paths, not a
 # definitive batch decision. Operator-explicit decision to ground the
 # constant rather than use a magic number; see memory
 # [[feedback-dim-convention-direction]] for the no-magic-number rule.
+#
+# Note: the metric stored in ``human_calibration_corr`` is currently a
+# *proxy* (panel inter-voter agreement, see
+# ``derive_inter_voter_agreement``), not Krippendorff α itself. The
+# proxy preserves the threshold interpretation but does not chance-
+# adjust like α. The proxy will be replaced by Pearson r between
+# judge scores and quarterly human L4 labels in a future PR; the
+# Krippendorff thresholds keep the same role at that point.
 KRIPPENDORFF_TENTATIVE_FLOOR: float = 0.667
-"""Krippendorff α floor for *tentative* conclusions in nominal IRR
+"""Krippendorff α floor for *tentative-conclusions* IRR
 (Krippendorff 2004 *Content Analysis* 2nd ed, p.241). Used as the
-dampening threshold for ``pairwise_win_rate`` until quarterly human
-L4 batch calibration data is wired."""
+dampening threshold for ``pairwise_win_rate``."""
 
 KRIPPENDORFF_DEFINITIVE_FLOOR: float = 0.800
-"""Krippendorff α floor for *definitive* conclusions (same source).
-Documented for symmetry — a future PR raising the threshold to 0.8
-when human L4 data lands surfaces this constant for explicit review."""
+"""Krippendorff α floor for *reliable / definitive-conclusions* IRR
+(same source). Documented for symmetry — a future PR raising the
+threshold to 0.8 when human L4 data lands surfaces this constant for
+explicit review."""
 
 CALIBRATION_THRESHOLD: float = KRIPPENDORFF_TENTATIVE_FLOOR
 
@@ -125,51 +139,65 @@ def derive_inter_voter_agreement(*, wins: int, losses: int, ties: int) -> float:
     """Compute panel inter-voter agreement as the
     ``human_calibration_corr`` proxy.
 
-    PR-AR-L4c (2026-05-26) — Krippendorff α is the canonical IRR
-    metric for nominal data, but its full calculation over a 3-voter
-    panel of binary verdicts is overkill (and the panel size + match
-    cardinality stay small). The simpler *max-side fraction* metric
-    gives the same monotone signal:
+    PR-AR-L4c (2026-05-26) — full Krippendorff α over a 3-voter panel
+    of binary verdicts is overkill, so this returns a *proxy* that
+    follows the same monotone signal. The interpretation thresholds
+    used by ``compute_admire_aggregate`` (``KRIPPENDORFF_TENTATIVE_FLOOR``
+    = 0.667 for tentative conclusions) are Krippendorff α thresholds;
+    the metric here is not Krippendorff α itself.
 
-        agreement = max(wins, losses) / (wins + losses)
+    Formula (two-factor):
 
-    Range:
+        majority_share = max(wins, losses) / (wins + losses)
+        decisive_share = (wins + losses) / max(1, wins + losses + ties)
+        agreement      = majority_share * decisive_share
 
-    - **1.0** — unanimous decisive vote (3 wins or 3 losses for a
-      3-voter panel).
-    - **2/3 ≈ 0.667** — 2-of-3 majority. Hits exactly the
-      ``KRIPPENDORFF_TENTATIVE_FLOOR`` Krippendorff identifies as the
-      substantial-agreement boundary.
-    - **0.5** — even split (2 wins / 2 losses or 1 / 1) — lower bound;
-      below this is impossible for the majority share.
+    Why two factors:
 
-    The metric proxies the eventual quarterly human-labeled
-    ``human_calibration_corr`` (Pearson r between judge scores and
-    human L4 labels). Replacing the proxy with the real correlation is
-    a future PR — the same threshold (Krippendorff tentative floor)
-    keeps the same interpretation.
+    - ``majority_share`` measures how strongly the decisive voters
+      agreed with each other. 3-of-3 → 1.0; 2-of-3 → 2/3.
+    - ``decisive_share`` measures how much of the panel actually
+      reached a decision. Ties + failures shrink the denominator —
+      Codex MCP review §3 caught the pre-fix case where
+      ``wins=1, losses=0, ties=2`` returned 1.0 despite only one
+      voter being decisive (degenerate single-vote unanimity).
+
+    Sample values:
+
+    - 3 wins, 0 losses, 0 ties → 1.0 * 1.0 = **1.0** (unanimous)
+    - 2 wins, 1 loss, 0 ties → 2/3 * 1.0 ≈ **0.667** (canonical
+      "tentative conclusions" floor)
+    - 1 win, 0 losses, 2 ties → 1.0 * 1/3 ≈ **0.333** (low-confidence
+      decisive vote, penalized)
+    - 2 wins, 2 losses, 0 ties → 0.5 * 1.0 = **0.5** (even split)
+    - 0 decisive of 3 voters → fallback to ``KRIPPENDORFF_TENTATIVE_FLOOR``
+
+    The proxy will be replaced by quarterly human-labeled
+    ``human_calibration_corr`` (Pearson r) once that batch lands;
+    the same Krippendorff thresholds keep their interpretation.
 
     Args:
         wins: decisive votes for the after-mutation response.
         losses: decisive votes for the before-mutation response.
-        ties: votes that reported no clear winner. Not counted in the
-            agreement denominator (Krippendorff α excludes ties from
-            the decisive set similarly).
+        ties: votes that reported no clear winner. Used to penalize
+            low panel-decisiveness via ``decisive_share``.
 
     Returns:
-        Agreement in ``[0.5, 1.0]`` when there is at least one decisive
-        vote; ``KRIPPENDORFF_TENTATIVE_FLOOR`` (0.667) when every
-        voter tied (no signal — neutral fallback, equivalent to
-        the threshold).
+        Agreement in ``[0.0, 1.0]``;
+        ``KRIPPENDORFF_TENTATIVE_FLOOR`` (0.667) when every voter
+        tied (no decisive signal — neutral fallback at the
+        tentative-conclusions threshold).
     """
-    _ = ties  # ties excluded from decisive-vote agreement denominator
     decisive = wins + losses
     if decisive == 0:
         # No decisive signal — neutral fallback at the threshold so
         # ``compute_admire_aggregate``'s dampener treats it as the
-        # minimum substantial-agreement reading.
+        # minimum tentative-conclusions reading.
         return KRIPPENDORFF_TENTATIVE_FLOOR
-    return max(wins, losses) / decisive
+    total = wins + losses + ties
+    majority_share = max(wins, losses) / decisive
+    decisive_share = decisive / max(1, total)
+    return majority_share * decisive_share
 
 
 def admire_means_from_eval_result(

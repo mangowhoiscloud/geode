@@ -61,15 +61,16 @@ from autoresearch.admire_means import (
 
 def test_krippendorff_tentative_floor_matches_published_value() -> None:
     """Krippendorff 2004 *Content Analysis* 2nd ed (p.241) names 0.667
-    as the tentative-conclusions floor for nominal IRR. A future PR
-    that changes this value should be a conscious operator decision —
-    invariant catches the diff."""
+    as the *tentative-conclusions* α floor for nominal IRR. A future
+    PR that changes this value should be a conscious operator
+    decision — invariant catches the diff."""
     assert pytest.approx(0.667) == KRIPPENDORFF_TENTATIVE_FLOOR
 
 
 def test_krippendorff_definitive_floor_matches_published_value() -> None:
-    """Same source — 0.800 for definitive conclusions. Documented for
-    when the human L4 batch lands and the threshold migrates up."""
+    """Same source — 0.800 for *reliable / definitive* conclusions.
+    Documented for when the human L4 batch lands and the threshold
+    migrates up."""
     assert pytest.approx(0.800) == KRIPPENDORFF_DEFINITIVE_FLOOR
 
 
@@ -114,9 +115,36 @@ def test_inter_voter_agreement_no_decisive_returns_threshold() -> None:
 
 
 def test_inter_voter_agreement_even_split_returns_half() -> None:
-    """2 wins / 2 losses → agreement = 0.5 (lower bound for a binary
-    decision with non-zero decisive votes)."""
+    """2 wins / 2 losses, no ties → majority_share 0.5 × decisive_share
+    1.0 = 0.5 (lower bound for a binary decision when all voters were
+    decisive)."""
     assert derive_inter_voter_agreement(wins=2, losses=2, ties=0) == pytest.approx(0.5)
+
+
+def test_inter_voter_agreement_low_decisive_share_penalized() -> None:
+    """Codex MCP §3 — pre-fix wins=1, losses=0, ties=2 returned 1.0
+    (a single-voter unanimity looked as strong as 3-of-3). Two-factor
+    formula now penalizes: majority_share 1.0 × decisive_share 1/3 =
+    ~0.333. The pin keeps the decisive-share penalty alive across
+    future refactors."""
+    agreement = derive_inter_voter_agreement(wins=1, losses=0, ties=2)
+    assert agreement == pytest.approx(1.0 / 3.0)
+    # Symmetric for losses-side single decisive vote.
+    agreement_losses = derive_inter_voter_agreement(wins=0, losses=1, ties=2)
+    assert agreement_losses == pytest.approx(1.0 / 3.0)
+
+
+def test_inter_voter_agreement_partial_panel_unanimity_still_below_full_panel() -> None:
+    """End-to-end ordering invariant — for any panel with ties,
+    agreement must be strictly less than full-panel unanimity. Catches
+    a future refactor that drops the decisive-share factor."""
+    full_unanimity = derive_inter_voter_agreement(wins=3, losses=0, ties=0)
+    partial_unanimity = derive_inter_voter_agreement(wins=2, losses=0, ties=1)
+    single_unanimity = derive_inter_voter_agreement(wins=1, losses=0, ties=2)
+    assert full_unanimity > partial_unanimity > single_unanimity
+    assert full_unanimity == pytest.approx(1.0)
+    assert partial_unanimity == pytest.approx(2 / 3)
+    assert single_unanimity == pytest.approx(1 / 3)
 
 
 # ───────────────────────────────────────────────────────────────────────────
