@@ -48,6 +48,32 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-AR-L4c ``admire_means`` consumer for seed-gen handoff (ADR-012 S2b)** —
+  Scope A (PR-RANKER-MUTATION-EVAL #1704) shipped
+  ``plugins.seed_generation.mutation_eval.evaluate_mutation_pairwise``;
+  this PR wires the autoresearch consumer side:
+  - ``admire_means_from_eval_result(result)`` converts a
+    ``MutationEvalResult`` into the autoresearch ``admire_means`` dict
+    shape with field-name parity (``pairwise_win_rate``).
+  - ``derive_inter_voter_agreement(wins, losses, ties)`` proxies
+    ``human_calibration_corr`` until quarterly human L4 batch lands.
+    Operator-grounded via Krippendorff 2004 *Content Analysis* 2nd ed
+    (p.241): α ≥ 0.667 = substantial-agreement floor for nominal IRR.
+  - New ``KRIPPENDORFF_TENTATIVE_FLOOR = 0.667`` and
+    ``KRIPPENDORFF_DEFINITIVE_FLOOR = 0.800`` constants documenting
+    the source.
+  - ``CALIBRATION_THRESHOLD`` migrated from magic 0.7 → tentative
+    floor (0.667). Existing tests updated to match.
+  - Deleted ``collect_admire_means_from_ranker`` placeholder.
+  The runner-side invocation (``evaluate_mutation_pairwise`` call
+  with before/after responses + audit 2× cost) is a follow-up PR —
+  this consumer provides the stable interface for that future work.
+  10 invariants in
+  ``tests/autoresearch/test_admire_handoff_consume.py`` pin the
+  Krippendorff constants, the agreement formula, the converter shape,
+  end-to-end aggregate computability, and cross-module field-name
+  parity with ``MutationEvalResult.pairwise_win_rate``.
+
 - **PR-AR-L4d UX Goodhart bidirectional gate** —
   PR-AR-L4a + L4b wired ``ux_means`` into the fitness scalar but the
   scalar alone doesn't catch trade-off failures (UX surface gamed at

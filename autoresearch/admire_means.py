@@ -55,7 +55,27 @@ assert abs(sum(ADMIRE_DIM_WEIGHTS.values()) - 1.0) < 1e-9, "ADMIRE_DIM_WEIGHTS m
 
 # Calibration threshold — human_calibration_corr 가 이 값 미만이면 judge
 # 가 human 기준에서 drift — pairwise_win_rate 를 dampen.
-CALIBRATION_THRESHOLD: float = 0.7
+#
+# PR-AR-L4c (2026-05-26) operator-grounded: Krippendorff 2004
+# *Content Analysis* 2nd ed (p.241) — α ≥ 0.667 = tentative conclusions
+# floor (substantial inter-rater agreement), α ≥ 0.800 = definitive
+# conclusions floor. The threshold is the *tentative* floor since the
+# autoresearch loop is closed-loop with manual rollback paths, not a
+# definitive batch decision. Operator-explicit decision to ground the
+# constant rather than use a magic number; see memory
+# [[feedback-dim-convention-direction]] for the no-magic-number rule.
+KRIPPENDORFF_TENTATIVE_FLOOR: float = 0.667
+"""Krippendorff α floor for *tentative* conclusions in nominal IRR
+(Krippendorff 2004 *Content Analysis* 2nd ed, p.241). Used as the
+dampening threshold for ``pairwise_win_rate`` until quarterly human
+L4 batch calibration data is wired."""
+
+KRIPPENDORFF_DEFINITIVE_FLOOR: float = 0.800
+"""Krippendorff α floor for *definitive* conclusions (same source).
+Documented for symmetry — a future PR raising the threshold to 0.8
+when human L4 data lands surfaces this constant for explicit review."""
+
+CALIBRATION_THRESHOLD: float = KRIPPENDORFF_TENTATIVE_FLOOR
 
 
 def compute_admire_aggregate(admire_means: dict[str, float] | None) -> float:
@@ -101,38 +121,108 @@ def validate_admire_schema(admire_means: Any) -> bool:
     return True
 
 
-def collect_admire_means_from_ranker(
-    *,
-    _placeholder: bool = True,
-) -> dict[str, float] | None:
-    """Collect ``admire_means`` from ``plugins/seed_generation/agents/ranker.py``
-    의 ELO + 3-voter panel.
+def derive_inter_voter_agreement(*, wins: int, losses: int, ties: int) -> float:
+    """Compute panel inter-voter agreement as the
+    ``human_calibration_corr`` proxy.
 
-    S2 (이 PR) 는 schema + math + hook interface 만 신설. 실제 ranker
-    호출 wiring 은 S2b (별도 PR) — mutation 의 before/after 응답을
-    ``Ranker._play_match`` 와 같은 패턴으로 panel 에 던지고 win-rate 계산.
+    PR-AR-L4c (2026-05-26) — Krippendorff α is the canonical IRR
+    metric for nominal data, but its full calculation over a 3-voter
+    panel of binary verdicts is overkill (and the panel size + match
+    cardinality stay small). The simpler *max-side fraction* metric
+    gives the same monotone signal:
 
-    이 함수는 placeholder — S2b 전까지는 ``None`` 반환 (compute_fitness
-    가 dim+ux fallback 으로 작동). S2b 머지 후:
+        agreement = max(wins, losses) / (wins + losses)
 
-    1. mutation 의 before/after 응답 hydrate (M4.0 의 ``eval_response_recorded``)
-    2. ``Ranker._build_voter_tasks`` 와 같은 패턴으로 3-voter panel 호출
-    3. ELO update (``_play_match`` 의 K-factor=32 같은 패턴)
-    4. pairwise_win_rate = wins / (wins + losses)
-    5. human_calibration_corr = 분기 단위 L4 batch 와의 Pearson 상관계수
+    Range:
+
+    - **1.0** — unanimous decisive vote (3 wins or 3 losses for a
+      3-voter panel).
+    - **2/3 ≈ 0.667** — 2-of-3 majority. Hits exactly the
+      ``KRIPPENDORFF_TENTATIVE_FLOOR`` Krippendorff identifies as the
+      substantial-agreement boundary.
+    - **0.5** — even split (2 wins / 2 losses or 1 / 1) — lower bound;
+      below this is impossible for the majority share.
+
+    The metric proxies the eventual quarterly human-labeled
+    ``human_calibration_corr`` (Pearson r between judge scores and
+    human L4 labels). Replacing the proxy with the real correlation is
+    a future PR — the same threshold (Krippendorff tentative floor)
+    keeps the same interpretation.
 
     Args:
-        _placeholder: S2b 전까지 ``None`` 반환 강제. test 에서 override 가능.
+        wins: decisive votes for the after-mutation response.
+        losses: decisive votes for the before-mutation response.
+        ties: votes that reported no clear winner. Not counted in the
+            agreement denominator (Krippendorff α excludes ties from
+            the decisive set similarly).
+
+    Returns:
+        Agreement in ``[0.5, 1.0]`` when there is at least one decisive
+        vote; ``KRIPPENDORFF_TENTATIVE_FLOOR`` (0.667) when every
+        voter tied (no signal — neutral fallback, equivalent to
+        the threshold).
     """
-    if _placeholder:
-        return None
-    return None  # pragma: no cover — S2b wiring placeholder
+    _ = ties  # ties excluded from decisive-vote agreement denominator
+    decisive = wins + losses
+    if decisive == 0:
+        # No decisive signal — neutral fallback at the threshold so
+        # ``compute_admire_aggregate``'s dampener treats it as the
+        # minimum substantial-agreement reading.
+        return KRIPPENDORFF_TENTATIVE_FLOOR
+    return max(wins, losses) / decisive
+
+
+def admire_means_from_eval_result(
+    result: Any,
+) -> dict[str, float]:
+    """Convert a ``plugins.seed_generation.mutation_eval.MutationEvalResult``
+    into the autoresearch ``admire_means`` dict shape.
+
+    Cross-module handoff contract (PR-RANKER-MUTATION-EVAL + PR-AR-L4c,
+    2026-05-26):
+
+    - ``pairwise_win_rate`` — verbatim from
+      ``MutationEvalResult.pairwise_win_rate``. Field name parity with
+      ``ADMIRE_DIM_WEIGHTS`` is pinned by both sides.
+    - ``human_calibration_corr`` — ``derive_inter_voter_agreement``
+      proxy until quarterly human L4 batch lands.
+
+    The autoresearch caller is responsible for invoking
+    ``evaluate_mutation_pairwise`` (with before/after responses + voter
+    panel + SubAgentManager) and forwarding its result here. The
+    actual before/after capture lives in the mutator runner
+    (``core/self_improving_loop/runner.py``); this PR only wires the
+    autoresearch consumer side, so the runner-level invocation is a
+    follow-up PR (audit 2× cost + response capture infrastructure).
+
+    Args:
+        result: A ``MutationEvalResult`` (typed via ``Any`` to avoid
+            the seed-gen → autoresearch import dependency — the
+            handoff boundary is data-only, not code-only).
+
+    Returns:
+        ``admire_means`` dict ready for ``compute_admire_aggregate``
+        or for forwarding to ``compute_fitness(admire_means=...)``.
+    """
+    win_rate = float(result.pairwise_win_rate)
+    calibration = derive_inter_voter_agreement(
+        wins=int(result.wins),
+        losses=int(result.losses),
+        ties=int(result.ties),
+    )
+    return {
+        "pairwise_win_rate": win_rate,
+        "human_calibration_corr": calibration,
+    }
 
 
 __all__ = [
     "ADMIRE_DIM_WEIGHTS",
     "CALIBRATION_THRESHOLD",
-    "collect_admire_means_from_ranker",
+    "KRIPPENDORFF_DEFINITIVE_FLOOR",
+    "KRIPPENDORFF_TENTATIVE_FLOOR",
+    "admire_means_from_eval_result",
     "compute_admire_aggregate",
+    "derive_inter_voter_agreement",
     "validate_admire_schema",
 ]
