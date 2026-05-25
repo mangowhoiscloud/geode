@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-L7 wrapper-sections fallback ↔ writer-schema drift invariants** —
+  `tests/autoresearch/test_wrapper_sections_drift.py` pins the dual-SoT
+  shape between `autoresearch/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`
+  (bootstrap default when the canonical
+  `autoresearch/state/policies/wrapper-sections.json` is absent) and
+  `write_wrapper_prompt_sections` (writer the mutator goes through).
+  5 invariants cover: fallback satisfies writer validator (roundtrip),
+  fallback shape (non-empty str dict), 5 canonical section anchors
+  (`role` / `tool_result_handling` / `shell_caution` / `refusal_policy`
+  / `thinking_visibility`), loader bootstrap path returns a fallback
+  copy on canonical-absent and on malformed JSON. Mirrors PR-MINIMAL-2
+  #1398's `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` pattern.
+
 ## [0.99.61] - 2026-05-26
 
 Structured-output 3-axis-plan smoke 17 closeout bundle + autoresearch
