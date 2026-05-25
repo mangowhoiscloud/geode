@@ -74,6 +74,13 @@ def _state_to_json(state: PipelineState) -> str:
         # ADR-012 S4 (2026-05-21) — persist cohort so a state.json
         # replay re-hydrates the same picker semantics.
         "cohort": state.cohort,
+        # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — Pareto attribution
+        # set. Resume path must rehydrate this; otherwise the evolver's
+        # HANDOFF pareto_front embedding silently changes between the
+        # pre-checkpoint and resumed run. Codex MCP review of
+        # PR-CHECKPOINT-RESUME-TIMEBUDGET caught the omission.
+        "target_dims_attribution": list(state.target_dims_attribution),
+        "pareto_mode": state.pareto_mode,
         "gen_tag": state.gen_tag,
         "candidates_requested": state.candidates_requested,
         "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,
@@ -903,6 +910,12 @@ class Pipeline:
         try:
             from plugins.seed_generation.checkpointer import write_checkpoint
 
+            # Codex MCP review of PR-CHECKPOINT-RESUME-TIMEBUDGET — append
+            # BEFORE serializing so the snapshot's ``completed_phases``
+            # reflects the just-completed phase. Pre-fix the on-disk
+            # snapshot was one phase behind the in-memory state.
+            if phase not in self.state.completed_phases:
+                self.state.completed_phases.append(phase)
             snapshot = json.loads(_state_to_json(self.state))
             write_checkpoint(
                 self.state.run_dir,
@@ -910,8 +923,6 @@ class Pipeline:
                 state_snapshot=snapshot,
                 duration_ms=duration_ms,
             )
-            if phase not in self.state.completed_phases:
-                self.state.completed_phases.append(phase)
         except Exception as exc:  # pragma: no cover — defensive
             log.warning(
                 "seed-generation: failed to write %s checkpoint — %s",

@@ -23,7 +23,8 @@ Design — single-flight, append-only:
 Convergence basis: paperclip's ``loadOrCreateSession`` flow reads the
 session JSONL → rebuilds in-memory message history → resumes the
 next pending turn. We adapt this to GEODE's phase granularity
-(7 checkpoints per run × 1 file per phase = a far simpler index).
+(9 phases in ``_PHASE_ORDER`` × 1 file per phase = a far simpler
+index than per-event JSONL).
 """
 
 from __future__ import annotations

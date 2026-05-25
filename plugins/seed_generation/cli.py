@@ -349,9 +349,12 @@ def _dispatch_pipeline_resume(
 ) -> None:
     """Build orchestrator + run with a pre-hydrated state + resume cursor.
 
-    Skips the picker / cost-preview / pre-flight gates (the run was
-    already past those when it aborted). Mirrors
-    :func:`_dispatch_pipeline` for everything else.
+    Skips the cost-preview / pre-flight / confirm gates (the run was
+    already past those when it aborted). The picker IS re-resolved
+    against the current ``~/.geode/config.toml`` because the
+    SubAgentManager + per-role agents need live bindings for the
+    phases that still have to run; if the operator edited config
+    between the abort and the resume, the new bindings win.
     """
     from plugins.seed_generation.orchestrator import (
         Pipeline,

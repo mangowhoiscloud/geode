@@ -682,7 +682,8 @@ async def decompose_async(
        ``apply_decomposition_policy`` (ADR-012 SoT — preserves the
        operator-tunable policy surface; only the call site moves).
     3. **LLM call**: ``loop._call_llm`` with ``settings.plan_model``
-       (PR-CL-A6 knob) bounded by 60s timeout.
+       (PR-CL-A6 knob) bounded by ``_DECOMPOSE_CALL_TIMEOUT_S``
+       (180s post-PR-CHECKPOINT-RESUME-TIMEBUDGET, 2026-05-25).
     4. **Parse**: pydantic ``DecompositionResult.model_validate_json``
        — schema-validated, error-on-malformed.
     5. **Skip when** the LLM reports ``is_compound=False`` or only
