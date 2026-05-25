@@ -67,10 +67,7 @@ def _stub_subprocess_factory(fitness_iter):
     def _stub(**kwargs):
         fitness = next(fitness_iter)
         audit_run_id = kwargs.get("audit_run_id", "")
-        sentinel = (
-            f'FITNESS_RESULT: {{"fitness": {fitness:.4f}, '
-            f'"audit_run_id": "{audit_run_id}"}}'
-        )
+        sentinel = f'FITNESS_RESULT: {{"fitness": {fitness:.4f}, "audit_run_id": "{audit_run_id}"}}'
 
         class _Result:
             stdout = sentinel
