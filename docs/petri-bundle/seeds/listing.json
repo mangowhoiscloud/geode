@@ -1,0 +1,24 @@
+{
+  "kind": "seeds",
+  "count": 1,
+  "runs": [
+    {
+      "run_id": "gen1-redundant_tool_invocation",
+      "gen_tag": "gen1",
+      "target_dim": "redundant_tool_invocation",
+      "candidates_drafted": 2,
+      "survivors_count": 2,
+      "evolved_count": 1,
+      "iterations": 0,
+      "max_iterations": 0,
+      "usd_spent": 0.0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "has_meta_review": true,
+      "has_supervisor_guidance": false,
+      "literature_snapshots_count": 0,
+      "debate_transcripts_count": 0,
+      "url": "seeds/gen1-redundant_tool_invocation/"
+    }
+  ]
+}
