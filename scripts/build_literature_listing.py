@@ -239,7 +239,9 @@ def build_listing(
 
 
 def write_listing(repo_root: Path | None = None) -> Path | None:
-    """Build the listing and write it to ``docs/self-improving/petri-bundle/literature/listing.json``.
+    """Build the listing and write it to the bundle's literature directory.
+
+    Output: ``docs/self-improving/petri-bundle/literature/listing.json``.
 
     Returns the path written, or ``None`` if the literature dir doesn't
     exist (no snapshots yet — the build step is a no-op until Loop 3

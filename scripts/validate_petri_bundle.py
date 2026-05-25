@@ -176,7 +176,9 @@ def main() -> int:
             print(f"  - {f}")
         print()
         print("Fix paths:")
-        print("  - Remove offending entries from docs/self-improving/petri-bundle/logs/listing.json")
+        print(
+            "  - Remove offending entries from docs/self-improving/petri-bundle/logs/listing.json"
+        )
         print("    and the .eval files from docs/self-improving/petri-bundle/logs/.")
         print("  - Rebuild the viewer bundle via `inspect view bundle` if assets are missing.")
         print("  - Partial/error/empty-results archives trigger click-time TypeError")

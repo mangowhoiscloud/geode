@@ -167,7 +167,9 @@ def test_tool_cache_hit_on_matching_hash(tmp_path: Path, monkeypatch: pytest.Mon
     # Path points at the original snapshot (not a fresh re-write).
     assert second["result"]["snapshot_path"] == str(first_path)
     # Only one snapshot file in the dir.
-    snapshots = list((repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2412.13371-*.json"))
+    snapshots = list(
+        (repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2412.13371-*.json")
+    )
     assert len(snapshots) == 1
 
 
@@ -196,7 +198,9 @@ def test_tool_writes_new_snapshot_on_changed_abstract(
         abstract="version two — substantially revised",
     )
     assert result["result"]["cache_hit"] is False
-    snapshots = list((repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2502.18864-*.json"))
+    snapshots = list(
+        (repo / "docs" / "self-improving/petri-bundle" / "literature").glob("2502.18864-*.json")
+    )
     assert len(snapshots) == 2
 
 
