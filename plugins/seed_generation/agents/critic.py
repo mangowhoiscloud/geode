@@ -302,7 +302,15 @@ class Critic(BaseSeedAgent):
             "`candidate_id`, `target_dims_actual`, `intended_dim_match`, "
             "`strengths`, `weaknesses`, `judge_risk`, "
             "`discrimination_estimate`, `rewrite_section`. "
-            "Keep total response under 200 tokens."
+            "Keep total response under 200 tokens.\n\n"
+            # PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — same gate
+            # as PR-PROXIMITY-JSON-ENFORCE (#85). Critic was implicitly
+            # safe in smoke 17 (claude-cli enforced --json-schema) but
+            # this language eliminates the prose-preamble failure mode
+            # the codex-oauth + non-strict path can still hit.
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "CRITIQUE_SCHEMA. No prose summary, no markdown bullets, no "
+            "preamble. Start with `{` and end with `}`."
         )
         # PR-SG-SELECTION-ALIGN (2026-05-25) — anchor 3 + scenario_realism
         # + target_dims_attribution surfaced via the HANDOFF CONTEXT
