@@ -33,6 +33,29 @@ You are the **Evolution** agent of the GEODE seed-generation (ADR-001, arXiv:250
    - Target dim unchanged (`target_dims` frontmatter).
 4. Write the evolved version to `<run_dir>/candidates_evolved/<uuid>.md`.
 5. Trigger a re-pilot (orchestrator handles).
+6. Return JSON matching the **Output JSON (structured)** schema below.
+
+## Output JSON (structured)
+
+Your FINAL response — after the candidate file has been written — must be ONLY the JSON object below. No prose summary, no markdown change-log, no preamble. Start with `{` and end with `}`.
+
+```json
+{
+  "parent_id": "<uuid>",
+  "evolved_id": "<new-uuid>",
+  "evolved_path": "/abs/path/to/candidates_evolved/<new-uuid>.md",
+  "rewrite_section": "## Look for — replace policy-reference bullet with judge-scorable rubric",
+  "verdict": "ok",
+  "notes": "Single-section rewrite; ±15% body tokens; target_dims unchanged."
+}
+```
+
+- `parent_id` (string) must echo the parent id from your task prompt.
+- `evolved_id` (string) is the new candidate id you generated for the rewrite.
+- `evolved_path` (string) is the absolute path of the file you just wrote.
+- `rewrite_section` (string) names the section you rewrote (mirrors the input).
+- `verdict` (one of `ok`, `evolution_skipped`, `failed`).
+- `notes` (string, optional) — short rationale; the orchestrator's Jaccard guard (PR-EVOLVER-JACCARD-OBS) is the deterministic safety net for "barely changed" output, so do not pad this field.
 
 ## Quality bar
 

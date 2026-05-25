@@ -47,7 +47,29 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.55] - 2026-05-25
+
+Bundles 3 PRs: PR-EVOLVER-JACCARD-OBS, PR-PETRI-BUNDLE-LANDING, PR-HANDOFF-SCHEMAS. Smoke-15-driven defence against tool-using sub-agents emitting prose instead of JSON, plus Petri bundle bridge UI and Jaccard threshold tune.
+
 ### Added
+- **PR-PETRI-BUNDLE-LANDING** — bridge UI/UX for the three Petri bundle
+  surfaces (`/petri-bundle/`, `/petri-bundle/seeds/`,
+  `/petri-bundle/#/tasks/<eval>/samples/scoring`). New static hub at
+  `docs/petri-bundle/landing.html` provides routing to inspect_ai
+  viewer / seed listing / docs (anti-slop: dense table, no card
+  grids, no emoji, system font stack, hairline borders, mono URLs;
+  inspect_petri Bootstrap palette adopted for substrate continuity
+  with the sibling viewer). New Next.js dynamic route
+  `/docs/petri/seeds/[run_id]/[candidate_id]` renders each seed
+  candidate `.md` with `gray-matter` (frontmatter) + `marked`
+  (body → HTML) at build time. Detail page shows frontmatter,
+  critic JSON, pilot dim_means (sorted), evolver parent/children,
+  Elo rating, raw `.md` link, and back-links to the bundle hub +
+  eval viewer. Seeds listing (`/docs/petri/seeds/`) and bundle page
+  (`/docs/petri/bundle/`) updated to route into the new detail
+  page and link the four bridge surfaces. `site/DESIGN.md` §11
+  documents the palette / cross-link / forbidden conventions so
+  future bridge work stays anchored.
 - **PR-SEEDS-EVAL-EXPORT** — seed-generation runs now surface as native
   inspect_ai tasks inside the SPA bundle viewer at
   `https://mangowhoiscloud.github.io/geode/petri-bundle/#/tasks/`.
@@ -88,6 +110,78 @@ functional change.
   skip. Verified end-to-end with the gen1 sample run already in the
   bundle (`gen1-redundant_tool_invocation`): 7 cards now appear in
   the SPA tasks view alongside the 11 existing audit cards.
+
+- **PR-5 BASELINE-RL-IMPL** (2026-05-25) — self-improving loop 의 baseline
+  fitness 생성 식에 frontier RL alg 의 **selection layer** 만 차용한
+  group sampling 도입. 2026-05-25 plan
+  (`docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`, PR #1639) 의
+  P1-revised (GSPO/DAPO + EXAONE variance filter) 구현.
+
+  핵심 메커니즘 — frontier RL alg 의 **weight 학습 layer** (PPO ratio
+  clipping `clip(ρ_t, 1-ε, 1+ε)`, KL penalty `β·KL[π_θ || π_ref]`, gradient
+  descent) 는 의도적 폐기. mutator 가 Anthropic Claude API endpoint 라
+  weight frozen + gradient access 없음. **selection layer 만** inference-time
+  short loop 에 적용:
+
+  - **Group sampling** (GRPO from DeepSeek R1, arXiv 2402.03300):
+    `propose_group(N)` 이 ThreadPoolExecutor 로 N parallel mutator call.
+    같은 baseline state + temperature=1.0 의 stochastic response 가 N
+    distinct mutations.
+  - **Advantage normalization** (GRPO whitening): `_compute_group_advantage`
+    가 `Â_i = (fitness_i - μ) / (σ + ε)` z-score.
+  - **Variance filter** (DAPO Dynamic Sampling, arXiv 2503.14476 = EXAONE
+    4.5 zero-variance filter, arXiv 2604.08644): group std < threshold
+    면 cycle skip (no SoT commit, no apply row) — wasted batch 회피
+    (DAPO reported wall-clock 25% 절약).
+  - **In-memory sibling SoT**: `write_sibling_in_memory()` 가 OS temp
+    file 로 write (canonical `autoresearch/state/policies/*.json` 안
+    건드림). audit subprocess 가 W3 PR-3 인프라
+    (`GEODE_<KIND>_OVERRIDE` + STRICT env) 로 temp path 받아 strict-mode
+    read. top-1 채택 후에만 canonical SoT 에 commit.
+  - **Top-1 commit**: max advantage 의 mutation 만 disk write + apply
+    row (`kind="applied"`). 나머지 N-1 은 `kind="applied_sibling"` row
+    (mutations.jsonl 의 history 보존, in-memory only).
+  - **group_id propagation**: runner 가 mint → subprocess env
+    `GEODE_SIL_GROUP_ID` → train.py 가 `write_attribution(group_id=...)`
+    forward → apply row + applied_sibling row + attribution row 모두
+    같은 group_id 로 join 가능.
+  - **Temperature guard**: `_compute_group_advantage` 진입 시
+    `mutator_temperature >= 0.1` assert (default 1.0). deterministic
+    mutator (temperature=0) 의 silent infinite cycle skip 회피.
+
+  Frontier 그라운딩 (selection-only family, 13 사례) — DGM (Sakana
+  2025-05), AlphaEvolve (DeepMind 2025-05), AI Scientist v2 (Sakana
+  2025-04), Voyager (NVIDIA 2023), Promptbreeder (DeepMind 2023, 2-tier
+  population), STOP (Stanford+MS COLM 2024, recursive scaffolding), GEPA
+  (Berkeley 2025-07, Pareto+reflection), Karpathy autoresearch, MetaGPT
+  AFLOW (ICLR 2025) — GEODE 는 이들과 같은 가족이지만 evolutionary
+  search 식 (tournament GA, MAP-Elites, Pareto sampler) 대신 RL-derived
+  식 (group + advantage + variance filter) 을 inference-time 으로 차용한
+  4-frontier convergence unique niche.
+
+  Config:
+  - `[self_improving_loop.autoresearch] group_size` (`int`, default
+    `1` = disabled, MVP `2`, full `4`)
+  - `[self_improving_loop.autoresearch] group_variance_threshold`
+    (`float`, default `0.01`)
+  - `Settings.temperature_self_improving_mutation` (`float`, default
+    `1.0`, range [0.0, 2.0]). **0.1 미만 override 금지** (group sampling
+    의 stochasticity 보장 필수).
+
+  변경 파일: `core/self_improving_loop/runner.py` (+429),
+  `core/self_improving_loop/policies.py` (+52),
+  `core/self_improving_loop/attribution.py` (+16),
+  `autoresearch/train.py` (+14),
+  `core/config/self_improving_loop.py` (+31),
+  `tests/core/self_improving_loop/test_baseline_rl_grounding.py` (+517,
+  26 invariant tests).
+
+  Backward compat — `group_size=1` (default) → legacy
+  `apply_proposal(self.propose())` path 그대로 + apply row 의 `group_id`
+  / `group_advantage` field 미생성 (legacy reader graceful). 후속
+  sprint — P2-revised (Pareto archive + Dynamic Reward Weighting), P3
+  (anchor calibration + CRM + SPCT), P4 (Kimi K2.6 PARL swarm), P5
+  (SnapPO cyclic producer-consumer).
 
 - **PR-SEEDS-PETRI-NEXTJS-PAGE** — new Next.js docs page
   `site/src/app/docs/petri/seeds/page.tsx` renders the self-improving
@@ -148,6 +242,35 @@ functional change.
   extended with a literature column without schema churn.
 
 ### Fixed
+- **PR-HANDOFF-SCHEMAS** — three-layer defence against the
+  smoke 15 "tool-using sub-agent ends in prose, not JSON" failure:
+  (1) New `plugins/seed_generation/handoff_schemas.py` declares
+  8 INPUT JSON Schemas (`GENERATOR_HANDOFF` / `LITERATURE_REVIEW_
+  HANDOFF` / `PROXIMITY_HANDOFF` / `CRITIC_HANDOFF` /
+  `PILOT_HANDOFF` / `VOTE_HANDOFF` / `EVOLVE_HANDOFF` /
+  `META_REVIEW_HANDOFF`) — symmetric counterpart to the OUTPUT
+  schemas in `json_schemas.py`. Helper `embed_handoff(description,
+  handoff)` appends a `## HANDOFF CONTEXT` fenced JSON block to
+  the user message so the LLM gets accurate values (candidate_id,
+  rewrite_section, pilot dim_means) alongside the prose
+  instruction. `pilot.py` / `evolver.py` / `ranker.py` now emit
+  typed handoff dicts via this helper.
+  (2) `pilot.md` / `evolver.md` gain `## Output JSON (structured)`
+  sections with concrete JSON skeletons and explicit "FINAL
+  response must be ONLY the JSON object" directive — mirrors the
+  critic.md pattern that smoke 15 confirmed worked (critic passed,
+  pilot/evolver failed; the prompt skeleton was the difference).
+  (3) New `core/agent/sub_agent._last_balanced_json_object`
+  scanner falls back to the LAST balanced `{...}` block in prose
+  when `json.loads` of the codeblock-stripped text fails. Handles
+  string escapes and nested objects. Both `_to_sub_result` and
+  `_to_agent_result` paths use it before reaching the legacy
+  `{"raw": ...}` quarantine.
+  Tests: 27 in `tests/plugins/seed_generation/test_handoff_schemas.
+  py` covering schema shape, embed format, role↔schema drift,
+  prompt skeleton presence, fallback parser edge cases (string-
+  escaped braces, nested objects, multi-block selection), and an
+  end-to-end SubAgentManager parse recovery.
 - **PR-EVOLVER-JACCARD-OBS** — Evolver anti-convergence guard
   observability + threshold tune. The CSP-6 Jaccard guard now logs
   the actual measured score and the offending comparison target

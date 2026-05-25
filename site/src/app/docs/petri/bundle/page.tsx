@@ -3,6 +3,8 @@ import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 export const metadata = { title: "Audit Bundle Viewer — GEODE Docs" };
 
 const BUNDLE_URL = "/petri-bundle/";
+const LANDING_URL = "/petri-bundle/landing.html";
+const SEEDS_URL = "/petri-bundle/seeds/";
 
 export default function Page() {
   return (
@@ -21,16 +23,33 @@ export default function Page() {
               GitHub Pages의 같은 도메인 다른 path에 publish됩니다.
             </p>
 
-            <p>
-              <a
-                href={BUNDLE_URL}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 mt-2 text-base font-medium hover:border-[#A573E8] hover:text-[#A573E8] transition-colors"
-                target="_blank"
-                rel="noreferrer"
-              >
-                /geode/petri-bundle/ 뷰어 열기 ↗
-              </a>
-            </p>
+            <table>
+              <thead>
+                <tr><th>표면</th><th>경로</th><th>용도</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href={LANDING_URL}>Bundle 허브</a></td>
+                  <td><code>/petri-bundle/landing.html</code></td>
+                  <td>viewer / seeds / docs 로 분기하는 정적 hub</td>
+                </tr>
+                <tr>
+                  <td><a href={BUNDLE_URL} target="_blank" rel="noreferrer">Eval 로그 viewer</a></td>
+                  <td><code>/petri-bundle/</code></td>
+                  <td>inspect_ai transcript 뷰어. <code>#/tasks/&lt;eval&gt;/samples/scoring</code> 형식의 deep link 안정.</td>
+                </tr>
+                <tr>
+                  <td><a href={SEEDS_URL} target="_blank" rel="noreferrer">Seed 번들</a></td>
+                  <td><code>/petri-bundle/seeds/</code></td>
+                  <td>self-improving-loop run 번들. <code>listing.json</code> + per-run JSON.</td>
+                </tr>
+                <tr>
+                  <td><a href="/geode/docs/petri/seeds">Seed 페이지 (docs)</a></td>
+                  <td><code>/docs/petri/seeds/</code></td>
+                  <td>candidate 클릭 시 마크다운 렌더 detail. critic / pilot / evolver 자식 cross-link.</td>
+                </tr>
+              </tbody>
+            </table>
 
             <h2>Bundle에 들어 있는 것</h2>
             <ul>
@@ -65,16 +84,33 @@ export default function Page() {
               audit. Hosted on the same GitHub Pages domain, different path.
             </p>
 
-            <p>
-              <a
-                href={BUNDLE_URL}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 mt-2 text-base font-medium hover:border-[#A573E8] hover:text-[#A573E8] transition-colors"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open /geode/petri-bundle/ viewer ↗
-              </a>
-            </p>
+            <table>
+              <thead>
+                <tr><th>Surface</th><th>Path</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href={LANDING_URL}>Bundle hub</a></td>
+                  <td><code>/petri-bundle/landing.html</code></td>
+                  <td>Static hub routing to viewer / seeds / docs.</td>
+                </tr>
+                <tr>
+                  <td><a href={BUNDLE_URL} target="_blank" rel="noreferrer">Eval log viewer</a></td>
+                  <td><code>/petri-bundle/</code></td>
+                  <td>inspect_ai transcript viewer. Deep links of the form <code>#/tasks/&lt;eval&gt;/samples/scoring</code> are stable.</td>
+                </tr>
+                <tr>
+                  <td><a href={SEEDS_URL} target="_blank" rel="noreferrer">Seed bundle</a></td>
+                  <td><code>/petri-bundle/seeds/</code></td>
+                  <td>Self-improving-loop run bundle. <code>listing.json</code> + per-run JSON.</td>
+                </tr>
+                <tr>
+                  <td><a href="/geode/docs/petri/seeds">Seed page (docs)</a></td>
+                  <td><code>/docs/petri/seeds/</code></td>
+                  <td>Click a candidate to open markdown-rendered detail. critic / pilot / evolver cross-links.</td>
+                </tr>
+              </tbody>
+            </table>
 
             <h2>What the bundle contains</h2>
             <ul>

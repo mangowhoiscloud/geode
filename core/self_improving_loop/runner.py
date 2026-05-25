@@ -65,6 +65,7 @@ __all__ = [
     "Proposal",
     "RunnerContext",
     "SelfImprovingLoopRunner",
+    "_compute_group_advantage",
     "apply_mutation",
     "build_runner_context",
     "parse_mutation",
@@ -88,7 +89,10 @@ class ApplyRecord(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     ts: float
-    kind: str = Field(default="applied", pattern=r"^applied$")
+    kind: str = Field(default="applied", pattern=r"^applied(_sibling)?$")
+    """P1-revised (2026-05-25) — ``applied`` (group 의 top-1 채택) 또는
+    ``applied_sibling`` (group 의 non-best, in-memory only). legacy
+    group_size=1 mode 는 항상 ``applied``."""
     mutation_id: str
     target_kind: str
     target_section: str
@@ -104,6 +108,17 @@ class ApplyRecord(BaseModel):
     cost_elapsed_seconds: float | None = None
     cost_model: str | None = None
     audit_run_id: str | None = None
+    group_id: str | None = None
+    """P1-revised — group sampling cross-ref key. 같은 cycle 의 N sibling
+    apply row + attribution row 가 모두 같은 group_id 를 가져 group statistic
+    재구성 가능. group_size=1 (legacy) 일 때 None."""
+    group_advantage: float | None = None
+    """P1-revised — advantage normalization z-score. group_size=1 일 때 None."""
+    principle: str | None = Field(default=None, max_length=500)
+    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시
+    한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
+    None 일 때 legacy (P3 이전 mutation row). max 500 chars (parse_mutation
+    guard)."""
 
 
 @dataclass(frozen=True)
@@ -158,6 +173,13 @@ class Mutation:
     cost_elapsed_seconds: float = 0.0
     cost_model: str = ""
 
+    principle: str = ""
+    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시한
+    self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴 —
+    principle → critique → reward chain 의 입구. parse_mutation 이
+    LLM response 의 ``principle`` key 에서 추출 (max 500자). 빈 문자열
+    일 때 legacy mutator (P3 이전) 호환."""
+
     def to_audit_row(
         self,
         *,
@@ -165,6 +187,9 @@ class Mutation:
         timestamp: float | None = None,
         baseline_fitness: float | None = None,
         audit_run_id: str = "",
+        kind: str = "applied",
+        group_id: str = "",
+        group_advantage: float | None = None,
     ) -> dict[str, Any]:
         """Render the mutation as one audit-log row.
 
@@ -173,16 +198,18 @@ class Mutation:
         graceful (key 가 없으면 0 / "" 가정).
 
         W3 (2026-05-25 attribution wiring) — ``audit_run_id`` parameter
-        추가. cross-ref key to the Petri eval archive measured for this
-        mutation. Empty string when the apply happens outside an audit
-        lane (manual --promote, replay); column omitted so legacy reader
-        무영향. ``Mutation`` 자체는 frozen dataclass 라 LLM 응답 구조
-        immutable 유지; audit_run_id 는 runner-side context 로 to_audit_row
-        호출 시점에 inject 한다.
+        추가. ``Mutation`` 자체는 frozen dataclass 라 LLM 응답 구조
+        immutable 유지; audit_run_id 는 runner-side context.
+
+        P1-revised (2026-05-25 baseline RL grounding) — ``kind`` /
+        ``group_id`` / ``group_advantage`` parameter 추가. group sampling
+        의 sibling row (``kind="applied_sibling"``) + group cross-ref.
+        group_size=1 (legacy) 일 때 default 그대로 (``kind="applied"``,
+        group_id="" → row 에서 column 생략).
         """
         row: dict[str, Any] = {
             "ts": timestamp if timestamp is not None else time.time(),
-            "kind": "applied",
+            "kind": kind,
             "mutation_id": self.mutation_id,
             "target_kind": self.target_kind,
             "target_section": self.target_section,
@@ -196,6 +223,10 @@ class Mutation:
         }
         if audit_run_id:
             row["audit_run_id"] = audit_run_id
+        if group_id:
+            row["group_id"] = group_id
+        if group_advantage is not None:
+            row["group_advantage"] = round(float(group_advantage), 6)
         # PR-SIL-5THEME C4 — cost 컬럼은 non-zero 일 때만 emit. 0 값
         # (legacy 또는 mock LLM 호출) 은 column 자체 생략 — JSONL 의
         # noise 절감 + legacy reader 무영향.
@@ -206,6 +237,10 @@ class Mutation:
             row["cost_elapsed_seconds"] = round(float(self.cost_elapsed_seconds), 4)
         if self.cost_model:
             row["cost_model"] = str(self.cost_model)
+        # P3-revised — principle non-empty 시만 emit (legacy mutation row
+        # 무영향).
+        if self.principle:
+            row["principle"] = self.principle
         return row
 
 
@@ -405,6 +440,22 @@ _MUTATION_CONTRACT_SUFFIX = (
     "``reflection`` (reflection.json). "
     "Omit for prompt-level mutations. (``retrieval`` was deprecated "
     "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
+    "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
+    "selecting ``target_section`` and writing ``new_value``, explicitly state "
+    "the judging principle that motivates this mutation — what specific axis "
+    "of GEODE behaviour should it move, and why? Output the principle as a "
+    "short string in the ``principle`` field (<= 500 chars). This is the "
+    "SPCT (DeepSeek-GRM 2026-Q1) frontier — self-generated principles "
+    "anchor self-judge drift and let downstream attribution (PR-3 W2 hook) "
+    "trace causal hypothesis. legacy callers (P3 이전) may omit; empty "
+    "string is graceful.\n"
+    "- **Group sampling (P1-revised, 2026-05-25)**: when this invocation is "
+    "part of a sibling group (``group_size > 1``), each sibling MUST target a "
+    "meaningfully different section or strategy. Repeating the same "
+    "``target_section`` + ``new_value`` across siblings collapses group "
+    "variance to zero, trips the DAPO Dynamic Sampling variance filter, and "
+    "the entire cycle's audit cost is discarded (see plan "
+    "``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §6).\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -415,7 +466,8 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
     '  "target_kind": "<prompt|tool_policy|decomposition|reflection>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
-    '  "rollback_condition": "<one-line predicate, or empty>"\n'
+    '  "rollback_condition": "<one-line predicate, or empty>",\n'
+    '  "principle": "<= 500 chars SPCT principle (P3-revised), or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -793,6 +845,16 @@ def parse_mutation(raw: str) -> Mutation:
         )
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
+    # P3-revised (2026-05-25, SPCT pattern) — principle 추출. LLM 이 명시
+    # 안 하면 (legacy 또는 mutator omit) 빈 문자열. max 500 chars guard.
+    principle_raw = payload.get("principle", "")
+    principle = principle_raw.strip() if isinstance(principle_raw, str) else ""
+    if len(principle) > 500:
+        raise ValueError(
+            f"principle length {len(principle)} exceeds 500 char cap "
+            f"(SPCT principle must be concise — frontier reference: "
+            f"DeepSeek-GRM)"
+        )
     # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
@@ -817,6 +879,7 @@ def parse_mutation(raw: str) -> Mutation:
             mutation_id=mutation_id_raw.strip(),
             expected_dim=expected_dim,
             rollback_condition=rollback_condition,
+            principle=principle,
         )
     return Mutation(
         target_section=target_section.strip(),
@@ -826,6 +889,7 @@ def parse_mutation(raw: str) -> Mutation:
         target_kind=target_kind,
         expected_dim=expected_dim,
         rollback_condition=rollback_condition,
+        principle=principle,
     )
 
 
@@ -882,6 +946,120 @@ def apply_mutation(
     return sections, previous_value
 
 
+def _apply_sibling_in_memory_with_value(
+    proposal: Proposal,
+) -> tuple[dict[str, str], str, Path]:
+    """P1-revised — write sibling SoT to OS temp file, returning the
+    new sections + previous_value + temp path.
+
+    Canonical SoT (``autoresearch/state/policies/*.json``) 는 건드리지
+    않음. audit subprocess 가 temp path 를 ``GEODE_<KIND>_OVERRIDE`` env
+    로 받아 strict mode read (W3 PR-3 인프라).
+    """
+    from core.self_improving_loop.policies import write_sibling_in_memory
+
+    new_sections = dict(proposal.target_sections)
+    previous_value = new_sections.get(proposal.mutation.target_section, "")
+    new_sections[proposal.mutation.target_section] = proposal.mutation.new_value
+    sibling_path = write_sibling_in_memory(proposal.mutation.target_kind, new_sections)
+    return new_sections, previous_value, sibling_path
+
+
+_FITNESS_RESULT_SENTINEL = "FITNESS_RESULT: "
+
+
+def _parse_fitness_from_subprocess_stdout(
+    stdout: str,
+    *,
+    audit_run_id: str,
+    sibling_idx: int,
+) -> float:
+    """Parse the ``FITNESS_RESULT: {...}`` sentinel line from
+    ``autoresearch/train.py`` stdout end-of-run.
+
+    Sentinel format: ``FITNESS_RESULT: {"fitness": <float>, "audit_run_id": "<id>"}``
+
+    Raises RuntimeError when the sentinel is missing or unparseable —
+    fail-fast so group sampling cycle aborts cleanly instead of producing
+    silent-zero advantages.
+    """
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith(_FITNESS_RESULT_SENTINEL):
+            payload_str = line[len(_FITNESS_RESULT_SENTINEL) :].strip()
+            try:
+                payload = json.loads(payload_str)
+                fitness = float(payload.get("fitness"))
+                returned_audit_id = str(payload.get("audit_run_id", ""))
+                if returned_audit_id and returned_audit_id != audit_run_id:
+                    log.warning(
+                        "self-improving-loop: sibling[%d] FITNESS_RESULT audit_run_id "
+                        "mismatch (expected %s, got %s) — possible env "
+                        "propagation drift",
+                        sibling_idx,
+                        audit_run_id,
+                        returned_audit_id,
+                    )
+                return fitness
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"sibling[{sibling_idx}] FITNESS_RESULT parse failed: {exc} "
+                    f"(payload: {payload_str!r})"
+                ) from exc
+    raise RuntimeError(
+        f"sibling[{sibling_idx}] audit subprocess did not emit FITNESS_RESULT "
+        f"sentinel — autoresearch/train.py end-of-run print missing or stdout "
+        f"truncated. audit_run_id={audit_run_id}"
+    )
+
+
+def _compute_group_advantage(
+    fitness_values: list[float],
+    threshold: float,
+    *,
+    mutator_temperature: float,
+) -> tuple[list[float] | None, str]:
+    """P1-revised (2026-05-25) — DAPO Dynamic Sampling + GRPO advantage normalization.
+
+    Plan: ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.1.
+
+    Frontier source: DAPO (ByteDance/Tsinghua arXiv 2503.14476) 의 Dynamic
+    Sampling — group reward variance ≈ 0 batch 폐기. EXAONE 4.5 (LG, arXiv
+    2604.08644) 의 zero-variance filter production 검증. GRPO (DeepSeek R1
+    arXiv 2402.03300) 의 advantage whitening.
+
+    Returns (advantages, status):
+    - status="ok" + advantages = z-score whitening if group std > threshold
+    - status="filtered_low_variance" + advantages=None if std < threshold
+      → caller cycle skip (audit cost wasted 회피)
+    - status="group_too_small" if N < 2 (legacy group_size=1 mode 는 caller
+      가 본 helper 호출 안 함, 본 분기는 invariant test 용)
+
+    Raises RuntimeError when ``mutator_temperature`` < 0.1 — deterministic
+    mutation 은 N rollout 모두 같음 → group std=0 → variance filter 영구
+    trigger → loop 영구 cycle skip 의 silent infinite-loop. plan §6 risk 표.
+    """
+    if mutator_temperature < 0.1:
+        raise RuntimeError(
+            f"P1-revised group sampling requires mutator temperature >= 0.1 "
+            f"(current: {mutator_temperature}). Deterministic mutation 은 N "
+            f"rollout 모두 같음 → group std=0 → variance filter 영구 trigger. "
+            f"Settings.temperature_self_improving_mutation (env "
+            f"GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION) 을 >= 0.1 로 override."
+        )
+    n = len(fitness_values)
+    if n < 2:
+        return None, "group_too_small"
+    mean_val = sum(fitness_values) / n
+    var_val = sum((r - mean_val) ** 2 for r in fitness_values) / n
+    std_val = var_val**0.5
+    if std_val < threshold:
+        return None, "filtered_low_variance"
+    eps = 1e-8
+    advantages = [(r - mean_val) / (std_val + eps) for r in fitness_values]
+    return advantages, "ok"
+
+
 def append_audit_log(
     mutation: Mutation,
     *,
@@ -889,6 +1067,9 @@ def append_audit_log(
     baseline_fitness: float | None = None,
     log_path: Path | None = None,
     audit_run_id: str = "",
+    kind: str = "applied",
+    group_id: str = "",
+    group_advantage: float | None = None,
 ) -> Path:
     """Append one mutation row to the git-tracked audit jsonl.
 
@@ -898,6 +1079,11 @@ def append_audit_log(
     W3 (2026-05-25 attribution wiring) — ``audit_run_id`` forwarded to
     ``Mutation.to_audit_row`` so the apply row carries the cross-ref
     key to the matching attribution row.
+
+    P1-revised (2026-05-25 baseline RL grounding) — ``kind`` / ``group_id``
+    / ``group_advantage`` forwarded. group sampling 의 sibling row
+    (``kind="applied_sibling"``) + group cross-ref. group_size=1 (legacy)
+    일 때 default 그대로.
     """
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -905,6 +1091,9 @@ def append_audit_log(
         previous_value=previous_value,
         baseline_fitness=baseline_fitness,
         audit_run_id=audit_run_id,
+        kind=kind,
+        group_id=group_id,
+        group_advantage=group_advantage,
     )
     # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
     # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
@@ -964,6 +1153,39 @@ def _git_commit_audit_log(
     return True
 
 
+def _mint_audit_run_id() -> str:
+    """Codex MCP review F5 (Dedup) — apply_proposal / apply_group_proposals
+    의 audit_run_id 생성 식을 single source 로 통일. UUID4 의 hex prefix[:12]
+    (W3 PR-3 의 within-ledger correlation key format).
+    """
+    return uuid.uuid4().hex[:12]
+
+
+_SIBLING_SOT_ENV_MAP: dict[str, str] = {
+    "prompt": "GEODE_WRAPPER_OVERRIDE",
+    "tool_policy": "GEODE_TOOL_POLICY_OVERRIDE",
+    "decomposition": "GEODE_DECOMPOSITION_POLICY_OVERRIDE",
+    "reflection": "GEODE_REFLECTION_POLICY_OVERRIDE",
+    "skill_catalog": "GEODE_SKILL_CATALOG_OVERRIDE",
+    "agent_contract": "GEODE_AGENT_CONTRACTS_OVERRIDE",
+}
+"""P1-revised — sibling SoT temp file path 를 propagation 할 env var
+mapping (per ``Mutation.target_kind``). W3 인프라 (``autoresearch/train.py:809+``)
+의 ``GEODE_*_OVERRIDE`` 와 동일 — sibling audit subprocess 가 strict mode
+로 temp SoT 를 read 하도록 강제."""
+
+_SIBLING_SOT_STRICT_ENV_MAP: dict[str, str] = {
+    "tool_policy": "GEODE_TOOL_POLICY_STRICT",
+    "decomposition": "GEODE_DECOMPOSITION_POLICY_STRICT",
+    "reflection": "GEODE_REFLECTION_POLICY_STRICT",
+    "skill_catalog": "GEODE_SKILL_CATALOG_STRICT",
+    "agent_contract": "GEODE_AGENT_CONTRACTS_STRICT",
+}
+"""``GEODE_<KIND>_STRICT=1`` mapping — sibling audit 의 strict-load.
+``prompt`` kind 는 ``_load_wrapper_override`` 가 env path 가 set 되면
+자동 strict (W3 PR-3 패턴) 라 별도 STRICT flag 불필요."""
+
+
 def _run_autoresearch_subprocess(
     *,
     repo_root: Path,
@@ -971,6 +1193,10 @@ def _run_autoresearch_subprocess(
     audit_run_id: str = "",
     mutation_id: str = "",
     expected_dim: dict[str, float] | None = None,
+    sibling_sot_kind: str = "",
+    sibling_sot_path: Path | None = None,
+    group_id: str = "",
+    no_promote: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Spawn ``autoresearch/train.py`` for the post-mutation audit.
 
@@ -985,15 +1211,37 @@ def _run_autoresearch_subprocess(
     ``write_attribution`` 호출 → mutations.jsonl 에 attribution row
     append. env 누락 시 hook 가 graceful skip (legacy --promote /
     manual run 보존).
+
+    P1-revised (2026-05-25 baseline RL grounding) — ``sibling_sot_kind``
+    / ``sibling_sot_path`` / ``group_id`` / ``no_promote`` parameter
+    추가. group sampling 의 sibling audit 가 (1) temp SoT path 를
+    canonical SoT 대신 read 하도록 env override + STRICT, (2) baseline.json
+    promote 차단 (--no-promote argv), (3) attribution row 에 group_id
+    propagation.
     """
     argv = ["uv", "run", "python", "autoresearch/train.py"]
     if dry_run:
         argv.append("--dry-run")
+    if no_promote:
+        argv.append("--no-promote")
     env = os.environ.copy()
     if audit_run_id and mutation_id:
         env["GEODE_SIL_AUDIT_RUN_ID"] = audit_run_id
         env["GEODE_SIL_MUTATION_ID"] = mutation_id
         env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(expected_dim or {}, ensure_ascii=False)
+    if group_id:
+        env["GEODE_SIL_GROUP_ID"] = group_id
+    if sibling_sot_kind and sibling_sot_path is not None:
+        env_var = _SIBLING_SOT_ENV_MAP.get(sibling_sot_kind)
+        if env_var is None:
+            raise ValueError(
+                f"sibling_sot_kind {sibling_sot_kind!r} has no env mapping; "
+                f"expected one of {list(_SIBLING_SOT_ENV_MAP)!r}"
+            )
+        env[env_var] = str(sibling_sot_path)
+        strict_var = _SIBLING_SOT_STRICT_ENV_MAP.get(sibling_sot_kind)
+        if strict_var is not None:
+            env[strict_var] = "1"
     return subprocess.run(  # noqa: S603  # nosec B603 — argv built from constants
         argv,
         cwd=str(repo_root),
@@ -1108,6 +1356,262 @@ class SelfImprovingLoopRunner:
             baseline_fitness=baseline_fitness,
         )
 
+    def propose_group(self, n: int) -> list[Proposal]:
+        """P1-revised (2026-05-25) — propose N sibling Mutations in parallel.
+
+        Frontier source: GRPO (DeepSeek R1) 의 group sampling + Promptbreeder
+        의 multi-prompt 동시 평가. plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``
+        §4.3 MVP scope.
+
+        Each sibling shares the same baseline state (same system + user
+        prompt). Stochasticity comes from ``Settings.temperature_self_improving_mutation``
+        (default 1.0, must be >= 0.1 — see _compute_group_advantage guard).
+        N parallel calls run in a ThreadPoolExecutor — mutator API endpoint
+        is stateless and each call is independent.
+
+        - ``n=1`` → returns ``[self.propose()]`` (legacy fallback)
+        - ``n>=2`` → parallel propose, N distinct Proposals (stochastic)
+
+        Audit cost is N × per-cycle audit cost (apply_group_proposals
+        spawns N sequential audit subprocesses); mutator LLM cost is N ×
+        per-call cost (parallel here).
+        """
+        if n < 1:
+            # Codex MCP review (slop) — n=0/negative 의 silent single propose
+            # 는 misleading. config knob 은 ``Field(ge=1, le=8)`` 라 정상
+            # path 에서 도달 안 함, 단 direct call 의 type-confusion 방지.
+            raise ValueError(f"propose_group: n must be >= 1, got {n}")
+        if n == 1:
+            return [self.propose()]
+        import concurrent.futures
+        import contextvars
+
+        # Codex MCP review (slop) — ThreadPoolExecutor 는 ContextVar 를 자동
+        # 전파하지 않는다. session metrics / cost ledger ContextVar 가 thread
+        # 안에서 unset → parent session aggregate 와 분리될 위험. 각 submit
+        # 마다 ``copy_context()`` 로 main thread 의 ctx snapshot 을 fresh copy
+        # 해 thread 안에서 run — 같은 Context 객체를 여러 thread 에서 enter
+        # 할 수 없는 제약 (RuntimeError "already entered") 회피.
+
+        def _propose_with_fresh_ctx() -> Proposal:
+            return contextvars.copy_context().run(self.propose)
+
+        proposals: list[Proposal] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n) as executor:
+            futures = [executor.submit(_propose_with_fresh_ctx) for _ in range(n)]
+            for future in concurrent.futures.as_completed(futures):
+                proposals.append(future.result())
+        return proposals
+
+    def apply_group_proposals(self, proposals: list[Proposal]) -> Mutation | None:
+        """P1-revised (2026-05-25) — apply N sibling proposals → audit →
+        variance filter → advantage normalization → top-1 commit.
+
+        Frontier source: DAPO Dynamic Sampling (variance filter) + GRPO
+        whitening (advantage normalization) + EXAONE 4.5 zero-variance
+        filter (production threshold). plan §4.3 + §5 (W3 env propagation
+        infra 재활용).
+
+        Steps:
+
+        1. Mint single ``group_id`` for the cycle.
+        2. For each sibling: write sibling SoT to OS temp file
+           (``write_sibling_in_memory``) — does NOT touch the canonical
+           ``autoresearch/state/policies/*.json`` SoT. Production
+           AgenticLoop 의 reader 는 이 temp file 을 안 봄.
+        3. Spawn N audit subprocesses sequentially (OL-P2 audit_lane=1
+           host enforcement preserved). Each subprocess receives the
+           sibling temp SoT path via env (``GEODE_<KIND>_OVERRIDE`` —
+           W3 STRICT-mode infra) + ``GEODE_SIL_GROUP_ID`` + per-sibling
+           ``GEODE_SIL_AUDIT_RUN_ID`` / ``GEODE_SIL_MUTATION_ID`` /
+           ``GEODE_SIL_EXPECTED_DIM`` (W2/W3 PR-3 infra).
+        4. Parse fitness from subprocess stdout (``FITNESS_RESULT: <json>``
+           sentinel printed by ``autoresearch/train.py`` end-of-run).
+        5. ``_compute_group_advantage`` — variance filter + whitening.
+           ``status="filtered_low_variance"`` → cycle skip, no SoT commit,
+           sibling temp files cleaned. Returns ``None``.
+        6. ``status="ok"`` → top-1 by advantage. Apply top-1 mutation to
+           canonical SoT via ``apply_mutation`` + ``append_audit_log``
+           with ``kind="applied"`` + ``group_id`` + ``group_advantage``.
+           Sibling rows (N-1) written with ``kind="applied_sibling"``.
+
+        Returns the accepted Mutation, or ``None`` if variance filter
+        triggered (cycle skipped).
+
+        Requires ``rerun_enabled=True`` — group advantage 가 real fitness
+        에 의존하므로 audit 가 실제로 fire 되어야 함.
+        """
+        if len(proposals) == 1:
+            return self.apply_proposal(proposals[0])
+        if not self.rerun_enabled:
+            raise RuntimeError(
+                "P1-revised group sampling requires rerun_enabled=True "
+                "(group advantage needs actual fitness from audit). "
+                "Use apply_proposal() with a single proposal for "
+                "rerun_disabled mode."
+            )
+        if self.rerun_dry_run:
+            # Codex MCP review #4 (2026-05-25) — dry-run synthetic fitness 는
+            # 모든 sibling 에 deterministic 값 (autoresearch/train.py:770+
+            # hardcoded dim_means) → group std=0 → variance filter 영구 trigger
+            # → group 영구 skip 의 silent dead loop. 또한 train.py 의 W2 hook 가
+            # ``if not args.dry_run`` 분기로 attribution row 자체 안 만듦.
+            # rerun_dry_run=True 와 group N>=2 는 양립 불가능.
+            raise RuntimeError(
+                "P1-revised group sampling requires rerun_dry_run=False "
+                "for N>=2 (dry-run synthesises deterministic fitness → "
+                "group std=0 → variance filter 영구 trigger + attribution "
+                "row 미작성). Either set rerun_dry_run=False to spend real "
+                "audit budget, or use apply_proposal() with a single proposal."
+            )
+
+        from core.config import settings
+        from core.config.self_improving_loop import load_self_improving_loop_config
+
+        cfg = load_self_improving_loop_config()
+        threshold = cfg.autoresearch.group_variance_threshold
+        mutator_temp = settings.temperature_self_improving_mutation
+
+        # Codex MCP review #5 (2026-05-25) — temperature guard 를 N audit 비용
+        # 지출 전에 raise 하도록 사전 fire. _compute_group_advantage 도 동일
+        # guard 보유 (defense in depth).
+        if mutator_temp < 0.1:
+            raise RuntimeError(
+                f"P1-revised group sampling requires mutator temperature >= 0.1 "
+                f"(current: {mutator_temp}). Settings.temperature_self_improving_mutation "
+                f"또는 GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION env 를 >= 0.1 로 set."
+            )
+
+        group_id = _mint_audit_run_id()
+        log.info(
+            "self-improving-loop: group %s — N=%d sibling propose+audit start",
+            group_id,
+            len(proposals),
+        )
+
+        fitness_values: list[float] = []
+        audit_run_ids: list[str] = []
+        sibling_sot_paths: list[Path] = []
+        sibling_previous_values: list[str] = []
+
+        try:
+            for idx, proposal in enumerate(proposals):
+                # In-memory (= OS temp file) sibling SoT
+                new_sections, previous_value, sibling_sot_path = (
+                    _apply_sibling_in_memory_with_value(proposal)
+                )
+                sibling_sot_paths.append(sibling_sot_path)
+                sibling_previous_values.append(previous_value)
+
+                audit_run_id = _mint_audit_run_id()
+                audit_run_ids.append(audit_run_id)
+
+                repo_root = (self.audit_log_path or MUTATION_AUDIT_LOG_PATH).resolve().parents[1]
+
+                proc = _run_autoresearch_subprocess(
+                    repo_root=repo_root,
+                    dry_run=self.rerun_dry_run,
+                    audit_run_id=audit_run_id,
+                    mutation_id=proposal.mutation.mutation_id,
+                    expected_dim=proposal.mutation.expected_dim,
+                    sibling_sot_kind=proposal.mutation.target_kind,
+                    sibling_sot_path=sibling_sot_path,
+                    group_id=group_id,
+                    no_promote=True,
+                )
+                fitness = _parse_fitness_from_subprocess_stdout(
+                    proc.stdout, audit_run_id=audit_run_id, sibling_idx=idx
+                )
+                fitness_values.append(fitness)
+
+            advantages, status = _compute_group_advantage(
+                fitness_values,
+                threshold,
+                mutator_temperature=mutator_temp,
+            )
+
+            if status == "filtered_low_variance":
+                log.info(
+                    "self-improving-loop: group %s filtered (low variance, "
+                    "std < %s). cycle skipped, no SoT commit.",
+                    group_id,
+                    threshold,
+                )
+                return None
+            if status != "ok" or advantages is None:
+                log.warning(
+                    "self-improving-loop: group %s status=%s; no advantage computed",
+                    group_id,
+                    status,
+                )
+                return None
+
+            # Top-1 by advantage
+            best_idx = max(range(len(advantages)), key=lambda i: advantages[i])
+            best_proposal = proposals[best_idx]
+            log.info(
+                "self-improving-loop: group %s — best=sibling[%d] advantage=%.4f fitness=%.4f",
+                group_id,
+                best_idx,
+                advantages[best_idx],
+                fitness_values[best_idx],
+            )
+
+            # Commit best to canonical SoT + apply row (kind="applied")
+            _committed_sections, previous_value = apply_mutation(
+                best_proposal.mutation,
+                current_sections=best_proposal.target_sections,
+            )
+            try:
+                log_path = append_audit_log(
+                    best_proposal.mutation,
+                    previous_value=previous_value,
+                    log_path=self.audit_log_path,
+                    audit_run_id=audit_run_ids[best_idx],
+                    kind="applied",
+                    group_id=group_id,
+                    group_advantage=advantages[best_idx],
+                )
+            except OSError as exc:
+                self._rollback_sot(
+                    best_proposal.original_sections,
+                    mutation=best_proposal.mutation,
+                    exc=exc,
+                )
+                raise
+
+            # Sibling rows (kind="applied_sibling")
+            # Codex MCP review (slop) — previous_value 를 보존 (이전 ""
+            # placeholder 였음). sibling 의 in-memory SoT 의 mutation 직전
+            # 값 → history audit + dedup detection 에 의미.
+            for i, sibling_proposal in enumerate(proposals):
+                if i == best_idx:
+                    continue
+                append_audit_log(
+                    sibling_proposal.mutation,
+                    previous_value=sibling_previous_values[i],
+                    log_path=self.audit_log_path,
+                    audit_run_id=audit_run_ids[i],
+                    kind="applied_sibling",
+                    group_id=group_id,
+                    group_advantage=advantages[i],
+                )
+
+            if self.commit_enabled:
+                _git_commit_audit_log(log_path, mutation=best_proposal.mutation)
+
+            self._append_self_improving_loop_index(best_proposal.mutation, previous_value)
+            return best_proposal.mutation
+        finally:
+            for sibling_path in sibling_sot_paths:
+                try:
+                    sibling_path.unlink(missing_ok=True)
+                except OSError:
+                    log.warning(
+                        "self-improving-loop: sibling temp file cleanup failed for %s",
+                        sibling_path,
+                    )
+
     def apply_proposal(self, proposal: Proposal) -> Mutation:
         """Apply a previously-proposed mutation — write SoT, audit
         log, (optional) git commit, (optional) autoresearch rerun.
@@ -1129,7 +1633,7 @@ class SelfImprovingLoopRunner:
         rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
         attribution row 도 없으니 audit_run_id 무의미).
         """
-        audit_run_id = uuid.uuid4().hex[:12] if self.rerun_enabled else ""
+        audit_run_id = _mint_audit_run_id() if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
             proposal.mutation, current_sections=proposal.target_sections
         )
@@ -1155,16 +1659,33 @@ class SelfImprovingLoopRunner:
         self._append_self_improving_loop_index(proposal.mutation, previous_value)
         return proposal.mutation
 
-    def run_once(self) -> Mutation:
+    def run_once(self) -> Mutation | None:
         """Execute one full propose+apply iteration. Backwards-compat
         wrapper around :meth:`propose` + :meth:`apply_proposal` so
         existing callers (and the autoresearch self-improving loop)
         keep working unchanged.
 
+        P1-revised (2026-05-25) — ``AutoresearchConfig.group_size`` knob
+        분기:
+        - ``group_size=1`` (default, legacy): :meth:`propose` +
+          :meth:`apply_proposal` 그대로 (single mutation, REINFORCE-style)
+        - ``group_size>=2``: :meth:`propose_group` +
+          :meth:`apply_group_proposals` (DAPO Dynamic Sampling + GRPO
+          advantage normalization + variance filter top-1 commit)
+
+        Variance filter trigger 시 ``None`` 반환 (cycle skip, no SoT
+        commit). legacy mode 는 항상 ``Mutation`` 반환.
+
         Raises :class:`ValueError` on parse / validation failure so
         the caller can decide whether to retry.
         """
-        return self.apply_proposal(self.propose())
+        from core.config.self_improving_loop import load_self_improving_loop_config
+
+        group_size = load_self_improving_loop_config().autoresearch.group_size
+        if group_size <= 1:
+            return self.apply_proposal(self.propose())
+        proposals = self.propose_group(group_size)
+        return self.apply_group_proposals(proposals)
 
     @staticmethod
     def _rollback_sot(

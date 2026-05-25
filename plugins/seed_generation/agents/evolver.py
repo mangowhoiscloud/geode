@@ -349,20 +349,43 @@ class Evolver(BaseSeedAgent):
                 + articles_with_reasoning.strip()
             )
         prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
-        return (
+        from plugins.seed_generation.handoff_schemas import embed_handoff
+
+        prose = (
             f"{prefix}"
-            f"Evolve ONE Petri seed candidate. Parent id: {candidate['id']!r}. "
-            f"Parent path: {candidate['path']!r}. Target dim: "
-            f"{target_dim!r}. Rewrite section: "
-            f"{rewrite_section!r}. Reflection weaknesses: {weakness_summary}. "
-            f"Pilot dim_means: {means_summary}. Per your system prompt, "
-            "rewrite ONLY that section, preserve frontmatter + target_dim, "
-            "keep total tokens within ±20% of original. Write to "
-            f"<run_dir>/candidates_evolved/<new-uuid>.md and return JSON with "
-            "`parent_id`, `evolved_id`, `evolved_path`, `rewrite_section`, "
-            "`verdict` (one of 'ok'/'evolution_skipped'/'failed'), and "
-            "`notes` (<= 200 tokens)."
+            "Evolve ONE Petri seed candidate. See the HANDOFF CONTEXT block "
+            "below for parent_id, parent_path, target_dim, rewrite_section, "
+            "reflection_weaknesses, and pilot_dim_means. Per your system "
+            "prompt, rewrite ONLY the named section, preserve frontmatter + "
+            "target_dim, keep total tokens within ±20% of original. Write "
+            "the evolved file to <run_dir>/candidates_evolved/<new-uuid>.md.\n\n"
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "EVOLVE_SCHEMA (parent_id, evolved_id, evolved_path, "
+            "rewrite_section, verdict, notes). No prose summary, no markdown "
+            "change-log, no preamble. Start with `{` and end with `}`."
         )
+        weaknesses_list = [str(w) for w in weaknesses]
+        # PR-HANDOFF-SCHEMAS — typed handoff. Optional fields elided when
+        # the upstream block was empty (smoke 14/15 ran with some absent).
+        handoff: dict[str, Any] = {
+            "parent_id": str(candidate["id"]),
+            "parent_path": str(candidate["path"]),
+            "target_dim": str(target_dim),
+            "rewrite_section": str(rewrite_section),
+            "reflection_weaknesses": weaknesses_list,
+            "pilot_dim_means": {k: v for k, v in dim_means.items() if isinstance(v, (int, float))},
+        }
+        if supervisor_guidance:
+            handoff["supervisor_guidance"] = supervisor_guidance
+        if articles_with_reasoning and articles_with_reasoning.strip():
+            handoff["literature_articles"] = articles_with_reasoning.strip()
+        # baseline_evidence is structured per-dim worst-K rows; pass-through.
+        if baseline_snapshot is not None and isinstance(baseline_snapshot, dict):
+            handoff["baseline_evidence"] = baseline_snapshot
+        # Keep `weakness_summary` / `means_summary` references — they're
+        # consumed only by this function (no leak); local-only.
+        _ = (weakness_summary, means_summary)
+        return embed_handoff(prose, handoff)
 
     def _build_evolved_row(
         self,

@@ -2260,6 +2260,7 @@ def main() -> int:
     _sil_mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
     _sil_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
     _sil_expected_raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "")
+    _sil_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
     if not args.dry_run and _sil_mutation_id and _sil_audit_run_id:
         try:
             from core.self_improving_loop.attribution import write_attribution
@@ -2294,6 +2295,7 @@ def main() -> int:
                 fitness_before=_sil_fitness_before,
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
+                group_id=_sil_group_id,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(
@@ -2415,6 +2417,26 @@ def main() -> int:
             )
     except Exception:  # pragma: no cover — defensive
         log.debug("OL-C2 few-shot pool append failed", exc_info=True)
+
+    # P1-revised (2026-05-25 baseline RL grounding) — FITNESS_RESULT sentinel
+    # for group sampling caller. ``runner.py:_parse_fitness_from_subprocess_stdout``
+    # tail-parses this line to extract per-sibling fitness for group
+    # statistic (mean / std / advantage). Always emitted on the success
+    # path (even when GEODE_SIL_* env not set) so non-group callers ignore
+    # it safely.
+    #
+    # Codex MCP review #8 (2026-05-25) — failure path (e.g. early-return
+    # at line ~2030 audit failure 또는 quota gate trip) DOES NOT emit this
+    # sentinel. The parser (``_parse_fitness_from_subprocess_stdout``) is
+    # fail-fast on missing sentinel → caller (apply_group_proposals) raises
+    # RuntimeError 로 cycle abort. 즉 failure path 의 no-sentinel 은 의도된
+    # 동작 (silent zero-fitness fallback 회피).
+    print(
+        f"FITNESS_RESULT: "
+        f'{{"fitness": {float(fitness):.6f}, '
+        f'"audit_run_id": "{_sil_audit_run_id}"}}'
+    )
+
     return 0
 
 

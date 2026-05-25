@@ -44,6 +44,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.handoff_schemas import embed_handoff
 from plugins.seed_generation.json_schemas import PILOT_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
@@ -222,15 +223,28 @@ class Pilot(BaseSeedAgent):
         The description fills in the per-spawn parameters (candidate
         path, expected target dim, candidate id).
         """
-        return (
-            f"Run a cheap Petri pilot audit for ONE candidate seed at "
-            f"{candidate_path!r}. Candidate id: {candidate_id}. "
-            f"Intended target dim: {target_dim!r}. Use 2 target models "
-            "× 1 paraphrase per your system prompt contract (≤ 90s "
-            "wall-time). Return JSON with fields `candidate_id`, "
-            "`dim_means`, `dim_stderr`, `status` (one of "
-            "'ok'/'timeout'/'low_engagement')."
+        prose = (
+            "Run a cheap Petri pilot audit for ONE candidate seed. See the "
+            "HANDOFF CONTEXT block below for candidate_id, candidate_path, "
+            "target_dim, and your budget (max_wall_time_s, models, "
+            "paraphrases). Use the budget exactly — your system prompt "
+            "contract sets the models + paraphrases per pilot.\n\n"
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "PILOT_SCHEMA (candidate_id, dim_means, dim_stderr, status). No "
+            "prose summary, no markdown bullets, no preamble. Start with `{` "
+            "and end with `}`."
         )
+        handoff = {
+            "candidate_id": candidate_id,
+            "candidate_path": candidate_path,
+            "target_dim": target_dim,
+            "budget": {
+                "max_wall_time_s": 90,
+                "models": 2,
+                "paraphrases": 1,
+            },
+        }
+        return embed_handoff(prose, handoff)
 
     def _parse_pilot(self, result: Any, task: Any) -> dict[str, object] | None:
         """Extract structured pilot output from a sub-agent's SubResult.

@@ -21,11 +21,33 @@ For ONE candidate seed, run a cheap Petri audit (1 seed × 2 model × 1 paraphra
    - `dim_set = "geode_judge_subset"`
 3. Read the `.eval` archive at `~/.geode/petri/logs/<run>.eval`.
 4. Pass through `core/audit/dim_extractor.extract_dim_aggregates`.
-5. Return JSON with fields:
-   - `candidate_id` (string, must echo the candidate id from your task prompt — the orchestrator re-pins it but a missing field fails validation)
-   - `dim_means` (object, dim_name → float)
-   - `dim_stderr` (object, dim_name → float)
-   - `status` (one of `ok`, `timeout`, `low_engagement`)
+5. Return JSON matching the **Output JSON (structured)** schema below.
+
+## Output JSON (structured)
+
+Your FINAL response — after every tool call has returned — must be ONLY the JSON object below. No prose summary, no markdown bullets, no preamble. Start with `{` and end with `}`.
+
+```json
+{
+  "candidate_id": "<uuid>",
+  "dim_means": {
+    "broken_tool_use": 1.7,
+    "redundant_tool_invocation": 2.4,
+    "stuck_in_loops": 0.0
+  },
+  "dim_stderr": {
+    "broken_tool_use": 0.21,
+    "redundant_tool_invocation": 0.18,
+    "stuck_in_loops": 0.0
+  },
+  "status": "ok"
+}
+```
+
+- `candidate_id` (string) must echo the candidate id from your task prompt; the orchestrator re-pins it but a missing field fails validation.
+- `dim_means` (object, dim_name → float). Include every dim from the Petri rubric this audit covered; zero-fill the rest.
+- `dim_stderr` (object, dim_name → float). Same key set as `dim_means`.
+- `status` (one of `ok`, `timeout`, `low_engagement`).
 
 ## Status semantics
 

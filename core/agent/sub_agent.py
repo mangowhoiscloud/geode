@@ -73,6 +73,68 @@ def _strip_json_codeblock(text: str) -> str:
     return match.group(1).strip()
 
 
+def _last_balanced_json_object(text: str) -> str | None:
+    """Walk the text right-to-left and return the LAST balanced
+    ``{...}`` substring whose first attempt at ``json.loads`` succeeds.
+
+    PR-HANDOFF-SCHEMAS (2026-05-25) — fallback parser for the case
+    where the LLM emitted JSON embedded inside prose. Smoke 15
+    surfaced tool-using sub-agents ending with a prose summary while
+    still including the structured object somewhere in the body.
+    LLMs tend to put the final structured answer LAST, so we scan
+    from the end. Returns ``None`` when no balanced + parseable
+    block exists.
+
+    Implementation: track open/close brace depth ignoring braces
+    inside JSON strings (which honour backslash escapes). When a
+    block's depth returns to zero we attempt ``json.loads``; the
+    first one that parses wins.
+    """
+    if "{" not in text:
+        return None
+    # Collect end positions of every `}` that closes a top-level object.
+    closes: list[int] = []
+    depth = 0
+    in_string = False
+    escape = False
+    start_idx = -1
+    starts: list[int] = []
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            if depth == 0:
+                start_idx = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start_idx != -1:
+                    starts.append(start_idx)
+                    closes.append(i + 1)
+                    start_idx = -1
+    if not closes:
+        return None
+    # Try each candidate from last to first.
+    for s, e in zip(reversed(starts), reversed(closes), strict=True):
+        candidate = text[s:e]
+        try:
+            json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        return candidate
+    return None
+
+
 # Thread-local storage for subagent context (OpenClaw Spawn pattern)
 _subagent_context = threading.local()
 
@@ -828,7 +890,20 @@ class SubAgentManager:
             parsed = json.loads(candidate_text) if candidate_text else {}
             output = parsed if isinstance(parsed, dict) else {"raw": parsed}
         except (json.JSONDecodeError, RecursionError):
-            output = {"raw": raw_text}
+            # PR-HANDOFF-SCHEMAS — last-resort scan for an embedded
+            # balanced {...} JSON object before falling back to raw.
+            # Smoke 15 surfaced tool-using sub-agents that ended with
+            # prose but had a valid JSON block somewhere earlier in
+            # the response.
+            embedded = _last_balanced_json_object(raw_text)
+            if embedded is not None:
+                try:
+                    parsed_emb = json.loads(embedded)
+                    output = parsed_emb if isinstance(parsed_emb, dict) else {"raw": raw_text}
+                except (json.JSONDecodeError, RecursionError):
+                    output = {"raw": raw_text}
+            else:
+                output = {"raw": raw_text}
         return SubResult(
             task_id=task.task_id,
             description=task.description,
@@ -868,7 +943,17 @@ class SubAgentManager:
             parsed = json.loads(candidate_text) if candidate_text else {}
             data = parsed if isinstance(parsed, dict) else {"raw": parsed}
         except (json.JSONDecodeError, RecursionError):
-            data = {"raw": raw_text}
+            # PR-HANDOFF-SCHEMAS — embedded {...} fallback (see
+            # _last_balanced_json_object docstring).
+            embedded = _last_balanced_json_object(raw_text)
+            if embedded is not None:
+                try:
+                    parsed_emb = json.loads(embedded)
+                    data = parsed_emb if isinstance(parsed_emb, dict) else {"raw": raw_text}
+                except (json.JSONDecodeError, RecursionError):
+                    data = {"raw": raw_text}
+            else:
+                data = {"raw": raw_text}
         summary = data.get("summary", "")
         if not summary:
             summary = str(data.get("tier", data.get("status", "")))[:200]
