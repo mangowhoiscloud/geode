@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+- **PR-L9 dead `audit_logs/` directory cleanup** —
+  `autoresearch/state/audit_logs/` was created via
+  `AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)` at
+  `autoresearch/train.py:run_audit` but no caller ever wrote into it
+  (grep across `core/` / `plugins/` / `autoresearch/` confirms zero
+  writers and zero readers besides the mkdir itself). The constant +
+  the mkdir call are deleted; 5 test sites that monkeypatched
+  `AUDIT_OUT_DIR` are stripped. New
+  `tests/autoresearch/test_no_dead_audit_logs_dir.py` pins the cleanup
+  as a drift invariant so a future PR re-introducing the dead path
+  fails fast (per CLAUDE.md "Writer destination tracked" rule —
+  add a real writer + reader pair before re-introducing a state
+  subdirectory).
+
 ### Fixed
 - **PR-ROLE-JSON-ENFORCE-EXTENSION — extend PR-HANDOFF-SCHEMAS to the
   4 remaining JSON-parsing roles + strengthen evolver.** Smoke 17
