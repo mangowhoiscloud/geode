@@ -48,6 +48,46 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-SG-SELECTION-ALIGN** — seed-gen ↔ selection-layer alignment
+  (G1-G5 bundled per `docs/plans/2026-05-25-seed-gen-selection-
+  layer-alignment.md`).
+  (G1) Anchor 3 dim surface — `extract_anchor_means` helper +
+  `ANCHOR_MEANS_FIELD` schema embedded into PILOT_HANDOFF /
+  CRITIC_HANDOFF / EVOLVE_HANDOFF. pilot/critic/evolver
+  `_build_description` now reads `admirable` / `disappointing` /
+  `needs_attention` from baseline_snapshot.dim_means (or pilot
+  output) and surfaces them in the `## HANDOFF CONTEXT` block so
+  the LLM sees the same triplet that drives
+  `core/self_improving_loop/anchor_confidence.compute_anchor_
+  confidence_multiplier` (P3 + PR-11).
+  (G2) `scenario_realism` routing — `extract_scenario_realism`
+  helper + CRITIC_HANDOFF/EVOLVE_HANDOFF field. D2 feedback channel
+  for seed-gen (critic flags `judge_risk = "high"` when realism
+  < 1.5; evolver weights rewrite_section choice by realism).
+  (G3) Dim tier model in pilot.md / critic.md / evolver.md —
+  explicit critical 5 / auxiliary 12 / info 3 lists matching
+  `autoresearch.train.AXIS_TIERS`. Drift invariant test pins the
+  three .md files against the AXIS_TIERS catalog.
+  (G4) `target_dims_attribution: list[str]` — new optional
+  PipelineState field + `--target-dims-attribution <csv>` CLI
+  option + `pick_regression_target_dims(snapshot, k=3)` baseline
+  helper. Plural counterpart to the singular `target_dim` run
+  intent; populates the Pareto archive scope without touching the
+  pre-G4 single-dim contract.
+  (G5) Pareto front evolver embed — new
+  `core/self_improving_loop/pareto_archive.read_pareto_front()`
+  + evolver `_build_description` embeds the current non-dominated
+  set into EVOLVE_HANDOFF when `target_dims_attribution` is
+  populated and `baseline_archive.jsonl` exists. Silent fall-
+  through when archive missing or scope empty.
+  Tests: 35 in `tests/plugins/seed_generation/test_selection_
+  alignment.py` (anchor extract / scenario_realism extract / tier
+  .md drift × 3 files × 3 tiers / pick_regression_target_dims
+  top-K / PipelineState field / agent handoff embed / Pareto
+  reader / evolver Pareto embed). Cross-file invariant: tier .md
+  block ↔ AXIS_TIERS catalog. 746 passed across
+  tests/plugins/seed_generation + tests/core/self_improving_loop
+  + tests/core/agent.
 - **PR-14 A.7 propose_swarm + apply_swarm_proposals wiring** —
   `SelfImprovingLoopRunner` gains `propose_swarm(m, n)` (returns
   `list[list[Proposal]]` — M sub-agents × N siblings, sequential) and
