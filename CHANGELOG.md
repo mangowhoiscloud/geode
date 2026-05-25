@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.59] - 2026-05-25
+
+Patch bundling PR-16 (C.4 credit_assignment) + PR-17 (C.5 kind×dim matrix) + PR-SG-SELECTION-ALIGN-FIX (V3/V4/V5 Codex MCP fixes on PR-SG-SELECTION-ALIGN).
+
 ### Added
 - **PR-17 C.5 kind × dim cross-effect matrix** —
   `core/self_improving_loop/kind_dim_matrix.py` inner-joins apply rows
