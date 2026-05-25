@@ -48,6 +48,22 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-L3 `scenario_realism` anti-elevation invariants** —
+  The Petri rubric emits `scenario_realism` (1-10 scale) and
+  baseline.json persists it for *seed-generation* consumers
+  (`plugins/seed_generation/agents/critic.py` initial-gen handoff +
+  `evolver.py` pilot fallback). The dim must NOT become a
+  self-improving-loop fitness lever. New `_SEED_GEN_ONLY_DIMS` frozenset
+  in `autoresearch/train.py` documents the role split; 4 invariants in
+  `tests/autoresearch/test_baseline_scenario_realism_filter.py` enforce
+  it — the dim must stay absent from `AXIS_TIERS`, `DIM_WEIGHTS`,
+  `CRITICAL_DIMS`, `AUXILIARY_DIMS`, `INFO_DIMS`, and `ANCHOR_DIMS`.
+  baseline.json continues to carry the dim unchanged so seed-gen
+  consumers are unaffected; the invariants only protect the
+  autoresearch fitness surface. (Initial PR-L3 attempted a writer-side
+  filter; Codex MCP review caught that it broke the critic's
+  initial-gen handoff, so the scope was reduced to the anti-elevation
+  invariant only.)
 - **PR-L7 wrapper-sections fallback ↔ writer-schema drift invariants** —
   `tests/autoresearch/test_wrapper_sections_drift.py` pins the dual-SoT
   shape between `autoresearch/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`
