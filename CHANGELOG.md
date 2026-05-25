@@ -48,6 +48,37 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-SEEDS-PETRI-NEXTJS-PAGE** — new Next.js docs page
+  `site/src/app/docs/petri/seeds/page.tsx` renders the self-improving
+  loop's seed-generation runs as a first-class GEODE docs surface,
+  unified with the other `docs/petri/*` pages (overview / scenarios /
+  run / judge-dimensions / bundle). Replaces the prior raw-HTML
+  `docs/petri-bundle/seeds/index.html` as the primary discovery
+  surface; the raw HTML stays as a fallback for direct bundle access.
+
+  Implementation:
+  - Server Component reads `docs/petri-bundle/seeds/listing.json` and
+    each run's `state.json` / `survivors.json` / `meta_review.json` at
+    build time via `node:fs`. Pages workflow already triggers on both
+    `site/**` and `docs/petri-bundle/**`, so every new published run
+    rebuilds the page.
+  - `DocsShell` + `Bi` (bilingual ko/en) wrappers match the existing
+    petri docs pattern (`bundle/page.tsx`). Dark theme, `#A573E8`
+    amethyst accent, no emoji, no card grids per `feedback-no-box-
+    ui-no-emoji` and `site/DESIGN.md`.
+  - Runs table (run_id / gen_tag / target_dim / status / draft surv
+    / evolved / iters / cost USD) with anchor links into expandable
+    per-run `<details>`: survivors (id + elo + pilot status +
+    candidate file link + evolved children), cost rollup, meta-review
+    session_summary, next-gen priors (target_dim + weight +
+    rationale), evolution yield, Elo distribution. Each run's header
+    also carries a `[raw bundle ↗]` link back to
+    `/petri-bundle/seeds/<run_id>/` for direct file access.
+  - Status derived from listing: `survivors_count == 0` fail,
+    `evolved_count < survivors_count` partial, else ok.
+  - Sitemap entry registered in `site/src/lib/geode-docs/sitemap.ts`
+    under the verification section, sibling to `petri/bundle`.
+
 - **PR-SEEDS-BUNDLE-VIEWER** — `docs/petri-bundle/seeds/index.html` ships
   a self-contained viewer for the self-improving-loop seed-generation
   runs published into the petri-bundle. Previously

@@ -127,6 +127,7 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "petri/run", title: "Petri Run", titleKo: "Petri 실행", summary: "geode audit (primary) or inspect eval (raw). Choose model roles, dim set, seeds, and turn budget.", summaryKo: "geode audit (1차 명령) 또는 inspect eval (raw). 모델 역할, dim set, seeds, turn 예산 선택.", quadrant: "how-to" },
       { slug: "petri/judge-dimensions", title: "Petri Judge Dimensions", titleKo: "Petri Judge 차원", summary: "What each dimension scores. How to read the heatmap. Default geode_5axes (22 dims) vs inspect_petri full default (38).", summaryKo: "각 차원이 무엇을 평가하는지. heatmap 읽는 법. 기본 geode_5axes (22 dim) vs inspect_petri default (38).", quadrant: "reference" },
       { slug: "petri/bundle", title: "Petri Bundle Viewer", titleKo: "Petri Bundle 뷰어", summary: "Live inspect_ai transcript viewer for the latest GEODE audit run.", summaryKo: "최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어.", quadrant: "reference", externalUrl: "/petri-bundle/" },
+      { slug: "petri/seeds", title: "Petri Seed Generation Runs", titleKo: "Petri Seed 생성 Run", summary: "Per-generation seed-generation dashboard. Runs table plus per-run survivors, cost, meta-review, next-gen priors. Build-time render of docs/petri-bundle/seeds/.", summaryKo: "self-improving loop seed-generation per-generation 대시보드. run 테이블 + 생존 후보 / 비용 / 메타리뷰 / 다음세대 prior. docs/petri-bundle/seeds/ 의 build-time 렌더.", quadrant: "reference" },
     ],
   },
   {
