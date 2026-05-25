@@ -83,6 +83,31 @@ functional change.
   `group_advantage`, but the per-dim partition itself is a local
   heuristic — not a direct DAPO/GRPO formula.
 
+### Fixed
+- **PR-SG-SELECTION-ALIGN-FIX** — Codex MCP review of
+  PR-SG-SELECTION-ALIGN flagged 3 half-wires. All fixed.
+  (V3) Tier-mapping drift test now parses the markdown tier table
+  per .md file and asserts the dim set in each tier row equals
+  `{d for d, t in AXIS_TIERS.items() if t == tier}` bidirectionally.
+  Pre-fix the tests only checked "every catalog dim appears
+  somewhere in the file", so a dim under the wrong tier in .md
+  would pass silently. New parametric test
+  `test_md_tier_mapping_matches_axis_tiers` × 3 files.
+  (V4) `PipelineState.pareto_mode: bool = False` field added,
+  threaded from `AutoresearchConfig.pareto_mode` via
+  `_dispatch_pipeline`. Evolver `_build_description` now gates
+  the `pareto_front` HANDOFF embed on `state.pareto_mode` — a
+  stale `baseline_archive.jsonl` from a prior `pareto_mode=True`
+  cycle no longer leaks into the evolver prompt when the current
+  cycle has linear scalarization. New test
+  `test_pareto_front_omitted_when_pareto_mode_false`.
+  (V5) `--target-dims-attribution` auto-pick narrowed to fire only
+  when `--target-dim` itself was auto-picked (None or `"auto"`).
+  Pre-fix it also fired for explicit `--target-dim broken_tool_use`
+  whenever a baseline existed, contradicting plan §5.3 / CLI help
+  text. The singular intent is now the operator's choice; the
+  plural Pareto scope only expands when both are auto.
+
 ## [0.99.58] - 2026-05-25
 
 Bundles PR-SG-SELECTION-ALIGN + PR-12/13/14 from develop (mutations_reader + meta_judge + propose_swarm wiring). seed-gen now surfaces the same selection-layer signals (anchor 3 / scenario_realism / tier model / Pareto front / target_dims_attribution) that autoresearch fitness reads.
