@@ -6,8 +6,8 @@ import { notFound } from "next/navigation";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 const REPO_ROOT = path.join(process.cwd(), "..");
-const SEEDS_DIR = path.join(REPO_ROOT, "docs", "petri-bundle", "seeds");
-const RAW_BUNDLE_URL = "/petri-bundle/seeds/";
+const SEEDS_DIR = path.join(REPO_ROOT, "docs", "self-improving", "petri-bundle", "seeds");
+const RAW_BUNDLE_URL = "/self-improving/petri-bundle/seeds/";
 
 type Candidate = { run_id: string; candidate_id: string; kind: "candidate" | "evolved" };
 

@@ -68,7 +68,7 @@ export default function Page() {
             </p>
             <pre>{`inspect view ~/.geode/diagnostics/petri/<run-id>/`}</pre>
             <p>
-              퍼블리시된 GEODE audit bundle은 <a href="/petri-bundle/">/geode/petri-bundle/</a>에서 바로 볼 수 있습니다.
+              퍼블리시된 GEODE audit bundle은 <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>에서 바로 볼 수 있습니다.
             </p>
 
             <h2>다음 단계</h2>
@@ -137,7 +137,7 @@ export default function Page() {
             </p>
             <pre>{`inspect view ~/.geode/diagnostics/petri/<run-id>/`}</pre>
             <p>
-              The published GEODE audit bundle is browsable at <a href="/petri-bundle/">/geode/petri-bundle/</a>.
+              The published GEODE audit bundle is browsable at <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>.
             </p>
 
             <h2>Next</h2>

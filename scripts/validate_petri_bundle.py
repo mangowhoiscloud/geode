@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate docs/petri-bundle/ before GitHub Pages deploy.
+"""Validate docs/self-improving/petri-bundle/ before GitHub Pages deploy.
 
 Used as a **CI ratchet** — invoked from both ``.github/workflows/ci.yml``
 (PR gate, blocks merge) and ``.github/workflows/pages.yml`` (post-merge
@@ -52,7 +52,7 @@ try:
 except ImportError:
     _ZSTD_AVAILABLE = sys.version_info >= (3, 14)
 
-BUNDLE_DIR = Path("docs/petri-bundle")
+BUNDLE_DIR = Path("docs/self-improving/petri-bundle")
 LISTING = BUNDLE_DIR / "logs" / "listing.json"
 ASSETS_DIR = BUNDLE_DIR / "assets"
 
@@ -176,15 +176,17 @@ def main() -> int:
             print(f"  - {f}")
         print()
         print("Fix paths:")
-        print("  - Remove offending entries from docs/petri-bundle/logs/listing.json")
-        print("    and the .eval files from docs/petri-bundle/logs/.")
+        print(
+            "  - Remove offending entries from docs/self-improving/petri-bundle/logs/listing.json"
+        )
+        print("    and the .eval files from docs/self-improving/petri-bundle/logs/.")
         print("  - Rebuild the viewer bundle via `inspect view bundle` if assets are missing.")
         print("  - Partial/error/empty-results archives trigger click-time TypeError")
         print("    (inspect_ai #1747 pattern).")
         return 1
 
     # CSP-14 (2026-05-23) — also count literature snapshots under
-    # docs/petri-bundle/literature/. Empty dir = 0; the surface is
+    # docs/self-improving/petri-bundle/literature/. Empty dir = 0; the surface is
     # opt-in (max_papers must be ≥ 1 for the literature_review phase
     # to write anything) so 0 is a normal state, not a failure.
     lit_count = 0
@@ -193,7 +195,7 @@ def main() -> int:
         lit_count = sum(1 for path in lit_dir.glob("*.json") if path.name != "listing.json")
 
     # CSP-14 (2026-05-23) — also count synced seed runs under
-    # docs/petri-bundle/seeds/<run_id>/. Each run is a subdirectory
+    # docs/self-improving/petri-bundle/seeds/<run_id>/. Each run is a subdirectory
     # containing state.json (+ optional survivors.json + meta_review.json
     # + candidates/). bundle_sync (plugins/seed_generation/bundle_sync.py)
     # auto-copies on Pipeline.arun finalization; 0 runs is a normal

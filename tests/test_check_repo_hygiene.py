@@ -83,7 +83,7 @@ def test_release_venv_symlinks_ignored(tmp_path: Path) -> None:
 
 
 def test_petri_bundle_absent_passes(tmp_path: Path) -> None:
-    # No docs/petri-bundle/ directory at all → ratchet must not trip.
+    # No docs/self-improving/petri-bundle/ directory at all → ratchet must not trip.
     result = run_check(tmp_path)
     assert result.returncode == 0, result.stderr
 
@@ -91,7 +91,7 @@ def test_petri_bundle_absent_passes(tmp_path: Path) -> None:
 def test_petri_bundle_at_floor_passes(tmp_path: Path) -> None:
     from scripts.check_repo_hygiene import PETRI_EVAL_FLOOR
 
-    logs = tmp_path / "docs" / "petri-bundle" / "logs"
+    logs = tmp_path / "docs" / "self-improving/petri-bundle" / "logs"
     logs.mkdir(parents=True)
     for i in range(PETRI_EVAL_FLOOR):
         (logs / f"archive-{i}.eval").write_bytes(b"placeholder")
@@ -102,7 +102,7 @@ def test_petri_bundle_at_floor_passes(tmp_path: Path) -> None:
 def test_petri_bundle_below_floor_fails(tmp_path: Path) -> None:
     from scripts.check_repo_hygiene import PETRI_EVAL_FLOOR
 
-    logs = tmp_path / "docs" / "petri-bundle" / "logs"
+    logs = tmp_path / "docs" / "self-improving/petri-bundle" / "logs"
     logs.mkdir(parents=True)
     for i in range(PETRI_EVAL_FLOOR - 1):
         (logs / f"archive-{i}.eval").write_bytes(b"placeholder")

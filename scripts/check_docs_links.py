@@ -10,7 +10,7 @@ Walks ``site/src/`` for every link-shaped string and classifies it:
 * **external http(s)://...** → reachable (HTTP 200/301/302/304 considered OK).
   Network check is opt-in via ``--http`` because it is slow + flaky on CI.
 
-Build-time copy steps (e.g. ``docs/petri-bundle/`` → ``site/out/petri-bundle/``
+Build-time copy steps (e.g. ``docs/self-improving/petri-bundle/`` → ``site/out/petri-bundle/``
 done by ``.github/workflows/pages.yml``) are recognised so paths that are
 served on the deployed site but absent from ``site/public/`` do not yield
 false positives.
@@ -140,7 +140,7 @@ def discover_build_time_copies(repo_root: Path) -> set[str]:
     """Paths that the Pages workflow injects into ``site/out/`` at build time
     so they appear at deploy URL even though they live outside ``site/``.
 
-    Currently the only build-time copy is ``docs/petri-bundle/`` →
+    Currently the only build-time copy is ``docs/self-improving/petri-bundle/`` →
     ``site/out/petri-bundle/`` (`.github/workflows/pages.yml` Copy step).
     If more are added later, register them here.
     """
@@ -148,6 +148,7 @@ def discover_build_time_copies(repo_root: Path) -> set[str]:
     if (repo_root / "docs" / "petri-bundle" / "index.html").exists():
         out.add("/petri-bundle/")
         out.add("/petri-bundle")
+        out.add("/self-improving/petri-bundle")
     return out
 
 

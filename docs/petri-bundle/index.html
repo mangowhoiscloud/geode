@@ -1,30 +1,22 @@
 <!doctype html>
-<html lang="en" data-bs-theme="light">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex,noai,noimageai" />
-    <title>Inspect View</title>
-    <link rel="icon" href="./assets/favicon.svg" />
-
-    <script>
-      // Forward the theme (dark or light) onto the root html element
-      // this parameter will tend to appear when the view is hosted within
-      // an iframe (e.g. in vscode)
-      const urlParams = new URLSearchParams(window.location.search);
-      const theme = urlParams.get("inspectLogviewThemeCategory");
-      if (theme) {
-        document.documentElement.setAttribute("data-text-highlight", theme);
-        document.documentElement.setAttribute("data-bs-theme", theme);
-      }
-    </script>
-    <script type="module" crossorigin src="./assets/index.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/chunk-DfAF0w94.js">
-    <link rel="stylesheet" crossorigin href="./assets/index.css">
-    <script id="log_dir_context" type="application/json">{"log_dir": "logs", "abs_log_dir": "logs"}</script>
-  </head>
-
-  <body style="min-width: 450px">
-    <div id="app"></div>
-  </body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Moved · GEODE petri-bundle</title>
+<meta http-equiv="refresh" content="0; url=/geode/self-improving/petri-bundle/">
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 4rem auto; max-width: 480px; padding: 0 1rem; color: #1a1f29; }
+  a { color: #0d6efd; }
+  code { background: #f1f3f5; padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1 style="font-size:1.2rem;">Bundle relocated</h1>
+<p>This bundle moved to <a id="link" href="/geode/self-improving/petri-bundle/"><code>/geode/self-improving/petri-bundle/</code></a>.</p>
+<p>If not auto-redirected, follow the link above.</p>
+<script>
+// Forward SPA deep-links (#/tasks/<id>) on top of the meta refresh.
+window.location.replace("/geode/self-improving/petri-bundle/" + window.location.hash + window.location.search);
+</script>
+</body>
 </html>

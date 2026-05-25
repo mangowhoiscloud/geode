@@ -4,7 +4,7 @@ name: Petri bundle integrity
 # https://mangowhoiscloud.github.io/geode/petri-bundle/.
 #
 # Why this exists separately from pages.yml:
-#   pages.yml bundles site/ + docs/petri-bundle/ into one Pages artifact.
+#   pages.yml bundles site/ + docs/self-improving/petri-bundle/ into one Pages artifact.
 #   When a non-petri PR touches site/, pages.yml's *build* job exercises
 #   the petri ratchet, but only if the path-filter in ci.yml or pages.yml
 #   matches. This workflow makes the petri ratchet unconditional — it runs
@@ -21,13 +21,13 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - "docs/petri-bundle/**"
+      - "docs/self-improving/petri-bundle/**"
       - "scripts/validate_petri_bundle.py"
       - "scripts/check_repo_hygiene.py"
       - ".github/workflows/petri-publish.yml"
   pull_request:
     paths:
-      - "docs/petri-bundle/**"
+      - "docs/self-improving/petri-bundle/**"
       - "scripts/validate_petri_bundle.py"
       - "scripts/check_repo_hygiene.py"
       - ".github/workflows/petri-publish.yml"
@@ -74,7 +74,7 @@ jobs:
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           base="origin/${{ github.base_ref }}"
           missing=$(git diff --name-only --diff-filter=D "${base}"...HEAD \
-            -- 'docs/petri-bundle/logs/*.eval' 'docs/petri-bundle/assets/**' || true)
+            -- 'docs/self-improving/petri-bundle/logs/*.eval' 'docs/self-improving/petri-bundle/assets/**' || true)
           if [ -n "${missing}" ]; then
             echo "::warning::Petri bundle files removed vs ${base}:"
             echo "${missing}" | sed 's/^/::warning:: - /'

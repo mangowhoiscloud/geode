@@ -1,6 +1,6 @@
 """Raw-data analyzer for Anthropic Petri × GEODE alignment audit archives.
 
-Reads .eval logs from ``docs/petri-bundle/logs/`` (zstd-compressed inspect-ai
+Reads .eval logs from ``docs/self-improving/petri-bundle/logs/`` (zstd-compressed inspect-ai
 archives) and emits CSV matrices + a markdown insights skeleton under
 ``docs/audits/``.
 
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 WORKTREE = Path(__file__).resolve().parent.parent
-LOGS_DIR = WORKTREE / "docs/petri-bundle/logs"
+LOGS_DIR = WORKTREE / "docs/self-improving/petri-bundle/logs"
 AUDITS_DIR = WORKTREE / "docs/audits"
 
 # 19 bare-string dims (subset rubric) — order matches
