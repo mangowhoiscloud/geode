@@ -1238,6 +1238,14 @@ def _run_autoresearch_subprocess(
         env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(expected_dim or {}, ensure_ascii=False)
     if group_id:
         env["GEODE_SIL_GROUP_ID"] = group_id
+    # PR-11 P3.1 (2026-05-25) — anchor_confidence_mode env forward. config
+    # default 가 False 라 set 안 된 sibling/legacy 동작 영향 0. True 일
+    # 때만 train.py 의 caller 가 ``compute_fitness`` 에 multiplier 인자를
+    # 적용하는 게 wiring (PR-11 의 다른 절반).
+    from core.config.self_improving_loop import load_self_improving_loop_config
+
+    if load_self_improving_loop_config().autoresearch.anchor_confidence_mode:
+        env["GEODE_SIL_ANCHOR_CONFIDENCE_MODE"] = "1"
     if sibling_sot_kind and sibling_sot_path is not None:
         env_var = _SIBLING_SOT_ENV_MAP.get(sibling_sot_kind)
         if env_var is None:
