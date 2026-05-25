@@ -421,6 +421,63 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # 8. Run
     agentic_result = run_process_coroutine(loop.arun(prompt))
 
+    # PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — when the caller declared
+    # a ``response_schema`` (PR-JSON-WIRE wired per-role schemas through
+    # ``WorkerRequest`` → ``AgenticLoop``) but the first run produced
+    # empty / unparseable / schema-missing-keys output, the prompt-level
+    # PR-HANDOFF-SCHEMAS gate already failed for this task. Inject the
+    # validator's verdict as a follow-up user turn (paperclip + open-
+    # scientist validation-feedback pattern) and re-issue the loop once.
+    # Cap at exactly one retry — a third pass would burn budget without
+    # changing the underlying behaviour (the role contract is the same).
+    #
+    # Codex MCP review (2026-05-26) caught two pre-merge issues, both
+    # patched below:
+    #
+    # 1. ``AgenticLoop.arun`` resets ``_loop_start_time`` on every call
+    #    (``agent_loop.py:1463``), so the second pass would get another
+    #    full ``time_budget_s`` rather than the remainder. Guard the
+    #    retry on ``elapsed_before_retry < 0.5 * request.timeout_s`` so
+    #    a worker pegged near its wall-clock cap doesn't get pushed past
+    #    it (the subprocess ``asyncio.wait_for`` would kill the retry
+    #    mid-flight, leaving the parent with no usable signal).
+    # 2. The no-retry success exits (``input_blocked`` / ``user_cancelled``
+    #    / ``user_clarification_needed``) carry intentional non-JSON text
+    #    that the parent expects to surface as-is. The earlier guard would
+    #    have fired the retry on these because they aren't in
+    #    ``_FAILURE_TERMINATION_REASONS``; ``_needs_schema_retry`` now
+    #    checks ``_NO_RETRY_TERMINATION_REASONS`` (see helper below).
+    elapsed_before_retry = time.time() - started
+    if (
+        request.response_schema is not None
+        and _needs_schema_retry(agentic_result, request.response_schema)
+        and elapsed_before_retry < 0.5 * request.timeout_s
+    ):
+        feedback_prompt = _build_schema_retry_prompt(request.response_schema, agentic_result)
+        log.warning(
+            "worker.schema_retry task_id=%s reason=empty_or_malformed "
+            "first_text_len=%d elapsed=%.1fs cap=%.1fs — re-issuing with "
+            "validator feedback",
+            request.task_id,
+            len(agentic_result.text) if agentic_result else 0,
+            elapsed_before_retry,
+            request.timeout_s,
+        )
+        agentic_result = run_process_coroutine(loop.arun(feedback_prompt))
+    elif request.response_schema is not None and _needs_schema_retry(
+        agentic_result, request.response_schema
+    ):
+        # Same trigger fired, but the elapsed-time gate vetoed the retry.
+        # Observability: surface why so an operator reading the worker
+        # log can correlate "no retry" with "out of budget".
+        log.warning(
+            "worker.schema_retry_skipped task_id=%s elapsed=%.1fs cap=%.1fs "
+            "— retry would push past 50%% of wall-clock cap",
+            request.task_id,
+            elapsed_before_retry,
+            request.timeout_s,
+        )
+
     elapsed_ms = (time.time() - started) * 1000
     success, summary, text = _resolve_worker_outcome(agentic_result)
 
@@ -469,6 +526,148 @@ _FAILURE_TERMINATION_REASONS: frozenset[str] = frozenset(
         "convergence_detected",
     }
 )
+
+# PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — termination reasons whose
+# text is intentional non-JSON and MUST NOT be re-issued to the loop
+# even when a ``response_schema`` is set:
+#
+# * ``input_blocked`` — policy filter rejected the prompt. Retrying with
+#   stronger schema language wouldn't change the input that got blocked.
+# * ``user_cancelled`` — operator pressed cancel. The "Interrupted."
+#   marker is the legitimate output (see ``agent_loop.py:705``); a
+#   retry would override the cancel intent.
+# * ``user_clarification_needed`` — overthinking detected; text IS the
+#   follow-up question. Retrying re-burns the budget that the loop
+#   bailed out of in the first place.
+#
+# Sourced from ``_resolve_worker_outcome``'s success-exit catalogue
+# (worker.py ~480-490 docstring) — anything classified as success there
+# must stay success here, otherwise the retry would invalidate the
+# parent's classification.
+_NO_RETRY_TERMINATION_REASONS: frozenset[str] = frozenset(
+    {
+        "input_blocked",
+        "user_cancelled",
+        "user_clarification_needed",
+    }
+)
+
+
+def _needs_schema_retry(
+    agentic_result: AgenticResult | None,
+    response_schema: dict[str, Any],
+) -> bool:
+    """Return True when a structured-output task's first attempt missed.
+
+    PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — the role's prompt-level
+    PR-HANDOFF-SCHEMAS gate ("FINAL response must be ONLY the JSON
+    object … Start with `{` and end with `}`") is best-effort; smoke 17
+    showed Codex + sub-agent runs occasionally finishing with empty
+    output_text or with prose surrounding the JSON. Worker-side this is
+    the last safety net before the parent orchestrator records
+    ``phase_failed`` and the run aborts. Returns True iff:
+
+    * ``agentic_result`` is missing or carries an explicit failure
+      ``error`` / ``termination_reason`` — the loop already gave up;
+    * the loop's text is empty / whitespace-only;
+    * the text does not contain a balanced ``{...}`` block that parses
+      under ``json.loads`` (free-form prose, codeblock fence noise);
+    * the parsed object is missing any ``required`` key declared on
+      ``response_schema`` (the loop emitted *a* JSON, but not the role's
+      schema — e.g. ``{}`` or a partial echo).
+
+    The function deliberately does NOT validate property types or
+    ``enum`` membership — that strictness belongs in the parent
+    orchestrator's parser. Retrying for soft mismatches would just burn
+    budget on the same prompt.
+
+    Codex MCP review (2026-05-26) — the no-retry success exits
+    (``input_blocked``, ``user_cancelled``, ``user_clarification_needed``)
+    carry intentional non-JSON text that the parent expects to surface
+    as-is. ``_resolve_worker_outcome`` already classifies them as
+    ``success=True``. Returning ``True`` here would re-call the loop on
+    a cancelled / blocked / clarification task — wasted budget and
+    semantically wrong. The ``_NO_RETRY_TERMINATION_REASONS`` check
+    below short-circuits those before the text-parse branch.
+    """
+    if agentic_result is None:
+        return True
+    if agentic_result.termination_reason in _NO_RETRY_TERMINATION_REASONS:
+        return False
+    if agentic_result.error:
+        return True
+    if agentic_result.termination_reason in _FAILURE_TERMINATION_REASONS:
+        return True
+
+    text = (agentic_result.text or "").strip()
+    if not text:
+        return True
+
+    # Local import — keep core/agent/worker.py free of a hard sub_agent
+    # dependency at module import time (worker.py is the IPC entry point;
+    # we want it to bootstrap with the minimum import surface).
+    from core.agent.sub_agent import _last_balanced_json_object
+
+    candidate = _last_balanced_json_object(text)
+    if candidate is None:
+        # No balanced + parseable object anywhere in the body.
+        return True
+
+    try:
+        parsed = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        return True
+
+    if not isinstance(parsed, dict):
+        return True
+
+    required = response_schema.get("required") if isinstance(response_schema, dict) else None
+    if isinstance(required, list) and required:
+        missing = [k for k in required if k not in parsed]
+        if missing:
+            return True
+
+    return False
+
+
+def _build_schema_retry_prompt(
+    response_schema: dict[str, Any],
+    agentic_result: AgenticResult | None,
+) -> str:
+    """Construct the validator-feedback follow-up turn for the retry.
+
+    PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — pattern mirrors paperclip
+    session replay + open-scientist ``validate_and_retry`` (llm.py:437):
+    state the verdict, restate the contract, then ask for the JSON
+    object only. The schema is emitted inline (truncated at 4096 chars
+    so a giant role schema doesn't blow the context budget on the
+    retry turn).
+    """
+    schema_text = json.dumps(response_schema, ensure_ascii=False, indent=2)
+    if len(schema_text) > 4096:
+        schema_text = schema_text[:4096] + "\n…(schema truncated; full version pinned upstream)"
+
+    first_text = ""
+    if agentic_result is not None and agentic_result.text:
+        first_text = agentic_result.text.strip()
+    if len(first_text) > 800:
+        first_text = first_text[:800] + "…(truncated)"
+
+    if not first_text:
+        prior_diag = "Your previous response was empty."
+    else:
+        prior_diag = (
+            "Your previous response did not parse as the required JSON object. "
+            f"Excerpt: {first_text!r}"
+        )
+
+    return (
+        f"{prior_diag}\n\n"
+        "You MUST emit ONLY the JSON object matching this schema as your final message. "
+        "No prose, no explanation, no markdown fences — start with `{` and end with `}`. "
+        f"Required keys: {response_schema.get('required', [])}.\n\n"
+        f"Schema:\n{schema_text}"
+    )
 
 
 def _resolve_worker_outcome(
