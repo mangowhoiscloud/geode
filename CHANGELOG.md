@@ -55,15 +55,20 @@ functional change.
   `swarm_id`, forwards `swarm_id` + `sub_agent_index` to each
   sub-agent's `apply_group_proposals`, and returns the last-committed
   sub-agent's mutation (MVP last-wins). `Mutation.to_audit_row` +
-  `append_audit_log` + `apply_group_proposals` all accept `swarm_id` +
-  `sub_agent_index` (default `""` / `None` → row column omitted, legacy
-  unchanged). `run_once` dispatches to swarm mode when
-  `AutoresearchConfig.sub_agent_count >= 2`. Swarm-level fitness
-  aggregation via `aggregate_swarm_fitness` deferred to a follow-up
-  that pairs PR-12 `mutations_reader` with the helper — current MVP
-  surfaces swarm metadata in mutations.jsonl rows for cross-sub-agent
-  grep analysis (no runtime aggregation). Frontier: Kimi K2.6 PARL
-  inference-time variant.
+  `append_audit_log` + `apply_group_proposals` + `apply_proposal` all
+  accept `swarm_id` + `sub_agent_index` (default `""` / `None` → row
+  column omitted, legacy unchanged). `run_once` dispatches to swarm
+  mode when `AutoresearchConfig.sub_agent_count >= 2`. Swarm-level
+  fitness aggregation via `aggregate_swarm_fitness` deferred to a
+  follow-up that pairs PR-12 `mutations_reader` with the helper —
+  current MVP surfaces swarm metadata in mutations.jsonl rows for
+  cross-sub-agent grep analysis (no runtime aggregation). Codex MCP
+  review caught a half-wire (Conditional Read Parity) at the
+  `apply_group_proposals(n=1)` singleton shortcut → `apply_proposal`
+  path where swarm metadata was being dropped on the most common MVP
+  config (`sub_agent_count>=2, group_size=1`); fixed by extending
+  `apply_proposal` with the same kwargs and forwarding from the
+  shortcut. Frontier: Kimi K2.6 PARL inference-time variant.
 - **PR-13 A.5 meta-judge module** — `core/self_improving_loop/meta_judge.py`
   invokes a meta-judge LLM on the most-recent N attribution rows (via
   PR-12 `read_recent_attributions`) and returns `MetaJudgeResult` with a

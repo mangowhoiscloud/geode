@@ -479,7 +479,13 @@ class TestApplyGroupProposals:
 
         called = {"apply_proposal_count": 0}
 
-        def fake_apply_proposal(self: Any, proposal: Proposal) -> Mutation:
+        def fake_apply_proposal(
+            self: Any,
+            proposal: Proposal,
+            *,
+            swarm_id: str = "",
+            sub_agent_index: int | None = None,
+        ) -> Mutation:
             called["apply_proposal_count"] += 1
             return proposal.mutation
 

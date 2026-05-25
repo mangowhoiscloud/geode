@@ -1476,7 +1476,11 @@ class SelfImprovingLoopRunner:
         에 의존하므로 audit 가 실제로 fire 되어야 함.
         """
         if len(proposals) == 1:
-            return self.apply_proposal(proposals[0])
+            return self.apply_proposal(
+                proposals[0],
+                swarm_id=swarm_id,
+                sub_agent_index=sub_agent_index,
+            )
         if not self.rerun_enabled:
             raise RuntimeError(
                 "P1-revised group sampling requires rerun_enabled=True "
@@ -1746,7 +1750,13 @@ class SelfImprovingLoopRunner:
         )
         return valid_mutations[-1]
 
-    def apply_proposal(self, proposal: Proposal) -> Mutation:
+    def apply_proposal(
+        self,
+        proposal: Proposal,
+        *,
+        swarm_id: str = "",
+        sub_agent_index: int | None = None,
+    ) -> Mutation:
         """Apply a previously-proposed mutation — write SoT, audit
         log, (optional) git commit, (optional) autoresearch rerun.
 
@@ -1766,6 +1776,14 @@ class SelfImprovingLoopRunner:
         row 와 attribution row 가 audit_run_id 로 join 가능. mint 는
         rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
         attribution row 도 없으니 audit_run_id 무의미).
+
+        P4 (PR-14, 2026-05-25) — ``swarm_id`` + ``sub_agent_index`` 인자
+        추가. 일반 caller 는 default ("" / None) 로 legacy 동작 보존.
+        ``apply_swarm_proposals`` → ``apply_group_proposals(n=1 group)`` →
+        ``apply_proposal`` singleton shortcut path 에서 swarm metadata
+        가 누락되지 않도록 forward (Codex MCP review #1662 catch — MVP
+        path ``sub_agent_count>=2, group_size=1`` 에서 swarm row 가
+        silent half-wire 되는 patch).
         """
         audit_run_id = _mint_audit_run_id() if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
@@ -1777,6 +1795,8 @@ class SelfImprovingLoopRunner:
                 previous_value=previous_value,
                 log_path=self.audit_log_path,
                 audit_run_id=audit_run_id,
+                swarm_id=swarm_id,
+                sub_agent_index=sub_agent_index,
             )
         except OSError as exc:
             self._rollback_sot(proposal.original_sections, mutation=proposal.mutation, exc=exc)

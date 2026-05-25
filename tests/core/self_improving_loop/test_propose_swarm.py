@@ -273,6 +273,44 @@ def test_run_once_dispatches_to_swarm_when_sub_agent_count_ge_2(
     assert called["apply_swarm_proposals"] is True
 
 
+def test_swarm_n1_mvp_path_writes_swarm_metadata_to_mutations_jsonl(
+    tmp_path: Path,
+) -> None:
+    """Codex MCP review #1662 catch — MVP path ``sub_agent_count>=2,
+    group_size=1`` 에서 apply_group_proposals 가 singleton shortcut 으로
+    apply_proposal 호출 시 swarm_id + sub_agent_index 가 누락되면 안 됨.
+
+    Real audit-row 검증 — propose_swarm(3, 1) → apply_swarm_proposals →
+    3 sub-agent 별 apply_group_proposals(1 proposal) → apply_proposal
+    singleton path. mutations.jsonl 의 모든 row 가 동일 swarm_id +
+    distinct sub_agent_index (0, 1, 2) 보유해야.
+    """
+    import json as _json
+
+    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    runner = SelfImprovingLoopRunner(rerun_enabled=False)
+    runner.audit_log_path = tmp_path / "mutations.jsonl"
+
+    # propose_swarm(3, 1) → 3 groups of 1 proposal each
+    groups = [[_fake_proposal()], [_fake_proposal()], [_fake_proposal()]]
+    runner.propose_group = lambda n: groups.pop(0)  # type: ignore[method-assign]
+
+    result = runner.apply_swarm_proposals(runner.propose_swarm(3, 1))
+    assert result is not None
+
+    # Read mutations.jsonl — should have 3 apply rows
+    rows = [
+        _json.loads(line) for line in runner.audit_log_path.read_text().splitlines() if line
+    ]
+    assert len(rows) == 3
+    swarm_ids = {r.get("swarm_id") for r in rows}
+    assert len(swarm_ids) == 1  # all 3 share single swarm_id
+    assert next(iter(swarm_ids)) != ""  # non-empty
+    sub_agent_indices = {r.get("sub_agent_index") for r in rows}
+    assert sub_agent_indices == {0, 1, 2}  # distinct per sub-agent
+
+
 def test_run_once_skips_swarm_when_sub_agent_count_is_1() -> None:
     """sub_agent_count=1 (default) → legacy group_size 분기."""
     from core.self_improving_loop.runner import SelfImprovingLoopRunner
