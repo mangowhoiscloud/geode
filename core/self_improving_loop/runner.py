@@ -1584,6 +1584,43 @@ class SelfImprovingLoopRunner:
                 )
                 return None
 
+            # PR-15 A.1 (2026-05-25) — pareto_mode archive writer wiring.
+            # config.pareto_mode=True 시 N sibling 의 fitness vector 를
+            # baseline_archive.jsonl 에 append (Pareto non-dominated insert
+            # 자동, dominated entry prune). selection layer (top-1) 는 그대로
+            # linear advantage 유지 — multi-dim vector 가 audit subprocess
+            # 의 dim_means 까지 capture 되는 후속 PR 에서 archive sampler 로
+            # 전환. 본 PR scope = lineage writer only.
+            if cfg.autoresearch.pareto_mode:
+                from core.paths import BASELINE_ARCHIVE_PATH
+                from core.self_improving_loop.pareto_archive import (
+                    ArchiveEntry,
+                    append_archive_entry,
+                )
+
+                for idx, proposal in enumerate(proposals):
+                    entry = ArchiveEntry(
+                        mutation_id=proposal.mutation.mutation_id,
+                        group_id=group_id,
+                        audit_run_id=audit_run_ids[idx],
+                        ts=time.time(),
+                        dim_means={"fitness": float(fitness_values[idx])},
+                        dim_stderr={},
+                    )
+                    try:
+                        append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)
+                    except OSError as exc:
+                        log.warning(
+                            "self-improving-loop: archive append failed for sibling[%d] — %s",
+                            idx,
+                            exc,
+                        )
+                log.info(
+                    "self-improving-loop: group %s — %d archive entries appended (pareto_mode)",
+                    group_id,
+                    len(proposals),
+                )
+
             # Top-1 by advantage
             best_idx = max(range(len(advantages)), key=lambda i: advantages[i])
             best_proposal = proposals[best_idx]

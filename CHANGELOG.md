@@ -48,6 +48,26 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-15 A.1 pareto_mode archive writer wiring** —
+  `apply_group_proposals` now appends one `ArchiveEntry` per sibling to
+  `autoresearch/state/baseline_archive.jsonl` when
+  `AutoresearchConfig.pareto_mode=True`. Append is plain JSONL write —
+  dominated-entry pruning happens at *load* time only
+  (`load_archive()` reinserts every row into a fresh `PareteArchive`,
+  triggering `insert()` dominance prune). Top-1 selection remains linear
+  advantage (multi-dim selection via archive sampler is deferred until
+  audit subprocess emits per-dim `dim_means` back to the runner — current
+  MVP appends `{"fitness": float}` 1-dim entries for cross-cycle
+  lineage; on 1-dim load the archive collapses to the single highest-
+  fitness entry, so the lineage value is in the raw JSONL stream, not
+  the loaded archive). `compute_hypervolume` and
+  `dynamic_reward_weight_step` from `pareto_archive.py` remain
+  intentionally unused at runtime — they're staged for the multi-dim
+  follow-up that will pair them with subprocess `dim_means` capture.
+  Adds `!autoresearch/state/baseline_archive.jsonl` negation to
+  `.gitignore` (silent-ignored writer guard, PR-G5b precedent) plus an
+  invariant test that `git check-ignore` confirms the negation.
+  Frontier: AlphaEvolve MAP-Elites + DGM archive lineage.
 - **PR-SG-SELECTION-ALIGN** — seed-gen ↔ selection-layer alignment
   (G1-G5 bundled per `docs/plans/2026-05-25-seed-gen-selection-
   layer-alignment.md`).

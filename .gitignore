@@ -187,6 +187,11 @@ autoresearch/state/*
 # every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
 # The trailing negation lets `git add autoresearch/state/mutations.jsonl` succeed.
 !autoresearch/state/mutations.jsonl
+# PR-15 A.1 (2026-05-25) — Pareto archive ledger. Same git-tracked invariant
+# as mutations.jsonl — pareto_mode=True 시 baseline_archive.jsonl 에 entry
+# append, dominated entry prune lineage 보존. silent-ignored writer 회피
+# (PR-G5b #1350 precedent).
+!autoresearch/state/baseline_archive.jsonl
 # PR-RATCHET-1 (2026-05-21) — 5 mutation-target JSONs (wrapper-sections /
 # tool-policy / decomposition / retrieval / reflection) moved in-repo
 # from ~/.geode/self-improving-loop/ so `git diff` shows the current
