@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+- **PR-L9 dead `audit_logs/` directory cleanup** —
+  `autoresearch/state/audit_logs/` was created via
+  `AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)` at
+  `autoresearch/train.py:run_audit` but no caller ever wrote into it
+  (grep across `core/` / `plugins/` / `autoresearch/` confirms zero
+  writers and zero readers besides the mkdir itself). The constant +
+  the mkdir call are deleted; 5 test sites that monkeypatched
+  `AUDIT_OUT_DIR` are stripped. New
+  `tests/autoresearch/test_no_dead_audit_logs_dir.py` pins the cleanup
+  as a drift invariant so a future PR re-introducing the dead path
+  fails fast (per CLAUDE.md "Writer destination tracked" rule —
+  add a real writer + reader pair before re-introducing a state
+  subdirectory).
+
 ### Fixed
 - **PR-WORKER-SCHEMA-AWARE-RETRY — worker-side schema-aware retry when
   the role declared a `response_schema`.** `core/agent/worker.py:_run_agentic`
@@ -17589,3 +17604,4 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
+

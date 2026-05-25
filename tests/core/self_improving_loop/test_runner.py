@@ -185,8 +185,9 @@ def test_build_runner_context_with_baseline_and_priors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """All 3 lookups feed the RunnerContext + target_dim auto-picked."""
-    from autoresearch import train as auto_train
     from plugins.seed_generation.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
+
+    from autoresearch import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "r"}), encoding="utf-8")
@@ -341,8 +342,9 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When baseline has evidence for target_dim, the user prompt embeds it."""
-    from autoresearch import train as auto_train
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+    from autoresearch import train as auto_train
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)
@@ -493,7 +495,6 @@ def test_run_once_uses_program_md_in_system_prompt(
 ) -> None:
     """End-to-end: SelfImprovingLoopRunner.run_once passes program.md body to LLM."""
     from autoresearch import train as auto_train
-
     from core.self_improving_loop import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
@@ -543,7 +544,6 @@ def test_runner_rolls_back_sot_when_audit_log_fails(
     """If append_audit_log raises OSError after SoT mutation, the SoT must
     revert to the pre-mutation state so the next iteration sees consistency."""
     from autoresearch import train as auto_train
-
     from core.self_improving_loop import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
@@ -589,7 +589,6 @@ def test_runner_success_path_unchanged_by_rollback_logic(
 ) -> None:
     """When audit-log write succeeds, SoT carries the mutation forward."""
     from autoresearch import train as auto_train
-
     from core.self_improving_loop import runner
 
     sot_path = tmp_path / "wrapper-sections.json"

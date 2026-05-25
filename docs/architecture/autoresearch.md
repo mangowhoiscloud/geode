@@ -53,8 +53,7 @@ geode/
 │   └── state/                   ← .gitignored runtime artifact
 │       ├── results.tsv          ← generation 별 fitness + verdict (append-only)
 │       ├── wrapper-override.json← mutation 의 GEODE runtime 전달 path
-│       ├── run.log              ← audit subprocess stdout/stderr
-│       └── audit_logs/          ← per-experiment archive
+│       └── run.log              ← audit subprocess stdout/stderr
 ├── plugins/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
