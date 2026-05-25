@@ -13,6 +13,8 @@ from core.agent.worker import (
     _FAILURE_TERMINATION_REASONS,
     WorkerRequest,
     WorkerResult,
+    _build_schema_retry_prompt,
+    _needs_schema_retry,
     _resolve_worker_outcome,
 )
 
@@ -399,3 +401,466 @@ class TestSubAgentReasoningWiring:
         assert captured.get("effort") == "max"
         assert captured.get("thinking_budget") == 8192
         assert captured.get("time_budget_s") == 240.0
+
+
+# ---------------------------------------------------------------------------
+# PR-WORKER-SCHEMA-AWARE-RETRY (2026-05-26) — schema-aware retry contract
+# ---------------------------------------------------------------------------
+
+
+_SAMPLE_ROLE_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["candidate_id", "score"],
+    "properties": {
+        "candidate_id": {"type": "string"},
+        "score": {"type": "number"},
+    },
+}
+
+
+class TestNeedsSchemaRetry:
+    """``_needs_schema_retry`` decides whether the worker re-issues the
+    loop with a validator-feedback follow-up turn. The role's prompt-level
+    PR-HANDOFF-SCHEMAS gate is best-effort; this helper is the last
+    safety net before the parent records ``phase_failed``.
+    """
+
+    def test_none_result_triggers_retry(self) -> None:
+        assert _needs_schema_retry(None, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_empty_text_triggers_retry(self) -> None:
+        result = AgenticResult(text="", termination_reason="unknown")
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_whitespace_only_text_triggers_retry(self) -> None:
+        result = AgenticResult(text="   \n\n   ", termination_reason="unknown")
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_prose_without_json_triggers_retry(self) -> None:
+        result = AgenticResult(
+            text="I think the answer is somewhere around 7 but I'm not sure.",
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_malformed_json_triggers_retry(self) -> None:
+        result = AgenticResult(
+            text='{"candidate_id": "c1", "score":',  # truncated
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_missing_required_keys_triggers_retry(self) -> None:
+        result = AgenticResult(
+            text='{"candidate_id": "c1"}',  # missing ``score``
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_explicit_error_triggers_retry(self) -> None:
+        result = AgenticResult(
+            text='{"candidate_id": "c1", "score": 0.7}',
+            termination_reason="unknown",
+            error="LLM provider timeout",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    @pytest.mark.parametrize(
+        "termination_reason",
+        sorted(_FAILURE_TERMINATION_REASONS),
+    )
+    def test_failure_termination_triggers_retry(self, termination_reason: str) -> None:
+        """Even with a syntactically valid JSON in ``text``, a failure-
+        tagged ``termination_reason`` means the loop bailed — re-issuing
+        gives it a fresh shot at the schema."""
+        result = AgenticResult(
+            text='{"candidate_id": "c1", "score": 0.7}',
+            termination_reason=termination_reason,
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    def test_happy_path_does_not_retry(self) -> None:
+        result = AgenticResult(
+            text='{"candidate_id": "c1", "score": 0.7}',
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is False
+
+    def test_json_embedded_in_prose_does_not_retry(self) -> None:
+        """``_last_balanced_json_object`` already tolerates JSON wrapped in
+        prose (PR-HANDOFF-SCHEMAS parser fallback). The retry helper
+        should match the parser, otherwise it would burn budget on
+        cases the parent will accept anyway."""
+        result = AgenticResult(
+            text=(
+                "After careful review, here is my answer:\n\n"
+                '{"candidate_id": "c1", "score": 0.7}\n\n'
+                "Let me know if you need anything else."
+            ),
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is False
+
+    def test_schema_without_required_treats_any_object_as_valid(self) -> None:
+        """``response_schema`` without a ``required`` list means the
+        caller didn't pin specific keys — any parseable object passes."""
+        schema_no_required: dict = {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {"candidate_id": {"type": "string"}},
+        }
+        result = AgenticResult(text="{}", termination_reason="unknown")
+        assert _needs_schema_retry(result, schema_no_required) is False
+
+    def test_non_dict_root_triggers_retry(self) -> None:
+        """The role contract is always an object; a bare list or scalar
+        cannot satisfy ``required`` and must be retried."""
+        result = AgenticResult(
+            text='["c1", 0.7]',
+            termination_reason="unknown",
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is True
+
+    @pytest.mark.parametrize(
+        "termination_reason",
+        ["input_blocked", "user_cancelled", "user_clarification_needed"],
+    )
+    def test_no_retry_success_exits_do_not_trigger_retry(self, termination_reason: str) -> None:
+        """Codex MCP catch (2026-05-26) — the success exits whose text
+        is intentional non-JSON must not be re-issued, otherwise the
+        retry would override the cancel / block / clarification intent
+        and invalidate ``_resolve_worker_outcome``'s success
+        classification."""
+        result = AgenticResult(
+            text="Interrupted." if termination_reason == "user_cancelled" else "non-JSON body",
+            termination_reason=termination_reason,
+        )
+        assert _needs_schema_retry(result, _SAMPLE_ROLE_SCHEMA) is False
+
+
+class TestBuildSchemaRetryPrompt:
+    def test_empty_prior_text_yields_explicit_empty_diag(self) -> None:
+        prior = AgenticResult(text="", termination_reason="unknown")
+        prompt = _build_schema_retry_prompt(_SAMPLE_ROLE_SCHEMA, prior)
+        assert "Your previous response was empty." in prompt
+        # Schema is embedded.
+        assert '"candidate_id"' in prompt
+        # The retry gate language matches the PR-HANDOFF-SCHEMAS prompt-side gate.
+        assert "start with `{`" in prompt
+        assert "end with `}`" in prompt
+
+    def test_prose_prior_text_is_excerpted(self) -> None:
+        prior = AgenticResult(
+            text="I'm going to think about this in detail before answering.",
+            termination_reason="unknown",
+        )
+        prompt = _build_schema_retry_prompt(_SAMPLE_ROLE_SCHEMA, prior)
+        # The first-attempt excerpt is quoted (truncated repr) so the
+        # model sees what it produced.
+        assert "did not parse" in prompt
+        assert "think about this in detail" in prompt
+
+    def test_long_prior_text_truncated_at_800_chars(self) -> None:
+        prior = AgenticResult(text="x" * 5000, termination_reason="unknown")
+        prompt = _build_schema_retry_prompt(_SAMPLE_ROLE_SCHEMA, prior)
+        assert "…(truncated)" in prompt
+
+    def test_long_schema_truncated_at_4096_chars(self) -> None:
+        big_schema: dict = {
+            "type": "object",
+            "required": ["k"],
+            "properties": {
+                f"k{i}": {"type": "string", "description": "x" * 200} for i in range(50)
+            },
+        }
+        prompt = _build_schema_retry_prompt(big_schema, None)
+        assert "schema truncated" in prompt
+
+
+class TestSchemaAwareRetryWiring:
+    """``_run_agentic`` must call the loop a second time exactly once
+    when ``response_schema`` is set and the first attempt fails the
+    retry helper. With no schema, no retry. With a schema and a passing
+    first attempt, no retry."""
+
+    def _patch_bootstrap(self, monkeypatch, tmp_path, side_effect_seq):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(side_effect=side_effect_seq)
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        return mock_loop, patch, MagicMock
+
+    def test_retry_fires_once_when_schema_set_and_first_is_empty(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(
+            side_effect=[
+                AgenticResult(text="", termination_reason="unknown"),
+                AgenticResult(
+                    text='{"candidate_id": "c1", "score": 0.7}',
+                    termination_reason="unknown",
+                ),
+            ]
+        )
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-1",
+                description="seed scoring",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+            )
+            result = _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 2, (
+            "expected exactly one retry when first attempt is empty"
+        )
+        assert result.success is True
+        assert "candidate_id" in result.output
+
+    def test_no_retry_when_first_attempt_passes(self, monkeypatch, tmp_path) -> None:
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(
+            return_value=AgenticResult(
+                text='{"candidate_id": "c1", "score": 0.7}',
+                termination_reason="unknown",
+            )
+        )
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-2",
+                description="seed scoring",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+            )
+            _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 1, (
+            "no retry expected when first attempt satisfies the schema"
+        )
+
+    def test_no_retry_when_response_schema_is_none(self, monkeypatch, tmp_path) -> None:
+        """Free-form callers (REPL, gateway, ad-hoc CLI) never opt into
+        the structured retry — an empty response is the caller's
+        problem, not ours."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(
+            return_value=AgenticResult(text="", termination_reason="unknown")
+        )
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-3",
+                description="free-form task",
+                response_schema=None,
+            )
+            _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 1, (
+            "no retry expected when caller did not declare a schema"
+        )
+
+    def test_retry_caps_at_one_even_if_second_attempt_also_fails(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """The retry budget is exactly one. A third pass would burn
+        cost without changing the underlying behaviour — the role
+        contract is the same prompt."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(
+            return_value=AgenticResult(text="", termination_reason="unknown")
+        )
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-4",
+                description="seed scoring",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+            )
+            result = _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 2, (
+            "retry must cap at exactly one — third pass not allowed"
+        )
+        # Phase still reports failure so the parent records ``phase_failed``.
+        assert result.success is False
+
+    @pytest.mark.parametrize(
+        "termination_reason",
+        ["input_blocked", "user_cancelled", "user_clarification_needed"],
+    )
+    def test_no_retry_on_success_exits_even_with_schema_set(
+        self, monkeypatch, tmp_path, termination_reason: str
+    ) -> None:
+        """Codex MCP catch (2026-05-26) — when the loop terminates with
+        ``input_blocked`` / ``user_cancelled`` / ``user_clarification_needed``
+        the text is intentional and the parent must surface it as-is.
+        Re-calling the loop on these terminations would be semantically
+        wrong (cancel intent overridden) and a budget burn."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(
+            return_value=AgenticResult(
+                text="non-JSON body",
+                termination_reason=termination_reason,
+            )
+        )
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="no-retry-success",
+                description="seed scoring",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+            )
+            _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 1, (
+            f"termination_reason={termination_reason!r} must not trigger retry "
+            "even with response_schema set"
+        )
+
+    def test_retry_skipped_when_elapsed_past_half_of_timeout_s(self, monkeypatch, tmp_path) -> None:
+        """Codex MCP catch (2026-05-26) — ``AgenticLoop.arun`` resets
+        ``_loop_start_time`` per call so the retry would get another
+        full ``time_budget_s``. Guard the retry on
+        ``elapsed_before_retry < 0.5 * request.timeout_s`` so a worker
+        pegged near its wall-clock cap doesn't get pushed past it."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        async def _slow_arun(_prompt: str) -> AgenticResult:
+            return AgenticResult(text="", termination_reason="unknown")
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(side_effect=_slow_arun)
+
+        # Fake the wall-clock so ``time.time() - started`` looks like
+        # 80% of the cap by the time we hit the retry gate.
+        real_time = __import__("time").time
+        baseline = real_time()
+        call_count = {"n": 0}
+
+        def _fake_time() -> float:
+            call_count["n"] += 1
+            # First call (``started = time.time()``) returns baseline.
+            # Subsequent calls return baseline + 80s — with timeout_s=100
+            # that's 80%, past the 50% gate.
+            if call_count["n"] == 1:
+                return baseline
+            return baseline + 80.0
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        monkeypatch.setattr("core.agent.worker.time.time", _fake_time)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-budget-gate",
+                description="seed scoring",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+                timeout_s=100.0,
+            )
+            _run_agentic(request)
+
+        assert mock_loop.arun.await_count == 1, (
+            "retry must be vetoed when elapsed time > 50%% of wall-clock cap"
+        )
+
+    def test_retry_passes_feedback_prompt_with_schema_to_loop(self, monkeypatch, tmp_path) -> None:
+        """The second ``arun`` call must include the schema text + the
+        explicit ``start with `{` and end with `}``` enforcement — that
+        is the entire point of the retry."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        prompts_seen: list[str] = []
+
+        async def _capture_arun(prompt: str) -> AgenticResult:
+            prompts_seen.append(prompt)
+            if len(prompts_seen) == 1:
+                return AgenticResult(text="", termination_reason="unknown")
+            return AgenticResult(
+                text='{"candidate_id": "c1", "score": 0.7}',
+                termination_reason="unknown",
+            )
+
+        mock_loop = MagicMock()
+        mock_loop.arun = AsyncMock(side_effect=_capture_arun)
+
+        monkeypatch.setattr("core.agent.worker.WORKER_DIR", tmp_path)
+        with (
+            patch("core.cli.tool_handlers._build_tool_handlers", return_value={}),
+            patch("core.agent.tool_executor.ToolExecutor"),
+            patch("core.agent.conversation.ConversationContext"),
+            patch("core.agent.loop.AgenticLoop", return_value=mock_loop),
+        ):
+            from core.agent.worker import _run_agentic
+
+            request = WorkerRequest(
+                task_id="retry-5",
+                description="original prompt text",
+                response_schema=_SAMPLE_ROLE_SCHEMA,
+            )
+            _run_agentic(request)
+
+        assert len(prompts_seen) == 2
+        # First attempt is the caller's prompt verbatim.
+        assert "original prompt text" in prompts_seen[0]
+        # Retry carries the validator feedback + schema body.
+        assert "start with `{`" in prompts_seen[1]
+        assert "candidate_id" in prompts_seen[1]

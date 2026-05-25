@@ -48,6 +48,37 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-WORKER-SCHEMA-AWARE-RETRY — worker-side schema-aware retry when
+  the role declared a `response_schema`.** `core/agent/worker.py:_run_agentic`
+  now calls `_needs_schema_retry(agentic_result, request.response_schema)`
+  after the first `loop.arun(prompt)` and, if it returns True AND the
+  elapsed-time gate (`elapsed_before_retry < 0.5 * request.timeout_s`)
+  passes, issues a second `loop.arun(feedback_prompt)` with the
+  validator verdict + inline schema (paperclip + open-scientist
+  `validate_and_retry` pattern). Retry budget is exactly one — a third
+  pass would burn cost without changing the underlying role contract.
+  `_needs_schema_retry` treats empty / unparseable / `required`-missing
+  first attempts as retry triggers; JSON embedded in prose passes
+  because the parent's `_last_balanced_json_object` parser already
+  tolerates it. PR-ROLE-JSON-ENFORCE-EXTENSION + PR-PROXIMITY-JSON-
+  ENFORCE made the prompt-level gate uniform, but smoke 17 confirmed
+  prompt-level gating is best-effort: the structural retry is the last
+  safety net before the parent records `phase_failed` and aborts the
+  run. Two Codex MCP cross-LLM review catches (2026-05-26) folded
+  in-band: (1) `_NO_RETRY_TERMINATION_REASONS` (`input_blocked` /
+  `user_cancelled` / `user_clarification_needed`) short-circuits the
+  helper so success exits with intentional non-JSON text aren't
+  re-issued (would override cancel intent); (2) the elapsed-time gate
+  prevents the retry from getting another full `time_budget_s` after
+  `AgenticLoop.arun` resets `_loop_start_time` per call. Pinned by
+  `TestNeedsSchemaRetry` (14 cases including 3 no-retry-success
+  parametrize), `TestBuildSchemaRetryPrompt` (4 cases including
+  4096-char schema truncation + 800-char prior-text truncation), and
+  `TestSchemaAwareRetryWiring` (10 wiring cases — retry-once-on-empty
+  / no-retry-on-success / no-retry-without-schema / cap-at-one / 3
+  no-retry-success parametrize / elapsed-time-gate / retry prompt
+  carries schema body + bracket-pair markers).
+
 - **PR-ROLE-JSON-ENFORCE-EXTENSION — extend PR-HANDOFF-SCHEMAS to the
   4 remaining JSON-parsing roles + strengthen evolver.** Smoke 17
   terminal state surfaced gaps beyond PR-PROXIMITY-JSON-ENFORCE: the
