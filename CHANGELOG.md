@@ -48,6 +48,20 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-19 B.2 PR-5 GAP HIGH acceptance integration tests** —
+  `tests/core/self_improving_loop/test_apply_group_proposals_acceptance.py`
+  adds 5 end-to-end integration tests for the PR-5 deferred GAP HIGH
+  acceptance bundle. Each test stubs `_run_autoresearch_subprocess` +
+  `_apply_sibling_in_memory_with_value` + `apply_mutation` to keep
+  the canonical SoT untouched and asserts mutations.jsonl invariants:
+  (1) top-1 `applied` + sibling `applied_sibling` kind ordering with a
+  shared `group_id`; (2) distinct `mutation_id` per sibling; (3)
+  `group_advantage` z-score emitted on every row with sum ≈ 0; (4)
+  variance filter trigger → no mutations.jsonl rows + None return;
+  (5) sibling temp SoT files cleaned in the `finally` block. The
+  remaining 7 of the PR-5 deferred 12 are already covered by the
+  PR-12~PR-18 sprint's unit tests — see module docstring's Cover
+  table for the mapping.
 - **PR-22 B.4 F1 cross-run SoT 3중첩 invariants** —
   `tests/core/self_improving_loop/test_cross_run_sot_invariant.py` pins the
   schema parity invariants between the three cross-run SoTs that the
