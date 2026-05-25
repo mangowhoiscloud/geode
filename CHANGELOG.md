@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.58] - 2026-05-25
+
+Bundles PR-SG-SELECTION-ALIGN + PR-12/13/14 from develop (mutations_reader + meta_judge + propose_swarm wiring). seed-gen now surfaces the same selection-layer signals (anchor 3 / scenario_realism / tier model / Pareto front / target_dims_attribution) that autoresearch fitness reads.
+
 ### Added
 - **PR-SG-SELECTION-ALIGN** — seed-gen ↔ selection-layer alignment
   (G1-G5 bundled per `docs/plans/2026-05-25-seed-gen-selection-
