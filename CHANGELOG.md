@@ -48,6 +48,20 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-HERMES-2** — Hermes Phase 2 platform-aware + family-aware system
+  prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
+  surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,
+  `mcp_remote`) to short directive blocks; `core/llm/model_guidance.py`
+  (131 LOC) maps the 4 LLM families (Anthropic / OpenAI / Google / xAI)
+  to tool-grammar + reasoning-visibility directives. Surface resolution
+  is env-override (`$GEODE_SURFACE_TYPE`) → ContextVar → default
+  `"cli"`; family resolution is a heuristic substring match against the
+  model string. Both are wired into
+  `core/agent/system_prompt.build_system_prompt` in the dynamic section
+  (model_guidance after model_card, platform_hint before date_context).
+  Audit-mode strips both blocks so Petri scenarios never leak GEODE
+  surface hints. 23 invariant tests pin module exports, resolution
+  order, block shape, and wiring symmetry.
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
   `/geode/petri-bundle/` as the primary entry point for Petri audit /
