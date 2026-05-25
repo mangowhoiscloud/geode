@@ -47,9 +47,13 @@ from autoresearch.train import (
 
 from autoresearch import train as auto_train
 
-# The 5 documented intent buckets. Renaming any of these requires updating
-# this list AND auditing every consumer (core/agent/system_prompt.py
-# reader, seed-generation evolver scenario_realism handoff, etc.).
+# The 5 documented bootstrap section anchors. These are not "required by
+# every consumer" — `core/agent/system_prompt.py` only validates
+# ``dict[str, str]`` and joins values, and the mutator accepts arbitrary
+# new ``target_section`` strings. The anchors are a drift ratchet: a
+# careless PR dropping one of these keys from the fallback dict trips
+# here, forcing a conscious update of this tuple AND a sweep of any
+# documentation / runbook that depends on the legacy 5-section layout.
 _CANONICAL_SECTION_KEYS: tuple[str, ...] = (
     "role",
     "tool_result_handling",
@@ -87,12 +91,13 @@ def test_fallback_is_non_empty_str_dict() -> None:
 
 
 def test_fallback_contains_canonical_section_keys() -> None:
-    """Renaming or dropping any of the 5 canonical section buckets is a
-    breaking change for the wrapper-prompt mutation surface — the
-    seed-generation evolver and the daily ``geode`` runtime both
-    consume these keys. Adding new keys is fine; removing or renaming
-    requires updating ``_CANONICAL_SECTION_KEYS`` here + auditing
-    every consumer in the same PR."""
+    """The 5 canonical bootstrap anchors stay present. These are
+    NOT required by every consumer (``core.agent.system_prompt``
+    accepts any ``dict[str, str]``); they are documented intent
+    buckets that the operator-facing docs + the fallback dict have
+    grown around. Dropping or renaming one here forces a conscious
+    update of ``_CANONICAL_SECTION_KEYS`` + a sweep of docs/runbooks
+    that reference the legacy layout."""
     fallback_keys = set(_WRAPPER_PROMPT_SECTIONS_FALLBACK)
     missing = set(_CANONICAL_SECTION_KEYS) - fallback_keys
     assert not missing, (
@@ -130,3 +135,8 @@ def test_load_returns_fallback_copy_when_canonical_sot_malformed(
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", bad)
     result = load_wrapper_prompt_sections()
     assert result == _WRAPPER_PROMPT_SECTIONS_FALLBACK
+    # Codex MCP review catch — equality alone passes even if the loader
+    # returned the module dict itself, leaving the caller free to mutate
+    # the shared fallback. Pin "copy, not identity" so mutation safety
+    # is enforced symmetric to the absent-SoT test above.
+    assert result is not _WRAPPER_PROMPT_SECTIONS_FALLBACK
