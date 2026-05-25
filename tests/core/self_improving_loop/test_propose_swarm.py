@@ -287,7 +287,6 @@ def test_swarm_n1_mvp_path_writes_swarm_metadata_to_mutations_jsonl(
     import json as _json
 
     from core.self_improving_loop.runner import (
-        Proposal,
         SelfImprovingLoopRunner,
         append_audit_log,
     )
