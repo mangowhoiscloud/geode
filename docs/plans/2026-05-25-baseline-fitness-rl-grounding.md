@@ -66,6 +66,7 @@ GEODE 의 mutator = Anthropic/OpenAI API endpoint, weight frozen. → frontier R
 | mutations.jsonl `kind` 확장 | `applied` (선택됨) + `applied_sibling` (선택 안 됨) + 기존 `attribution` | group_id field 추가 |
 | 폐기 시 동작 | cycle skip + log | 안전 default. 후속에 mutator 재시도 with higher temperature 옵션 |
 | mutator parallel | asyncio.gather (N mutator LLM call parallel) | mutator cost 가산은 N 배. audit subprocess 는 sequential (OL-P2 audit_lane=1 정합) |
+| **mutator temperature** | **1.0 (fix)** | `Settings.temperature_self_improving_mutation` (`core/config/_settings.py:260`) default 그대로 유지. range [0.0, 2.0]. **0.1 미만 override 금지** — group sampling 의 stochasticity 보장 필수 (temperature=0 시 N rollout 모두 같음 → group std=0 → variance filter 영구 trigger). 2026-05-25 운영자 결정 |
 
 ## 5. 코드 변경 위치
 
@@ -91,6 +92,7 @@ GEODE 의 mutator = Anthropic/OpenAI API endpoint, weight frozen. → frontier R
 | Race | in-memory SoT variant 의 audit subprocess spawn 간 race | env propagation 으로 격리 (W3 인프라) |
 | Variance threshold | ε=0.01 가 너무 작으면 모든 group pass, 너무 크면 모든 group fail | config knob + history 누적 후 tune |
 | First cycle | mutations.jsonl 가 비어있어도 group 내 비교만 → prior baseline 불필요 (현재 동작 유지) |
+| **Temperature override (deterministic)** | `Settings.temperature_self_improving_mutation` 가 0.1 미만이면 N rollout 모두 같음 → group std=0 → variance filter 영구 trigger → loop 영구 cycle skip | **`_compute_group_advantage` 진입 시 `temperature >= 0.1` assert + RuntimeError raise**. 운영자 결정 fix temperature=1.0 (default) |
 
 ## 7. Codex MCP 검증 prompt
 
@@ -133,6 +135,8 @@ gradient descent) 가 포함되지 않았는지 cross-check.
 - [ ] `test_mutations_jsonl_kind_applied_sibling_row`
 - [ ] `test_group_id_propagates_to_attribution`
 - [ ] `test_legacy_n1_mode_backward_compat`
+- [ ] `test_mutator_temperature_nonzero_guard` — `Settings.temperature_self_improving_mutation >= 0.1` 검증, 0 일 때 RuntimeError raise
+- [ ] `test_propose_group_returns_distinct_mutations` — N parallel call 의 response 가 distinct (group std > 0 보장)
 
 ### Quality gates
 - [ ] ruff + format + mypy + pytest 모두 통과
