@@ -44,7 +44,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
-from plugins.seed_generation.handoff_schemas import embed_handoff
+from plugins.seed_generation.handoff_schemas import embed_handoff, extract_anchor_means
 from plugins.seed_generation.json_schemas import PILOT_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
@@ -188,6 +188,11 @@ class Pilot(BaseSeedAgent):
                 candidate_id=candidate_id,
                 candidate_path=candidate_path,
                 target_dim=target_dim,
+                # PR-SG-SELECTION-ALIGN (2026-05-25) — anchor 3 prior +
+                # Pareto scope. baseline_snapshot.dim_means is the
+                # cross-run signal source; pre-run cycles may have None.
+                baseline_dim_means=(getattr(state.baseline_snapshot, "dim_means", None) or {}),
+                target_dims_attribution=list(state.target_dims_attribution),
             )
             tasks.append(
                 SubTask(
@@ -216,12 +221,20 @@ class Pilot(BaseSeedAgent):
         candidate_id: str,
         candidate_path: str,
         target_dim: str,
+        baseline_dim_means: dict[str, Any] | None = None,
+        target_dims_attribution: list[str] | None = None,
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
         The system prompt is owned by ``plugins/seed_generation/agents/pilot.md``.
         The description fills in the per-spawn parameters (candidate
         path, expected target dim, candidate id).
+
+        PR-SG-SELECTION-ALIGN (2026-05-25) — also surfaces the prior
+        anchor 3 dim_means (admirable / disappointing / needs_attention,
+        when baseline has them) and the Pareto-scope dim list so the
+        pilot frames its audit around the same triplet that the
+        selection layer's P3 multiplier reads.
         """
         prose = (
             "Run a cheap Petri pilot audit for ONE candidate seed. See the "
@@ -234,7 +247,7 @@ class Pilot(BaseSeedAgent):
             "prose summary, no markdown bullets, no preamble. Start with `{` "
             "and end with `}`."
         )
-        handoff = {
+        handoff: dict[str, Any] = {
             "candidate_id": candidate_id,
             "candidate_path": candidate_path,
             "target_dim": target_dim,
@@ -244,6 +257,11 @@ class Pilot(BaseSeedAgent):
                 "paraphrases": 1,
             },
         }
+        anchor_means = extract_anchor_means(baseline_dim_means or {})
+        if anchor_means:
+            handoff["anchor_means"] = anchor_means
+        if target_dims_attribution:
+            handoff["target_dims_attribution"] = list(target_dims_attribution)
         return embed_handoff(prose, handoff)
 
     def _parse_pilot(self, result: Any, task: Any) -> dict[str, object] | None:

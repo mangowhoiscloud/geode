@@ -49,6 +49,45 @@ def _additive(properties: dict[str, Any], required: list[str]) -> dict[str, Any]
     }
 
 
+# PR-SG-SELECTION-ALIGN (2026-05-25) — G1 anchor 3 dims field.
+# Mirrors ``core.self_improving_loop.anchor_confidence.ANCHOR_DIMS_*``
+# so the seed-gen LLM sees the same three dim names that drive the
+# fitness multiplier (P3, ``anchor_confidence.compute_anchor_
+# confidence_multiplier``). Surface fields are optional — when
+# baseline_snapshot lacks anchor entries the key is omitted entirely
+# and the LLM falls back to general framing.
+ANCHOR_MEANS_FIELD: Final[dict[str, Any]] = {
+    "type": "object",
+    "properties": {
+        "admirable": {"type": "number"},
+        "disappointing": {"type": "number"},
+        "needs_attention": {"type": "number"},
+    },
+}
+
+
+# PR-SG-SELECTION-ALIGN (2026-05-25) — G5 Pareto front block (evolver only).
+# Mirrors the row shape produced by
+# ``core.self_improving_loop.pareto_archive.read_pareto_front``.
+# Each entry is an already-admitted, non-dominated mutation in the
+# current ``target_dims_attribution`` scope.
+PARETO_FRONT_FIELD: Final[dict[str, Any]] = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "dims": {
+                "type": "object",
+                "additionalProperties": {"type": "number"},
+            },
+            "fitness": {"type": "number"},
+        },
+        "required": ["id", "dims"],
+    },
+}
+
+
 GENERATOR_HANDOFF: Final[dict[str, Any]] = _additive(
     properties={
         "target_dim": {"type": "string"},
@@ -120,11 +159,18 @@ CRITIC_HANDOFF: Final[dict[str, Any]] = _additive(
         "priors": {"type": "object"},
         "supervisor_guidance": {"type": "object"},
         "literature_articles": {"type": "string"},
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer signals.
+        "target_dims_attribution": {"type": "array", "items": {"type": "string"}},
+        "anchor_means": ANCHOR_MEANS_FIELD,
+        "scenario_realism": {"type": "number"},
     },
     required=["candidate_id", "candidate_path", "target_dim"],
 )
 """Critic — per-candidate critique. Optional fields carry
-baseline / priors / guidance / literature context when present."""
+baseline / priors / guidance / literature context when present.
+PR-SG-SELECTION-ALIGN — adds anchor_means + scenario_realism +
+target_dims_attribution so the critic 's strengths/weaknesses verdict
+incorporates the same signals autoresearch fitness uses."""
 
 
 PILOT_HANDOFF: Final[dict[str, Any]] = _additive(
@@ -141,12 +187,21 @@ PILOT_HANDOFF: Final[dict[str, Any]] = _additive(
             },
             "required": ["max_wall_time_s", "models", "paraphrases"],
         },
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer signals.
+        # Pilot writes anchor_means in its OUTPUT (dim_means already);
+        # here we expose the prior anchor baseline as INPUT context so
+        # the LLM can frame the audit around the same triplet.
+        "target_dims_attribution": {"type": "array", "items": {"type": "string"}},
+        "anchor_means": ANCHOR_MEANS_FIELD,
     },
     required=["candidate_id", "candidate_path", "target_dim", "budget"],
 )
 """Pilot — Petri inner-loop audit per candidate. Budget block
 explicit so the LLM knows the wall-time + model count + paraphrase
-count it must respect."""
+count it must respect.
+PR-SG-SELECTION-ALIGN — adds anchor_means + target_dims_attribution
+so the pilot frames its audit around the same triplet that
+autoresearch P3 multiplier reads."""
 
 
 VOTE_HANDOFF: Final[dict[str, Any]] = _additive(
@@ -199,12 +254,20 @@ EVOLVE_HANDOFF: Final[dict[str, Any]] = _additive(
         "baseline_evidence": {"type": "object"},
         "supervisor_guidance": {"type": "object"},
         "literature_articles": {"type": "string"},
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer signals.
+        "target_dims_attribution": {"type": "array", "items": {"type": "string"}},
+        "anchor_means": ANCHOR_MEANS_FIELD,
+        "scenario_realism": {"type": "number"},
+        "pareto_front": PARETO_FRONT_FIELD,
     },
     required=["parent_id", "parent_path", "target_dim", "rewrite_section"],
 )
 """Evolver — rewrites ONE section of a survivor candidate.
 Pulls Critic's ``rewrite_section`` + ``weaknesses`` and Pilot's
-``dim_means`` so the LLM knows which dim regressed."""
+``dim_means`` so the LLM knows which dim regressed.
+PR-SG-SELECTION-ALIGN — adds anchor_means + scenario_realism +
+target_dims_attribution + pareto_front so the rewrite respects the
+selection layer's Pareto archive boundaries and anchor confidence."""
 
 
 META_REVIEW_HANDOFF: Final[dict[str, Any]] = _additive(
@@ -232,6 +295,39 @@ the AgentDef contract: ``Meta-reviewer caps output at one paragraph
 + a few aggregate dicts.``"""
 
 
+def extract_anchor_means(dim_means: dict[str, Any]) -> dict[str, float]:
+    """Project ``dim_means`` to the anchor 3 triplet only.
+
+    PR-SG-SELECTION-ALIGN (2026-05-25, G1) — mirrors
+    ``core.self_improving_loop.anchor_confidence.ANCHOR_DIMS_POSITIVE``
+    + ``ANCHOR_DIMS_NEGATIVE``. Returns ``{}`` when none of the three
+    dims are present so the handoff JSON omits the ``anchor_means``
+    key entirely (avoids surfacing empty dicts that the LLM may
+    interpret as "all-zero").
+    """
+    anchor_keys = ("admirable", "disappointing", "needs_attention")
+    out: dict[str, float] = {}
+    for key in anchor_keys:
+        value = dim_means.get(key)
+        if isinstance(value, (int, float)):
+            out[key] = float(value)
+    return out
+
+
+def extract_scenario_realism(dim_means: dict[str, Any]) -> float | None:
+    """Return ``scenario_realism`` from ``dim_means`` when present, else None.
+
+    PR-SG-SELECTION-ALIGN (2026-05-25, G2) — D2 routing. Surfaces
+    the scenario_realism Petri dim as a separate handoff field so
+    the critic / evolver can weight judge_risk independently of the
+    other 22 dims.
+    """
+    value = dim_means.get("scenario_realism")
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
 def embed_handoff(description: str, handoff: dict[str, Any]) -> str:
     """Append a ``## HANDOFF CONTEXT`` JSON block to the LLM user message.
 
@@ -249,13 +345,17 @@ def embed_handoff(description: str, handoff: dict[str, Any]) -> str:
 
 
 __all__ = [
+    "ANCHOR_MEANS_FIELD",
     "CRITIC_HANDOFF",
     "EVOLVE_HANDOFF",
     "GENERATOR_HANDOFF",
     "LITERATURE_REVIEW_HANDOFF",
     "META_REVIEW_HANDOFF",
+    "PARETO_FRONT_FIELD",
     "PILOT_HANDOFF",
     "PROXIMITY_HANDOFF",
     "VOTE_HANDOFF",
     "embed_handoff",
+    "extract_anchor_means",
+    "extract_scenario_realism",
 ]

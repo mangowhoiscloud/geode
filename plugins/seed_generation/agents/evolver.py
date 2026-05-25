@@ -37,6 +37,7 @@ P-checklist application:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
@@ -276,6 +277,11 @@ class Evolver(BaseSeedAgent):
                 baseline_snapshot=state.baseline_snapshot,
                 supervisor_guidance=state.supervisor_guidance,
                 articles_with_reasoning=state.articles_with_reasoning,
+                # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer
+                # context: Pareto-scope dim list + run_dir for the
+                # pareto_front reader to locate baseline_archive.jsonl.
+                target_dims_attribution=list(state.target_dims_attribution),
+                run_dir=state.run_dir,
             )
             tasks.append(
                 SubTask(
@@ -307,6 +313,8 @@ class Evolver(BaseSeedAgent):
         baseline_snapshot: Any = None,
         supervisor_guidance: dict[str, Any] | None = None,
         articles_with_reasoning: str = "",
+        target_dims_attribution: list[str] | None = None,
+        run_dir: Any = None,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -382,6 +390,30 @@ class Evolver(BaseSeedAgent):
         # baseline_evidence is structured per-dim worst-K rows; pass-through.
         if baseline_snapshot is not None and isinstance(baseline_snapshot, dict):
             handoff["baseline_evidence"] = baseline_snapshot
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — G1/G2/G4/G5 surface.
+        # anchor 3 + scenario_realism source priority: in-run pilot
+        # dim_means (most recent) → baseline_snapshot.dim_means
+        # fallback. Pareto front pulled from baseline_archive.jsonl
+        # when run_dir + target_dims_attribution both present.
+        from plugins.seed_generation.handoff_schemas import (
+            extract_anchor_means,
+            extract_scenario_realism,
+        )
+
+        baseline_dim_means: dict[str, Any] = getattr(baseline_snapshot, "dim_means", None) or {}
+        # Pilot dim_means wins; fall through to baseline_snapshot.
+        anchor_source: dict[str, Any] = dict(dim_means) if dim_means else baseline_dim_means
+        anchor_means = extract_anchor_means(anchor_source)
+        if anchor_means:
+            handoff["anchor_means"] = anchor_means
+        scenario_realism = extract_scenario_realism(anchor_source)
+        if scenario_realism is not None:
+            handoff["scenario_realism"] = scenario_realism
+        if target_dims_attribution:
+            handoff["target_dims_attribution"] = list(target_dims_attribution)
+            pareto_front = _read_pareto_front_safe(run_dir, list(target_dims_attribution))
+            if pareto_front:
+                handoff["pareto_front"] = pareto_front
         # Keep `weakness_summary` / `means_summary` references — they're
         # consumed only by this function (no leak); local-only.
         _ = (weakness_summary, means_summary)
@@ -506,3 +538,30 @@ class Evolver(BaseSeedAgent):
                         if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
                             return (True, score, label)
         return (False, max_score, max_against)
+
+
+def _read_pareto_front_safe(run_dir: Any, target_dims: list[str]) -> list[dict[str, Any]]:
+    """Return the current Pareto front from ``baseline_archive.jsonl``
+    within the active ``target_dims`` scope.
+
+    PR-SG-SELECTION-ALIGN (2026-05-25, G5) — silent fall-through:
+    when ``run_dir`` is None, the archive file is missing, or
+    ``target_dims`` is empty, returns ``[]`` so the evolver handoff
+    omits the ``pareto_front`` key entirely. Caller decides whether
+    to embed.
+    """
+    if not run_dir or not target_dims:
+        return []
+    try:
+        archive_path = Path(run_dir) / "baseline_archive.jsonl"
+    except TypeError:
+        return []
+    if not archive_path.is_file():
+        return []
+    try:
+        from core.self_improving_loop.pareto_archive import read_pareto_front
+
+        return read_pareto_front(archive_path, target_dims)
+    except Exception as exc:  # pragma: no cover — defensive
+        log.warning("evolver: read_pareto_front raised: %s", exc)
+        return []

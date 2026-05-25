@@ -47,7 +47,84 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.58] - 2026-05-25
+
+Bundles PR-SG-SELECTION-ALIGN + PR-12/13/14 from develop (mutations_reader + meta_judge + propose_swarm wiring). seed-gen now surfaces the same selection-layer signals (anchor 3 / scenario_realism / tier model / Pareto front / target_dims_attribution) that autoresearch fitness reads.
+
 ### Added
+- **PR-SG-SELECTION-ALIGN** — seed-gen ↔ selection-layer alignment
+  (G1-G5 bundled per `docs/plans/2026-05-25-seed-gen-selection-
+  layer-alignment.md`).
+  (G1) Anchor 3 dim surface — `extract_anchor_means` helper +
+  `ANCHOR_MEANS_FIELD` schema embedded into PILOT_HANDOFF /
+  CRITIC_HANDOFF / EVOLVE_HANDOFF. pilot/critic/evolver
+  `_build_description` now reads `admirable` / `disappointing` /
+  `needs_attention` from baseline_snapshot.dim_means (or pilot
+  output) and surfaces them in the `## HANDOFF CONTEXT` block so
+  the LLM sees the same triplet that drives
+  `core/self_improving_loop/anchor_confidence.compute_anchor_
+  confidence_multiplier` (P3 + PR-11).
+  (G2) `scenario_realism` routing — `extract_scenario_realism`
+  helper + CRITIC_HANDOFF/EVOLVE_HANDOFF field. D2 feedback channel
+  for seed-gen (critic flags `judge_risk = "high"` when realism
+  < 1.5; evolver weights rewrite_section choice by realism).
+  (G3) Dim tier model in pilot.md / critic.md / evolver.md —
+  explicit critical 5 / auxiliary 12 / info 3 lists matching
+  `autoresearch.train.AXIS_TIERS`. Drift invariant test pins the
+  three .md files against the AXIS_TIERS catalog.
+  (G4) `target_dims_attribution: list[str]` — new optional
+  PipelineState field + `--target-dims-attribution <csv>` CLI
+  option + `pick_regression_target_dims(snapshot, k=3)` baseline
+  helper. Plural counterpart to the singular `target_dim` run
+  intent; populates the Pareto archive scope without touching the
+  pre-G4 single-dim contract.
+  (G5) Pareto front evolver embed — new
+  `core/self_improving_loop/pareto_archive.read_pareto_front()`
+  + evolver `_build_description` embeds the current non-dominated
+  set into EVOLVE_HANDOFF when `target_dims_attribution` is
+  populated and `baseline_archive.jsonl` exists. Silent fall-
+  through when archive missing or scope empty.
+  Tests: 35 in `tests/plugins/seed_generation/test_selection_
+  alignment.py` (anchor extract / scenario_realism extract / tier
+  .md drift × 3 files × 3 tiers / pick_regression_target_dims
+  top-K / PipelineState field / agent handoff embed / Pareto
+  reader / evolver Pareto embed). Cross-file invariant: tier .md
+  block ↔ AXIS_TIERS catalog. 746 passed across
+  tests/plugins/seed_generation + tests/core/self_improving_loop
+  + tests/core/agent.
+- **PR-14 A.7 propose_swarm + apply_swarm_proposals wiring** —
+  `SelfImprovingLoopRunner` gains `propose_swarm(m, n)` (returns
+  `list[list[Proposal]]` — M sub-agents × N siblings, sequential) and
+  `apply_swarm_proposals(swarm_proposals)` which mints a single
+  `swarm_id`, forwards `swarm_id` + `sub_agent_index` to each
+  sub-agent's `apply_group_proposals`, and returns the last-committed
+  sub-agent's mutation (MVP last-wins). `Mutation.to_audit_row` +
+  `append_audit_log` + `apply_group_proposals` + `apply_proposal` all
+  accept `swarm_id` + `sub_agent_index` (default `""` / `None` → row
+  column omitted, legacy unchanged). `run_once` dispatches to swarm
+  mode when `AutoresearchConfig.sub_agent_count >= 2`. Swarm-level
+  fitness aggregation via `aggregate_swarm_fitness` deferred to a
+  follow-up that pairs PR-12 `mutations_reader` with the helper —
+  current MVP surfaces swarm metadata in mutations.jsonl rows for
+  cross-sub-agent grep analysis (no runtime aggregation). Codex MCP
+  review caught a half-wire (Conditional Read Parity) at the
+  `apply_group_proposals(n=1)` singleton shortcut → `apply_proposal`
+  path where swarm metadata was being dropped on the most common MVP
+  config (`sub_agent_count>=2, group_size=1`); fixed by extending
+  `apply_proposal` with the same kwargs and forwarding from the
+  shortcut. Frontier: Kimi K2.6 PARL inference-time variant.
+- **PR-13 A.5 meta-judge module** — `core/self_improving_loop/meta_judge.py`
+  invokes a meta-judge LLM on the most-recent N attribution rows (via
+  PR-12 `read_recent_attributions`) and returns `MetaJudgeResult` with a
+  `drift_score` on `[0.0, 1.0]` + `drift_summary` text + `evaluated_count`
+  + `llm_raw` (capped 2000 chars). Pure function `build_meta_judge_prompt`
+  serialises records to JSONL; `parse_meta_judge_response` accepts strict
+  JSON, fence-wrapped JSON, or regex key-value fallback for low-capability
+  models, and returns `(0.0, "")` on total failure so callers can detect
+  "no signal". `invoke_meta_judge(n, llm_call, path)` accepts a dependency-
+  injected LLM callable (default = mutator dispatch) and returns `None`
+  when no attribution rows exist (fresh repo / pre-PR-5). Frontier
+  reference: Meta-Rewarding (Meta 2024-07 arXiv 2407.19594).
 - **PR-12 C.2 mutations_reader module** — `core/self_improving_loop/mutations_reader.py`
   adds a read-only iterator + type-safe filter for `mutations.jsonl`
   (`iter_mutations(path, kinds, limit)`, `read_recent_attributions(n, path)`,
