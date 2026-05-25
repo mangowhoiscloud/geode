@@ -47,7 +47,67 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SEEDS-BUNDLE-VIEWER** — `docs/petri-bundle/seeds/index.html` ships
+  a self-contained viewer for the self-improving-loop seed-generation
+  runs published into the petri-bundle. Previously
+  `https://mangowhoiscloud.github.io/geode/petri-bundle/seeds/` returned
+  404 (GitHub Pages disallows directory browsing); only direct file URLs
+  like `/seeds/listing.json` or
+  `/seeds/<run_id>/state.json` worked. The new index fetches
+  `listing.json` at load, renders a dense run table (run_id / gen_tag /
+  target_dim / status / draft→survivors / evolved / iters / cost USD),
+  and lazily drills down per run into `state.json` + `survivors.json` +
+  `meta_review.json` — survivors with elo + candidate `.md` link, cost
+  rollup, meta-review session_summary, next-gen priors, evolution yield,
+  Elo distribution. Status is derived from the listing
+  (`survivors_count == 0` → fail, `evolved_count < survivors_count` →
+  partial, else ok). The viewer is a single static HTML file (no
+  build step, no Next.js dep) so it ships alongside the inspect-petri
+  eval-log viewer at `/petri-bundle/` and the pages.yml workflow that
+  already triggers on `docs/petri-bundle/**` deploys it without any new
+  CI wiring. Mockup source: `/tmp/geode-literature-mockup/seeds.html`
+  (v2 post-Slop-feedback dense-table design); adapted to the live
+  schema (no phase progress yet — that field doesn't exist in
+  `state.json`; no candidate titles yet — would require `.md`
+  frontmatter fetch). Once
+  [`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`](../docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md)
+  Phase 2 ships its `LiteratureReview` agent the same viewer can be
+  extended with a literature column without schema churn.
+
 ### Fixed
+- **PR-CODEX-OAUTH-EMPTY-TEXT-DUMP** — codex_oauth adapter writes a
+  postmortem dump to `~/.geode/diagnostics/codex-oauth-empty-text/
+  <ts>-<model>.json` when the upstream returns `output_text=""`.
+  Smoke 11/12/13 vote-m000-openai.openai-codex consistently failed
+  in this shape (10s elapsed, ~$0.04 billed, zero
+  assistant_message events, `termination_reason="natural"`) — the
+  worker treated empty text as failure with no diagnostic surface.
+  Dump captures (usage / reasoning_items raw + count /
+  reasoning_summaries / stop_reason) and the adapter logs the dump
+  path on the warning line alongside the worker-level failure.
+  Mirrors `claude_cli._dump_transient_postmortem` shape so
+  `~/.geode/diagnostics/` houses both diagnostic categories under
+  one tar-up. Pinned by 5 regression tests in
+  `tests/core/llm/adapters/test_codex_oauth_empty_text_dump.py`.
+
+- **PR-ENV-WHITELIST-CODEX-BYPASS** — add
+  `GEODE_CODEX_OAUTH_POLL_DISABLED` to
+  `IsolatedRunner._SUBPROCESS_ENV_WHITELIST`. Smoke 13 vote-m000-*
+  failed with `codex-cli-subagent lane blocked — Codex 5-hour OAuth
+  bucket >= throttle threshold (see GEODE_CODEX_OAUTH_POLL_DISABLED
+  to bypass)` even though the operator had set the env on the parent
+  `geode serve` process. Root cause: the whitelist did not include
+  the bypass env, so the `safe_env` built in
+  `_aexecute_subprocess` dropped it before spawning the worker.
+  The worker subprocess then ran
+  `should_block_codex_lane_acquisition()` with an unset env, the
+  throttle gate fired, and 5 retries failed against the actual
+  ChatGPT Plus subscription bucket that had headroom. Pinned by 4
+  regression tests in `tests/test_subprocess_env_whitelist.py`:
+  bypass env present, operator-knob set preserved, credential envs
+  preserved, dangerous-env exclusion guard.
+
 - **PR-SESSION-RESUME-PARAMS** — paperclip-aligned cwd-paired
   resume-context tracking. Smoke 12 (v0.99.54) surfaced a
   stale-session bug after the PR-CLEANUP per-task cwd isolation
