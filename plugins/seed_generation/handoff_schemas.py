@@ -212,32 +212,44 @@ VOTE_HANDOFF: Final[dict[str, Any]] = _additive(
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
-                "path": {"type": "string"},
+                # PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — pre-fix
+                # this carried a literal ``run_dir/candidates/<cid>.md``
+                # relative-path string + instructed the voter to "Read
+                # both candidate seeds". The model couldn't resolve
+                # the fake path (per-task isolated cwd per
+                # PR-RESUME-NO-PERSIST-FIX, not the orchestrator
+                # run_dir) so claude-cli hallucinated session
+                # continuity ("I already read both candidate files in
+                # the previous turn") and exited turn 1 with empty
+                # output. Now the full seed body is inlined per the
+                # co-scientist debate_pair pattern; no Read tool
+                # needed, no phantom-continuity confusion.
+                "body": {"type": "string"},
                 "pilot_means": {
                     "type": "object",
                     "additionalProperties": {"type": "number"},
                 },
             },
-            "required": ["id", "path"],
+            "required": ["id", "body"],
         },
         "candidate_b": {
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
-                "path": {"type": "string"},
+                "body": {"type": "string"},
                 "pilot_means": {
                     "type": "object",
                     "additionalProperties": {"type": "number"},
                 },
             },
-            "required": ["id", "path"],
+            "required": ["id", "body"],
         },
     },
     required=["match_id", "target_dim", "candidate_a", "candidate_b"],
 )
 """Ranker voter — per-match A/B vote with pilot dim_means
-attached so the judge sees the per-dim signal alongside seed
-paths."""
+attached so the judge sees the per-dim signal alongside the
+inlined seed bodies (PR-VOTER-PROMPT-ANTI-PHANTOM, 2026-05-26)."""
 
 
 EVOLVE_HANDOFF: Final[dict[str, Any]] = _additive(

@@ -75,6 +75,13 @@ _REQUIRED_CRITIQUE_FIELDS = (
     "weaknesses",
     "judge_risk",
     "discrimination_estimate",
+    # PR-STRICT-COMPATIBLE-SCHEMAS (2026-05-26) — strict-mode schema
+    # requires every property in required. ``rewrite_section`` is
+    # nullable per critic.md (``null`` when no clear weak section),
+    # but the key MUST be present. The Evolver
+    # (``evolver.py:_consume_rewrite_target``) + ``eval_export.py``
+    # serialiser both handle the null case gracefully.
+    "rewrite_section",
 )
 
 

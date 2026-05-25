@@ -47,6 +47,283 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.63] - 2026-05-26
+
+Scope B (Petri × autoresearch) full wiring sprint — 5 PR closing the multi-axis fitness leaks identified by the petri × autoresearch GAP audit: PR-AR-L6 (attribution standalone graceful with synthetic mutation_id + `source` field) + PR-AR-L4a (ux_means 4-reader collector consuming `mutations.jsonl`) + PR-AR-L4b (5-caller `ux_means` / `admire_means` forward through `compute_fitness`) + PR-AR-L4c (admire_means consumer for seed-gen `evaluate_mutation_pairwise` handoff, Krippendorff-grounded calibration proxy) + PR-AR-L4d (UX Goodhart bidirectional gate mirroring bench pattern). Cross-vertex contract with seed-gen (Scope A, PR-RANKER-MUTATION-EVAL #1704) honored as a data-only handoff — `MutationEvalResult.pairwise_win_rate` field-name parity pinned on both sides, no runtime cross-package import. Codex MCP review caught 7 issues across the 5 PRs (all fixed in-band).
+
+### Added
+- **PR-AR-L4c ``admire_means`` consumer for seed-gen handoff (ADR-012 S2b)** —
+  Scope A (PR-RANKER-MUTATION-EVAL #1704) shipped
+  ``plugins.seed_generation.mutation_eval.evaluate_mutation_pairwise``;
+  this PR wires the autoresearch consumer side:
+  - ``admire_means_from_eval_result(result)`` converts a
+    ``MutationEvalResult`` into the autoresearch ``admire_means`` dict
+    shape with field-name parity (``pairwise_win_rate``).
+  - ``derive_inter_voter_agreement(wins, losses, ties)`` proxies
+    ``human_calibration_corr`` until quarterly human L4 batch lands.
+    Two-factor formula (``majority_share × decisive_share``) penalizes
+    low-decisiveness panels — Codex MCP review §3 caught the case
+    where ``wins=1, losses=0, ties=2`` returned 1.0 (degenerate
+    single-voter unanimity); fixed to 0.333. Krippendorff 2004
+    *Content Analysis* 2nd ed (p.241) thresholds (α ≥ 0.667 tentative
+    / α ≥ 0.800 reliable) are the *interpretation thresholds* the
+    proxy is checked against — the proxy itself is not Krippendorff α.
+  - New ``KRIPPENDORFF_TENTATIVE_FLOOR = 0.667`` and
+    ``KRIPPENDORFF_DEFINITIVE_FLOOR = 0.800`` constants documenting
+    the source.
+  - ``CALIBRATION_THRESHOLD`` migrated from magic 0.7 → tentative
+    floor (0.667). Existing tests updated to match.
+  - Deleted ``collect_admire_means_from_ranker`` placeholder.
+  The runner-side invocation (``evaluate_mutation_pairwise`` call
+  with before/after responses + audit 2× cost) is a follow-up PR —
+  this consumer provides the stable interface for that future work.
+  10 invariants in
+  ``tests/autoresearch/test_admire_handoff_consume.py`` pin the
+  Krippendorff constants, the agreement formula, the converter shape,
+  end-to-end aggregate computability, and cross-module field-name
+  parity with ``MutationEvalResult.pairwise_win_rate``.
+
+- **PR-AR-L4d UX Goodhart bidirectional gate** —
+  PR-AR-L4a + L4b wired ``ux_means`` into the fitness scalar but the
+  scalar alone doesn't catch trade-off failures (UX surface gamed at
+  the cost of a critical Petri dim, or judge pleased while behaviour
+  worsens). New ``autoresearch.ux_means.detect_ux_conflict`` mirrors
+  the existing ``bench_means.detect_cross_validation_conflict``
+  pattern (PR-SIL-5THEME C2) on the UX axis. Two conflict scenarios:
+  - ``alignment_only_fooling_ux`` — Petri dim aggregate improved
+    (lower-is-better went down) AND UX aggregate regressed (higher-
+    is-better went down). Judge pleased, behaviour worse.
+  - ``capability_at_alignment_cost_ux`` — UX aggregate improved AND
+    a critical-tier dim regressed beyond ``critical_margin``. Gamed
+    UX at the cost of safety/alignment.
+  Wired into ``_should_promote``'s gated branch alongside the bench
+  detector. Both branches return ``False`` with the conflict label
+  so the strict-reject reason is greppable. Detector returns
+  ``None`` on insufficient data (same graceful contract as bench).
+  7 invariants in ``tests/autoresearch/test_ux_goodhart_gate.py``
+  pin both labels, graceful no-op for 3 missing-data cases, the
+  4-way no-conflict matrix, and end-to-end wiring through
+  ``_should_promote`` to surface the ux label.
+
+- **PR-AR-L4b ``compute_fitness`` 5-caller ``ux_means`` / ``admire_means`` forward** —
+  Pre-PR-AR-L4b PR-AR-L4a wired the ``ux_means`` collector but no
+  caller forwarded the dict to ``compute_fitness`` — the fitness
+  scalar stayed dim-only despite the data being available.
+  Wires the 4 ``_should_promote`` internal ``compute_fitness`` calls
+  (bootstrap / gated / current_raw / prior_raw) + the 1 ``main()``
+  call to forward ``ux_means`` (from ``collect_ux_means_from_sources``)
+  and ``baseline_ux_means`` (from ``_load_baseline`` 5-tuple). The
+  4 new ``_should_promote`` kwargs (``ux_means`` /
+  ``baseline_ux_means`` / ``admire_means`` / ``baseline_admire_means``)
+  default to ``None`` for backward-compat with legacy callers.
+  ``admire_means`` slot is reserved — PR-AR-L4c wires the seed-gen
+  ranker handoff after Scope A (PR-RANKER-MUTATION-EVAL) ships
+  ``evaluate_mutation_pairwise``.
+  ``_write_baseline`` now persists ``axes.ux_means`` (slot existed
+  pre-PR-AR-L4b but was always emitted as ``None``).
+  7 invariants in
+  ``tests/autoresearch/test_ux_admire_caller_forward.py`` pin:
+  - ``_should_promote`` signature exposes the 4 new kwargs (default None)
+  - 5 ``compute_fitness`` call blocks all mention ``ux_means=`` and
+    ``admire_means=`` (caller-symmetry grep — PR-11 anchor multiplier
+    pattern from [[feedback-signature-forward-audit]])
+  - end-to-end exercise: bootstrap fitness changes when ux_means is
+    supplied vs not (forward actually reaches compute_fitness)
+  - ``prior_raw`` baseline-side asymmetry — baseline_ux_means
+    actually reaches the prior_raw compute_fitness call (Codex MCP
+    catch §6)
+  - ``_write_baseline`` roundtrips the ``axes.ux_means`` slot
+  - main caller invokes ``collect_ux_means_from_sources``
+
+- **PR-RANKER-MUTATION-EVAL — seed-gen `evaluate_mutation_pairwise()`
+  handoff entry point for autoresearch admire_means.** New module
+  `plugins/seed_generation/mutation_eval.py` exposes the seed-gen
+  3-voter cross-provider panel as a single async call
+  `evaluate_mutation_pairwise(before_response, after_response,
+  scenario_seed, *, voters, manager, match_id)` returning
+  `MutationEvalResult(wins, losses, ties, pairwise_win_rate,
+  provider_diversity, voter_models)`. Reuses VOTE_SCHEMA
+  (strict-mode, PR-STRICT-COMPATIBLE-SCHEMAS), `embed_handoff`,
+  `picker_source_to_adapter_source`, anti-phantom prompt prose
+  (PR-VOTER-PROMPT-ANTI-PHANTOM — inlined bodies, no Read tool,
+  first-and-only-turn disclaimer). Autoresearch
+  (`autoresearch/admire_means.py:ADMIRE_DIM_WEIGHTS`) drops
+  `MutationEvalResult.pairwise_win_rate` directly into
+  `admire_means["pairwise_win_rate"]` — field name parity pinned
+  by `test_pairwise_win_rate_field_name_matches_autoresearch_admire`
+  (static grep on both source files; no runtime cross-package
+  import to honour the seed-gen → autoresearch handoff boundary).
+  Codex MCP cross-LLM review caught (and fix folded in-band): the
+  pre-fix `f"vote-{match_id}-{provider}.{source}"` task_id format
+  collided for the default manifest's two identical
+  `openai.openai-codex` voters → `SubAgentManager` dedup → 3-voter
+  panel silently became 2-voter. Now per-voter ordinal
+  `v{idx:02d}` disambiguates + voter identity mirrored into
+  `SubTask.args` for typed reverse-lookup. Voter failure / malformed
+  vote / invalid winner label degrade gracefully (drop from
+  aggregate, no raise; `provider_diversity` tells the caller
+  whether the result is trustworthy). 8 tests:
+  cross-module-contract field-name parity, no-autoresearch-import
+  AST invariant, default-panel-not-deduplicated 3-voter dispatch,
+  happy-path 2-of-3 aggregation, partial-failure graceful drop,
+  all-fail neutral 0.5, invalid-winner-label silent rejection,
+  anti-phantom prompt prose pin.
+
+- **PR-AR-L6 attribution writer standalone graceful** —
+  Pre-PR-AR-L6 ``autoresearch/train.py``'s W2 attribution block was
+  gated on three envs (``GEODE_SIL_MUTATION_ID`` /
+  ``GEODE_SIL_AUDIT_RUN_ID`` / ``GEODE_SIL_EXPECTED_DIM``) — operator
+  standalone runs (``uv run python autoresearch/train.py``,
+  ``--promote``) had none of those, so the attribution row was
+  silently skipped. Downstream consumers (a future source-aware
+  ``compute_credit_assignment`` variant, operator analytics) had no
+  ledger visibility into manual runs.
+  New ``source`` field on ``AttributionRecord`` /
+  ``compute_attribution`` / ``write_attribution`` distinguishes
+  mutator-driven (``"mutator"``, default) from manual (``"manual"``)
+  rows. Standalone runs synthesize ``mutation_id =
+  manual-{commit[:8]}-{audit_uuid[:8]}`` + ``audit_run_id =
+  manual-audit-{audit_uuid[:8]}`` so the ledger keeps a permanent
+  row, and downstream consumers (operator analytics; a future
+  source-aware ``compute_credit_assignment`` variant) can filter the
+  JSONL stream on ``source`` when they want a mutator-only signal. Legacy on-disk rows omit ``source`` → reads
+  back as ``None`` → schema treats as "mutator" for backward compat.
+  7 invariants in
+  ``tests/autoresearch/test_attribution_standalone_manual.py`` pin
+  the schema additions, the synthetic-id format, and the
+  filter-by-source contract.
+
+### Fixed
+- **PR-VOTER-PROMPT-ANTI-PHANTOM — inline candidate seed bodies into
+  voter handoff (kill the fake-path Read instruction).** Smoke 18
+  dialogue trace
+  (`.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
+  vote-m000-anthropic.claude-cli/dialogue.jsonl`) caught claude-cli
+  emitting `"I already read both candidate files in the previous turn
+  and can answer from context."` on the FIRST turn (no previous
+  turn exists). Root cause: voter handoff sent a literal
+  `"run_dir/candidates/<cid>.md"` relative-path string and the prompt
+  instructed the model to "Read both candidate seeds". The per-task
+  isolated cwd (PR-RESUME-NO-PERSIST-FIX) meant the model couldn't
+  resolve the fake relative path; the only escape was to hallucinate
+  session continuity. Fix per the open-coscientist `nodes/ranking.py`
+  `debate_pair` pattern: read each candidate seed body once in
+  `Ranker.aexecute` via new `_read_candidate_bodies(state)` helper,
+  thread `candidate_bodies` dict through `_play_match` →
+  `_build_voter_tasks` → `_build_description`. `VOTE_HANDOFF` schema
+  (`handoff_schemas.py`) `candidate_a/b.path` → `body` (required).
+  Prompt rewritten: removed "Read both candidate seeds"; added
+  explicit "DO NOT call any Read tool, DO NOT claim to have read
+  them in a previous turn (this is the first and only turn of your
+  session)". Codex MCP cross-LLM review caught the empty-body
+  failure mode (read error silently emitted `""` while prompt
+  asserted "Both seed bodies are fully present") + the stale
+  docstring; folded in-band — unreadable paths now emit
+  `_CANDIDATE_BODY_UNAVAILABLE` sentinel
+  (`[CANDIDATE_BODY_UNAVAILABLE: path=... error=...]`) that
+  instructs the voter to emit `winner: "tie"`, and the prompt
+  explicitly handles the sentinel. Pinned by extended
+  `test_ranker_voter_handoff_matches_schema`: asserts body inlined,
+  anti-phantom prose present, `run_dir/candidates/` literal absent.
+
+### Changed
+- **PR-STRICT-COMPATIBLE-SCHEMAS — convert 5 seed-gen schemas to
+  OpenAI strict-mode (Codex `text.format` constraint).** Pre-fix all
+  seed-gen schemas used the permissive `_additive()` helper (no
+  `additionalProperties:false`), so the Codex OAuth adapter's
+  `_is_openai_strict_compatible` detector
+  (`core/llm/adapters/codex_oauth.py`) always returned False → the
+  Responses API received `text.format.strict=False` → schema
+  behaviour collapsed to a *server hint* rather than an enforced
+  *constraint*. gpt-5.5 reasoning models could then consume the
+  entire output budget on `encrypted_reasoning` items and return
+  empty `output_text` (smoke 18:
+  `.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
+  vote-m000-openai.openai-codex/dialogue.jsonl` turn 1 — cost
+  $0.0358, 0 `assistant_message`). New `_strict_additive()` helper
+  derives `required` from `properties.keys()` + sets
+  `additionalProperties:false`; recursive `_strict_additive` on
+  nested objects + array items. Converted: PROXIMITY, CRITIQUE,
+  VOTE, EVOLVE, SUPERVISOR. Three exceptions remain non-strict
+  because they use typed-additional maps that depend on
+  runtime-known keys (Petri 24-dim catalog / arxiv-id snapshot
+  map): PILOT, META_REVIEW, LITERATURE_REVIEW. Side fixes folded
+  in-band: (a) `CRITIQUE_SCHEMA` adds `rewrite_section` field
+  (`["string","null"]`) — pre-fix the field was tolerated by
+  permissive `_additive` but `evolver.py:_consume_rewrite_target`
+  + `eval_export.py:355` actively consume it, so strict mode
+  required it be declared (Codex MCP catch); (b) `EVOLVE_SCHEMA`
+  promotes `notes` from optional → required with empty-string
+  sentinel (`evolver.md` + `_REQUIRED_EVOLVE_FIELDS` updated to
+  match); (c) `LITERATURE_REVIEW_SCHEMA` fixes 2 type drifts vs
+  parser — `articles_with_reasoning` was `array` but parser reads
+  as string, `snapshots` was `array` but parser reads as
+  `{arxiv_id: snapshot_path}` dict. Pinned by 4 new tests:
+  `test_strict_role_schemas_pass_openai_strict_check` (parametrize
+  5 strict roles), `test_non_strict_role_schemas_documented_reason`
+  (parametrize 3 non-strict roles, guards against silent
+  tightening), `test_strict_helper_derives_required_from_properties_keys`,
+  + existing `test_critique_schema_required_matches_parser_required`
+  now `==`. Codex MCP cross-LLM review caught the
+  `rewrite_section` omission (would have broken critic→evolver
+  handoff under strict mode) + CHANGELOG/docstring drift; both
+  folded in-band before merge.
+
+- **PR-AR-L4a ``ux_means`` 4-reader collector wiring (ADR-012 S1b)** —
+  Pre-PR-AR-L4a ``autoresearch.ux_means.collect_ux_means_from_sources``
+  was a hardcoded ``return None`` placeholder — ADR-012 S1 shipped
+  the schema + math but the S1b collector wiring never landed, so the
+  entire ux fitness axis was dormant in production.
+  4 readers now consume the single SoT
+  ``autoresearch/state/mutations.jsonl``:
+  - ``read_run_log_success_rate`` — count(attribution_score > 0) /
+    count(attribution rows)
+  - ``read_token_cost`` — Σ(in_tok × price.input + out_tok ×
+    price.output) per ``cost_model`` from ``core.llm.token_tracker.MODEL_PRICING``
+  - ``read_revert_ratio`` — count(fitness_delta < 0) /
+    count(rows with fitness_delta)
+  - ``read_latency`` — mean(cost_elapsed_seconds) across apply rows
+  New ``DEFAULT_UX_TOKEN_BUDGET_USD = 5.0`` and
+  ``DEFAULT_UX_LATENCY_BUDGET_S = 1800`` budget constants
+  (operator-aggressive setting). 10 invariants in
+  ``tests/autoresearch/test_ux_means_collector.py`` pin each reader's
+  graceful-no-op contract + the wired collector shape. Caller-side
+  ``compute_fitness`` forward arrives in PR-AR-L4b.
+
+### Fixed
+- **PR-SCHEMA-PARSER-DRIFT-CLOSE — close 3 schema ↔ parser SoT
+  drifts surfaced by smoke 18 dialogue audit.** smoke 18 archive
+  (`.audit/smoke-archives/smoke-18-partial-1779728410/`) showed
+  4/12 critic sub-agents `malformed_critique` with the LLM emitting
+  otherwise-valid JSON missing `discrimination_estimate`. Root cause:
+  `_REQUIRED_CRITIQUE_FIELDS` (`critic.py:70`) lists 7 fields,
+  `CRITIQUE_SCHEMA.required` (`json_schemas.py:85`) listed only 6.
+  Worker-side `_needs_schema_retry` (PR-WORKER-SCHEMA-AWARE-RETRY
+  in v0.99.61) only fires for schema-`required` violations, so the
+  retry never fired for the one drift-prone field. Audit of all 7
+  Loop-1 phases + literature_review found 3 such gaps:
+  (1) CRITIQUE_SCHEMA missing `discrimination_estimate`;
+  (2) SUPERVISOR_SCHEMA did not exist at all (supervisor SubTask
+  spawned without `response_schema=`); (3) LITERATURE_REVIEW_SCHEMA
+  defined since PR-JSON-WIRE (#79) but never wired into the
+  literature_review SubTask spawn. supervisor.json checkpoint
+  regression in smoke 18 vs smoke 17 is the visible downstream
+  symptom of (2). Fix: add `discrimination_estimate` to
+  CRITIQUE_SCHEMA.required + properties; define SUPERVISOR_SCHEMA
+  matching `_REQUIRED_SUPERVISOR_FIELDS` (3 keys, mirrors
+  `supervisor.md` typed contract); wire both SUPERVISOR_SCHEMA into
+  supervisor.py:_build_task and LITERATURE_REVIEW_SCHEMA into
+  literature_review.py:_build_task. Tightened
+  `test_critique_schema_required_matches_parser_required` from
+  `issubset` to `==` (pre-fix the relaxed assertion explicitly
+  allowed the discrimination_estimate gap). Added 2 new SoT
+  invariants (`test_supervisor_schema_required_matches_parser_required`,
+  `test_literature_review_schema_required_matches_parser_call_site`)
+  + 2 new SubTask wire pins
+  (`test_supervisor_build_task_carries_schema`,
+  `test_literature_review_build_task_carries_schema`). All 7 Loop-1
+  schema-parser invariants now hold under `==`.
+
 ## [0.99.62] - 2026-05-26
 
 Petri × autoresearch leak resolution sprint: 3 PR (L7/L3/L8) closing fitness-surface / baseline-ratchet leaks identified by the full-cycle GAP audit (PR-L9 already shipped in v0.99.61). L7 pins the wrapper-sections fallback ↔ writer-schema dual-SoT drift; L3 codifies the seed-gen-only role split via an anti-elevation invariant (Codex MCP review caught + pivoted from writer-side filter that would have broken critic.py's initial-gen handoff); L8 replaces the unconditional fresh-baseline auto-promote with a 2-clause sanity gate (completeness + fitness floor).

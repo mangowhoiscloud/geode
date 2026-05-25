@@ -69,6 +69,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import SUPERVISOR_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -181,6 +182,14 @@ class Supervisor(BaseSeedAgent):
             agent=_SUPERVISOR_AGENT_NAME,
             model=self.model,
             source=self.adapter_source,
+            # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — pre-fix this
+            # spawn omitted ``response_schema=`` so the worker-side
+            # ``_needs_schema_retry`` never fired on supervisor
+            # malformed output. Combined with the missing
+            # SUPERVISOR_SCHEMA definition, supervisor was the one
+            # Loop-1 phase running without structured-output enforcement
+            # (and the only role missing from smoke 18 checkpoints).
+            response_schema=SUPERVISOR_SCHEMA,
         )
 
     def _build_description(

@@ -16,15 +16,18 @@ through gives false confidence.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from plugins.seed_generation.json_schemas import (
     CRITIQUE_SCHEMA,
     EVOLVE_SCHEMA,
+    LITERATURE_REVIEW_SCHEMA,
     META_REVIEW_SCHEMA,
     PILOT_SCHEMA,
     PROXIMITY_SCHEMA,
+    SUPERVISOR_SCHEMA,
     VOTE_SCHEMA,
 )
 
@@ -40,16 +43,16 @@ def test_proximity_schema_required_matches_parser_required() -> None:
 def test_critique_schema_required_matches_parser_required() -> None:
     from plugins.seed_generation.agents.critic import _REQUIRED_CRITIQUE_FIELDS
 
-    # Schema covers the subset the LLM must emit; the parser's tuple
-    # may include additional fields the parser checks but the schema
-    # leaves as optional (discrimination_estimate). Schema required
-    # must be a SUBSET of parser required (otherwise the LLM passes
-    # schema but fails parser).
-    schema_required = set(CRITIQUE_SCHEMA["required"])
-    parser_required = set(_REQUIRED_CRITIQUE_FIELDS)
-    assert schema_required.issubset(parser_required), (
-        f"schema requires fields the parser doesn't check: {schema_required - parser_required}"
-    )
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — tightened from
+    # ``issubset`` to ``==``. Pre-fix the schema permissively allowed
+    # ``discrimination_estimate`` to be missing while the parser still
+    # rejected it (smoke 18: 4/12 critic sub-agents malformed_critique
+    # for exactly this drift). The worker-side ``_needs_schema_retry``
+    # only fires for schema ``required`` violations; keeping the
+    # parser tuple stricter than the schema meant the retry path was
+    # silently dead for the one field most likely to be dropped. Both
+    # SoTs must now agree.
+    assert set(CRITIQUE_SCHEMA["required"]) == set(_REQUIRED_CRITIQUE_FIELDS)
 
 
 def test_pilot_schema_required_matches_parser_required() -> None:
@@ -74,6 +77,33 @@ def test_meta_review_schema_required_matches_parser_required() -> None:
     from plugins.seed_generation.agents.meta_reviewer import _REQUIRED_META_FIELDS
 
     assert set(META_REVIEW_SCHEMA["required"]) == set(_REQUIRED_META_FIELDS)
+
+
+def test_supervisor_schema_required_matches_parser_required() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — supervisor was the
+    # only Loop-1 phase whose schema did not exist. The parser tuple
+    # has been in supervisor.py since the role landed; the schema
+    # was added in this PR.
+    from plugins.seed_generation.agents.supervisor import _REQUIRED_SUPERVISOR_FIELDS
+
+    assert set(SUPERVISOR_SCHEMA["required"]) == set(_REQUIRED_SUPERVISOR_FIELDS)
+
+
+def test_literature_review_schema_required_matches_parser_call_site() -> None:
+    # literature_review.py:144 passes ``required_fields`` inline to
+    # ``parse_structured_output`` rather than declaring a
+    # module-level constant. Pin the inline tuple ↔ schema equality
+    # so a future caller-side edit can't drift from the schema.
+    from plugins.seed_generation.agents import literature_review as litreview
+
+    source = Path(litreview.__file__).read_text(encoding="utf-8")
+    # The required_fields tuple is the only multi-string tuple in
+    # the file's parse_structured_output call site (line ~144).
+    assert 'required_fields=("articles_with_reasoning", "snapshots")' in source
+    assert set(LITERATURE_REVIEW_SCHEMA["required"]) == {
+        "articles_with_reasoning",
+        "snapshots",
+    }
 
 
 # ────────────────────── SubTask carries response_schema ───────────────────────
@@ -129,6 +159,31 @@ def test_pilot_build_tasks_carries_schema() -> None:
     assert tasks
     for t in tasks:
         assert t.response_schema is PILOT_SCHEMA
+
+
+def test_supervisor_build_task_carries_schema() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — supervisor's spawn
+    # site previously omitted ``response_schema=`` entirely, so the
+    # worker-side retry never fired and the supervisor.json checkpoint
+    # regressed in smoke 18 vs smoke 17.
+    from plugins.seed_generation.agents.supervisor import Supervisor
+
+    state = _pipeline_state_with_candidate()
+    agent = Supervisor(MagicMock())
+    task = agent._build_task(state)  # type: ignore[attr-defined]
+    assert task.response_schema is SUPERVISOR_SCHEMA
+
+
+def test_literature_review_build_task_carries_schema() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — the schema has
+    # existed since PR-JSON-WIRE (#79) but literature_review.py's
+    # ``_build_task`` was the one spawn site that never wired it.
+    from plugins.seed_generation.agents.literature_review import LiteratureReview
+
+    state = _pipeline_state_with_candidate()
+    agent = LiteratureReview(MagicMock())
+    task = agent._build_task(state, max_papers=1)  # type: ignore[attr-defined]
+    assert task.response_schema is LITERATURE_REVIEW_SCHEMA
 
 
 # ────────────────────── End-to-end wire-through ───────────────────────────────
@@ -220,6 +275,102 @@ def test_subagent_manager_threads_schema_to_worker_request() -> None:
     manager = SubAgentManager(runner=IsolatedRunner(), action_handlers={})
     request = manager._build_worker_request(task)
     assert request.response_schema == schema
+
+
+# ────────────────────── PR-STRICT-COMPATIBLE-SCHEMAS invariants ──────────────
+
+
+# PR-STRICT-COMPATIBLE-SCHEMAS (2026-05-26) — the codex_oauth adapter
+# auto-detects strict-mode for ``text.format`` via
+# ``_is_openai_strict_compatible``. Pre-fix every seed-gen schema
+# used the permissive ``_additive()`` helper, so codex always landed
+# on ``strict: False`` → text.format became a *hint*, not a
+# *constraint* → gpt-5.5 reasoning models could burn the output
+# budget on encrypted reasoning items and return empty
+# ``output_text`` (smoke 18: vote-m000-openai.openai-codex turn 1
+# cost $0.0358 with 0 assistant_message).
+#
+# The schemas listed in _STRICT_ROLES below were converted to
+# ``_strict_additive`` (additionalProperties:false + every property
+# in required). The remaining two (PILOT, META_REVIEW,
+# LITERATURE_REVIEW) cannot be strict because they use
+# typed-additional maps (Petri dim catalog / arxiv-id keyed
+# snapshots) the schema can't enumerate at compile time.
+
+
+_STRICT_ROLES = {
+    "PROXIMITY_SCHEMA": PROXIMITY_SCHEMA,
+    "CRITIQUE_SCHEMA": CRITIQUE_SCHEMA,
+    "VOTE_SCHEMA": VOTE_SCHEMA,
+    "EVOLVE_SCHEMA": EVOLVE_SCHEMA,
+    "SUPERVISOR_SCHEMA": SUPERVISOR_SCHEMA,
+}
+
+_NON_STRICT_ROLES = {
+    "PILOT_SCHEMA": PILOT_SCHEMA,
+    "META_REVIEW_SCHEMA": META_REVIEW_SCHEMA,
+    "LITERATURE_REVIEW_SCHEMA": LITERATURE_REVIEW_SCHEMA,
+}
+
+
+@pytest.mark.parametrize("name,schema", list(_STRICT_ROLES.items()))
+def test_strict_role_schemas_pass_openai_strict_check(name: str, schema: dict) -> None:
+    """Every converted schema satisfies OpenAI's strict-mode subset.
+
+    Asserts ``_is_openai_strict_compatible`` returns True so the codex
+    backend wires ``strict: True`` into ``text.format`` — the
+    constraint that prevents gpt-5.5's reasoning budget from consuming
+    the entire output budget on empty responses.
+    """
+    from core.llm.adapters.codex_oauth import _is_openai_strict_compatible
+
+    assert _is_openai_strict_compatible(schema), (
+        f"{name} declared strict-compatible but failed the codex adapter's "
+        "strict-detector check. Verify every nested object uses "
+        "_strict_additive (additionalProperties:false + required = "
+        "list(properties.keys())) and every array items entry is strict-compatible."
+    )
+
+
+@pytest.mark.parametrize("name,schema", list(_NON_STRICT_ROLES.items()))
+def test_non_strict_role_schemas_documented_reason(name: str, schema: dict) -> None:
+    """The roles flagged non-strict-compatible by design must FAIL the
+    strict-detector check.
+
+    If a future PR accidentally tightens these (e.g. enumerates the
+    Petri dim catalog into properties), this test catches the
+    silent strict-mode flip — operators reading the
+    ``additionalProperties: typed`` would expect the schema to remain
+    permissive, but the detector would now return True and codex
+    would start enforcing strict on a schema the role doesn't
+    actually conform to.
+    """
+    from core.llm.adapters.codex_oauth import _is_openai_strict_compatible
+
+    assert not _is_openai_strict_compatible(schema), (
+        f"{name} is documented as non-strict-compatible "
+        "(typed-additionalProperties for per-dim or per-arxiv-id maps) "
+        "but now passes the strict-detector check. Either the schema "
+        "actually became strict-compatible (update the docstring + "
+        "move it to _STRICT_ROLES) or a property accidentally lost "
+        "its typed-additional escape (regression — restore it)."
+    )
+
+
+def test_strict_helper_derives_required_from_properties_keys() -> None:
+    """``_strict_additive`` must list every property in required;
+    this is what makes the schema strict-compatible.
+    """
+    from plugins.seed_generation.json_schemas import _strict_additive
+
+    schema = _strict_additive(
+        properties={
+            "a": {"type": "string"},
+            "b": {"type": "number"},
+        }
+    )
+    assert schema["required"] == ["a", "b"]
+    assert schema["additionalProperties"] is False
 
 
 if __name__ == "__main__":

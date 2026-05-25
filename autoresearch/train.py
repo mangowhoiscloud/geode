@@ -1919,6 +1919,16 @@ def _should_promote(
     # 결정 영향력 0. 이제 bench + baseline_bench 둘 다 받아서 gate fire.
     bench_means: dict[str, float] | None = None,
     baseline_bench_means: dict[str, float] | None = None,
+    # PR-AR-L4b (2026-05-26) — ux_means / admire_means caller forward.
+    # 이전엔 internal compute_fitness 4 호출에 ux/admire 전달 0 → ADR-012
+    # 3-axis fitness 의 ux/admire 축이 promote gate 에 미반영. 이제
+    # caller 가 current + baseline 둘 다 받아서 cross-axis 비교 가능.
+    # admire_means 는 Scope A (seed-gen ranker mutation-eval) 머지 후
+    # 실제 채워짐 — 본 PR 은 signature slot 만 예약. legacy=None.
+    ux_means: dict[str, float] | None = None,
+    baseline_ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    baseline_admire_means: dict[str, float] | None = None,
     # PR-SIL-5THEME C3 (2026-05-23) — P3 modality 가중 분리. dim 측
     # modality (judge_llm vs analytics) 를 internal compute_fitness 호출에
     # forward — modality-aware weight + N=1 widening guard 적용. None 이면
@@ -1990,6 +2000,8 @@ def _should_promote(
             measurement_modality=measurement_modality,
             anchor_means=_bootstrap_anchor or None,
             anchor_confidence_mode=anchor_confidence_mode,
+            ux_means=ux_means,
+            admire_means=admire_means,
         )
         if bootstrap_fitness < BOOTSTRAP_FITNESS_FLOOR:
             return False, (
@@ -2006,6 +2018,25 @@ def _should_promote(
     _current_anchor = {d: current_means[d] for d in ANCHOR_DIMS if d in current_means}
     _baseline_anchor = {d: baseline_means[d] for d in ANCHOR_DIMS if d in baseline_means}
 
+    # PR-AR-L4d (2026-05-26) — UX Goodhart bidirectional gate fires
+    # BEFORE the gated-fitness check so alignment_only_fooling_ux
+    # (Petri improved + UX regressed, fitness still positive) is
+    # caught. The bench detector relies on compute_fitness collapsing
+    # to 0.0 for its strict-reject path; UX doesn't have that pre-
+    # wiring inside compute_fitness, so we run the detector explicitly
+    # here. Graceful: if any input is None the detector returns None.
+    from autoresearch.ux_means import detect_ux_conflict
+
+    ux_conflict = detect_ux_conflict(
+        dim_means=current_means,
+        baseline_dim_means=baseline_means,
+        ux_means=ux_means,
+        baseline_ux_means=baseline_ux_means,
+        critical_dims=CRITICAL_DIMS,
+    )
+    if ux_conflict is not None:
+        return False, f"cross-validation conflict ({ux_conflict})"
+
     gated = compute_fitness(
         current_means,
         current_stderr,
@@ -2016,22 +2047,24 @@ def _should_promote(
         measurement_modality=measurement_modality,
         anchor_means=_current_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=ux_means,
+        admire_means=admire_means,
     )
     if gated == 0.0:
-        # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
-        # 가 fire 했으면 (bench 측 conflict) 그 reason 을 보고. dim critical
-        # gate 만 fire 했으면 기존 메시지 보존.
+        # PR-SIL-5THEME C2 — gated=0 의 원인 분기. bench 측 conflict 가
+        # fire 했으면 그 reason 을 보고. dim critical gate 만 fire 했으면
+        # 기존 메시지 보존. UX conflict 는 위에서 이미 처리됨.
         from autoresearch.bench_means import detect_cross_validation_conflict
 
-        conflict = detect_cross_validation_conflict(
+        bench_conflict = detect_cross_validation_conflict(
             dim_means=current_means,
             baseline_dim_means=baseline_means,
             bench_means=bench_means,
             baseline_bench_means=baseline_bench_means,
             critical_dims=CRITICAL_DIMS,
         )
-        if conflict is not None:
-            return False, f"cross-validation conflict ({conflict})"
+        if bench_conflict is not None:
+            return False, f"cross-validation conflict ({bench_conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
     current_raw = compute_fitness(
@@ -2040,6 +2073,8 @@ def _should_promote(
         measurement_modality=measurement_modality,
         anchor_means=_current_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=ux_means,
+        admire_means=admire_means,
     )
     prior_raw = compute_fitness(
         baseline_means,
@@ -2047,6 +2082,8 @@ def _should_promote(
         measurement_modality=baseline_measurement_modality,
         anchor_means=_baseline_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=baseline_ux_means,
+        admire_means=baseline_admire_means,
     )
     # PR-3 — N=1 detector. Walks the critical tier (most safety-relevant)
     # against the per-dim sample_count; if any critical dim was measured
@@ -2170,6 +2207,8 @@ def main() -> int:
     if args.no_baseline:
         baseline_means, baseline_stderr = None, None
         baseline_bench_means: dict[str, float] = {}
+        _baseline_ux_means: dict[str, float] = {}
+        _baseline_admire_means: dict[str, float] = {}
     else:
         (
             baseline_means,
@@ -2234,6 +2273,19 @@ def main() -> int:
     _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
     _anchor_confidence_mode = _anchor_mode_env == "1"
     _anchor_means_current = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
+    # PR-AR-L4b (2026-05-26) — ux_means / admire_means caller wiring.
+    # ``collect_ux_means_from_sources`` reads the 4 ledger-based metrics
+    # (mutator success_rate, token_cost_norm, revert_ratio_norm,
+    # latency_norm). Returns ``None`` until the loop has run at least
+    # one cycle (no attribution rows yet) → ``compute_fitness`` then
+    # falls back to dim-only fitness (no-op signal). admire_means is
+    # the Scope A handoff slot — reserved as None here; PR-AR-L4c wires
+    # the ranker pairwise win_rate consume after seed-gen ships the
+    # ``evaluate_mutation_pairwise`` entry point.
+    from autoresearch.ux_means import collect_ux_means_from_sources
+
+    ux_means_current = collect_ux_means_from_sources()
+    admire_means_current: dict[str, float] | None = None
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
@@ -2244,6 +2296,8 @@ def main() -> int:
         measurement_modality=measurement_modality or None,
         anchor_means=_anchor_means_current or None,
         anchor_confidence_mode=_anchor_confidence_mode,
+        ux_means=ux_means_current,
+        admire_means=admire_means_current,
     )
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
@@ -2344,6 +2398,11 @@ def main() -> int:
         "bench_stderr": bench_provenance.bench_stderr or None,
         "bench_sample_count": bench_provenance.bench_sample_count or None,
         "bench_rubric_version": bench_provenance.rubric_version,
+        # PR-AR-L4b (2026-05-26) — persist ux_means current value so the
+        # next baseline-load returns a non-empty ux slot. admire_means
+        # stays None until PR-AR-L4c wires the ranker handoff.
+        "ux_means": ux_means_current,
+        "admire_means": admire_means_current,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -2382,38 +2441,70 @@ def main() -> int:
             # 적용 또는 둘 다 raw) 로 비교됨. _should_promote 가 ANCHOR_DIMS
             # subset 을 current_means / baseline_means 에서 자동 추출.
             anchor_confidence_mode=_anchor_confidence_mode,
+            # PR-AR-L4b (2026-05-26) — ux_means / admire_means forward to
+            # _should_promote's 4 internal compute_fitness calls. baseline
+            # ux/admire come from _load_baseline; current ux from the
+            # collector. admire is reserved (None) — PR-AR-L4c wires it.
+            ux_means=ux_means_current,
+            baseline_ux_means=_baseline_ux_means or None,
+            admire_means=admire_means_current,
+            baseline_admire_means=_baseline_admire_means or None,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
-    # W2 (2026-05-25 attribution wiring) — closed loop completion.
-    # runner.py 의 ``_run_autoresearch_subprocess`` 가 propose-apply-audit
-    # 한 cycle 동안 env 3개로 propagate 한다:
-    #   - GEODE_SIL_AUDIT_RUN_ID  (this cycle 의 audit run id, mutations.jsonl 의
-    #     apply row 와 같은 값)
-    #   - GEODE_SIL_MUTATION_ID   (apply row 의 mutation_id; attribution row 의
-    #     foreign key)
-    #   - GEODE_SIL_EXPECTED_DIM  (mutator LLM 의 commitment, JSON dict)
-    # 셋 모두 set 됐을 때만 attribution row append (manual --promote /
-    # standalone audit 보존). dry-run 도 skip — synthetic dim_means 는
-    # attribution 신호가 무의미.
+    # W2 (2026-05-25) + PR-AR-L6 (2026-05-26) — closed loop attribution.
+    # Two paths:
+    #
+    # 1. Mutator-driven cycle — ``runner.py:_run_autoresearch_subprocess``
+    #    propagates 3 envs (``GEODE_SIL_AUDIT_RUN_ID`` /
+    #    ``GEODE_SIL_MUTATION_ID`` / ``GEODE_SIL_EXPECTED_DIM``). All set
+    #    → row written with ``source="mutator"``. apply row in
+    #    ``mutations.jsonl`` shares the same ``mutation_id`` for the
+    #    inner-join.
+    # 2. Manual standalone audit — operator runs ``train.py`` (or
+    #    ``--promote``) outside the mutator runner; envs absent. Row is
+    #    still written with a synthetic ``mutation_id`` (``manual-{commit
+    #    [:8]}-{audit_uuid[:8]}``) + ``source="manual"`` so the
+    #    ``compute_credit_assignment`` learning corpus and operator-side
+    #    fitness analytics keep the manual cycle in their ledger.
+    #
+    # ``--dry-run`` always skips — synthetic dim_means carries no signal.
     _sil_mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
     _sil_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
     _sil_expected_raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "")
     _sil_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
-    if not args.dry_run and _sil_mutation_id and _sil_audit_run_id:
+    _attribution_should_write = not args.dry_run
+    _attribution_is_manual = _attribution_should_write and not (
+        _sil_mutation_id and _sil_audit_run_id
+    )
+    if _attribution_should_write:
         try:
+            import uuid
+
             from core.self_improving_loop.attribution import write_attribution
             from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
-            try:
-                _sil_expected_dim = json.loads(_sil_expected_raw) if _sil_expected_raw else {}
-                if not isinstance(_sil_expected_dim, dict):
+            if _attribution_is_manual:
+                # Synthetic ids — commit prefix (visible in ledger) +
+                # audit_uuid (uniqueness across multiple manual runs at
+                # the same commit). ``source="manual"`` lets downstream
+                # consumers filter the manual rows.
+                _audit_uuid = uuid.uuid4().hex[:8]
+                _sil_mutation_id = f"manual-{commit[:8]}-{_audit_uuid}"
+                _sil_audit_run_id = f"manual-audit-{_audit_uuid}"
+                _sil_expected_dim: dict[str, float] = {}
+                _sil_source = "manual"
+            else:
+                try:
+                    _sil_expected_dim = json.loads(_sil_expected_raw) if _sil_expected_raw else {}
+                    if not isinstance(_sil_expected_dim, dict):
+                        _sil_expected_dim = {}
+                except json.JSONDecodeError:
                     _sil_expected_dim = {}
-            except json.JSONDecodeError:
-                _sil_expected_dim = {}
+                _sil_source = "mutator"
             _sil_baseline_before = (
                 BaselineSnapshot(
                     dim_means=dict(baseline_means),
@@ -2438,6 +2529,7 @@ def main() -> int:
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
                 group_id=_sil_group_id,
+                source=_sil_source,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(
