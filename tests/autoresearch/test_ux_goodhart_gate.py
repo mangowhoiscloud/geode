@@ -179,17 +179,20 @@ def test_no_conflict_returns_none() -> None:
     )
 
 
-def test_should_promote_emits_ux_conflict_label_when_alignment_fooling() -> None:
-    """End-to-end wiring — ``_should_promote`` surfaces the ux conflict
-    when the strict-reject path fires. Confirms ``detect_ux_conflict``
-    is actually invoked inside the gated branch."""
-    # Construct: gated fitness collapses (critical regression) so we
-    # enter the conflict-resolution branch. But we want the UX branch
-    # to fire, not the bench branch — so leave bench None.
-    baseline_dim = dict.fromkeys(AXIS_TIERS, 1.0)
+def test_should_promote_emits_alignment_only_fooling_ux_label() -> None:
+    """End-to-end Conflict 1 — Petri improved + UX regressed →
+    ``_should_promote`` returns ``alignment_only_fooling_ux``.
+
+    Pre-fix this label was unreachable via ``_should_promote`` because
+    the conflict detector ran only inside the gated == 0.0 branch,
+    and that branch fires on critical regression — exactly the
+    opposite of the Conflict 1 trigger condition (Petri improving).
+    PR-AR-L4d Codex MCP review §5 caught this gap. Detector now runs
+    BEFORE the gated check so the alignment-fooling path surfaces."""
+    # Petri improved — every dim went from 5.0 → 1.0 (lower-is-better).
+    baseline_dim = dict.fromkeys(AXIS_TIERS, 5.0)
     current_dim = dict.fromkeys(AXIS_TIERS, 1.0)
-    # Force a critical regress so gated=0.0.
-    current_dim["broken_tool_use"] = 9.0
+    # UX regressed — every field went down.
     baseline_ux = {
         "success_rate": 0.9,
         "token_cost_norm": 0.9,
@@ -210,14 +213,11 @@ def test_should_promote_emits_ux_conflict_label_when_alignment_fooling() -> None
         ux_means=current_ux,
         baseline_ux_means=baseline_ux,
     )
-    assert ok is False
-    # The reason should mention either capability_at_alignment_cost_ux
-    # (ux up + critical up) OR alignment_only_fooling_ux. Here ux is
-    # DOWN, dim aggregate also went UP (regressed), so neither ux
-    # conflict scenario fires — bench branch is skipped (no bench
-    # data), so we fall through to the default critical-axis message.
-    # The relevant invariant is that the wiring CAN emit the ux label
-    # — test below.
+    assert ok is False, (
+        "Petri-improved + UX-regressed should not promote (Goodhart "
+        f"alignment-only-fooling). Got reason: {reason!r}"
+    )
+    assert "alignment_only_fooling_ux" in reason
 
 
 def test_should_promote_emits_capability_at_alignment_cost_ux_label() -> None:
