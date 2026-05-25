@@ -363,3 +363,36 @@ def test_orchestrator_emits_noop_outside_journal_scope() -> None:
     state = PipelineState(run_id="t-noscope", target_dim="x", gen_tag="gen2")
     # No run_transcript_scope active — must not raise.
     asyncio.run(Pipeline(state, registry).arun())
+
+
+def test_record_checkpoint_writes_per_phase_files(tmp_path) -> None:
+    """PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — every
+    completed phase writes ``<run_dir>/checkpoints/<phase>.json`` and
+    the on-disk snapshot's ``completed_phases`` includes the just-
+    completed phase (Codex MCP review fix — pre-fix the snapshot was
+    one phase behind the in-memory list)."""
+    import json as _json
+
+    registry, _ = _make_registry_with_all_stubs()
+    state = PipelineState(
+        run_id="t-ck", target_dim="broken_tool_use", gen_tag="gen2", run_dir=tmp_path
+    )
+    asyncio.run(Pipeline(state, registry).arun())
+
+    ck_dir = tmp_path / "checkpoints"
+    assert ck_dir.is_dir(), "checkpoints/ subdir must be created"
+    written_phases = {p.stem for p in ck_dir.glob("*.json")}
+    # ``supervisor`` + ``literature_review`` short-circuit when the role
+    # is not registered (no stub) so they shouldn't produce a
+    # checkpoint. Every other _PHASE_ORDER role IS registered.
+    expected = {"generator", "proximity", "critic", "pilot", "ranker", "evolver", "meta_reviewer"}
+    assert written_phases >= expected, f"missing checkpoints: {expected - written_phases}"
+
+    # state.completed_phases must reflect every written checkpoint.
+    assert set(state.completed_phases) >= expected
+
+    # Codex MCP fix: the on-disk snapshot for the LAST phase must
+    # already list that phase in ``completed_phases`` (append-before-
+    # serialize ordering).
+    meta_review_ck = _json.loads((ck_dir / "meta_reviewer.json").read_text())
+    assert "meta_reviewer" in meta_review_ck["state_snapshot"]["completed_phases"]

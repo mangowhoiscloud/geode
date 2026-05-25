@@ -48,6 +48,27 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-CHECKPOINT-RESUME-TIMEBUDGET — per-phase checkpoints + lifted
+  sub-agent wall-clock defaults.** `plugins/seed_generation/checkpointer.py`
+  writes `<run_dir>/checkpoints/<phase>.json` after each successful seed-
+  generation phase (atomic via `os.replace` of a tmp file); the orchestrator
+  appends to `state.completed_phases` on success. New
+  `plugins/seed_generation/resume.py` + `geode audit-seeds resume <run_id>`
+  CLI hydrate `PipelineState` from the latest checkpoint and continue from
+  the first phase without an on-disk record. Wall-clock budgets:
+  `core/agent/sub_agent.py` `SubAgentManager.timeout_s` default 120s → 600s
+  with new `GEODE_SUBAGENT_TIMEOUT_S` env override (clamp `[10, 3600]`);
+  `core/agent/worker.py` `WorkerRequest.timeout_s` default mirrors the
+  bump; `core/agent/plan.py` `_DECOMPOSE_CALL_TIMEOUT_S` 60s → 180s so
+  multi-tool plan.decompose calls under load (smoke-16 evolver
+  `asyncio.CancelledError` at 122s wall-time) don't trip the inner cap.
+  The seed-generation registry keeps its explicit `timeout_s=1800.0`
+  override in `plugins/seed_generation/_registry_builder.py` — the new
+  600s is the default for callers that don't override.
+  Convergence basis: paperclip session JSONL resume + LangGraph SqliteSaver
+  thread/checkpoint keying + openclaw per-agent wall-clock + hermes
+  IterationBudget. Plan SoT: `docs/plans/2026-05-25-structured-output-3-axis-fix.md`
+  §5 + §6.
 - **PR-27 C.7 unified MutatorContextView** —
   `core/self_improving_loop/mutator_context_view.py` composes the 5+ mutator-context sources into a single frozen Pydantic view: `baseline_snapshot` / `policy_snapshots` (5 kind policies) / `program_md` / `meta_review_snapshot` / `recent_mutations` (PR-12 reader output) / `cross_run_key` (PR-26 CrossRunJoinKey). `compose_mutator_context_view(...)` packs the loaded sources with safe defaults (None or empty container for missing sources); `source_count(view)` returns the count of populated sources for operator diagnostics. `extra="allow"` so future sources can be carried without schema migration. Pure helper, caller wiring (runner.py build_runner_context) deferred. Resolves F2 fragmentation signal.
 ### Added

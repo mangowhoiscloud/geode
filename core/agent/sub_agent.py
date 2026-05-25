@@ -73,6 +73,35 @@ def _strip_json_codeblock(text: str) -> str:
     return match.group(1).strip()
 
 
+def _resolve_timeout_s(default: float) -> float:
+    """Apply ``GEODE_SUBAGENT_TIMEOUT_S`` env override with clamp.
+
+    PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — env knob for
+    the SubAgentManager wall-clock cap so deployments can tune
+    without code change. Clamp to ``[10, 3600]``:
+
+    - Lower bound 10s — below this the orchestrator's per-phase
+      framing overhead alone dominates; a sub-agent can't complete
+      meaningful work.
+    - Upper bound 3600s (1h) — matches openclaw's per-agent
+      ``agents.defaults.timeoutSeconds`` documented range; longer
+      runs should checkpoint + resume rather than hold a single
+      subprocess open.
+
+    Non-numeric or empty env values fall through to ``default``.
+    """
+    import os
+
+    raw = os.environ.get("GEODE_SUBAGENT_TIMEOUT_S", "").strip()
+    if not raw:
+        return float(default)
+    try:
+        value = float(raw)
+    except ValueError:
+        return float(default)
+    return max(10.0, min(3600.0, value))
+
+
 def _last_balanced_json_object(text: str) -> str | None:
     """Walk the text right-to-left and return the LAST balanced
     ``{...}`` substring whose first attempt at ``json.loads`` succeeds.
@@ -341,7 +370,18 @@ class SubAgentManager:
         runner: IsolatedRunner,
         task_handler: Any | None = None,
         *,
-        timeout_s: float = 120.0,
+        # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — raised
+        # 120 → 600 (10 min) on operator directive ("야심차게 잡아도 돼.
+        # 300초 그이상으로 잡아"). Matches the per-agent-run wall-clock
+        # convergence from openclaw (`agents/timeout.ts:3` 48h default)
+        # while still leaving room for the IsolationConfig outer cap.
+        # 120s was too tight for tool-using sub-agents — smoke 16
+        # evolver TimeoutError surfaced at 122s in
+        # ``plan.decompose_async``. Pilot's 90s Petri audit alone
+        # leaves <30s for plan + tool overhead at 120s; 600s gives
+        # multi-round tool reasoning the headroom it needs. Override
+        # via ``GEODE_SUBAGENT_TIMEOUT_S`` env (clamped [10, 3600]).
+        timeout_s: float = 600.0,
         hooks: HookSystem | None = None,
         agent_registry: AgentRegistry | None = None,
         parent_session_key: str = "",
@@ -359,7 +399,13 @@ class SubAgentManager:
     ) -> None:
         self._runner = runner
         self._task_handler = task_handler
-        self._timeout_s = timeout_s
+        # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — env override
+        # for the wall-clock cap, clamped to a sane range so a bad
+        # `GEODE_SUBAGENT_TIMEOUT_S=abc` or `=99999999` doesn't break
+        # subprocess accounting. 10s lower bound matches the smoke
+        # smallest phase (proximity ~0.2ms is fine; literature_review
+        # ~30s on cache hit needs > 10s headroom).
+        self._timeout_s = _resolve_timeout_s(timeout_s)
         self._time_budget_s = time_budget_s
         self._hooks = hooks
         self._agent_registry = agent_registry
