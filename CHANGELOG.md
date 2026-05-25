@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.57] - 2026-05-25
+
+Patch release bundling PR-11 anchor-confidence multiplier wiring + PR-SEEDS-PER-RUN-LINK (Pages directory-listing 404 fix on the seed listing).
+
 ### Added
 - **PR-11 P3.1 anchor confidence multiplier wiring** — `autoresearch/train.py
   compute_fitness` now accepts `anchor_means` + `anchor_confidence_mode`
