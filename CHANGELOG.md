@@ -47,6 +47,181 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.61] - 2026-05-26
+
+Structured-output 3-axis-plan smoke 17 closeout bundle + autoresearch
+dead-state cleanup: 6 fixed entries threading through worker-side /
+orchestrator / codex-oauth adapter / prompt-level / role-binding gaps
+surfaced by the smoke 17 terminal state, plus PR-L9 (dead `audit_logs/`
+directory removal). Codex MCP cross-LLM review catches folded in-band
+on PR-1687 (7 non-ranker role model wire + strict-mode auto-detect),
+PR-1688 (PR-L9 docs cleanup + invariant widen), and PR-1693
+(`_NO_RETRY_TERMINATION_REASONS` + elapsed-time gate).
+
+### Removed
+- **PR-L9 dead `audit_logs/` directory cleanup** —
+  `autoresearch/state/audit_logs/` was created via
+  `AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)` at
+  `autoresearch/train.py:run_audit` but no caller ever wrote into it
+  (grep across `core/` / `plugins/` / `autoresearch/` confirms zero
+  writers and zero readers besides the mkdir itself). The constant +
+  the mkdir call are deleted; 5 test sites that monkeypatched
+  `AUDIT_OUT_DIR` are stripped. New
+  `tests/autoresearch/test_no_dead_audit_logs_dir.py` pins the cleanup
+  as a drift invariant so a future PR re-introducing the dead path
+  fails fast (per CLAUDE.md "Writer destination tracked" rule —
+  add a real writer + reader pair before re-introducing a state
+  subdirectory).
+
+### Fixed
+- **PR-WORKER-SCHEMA-AWARE-RETRY — worker-side schema-aware retry when
+  the role declared a `response_schema`.** `core/agent/worker.py:_run_agentic`
+  now calls `_needs_schema_retry(agentic_result, request.response_schema)`
+  after the first `loop.arun(prompt)` and, if it returns True AND the
+  elapsed-time gate (`elapsed_before_retry < 0.5 * request.timeout_s`)
+  passes, issues a second `loop.arun(feedback_prompt)` with the
+  validator verdict + inline schema (paperclip + open-scientist
+  `validate_and_retry` pattern). Retry budget is exactly one — a third
+  pass would burn cost without changing the underlying role contract.
+  `_needs_schema_retry` treats empty / unparseable / `required`-missing
+  first attempts as retry triggers; JSON embedded in prose passes
+  because the parent's `_last_balanced_json_object` parser already
+  tolerates it. PR-ROLE-JSON-ENFORCE-EXTENSION + PR-PROXIMITY-JSON-
+  ENFORCE made the prompt-level gate uniform, but smoke 17 confirmed
+  prompt-level gating is best-effort: the structural retry is the last
+  safety net before the parent records `phase_failed` and aborts the
+  run. Two Codex MCP cross-LLM review catches (2026-05-26) folded
+  in-band: (1) `_NO_RETRY_TERMINATION_REASONS` (`input_blocked` /
+  `user_cancelled` / `user_clarification_needed`) short-circuits the
+  helper so success exits with intentional non-JSON text aren't
+  re-issued (would override cancel intent); (2) the elapsed-time gate
+  prevents the retry from getting another full `time_budget_s` after
+  `AgenticLoop.arun` resets `_loop_start_time` per call. Pinned by
+  `TestNeedsSchemaRetry` (14 cases including 3 no-retry-success
+  parametrize), `TestBuildSchemaRetryPrompt` (4 cases including
+  4096-char schema truncation + 800-char prior-text truncation), and
+  `TestSchemaAwareRetryWiring` (10 wiring cases — retry-once-on-empty
+  / no-retry-on-success / no-retry-without-schema / cap-at-one / 3
+  no-retry-success parametrize / elapsed-time-gate / retry prompt
+  carries schema body + bracket-pair markers).
+
+- **PR-ROLE-JSON-ENFORCE-EXTENSION — extend PR-HANDOFF-SCHEMAS to the
+  4 remaining JSON-parsing roles + strengthen evolver.** Smoke 17
+  terminal state surfaced gaps beyond PR-PROXIMITY-JSON-ENFORCE: the
+  meta_reviewer phase_failed with `{'raw': 'Meta-review submitted.
+  Densest batch yet (14 candidates, 9 pilot rows, 5 survivors) but 0/5
+  evolution yield…'}` — narrated completion, no JSON. Audit of
+  `_build_description` across all role agents found 4 JSON-parsing
+  roles (critic / literature_review / meta_reviewer / supervisor)
+  missing the "FINAL response must be ONLY the JSON object … Start
+  with `{` and end with `}`" gate. Generator excluded (writes seed
+  via `write_file`, no JSON parse). Evolver already had the gate but
+  smoke 17 showed 5/5 sub-agents exited with `termination_reason=natural`
+  + empty output, treating the `write_file` tool call as the loop
+  terminus; added an explicit "Even after you've successfully called
+  `write_file` and the evolved file exists on disk, the orchestrator
+  still needs the JSON object as your VERY LAST assistant message"
+  reminder. Pinned by
+  `test_all_json_based_role_prompts_carry_final_response_enforcement`
+  (renders each role's prompt at runtime via the public builder
+  methods, asserts the gate text + bracket-pair markers — robust
+  against the "comment satisfies grep" weakness Codex MCP caught in
+  the initial static-source-grep approach).
+
+- **PR-PROXIMITY-JSON-ENFORCE — proximity prompt mirrors the
+  PR-HANDOFF-SCHEMAS JSON-only enforcement.** `plugins/seed_generation/
+  agents/proximity.py:_build_description` now appends
+  ``Your FINAL response must be ONLY the JSON object matching the
+  PROXIMITY_SCHEMA … Start with `{` and end with `}`.`` Pre-fix
+  smoke 17 hit a `phase_failed` because the LLM emitted a narrative
+  preamble (``"Analyzing the 14 candidates by reading their excerpts
+  — grouping by mechanism…"``) and the parser dropped the
+  malformed payload. The other PR-HANDOFF-SCHEMAS-aligned roles
+  (pilot / critic / evolver) already had this gating language;
+  proximity was the one outlier. Pinned by a new test in
+  `tests/plugins/seed_generation/test_proximity.py`.
+
+- **PR-CHECKPOINT-ON-FAILURE — phase_failed phases no longer write a
+  checkpoint.** `plugins/seed_generation/orchestrator.py:Pipeline.arun`
+  now gates the post-phase `_record_checkpoint` call on
+  `phase_result.success`. Pre-fix, smoke 17 wrote a `proximity.json`
+  checkpoint despite the proximity agent returning
+  `status="error"` (soft failure with `phase_failed (raised=False)`)
+  because `_arun_phase` returned normally — the outer loop called
+  `_record_checkpoint` unconditionally, so a future
+  `audit-seeds resume gen1-redundant_tool_invocation` would have
+  SKIPPED proximity on the next attempt (opposite of the operator's
+  intent). Pinned by
+  `test_phase_failed_soft_failure_does_not_write_checkpoint` in
+  `tests/plugins/seed_generation/test_orchestrator.py`.
+
+- **PR-VOTER-PROVIDER-WIRE — every seed-generation role's SubTask now
+  carries the picker-resolved `model`.** `core/agent/sub_agent.py:SubTask`
+  gains a `model: str = ""` field; `SubAgentManager._build_request`
+  honors `task.model` over both `settings.model` and
+  `agent_ctx["model"]`. Pre-fix every sub-agent inherited the parent's
+  default model, which short-circuited adapter resolution: smoke 17
+  RESUME dispatched ranker voters with binding `(claude-cli,
+  claude-opus-4-7)` via the codex-cli subprocess adapter because
+  `_resolve_provider(settings.model)` returned an openai-codex key, so
+  `resolve_for("openai", "adapter")` matched codex-cli instead of
+  claude-cli. Codex MCP re-review of PR #1687 caught that the same
+  wire gap exists for the 7 non-ranker role agents (generator /
+  critic / pilot / proximity / evolver / meta_reviewer / supervisor)
+  — once `.md` `model:` frontmatter is removed, `AgentDefinition.model`
+  falls back to `ANTHROPIC_SECONDARY` (claude-sonnet-4-6), silently
+  overriding pilot (claude-haiku-4-5) / meta_reviewer / supervisor
+  (claude-opus-4-7) bindings. Every role's SubTask spawn now passes
+  `model=self.model`. Pinned by 3 new tests:
+  `test_ranker_voter_spawn_carries_per_voter_model` +
+  `test_sub_task_model_field_wins_over_settings_default` +
+  `test_all_role_subtask_spawns_carry_model_for_role_binding`
+  (static-grep sentinel across all 7 non-ranker role files).
+
+- **seed-generation agent definitions — remove per-agent `model:`
+  frontmatter + normalize to English.** All 9 `plugins/seed_generation/
+  agents/*.md` files dropped their `model:` line so the manifest's
+  per-role binding (resolved via the picker) is the single SoT for
+  which model each role runs against — previously a stale `model:`
+  in `.md` frontmatter could silently override the picker's resolved
+  binding when `agent_ctx["model"]` was consulted. Korean text in
+  `critic.md` / `evolver.md` / `pilot.md` was rewritten to English
+  for consistency (the rest of the corpus is English).
+
+- **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now forwards
+  `req.response_schema`.** `core/llm/adapters/codex_oauth.py` was the
+  only PR-JSON-WIRE (#79) adapter that silently dropped the schema field;
+  claude-cli wires through `--json-schema` and codex-cli writes
+  `--output-schema <FILE>`, but codex-oauth's `_build_codex_call_kwargs`
+  never emitted the OpenAI Responses API equivalent
+  (`text.format = {"type": "json_schema", "name": ..., "strict": ...,
+  "schema": ...}`). Without that field, gpt-5.x reasoning models on
+  the Codex backend could return `stop_reason=completed` + empty
+  `output_text` (entire output budget consumed by encrypted reasoning
+  items), surfacing as `unknown` failures that `AgenticLoop` retried
+  5× and produced ~10 `~/.geode/diagnostics/codex-oauth-empty-text/`
+  dumps per ranker match (smoke 17 evidence). Fix: append `text.format`
+  per the Responses API spec (ctx7-grounded via
+  `/websites/developers_openai_api` `responses-vs-chat-completions`
+  guide). Schema name derived from the schema's `title` field
+  (fallback `"response"`).
+
+  Per Codex MCP review of PR #1687, `strict: True` is auto-detected
+  by `_is_strict_compatible(schema)` rather than hard-coded.
+  OpenAI Structured Outputs strict mode requires every object schema
+  to set `additionalProperties: false` AND list every property in
+  `required` (recursively into nested objects + array items). GEODE's
+  seed-generation schemas in `plugins/seed_generation/json_schemas.py`
+  use an additive helper that intentionally omits both — unconditional
+  `strict=True` would have caused the server to reject the request
+  (400) before generation, a worse retry storm than the empty-text
+  path. Non-compatible schemas fall back to `strict: False` (schema
+  still forwarded as a server hint). 9 new invariant + retry-edge
+  tests in
+  `tests/core/llm/adapters/test_codex_oauth_backend_invariants.py`
+  and
+  `tests/core/llm/adapters/test_codex_oauth_empty_text_retry_edge.py`.
+
 ## [0.99.60] - 2026-05-25
 
 Sprint bundle closing the 전소 self-improving-loop backlog: PR-20 (A.6 CRM causal_hypothesis) + PR-21 (A.8 sub_agent_slice) + PR-22 (B.4 F1 cross-run SoT invariants) + PR-23 (A.2 Tchebycheff) + PR-24 (A.3 MAP-Elites) + PR-25 (A.4 GEPA sampler) + PR-26 (C.6 cross-run SoT unification) + PR-27 (C.7 unified MutatorContextView) + PR-CHECKPOINT-RESUME-TIMEBUDGET (seed-gen per-phase checkpoint + 600s wall-clock) + PR-28 (C.8 silent fallback STRICT mode parity invariants). 9 fragmentation-audit signals closed, Codex MCP catches averaged 1.6/PR.
@@ -17440,3 +17615,4 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
+

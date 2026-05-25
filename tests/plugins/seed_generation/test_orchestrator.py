@@ -396,3 +396,261 @@ def test_record_checkpoint_writes_per_phase_files(tmp_path) -> None:
     # serialize ordering).
     meta_review_ck = _json.loads((ck_dir / "meta_reviewer.json").read_text())
     assert "meta_reviewer" in meta_review_ck["state_snapshot"]["completed_phases"]
+
+
+class _SoftFailAgent(BaseSeedAgent):
+    """Agent that returns ``status="error"`` without raising — mirrors
+    smoke 17 proximity phase (LLM emitted non-JSON narrative, the
+    agent caught the parse error and returned a soft failure).
+    """
+
+    def __init__(self, role: str) -> None:
+        super().__init__(role=role, model="stub-model")
+
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
+        return SeedAgentResult(
+            role=self.role,
+            status="error",
+            error_message="malformed payload: non-JSON narrative",
+            output={},
+        )
+
+
+def test_all_role_subtask_spawns_carry_model_for_role_binding() -> None:
+    """PR-VOTER-PROVIDER-WIRE follow-up (Codex MCP re-review of PR #1687):
+    every role agent's ``SubTask`` construction must include
+    ``model=self.model`` so the manifest binding propagates.
+
+    Pre-fix only the ranker's voter spawn carried ``model=voter.model``;
+    the 7 other role agents (generator / critic / pilot / proximity /
+    evolver / meta_reviewer / supervisor) passed only
+    ``source=self.adapter_source``. Combined with the .md ``model:``
+    frontmatter removal, this meant ``agent_ctx["model"]`` fell back
+    to ``ANTHROPIC_SECONDARY`` (claude-sonnet-4-6), silently overriding
+    the picker's resolved per-role binding for pilot
+    (claude-haiku-4-5) / meta_reviewer / supervisor (claude-opus-4-7).
+
+    Static grep — fails fast on a refactor that drops the model line
+    from any role's SubTask spawn.
+    """
+    from pathlib import Path as _Path
+
+    role_files = {
+        "generator": "generator.py",
+        "critic": "critic.py",
+        "pilot": "pilot.py",
+        "proximity": "proximity.py",
+        "evolver": "evolver.py",
+        "meta_reviewer": "meta_reviewer.py",
+        "supervisor": "supervisor.py",
+    }
+    base = _Path(__file__).parent.parent.parent.parent / "plugins/seed_generation/agents"
+    for role, fname in role_files.items():
+        src = (base / fname).read_text()
+        # Every ``source=self.adapter_source,`` line in a role agent
+        # MUST be paired with a ``model=self.model,`` line on an adjacent
+        # line. Pre-fix the model line was absent, causing the
+        # AgentDefinition default to win silently.
+        lines = src.splitlines()
+        source_lines = [i for i, ln in enumerate(lines) if "source=self.adapter_source" in ln]
+        assert source_lines, f"{role}: no source=self.adapter_source line in {fname}"
+        for idx in source_lines:
+            # Look for ``model=self.model`` within 1 line above (kwargs
+            # convention: model directly precedes source) — same SubTask call.
+            window = lines[max(0, idx - 1) : idx + 1]
+            assert any("model=self.model" in ln for ln in window), (
+                f"{role}: {fname}:{idx + 1} has ``source=self.adapter_source`` "
+                f"without an adjacent ``model=self.model`` line. PR-VOTER-PROVIDER-WIRE "
+                f"requires every role SubTask spawn to forward the picker's per-role "
+                f"binding so AgentDefinition.model (ANTHROPIC_SECONDARY) doesn't "
+                f"silently override pilot (claude-haiku) / meta / supervisor "
+                f"(claude-opus). Window was:\n"
+                f"{chr(10).join(window)}"
+            )
+
+
+def test_phase_failed_soft_failure_does_not_write_checkpoint(tmp_path) -> None:
+    """PR-CHECKPOINT-ON-FAILURE (2026-05-25) — phases that emit
+    ``phase_failed (raised=False)`` MUST NOT leave a checkpoint on
+    disk. Pre-fix smoke 17 wrote ``proximity.json`` despite the
+    proximity agent returning ``status="error"``, so a future
+    ``audit-seeds resume`` would skip proximity on the next attempt
+    — the opposite of the operator's intent. The fix gates the
+    checkpoint write on ``phase_result.success``.
+    """
+    registry = PipelineRegistry()
+    registry.register(_StubAgent("generator"))
+    # Proximity soft-fails (returns status=error without raising).
+    registry.register(_SoftFailAgent("proximity"))
+    for r in ("critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_StubAgent(r))
+    state = PipelineState(
+        run_id="t-soft-fail",
+        target_dim="x",
+        gen_tag="gen2",
+        run_dir=tmp_path,
+    )
+    asyncio.run(Pipeline(state, registry).arun())
+
+    ck_dir = tmp_path / "checkpoints"
+    written_phases = {p.stem for p in ck_dir.glob("*.json")}
+
+    # proximity FAILED → no checkpoint, so a future resume re-runs it.
+    assert "proximity" not in written_phases, (
+        f"PR-CHECKPOINT-ON-FAILURE regression: proximity.json written "
+        f"despite soft-failure. Found checkpoints: {written_phases}"
+    )
+    # state.completed_phases must NOT list proximity either.
+    assert "proximity" not in state.completed_phases
+
+    # All phases that DID succeed must still be checkpointed.
+    expected_success = {"generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"}
+    assert written_phases >= expected_success
+
+
+def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
+    """PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — every role that
+    parses a JSON response (i.e. uses ``parse_structured_output`` or
+    ``response_schema``) must carry the PR-HANDOFF-SCHEMAS "FINAL
+    response must be ONLY the JSON object" gate in the **runtime
+    prompt**, not just somewhere in the source file.
+
+    Pre-fix smoke 17 phase_failed at meta_reviewer with
+    ``{'raw': 'Meta-review submitted. Densest batch yet (14 candidates,
+    9 pilot rows, 5 survivors)…'}`` — the LLM narrated completion
+    instead of emitting the META_REVIEW_SCHEMA JSON. 4 non-proximity
+    roles missed the enforcement language (critic / literature_review /
+    meta_reviewer / supervisor — proximity already fixed in
+    PR-PROXIMITY-JSON-ENFORCE). Generator is excluded — it writes the
+    seed via ``write_file`` and the orchestrator picks up the file from
+    disk; the sub-agent's response shape isn't parsed.
+
+    Codex MCP review of PR-ROLE-JSON-ENFORCE-EXTENSION caught that a
+    raw-source grep can be satisfied by comments/docstrings even after
+    the production prompt loses the gate. So this test instantiates
+    each agent with a stub manager, calls the prompt builder, and
+    asserts the RENDERED string carries the gate.
+    """
+    # Directly invoke each role's prompt-builder method (avoiding the
+    # full aexecute side-effect chain). Each role exposes one of
+    # ``_build_description`` or ``_build_task`` — we render the string
+    # and grep for the gate language. This avoids needing to set up
+    # full pipeline state for every role (survivors, reflections, etc.)
+    # while still asserting on the runtime-rendered prompt rather than
+    # raw source text.
+    import random
+
+    from plugins.seed_generation.agents.critic import Critic
+    from plugins.seed_generation.agents.evolver import Evolver
+    from plugins.seed_generation.agents.literature_review import LiteratureReview
+    from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
+    from plugins.seed_generation.agents.pilot import Pilot
+    from plugins.seed_generation.agents.proximity import Proximity
+    from plugins.seed_generation.agents.ranker import Ranker
+    from plugins.seed_generation.agents.supervisor import Supervisor
+    from plugins.seed_generation.picker import VoterBinding
+
+    state = PipelineState(run_id="t-prompt-gate", target_dim="broken_tool_use", gen_tag="gen2")
+
+    class _NoOp:
+        pass
+
+    voters = [
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="claude-cli"),
+    ]
+
+    def _critic_prompt() -> str:
+        agent = Critic(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate_id="c-0",
+            candidate_path="/dev/null",
+            target_dim="broken_tool_use",
+        )
+
+    def _evolver_prompt() -> str:
+        agent = Evolver(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate={"id": "c-0", "path": "/dev/null", "target_dim": "broken_tool_use"},
+            rewrite_section="prompt",
+            weaknesses=["w1"],
+            dim_means={},
+        )
+
+    def _literature_review_prompt() -> str:
+        agent = LiteratureReview(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(state, max_papers=1, queries_per_run=1)
+
+    def _meta_reviewer_prompt() -> str:
+        agent = MetaReviewer(manager=_NoOp())  # type: ignore[arg-type]
+        snapshot = {
+            "summary": "test",
+            "candidate_ids": ["c-0"],
+            "baseline_evidence_count": 0,
+            "baseline_evidence_for_target": 0,
+            "has_meta_review_snapshot": False,
+        }
+        return agent._build_description(state, snapshot)
+
+    def _pilot_prompt() -> str:
+        agent = Pilot(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate_id="c-0",
+            candidate_path="/dev/null",
+            target_dim="broken_tool_use",
+        )
+
+    def _proximity_prompt() -> str:
+        agent = Proximity(manager=_NoOp())  # type: ignore[arg-type]
+        state_with_cands = PipelineState(
+            run_id="t",
+            target_dim="x",
+            gen_tag="g",
+            candidates=[{"id": "c-0"}, {"id": "c-1"}],
+        )
+        return agent._build_description(state_with_cands, "- c-0\n- c-1")
+
+    def _ranker_prompt() -> str:
+        from plugins.seed_generation.tournament import MatchPlan
+
+        agent = Ranker(manager=_NoOp(), voters=voters, rng=random.Random(0))  # type: ignore[arg-type]
+        return agent._build_description(
+            match=MatchPlan(match_id="m0", a="c-0", b="c-1"),
+            voter=voters[0],
+            means_a={},
+            means_b={},
+        )
+
+    def _supervisor_prompt() -> str:
+        agent = Supervisor(manager=_NoOp())  # type: ignore[arg-type]
+        snapshot = {
+            "summary": "test",
+            "baseline_evidence_count": 0,
+            "baseline_evidence_for_target": 0,
+            "has_meta_review_snapshot": False,
+        }
+        return agent._build_description(state, snapshot)
+
+    builders = [
+        ("critic", _critic_prompt),
+        ("evolver", _evolver_prompt),
+        ("literature_review", _literature_review_prompt),
+        ("meta_reviewer", _meta_reviewer_prompt),
+        ("pilot", _pilot_prompt),
+        ("proximity", _proximity_prompt),
+        ("ranker", _ranker_prompt),
+        ("supervisor", _supervisor_prompt),
+    ]
+    for role, build in builders:
+        prompt = build()
+        assert prompt, f"{role}: prompt builder returned empty string"
+        assert "FINAL response must be ONLY the JSON object" in prompt, (
+            f"{role} runtime prompt is missing the PR-HANDOFF-SCHEMAS enforcement "
+            f"language. The source file may have the language only in comments — "
+            f"that doesn't count. Add the gate to the actual description string."
+        )
+        assert "Start with `{`" in prompt and "end with `}`" in prompt, (
+            f"{role} runtime prompt has the FINAL response language but not the "
+            f"bracket-pair markers (`Start with `{{` and end with `}}``)."
+        )

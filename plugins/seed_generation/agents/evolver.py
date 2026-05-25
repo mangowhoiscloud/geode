@@ -302,6 +302,7 @@ class Evolver(BaseSeedAgent):
                         "gen_tag": state.gen_tag,
                     },
                     agent=_EVOLVER_AGENT_NAME,
+                    model=self.model,
                     source=self.adapter_source,
                     # PR-JSON-WIRE (2026-05-25) — force evolve JSON shape.
                     response_schema=EVOLVE_SCHEMA,
@@ -377,7 +378,22 @@ class Evolver(BaseSeedAgent):
             "Your FINAL response must be ONLY the JSON object matching the "
             "EVOLVE_SCHEMA (parent_id, evolved_id, evolved_path, "
             "rewrite_section, verdict, notes). No prose summary, no markdown "
-            "change-log, no preamble. Start with `{` and end with `}`."
+            "change-log, no preamble. Start with `{` and end with `}`.\n\n"
+            # PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — smoke 17
+            # evolver phase_failed with 5/5 sub-agents either empty
+            # (``output: ""``, ``termination_reason=natural``) or
+            # emitting "The evolution was already completed in this
+            # session. The evolved file exists at the target path.
+            # Returning the final structured output:" *without* the
+            # JSON. The LLM treated the ``write_file`` tool call as the
+            # task terminus and exited its loop without emitting the
+            # required object. Explicit reminder that file write is
+            # NOT the final step — JSON object IS.
+            "Even after you've successfully called ``write_file`` and the "
+            "evolved file exists on disk, the orchestrator still needs the "
+            "JSON object as your VERY LAST assistant message. The file "
+            "write is a side effect; the JSON object is the contract. Do "
+            "not exit your loop until the JSON object has been emitted."
         )
         weaknesses_list = [str(w) for w in weaknesses]
         # PR-HANDOFF-SCHEMAS — typed handoff. Optional fields elided when

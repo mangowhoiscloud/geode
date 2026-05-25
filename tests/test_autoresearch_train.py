@@ -20,7 +20,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from autoresearch import train as auto_train
 from autoresearch.train import (
     AUXILIARY_DIMS,
     AXIS_TIERS,
@@ -43,6 +42,8 @@ from autoresearch.train import (
     compute_missing_dims,
     run_audit,
 )
+
+from autoresearch import train as auto_train
 
 
 def test_build_audit_command_uses_current_geode_audit_flags() -> None:
@@ -408,7 +409,6 @@ def test_real_mode_invokes_subprocess_with_override_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", tmp_path / "state" / "audit_logs")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     captured: dict[str, Any] = {}
@@ -445,7 +445,6 @@ def test_real_mode_parses_dim_stderr_when_emitted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", tmp_path / "state" / "audit_logs")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -473,7 +472,6 @@ def test_real_mode_raises_when_summary_json_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", tmp_path / "state" / "audit_logs")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -1795,7 +1793,6 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     state_dir = tmp_path / "state"
     monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
     monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
     monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
     # No baseline file → baseline_decision payload reflects the empty case.
     monkeypatch.setenv("AUTORESEARCH_VERDICT", "pending")
@@ -1933,7 +1930,6 @@ def test_run_audit_subprocess_timeout_emits_event(
     # State-dir redirects so wrapper_override write doesn't touch the repo.
     state_dir = tmp_path / "state"
     monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
-    monkeypatch.setattr(auto_train, "AUDIT_OUT_DIR", state_dir / "audit_logs")
 
     def _raise_timeout(*_args: object, **kwargs: object) -> object:
         raise subprocess.TimeoutExpired(cmd=["geode", "audit"], timeout=420)

@@ -362,8 +362,9 @@ def test_run_once_loads_target_kind_policy_not_wrapper_sections(
     apply_mutation, which would write wrapper-prompt content into the
     wrong SoT for non-prompt target_kinds. Pin that run_once now
     loads the correct policy via ``load_policy(mutation.target_kind)``."""
-    from autoresearch import train as _train
     from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    from autoresearch import train as _train
 
     # Redirect tool_policy SoT to a tmp path so the test never touches
     # ~/.geode/. Pre-populate with one entry to confirm load_policy is
@@ -457,8 +458,9 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
     """Pin that the prompt branch still routes through
     autoresearch.train.write_wrapper_prompt_sections — schema
     enforcement (single-paragraph 600-char cap) must survive PR-6."""
-    from autoresearch import train as _train
     from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    from autoresearch import train as _train
 
     written: list[dict[str, str]] = []
     monkeypatch.setattr(_train, "write_wrapper_prompt_sections", lambda s: written.append(dict(s)))

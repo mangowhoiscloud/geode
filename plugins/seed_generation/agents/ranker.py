@@ -284,6 +284,19 @@ class Ranker(BaseSeedAgent):
                     },
                     agent=f"seed_ranker_voter_{voter.provider}",
                     source=picker_source_to_adapter_source(voter.source),
+                    # PR-VOTER-PROVIDER-WIRE (2026-05-25) — per-voter
+                    # model override. Pre-fix SubTask only carried
+                    # ``source``; ``worker_model`` fell back to the
+                    # parent's ``settings.model`` so the resolved
+                    # adapter ignored the voter's binding (smoke 17
+                    # RESUME: claude-cli voter dispatched via codex-cli
+                    # because ``_resolve_provider(settings.model)``
+                    # returned the parent's provider, not the voter's).
+                    # Now ``task.model = voter.model`` wins in
+                    # ``SubAgentManager._build_request``, so
+                    # ``(provider, source)`` together pick the right
+                    # adapter via ``resolve_for``.
+                    model=voter.model,
                     # PR-JSON-WIRE (2026-05-25) — force vote JSON shape.
                     response_schema=VOTE_SCHEMA,
                 )

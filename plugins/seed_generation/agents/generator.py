@@ -255,6 +255,7 @@ class Generator(BaseSeedAgent):
                         "pool_path_in": pool_path,
                     },
                     agent=_GENERATOR_AGENT_NAME,
+                    model=self.model,
                     source=self.adapter_source,
                 )
             )

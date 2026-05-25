@@ -1,7 +1,6 @@
 ---
 name: seed_ranker
 role: Petri seed candidate Ranker (Elo tournament orchestrator)
-model: claude-sonnet-4-6
 toolkit: seed_ranker
 ---
 

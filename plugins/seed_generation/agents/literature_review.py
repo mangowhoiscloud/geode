@@ -239,7 +239,17 @@ class LiteratureReview(BaseSeedAgent):
             "analyse the abstract against target_dim, (4) synthesise into "
             "a single ``articles_with_reasoning`` markdown block. Return "
             "JSON with keys ``articles_with_reasoning`` (str) and "
-            "``snapshots`` (dict[arxiv_id, snapshot_path])."
+            "``snapshots`` (dict[arxiv_id, snapshot_path]).\n\n"
+            # PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — even though
+            # the orchestrator gracefully degrades on JSON parse failure
+            # (Loop 3 is opt-in evidence, not a hard prerequisite), the
+            # enforcement language eliminates the failure path entirely
+            # so downstream Generator / Critic actually receive the
+            # evidence block when ``max_papers >= 1``.
+            "Your FINAL response must be ONLY the JSON object with the "
+            "two required keys (`articles_with_reasoning`, `snapshots`). "
+            "No prose summary, no markdown bullets, no preamble. "
+            "Start with `{` and end with `}`."
         )
 
 

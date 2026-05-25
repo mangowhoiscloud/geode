@@ -180,7 +180,7 @@ site/tsconfig.tsbuildinfo
 !site/public/**/*.svg
 !site/public/**/*.ico
 
-# autoresearch outer-loop runtime artifact (results.tsv, audit_logs/, failure_log)
+# autoresearch outer-loop runtime artifact (results.tsv, failure_log)
 autoresearch/state/*
 !autoresearch/state/.gitkeep
 # G5b.fix1 (2026-05-20) — mutation audit ledger is the git-as-optimiser SoT;

@@ -262,6 +262,22 @@ class SubTask:
     args: dict[str, Any] = field(default_factory=dict)
     agent: str | None = None  # Explicit agent override
     source: str = ""  # adapter source; empty falls back to "payg"
+    # PR-VOTER-PROVIDER-WIRE (2026-05-25) — per-task model override.
+    # Pre-fix every SubTask inherited ``worker_model = settings.model``
+    # (or the AgentDefinition's model if ``agent_ctx`` resolved). That
+    # silently mis-routed callers that needed a per-call binding —
+    # e.g. ranker.py:285 spawns one SubTask per voter, each carrying
+    # the voter's distinct ``(model, provider, source)`` triple, but
+    # the dispatch path only honored ``source``; ``worker_model`` fell
+    # back to the parent's default → ``_resolve_provider(worker_model)``
+    # returned the wrong provider key → ``resolve_for(provider, source)``
+    # picked the wrong adapter (smoke 17 RESUME evidence: voter binding
+    # ``claude-cli`` voter dispatched via ``codex-cli`` subprocess
+    # adapter, because the parent's default model resolved to
+    # ``openai-codex`` provider via ``_PROVIDER_NORMALIZATION``).
+    # Empty preserves back-compat: callers that don't need per-task
+    # override (the common case) still inherit settings/agent_ctx.
+    model: str = ""
     # PR-JSON-WIRE (2026-05-25) — per-task JSON Schema that constrains
     # the spawned LLM call's response to the role's expected shape.
     # Threads through ``WorkerRequest.response_schema`` →
@@ -713,6 +729,13 @@ class SubAgentManager:
             # AgentDefinition model override wins over settings default.
             if agent_ctx.get("model"):
                 worker_model = str(agent_ctx["model"])
+        # PR-VOTER-PROVIDER-WIRE (2026-05-25) — per-task model override
+        # is the strongest signal: it comes from the live binding the
+        # caller already resolved (ranker picker → voter.model). Wins
+        # over both ``settings.model`` and AgentDefinition's model.
+        # Empty string preserves legacy behaviour (settings/agent_ctx).
+        if task.model:
+            worker_model = task.model
 
         # Sub-agent lineage (2026-05-21) — capture the calling parent
         # loop's session_id from the ContextVar bound in

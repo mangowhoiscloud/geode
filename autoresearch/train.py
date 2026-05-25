@@ -551,7 +551,6 @@ def write_wrapper_prompt_sections(sections: dict[str, str]) -> None:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = REPO_ROOT / "autoresearch" / "state"
 RUN_LOG = STATE_DIR / "run.log"
-AUDIT_OUT_DIR = STATE_DIR / "audit_logs"
 
 # G5a — file-backed SoT for the wrapper prompt sections, shared between
 # autoresearch (writer when the G5b runner promotes a mutation),
@@ -762,7 +761,6 @@ def run_audit(
     skipped when either is empty.
     """
     started = time.time()
-    AUDIT_OUT_DIR.mkdir(parents=True, exist_ok=True)
     override_path = _dump_wrapper_override()
     _emit_journal(
         session_id,

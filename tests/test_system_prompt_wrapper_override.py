@@ -172,7 +172,6 @@ def test_sot_path_parity_with_autoresearch() -> None:
     intact, so the parity must be pinned by a test instead.
     """
     from autoresearch import train as auto_train
-
     from core.agent import system_prompt
 
     assert auto_train.WRAPPER_SECTIONS_SOT_PATH == system_prompt._WRAPPER_SECTIONS_SOT_PATH

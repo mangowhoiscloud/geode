@@ -167,6 +167,7 @@ class MetaReviewer(BaseSeedAgent):
                 "snapshot": snapshot,
             },
             agent=_META_REVIEWER_AGENT_NAME,
+            model=self.model,
             source=self.adapter_source,
             # PR-JSON-WIRE (2026-05-25) — force meta_review JSON shape.
             response_schema=META_REVIEW_SCHEMA,
@@ -218,7 +219,23 @@ class MetaReviewer(BaseSeedAgent):
             f"{snapshot['candidate_ids'][:5]!r} (showing first 5 of "
             f"{len(snapshot['candidate_ids'])}). Use `read_document` to "
             "inspect specific candidates as needed; do NOT request the "
-            f"entire pool body.{debate_block}"
+            f"entire pool body.{debate_block}\n\n"
+            # PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — smoke 17
+            # meta_reviewer phase_failed with ``{'raw': 'Meta-review
+            # submitted. Densest batch yet (14 candidates, 9 pilot rows,
+            # 5 survivors) but 0/5 evolution yield…'}`` — the LLM
+            # narrated completion instead of emitting the JSON object.
+            # Mirrors PR-HANDOFF-SCHEMAS / PR-PROXIMITY-JSON-ENFORCE.
+            # The gate lands AT THE END of the description (after the
+            # optional debate_block context) so "Start with `{` and end
+            # with `}`" is the last thing the model reads, maximising
+            # adherence. The companion ``debate_block_under_500_chars``
+            # test was relaxed to measure only the debate fragment.
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "META_REVIEW_SCHEMA (`coverage`, `underrepresented_dims`, "
+            "`overrepresented_dims`, `next_gen_priors`, `elo_distribution`, "
+            "`evolution_yield`, `session_summary`). No prose summary, no "
+            "markdown bullets, no preamble. Start with `{` and end with `}`."
         )
 
 

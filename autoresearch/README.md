@@ -106,7 +106,7 @@ autoresearch/
 ├── program.md     — agent instructions (humans modify)
 ├── README.md      — this file
 └── state/         — runtime artefacts (gitignored: results.tsv,
-                     results.jsonl, baseline.json, audit_logs/, …)
+                     results.jsonl, baseline.json, …)
 ```
 
 ## Cross-loop handoff (P0b)

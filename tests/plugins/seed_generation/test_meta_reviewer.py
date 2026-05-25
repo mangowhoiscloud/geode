@@ -337,13 +337,18 @@ def test_meta_reviewer_debate_block_under_500_chars() -> None:
     manager = _StubManager()
     asyncio.run(MetaReviewer(manager=manager).aexecute(state))  # type: ignore[arg-type]
     task = manager.received_tasks[0]
-    # Locate the debate block — everything between the first "Debate (Loop 2)"
-    # and the next sentence boundary. It must be small (the LLM should call
-    # read_document for the sidecar bodies if it wants the actual text).
+    # Locate the debate block — measured from ``Debate (Loop 2)`` to the
+    # JSON-enforce gate (which now ends the description per
+    # PR-ROLE-JSON-ENFORCE-EXTENSION 2026-05-26; pre-fix the debate
+    # block was the final fragment). It must be small (the LLM should
+    # call read_document for the sidecar bodies if it wants the actual
+    # text).
     desc = task.description
     debate_start = desc.find("Debate (Loop 2)")
     assert debate_start != -1
-    debate_block_len = len(desc) - debate_start
+    gate_start = desc.find("FINAL response must be ONLY", debate_start)
+    debate_block_end = gate_start if gate_start != -1 else len(desc)
+    debate_block_len = debate_block_end - debate_start
     assert debate_block_len < 500, (
         f"debate block grew to {debate_block_len} chars — aggregate must stay terse"
     )
