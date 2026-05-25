@@ -48,6 +48,29 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-ROLE-JSON-ENFORCE-EXTENSION — extend PR-HANDOFF-SCHEMAS to the
+  4 remaining JSON-parsing roles + strengthen evolver.** Smoke 17
+  terminal state surfaced gaps beyond PR-PROXIMITY-JSON-ENFORCE: the
+  meta_reviewer phase_failed with `{'raw': 'Meta-review submitted.
+  Densest batch yet (14 candidates, 9 pilot rows, 5 survivors) but 0/5
+  evolution yield…'}` — narrated completion, no JSON. Audit of
+  `_build_description` across all role agents found 4 JSON-parsing
+  roles (critic / literature_review / meta_reviewer / supervisor)
+  missing the "FINAL response must be ONLY the JSON object … Start
+  with `{` and end with `}`" gate. Generator excluded (writes seed
+  via `write_file`, no JSON parse). Evolver already had the gate but
+  smoke 17 showed 5/5 sub-agents exited with `termination_reason=natural`
+  + empty output, treating the `write_file` tool call as the loop
+  terminus; added an explicit "Even after you've successfully called
+  `write_file` and the evolved file exists on disk, the orchestrator
+  still needs the JSON object as your VERY LAST assistant message"
+  reminder. Pinned by
+  `test_all_json_based_role_prompts_carry_final_response_enforcement`
+  (renders each role's prompt at runtime via the public builder
+  methods, asserts the gate text + bracket-pair markers — robust
+  against the "comment satisfies grep" weakness Codex MCP caught in
+  the initial static-source-grep approach).
+
 - **PR-PROXIMITY-JSON-ENFORCE — proximity prompt mirrors the
   PR-HANDOFF-SCHEMAS JSON-only enforcement.** `plugins/seed_generation/
   agents/proximity.py:_build_description` now appends

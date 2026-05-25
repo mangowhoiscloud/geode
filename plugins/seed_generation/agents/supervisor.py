@@ -213,7 +213,17 @@ class Supervisor(BaseSeedAgent):
             "(keys: generation, critique, evolution), and "
             "`session_summary` (<= 200 tokens). Read upstream "
             "snapshots via `read_document` if you need the raw rows; "
-            "the description above only gives counts."
+            "the description above only gives counts.\n\n"
+            # PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — mirror the
+            # PR-HANDOFF-SCHEMAS gate so the LLM can't slip prose past
+            # the parser. Supervisor wasn't observed failing in smoke
+            # 17 because the role isn't registered in default test
+            # fixtures, but the same gap pattern applies once the role
+            # is enabled in production.
+            "Your FINAL response must be ONLY the JSON object with fields "
+            "`research_goal_analysis`, `phase_guidance` (keys: generation, "
+            "critique, evolution), `session_summary`. No prose summary, no "
+            "markdown bullets, no preamble. Start with `{` and end with `}`."
         )
 
 

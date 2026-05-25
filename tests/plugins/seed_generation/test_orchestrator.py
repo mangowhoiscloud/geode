@@ -506,3 +506,151 @@ def test_phase_failed_soft_failure_does_not_write_checkpoint(tmp_path) -> None:
     # All phases that DID succeed must still be checkpointed.
     expected_success = {"generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"}
     assert written_phases >= expected_success
+
+
+def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
+    """PR-ROLE-JSON-ENFORCE-EXTENSION (2026-05-26) — every role that
+    parses a JSON response (i.e. uses ``parse_structured_output`` or
+    ``response_schema``) must carry the PR-HANDOFF-SCHEMAS "FINAL
+    response must be ONLY the JSON object" gate in the **runtime
+    prompt**, not just somewhere in the source file.
+
+    Pre-fix smoke 17 phase_failed at meta_reviewer with
+    ``{'raw': 'Meta-review submitted. Densest batch yet (14 candidates,
+    9 pilot rows, 5 survivors)…'}`` — the LLM narrated completion
+    instead of emitting the META_REVIEW_SCHEMA JSON. 4 non-proximity
+    roles missed the enforcement language (critic / literature_review /
+    meta_reviewer / supervisor — proximity already fixed in
+    PR-PROXIMITY-JSON-ENFORCE). Generator is excluded — it writes the
+    seed via ``write_file`` and the orchestrator picks up the file from
+    disk; the sub-agent's response shape isn't parsed.
+
+    Codex MCP review of PR-ROLE-JSON-ENFORCE-EXTENSION caught that a
+    raw-source grep can be satisfied by comments/docstrings even after
+    the production prompt loses the gate. So this test instantiates
+    each agent with a stub manager, calls the prompt builder, and
+    asserts the RENDERED string carries the gate.
+    """
+    # Directly invoke each role's prompt-builder method (avoiding the
+    # full aexecute side-effect chain). Each role exposes one of
+    # ``_build_description`` or ``_build_task`` — we render the string
+    # and grep for the gate language. This avoids needing to set up
+    # full pipeline state for every role (survivors, reflections, etc.)
+    # while still asserting on the runtime-rendered prompt rather than
+    # raw source text.
+    import random
+
+    from plugins.seed_generation.agents.critic import Critic
+    from plugins.seed_generation.agents.evolver import Evolver
+    from plugins.seed_generation.agents.literature_review import LiteratureReview
+    from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
+    from plugins.seed_generation.agents.pilot import Pilot
+    from plugins.seed_generation.agents.proximity import Proximity
+    from plugins.seed_generation.agents.ranker import Ranker
+    from plugins.seed_generation.agents.supervisor import Supervisor
+    from plugins.seed_generation.picker import VoterBinding
+
+    state = PipelineState(run_id="t-prompt-gate", target_dim="broken_tool_use", gen_tag="gen2")
+
+    class _NoOp:
+        pass
+
+    voters = [
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
+        VoterBinding(model="claude-haiku-4-5", provider="anthropic", source="claude-cli"),
+    ]
+
+    def _critic_prompt() -> str:
+        agent = Critic(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate_id="c-0",
+            candidate_path="/dev/null",
+            target_dim="broken_tool_use",
+        )
+
+    def _evolver_prompt() -> str:
+        agent = Evolver(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate={"id": "c-0", "path": "/dev/null", "target_dim": "broken_tool_use"},
+            rewrite_section="prompt",
+            weaknesses=["w1"],
+            dim_means={},
+        )
+
+    def _literature_review_prompt() -> str:
+        agent = LiteratureReview(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(state, max_papers=1, queries_per_run=1)
+
+    def _meta_reviewer_prompt() -> str:
+        agent = MetaReviewer(manager=_NoOp())  # type: ignore[arg-type]
+        snapshot = {
+            "summary": "test",
+            "candidate_ids": ["c-0"],
+            "baseline_evidence_count": 0,
+            "baseline_evidence_for_target": 0,
+            "has_meta_review_snapshot": False,
+        }
+        return agent._build_description(state, snapshot)
+
+    def _pilot_prompt() -> str:
+        agent = Pilot(manager=_NoOp())  # type: ignore[arg-type]
+        return agent._build_description(
+            candidate_id="c-0",
+            candidate_path="/dev/null",
+            target_dim="broken_tool_use",
+        )
+
+    def _proximity_prompt() -> str:
+        agent = Proximity(manager=_NoOp())  # type: ignore[arg-type]
+        state_with_cands = PipelineState(
+            run_id="t",
+            target_dim="x",
+            gen_tag="g",
+            candidates=[{"id": "c-0"}, {"id": "c-1"}],
+        )
+        return agent._build_description(state_with_cands, "- c-0\n- c-1")
+
+    def _ranker_prompt() -> str:
+        from plugins.seed_generation.tournament import MatchPlan
+
+        agent = Ranker(manager=_NoOp(), voters=voters, rng=random.Random(0))  # type: ignore[arg-type]
+        return agent._build_description(
+            match=MatchPlan(match_id="m0", a="c-0", b="c-1"),
+            voter=voters[0],
+            means_a={},
+            means_b={},
+        )
+
+    def _supervisor_prompt() -> str:
+        agent = Supervisor(manager=_NoOp())  # type: ignore[arg-type]
+        snapshot = {
+            "summary": "test",
+            "baseline_evidence_count": 0,
+            "baseline_evidence_for_target": 0,
+            "has_meta_review_snapshot": False,
+        }
+        return agent._build_description(state, snapshot)
+
+    builders = [
+        ("critic", _critic_prompt),
+        ("evolver", _evolver_prompt),
+        ("literature_review", _literature_review_prompt),
+        ("meta_reviewer", _meta_reviewer_prompt),
+        ("pilot", _pilot_prompt),
+        ("proximity", _proximity_prompt),
+        ("ranker", _ranker_prompt),
+        ("supervisor", _supervisor_prompt),
+    ]
+    for role, build in builders:
+        prompt = build()
+        assert prompt, f"{role}: prompt builder returned empty string"
+        assert "FINAL response must be ONLY the JSON object" in prompt, (
+            f"{role} runtime prompt is missing the PR-HANDOFF-SCHEMAS enforcement "
+            f"language. The source file may have the language only in comments — "
+            f"that doesn't count. Add the gate to the actual description string."
+        )
+        assert "Start with `{`" in prompt and "end with `}`" in prompt, (
+            f"{role} runtime prompt has the FINAL response language but not the "
+            f"bracket-pair markers (`Start with `{{` and end with `}}``)."
+        )
