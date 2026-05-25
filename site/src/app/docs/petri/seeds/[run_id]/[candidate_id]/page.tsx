@@ -314,7 +314,7 @@ function SeedDetail(props: DetailProps) {
             <tr>
               <th>parent_id</th>
               <td>
-                <a href={`./${seed.parent_id}/`}><code>{seed.parent_id}</code></a>
+                <a href={`./${seed.parent_id}`}><code>{seed.parent_id}</code></a>
               </td>
             </tr>
           )}
@@ -323,7 +323,7 @@ function SeedDetail(props: DetailProps) {
               <th>{t("진화 자식", "evolved children")}</th>
               <td>
                 {seed.evolved_children.map((c) => (
-                  <a key={c} href={`./${c}/`} className="mr-2"><code>{c}</code></a>
+                  <a key={c} href={`./${c}`} className="mr-2"><code>{c}</code></a>
                 ))}
               </td>
             </tr>

@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-DETAIL-LINK-FIX** — seed detail links now match
+  `next.config.ts: trailingSlash: false`. Four hrefs in
+  `site/src/app/docs/petri/seeds/page.tsx` and
+  `site/src/app/docs/petri/seeds/[run_id]/[candidate_id]/page.tsx`
+  ended with `/`, which the static export does not serve (HTTP
+  404 on `https://mangowhoiscloud.github.io/geode/docs/petri/
+  seeds/<run>/<id>/`). Dropped trailing slashes; the parent /
+  evolved-children cross-links inside the detail page now use
+  `./<id>` (browser resolves to `/docs/petri/seeds/<run>/<id>`
+  because the current URL has no trailing slash).
+
 ## [0.99.55] - 2026-05-25
 
 Bundles 3 PRs: PR-EVOLVER-JACCARD-OBS, PR-PETRI-BUNDLE-LANDING, PR-HANDOFF-SCHEMAS. Smoke-15-driven defence against tool-using sub-agents emitting prose instead of JSON, plus Petri bundle bridge UI and Jaccard threshold tune.
