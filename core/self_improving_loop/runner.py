@@ -1598,6 +1598,8 @@ class SelfImprovingLoopRunner:
                     append_archive_entry,
                 )
 
+                _archive_appended = 0
+                _archive_failed = 0
                 for idx, proposal in enumerate(proposals):
                     entry = ArchiveEntry(
                         mutation_id=proposal.mutation.mutation_id,
@@ -1609,16 +1611,21 @@ class SelfImprovingLoopRunner:
                     )
                     try:
                         append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)
+                        _archive_appended += 1
                     except OSError as exc:
+                        _archive_failed += 1
                         log.warning(
                             "self-improving-loop: archive append failed for sibling[%d] — %s",
                             idx,
                             exc,
                         )
+                # Codex MCP review WARN #4 — success log 가 실제 append 카운트
+                # 와 일치해야 함 (silent partial failure 회피).
                 log.info(
-                    "self-improving-loop: group %s — %d archive entries appended (pareto_mode)",
+                    "self-improving-loop: group %s — pareto_mode archive: %d appended, %d failed",
                     group_id,
-                    len(proposals),
+                    _archive_appended,
+                    _archive_failed,
                 )
 
             # Top-1 by advantage

@@ -37,13 +37,25 @@ def test_baseline_archive_path_not_gitignored() -> None:
     """PR-G5b precedent — silent-ignored writer 방지.
 
     `git check-ignore` 로 BASELINE_ARCHIVE_PATH 가 ignored 면 FAIL.
+
+    Codex MCP WARN #6 tighten — git 부재 또는 non-repo 환경에서는 skip,
+    returncode 0 (ignored) 일 때만 negation 패턴 매치 검증, returncode 1
+    (not ignored) 이 명시적 pass, 다른 returncode 는 FileNotFoundError /
+    fail.
     """
+    import shutil
     import subprocess
 
     from core.paths import BASELINE_ARCHIVE_PATH
 
+    if shutil.which("git") is None:
+        pytest.skip("git binary not available in PATH")
+
     # Resolve to repo-relative path for git check-ignore
     repo_root = BASELINE_ARCHIVE_PATH.resolve().parents[2]
+    if not (repo_root / ".git").exists():
+        pytest.skip("not running inside a git checkout")
+
     rel_path = BASELINE_ARCHIVE_PATH.resolve().relative_to(repo_root)
     proc = subprocess.run(  # noqa: S603  # nosec B603
         ["git", "check-ignore", "-v", str(rel_path)],  # noqa: S607  # nosec B607
@@ -52,11 +64,15 @@ def test_baseline_archive_path_not_gitignored() -> None:
         text=True,
         check=False,
     )
-    # check-ignore returns 0 when ignored, 1 when NOT ignored.
-    # Pattern that ends in ``!autoresearch/state/baseline_archive.jsonl`` is
-    # the negation we want (returns 0 but path is included).
+    # check-ignore exit codes:
+    # - 0: path is ignored (must be by a negation line to pass)
+    # - 1: path is NOT ignored (pass — but our case uses negation, not 1)
+    # - other: git error → fail loudly so we don't false-pass
+    assert proc.returncode in (0, 1), (
+        f"git check-ignore failed (rc={proc.returncode}): {proc.stderr!r}"
+    )
     if proc.returncode == 0:
-        # Ignored — but only if the matching pattern is NOT a negation
+        # Pattern line must be the negation rule we added (PR-15)
         last_line = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
         assert last_line.split("\t")[0].endswith("!autoresearch/state/baseline_archive.jsonl"), (
             f"baseline_archive.jsonl is gitignored without negation: {last_line!r}"
