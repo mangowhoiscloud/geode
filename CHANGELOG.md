@@ -51,19 +51,22 @@ functional change.
 - **PR-16 C.4 credit_assignment module** —
   `core/self_improving_loop/credit_assignment.py` adds two pure
   functions for selection-layer observability:
-  `compute_credit_assignment(mutation, group_advantage)` partitions a
-  single mutation's `group_advantage` across its `expected_dim` keys
-  by magnitude-weighted share (`credit[d] = group_advantage *
-  |expected_dim[d]| / sum(|expected_dim|)`), and
+  `compute_credit_assignment(mutation, group_advantage)` applies a
+  **heuristic magnitude-weighted partition** of a single mutation's
+  `group_advantage` across its `expected_dim` keys (`credit[d] =
+  group_advantage * |expected_dim[d]| / sum(|expected_dim|)`), and
   `aggregate_credit_history(records)` sums these contributions across
   an iterable of `ApplyRecord` rows (e.g. PR-12
   `read_recent_applies` output) for a per-dim cumulative credit
   ranking. Records with `group_advantage=None` (legacy single-mutation
   mode) or empty `expected_dim` are skipped silently. Sign convention:
   credit magnitude tracks `group_advantage` sign; intent direction
-  stays encoded in the original `expected_dim` sign. Frontier:
-  Quality-Diversity behavior-characterization mapping + DAPO/GRPO
-  advantage decomposition.
+  stays encoded in the original `expected_dim` sign. Caller (CLI /
+  operator dashboard surfacing the rank) is deferred to a follow-up
+  PR. Frontier: Quality-Diversity behavior-characterization mapping
+  (Mouret & Clune 2015); DAPO/GRPO justify the scalar
+  `group_advantage`, but the per-dim partition itself is a local
+  heuristic — not a direct DAPO/GRPO formula.
 
 ## [0.99.58] - 2026-05-25
 
