@@ -47,6 +47,34 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SEEDS-BUNDLE-VIEWER** — `docs/petri-bundle/seeds/index.html` ships
+  a self-contained viewer for the self-improving-loop seed-generation
+  runs published into the petri-bundle. Previously
+  `https://mangowhoiscloud.github.io/geode/petri-bundle/seeds/` returned
+  404 (GitHub Pages disallows directory browsing); only direct file URLs
+  like `/seeds/listing.json` or
+  `/seeds/<run_id>/state.json` worked. The new index fetches
+  `listing.json` at load, renders a dense run table (run_id / gen_tag /
+  target_dim / status / draft→survivors / evolved / iters / cost USD),
+  and lazily drills down per run into `state.json` + `survivors.json` +
+  `meta_review.json` — survivors with elo + candidate `.md` link, cost
+  rollup, meta-review session_summary, next-gen priors, evolution yield,
+  Elo distribution. Status is derived from the listing
+  (`survivors_count == 0` → fail, `evolved_count < survivors_count` →
+  partial, else ok). The viewer is a single static HTML file (no
+  build step, no Next.js dep) so it ships alongside the inspect-petri
+  eval-log viewer at `/petri-bundle/` and the pages.yml workflow that
+  already triggers on `docs/petri-bundle/**` deploys it without any new
+  CI wiring. Mockup source: `/tmp/geode-literature-mockup/seeds.html`
+  (v2 post-Slop-feedback dense-table design); adapted to the live
+  schema (no phase progress yet — that field doesn't exist in
+  `state.json`; no candidate titles yet — would require `.md`
+  frontmatter fetch). Once
+  [`docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`](../docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md)
+  Phase 2 ships its `LiteratureReview` agent the same viewer can be
+  extended with a literature column without schema churn.
+
 ### Fixed
 - **PR-ENV-WHITELIST-CODEX-BYPASS** — add
   `GEODE_CODEX_OAUTH_POLL_DISABLED` to
