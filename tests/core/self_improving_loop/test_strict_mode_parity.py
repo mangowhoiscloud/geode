@@ -24,12 +24,28 @@ from __future__ import annotations
 import inspect
 import re
 
-# 12 kind enumerated in autoresearch/train.py:838-873 — must stay in sync
+# 12 kind enumerated in autoresearch/train.py — must stay in sync
 # with that file's env-emit block.
+#
+# Override pattern is intentionally RHS-agnostic: matches
+# ``env["GEODE_<X>_OVERRIDE"] = …`` *regardless* of what is on the right
+# (str(Path), helper call, local variable). A future kind that swaps
+# ``GLOBAL_<X>_PATH`` for a different path expression must still pair
+# with STRICT — drift detection should not be subverted by a cosmetic
+# RHS rename.
 _TRAIN_PY_STRICT_ENV_PATTERN = re.compile(r'env\["GEODE_([A-Z_]+)_STRICT"\]\s*=\s*"1"')
-_TRAIN_PY_OVERRIDE_ENV_PATTERN = re.compile(
-    r'env\["GEODE_([A-Z_]+)_OVERRIDE"\]\s*=\s*str\(GLOBAL_\1_PATH\)'
-)
+_TRAIN_PY_OVERRIDE_ENV_PATTERN = re.compile(r'env\["GEODE_([A-Z_]+)_OVERRIDE"\]\s*=')
+
+# Overrides that are NOT mutation-surface SoTs (do not flow through
+# resolve_sot). These have their own consumers and strict-mode contracts.
+#
+# - ``WRAPPER``: ``GEODE_WRAPPER_OVERRIDE`` is consumed by
+#   ``core/agent/system_prompt.WRAPPER_OVERRIDE_HOOK_READY`` to override
+#   the wrapper system prompt during the audit subprocess. It is gated
+#   by the hook-ready flag in train.py:791-794, which is the strict-
+#   equivalent (audit raises if the hook is unwired) — no separate
+#   STRICT env is needed because there is no graceful fall-through.
+_NON_MUTATION_SURFACE_OVERRIDES: frozenset[str] = frozenset({"WRAPPER"})
 
 
 def _read_train_py_env_block() -> str:
@@ -44,10 +60,27 @@ def test_train_py_overrides_paired_with_strict() -> None:
     source = _read_train_py_env_block()
     overrides = set(_TRAIN_PY_OVERRIDE_ENV_PATTERN.findall(source))
     stricts = set(_TRAIN_PY_STRICT_ENV_PATTERN.findall(source))
-    missing_strict = overrides - stricts
+    mutation_surface_overrides = overrides - _NON_MUTATION_SURFACE_OVERRIDES
+    missing_strict = mutation_surface_overrides - stricts
     assert not missing_strict, (
         f"Override-without-STRICT drift: {missing_strict} — audit subprocess "
-        "would silent-fallback. Add GEODE_<X>_STRICT=1 alongside the override."
+        "would silent-fallback. Add GEODE_<X>_STRICT=1 alongside the override, "
+        "or document the override as non-mutation-surface in "
+        "_NON_MUTATION_SURFACE_OVERRIDES."
+    )
+
+
+def test_override_pattern_catches_non_global_path_rhs() -> None:
+    """Regression — pairing invariant must not be subverted by a future
+    kind that uses a different RHS shape (helper call, Path(...) literal,
+    local variable). Synthetic source with an override using a non-
+    ``GLOBAL_<X>_PATH`` RHS must still register as an override."""
+    synthetic = 'env["GEODE_FUTURE_KIND_OVERRIDE"] = some_helper(path)\n'
+    matches = set(_TRAIN_PY_OVERRIDE_ENV_PATTERN.findall(synthetic))
+    assert "FUTURE_KIND" in matches, (
+        "Override pattern is too narrow — a future kind with a non-"
+        "GLOBAL_<X>_PATH RHS would evade pairing detection while "
+        "the >=12 strict count floor keeps passing."
     )
 
 
