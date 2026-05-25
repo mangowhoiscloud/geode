@@ -47,6 +47,10 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.62] - 2026-05-26
+
+Petri × autoresearch leak resolution sprint: 3 PR (L7/L3/L8) closing fitness-surface / baseline-ratchet leaks identified by the full-cycle GAP audit (PR-L9 already shipped in v0.99.61). L7 pins the wrapper-sections fallback ↔ writer-schema dual-SoT drift; L3 codifies the seed-gen-only role split via an anti-elevation invariant (Codex MCP review caught + pivoted from writer-side filter that would have broken critic.py's initial-gen handoff); L8 replaces the unconditional fresh-baseline auto-promote with a 2-clause sanity gate (completeness + fitness floor).
+
 ### Changed
 - **PR-L8 bootstrap baseline ratchet** —
   ``autoresearch/train.py:_should_promote`` no longer auto-promotes any
