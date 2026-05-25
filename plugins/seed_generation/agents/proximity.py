@@ -212,6 +212,18 @@ class Proximity(BaseSeedAgent):
             "(would produce essentially the same audit transcript). Keep ONE "
             "candidate per high-similarity group OUT of the high list — the "
             "orchestrator drops every entry marked high.\n\n"
+            # PR-PROXIMITY-JSON-ENFORCE (2026-05-25) — mirror the
+            # PR-HANDOFF-SCHEMAS pattern from pilot/evolver/critic.
+            # Pre-fix smoke 17 hit a phase_failed because the LLM
+            # returned a narrative ("Analyzing the 14 candidates by
+            # reading their excerpts — grouping by mechanism…") with
+            # no JSON object at all. Now the prompt is explicit about
+            # JSON-only response shape so the model can't slip a prose
+            # preamble past the parser.
+            "Your FINAL response must be ONLY the JSON object matching the "
+            "PROXIMITY_SCHEMA (similarity_clusters, removed_duplicates). No "
+            "prose summary, no markdown bullets, no preamble. Start with `{` "
+            "and end with `}`.\n\n"
             f"Candidates:\n{candidate_summary}"
         )
 

@@ -48,6 +48,19 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-PROXIMITY-JSON-ENFORCE — proximity prompt mirrors the
+  PR-HANDOFF-SCHEMAS JSON-only enforcement.** `plugins/seed_generation/
+  agents/proximity.py:_build_description` now appends
+  ``Your FINAL response must be ONLY the JSON object matching the
+  PROXIMITY_SCHEMA … Start with `{` and end with `}`.`` Pre-fix
+  smoke 17 hit a `phase_failed` because the LLM emitted a narrative
+  preamble (``"Analyzing the 14 candidates by reading their excerpts
+  — grouping by mechanism…"``) and the parser dropped the
+  malformed payload. The other PR-HANDOFF-SCHEMAS-aligned roles
+  (pilot / critic / evolver) already had this gating language;
+  proximity was the one outlier. Pinned by a new test in
+  `tests/plugins/seed_generation/test_proximity.py`.
+
 - **PR-CHECKPOINT-ON-FAILURE — phase_failed phases no longer write a
   checkpoint.** `plugins/seed_generation/orchestrator.py:Pipeline.arun`
   now gates the post-phase `_record_checkpoint` call on

@@ -228,3 +228,46 @@ class TestSelectRemovals:
 def test_high_degree_constant_pinned() -> None:
     """Pinned so any future relaxation shows up in review."""
     assert HIGH_SIMILARITY_DEGREE == "high"
+
+
+def test_proximity_prompt_enforces_json_only_response() -> None:
+    """PR-PROXIMITY-JSON-ENFORCE (2026-05-25) — proximity description
+    must carry the JSON-only enforcement language from PR-HANDOFF-SCHEMAS.
+
+    Pre-fix smoke 17 hit ``phase_failed`` because the LLM emitted a
+    narrative (``'Analyzing the 14 candidates by reading their
+    excerpts — grouping by mechanism…'``) instead of the JSON object
+    matching PROXIMITY_SCHEMA. The prompt lacked the "FINAL response
+    must be ONLY the JSON object" + "Start with `{` and end with `}`"
+    language that pilot/critic/evolver use to gate the model from
+    slipping a prose preamble past the parser.
+    """
+    from plugins.seed_generation.agents.proximity import Proximity
+    from plugins.seed_generation.orchestrator import PipelineState
+
+    state = PipelineState(
+        run_id="t-prox-prompt",
+        target_dim="broken_tool_use",
+        gen_tag="gen2",
+        candidates=[
+            {"id": "c0", "path": ""},
+            {"id": "c1", "path": ""},
+        ],
+    )
+
+    class _NoOpManager:
+        pass
+
+    proximity = Proximity(manager=_NoOpManager())  # type: ignore[arg-type]
+    task = proximity._build_task(state)
+    desc = task.description
+
+    # Pin the JSON-only enforcement language — mirrors pilot/evolver/critic.
+    assert "FINAL response must be ONLY the JSON object" in desc, (
+        "PR-PROXIMITY-JSON-ENFORCE regression — description must instruct "
+        "the model to emit ONLY JSON, not a prose explanation."
+    )
+    assert "PROXIMITY_SCHEMA" in desc
+    assert "Start with `{` and end with `}`" in desc, (
+        "Missing the bracket marker that catches preamble prose."
+    )
