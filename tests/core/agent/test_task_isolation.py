@@ -14,10 +14,10 @@ from pathlib import Path
 from core.agent.task_isolation import get_task_isolated_cwd, set_task_isolated_cwd
 
 # Test fixtures use ``/tmp/...`` literals only as string-equality
-# probes — nothing is actually created on disk. ``# noqa: S108`` on
-# each site keeps ruff's filesystem-security lint quiet without
-# pulling in a tmp_path fixture that's overkill for the ContextVar
-# round-trip checks here.
+# probes — nothing is actually created on disk. The per-line
+# ``noqa`` suppression below keeps ruff's filesystem-security lint
+# (S108) quiet without pulling in a tmp_path fixture that's overkill
+# for the ContextVar round-trip checks here.
 _FAKE_CWD_A = "/tmp/some-task-cwd"  # noqa: S108 — ContextVar value probe, not a real dir
 _FAKE_CWD_B = "/tmp/another-task-cwd"  # noqa: S108
 _FAKE_CWD_C = "/tmp/before-clear"  # noqa: S108
