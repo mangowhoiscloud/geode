@@ -48,105 +48,26 @@ functional change.
 ## [Unreleased]
 
 ### Added
-- **PR-AR-L6 attribution writer standalone graceful** —
-  Pre-PR-AR-L6 ``autoresearch/train.py``'s W2 attribution block was
-  gated on three envs (``GEODE_SIL_MUTATION_ID`` /
-  ``GEODE_SIL_AUDIT_RUN_ID`` / ``GEODE_SIL_EXPECTED_DIM``) — operator
-  standalone runs (``uv run python autoresearch/train.py``,
-  ``--promote``) had none of those, so the attribution row was
-  silently skipped. Downstream consumers (a future source-aware
-  ``compute_credit_assignment`` variant, operator analytics) had no
-  ledger visibility into manual runs.
-  New ``source`` field on ``AttributionRecord`` /
-  ``compute_attribution`` / ``write_attribution`` distinguishes
-  mutator-driven (``"mutator"``, default) from manual (``"manual"``)
-  rows. Standalone runs synthesize ``mutation_id =
-  manual-{commit[:8]}-{audit_uuid[:8]}`` + ``audit_run_id =
-  manual-audit-{audit_uuid[:8]}`` so the ledger keeps a permanent
-  row, and downstream consumers (operator analytics; a future
-  source-aware ``compute_credit_assignment`` variant) can filter the
-  JSONL stream on ``source`` when they want a mutator-only signal. Legacy on-disk rows omit ``source`` → reads
-  back as ``None`` → schema treats as "mutator" for backward compat.
-  7 invariants in
-  ``tests/autoresearch/test_attribution_standalone_manual.py`` pin
-  the schema additions, the synthetic-id format, and the
-  filter-by-source contract.
-
-### Fixed
-- **PR-VOTER-PROMPT-ANTI-PHANTOM — inline candidate seed bodies into
-  voter handoff (kill the fake-path Read instruction).** Smoke 18
-  dialogue trace
-  (`.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
-  vote-m000-anthropic.claude-cli/dialogue.jsonl`) caught claude-cli
-  emitting `"I already read both candidate files in the previous turn
-  and can answer from context."` on the FIRST turn (no previous
-  turn exists). Root cause: voter handoff sent a literal
-  `"run_dir/candidates/<cid>.md"` relative-path string and the prompt
-  instructed the model to "Read both candidate seeds". The per-task
-  isolated cwd (PR-RESUME-NO-PERSIST-FIX) meant the model couldn't
-  resolve the fake relative path; the only escape was to hallucinate
-  session continuity. Fix per the open-coscientist `nodes/ranking.py`
-  `debate_pair` pattern: read each candidate seed body once in
-  `Ranker.aexecute` via new `_read_candidate_bodies(state)` helper,
-  thread `candidate_bodies` dict through `_play_match` →
-  `_build_voter_tasks` → `_build_description`. `VOTE_HANDOFF` schema
-  (`handoff_schemas.py`) `candidate_a/b.path` → `body` (required).
-  Prompt rewritten: removed "Read both candidate seeds"; added
-  explicit "DO NOT call any Read tool, DO NOT claim to have read
-  them in a previous turn (this is the first and only turn of your
-  session)". Codex MCP cross-LLM review caught the empty-body
-  failure mode (read error silently emitted `""` while prompt
-  asserted "Both seed bodies are fully present") + the stale
-  docstring; folded in-band — unreadable paths now emit
-  `_CANDIDATE_BODY_UNAVAILABLE` sentinel
-  (`[CANDIDATE_BODY_UNAVAILABLE: path=... error=...]`) that
-  instructs the voter to emit `winner: "tie"`, and the prompt
-  explicitly handles the sentinel. Pinned by extended
-  `test_ranker_voter_handoff_matches_schema`: asserts body inlined,
-  anti-phantom prose present, `run_dir/candidates/` literal absent.
-
-### Changed
-- **PR-STRICT-COMPATIBLE-SCHEMAS — convert 5 seed-gen schemas to
-  OpenAI strict-mode (Codex `text.format` constraint).** Pre-fix all
-  seed-gen schemas used the permissive `_additive()` helper (no
-  `additionalProperties:false`), so the Codex OAuth adapter's
-  `_is_openai_strict_compatible` detector
-  (`core/llm/adapters/codex_oauth.py`) always returned False → the
-  Responses API received `text.format.strict=False` → schema
-  behaviour collapsed to a *server hint* rather than an enforced
-  *constraint*. gpt-5.5 reasoning models could then consume the
-  entire output budget on `encrypted_reasoning` items and return
-  empty `output_text` (smoke 18:
-  `.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
-  vote-m000-openai.openai-codex/dialogue.jsonl` turn 1 — cost
-  $0.0358, 0 `assistant_message`). New `_strict_additive()` helper
-  derives `required` from `properties.keys()` + sets
-  `additionalProperties:false`; recursive `_strict_additive` on
-  nested objects + array items. Converted: PROXIMITY, CRITIQUE,
-  VOTE, EVOLVE, SUPERVISOR. Three exceptions remain non-strict
-  because they use typed-additional maps that depend on
-  runtime-known keys (Petri 24-dim catalog / arxiv-id snapshot
-  map): PILOT, META_REVIEW, LITERATURE_REVIEW. Side fixes folded
-  in-band: (a) `CRITIQUE_SCHEMA` adds `rewrite_section` field
-  (`["string","null"]`) — pre-fix the field was tolerated by
-  permissive `_additive` but `evolver.py:_consume_rewrite_target`
-  + `eval_export.py:355` actively consume it, so strict mode
-  required it be declared (Codex MCP catch); (b) `EVOLVE_SCHEMA`
-  promotes `notes` from optional → required with empty-string
-  sentinel (`evolver.md` + `_REQUIRED_EVOLVE_FIELDS` updated to
-  match); (c) `LITERATURE_REVIEW_SCHEMA` fixes 2 type drifts vs
-  parser — `articles_with_reasoning` was `array` but parser reads
-  as string, `snapshots` was `array` but parser reads as
-  `{arxiv_id: snapshot_path}` dict. Pinned by 4 new tests:
-  `test_strict_role_schemas_pass_openai_strict_check` (parametrize
-  5 strict roles), `test_non_strict_role_schemas_documented_reason`
-  (parametrize 3 non-strict roles, guards against silent
-  tightening), `test_strict_helper_derives_required_from_properties_keys`,
-  + existing `test_critique_schema_required_matches_parser_required`
-  now `==`. Codex MCP cross-LLM review caught the
-  `rewrite_section` omission (would have broken critic→evolver
-  handoff under strict mode) + CHANGELOG/docstring drift; both
-  folded in-band before merge.
+- **PR-AR-L4a ``ux_means`` 4-reader collector wiring (ADR-012 S1b)** —
+  Pre-PR-AR-L4a ``autoresearch.ux_means.collect_ux_means_from_sources``
+  was a hardcoded ``return None`` placeholder — ADR-012 S1 shipped
+  the schema + math but the S1b collector wiring never landed, so the
+  entire ux fitness axis was dormant in production.
+  4 readers now consume the single SoT
+  ``autoresearch/state/mutations.jsonl``:
+  - ``read_run_log_success_rate`` — count(attribution_score > 0) /
+    count(attribution rows)
+  - ``read_token_cost`` — Σ(in_tok × price.input + out_tok ×
+    price.output) per ``cost_model`` from ``core.llm.token_tracker.MODEL_PRICING``
+  - ``read_revert_ratio`` — count(fitness_delta < 0) /
+    count(rows with fitness_delta)
+  - ``read_latency`` — mean(cost_elapsed_seconds) across apply rows
+  New ``DEFAULT_UX_TOKEN_BUDGET_USD = 5.0`` and
+  ``DEFAULT_UX_LATENCY_BUDGET_S = 1800`` budget constants
+  (operator-aggressive setting). 10 invariants in
+  ``tests/autoresearch/test_ux_means_collector.py`` pin each reader's
+  graceful-no-op contract + the wired collector shape. Caller-side
+  ``compute_fitness`` forward arrives in PR-AR-L4b.
 
 ### Fixed
 - **PR-SCHEMA-PARSER-DRIFT-CLOSE — close 3 schema ↔ parser SoT
