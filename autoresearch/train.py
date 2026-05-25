@@ -2388,32 +2388,56 @@ def main() -> int:
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
-    # W2 (2026-05-25 attribution wiring) — closed loop completion.
-    # runner.py 의 ``_run_autoresearch_subprocess`` 가 propose-apply-audit
-    # 한 cycle 동안 env 3개로 propagate 한다:
-    #   - GEODE_SIL_AUDIT_RUN_ID  (this cycle 의 audit run id, mutations.jsonl 의
-    #     apply row 와 같은 값)
-    #   - GEODE_SIL_MUTATION_ID   (apply row 의 mutation_id; attribution row 의
-    #     foreign key)
-    #   - GEODE_SIL_EXPECTED_DIM  (mutator LLM 의 commitment, JSON dict)
-    # 셋 모두 set 됐을 때만 attribution row append (manual --promote /
-    # standalone audit 보존). dry-run 도 skip — synthetic dim_means 는
-    # attribution 신호가 무의미.
+    # W2 (2026-05-25) + PR-AR-L6 (2026-05-26) — closed loop attribution.
+    # Two paths:
+    #
+    # 1. Mutator-driven cycle — ``runner.py:_run_autoresearch_subprocess``
+    #    propagates 3 envs (``GEODE_SIL_AUDIT_RUN_ID`` /
+    #    ``GEODE_SIL_MUTATION_ID`` / ``GEODE_SIL_EXPECTED_DIM``). All set
+    #    → row written with ``source="mutator"``. apply row in
+    #    ``mutations.jsonl`` shares the same ``mutation_id`` for the
+    #    inner-join.
+    # 2. Manual standalone audit — operator runs ``train.py`` (or
+    #    ``--promote``) outside the mutator runner; envs absent. Row is
+    #    still written with a synthetic ``mutation_id`` (``manual-{commit
+    #    [:8]}-{audit_uuid[:8]}``) + ``source="manual"`` so the
+    #    ``compute_credit_assignment`` learning corpus and operator-side
+    #    fitness analytics keep the manual cycle in their ledger.
+    #
+    # ``--dry-run`` always skips — synthetic dim_means carries no signal.
     _sil_mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
     _sil_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
     _sil_expected_raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "")
     _sil_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
-    if not args.dry_run and _sil_mutation_id and _sil_audit_run_id:
+    _attribution_should_write = not args.dry_run
+    _attribution_is_manual = _attribution_should_write and not (
+        _sil_mutation_id and _sil_audit_run_id
+    )
+    if _attribution_should_write:
         try:
+            import uuid
+
             from core.self_improving_loop.attribution import write_attribution
             from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
-            try:
-                _sil_expected_dim = json.loads(_sil_expected_raw) if _sil_expected_raw else {}
-                if not isinstance(_sil_expected_dim, dict):
+            if _attribution_is_manual:
+                # Synthetic ids — commit prefix (visible in ledger) +
+                # audit_uuid (uniqueness across multiple manual runs at
+                # the same commit). ``source="manual"`` lets downstream
+                # consumers filter the manual rows.
+                _audit_uuid = uuid.uuid4().hex[:8]
+                _sil_mutation_id = f"manual-{commit[:8]}-{_audit_uuid}"
+                _sil_audit_run_id = f"manual-audit-{_audit_uuid}"
+                _sil_expected_dim: dict[str, float] = {}
+                _sil_source = "manual"
+            else:
+                try:
+                    _sil_expected_dim = json.loads(_sil_expected_raw) if _sil_expected_raw else {}
+                    if not isinstance(_sil_expected_dim, dict):
+                        _sil_expected_dim = {}
+                except json.JSONDecodeError:
                     _sil_expected_dim = {}
-            except json.JSONDecodeError:
-                _sil_expected_dim = {}
+                _sil_source = "mutator"
             _sil_baseline_before = (
                 BaselineSnapshot(
                     dim_means=dict(baseline_means),
@@ -2438,6 +2462,7 @@ def main() -> int:
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
                 group_id=_sil_group_id,
+                source=_sil_source,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(

@@ -73,6 +73,13 @@ class AttributionRecord(BaseModel):
     fitness_delta: float | None = None
     audit_run_id: str | None = None
     group_id: str | None = None
+    source: str | None = None
+    """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
+    (``"mutator"``) from operator manual ``--promote`` rows
+    (``"manual"``). Legacy rows omit the field → ``None`` (caller
+    treats as ``"mutator"`` for backward compat). Used by
+    ``compute_credit_assignment`` to filter the learning corpus when
+    operator wants mutator-only signal."""
     """P1-revised (2026-05-25 baseline RL grounding) — group sampling 의
     cross-ref key. 같은 cycle 의 N sibling mutation 의 attribution row 가
     모두 같은 group_id 를 가져 group statistic 재구성 가능. group_size=1
@@ -219,6 +226,7 @@ def compute_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     group_id: str = "",
+    source: str = "mutator",
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -264,6 +272,13 @@ def compute_attribution(
     # (legacy group_size=1) — column omitted, legacy readers graceful.
     if group_id:
         payload["group_id"] = group_id
+    # PR-AR-L6 (2026-05-26) — source distinguishes mutator-driven cycle
+    # rows ("mutator") from operator manual --promote rows ("manual").
+    # ``compute_credit_assignment`` can filter the learning corpus on
+    # this field when the operator wants mutator-only signal. Default
+    # "mutator" matches every pre-existing caller — legacy rows that
+    # omit the field will read as "mutator" via the schema default.
+    payload["source"] = source
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
     # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
     # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
@@ -320,6 +335,7 @@ def write_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     group_id: str = "",
+    source: str = "mutator",
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -347,6 +363,7 @@ def write_attribution(
         fitness_after=fitness_after,
         audit_run_id=audit_run_id,
         group_id=group_id,
+        source=source,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload
