@@ -48,6 +48,22 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-28 C.8 silent fallback STRICT mode parity invariants** —
+  `tests/core/self_improving_loop/test_strict_mode_parity.py` pins the
+  fragmentation-audit F5 fix (ADR-012 S0a/S0b) as a drift invariant.
+  `autoresearch/train.py:838-873` sets `GEODE_<KIND>_OVERRIDE` together
+  with `GEODE_<KIND>_STRICT=1` for the 12 mutation-surface kinds so the
+  audit subprocess fails fast instead of silently falling back to the
+  in-repo SoT; `core/self_improving_loop/sot_resolution.py` reads the
+  matching `_STRICT_SUFFIX` via `removesuffix(_OVERRIDE_SUFFIX) +
+  _STRICT_SUFFIX`. The 8 invariants cover override↔strict pairing
+  (drift detection), strict-kind count floor (>=12), suffix derivation
+  pattern, and end-to-end `resolve_sot` strict-flag propagation for the
+  4 layer outcomes (env+STRICT / env-only / operator-local / in-repo).
+  A future kind addition that forgets STRICT trips the pairing
+  invariant. Memory `project_autoresearch_fragmentation_audit.md` F5
+  closed.
+### Added
 - **PR-CHECKPOINT-RESUME-TIMEBUDGET — per-phase checkpoints + lifted
   sub-agent wall-clock defaults.** `plugins/seed_generation/checkpointer.py`
   writes `<run_dir>/checkpoints/<phase>.json` after each successful seed-
