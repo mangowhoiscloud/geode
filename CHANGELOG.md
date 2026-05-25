@@ -47,6 +47,58 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.62] - 2026-05-26
+
+Petri × autoresearch leak resolution sprint: 3 PR (L7/L3/L8) closing fitness-surface / baseline-ratchet leaks identified by the full-cycle GAP audit (PR-L9 already shipped in v0.99.61). L7 pins the wrapper-sections fallback ↔ writer-schema dual-SoT drift; L3 codifies the seed-gen-only role split via an anti-elevation invariant (Codex MCP review caught + pivoted from writer-side filter that would have broken critic.py's initial-gen handoff); L8 replaces the unconditional fresh-baseline auto-promote with a 2-clause sanity gate (completeness + fitness floor).
+
+### Changed
+- **PR-L8 bootstrap baseline ratchet** —
+  ``autoresearch/train.py:_should_promote`` no longer auto-promotes any
+  first audit on a fresh ``baseline.json``-less branch. The default-path
+  (no ``--promote`` flag) auto-promote now requires (a) ``dim_means``
+  completeness — every ``AXIS_TIERS`` dim present, catching truncated
+  subprocess output / extractor partial-fail modes — AND (b) raw
+  fitness ≥ new ``BOOTSTRAP_FITNESS_FLOOR`` (0.30), catching "audit ran
+  but every dim landed at worst-case" modes. Failure reasons start
+  with ``bootstrap_sanity_failed`` so log analytics can grep both
+  clauses. ``--promote`` operator override bypasses ``_should_promote``
+  entirely so deliberately-weak baselines still work. 6 invariants in
+  ``tests/autoresearch/test_should_promote_bootstrap.py`` pin the gate;
+  the existing ``test_should_promote_bootstraps_when_no_prior_baseline``
+  renamed + updated to the gated semantics. Codex MCP review tightened
+  the boundary test via ``mock.patch`` to actually exercise the
+  ``< floor`` / ``== floor`` semantics.
+
+### Added
+- **PR-L3 `scenario_realism` anti-elevation invariants** —
+  The Petri rubric emits `scenario_realism` (1-10 scale) and
+  baseline.json persists it for *seed-generation* consumers
+  (`plugins/seed_generation/agents/critic.py` initial-gen handoff +
+  `evolver.py` pilot fallback). The dim must NOT become a
+  self-improving-loop fitness lever. New `_SEED_GEN_ONLY_DIMS` frozenset
+  in `autoresearch/train.py` documents the role split; 4 invariants in
+  `tests/autoresearch/test_baseline_scenario_realism_filter.py` enforce
+  it — the dim must stay absent from `AXIS_TIERS`, `DIM_WEIGHTS`,
+  `CRITICAL_DIMS`, `AUXILIARY_DIMS`, `INFO_DIMS`, and `ANCHOR_DIMS`.
+  baseline.json continues to carry the dim unchanged so seed-gen
+  consumers are unaffected; the invariants only protect the
+  autoresearch fitness surface. (Initial PR-L3 attempted a writer-side
+  filter; Codex MCP review caught that it broke the critic's
+  initial-gen handoff, so the scope was reduced to the anti-elevation
+  invariant only.)
+- **PR-L7 wrapper-sections fallback ↔ writer-schema drift invariants** —
+  `tests/autoresearch/test_wrapper_sections_drift.py` pins the dual-SoT
+  shape between `autoresearch/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`
+  (bootstrap default when the canonical
+  `autoresearch/state/policies/wrapper-sections.json` is absent) and
+  `write_wrapper_prompt_sections` (writer the mutator goes through).
+  5 invariants cover: fallback satisfies writer validator (roundtrip),
+  fallback shape (non-empty str dict), 5 canonical section anchors
+  (`role` / `tool_result_handling` / `shell_caution` / `refusal_policy`
+  / `thinking_visibility`), loader bootstrap path returns a fallback
+  copy on canonical-absent and on malformed JSON. Mirrors PR-MINIMAL-2
+  #1398's `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` pattern.
+
 ## [0.99.61] - 2026-05-26
 
 Structured-output 3-axis-plan smoke 17 closeout bundle + autoresearch

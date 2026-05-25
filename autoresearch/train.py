@@ -434,6 +434,31 @@ INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "inf
 # ``anchor_means`` 인자에 forward.
 ANCHOR_DIMS: tuple[str, ...] = ("admirable", "disappointing", "needs_attention")
 
+# PR-L3 (2026-05-26) — dims that the Petri judge emits and baseline.json
+# persists for OTHER consumers (seed-generation), but that autoresearch's
+# self-improving loop must NOT elevate to fitness levers. Codified as a
+# documented set so the role split is in one place; the matching test
+# (``tests/autoresearch/test_baseline_scenario_realism_filter.py``) is
+# an anti-elevation invariant — a future PR adding any name here to
+# ``AXIS_TIERS`` / ``DIM_WEIGHTS`` / ``ANCHOR_DIMS`` trips CI so the
+# split cannot silently collapse.
+#
+# - ``scenario_realism`` — seed-gen signal. Consumed by
+#   ``plugins/seed_generation/agents/critic.py`` (initial-generation
+#   handoff via ``baseline_snapshot.dim_means``) AND
+#   ``plugins/seed_generation/agents/evolver.py`` (in-run pilot fallback).
+#   Both call ``extract_scenario_realism(dim_means)``. The dim is
+#   intentionally absent from ``AXIS_TIERS`` / ``DIM_WEIGHTS`` /
+#   ``CRITICAL_DIMS`` / ``AUXILIARY_DIMS`` / ``ANCHOR_DIMS`` and from
+#   ``baseline_reader._operational_dim_set`` so the mutator never
+#   proposes scenario_realism-targeted mutations.
+#
+# Note: this is NOT a writer-side filter. baseline.json keeps the dim
+# so seed-gen consumers continue to read it (the critic's initial-gen
+# handoff has no pilot fallback). The only enforcement is the test-side
+# anti-elevation invariant on the autoresearch surface.
+_SEED_GEN_ONLY_DIMS: frozenset[str] = frozenset({"scenario_realism"})
+
 # ---------------------------------------------------------------------------
 # Wrapper prompt sections — MUTATION TARGET
 # ---------------------------------------------------------------------------
@@ -1855,6 +1880,30 @@ def _write_baseline(
 # noise gain before overwriting an under-sampled baseline.
 N1_FITNESS_MARGIN_FLOOR = 0.20
 
+# PR-L8 (2026-05-26) — bootstrap baseline ratchet. Fresh-start (no prior
+# baseline.json) used to auto-promote ANY first audit, leaving the loop
+# vulnerable to a broken initial audit (subprocess returns sentinel,
+# rubric mid-migration, dim_extractor partial extract) becoming the
+# permanent "promoted" reference. The new gate requires:
+#
+# 1. ``dim_means`` completeness — every dim in ``AXIS_TIERS`` must be
+#    present. Catches the "subprocess emitted only a handful of dims"
+#    failure mode.
+# 2. Raw fitness ≥ ``BOOTSTRAP_FITNESS_FLOOR`` — catches the "audit
+#    succeeded but every dim is at the worst-case 10.0" mode.
+#
+# Operators who *want* a deliberately-weak bootstrap (e.g. seeding from
+# a known-bad checkpoint to ratchet upward) pass ``--promote`` on the
+# argv, which still bypasses :func:`_should_promote` entirely. The gate
+# only protects the *default* (no flag) path.
+#
+# Tuning: 0.30 is roughly the fitness floor below which mutation
+# proposals lack signal (a baseline this low means most dims are above
+# 7/10 concerning, so a single-dim improvement barely moves the
+# weighted aggregate). Adjust via this constant rather than per-call
+# argv so the floor stays a single SoT.
+BOOTSTRAP_FITNESS_FLOOR: float = 0.30
+
 
 def _should_promote(
     current_means: dict[str, float],
@@ -1915,7 +1964,42 @@ def _should_promote(
     Returns ``(should_promote, reason)`` for caller logging.
     """
     if baseline_means is None or baseline_stderr is None:
-        return True, "no prior baseline (bootstrap)"
+        # PR-L8 (2026-05-26) — bootstrap gate. Fresh-start auto-promote
+        # was too permissive: a broken first audit (truncated subprocess
+        # output, rubric mid-migration, dim_extractor partial extract)
+        # would become the permanent baseline. Require:
+        #
+        #   (a) ``dim_means`` completeness — every AXIS_TIERS dim present
+        #   (b) raw fitness ≥ ``BOOTSTRAP_FITNESS_FLOOR``
+        #
+        # ``--promote`` operator override bypasses ``_should_promote``
+        # entirely (see ``main()``), so this only constrains the
+        # default-path auto-promote.
+        missing = compute_missing_dims(current_means)
+        if missing:
+            preview = sorted(missing)[:3]
+            suffix = "..." if len(missing) > 3 else ""
+            return False, (
+                f"bootstrap_sanity_failed: incomplete dim_means "
+                f"({len(missing)} missing — {preview}{suffix})"
+            )
+        _bootstrap_anchor = {d: current_means[d] for d in ANCHOR_DIMS if d in current_means}
+        bootstrap_fitness = compute_fitness(
+            current_means,
+            current_stderr,
+            measurement_modality=measurement_modality,
+            anchor_means=_bootstrap_anchor or None,
+            anchor_confidence_mode=anchor_confidence_mode,
+        )
+        if bootstrap_fitness < BOOTSTRAP_FITNESS_FLOOR:
+            return False, (
+                f"bootstrap_sanity_failed: fitness {bootstrap_fitness:.4f} "
+                f"< floor {BOOTSTRAP_FITNESS_FLOOR}"
+            )
+        return True, (
+            f"bootstrap_promote: fitness {bootstrap_fitness:.4f} "
+            f"≥ floor {BOOTSTRAP_FITNESS_FLOOR}, dim completeness ok"
+        )
 
     # PR-11 P3.1 (2026-05-25) — anchor subset 추출 (current + baseline 각각).
     # mode=False 면 compute_fitness 가 무시 → 추출 비용 무관.
