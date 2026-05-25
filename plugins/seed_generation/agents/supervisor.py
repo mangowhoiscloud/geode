@@ -179,6 +179,7 @@ class Supervisor(BaseSeedAgent):
                 "snapshot": snapshot,
             },
             agent=_SUPERVISOR_AGENT_NAME,
+            model=self.model,
             source=self.adapter_source,
         )
 

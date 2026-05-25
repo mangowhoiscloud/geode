@@ -302,6 +302,7 @@ class Evolver(BaseSeedAgent):
                         "gen_tag": state.gen_tag,
                     },
                     agent=_EVOLVER_AGENT_NAME,
+                    model=self.model,
                     source=self.adapter_source,
                     # PR-JSON-WIRE (2026-05-25) — force evolve JSON shape.
                     response_schema=EVOLVE_SCHEMA,

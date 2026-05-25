@@ -167,6 +167,7 @@ class MetaReviewer(BaseSeedAgent):
                 "snapshot": snapshot,
             },
             agent=_META_REVIEWER_AGENT_NAME,
+            model=self.model,
             source=self.adapter_source,
             # PR-JSON-WIRE (2026-05-25) — force meta_review JSON shape.
             response_schema=META_REVIEW_SCHEMA,

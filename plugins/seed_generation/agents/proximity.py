@@ -194,6 +194,7 @@ class Proximity(BaseSeedAgent):
                 "candidate_count": len(state.candidates),
             },
             agent=_PROXIMITY_AGENT_NAME,
+            model=self.model,
             source=self.adapter_source,
             # PR-JSON-WIRE (2026-05-25) — force similarity_clusters JSON shape.
             response_schema=PROXIMITY_SCHEMA,
@@ -221,9 +222,9 @@ class Proximity(BaseSeedAgent):
             # JSON-only response shape so the model can't slip a prose
             # preamble past the parser.
             "Your FINAL response must be ONLY the JSON object matching the "
-            "PROXIMITY_SCHEMA (similarity_clusters, removed_duplicates). No "
-            "prose summary, no markdown bullets, no preamble. Start with `{` "
-            "and end with `}`.\n\n"
+            "PROXIMITY_SCHEMA (single required field: `similarity_clusters`). "
+            "No prose summary, no markdown bullets, no preamble. Start with "
+            "`{` and end with `}`.\n\n"
             f"Candidates:\n{candidate_summary}"
         )
 

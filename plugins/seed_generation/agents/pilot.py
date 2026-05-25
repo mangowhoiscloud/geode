@@ -205,6 +205,7 @@ class Pilot(BaseSeedAgent):
                         "target_dim": target_dim,
                     },
                     agent=_PILOT_AGENT_NAME,
+                    model=self.model,
                     source=self.adapter_source,
                     # PR-JSON-WIRE (2026-05-25) — force pilot JSON shape
                     # (dim_means/dim_stderr/status). Smoke 14 surfaced

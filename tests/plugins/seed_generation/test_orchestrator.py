@@ -416,6 +416,59 @@ class _SoftFailAgent(BaseSeedAgent):
         )
 
 
+def test_all_role_subtask_spawns_carry_model_for_role_binding() -> None:
+    """PR-VOTER-PROVIDER-WIRE follow-up (Codex MCP re-review of PR #1687):
+    every role agent's ``SubTask`` construction must include
+    ``model=self.model`` so the manifest binding propagates.
+
+    Pre-fix only the ranker's voter spawn carried ``model=voter.model``;
+    the 7 other role agents (generator / critic / pilot / proximity /
+    evolver / meta_reviewer / supervisor) passed only
+    ``source=self.adapter_source``. Combined with the .md ``model:``
+    frontmatter removal, this meant ``agent_ctx["model"]`` fell back
+    to ``ANTHROPIC_SECONDARY`` (claude-sonnet-4-6), silently overriding
+    the picker's resolved per-role binding for pilot
+    (claude-haiku-4-5) / meta_reviewer / supervisor (claude-opus-4-7).
+
+    Static grep — fails fast on a refactor that drops the model line
+    from any role's SubTask spawn.
+    """
+    from pathlib import Path as _Path
+
+    role_files = {
+        "generator": "generator.py",
+        "critic": "critic.py",
+        "pilot": "pilot.py",
+        "proximity": "proximity.py",
+        "evolver": "evolver.py",
+        "meta_reviewer": "meta_reviewer.py",
+        "supervisor": "supervisor.py",
+    }
+    base = _Path(__file__).parent.parent.parent.parent / "plugins/seed_generation/agents"
+    for role, fname in role_files.items():
+        src = (base / fname).read_text()
+        # Every ``source=self.adapter_source,`` line in a role agent
+        # MUST be paired with a ``model=self.model,`` line on an adjacent
+        # line. Pre-fix the model line was absent, causing the
+        # AgentDefinition default to win silently.
+        lines = src.splitlines()
+        source_lines = [i for i, ln in enumerate(lines) if "source=self.adapter_source" in ln]
+        assert source_lines, f"{role}: no source=self.adapter_source line in {fname}"
+        for idx in source_lines:
+            # Look for ``model=self.model`` within 1 line above (kwargs
+            # convention: model directly precedes source) — same SubTask call.
+            window = lines[max(0, idx - 1) : idx + 1]
+            assert any("model=self.model" in ln for ln in window), (
+                f"{role}: {fname}:{idx + 1} has ``source=self.adapter_source`` "
+                f"without an adjacent ``model=self.model`` line. PR-VOTER-PROVIDER-WIRE "
+                f"requires every role SubTask spawn to forward the picker's per-role "
+                f"binding so AgentDefinition.model (ANTHROPIC_SECONDARY) doesn't "
+                f"silently override pilot (claude-haiku) / meta / supervisor "
+                f"(claude-opus). Window was:\n"
+                f"{chr(10).join(window)}"
+            )
+
+
 def test_phase_failed_soft_failure_does_not_write_checkpoint(tmp_path) -> None:
     """PR-CHECKPOINT-ON-FAILURE (2026-05-25) — phases that emit
     ``phase_failed (raised=False)`` MUST NOT leave a checkpoint on
