@@ -269,6 +269,29 @@ class AutoresearchConfig(BaseModel):
     adapt 권장. ``group_size`` 가 1 이면 무시.
     """
 
+    pareto_mode: bool = False
+    """P2-revised (2026-05-25) — Pareto archive + Dynamic Reward Weighting
+    enable knob. plan ``docs/plans/2026-05-25-p2-pareto-archive-dynamic-reward-weighting.md``.
+
+    - ``False`` (default, legacy): apply_group_proposals 의 top-1 by linear
+      advantage. PR-5 P1-revised 동작 그대로.
+    - ``True``: archive 의 Pareto-non-dominated set 에 mutation insert +
+      sample. concave Pareto front 영역 도달 가능 (Das-Dennis 1997 한계
+      회피). group_size>=2 와 결합 시 의미 (single mutation 은 archive
+      비교 없음).
+
+    pareto_mode=True 시 ``baseline_archive.jsonl`` writer 활성.
+    """
+
+    hypervolume_reference_point: dict[str, float] = Field(default_factory=dict)
+    """P2-revised — hypervolume 계산의 reference point (per-dim nadir,
+    worst-case). 빈 dict 이면 archive entry 의 dim 최솟값 자동 사용.
+
+    Higher-is-better convention — caller 는 good-low palette dim 의 score
+    를 미리 invert (e.g., ``10 - input_hallucination_score``). reference
+    point 는 unreachable worst-case (e.g., dim 별 0).
+    """
+
     target_model: str | None = None
     """**Deprecated pre-PR #1496 slot** — surviving for back-compat
     config file load. Never consulted at runtime. Will be dropped in a
