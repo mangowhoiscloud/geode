@@ -118,6 +118,11 @@ def test_bundled_manifest_loads() -> None:
         "pilot",
         "proximity",
         "ranker",
+        # PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor added to
+        # enabled_roles so _registry_builder.py registers it via the
+        # main loop. Pre-fix smoke 19 transcript caught
+        # phase_skipped reason=agent_not_registered.
+        "supervisor",
     }
     assert manifest.voter_diversity() >= 2
 

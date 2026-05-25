@@ -40,6 +40,17 @@ enabled_roles = [
     "pilot",
     "proximity",
     "ranker",
+    # PR-SUPERVISOR-ENABLE (2026-05-26) — pre-fix the supervisor role
+    # had no ``[seed_generation.role.supervisor]`` section AND was not
+    # in this enabled_roles list, so ``_registry_builder.py`` 's
+    # ``for role_name in manifest.enabled_roles`` loop never registered
+    # it. The orchestrator emitted ``phase_skipped
+    # reason=agent_not_registered`` for supervisor on every run.
+    # Smoke 19 confirmed: checkpoints/ had no ``supervisor.json``,
+    # ``sub_agents/`` had no ``supervisor-*`` dir, transcript line 4
+    # carried the explicit skip reason. PR-1 (#1698) SUPERVISOR_SCHEMA
+    # wire was a partial fix — necessary but not sufficient.
+    "supervisor",
 ]
 
 # ── Roles ────────────────────────────────────────────────────────────────────
@@ -134,6 +145,22 @@ allowed_models = [
     "gpt-5.5",
 ]
 role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
+
+# PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor role spec section.
+# Defaults mirror ``plugins/seed_generation/agents/supervisor.py``'s
+# ``_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-7"`` (per the role
+# docstring: "Run-level strategy synthesis. Dispatches ONE Opus
+# sub-agent" — Opus chosen because supervisor's output gates the
+# value of every downstream call). Allowed list mirrors meta_reviewer
+# (same single-shot, run-level analyst pattern).
+[seed_generation.role.supervisor]
+default_model = "claude-opus-4-7"
+allowed_models = [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "gpt-5.5",
+]
+role_contract = "plugins/seed_generation/agents/supervisor.md"
 
 # CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) role of the
 # 3-loop port. Runs once per run, after Supervisor + before Generator.
