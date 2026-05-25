@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-L8 bootstrap baseline ratchet** —
+  ``autoresearch/train.py:_should_promote`` no longer auto-promotes any
+  first audit on a fresh ``baseline.json``-less branch. The default-path
+  (no ``--promote`` flag) auto-promote now requires (a) ``dim_means``
+  completeness — every ``AXIS_TIERS`` dim present, catching truncated
+  subprocess output / extractor partial-fail modes — AND (b) raw
+  fitness ≥ new ``BOOTSTRAP_FITNESS_FLOOR`` (0.30), catching "audit ran
+  but every dim landed at worst-case" modes. Failure reasons start
+  with ``bootstrap_sanity_failed`` so log analytics can grep both
+  clauses. ``--promote`` operator override bypasses ``_should_promote``
+  entirely so deliberately-weak baselines still work. 6 invariants in
+  ``tests/autoresearch/test_should_promote_bootstrap.py`` pin the gate;
+  the existing ``test_should_promote_bootstraps_when_no_prior_baseline``
+  renamed + updated to the gated semantics. Codex MCP review tightened
+  the boundary test via ``mock.patch`` to actually exercise the
+  ``< floor`` / ``== floor`` semantics.
+
 ### Added
 - **PR-L3 `scenario_realism` anti-elevation invariants** —
   The Petri rubric emits `scenario_realism` (1-10 scale) and
