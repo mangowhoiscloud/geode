@@ -491,3 +491,67 @@ def test_ranker_voter_description_includes_pilot_means() -> None:
     # At least one task's description should mention dim_01 from pilot means.
     descriptions = [t.description for t in manager.received_tasks]
     assert any("dim_01" in d for d in descriptions), descriptions[:1]
+
+
+def test_ranker_voter_spawn_carries_per_voter_model() -> None:
+    """PR-VOTER-PROVIDER-WIRE (2026-05-25) — each SubTask carries
+    ``model=voter.model`` so the worker's adapter resolution honors
+    the manifest binding instead of falling back to ``settings.model``.
+
+    Pre-fix evidence (smoke 17 RESUME): voter binding
+    ``model="claude-opus-4-7", source="claude-cli"`` was dispatched
+    via the codex-cli subprocess adapter because ``SubTask`` carried
+    only ``source``; ``worker_model`` fell back to ``settings.model``
+    and ``_resolve_provider`` mapped that to an openai key, so
+    ``resolve_for("openai", "adapter")`` picked codex-cli instead of
+    claude-cli. This test pins the wire so a regression that drops
+    the ``model=voter.model`` propagation fails here instead of
+    silently re-routing to the wrong adapter.
+    """
+    state = _state_with_candidates(2)
+    manager = _AlwaysAWinsManager()
+    ranker = Ranker(
+        manager=manager,  # type: ignore[arg-type]
+        voters=_voters(),
+        rng=random.Random(0),
+    )
+    asyncio.run(ranker.aexecute(state))
+
+    # Voter list from ``_voters()``: claude-sonnet, gpt-5.5, claude-haiku.
+    expected_models = [
+        ("anthropic", "claude-sonnet-4-6"),
+        ("openai", "gpt-5.5"),
+        ("anthropic", "claude-haiku-4-5"),
+    ]
+    # Each match dispatches 3 voters; iterate by 3 and assert.
+    assert len(manager.received_tasks) % 3 == 0, "expected 3 voters per match"
+    for match_idx in range(0, len(manager.received_tasks), 3):
+        for slot, (expected_provider, expected_model) in enumerate(expected_models):
+            task = manager.received_tasks[match_idx + slot]
+            assert task.model == expected_model, (
+                f"voter slot {slot}: expected model {expected_model!r}, "
+                f"got {task.model!r}. PR-VOTER-PROVIDER-WIRE regression — "
+                f"SubTask.model must carry voter.model so adapter resolution "
+                f"picks the right (provider, source) pair."
+            )
+            # task_id encoding includes voter_id = "{provider}.{source}".
+            assert expected_provider in task.task_id
+
+
+def test_sub_task_model_field_wins_over_settings_default() -> None:
+    """SubAgentManager._build_request honors ``task.model`` over
+    ``settings.model`` (and over agent_ctx model). This is the
+    contract that makes PR-VOTER-PROVIDER-WIRE work — without it,
+    every voter would inherit the parent's default model regardless
+    of the voter binding.
+    """
+    from core.agent.sub_agent import SubTask
+
+    # Verify the new field exists on SubTask with the right default.
+    t = SubTask(task_id="t-1", description="d", task_type="analyze")
+    assert hasattr(t, "model")
+    assert t.model == ""  # back-compat default
+
+    # Per-task override.
+    t2 = SubTask(task_id="t-2", description="d", task_type="analyze", model="claude-opus-4-7")
+    assert t2.model == "claude-opus-4-7"

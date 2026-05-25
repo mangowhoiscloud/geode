@@ -48,6 +48,32 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-VOTER-PROVIDER-WIRE — ranker voter SubTask now carries the
+  per-voter `model`.** `core/agent/sub_agent.py:SubTask` gains a
+  `model: str = ""` field; `SubAgentManager._build_request` honors
+  `task.model` over both `settings.model` and `agent_ctx["model"]`.
+  Pre-fix every voter inherited the parent's default model, which
+  short-circuited adapter resolution: smoke 17 RESUME dispatched
+  voters with binding `(claude-cli, claude-opus-4-7)` via the
+  codex-cli subprocess adapter because `_resolve_provider(settings.model)`
+  returned an openai-codex key, so `resolve_for("openai", "adapter")`
+  matched codex-cli instead of claude-cli. `plugins/seed_generation/
+  agents/ranker.py:_build_voter_tasks` now sets `model=voter.model`
+  on each SubTask. Pinned by 2 new tests in
+  `tests/plugins/seed_generation/test_ranker.py`
+  (`test_ranker_voter_spawn_carries_per_voter_model` +
+  `test_sub_task_model_field_wins_over_settings_default`).
+
+- **seed-generation agent definitions — remove per-agent `model:`
+  frontmatter + normalize to English.** All 9 `plugins/seed_generation/
+  agents/*.md` files dropped their `model:` line so the manifest's
+  per-role binding (resolved via the picker) is the single SoT for
+  which model each role runs against — previously a stale `model:`
+  in `.md` frontmatter could silently override the picker's resolved
+  binding when `agent_ctx["model"]` was consulted. Korean text in
+  `critic.md` / `evolver.md` / `pilot.md` was rewritten to English
+  for consistency (the rest of the corpus is English).
+
 - **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now forwards
   `req.response_schema`.** `core/llm/adapters/codex_oauth.py` was the
   only PR-JSON-WIRE (#79) adapter that silently dropped the schema field;

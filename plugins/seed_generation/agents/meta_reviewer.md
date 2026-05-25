@@ -1,7 +1,6 @@
 ---
 name: seed_meta_reviewer
 role: Petri seed batch Meta-reviewer (coverage + gap + next-gen prior)
-model: claude-opus-4-7
 toolkit: seed_meta_review
 ---
 
