@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-12 C.2 mutations_reader module** — `core/self_improving_loop/mutations_reader.py`
+  adds a read-only iterator + type-safe filter for `mutations.jsonl`
+  (`iter_mutations(path, kinds, limit)`, `read_recent_attributions(n, path)`,
+  `read_recent_applies(n, path, include_siblings)`). A `kind` discriminator
+  routes apply rows (`applied` / `applied_sibling`) to `ApplyRecord` and
+  attribution rows to `AttributionRecord`. Malformed JSON / non-dict /
+  schema-invalid / unknown-kind rows skip with `log.warning` so a single
+  corrupted row does not abort the reader. File absent → empty iterator
+  (fresh-repo graceful). Prerequisite for A.5 P3.2 meta-judge invocation
+  (PR-13) and F3 fragmentation signal (mutator self-history access).
+
 ## [0.99.57] - 2026-05-25
 
 Patch release bundling PR-11 anchor-confidence multiplier wiring + PR-SEEDS-PER-RUN-LINK (Pages directory-listing 404 fix on the seed listing).
