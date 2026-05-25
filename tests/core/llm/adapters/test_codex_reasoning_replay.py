@@ -220,6 +220,129 @@ def test_codex_call_kwargs_no_reasoning_when_empty() -> None:
     assert kwargs["input"][0] == {"role": "user", "content": "hello"}
 
 
+def test_codex_reasoning_replay_preserves_empty_summary() -> None:
+    """PR-CODEX-MULTITURN-SUMMARY-PRESERVE (2026-05-26) — when a
+    reasoning item is captured from a prior turn WITHOUT a summary
+    (gpt-5.x default for high-effort reasoning is to omit detailed
+    chain-of-thought summaries), the replay MUST still include
+    ``summary: []`` per OpenAI Responses API spec. Pre-fix the
+    capture path at ``_openai_common.py:617-619`` only added the
+    field when truthy — round-tripped items lacked the key and the
+    API returned ``"Missing required parameter: 'input[N].summary'"``
+    on the retry attempt (smoke 19 evidence:
+    vote-m000-openai.openai-codex/dialogue.jsonl turn 2 +
+    ~10 voter failures across the ranker phase).
+    """
+    from core.llm.adapters._openai_common import build_codex_input
+    from core.llm.adapters.base import AdapterCallRequest, Message
+
+    # Capture-shape: reasoning item WITHOUT summary key (matches
+    # pre-fix output where ``if summary:`` skipped the assignment).
+    captured_item_no_summary = {
+        "type": "reasoning",
+        "encrypted_content": "encrypted_blob_no_summary",
+    }
+    # Capture-shape: reasoning item with empty summary list (matches
+    # post-fix output — explicit ``[]`` instead of missing key).
+    captured_item_empty_summary = {
+        "type": "reasoning",
+        "encrypted_content": "encrypted_blob_empty_summary",
+        "summary": [],
+    }
+    req = AdapterCallRequest(
+        model="gpt-5.5",
+        system_prompt="",
+        messages=[
+            Message(role="user", content="q1"),
+            Message(
+                role="assistant",
+                content=[{"type": "text", "text": "a1"}],
+                codex_reasoning_items=(captured_item_no_summary,),
+            ),
+            Message(role="user", content="q2"),
+            Message(
+                role="assistant",
+                content=[{"type": "text", "text": "a2"}],
+                codex_reasoning_items=(captured_item_empty_summary,),
+            ),
+            Message(role="user", content="q3"),
+        ],
+    )
+    inputs = build_codex_input(req)
+    # The two reasoning items land just before their assistant entries.
+    reasoning_entries = [item for item in inputs if item.get("type") == "reasoning"]
+    assert len(reasoning_entries) == 2
+    # PR-CODEX-MULTITURN-SUMMARY-PRESERVE — capture-time fix
+    # guarantees ``summary`` is always present, even when the input
+    # item omitted it (legacy capture) or carried an explicit empty
+    # list (post-fix capture). The replay code at
+    # ``_openai_common.py:357-360`` just strips the ``id`` field and
+    # forwards every other key; the summary must therefore be in the
+    # captured shape for it to survive the round-trip.
+    #
+    # Note: this test exercises the REPLAY path (build_codex_input).
+    # The capture-path fix is exercised in
+    # ``test_codex_multiturn_reasoning.py``'s extraction tests +
+    # the new ``test_reasoning_item_capture_always_has_summary_field``
+    # below.
+    for entry in reasoning_entries:
+        # PR-CODEX-MULTITURN-SUMMARY-PRESERVE (2026-05-26) — strict
+        # cross-module contract: every replayed reasoning item MUST
+        # carry ``summary`` (empty list or populated, never absent).
+        # Both the capture-time fix (``translate_codex_response``)
+        # AND the replay-time defensive injection
+        # (``build_codex_input.setdefault("summary", [])``) guarantee
+        # this. Pre-fix this assertion failed for the legacy
+        # captured-dict-missing-summary fixture, exactly the smoke 19
+        # failure mode.
+        assert "summary" in entry, (
+            f"reasoning entry replayed without summary field — "
+            f"OpenAI Responses API will 400 with "
+            f"'Missing required parameter: input[N].summary'. "
+            f"Entry: {entry!r}"
+        )
+        assert isinstance(entry["summary"], list)
+
+
+def test_reasoning_item_capture_always_has_summary_field() -> None:
+    """PR-CODEX-MULTITURN-SUMMARY-PRESERVE (2026-05-26) — direct test
+    of the capture-path fix in ``_openai_common.py``. When the codex
+    response carries a reasoning item without a summary, the
+    extracted item MUST default ``summary`` to ``[]`` so downstream
+    replay can satisfy the OpenAI Responses API requirement.
+    """
+    from types import SimpleNamespace
+
+    from core.llm.adapters._openai_common import translate_codex_response
+
+    # Reasoning item where summary is None (gpt-5.x high-effort runs
+    # may emit ``summary: None`` even when summary="auto" was set —
+    # the model decides whether to surface a summary). The capture
+    # path must default to ``[]`` so the next-turn replay satisfies
+    # the API's required-field invariant.
+    reasoning_item = SimpleNamespace(
+        type="reasoning",
+        encrypted_content="blob_x",
+        summary=None,
+        id="rs_test_1",
+    )
+    response = SimpleNamespace(
+        output_text="",
+        output=[reasoning_item],
+        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+        status="completed",
+    )
+    result = translate_codex_response(response)
+    assert len(result.reasoning_items) == 1
+    captured = result.reasoning_items[0]
+    assert captured["type"] == "reasoning"
+    assert captured["encrypted_content"] == "blob_x"
+    # The key invariant — summary MUST be present (default empty list)
+    # so the next-turn replay can round-trip without 400.
+    assert "summary" in captured
+    assert captured["summary"] == []
+
+
 @pytest.mark.parametrize(
     ("tool_choice", "expected"),
     [

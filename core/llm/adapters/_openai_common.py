@@ -357,7 +357,23 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
             for ri in m.codex_reasoning_items:
                 if not isinstance(ri, dict) or not ri.get("encrypted_content"):
                     continue
-                out.append({k: v for k, v in ri.items() if k != "id"})
+                replayed = {k: v for k, v in ri.items() if k != "id"}
+                # PR-CODEX-MULTITURN-SUMMARY-PRESERVE (2026-05-26,
+                # Codex MCP catch) — defensive injection at the
+                # replay layer. The capture-path fix at
+                # ``translate_codex_response`` now always emits
+                # ``summary`` on newly captured items, but legacy
+                # ``codex_reasoning_items`` dicts (persisted across
+                # process restarts, deserialised from older state
+                # snapshots, or constructed by external callers) may
+                # still lack the field. The OpenAI Responses API
+                # rejects with ``"Missing required parameter:
+                # 'input[N].summary'"`` whenever it's absent, so we
+                # inject ``summary: []`` here too — defence in depth
+                # against both the capture-time and the persisted-
+                # data drift surfaces.
+                replayed.setdefault("summary", [])
+                out.append(replayed)
             out.extend(_convert_assistant_msg_to_responses(m.content))
             continue
         if m.role == "user":
@@ -614,18 +630,27 @@ def translate_codex_response(
             enc = _attr_or_key(item, "encrypted_content")
             if enc:
                 entry["encrypted_content"] = enc
+            # PR-CODEX-MULTITURN-SUMMARY-PRESERVE (2026-05-26) —
+            # ALWAYS include ``summary`` (default to empty list when
+            # gpt-5.x didn't emit one). Pre-fix the field was only
+            # populated when ``summary`` was truthy; on replay the
+            # OpenAI Responses API requires every reasoning item to
+            # carry ``summary`` (even ``[]``) and rejects with
+            # ``"Missing required parameter: 'input[N].summary'"``
+            # when it's absent (smoke 19 evidence:
+            # vote-m000-openai.openai-codex/dialogue.jsonl turn 2 +
+            # ~10 voter failures across the ranker phase). Per
+            # ctx7-grounded Responses API docs (``/websites/
+            # developers_openai_api`` "Keeping reasoning items in
+            # context") the field is structurally required even when
+            # there's no chain-of-thought summary to surface.
             summary = _attr_or_key(item, "summary")
-            if summary:
-                entry["summary"] = summary
-                if isinstance(summary, list):
-                    for s in summary:
-                        t = (
-                            s.get("text", "")
-                            if isinstance(s, dict)
-                            else getattr(s, "text", "") or ""
-                        )
-                        if t:
-                            reasoning_summaries.append(t)
+            entry["summary"] = summary if summary else []
+            if summary and isinstance(summary, list):
+                for s in summary:
+                    t = s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "") or ""
+                    if t:
+                        reasoning_summaries.append(t)
             iid = _attr_or_key(item, "id")
             if iid:
                 entry["id"] = iid

@@ -47,6 +47,47 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-MULTITURN-SUMMARY-PRESERVE — Codex Responses API
+  multi-turn replay must carry `summary` on every reasoning item.**
+  Smoke 19 evidence: ~10 voter failures across the ranker phase, all
+  from `vote-m*-openai.openai-codex` retries, with
+  ``"✕ Invalid request. Missing required parameter:
+  'input[N].summary'."`` Root cause: the codex_oauth capture path at
+  ``core/llm/adapters/_openai_common.py:translate_codex_response``
+  only added the `summary` field when truthy:
+  ``if summary: entry["summary"] = summary``. On a high-effort gpt-5.x
+  run with no chain-of-thought summary, the captured reasoning item
+  lacked the field entirely. On the next-turn replay through
+  ``build_codex_input`` (PR-WORKER-SCHEMA-AWARE-RETRY's validator-
+  feedback retry triggered this exact path), the OpenAI Responses
+  API rejected the input because reasoning items REQUIRE a `summary`
+  field per spec (ctx7-grounded against
+  ``/websites/developers_openai_api`` "Keeping reasoning items in
+  context" + "Migrate to Responses" — `summary: []` is the empty-but-
+  present shape).
+  Fix: 2-layer defence:
+  (a) Capture-time (``translate_codex_response``):
+      ``entry["summary"] = summary if summary else []`` — always
+      present the field on freshly captured items.
+  (b) Replay-time (``build_codex_input``):
+      ``replayed.setdefault("summary", [])`` — defensive injection
+      against legacy persisted codex_reasoning_items dicts that lack
+      the field (Codex MCP catch — covers cross-process state
+      snapshots + externally constructed Message instances).
+  Pinned by 2 new tests in
+  ``tests/core/llm/adapters/test_codex_reasoning_replay.py``:
+  ``test_codex_reasoning_replay_preserves_empty_summary`` (legacy
+  captured dict missing summary still replays correctly) +
+  ``test_reasoning_item_capture_always_has_summary_field`` (capture
+  defaults summary to `[]` when SDK item has None / missing).
+  Codex MCP cross-LLM review caught 4 issues — all folded in-band:
+  defence-in-depth replay injection, strict test assertion (was
+  permissive `if "summary" in entry`), docstring accuracy fix, and
+  followup task #101 (PR-CODEX-MULTITURN-PHASE-PRESERVE) for the
+  spec's `phase` parameter (separate concern, no current failure
+  evidence).
+
 ### Added
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
