@@ -48,6 +48,8 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-25 A.4 GEPA Pareto sampler helper** —
+  `core/self_improving_loop/gepa_sampler.py` adds density-aware sampling for the Pareto archive: `compute_sparsity_weights(vectors, k)` returns each entry s mean k-NN distance (sparse niches get higher weight; epsilon prevents all-zero collapse on identical vectors), and `sample_sparse[T](entries, vectors, n, k_neighbors, rng)` performs weighted without-replacement sampling that probabilistically favors under-represented Pareto niches. Replaces the uniform-random `PareteArchive.sample` baseline (PR-15) — caller wiring follows. Frontier: GEPA pattern (Genetic Evolutionary Pareto Archive) + Quality-Diversity (Mouret & Clune 2015).
 - **PR-24 A.3 MAP-Elites niche grid helper** —
   `core/self_improving_loop/map_elites.py` adds Quality-Diversity (Mouret & Clune 2015) niche-archive helpers: `MapElitesGrid` (sparse 2D dict — each cell holds the highest-fitness payload, ties rejected), `compute_cell_index(value, bounds, resolution)` for behavior discretization (clamps out-of-range, value at upper bound maps to last cell), `compute_grid_coverage(grid)` (occupied/total ratio), and `insert_many` batch. Complements PR-15 Pareto archive — Pareto prunes by global dominance, MAP-Elites preserves per-niche elites so behavior diversity stays in the archive. Pure helper, caller wiring (archive niche-aware sampling) deferred. Frontier: AlphaEvolve (DeepMind 2025-05).
 - **PR-23 A.2 Tchebycheff scalarization helper** —
