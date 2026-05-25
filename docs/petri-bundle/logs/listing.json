@@ -251,5 +251,138 @@
       "value": 1.0,
       "params": {}
     }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-generator_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "192232cab8924f16861072",
+    "run_id": "ba85842f0b3c492f9138be",
+    "task": "seed-generation/generator",
+    "task_id": "dec65926b0ba49779f06f7",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-proximity_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "adefe0fa299d4617b8dc21",
+    "run_id": "9d40825201bd4e92851537",
+    "task": "seed-generation/proximity",
+    "task_id": "4876973d0a964628aa76eb",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-critic_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "37dd042263c44cd8b3759e",
+    "run_id": "9dc2418d93604c54885ec3",
+    "task": "seed-generation/critic",
+    "task_id": "ef6916d4530544e7a44cef",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.635,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-pilot_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "a2c4c660d75e4fb1aa2a0e",
+    "run_id": "2ea4d38e2c43411c866807",
+    "task": "seed-generation/pilot",
+    "task_id": "34031c33a3074fd29e583f",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-ranker_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "78f6265b748c41319400ad",
+    "run_id": "4e204e20edcd4c95a16cc4",
+    "task": "seed-generation/ranker",
+    "task_id": "9ed620c55b454ad4986a61",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-evolver_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "19567db305f04733b0b757",
+    "run_id": "56a426d472774096a3fb51",
+    "task": "seed-generation/evolver",
+    "task_id": "f94fc4d27de0411890bcc7",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.5,
+      "params": {}
+    }
+  },
+  "2026-05-25T05-05-24-00-00_seedgen-meta_reviewer_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "8adb8e90e9ed4dc4b258ff",
+    "run_id": "1b2adc8d909649b095b203",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "03952dd19a504a0393d013",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-25T05:05:24+00:00",
+    "completed_at": "2026-05-25T05:05:24+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
   }
 }
