@@ -47,6 +47,49 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-STRICT-COMPATIBLE-SCHEMAS — convert 5 seed-gen schemas to
+  OpenAI strict-mode (Codex `text.format` constraint).** Pre-fix all
+  seed-gen schemas used the permissive `_additive()` helper (no
+  `additionalProperties:false`), so the Codex OAuth adapter's
+  `_is_openai_strict_compatible` detector
+  (`core/llm/adapters/codex_oauth.py`) always returned False → the
+  Responses API received `text.format.strict=False` → schema
+  behaviour collapsed to a *server hint* rather than an enforced
+  *constraint*. gpt-5.5 reasoning models could then consume the
+  entire output budget on `encrypted_reasoning` items and return
+  empty `output_text` (smoke 18:
+  `.audit/smoke-archives/smoke-18-partial-1779728410/sub_agents/
+  vote-m000-openai.openai-codex/dialogue.jsonl` turn 1 — cost
+  $0.0358, 0 `assistant_message`). New `_strict_additive()` helper
+  derives `required` from `properties.keys()` + sets
+  `additionalProperties:false`; recursive `_strict_additive` on
+  nested objects + array items. Converted: PROXIMITY, CRITIQUE,
+  VOTE, EVOLVE, SUPERVISOR. Three exceptions remain non-strict
+  because they use typed-additional maps that depend on
+  runtime-known keys (Petri 24-dim catalog / arxiv-id snapshot
+  map): PILOT, META_REVIEW, LITERATURE_REVIEW. Side fixes folded
+  in-band: (a) `CRITIQUE_SCHEMA` adds `rewrite_section` field
+  (`["string","null"]`) — pre-fix the field was tolerated by
+  permissive `_additive` but `evolver.py:_consume_rewrite_target`
+  + `eval_export.py:355` actively consume it, so strict mode
+  required it be declared (Codex MCP catch); (b) `EVOLVE_SCHEMA`
+  promotes `notes` from optional → required with empty-string
+  sentinel (`evolver.md` + `_REQUIRED_EVOLVE_FIELDS` updated to
+  match); (c) `LITERATURE_REVIEW_SCHEMA` fixes 2 type drifts vs
+  parser — `articles_with_reasoning` was `array` but parser reads
+  as string, `snapshots` was `array` but parser reads as
+  `{arxiv_id: snapshot_path}` dict. Pinned by 4 new tests:
+  `test_strict_role_schemas_pass_openai_strict_check` (parametrize
+  5 strict roles), `test_non_strict_role_schemas_documented_reason`
+  (parametrize 3 non-strict roles, guards against silent
+  tightening), `test_strict_helper_derives_required_from_properties_keys`,
+  + existing `test_critique_schema_required_matches_parser_required`
+  now `==`. Codex MCP cross-LLM review caught the
+  `rewrite_section` omission (would have broken critic→evolver
+  handoff under strict mode) + CHANGELOG/docstring drift; both
+  folded in-band before merge.
+
 ### Fixed
 - **PR-SCHEMA-PARSER-DRIFT-CLOSE — close 3 schema ↔ parser SoT
   drifts surfaced by smoke 18 dialogue audit.** smoke 18 archive

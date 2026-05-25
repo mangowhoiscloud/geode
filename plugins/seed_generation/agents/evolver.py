@@ -66,6 +66,13 @@ _REQUIRED_EVOLVE_FIELDS = (
     "evolved_path",
     "rewrite_section",
     "verdict",
+    # PR-STRICT-COMPATIBLE-SCHEMAS (2026-05-26) — promoted from
+    # optional. EVOLVE_SCHEMA now requires every property (so codex
+    # ``text.format`` can wire strict-mode); the evolver agent
+    # contract still allows ``notes=""`` to mean "no notes worth
+    # surfacing", but the field must be present (empty-string
+    # sentinel).
+    "notes",
 )
 _VALID_VERDICTS = frozenset({"ok", "evolution_skipped", "failed"})
 

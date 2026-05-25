@@ -160,6 +160,10 @@ class TestEvolverExecuteAdmissionFlow:
                 "evolved_path": a_path,
                 "rewrite_section": "Body",
                 "verdict": "ok",
+                # PR-STRICT-COMPATIBLE-SCHEMAS (2026-05-26) — notes
+                # promoted from optional → required (empty-string
+                # sentinel allowed).
+                "notes": "",
             },
             "evolve-c1": {
                 "parent_id": "c1",
@@ -167,6 +171,7 @@ class TestEvolverExecuteAdmissionFlow:
                 "evolved_path": b_path,
                 "rewrite_section": "Body",
                 "verdict": "ok",
+                "notes": "",
             },
         }
 
