@@ -48,6 +48,21 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-17 C.5 kind × dim cross-effect matrix** —
+  `core/self_improving_loop/kind_dim_matrix.py` inner-joins apply rows
+  (PR-12 `read_recent_applies`) with attribution rows (PR-12
+  `read_recent_attributions`) on `mutation_id` and produces a 2-D
+  `{target_kind: {dim_name: cumulative_score}}` matrix
+  (`compute_kind_dim_matrix`). Each cell accumulates
+  `attribution_score × observed_dim[dim]` (signed). Orphan apply or
+  attribution rows are skipped silently. Companions:
+  `rank_dims_by_kind(kind)` / `rank_kinds_by_dim(dim)` sort by
+  absolute score with optional `limit`. Resolves F4 fragmentation
+  signal — operators can answer "which mutation kind has moved which
+  dim the most over history" without re-deriving from raw JSONL.
+  Pure functions (I/O-free); caller (CLI / dashboard) deferred to a
+  follow-up PR. Frontier: Quality-Diversity behavior-niche grid
+  (Mouret & Clune 2015) + DGM archive lineage causal trace.
 - **PR-16 C.4 credit_assignment module** —
   `core/self_improving_loop/credit_assignment.py` adds two pure
   functions for selection-layer observability:
