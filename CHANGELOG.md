@@ -48,6 +48,17 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-21 A.8 sub_agent_slice helper** —
+  `core/self_improving_loop/sub_agent_slice.py` defines a 5-stage
+  deterministic round-robin slice mapping (role / tools / reflection
+  / decomposition / interlocutor) keyed on `sub_agent_index`.
+  `compute_sub_agent_slice(idx, total)` returns the slice name;
+  `derive_slice_prompt_hint(slice)` returns a one-line mutator
+  system-prompt hint that the eventual `propose_swarm` wiring can
+  prepend to diversify sub-agent focus beyond temperature
+  stochasticity. Pure functions, no caller wired yet (deferred to a
+  follow-up PR). Frontier: Kimi K2.6 PARL post-trained decomposition,
+  inference-time variant.
 - **PR-20 A.6 CRM causal_hypothesis field** —
   `Mutation` dataclass + `ApplyRecord` Pydantic schema +
   `parse_mutation` + `to_audit_row` 가 새로운 optional
