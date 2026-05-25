@@ -114,6 +114,11 @@ class ApplyRecord(BaseModel):
     재구성 가능. group_size=1 (legacy) 일 때 None."""
     group_advantage: float | None = None
     """P1-revised — advantage normalization z-score. group_size=1 일 때 None."""
+    principle: str | None = Field(default=None, max_length=500)
+    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시
+    한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
+    None 일 때 legacy (P3 이전 mutation row). max 500 chars (parse_mutation
+    guard)."""
 
 
 @dataclass(frozen=True)
@@ -167,6 +172,13 @@ class Mutation:
     cost_output_tokens: int = 0
     cost_elapsed_seconds: float = 0.0
     cost_model: str = ""
+
+    principle: str = ""
+    """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시한
+    self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴 —
+    principle → critique → reward chain 의 입구. parse_mutation 이
+    LLM response 의 ``principle`` key 에서 추출 (max 500자). 빈 문자열
+    일 때 legacy mutator (P3 이전) 호환."""
 
     def to_audit_row(
         self,
@@ -225,6 +237,10 @@ class Mutation:
             row["cost_elapsed_seconds"] = round(float(self.cost_elapsed_seconds), 4)
         if self.cost_model:
             row["cost_model"] = str(self.cost_model)
+        # P3-revised — principle non-empty 시만 emit (legacy mutation row
+        # 무영향).
+        if self.principle:
+            row["principle"] = self.principle
         return row
 
 
@@ -424,6 +440,15 @@ _MUTATION_CONTRACT_SUFFIX = (
     "``reflection`` (reflection.json). "
     "Omit for prompt-level mutations. (``retrieval`` was deprecated "
     "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
+    "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
+    "selecting ``target_section`` and writing ``new_value``, explicitly state "
+    "the judging principle that motivates this mutation — what specific axis "
+    "of GEODE behaviour should it move, and why? Output the principle as a "
+    "short string in the ``principle`` field (<= 500 chars). This is the "
+    "SPCT (DeepSeek-GRM 2026-Q1) frontier — self-generated principles "
+    "anchor self-judge drift and let downstream attribution (PR-3 W2 hook) "
+    "trace causal hypothesis. legacy callers (P3 이전) may omit; empty "
+    "string is graceful.\n"
     "- **Group sampling (P1-revised, 2026-05-25)**: when this invocation is "
     "part of a sibling group (``group_size > 1``), each sibling MUST target a "
     "meaningfully different section or strategy. Repeating the same "
@@ -441,7 +466,8 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
     '  "target_kind": "<prompt|tool_policy|decomposition|reflection>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
-    '  "rollback_condition": "<one-line predicate, or empty>"\n'
+    '  "rollback_condition": "<one-line predicate, or empty>",\n'
+    '  "principle": "<= 500 chars SPCT principle (P3-revised), or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -819,6 +845,16 @@ def parse_mutation(raw: str) -> Mutation:
         )
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
+    # P3-revised (2026-05-25, SPCT pattern) — principle 추출. LLM 이 명시
+    # 안 하면 (legacy 또는 mutator omit) 빈 문자열. max 500 chars guard.
+    principle_raw = payload.get("principle", "")
+    principle = principle_raw.strip() if isinstance(principle_raw, str) else ""
+    if len(principle) > 500:
+        raise ValueError(
+            f"principle length {len(principle)} exceeds 500 char cap "
+            f"(SPCT principle must be concise — frontier reference: "
+            f"DeepSeek-GRM)"
+        )
     # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
@@ -843,6 +879,7 @@ def parse_mutation(raw: str) -> Mutation:
             mutation_id=mutation_id_raw.strip(),
             expected_dim=expected_dim,
             rollback_condition=rollback_condition,
+            principle=principle,
         )
     return Mutation(
         target_section=target_section.strip(),
@@ -852,6 +889,7 @@ def parse_mutation(raw: str) -> Mutation:
         target_kind=target_kind,
         expected_dim=expected_dim,
         rollback_condition=rollback_condition,
+        principle=principle,
     )
 
 

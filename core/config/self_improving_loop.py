@@ -292,6 +292,22 @@ class AutoresearchConfig(BaseModel):
     point 는 unreachable worst-case (e.g., dim 별 0).
     """
 
+    anchor_confidence_mode: bool = False
+    """P3-revised (2026-05-25, SPCT + Meta-Rewarding) — anchor 3
+    (admirable / disappointing / needs_attention) → fitness 의 confidence
+    multiplier routing knob. plan ``docs/plans/2026-05-25-p3-anchor-calibration-crm-spct.md``.
+
+    - ``False`` (default, legacy): anchor 3 가 dim_means 에 measured 되지만
+      fitness 계산에는 weight=0 (제외). PR-5 이전 동작 그대로.
+    - ``True``: ``compute_anchor_confidence_multiplier`` helper 가
+      ``0.7 + 0.3 × normalized_anchor`` range [0.7, 1.0] 의 multiplier
+      산출. caller (autoresearch/train.py compute_fitness — P3.1 후속 wiring)
+      가 base_fitness × multiplier 적용.
+
+    사용자 결정 D2 (2026-05-25): anchor 3 → self-improving loop baseline 의
+    input. PSM 패턴 거부 후 RL-derived (AutoGLM ORM confidence band).
+    """
+
     target_model: str | None = None
     """**Deprecated pre-PR #1496 slot** — surviving for back-compat
     config file load. Never consulted at runtime. Will be dropped in a
