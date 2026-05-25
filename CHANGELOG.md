@@ -48,6 +48,18 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-13 A.5 meta-judge module** — `core/self_improving_loop/meta_judge.py`
+  invokes a meta-judge LLM on the most-recent N attribution rows (via
+  PR-12 `read_recent_attributions`) and returns `MetaJudgeResult` with a
+  `drift_score` on `[0.0, 1.0]` + `drift_summary` text + `evaluated_count`
+  + `llm_raw` (capped 2000 chars). Pure function `build_meta_judge_prompt`
+  serialises records to JSONL; `parse_meta_judge_response` accepts strict
+  JSON, fence-wrapped JSON, or regex key-value fallback for low-capability
+  models, and returns `(0.0, "")` on total failure so callers can detect
+  "no signal". `invoke_meta_judge(n, llm_call, path)` accepts a dependency-
+  injected LLM callable (default = mutator dispatch) and returns `None`
+  when no attribution rows exist (fresh repo / pre-PR-5). Frontier
+  reference: Meta-Rewarding (Meta 2024-07 arXiv 2407.19594).
 - **PR-12 C.2 mutations_reader module** — `core/self_improving_loop/mutations_reader.py`
   adds a read-only iterator + type-safe filter for `mutations.jsonl`
   (`iter_mutations(path, kinds, limit)`, `read_recent_attributions(n, path)`,
