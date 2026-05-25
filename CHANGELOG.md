@@ -60,7 +60,13 @@ functional change.
   `GEODE_SIL_ANCHOR_CONFIDENCE_MODE=1` env to gate the mode. `runner.py
   _run_autoresearch_subprocess` forwards the env from `AutoresearchConfig.
   anchor_confidence_mode`. Critical gate (return 0.0) untouched — strict
-  reject is anchor-independent.
+  reject is anchor-independent. `_should_promote` (promotion logic) also
+  threads the multiplier through its 3 internal `compute_fitness` calls
+  (gated / current_raw / prior_raw) — extracting ANCHOR_DIMS subset from
+  current/baseline dim_means and forwarding `anchor_confidence_mode` — so
+  promotion decision compares fitness on the same scale as the
+  caller-side logged fitness (Codex MCP review fix; previously
+  half-wired: caller multiplied, promote compared raw).
 
 ## [0.99.56] - 2026-05-25
 

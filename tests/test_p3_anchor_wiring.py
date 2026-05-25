@@ -278,3 +278,101 @@ def test_partial_anchor_means_subset() -> None:
         anchor_confidence_mode=True,
     )
     assert f_partial == pytest.approx(f_legacy, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# 9. _should_promote anchor wiring (Codex MCP catch — promote 결정도 multiplier)
+# ---------------------------------------------------------------------------
+
+
+def test_should_promote_mode_off_legacy_behavior() -> None:
+    """mode=False (default) — _should_promote 내부 3 compute_fitness 호출이
+    anchor multiplier 적용 안 함. PR-11 이전 동작 유지."""
+    from autoresearch.train import _should_promote
+
+    current = _make_neutral_dim_means()
+    current["admirable"] = 1.0  # bad anchor — but mode off 라 무영향
+    current["disappointing"] = 10.0
+    baseline = _make_neutral_dim_means()
+    baseline["admirable"] = 10.0  # good anchor — mode off 라 무영향
+    # current 가 baseline 보다 raw fitness 같음 (anchor 외 dim 동일) →
+    # mode off 라 promote 결정도 동일
+    ok, _ = _should_promote(
+        current,
+        dict.fromkeys(current, 0.0),
+        baseline,
+        dict.fromkeys(baseline, 0.0),
+        anchor_confidence_mode=False,
+    )
+    # margin floor 0.05 + stderr 0 → current_raw == prior_raw 인데 promotion
+    # 은 strict > floor 이어야 → False (legacy 동작)
+    assert ok is False
+
+
+def test_should_promote_mode_on_anchor_breaks_tie() -> None:
+    """mode=True — current anchor 가 baseline 보다 좋으면 multiplier 차이로
+    promote, 나쁘면 reject. promote 결정도 multiplier-adjusted fitness 로 비교."""
+    from autoresearch.train import _should_promote
+
+    current = _make_neutral_dim_means()
+    current["admirable"] = 10.0  # best anchor
+    current["disappointing"] = 1.0
+    current["needs_attention"] = 1.0
+    baseline = _make_neutral_dim_means()
+    baseline["admirable"] = 1.0  # worst anchor
+    baseline["disappointing"] = 10.0
+    baseline["needs_attention"] = 10.0
+    # raw dim 동일, baseline 의 multiplier 만 0.7 → current_raw > prior_raw*0.7
+    # 차이가 0.05 floor 초과해야 promote True
+    ok, reason = _should_promote(
+        current,
+        dict.fromkeys(current, 0.0),
+        baseline,
+        dict.fromkeys(baseline, 0.0),
+        anchor_confidence_mode=True,
+    )
+    assert ok is True, f"expected promote=True, got reason={reason!r}"
+
+
+def test_should_promote_mode_on_baseline_better_anchor_blocks() -> None:
+    """역방향 — baseline 이 anchor 좋고 current 가 anchor 나쁘면 mode=True
+    에서 multiplier 차이로 reject. mode=False 에선 tie 라 reject (legacy)."""
+    from autoresearch.train import _should_promote
+
+    current = _make_neutral_dim_means()
+    current["admirable"] = 1.0  # worst anchor
+    current["disappointing"] = 10.0
+    current["needs_attention"] = 10.0
+    baseline = _make_neutral_dim_means()
+    baseline["admirable"] = 10.0  # best anchor
+    baseline["disappointing"] = 1.0
+    baseline["needs_attention"] = 1.0
+    ok, _ = _should_promote(
+        current,
+        dict.fromkeys(current, 0.0),
+        baseline,
+        dict.fromkeys(baseline, 0.0),
+        anchor_confidence_mode=True,
+    )
+    # current_raw*0.7 < prior_raw*1.0 → reject (multiplier 차이로 강하게 reject)
+    assert ok is False
+
+
+def test_should_promote_gated_critical_anchor_independent() -> None:
+    """critical regression 시 gated fitness=0.0 → multiplier 무관 reject.
+    anchor best 라도 strict-reject."""
+    from autoresearch.train import _should_promote
+
+    baseline = _make_neutral_dim_means()
+    current = _make_neutral_dim_means()
+    current[CRITICAL_DIMS[0]] = 5.0  # critical regression
+    current["admirable"] = 10.0  # best anchor (irrelevant for strict reject)
+    ok, reason = _should_promote(
+        current,
+        dict.fromkeys(current, 0.0),
+        baseline,
+        dict.fromkeys(baseline, 0.0),
+        anchor_confidence_mode=True,
+    )
+    assert ok is False
+    assert "critical" in reason.lower() or "regression" in reason.lower()

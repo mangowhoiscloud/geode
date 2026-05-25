@@ -1878,6 +1878,14 @@ def _should_promote(
     # backward compat (judge_llm 가정).
     measurement_modality: dict[str, str] | None = None,
     baseline_measurement_modality: dict[str, str] | None = None,
+    # PR-11 P3.1 (2026-05-25) — anchor confidence multiplier forward to
+    # internal compute_fitness 3 호출 (gated / current_raw / prior_raw)
+    # so promote 결정이 caller-side fitness 와 같은 scale 로 비교됨. mode
+    # False (default) 면 multiplier=1.0 → legacy 동작. baseline_means /
+    # current_means 의 ``ANCHOR_DIMS`` subset 을 자동 추출 (dim_extractor
+    # indiscriminate collect 덕분에 anchor 가 이미 포함됨, stale v1 baseline
+    # 부재 시 빈 dict → graceful multiplier=1.0).
+    anchor_confidence_mode: bool = False,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
@@ -1911,6 +1919,11 @@ def _should_promote(
     if baseline_means is None or baseline_stderr is None:
         return True, "no prior baseline (bootstrap)"
 
+    # PR-11 P3.1 (2026-05-25) — anchor subset 추출 (current + baseline 각각).
+    # mode=False 면 compute_fitness 가 무시 → 추출 비용 무관.
+    _current_anchor = {d: current_means[d] for d in ANCHOR_DIMS if d in current_means}
+    _baseline_anchor = {d: baseline_means[d] for d in ANCHOR_DIMS if d in baseline_means}
+
     gated = compute_fitness(
         current_means,
         current_stderr,
@@ -1919,6 +1932,8 @@ def _should_promote(
         bench_means=bench_means,
         baseline_bench_means=baseline_bench_means,
         measurement_modality=measurement_modality,
+        anchor_means=_current_anchor or None,
+        anchor_confidence_mode=anchor_confidence_mode,
     )
     if gated == 0.0:
         # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
@@ -1941,11 +1956,15 @@ def _should_promote(
         current_means,
         current_stderr,
         measurement_modality=measurement_modality,
+        anchor_means=_current_anchor or None,
+        anchor_confidence_mode=anchor_confidence_mode,
     )
     prior_raw = compute_fitness(
         baseline_means,
         baseline_stderr,
         measurement_modality=baseline_measurement_modality,
+        anchor_means=_baseline_anchor or None,
+        anchor_confidence_mode=anchor_confidence_mode,
     )
     # PR-3 — N=1 detector. Walks the critical tier (most safety-relevant)
     # against the per-dim sample_count; if any critical dim was measured
@@ -2276,6 +2295,11 @@ def main() -> int:
             # PR-SIL-5THEME C3 — modality forward.
             measurement_modality=measurement_modality or None,
             baseline_measurement_modality=baseline_modality or None,
+            # PR-11 P3.1 — anchor multiplier mode forward 로 caller-side
+            # fitness 와 promotion-side fitness 가 같은 scale (둘 다 multiplier
+            # 적용 또는 둘 다 raw) 로 비교됨. _should_promote 가 ANCHOR_DIMS
+            # subset 을 current_means / baseline_means 에서 자동 추출.
+            anchor_confidence_mode=_anchor_confidence_mode,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
