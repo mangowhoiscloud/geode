@@ -188,6 +188,96 @@ def test_load_baseline_roundtrips_ux_means_slot(
     assert baseline_ux == pytest.approx(ux)
 
 
+def test_prior_raw_branch_uses_baseline_ux_means_not_current() -> None:
+    """The ``prior_raw`` internal ``compute_fitness`` call inside
+    ``_should_promote`` must use ``baseline_ux_means`` (not current
+    ``ux_means``) so prior-vs-current fitness comparison is fair.
+    Subtle asymmetry — Codex MCP review §6 flagged that the bootstrap
+    end-to-end test exercises only the current-side path. This test
+    pins the baseline-side forward explicitly.
+
+    Construct two _should_promote calls with the SAME current
+    ux_means but DIFFERENT baseline_ux_means. The promote decision
+    margin must differ (prior_raw changes when baseline_ux_means
+    changes)."""
+    from autoresearch.train import compute_fitness
+
+    dim_means = dict.fromkeys(AXIS_TIERS, 3.0)
+    dim_stderr = dict.fromkeys(AXIS_TIERS, 0.0)
+    baseline_means_dict = dict.fromkeys(AXIS_TIERS, 3.0)
+    baseline_stderr_dict = dict.fromkeys(AXIS_TIERS, 0.05)
+    current_ux = {
+        "success_rate": 0.5,
+        "token_cost_norm": 0.5,
+        "revert_ratio_norm": 0.5,
+        "latency_norm": 0.5,
+    }
+    # Two prior_raw fitness values — same current means, different
+    # baseline_ux. If the code wrongly used current ux for prior_raw,
+    # these would be identical.
+    prior_low = compute_fitness(
+        baseline_means_dict,
+        baseline_stderr_dict,
+        ux_means={
+            "success_rate": 0.0,
+            "token_cost_norm": 0.0,
+            "revert_ratio_norm": 0.0,
+            "latency_norm": 0.0,
+        },
+    )
+    prior_high = compute_fitness(
+        baseline_means_dict,
+        baseline_stderr_dict,
+        ux_means={
+            "success_rate": 1.0,
+            "token_cost_norm": 1.0,
+            "revert_ratio_norm": 1.0,
+            "latency_norm": 1.0,
+        },
+    )
+    # Sanity — compute_fitness itself is sensitive to ux_means.
+    assert prior_low != prior_high
+
+    # Now exercise _should_promote with current_ux fixed and baseline_ux
+    # varying. If the forward is correct, the gated/prior_raw fitness
+    # used internally differs → margin differs → decision can flip.
+    # We don't assert decision flips (depends on margin math); we assert
+    # the reason string carries different fitness numbers.
+    _, reason_low_baseline = _should_promote(
+        dim_means,
+        dim_stderr,
+        baseline_means=baseline_means_dict,
+        baseline_stderr=baseline_stderr_dict,
+        ux_means=current_ux,
+        baseline_ux_means={
+            "success_rate": 0.0,
+            "token_cost_norm": 0.0,
+            "revert_ratio_norm": 0.0,
+            "latency_norm": 0.0,
+        },
+    )
+    _, reason_high_baseline = _should_promote(
+        dim_means,
+        dim_stderr,
+        baseline_means=baseline_means_dict,
+        baseline_stderr=baseline_stderr_dict,
+        ux_means=current_ux,
+        baseline_ux_means={
+            "success_rate": 1.0,
+            "token_cost_norm": 1.0,
+            "revert_ratio_norm": 1.0,
+            "latency_norm": 1.0,
+        },
+    )
+    # Reasons must differ because prior_raw fitness differs between the
+    # two calls — if the code wrongly used current ux_means for
+    # prior_raw, both reasons would be identical.
+    assert reason_low_baseline != reason_high_baseline, (
+        "prior_raw appears to use current ux_means instead of "
+        "baseline_ux_means — the asymmetric forward is broken."
+    )
+
+
 def test_main_caller_collects_ux_means_via_l4a_collector() -> None:
     """The main ``fitness = compute_fitness(...)`` call must reach
     ``collect_ux_means_from_sources`` to gather current ux. grep
