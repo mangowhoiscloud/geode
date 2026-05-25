@@ -1,9 +1,36 @@
 # 2026-05-25 — Lineage + Attribution Schema (RFC)
 
-> Status: **Final** (2026-05-25 운영자 5 항목 일괄 채택)
-> Scope: PR-3 LINEAGE+ATTRIBUTION 통합 구현의 사전 schema 확정
+> Status: **Amended 2026-05-25** — 디렉토리 grouping / UUIDv7 / 4 파일 schema 모두 폐기, single-ledger 패턴으로 정정
+> Scope: PR-3 ATTRIBUTION WIRING 사전 schema 확정 (이전 "LINEAGE+ATTRIBUTION 통합" → "wiring gap fill" 로 재정의)
 > Sprint: PR-2 SCHEMA-DESIGN
-> 관련 메모리: [[project-autoresearch-separation-architecture]], [[project-autoresearch-state-injection-pipeline]], [[project-autoresearch-fragmentation-audit]], [[reference-mutation-surface-frontier-2026-05-25]]
+> 관련 메모리: [[project-autoresearch-separation-architecture]], [[project-autoresearch-state-injection-pipeline]], [[project-autoresearch-fragmentation-audit]], [[reference-mutation-surface-frontier-2026-05-25]], [[feedback-post-implementation-verification]]
+> Follow-up plan: [2026-05-25 Attribution Wiring Gap Fill](./2026-05-25-attribution-wiring-gap-fill.md)
+
+## 0. 정정 history (2026-05-25 amend)
+
+본 RFC 의 초기 결정 (디렉토리 grouping + UUIDv7 + 4 파일 schema + day prefix) 은 PR-3 worktree 의 GAP audit 단계에서 다음 사실을 발견하여 **전면 정정**:
+
+| 발견 | 영향 |
+|---|---|
+| `core/self_improving_loop/attribution.py` (PR-5 C-4, 2026-05-21) 가 이미 `compute_attribution()` 으로 multi-dim attribution payload (`observed_dim`, `ci95`, `significant`, `attribution_score`, `confidence_stability`) 생산하며 결과를 mutations.jsonl 의 `kind="attribution"` row 로 append 하는 single-ledger 패턴 채택 | 본 RFC 의 `post_state.json` 별 파일 + 디렉토리 grouping schema 와 충돌 |
+| `core/self_improving_loop/runner.py:822, 842` 가 이미 `previous_value` 를 mutations.jsonl 의 apply row 에 저장 | 본 RFC 의 `pre_state.json` 의 lineage 측 부분 무효 |
+| `compute_attribution` 의 production caller 0 (tests/ 만) — PR-5 framework only, PR-6 wiring 이 빠짐 | 본 RFC 가 사실상 그 wiring gap 을 채우는 작업이었음 — 새 schema 가 아니라 기존 schema 의 caller 추가가 정답 |
+| openclaw / hermes / autoresearch 어느 곳에서도 디렉토리 grouping 패턴 검증 0건 — single-ledger + `kind` discriminator 가 GEODE 만의 패턴 | §4 frontier 그라운딩의 (multi-dim × lineage) 분면 채택 근거 약화 |
+
+[[feedback-post-implementation-verification]] 위반 사례 — RFC 작성 전에 `grep -rn "attribution" core/self_improving_loop/` 한 번이면 발견했을 것. 후속 plan ([Attribution Wiring Gap Fill](./2026-05-25-attribution-wiring-gap-fill.md)) 으로 정정된 4 wiring 진행.
+
+**유효한 결정** (amend 후 유지):
+- (선택) Pydantic schema freeze (W4)
+- drift invariant (apply ↔ attribution 의 mutation_id 동등성)
+- `audit_run_id` field 추가 (mutation row ↔ Petri eval cross-ref)
+
+**무효 결정** (amend 후 폐기):
+- 디렉토리 grouping (`runs/<YYYY-MM-DD>/<UUIDv7>/`)
+- UUIDv7 (단순 hex[12] 유지)
+- day prefix
+- 4 파일 schema (apply/pre_state/post_state/trace.eval)
+- `siblings: []` 필드 예약
+- relative symlink for trace.eval (`audit_run_id` field 로 대체)
 
 ## 1. 배경
 
@@ -29,6 +56,8 @@ frontier 패턴 중 GEODE 가 점유할 분면은 **(multi-dim × lineage)** —
 
 ## 4. Frontier 그라운딩
 
+> **[AMENDED 2026-05-25]** — GEODE 의 기존 single-ledger 패턴 (mutations.jsonl 의 `kind` discriminator) 이 이미 (lineage × multi-dim) 두 측면을 단일 ledger 로 통합. frontier 의 디렉토리 grouping 패턴 (AlphaEvolve evolutionary DB) 은 GEODE 와 정합 안 됨 — 패턴 적용 거부. openclaw/hermes/autoresearch 검증에서도 디렉토리 grouping 사례 0건. 이하 4분면 표는 historical reference (이론적 분류, 채택 안 함).
+
 frontier 16건은 **2 직교 차원** 으로 분류 가능:
 - **Lineage** (storage): mutation trace 를 append-only archive 로 보존하는가
 - **Multi-dim** (semantic): mutation 의 효과를 N≥2 차원으로 측정하는가
@@ -52,6 +81,8 @@ frontier 16건은 **2 직교 차원** 으로 분류 가능:
 
 ## 5. 디렉토리 구조
 
+> **[AMENDED 2026-05-25]** — 본 § 의 디렉토리 grouping schema 는 폐기. mutations.jsonl single-ledger 패턴 유지 + `audit_run_id` field 만 추가. 정정된 schema 는 [follow-up plan §5/§7](./2026-05-25-attribution-wiring-gap-fill.md) 참조. 이하 내용은 historical record.
+
 ```
 autoresearch/state/
 ├── mutations.jsonl                          # 기존 index ledger (유지, drift invariant 로 동기)
@@ -67,6 +98,8 @@ autoresearch/state/
 `<YYYY-MM-DD>` 예: `2026-05-25/`. 일별 prefix 로 디렉토리당 항목 수 안전 확보 (월 1000 mutation 시 일 ~33 < 50). `pre_state` / `post_state` 명명은 두 파일이 multi-dim mutation lineage 의 (before/after) 양면임을 명시화 — frontier 의 (multi-dim × lineage) 분면 채택과 정합.
 
 ## 6. 파일별 Schema
+
+> **[AMENDED 2026-05-25]** — 4 파일 schema (`apply.json`/`pre_state.json`/`post_state.json`/`trace.eval`) 모두 폐기. 기존 `Mutation.to_audit_row()` (16 fields, runner.py:127-164) + `compute_attribution()` (13 fields, attribution.py:171-235) 의 row schema 그대로 유지. `audit_run_id` field 만 추가. (선택) Pydantic schema freeze (W4) 는 [follow-up plan §5/W4](./2026-05-25-attribution-wiring-gap-fill.md) 참조. 이하 내용은 historical record.
 
 ### 6.1 `apply.json`
 
@@ -146,6 +179,8 @@ audit subprocess 가 종료 시 `docs/petri-bundle/logs/<audit_id>.eval` 를 가
 
 ## 7. Writer / Reader 책임
 
+> **[AMENDED 2026-05-25]** — 신규 `core/self_improving_loop/runs.py` 모듈 + 4 writer hook 모두 폐기. 기존 writer 유지: `runner.py:append_audit_log()` (apply row, T3) + `attribution.py:append_attribution_log()` (attribution row, T4). 정정된 wiring 위치는 [follow-up plan §5 W1-W4](./2026-05-25-attribution-wiring-gap-fill.md) 참조. 이하 내용은 historical record.
+
 ### Writer
 
 | 파일 | Writer 함수 | 위치 | 시점 |
@@ -183,6 +218,8 @@ def load_post_state_for_mutation(mutation_id: str) -> PostStateRecord | None: ..
 
 ## 8. 운영자 결정 사항 (2026-05-25 일괄 채택)
 
+> **[AMENDED 2026-05-25]** — Q1 UUIDv7 / Q2 symlink / Q3 day prefix / Q5 siblings 모두 폐기 (해당 항목 자체 부재). Q4 drift invariant 만 유효 (apply ↔ attribution mutation_id 동등성 + expected_dim ↔ observed_dim 정합). 추가 결정 사항: `audit_run_id` field, Pydantic schema freeze. 이하 표는 historical record.
+
 | # | 항목 | 채택 | 근거 |
 |---|---|---|---|
 | Q1 | mutation_id 형식 | **UUIDv7** (RFC 9562) | time-sortable, `runs/2026-05-25/<uuidv7>/` 디렉토리 시간순 정렬, mutator history reader 효율. 기존 mutations.jsonl UUID4 row 는 backward-compat 유지, 신규 mutation 부터 UUIDv7 |
@@ -205,6 +242,8 @@ def load_post_state_for_mutation(mutation_id: str) -> PostStateRecord | None: ..
 ⚠️ PR-3 구현 전 `git check-ignore autoresearch/state/runs/2026-05-25/test-id/apply.json` 으로 실제 ignore 정책 확인 + 회귀 invariant 테스트 ([[project-petri-p1-handoff]] PR-G5b 의 silent-ignored writer 사례 회피).
 
 ## 11. PR-3 Acceptance Criteria
+
+> **[AMENDED 2026-05-25]** — 본 § 의 acceptance criteria 폐기. 정정된 acceptance 는 [follow-up plan §8](./2026-05-25-attribution-wiring-gap-fill.md) 의 4 wiring (W1-W4) + 8 invariant tests. 이하 내용은 historical record.
 
 - [ ] 디렉토리 구조 §5 와 정확히 매치 (`runs/<YYYY-MM-DD>/<UUIDv7>/`)
 - [ ] 4 파일 schema §6 와 정확히 매치 (Pydantic model 로 freeze: `ApplyRecord`, `PreStateRecord`, `PostStateRecord`)

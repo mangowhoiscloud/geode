@@ -48,6 +48,78 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-SEEDS-EVAL-EXPORT** — seed-generation runs now surface as native
+  inspect_ai tasks inside the SPA bundle viewer at
+  `https://mangowhoiscloud.github.io/geode/petri-bundle/#/tasks/`.
+  Previously the SPA only recognised `inspect_petri/audit` `.eval`
+  archives shipped from `geode audit` runs; the seed-generation
+  pipeline's JSON-only output (`docs/petri-bundle/seeds/<run_id>/*.
+  json`) was invisible to it.
+
+  New module `plugins/seed_generation/eval_export.py:export_run_to_evals`
+  reads a run's `state.json` + `survivors.json` + `meta_review.json`
+  and synthesises **one `.eval` per non-empty pipeline phase** of the
+  8 phases (`supervisor` / `generator` / `proximity` / `critic` /
+  `pilot` / `ranker` / `evolver` / `meta_reviewer`). Each phase
+  becomes a task whose samples are the natural unit for that phase
+  (candidates, reflections, pilot evaluations, etc.), with a single
+  meaningful score derived from the phase's own semantics (draft-to-
+  survive ratio, dedupe ratio, avg discrimination_estimate, target-
+  dim pilot mean, survival ratio, evolution yield, dim-coverage
+  breadth). Each emitted archive passes the strict
+  `scripts/validate_petri_bundle.py` invariants (status='success',
+  non-empty `results.scores` with metrics).
+
+  Wired into `plugins/seed_generation/bundle_sync.py:sync_run_to_bundle`
+  as a best-effort secondary publish step after the JSON sync, so
+  every newly-published seed-generation run automatically gains 7-8
+  phase task cards in the viewer. An export failure does not block
+  the JSON sync that already succeeded; operators can opt out per-
+  environment via `GEODE_SEED_EVAL_EXPORT_DISABLED=1`.
+
+  Listing-entry merge re-uses the audit-side helpers
+  (`plugins/petri_audit/bundle_sync._extract_listing_entry` +
+  `_merge_listing`) so the produced `.eval` lands in
+  `docs/petri-bundle/logs/listing.json` with the same schema the SPA
+  already reads. 6 new tests
+  (`tests/test_seed_eval_export.py`) pin: per-phase produce count,
+  validator-required header invariants, listing-entry merge,
+  PHASE_TASKS name discipline, empty-run skip, missing-state-json
+  skip. Verified end-to-end with the gen1 sample run already in the
+  bundle (`gen1-redundant_tool_invocation`): 7 cards now appear in
+  the SPA tasks view alongside the 11 existing audit cards.
+
+- **PR-SEEDS-PETRI-NEXTJS-PAGE** — new Next.js docs page
+  `site/src/app/docs/petri/seeds/page.tsx` renders the self-improving
+  loop's seed-generation runs as a first-class GEODE docs surface,
+  unified with the other `docs/petri/*` pages (overview / scenarios /
+  run / judge-dimensions / bundle). Replaces the prior raw-HTML
+  `docs/petri-bundle/seeds/index.html` as the primary discovery
+  surface; the raw HTML stays as a fallback for direct bundle access.
+
+  Implementation:
+  - Server Component reads `docs/petri-bundle/seeds/listing.json` and
+    each run's `state.json` / `survivors.json` / `meta_review.json` at
+    build time via `node:fs`. Pages workflow already triggers on both
+    `site/**` and `docs/petri-bundle/**`, so every new published run
+    rebuilds the page.
+  - `DocsShell` + `Bi` (bilingual ko/en) wrappers match the existing
+    petri docs pattern (`bundle/page.tsx`). Dark theme, `#A573E8`
+    amethyst accent, no emoji, no card grids per `feedback-no-box-
+    ui-no-emoji` and `site/DESIGN.md`.
+  - Runs table (run_id / gen_tag / target_dim / status / draft surv
+    / evolved / iters / cost USD) with anchor links into expandable
+    per-run `<details>`: survivors (id + elo + pilot status +
+    candidate file link + evolved children), cost rollup, meta-review
+    session_summary, next-gen priors (target_dim + weight +
+    rationale), evolution yield, Elo distribution. Each run's header
+    also carries a `[raw bundle ↗]` link back to
+    `/petri-bundle/seeds/<run_id>/` for direct file access.
+  - Status derived from listing: `survivors_count == 0` fail,
+    `evolved_count < survivors_count` partial, else ok.
+  - Sitemap entry registered in `site/src/lib/geode-docs/sitemap.ts`
+    under the verification section, sibling to `petri/bundle`.
+
 - **PR-SEEDS-BUNDLE-VIEWER** — `docs/petri-bundle/seeds/index.html` ships
   a self-contained viewer for the self-improving-loop seed-generation
   runs published into the petri-bundle. Previously
@@ -76,6 +148,50 @@ functional change.
   extended with a literature column without schema churn.
 
 ### Fixed
+- **PR-EVOLVER-JACCARD-OBS** — Evolver anti-convergence guard
+  observability + threshold tune. The CSP-6 Jaccard guard now logs
+  the actual measured score and the offending comparison target
+  (`parent:<id>` or `sibling:<evolved_id>`) when it coerces a
+  verdict to `evolution_skipped`, replacing the previous log line
+  that only reported the static threshold. The threshold itself was
+  raised 0.70 → 0.90 to match the prompt's single-section ±20%
+  rewrite contract (`plugins/seed_generation/agents/evolver.md`) —
+  under that constraint, two compliant evolutions naturally share
+  80-90% of their 5-grams. The original 0.70 mirrored
+  co-scientist's pool-deduplication threshold (where the evolver
+  was free to rewrite the entire body). Smoke 14 (archive
+  `.audit/smoke-archives/smoke-14-1779674544/`) iter-2 evolver
+  measured 5-gram Jaccard **0.8437** between parent
+  `gen1-002-e2b9f471` and its single-bullet rewrite ("all other
+  bullets preserved verbatim" per the LLM's own notes); the 0.70
+  threshold falsely rejected it as a near-duplicate, surfacing as
+  `verdict_not_ok` phase failure. The internal API renamed from
+  `_is_near_duplicate(parsed, ..., ...) -> bool` to
+  `_check_near_duplicate(...) -> tuple[bool, float, str]`. Tests:
+  8 in `tests/plugins/seed_generation/test_evolver_anti_convergence
+  .py` including a smoke-14 replay that pins the empirical anchor
+  (Jaccard ≈ 0.85 admitted at 0.90, rejected at 0.70).
+- **PR-JSON-WIRE** — per-role JSON Schema wire-through. New
+  `plugins/seed_generation/json_schemas.py` declares 7 schemas
+  (PROXIMITY / CRITIQUE / PILOT / VOTE / EVOLVE / META_REVIEW /
+  LITERATURE_REVIEW). `SubTask` gains an optional `response_schema`
+  field, propagated through `WorkerRequest` → `AgenticLoop` →
+  `build_adapter_request` → `AdapterCallRequest.response_schema`,
+  which the claude-cli / codex-cli adapters already forward as
+  `--json-schema` / `--output-schema`. Each role's
+  `_build_tasks` populates the field with its schema so the
+  provider rejects malformed responses before they reach the parser.
+  Smoke 14 surfaced the concrete failure mode this fixes: pilot
+  candidate `pilot-gen1-000-...` returned `"...all zero..."` prose
+  ellipsis inside a JSON object, breaking `json.loads` after
+  codeblock unwrap (`Expecting property name enclosed in double
+  quotes line 32 column 5`). The schema's
+  `dim_means.additionalProperties: {"type": "number"}` rejects the
+  string ellipsis at provider-level. Test coverage: 15 tests in
+  `tests/plugins/seed_generation/test_json_schemas_wire.py` —
+  schema↔parser required-fields drift (6), per-role
+  `_build_tasks` schema attachment (3), end-to-end wire-through
+  (6 including default-None back-compat).
 - **PR-CODEX-OAUTH-EMPTY-TEXT-DUMP** — codex_oauth adapter writes a
   postmortem dump to `~/.geode/diagnostics/codex-oauth-empty-text/
   <ts>-<model>.json` when the upstream returns `output_text=""`.

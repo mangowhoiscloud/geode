@@ -2246,6 +2246,63 @@ def main() -> int:
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
+    # W2 (2026-05-25 attribution wiring) — closed loop completion.
+    # runner.py 의 ``_run_autoresearch_subprocess`` 가 propose-apply-audit
+    # 한 cycle 동안 env 3개로 propagate 한다:
+    #   - GEODE_SIL_AUDIT_RUN_ID  (this cycle 의 audit run id, mutations.jsonl 의
+    #     apply row 와 같은 값)
+    #   - GEODE_SIL_MUTATION_ID   (apply row 의 mutation_id; attribution row 의
+    #     foreign key)
+    #   - GEODE_SIL_EXPECTED_DIM  (mutator LLM 의 commitment, JSON dict)
+    # 셋 모두 set 됐을 때만 attribution row append (manual --promote /
+    # standalone audit 보존). dry-run 도 skip — synthetic dim_means 는
+    # attribution 신호가 무의미.
+    _sil_mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+    _sil_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
+    _sil_expected_raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "")
+    if not args.dry_run and _sil_mutation_id and _sil_audit_run_id:
+        try:
+            from core.self_improving_loop.attribution import write_attribution
+            from plugins.seed_generation.baseline_reader import BaselineSnapshot
+
+            try:
+                _sil_expected_dim = json.loads(_sil_expected_raw) if _sil_expected_raw else {}
+                if not isinstance(_sil_expected_dim, dict):
+                    _sil_expected_dim = {}
+            except json.JSONDecodeError:
+                _sil_expected_dim = {}
+            _sil_baseline_before = (
+                BaselineSnapshot(
+                    dim_means=dict(baseline_means),
+                    dim_stderr=dict(baseline_stderr or {}),
+                )
+                if baseline_means
+                else None
+            )
+            _sil_baseline_after = BaselineSnapshot(
+                dim_means=dict(dim_means),
+                dim_stderr=dict(dim_stderr or {}),
+            )
+            _sil_fitness_before = (
+                sum(baseline_means.values()) / len(baseline_means) if baseline_means else None
+            )
+            write_attribution(
+                mutation_id=_sil_mutation_id,
+                expected_dim=_sil_expected_dim,
+                baseline_before=_sil_baseline_before,
+                baseline_after=_sil_baseline_after,
+                fitness_before=_sil_fitness_before,
+                fitness_after=float(fitness),
+                audit_run_id=_sil_audit_run_id,
+            )
+        except Exception:  # pragma: no cover — defensive
+            log.warning(
+                "self-improving-loop attribution write failed for mutation %s audit_run %s",
+                _sil_mutation_id,
+                _sil_audit_run_id,
+                exc_info=True,
+            )
+
     # P1a — append to the shared cross-loop session registry.
     _append_session_index(
         session_id=session_id,

@@ -300,7 +300,14 @@ def test_compute_attribution_missing_after_returns_empty_shape() -> None:
 
 def test_append_attribution_log_writes_one_row(tmp_path: Path) -> None:
     log_path = tmp_path / "mutations.jsonl"
-    payload = {"mutation_id": "m-1", "kind": "attribution", "observed_dim": {"safety": 0.3}}
+    # W4 (2026-05-25) — Pydantic AttributionRecord requires ``ts``;
+    # legacy minimal-payload pattern updated to include the timestamp.
+    payload = {
+        "ts": 1716638400.0,
+        "mutation_id": "m-1",
+        "kind": "attribution",
+        "observed_dim": {"safety": 0.3},
+    }
     out = append_attribution_log(payload, log_path=log_path)
     assert out == log_path
     rows = log_path.read_text(encoding="utf-8").strip().splitlines()
@@ -313,7 +320,10 @@ def test_append_attribution_log_writes_one_row(tmp_path: Path) -> None:
 def test_append_attribution_log_appends_to_existing_file(tmp_path: Path) -> None:
     log_path = tmp_path / "mutations.jsonl"
     log_path.write_text('{"existing":true}\n', encoding="utf-8")
-    append_attribution_log({"mutation_id": "m-1", "kind": "attribution"}, log_path=log_path)
+    append_attribution_log(
+        {"ts": 1716638400.0, "mutation_id": "m-1", "kind": "attribution"},
+        log_path=log_path,
+    )
     rows = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(rows) == 2
     assert json.loads(rows[0]) == {"existing": True}

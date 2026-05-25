@@ -45,6 +45,7 @@ from plugins.seed_generation.agents.base import (
     SeedAgentResult,
     parse_structured_output,
 )
+from plugins.seed_generation.json_schemas import VOTE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 from plugins.seed_generation.picker import VoterBinding
 from plugins.seed_generation.tournament import (
@@ -283,6 +284,8 @@ class Ranker(BaseSeedAgent):
                     },
                     agent=f"seed_ranker_voter_{voter.provider}",
                     source=picker_source_to_adapter_source(voter.source),
+                    # PR-JSON-WIRE (2026-05-25) — force vote JSON shape.
+                    response_schema=VOTE_SCHEMA,
                 )
             )
         return tasks

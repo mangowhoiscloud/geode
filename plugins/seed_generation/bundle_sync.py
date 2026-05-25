@@ -173,6 +173,27 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
                 except OSError as exc:
                     log.warning("bundle_sync: survivor %s copy failed: %s", survivor_id, exc)
 
+    # PR-SEEDS-EVAL-EXPORT (2026-05-25) — additionally synthesise per-
+    # phase inspect_ai ``.eval`` archives so the SPA viewer at
+    # ``docs/petri-bundle/index.html`` (and the live Pages mirror) shows
+    # each phase of the run as a task card alongside the audit ones.
+    # Best-effort: a converter failure does not block the JSON sync that
+    # already succeeded above. ``GEODE_SEED_EVAL_EXPORT_DISABLED=1`` lets
+    # operators opt out of the secondary publish path independently of
+    # the JSON one (useful while iterating on the converter).
+    if os.environ.get("GEODE_SEED_EVAL_EXPORT_DISABLED") != "1":
+        try:
+            from plugins.seed_generation.eval_export import export_run_to_evals
+
+            logs_dir = _bundle_seeds_dir().parent / "logs"
+            export_run_to_evals(bundle_dir, logs_dir)
+        except Exception:
+            log.warning(
+                "bundle_sync: eval_export failed for %s; JSON sync stays",
+                run_id,
+                exc_info=True,
+            )
+
     log.info("bundle_sync: %s → %s", run_id, bundle_dir)
     return bundle_dir
 

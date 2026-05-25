@@ -44,6 +44,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.json_schemas import PILOT_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -199,6 +200,11 @@ class Pilot(BaseSeedAgent):
                     },
                     agent=_PILOT_AGENT_NAME,
                     source=self.adapter_source,
+                    # PR-JSON-WIRE (2026-05-25) — force pilot JSON shape
+                    # (dim_means/dim_stderr/status). Smoke 14 surfaced
+                    # the LLM emitting `...all zero...` prose ellipsis
+                    # inside the JSON; --json-schema rejects it.
+                    response_schema=PILOT_SCHEMA,
                 )
             )
         return tasks
