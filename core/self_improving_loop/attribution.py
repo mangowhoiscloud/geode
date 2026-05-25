@@ -40,10 +40,39 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 if TYPE_CHECKING:
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
 from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
+
+
+class AttributionRecord(BaseModel):
+    """Pydantic schema for ``mutations.jsonl`` attribution row (W4, 2026-05-25).
+
+    Schema 정의는 ``compute_attribution()`` payload 와 1:1 매치.
+    ``extra="allow"`` 로 legacy row 호환 + PR-E confidence_stability /
+    PR-SIL-5THEME C4 fitness ledger / W3 audit_run_id 모두 optional.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    ts: float
+    kind: str = Field(default="attribution", pattern=r"^attribution$")
+    mutation_id: str
+    observed_dim: dict[str, float] = Field(default_factory=dict)
+    ci95: dict[str, float] = Field(default_factory=dict)
+    significant: dict[str, bool] = Field(default_factory=dict)
+    attribution_score: float = 0.0
+    missing_baseline: bool = True
+    confidence_trajectory: list[float] = Field(default_factory=list)
+    confidence_stability: float | None = None
+    fitness_before: float | None = None
+    fitness_after: float | None = None
+    fitness_delta: float | None = None
+    audit_run_id: str | None = None
+
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +206,7 @@ def compute_attribution(
     confidence_trajectory: list[float] | None = None,
     fitness_before: float | None = None,
     fitness_after: float | None = None,
+    audit_run_id: str = "",
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -211,6 +241,12 @@ def compute_attribution(
         "confidence_trajectory": trajectory,
         "confidence_stability": stability,
     }
+    # W3 (2026-05-25 attribution wiring) — cross-ref to the Petri eval
+    # archive measured for this mutation. Empty string when the caller
+    # didn't propagate the audit_run_id (e.g. legacy callsite); column
+    # omitted so legacy readers stay graceful.
+    if audit_run_id:
+        payload["audit_run_id"] = audit_run_id
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
     # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
     # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
@@ -247,8 +283,10 @@ def append_attribution_log(
     """
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
+    # W4 (2026-05-25) — Pydantic schema validation. drift fail-fast.
+    validated = AttributionRecord.model_validate(payload).model_dump(exclude_none=True)
     with target.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        fh.write(json.dumps(validated, ensure_ascii=False, sort_keys=True))
         fh.write("\n")
     return target
 
@@ -263,6 +301,7 @@ def write_attribution(
     log_path: Path | None = None,
     fitness_before: float | None = None,
     fitness_after: float | None = None,
+    audit_run_id: str = "",
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -288,12 +327,14 @@ def write_attribution(
         confidence_trajectory=confidence_trajectory,
         fitness_before=fitness_before,
         fitness_after=fitness_after,
+        audit_run_id=audit_run_id,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload
 
 
 __all__ = [
+    "AttributionRecord",
     "append_attribution_log",
     "compute_attribution",
     "confidence_trajectory_from_episodes",

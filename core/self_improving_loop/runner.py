@@ -40,6 +40,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import os
 import subprocess
 import time
 import uuid
@@ -47,6 +48,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
 from core.paths import (
@@ -57,6 +60,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "MUTATION_AUDIT_LOG_PATH",
+    "ApplyRecord",
     "Mutation",
     "Proposal",
     "RunnerContext",
@@ -70,6 +74,36 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
+
+class ApplyRecord(BaseModel):
+    """Pydantic schema for ``mutations.jsonl`` apply row (W4, 2026-05-25).
+
+    Schema 정의는 ``Mutation.to_audit_row()`` 의 출력 dict 와 1:1 매치.
+    writer side validation 으로 schema drift 를 fail-fast 로 잡는다 —
+    legacy dict row 도 ``extra="allow"`` 로 호환 (cost_* 등의 optional
+    field 는 None 으로 떨어짐). reader 마이그레이션은 W4b 후속 PR.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    ts: float
+    kind: str = Field(default="applied", pattern=r"^applied$")
+    mutation_id: str
+    target_kind: str
+    target_section: str
+    previous_value: str
+    new_value: str
+    rationale: str = ""
+    target_dim: str = ""
+    expected_dim: dict[str, float] = Field(default_factory=dict)
+    rollback_condition: str = ""
+    baseline_fitness: float | None = None
+    cost_input_tokens: int | None = None
+    cost_output_tokens: int | None = None
+    cost_elapsed_seconds: float | None = None
+    cost_model: str | None = None
+    audit_run_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,12 +164,21 @@ class Mutation:
         previous_value: str,
         timestamp: float | None = None,
         baseline_fitness: float | None = None,
+        audit_run_id: str = "",
     ) -> dict[str, Any]:
         """Render the mutation as one audit-log row.
 
         PR-SIL-5THEME C4 (2026-05-23) — cost 4-field 추가. 모두 0 / "" 일
         때만 row 에 컬럼 자체 미생성 → legacy reader 가 새 컬럼 부재 시
         graceful (key 가 없으면 0 / "" 가정).
+
+        W3 (2026-05-25 attribution wiring) — ``audit_run_id`` parameter
+        추가. cross-ref key to the Petri eval archive measured for this
+        mutation. Empty string when the apply happens outside an audit
+        lane (manual --promote, replay); column omitted so legacy reader
+        무영향. ``Mutation`` 자체는 frozen dataclass 라 LLM 응답 구조
+        immutable 유지; audit_run_id 는 runner-side context 로 to_audit_row
+        호출 시점에 inject 한다.
         """
         row: dict[str, Any] = {
             "ts": timestamp if timestamp is not None else time.time(),
@@ -151,6 +194,8 @@ class Mutation:
             "rollback_condition": self.rollback_condition,
             "baseline_fitness": baseline_fitness,
         }
+        if audit_run_id:
+            row["audit_run_id"] = audit_run_id
         # PR-SIL-5THEME C4 — cost 컬럼은 non-zero 일 때만 emit. 0 값
         # (legacy 또는 mock LLM 호출) 은 column 자체 생략 — JSONL 의
         # noise 절감 + legacy reader 무영향.
@@ -734,6 +779,18 @@ def parse_mutation(raw: str) -> Mutation:
             # genuine numeric, not a coerced bool).
             if isinstance(k, str) and isinstance(v, int | float) and not isinstance(v, bool):
                 expected_dim[k] = float(v)
+    if not expected_dim:
+        # W1 (2026-05-25 attribution wiring) — expected_dim 가 비어 있으면
+        # 후속 ``compute_attribution`` 이 attribution_score 0.0 으로만 평가
+        # 되어 mutation 효과 측정이 무의미해진다. LLM 이 prompt 의 명시 요청
+        # (``Mutation Contract`` §expected_dim) 을 빠뜨렸다는 신호이므로
+        # WARNING 으로 surface 한다 — fail-closed 가 아니라 loop 가 계속
+        # 돌면서 다음 mutation 에 영향 주지 않도록 graceful.
+        log.warning(
+            "self-improving-loop: mutation %r has empty expected_dim — "
+            "attribution score will be 0.0 (LLM omitted dim commitments)",
+            payload.get("target_section", "(unknown)"),
+        )
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
     # PR-6 C-5 — target_kind dispatches to the policy SoT file. Default
@@ -831,17 +888,31 @@ def append_audit_log(
     previous_value: str,
     baseline_fitness: float | None = None,
     log_path: Path | None = None,
+    audit_run_id: str = "",
 ) -> Path:
     """Append one mutation row to the git-tracked audit jsonl.
 
     Returns the path of the audit log so the caller can ``git add``
     it. Best-effort — directory is created if missing.
+
+    W3 (2026-05-25 attribution wiring) — ``audit_run_id`` forwarded to
+    ``Mutation.to_audit_row`` so the apply row carries the cross-ref
+    key to the matching attribution row.
     """
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
-    row = mutation.to_audit_row(previous_value=previous_value, baseline_fitness=baseline_fitness)
+    row = mutation.to_audit_row(
+        previous_value=previous_value,
+        baseline_fitness=baseline_fitness,
+        audit_run_id=audit_run_id,
+    )
+    # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
+    # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
+    # ledger 에 들어가지 않음. backward-compat 은 ApplyRecord 의
+    # ``extra="allow"`` + optional cost/audit_run_id field 로 유지.
+    validated = ApplyRecord.model_validate(row).model_dump(exclude_none=True)
     with target.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        fh.write(json.dumps(validated, ensure_ascii=False) + "\n")
     return target
 
 
@@ -897,6 +968,9 @@ def _run_autoresearch_subprocess(
     *,
     repo_root: Path,
     dry_run: bool,
+    audit_run_id: str = "",
+    mutation_id: str = "",
+    expected_dim: dict[str, float] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Spawn ``autoresearch/train.py`` for the post-mutation audit.
 
@@ -904,13 +978,26 @@ def _run_autoresearch_subprocess(
     operators flip to ``dry_run=False`` for a real budget-spending
     audit. The subprocess is non-fatal — failures log + return so the
     runner can record the mutation row even when the audit aborts.
+
+    W2/W3 (2026-05-25 attribution wiring) — when ``audit_run_id`` /
+    ``mutation_id`` / ``expected_dim`` 모두 non-empty 면 env 로
+    propagate. train.py 의 _persist_baseline 직후 hook 이 env 받고
+    ``write_attribution`` 호출 → mutations.jsonl 에 attribution row
+    append. env 누락 시 hook 가 graceful skip (legacy --promote /
+    manual run 보존).
     """
     argv = ["uv", "run", "python", "autoresearch/train.py"]
     if dry_run:
         argv.append("--dry-run")
+    env = os.environ.copy()
+    if audit_run_id and mutation_id:
+        env["GEODE_SIL_AUDIT_RUN_ID"] = audit_run_id
+        env["GEODE_SIL_MUTATION_ID"] = mutation_id
+        env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(expected_dim or {}, ensure_ascii=False)
     return subprocess.run(  # noqa: S603  # nosec B603 — argv built from constants
         argv,
         cwd=str(repo_root),
+        env=env,
         capture_output=True,
         text=True,
         check=False,
@@ -1035,7 +1122,14 @@ class SelfImprovingLoopRunner:
         lands, the SoT is rolled back to
         ``proposal.original_sections`` and the original exception
         propagates so the caller can retry.
+
+        W3 (2026-05-25 attribution wiring) — audit_run_id 를 propose-
+        apply-audit 단일 cycle 안에서 mint. mutations.jsonl 의 apply
+        row 와 attribution row 가 audit_run_id 로 join 가능. mint 는
+        rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
+        attribution row 도 없으니 audit_run_id 무의미).
         """
+        audit_run_id = uuid.uuid4().hex[:12] if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
             proposal.mutation, current_sections=proposal.target_sections
         )
@@ -1044,6 +1138,7 @@ class SelfImprovingLoopRunner:
                 proposal.mutation,
                 previous_value=previous_value,
                 log_path=self.audit_log_path,
+                audit_run_id=audit_run_id,
             )
         except OSError as exc:
             self._rollback_sot(proposal.original_sections, mutation=proposal.mutation, exc=exc)
@@ -1052,7 +1147,11 @@ class SelfImprovingLoopRunner:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             repo_root = log_path.resolve().parents[1]
-            self._invoke_autoresearch(repo_root)
+            self._invoke_autoresearch(
+                repo_root,
+                audit_run_id=audit_run_id,
+                mutation=proposal.mutation,
+            )
         self._append_self_improving_loop_index(proposal.mutation, previous_value)
         return proposal.mutation
 
@@ -1119,10 +1218,28 @@ class SelfImprovingLoopRunner:
                 mutation.target_section,
             )
 
-    def _invoke_autoresearch(self, repo_root: Path) -> None:
-        """Wrap the autoresearch subprocess so tests can override."""
+    def _invoke_autoresearch(
+        self,
+        repo_root: Path,
+        *,
+        audit_run_id: str = "",
+        mutation: Mutation | None = None,
+    ) -> None:
+        """Wrap the autoresearch subprocess so tests can override.
+
+        W2/W3 (2026-05-25 attribution wiring) — propagate audit_run_id +
+        mutation_id + expected_dim to the subprocess env so the
+        attribution row written after the audit carries the same
+        cross-ref keys as the apply row.
+        """
         try:
-            _run_autoresearch_subprocess(repo_root=repo_root, dry_run=self.rerun_dry_run)
+            _run_autoresearch_subprocess(
+                repo_root=repo_root,
+                dry_run=self.rerun_dry_run,
+                audit_run_id=audit_run_id,
+                mutation_id=mutation.mutation_id if mutation is not None else "",
+                expected_dim=mutation.expected_dim if mutation is not None else None,
+            )
         except Exception:  # pragma: no cover — defensive
             log.warning("self-improving-loop autoresearch re-run failed", exc_info=True)
 
