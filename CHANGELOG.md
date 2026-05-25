@@ -48,6 +48,7 @@ functional change.
 ## [Unreleased]
 
 ### Added
+<<<<<<< HEAD
 - **PR-RANKER-MUTATION-EVAL — seed-gen `evaluate_mutation_pairwise()`
   handoff entry point for autoresearch admire_means.** New module
   `plugins/seed_generation/mutation_eval.py` exposes the seed-gen
@@ -181,6 +182,27 @@ functional change.
   `rewrite_section` omission (would have broken critic→evolver
   handoff under strict mode) + CHANGELOG/docstring drift; both
   folded in-band before merge.
+
+- **PR-AR-L4a ``ux_means`` 4-reader collector wiring (ADR-012 S1b)** —
+  Pre-PR-AR-L4a ``autoresearch.ux_means.collect_ux_means_from_sources``
+  was a hardcoded ``return None`` placeholder — ADR-012 S1 shipped
+  the schema + math but the S1b collector wiring never landed, so the
+  entire ux fitness axis was dormant in production.
+  4 readers now consume the single SoT
+  ``autoresearch/state/mutations.jsonl``:
+  - ``read_run_log_success_rate`` — count(attribution_score > 0) /
+    count(attribution rows)
+  - ``read_token_cost`` — Σ(in_tok × price.input + out_tok ×
+    price.output) per ``cost_model`` from ``core.llm.token_tracker.MODEL_PRICING``
+  - ``read_revert_ratio`` — count(fitness_delta < 0) /
+    count(rows with fitness_delta)
+  - ``read_latency`` — mean(cost_elapsed_seconds) across apply rows
+  New ``DEFAULT_UX_TOKEN_BUDGET_USD = 5.0`` and
+  ``DEFAULT_UX_LATENCY_BUDGET_S = 1800`` budget constants
+  (operator-aggressive setting). 10 invariants in
+  ``tests/autoresearch/test_ux_means_collector.py`` pin each reader's
+  graceful-no-op contract + the wired collector shape. Caller-side
+  ``compute_fitness`` forward arrives in PR-AR-L4b.
 
 ### Fixed
 - **PR-SCHEMA-PARSER-DRIFT-CLOSE — close 3 schema ↔ parser SoT

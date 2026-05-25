@@ -6,6 +6,8 @@ S1 의 minimal scope: schema + normalize + compute_fitness 다축화.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from autoresearch.train import (
     UX_FITNESS_DIM_WEIGHT,
@@ -201,14 +203,20 @@ def test_compute_fitness_ux_does_not_bypass_critical_gate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. collect_ux_means_from_sources — S1b placeholder
+# 6. collect_ux_means_from_sources — graceful when mutations.jsonl empty
 # ---------------------------------------------------------------------------
 
 
-def test_collect_returns_none_in_s1() -> None:
-    """S1 (이 PR) 단계 — 4 source wiring 부재. ``None`` 반환으로
-    ``compute_fitness`` 가 dim-only fallback 작동."""
-    assert collect_ux_means_from_sources() is None
+def test_collect_returns_none_when_ledger_absent(tmp_path: Path) -> None:
+    """PR-AR-L4a (2026-05-26) — collector graceful no-op contract.
+
+    Pre-PR-AR-L4a the function was a hardcoded ``return None`` placeholder.
+    Post-wiring it reads ``mutations.jsonl``; when the file is absent
+    (fresh checkout, before first audit) it still returns ``None`` so
+    ``compute_fitness`` falls back to dim-only fitness."""
+    missing = tmp_path / "no-mutations.jsonl"
+    assert not missing.exists()
+    assert collect_ux_means_from_sources(log_path=missing) is None
 
 
 # ---------------------------------------------------------------------------
