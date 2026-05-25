@@ -19,7 +19,7 @@ export default function Page() {
               <li><code>autoresearch/train.py</code>. 메인 루프</li>
               <li><code>autoresearch/prepare.py</code>. 데이터/모델 준비</li>
               <li><code>autoresearch/program.md</code>. 매 generation 마다 LLM 이 읽는 program 문서</li>
-              <li><code>autoresearch/state/</code>. 누적 결과 (results.tsv, audit_logs/, failure_log)</li>
+              <li><code>autoresearch/state/</code>. 누적 결과 (results.tsv, failure_log)</li>
             </ul>
 
             <h2>Closed-loop 안정성 게이트 (G1-G6)</h2>
@@ -55,7 +55,7 @@ cat autoresearch/state/results.tsv | tail -10`}</pre>
               <li><code>autoresearch/train.py</code>. main loop</li>
               <li><code>autoresearch/prepare.py</code>. data + model setup</li>
               <li><code>autoresearch/program.md</code>. the program doc the LLM rereads each generation</li>
-              <li><code>autoresearch/state/</code>. cumulative state (results.tsv, audit_logs/, failure_log)</li>
+              <li><code>autoresearch/state/</code>. cumulative state (results.tsv, failure_log)</li>
             </ul>
 
             <h2>Closed-loop stability gates (G1-G6)</h2>

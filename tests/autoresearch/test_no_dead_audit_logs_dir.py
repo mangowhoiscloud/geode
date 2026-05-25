@@ -30,11 +30,17 @@ def test_audit_out_dir_constant_not_reintroduced() -> None:
 
 
 def test_train_py_does_not_reference_audit_logs_subdir() -> None:
-    """train.py source must not reference the dead ``audit_logs`` subdir."""
+    """train.py source must not reference the dead ``audit_logs`` subdir.
+
+    Codex MCP review #1688 widened the original literal-only check to
+    catch both quote styles + bare path fragments, so re-introducing
+    via ``STATE_DIR / 'audit_logs'`` or a renamed constant still trips.
+    """
     source = inspect.getsource(auto_train)
-    assert '"audit_logs"' not in source, (
-        "Reference to autoresearch/state/audit_logs/ found in train.py. "
-        "If this is intentional, add a writer that actually emits files "
-        "into the directory + a reader that consumes them, and update "
-        "this invariant accordingly."
-    )
+    for needle in ('"audit_logs"', "'audit_logs'", "audit_logs/"):
+        assert needle not in source, (
+            f"Reference to autoresearch/state/audit_logs/ ({needle!r}) found "
+            "in train.py. If this is intentional, add a writer that actually "
+            "emits files into the directory + a reader that consumes them, "
+            "and update this invariant accordingly."
+        )
