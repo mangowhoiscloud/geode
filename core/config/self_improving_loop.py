@@ -238,6 +238,37 @@ class AutoresearchConfig(BaseModel):
     """In-process mutator runner binding. Consumed by
     :func:`core.self_improving_loop.runner._default_llm_call`."""
 
+    # P1-revised (2026-05-25) — GSPO/DAPO + EXAONE variance filter 의 selection
+    # layer 만 inference-time 으로 채택. 본 sprint plan:
+    # ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``.
+    group_size: Annotated[int, Field(ge=1, le=8)] = 1
+    """Number of sibling mutations to propose+audit per self-improving cycle.
+
+    - ``1`` (default): legacy (1+1)-ES + previous-baseline 비교. group sampling
+      disabled, backward-compat 보존.
+    - ``2`` (MVP): N=2 sibling parallel mutator call + sequential audit + group
+      mean/std → DAPO Dynamic Sampling 의 variance filter + advantage
+      normalization. P1-revised 의 시작값.
+    - ``4`` (full): frontier-aligned (DeepSeek-R1 GRPO N=8, Promptbreeder
+      pop=50 의 cost-trimmed 변형). audit cost 4x 부담.
+
+    cost 영향 — N 배 audit cost (subscription source 는 quota window 안에서
+    무료, ``core/llm/audit_lane.py`` OL-P2 audit_lane=1 으로 sequential 강제).
+    """
+
+    group_variance_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.01
+    """DAPO Dynamic Sampling / EXAONE 4.5 zero-variance filter 의 threshold ε.
+
+    N sibling mutation 의 fitness std 가 이 값 미만이면 group 폐기 (cycle skip
+    + log). variance filter 의 의도: 모든 sibling 이 비슷한 결과를 내면 학습
+    signal 0 → 무신호 cycle 의 audit cost 낭비 회피 (DAPO reported wall-clock
+    25% 절약).
+
+    EXAONE production value 미공개로 0.01 default. ``baseline.json`` history
+    (N≥30 cycle) 누적 후 percentile-based (5th percentile 미만 filter) 로
+    adapt 권장. ``group_size`` 가 1 이면 무시.
+    """
+
     target_model: str | None = None
     """**Deprecated pre-PR #1496 slot** — surviving for back-compat
     config file load. Never consulted at runtime. Will be dropped in a

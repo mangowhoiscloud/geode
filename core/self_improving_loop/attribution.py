@@ -72,6 +72,14 @@ class AttributionRecord(BaseModel):
     fitness_after: float | None = None
     fitness_delta: float | None = None
     audit_run_id: str | None = None
+    group_id: str | None = None
+    """P1-revised (2026-05-25 baseline RL grounding) — group sampling 의
+    cross-ref key. 같은 cycle 의 N sibling mutation 의 attribution row 가
+    모두 같은 group_id 를 가져 group statistic (mean / std / advantage) 재구성
+    가능. group_size=1 (legacy) 일 때 None."""
+    group_advantage: float | None = None
+    """P1-revised — advantage normalization 의 z-score. ``(fitness_i - μ) /
+    (σ + ε)`` over group. group_id 부재 (legacy) 일 때 None."""
 
 
 log = logging.getLogger(__name__)
@@ -207,6 +215,7 @@ def compute_attribution(
     fitness_before: float | None = None,
     fitness_after: float | None = None,
     audit_run_id: str = "",
+    group_id: str = "",
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -247,6 +256,11 @@ def compute_attribution(
     # omitted so legacy readers stay graceful.
     if audit_run_id:
         payload["audit_run_id"] = audit_run_id
+    # P1-revised (2026-05-25 baseline RL grounding) — group sampling
+    # cross-ref key. Empty string when caller is single-mutation
+    # (legacy group_size=1) — column omitted, legacy readers graceful.
+    if group_id:
+        payload["group_id"] = group_id
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
     # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
     # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
@@ -302,6 +316,7 @@ def write_attribution(
     fitness_before: float | None = None,
     fitness_after: float | None = None,
     audit_run_id: str = "",
+    group_id: str = "",
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -328,6 +343,7 @@ def write_attribution(
         fitness_before=fitness_before,
         fitness_after=fitness_after,
         audit_run_id=audit_run_id,
+        group_id=group_id,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload
