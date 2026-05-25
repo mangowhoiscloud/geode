@@ -48,6 +48,20 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-CHECKPOINT-ON-FAILURE — phase_failed phases no longer write a
+  checkpoint.** `plugins/seed_generation/orchestrator.py:Pipeline.arun`
+  now gates the post-phase `_record_checkpoint` call on
+  `phase_result.success`. Pre-fix, smoke 17 wrote a `proximity.json`
+  checkpoint despite the proximity agent returning
+  `status="error"` (soft failure with `phase_failed (raised=False)`)
+  because `_arun_phase` returned normally — the outer loop called
+  `_record_checkpoint` unconditionally, so a future
+  `audit-seeds resume gen1-redundant_tool_invocation` would have
+  SKIPPED proximity on the next attempt (opposite of the operator's
+  intent). Pinned by
+  `test_phase_failed_soft_failure_does_not_write_checkpoint` in
+  `tests/plugins/seed_generation/test_orchestrator.py`.
+
 - **PR-VOTER-PROVIDER-WIRE — ranker voter SubTask now carries the
   per-voter `model`.** `core/agent/sub_agent.py:SubTask` gains a
   `model: str = ""` field; `SubAgentManager._build_request` honors

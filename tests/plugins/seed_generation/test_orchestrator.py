@@ -396,3 +396,60 @@ def test_record_checkpoint_writes_per_phase_files(tmp_path) -> None:
     # serialize ordering).
     meta_review_ck = _json.loads((ck_dir / "meta_reviewer.json").read_text())
     assert "meta_reviewer" in meta_review_ck["state_snapshot"]["completed_phases"]
+
+
+class _SoftFailAgent(BaseSeedAgent):
+    """Agent that returns ``status="error"`` without raising — mirrors
+    smoke 17 proximity phase (LLM emitted non-JSON narrative, the
+    agent caught the parse error and returned a soft failure).
+    """
+
+    def __init__(self, role: str) -> None:
+        super().__init__(role=role, model="stub-model")
+
+    async def aexecute(self, state: PipelineState) -> SeedAgentResult:
+        return SeedAgentResult(
+            role=self.role,
+            status="error",
+            error_message="malformed payload: non-JSON narrative",
+            output={},
+        )
+
+
+def test_phase_failed_soft_failure_does_not_write_checkpoint(tmp_path) -> None:
+    """PR-CHECKPOINT-ON-FAILURE (2026-05-25) — phases that emit
+    ``phase_failed (raised=False)`` MUST NOT leave a checkpoint on
+    disk. Pre-fix smoke 17 wrote ``proximity.json`` despite the
+    proximity agent returning ``status="error"``, so a future
+    ``audit-seeds resume`` would skip proximity on the next attempt
+    — the opposite of the operator's intent. The fix gates the
+    checkpoint write on ``phase_result.success``.
+    """
+    registry = PipelineRegistry()
+    registry.register(_StubAgent("generator"))
+    # Proximity soft-fails (returns status=error without raising).
+    registry.register(_SoftFailAgent("proximity"))
+    for r in ("critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+        registry.register(_StubAgent(r))
+    state = PipelineState(
+        run_id="t-soft-fail",
+        target_dim="x",
+        gen_tag="gen2",
+        run_dir=tmp_path,
+    )
+    asyncio.run(Pipeline(state, registry).arun())
+
+    ck_dir = tmp_path / "checkpoints"
+    written_phases = {p.stem for p in ck_dir.glob("*.json")}
+
+    # proximity FAILED → no checkpoint, so a future resume re-runs it.
+    assert "proximity" not in written_phases, (
+        f"PR-CHECKPOINT-ON-FAILURE regression: proximity.json written "
+        f"despite soft-failure. Found checkpoints: {written_phases}"
+    )
+    # state.completed_phases must NOT list proximity either.
+    assert "proximity" not in state.completed_phases
+
+    # All phases that DID succeed must still be checkpointed.
+    expected_success = {"generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"}
+    assert written_phases >= expected_success
