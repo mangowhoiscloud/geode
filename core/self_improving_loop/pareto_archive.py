@@ -28,6 +28,7 @@ import logging
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -296,6 +297,68 @@ def load_archive(archive_path: Path) -> PareteArchive:
     return archive
 
 
+def read_pareto_front(
+    archive_path: Path,
+    target_dims: list[str],
+) -> list[dict[str, Any]]:
+    """Return the current non-dominated set restricted to ``target_dims``.
+
+    PR-SG-SELECTION-ALIGN (2026-05-25, G5) — reader counterpart for
+    the seed-gen evolver. The Pareto archive is the SoT for which
+    mutations the selection layer currently considers ``non-
+    dominated`` in the active dim scope. Surface this front in the
+    evolver's HANDOFF so the LLM can reason about which front edge
+    its rewrite should push.
+
+    Returns ``[]`` when the archive file is missing or
+    ``target_dims`` is empty (no scope to project onto). When a
+    loaded entry omits all ``target_dims`` it's skipped (no signal
+    to compare). Each returned row is a plain dict so the caller
+    can embed it directly into the JSON handoff without coupling
+    to the pydantic ``ArchiveEntry`` model.
+
+    Output row shape:
+    ``{"id": <mutation_id>, "dims": {dim: mean, ...}, "fitness": <scalar>}``
+
+    where ``fitness`` is the mean of the projected dim values
+    (cheap scalarization for human-readable handoff; the LLM uses
+    ``dims`` itself for trade-off reasoning).
+    """
+    if not target_dims or not archive_path.is_file():
+        return []
+    front_archive = PareteArchive()
+    for line in archive_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            entry = ArchiveEntry.model_validate(data)
+        except (json.JSONDecodeError, Exception) as exc:
+            log.warning("pareto_archive read_pareto_front: skipping invalid row: %s", exc)
+            continue
+        projected = {d: entry.dim_means[d] for d in target_dims if d in entry.dim_means}
+        if not projected:
+            continue
+        # Re-insert with the projected dims so dominance is computed in
+        # the requested scope, not the full 17-dim vector.
+        projected_entry = ArchiveEntry(
+            mutation_id=entry.mutation_id,
+            group_id=entry.group_id,
+            audit_run_id=entry.audit_run_id,
+            ts=entry.ts,
+            dim_means=projected,
+            dim_stderr={d: entry.dim_stderr.get(d, 0.0) for d in projected},
+        )
+        front_archive.insert(projected_entry)
+    out: list[dict[str, Any]] = []
+    for member in front_archive.non_dominated_set():
+        dims_map = dict(member.dim_means)
+        scalar = sum(dims_map.values()) / max(len(dims_map), 1)
+        out.append({"id": member.mutation_id, "dims": dims_map, "fitness": scalar})
+    return out
+
+
 __all__ = [
     "ArchiveEntry",
     "PareteArchive",
@@ -303,4 +366,5 @@ __all__ = [
     "compute_hypervolume",
     "dynamic_reward_weight_step",
     "load_archive",
+    "read_pareto_front",
 ]

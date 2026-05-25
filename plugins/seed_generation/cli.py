@@ -184,6 +184,17 @@ def audit_seeds_generate(
             "critic → pilot → ranker → evolver → meta_reviewer cycle."
         ),
     ),
+    target_dims_attribution: str | None = typer.Option(
+        None,
+        "--target-dims-attribution",
+        help=(
+            "PR-SG-SELECTION-ALIGN (2026-05-25, G4): comma-separated dim "
+            "names the Pareto archive (P2, selection layer) should track "
+            "for non-dominated candidates this run. Defaults to top-3 from "
+            "``pick_regression_target_dims`` when --target-dim auto-picks. "
+            "Omit to keep the single-dim contract (empty list)."
+        ),
+    ),
 ) -> None:
     """Generate a new candidate batch — runs picker → cost preview →
     pre-flight → confirm → Pipeline.arun().
@@ -196,6 +207,14 @@ def audit_seeds_generate(
     cfg = _get_seed_generation_config()
     resolved_gen_tag = gen_tag if gen_tag is not None else cfg.default_gen_tag
     resolved_candidates = candidates if candidates is not None else cfg.candidates_default
+    # PR-SG-SELECTION-ALIGN (2026-05-25) — split CSV input. Empty / None
+    # → None so the orchestrator falls through to baseline-driven
+    # ``pick_regression_target_dims`` (top-3) auto-pick.
+    parsed_attribution: list[str] | None = (
+        [d.strip() for d in target_dims_attribution.split(",") if d.strip()]
+        if target_dims_attribution
+        else None
+    )
     exit_code = run_audit_seeds(
         target_dim=target_dim,
         gen_tag=resolved_gen_tag,
@@ -203,6 +222,7 @@ def audit_seeds_generate(
         yes=yes,
         quiet=quiet,
         max_iterations=max_iterations,
+        target_dims_attribution=parsed_attribution,
     )
     raise typer.Exit(code=exit_code)
 
@@ -296,6 +316,7 @@ def run_audit_seeds(
     yes: bool = False,
     quiet: bool = False,
     max_iterations: int = 0,
+    target_dims_attribution: list[str] | None = None,
     stdout: IO[str] | None = None,
     stderr: IO[str] | None = None,
     confirm_fn: Callable[[IO[str], IO[str]], bool] | None = None,
@@ -415,6 +436,25 @@ def run_audit_seeds(
         # Pipeline construction is deferred until after the gate so the
         # heavy SubAgentManager wiring isn't paid on a dry preview.
         try:
+            # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — default the
+            # Pareto-scope dim list. Explicit CLI value wins; otherwise
+            # auto-pick top-3 from the same baseline snapshot the
+            # singular ``target_dim`` was picked from. When neither is
+            # set (e.g. no baseline yet, explicit single-dim run) the
+            # list stays empty and the pre-G4 single-dim behaviour
+            # holds.
+            resolved_attribution = target_dims_attribution
+            if resolved_attribution is None and baseline_snapshot is not None:
+                from plugins.seed_generation.baseline_reader import (
+                    pick_regression_target_dims,
+                )
+
+                resolved_attribution = pick_regression_target_dims(baseline_snapshot, k=3)
+                if resolved_attribution:
+                    err.write(
+                        "seed-generation: --target-dims-attribution auto → "
+                        f"{resolved_attribution!r} (top-3 worst-regressed)\n"
+                    )
             _dispatch_pipeline(
                 picker_result=picker_result,
                 target_dim=resolved_dim,
@@ -426,6 +466,7 @@ def run_audit_seeds(
                 baseline_snapshot=baseline_snapshot,
                 meta_review_snapshot=meta_review_snapshot,
                 max_iterations=max_iterations,
+                target_dims_attribution=resolved_attribution,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -458,6 +499,7 @@ def _dispatch_pipeline(
     baseline_snapshot: Any = None,
     meta_review_snapshot: Any = None,
     max_iterations: int = 0,
+    target_dims_attribution: list[str] | None = None,
 ) -> None:
     """Build orchestrator + run.
 
@@ -492,6 +534,7 @@ def _dispatch_pipeline(
     state = PipelineState(
         run_id=run_id,
         target_dim=target_dim,
+        target_dims_attribution=list(target_dims_attribution or []),
         gen_tag=gen_tag,
         candidates_requested=candidates_requested,
         run_dir=run_dir,

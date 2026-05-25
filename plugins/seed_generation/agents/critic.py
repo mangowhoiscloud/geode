@@ -47,6 +47,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.handoff_schemas import (
+    embed_handoff,
+    extract_anchor_means,
+    extract_scenario_realism,
+)
 from plugins.seed_generation.json_schemas import CRITIQUE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 
@@ -195,6 +200,8 @@ class Critic(BaseSeedAgent):
                 meta_review_snapshot=state.meta_review_snapshot,
                 supervisor_guidance=state.supervisor_guidance,
                 articles_with_reasoning=state.articles_with_reasoning,
+                # PR-SG-SELECTION-ALIGN (2026-05-25) — Pareto scope.
+                target_dims_attribution=list(state.target_dims_attribution),
             )
             tasks.append(
                 SubTask(
@@ -224,6 +231,7 @@ class Critic(BaseSeedAgent):
         meta_review_snapshot: Any = None,
         supervisor_guidance: dict[str, Any] | None = None,
         articles_with_reasoning: str = "",
+        target_dims_attribution: list[str] | None = None,
     ) -> str:
         """Compose the per-candidate user message for the sub-agent.
 
@@ -284,7 +292,7 @@ class Critic(BaseSeedAgent):
             except ImportError:  # pragma: no cover — defensive
                 pass
         prompt_prefix = ("\n\n".join(prefix_blocks) + "\n\n") if prefix_blocks else ""
-        return (
+        prose = (
             f"{prompt_prefix}"
             f"Critique ONE Petri audit seed candidate at path "
             f"{candidate_path!r}. Candidate id: {candidate_id}. "
@@ -295,6 +303,26 @@ class Critic(BaseSeedAgent):
             "`discrimination_estimate`, `rewrite_section`. "
             "Keep total response under 200 tokens."
         )
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — anchor 3 + scenario_realism
+        # + target_dims_attribution surfaced via the HANDOFF CONTEXT
+        # block so the LLM critic sees the same signals autoresearch
+        # fitness uses. baseline_snapshot.dim_means is the source when
+        # the upstream pilot rows aren't available (initial generation).
+        handoff: dict[str, Any] = {
+            "candidate_id": candidate_id,
+            "candidate_path": candidate_path,
+            "target_dim": target_dim,
+        }
+        baseline_dim_means: dict[str, Any] = getattr(baseline_snapshot, "dim_means", None) or {}
+        anchor_means = extract_anchor_means(baseline_dim_means)
+        if anchor_means:
+            handoff["anchor_means"] = anchor_means
+        scenario_realism = extract_scenario_realism(baseline_dim_means)
+        if scenario_realism is not None:
+            handoff["scenario_realism"] = scenario_realism
+        if target_dims_attribution:
+            handoff["target_dims_attribution"] = list(target_dims_attribution)
+        return embed_handoff(prose, handoff)
 
     def _parse_critique(self, result: Any, task: Any) -> dict[str, object] | None:
         """Extract structured critique from a sub-agent's SubResult.

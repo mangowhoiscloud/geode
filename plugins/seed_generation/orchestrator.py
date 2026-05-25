@@ -210,6 +210,14 @@ class PipelineState:
     # as a ux_means field (e.g. ``"success_rate"``).
     # See :mod:`plugins.seed_generation.baseline_reader.SEED_COHORTS`.
     cohort: str = "petri_17dim"
+    # PR-SG-SELECTION-ALIGN (2026-05-25) — G4. Plural Pareto scope
+    # alongside singular ``target_dim`` (run-level INTENT). When
+    # populated, this is the dim set the selection layer's Pareto
+    # archive (P2, ``core/self_improving_loop/pareto_archive.py``)
+    # tracks for non-dominated candidates. Empty list preserves the
+    # pre-G4 single-dim contract — callers that only set
+    # ``target_dim`` behave exactly as before.
+    target_dims_attribution: list[str] = field(default_factory=list)
     candidates_requested: int = 15
     # CSP-5 (2026-05-22) — paper §3 iteration loop. Default 0 keeps
     # the pre-CSP-5 single-pass behaviour (Pipeline.arun() executes

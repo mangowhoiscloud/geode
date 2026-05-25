@@ -61,6 +61,7 @@ __all__ = [
     "load_latest_meta_review",
     "pick_regression_target",
     "pick_regression_target_dim",
+    "pick_regression_target_dims",
 ]
 
 # ADR-012 S4 (2026-05-21) — seed cohort enum. A cohort labels what
@@ -321,6 +322,61 @@ def pick_regression_target_dim(
 
     top_value = max(candidates.values())
     return min((d for d, v in candidates.items() if v == top_value), default=None)
+
+
+def pick_regression_target_dims(
+    snapshot: BaselineSnapshot,
+    *,
+    k: int = 3,
+    prefer_critical: bool = True,
+) -> list[str]:
+    """Return top-K worst-regressed dims from the operational tier.
+
+    PR-SG-SELECTION-ALIGN (2026-05-25) — G4. Plural counterpart of
+    :func:`pick_regression_target_dim`. Used by the seed-gen
+    orchestrator to populate ``PipelineState.target_dims_attribution``
+    so the Pareto archive (P2) knows which axes the next generation
+    should keep on its non-dominated front.
+
+    Tie-break: descending by mean value, alphabetical on equal mean.
+    Returns an empty list when ``snapshot.dim_means`` is empty or no
+    dim intersects the operational set.
+
+    When ``prefer_critical=True``, critical-tier dims are returned
+    first (in worst-mean order), then auxiliary-tier dims fill
+    remaining slots — matching the single-pick semantics in
+    :func:`pick_regression_target_dim`.
+    """
+    if k <= 0 or not snapshot.dim_means:
+        return []
+    operational = _operational_dim_set()
+    if operational:
+        candidates = {d: v for d, v in snapshot.dim_means.items() if d in operational}
+    else:
+        candidates = dict(snapshot.dim_means)
+    if not candidates:
+        return []
+
+    def _critical_dims_local() -> frozenset[str]:
+        try:
+            from autoresearch.train import CRITICAL_DIMS
+
+            return frozenset(CRITICAL_DIMS)
+        except Exception:  # pragma: no cover
+            return frozenset()
+
+    # (dim_name, mean) — descending mean, ascending name on ties.
+    ordered: list[tuple[str, float]] = sorted(
+        candidates.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    if prefer_critical:
+        critical = _critical_dims_local()
+        critical_rows = [name for name, _ in ordered if name in critical]
+        auxiliary_rows = [name for name, _ in ordered if name not in critical]
+        merged = (critical_rows + auxiliary_rows)[:k]
+        return merged
+    return [name for name, _ in ordered[:k]]
 
 
 def pick_regression_target(
