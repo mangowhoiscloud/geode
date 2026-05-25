@@ -47,6 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-SCHEMA-PARSER-DRIFT-CLOSE — close 3 schema ↔ parser SoT
+  drifts surfaced by smoke 18 dialogue audit.** smoke 18 archive
+  (`.audit/smoke-archives/smoke-18-partial-1779728410/`) showed
+  4/12 critic sub-agents `malformed_critique` with the LLM emitting
+  otherwise-valid JSON missing `discrimination_estimate`. Root cause:
+  `_REQUIRED_CRITIQUE_FIELDS` (`critic.py:70`) lists 7 fields,
+  `CRITIQUE_SCHEMA.required` (`json_schemas.py:85`) listed only 6.
+  Worker-side `_needs_schema_retry` (PR-WORKER-SCHEMA-AWARE-RETRY
+  in v0.99.61) only fires for schema-`required` violations, so the
+  retry never fired for the one drift-prone field. Audit of all 7
+  Loop-1 phases + literature_review found 3 such gaps:
+  (1) CRITIQUE_SCHEMA missing `discrimination_estimate`;
+  (2) SUPERVISOR_SCHEMA did not exist at all (supervisor SubTask
+  spawned without `response_schema=`); (3) LITERATURE_REVIEW_SCHEMA
+  defined since PR-JSON-WIRE (#79) but never wired into the
+  literature_review SubTask spawn. supervisor.json checkpoint
+  regression in smoke 18 vs smoke 17 is the visible downstream
+  symptom of (2). Fix: add `discrimination_estimate` to
+  CRITIQUE_SCHEMA.required + properties; define SUPERVISOR_SCHEMA
+  matching `_REQUIRED_SUPERVISOR_FIELDS` (3 keys, mirrors
+  `supervisor.md` typed contract); wire both SUPERVISOR_SCHEMA into
+  supervisor.py:_build_task and LITERATURE_REVIEW_SCHEMA into
+  literature_review.py:_build_task. Tightened
+  `test_critique_schema_required_matches_parser_required` from
+  `issubset` to `==` (pre-fix the relaxed assertion explicitly
+  allowed the discrimination_estimate gap). Added 2 new SoT
+  invariants (`test_supervisor_schema_required_matches_parser_required`,
+  `test_literature_review_schema_required_matches_parser_call_site`)
+  + 2 new SubTask wire pins
+  (`test_supervisor_build_task_carries_schema`,
+  `test_literature_review_build_task_carries_schema`). All 7 Loop-1
+  schema-parser invariants now hold under `==`.
+
 ## [0.99.62] - 2026-05-26
 
 Petri × autoresearch leak resolution sprint: 3 PR (L7/L3/L8) closing fitness-surface / baseline-ratchet leaks identified by the full-cycle GAP audit (PR-L9 already shipped in v0.99.61). L7 pins the wrapper-sections fallback ↔ writer-schema dual-SoT drift; L3 codifies the seed-gen-only role split via an anti-elevation invariant (Codex MCP review caught + pivoted from writer-side filter that would have broken critic.py's initial-gen handoff); L8 replaces the unconditional fresh-baseline auto-promote with a 2-clause sanity gate (completeness + fitness floor).

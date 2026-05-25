@@ -16,15 +16,18 @@ through gives false confidence.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from plugins.seed_generation.json_schemas import (
     CRITIQUE_SCHEMA,
     EVOLVE_SCHEMA,
+    LITERATURE_REVIEW_SCHEMA,
     META_REVIEW_SCHEMA,
     PILOT_SCHEMA,
     PROXIMITY_SCHEMA,
+    SUPERVISOR_SCHEMA,
     VOTE_SCHEMA,
 )
 
@@ -40,16 +43,16 @@ def test_proximity_schema_required_matches_parser_required() -> None:
 def test_critique_schema_required_matches_parser_required() -> None:
     from plugins.seed_generation.agents.critic import _REQUIRED_CRITIQUE_FIELDS
 
-    # Schema covers the subset the LLM must emit; the parser's tuple
-    # may include additional fields the parser checks but the schema
-    # leaves as optional (discrimination_estimate). Schema required
-    # must be a SUBSET of parser required (otherwise the LLM passes
-    # schema but fails parser).
-    schema_required = set(CRITIQUE_SCHEMA["required"])
-    parser_required = set(_REQUIRED_CRITIQUE_FIELDS)
-    assert schema_required.issubset(parser_required), (
-        f"schema requires fields the parser doesn't check: {schema_required - parser_required}"
-    )
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — tightened from
+    # ``issubset`` to ``==``. Pre-fix the schema permissively allowed
+    # ``discrimination_estimate`` to be missing while the parser still
+    # rejected it (smoke 18: 4/12 critic sub-agents malformed_critique
+    # for exactly this drift). The worker-side ``_needs_schema_retry``
+    # only fires for schema ``required`` violations; keeping the
+    # parser tuple stricter than the schema meant the retry path was
+    # silently dead for the one field most likely to be dropped. Both
+    # SoTs must now agree.
+    assert set(CRITIQUE_SCHEMA["required"]) == set(_REQUIRED_CRITIQUE_FIELDS)
 
 
 def test_pilot_schema_required_matches_parser_required() -> None:
@@ -74,6 +77,33 @@ def test_meta_review_schema_required_matches_parser_required() -> None:
     from plugins.seed_generation.agents.meta_reviewer import _REQUIRED_META_FIELDS
 
     assert set(META_REVIEW_SCHEMA["required"]) == set(_REQUIRED_META_FIELDS)
+
+
+def test_supervisor_schema_required_matches_parser_required() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — supervisor was the
+    # only Loop-1 phase whose schema did not exist. The parser tuple
+    # has been in supervisor.py since the role landed; the schema
+    # was added in this PR.
+    from plugins.seed_generation.agents.supervisor import _REQUIRED_SUPERVISOR_FIELDS
+
+    assert set(SUPERVISOR_SCHEMA["required"]) == set(_REQUIRED_SUPERVISOR_FIELDS)
+
+
+def test_literature_review_schema_required_matches_parser_call_site() -> None:
+    # literature_review.py:144 passes ``required_fields`` inline to
+    # ``parse_structured_output`` rather than declaring a
+    # module-level constant. Pin the inline tuple ↔ schema equality
+    # so a future caller-side edit can't drift from the schema.
+    from plugins.seed_generation.agents import literature_review as litreview
+
+    source = Path(litreview.__file__).read_text(encoding="utf-8")
+    # The required_fields tuple is the only multi-string tuple in
+    # the file's parse_structured_output call site (line ~144).
+    assert 'required_fields=("articles_with_reasoning", "snapshots")' in source
+    assert set(LITERATURE_REVIEW_SCHEMA["required"]) == {
+        "articles_with_reasoning",
+        "snapshots",
+    }
 
 
 # ────────────────────── SubTask carries response_schema ───────────────────────
@@ -129,6 +159,31 @@ def test_pilot_build_tasks_carries_schema() -> None:
     assert tasks
     for t in tasks:
         assert t.response_schema is PILOT_SCHEMA
+
+
+def test_supervisor_build_task_carries_schema() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — supervisor's spawn
+    # site previously omitted ``response_schema=`` entirely, so the
+    # worker-side retry never fired and the supervisor.json checkpoint
+    # regressed in smoke 18 vs smoke 17.
+    from plugins.seed_generation.agents.supervisor import Supervisor
+
+    state = _pipeline_state_with_candidate()
+    agent = Supervisor(MagicMock())
+    task = agent._build_task(state)  # type: ignore[attr-defined]
+    assert task.response_schema is SUPERVISOR_SCHEMA
+
+
+def test_literature_review_build_task_carries_schema() -> None:
+    # PR-SCHEMA-PARSER-DRIFT-CLOSE (2026-05-26) — the schema has
+    # existed since PR-JSON-WIRE (#79) but literature_review.py's
+    # ``_build_task`` was the one spawn site that never wired it.
+    from plugins.seed_generation.agents.literature_review import LiteratureReview
+
+    state = _pipeline_state_with_candidate()
+    agent = LiteratureReview(MagicMock())
+    task = agent._build_task(state, max_papers=1)  # type: ignore[attr-defined]
+    assert task.response_schema is LITERATURE_REVIEW_SCHEMA
 
 
 # ────────────────────── End-to-end wire-through ───────────────────────────────
