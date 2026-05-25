@@ -1115,6 +1115,14 @@ def _git_commit_audit_log(
     return True
 
 
+def _mint_audit_run_id() -> str:
+    """Codex MCP review F5 (Dedup) — apply_proposal / apply_group_proposals
+    의 audit_run_id 생성 식을 single source 로 통일. UUID4 의 hex prefix[:12]
+    (W3 PR-3 의 within-ledger correlation key format).
+    """
+    return uuid.uuid4().hex[:12]
+
+
 _SIBLING_SOT_ENV_MAP: dict[str, str] = {
     "prompt": "GEODE_WRAPPER_OVERRIDE",
     "tool_policy": "GEODE_TOOL_POLICY_OVERRIDE",
@@ -1342,16 +1350,17 @@ class SelfImprovingLoopRunner:
 
         # Codex MCP review (slop) — ThreadPoolExecutor 는 ContextVar 를 자동
         # 전파하지 않는다. session metrics / cost ledger ContextVar 가 thread
-        # 안에서 unset → parent session aggregate 와 분리될 위험. copy_context()
-        # 로 명시 전파.
-        parent_ctx = contextvars.copy_context()
+        # 안에서 unset → parent session aggregate 와 분리될 위험. 각 submit
+        # 마다 ``copy_context()`` 로 main thread 의 ctx snapshot 을 fresh copy
+        # 해 thread 안에서 run — 같은 Context 객체를 여러 thread 에서 enter
+        # 할 수 없는 제약 (RuntimeError "already entered") 회피.
 
-        def _propose_in_ctx() -> Proposal:
-            return parent_ctx.run(self.propose)
+        def _propose_with_fresh_ctx() -> Proposal:
+            return contextvars.copy_context().run(self.propose)
 
         proposals: list[Proposal] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=n) as executor:
-            futures = [executor.submit(_propose_in_ctx) for _ in range(n)]
+            futures = [executor.submit(_propose_with_fresh_ctx) for _ in range(n)]
             for future in concurrent.futures.as_completed(futures):
                 proposals.append(future.result())
         return proposals
@@ -1435,7 +1444,7 @@ class SelfImprovingLoopRunner:
                 f"또는 GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION env 를 >= 0.1 로 set."
             )
 
-        group_id = uuid.uuid4().hex[:12]
+        group_id = _mint_audit_run_id()
         log.info(
             "self-improving-loop: group %s — N=%d sibling propose+audit start",
             group_id,
@@ -1456,7 +1465,7 @@ class SelfImprovingLoopRunner:
                 sibling_sot_paths.append(sibling_sot_path)
                 sibling_previous_values.append(previous_value)
 
-                audit_run_id = uuid.uuid4().hex[:12]
+                audit_run_id = _mint_audit_run_id()
                 audit_run_ids.append(audit_run_id)
 
                 repo_root = (self.audit_log_path or MUTATION_AUDIT_LOG_PATH).resolve().parents[1]
@@ -1586,7 +1595,7 @@ class SelfImprovingLoopRunner:
         rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
         attribution row 도 없으니 audit_run_id 무의미).
         """
-        audit_run_id = uuid.uuid4().hex[:12] if self.rerun_enabled else ""
+        audit_run_id = _mint_audit_run_id() if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
             proposal.mutation, current_sections=proposal.target_sections
         )
