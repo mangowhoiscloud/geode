@@ -133,6 +133,45 @@ class TestTierDocParity:
             assert f"`{dim}`" in body, f"{md_name} missing info dim {dim}"
 
     @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    def test_md_tier_mapping_matches_axis_tiers(self, md_name: str) -> None:
+        """Parse the tier table in each .md and assert dim -> tier
+        bidirectional equality with ``autoresearch.train.AXIS_TIERS``.
+
+        PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V3) — pre-fix
+        `test_md_lists_every_<tier>_dim` only asserted "every
+        AXIS_TIERS dim appears somewhere in the file"; a dim listed
+        under the WRONG tier or a typo in the .md would still pass.
+        This test parses the markdown row for each tier and checks
+        the dim's actual classification.
+
+        Row format (matched by regex on bold tier label + backticked
+        dim names):
+
+            | **<tier> (N)** | `dim_a`, `dim_b`, ... |
+        """
+        import re
+
+        from autoresearch.train import AXIS_TIERS
+
+        body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
+        for tier in ("critical", "auxiliary", "info"):
+            pattern = re.compile(
+                rf"\|\s*\*\*{tier}\s*\(\d+\)\*\*\s*\|\s*(.*?)\s*\|",
+                re.DOTALL,
+            )
+            match = pattern.search(body)
+            assert match, f"{md_name}: missing tier row for {tier!r}"
+            row_dims = set(re.findall(r"`([a-z_]+)`", match.group(1)))
+            expected = {d for d, t in AXIS_TIERS.items() if t == tier}
+            assert row_dims == expected, (
+                f"{md_name} tier {tier!r} mismatch:\n"
+                f"  in .md row: {sorted(row_dims)}\n"
+                f"  in AXIS_TIERS: {sorted(expected)}\n"
+                f"  unexpected (in md but not catalog): {sorted(row_dims - expected)}\n"
+                f"  missing (in catalog but not md): {sorted(expected - row_dims)}"
+            )
+
+    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
     def test_md_has_anchor_section(self, md_name: str) -> None:
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         assert "## Anchor 3 dims" in body
@@ -379,7 +418,7 @@ class TestParetoFrontReader:
 
 
 class TestEvolverParetoFrontEmbed:
-    def _state_with_archive(self, tmp_path: Path) -> object:
+    def _state_with_archive(self, tmp_path: Path, *, pareto_mode: bool = True) -> object:
         from plugins.seed_generation.baseline_reader import BaselineSnapshot
         from plugins.seed_generation.orchestrator import PipelineState
 
@@ -401,6 +440,7 @@ class TestEvolverParetoFrontEmbed:
             target_dim="broken_tool_use",
             gen_tag="g",
             target_dims_attribution=["broken_tool_use", "input_hallucination"],
+            pareto_mode=pareto_mode,
             baseline_snapshot=BaselineSnapshot(dim_means={"broken_tool_use": 1.0}, dim_stderr={}),
             run_dir=tmp_path,
         )
@@ -449,6 +489,7 @@ class TestEvolverParetoFrontEmbed:
             target_dim="broken_tool_use",
             gen_tag="g",
             target_dims_attribution=[],  # empty → no Pareto scope
+            pareto_mode=True,
             baseline_snapshot=BaselineSnapshot(dim_means={"broken_tool_use": 1.0}, dim_stderr={}),
             run_dir=tmp_path,
         )
@@ -467,3 +508,25 @@ class TestEvolverParetoFrontEmbed:
         handoff = _extract_handoff(tasks[0].description)
         assert "pareto_front" not in handoff
         assert "target_dims_attribution" not in handoff
+
+    def test_pareto_front_omitted_when_pareto_mode_false(self, tmp_path: Path) -> None:
+        """PR-SG-SELECTION-ALIGN-FIX (V4) — gate: even when the
+        archive exists from a prior pareto_mode=True cycle AND the
+        current run has a non-empty target_dims_attribution, the
+        evolver MUST NOT embed pareto_front when ``state.pareto_mode``
+        is False (default). Plan §9 said "when pareto_mode active";
+        Codex MCP review flagged the missing guard.
+        """
+        from plugins.seed_generation.agents.evolver import Evolver
+
+        state = self._state_with_archive(tmp_path, pareto_mode=False)
+        evolver = Evolver(MagicMock())
+        tasks = evolver._build_tasks(state, {state.candidates[0]["id"]: state.candidates[0]})  # type: ignore[attr-defined]
+        handoff = _extract_handoff(tasks[0].description)
+        # target_dims_attribution still surfaces — that's just metadata.
+        assert handoff["target_dims_attribution"] == [
+            "broken_tool_use",
+            "input_hallucination",
+        ]
+        # pareto_front omitted because the live mode is linear scalarization.
+        assert "pareto_front" not in handoff

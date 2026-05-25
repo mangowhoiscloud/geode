@@ -280,8 +280,14 @@ class Evolver(BaseSeedAgent):
                 # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer
                 # context: Pareto-scope dim list + run_dir for the
                 # pareto_front reader to locate baseline_archive.jsonl.
+                # PR-SG-SELECTION-ALIGN-FIX (V4) — `pareto_mode` gate
+                # from PipelineState (default False) so a stale archive
+                # from a prior `pareto_mode=True` cycle doesn't leak
+                # into evolver handoff when the current cycle is
+                # linear-scalarization.
                 target_dims_attribution=list(state.target_dims_attribution),
                 run_dir=state.run_dir,
+                pareto_mode=state.pareto_mode,
             )
             tasks.append(
                 SubTask(
@@ -315,6 +321,7 @@ class Evolver(BaseSeedAgent):
         articles_with_reasoning: str = "",
         target_dims_attribution: list[str] | None = None,
         run_dir: Any = None,
+        pareto_mode: bool = False,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -411,9 +418,17 @@ class Evolver(BaseSeedAgent):
             handoff["scenario_realism"] = scenario_realism
         if target_dims_attribution:
             handoff["target_dims_attribution"] = list(target_dims_attribution)
-            pareto_front = _read_pareto_front_safe(run_dir, list(target_dims_attribution))
-            if pareto_front:
-                handoff["pareto_front"] = pareto_front
+            # PR-SG-SELECTION-ALIGN-FIX (V4) — gate Pareto front embed
+            # on the live `pareto_mode` knob. Without this, a stale
+            # baseline_archive.jsonl from a prior pareto_mode=True
+            # cycle would leak into the evolver handoff even when the
+            # current cycle has linear scalarization, mis-cuing the
+            # rewrite toward archive points the selection layer no
+            # longer curates.
+            if pareto_mode:
+                pareto_front = _read_pareto_front_safe(run_dir, list(target_dims_attribution))
+                if pareto_front:
+                    handoff["pareto_front"] = pareto_front
         # Keep `weakness_summary` / `means_summary` references — they're
         # consumed only by this function (no leak); local-only.
         _ = (weakness_summary, means_summary)

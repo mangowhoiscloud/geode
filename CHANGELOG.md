@@ -47,11 +47,110 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.59] - 2026-05-25
+
+Patch bundling PR-16 (C.4 credit_assignment) + PR-17 (C.5 kind×dim matrix) + PR-SG-SELECTION-ALIGN-FIX (V3/V4/V5 Codex MCP fixes on PR-SG-SELECTION-ALIGN).
+
+### Added
+- **PR-18 C.3 rollback_condition parser + evaluator** —
+  `core/self_improving_loop/rollback_condition.py` turns the
+  free-text `Mutation.rollback_condition` field (PR-5) into a runtime
+  signal via a single pure function
+  `evaluate_rollback_condition(condition, observed_dim, baseline_dim,
+  observed_fitness, baseline_fitness)`. Four supported syntax
+  patterns: `any dim drops more than X`, `fitness drops below X`,
+  `critical dim drops more than X` (5 critical dims from
+  `AXIS_TIERS`), and `rollback if fitness regression`. Patterns are
+  case-insensitive and can be embedded in longer operator notes.
+  Free-text fallback returns False — by design, automatic SoT
+  reversion is *not* triggered; the result is a signal for an
+  alerting CLI / dashboard, leaving the rollback action to the
+  operator. Missing baseline / fitness → False (graceful).
+- **PR-17 C.5 kind × dim cross-effect matrix** —
+  `core/self_improving_loop/kind_dim_matrix.py` inner-joins apply rows
+  (PR-12 `read_recent_applies`) with attribution rows (PR-12
+  `read_recent_attributions`) on `mutation_id` and produces a 2-D
+  `{target_kind: {dim_name: cumulative_score}}` matrix
+  (`compute_kind_dim_matrix`). Each cell accumulates
+  `attribution_score × observed_dim[dim]` (signed). Orphan apply or
+  attribution rows are skipped silently. Companions:
+  `rank_dims_by_kind(kind)` / `rank_kinds_by_dim(dim)` sort by
+  absolute score with optional `limit`. Resolves F4 fragmentation
+  signal — operators can answer "which mutation kind has moved which
+  dim the most over history" without re-deriving from raw JSONL.
+  Pure functions (I/O-free); caller (CLI / dashboard) deferred to a
+  follow-up PR. Frontier: Quality-Diversity behavior-niche grid
+  (Mouret & Clune 2015) + DGM archive lineage causal trace.
+- **PR-16 C.4 credit_assignment module** —
+  `core/self_improving_loop/credit_assignment.py` adds two pure
+  functions for selection-layer observability:
+  `compute_credit_assignment(mutation, group_advantage)` applies a
+  **heuristic magnitude-weighted partition** of a single mutation's
+  `group_advantage` across its `expected_dim` keys (`credit[d] =
+  group_advantage * |expected_dim[d]| / sum(|expected_dim|)`), and
+  `aggregate_credit_history(records)` sums these contributions across
+  an iterable of `ApplyRecord` rows (e.g. PR-12
+  `read_recent_applies` output) for a per-dim cumulative credit
+  ranking. Records with `group_advantage=None` (legacy single-mutation
+  mode) or empty `expected_dim` are skipped silently. Sign convention:
+  credit magnitude tracks `group_advantage` sign; intent direction
+  stays encoded in the original `expected_dim` sign. Caller (CLI /
+  operator dashboard surfacing the rank) is deferred to a follow-up
+  PR. Frontier: Quality-Diversity behavior-characterization mapping
+  (Mouret & Clune 2015); DAPO/GRPO justify the scalar
+  `group_advantage`, but the per-dim partition itself is a local
+  heuristic — not a direct DAPO/GRPO formula.
+
+### Fixed
+- **PR-SG-SELECTION-ALIGN-FIX** — Codex MCP review of
+  PR-SG-SELECTION-ALIGN flagged 3 half-wires. All fixed.
+  (V3) Tier-mapping drift test now parses the markdown tier table
+  per .md file and asserts the dim set in each tier row equals
+  `{d for d, t in AXIS_TIERS.items() if t == tier}` bidirectionally.
+  Pre-fix the tests only checked "every catalog dim appears
+  somewhere in the file", so a dim under the wrong tier in .md
+  would pass silently. New parametric test
+  `test_md_tier_mapping_matches_axis_tiers` × 3 files.
+  (V4) `PipelineState.pareto_mode: bool = False` field added,
+  threaded from `AutoresearchConfig.pareto_mode` via
+  `_dispatch_pipeline`. Evolver `_build_description` now gates
+  the `pareto_front` HANDOFF embed on `state.pareto_mode` — a
+  stale `baseline_archive.jsonl` from a prior `pareto_mode=True`
+  cycle no longer leaks into the evolver prompt when the current
+  cycle has linear scalarization. New test
+  `test_pareto_front_omitted_when_pareto_mode_false`.
+  (V5) `--target-dims-attribution` auto-pick narrowed to fire only
+  when `--target-dim` itself was auto-picked (None or `"auto"`).
+  Pre-fix it also fired for explicit `--target-dim broken_tool_use`
+  whenever a baseline existed, contradicting plan §5.3 / CLI help
+  text. The singular intent is now the operator's choice; the
+  plural Pareto scope only expands when both are auto.
+
 ## [0.99.58] - 2026-05-25
 
 Bundles PR-SG-SELECTION-ALIGN + PR-12/13/14 from develop (mutations_reader + meta_judge + propose_swarm wiring). seed-gen now surfaces the same selection-layer signals (anchor 3 / scenario_realism / tier model / Pareto front / target_dims_attribution) that autoresearch fitness reads.
 
 ### Added
+- **PR-15 A.1 pareto_mode archive writer wiring** —
+  `apply_group_proposals` now appends one `ArchiveEntry` per sibling to
+  `autoresearch/state/baseline_archive.jsonl` when
+  `AutoresearchConfig.pareto_mode=True`. Append is plain JSONL write —
+  dominated-entry pruning happens at *load* time only
+  (`load_archive()` reinserts every row into a fresh `PareteArchive`,
+  triggering `insert()` dominance prune). Top-1 selection remains linear
+  advantage (multi-dim selection via archive sampler is deferred until
+  audit subprocess emits per-dim `dim_means` back to the runner — current
+  MVP appends `{"fitness": float}` 1-dim entries for cross-cycle
+  lineage; on 1-dim load the archive collapses to the single highest-
+  fitness entry, so the lineage value is in the raw JSONL stream, not
+  the loaded archive). `compute_hypervolume` and
+  `dynamic_reward_weight_step` from `pareto_archive.py` remain
+  intentionally unused at runtime — they're staged for the multi-dim
+  follow-up that will pair them with subprocess `dim_means` capture.
+  Adds `!autoresearch/state/baseline_archive.jsonl` negation to
+  `.gitignore` (silent-ignored writer guard, PR-G5b precedent) plus an
+  invariant test that `git check-ignore` confirms the negation.
+  Frontier: AlphaEvolve MAP-Elites + DGM archive lineage.
 - **PR-SG-SELECTION-ALIGN** — seed-gen ↔ selection-layer alignment
   (G1-G5 bundled per `docs/plans/2026-05-25-seed-gen-selection-
   layer-alignment.md`).

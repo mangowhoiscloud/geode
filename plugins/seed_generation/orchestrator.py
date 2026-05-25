@@ -218,6 +218,14 @@ class PipelineState:
     # pre-G4 single-dim contract — callers that only set
     # ``target_dim`` behave exactly as before.
     target_dims_attribution: list[str] = field(default_factory=list)
+    # PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V4) — G5 gate. Mirrors
+    # ``core.config.self_improving_loop.AutoresearchConfig.pareto_mode``.
+    # The evolver only embeds ``pareto_front`` into its HANDOFF when
+    # this is True, even if ``baseline_archive.jsonl`` exists from a
+    # prior pareto_mode=True cycle. Prevents the half-disconnect of
+    # surfacing archive state to the LLM while selection layer
+    # isn't actively curating the front.
+    pareto_mode: bool = False
     candidates_requested: int = 15
     # CSP-5 (2026-05-22) — paper §3 iteration loop. Default 0 keeps
     # the pre-CSP-5 single-pass behaviour (Pipeline.arun() executes
