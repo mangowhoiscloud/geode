@@ -1919,6 +1919,16 @@ def _should_promote(
     # 결정 영향력 0. 이제 bench + baseline_bench 둘 다 받아서 gate fire.
     bench_means: dict[str, float] | None = None,
     baseline_bench_means: dict[str, float] | None = None,
+    # PR-AR-L4b (2026-05-26) — ux_means / admire_means caller forward.
+    # 이전엔 internal compute_fitness 4 호출에 ux/admire 전달 0 → ADR-012
+    # 3-axis fitness 의 ux/admire 축이 promote gate 에 미반영. 이제
+    # caller 가 current + baseline 둘 다 받아서 cross-axis 비교 가능.
+    # admire_means 는 Scope A (seed-gen ranker mutation-eval) 머지 후
+    # 실제 채워짐 — 본 PR 은 signature slot 만 예약. legacy=None.
+    ux_means: dict[str, float] | None = None,
+    baseline_ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    baseline_admire_means: dict[str, float] | None = None,
     # PR-SIL-5THEME C3 (2026-05-23) — P3 modality 가중 분리. dim 측
     # modality (judge_llm vs analytics) 를 internal compute_fitness 호출에
     # forward — modality-aware weight + N=1 widening guard 적용. None 이면
@@ -1990,6 +2000,8 @@ def _should_promote(
             measurement_modality=measurement_modality,
             anchor_means=_bootstrap_anchor or None,
             anchor_confidence_mode=anchor_confidence_mode,
+            ux_means=ux_means,
+            admire_means=admire_means,
         )
         if bootstrap_fitness < BOOTSTRAP_FITNESS_FLOOR:
             return False, (
@@ -2016,6 +2028,8 @@ def _should_promote(
         measurement_modality=measurement_modality,
         anchor_means=_current_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=ux_means,
+        admire_means=admire_means,
     )
     if gated == 0.0:
         # PR-SIL-5THEME C2 — gated=0 의 원인 분기. cross-validation gate
@@ -2040,6 +2054,8 @@ def _should_promote(
         measurement_modality=measurement_modality,
         anchor_means=_current_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=ux_means,
+        admire_means=admire_means,
     )
     prior_raw = compute_fitness(
         baseline_means,
@@ -2047,6 +2063,8 @@ def _should_promote(
         measurement_modality=baseline_measurement_modality,
         anchor_means=_baseline_anchor or None,
         anchor_confidence_mode=anchor_confidence_mode,
+        ux_means=baseline_ux_means,
+        admire_means=baseline_admire_means,
     )
     # PR-3 — N=1 detector. Walks the critical tier (most safety-relevant)
     # against the per-dim sample_count; if any critical dim was measured
@@ -2170,6 +2188,8 @@ def main() -> int:
     if args.no_baseline:
         baseline_means, baseline_stderr = None, None
         baseline_bench_means: dict[str, float] = {}
+        _baseline_ux_means: dict[str, float] = {}
+        _baseline_admire_means: dict[str, float] = {}
     else:
         (
             baseline_means,
@@ -2234,6 +2254,19 @@ def main() -> int:
     _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
     _anchor_confidence_mode = _anchor_mode_env == "1"
     _anchor_means_current = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
+    # PR-AR-L4b (2026-05-26) — ux_means / admire_means caller wiring.
+    # ``collect_ux_means_from_sources`` reads the 4 ledger-based metrics
+    # (mutator success_rate, token_cost_norm, revert_ratio_norm,
+    # latency_norm). Returns ``None`` until the loop has run at least
+    # one cycle (no attribution rows yet) → ``compute_fitness`` then
+    # falls back to dim-only fitness (no-op signal). admire_means is
+    # the Scope A handoff slot — reserved as None here; PR-AR-L4c wires
+    # the ranker pairwise win_rate consume after seed-gen ships the
+    # ``evaluate_mutation_pairwise`` entry point.
+    from autoresearch.ux_means import collect_ux_means_from_sources
+
+    ux_means_current = collect_ux_means_from_sources()
+    admire_means_current: dict[str, float] | None = None
     fitness = compute_fitness(
         dim_means,
         dim_stderr,
@@ -2244,6 +2277,8 @@ def main() -> int:
         measurement_modality=measurement_modality or None,
         anchor_means=_anchor_means_current or None,
         anchor_confidence_mode=_anchor_confidence_mode,
+        ux_means=ux_means_current,
+        admire_means=admire_means_current,
     )
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
@@ -2344,6 +2379,11 @@ def main() -> int:
         "bench_stderr": bench_provenance.bench_stderr or None,
         "bench_sample_count": bench_provenance.bench_sample_count or None,
         "bench_rubric_version": bench_provenance.rubric_version,
+        # PR-AR-L4b (2026-05-26) — persist ux_means current value so the
+        # next baseline-load returns a non-empty ux slot. admire_means
+        # stays None until PR-AR-L4c wires the ranker handoff.
+        "ux_means": ux_means_current,
+        "admire_means": admire_means_current,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -2382,6 +2422,14 @@ def main() -> int:
             # 적용 또는 둘 다 raw) 로 비교됨. _should_promote 가 ANCHOR_DIMS
             # subset 을 current_means / baseline_means 에서 자동 추출.
             anchor_confidence_mode=_anchor_confidence_mode,
+            # PR-AR-L4b (2026-05-26) — ux_means / admire_means forward to
+            # _should_promote's 4 internal compute_fitness calls. baseline
+            # ux/admire come from _load_baseline; current ux from the
+            # collector. admire is reserved (None) — PR-AR-L4c wires it.
+            ux_means=ux_means_current,
+            baseline_ux_means=_baseline_ux_means or None,
+            admire_means=admire_means_current,
+            baseline_admire_means=_baseline_admire_means or None,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)

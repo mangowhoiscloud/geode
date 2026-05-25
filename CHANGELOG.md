@@ -48,7 +48,36 @@ functional change.
 ## [Unreleased]
 
 ### Added
-<<<<<<< HEAD
+- **PR-AR-L4b ``compute_fitness`` 5-caller ``ux_means`` / ``admire_means`` forward** —
+  Pre-PR-AR-L4b PR-AR-L4a wired the ``ux_means`` collector but no
+  caller forwarded the dict to ``compute_fitness`` — the fitness
+  scalar stayed dim-only despite the data being available.
+  Wires the 4 ``_should_promote`` internal ``compute_fitness`` calls
+  (bootstrap / gated / current_raw / prior_raw) + the 1 ``main()``
+  call to forward ``ux_means`` (from ``collect_ux_means_from_sources``)
+  and ``baseline_ux_means`` (from ``_load_baseline`` 5-tuple). The
+  4 new ``_should_promote`` kwargs (``ux_means`` /
+  ``baseline_ux_means`` / ``admire_means`` / ``baseline_admire_means``)
+  default to ``None`` for backward-compat with legacy callers.
+  ``admire_means`` slot is reserved — PR-AR-L4c wires the seed-gen
+  ranker handoff after Scope A (PR-RANKER-MUTATION-EVAL) ships
+  ``evaluate_mutation_pairwise``.
+  ``_write_baseline`` now persists ``axes.ux_means`` (slot existed
+  pre-PR-AR-L4b but was always emitted as ``None``).
+  7 invariants in
+  ``tests/autoresearch/test_ux_admire_caller_forward.py`` pin:
+  - ``_should_promote`` signature exposes the 4 new kwargs (default None)
+  - 5 ``compute_fitness`` call blocks all mention ``ux_means=`` and
+    ``admire_means=`` (caller-symmetry grep — PR-11 anchor multiplier
+    pattern from [[feedback-signature-forward-audit]])
+  - end-to-end exercise: bootstrap fitness changes when ux_means is
+    supplied vs not (forward actually reaches compute_fitness)
+  - ``prior_raw`` baseline-side asymmetry — baseline_ux_means
+    actually reaches the prior_raw compute_fitness call (Codex MCP
+    catch §6)
+  - ``_write_baseline`` roundtrips the ``axes.ux_means`` slot
+  - main caller invokes ``collect_ux_means_from_sources``
+
 - **PR-RANKER-MUTATION-EVAL — seed-gen `evaluate_mutation_pairwise()`
   handoff entry point for autoresearch admire_means.** New module
   `plugins/seed_generation/mutation_eval.py` exposes the seed-gen
