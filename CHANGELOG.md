@@ -47,6 +47,57 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-SESSION-RESUME-PARAMS** — paperclip-aligned cwd-paired
+  resume-context tracking. Smoke 12 (v0.99.54) surfaced a
+  stale-session bug after the PR-CLEANUP per-task cwd isolation
+  landed: claude-cli's session storage is cwd-keyed
+  (`~/.claude/projects/<cwd-slug>/<session_id>.jsonl`), so a UUID
+  stored in SQLite from cwd A produces `No conversation found with
+  session ID <uuid>` when `_load_prior_session_id` returns it for a
+  worker now running in cwd B. The proximity and meta_reviewer
+  phases both failed because their stored UUIDs (from a smoke 11
+  run that pre-dated B2 wiring) pointed into the workspace-root
+  cwd-pool while smoke 12 ran in per-task isolated cwds.
+  Fix mirrors paperclip's `claudeSessionCwdMatchesExecutionTarget`
+  (`packages/adapters/claude-local/src/server/execute.ts:592`):
+  a paired `cwd` field stored alongside the session_id, and a
+  read-time `path.resolve()` equality gate. On mismatch the loader
+  returns `""` to force a fresh session instead of the doomed
+  `--resume <stale_id>`. Schema migration uses a JSON blob column
+  so future paired fields (`prompt_bundle_key`, `adapter_type`,
+  `remote_id`, …) extend without further ALTERs (codex-cli /
+  payg / subscription adapters are covered by the same shape).
+  Changes:
+  - `core/memory/session_manager.py` — `agent_runtime_state` table
+    grows `session_resume_params TEXT NOT NULL DEFAULT '{}'`;
+    additive ALTER mirrors the PR-CL-BUDGET `sessions`-table
+    pattern for legacy DBs.
+  - `core/observability/agent_runtime_state.py` — dataclass field
+    `session_resume_params: dict[str, Any]`; writer accepts the
+    dict and JSON-serialises before storage with a COALESCE guard
+    that preserves prior params on partial upserts; reader parses
+    JSON with graceful degradation to `{}` on malformed content.
+  - `core/agent/loop/agent_loop.py` — new `_saved_cwd_matches_current`
+    helper (paperclip-mirror); `_load_prior_session_id` gates on
+    cwd equality before returning the stored id; `_persist_session_id`
+    captures `get_task_isolated_cwd()` into both SQLite + the
+    legacy session.json file fallback so the reader's symmetric
+    gate has the same SoT regardless of which path served the id.
+  - `core/wiring/bootstrap.py` — `_on_session_ended` hook handler
+    threads the per-task cwd into `record_agent_session_end` so
+    the canonical SESSION_ENDED write path is paired too.
+  - 19 new regression tests across `tests/test_session_resume_params.py`
+    pin every layer: 7 helper tests
+    (`_saved_cwd_matches_current` — empty / mismatch / resolve
+    normalisation), 4 SQLite round-trip tests (round-trip /
+    legacy empty / preserve-on-upsert / malformed JSON
+    graceful), 4 `_load_prior_session_id` integration tests
+    (match / mismatch / legacy-empty / direct-call), 2
+    `_persist_session_id` end-to-end tests (cwd written / cwd
+    omitted), 2 migration sanity tests (fresh-DB / ALTER on
+    legacy-DB).
+
 ## [0.99.54] - 2026-05-25
 
 ### Fixed

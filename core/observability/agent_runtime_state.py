@@ -58,6 +58,15 @@ class AgentRuntimeState:
     total_cached_input_tokens: int = 0
     total_cost_cents: int = 0
     last_error: str = ""
+    # PR-SESSION-RESUME-PARAMS (2026-05-25) — paperclip
+    # ``sessionParams`` JSON blob mirror. Carries the resume-context
+    # the next reader needs to verify before resuming the saved
+    # session: at minimum the ``cwd`` the session was written from.
+    # Future fields (``prompt_bundle_key``, ``adapter_type``,
+    # ``remote_id``, …) extend the same dict without further schema
+    # ALTERs. Empty dict on legacy rows preserves back-compat (the
+    # reader skips the verification gate when the dict is empty).
+    session_resume_params: dict[str, Any] = field(default_factory=dict)
     created_at: float = 0.0
     updated_at: float = 0.0
 
@@ -145,26 +154,44 @@ def record_agent_session_end(
     component: str = "agentic_loop",
     adapter_type: str = "",
     claude_cli_session_id: str = "",
+    session_resume_params: dict[str, Any] | None = None,
 ) -> None:
     """Upsert the ``agent_runtime_state`` row for a completed AgenticLoop.
 
     Fires on ``HookEvent.SESSION_ENDED`` from every AgenticLoop path
     (REPL / gateway / sub-agent). Preserves cumulative totals — the
-    UPSERT only writes identity + session_id columns; totals are
-    accumulated separately by :func:`accumulate_tokens_and_cost`.
+    UPSERT only writes identity + session_id + resume_params columns;
+    totals are accumulated separately by
+    :func:`accumulate_tokens_and_cost`.
+
+    ``session_resume_params`` — PR-SESSION-RESUME-PARAMS (2026-05-25)
+    paperclip-aligned JSON dict. When non-empty the caller MUST
+    populate at minimum ``{"cwd": <current cwd>}`` so the next
+    reader can verify the saved session belongs to the same
+    execution context. Empty / None preserves the legacy behaviour
+    (no gate at read-time). Serialised to JSON before storage; the
+    column type is TEXT.
     """
+    import json
+
     conn = _get_conn()
     if conn is None or not agent_id:
         return
     now = time.time()
+    params_blob = (
+        json.dumps(session_resume_params, separators=(",", ":"), ensure_ascii=False)
+        if session_resume_params
+        else ""
+    )
     try:
         with _LOCK:
             conn.execute(
                 """\
                 INSERT INTO agent_runtime_state
                     (agent_id, agent_kind, component, adapter_type,
-                     claude_cli_session_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     claude_cli_session_id, session_resume_params,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), '{}'), ?, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     agent_kind            = excluded.agent_kind,
                     component             = excluded.component,
@@ -174,6 +201,11 @@ def record_agent_session_end(
                             THEN excluded.claude_cli_session_id
                         ELSE agent_runtime_state.claude_cli_session_id
                     END,
+                    session_resume_params = CASE
+                        WHEN excluded.session_resume_params != '{}'
+                            THEN excluded.session_resume_params
+                        ELSE agent_runtime_state.session_resume_params
+                    END,
                     updated_at            = excluded.updated_at
                 """,
                 (
@@ -182,6 +214,7 @@ def record_agent_session_end(
                     component,
                     adapter_type,
                     claude_cli_session_id,
+                    params_blob,
                     now,
                     now,
                 ),
@@ -370,6 +403,8 @@ def mark_run_ended(run_id: str, status: str) -> None:
 
 def get_agent_runtime_state(agent_id: str) -> AgentRuntimeState | None:
     """Fetch one agent's cumulative state; None if no row exists."""
+    import json
+
     conn = _get_conn()
     if conn is None or not agent_id:
         return None
@@ -380,7 +415,8 @@ def get_agent_runtime_state(agent_id: str) -> AgentRuntimeState | None:
                    claude_cli_session_id, last_run_id, last_run_status,
                    total_input_tokens, total_output_tokens,
                    total_cached_input_tokens, total_cost_cents,
-                   last_error, created_at, updated_at
+                   last_error, session_resume_params,
+                   created_at, updated_at
             FROM agent_runtime_state WHERE agent_id = ?
             """,
             (agent_id,),
@@ -390,6 +426,22 @@ def get_agent_runtime_state(agent_id: str) -> AgentRuntimeState | None:
         return None
     if row is None:
         return None
+    # PR-SESSION-RESUME-PARAMS — JSON blob → dict. Malformed JSON
+    # (legacy '' or operator hand-edits) gracefully degrades to {}
+    # so the caller's resume gate just skips (treats as "no
+    # context recorded, no guard").
+    raw_params = str(row[12]) if row[12] is not None else ""
+    try:
+        parsed_params = json.loads(raw_params) if raw_params else {}
+        if not isinstance(parsed_params, dict):
+            parsed_params = {}
+    except json.JSONDecodeError:
+        log.debug(
+            "agent_runtime_state(%s).session_resume_params malformed: %r",
+            agent_id,
+            raw_params,
+        )
+        parsed_params = {}
     return AgentRuntimeState(
         agent_id=str(row[0]),
         agent_kind=str(row[1]),
@@ -403,8 +455,9 @@ def get_agent_runtime_state(agent_id: str) -> AgentRuntimeState | None:
         total_cached_input_tokens=int(row[9]),
         total_cost_cents=int(row[10]),
         last_error=str(row[11]),
-        created_at=float(row[12]),
-        updated_at=float(row[13]),
+        session_resume_params=parsed_params,
+        created_at=float(row[13]),
+        updated_at=float(row[14]),
     )
 
 
