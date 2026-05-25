@@ -68,6 +68,18 @@ functional change.
   caller-side logged fitness (Codex MCP review fix; previously
   half-wired: caller multiplied, promote compared raw).
 
+### Fixed
+- **PR-SEEDS-PER-RUN-LINK** — seed listing `[raw 번들 ↗]` link
+  per row pointed at the run's directory (`/petri-bundle/seeds/
+  <run_id>/`). GitHub Pages does not serve directory listings,
+  so it returned HTTP 404 on click. The link now targets the
+  run's served `state.json` instead (`/petri-bundle/seeds/
+  <run_id>/state.json`). Prose mentions on the same page (KO +
+  EN) were updated to point at the concrete files
+  (`state.json` / `survivors.json`) instead of "per-run 디렉토리"
+  / "per-run directory" since the directory itself is not
+  reachable.
+
 ## [0.99.56] - 2026-05-25
 
 Patch release shipping PR-DETAIL-LINK-FIX so the seeds listing → detail click flow on the live Pages site stops returning 404. Single-PR rotation to fix a user-visible regression from v0.99.55.
