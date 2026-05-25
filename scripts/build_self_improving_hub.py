@@ -26,6 +26,7 @@ NOTE: `--bundle-root` defaults to `docs/self-improving/petri-bundle/` (post-Phas
 relocation the bundle moves to `docs/self-improving/petri-bundle/`; update the
 default (or the CI invocation) accordingly.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,10 +70,7 @@ HARNESS_MAP: dict[str, tuple[str, str]] = {
 def html_escape(value: str) -> str:
     """Minimal HTML escape — no external dep."""
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -100,10 +98,7 @@ def harness_chip(model: str) -> str:
         return '<span class="muted">.</span>'
     prefix = model.split("/", 1)[0]
     cls, label = HARNESS_MAP.get(prefix, ("payg", "PAYG"))
-    return (
-        f'<span class="chip {cls}">{html_escape(label)}</span> '
-        f"<code>{html_escape(model)}</code>"
-    )
+    return f'<span class="chip {cls}">{html_escape(label)}</span> <code>{html_escape(model)}</code>'
 
 
 def fmt_mtime(path: Path) -> str:
@@ -290,9 +285,7 @@ def render_petri_rows(rows: list[PetriRow]) -> str:
     out: list[str] = []
     for row in rows[:PETRI_ROW_LIMIT]:
         task_short = row.task_id[:8] if row.task_id else "unknown"
-        anchor = (
-            f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
-        )
+        anchor = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
         out.append(
             "        <tr>\n"
             f'          <td class="id"><a href="{anchor}">audit_{html_escape(task_short)}</a> '
@@ -425,7 +418,7 @@ def render_autoresearch_rows(state: AutoresearchState) -> str:
         (
             "        <tr>\n"
             '          <td class="id"><a href="/geode/self-improving/autoresearch/policies/">'
-            f'policies/ ({state.policies_count} files)</a> '
+            f"policies/ ({state.policies_count} files)</a> "
             '<span class="bucket autoresearch">autoresearch</span></td>\n'
             f'          <td class="muted">{state.policies_mtime}</td>\n'
             '          <td class="muted">.</td>\n'
@@ -447,9 +440,7 @@ def render_sidebar_petri(rows: list[PetriRow]) -> str:
     out: list[str] = []
     for row in rows[:PETRI_SIDEBAR_LIMIT]:
         task_short = row.task_id[:8] if row.task_id else "unknown"
-        anchor = (
-            f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
-        )
+        anchor = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
         out.append(f'            <li><a href="{anchor}">audit_{html_escape(task_short)}</a></li>')
     return "\n".join(out)
 
@@ -526,14 +517,12 @@ def main(argv: list[str] | None = None) -> int:
         autoresearch.policies_count,
     )
 
-    petri_section_label = f"{len(petri_rows)} archive" + (
-        "s" if len(petri_rows) != 1 else ""
-    )
-    seedgen_section_label = (
-        f"{len(seedgen_rows)} run" + ("s" if len(seedgen_rows) != 1 else "")
-    )
-    autoresearch_status_label = "stale" if autoresearch.baseline_stale else (
-        "live" if autoresearch.baseline_path is not None else "absent"
+    petri_section_label = f"{len(petri_rows)} archive" + ("s" if len(petri_rows) != 1 else "")
+    seedgen_section_label = f"{len(seedgen_rows)} run" + ("s" if len(seedgen_rows) != 1 else "")
+    autoresearch_status_label = (
+        "stale"
+        if autoresearch.baseline_stale
+        else ("live" if autoresearch.baseline_path is not None else "absent")
     )
 
     build_date = _dt.datetime.now(tz=_dt.UTC).strftime("%Y-%m-%d %H:%M")
