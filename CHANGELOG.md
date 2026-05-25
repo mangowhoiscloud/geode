@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-SUPERVISOR-ENABLE — register supervisor in the seed-gen
+  manifest so the orchestrator doesn't `phase_skipped` it.** Pre-fix
+  `enabled_roles` (`plugins/seed_generation/seed_generation.plugin.toml`)
+  had 8 roles and `supervisor` was NOT one of them; `[seed_generation.
+  role.supervisor]` section did not exist either. Smoke 19 transcript
+  caught the consequence on line 4: `"event": "phase_skipped",
+  "payload": {"role": "supervisor", "reason": "agent_not_registered"}`.
+  Per the run's `state/seed-generation/<run_id>/sub_agents/` dir the
+  supervisor never spawned; per `checkpoints/` no `supervisor.json`
+  landed. PR-1 (#1698) SUPERVISOR_SCHEMA wire was a necessary fix
+  but not sufficient — schema couldn't reach the LLM because the
+  registry builder's main loop never visited supervisor (it iterates
+  `manifest.enabled_roles`). Fix: add `supervisor` to enabled_roles +
+  the matching role spec section (default_model `claude-opus-4-7`
+  per the Supervisor.py docstring, allowed list mirrors
+  meta_reviewer's run-level analyst pattern). `_ROLE_TO_CLASS` in
+  `_registry_builder.py` adds `Supervisor` so the main loop registers
+  it cleanly (the legacy fallback at the end stays as defensive code
+  for future manifest revisions). Pinned by 4 invariants in
+  `test_registry_wireup.py::test_populate_registry_supervisor_registered`
+  (manifest enabled_roles + role spec + picker binding + registry
+  registration + concrete-class check + model wiring) +
+  `test_bundled_manifest_loads` updated to include supervisor in the
+  expected enabled set.
+
 ### Added
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
