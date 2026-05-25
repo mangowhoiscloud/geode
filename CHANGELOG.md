@@ -48,6 +48,23 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-ENV-WHITELIST-CODEX-BYPASS** — add
+  `GEODE_CODEX_OAUTH_POLL_DISABLED` to
+  `IsolatedRunner._SUBPROCESS_ENV_WHITELIST`. Smoke 13 vote-m000-*
+  failed with `codex-cli-subagent lane blocked — Codex 5-hour OAuth
+  bucket >= throttle threshold (see GEODE_CODEX_OAUTH_POLL_DISABLED
+  to bypass)` even though the operator had set the env on the parent
+  `geode serve` process. Root cause: the whitelist did not include
+  the bypass env, so the `safe_env` built in
+  `_aexecute_subprocess` dropped it before spawning the worker.
+  The worker subprocess then ran
+  `should_block_codex_lane_acquisition()` with an unset env, the
+  throttle gate fired, and 5 retries failed against the actual
+  ChatGPT Plus subscription bucket that had headroom. Pinned by 4
+  regression tests in `tests/test_subprocess_env_whitelist.py`:
+  bypass env present, operator-knob set preserved, credential envs
+  preserved, dangerous-env exclusion guard.
+
 - **PR-SESSION-RESUME-PARAMS** — paperclip-aligned cwd-paired
   resume-context tracking. Smoke 12 (v0.99.54) surfaced a
   stale-session bug after the PR-CLEANUP per-task cwd isolation
