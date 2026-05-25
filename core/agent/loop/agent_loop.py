@@ -57,20 +57,58 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
+    """Paperclip-aligned cwd-equality check
+    (``packages/adapters/claude-local/src/server/execute.ts:592`` ->
+    ``claudeSessionCwdMatchesExecutionTarget``).
+
+    Returns True when EITHER the stored side or the current side is
+    empty (legacy rows / direct-call callers without per-task cwd)
+    so the resume gate skips and the call falls through to the
+    existing happy path. When both are non-empty, compares via
+    ``Path(x).resolve()`` to normalise symlinks / ``..`` / trailing
+    slashes — string equality alone is insufficient when the worker
+    and the claude-cli call sites pass differently-shaped absolute
+    paths.
+    """
+    from pathlib import Path
+
+    if not stored_cwd or not current_cwd:
+        return True
+    try:
+        return Path(stored_cwd).resolve() == Path(current_cwd).resolve()
+    except (OSError, RuntimeError):
+        # Path resolution can raise on cycles / inaccessible mounts.
+        # Treat as mismatch to force a fresh session rather than a
+        # doomed resume.
+        return False
+
+
 def _load_prior_session_id(session_id: str) -> str:
     """Return the claude-cli session_id from the prior turn of this
-    sub-agent, or empty string when no prior session exists.
+    sub-agent, or empty string when no prior session exists OR the
+    saved session belongs to a different cwd-pool.
 
     PR-COMM-3c (2026-05-24) — SQLite primary, file fallback.
-    Reads ``agent_runtime_state.claude_cli_session_id`` first
-    (single source of truth introduced by PR-COMM-3 / PR-COMM-3b).
-    Falls back to the legacy
-    ``<run_dir>/sub_agents/<session_id>/session.json`` file from PR-V
-    so existing on-disk caches keep working through the 1-release
-    grace window (slated for removal in v0.99.54). Returns empty on
-    any I/O / parse error so the call falls back to a fresh session
-    rather than crashing.
+    PR-SESSION-RESUME-PARAMS (2026-05-25) — paperclip-aligned cwd
+    verification. Reading ``agent_runtime_state.claude_cli_session_id``
+    is not enough on its own: claude-cli's session storage is keyed
+    on cwd (``~/.claude/projects/<cwd-slug>/<session_id>.jsonl``), so
+    a stored UUID from a prior cwd produces ``"No conversation
+    found"`` against the current per-task cwd-pool (smoke 12
+    proximity + meta_reviewer evidence). Before returning the UUID
+    we verify ``session_resume_params.cwd == get_task_isolated_cwd()``;
+    on mismatch we return ``""`` to force a fresh session. Same
+    check applied to the legacy session.json file fallback.
+
+    Returns empty on any I/O / parse / mismatch so the call falls
+    back to a fresh session rather than crashing or resuming a
+    stale id.
     """
+    from core.agent.task_isolation import get_task_isolated_cwd
+
+    current_cwd = get_task_isolated_cwd() or ""
+
     # SQLite primary — read from the per-agent row landed by
     # PR-COMM-3b's record_agent_session_end hook handler.
     try:
@@ -78,7 +116,16 @@ def _load_prior_session_id(session_id: str) -> str:
 
         state = get_agent_runtime_state(session_id)
         if state is not None and state.claude_cli_session_id:
-            return state.claude_cli_session_id
+            stored_cwd = str(state.session_resume_params.get("cwd", ""))
+            if _saved_cwd_matches_current(stored_cwd, current_cwd):
+                return state.claude_cli_session_id
+            log.info(
+                "session %s saved for cwd=%r — skipping resume in cwd=%r",
+                state.claude_cli_session_id,
+                stored_cwd,
+                current_cwd,
+            )
+            return ""
     except Exception:
         log.debug(
             "agent_runtime_state read failed for %s — falling back to session.json",
@@ -101,7 +148,21 @@ def _load_prior_session_id(session_id: str) -> str:
 
         payload = json.loads(session_path.read_text(encoding="utf-8"))
         cached = payload.get("claude_cli_session_id", "")
-        return str(cached) if cached else ""
+        if not cached:
+            return ""
+        # PR-SESSION-RESUME-PARAMS — file fallback gets the same
+        # paired-cwd gate. Missing key (legacy file pre-fix) skips
+        # the gate and returns the id (back-compat).
+        stored_cwd_file = str(payload.get("cwd", ""))
+        if not _saved_cwd_matches_current(stored_cwd_file, current_cwd):
+            log.info(
+                "session %s (file) saved for cwd=%r — skipping resume in cwd=%r",
+                cached,
+                stored_cwd_file,
+                current_cwd,
+            )
+            return ""
+        return str(cached)
     except Exception:
         log.debug("session.json read failed for %s", session_id, exc_info=True)
         return ""
@@ -127,6 +188,18 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
     if not emitted_session_id:
         return
 
+    # PR-SESSION-RESUME-PARAMS (2026-05-25) — capture the cwd the
+    # session was actually written from. claude-cli's session
+    # storage is cwd-keyed (``~/.claude/projects/<cwd-slug>/``), so
+    # the next reader MUST know which cwd this id is good for. Empty
+    # string when no per-task isolation is in scope (direct-call
+    # surface) — the reader's gate skips on empty stored_cwd
+    # (back-compat with pre-fix rows).
+    from core.agent.task_isolation import get_task_isolated_cwd
+
+    write_cwd = get_task_isolated_cwd() or ""
+    resume_params = {"cwd": write_cwd} if write_cwd else {}
+
     # SQLite primary write — directly upsert the resumable session_id
     # so the next turn's _load_prior_session_id sees it even if the
     # round's SESSION_ENDED hook hasn't fired yet (early termination,
@@ -137,6 +210,7 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
         record_agent_session_end(
             agent_id=session_id,
             claude_cli_session_id=emitted_session_id,
+            session_resume_params=resume_params,
         )
     except Exception:
         log.debug(
@@ -162,6 +236,11 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
             "claude_cli_session_id": emitted_session_id,
             "updated_at": time.time(),
         }
+        # PR-SESSION-RESUME-PARAMS — paired cwd in the file fallback
+        # as well so the reader's symmetric gate has the same SoT
+        # regardless of which path served the resume id.
+        if write_cwd:
+            payload["cwd"] = write_cwd
         session_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
