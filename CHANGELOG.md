@@ -48,6 +48,24 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-PETRI-BUNDLE-LANDING** — bridge UI/UX for the three Petri bundle
+  surfaces (`/petri-bundle/`, `/petri-bundle/seeds/`,
+  `/petri-bundle/#/tasks/<eval>/samples/scoring`). New static hub at
+  `docs/petri-bundle/landing.html` provides routing to inspect_ai
+  viewer / seed listing / docs (anti-slop: dense table, no card
+  grids, no emoji, system font stack, hairline borders, mono URLs;
+  inspect_petri Bootstrap palette adopted for substrate continuity
+  with the sibling viewer). New Next.js dynamic route
+  `/docs/petri/seeds/[run_id]/[candidate_id]` renders each seed
+  candidate `.md` with `gray-matter` (frontmatter) + `marked`
+  (body → HTML) at build time. Detail page shows frontmatter,
+  critic JSON, pilot dim_means (sorted), evolver parent/children,
+  Elo rating, raw `.md` link, and back-links to the bundle hub +
+  eval viewer. Seeds listing (`/docs/petri/seeds/`) and bundle page
+  (`/docs/petri/bundle/`) updated to route into the new detail
+  page and link the four bridge surfaces. `site/DESIGN.md` §11
+  documents the palette / cross-link / forbidden conventions so
+  future bridge work stays anchored.
 - **PR-SEEDS-EVAL-EXPORT** — seed-generation runs now surface as native
   inspect_ai tasks inside the SPA bundle viewer at
   `https://mangowhoiscloud.github.io/geode/petri-bundle/#/tasks/`.
