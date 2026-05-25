@@ -1,7 +1,6 @@
 ---
 name: seed_literature_review
 role: Petri seed batch Literature Reviewer (4-phase paper analysis loop)
-model: claude-sonnet-4-6
 toolkit: seed_literature_review
 ---
 

@@ -214,6 +214,7 @@ class Critic(BaseSeedAgent):
                         "target_dim": target_dim,
                     },
                     agent=_CRITIC_AGENT_NAME,
+                    model=self.model,
                     source=self.adapter_source,
                     # PR-JSON-WIRE (2026-05-25) — force critique JSON shape.
                     response_schema=CRITIQUE_SCHEMA,

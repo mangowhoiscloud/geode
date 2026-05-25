@@ -1,7 +1,6 @@
 ---
 name: seed_generator
 role: Petri seed candidate generator
-model: claude-sonnet-4-6
 toolkit: seed_generation
 ---
 

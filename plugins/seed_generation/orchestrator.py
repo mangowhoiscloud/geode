@@ -539,14 +539,26 @@ class Pipeline:
                     )
             for phase in order[resume_idx:]:
                 phase_started = time.time()
-                await self._arun_phase(phase)
+                phase_result = await self._arun_phase(phase)
                 # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) —
                 # checkpoint the post-phase state so a downstream
                 # crash doesn't lose this phase's work. Failures
                 # here are logged but don't abort the run (the
                 # checkpoint is a recovery convenience, not a hard
                 # contract — the run continues either way).
-                if iteration == 0 and self.state.run_dir is not None:
+                #
+                # PR-CHECKPOINT-ON-FAILURE (2026-05-25) — only checkpoint
+                # phases that actually succeeded. Smoke 17 wrote a
+                # ``proximity.json`` checkpoint despite the proximity
+                # phase emitting ``phase_failed (raised=False)`` because
+                # ``_arun_phase`` returned normally (it catches and
+                # logs soft failures). A future ``audit-seeds resume``
+                # would then SKIP proximity on the next attempt — the
+                # opposite of what the operator wants. Now the
+                # checkpoint is gated on ``phase_result.success`` so
+                # resume re-runs failed phases instead of pretending
+                # they completed.
+                if iteration == 0 and self.state.run_dir is not None and phase_result.success:
                     self._record_checkpoint(
                         phase,
                         duration_ms=(time.time() - phase_started) * 1000.0,

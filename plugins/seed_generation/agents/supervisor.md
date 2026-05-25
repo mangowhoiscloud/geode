@@ -1,7 +1,6 @@
 ---
 name: seed_supervisor
 role: Petri seed-generation Supervisor (run-level strategy synthesis)
-model: claude-opus-4-7
 toolkit: seed_critique
 ---
 

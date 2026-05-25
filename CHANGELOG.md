@@ -47,6 +47,101 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-PROXIMITY-JSON-ENFORCE — proximity prompt mirrors the
+  PR-HANDOFF-SCHEMAS JSON-only enforcement.** `plugins/seed_generation/
+  agents/proximity.py:_build_description` now appends
+  ``Your FINAL response must be ONLY the JSON object matching the
+  PROXIMITY_SCHEMA … Start with `{` and end with `}`.`` Pre-fix
+  smoke 17 hit a `phase_failed` because the LLM emitted a narrative
+  preamble (``"Analyzing the 14 candidates by reading their excerpts
+  — grouping by mechanism…"``) and the parser dropped the
+  malformed payload. The other PR-HANDOFF-SCHEMAS-aligned roles
+  (pilot / critic / evolver) already had this gating language;
+  proximity was the one outlier. Pinned by a new test in
+  `tests/plugins/seed_generation/test_proximity.py`.
+
+- **PR-CHECKPOINT-ON-FAILURE — phase_failed phases no longer write a
+  checkpoint.** `plugins/seed_generation/orchestrator.py:Pipeline.arun`
+  now gates the post-phase `_record_checkpoint` call on
+  `phase_result.success`. Pre-fix, smoke 17 wrote a `proximity.json`
+  checkpoint despite the proximity agent returning
+  `status="error"` (soft failure with `phase_failed (raised=False)`)
+  because `_arun_phase` returned normally — the outer loop called
+  `_record_checkpoint` unconditionally, so a future
+  `audit-seeds resume gen1-redundant_tool_invocation` would have
+  SKIPPED proximity on the next attempt (opposite of the operator's
+  intent). Pinned by
+  `test_phase_failed_soft_failure_does_not_write_checkpoint` in
+  `tests/plugins/seed_generation/test_orchestrator.py`.
+
+- **PR-VOTER-PROVIDER-WIRE — every seed-generation role's SubTask now
+  carries the picker-resolved `model`.** `core/agent/sub_agent.py:SubTask`
+  gains a `model: str = ""` field; `SubAgentManager._build_request`
+  honors `task.model` over both `settings.model` and
+  `agent_ctx["model"]`. Pre-fix every sub-agent inherited the parent's
+  default model, which short-circuited adapter resolution: smoke 17
+  RESUME dispatched ranker voters with binding `(claude-cli,
+  claude-opus-4-7)` via the codex-cli subprocess adapter because
+  `_resolve_provider(settings.model)` returned an openai-codex key, so
+  `resolve_for("openai", "adapter")` matched codex-cli instead of
+  claude-cli. Codex MCP re-review of PR #1687 caught that the same
+  wire gap exists for the 7 non-ranker role agents (generator /
+  critic / pilot / proximity / evolver / meta_reviewer / supervisor)
+  — once `.md` `model:` frontmatter is removed, `AgentDefinition.model`
+  falls back to `ANTHROPIC_SECONDARY` (claude-sonnet-4-6), silently
+  overriding pilot (claude-haiku-4-5) / meta_reviewer / supervisor
+  (claude-opus-4-7) bindings. Every role's SubTask spawn now passes
+  `model=self.model`. Pinned by 3 new tests:
+  `test_ranker_voter_spawn_carries_per_voter_model` +
+  `test_sub_task_model_field_wins_over_settings_default` +
+  `test_all_role_subtask_spawns_carry_model_for_role_binding`
+  (static-grep sentinel across all 7 non-ranker role files).
+
+- **seed-generation agent definitions — remove per-agent `model:`
+  frontmatter + normalize to English.** All 9 `plugins/seed_generation/
+  agents/*.md` files dropped their `model:` line so the manifest's
+  per-role binding (resolved via the picker) is the single SoT for
+  which model each role runs against — previously a stale `model:`
+  in `.md` frontmatter could silently override the picker's resolved
+  binding when `agent_ctx["model"]` was consulted. Korean text in
+  `critic.md` / `evolver.md` / `pilot.md` was rewritten to English
+  for consistency (the rest of the corpus is English).
+
+- **PR-CODEX-OAUTH-RESPONSE-SCHEMA — Codex OAuth adapter now forwards
+  `req.response_schema`.** `core/llm/adapters/codex_oauth.py` was the
+  only PR-JSON-WIRE (#79) adapter that silently dropped the schema field;
+  claude-cli wires through `--json-schema` and codex-cli writes
+  `--output-schema <FILE>`, but codex-oauth's `_build_codex_call_kwargs`
+  never emitted the OpenAI Responses API equivalent
+  (`text.format = {"type": "json_schema", "name": ..., "strict": ...,
+  "schema": ...}`). Without that field, gpt-5.x reasoning models on
+  the Codex backend could return `stop_reason=completed` + empty
+  `output_text` (entire output budget consumed by encrypted reasoning
+  items), surfacing as `unknown` failures that `AgenticLoop` retried
+  5× and produced ~10 `~/.geode/diagnostics/codex-oauth-empty-text/`
+  dumps per ranker match (smoke 17 evidence). Fix: append `text.format`
+  per the Responses API spec (ctx7-grounded via
+  `/websites/developers_openai_api` `responses-vs-chat-completions`
+  guide). Schema name derived from the schema's `title` field
+  (fallback `"response"`).
+
+  Per Codex MCP review of PR #1687, `strict: True` is auto-detected
+  by `_is_strict_compatible(schema)` rather than hard-coded.
+  OpenAI Structured Outputs strict mode requires every object schema
+  to set `additionalProperties: false` AND list every property in
+  `required` (recursively into nested objects + array items). GEODE's
+  seed-generation schemas in `plugins/seed_generation/json_schemas.py`
+  use an additive helper that intentionally omits both — unconditional
+  `strict=True` would have caused the server to reject the request
+  (400) before generation, a worse retry storm than the empty-text
+  path. Non-compatible schemas fall back to `strict: False` (schema
+  still forwarded as a server hint). 9 new invariant + retry-edge
+  tests in
+  `tests/core/llm/adapters/test_codex_oauth_backend_invariants.py`
+  and
+  `tests/core/llm/adapters/test_codex_oauth_empty_text_retry_edge.py`.
+
 ## [0.99.60] - 2026-05-25
 
 Sprint bundle closing the 전소 self-improving-loop backlog: PR-20 (A.6 CRM causal_hypothesis) + PR-21 (A.8 sub_agent_slice) + PR-22 (B.4 F1 cross-run SoT invariants) + PR-23 (A.2 Tchebycheff) + PR-24 (A.3 MAP-Elites) + PR-25 (A.4 GEPA sampler) + PR-26 (C.6 cross-run SoT unification) + PR-27 (C.7 unified MutatorContextView) + PR-CHECKPOINT-RESUME-TIMEBUDGET (seed-gen per-phase checkpoint + 600s wall-clock) + PR-28 (C.8 silent fallback STRICT mode parity invariants). 9 fragmentation-audit signals closed, Codex MCP catches averaged 1.6/PR.

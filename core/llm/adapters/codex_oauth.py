@@ -285,7 +285,98 @@ def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["reasoning"] = {"effort": req.effort, "summary": "auto"}
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
+    # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API
+    # structured-output enforcement. PR-JSON-WIRE (#79) routed
+    # ``req.response_schema`` through claude-cli (--json-schema) and
+    # codex-cli (--output-schema <FILE>) but silently dropped the
+    # codex-oauth path. Without API-level schema enforcement, gpt-5.x
+    # reasoning models can return ``stop_reason=completed`` with the
+    # entire output budget spent on encrypted reasoning items + empty
+    # ``output_text`` (smoke 17: 20+ codex-oauth-empty-text dumps,
+    # ~10 per match). Adding ``text.format = {type:"json_schema", ...}``
+    # forwards the schema for server-side enforcement. Spec: OpenAI
+    # Responses API ``text.format`` (replaces Chat Completions
+    # ``response_format``).
+    #
+    # Codex MCP review of PR #1687: ``strict: True`` requires the schema
+    # to satisfy OpenAI's Structured Outputs subset (all object schemas
+    # set ``additionalProperties: false`` AND every property listed in
+    # ``required``). GEODE's seed-generation schemas in
+    # ``plugins/seed_generation/json_schemas.py`` intentionally use the
+    # additive helper that omits both, so unconditional strict=True would
+    # cause the server to **reject the request** (400) before generation
+    # — a worse retry storm than the empty-text path. Auto-detect strict
+    # compatibility per schema and fall through to ``strict: False`` for
+    # non-compatible schemas (still forwards the shape as a strong hint,
+    # but server treats it as informational rather than gated).
+    if req.response_schema is not None:
+        schema_name = str(req.response_schema.get("title") or "response")
+        kwargs["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": schema_name,
+                "strict": _is_openai_strict_compatible(req.response_schema),
+                "schema": req.response_schema,
+            }
+        }
     return kwargs
+
+
+def _is_openai_strict_compatible(schema: Any) -> bool:
+    """Check whether ``schema`` satisfies OpenAI's strict Structured Outputs subset.
+
+    Provider-specific (OpenAI Responses API only). Do NOT reuse from
+    other adapters without verifying the target API's subset rules —
+    Anthropic Structured Outputs (Claude API) shares the
+    ``additionalProperties: false`` constraint but DIVERGES on:
+
+    - ``required`` completeness: OpenAI requires every property key to
+      appear in ``required``; Anthropic allows up to 24 optional
+      properties.
+    - ``oneOf``: OpenAI supports; Anthropic does not.
+    - Numerical / string constraints (``minimum`` / ``maxLength`` …):
+      OpenAI supports; Anthropic does not.
+
+    Codex OAuth hits the OpenAI Responses API, so this helper enforces
+    OpenAI's stricter rule set. Per OpenAI docs (ctx7 `/websites/
+    developers_openai_api`, responses-vs-chat-completions guide),
+    ``strict: True`` requires every ``type: "object"`` subschema:
+
+    - sets ``additionalProperties: false`` (typed-additional or True is rejected)
+    - lists ALL declared property keys in ``required``
+
+    Plus array ``items`` and nested objects must satisfy the same recursively.
+    ``oneOf`` / ``anyOf`` / ``allOf`` branches must each be strict-compatible.
+
+    Returns ``True`` when the schema is safe to send with ``strict: True``;
+    ``False`` when ``strict: False`` should be used instead. This keeps
+    legacy GEODE schemas (designed for additive-output tolerance) from
+    causing 400 rejections while still forwarding the schema shape as a
+    server hint.
+    """
+    if not isinstance(schema, dict):
+        return True
+    schema_type = schema.get("type")
+    if schema_type == "object":
+        if schema.get("additionalProperties") is not False:
+            return False
+        properties = schema.get("properties") or {}
+        required = set(schema.get("required") or [])
+        if set(properties.keys()) != required:
+            return False
+        for prop_schema in properties.values():
+            if not _is_openai_strict_compatible(prop_schema):
+                return False
+    if "items" in schema and not _is_openai_strict_compatible(schema["items"]):
+        return False
+    for combinator_key in ("oneOf", "anyOf", "allOf"):
+        # Combinators are accepted only when every branch is strict-compatible.
+        branches = schema.get(combinator_key)
+        if isinstance(branches, list):
+            for branch in branches:
+                if not _is_openai_strict_compatible(branch):
+                    return False
+    return True
 
 
 def _translate_codex_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any]:

@@ -111,3 +111,175 @@ def test_codex_kwargs_no_tools_when_none_provided() -> None:
     kwargs = _build_codex_call_kwargs(_req())
     assert "tools" not in kwargs
     assert "parallel_tool_calls" not in kwargs
+
+
+# --- PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) ---------------------------
+
+
+_VOTE_SCHEMA: dict[str, object] = {
+    "title": "vote",
+    "type": "object",
+    "properties": {
+        "match_id": {"type": "string"},
+        "winner": {"type": "string", "enum": ["A", "B", "tie"]},
+        "rationale": {"type": "string"},
+    },
+    "required": ["match_id", "winner", "rationale"],
+}
+
+
+def test_codex_kwargs_omits_text_format_when_no_response_schema() -> None:
+    """Back-compat: callers that don't pin a schema keep the pre-fix shape."""
+    kwargs = _build_codex_call_kwargs(_req())
+    assert "text" not in kwargs
+
+
+def test_codex_kwargs_wires_response_schema_to_text_format() -> None:
+    """Responses API structured output: ``text.format = {type:"json_schema", ...}``.
+
+    PR-CODEX-OAUTH-RESPONSE-SCHEMA — codex-oauth was the only PR-JSON-WIRE
+    adapter that silently dropped ``req.response_schema``. Smoke 17
+    evidence: 20+ ``codex-oauth-empty-text`` dumps because gpt-5.5
+    burned the output budget on encrypted reasoning with no API-level
+    JSON enforcement. This test pins the wire-through.
+
+    Note: ``_VOTE_SCHEMA`` is NOT strict-compatible (no
+    ``additionalProperties: false``) so ``strict`` is auto-detected to
+    ``False``. Strict=True is exercised by
+    ``test_codex_kwargs_text_format_strict_true_for_strict_compat_schema``.
+    """
+    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    assert "text" in kwargs, "text.format missing — codex-oauth silently dropped response_schema"
+    text = kwargs["text"]
+    assert isinstance(text, dict)
+    fmt = text["format"]
+    assert fmt["type"] == "json_schema"
+    # Auto-detect: VOTE_SCHEMA lacks additionalProperties:false → strict=False.
+    assert fmt["strict"] is False
+    assert fmt["schema"] == _VOTE_SCHEMA
+    # Name derived from schema title when present.
+    assert fmt["name"] == "vote"
+
+
+def test_codex_kwargs_text_format_name_fallback_when_no_title() -> None:
+    """Schemas without ``title`` get a generic ``response`` name."""
+    untitled = {k: v for k, v in _VOTE_SCHEMA.items() if k != "title"}
+    kwargs = _build_codex_call_kwargs(_req(response_schema=untitled))
+    assert kwargs["text"]["format"]["name"] == "response"
+
+
+def test_codex_kwargs_text_format_coexists_with_reasoning() -> None:
+    """Voter call shape: gpt-5.5 reasoning model + structured output.
+
+    The fix must not regress the reasoning kwargs — both blocks coexist.
+    """
+    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
+    assert kwargs["include"] == ["reasoning.encrypted_content"]
+    assert kwargs["text"]["format"]["type"] == "json_schema"
+
+
+# --- Strict-mode auto-detection (Codex MCP review of PR #1687) -------------
+
+
+_STRICT_COMPAT_SCHEMA: dict[str, object] = {
+    "title": "strict_person",
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "number"},
+    },
+    "required": ["name", "age"],
+    "additionalProperties": False,
+}
+
+
+def test_codex_kwargs_text_format_strict_true_for_strict_compat_schema() -> None:
+    """Strict mode enabled when schema satisfies the OpenAI subset.
+
+    Codex MCP review of PR #1687 caught that unconditional strict=True
+    would cause the server to reject GEODE's seed-generation schemas
+    (which lack ``additionalProperties: false``). The adapter
+    auto-detects strict compatibility and passes ``strict: True`` only
+    when the schema meets the constraints. ctx7 spec (Responses API
+    docs): every object schema must set ``additionalProperties: false``
+    AND list every property in ``required``.
+    """
+    kwargs = _build_codex_call_kwargs(_req(response_schema=_STRICT_COMPAT_SCHEMA))
+    assert kwargs["text"]["format"]["strict"] is True
+
+
+def test_codex_kwargs_text_format_strict_false_when_additional_properties_open() -> None:
+    """GEODE's ``_additive`` schemas omit ``additionalProperties: false``
+    so they cannot ride strict mode without being rewritten."""
+    open_schema = {
+        "title": "open",
+        "type": "object",
+        "properties": {"x": {"type": "string"}},
+        "required": ["x"],
+        # NB: no additionalProperties → not strict-compatible
+    }
+    kwargs = _build_codex_call_kwargs(_req(response_schema=open_schema))
+    assert kwargs["text"]["format"]["strict"] is False
+
+
+def test_codex_kwargs_text_format_strict_false_when_required_misses_property() -> None:
+    """Strict mode requires every property listed in ``required``."""
+    partial_required = {
+        "title": "partial",
+        "type": "object",
+        "properties": {
+            "a": {"type": "string"},
+            "b": {"type": "string"},
+        },
+        "required": ["a"],  # b missing
+        "additionalProperties": False,
+    }
+    kwargs = _build_codex_call_kwargs(_req(response_schema=partial_required))
+    assert kwargs["text"]["format"]["strict"] is False
+
+
+def test_codex_kwargs_text_format_strict_false_when_typed_additional_properties() -> None:
+    """``additionalProperties: {"type": "number"}`` (typed extra) is NOT
+    the same as ``false`` — strict mode rejects typed extras.
+
+    PILOT_SCHEMA / META_REVIEW_SCHEMA use this shape for sparse dim
+    dictionaries — auto-detect must catch and fall back to non-strict.
+    """
+    typed_extra = {
+        "title": "typed_extra",
+        "type": "object",
+        "properties": {
+            "scores": {
+                "type": "object",
+                "additionalProperties": {"type": "number"},
+            },
+        },
+        "required": ["scores"],
+        "additionalProperties": False,
+    }
+    kwargs = _build_codex_call_kwargs(_req(response_schema=typed_extra))
+    assert kwargs["text"]["format"]["strict"] is False
+
+
+def test_codex_kwargs_text_format_strict_recurses_into_array_items() -> None:
+    """Array ``items`` schemas must also be strict-compatible."""
+    array_of_open = {
+        "title": "array_of_open",
+        "type": "object",
+        "properties": {
+            "list": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                    "required": ["x"],
+                    # items lack additionalProperties → not strict
+                },
+            },
+        },
+        "required": ["list"],
+        "additionalProperties": False,
+    }
+    kwargs = _build_codex_call_kwargs(_req(response_schema=array_of_open))
+    assert kwargs["text"]["format"]["strict"] is False

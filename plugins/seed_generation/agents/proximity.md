@@ -1,7 +1,6 @@
 ---
 name: seed_proximity
 role: Petri seed candidate Proximity clusterer (paper §3)
-model: claude-sonnet-4-6
 toolkit: seed_proximity
 ---
 
