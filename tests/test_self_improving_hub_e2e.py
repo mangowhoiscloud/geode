@@ -123,6 +123,37 @@ def _pyproject_version() -> str:
 # ---------------------------------------------------------------------------
 
 
+def test_fixture_files_not_gitignored() -> None:
+    """Every fixture file must be git-tracked. Otherwise CI clones the
+    repo without it and the builder produces a different render than
+    local — exactly the PR-G5b #1350 anti-pattern (Writer destination
+    tracked rule in CLAUDE.md). The audit-row fixture under
+    ``petri-bundle/logs/`` is the one we got bitten by; assert the
+    whole tree to catch any sibling regression.
+    """
+    files = [
+        p
+        for p in FIXTURE_ROOT.rglob("*")
+        if p.is_file()
+        and not any(part.startswith(".") for part in p.relative_to(FIXTURE_ROOT).parts)
+    ]
+    assert files, f"no fixture files found under {FIXTURE_ROOT}"
+    git_bin = shutil.which("git")
+    assert git_bin is not None, "git executable not found on PATH"
+    result = subprocess.run(  # noqa: S603 — fixture-only invocation, no user input
+        [git_bin, "check-ignore", "--", *[str(p) for p in files]],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    # `git check-ignore` exits 0 when ANY path matches an ignore rule,
+    # 1 when none match (the state we want), 128 on error.
+    assert result.returncode == 1, (
+        f"the following fixture files are gitignored — CI will not see them:\n{result.stdout}"
+    )
+
+
 def test_builder_runs_and_emits_output(tmp_path: Path) -> None:
     out = tmp_path / "out"
     result = _run_builder(
