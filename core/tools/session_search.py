@@ -256,16 +256,18 @@ class SessionSearchTool:
 
         try:
             with SearchIndex() as index:
-                hits = index.search(query, project_id=project_id, limit=limit)
+                hits = index.search(
+                    query,
+                    project_id=project_id,
+                    session_id=session_id,
+                    limit=limit,
+                )
         except Exception as exc:
             log.debug("session_search: global search failed: %s", exc)
             return tool_error(
                 f"global_search_failed: {exc}",
                 error_type="internal",
             )
-
-        if session_id is not None:
-            hits = [h for h in hits if h.session_id == session_id]
 
         return {
             "matched": bool(hits),

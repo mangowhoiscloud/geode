@@ -60,6 +60,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import re
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -144,6 +145,21 @@ class SearchIndexHit:
     score: float
 
 
+_SAVEPOINT_NAME_RE = re.compile(r"[^A-Za-z0-9_]")
+
+
+def _savepoint_name(project_id: str) -> str:
+    """Build a SQLite-safe savepoint name from ``project_id``.
+
+    SQLite's ``SAVEPOINT`` grammar accepts a bare identifier (letters,
+    digits, underscore — no quoting). Project IDs are hash-shaped on
+    disk but we still sanitise defensively so a future
+    operator-chosen project label can't break the rebuild path.
+    """
+    safe = _SAVEPOINT_NAME_RE.sub("_", project_id)
+    return f"reindex_{safe}"
+
+
 def iter_project_dbs(projects_root: Path | None = None) -> Iterator[tuple[str, Path]]:
     """Yield ``(project_id, sessions_db_path)`` for every project on disk.
 
@@ -180,6 +196,15 @@ class SearchIndex:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # busy_timeout=5000 — Codex MCP catch on PR-Hermes-1d.2: a
+        # concurrent ``session_search(scope="all")`` reader holding a
+        # shared lock would otherwise make ``BEGIN IMMEDIATE`` in
+        # :meth:`rebuild` fail-fast. 5 seconds is long enough for the
+        # reader's brief SELECT to finish + short enough that an
+        # operator running ``geode reindex`` doesn't hang on a stuck
+        # connection. Mirrors WAL-default conventions in
+        # ``core/memory/session_manager.py``.
+        self._conn.execute("PRAGMA busy_timeout = 5000")
         self._init_schema()
 
     @property
@@ -211,29 +236,43 @@ class SearchIndex:
         """Walk every project DB and (re)populate the index.
 
         Returns a ``{project_id: rows_indexed}`` map so callers (the
-        ``geode reindex`` CLI) can surface progress. Each project is
-        processed in its own savepoint so a corrupt DB doesn't sink
-        the whole rebuild.
+        ``geode reindex`` CLI) can surface progress.
+
+        Crash-safety:
+
+        * Each project is wrapped in its own SQLite ``SAVEPOINT`` so a
+          ``sqlite3.Error`` mid-insert rolls back JUST that project's
+          partial rows; siblings keep their fully-inserted state.
+        * The outer ``BEGIN IMMEDIATE`` transaction acquires a reserved
+          lock so concurrent ``search()`` readers see either the pre-
+          or post-rebuild snapshot, never an interleaved one.
+        * The pre-existing ``indexed_messages`` rows are wiped INSIDE
+          the same transaction; the wipe + insert + commit form a
+          single atomic step — a crash leaves the prior committed
+          snapshot intact (Codex MCP catch on PR-Hermes-1d.2: pre-fix
+          a transient source-DB read failure could land an empty
+          committed index).
         """
         stats: dict[str, int] = {}
-        # Wipe-and-rebuild — the source DBs are the ground truth so
-        # full rebuild is safe and idempotent. Done inside a single
-        # transaction so concurrent ``search()`` reads see either the
-        # pre- or post-rebuild state.
         cur = self._conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
         try:
             cur.execute("DELETE FROM indexed_messages")
             for project_id, db_path in iter_project_dbs(projects_root):
+                savepoint = _savepoint_name(project_id)
+                cur.execute(f"SAVEPOINT {savepoint}")
                 try:
                     indexed = self._index_project(cur, project_id, db_path)
                 except sqlite3.Error as exc:
                     log.warning(
-                        "search_index: project %s rebuild failed: %s; skipping",
+                        "search_index: project %s rebuild failed: %s; rolling back its rows",
                         project_id,
                         exc,
                     )
+                    cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
                     continue
+                cur.execute(f"RELEASE SAVEPOINT {savepoint}")
                 stats[project_id] = indexed
             self._conn.commit()
         except Exception:
@@ -291,14 +330,27 @@ class SearchIndex:
         query: str,
         *,
         project_id: str | None = None,
+        session_id: str | None = None,
         limit: int = 20,
     ) -> list[SearchIndexHit]:
-        """Cross-project FTS5 search. ``project_id`` narrows to a single project.
+        """Cross-project FTS5 search.
+
+        Both ``project_id`` and ``session_id`` (Codex MCP catch on
+        PR-Hermes-1d.2: pre-fix the tool applied session_id AFTER
+        ``limit`` so a session with hits past row N was invisible)
+        narrow inside the SQL query so the SQL ``LIMIT`` semantics
+        match what the operator expected.
 
         Empty / non-string / sanitised-to-empty query → ``[]`` (no
-        rows). Malformed FTS5 syntax slips through to ``sqlite3``
-        which raises ``OperationalError``; we trap and log + return
+        rows). Malformed FTS5 syntax that survives the sanitiser
+        raises ``sqlite3.OperationalError``; we trap and log + return
         ``[]`` to mirror the per-project search contract.
+
+        Rows are returned newest-timestamp-first, **not**
+        bm25-relevance-first — the cross-project use case is
+        operator-driven recall ("show me what I said about X this
+        week") where chronological order beats relevance ranking.
+        Callers that need relevance order can re-sort by ``score``.
         """
         from core.memory.fts_helpers import sanitize_fts5_query
 
@@ -318,6 +370,9 @@ class SearchIndex:
         if project_id is not None:
             sql += " AND m.project_id = ?"
             params.append(project_id)
+        if session_id is not None:
+            sql += " AND m.session_id = ?"
+            params.append(session_id)
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:

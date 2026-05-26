@@ -257,3 +257,84 @@ def test_search_returns_empty_on_malformed_fts_grammar(tmp_path: Path, fixture_p
         idx.rebuild(projects_root=fixture_projects_root)
         # Empty after sanitisation
         assert idx.search("....") == []
+
+
+def test_search_session_id_push_down_into_sql(tmp_path: Path, fixture_projects_root: Path):
+    """``session_id`` filter is applied INSIDE the SQL query so
+    ``limit`` semantics are correct (Codex MCP catch — pre-fix the
+    tool post-filtered after limit, hiding hits in non-matching
+    sessions past row N)."""
+    db = tmp_path / "search" / "global.db"
+    with SearchIndex(db) as idx:
+        idx.rebuild(projects_root=fixture_projects_root)
+        hits = idx.search("search", session_id="sess-b", limit=10)
+        assert all(h.session_id == "sess-b" for h in hits)
+        assert len(hits) == 1
+
+
+def test_busy_timeout_pragma_applied(tmp_path: Path):
+    """busy_timeout=5000 — concurrent readers must not race-fail the
+    rebuild's BEGIN IMMEDIATE."""
+    db = tmp_path / "search" / "global.db"
+    with SearchIndex(db) as idx:
+        result = idx._conn.execute("PRAGMA busy_timeout").fetchone()
+        assert result[0] == 5000
+
+
+def test_rebuild_savepoint_isolates_corrupt_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A ``sqlite3.Error`` during one project's indexing rolls back
+    JUST that project's partial rows; siblings remain fully indexed
+    (Codex MCP catch — docstring claimed per-project savepoints but
+    pre-fix the outer catch leaked half-inserted state)."""
+    projects = tmp_path / "projects"
+    _seed_project_db(
+        projects / "good" / "sessions" / "sessions.db",
+        ("sess-g", 0, "user", "good content one", None, 1.0),
+        ("sess-g", 1, "user", "good content two", None, 2.0),
+    )
+    _seed_project_db(
+        projects / "bad" / "sessions" / "sessions.db",
+        ("sess-b", 0, "user", "bad content one", None, 3.0),
+    )
+
+    db = tmp_path / "search" / "global.db"
+    with SearchIndex(db) as idx:
+        original_index = idx._index_project
+
+        def _flaky_index(cur, project_id: str, db_path: Path) -> int:
+            if project_id == "bad":
+                cur.execute(
+                    "INSERT OR REPLACE INTO indexed_messages "
+                    "(project_id, project_slug, session_id, message_id, "
+                    "seq, role, content, tool_name, tool_calls, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "bad",
+                        "bad",
+                        "sess-b",
+                        1,
+                        0,
+                        "user",
+                        "partial insert",
+                        None,
+                        None,
+                        3.0,
+                    ),
+                )
+                raise sqlite3.Error("simulated source DB corruption")
+            return original_index(cur, project_id, db_path)
+
+        monkeypatch.setattr(idx, "_index_project", _flaky_index)
+        stats = idx.rebuild(projects_root=projects)
+
+        assert stats == {"good": 2}
+        good_rows = idx._conn.execute(
+            "SELECT COUNT(*) FROM indexed_messages WHERE project_id = 'good'"
+        ).fetchone()[0]
+        bad_rows = idx._conn.execute(
+            "SELECT COUNT(*) FROM indexed_messages WHERE project_id = 'bad'"
+        ).fetchone()[0]
+        assert good_rows == 2
+        assert bad_rows == 0, "savepoint rollback must wipe the partial insert from the bad project"

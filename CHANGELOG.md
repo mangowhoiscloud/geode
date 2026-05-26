@@ -59,24 +59,39 @@ functional change.
   Schema: single `indexed_messages` table + one external-content
   `indexed_messages_fts` virtual table + insert/delete/update
   triggers. Unique constraint on `(project_id, session_id,
-  message_id)` plus a `BEGIN IMMEDIATE` wipe-and-rebuild transaction
-  makes the rebuild idempotent and stale-row-clearing in one shot.
-  The `session_search` tool now accepts `scope` ∈ {`project` (default,
-  unchanged behaviour), `all`} and an optional `project_id` filter
-  for the all-scope path; hits returned by the all-scope branch
-  carry `project_id` + `project_slug` so the agent can tell where
-  each match came from. Missing `global.db` (operator never ran
-  reindex) is a graceful no-op — `{matched: False, count: 0,
-  reason: "global_index_not_built — run 'geode reindex' first"}` —
-  so the LLM can fall back to scope=project. 30 invariant tests
-  pin: schema creation, rebuild idempotency + stale-row clearing,
-  iter_project_dbs graceful no-op on missing root + skip
-  no-sessions-db dirs, bm25-ordered FTS5 hits with snippets,
-  project_id + limit filters, session_id post-filter, scope-default
-  fallback on typo, missing-index graceful no-op, `geode reindex`
-  CLI registered + empty-projects-root exit-zero + 2-project
-  rebuild populates global.db end-to-end, `--help` text describes
-  global.db + sessions.db.
+  message_id)` + per-project SQLite `SAVEPOINT` blocks inside a
+  `BEGIN IMMEDIATE` wipe-and-rebuild transaction make the rebuild
+  idempotent, stale-row-clearing in one shot, and crash-safe (one
+  project's transient read failure rolls back JUST that project's
+  partial rows; siblings stay intact). `PRAGMA busy_timeout=5000`
+  ensures the rebuild's reserved lock cooperates with concurrent
+  `session_search(scope="all")` readers. Result rows are
+  newest-timestamp-first (operator-driven recall over relevance
+  ranking; callers needing relevance can re-sort by the included
+  `score` field). The `session_search` tool now accepts `scope` ∈
+  {`project` (default, unchanged behaviour), `all`} and optional
+  `project_id` / `session_id` filters for the all-scope path —
+  both filters are pushed INTO the FTS5 SQL so the SQL `LIMIT`
+  semantics match what the operator expected. Hits returned by the
+  all-scope branch carry `project_id` + `project_slug` so the
+  agent can tell where each match came from. Missing `global.db`
+  (operator never ran reindex) is a graceful no-op —
+  `{matched: False, count: 0, reason: "global_index_not_built —
+  run 'geode reindex' first"}` — so the LLM can fall back to
+  scope=project. Background `SearchIndexer` thread + bounded queue
+  + PASSIVE checkpoint (originally drafted for Phase 1d in the
+  Hermes absorption plan) are intentionally deferred to a follow-up
+  1d.3 sprint; the rebuild-on-demand CLI ships the recall surface
+  first. 33 invariant tests pin: schema creation, rebuild
+  idempotency + stale-row clearing + per-project SAVEPOINT crash
+  safety + busy_timeout=5000 PRAGMA, iter_project_dbs graceful
+  no-op on missing root + skip
+  no-sessions-db dirs, timestamp-DESC-ordered FTS5 hits with
+  snippets, project_id + limit + session_id push-down filters,
+  scope-default fallback on typo, missing-index graceful no-op,
+  `geode reindex` CLI registered + empty-projects-root exit-zero
+  + 2-project rebuild populates global.db end-to-end, `--help`
+  text describes global.db + sessions.db.
 
 ## [0.99.64] - 2026-05-26
 
