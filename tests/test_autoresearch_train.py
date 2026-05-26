@@ -1568,18 +1568,32 @@ def test_resolve_gen_tag_honors_env_override(monkeypatch: pytest.MonkeyPatch) ->
     assert _resolve_gen_tag("a1b2c3d") == "seed-generation-gen1"
 
 
-def test_resolve_gen_tag_default_includes_commit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unset env falls back to ``autoresearch-<commit>``."""
+def test_resolve_gen_tag_default_includes_commit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Unset env falls back to ``autoresearch-<commit>-gen<N>``.
+
+    PR-GEN-COUNTER (2026-05-26) — the resolver now appends a monotonic
+    ``-gen{N}`` counter derived from sessions.jsonl history. With no
+    history, the first emission is ``gen1``."""
+    from autoresearch import train as train_mod
+
     monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
-    assert _resolve_gen_tag("a1b2c3d") == "autoresearch-a1b2c3d"
+    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
+    assert _resolve_gen_tag("a1b2c3d") == "autoresearch-a1b2c3d-gen1"
 
 
 def test_resolve_gen_tag_treats_whitespace_as_unset(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Whitespace-only env value is treated as unset."""
+    """Whitespace-only env value is treated as unset, so the resolver
+    falls back to ``autoresearch-<commit>-gen<N>`` (post PR-GEN-COUNTER
+    shape, gen1 for fresh history)."""
+    from autoresearch import train as train_mod
+
     monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "   ")
-    assert _resolve_gen_tag("xyz") == "autoresearch-xyz"
+    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
+    assert _resolve_gen_tag("xyz") == "autoresearch-xyz-gen1"
 
 
 def test_append_session_index_writes_jsonl_row(

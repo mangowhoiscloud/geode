@@ -53,6 +53,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "BUNDLE_SEEDS_DIR",
+    "sync_run_incremental",
     "sync_run_to_bundle",
 ]
 
@@ -85,11 +86,19 @@ def _bundle_seeds_dir() -> Path:
 BUNDLE_SEEDS_DIR = _bundle_seeds_dir
 
 
-# Files copied verbatim from the run dir → bundle dir.
+# Files copied verbatim from the run dir → bundle dir. PR-SEEDS-HIRES
+# (2026-05-26) added the 4 observability files so the hub can render
+# per-run procedures (transcript) / live progress / ranker match outcomes
+# / per-phase cost breakdown. Sub-agent dialogues + checkpoints are
+# whole-directory copies handled by ``_sync_subagents`` / ``_sync_checkpoints``.
 _RUN_FILES_TO_SYNC = (
     "state.json",
     "survivors.json",
     "meta_review.json",
+    "transcript.jsonl",
+    "progress.json",
+    "tournament.json",
+    "per_phase_costs.json",
 )
 
 
@@ -173,6 +182,13 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
                 except OSError as exc:
                     log.warning("bundle_sync: survivor %s copy failed: %s", survivor_id, exc)
 
+    # PR-SEEDS-HIRES (2026-05-26) — hi-resolution observability surface.
+    # Walks ``sub_agents/<task_id>/`` + ``checkpoints/<phase>.json``
+    # so the hub renders every agent's turn-by-turn dialogue + per-phase
+    # state snapshot. No size cap per operator directive (resolution wins).
+    _sync_subagents(src_dir, bundle_dir)
+    _sync_checkpoints(src_dir, bundle_dir)
+
     # PR-SEEDS-EVAL-EXPORT (2026-05-25) — additionally synthesise per-
     # phase inspect_ai ``.eval`` archives so the SPA viewer at
     # ``docs/self-improving/petri-bundle/index.html`` (and the live Pages mirror) shows
@@ -196,6 +212,170 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
 
     log.info("bundle_sync: %s → %s", run_id, bundle_dir)
     return bundle_dir
+
+
+def _sync_subagents(src_dir: Path, bundle_dir: Path) -> None:
+    """Copy every ``sub_agents/<task_id>/{dialogue.jsonl,result.json,session.json}``.
+
+    No-cap verbatim copy per operator directive (2026-05-26 hub upgrade) —
+    resolution wins. Worst case ~1.5 MB per run uncompacted (15 generator
+    sub-agents × ~50 turns × ~2 KB); ~75 MB/year for 50 runs is acceptable.
+
+    Tolerant: missing ``sub_agents/`` (test runs / early-exit pipelines)
+    or unreadable individual files are logged at WARNING and skipped.
+    """
+    src_subagents = src_dir / "sub_agents"
+    if not src_subagents.is_dir():
+        return
+    dst_subagents = bundle_dir / "sub_agents"
+    try:
+        dst_subagents.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("bundle_sync: cannot create sub_agents dir: %s", exc)
+        return
+    for task_dir in sorted(src_subagents.iterdir()):
+        if not task_dir.is_dir():
+            continue
+        dst_task_dir = dst_subagents / task_dir.name
+        try:
+            dst_task_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log.warning("bundle_sync: cannot create %s: %s", dst_task_dir, exc)
+            continue
+        for fname in ("dialogue.jsonl", "result.json", "session.json"):
+            src = task_dir / fname
+            if not src.is_file():
+                continue
+            try:
+                shutil.copy2(src, dst_task_dir / fname)
+            except OSError as exc:
+                log.warning(
+                    "bundle_sync: sub-agent %s/%s copy failed: %s",
+                    task_dir.name,
+                    fname,
+                    exc,
+                )
+
+
+def _sync_checkpoints(src_dir: Path, bundle_dir: Path) -> None:
+    """Copy ``checkpoints/<phase>.json`` snapshots verbatim.
+
+    Per-phase ``state_snapshot`` is the operator's time-travel surface
+    (read by the hub's lineage renderer + resume CLI). ~10 KB per phase.
+    """
+    src_ck = src_dir / "checkpoints"
+    if not src_ck.is_dir():
+        return
+    dst_ck = bundle_dir / "checkpoints"
+    try:
+        dst_ck.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("bundle_sync: cannot create checkpoints dir: %s", exc)
+        return
+    for src in sorted(src_ck.glob("*.json")):
+        try:
+            shutil.copy2(src, dst_ck / src.name)
+        except OSError as exc:
+            log.warning("bundle_sync: checkpoint %s copy failed: %s", src.name, exc)
+
+
+def sync_run_incremental(run_dir: Path | str) -> Path | None:
+    """Mtime-aware mid-run sync — copy only files newer than the bundle counterpart.
+
+    Used by the orchestrator's ``_live_sync_loop`` every 5s during a
+    running pipeline so the published bundle reflects current state in
+    near-real time. ``GEODE_SEED_LIVE_SYNC_DISABLED=1`` opts out (kill
+    switch independent of ``GEODE_SEED_BUNDLE_SYNC_DISABLED`` which
+    governs the final post-run sync).
+
+    Re-uses the same containment guard + dir resolution as
+    :func:`sync_run_to_bundle` to guarantee writes stay under
+    ``docs/self-improving/petri-bundle/seeds/<run_id>/``.
+
+    No-op when the source run dir does not yet exist (race between
+    Pipeline construction and first phase output).
+    """
+    if os.environ.get("GEODE_SEED_LIVE_SYNC_DISABLED") == "1":
+        return None
+
+    src_dir = Path(run_dir).resolve()
+    if not src_dir.is_dir():
+        return None
+
+    run_id = src_dir.name
+    bundle_dir = _bundle_seeds_dir() / run_id
+    try:
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    if "docs/self-improving/petri-bundle/seeds" not in str(bundle_dir.resolve()):
+        return None
+
+    # Top-level files
+    for fname in _RUN_FILES_TO_SYNC:
+        src = src_dir / fname
+        if not src.is_file():
+            continue
+        dst = bundle_dir / fname
+        if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
+            continue
+        try:
+            shutil.copy2(src, dst)
+        except OSError:
+            continue
+
+    # Sub-agent dirs — incremental glob
+    _incremental_sync_subagents(src_dir / "sub_agents", bundle_dir / "sub_agents")
+    # Checkpoints — incremental glob
+    _incremental_sync_checkpoints(src_dir / "checkpoints", bundle_dir / "checkpoints")
+    return bundle_dir
+
+
+def _incremental_sync_subagents(src_subagents: Path, dst_subagents: Path) -> None:
+    """Helper: incremental copy of sub_agents/ children. mtime-aware."""
+    if not src_subagents.is_dir():
+        return
+    try:
+        dst_subagents.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    for task_dir in src_subagents.iterdir():
+        if not task_dir.is_dir():
+            continue
+        dst_task_dir = dst_subagents / task_dir.name
+        try:
+            dst_task_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        for fname in ("dialogue.jsonl", "result.json", "session.json"):
+            src = task_dir / fname
+            if not src.is_file():
+                continue
+            dst = dst_task_dir / fname
+            if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
+                continue
+            try:
+                shutil.copy2(src, dst)
+            except OSError:
+                continue
+
+
+def _incremental_sync_checkpoints(src_ck: Path, dst_ck: Path) -> None:
+    """Helper: incremental copy of checkpoints/*.json. mtime-aware."""
+    if not src_ck.is_dir():
+        return
+    try:
+        dst_ck.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    for src in src_ck.glob("*.json"):
+        dst = dst_ck / src.name
+        if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime:
+            continue
+        try:
+            shutil.copy2(src, dst)
+        except OSError:
+            continue
 
 
 def _read_survivor_ids(state_json: Path) -> list[str]:

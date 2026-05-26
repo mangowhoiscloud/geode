@@ -1,0 +1,26 @@
+{"ts": 1779787200.0, "seq": 0, "session_id": "test-run-001", "gen_tag": "gen1", "component": "orchestrator", "level": "info", "event": "run_started", "payload": {"run_id": "test-run-001", "target_dim": "redundant_tool_invocation"}, "actor_type": "orchestrator", "actor_id": "supervisor", "action": "start"}
+{"ts": 1779787205.0, "seq": 1, "component": "orchestrator", "event": "phase_started", "payload": {"role": "supervisor"}, "actor_type": "orchestrator", "actor_id": "supervisor"}
+{"ts": 1779787212.4, "seq": 2, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "supervisor", "duration_ms": 7400.0}, "actor_type": "orchestrator", "actor_id": "supervisor"}
+{"ts": 1779787213.0, "seq": 3, "component": "orchestrator", "event": "phase_started", "payload": {"role": "literature_review"}}
+{"ts": 1779787221.0, "seq": 4, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "literature_review", "duration_ms": 8000.0}}
+{"ts": 1779787222.0, "seq": 5, "component": "orchestrator", "event": "phase_started", "payload": {"role": "generator"}}
+{"ts": 1779787222.5, "seq": 6, "component": "subagent", "event": "subagent_started", "payload": {"task_id": "gen-c-001", "role": "generator"}}
+{"ts": 1779787222.5, "seq": 7, "component": "subagent", "event": "subagent_started", "payload": {"task_id": "gen-c-002", "role": "generator"}}
+{"ts": 1779787295.0, "seq": 8, "component": "subagent", "event": "subagent_completed", "payload": {"task_id": "gen-c-001", "success": true, "duration_ms": 72500.0}}
+{"ts": 1779787298.0, "seq": 9, "component": "subagent", "event": "subagent_completed", "payload": {"task_id": "gen-c-002", "success": true, "duration_ms": 75500.0}}
+{"ts": 1779787299.0, "seq": 10, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "generator", "duration_ms": 77000.0}}
+{"ts": 1779787300.0, "seq": 11, "component": "orchestrator", "event": "phase_started", "payload": {"role": "proximity"}}
+{"ts": 1779787304.0, "seq": 12, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "proximity", "duration_ms": 4000.0}}
+{"ts": 1779787305.0, "seq": 13, "component": "orchestrator", "event": "phase_started", "payload": {"role": "critic"}}
+{"ts": 1779787335.0, "seq": 14, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "critic", "duration_ms": 30000.0}}
+{"ts": 1779787336.0, "seq": 15, "component": "orchestrator", "event": "phase_started", "payload": {"role": "pilot"}}
+{"ts": 1779787481.0, "seq": 16, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "pilot", "duration_ms": 145000.0}}
+{"ts": 1779787482.0, "seq": 17, "component": "orchestrator", "event": "phase_started", "payload": {"role": "ranker"}}
+{"ts": 1779787483.0, "seq": 18, "component": "subagent", "event": "subagent_started", "payload": {"task_id": "vote-m1-v00-openai.openai-codex", "role": "ranker"}}
+{"ts": 1779787486.4, "seq": 19, "component": "subagent", "event": "subagent_completed", "payload": {"task_id": "vote-m1-v00-openai.openai-codex", "success": true, "duration_ms": 3400.0}}
+{"ts": 1779787573.0, "seq": 20, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "ranker", "duration_ms": 91000.0}}
+{"ts": 1779787574.0, "seq": 21, "component": "orchestrator", "event": "phase_started", "payload": {"role": "evolver"}}
+{"ts": 1779787620.0, "seq": 22, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "evolver", "duration_ms": 46000.0}}
+{"ts": 1779787621.0, "seq": 23, "component": "orchestrator", "event": "phase_started", "payload": {"role": "meta_reviewer"}}
+{"ts": 1779787640.0, "seq": 24, "component": "orchestrator", "event": "phase_finished", "payload": {"role": "meta_reviewer", "duration_ms": 19000.0}}
+{"ts": 1779787641.0, "seq": 25, "component": "orchestrator", "event": "run_finished", "payload": {"usd_spent": 12.74, "survivors": ["c-001", "c-002"]}}

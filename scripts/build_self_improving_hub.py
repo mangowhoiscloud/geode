@@ -30,6 +30,7 @@ default (or the CI invocation) accordingly.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as _dt
 import json
 import logging
@@ -140,8 +141,8 @@ HARNESS_MAP: dict[str, tuple[str, str]] = {
     "anthropic": ("payg", "PAYG"),
     "openai": ("payg", "PAYG"),
     "claude-cli": ("claude", "Claude Code"),
-    "codex": ("codex", "Codex Plus"),
-    "openai-codex": ("codex", "Codex Plus"),
+    "codex": ("codex", "Codex"),
+    "openai-codex": ("codex", "Codex"),
     "geode": ("geode", "GEODE"),
 }
 
@@ -1093,6 +1094,7 @@ def render_seedgen_run(
     autoresearch_status_label: str,
     geode_version: str,
     build_date: str,
+    run_bundle_dir: Path | None = None,
 ) -> Path:
     """Render one per-run detail page to ``<out_dir>/<run_id>/index.html``."""
     run_out = out_dir / run_meta.run_id
@@ -1167,7 +1169,1156 @@ def render_seedgen_run(
         )
     out_path = run_out / "index.html"
     out_path.write_text(rendered, encoding="utf-8")
+    # PR-SEEDS-HIRES P2 (2026-05-26) — emit hi-res sub-pages per run.
+    _emit_seedgen_run_subpages(
+        run_id=run_meta.run_id,
+        run_bundle_dir=run_bundle_dir,
+        out_dir=run_out,
+        geode_version=geode_version,
+        build_date=build_date,
+        sidebar_petri_recent=sidebar_petri_recent,
+        sidebar_seedgen_runs=sidebar_seedgen_runs,
+        petri_count=petri_count,
+        seedgen_count_label=seedgen_count_label,
+        autoresearch_status_label=autoresearch_status_label,
+    )
     return out_path
+
+
+# --------------------------------------------------------------------------- #
+# PR-SEEDS-HIRES P2 (2026-05-26) — high-resolution sub-pages.
+# Renders /agents/, /agent/<task_id>/, /timeline/, /tournament/ per run.
+# Reads data from the bundle dir (docs/self-improving/petri-bundle/seeds/<run_id>/).
+# --------------------------------------------------------------------------- #
+
+
+def _emit_seedgen_run_subpages(
+    *,
+    run_id: str,
+    run_bundle_dir: Path | None,
+    out_dir: Path,
+    geode_version: str,
+    build_date: str,
+    sidebar_petri_recent: str,
+    sidebar_seedgen_runs: str,
+    petri_count: int,
+    seedgen_count_label: str,
+    autoresearch_status_label: str,
+) -> None:
+    """Emit the 4 hi-res sub-pages for a single run.
+
+    Reads ``sub_agents/<task_id>/{dialogue.jsonl,session.json,result.json}``,
+    ``transcript.jsonl``, ``per_phase_costs.json``, ``tournament.json``,
+    ``checkpoints/*.json`` from the run's bundle dir. Falls back to the
+    fixture / state run dir resolved by walking up from ``out_dir``.
+
+    No-data sources render an empty-state row rather than crashing — the
+    page exists for every run even if instrumentation hasn't backfilled
+    older runs.
+    """
+    # Resolve the bundle dir from the out_dir layout when not supplied:
+    # out_dir = .../docs/self-improving/seed-generation/<run_id>/
+    # bundle  = .../docs/self-improving/petri-bundle/seeds/<run_id>/
+    if run_bundle_dir is None:
+        candidate = out_dir.parent.parent / "petri-bundle" / "seeds" / run_id
+        run_bundle_dir = candidate if candidate.is_dir() else None
+
+    common = {
+        "geode_version": geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": build_date,
+        "sidebar_petri_recent": sidebar_petri_recent,
+        "sidebar_seedgen_runs": sidebar_seedgen_runs,
+        "petri_count": str(petri_count),
+        "seedgen_count_label": seedgen_count_label,
+        "autoresearch_status_label": autoresearch_status_label,
+        "run_id": html_escape(run_id),
+    }
+
+    subagents = _load_subagents(run_bundle_dir) if run_bundle_dir else []
+
+    # /agents/index.html
+    agents_index_html = _render_seedgen_subpage(
+        title=f"Agents — {run_id}",
+        active_link="agents",
+        body=_render_agents_index_body(run_id, subagents),
+        common=common,
+    )
+    (out_dir / "agents").mkdir(parents=True, exist_ok=True)
+    (out_dir / "agents" / "index.html").write_text(agents_index_html, encoding="utf-8")
+
+    # /agent/<task_id>/index.html
+    for sa in subagents:
+        task_id = sa["task_id"]
+        detail_html = _render_seedgen_subpage(
+            title=f"Agent {task_id} — {run_id}",
+            active_link="agents",
+            body=_render_agent_detail_body(run_id, sa),
+            common=common,
+        )
+        agent_out = out_dir / "agent" / task_id
+        agent_out.mkdir(parents=True, exist_ok=True)
+        (agent_out / "index.html").write_text(detail_html, encoding="utf-8")
+
+    # /timeline/index.html
+    timeline_html = _render_seedgen_subpage(
+        title=f"Timeline — {run_id}",
+        active_link="timeline",
+        body=_render_timeline_body(run_id, run_bundle_dir, subagents),
+        common=common,
+    )
+    (out_dir / "timeline").mkdir(parents=True, exist_ok=True)
+    (out_dir / "timeline" / "index.html").write_text(timeline_html, encoding="utf-8")
+
+    # /tournament/index.html
+    tournament_html = _render_seedgen_subpage(
+        title=f"Tournament — {run_id}",
+        active_link="tournament",
+        body=_render_tournament_body(run_id, run_bundle_dir),
+        common=common,
+    )
+    (out_dir / "tournament").mkdir(parents=True, exist_ok=True)
+    (out_dir / "tournament" / "index.html").write_text(tournament_html, encoding="utf-8")
+
+    # PR-SEEDS-HIRES P3 (2026-05-26) — /lineage/index.html + per-candidate pages
+    if run_bundle_dir is not None:
+        state_path = run_bundle_dir / "state.json"
+        if state_path.is_file():
+            try:
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                state = {}
+        else:
+            state = {}
+        if isinstance(state, dict):
+            emit_seedgen_lineage_pages(
+                run_id=run_id,
+                state=state,
+                bundle_dir=run_bundle_dir,
+                out_dir=out_dir,
+                sidebar_petri_recent=common["sidebar_petri_recent"],
+                sidebar_seedgen_runs=common["sidebar_seedgen_runs"],
+                petri_count=int(common["petri_count"]),
+                seedgen_count_label=common["seedgen_count_label"],
+                autoresearch_status_label=common["autoresearch_status_label"],
+                geode_version=common["geode_version"],
+                build_date=common["build_date"],
+            )
+
+
+def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
+    """Walk ``sub_agents/<task_id>/`` and project per-agent rows.
+
+    Each row: ``{task_id, phase, model, provider, turn_count, total_cost,
+    duration_ms, dialogue_events: [...], session: {...}, result: {...}}``.
+    Sorted by phase order then task_id so the rendering is stable.
+    """
+    sub_root = bundle_dir / "sub_agents"
+    if not sub_root.is_dir():
+        return []
+    phase_order = {
+        "supervisor": 0,
+        "literature_review": 1,
+        "generator": 2,
+        "proximity": 3,
+        "critic": 4,
+        "pilot": 5,
+        "ranker": 6,
+        "evolver": 7,
+        "meta_reviewer": 8,
+        "unknown": 99,
+    }
+    rows: list[dict[str, Any]] = []
+    for task_dir in sub_root.iterdir():
+        if not task_dir.is_dir():
+            continue
+        session: dict[str, Any] = {}
+        sess_path = task_dir / "session.json"
+        if sess_path.is_file():
+            try:
+                session = json.loads(sess_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                session = {}
+        meta = session.get("metadata") if isinstance(session, dict) else {}
+        phase = (
+            str(meta.get("phase"))
+            if isinstance(meta, dict) and meta.get("phase")
+            else _phase_from_task_id(task_dir.name)
+        )
+        dialogue_events = _read_dialogue(task_dir / "dialogue.jsonl")
+        total_cost = 0.0
+        duration_ms = 0.0
+        for evt in dialogue_events:
+            if evt.get("event") == "session_end":
+                with contextlib.suppress(TypeError, ValueError):
+                    total_cost += float(evt.get("total_cost") or 0.0)
+                with contextlib.suppress(TypeError, ValueError):
+                    duration_ms += float(evt.get("duration_s") or 0.0) * 1000.0
+        result: dict[str, Any] = {}
+        res_path = task_dir / "result.json"
+        if res_path.is_file():
+            try:
+                result = json.loads(res_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                result = {}
+        rows.append(
+            {
+                "task_id": task_dir.name,
+                "phase": phase,
+                "model": session.get("model", "—"),
+                "provider": session.get("provider", "—"),
+                "turn_count": sum(
+                    1
+                    for e in dialogue_events
+                    if e.get("event") in ("user_message", "assistant_message")
+                ),
+                "total_cost": total_cost,
+                "duration_ms": duration_ms,
+                "dialogue_events": dialogue_events,
+                "session": session,
+                "result": result,
+            }
+        )
+    rows.sort(key=lambda r: (phase_order.get(r["phase"], 99), r["task_id"]))
+    return rows
+
+
+def _read_dialogue(path: Path) -> list[dict[str, Any]]:
+    """Parse a ``dialogue.jsonl`` file into a list of event dicts."""
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                evt = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(evt, dict):
+                out.append(evt)
+    except OSError:
+        return []
+    return out
+
+
+_TASK_PREFIX_TO_PHASE: tuple[tuple[str, str], ...] = (
+    ("super-", "supervisor"),
+    ("lit-", "literature_review"),
+    ("gen-", "generator"),
+    ("prox-", "proximity"),
+    ("crit-", "critic"),
+    ("pilot-", "pilot"),
+    ("vote-", "ranker"),
+    ("evolve-", "evolver"),
+    ("meta-", "meta_reviewer"),
+)
+
+
+def _phase_from_task_id(task_id: str) -> str:
+    """Infer phase from task_id prefix (mirrors orchestrator's _infer_phase_from_task)."""
+    for prefix, phase in _TASK_PREFIX_TO_PHASE:
+        if task_id.startswith(prefix):
+            return phase
+    return "unknown"
+
+
+def _render_seedgen_subpage(
+    *,
+    title: str,
+    active_link: str,
+    body: str,
+    common: dict[str, str],
+) -> str:
+    """Common shell for a seedgen sub-page (agents / timeline / tournament).
+
+    Renders the standard hub layout (sidebar + Meta block + content) so
+    every sub-page is sidebar-consistent. ``active_link`` controls which
+    sub-link gets ``aria-current="page"``.
+    """
+    active_agents = ' aria-current="page"' if active_link == "agents" else ""
+    active_timeline = ' aria-current="page"' if active_link == "timeline" else ""
+    active_tournament = ' aria-current="page"' if active_link == "tournament" else ""
+    rid = common["run_id"]
+    base = "/geode/self-improving"
+    seedgen_root_label = f"Runs ({common['seedgen_count_label']})"
+    ar_label = html_escape(common["autoresearch_status_label"])
+    sidebar_html = (
+        '<aside aria-label="GEODE Self-Improving Hub navigation">'
+        '<h1 class="brand">GEODE Self-Improving Hub</h1>'
+        '<div class="nav-section">Hub</div>'
+        f'<ul><li><a href="{base}/">Overview</a></li></ul>'
+        '<div class="nav-section">Petri Audit</div>'
+        f'<ul><li><a href="{base}/petri-bundle/">Bundle</a></li>'
+        f"{common['sidebar_petri_recent']}</ul>"
+        '<div class="nav-section">Seed Generation</div>'
+        "<ul>"
+        f'<li><a href="{base}/seed-generation/">{seedgen_root_label}</a></li>'
+        f"{common['sidebar_seedgen_runs']}"
+        f'<li><a href="{base}/seed-generation/{rid}/agents/"{active_agents}>Agents</a></li>'
+        f'<li><a href="{base}/seed-generation/{rid}/timeline/"{active_timeline}>Timeline</a></li>'
+        f'<li><a href="{base}/seed-generation/{rid}/tournament/"{active_tournament}>'
+        "Tournament</a></li>"
+        f'<li><a href="{base}/seed-generation/{rid}/lineage/"'
+        f"{' aria-current="page"' if active_link == 'lineage' else ''}>Lineage</a></li>"
+        f'<li><a href="{base}/seed-generation/active/"'
+        f"{' aria-current="page"' if active_link == 'active' else ''}>Active runs</a></li>"
+        "</ul>"
+        '<div class="nav-section">Autoresearch</div>'
+        f'<ul><li><a href="{base}/autoresearch/">{ar_label}</a></li></ul>'
+        '<div class="nav-section">Docs</div>'
+        "<ul>"
+        '<li><a href="/geode/docs/petri/overview">Petri overview</a></li>'
+        '<li><a href="/geode/docs/petri/run">Run an audit</a></li>'
+        '<li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>'
+        "</ul>"
+        '<div class="nav-section">Meta</div>'
+        '<ul><li><a href="https://github.com/mangowhoiscloud/geode">GitHub</a></li></ul>'
+        "</aside>"
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html_escape(title)} — GEODE Self-Improving Hub</title>
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+<div class="shell">
+{sidebar_html}
+<main>
+  <header class="page-head">
+    <h2>{html_escape(title)}</h2>
+  </header>
+  {body}
+  <div class="build-info">
+    <p class="version-stamp">
+      Rendered against GEODE <code>v{common["geode_version"]}</code> &middot;
+      DESIGN.md schema {common["design_schema_version"]} &middot; built {common["build_date"]}.
+    </p>
+  </div>
+</main>
+</div>
+</body>
+</html>
+"""
+
+
+def _chip_for_subagent(sa: dict[str, Any]) -> tuple[str, str]:
+    """Resolve the harness chip for a sub-agent row.
+
+    session.json carries ``(model, provider)`` separately, so we
+    construct ``"provider/model"`` for ``_harness_chip`` lookup when
+    the model lacks a ``/`` prefix.
+    """
+    model = str(sa.get("model") or "")
+    provider = str(sa.get("provider") or "")
+    if provider and "/" not in model:
+        return _harness_chip(f"{provider}/{model}")
+    return _harness_chip(model)
+
+
+def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> str:
+    """Dense table: per-sub-agent row (task_id link / phase / model / turns / cost / duration)."""
+    if not subagents:
+        return (
+            '<section class="page-sub">'
+            '<p class="muted">No sub-agent traces published for this run '
+            "(may be a pre-PR-SEEDS-HIRES run, or instrumentation hasn't "
+            "backfilled).</p></section>"
+        )
+    rows: list[str] = []
+    for sa in subagents:
+        chip_class, chip_label = _chip_for_subagent(sa)
+        cost_label = f"${sa['total_cost']:.4f}" if sa["total_cost"] > 0 else "—"
+        dur_label = f"{sa['duration_ms'] / 1000:.1f}s" if sa["duration_ms"] > 0 else "—"
+        rows.append(
+            f"        <tr>"
+            f'<td class="id"><a href="/geode/self-improving/seed-generation/{html_escape(run_id)}'
+            f'/agent/{html_escape(sa["task_id"])}/">'
+            f"<code>{html_escape(sa['task_id'])}</code></a></td>"
+            f'<td><span class="bucket seedgen">{html_escape(sa["phase"])}</span></td>'
+            f'<td><span class="chip {chip_class}">{chip_label}</span> '
+            f"<code>{html_escape(str(sa.get('model') or '—'))}</code></td>"
+            f'<td class="num">{sa["turn_count"]}</td>'
+            f'<td class="num">{cost_label}</td>'
+            f'<td class="num">{dur_label}</td>'
+            "</tr>"
+        )
+    rows_html = "\n".join(rows)
+    return f"""<section class="page-sub">
+  <p class="muted">{len(subagents)} sub-agent{"s" if len(subagents) != 1 else ""} —
+  every conversation turn captured. Click a row for full dialogue.</p>
+  <div class="heatmap-scroll">
+    <table class="records seedgen-agents">
+      <thead><tr>
+        <th>task_id</th><th>phase</th><th>model</th>
+        <th class="num">turns</th><th class="num">cost</th><th class="num">duration</th>
+      </tr></thead>
+      <tbody>
+{rows_html}
+      </tbody>
+    </table>
+  </div>
+</section>
+"""
+
+
+def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
+    """Per-turn `<details>` page with session metadata header + dialogue events."""
+    chip_class, chip_label = _chip_for_subagent(sa)
+    cost = sa["total_cost"]
+    dur = sa["duration_ms"]
+    summary = sa.get("result", {}).get("summary") or "—"
+    turns: list[str] = []
+    for evt in sa["dialogue_events"]:
+        kind = evt.get("event")
+        if kind == "session_start":
+            pre_body = html_escape(json.dumps(evt, ensure_ascii=False, indent=2))
+            turns.append(
+                f'<details open class="turn"><summary>session_start</summary>'
+                f'<pre class="msg">{pre_body}</pre></details>'
+            )
+        elif kind == "user_message":
+            text = str(evt.get("text") or "")
+            turns.append(
+                f'<details class="turn user"><summary>user — turn '
+                f"{evt.get('seq', '?')} ({len(text)} chars)</summary>"
+                f'<pre class="msg">{html_escape(text)}</pre></details>'
+            )
+        elif kind == "assistant_message":
+            text = str(evt.get("text") or "")
+            turns.append(
+                f'<details class="turn assistant"><summary>assistant — turn '
+                f"{evt.get('seq', '?')} ({len(text)} chars)</summary>"
+                f'<pre class="msg">{html_escape(text)}</pre></details>'
+            )
+        elif kind == "session_end":
+            pre_body = html_escape(json.dumps(evt, ensure_ascii=False, indent=2))
+            turns.append(
+                f'<details open class="turn session-end"><summary>session_end — '
+                f"cost ${float(evt.get('total_cost') or 0):.4f}, "
+                f"duration {float(evt.get('duration_s') or 0):.2f}s</summary>"
+                f'<pre class="msg">{pre_body}</pre></details>'
+            )
+        else:
+            pre_body = html_escape(json.dumps(evt, ensure_ascii=False, indent=2))
+            turns.append(
+                f'<details class="turn"><summary>{html_escape(str(kind))} — seq '
+                f"{evt.get('seq', '?')}</summary>"
+                f'<pre class="msg">{pre_body}</pre></details>'
+            )
+    turns_html = "\n".join(turns) if turns else '<p class="muted">No dialogue events.</p>'
+    back_href = f"/geode/self-improving/seed-generation/{html_escape(run_id)}/agents/"
+    cost_label = f"${cost:.4f}" if cost > 0 else "—"
+    dur_label = f"{dur / 1000:.2f}s" if dur > 0 else "—"
+    model_chip = (
+        f'<span class="chip {chip_class}">{chip_label}</span>'
+        f" <code>{html_escape(str(sa.get('model') or '—'))}</code>"
+    )
+    return f"""<section class="page-sub run-detail-header">
+  <dl>
+    <dt>task_id</dt><dd><code>{html_escape(sa["task_id"])}</code></dd>
+    <dt>phase</dt><dd><span class="bucket seedgen">{html_escape(sa["phase"])}</span></dd>
+    <dt>model</dt><dd>{model_chip}</dd>
+    <dt>turns</dt><dd>{sa["turn_count"]}</dd>
+    <dt>total cost (USD)</dt><dd>{cost_label}</dd>
+    <dt>duration</dt><dd>{dur_label}</dd>
+    <dt>result summary</dt><dd>{html_escape(str(summary))}</dd>
+  </dl>
+  <p><a href="{back_href}">← back to agents</a></p>
+</section>
+<section class="page-sub">
+  <h3>Conversation ({sa["turn_count"]} turns)</h3>
+  {turns_html}
+</section>
+"""
+
+
+def _render_timeline_body(
+    run_id: str,
+    bundle_dir: Path | None,
+    subagents: list[dict[str, Any]],
+) -> str:
+    """Phoenix-style nested span list — per-phase `<section>` with sub-agents inside."""
+    if bundle_dir is None:
+        return (
+            '<section class="page-sub"><p class="muted">No bundle data for this run.</p></section>'
+        )
+    per_phase_costs: dict[str, dict[str, Any]] = {}
+    pp_path = bundle_dir / "per_phase_costs.json"
+    if pp_path.is_file():
+        try:
+            per_phase_costs = json.loads(pp_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            per_phase_costs = {}
+    transcript = _read_dialogue(bundle_dir / "transcript.jsonl")
+    phase_events: dict[str, list[dict[str, Any]]] = {}
+    for evt in transcript:
+        payload = evt.get("payload") if isinstance(evt, dict) else None
+        if isinstance(payload, dict):
+            role = payload.get("role")
+            if isinstance(role, str):
+                phase_events.setdefault(role, []).append(evt)
+    by_phase: dict[str, list[dict[str, Any]]] = {}
+    for sa in subagents:
+        by_phase.setdefault(sa["phase"], []).append(sa)
+    phase_order = [
+        "supervisor",
+        "literature_review",
+        "generator",
+        "proximity",
+        "critic",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+    ]
+    sections: list[str] = []
+    for phase in phase_order:
+        if phase not in per_phase_costs and phase not in by_phase and phase not in phase_events:
+            continue
+        cost = per_phase_costs.get(phase, {})
+        cost_usd = float(cost.get("cost_usd", 0.0) or 0.0)
+        dur_ms = float(cost.get("duration_ms", 0.0) or 0.0)
+        agent_count = int(cost.get("agent_count", 0) or 0)
+        sub_html: list[str] = []
+        for sa in by_phase.get(phase, []):
+            link = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/agent/{html_escape(sa['task_id'])}/"
+            )
+            sub_html.append(
+                f'<li><a href="{link}"><code>{html_escape(sa["task_id"])}</code></a> '
+                f"— {sa['turn_count']} turns, "
+                f"${sa['total_cost']:.4f}, {sa['duration_ms'] / 1000:.1f}s</li>"
+            )
+        events_html: list[str] = []
+        for evt in phase_events.get(phase, [])[:8]:
+            events_html.append(
+                f"<li><code>{html_escape(str(evt.get('event') or '?'))}</code> "
+                f"@ {html_escape(str(evt.get('ts') or ''))}</li>"
+            )
+        none_li = '<li class="muted">none</li>'
+        sub_inner = "".join(sub_html) or none_li
+        events_inner = "".join(events_html) or none_li
+        agent_plural = "s" if agent_count != 1 else ""
+        hook_event_count = len(phase_events.get(phase, []))
+        sections.append(
+            f'<section class="page-sub phase-block">'
+            f"<h3>{html_escape(phase)}</h3>"
+            f'<p class="muted">duration {dur_ms / 1000:.1f}s · '
+            f"cost ${cost_usd:.4f} · {agent_count} sub-agent{agent_plural}</p>"
+            f"<details><summary>sub-agents ({len(sub_html)})</summary>"
+            f'<ul class="event-list">{sub_inner}</ul>'
+            "</details>"
+            f"<details><summary>hook events ({hook_event_count})</summary>"
+            f'<ul class="event-list">{events_inner}</ul>'
+            "</details>"
+            "</section>"
+        )
+    body = (
+        "\n".join(sections)
+        if sections
+        else ('<section class="page-sub"><p class="muted">No phase data published.</p></section>')
+    )
+    return f"""<p class="muted">9-phase timeline reading from
+  <code>transcript.jsonl</code> + <code>per_phase_costs.json</code>.
+  Each phase &lt;section&gt; nests its sub-agent fan-out + filtered hook events.</p>
+{body}
+"""
+
+
+def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
+    """Per-match section with 3-voter panel + Elo before/after deltas."""
+    if bundle_dir is None:
+        return (
+            '<section class="page-sub"><p class="muted">No bundle data for this run.</p></section>'
+        )
+    t_path = bundle_dir / "tournament.json"
+    if not t_path.is_file():
+        return (
+            '<section class="page-sub">'
+            '<p class="muted">No <code>tournament.json</code> for this run '
+            "(may be a pre-PR-SEEDS-HIRES run).</p></section>"
+        )
+    try:
+        data = json.loads(t_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return (
+            '<section class="page-sub"><p class="muted">tournament.json unreadable.</p></section>'
+        )
+    matches = data.get("matches") or []
+    voter_panel = data.get("voter_panel") or []
+    panel_chips: list[str] = []
+    for v in voter_panel:
+        chip_class, chip_label = _harness_chip(v.get("voter_model", ""))
+        panel_chips.append(
+            f'<span class="chip {chip_class}">{chip_label}</span> '
+            f"<code>{html_escape(v.get('voter_id', '—'))}</code>"
+        )
+    match_sections: list[str] = []
+    for m in matches:
+        votes_html: list[str] = []
+        for v in m.get("votes", []):
+            vote = v.get("vote") or "—"
+            vote_class = {"A": "win-a", "B": "win-b", "tie": "tie"}.get(str(vote), "muted")
+            votes_html.append(
+                f"<tr><td><code>{html_escape(v.get('voter_id', '—'))}</code></td>"
+                f'<td><span class="bucket {vote_class}">{html_escape(str(vote))}</span></td>'
+                f'<td class="rationale">{html_escape(str(v.get("rationale") or "—"))}</td>'
+                f'<td class="num">{float(v.get("duration_ms") or 0) / 1000:.1f}s</td>'
+                "</tr>"
+            )
+        elo_before = m.get("elo_before", {})
+        elo_after = m.get("elo_after", {})
+        cand_a = m.get("candidate_a", "?")
+        cand_b = m.get("candidate_b", "?")
+        delta_a = float(m.get("elo_delta_a", 0) or 0)
+        delta_b = float(m.get("elo_delta_b", 0) or 0)
+        winner_label = m.get("winner") or "quorum lost"
+        match_sections.append(
+            f'<section class="page-sub match">'
+            f"<h3>Match {html_escape(str(m.get('match_id', '?')))} "
+            f'— winner: <span class="bucket seedgen">{html_escape(str(winner_label))}</span></h3>'
+            f'<p class="muted">'
+            f"<code>{html_escape(cand_a)}</code> "
+            f"Elo {float(elo_before.get(cand_a, 1000.0)):.1f} → "
+            f"{float(elo_after.get(cand_a, 1000.0)):.1f} "
+            f"(Δ {delta_a:+.1f}) · "
+            f"<code>{html_escape(cand_b)}</code> "
+            f"Elo {float(elo_before.get(cand_b, 1000.0)):.1f} → "
+            f"{float(elo_after.get(cand_b, 1000.0)):.1f} "
+            f"(Δ {delta_b:+.1f})</p>"
+            f'<table class="records votes">'
+            f"<thead><tr><th>voter</th><th>vote</th><th>rationale</th>"
+            f'<th class="num">duration</th></tr></thead>'
+            f"<tbody>{''.join(votes_html)}</tbody></table>"
+            "</section>"
+        )
+    return f"""<section class="page-sub">
+  <p class="muted">3-voter panel: {" · ".join(panel_chips) or "—"}</p>
+  <p class="muted">{len(matches)} match{"es" if len(matches) != 1 else ""}
+  with per-voter rationale + Elo delta.</p>
+</section>
+{"".join(match_sections)}
+"""
+
+
+# --------------------------------------------------------------------------- #
+# PR-SEEDS-HIRES P3 (2026-05-26) — Live + Lineage surfaces
+# --------------------------------------------------------------------------- #
+
+
+def _load_active_runs(seeds_bundle_dir: Path) -> list[dict[str, Any]]:
+    """Walk every run's progress.json; return only ones with current_phase != 'done'."""
+    out: list[dict[str, Any]] = []
+    if not seeds_bundle_dir.is_dir():
+        return out
+    for run_dir in sorted(seeds_bundle_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        progress_path = run_dir / "progress.json"
+        if not progress_path.is_file():
+            continue
+        try:
+            data = json.loads(progress_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("current_phase") == "done":
+            continue
+        data["_run_dir"] = run_dir.name
+        out.append(data)
+    return out
+
+
+def render_seedgen_active(
+    seeds_bundle_dir: Path,
+    out_dir: Path,
+    *,
+    sidebar_petri_recent: str,
+    sidebar_seedgen_runs: str,
+    petri_count: int,
+    seedgen_count_label: str,
+    autoresearch_status_label: str,
+    geode_version: str,
+    build_date: str,
+) -> Path:
+    """Render the cross-run ``/seed-generation/active/`` live dashboard.
+
+    PR-SEEDS-HIRES P3 — hybrid liveness: static snapshot at build time +
+    a small inline JS poller (~50 lines, no framework) that refetches
+    each in-progress run's ``progress.json`` every 5s and updates the
+    table cells in place. ``<meta http-equiv="refresh" content="60">``
+    is the JS-disabled fallback.
+    """
+    active = _load_active_runs(seeds_bundle_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    common = {
+        "geode_version": geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": build_date,
+        "sidebar_petri_recent": sidebar_petri_recent,
+        "sidebar_seedgen_runs": sidebar_seedgen_runs,
+        "petri_count": str(petri_count),
+        "seedgen_count_label": seedgen_count_label,
+        "autoresearch_status_label": autoresearch_status_label,
+        "run_id": "",  # no per-run context on this cross-run page
+    }
+    rows_html: list[str] = []
+    for run in active:
+        rid = html_escape(str(run.get("run_id") or run.get("_run_dir") or "?"))
+        rows_html.append(
+            f'        <tr data-run-id="{rid}">'
+            f'<td class="id"><a href="/geode/self-improving/seed-generation/{rid}/">'
+            f"<code>{rid}</code></a></td>"
+            f'<td class="phase"><span class="bucket seedgen">'
+            f"{html_escape(str(run.get('current_phase') or '—'))}</span></td>"
+            f'<td class="step muted">{html_escape(str(run.get("current_step") or "—"))}</td>'
+            f'<td class="agent muted"><code>'
+            f"{html_escape(str(run.get('current_agent_task_id') or '—'))}</code></td>"
+            f'<td class="eta num">{_fmt_eta(run.get("eta_seconds"))}</td>'
+            f'<td class="updated muted">'
+            f"{_fmt_relative_age(run.get('last_updated_at'))}</td>"
+            "</tr>"
+        )
+    table_html = (
+        '<table class="records active-runs">'
+        "<thead><tr><th>run_id</th><th>phase</th><th>step</th>"
+        '<th>agent</th><th class="num">eta</th><th>updated</th></tr></thead>'
+        f'<tbody id="active-tbody">{"".join(rows_html)}</tbody>'
+        "</table>"
+    )
+    empty_state = (
+        '<p class="muted">No active seed-generation runs as of build '
+        f"{html_escape(build_date)}. Page meta-refreshes every 60s + "
+        "JS poller refetches each <code>progress.json</code> every 5s.</p>"
+    )
+    body = (
+        '<section class="page-sub">'
+        '<p class="muted live-indicator" id="live-indicator">'
+        '<span class="dot"></span> updating from <code>progress.json</code> '
+        "every 5s — meta-refresh fallback at 60s.</p>"
+        + (table_html if active else empty_state)
+        + "</section>"
+    )
+    # Inline vanilla JS — keep < 2KB; no framework, no imports.
+    inline_js = """<script>
+(function(){
+  var rows = document.querySelectorAll('#active-tbody tr[data-run-id]');
+  function poll(){
+    rows.forEach(function(tr){
+      var rid = tr.getAttribute('data-run-id');
+      fetch('/geode/self-improving/petri-bundle/seeds/' + rid + '/progress.json',
+            {cache: 'no-cache'})
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          if (!d) return;
+          if (d.current_phase === 'done') { tr.remove(); return; }
+          var p = tr.querySelector('.phase span');
+          if (p) p.textContent = d.current_phase || '—';
+          var s = tr.querySelector('.step'); if (s) s.textContent = d.current_step || '—';
+          var a = tr.querySelector('.agent code');
+          if (a) a.textContent = d.current_agent_task_id || '—';
+        })
+        .catch(function(){});
+    });
+  }
+  setInterval(poll, 5000);
+  poll();
+})();
+</script>"""
+    full_html = (
+        _render_seedgen_subpage(
+            title="Active runs",
+            active_link="active",
+            body=body,
+            common=common,
+        )
+        .replace("</body>", f"{inline_js}\n</body>")
+        .replace(
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            (
+                '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                '\n<meta http-equiv="refresh" content="60">'
+            ),
+        )
+    )
+    out_path = out_dir / "active" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(full_html, encoding="utf-8")
+    return out_path
+
+
+def _fmt_eta(value: Any) -> str:
+    if value is None:
+        return "—"
+    try:
+        secs = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if secs <= 0:
+        return "—"
+    if secs < 60:
+        return f"{secs:.0f}s"
+    return f"{secs / 60:.1f}m"
+
+
+def _fmt_relative_age(ts: Any) -> str:
+    if ts is None:
+        return "—"
+    try:
+        ts_f = float(ts)
+    except (TypeError, ValueError):
+        return "—"
+    age = max(0.0, _dt.datetime.now(tz=_dt.UTC).timestamp() - ts_f)
+    if age < 60:
+        return f"{age:.0f}s ago"
+    if age < 3600:
+        return f"{age / 60:.0f}m ago"
+    return f"{age / 3600:.1f}h ago"
+
+
+# --------------------------------------------------------------------------- #
+# Per-candidate lineage page                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _load_candidate_lineage(
+    state: dict[str, Any], bundle_dir: Path, cand_id: str
+) -> list[dict[str, Any]]:
+    """Build the list of stations a candidate visited across phases.
+
+    Each station: ``{phase, body}``. Phases that have no per-candidate
+    data (e.g. supervisor sets run-wide guidance not per-candidate) are
+    omitted for that candidate.
+    """
+    stations: list[dict[str, Any]] = []
+
+    # supervisor — run-wide guidance, only shown on the first candidate's
+    # lineage as the "what the supervisor was aiming at" context.
+    guidance = state.get("supervisor_guidance") if isinstance(state, dict) else None
+    if isinstance(guidance, dict) and guidance.get("research_goal_analysis"):
+        analysis = guidance.get("research_goal_analysis") or {}
+        focus = html_escape(str(analysis.get("target_dim_focus", "—")))
+        priors = html_escape(", ".join(analysis.get("sub_dim_priorities", []) or []))
+        summary_field = html_escape(str(guidance.get("session_summary", "—")))
+        body = (
+            '<dl class="status-grid">'
+            f"<dt>target_dim_focus</dt><dd>{focus}</dd>"
+            f"<dt>sub_dim_priorities</dt><dd>{priors}</dd>"
+            f"<dt>session_summary</dt><dd>{summary_field}</dd>"
+            "</dl>"
+        )
+        stations.append({"phase": "supervisor", "body": body})
+
+    # generator — body of the candidate .md file (if available).
+    cand_body_path = bundle_dir / "candidates" / f"{cand_id}.md"
+    if cand_body_path.is_file():
+        try:
+            cand_body = cand_body_path.read_text(encoding="utf-8")
+        except OSError:
+            cand_body = ""
+        if cand_body:
+            stations.append(
+                {
+                    "phase": "generator",
+                    "body": f'<pre class="msg cand-body">{html_escape(cand_body)}</pre>',
+                }
+            )
+
+    # proximity — removed_duplicates rationale (if this candidate was a
+    # dup of another) or quietly omit.
+    removed = state.get("removed_duplicates") if isinstance(state, dict) else []
+    for rd in removed or []:
+        if isinstance(rd, dict) and rd.get("id") == cand_id:
+            stations.append(
+                {
+                    "phase": "proximity",
+                    "body": (
+                        f'<p class="muted">Dropped: {html_escape(str(rd.get("reason", "—")))}</p>'
+                    ),
+                }
+            )
+
+    # critic — reflections + debate_transcripts
+    reflections = state.get("reflections", {}) if isinstance(state, dict) else {}
+    if isinstance(reflections, dict) and cand_id in reflections:
+        r = reflections[cand_id] if isinstance(reflections[cand_id], dict) else {}
+        strengths = "".join(f"<li>{html_escape(str(s))}</li>" for s in r.get("strengths") or [])
+        weaknesses = "".join(f"<li>{html_escape(str(w))}</li>" for w in r.get("weaknesses") or [])
+        rewrite_section = html_escape(str(r.get("rewrite_section", "—")))
+        stations.append(
+            {
+                "phase": "critic",
+                "body": (
+                    '<dl class="status-grid">'
+                    f"<dt>judge_risk</dt><dd>{html_escape(str(r.get('judge_risk', '—')))}</dd>"
+                    "<dt>discrimination</dt>"
+                    f"<dd>{r.get('discrimination_estimate', '—')}</dd>"
+                    f"<dt>strengths</dt><dd><ul>{strengths}</ul></dd>"
+                    f"<dt>weaknesses</dt><dd><ul>{weaknesses}</ul></dd>"
+                    f"<dt>rewrite_section</dt><dd>{rewrite_section}</dd>"
+                    "</dl>"
+                ),
+            }
+        )
+    debates = state.get("debate_transcripts", {}) if isinstance(state, dict) else {}
+    if isinstance(debates, dict) and cand_id in debates:
+        turns = debates[cand_id] if isinstance(debates[cand_id], list) else []
+        turn_html: list[str] = []
+        for t in turns:
+            if not isinstance(t, dict):
+                continue
+            spkr = html_escape(str(t.get("speaker", "?")))
+            content = html_escape(str(t.get("content", "")))
+            turn_html.append(
+                f'<details class="turn {spkr}"><summary>{spkr} — turn '
+                f"{t.get('turn', '?')}</summary>"
+                f'<pre class="msg">{content}</pre></details>'
+            )
+        if turn_html:
+            stations.append(
+                {
+                    "phase": "critic_debate",
+                    "body": f'<p class="muted">{len(turn_html)} debate turns</p>'
+                    + "".join(turn_html),
+                }
+            )
+
+    # pilot — dim_means + dim_stderr
+    pilot_scores = state.get("pilot_scores", {}) if isinstance(state, dict) else {}
+    if isinstance(pilot_scores, dict) and cand_id in pilot_scores:
+        ps = pilot_scores[cand_id] if isinstance(pilot_scores[cand_id], dict) else {}
+        means = ps.get("dim_means", {}) if isinstance(ps, dict) else {}
+        if isinstance(means, dict) and means:
+            sorted_means = sorted(
+                ((k, v) for k, v in means.items() if isinstance(v, (int, float))),
+                key=lambda kv: -float(kv[1]),
+            )[:8]
+            rows = "".join(
+                f'<tr><td>{html_escape(k)}</td><td class="num">{float(v):.2f}</td></tr>'
+                for k, v in sorted_means
+            )
+            stations.append(
+                {
+                    "phase": "pilot",
+                    "body": (
+                        f'<p class="muted">status: {html_escape(str(ps.get("status", "—")))} '
+                        "· top-8 dim_means (higher = stronger audit signal)</p>"
+                        '<table class="records">'
+                        "<thead><tr><th>dim</th><th>mean</th></tr></thead>"
+                        f"<tbody>{rows}</tbody></table>"
+                    ),
+                }
+            )
+
+    # ranker — matches this candidate played in tournament.json
+    t_path = bundle_dir / "tournament.json"
+    if t_path.is_file():
+        try:
+            t_data = json.loads(t_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            t_data = {}
+        match_rows: list[str] = []
+        for m in t_data.get("matches") or []:
+            if cand_id not in (m.get("candidate_a"), m.get("candidate_b")):
+                continue
+            side = "A" if m.get("candidate_a") == cand_id else "B"
+            opp = m.get("candidate_b") if side == "A" else m.get("candidate_a")
+            elo_before = m.get("elo_before", {}).get(cand_id, 1000.0)
+            elo_after = m.get("elo_after", {}).get(cand_id, 1000.0)
+            delta = float(elo_after) - float(elo_before)
+            winner = m.get("winner")
+            won = "won" if winner == side else ("tied" if winner == "tie" else "lost")
+            match_rows.append(
+                f"<tr><td><code>{html_escape(str(m.get('match_id', '?')))}</code></td>"
+                f"<td>{side} vs <code>{html_escape(str(opp))}</code></td>"
+                f'<td><span class="bucket seedgen">{won}</span></td>'
+                f'<td class="num">{float(elo_before):.1f} → '
+                f"{float(elo_after):.1f} (Δ {delta:+.1f})</td></tr>"
+            )
+        if match_rows:
+            stations.append(
+                {
+                    "phase": "ranker",
+                    "body": (
+                        '<table class="records">'
+                        "<thead><tr><th>match</th><th>side / opponent</th>"
+                        '<th>outcome</th><th class="num">Elo</th></tr></thead>'
+                        f"<tbody>{''.join(match_rows)}</tbody></table>"
+                    ),
+                }
+            )
+
+    # evolver — evolved_candidates rows where parent_id == cand_id
+    evolved = state.get("evolved_candidates", []) if isinstance(state, dict) else []
+    for ev in evolved or []:
+        if not isinstance(ev, dict) or ev.get("parent_id") != cand_id:
+            continue
+        ev_id = str(ev.get("id", "?"))
+        ev_body_path = bundle_dir / "candidates" / f"{ev_id}.md"
+        diff_html = ""
+        if cand_body_path.is_file() and ev_body_path.is_file():
+            import difflib
+
+            try:
+                src_lines = cand_body_path.read_text(encoding="utf-8").splitlines()
+                dst_lines = ev_body_path.read_text(encoding="utf-8").splitlines()
+                diff = difflib.unified_diff(
+                    src_lines, dst_lines, fromfile=cand_id, tofile=ev_id, lineterm=""
+                )
+                diff_text = "\n".join(diff)
+                if diff_text:
+                    diff_html = f'<pre class="diff">{html_escape(diff_text)}</pre>'
+            except OSError:
+                diff_html = ""
+        m_axis = html_escape(str(ev.get("mutation_axis", "—")))
+        m_rewrite = html_escape(str(ev.get("rewrite_section", "—")))
+        m_notes = html_escape(str(ev.get("notes", "—")))
+        stations.append(
+            {
+                "phase": "evolver",
+                "body": (
+                    '<dl class="status-grid">'
+                    f"<dt>evolved id</dt><dd><code>{html_escape(ev_id)}</code></dd>"
+                    f"<dt>mutation_axis</dt><dd>{m_axis}</dd>"
+                    f"<dt>rewrite_section</dt><dd>{m_rewrite}</dd>"
+                    f"<dt>notes</dt><dd>{m_notes}</dd>"
+                    "</dl>" + diff_html
+                ),
+            }
+        )
+
+    return stations
+
+
+def _render_lineage_index_body(run_id: str, state: dict[str, Any], bundle_dir: Path) -> str:
+    """List every candidate (original + evolved) with the stations each visited."""
+    ids: list[str] = []
+    for c in state.get("candidates") or []:
+        if isinstance(c, dict) and c.get("id"):
+            ids.append(str(c["id"]))
+    for ev in state.get("evolved_candidates") or []:
+        if isinstance(ev, dict) and ev.get("id"):
+            ids.append(str(ev["id"]))
+    if not ids:
+        return (
+            '<section class="page-sub">'
+            '<p class="muted">No candidates published for this run.</p></section>'
+        )
+    rows: list[str] = []
+    for cid in ids:
+        stations = _load_candidate_lineage(state, bundle_dir, cid)
+        phase_chips = "".join(
+            f'<span class="bucket seedgen">{html_escape(s["phase"])}</span> ' for s in stations
+        )
+        link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/lineage/{html_escape(cid)}/"
+        )
+        rows.append(
+            f'        <tr><td class="id"><a href="{link}">'
+            f"<code>{html_escape(cid)}</code></a></td>"
+            f"<td>{phase_chips or '<span class="muted">no stations</span>'}</td>"
+            f'<td class="num">{len(stations)}</td></tr>'
+        )
+    return (
+        '<section class="page-sub">'
+        f'<p class="muted">{len(ids)} candidates — phase-by-phase journey + diff '
+        "between original and evolved variants.</p>"
+        '<table class="records seedgen-agents">'
+        "<thead><tr><th>candidate</th><th>stations visited</th>"
+        '<th class="num">station count</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
+    )
+
+
+def _render_lineage_detail_body(run_id: str, cand_id: str, stations: list[dict[str, Any]]) -> str:
+    """Per-candidate page — one `<section class="lineage-station">` per phase."""
+    if not stations:
+        return (
+            '<section class="page-sub">'
+            f'<p class="muted">No stations recorded for candidate {html_escape(cand_id)}.</p>'
+            "</section>"
+        )
+    back_link = f"/geode/self-improving/seed-generation/{html_escape(run_id)}/lineage/"
+    sections: list[str] = []
+    for s in stations:
+        sections.append(
+            f'<section class="page-sub lineage-station">'
+            f"<h3>{html_escape(s['phase'])}</h3>"
+            f"{s['body']}"
+            "</section>"
+        )
+    return (
+        '<section class="page-sub run-detail-header">'
+        f'<p><a href="{back_link}">← back to lineage index</a></p>'
+        f"<dl><dt>candidate</dt><dd><code>{html_escape(cand_id)}</code></dd>"
+        f"<dt>stations</dt><dd>{len(stations)}</dd></dl></section>" + "".join(sections)
+    )
+
+
+def emit_seedgen_lineage_pages(
+    run_id: str,
+    state: dict[str, Any],
+    bundle_dir: Path,
+    out_dir: Path,
+    *,
+    sidebar_petri_recent: str,
+    sidebar_seedgen_runs: str,
+    petri_count: int,
+    seedgen_count_label: str,
+    autoresearch_status_label: str,
+    geode_version: str,
+    build_date: str,
+) -> None:
+    """Emit lineage/index.html + lineage/<cand_id>/index.html for a run."""
+    common = {
+        "geode_version": geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": build_date,
+        "sidebar_petri_recent": sidebar_petri_recent,
+        "sidebar_seedgen_runs": sidebar_seedgen_runs,
+        "petri_count": str(petri_count),
+        "seedgen_count_label": seedgen_count_label,
+        "autoresearch_status_label": autoresearch_status_label,
+        "run_id": html_escape(run_id),
+    }
+    # Index
+    idx_body = _render_lineage_index_body(run_id, state, bundle_dir)
+    idx_html = _render_seedgen_subpage(
+        title=f"Lineage — {run_id}",
+        active_link="lineage",
+        body=idx_body,
+        common=common,
+    )
+    (out_dir / "lineage").mkdir(parents=True, exist_ok=True)
+    (out_dir / "lineage" / "index.html").write_text(idx_html, encoding="utf-8")
+
+    # Per-candidate
+    ids: list[str] = []
+    for c in state.get("candidates") or []:
+        if isinstance(c, dict) and c.get("id"):
+            ids.append(str(c["id"]))
+    for ev in state.get("evolved_candidates") or []:
+        if isinstance(ev, dict) and ev.get("id"):
+            ids.append(str(ev["id"]))
+    for cid in ids:
+        stations = _load_candidate_lineage(state, bundle_dir, cid)
+        detail_html = _render_seedgen_subpage(
+            title=f"Lineage {cid} — {run_id}",
+            active_link="lineage",
+            body=_render_lineage_detail_body(run_id, cid, stations),
+            common=common,
+        )
+        cand_dir = out_dir / "lineage" / cid
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        (cand_dir / "index.html").write_text(detail_html, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -2335,8 +3486,23 @@ def main(argv: list[str] | None = None) -> int:
             sidebar_seedgen_runs=sidebar_seedgen_runs_html,
             geode_version=version,
             build_date=build_date,
+            run_bundle_dir=seeds_dir / run.run_id,
         )
         LOG.info("wrote seedgen run %s (%d bytes)", run_path, run_path.stat().st_size)
+
+    # PR-SEEDS-HIRES P3 (2026-05-26) — cross-run /active/ live dashboard.
+    active_path = render_seedgen_active(
+        seeds_dir,
+        args.seedgen_out_dir,
+        sidebar_petri_recent=sidebar_petri_recent_html,
+        sidebar_seedgen_runs=sidebar_seedgen_runs_html,
+        petri_count=len(petri_rows),
+        seedgen_count_label=seedgen_count_label_value,
+        autoresearch_status_label=autoresearch_status_label,
+        geode_version=version,
+        build_date=build_date,
+    )
+    LOG.info("wrote seedgen active %s (%d bytes)", active_path, active_path.stat().st_size)
 
     # ----------------------------------------------------------------- #
     # Autoresearch surface (5 sub-pages — P6)                          #

@@ -36,8 +36,14 @@ P-checklist application:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import json
 import logging
 import random
+import time
+from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
@@ -54,7 +60,6 @@ from plugins.seed_generation.tournament import (
     MatchOutcome,
     MatchPlan,
     apply_match,
-    initial_ratings,
     majority_winner,
     plan_matches,
     top_k,
@@ -70,6 +75,8 @@ __all__ = ["Ranker"]
 
 _DEFAULT_RANKER_MODEL = "claude-opus-4-7"
 _TASK_TYPE = "seed-ranker-vote"
+_PARTIAL_CHECKPOINT_EVERY_MATCHES = 10
+_PARTIAL_CHECKPOINT_EVERY_SECONDS = 120.0
 
 _REQUIRED_VOTE_FIELDS = ("match_id", "winner", "rationale")
 _VALID_WINNER_LABELS = frozenset({"A", "B", "tie"})
@@ -88,6 +95,17 @@ _CANDIDATE_BODY_UNAVAILABLE = (
     'Treat this match as ambiguous — emit ``winner: "tie"`` and note '
     "the unavailability in your rationale.)"
 )
+
+
+def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
+    return {
+        "match_id": outcome.match_id,
+        "a": outcome.a,
+        "b": outcome.b,
+        "winner": outcome.winner,
+        "votes": list(outcome.votes),
+        "voter_ids": list(outcome.voter_ids),
+    }
 
 
 class Ranker(BaseSeedAgent):
@@ -181,7 +199,6 @@ class Ranker(BaseSeedAgent):
         # well under any LLM context budget.
         candidate_bodies = self._read_candidate_bodies(state)
 
-        ratings = initial_ratings(candidate_ids)
         # CSP-8 (2026-05-22) — Proximity now emits clusters
         # (``state.similarity_clusters``) instead of a sparse pairwise
         # graph. Bracket seeding reverts to the legacy random-shuffle
@@ -189,27 +206,119 @@ class Ranker(BaseSeedAgent):
         # meta_reviewer + operator-readable state.json as a coverage
         # signal but does NOT feed the Elo bracket.
         match_plan = plan_matches(candidate_ids, rng=self._rng)
+        from plugins.seed_generation.resume import load_ranker_partial_resume
+
+        resume = load_ranker_partial_resume(
+            state.run_dir,
+            candidate_ids=candidate_ids,
+            match_plan=match_plan,
+        )
+        ratings = resume.ratings
         log.info(
-            "seed-generation ranker: %d candidates → %d matches × %d voters",
+            "seed-generation ranker: %d candidates → %d matches × %d voters "
+            "(resumed=%d pending=%d)",
             len(candidate_ids),
             len(match_plan),
             len(self._voters),
+            len(resume.completed_match_ids),
+            len(resume.pending_matches),
         )
 
-        outcomes: list[MatchOutcome] = []
-        for match in match_plan:
-            outcome = await self._play_match(
-                match,
-                pilot_means=pilot_means,
-                candidate_bodies=candidate_bodies,
+        outcomes: list[MatchOutcome] = list(resume.outcomes)
+        # PR-SEEDS-HIRES (2026-05-26) — accumulate per-match details
+        # (voter rationale + Elo before/after deltas) so the hub's
+        # tournament page can render the full 3-voter panel breakdown
+        # per match. ``state.elo_ratings`` only carries the FINAL ratings;
+        # this list carries the per-match trace.
+        match_details: list[dict[str, Any]] = []
+        # PR-RANKER-PARALLEL (2026-05-26) — dispatch every independent
+        # match concurrently, then apply Elo sequentially below. The
+        # expensive part is the voter panel call inside ``_play_match``;
+        # the rating mutation must stay ordered by ``match_plan`` so the
+        # same RNG seed still produces the same final Elo table.
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ] = asyncio.Queue()
+        checkpoint_task: asyncio.Task[None] | None = None
+        if state.run_dir is not None and resume.pending_matches:
+            checkpoint_task = asyncio.create_task(
+                self._partial_checkpoint_loop(
+                    run_dir=state.run_dir,
+                    match_plan=match_plan,
+                    result_queue=result_queue,
+                    base_completed_match_ids=list(resume.completed_match_ids),
+                    base_ratings=ratings,
+                    base_outcomes=outcomes,
+                    total_matches=len(match_plan),
+                )
             )
+        try:
+            match_results = await asyncio.gather(
+                *[
+                    self._play_match_with_checkpoint_report(
+                        match,
+                        pilot_means=pilot_means,
+                        candidate_bodies=candidate_bodies,
+                        result_queue=result_queue,
+                    )
+                    for match in resume.pending_matches
+                ]
+            )
+        finally:
+            if checkpoint_task is not None:
+                await result_queue.put(None)
+                with contextlib.suppress(Exception):
+                    await checkpoint_task
+        for match, (outcome, detail) in zip(resume.pending_matches, match_results, strict=True):
+            elo_before = deepcopy(ratings)
             if outcome is None:
+                # Detail is still meaningful for quorum-lost matches —
+                # surface the partial voter responses in the hub.
+                if detail is not None:
+                    detail.update(
+                        {
+                            "winner": None,
+                            "elo_before": {
+                                match.a: elo_before.get(match.a, 1000.0),
+                                match.b: elo_before.get(match.b, 1000.0),
+                            },
+                            "elo_after": {
+                                match.a: elo_before.get(match.a, 1000.0),
+                                match.b: elo_before.get(match.b, 1000.0),
+                            },
+                            "elo_delta_a": 0.0,
+                            "elo_delta_b": 0.0,
+                            "quorum_lost": True,
+                        }
+                    )
+                    match_details.append(detail)
                 continue
             outcomes.append(outcome)
             apply_match(ratings, outcome, k_factor=self._k_factor)
+            if detail is not None:
+                detail.update(
+                    {
+                        "winner": outcome.winner,
+                        "elo_before": {
+                            match.a: elo_before.get(match.a, 1000.0),
+                            match.b: elo_before.get(match.b, 1000.0),
+                        },
+                        "elo_after": {
+                            match.a: ratings.get(match.a, 1000.0),
+                            match.b: ratings.get(match.b, 1000.0),
+                        },
+                        "elo_delta_a": ratings.get(match.a, 1000.0)
+                        - elo_before.get(match.a, 1000.0),
+                        "elo_delta_b": ratings.get(match.b, 1000.0)
+                        - elo_before.get(match.b, 1000.0),
+                        "quorum_lost": False,
+                    }
+                )
+                match_details.append(detail)
 
         survivors = top_k(ratings, k=self._survivors_k)
         self._emit_elo_log(state, outcomes, ratings)
+        self._persist_tournament_log(state, match_details)
         log.info(
             "seed-generation ranker: %d/%d matches counted, survivors=%s",
             len(outcomes),
@@ -224,6 +333,119 @@ class Ranker(BaseSeedAgent):
                 "survivors": survivors,
             },
         )
+
+    async def _play_match_with_checkpoint_report(
+        self,
+        match: MatchPlan,
+        *,
+        pilot_means: dict[str, dict[str, Any]],
+        candidate_bodies: dict[str, str],
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ],
+    ) -> tuple[MatchOutcome | None, dict[str, Any]]:
+        result = await self._play_match(
+            match,
+            pilot_means=pilot_means,
+            candidate_bodies=candidate_bodies,
+        )
+        await result_queue.put((match, result))
+        return result
+
+    async def _partial_checkpoint_loop(
+        self,
+        *,
+        run_dir: Path,
+        match_plan: list[MatchPlan],
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ],
+        base_completed_match_ids: list[str],
+        base_ratings: dict[str, float],
+        base_outcomes: list[MatchOutcome],
+        total_matches: int,
+    ) -> None:
+        """Persist the ordered Elo prefix while match panels run.
+
+        Match calls finish in arbitrary order, but the partial checkpoint
+        must only record the deterministic prefix that has been applied
+        to Elo in ``match_plan`` order.
+        """
+        from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
+
+        ratings = dict(base_ratings)
+        outcomes = list(base_outcomes)
+        completed_ids = list(base_completed_match_ids)
+        completed_set = set(completed_ids)
+        pending_results: dict[str, tuple[MatchOutcome | None, dict[str, Any]]] = {}
+        next_idx = 0
+        while next_idx < len(match_plan) and match_plan[next_idx].match_id in completed_set:
+            next_idx += 1
+
+        last_dump_count = len(completed_ids)
+        last_dump_at = time.monotonic()
+        force_dump = False
+
+        while True:
+            timeout = max(
+                0.1,
+                _PARTIAL_CHECKPOINT_EVERY_SECONDS - (time.monotonic() - last_dump_at),
+            )
+            timed_out = False
+            try:
+                item = await asyncio.wait_for(result_queue.get(), timeout=timeout)
+            except TimeoutError:
+                timed_out = True
+                item = None
+                force_dump = True
+
+            if item is None and not timed_out:
+                force_dump = True
+            elif item is not None:
+                match, result = item
+                pending_results[match.match_id] = result
+
+            while next_idx < len(match_plan):
+                match = match_plan[next_idx]
+                if match.match_id in completed_set:
+                    next_idx += 1
+                    continue
+                if match.match_id not in pending_results:
+                    break
+                result = pending_results.pop(match.match_id)
+                outcome, _detail = result
+                completed_set.add(match.match_id)
+                completed_ids.append(match.match_id)
+                if outcome is not None:
+                    apply_match(ratings, outcome, k_factor=self._k_factor)
+                    outcomes.append(outcome)
+                next_idx += 1
+
+            due_by_count = len(completed_ids) - last_dump_count >= _PARTIAL_CHECKPOINT_EVERY_MATCHES
+            due_by_time = time.monotonic() - last_dump_at >= _PARTIAL_CHECKPOINT_EVERY_SECONDS
+            dirty = len(completed_ids) > last_dump_count
+            if dirty and (due_by_count or due_by_time or force_dump):
+                try:
+                    write_partial_ranker_checkpoint(
+                        run_dir,
+                        completed_match_ids=completed_ids,
+                        partial_ratings=ratings,
+                        partial_outcomes_serialised=[
+                            _serialise_match_outcome(outcome) for outcome in outcomes
+                        ],
+                        total_matches=total_matches,
+                    )
+                except OSError as exc:
+                    log.warning(
+                        "seed-generation ranker: partial checkpoint write failed — %s",
+                        exc,
+                    )
+                last_dump_count = len(completed_ids)
+                last_dump_at = time.monotonic()
+                force_dump = False
+
+            if item is None and not timed_out:
+                break
 
     def _read_candidate_bodies(self, state: PipelineState) -> dict[str, str]:
         """Read each candidate's seed .md body once, keyed by candidate id.
@@ -276,8 +498,19 @@ class Ranker(BaseSeedAgent):
         *,
         pilot_means: dict[str, dict[str, Any]] | None = None,
         candidate_bodies: dict[str, str] | None = None,
-    ) -> MatchOutcome | None:
-        """Dispatch the 3 voters for one match; return ``None`` on quorum loss."""
+    ) -> tuple[MatchOutcome | None, dict[str, Any]]:
+        """Dispatch the 3 voters for one match.
+
+        Returns a tuple ``(outcome, detail)`` where:
+
+        - ``outcome`` is the legacy :class:`MatchOutcome` used by the
+          Elo update — ``None`` when quorum is lost (< 2 valid votes).
+        - ``detail`` is a rich dict consumed by the hub's tournament
+          page renderer: ``{match_id, candidate_a, candidate_b, votes:
+          [{voter_id, voter_model, voter_provider, vote, rationale,
+          duration_ms}, ...]}``. Always non-empty (so the hub can
+          render quorum-lost matches too).
+        """
         tasks = self._build_voter_tasks(
             match,
             pilot_means=pilot_means or {},
@@ -288,29 +521,63 @@ class Ranker(BaseSeedAgent):
 
         votes: list[str] = []
         voter_ids: list[str] = []
+        voter_details: list[dict[str, Any]] = []
         for result in results:
             task = tasks_by_id.get(result.task_id)
-            if task is None or not result.success:
+            if task is None:
                 continue
-            parsed = parse_structured_output(
-                result.output,
-                required_fields=_REQUIRED_VOTE_FIELDS,
-                pin_field="match_id",
-                pin_value=match.match_id,
-            )
-            if parsed is None:
-                continue
-            winner = parsed.get("winner")
-            if winner not in _VALID_WINNER_LABELS:
-                log.warning(
-                    "seed-generation ranker: match=%s voter=%s invalid winner=%r",
-                    match.match_id,
-                    task.args.get("voter_id"),
-                    winner,
+            voter_id = str(task.args.get("voter_id", "?"))
+            voter_model = str(task.args.get("voter_model", ""))
+            voter_source = str(task.args.get("voter_source", ""))
+            duration_ms = float(getattr(result, "duration_ms", 0.0) or 0.0)
+            vote_value: str | None = None
+            rationale = ""
+            parse_error: str | None = None
+            if not result.success:
+                parse_error = "voter_call_failed"
+            else:
+                parsed = parse_structured_output(
+                    result.output,
+                    required_fields=_REQUIRED_VOTE_FIELDS,
+                    pin_field="match_id",
+                    pin_value=match.match_id,
                 )
-                continue
-            votes.append(str(winner))
-            voter_ids.append(str(task.args.get("voter_id", "?")))
+                if parsed is None:
+                    parse_error = "structured_output_parse_failed"
+                else:
+                    winner = parsed.get("winner")
+                    if winner not in _VALID_WINNER_LABELS:
+                        log.warning(
+                            "seed-generation ranker: match=%s voter=%s invalid winner=%r",
+                            match.match_id,
+                            voter_id,
+                            winner,
+                        )
+                        parse_error = "invalid_winner_label"
+                    else:
+                        vote_value = str(winner)
+                        rationale = str(parsed.get("rationale") or "")
+            voter_details.append(
+                {
+                    "voter_id": voter_id,
+                    "voter_model": voter_model,
+                    "voter_provider": voter_source,
+                    "vote": vote_value,
+                    "rationale": rationale,
+                    "duration_ms": duration_ms,
+                    "parse_error": parse_error,
+                }
+            )
+            if vote_value is not None:
+                votes.append(vote_value)
+                voter_ids.append(voter_id)
+
+        detail: dict[str, Any] = {
+            "match_id": match.match_id,
+            "candidate_a": match.a,
+            "candidate_b": match.b,
+            "votes": voter_details,
+        }
 
         if len(votes) < 2:
             # Need ≥ 2 votes to declare a majority. Quorum loss → skip the
@@ -322,15 +589,18 @@ class Ranker(BaseSeedAgent):
                 len(votes),
                 len(self._voters),
             )
-            return None
+            return None, detail
         winner_label = majority_winner(tuple(votes))  # type: ignore[arg-type]
-        return MatchOutcome(
-            match_id=match.match_id,
-            a=match.a,
-            b=match.b,
-            winner=winner_label,
-            votes=tuple(votes),  # type: ignore[arg-type]
-            voter_ids=tuple(voter_ids),
+        return (
+            MatchOutcome(
+                match_id=match.match_id,
+                a=match.a,
+                b=match.b,
+                winner=winner_label,
+                votes=tuple(votes),  # type: ignore[arg-type]
+                voter_ids=tuple(voter_ids),
+            ),
+            detail,
         )
 
     def _build_voter_tasks(
@@ -560,5 +830,75 @@ class Ranker(BaseSeedAgent):
             log.warning(
                 "seed-generation ranker: failed to write elo_log.tsv at %s: %s",
                 log_path,
+                exc,
+            )
+
+    def _persist_tournament_log(
+        self,
+        state: PipelineState,
+        match_details: list[dict[str, Any]],
+    ) -> None:
+        """Persist full per-match record (3-voter panel + Elo delta) to tournament.json.
+
+        PR-SEEDS-HIRES (2026-05-26) — hub renders this on the per-run
+        ``/tournament/`` page. ``elo_log.tsv`` (sibling writer) still
+        carries the compact TSV view that the S10 results.tsv consumer
+        reads; the JSON variant is observability-only.
+
+        Schema::
+
+            {
+              "run_id": "...",
+              "gen_tag": "...",
+              "voter_panel": [{"voter_id": ..., "voter_model": ..., "voter_provider": ...}],
+              "matches": [
+                {
+                  "match_id": "m007",
+                  "candidate_a": "...",
+                  "candidate_b": "...",
+                  "winner": "A" | "B" | "tie" | null,
+                  "quorum_lost": bool,
+                  "votes": [
+                    {"voter_id", "voter_model", "voter_provider", "vote",
+                     "rationale", "duration_ms", "parse_error"},
+                    ...
+                  ],
+                  "elo_before": {"a": float, "b": float},
+                  "elo_after": {"a": float, "b": float},
+                  "elo_delta_a": float,
+                  "elo_delta_b": float
+                }
+              ]
+            }
+
+        Skipped when ``state.run_dir`` is unset (test runs). Failures
+        log WARNING — observability never crashes the run.
+        """
+        if state.run_dir is None:
+            return
+        payload = {
+            "run_id": state.run_id,
+            "gen_tag": state.gen_tag,
+            "voter_panel": [
+                {
+                    "voter_id": f"{v.provider}.{v.source}",
+                    "voter_model": v.model,
+                    "voter_provider": v.source,
+                }
+                for v in self._voters
+            ],
+            "matches": match_details,
+        }
+        try:
+            state.run_dir.mkdir(parents=True, exist_ok=True)
+            target = state.run_dir / "tournament.json"
+            target.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            log.warning(
+                "seed-generation ranker: failed to write tournament.json at %s: %s",
+                state.run_dir,
                 exc,
             )

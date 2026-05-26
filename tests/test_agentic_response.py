@@ -255,7 +255,7 @@ class TestNormalizeOpenAIResponses:
         result = normalize_openai_responses(resp)
         assert result.content == []
         # v0.53.3 — empty output no longer drops usage; usage is preserved
-        # as zeros even when output is empty (the Codex Plus
+        # as zeros even when output is empty (the Codex
         # ``Completed.output``-omitted edge case).
         assert result.usage.input_tokens == 0
         assert result.usage.output_tokens == 0

@@ -43,7 +43,24 @@ _HISTORY_DEFAULT_N = 5
 # (claude-cli / openai-codex / api_key) per component. ``history`` and
 # ``rollback`` continue to delegate to git natively.
 _RUN_DEFERRED_ACTIONS: frozenset[str] = frozenset()
-_KNOWN_ACTIONS = frozenset({"status", "run", "history", "rollback", "migrate", "config", "source"})
+_KNOWN_ACTIONS = frozenset(
+    {
+        "status",
+        "run",
+        "history",
+        "rollback",
+        "migrate",
+        "config",
+        "source",
+        # PR-WIRE-1 (2026-05-26) — operator visibility into the previously
+        # orphan observability helpers (credit_assignment / kind_dim_matrix /
+        # rollback_condition). See ``feedback-sot-revert-on-reject`` memory
+        # for the audit context.
+        "credit",
+        "matrix",
+        "rollback-check",
+    }
+)
 _DESIGN_DOC = "docs/plans/2026-05-21-self-improving-loop-ux.md"
 _RUN_DEFAULT_ITERATIONS = 1
 _RUN_MAX_ITERATIONS = 10
@@ -87,11 +104,27 @@ def cmd_self_improving(args: str) -> None:
         _cmd_source(parts[1:])
         return
 
+    # PR-WIRE-1 (2026-05-26) — operator-facing visibility into the previously
+    # orphan helpers. Each sub-action reads mutations.jsonl, runs the helper,
+    # renders a dense table.
+    if action == "credit":
+        _cmd_credit(parts[1:])
+        return
+
+    if action == "matrix":
+        _cmd_matrix(parts[1:])
+        return
+
+    if action == "rollback-check":
+        _cmd_rollback_check(parts[1:])
+        return
+
     console.print()
     console.print(f"  [warning]Unknown action: /self-improving {action}[/warning]")
     console.print(
         "  [muted]Available now: [/muted]"
-        "status / run / history / rollback / migrate / config / source"
+        "status / run / history / rollback / migrate / config / source / "
+        "credit / matrix / rollback-check"
     )
     console.print()
 
@@ -1144,3 +1177,245 @@ def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
     if not result.endswith("\n"):
         result += "\n"
     return result
+
+
+# ---------------------------------------------------------------------------
+# PR-WIRE-1 (2026-05-26) — orphan helper CLI wiring
+# ---------------------------------------------------------------------------
+#
+# Phase A audit of the 2026-05-26 autoresearch attribution sprint found
+# three observability helpers (``compute_credit_assignment`` /
+# ``compute_kind_dim_matrix`` / ``evaluate_rollback_condition``) that
+# were defined in ``core/self_improving_loop/`` but had zero production
+# callers — only test fixtures imported them. PR-16/17/18 had shipped
+# the helpers as "operator dashboard" infrastructure with caller wiring
+# explicitly deferred (each module docstring said so).
+#
+# This PR closes that gap by wiring the helpers through three new
+# REPL sub-actions:
+#
+#   /self-improving credit [--last N]
+#     → aggregate_credit_history (signed per-dim credit across N apply rows)
+#
+#   /self-improving matrix [--last N]
+#     → compute_kind_dim_matrix + rank_dims_by_kind (kind × dim contribution
+#       cross-join on mutation_id between apply and attribution rows)
+#
+#   /self-improving rollback-check [--last N]
+#     → evaluate_rollback_condition (per-row predicate eval against current
+#       baseline + latest observed_dim from attribution rows)
+#
+# Output is dense table / list per ``[[feedback-no-box-ui-no-emoji]]`` —
+# no decorative card grids, no emoji, monospace-friendly.
+
+_WIRE_DEFAULT_LAST = 20
+
+
+def _parse_last_n(opts: list[str], default: int = _WIRE_DEFAULT_LAST) -> int:
+    """Parse ``--last N`` from sub-action argv; default to ``default``."""
+    if "--last" in opts:
+        idx = opts.index("--last")
+        if idx + 1 < len(opts):
+            try:
+                n = int(opts[idx + 1])
+                if n > 0:
+                    return n
+            except ValueError:
+                pass
+    return default
+
+
+def _cmd_credit(opts: list[str]) -> None:
+    """Render ``aggregate_credit_history`` over the most recent N apply rows.
+
+    Wires the previously orphan ``core.self_improving_loop.credit_assignment``
+    helpers. Reads ``mutations.jsonl``, filters to ``applied`` rows, runs
+    the aggregator, prints a dense ``dim → cumulative_credit`` table sorted
+    by absolute credit descending.
+
+    Empty state when:
+    - No mutations yet (file absent / no applied rows)
+    - All rows lack ``group_advantage`` (legacy group_size=1 mode)
+    - All rows lack ``expected_dim`` (mutator didn't commit dim deltas)
+    """
+    from core.paths import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving_loop.credit_assignment import aggregate_credit_history
+    from core.self_improving_loop.mutations_reader import read_recent_applies
+
+    last_n = _parse_last_n(opts)
+    rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
+
+    console.print()
+    console.print(f"  [header]Credit assignment[/header] (last {last_n} apply rows)")
+    if not rows:
+        console.print("    [muted]no applied mutations yet[/muted]")
+        console.print()
+        return
+
+    credit = aggregate_credit_history(rows)
+    if not credit:
+        console.print(
+            "    [muted]no group_advantage or expected_dim signal across the window — "
+            "group_size=1 legacy mode, or mutator didn't commit per-dim deltas[/muted]"
+        )
+        console.print()
+        return
+
+    ranked = sorted(credit.items(), key=lambda kv: abs(kv[1]), reverse=True)
+    name_width = max(len(d) for d, _ in ranked)
+    console.print(f"    [muted]{'dim':<{name_width}}  cumulative_credit[/muted]")
+    for dim, value in ranked:
+        console.print(f"    {dim:<{name_width}}  {value:+.4f}")
+    console.print()
+
+
+def _cmd_matrix(opts: list[str]) -> None:
+    """Render ``compute_kind_dim_matrix`` as a target_kind × dim grid.
+
+    Wires the previously orphan ``core.self_improving_loop.kind_dim_matrix``
+    helpers. Inner-joins apply rows and attribution rows on
+    ``mutation_id``. Each cell is ``attribution_score × observed_dim[d]``
+    accumulated across the matched rows — signed contribution preserved.
+
+    Renders the top-3 dims per kind by absolute magnitude (operator
+    overview) plus a one-line summary "X kinds × Y dims tracked".
+    """
+    from core.paths import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving_loop.kind_dim_matrix import (
+        compute_kind_dim_matrix,
+        rank_dims_by_kind,
+    )
+    from core.self_improving_loop.mutations_reader import (
+        read_recent_applies,
+        read_recent_attributions,
+    )
+
+    last_n = _parse_last_n(opts)
+    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
+    attr_rows = read_recent_attributions(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
+
+    console.print()
+    console.print(f"  [header]Kind × Dim contribution matrix[/header] (last {last_n} rows each)")
+    if not apply_rows or not attr_rows:
+        console.print(
+            f"    [muted]need both apply and attribution rows — "
+            f"have {len(apply_rows)} applied / {len(attr_rows)} attribution[/muted]"
+        )
+        console.print()
+        return
+
+    matrix = compute_kind_dim_matrix(apply_rows, attr_rows)
+    if not matrix:
+        console.print(
+            "    [muted]no mutation_id overlap between apply and attribution rows — "
+            "either the W2/W3 cross-ref env propagation missed the cycle, or the "
+            "window is too small to capture both halves of any cycle[/muted]"
+        )
+        console.print()
+        return
+
+    total_kinds = len(matrix)
+    total_dims = len({dim for dims in matrix.values() for dim in dims})
+    console.print(f"    [muted]{total_kinds} kinds × {total_dims} dims tracked[/muted]")
+    console.print()
+    kind_width = max(len(k) for k in matrix)
+    for kind in sorted(matrix):
+        top3 = rank_dims_by_kind(matrix, kind, limit=3)
+        cells = "  ".join(f"{dim}={score:+.3f}" for dim, score in top3) or "[muted]no dims[/muted]"
+        console.print(f"    {kind:<{kind_width}}  {cells}")
+    console.print()
+
+
+def _cmd_rollback_check(opts: list[str]) -> None:
+    """Render ``evaluate_rollback_condition`` over recent apply rows.
+
+    Wires the previously orphan
+    ``core.self_improving_loop.rollback_condition.evaluate_rollback_condition``.
+    For each of the last N apply rows that has a non-empty
+    ``rollback_condition`` predicate, evaluates the predicate against
+    the current baseline.json (baseline_dim + baseline_fitness) and the
+    latest matching attribution row's ``observed_dim`` (when available).
+
+    Output rows: ``mutation_id  target_section  WOULD-TRIGGER|safe  predicate``.
+    Operators use this to spot mutations whose rollback condition is now
+    firing against current state — manual rollback candidates.
+    """
+    from core.paths import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving_loop.mutations_reader import (
+        read_recent_applies,
+        read_recent_attributions,
+    )
+    from core.self_improving_loop.rollback_condition import evaluate_rollback_condition
+
+    last_n = _parse_last_n(opts)
+    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
+    attr_rows = read_recent_attributions(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
+
+    console.print()
+    console.print(f"  [header]Rollback-condition evaluation[/header] (last {last_n} applied rows)")
+    if not apply_rows:
+        console.print("    [muted]no applied mutations yet[/muted]")
+        console.print()
+        return
+
+    # Codex MCP review (CONDITIONAL_PASS must-fix #1) — derive baseline
+    # path from the SAME freshly-resolved ``MUTATION_AUDIT_LOG_PATH`` we
+    # used for the JSONL reads, not from ``_baseline_path()`` which
+    # imports the runner's module-cached copy. Without this, a
+    # monkeypatch on ``core.paths.MUTATION_AUDIT_LOG_PATH`` would only
+    # swap the apply/attribution reads and silently fall through to the
+    # operator's real baseline.json — wrong evaluation target.
+    baseline_path = Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
+    baseline = _load_json(baseline_path) or {}
+    baseline_dim_raw = baseline.get("dim_means") if isinstance(baseline, dict) else None
+    if not isinstance(baseline_dim_raw, dict):
+        baseline_dim_raw = None
+    baseline_dim: dict[str, float] | None = None
+    if baseline_dim_raw is not None:
+        baseline_dim = {
+            k: float(v) for k, v in baseline_dim_raw.items() if isinstance(v, int | float)
+        }
+    raw_fitness = baseline.get("fitness") if isinstance(baseline, dict) else None
+    baseline_fitness = float(raw_fitness) if isinstance(raw_fitness, int | float) else None
+
+    attr_by_id = {a.mutation_id: a for a in attr_rows if getattr(a, "mutation_id", None)}
+
+    rows_with_predicate = [r for r in apply_rows if getattr(r, "rollback_condition", "").strip()]
+    if not rows_with_predicate:
+        console.print(
+            "    [muted]no rollback_condition predicates set on recent mutations — "
+            "mutator output didn't include the field, or the window is empty[/muted]"
+        )
+        console.print()
+        return
+
+    triggered = 0
+    for row in rows_with_predicate:
+        mid = getattr(row, "mutation_id", "?")
+        section = getattr(row, "target_section", "?")
+        predicate = getattr(row, "rollback_condition", "")
+        attr = attr_by_id.get(mid)
+        observed_dim = dict(getattr(attr, "observed_dim", {}) or {}) if attr else {}
+        observed_fitness = None
+        if attr is not None:
+            raw_obs_fitness = getattr(attr, "fitness_after", None)
+            if isinstance(raw_obs_fitness, int | float):
+                observed_fitness = float(raw_obs_fitness)
+        fires = evaluate_rollback_condition(
+            predicate,
+            observed_dim=observed_dim,
+            baseline_dim=baseline_dim,
+            observed_fitness=observed_fitness,
+            baseline_fitness=baseline_fitness,
+        )
+        label = "[bold red]WOULD-TRIGGER[/bold red]" if fires else "[muted]safe[/muted]"
+        if fires:
+            triggered += 1
+        console.print(f"    {mid[:12]:<12}  {section:<24}  {label}  {_clip(predicate, 60)}")
+    console.print()
+    summary_color = "bold" if triggered else "muted"
+    console.print(
+        f"  [{summary_color}]{triggered} of {len(rows_with_predicate)} predicates "
+        f"trigger against current baseline[/{summary_color}]"
+    )
+    console.print()

@@ -13,10 +13,13 @@ from pathlib import Path
 import pytest
 from plugins.seed_generation.checkpointer import (
     CHECKPOINT_SUBDIR,
+    RANKER_PARTIAL_CHECKPOINT,
     PhaseCheckpoint,
     list_completed_phases,
     load_checkpoint,
+    load_partial_ranker_checkpoint,
     write_checkpoint,
+    write_partial_ranker_checkpoint,
 )
 
 
@@ -137,3 +140,29 @@ def test_list_completed_phases_skips_non_json_files(tmp_path: Path) -> None:
 
 def test_list_completed_phases_empty_dir(tmp_path: Path) -> None:
     assert list_completed_phases(tmp_path) == []
+
+
+def test_write_partial_ranker_checkpoint_round_trip(tmp_path: Path) -> None:
+    target = write_partial_ranker_checkpoint(
+        tmp_path,
+        completed_match_ids=["m000", "m001"],
+        partial_ratings={"c-1": 1016.0, "c-2": 984.0},
+        partial_outcomes_serialised=[
+            {
+                "match_id": "m000",
+                "a": "c-1",
+                "b": "c-2",
+                "winner": "A",
+                "votes": ["A", "A", "tie"],
+                "voter_ids": ["v1", "v2", "v3"],
+            }
+        ],
+        total_matches=5,
+    )
+    assert target == tmp_path / CHECKPOINT_SUBDIR / RANKER_PARTIAL_CHECKPOINT
+    ck = load_partial_ranker_checkpoint(tmp_path)
+    assert ck is not None
+    assert ck.completed_match_ids == ["m000", "m001"]
+    assert ck.partial_ratings == {"c-1": 1016.0, "c-2": 984.0}
+    assert ck.partial_outcomes_serialised[0]["match_id"] == "m000"
+    assert ck.total_matches == 5

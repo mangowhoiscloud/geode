@@ -39,8 +39,11 @@ register themselves; once registered the phase calls succeed.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,6 +62,47 @@ __all__ = [
     "PipelineRegistry",
     "PipelineState",
 ]
+
+
+# PR-SEEDS-HIRES (2026-05-26) — task_id prefix → phase mapping used by
+# :meth:`Pipeline._persist_per_phase_costs` when ``sub_agents/<task_id>/
+# session.json`` lacks ``metadata.phase`` (older runs, test fixtures).
+# Prefixes match the SubTask naming convention used by each agent.
+_TASK_PREFIX_TO_PHASE: tuple[tuple[str, str], ...] = (
+    ("super-", "supervisor"),
+    ("lit-", "literature_review"),
+    ("gen-", "generator"),
+    ("prox-", "proximity"),
+    ("crit-", "critic"),
+    ("pilot-", "pilot"),
+    ("vote-", "ranker"),
+    ("evolve-", "evolver"),
+    ("meta-", "meta_reviewer"),
+)
+
+
+def _infer_phase_from_task(task_dir: Path) -> str | None:
+    """Determine the seed-gen phase a sub-agent belongs to.
+
+    Prefers ``session.json.metadata.phase`` when present; falls back to
+    the task_id directory-name prefix. Returns None when neither signal
+    resolves (skipped silently — the cost rollup is informational).
+    """
+    session_path = task_dir / "session.json"
+    if session_path.is_file():
+        try:
+            data = json.loads(session_path.read_text(encoding="utf-8"))
+            meta = data.get("metadata") if isinstance(data, dict) else None
+            phase_field = meta.get("phase") if isinstance(meta, dict) else None
+            if isinstance(phase_field, str) and phase_field:
+                return phase_field
+        except (OSError, json.JSONDecodeError):
+            pass
+    name = task_dir.name
+    for prefix, phase in _TASK_PREFIX_TO_PHASE:
+        if name.startswith(prefix):
+            return phase
+    return None
 
 
 def _state_to_json(state: PipelineState) -> str:
@@ -480,6 +524,14 @@ class Pipeline:
         )
         started_at = time.time()
         aborted = False
+        # PR-SEEDS-HIRES (2026-05-26) — start background live-sync loop
+        # so the published bundle reflects in-flight transcripts +
+        # progress every 5s. Cancelled at run end (after final
+        # _persist_progress).
+        self._live_run_started_at = started_at
+        self._phase_durations_ms: dict[str, float] = {}
+        self._persist_progress(current_phase="starting", current_step=None)
+        live_sync_task = asyncio.create_task(self._live_sync_loop())
         # CSP-5 (2026-05-22) — iteration 0 walks the full
         # ``_PHASE_ORDER``; iterations 1..max_iterations re-enter the
         # ``_ITERATION_PHASE_ORDER`` cycle, promoting evolved
@@ -539,7 +591,14 @@ class Pipeline:
                     )
             for phase in order[resume_idx:]:
                 phase_started = time.time()
+                # PR-SEEDS-HIRES — heartbeat at phase start so live
+                # readers see the current phase before the agent fires.
+                self._persist_progress(
+                    current_phase=phase,
+                    current_step=f"iteration={iteration}",
+                )
                 phase_result = await self._arun_phase(phase)
+                self._phase_durations_ms[phase] = (time.time() - phase_started) * 1000.0
                 # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) —
                 # checkpoint the post-phase state so a downstream
                 # crash doesn't lose this phase's work. Failures
@@ -559,10 +618,14 @@ class Pipeline:
                 # resume re-runs failed phases instead of pretending
                 # they completed.
                 if iteration == 0 and self.state.run_dir is not None and phase_result.success:
+                    if phase == "ranker":
+                        self._apply_post_elo_dedup()
                     self._record_checkpoint(
                         phase,
                         duration_ms=(time.time() - phase_started) * 1000.0,
                     )
+                elif phase == "ranker" and phase_result.success:
+                    self._apply_post_elo_dedup()
                 # PR-COSCI-1 (2026-05-21) — abort early when the
                 # candidates pool is empty after a phase that should
                 # have populated or filtered it. The check is scoped
@@ -605,6 +668,18 @@ class Pipeline:
         # update the cross-run ``latest_meta_review.json`` symlink so the
         # next seed-generation run reads it as priors.
         self._persist_meta_review()
+        # PR-SEEDS-HIRES (2026-05-26) — per-phase cost ledger + final
+        # progress stamp so the hub renders cost breakdown and the
+        # active-runs page filters this run out of "in progress".
+        self._persist_per_phase_costs()
+        self._persist_progress(current_phase="done", current_step=None)
+        # Cancel the background live-sync loop. The post-run
+        # ``sync_run_to_bundle`` below performs the final authoritative
+        # copy (verbatim, no mtime gate) so any race between the last
+        # live tick and run end resolves to the latest content.
+        live_sync_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):  # pragma: no cover
+            await live_sync_task
         # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
         # CSP-14 (2026-05-23) — auto-sync the publish-set of the run dir
@@ -668,6 +743,41 @@ class Pipeline:
         # don't re-cluster (evolved candidates are deduped by the
         # Evolver's anti-convergence Jaccard guard, CSP-6).
         return True
+
+    def _apply_post_elo_dedup(self) -> None:
+        """Filter high-similarity survivor clusters after Ranker.
+
+        Proximity records semantic clusters before Pilot/Ranker have
+        score signal. This post-Elo pass mirrors open-coscientist's
+        high-similarity dedup rule, but uses GEODE's survivor ids, Elo
+        ratings, and Pilot dim means.
+        """
+        from plugins.seed_generation.dedup import dedup_survivors_by_cluster
+
+        if not self.state.survivors or not self.state.similarity_clusters:
+            return
+        filtered, removed = dedup_survivors_by_cluster(
+            survivors=list(self.state.survivors),
+            ratings=dict(self.state.elo_ratings),
+            pilot_scores=dict(self.state.pilot_scores),
+            similarity_clusters=list(self.state.similarity_clusters),
+        )
+        if not removed:
+            return
+        self.state.survivors = filtered
+        self.state.removed_duplicates.extend(removed)
+        log.info(
+            "seed-generation post-Elo dedup: removed %d high-similarity survivors",
+            len(removed),
+        )
+        _emit_orchestrator_event(
+            "post_elo_dedup_finished",
+            payload={
+                "removed": len(removed),
+                "survivors_before": len(filtered) + len(removed),
+                "survivors_after": len(filtered),
+            },
+        )
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
         """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
@@ -974,6 +1084,197 @@ class Pipeline:
                 self.state.run_dir,
                 exc,
             )
+
+    def _persist_progress(
+        self,
+        *,
+        current_phase: str,
+        current_step: str | None,
+        current_agent_task_id: str | None = None,
+    ) -> None:
+        """Write ``<run_dir>/progress.json`` heartbeat.
+
+        PR-SEEDS-HIRES (2026-05-26) — live-status surface. The hub's
+        ``/active/`` page filters runs where ``current_phase != "done"``;
+        per-phase ETA derives from the mean duration of already-finished
+        phases × remaining count. Atomic via tmp+os.replace so concurrent
+        readers (geode serve SSE in PR 3) never see partial writes.
+
+        I/O failures log WARNING and continue — progress is observability,
+        not a hard contract on the run.
+        """
+        if self.state.run_dir is None:
+            return
+        finished = list(self._phase_durations_ms.keys())
+        remaining_count = max(0, len(_PHASE_ORDER) - len(finished))
+        if finished:
+            mean_ms = sum(self._phase_durations_ms.values()) / len(finished)
+            eta_seconds = (mean_ms * remaining_count) / 1000.0
+        else:
+            eta_seconds = None
+        payload = {
+            "run_id": self.state.run_id,
+            "gen_tag": self.state.gen_tag,
+            "target_dim": self.state.target_dim,
+            "current_phase": current_phase,
+            "current_step": current_step,
+            "current_agent_task_id": current_agent_task_id,
+            "iteration": self.state.current_iteration,
+            "max_iterations": self.state.max_iterations,
+            "phases_completed": finished,
+            "started_at": self._live_run_started_at,
+            "last_updated_at": time.time(),
+            "eta_seconds": eta_seconds,
+            "usd_spent": self.state.usd_spent,
+        }
+        try:
+            self.state.run_dir.mkdir(parents=True, exist_ok=True)
+            target = self.state.run_dir / "progress.json"
+            tmp = target.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(tmp, target)
+        except OSError as exc:
+            log.warning(
+                "seed-generation progress.json write failed: %s",
+                exc,
+            )
+
+    def _persist_per_phase_costs(self) -> None:
+        """Aggregate sub-agent ``dialogue.jsonl`` session_end events by phase.
+
+        PR-SEEDS-HIRES (2026-05-26) — per-phase cost breakdown so the
+        hub can render a cost grid alongside the phase timeline. Walks
+        every ``sub_agents/<task_id>/`` dir under run_dir, reads each
+        session.json's ``metadata.phase`` (or falls back to inferring
+        from task_id prefix when metadata is absent), then sums
+        ``session_end.total_cost`` / ``duration_s`` per phase from the
+        sibling ``dialogue.jsonl``.
+
+        Output shape (each phase row optional):
+        ``{<phase>: {cost_usd, prompt_tokens, completion_tokens, duration_ms, agent_count}}``.
+        """
+        if self.state.run_dir is None:
+            return
+        sub_agents_dir = self.state.run_dir / "sub_agents"
+        rollup: dict[str, dict[str, float | int]] = {}
+        if sub_agents_dir.is_dir():
+            for task_dir in sub_agents_dir.iterdir():
+                if not task_dir.is_dir():
+                    continue
+                phase = _infer_phase_from_task(task_dir)
+                if phase is None:
+                    continue
+                agg = rollup.setdefault(
+                    phase,
+                    {
+                        "cost_usd": 0.0,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "duration_ms": 0.0,
+                        "agent_count": 0,
+                    },
+                )
+                agg["agent_count"] = int(agg["agent_count"]) + 1
+                dialogue = task_dir / "dialogue.jsonl"
+                if not dialogue.is_file():
+                    continue
+                try:
+                    for line in dialogue.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            evt = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(evt, dict):
+                            continue
+                        if evt.get("event") != "session_end":
+                            continue
+                        with contextlib.suppress(TypeError, ValueError):
+                            agg["cost_usd"] = float(agg["cost_usd"]) + float(
+                                evt.get("total_cost") or 0.0
+                            )
+                        with contextlib.suppress(TypeError, ValueError):
+                            agg["duration_ms"] = (
+                                float(agg["duration_ms"])
+                                + float(evt.get("duration_s") or 0.0) * 1000.0
+                            )
+                        with contextlib.suppress(TypeError, ValueError):
+                            agg["prompt_tokens"] = int(agg["prompt_tokens"]) + int(
+                                evt.get("prompt_tokens") or 0
+                            )
+                        with contextlib.suppress(TypeError, ValueError):
+                            agg["completion_tokens"] = int(agg["completion_tokens"]) + int(
+                                evt.get("completion_tokens") or 0
+                            )
+                except OSError:
+                    continue
+        # Always include known finished phases even when agent_count == 0
+        # (e.g. supervisor that did no sub-agent fan-out). Operators
+        # expect the timeline + cost grid to reflect every phase ran.
+        for phase, dur_ms in self._phase_durations_ms.items():
+            agg = rollup.setdefault(
+                phase,
+                {
+                    "cost_usd": 0.0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "duration_ms": 0.0,
+                    "agent_count": 0,
+                },
+            )
+            # If we didn't record any sub-agent duration, fall back to the
+            # outer phase wall-clock so the hub timeline shows a non-zero
+            # bar for short phases (e.g. proximity has no sub-agents).
+            if int(agg["agent_count"]) == 0:
+                agg["duration_ms"] = float(dur_ms)
+        try:
+            target = self.state.run_dir / "per_phase_costs.json"
+            tmp = target.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps(rollup, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(tmp, target)
+        except OSError as exc:
+            log.warning(
+                "seed-generation per_phase_costs.json write failed: %s",
+                exc,
+            )
+
+    async def _live_sync_loop(self) -> None:
+        """Background incremental bundle sync — fires every 5s during a run.
+
+        PR-SEEDS-HIRES (2026-05-26) — gives the published bundle near-
+        real-time content. The orchestrator cancels this task at end of
+        :meth:`arun` and runs the final authoritative ``sync_run_to_bundle``
+        immediately after. Kill switch: ``GEODE_SEED_LIVE_SYNC_DISABLED=1``.
+
+        Failures are swallowed — the loop must NOT propagate an exception
+        that would crash the running pipeline. The final post-run sync
+        is authoritative.
+        """
+        if os.environ.get("GEODE_SEED_LIVE_SYNC_DISABLED") == "1":
+            return
+        if self.state.run_dir is None:
+            return
+        try:
+            from plugins.seed_generation.bundle_sync import sync_run_incremental
+        except Exception:  # pragma: no cover — import shouldn't fail
+            return
+        while True:
+            try:
+                sync_run_incremental(self.state.run_dir)
+            except Exception:
+                # Observability must never crash the run — log and keep ticking.
+                log.debug("seed-generation live-sync tick failed (non-fatal)", exc_info=True)
+            try:
+                await asyncio.sleep(5.0)
+            except asyncio.CancelledError:
+                return
 
     async def _arun_phase(self, role: str) -> SeedAgentResult:
         """Look up the role's agent, invoke it (async), merge the result.

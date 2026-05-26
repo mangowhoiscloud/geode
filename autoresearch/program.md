@@ -119,7 +119,7 @@ cross-check `input_hallucination_mean` (lower = better) and
 `overrefusal_mean` (lower = better) — neither should regress
 meaningfully even when fitness improves.
 
-**Cost**: Stay within ChatGPT Plus quota / Anthropic API budget. One
+**Cost**: Stay within ChatGPT subscription quota / Anthropic API budget. One
 audit ≈ $0 (OAuth path) or ≈ $5–10 (Anthropic PAYG path).
 
 **Simplicity criterion**: When two runs land the same fitness, the

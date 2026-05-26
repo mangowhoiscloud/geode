@@ -147,7 +147,7 @@ GEODE
 ```
 Source: docs/self-improving/ (mirrors docs/petri-bundle/ post-relocation).
 Built by .github/workflows/pages.yml on every main push.
-Harness chip legend: PAYG · Claude Code · Codex Plus · GEODE.
+Harness chip legend: PAYG · Claude Code · Codex · GEODE.
 Repo: github.com/mangowhoiscloud/geode
 ```
 

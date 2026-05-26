@@ -47,9 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
+  independent tournament matches with ``asyncio.gather`` and applies
+  Elo updates afterward in the original ``match_plan`` order. This
+  preserves deterministic final ratings / survivor selection for a
+  fixed RNG seed while allowing the voter-panel LLM calls to overlap;
+  the provider lanes introduced by PR-OAUTH-API-LANES remain the
+  throttle for the resulting burst. Pinned by
+  ``tests/plugins/seed_generation/test_ranker.py`` invariants for
+  concurrent match dispatch and post-gather Elo ordering.
+- **PR-RANKER-PARTIAL-CHECKPOINT** — seed-generation Ranker now writes
+  ``checkpoints/ranker.partial.json`` while match panels run. The
+  partial checkpoint stores the ordered Elo-applied match prefix
+  (``completed_match_ids``), ``partial_ratings``,
+  ``partial_outcomes_serialised``, and ``total_matches`` with atomic
+  temp-file replacement. Resume accepts the checkpoint only when it
+  matches the current match-plan prefix, restores ratings/outcomes,
+  and dispatches only the remaining matches. Pinned by checkpointer,
+  resume, and Ranker invariants for round-trip, stale-plan rejection,
+  final partial dump, and no replay of completed matches.
+- **PR-RANKER-DEDUP-POST-ELO** — seed-generation now applies an
+  open-coscientist-aligned post-Ranker survivor dedup pass before
+  Evolver dispatch. Within each high-similarity survivor cluster,
+  GEODE keeps the best candidate by ``(elo_rating, sum(dim_means),
+  candidate_id)``, removes lower-ranked near-duplicates from
+  ``state.survivors``, and appends audit rows to
+  ``state.removed_duplicates``. Pinned by pure helper and Pipeline
+  invariants covering Elo priority, Pilot-score tie-breaks, survivor
+  filtering, and non-high / non-survivor preservation.
+
 ### Fixed
 
-- PR-HUB-DOCS-LINK-FIX — the self-improving hub's DOCS sidebar pointed
+- **PR-HUB-DOCS-LINK-FIX** — the self-improving hub's DOCS sidebar pointed
   at two Next.js routes that don't exist: ``/geode/docs/petri`` (no
   ``overview`` suffix, returned 404) and ``/geode/docs/petri/dimensions``
   (wrong slug, the real route is ``judge-dimensions``). Operator
@@ -62,6 +93,328 @@ functional change.
   enumerates every ``/geode/docs/petri/<slug>`` href in the built HTML
   and asserts ``slug ∈ {dir.name for dir in site/src/app/docs/petri/}``,
   so a future Next.js rename or hub typo fails the gate before merge.
+
+- **PR-FIX-CHATGPT-PLAN-HALLUCINATION** — ChatGPT OAuth plan display now
+  resolves the JWT ``chatgpt_plan_type`` slug into a product label
+  instead of leaking raw slugs or hard-coding Plus. ``chatgpt_plan_label``
+  maps known tiers (Free / Plus / Pro / Pro Lite / Team / Business /
+  Enterprise / Edu), preserves a generic ``ChatGPT subscription`` fallback,
+  and title-cases future unknown slugs. ``/login openai`` now emits
+  ``Plan: ChatGPT Pro Lite`` for ``prolite`` accounts, the ``/login``
+  dashboard renders OpenAI Codex plan bindings with the same label, and
+  the credential-source display no longer formats raw ``ChatGPT prolite``.
+  Generic docs, comments, hub chips, and tests now refer to ChatGPT
+  subscription / Codex subscription paths rather than pretending every
+  OAuth account is Plus. Pinned by
+  ``tests/core/auth/test_chatgpt_plan_label.py``,
+  ``tests/test_login_plan_binding.py``, and
+  ``tests/test_oauth_path_display.py``.
+
+- **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
+  longer collapses repeated audits at the same git commit into a
+  single synthetic ``autoresearch-{commit}`` gen_tag. The 2026-05-26
+  attribution sprint Phase A audit (§5.6) found that every audit at
+  one commit shared the same gen_tag, making cross-cycle attribution
+  decomposition impossible. Post-PR the resolver reads
+  ``~/.geode/self-improving-loop/sessions.jsonl``, finds rows whose
+  gen_tag starts with ``autoresearch-{commit}``, parses the optional
+  ``-gen{N}`` suffix, and emits ``autoresearch-{commit}-gen{N+1}``.
+  Legacy rows without a suffix count as ``gen0`` (next emission is
+  ``gen1``). The ``AUTORESEARCH_GEN_TAG`` operator override still
+  wins. Best-effort reads — malformed JSON / non-dict rows / OSError
+  during scan all fall through gracefully to ``gen1``. Pinned by 11
+  invariant tests in
+  ``tests/autoresearch/test_gen_tag_monotonic.py`` covering fresh
+  history, increments, legacy mixing, per-commit isolation, override
+  precedence, malformed-row tolerance, and OSError fallback.
+
+### Added
+
+- **PR-WIRE-1** — Three new ``/self-improving`` REPL sub-actions wire
+  the three observability helpers identified as production-orphan
+  during the 2026-05-26 attribution sprint Phase A audit:
+  ``/self-improving credit [--last N]`` invokes
+  ``aggregate_credit_history``; ``/self-improving matrix [--last N]``
+  invokes ``compute_kind_dim_matrix`` + ``rank_dims_by_kind``;
+  ``/self-improving rollback-check [--last N]`` invokes
+  ``evaluate_rollback_condition`` against the current ``baseline.json``
+  + each apply row's stored ``rollback_condition`` predicate. Each
+  sub-action reads ``autoresearch/state/mutations.jsonl`` (the
+  git-tracked audit ledger), runs the helper, and prints a dense
+  table (``[[feedback-no-box-ui-no-emoji]]`` compliant — no card grids,
+  no emoji). Empty-state paths are pinned: no rows / no signal / no
+  predicates each emit a muted explanation line. Default N = 20.
+  Pinned by 15 invariant tests in
+  ``tests/core/cli/test_self_improving_wire1.py`` covering dispatcher
+  routing, ``--last`` argv parsing, real-helper invocation
+  (non-stub), and three empty-state branches per command.
+- **PR-SEEDS-HIRES (Phase 3: live + lineage)** — final 2 surfaces of
+  the seed-generation hi-resolution sprint:
+
+  - `/seed-generation/active/` — cross-run live dashboard. Filters
+    every run's `progress.json` where `current_phase != "done"`;
+    renders a dense table with phase / step / agent / ETA / updated.
+    Hybrid liveness: static build-time snapshot + inline ~50-line
+    vanilla JS poller that refetches each run's `progress.json`
+    every 5s, with `<meta http-equiv="refresh" content="60">` as
+    fallback. End-to-end latency ≤ 10s (PR 1's `_live_sync_loop` +
+    poller). No framework, no external script, ≤ 2 KB inline JS.
+  - `/seed-generation/<run_id>/lineage/` + per-candidate
+    `/lineage/<cand_id>/` — Phoenix-style time-ordered station list
+    per candidate (supervisor guidance / generator body / proximity
+    drop / critic reflection + debate / pilot dim_means / ranker
+    matches / evolver rewrite + unified diff between parent +
+    evolved bodies). Uses Python `difflib.unified_diff` — no dep.
+
+  Builder: `scripts/build_self_improving_hub.py` adds
+  `render_seedgen_active` + `_load_active_runs` + `_fmt_eta` +
+  `_fmt_relative_age` (active) + `emit_seedgen_lineage_pages` +
+  `_load_candidate_lineage` + `_render_lineage_index_body` +
+  `_render_lineage_detail_body` (lineage). `_render_seedgen_subpage`
+  sidebar extended with `Lineage` + `Active runs` entries. Active +
+  lineage emitters wired into `_emit_seedgen_run_subpages` + `main()`.
+
+  CSS: `docs/self-improving/assets/hub.css` adds `.active-runs`,
+  `.live-indicator` + `.dot` keyframe pulse, `.lineage-station`,
+  `pre.diff`, `pre.msg.cand-body`. **Zero new color tokens** —
+  reuses `--bucket-seedgen`, `--paper-tint`, `--rule-soft`.
+
+  DESIGN.md: `self-improving-seed-generation-active.md`,
+  `self-improving-seed-generation-lineage.md`.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **45 cases** — was 40):
+  `test_pr3_active_runs_lists_in_progress`,
+  `test_pr3_active_has_meta_refresh_and_js_poller` (cotton: inline JS
+  ≤ 2 KB, no `<script src=>`, no ESM imports),
+  `test_pr3_lineage_index_lists_candidates`,
+  `test_pr3_lineage_detail_renders_stations_and_diff`,
+  `test_pr3_lineage_basepath_safe`.
+
+  Closes the operator directive 2026-05-26: "활성 런, 런별로 현재 진행중인
+  에이전트와 스텝" + "각 시나리오가 절차순으로 어떻게 변화했는지". Combined with
+  PR 1 + PR 2, all 5 hi-resolution surfaces (conversations / procedures
+  / active runs / lineage / ranker matches) now ship.
+
+
+### Changed
+
+- **PR-ATTR-INSPIRED-BY** — self-improving loop's group-sampling
+  selection layer docstrings + plan doc + config docstrings
+  downgraded from "DAPO Dynamic Sampling + GRPO advantage
+  normalization + EXAONE 4.5 zero-variance filter" (which overstated
+  the relationship) to **"DAPO-inspired variance gate +
+  GRPO-inspired group-relative scoring — not policy optimization, no
+  parameter update, no gradient"**. Removes the mis-citation of
+  EXAONE 4.5 (arXiv 2604.08644) verified during the 2026-05-26
+  attribution sprint Phase A audit: that paper is the EXAONE 4.5
+  vision-language model technical report from LG AI Research and
+  contains no variance filter / Dynamic Sampling / RL-training
+  content. Touched files: `core/self_improving_loop/runner.py`
+  (5 docstrings + 1 prompt-template line),
+  `core/config/self_improving_loop.py` (group_size +
+  group_variance_threshold knobs),
+  `core/self_improving_loop/credit_assignment.py` (module
+  docstring), `docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`
+  (D5 row + frontier table + section 4.2 + reference list).
+  No deterministic code-path change. One runtime-facing string did
+  change — the mutator LLM prompt template line in
+  `runner.py:_MUTATION_CONTRACT_SUFFIX` mentions the variance gate
+  in its sibling-uniqueness instruction, reworded from "DAPO Dynamic
+  Sampling variance filter" to "DAPO-inspired variance gate" so the
+  mutator's understanding stays consistent with the docstrings.
+  No test invalidation. Historical `CHANGELOG.md` entries for past
+  releases that mentioned the prior framing are intentionally left
+  unchanged (Keep a Changelog: released entries are immutable).
+
+### Added
+
+- PR-OAUTH-API-LANES (2026-05-26) — per-provider API lanes covering
+  the 4 direct-API adapters (`anthropic-oauth`, `anthropic-payg`,
+  `codex-oauth`, `openai-payg`) that previously had no concurrency
+  gate. Adds `core/orchestration/anthropic_api_lane.py` and
+  `core/orchestration/openai_api_lane.py` — each pools OAuth + PAYG
+  sources for the same provider on a single per-account semaphore.
+  Default `max_concurrent=4`, env override via
+  `GEODE_ANTHROPIC_API_LANE_MAX` / `GEODE_OPENAI_API_LANE_MAX`.
+  Wired into each adapter's `acomplete` with `async with
+  acquire_*_api_lane_async(key)`. Subprocess adapters (claude-cli,
+  codex-cli) keep their existing lanes unchanged — this PR is
+  additive only. Unblocks PR-RANKER-PARALLEL (next in sprint) by
+  giving the 177-call match-burst a per-provider 429 ceiling.
+  21 unit tests pin: default cap, env override (positive / empty /
+  non-integer / non-positive fallback), singleton identity, reset
+  isolation, sync + async acquire smoke, `asyncio.gather` burst →
+  throttled-to-cap invariant.
+
+
+- PR-SMOKE-LOG-FLAG (2026-05-26) — ``geode audit-seeds generate
+  --smoke-log {auto,<path>}`` flag tees stdout + stderr into the
+  GEODE-convention smoke archive without operator-managed ``>``
+  redirect. ``auto`` resolves to
+  ``.audit/smoke-archives/smoke-<N>-<unix_ts>.log`` where ``N`` is the
+  next integer after the highest existing ``smoke-<int>-*.log``
+  filename in the archive directory; an explicit value is taken
+  literally. Implementation is a Python-level ``_TeeStream`` proxy
+  around ``sys.stdout`` / ``sys.stderr`` — best-effort secondary write
+  so a disk-full failure on the log can never crash the actual
+  pipeline (the primary stream stays authoritative). Subprocess output
+  (claude-cli, codex) keeps the original OS file descriptors and lands
+  in its own ``state/seed-generation/<run>/sub_agents/...`` SoT; the
+  smoke log captures exactly what the operator would have seen on the
+  terminal. Default (no flag) is unchanged — REPL / regular
+  ``audit-seeds generate`` invocations behave identically to pre-PR.
+  Pinned by 11 unit tests in
+  ``tests/plugins/seed_generation/test_smoke_log_flag.py``.
+
+- PR-HOOKEVENT-RESERVE — autoresearch mutation lifecycle event
+  namespace reservation. Adds 5 ``HookEvent`` members anchoring the
+  shared event taxonomy between two concurrent sprints:
+  (a) **autoresearch attribution sprint Phase G** — emit sites in
+  ``autoresearch/train.py:2407-2455`` (``_should_promote=False``
+  branch) + ``runner.py:1882-1888`` (subprocess returncode check)
+  for SoT-revert paths;
+  (b) **observability central SoT sprint** PR-5 wildcard firehose +
+  PR-10 autoresearch indexer that joins by ``mutation_id`` against
+  ``autoresearch/state/mutations.jsonl``. Reserving names + values
+  up-front prevents value drift once both sprints emit concurrently.
+  Members: ``MUTATION_PROPOSED`` / ``MUTATION_APPLIED`` /
+  ``MUTATION_REJECTED`` / ``MUTATION_REVERTED`` /
+  ``BASELINE_PROMOTED``. All 4 mutation lifecycle values use the
+  ``mutation_`` prefix so the wildcard subscriber's
+  ``startswith("mutation_")`` filter groups them as one taxonomy;
+  ``BASELINE_PROMOTED`` stays distinct from the pre-existing
+  ``MODEL_PROMOTED`` (pipeline-level retrain promotion) to avoid the
+  collision. Payload schema documented inline at ``core/hooks/system.py``
+  above the new members. Pinned by 4 unit tests in
+  ``tests/test_hookevent_mutation_baseline_reserve.py``: enum members
+  exist, ``mutation_`` prefix invariant, ``baseline_promoted``
+  literal value, distinctness from existing pipeline events.
+- **PR-SEEDS-HIRES (Phase 1: data plumbing)** — every seed-generation run
+  now publishes a full observability surface to the Pages bundle so the
+  hub can render extreme-resolution views in subsequent phases.
+
+  New bundle files under `docs/self-improving/petri-bundle/seeds/<run_id>/`:
+
+  - `transcript.jsonl` — per-run event log (phase + sub-agent + LLM-call
+    + tool-exec hook events from `core/hooks/system.py`).
+  - `progress.json` — live status `{current_phase, current_step,
+    current_agent_task_id, started_at, last_updated_at, phases_completed,
+    eta_seconds, usd_spent}`. Atomic via tmp+os.replace; written at
+    every phase boundary inside `Pipeline.arun`.
+  - `tournament.json` — per-match Elo tournament record with the full
+    3-voter panel (`voter_id`, `voter_model`, `voter_provider`, `vote`,
+    `rationale`, `duration_ms`, `parse_error`) and Elo before/after
+    deltas. Quorum-lost matches are surfaced with `quorum_lost: true`.
+  - `per_phase_costs.json` — `{<phase>: {cost_usd, prompt_tokens,
+    completion_tokens, duration_ms, agent_count}}` aggregated from
+    `sub_agents/*/dialogue.jsonl` `session_end` events.
+  - `sub_agents/<task_id>/{dialogue.jsonl, result.json, session.json}` —
+    per-sub-agent turn-by-turn transcript + structured output + session
+    metadata. No size cap per operator directive (resolution wins).
+  - `checkpoints/<phase>.json` — per-phase state snapshots (was already
+    written by `plugins/seed_generation/checkpointer.py`, now bundled).
+
+  Writers:
+
+  - `plugins/seed_generation/orchestrator.py` — new `_persist_progress`,
+    `_persist_per_phase_costs`, `_live_sync_loop` (5s background
+    incremental rsync to the bundle so the live page reflects in-flight
+    runs near-real-time). Kill switch `GEODE_SEED_LIVE_SYNC_DISABLED=1`.
+  - `plugins/seed_generation/agents/ranker.py` — `_persist_tournament_log`
+    (extracts per-voter rationale + Elo before/after from the existing
+    voter SubTask results; `_play_match` now returns a richer
+    `(MatchOutcome | None, match_detail)` tuple).
+  - `plugins/seed_generation/bundle_sync.py` — `_RUN_FILES_TO_SYNC`
+    extended; new `_sync_subagents` + `_sync_checkpoints` helpers + new
+    `sync_run_incremental` mtime-aware mid-run copy used by the live
+    writer.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **34 cases** — was 30):
+
+  - `test_pr1_bundle_includes_transcript_progress_tournament_costs` —
+    4 new top-level files exist under the fixture run.
+  - `test_pr1_subagent_triple_tracked` — every `sub_agents/<task_id>/`
+    carries the dialogue/result/session triple.
+  - `test_pr1_checkpoints_tracked` — at least one phase snapshot.
+  - `test_pr1_tournament_schema_complete` — voter_panel + matches schema
+    + A/B/tie coverage so downstream renderer branches stay exercised.
+
+- **PR-SEEDS-HIRES (Phase 2: static render)** — 4 new hi-resolution
+  sub-pages per seed-generation run, reading the Phase 1 bundle data:
+
+  - `/seed-generation/<run_id>/agents/` — dense per-sub-agent table
+    (task_id link / phase chip / harness chip + model / turn count /
+    cost USD / duration). Sorted by phase order.
+  - `/seed-generation/<run_id>/agent/<task_id>/` — Langfuse-style
+    turn-by-turn page. Header `<dl>` with task metadata + result
+    summary; body is a sequence of collapsible `<details class="turn
+    [user|assistant|session-end]">` blocks, one per
+    `dialogue.jsonl` event. All collapsed by default — page renders
+    ~5 KB no matter how many turns.
+  - `/seed-generation/<run_id>/timeline/` — Phoenix-style 9-phase
+    nested span list. Per-phase `<section>` with duration + cost
+    header + nested `<details>` for sub-agent fan-out + filtered
+    hook events from `transcript.jsonl`.
+  - `/seed-generation/<run_id>/tournament/` — full Elo tournament
+    record with 3-voter panel breakdown per match (voter chip / vote
+    / rationale / duration) + Elo before→after deltas. Mixed-outcome
+    fixture (A win / B win / tie) keeps renderer branches exercised.
+
+  Builder: `scripts/build_self_improving_hub.py` adds
+  `_emit_seedgen_run_subpages` orchestrator + 4 body renderers
+  (`_render_agents_index_body`, `_render_agent_detail_body`,
+  `_render_timeline_body`, `_render_tournament_body`) + 3 data
+  loaders (`_load_subagents`, `_read_dialogue`, `_chip_for_subagent`)
+  + a shared `_render_seedgen_subpage` shell. The shell mirrors the
+  existing hub sidebar contract so all 4 sub-pages stay sidebar-
+  consistent.
+
+  CSS: `docs/self-improving/assets/hub.css` adds `.seedgen-agents`,
+  `.turn` + user/assistant/session-end variants, `.msg` pre-wrap
+  text body, `.event-list`, `.phase-block`, `.match`, `.votes`,
+  `.bucket.{win-a,win-b,tie}`. **Zero new color tokens** — every new
+  rule reuses `--bucket-{petri,seedgen,autoresearch}` + existing
+  paper / rule tokens (cotton single-substrate preserved).
+
+  DESIGN.md: `self-improving-seed-generation-conversations.md`,
+  `self-improving-seed-generation-timeline.md`,
+  `self-improving-seed-generation-tournament.md`.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **40 cases** — was 34):
+  `test_pr2_agents_index_renders`, `test_pr2_agent_detail_paginates
+  _via_details`, `test_pr2_timeline_shows_all_known_phases`,
+  `test_pr2_tournament_renders_three_voter_panel`,
+  `test_pr2_subpages_basepath_safe`, `test_pr2_subpages_no_js_framework`.
+
+
+### Fixed
+
+- **PR-SOT-REVERT-ON-REJECT** — self-improving loop closed-loop silent
+  leak: when the runner-driven audit (`GEODE_SIL_MUTATION_ID` env set)
+  triggers `_should_promote=False`, the SoT is now reverted to its
+  pre-mutation state instead of leaving the rejected mutation as
+  permanent state. `autoresearch.train._revert_sot_after_reject` walks
+  `mutations.jsonl` for the apply row's `previous_value` and dispatches
+  through `load_wrapper_prompt_sections`/`write_wrapper_prompt_sections`
+  (prompt kind) or `policies.load_policy`/`policies.write_policy`
+  (policy kinds). Insertion case (`previous_value=""`) deletes the key
+  instead of writing back an empty string. Manual audits (no SIL env)
+  remain unchanged — operator-driven mutations accumulate by design.
+  Pinned by 9 invariant tests in `tests/autoresearch/test_sot_revert_on_reject.py`.
+
+- **PR-SOT-REVERT-ON-AUDIT-FAIL** — self-improving loop closed-loop
+  silent leak #2: `SelfImprovingLoopRunner._invoke_autoresearch` now
+  checks the audit subprocess's `returncode` and rolls the canonical
+  SoT back to `proposal.original_sections` when the subprocess
+  crashes (Exception) or exits non-zero. Without this, a crashed
+  audit left the SoT mutated and the baseline unchanged, giving the
+  next cycle no signal to attribute the regression to. `_rollback_sot`'s
+  `exc` parameter type is widened from `OSError` to `BaseException`
+  so the synthesized `RuntimeError` for non-zero exit codes type-checks.
+  `apply_proposal` (the singleton group_size=1 path) now forwards
+  `proposal.original_sections` to the invoker. Pinned by 7 invariant
+  tests covering returncode=0 (no rollback), non-zero rollback,
+  Exception rollback, None-guard backward-compat, and the widened exc type.
 
 ## [0.99.71] - 2026-05-26
 
@@ -18822,4 +19175,3 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
-

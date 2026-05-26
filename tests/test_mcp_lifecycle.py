@@ -35,10 +35,9 @@ class TestMCPHookEvents:
         assert not hasattr(HookEvent, "MCP_SERVER_STARTED")
         assert not hasattr(HookEvent, "MCP_SERVER_STOPPED")
 
-    def test_hook_event_count(self) -> None:
-        """Total hook events — +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
-        + 3 PR-CL-BUDGET handoff."""
-        assert len(HookEvent) == 74
+    # Total HookEvent count assertion intentionally lives in
+    # tests/test_hooks.py::TestHookEvent::test_all_events_exist —
+    # PR-HOOKEVENT-RESERVE (2026-05-26) folded this site's duplicate.
 
 
 # ---------------------------------------------------------------------------

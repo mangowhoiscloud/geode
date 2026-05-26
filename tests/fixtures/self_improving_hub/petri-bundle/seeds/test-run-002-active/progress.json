@@ -1,0 +1,15 @@
+{
+  "run_id": "test-run-002-active",
+  "gen_tag": "gen2",
+  "target_dim": "context_hoarding",
+  "current_phase": "ranker",
+  "current_step": "vote 3 of 12",
+  "current_agent_task_id": "vote-m3-v02-anthropic.claude-cli",
+  "iteration": 0,
+  "max_iterations": 0,
+  "phases_completed": ["supervisor", "literature_review", "generator", "proximity", "critic", "pilot"],
+  "started_at": 1779787900.0,
+  "last_updated_at": 1779788213.0,
+  "eta_seconds": 184.5,
+  "usd_spent": 5.81
+}

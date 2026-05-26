@@ -7,7 +7,7 @@
 
 ## 1. Background
 
-PR-5 #1641 merge 후 self-improving loop 가 N=2 group sampling + variance filter + GRPO whitening 으로 single-trajectory variance 해소. 단 **multi-dim 신호의 scalarization 손실** 잔존:
+PR-5 #1641 merge 후 self-improving loop 가 N=2 group sampling + DAPO-inspired variance gate + GRPO-inspired z-score whitening (selection-only) 으로 single-trajectory variance 해소. 단 **multi-dim 신호의 scalarization 손실** 잔존:
 
 - 현재 fitness = weighted sum of 17 dims (`autoresearch/train.py:DIM_WEIGHTS`), 즉 *linear scalarization*
 - 알려진 한계: concave Pareto front 의 일부 구간 영원히 도달 불가 (Das & Dennis 1997)

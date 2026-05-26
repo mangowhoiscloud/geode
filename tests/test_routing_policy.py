@@ -54,7 +54,7 @@ def test_plan_kind_priority_subscription_first() -> None:
 
 def test_openai_equivalence_class_pairs_with_codex() -> None:
     """openai and openai-codex must share an equivalence class so a
-    Codex Plus OAuth plan is considered when the user requests gpt-5.x."""
+    Codex OAuth plan is considered when the user requests gpt-5.x."""
     eq = equivalent_providers("openai")
     assert "openai-codex" in eq
     assert "openai" in eq
@@ -76,7 +76,7 @@ def test_unrelated_provider_is_singleton() -> None:
 
 
 def _seed_two_plans(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Plan, Plan]:
-    """Helper: register both an OAuth Codex Plus plan and a PAYG OpenAI
+    """Helper: register both an OAuth Codex plan and a PAYG OpenAI
     plan, each with an available profile. Returns (subscription_plan,
     payg_plan)."""
     monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
@@ -133,7 +133,7 @@ def _seed_two_plans(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Pl
 def test_resolve_routing_prefers_oauth_over_payg(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Both plans registered, no explicit /login route — Codex Plus must win.
+    """Both plans registered, no explicit /login route — Codex must win.
     This is the v0.52.1-incident-defining contract: a user who paid for
     Plus must not be billed PAYG for the same model."""
     sub_plan, _ = _seed_two_plans(monkeypatch, tmp_path)
@@ -269,7 +269,7 @@ def test_route_provider_returns_routed_provider_when_plan_found(
         id="openai-codex-geode",
         provider="openai-codex",
         kind=PlanKind.OAUTH_BORROWED,
-        display_name="OpenAI Codex Plus",
+        display_name="OpenAI Codex",
         base_url="https://chatgpt.com/backend-api/codex",
     )
     fake_target = type(

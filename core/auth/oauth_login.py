@@ -89,6 +89,111 @@ def _plan_type_from_token(token: str) -> str:
     return ""
 
 
+# PR-FIX-CHATGPT-PLAN-HALLUCINATION (2026-05-26) — display-label map for
+# the documented ``chatgpt_plan_type`` JWT claim values. Pre-fix the
+# GEODE codebase had "ChatGPT Plus" hard-coded in ~28 places regardless
+# of the operator's actual tier (verified incident: operator on
+# ``plan_type='prolite'`` saw "ChatGPT Plus" surfaced in CLI / hub
+# chip / docs / audit reports). The mapping below resolves the slug
+# the JWT issuer publishes into the human-readable plan name that
+# OpenAI uses in its own product UI. Unknown slugs round-trip as
+# ``"ChatGPT {Slug}"`` so a newly-launched tier still displays
+# something — instead of perpetuating the "Plus" hallucination.
+_CHATGPT_PLAN_LABELS: dict[str, str] = {
+    "free": "ChatGPT Free",
+    "plus": "ChatGPT Plus",
+    "pro": "ChatGPT Pro",
+    "prolite": "ChatGPT Pro Lite",
+    "team": "ChatGPT Team",
+    "business": "ChatGPT Business",
+    "enterprise": "ChatGPT Enterprise",
+    "edu": "ChatGPT Edu",
+}
+
+
+def chatgpt_plan_label(plan_type: str | None) -> str:
+    """Resolve a ``chatgpt_plan_type`` JWT claim slug to its display label.
+
+    Examples
+    --------
+    >>> chatgpt_plan_label("plus")
+    'ChatGPT Plus'
+    >>> chatgpt_plan_label("prolite")
+    'ChatGPT Pro Lite'
+    >>> chatgpt_plan_label("")
+    'ChatGPT subscription'
+    >>> chatgpt_plan_label("future-tier-2030")
+    'ChatGPT Future-Tier-2030'
+
+    Empty / None slugs surface a generic "ChatGPT subscription" label
+    (e.g. when no OAuth profile is signed-in yet, or build-time site
+    rendering without operator JWT). Unknown slugs title-case the slug
+    so a newly-launched tier still gets a reasonable display string
+    rather than dropping to "Plus".
+    """
+    normalised = (plan_type or "").strip().lower()
+    if not normalised:
+        return "ChatGPT subscription"
+    canonical = _CHATGPT_PLAN_LABELS.get(normalised)
+    if canonical:
+        return canonical
+    # Fallback: title-case the slug. Keep punctuation as-is so future
+    # tiers with hyphens / numbers (e.g. "plus-2030") survive.
+    return f"ChatGPT {normalised.title()}"
+
+
+def resolve_local_chatgpt_plan_label() -> str:
+    """Resolve the operator's *current* ChatGPT plan label from local JWTs.
+
+    Walks the two well-known token sources GEODE reads at runtime:
+
+    1. ``~/.codex/auth.json`` (external Codex CLI token — preferred,
+       this is what production smoke runs typically use).
+    2. GEODE profile store via :func:`reconcile_plan_tier_from_stored_jwt`
+       (in-process Plan registry).
+
+    Returns the human label from :func:`chatgpt_plan_label`. Falls back
+    to the generic "ChatGPT subscription" string when nothing is
+    readable — never raises, never blocks startup / build / CLI render.
+
+    Used by hub builders, login UX, and any other display layer that
+    needs the operator's actual plan name instead of the pre-fix
+    "Plus" hard-code.
+    """
+    # Source 1: external Codex CLI auth file (most common).
+    codex_auth = Path.home() / ".codex" / "auth.json"
+    try:
+        raw = codex_auth.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        token = (
+            payload.get("tokens", {}).get("id_token", "")
+            or payload.get("tokens", {}).get("access_token", "")
+            or ""
+        )
+        slug = _plan_type_from_token(token) if token else ""
+        if slug:
+            return chatgpt_plan_label(slug)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        pass
+
+    # Source 2: GEODE-issued OAuth profile. Container not built
+    # (standalone CLI / pytest) → silently fall through to the generic
+    # label so callers never see an empty string.
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from core.wiring.container import ensure_profile_store
+
+        store = ensure_profile_store()
+        profile = store.get(f"{_GEODE_OPENAI_PLAN_ID}:user")
+        token = (profile.key if profile else "") or ""
+        slug = _plan_type_from_token(token) if token else ""
+        if slug:
+            return chatgpt_plan_label(slug)
+
+    return chatgpt_plan_label("")
+
+
 def reconcile_plan_tier_from_stored_jwt() -> tuple[str, str] | None:
     """Re-decode the stored OpenAI OAuth JWT and sync ``subscription_tier``.
 
@@ -431,7 +536,7 @@ def login_openai() -> dict[str, Any]:
         provider=_PROVIDER_LABEL,
         account_id=account_id,
         email=email,
-        plan_type=plan_type or "unknown",
+        plan_type=chatgpt_plan_label(plan_type),
         # v0.52.2 — resolve the live SOT path each call (auth.toml since
         # v0.50.2). Pre-fix this displayed the legacy auth.json constant
         # while the actual write landed in auth.toml.

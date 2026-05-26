@@ -11,7 +11,7 @@ spinner. R6 implements this in GEODE at per-reasoning-item granularity
 Three invariants:
 
   1. ``normalize_openai_responses`` extracts ``reasoning.summary[].text``
-     into ``AgenticResponse.reasoning_summaries`` (Codex Plus path).
+     into ``AgenticResponse.reasoning_summaries`` (Codex path).
      Captures both the full reasoning-with-encrypted-content case and
      the summary-only fallback.
 
@@ -49,7 +49,7 @@ def _make_reasoning_item(*, encrypted: str | None, summary_texts: list[str]) -> 
 
 
 class TestCodexReasoningSummaryExtraction:
-    """Sidecar populated from Codex Plus ``reasoning.summary[].text``."""
+    """Sidecar populated from Codex ``reasoning.summary[].text``."""
 
     def test_extracts_summary_with_encrypted_blob(self) -> None:
         resp = MagicMock()

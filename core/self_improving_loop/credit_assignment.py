@@ -17,7 +17,8 @@ group_advantage 가 어느 dim 에 attributable 한가?" 는 추적 불가.
 유지. 후속 caller (CLI 또는 operator dashboard) 가 결과를 visualise.
 
 Frontier reference: Quality-Diversity (Mouret & Clune 2015) 의
-behavior-characterization mapping + DAPO/GRPO 의 advantage decomposition.
+behavior-characterization mapping + GRPO-inspired group-relative
+advantage decomposition (formula only; no policy update).
 """
 
 from __future__ import annotations

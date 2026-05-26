@@ -488,7 +488,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     "part of a sibling group (``group_size > 1``), each sibling MUST target a "
     "meaningfully different section or strategy. Repeating the same "
     "``target_section`` + ``new_value`` across siblings collapses group "
-    "variance to zero, trips the DAPO Dynamic Sampling variance filter, and "
+    "variance to zero, trips the DAPO-inspired variance gate, and "
     "the entire cycle's audit cost is discarded (see plan "
     "``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §6).\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
@@ -1067,18 +1067,36 @@ def _compute_group_advantage(
     *,
     mutator_temperature: float,
 ) -> tuple[list[float] | None, str]:
-    """P1-revised (2026-05-25) — DAPO Dynamic Sampling + GRPO advantage normalization.
+    """P1-revised (2026-05-25) — DAPO-inspired variance gate + GRPO-inspired group-relative scoring.
+
+    **Not policy optimization; no parameter update; no gradient.** This is
+    an *inference-time* candidate-selection heuristic — N sibling
+    mutations are audited in parallel, low-signal groups (std < ε) are
+    skipped, and the remaining group's z-score is used to pick top-1
+    for canonical SoT commit.
 
     Plan: ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.1.
 
-    Frontier source: DAPO (ByteDance/Tsinghua arXiv 2503.14476) 의 Dynamic
-    Sampling — group reward variance ≈ 0 batch 폐기. EXAONE 4.5 (LG, arXiv
-    2604.08644) 의 zero-variance filter production 검증. GRPO (DeepSeek R1
-    arXiv 2402.03300) 의 advantage whitening.
+    Frontier inspiration (concept reference only — abstract-level
+    descriptions verified via WebFetch 2026-05-26; specific formulas
+    are NOT formally cited here because the PDF full-text was not
+    full-text-audited for this sprint; do not re-claim any specific
+    DAPO/GRPO result as "exact" without re-verifying against the PDF):
 
-    Returns (advantages, status):
-    - status="ok" + advantages = z-score whitening if group std > threshold
-    - status="filtered_low_variance" + advantages=None if std < threshold
+    - DAPO (ByteDance/Tsinghua, arXiv 2503.14476). Abstract introduces
+      "Decoupled Clip and Dynamic Sampling Policy Optimization". The
+      idea of skipping low-signal sampling groups is what GEODE
+      borrows for *selection-time* filtering — distinct from DAPO's
+      *training-time* use.
+    - GRPO (DeepSeekMath, arXiv 2402.03300). Abstract describes GRPO
+      as a PPO variant using group-relative scoring. GEODE uses
+      group-relative z-score ranking as a *selection* score for
+      top-1 sibling mutation commit — distinct from GRPO's use as a
+      policy-update advantage.
+
+    Returns (scores, status):
+    - status="ok" + scores = z-score ranking if group std > threshold
+    - status="filtered_low_variance" + scores=None if std < threshold
       → caller cycle skip (audit cost wasted 회피)
     - status="group_too_small" if N < 2 (legacy group_size=1 mode 는 caller
       가 본 helper 호출 안 함, 본 분기는 invariant test 용)
@@ -1419,9 +1437,10 @@ class SelfImprovingLoopRunner:
     def propose_group(self, n: int) -> list[Proposal]:
         """P1-revised (2026-05-25) — propose N sibling Mutations in parallel.
 
-        Frontier source: GRPO (DeepSeek R1) 의 group sampling + Promptbreeder
-        의 multi-prompt 동시 평가. plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``
-        §4.3 MVP scope.
+        Frontier inspiration: GRPO-inspired group sampling (DeepSeekMath
+        arXiv 2402.03300 — borrows the N-sibling-parallel idea, not the
+        policy-update gradient) + Promptbreeder 의 multi-prompt 동시 평가.
+        plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.3 MVP scope.
 
         Each sibling shares the same baseline state (same system + user
         prompt). Stochasticity comes from ``Settings.temperature_self_improving_mutation``
@@ -1471,12 +1490,13 @@ class SelfImprovingLoopRunner:
         sub_agent_index: int | None = None,
     ) -> Mutation | None:
         """P1-revised (2026-05-25) — apply N sibling proposals → audit →
-        variance filter → advantage normalization → top-1 commit.
+        variance gate → group-relative scoring → top-1 commit.
 
-        Frontier source: DAPO Dynamic Sampling (variance filter) + GRPO
-        whitening (advantage normalization) + EXAONE 4.5 zero-variance
-        filter (production threshold). plan §4.3 + §5 (W3 env propagation
-        infra 재활용).
+        Frontier inspiration: DAPO-inspired variance gate (arXiv 2503.14476;
+        skip low-signal groups) + GRPO-inspired whitening (DeepSeekMath
+        arXiv 2402.03300; z-score ranking, used here as a *selection*
+        score, not a policy-update advantage). plan §4.3 + §5 (W3 env
+        propagation infra 재활용).
 
         Steps:
 
@@ -1881,10 +1901,16 @@ class SelfImprovingLoopRunner:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             repo_root = log_path.resolve().parents[1]
+            # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
+            # ``proposal.original_sections`` so _invoke_autoresearch can
+            # rollback the canonical SoT if the audit subprocess crashes
+            # or exits non-zero. Without this, a crashed audit leaves
+            # the SoT mutated and the baseline unchanged — silent leak.
             self._invoke_autoresearch(
                 repo_root,
                 audit_run_id=audit_run_id,
                 mutation=proposal.mutation,
+                original_sections=proposal.original_sections,
             )
         self._append_self_improving_loop_index(proposal.mutation, previous_value)
         return proposal.mutation
@@ -1900,8 +1926,9 @@ class SelfImprovingLoopRunner:
         - ``group_size=1`` (default, legacy): :meth:`propose` +
           :meth:`apply_proposal` 그대로 (single mutation, REINFORCE-style)
         - ``group_size>=2``: :meth:`propose_group` +
-          :meth:`apply_group_proposals` (DAPO Dynamic Sampling + GRPO
-          advantage normalization + variance filter top-1 commit)
+          :meth:`apply_group_proposals` (DAPO-inspired variance gate +
+          GRPO-inspired score whitening, mutation-selection only — not
+          policy gradient / not RL training)
 
         Variance filter trigger 시 ``None`` 반환 (cycle skip, no SoT
         commit). legacy mode 는 항상 ``Mutation`` 반환.
@@ -1931,17 +1958,29 @@ class SelfImprovingLoopRunner:
         original_sections: dict[str, str],
         *,
         mutation: Mutation,
-        exc: OSError,
+        exc: BaseException,
     ) -> None:
         """Restore the SoT to ``original_sections`` after a post-apply failure.
 
-        G5b.fix3 — invoked from ``run_once`` when
+        G5b.fix3 — original use: invoked from ``run_once`` when
         :func:`append_audit_log` raises ``OSError`` *after*
         :func:`apply_mutation` has already written the new sections to
         disk. The SoT must be rolled back to the pre-mutation state so
         the loop never persists a mutation that has no audit-log row;
         otherwise the git-as-optimiser ledger and the live state would
         diverge silently.
+
+        PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — extended use: also
+        invoked from :meth:`_invoke_autoresearch` when the post-commit
+        audit subprocess raises (caught as ``Exception``) or exits
+        non-zero (synthesized as ``RuntimeError`` carrying the exit
+        code). ``exc`` type is widened from ``OSError`` to
+        ``BaseException`` so the synthesized RuntimeError type-checks —
+        but the in-process catch boundary in
+        :meth:`_invoke_autoresearch` is ``Exception``, so
+        KeyboardInterrupt / SystemExit still propagate without
+        triggering rollback. The log message is structural; the exact
+        exception type lands in the formatted output.
 
         Rollback failure is itself logged but never raised in place of
         the original ``exc`` — the caller already has the more useful
@@ -1984,6 +2023,7 @@ class SelfImprovingLoopRunner:
         *,
         audit_run_id: str = "",
         mutation: Mutation | None = None,
+        original_sections: dict[str, str] | None = None,
     ) -> None:
         """Wrap the autoresearch subprocess so tests can override.
 
@@ -1991,17 +2031,46 @@ class SelfImprovingLoopRunner:
         mutation_id + expected_dim to the subprocess env so the
         attribution row written after the audit carries the same
         cross-ref keys as the apply row.
+
+        PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — when the subprocess
+        crashes (Exception) or exits non-zero (returncode != 0), the
+        canonical SoT mutation this audit was supposed to validate is
+        rolled back via :meth:`_rollback_sot`. Without rollback a
+        crashed audit leaves the SoT mutated and the baseline
+        unchanged — the next cycle has no signal to attribute the
+        regression to.
+
+        ``original_sections`` is the pre-mutation SoT
+        (``proposal.original_sections``). When ``None`` (callers that
+        didn't migrate, or mutation is None), rollback is skipped and
+        the legacy graceful-log behaviour is preserved.
         """
         try:
-            _run_autoresearch_subprocess(
+            result = _run_autoresearch_subprocess(
                 repo_root=repo_root,
                 dry_run=self.rerun_dry_run,
                 audit_run_id=audit_run_id,
                 mutation_id=mutation.mutation_id if mutation is not None else "",
                 expected_dim=mutation.expected_dim if mutation is not None else None,
             )
-        except Exception:  # pragma: no cover — defensive
+        except Exception as exc:
             log.warning("self-improving-loop autoresearch re-run failed", exc_info=True)
+            if original_sections is not None and mutation is not None:
+                self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+            return
+        if result.returncode != 0:
+            log.warning(
+                "self-improving-loop autoresearch re-run exited non-zero "
+                "(returncode=%d); stderr tail: %s",
+                result.returncode,
+                (result.stderr or "")[-500:],
+            )
+            if original_sections is not None and mutation is not None:
+                self._rollback_sot(
+                    original_sections,
+                    mutation=mutation,
+                    exc=RuntimeError(f"audit subprocess exit code {result.returncode}"),
+                )
 
     @staticmethod
     def _append_self_improving_loop_index(mutation: Mutation, previous_value: str) -> None:

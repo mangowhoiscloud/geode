@@ -7,6 +7,7 @@ PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S5) — pin the hydration
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from plugins.seed_generation.orchestrator import _PHASE_ORDER
 from plugins.seed_generation.resume import (
     ResumeError,
     hydrate_state,
+    load_ranker_partial_resume,
     next_phase_to_run,
     resolve_resume_target,
 )
@@ -222,3 +224,80 @@ def test_resolve_resume_target_returns_state_and_phase(tmp_path: Path) -> None:
     state, next_phase = resolve_resume_target(tmp_path)
     assert state.run_id == "gen1-broken_tool_use"
     assert next_phase == "literature_review"
+
+
+def test_load_ranker_partial_resume_filters_completed_prefix(tmp_path: Path) -> None:
+    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from plugins.seed_generation.tournament import (
+        MatchOutcome,
+        apply_match,
+        initial_ratings,
+        plan_matches,
+    )
+
+    candidate_ids = ["c-1", "c-2", "c-3", "c-4"]
+    match_plan = plan_matches(candidate_ids, rng=random.Random(3))
+    first = match_plan[0]
+    outcome = MatchOutcome(
+        match_id=first.match_id,
+        a=first.a,
+        b=first.b,
+        winner="A",
+        votes=("A", "A", "tie"),
+        voter_ids=("v1", "v2", "v3"),
+    )
+    ratings = initial_ratings(candidate_ids)
+    apply_match(ratings, outcome)
+    write_partial_ranker_checkpoint(
+        tmp_path,
+        completed_match_ids=[first.match_id],
+        partial_ratings=ratings,
+        partial_outcomes_serialised=[
+            {
+                "match_id": outcome.match_id,
+                "a": outcome.a,
+                "b": outcome.b,
+                "winner": outcome.winner,
+                "votes": list(outcome.votes),
+                "voter_ids": list(outcome.voter_ids),
+            }
+        ],
+        total_matches=len(match_plan),
+    )
+
+    resume = load_ranker_partial_resume(
+        tmp_path,
+        candidate_ids=candidate_ids,
+        match_plan=match_plan,
+    )
+    assert resume.completed_match_ids == (first.match_id,)
+    assert resume.ratings == ratings
+    assert [match.match_id for match in resume.pending_matches] == [
+        match.match_id for match in match_plan[1:]
+    ]
+    assert len(resume.outcomes) == 1
+    assert resume.outcomes[0].match_id == first.match_id
+
+
+def test_load_ranker_partial_resume_ignores_non_prefix_checkpoint(tmp_path: Path) -> None:
+    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from plugins.seed_generation.tournament import initial_ratings, plan_matches
+
+    candidate_ids = ["c-1", "c-2", "c-3", "c-4"]
+    match_plan = plan_matches(candidate_ids, rng=random.Random(3))
+    write_partial_ranker_checkpoint(
+        tmp_path,
+        completed_match_ids=[match_plan[1].match_id],
+        partial_ratings={"c-1": 1200.0},
+        partial_outcomes_serialised=[],
+        total_matches=len(match_plan),
+    )
+
+    resume = load_ranker_partial_resume(
+        tmp_path,
+        candidate_ids=candidate_ids,
+        match_plan=match_plan,
+    )
+    assert resume.completed_match_ids == ()
+    assert resume.ratings == initial_ratings(candidate_ids)
+    assert resume.pending_matches == match_plan
