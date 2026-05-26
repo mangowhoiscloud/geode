@@ -47,6 +47,151 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.74] - 2026-05-27
+
+> PATCH rotation bundling the 2026-05-27 operations sprint:
+> claude-cli credit-exhaustion retry (auto-bridges a 5h pool refresh
+> via the paperclip QUOTA_BACKOFF schedule), aggressive LaneQueue
+> raise to cap 50 across every workload + global lane, and
+> observability completion — every reserved MUTATION_*/BASELINE_PROMOTED
+> HookEvent (PR-HOOKEVENT-RESERVE 2026-05-26) now has live emit-site
+> coverage including the audit-fail / audit-log-write-fail revert
+> paths.
+
+### Added
+- **PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27)** — inject a compact
+  per-dim credit (``aggregate_credit_history``) + (kind × dim)
+  matrix (``compute_kind_dim_matrix``) summary into the mutator's
+  user prompt every cycle. Closes the F3 fragmentation signal —
+  pre-PR the mutator never saw which dims its previous mutations
+  credited nor which kinds had moved which dims. New
+  ``[self_improving_loop.autoresearch].mutator_feedback_window``
+  knob (default ``20``, matches the operator dashboard
+  ``_WIRE_DEFAULT_LAST`` convention from PR-WIRE-1). Empty repo →
+  empty block (graceful). Helper module
+  ``core/self_improving_loop/mutator_feedback.py``.
+- **PR-MUTATOR-DEDUP-GUARD (2026-05-27)** — reject mutator proposals
+  whose ``new_value`` has a ``difflib.SequenceMatcher.ratio()`` above
+  ``mutator_dedup_threshold`` against a recent apply row with the
+  SAME ``(target_kind, target_section)``. The kind+section equality
+  gate runs before the ratio comparison so a long identical payload
+  on a different kind / section is not falsely flagged (Codex MCP
+  review catch — without the gate the long ``new_value`` payload
+  would dominate a joined-signature ratio). New
+  ``RepetitiveMutationError(ValueError)`` so existing cycle-skip
+  catches handle the rejection without the runner crashing. New
+  knobs: ``mutator_dedup_window`` (default ``20``, mirrors the
+  feedback window) and ``mutator_dedup_threshold`` (default
+  ``0.85``, stdlib-grounded — sits well above
+  ``difflib.get_close_matches`` ``0.6`` "close match" band).
+- **PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27)** — graduate
+  ``tool_descriptions`` from ``_READER_ONLY_KINDS`` to
+  ``TARGET_KINDS``. The reader (``core/agent/tool_descriptions_policy.py``,
+  ADR-013 T1) has been live since 2026-05-21 and the audit
+  subprocess already wires
+  ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE``; the graduation opens the
+  surface the mutator can dispatch to, directly attacking Petri
+  17-dim's ``broken_tool_use`` pressure. Nested-schema kind
+  (``{tool_name: {description: str, hints: list[str]}}``) joins
+  the same flat ↔ nested machinery as ``skill_catalog`` /
+  ``agent_contract``; ``hints`` is the only list-typed field.
+  Codex MCP review fix-up: ``policy_path("tool_descriptions")``
+  resolves to the operator-local path
+  (``~/.geode/self-improving-loop/tool-descriptions.json``) when it
+  exists, so BOTH READ and WRITE land on whichever file the runtime
+  reader actually reads. Closes the dual-SoT drift concern — the
+  mutator now writes to the same layer the runtime reads, preserving
+  the autoresearch ``mutate → measure → baseline`` closed-loop visibility.
+  Pin: ``_READER_ONLY_KINDS`` size assertion drops from 7 to 6.
+- **PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27)** — extend
+  MUTATION_REVERTED emit coverage to the symmetric ``_rollback_sot``
+  paths (audit-log-write-fail / audit-subprocess-crash /
+  audit-subprocess-nonzero). PR-MUTATION-EMIT-WIRE only covered the
+  promote-gate reject path (``autoresearch/train.py:_revert_sot_after_reject``);
+  the four ``_rollback_sot`` caller sites in
+  ``core/self_improving_loop/runner.py`` were left without emit. Added
+  ``audit_run_id`` + ``reason`` keyword args to ``_rollback_sot`` and
+  threaded specific reason strings (``audit_log_write_fail`` x2 /
+  ``audit_subprocess_crash`` / ``audit_subprocess_nonzero``) from each
+  caller. Pinned with ``tests/core/self_improving_loop/test_mutation_emit_wire.py::test_rollback_sot_emits_mutation_reverted``
+  (3 reason variants + default fallback).
+
+### Fixed
+- **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route
+  ``ClaudeCliTransientUpstreamError`` into the retry path with the
+  paperclip QUOTA_BACKOFF schedule (2m / 10m / 30m / 2h) so a
+  claude-cli 5h pool refresh window can be bridged automatically.
+  Pre-PR the bare ``except Exception`` branch in
+  ``core/llm/router/calls/_failover.py:136`` skipped the exception to
+  the next model after a single attempt; the SDK ``RETRYABLE_ERRORS``
+  tuple cannot include the plugin-imported exception (layer
+  violation + plugin-as-optional-dep). Smoke 24 surfaced this as 5/5
+  evolver phases hard-failing within 30s after 3 attempts each, even
+  though manual ``audit-seeds resume`` succeeded ~20 min later once
+  the Anthropic Max OAuth pool replenished. Pinned with two new
+  ``tests/test_model_failover.py`` cases (retry-within-primary +
+  retries-exhausted-then-fall-back).
+
+### Added
+- **PR-MUTATION-EMIT-WIRE (2026-05-27)** — wire the writer-side emit
+  for ``HookEvent.MUTATION_APPLIED`` / ``MUTATION_REVERTED`` /
+  ``BASELINE_PROMOTED``. PR-HOOKEVENT-RESERVE (2026-05-26) added the
+  enum members + payload schema docstrings but left the emit sites
+  un-wired ("writers will emit these once the SoT-revert paths land").
+  This PR fills the gap:
+  - ``core/self_improving_loop/_hooks.py`` — new module mirroring
+    ``core/llm/router/_hooks.py``: ``set_self_improving_loop_hooks``
+    setter + ``_fire_hook`` helper with lazy-wire no-op contract.
+  - ``core/wiring/bootstrap.py`` — registers a plugin slot that calls
+    the new setter after ``HookSystem`` is constructed.
+  - ``core/self_improving_loop/runner.py:append_audit_log`` — emits
+    ``MUTATION_APPLIED`` after the row write succeeds (fires for every
+    ``kind`` so listeners distinguish ``"applied"`` / ``"applied_sibling"`` /
+    ``"pre_audit_sibling"`` via the ``kind`` extra field).
+  - ``autoresearch/train.py:_write_baseline`` — emits
+    ``BASELINE_PROMOTED`` after ``BASELINE_PATH.write_text`` succeeds,
+    with ``prior_baseline_path`` read pre-write + ``reason`` quoting
+    ``operator_force`` vs ``gate_approved``.
+  - ``autoresearch/train.py:_revert_sot_after_reject`` — emits
+    ``MUTATION_REVERTED`` with ``reason="promote_gate_reject"`` after
+    the SoT roll-back succeeds. ``run_id`` carries the audit_run_id
+    (not the mutation_id). Covers the promotion-gate reject path.
+    The audit-subprocess-crash revert path uses ``_rollback_sot``
+    in ``runner.py`` and is deferred to a follow-up PR.
+  Pinned with new ``tests/core/self_improving_loop/test_mutation_emit_wire.py``:
+  no-op-when-unwired + dispatch-when-wired + ``append_audit_log``
+  emit (``"applied"`` + ``"applied_sibling"``) + ``_write_baseline``
+  emit (BASELINE_PROMOTED) + ``_revert_sot_after_reject`` emit
+  (MUTATION_REVERTED, ``run_id`` = audit_run_id).
+
+### Changed
+- **PR-LANE-CAP-50 (2026-05-27)** — raise every lane / queue
+  concurrency default to 50. Operator decision after the smoke 24
+  evolver phase 5/5 credit-exhaustion pattern + PR-LANE-CAP-AGGRESSIVE
+  (claude=4 / openai=16 / anthropic=8) didn't bridge the
+  Anthropic Max OAuth 5h pool refresh.
+  - ``core/orchestration/lane_queue.py``: ``DEFAULT_MAX_CONCURRENT``
+    4 → 50.
+  - ``core/wiring/container.py``: ``DEFAULT_GLOBAL_CONCURRENCY`` 8 →
+    50, ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` 4 → 50. Gateway lane
+    intentionally unchanged at 4.
+  - Per-adapter lanes raised in lockstep: ``DEFAULT_CLAUDE_CLI_LANE_MAX``
+    4 → 50, ``DEFAULT_OPENAI_API_LANE_MAX`` 16 → 50,
+    ``DEFAULT_ANTHROPIC_API_LANE_MAX`` 8 → 50,
+    ``DEFAULT_CODEX_CLI_LANE_MAX`` 2 → 50.
+  - ``plugins/seed_generation/agents/ranker.py``:
+    ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`` 8 → 50 (matches the
+    per-adapter lane ceiling so cap 50 is equilibrium).
+  - The OpenClaw hierarchy invariant ``max(workload_lane) <=
+    max(global_lane)`` is preserved at the new 50/50 ceiling.
+- **PR-LANE-CAP-DOCS-CLEANUP (2026-05-27)** — refresh 5 stale
+  docstring / decision-doc references that still cited
+  ``max_concurrent=16`` (pilot.py, evolver.py, critic.py,
+  seed-generation-decision.md) or ``max_concurrent=2``
+  (oauth_usage.py) to reference the ``DEFAULT_*_CONCURRENCY``
+  constants with their post-PR-LANE-CAP-50 value (currently 50).
+  Docstring-only — no code semantics shift.
+
 ## [0.99.73] - 2026-05-27
 
 MINOR rotation. Ships the 2026-05-26 autoresearch attribution sprint
@@ -89,6 +234,38 @@ develop. See section entries below.
     ``tests/core/self_improving_loop/test_variance_adaptive_and_resample.py``.
 
 ### Changed
+
+- PR-LANE-CAP-50 (2026-05-27) — raise every lane / queue concurrency
+  default to 50 per operator decision (follow-up to
+  PR-LANE-CAP-AGGRESSIVE, which raised to 4/16/8/8). Operator
+  rationale: cap claude_cli/openai_api/anthropic_api lanes at the
+  same aggressive ceiling so the ranker's ``asyncio.gather`` burst
+  (150 voter tasks) hits per-account RPM ceilings as the
+  *theoretical* limit, not the *configured* limit. New defaults:
+  - ``DEFAULT_MAX_CONCURRENT`` (Lane base): 4 → **50**
+  - ``DEFAULT_GLOBAL_CONCURRENCY`` (LaneQueue global lane): 8 → **50**
+  - ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` (seed-generation workload
+    lane): 4 → **50** (matches the new global so the hierarchy
+    invariant ``max(workload) <= max(global)`` holds at 50)
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX``: 4 → **50** (intentionally well
+    above the documented 3-4 sub-agent burst floor; operators on
+    Pro/Max tiers without sufficient pool headroom should drop via
+    ``GEODE_CLAUDE_CLI_LANE_MAX``)
+  - ``DEFAULT_OPENAI_API_LANE_MAX``: 16 → **50** (~200-300 RPM at
+    10-15s/call, well under Codex 500 RPM ceiling)
+  - ``DEFAULT_ANTHROPIC_API_LANE_MAX``: 8 → **50** (saturates tier 1
+    50 RPM; tier 1 accounts should drop via env override)
+  - ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES``: 8 → **50** (matches new
+    lane ceilings — 50 matches × 3 voters = 150 voter tasks
+    inflight against 100 per-lane budget)
+  Tests + docstrings updated to assert and rationale-document the new
+  defaults. Gateway concurrency (``DEFAULT_GATEWAY_CONCURRENCY=4``)
+  intentionally unchanged — Slack/Discord/Telegram inbound traffic
+  has a different sizing rationale (per-channel burst, not LLM
+  call concurrency). Operator env overrides
+  (``GEODE_{CLAUDE_CLI,OPENAI_API,ANTHROPIC_API}_LANE_MAX``,
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES``) remain the recommended
+  per-deployment tuning knob.
 
 - PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raise the per-adapter lane
   concurrency caps + lane timeouts + add a phase-local semaphore on

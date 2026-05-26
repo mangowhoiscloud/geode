@@ -104,16 +104,18 @@ def test_reader_only_kinds_match_env_override_block() -> None:
 
 
 def test_reader_only_set_size_matches_audit_finding() -> None:
-    """Sanity counter — the 2026-05-26 Phase A audit found exactly 7
-    reader-only surfaces. If a future PR graduates one (moving it to
-    TARGET_KINDS) the size should drop; if a new surface lands the
-    size should grow. Either way the explicit count makes the change
-    impossible to miss in code review."""
+    """Sanity counter — the 2026-05-26 Phase A audit found 7
+    reader-only surfaces; PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27)
+    graduated ``tool_descriptions`` to ``TARGET_KINDS``, leaving 6.
+    If a future PR graduates another the size should drop; if a new
+    surface lands the size should grow. Either way the explicit count
+    makes the change impossible to miss in code review."""
     from core.self_improving_loop.policies import _READER_ONLY_KINDS
 
-    assert len(_READER_ONLY_KINDS) == 7, (
+    assert len(_READER_ONLY_KINDS) == 6, (
         f"_READER_ONLY_KINDS has {len(_READER_ONLY_KINDS)} entries; the "
-        "2026-05-26 attribution sprint Phase A audit counted 7. "
+        "2026-05-27 PR-TOOL-DESCRIPTIONS-MUTATE graduation leaves 6 "
+        "(was 7 per the 2026-05-26 attribution sprint Phase A audit). "
         "Update this assertion AND the policies.py doc comment if the "
         "surface count legitimately changed."
     )

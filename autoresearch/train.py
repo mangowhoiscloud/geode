@@ -875,9 +875,29 @@ def run_audit(
     if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
         env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
         env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
-    if GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
-        env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
-        env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    # — three resolution rules together close the dual-SoT drift:
+    # (1) honour any env override the caller already set (preserves
+    #     ``_run_autoresearch_subprocess``'s sibling-SoT temp path
+    #     for group sampling — pre-fix this audit block clobbered it),
+    # (2) when the operator-local file exists, use it (matches the
+    #     runtime reader's 3-layer resolution at
+    #     ``core/agent/tool_descriptions_policy.py``),
+    # (3) fall back to in-repo when neither is set.
+    # Matches ``core.self_improving_loop.policies:policy_path`` so
+    # mutator R/W + audit R + sibling audit all converge on the same
+    # file. Codex MCP review of PR-TOOL-DESCRIPTIONS-MUTATE caught
+    # rule (1) — without preserving the caller's env, group sampling's
+    # temp SoT would be silently replaced.
+    from core.paths import OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+
+    if "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" not in env:
+        if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+        elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
     if GLOBAL_SKILL_CATALOG_PATH.is_file():
         env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
         env["GEODE_SKILL_CATALOG_STRICT"] = "1"
@@ -1967,9 +1987,32 @@ def _write_baseline(
         baseline_payload["manual_promote"] = True
         baseline_payload["promoted_by"] = "operator"
         baseline_payload["promoted_at"] = baseline_payload["ts_utc"]
+    # PR-MUTATION-EMIT-WIRE (2026-05-27) — read prior_baseline_path
+    # *before* the write so the BASELINE_PROMOTED payload can carry
+    # both old + new paths. The reserve docstring
+    # (core/hooks/system.py:289-291) requires:
+    #   {"baseline_path": str, "prior_baseline_path": str,
+    #    "ts": float, "run_id": str, "reason": str}
+    prior_baseline_path_str = str(BASELINE_PATH) if BASELINE_PATH.exists() else ""
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+    )
+    # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
+    # quotes the gate verdict text from ``_should_promote`` (or the
+    # ``operator`` literal when ``--promote`` bypassed the gate).
+    from core.hooks.system import HookEvent
+    from core.self_improving_loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.BASELINE_PROMOTED,
+        {
+            "baseline_path": str(BASELINE_PATH),
+            "prior_baseline_path": prior_baseline_path_str,
+            "ts": time.time(),
+            "run_id": session_id,
+            "reason": "operator_force" if manual_promote else "gate_approved",
+        },
     )
 
 
@@ -2327,6 +2370,32 @@ def _revert_sot_after_reject(
         mutation_id,
         target_kind,
         target_section,
+    )
+    # PR-MUTATION-EMIT-WIRE (2026-05-27) — emit MUTATION_REVERTED after
+    # the SoT roll-back succeeds. Payload schema per the reserve
+    # docstring (core/hooks/system.py:285-288):
+    #   {"mutation_id": str, "target_kind": str, "target_path": str,
+    #    "ts": float, "run_id": str, "reason": str}
+    # ``run_id`` carries the AUDIT_RUN_ID (the per-audit correlation
+    # key written into mutations.jsonl by runner.append_audit_log),
+    # NOT the mutation_id — the mutation_id rides in its own field.
+    # The audit-subprocess-crash + audit-log-write-fail revert paths
+    # are wired through ``_rollback_sot`` (runner.py) by
+    # PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27); this function
+    # owns only the promote-gate reject path.
+    from core.hooks.system import HookEvent
+    from core.self_improving_loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.MUTATION_REVERTED,
+        {
+            "mutation_id": mutation_id,
+            "target_kind": target_kind,
+            "target_path": f"{target_kind}.{target_section}",
+            "ts": time.time(),
+            "run_id": os.environ.get("GEODE_SIL_AUDIT_RUN_ID", ""),
+            "reason": "promote_gate_reject",
+        },
     )
     return True, f"{target_kind}.{target_section}"
 

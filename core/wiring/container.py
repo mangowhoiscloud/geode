@@ -32,7 +32,7 @@ def __getattr__(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # Default configuration
 # ---------------------------------------------------------------------------
-DEFAULT_GLOBAL_CONCURRENCY = 8
+DEFAULT_GLOBAL_CONCURRENCY = 50
 DEFAULT_GATEWAY_CONCURRENCY = 4
 # PR-LQ-Phase1 (2026-05-22) — seed-generation lane bumped DOWN from 16 to 4
 # to restore the OpenClaw lane hierarchy invariant
@@ -44,7 +44,7 @@ DEFAULT_GATEWAY_CONCURRENCY = 4
 # ``tests/test_lane_queue.py`` guards future drift. Re-raising the cap is
 # fine once the global lane grows OR a Claude-CLI-specific sub-agent lane
 # isolates that path (see [[project_lanequeue_handoff_2026_05_22]] Phase 2).
-DEFAULT_SEED_PIPELINE_CONCURRENCY = 4
+DEFAULT_SEED_PIPELINE_CONCURRENCY = 50
 
 # Module-level accessors set by build_auth().
 # Both runtime LLM dispatch and the CLI (`/login`) read from the
@@ -168,11 +168,11 @@ def build_default_lanes() -> LaneQueue:
         SessionLane (per-key serial, max=256)
             ↓
         Workload Lanes (per-workload cap, MUST be <= global)
-        ├── "gateway"          (max=4)  — Slack/Discord/Telegram messages
-        ├── "seed-generation"  (max=4)  — co-scientist 8-role sub-agent pipeline
+        ├── "gateway"          (max=GATEWAY, currently 4)  — Slack/Discord/Telegram
+        ├── "seed-generation"  (max=SEED_PIPELINE, currently 50)  — co-scientist 8-role
         └── (CLI/general sub-agent paths use global only)
             ↓
-        "global" (max=8) — total system capacity
+        "global" (max=GLOBAL, currently 50) — total system capacity
 
     Gateway messages acquire ["session", "gateway", "global"].
     Seed-generation phases acquire ["session", "seed-generation", "global"]

@@ -19,12 +19,15 @@ from plugins.seed_generation.agents.ranker import (
 )
 
 
-def test_default_is_eight() -> None:
-    """The default cap is 8, matching the per-adapter lane ceiling
-    (claude_cli=4 voter * 1 + openai_api=16 voter * 2 = 24 inflight =
-    8 matches * 3 voters)."""
-    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 8
-    assert resolve_ranker_max_inflight_matches() == 8
+def test_default_is_fifty() -> None:
+    """The default cap is 50 — PR-LANE-CAP-50 (2026-05-27) raised
+    from 8 to 50 per operator decision to match the per-adapter
+    lane ceilings (all three lanes raised to 50). 50 matches × 3
+    voters = 150 voter tasks inflight; lane caps absorb (50
+    claude-cli + 50 openai-api = 100 budget, with the 50 surplus
+    queueing inside each lane's semaphore)."""
+    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 50
+    assert resolve_ranker_max_inflight_matches() == 50
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:

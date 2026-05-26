@@ -51,8 +51,12 @@ def test_target_kinds_includes_agent_contract() -> None:
     assert "agent_contract" in pol.TARGET_KINDS
 
 
-def test_target_kinds_count_is_6_post_m2() -> None:
-    assert len(pol.TARGET_KINDS) == 6
+def test_target_kinds_count_is_7_post_tool_descriptions() -> None:
+    """PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — graduated
+    ``tool_descriptions`` so the active mutation surface count is now 7
+    (was 6 post-M2). Order matters because the type-hint enum derives
+    from the tuple."""
+    assert len(pol.TARGET_KINDS) == 7
     assert pol.TARGET_KINDS == (
         "prompt",
         "tool_policy",
@@ -60,6 +64,7 @@ def test_target_kinds_count_is_6_post_m2() -> None:
         "reflection",
         "skill_catalog",
         "agent_contract",
+        "tool_descriptions",
     )
 
 

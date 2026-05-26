@@ -15,7 +15,7 @@ Distinct from ``claude_cli_lane`` because:
   ``anthropic.AsyncClient.messages.create``); the burst pattern + 429
   surface differ.
 
-Why ``max_concurrent=4``
+Why ``max_concurrent=50``
 ========================
 
 Mid-range default selected from three reference points:
@@ -80,7 +80,7 @@ ANTHROPIC_API_LANE_NAME = "anthropic-api"
 ANTHROPIC_API_LANE_MAX_ENV = "GEODE_ANTHROPIC_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_ANTHROPIC_API_LANE_MAX`."""
 
-DEFAULT_ANTHROPIC_API_LANE_MAX = 8
+DEFAULT_ANTHROPIC_API_LANE_MAX = 50
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 8.
 
 Anthropic tier 1 documents 50 RPM aggregate per account. Voter calls

@@ -327,6 +327,62 @@ class AutoresearchConfig(BaseModel):
     the budget but keep the feature disabled until A/B data validates
     it. Default False preserves backward-compat."""
 
+    mutator_feedback_window: Annotated[int, Field(ge=0, le=200)] = 20
+    """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — number of most-recent
+    ``ApplyRecord`` + ``AttributionRecord`` rows fed back into the
+    mutator's user prompt as a compact per-dim credit + kind×dim
+    matrix summary.
+
+    Default ``20`` matches the operator dashboard convention
+    (``core/cli/commands/self_improving.py:_WIRE_DEFAULT_LAST``, PR-WIRE-1).
+    Same window across both surfaces means the mutator sees the same
+    slice the operator inspects in ``geode self-improve wire`` — single
+    source of truth for "what counts as recent history". The PR-WIRE-1
+    pick was itself anchored at "≈25-day window at min_interval=20h",
+    which keeps the recency signal load-bearing without saturating
+    the prompt budget.
+
+    ``0`` disables the feedback block entirely (legacy behaviour
+    before PR-MUTATOR-HISTORY-FEEDBACK). Cap of 200 prevents an
+    operator from blowing the mutator prompt budget — the formatted
+    block is roughly 20-40 tokens per record, so 200 rows ≈ 6-8 KB
+    of prompt overhead.
+    """
+
+    mutator_dedup_window: Annotated[int, Field(ge=0, le=200)] = 20
+    """PR-MUTATOR-DEDUP-GUARD (2026-05-27) — number of most-recent
+    apply rows checked for repetitive mutation similarity. The runner
+    rejects a proposal whose ``(target_kind, target_section, new_value)``
+    triple has a ``difflib.SequenceMatcher.ratio()`` above
+    ``mutator_dedup_threshold`` against any row in this window.
+
+    Default ``20`` mirrors :attr:`mutator_feedback_window` — operators
+    only need to reason about one "recent history" length across the
+    two related guards. ``0`` disables the dedup check (legacy
+    behaviour). Cap 200 mirrors the feedback window cap for symmetry.
+    """
+
+    mutator_dedup_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.85
+    """PR-MUTATOR-DEDUP-GUARD (2026-05-27) — similarity threshold above
+    which a proposed mutation is treated as a repeat of a recent apply
+    row and rejected. Uses ``difflib.SequenceMatcher.ratio()`` from
+    Python stdlib, which the official docs (cpython
+    ``Lib/difflib.py:get_close_matches`` default ``cutoff=0.6``) describe
+    as "a measure of the sequences' similarity as a float in the range
+    [0, 1]".
+
+    Default ``0.85`` is **conservative dedup**: stdlib's own
+    ``get_close_matches`` defaults to ``0.6`` for "close matches" in
+    typo-correction contexts; ``0.85`` sits well above that band so
+    only near-identical mutations trigger the guard. The threshold
+    catches cosmetic whitespace / phrasing edits (ratio typically
+    ≥0.9) while letting the mutator iterate on a section it has
+    touched before with materially new content (ratio typically
+    ≤0.7 after a meaningful rewrite). Operators tuning the guard
+    can drop to ``0.75`` for stricter dedup or raise to ``0.95`` to
+    only block exact-duplicate proposals.
+    """
+
     pareto_mode: bool = False
     """P2-revised (2026-05-25) — Pareto archive + Dynamic Reward Weighting
     enable knob. plan ``docs/plans/2026-05-25-p2-pareto-archive-dynamic-reward-weighting.md``.

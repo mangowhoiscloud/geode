@@ -15,7 +15,7 @@ Distinct from ``codex_cli_lane`` because:
 - ``openai_api_lane`` gates **direct API call** (no subprocess, just
   ``openai.AsyncOpenAI.responses.create``); 429 surface differs.
 
-Why ``max_concurrent=4``
+Why ``max_concurrent=50``
 ========================
 
 Mid-range default selected from three reference points:
@@ -75,7 +75,7 @@ OPENAI_API_LANE_NAME = "openai-api"
 OPENAI_API_LANE_MAX_ENV = "GEODE_OPENAI_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_OPENAI_API_LANE_MAX`."""
 
-DEFAULT_OPENAI_API_LANE_MAX = 16
+DEFAULT_OPENAI_API_LANE_MAX = 50
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 16.
 
 OpenAI Codex Responses API documents a 500 RPM aggregate per ChatGPT

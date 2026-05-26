@@ -96,7 +96,8 @@ class Critic(BaseSeedAgent):
     (~200 token completion per critique). Fan-out lets the 15-candidate
     Generation batch be reviewed in roughly the same wall-time as one
     sequential critique, gated only by the ``seed-generation`` Lane
-    (max_concurrent=16, see ``core/wiring/container.py``).
+    (``DEFAULT_SEED_PIPELINE_CONCURRENCY``, currently 50 — see
+    ``core/wiring/container.py``).
     """
 
     def __init__(

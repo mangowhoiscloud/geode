@@ -113,7 +113,8 @@ class Evolver(BaseSeedAgent):
     information needed — the Critic feedback is per-candidate, the
     Pilot dim_means are per-candidate). Fan-out keeps the K=5
     evolution batch within one rollout's wall-time, gated by the
-    ``seed-generation`` Lane (max_concurrent=16).
+    ``seed-generation`` Lane (``DEFAULT_SEED_PIPELINE_CONCURRENCY``,
+    currently 50).
     """
 
     def __init__(
