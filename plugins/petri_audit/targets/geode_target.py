@@ -297,16 +297,10 @@ async def _default_geode_runner(
 
     bootstrap_builtins()
 
-    # PR-AUDIT-TARGET-SOURCE-WIRE (2026-05-27) — resolve the (provider,
-    # source) pair through ``get_binding("target", ...)`` so the audit
-    # subprocess's adapter selection honours the operator's
-    # ``[self_improving_loop.petri.target] source`` / ``[petri.target]
-    # source`` settings instead of falling through to AgenticLoop's
-    # default ``source="payg"`` and then failing with
-    # ``OPENAI_API_KEY not set`` on subscription-only environments
-    # (Pattern B). ``get_binding`` returns the same source the manual
-    # ``geode audit`` CLI resolves, so the audit subprocess + manual
-    # audit + autoresearch closed-loop now share one source SoT.
+    # Resolve (provider, source) via ``get_binding`` — the same path
+    # the manual ``geode audit`` CLI uses — so the audit subprocess,
+    # the CLI, and the closed-loop all share one source SoT
+    # (``[petri.target]`` / ``[self_improving_loop.petri.target]``).
     resolved_provider = infer_provider_from_model(model) if model else "anthropic"
     resolved_source = ""
     if model:
@@ -316,6 +310,21 @@ async def _default_geode_runner(
             binding = get_binding("target", model=model)
             resolved_provider = binding.provider
             resolved_source = binding.source
+            # Translate Petri-surface source names to the GEODE
+            # adapter-registry namespace so AgenticLoop's
+            # ``get_adapter(name)`` / ``resolve_for(provider, category)``
+            # lookups hit. Only two pairs diverge:
+            #   ``openai-codex`` (Petri name) → ``codex-oauth`` (registry name)
+            #   ``api_key`` (Petri PAYG, provider-generic) → ``payg``
+            #     (registry category; the fallback ``resolve_for(provider,
+            #     "payg")`` selects the provider-specific ``*-payg`` adapter)
+            # The other concrete sources (``claude-cli`` / ``codex-cli`` /
+            # ``anthropic-oauth``) are identical across both namespaces.
+            _PETRI_TO_REGISTRY = {
+                "openai-codex": "codex-oauth",
+                "api_key": "payg",
+            }
+            resolved_source = _PETRI_TO_REGISTRY.get(resolved_source, resolved_source)
         except Exception:
             # get_binding can raise if the model is not in the role
             # manifest's allowed_models list (manual override / custom
