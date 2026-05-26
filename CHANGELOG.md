@@ -47,6 +47,42 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up) — per-voter
+  ``reasoning.effort`` override propagation. ``VoterSpec.effort`` (new
+  optional string field on the judge-panel voter entry) lets
+  operators flip the whole judge panel via
+  ``[[seed_generation.judge_panel.voters]]`` arrays in
+  ``~/.geode/config.toml`` without a code redeploy. Empty (the
+  manifest default) preserves the Sprint G ``"none"`` floor that
+  ranker / mutation_eval already pin; non-empty value flows
+  through the picker (``VoterBinding.effort``) into the
+  ``SubTask.effort`` constructor at both voter dispatch sites
+  (``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` and
+  ``plugins/seed_generation/mutation_eval.py``). The new
+  ``_load_config_toml_voter_overrides`` reads
+  ``[[seed_generation.judge_panel.voters]]`` from
+  ``~/.geode/config.toml`` (per-voter full-panel replacement,
+  same semantics as the role-override file) so the advertised
+  config.toml hatch actually wires to the picker — Codex MCP HIGH
+  catch fold (the original PR didn't add the loader, so the
+  operator surface didn't work end-to-end). ``VoterSpec`` also
+  validates ``effort`` against the OpenAI Responses API
+  documented enum (``none, minimal, low, medium, high, xhigh`` +
+  empty) at manifest load so an operator typo fails fast instead
+  of silently flowing to the server — Codex MCP MEDIUM catch
+  fold. Closes the original Codex MCP HIGH catch from PR #1734
+  (Sprint G) — the prior hard-pin had no operator override surface
+  if effort tuning ever needed to change post-deploy. 12 unit
+  tests pin: spec defaults + accepts override, all-documented-enum
+  acceptance + bad-value rejection, binding carries effort, picker
+  propagation, ranker SubTask uses voter.effort, mutation_eval
+  same, ``source="auto"`` rejection still in place, config.toml
+  full-panel replacement, missing voters → fallback to manifest,
+  missing file → fallback, invalid entry skipped with WARN.
+
 ### Fixed
 
 - PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1) — extend the

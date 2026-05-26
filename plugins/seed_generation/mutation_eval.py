@@ -272,7 +272,14 @@ async def evaluate_mutation_pairwise(
                 # OpenAI Responses API "Sampling Parameters"
                 # reasoning_effort enum supports ``"none"`` to
                 # disable reasoning on reasoning-capable models.
-                effort="none",
+                #
+                # PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up,
+                # 2026-05-26) — same override hatch as
+                # ``ranker.py:_build_voter_tasks``. Empty
+                # ``voter.effort`` keeps the Sprint G default
+                # ``"none"``; operator override via
+                # ``~/.geode/config.toml`` flips it without redeploy.
+                effort=voter.effort or "none",
             )
         )
     results = await manager.adelegate(tasks, announce=False)

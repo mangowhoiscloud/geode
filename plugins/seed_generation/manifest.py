@@ -129,11 +129,19 @@ class VoterSpec(BaseModel):
       ``petri.source.<provider>.allowed``. The ``auto`` sentinel is rejected
       here — judge voters require a concrete binding so the panel diversity
       check is meaningful.
+    - ``effort`` — optional ``reasoning.effort`` override (Sprint G/H
+      operator escape-hatch, 2026-05-26). Empty string preserves the
+      ranker/mutation_eval default (``"none"``); operators can flip a
+      voter to ``"low"`` / ``"medium"`` / ``"high"`` / ``"xhigh"`` via
+      ``~/.geode/config.toml`` without redeploy when the default
+      proves wrong for a model. Adapter validates against the model's
+      ``reasoning_effort_values`` at request time.
     """
 
     model: str
     provider: str
     source: str
+    effort: str = ""
 
     @model_validator(mode="after")
     def _source_not_auto(self) -> VoterSpec:
@@ -141,6 +149,26 @@ class VoterSpec(BaseModel):
             raise ValueError(
                 f"voter ({self.model}, {self.provider}) cannot use source=auto — "
                 "judge panel diversity requires concrete bindings"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _effort_in_enum(self) -> VoterSpec:
+        """Validate effort against the OpenAI Responses API documented
+        enum at manifest load time so an operator typo (e.g. ``"loww"``)
+        fails fast instead of surfacing as a 400 from the server at
+        ranker dispatch. Empty string is the sentinel meaning "use the
+        caller default" (ranker / mutation_eval pin ``"none"``).
+        Per-model availability (e.g. gpt-5.4 only ``low/medium/high``)
+        is enforced separately by the adapter at request time.
+        (Codex MCP catch — Sprint G/H follow-up, 2026-05-26.)
+        """
+        valid = {"", "none", "minimal", "low", "medium", "high", "xhigh"}
+        if self.effort not in valid:
+            raise ValueError(
+                f"voter ({self.model}, {self.provider}) effort={self.effort!r} "
+                f"is not a recognised OpenAI Responses API reasoning_effort "
+                f"value; expected one of {sorted(valid - {''})} or empty."
             )
         return self
 
