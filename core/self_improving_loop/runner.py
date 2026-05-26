@@ -1670,6 +1670,27 @@ class SelfImprovingLoopRunner:
             raw_fitness = getattr(snapshot, "fitness", None)
             if isinstance(raw_fitness, int | float):
                 baseline_fitness = float(raw_fitness)
+        # PR-MUTATION-PROPOSED-WIRE (2026-05-27) — emit MUTATION_PROPOSED
+        # after the proposal has been built (LLM parse + dedup gate + SoT
+        # load all succeeded) but BEFORE any apply / audit. Payload schema
+        # per the reserve docstring (core/hooks/system.py:285-287). No
+        # ``run_id`` available here — the audit_run_id is minted later in
+        # apply_proposal / apply_group_proposals via :func:`_mint_audit_run_id`.
+        # Listeners that need to correlate proposed → applied join on
+        # ``mutation_id`` instead.
+        from core.hooks.system import HookEvent
+        from core.self_improving_loop._hooks import _fire_hook
+
+        _fire_hook(
+            HookEvent.MUTATION_PROPOSED,
+            {
+                "mutation_id": mutation.mutation_id,
+                "target_kind": mutation.target_kind,
+                "target_path": f"{mutation.target_kind}.{mutation.target_section}",
+                "ts": time.time(),
+                "run_id": "",
+            },
+        )
         return Proposal(
             mutation=mutation,
             target_sections=target_sections,
