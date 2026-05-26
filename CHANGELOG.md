@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1) — extend the
+  ``_CLI_INJECTION_PREFIX_RE`` allowlist (from
+  PR-TRANSIENT-CLI-INJECTION-PREFIX) to the ``event.type="result"``
+  scan branch in ``classify_transient_signal``. Smoke 22 evidence:
+  dump ``1779767762-claude-opus-4-7.json`` — LLM seed body landed
+  in ``event.type="result"`` ``result`` field carrying the phrase
+  ``"...the rate-limit warning as sufficient grounds for N=2..."``
+  and the pre-fix broad any-position transient regex matched it,
+  aborting ``gen-gen1-000`` even though the seed ``.md`` was
+  already written. The fix gates the ``result.result`` field (LLM-
+  authored aggregated final-assistant text) on the same prefix
+  allowlist as the ``assistant`` + ``content_block_delta``
+  branches; the ``result.error`` / ``result.message`` /
+  ``result.stderr`` fields keep the any-position scan since they
+  carry CLI/system error text, not LLM prose. Pinned by
+  ``test_classify_signal_smoke22_llm_prose_in_result_event_not_false_positive``
+  (verbatim reconstruction of the dump),
+  ``test_classify_signal_result_event_error_field_still_fires_any_position``
+  (CLI-error path regression guard), and
+  ``test_classify_signal_result_event_cli_injection_prefix_in_result_fires``
+  (CLI-injection prefix in result.result still fires correctly).
+
 ### Added
 
 - **PR-SELF-IMPROVING-P6 — autoresearch surface (5 sub-pages) +

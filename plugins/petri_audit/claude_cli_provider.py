@@ -748,6 +748,25 @@ def classify_transient_signal(
                     value = event.payload.get(key)
                     if not isinstance(value, str):
                         continue
+                    # PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE
+                    # (Sprint H1, 2026-05-26) — the ``result`` field
+                    # carries the LLM's aggregated final assistant
+                    # response (LLM-authored prose), not a CLI/system
+                    # error. Apply the same CLI-injection-prefix
+                    # allowlist as the ``assistant`` +
+                    # ``content_block_delta`` branches so LLM prose
+                    # with rate-limit vocabulary doesn't false-positive.
+                    # Smoke 22 incident: dump
+                    # ``1779767762-claude-opus-4-7.json`` — LLM seed
+                    # body in ``event/result.result`` matched
+                    # ``"rate-limit warning"`` and aborted
+                    # ``gen-gen1-000`` even though the seed .md was
+                    # already written. The ``error`` / ``message`` /
+                    # ``stderr`` fields are CLI-injected error text,
+                    # not LLM content, so they keep the any-position
+                    # scan.
+                    if key == "result" and not _CLI_INJECTION_PREFIX_RE.match(value):
+                        continue
                     match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(value)
                     if match:
                         return TransientSignal(
