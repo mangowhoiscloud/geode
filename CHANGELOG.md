@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- PR-CODEX-GPT55-OUTPUT-EMIT — gpt-5.5 voter calls in the seed-generation
+  ranker phase were running at the silent SubTask default
+  ``effort="medium"`` (via ``_DIFFICULTY_TO_EFFORT["medium"]``), causing
+  gpt-5.5 to consume the entire ``output_tokens`` budget (109-254 per
+  call across 36 dumps in smoke 20) on encrypted reasoning items and
+  emit ``output_text=""`` 100% of the time — every match either lost
+  quorum or got 1/3 votes from claude-cli alone, collapsing the entire
+  ranker phase. Adds ``SubTask.effort`` field (empty-default preserves
+  the legacy difficulty/settings path) and pins ``effort="low"`` on
+  voter SubTasks at ``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` per ctx7 OpenAI Responses API docs
+  (``/websites/developers_openai_api`` → "Reasoning effort": "Reducing
+  reasoning effort can result in faster responses and fewer tokens
+  used on reasoning"; the canonical example uses ``effort: "low"`` for
+  a similarly compact classification task). ``max_output_tokens`` is
+  not viable on the codex-oauth backend (400 ``Unsupported parameter``
+  per ``core/llm/providers/codex.py:325`` and existing
+  ``test_codex_kwargs_does_not_send_max_output_tokens``).
+
 ## [0.99.64] - 2026-05-26
 
 Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR

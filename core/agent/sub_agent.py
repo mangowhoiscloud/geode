@@ -289,6 +289,24 @@ class SubTask:
     # prose ellipsis inside a JSON object). Empty None preserves
     # back-compat — caller without a schema still gets free-form text.
     response_schema: dict[str, Any] | None = None
+    # PR-CODEX-GPT55-OUTPUT-EMIT (2026-05-26) — per-task reasoning
+    # effort override. Empty string preserves the legacy
+    # difficulty-driven path (``_DIFFICULTY_TO_EFFORT`` →
+    # ``settings.agentic_effort`` fallback). When set, wins over both
+    # ``task.difficulty`` and ``settings.agentic_effort`` — used by
+    # the ranker voter pathway to pin ``effort="low"`` because the
+    # vote task (single A/B/tie + 1-sentence rationale) is a
+    # classification, not a multi-step reasoning problem. Smoke 20
+    # evidence: 36 codex-oauth-empty-text dumps at ``effort="medium"``
+    # (the silent SubTask default) where gpt-5.5 burned its entire
+    # output budget on encrypted reasoning items and emitted zero
+    # message text, collapsing the ranker phase. ctx7 OpenAI
+    # Responses API docs ``/websites/developers_openai_api`` →
+    # "reasoning.effort": "Reducing reasoning effort can result in
+    # faster responses and fewer tokens used on reasoning in a
+    # response" + the canonical example uses ``effort: "low"`` for a
+    # similarly simple bash-script task.
+    effort: str = ""
 
 
 @dataclass
@@ -700,6 +718,15 @@ class SubAgentManager:
         _DIFFICULTY_TO_EFFORT = {"low": "low", "medium": "medium", "high": "high"}
         difficulty = getattr(task, "difficulty", "medium")
         task_effort = _DIFFICULTY_TO_EFFORT.get(difficulty, settings.agentic_effort)
+        # PR-CODEX-GPT55-OUTPUT-EMIT (2026-05-26) — explicit per-task
+        # effort override wins over both ``task.difficulty`` and
+        # ``settings.agentic_effort``. Empty string falls through to
+        # the difficulty/settings path (legacy behaviour). The ranker
+        # voter SubTasks set this to ``"low"`` to keep gpt-5.5 from
+        # burning its entire output budget on encrypted reasoning for
+        # a classification call (smoke 20: 36 empty-text dumps).
+        if task.effort:
+            task_effort = task.effort
 
         # S2-wire (2026-05-18): resolve AgentDefinition if task.agent is set
         # so the worker can apply the agent's system_prompt + tools + model.
