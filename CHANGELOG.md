@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-MUTATION-PROPOSED-WIRE (2026-05-27)** — emit
+  ``HookEvent.MUTATION_PROPOSED`` at
+  ``core/self_improving_loop/runner.py:propose`` after the LLM parse
+  + dedup gate + kind-aware SoT load all succeed, but BEFORE any
+  apply / audit. Closes the last remaining ``MUTATION_*`` emit gap
+  identified during the 2026-05-27 self-improving-loop observability
+  alignment audit (MUTATION_REJECTED stays deferred — semantic overlap
+  with MUTATION_REVERTED for runner-driven mutations). ``run_id`` is
+  empty in the payload because ``audit_run_id`` is minted later in
+  ``apply_proposal`` / ``apply_group_proposals``; listeners that need
+  to correlate proposed → applied join on ``mutation_id``. ``propose``
+  is the single entry point for single + group + swarm modes (group /
+  swarm call ``self.propose()`` internally), so this single emit-site
+  covers all three.
+
 ## [0.99.74] - 2026-05-27
 
 > PATCH rotation bundling the 2026-05-27 operations sprint:
