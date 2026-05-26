@@ -93,6 +93,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1529,17 +1530,101 @@ def _resolve_session_id() -> str:
     return f"{stamp}-{short}"
 
 
+_GEN_SUFFIX_RE = re.compile(r"-gen(\d+)$")
+
+
+def _next_gen_counter_for_commit(commit: str, sessions_path: Path | None = None) -> int:
+    """Return the next monotonic ``gen{N}`` counter for ``commit``.
+
+    PR-GEN-COUNTER (2026-05-26) — fix the attribution silent leak found
+    in the 2026-05-26 sprint Phase A audit (§5.6): pre-PR,
+    ``_resolve_gen_tag(commit)`` returned ``autoresearch-{commit}``
+    deterministically, so repeated audits at the same commit collapsed
+    onto the same gen_tag — every attribution row at that commit
+    looked like the same generation. This function reads
+    ``sessions.jsonl``, finds rows whose gen_tag starts with
+    ``autoresearch-{commit}``, parses the optional ``-gen{N}`` suffix,
+    and returns ``max(N) + 1``. Rows without the suffix (legacy
+    pre-PR format) count as ``gen0`` so the next is ``gen1``.
+
+    ``sessions_path`` parameter is for testability; default reads
+    ``SESSIONS_INDEX_PATH``.
+    """
+    target = sessions_path if sessions_path is not None else SESSIONS_INDEX_PATH
+    if not target.is_file():
+        return 1
+    max_n = 0
+    saw_commit = False
+    prefix = f"autoresearch-{commit}"
+    try:
+        with target.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                tag = row.get("gen_tag", "")
+                if not isinstance(tag, str) or not tag.startswith(prefix):
+                    continue
+                saw_commit = True
+                # Match either ``<prefix>`` (legacy = gen0 implied) or
+                # ``<prefix>-gen<N>`` (post-PR explicit counter).
+                suffix = tag[len(prefix) :]
+                if suffix == "":
+                    continue  # legacy gen0 — max_n stays at 0
+                m = _GEN_SUFFIX_RE.match(suffix)
+                if m:
+                    try:
+                        n = int(m.group(1))
+                    except ValueError:
+                        # Regex restricts to ``\d+`` so this cannot fire
+                        # in practice, but ``int`` *can* raise on
+                        # absurdly long digit strings. Treat as if the
+                        # row didn't match so the scan continues.
+                        continue
+                    max_n = max(max_n, n)
+    except OSError:
+        # Reading sessions.jsonl is best-effort — fall through to gen1.
+        return 1
+    if not saw_commit:
+        return 1
+    return max_n + 1
+
+
 def _resolve_gen_tag(commit: str) -> str:
     """Return the gen_tag for this audit.
 
     Honours ``AUTORESEARCH_GEN_TAG`` so a parent driver (e.g. seed-
     pipeline cycle) can label generations consistently across runs.
-    Default: ``autoresearch-<commit>``.
+    Default: ``autoresearch-<commit>-gen<N>`` where ``N`` is the next
+    monotonic counter for this commit's history in ``sessions.jsonl``.
+
+    PR-GEN-COUNTER (2026-05-26) — switched from ``autoresearch-{commit}``
+    (collision-prone) to ``autoresearch-{commit}-gen{N}`` so repeated
+    audits at the same commit don't collapse into one synthetic
+    generation. Legacy gen_tags in old sessions.jsonl (no ``-gen{N}``
+    suffix) are treated as ``gen0`` — the next emission is ``gen1``.
+
+    Concurrency: the counter scan + emission are NOT atomic. Two
+    overlapping ``_resolve_gen_tag`` calls (e.g. seed-gen cycle +
+    manual ``geode audit`` overlap) can both observe the same
+    ``max(N)`` and emit the same ``gen{N+1}``, since the session row
+    is appended only at run end. This is acceptable as a best-effort
+    counter — gen_tag uniqueness is NOT guaranteed under concurrency.
+    Operators who need strict uniqueness should pin the tag via
+    ``AUTORESEARCH_GEN_TAG`` from the parent driver. See Codex MCP
+    review (PR-GEN-COUNTER CONDITIONAL_PASS #2, 2026-05-26).
     """
     override = os.environ.get("AUTORESEARCH_GEN_TAG", "").strip()
     if override:
         return override
-    return f"autoresearch-{commit}"
+    counter = _next_gen_counter_for_commit(commit)
+    return f"autoresearch-{commit}-gen{counter}"
 
 
 def _append_session_index(

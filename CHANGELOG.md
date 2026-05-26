@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
+  longer collapses repeated audits at the same git commit into a
+  single synthetic ``autoresearch-{commit}`` gen_tag. The 2026-05-26
+  attribution sprint Phase A audit (§5.6) found that every audit at
+  one commit shared the same gen_tag, making cross-cycle attribution
+  decomposition impossible. Post-PR the resolver reads
+  ``~/.geode/self-improving-loop/sessions.jsonl``, finds rows whose
+  gen_tag starts with ``autoresearch-{commit}``, parses the optional
+  ``-gen{N}`` suffix, and emits ``autoresearch-{commit}-gen{N+1}``.
+  Legacy rows without a suffix count as ``gen0`` (next emission is
+  ``gen1``). The ``AUTORESEARCH_GEN_TAG`` operator override still
+  wins. Best-effort reads — malformed JSON / non-dict rows / OSError
+  during scan all fall through gracefully to ``gen1``. Pinned by 11
+  invariant tests in
+  ``tests/autoresearch/test_gen_tag_monotonic.py`` covering fresh
+  history, increments, legacy mixing, per-commit isolation, override
+  precedence, malformed-row tolerance, and OSError fallback.
+
 ### Added
 
 - **PR-WIRE-1** — Three new ``/self-improving`` REPL sub-actions wire
