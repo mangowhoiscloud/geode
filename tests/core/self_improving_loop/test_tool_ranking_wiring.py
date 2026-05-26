@@ -172,6 +172,19 @@ def test_wiring_emits_both_blocks_under_dual_slot_config(
     assert "bad_tool" in new_system
     assert call_count["n"] == 1, "ledger must be read once even with both slots"
 
+    # Order invariant — both readers prepend to ``new_system``. Because
+    # tool_hints runs first then tool_ranking second, the final layered
+    # result is ``[tool-ranking][tool-hints][BASE]`` (newest prepend
+    # appears first). Pinned so a future re-shuffle of the orchestrator
+    # block surfaces in tests, not silently in production prompts.
+    ranking_idx = new_system.index("<tool-ranking>")
+    hints_idx = new_system.index("<tool-hints>")
+    base_idx = new_system.index("BASE")
+    assert ranking_idx < hints_idx < base_idx, (
+        f"expected [ranking][hints][BASE], got "
+        f"ranking@{ranking_idx} hints@{hints_idx} base@{base_idx}"
+    )
+
 
 def test_wiring_graceful_when_ledger_read_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """A loader exception → both slots silently no-op, system prompt intact."""

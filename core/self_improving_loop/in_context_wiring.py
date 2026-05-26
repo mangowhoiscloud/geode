@@ -165,7 +165,12 @@ def apply_in_context_slots(
 
     # tool_hints + tool_ranking — episodic-ledger readers. Share one
     # read of ``episodes.jsonl`` when both slots are enabled so the
-    # disk-read budget per LLM call stays at 1, not 2.
+    # disk-read budget per LLM call stays at 1, not 2. Both readers
+    # PREPEND to ``new_system``, so the relative layered order in the
+    # final prompt is ``[tool-ranking][tool-hints][BASE]`` (later
+    # prepend wins the head position). Pinned by
+    # ``test_wiring_emits_both_blocks_under_dual_slot_config``'s order
+    # invariant.
     tool_hints_cfg = slots.get(SLOT_TOOL_HINTS)
     tool_ranking_cfg = slots.get(SLOT_TOOL_RANKING)
     if tool_hints_cfg is not None or tool_ranking_cfg is not None:

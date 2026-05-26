@@ -91,10 +91,14 @@ functional change.
   `core/self_improving_loop/in_context_slots.py`) with shared-ledger
   read (`in_context_wiring.apply_in_context_slots` reads
   `episodes.jsonl` once even when both episodic slots are enabled).
-  27 invariant tests pin the Wilson formula (5/5, 9/10, 90/100,
-  900/1000 concrete pins), aggregation gates (MIN_INVOCATIONS,
-  WILSON_THRESHOLD), malformed-row tolerance, schema registration,
-  wiring orchestration, and graceful no-op on ledger read failure.
+  29 invariant tests pin the Wilson formula (concrete pins for
+  5/5 → 0.5655 and 100/100 → 0.9630; convergence ordering for
+  9/10 < 90/100 < 900/1000 < 0.9), aggregation gates
+  (MIN_INVOCATIONS, WILSON_THRESHOLD), malformed-row tolerance,
+  schema registration, wiring orchestration, the
+  `[tool-ranking][tool-hints][BASE]` relative layered order under
+  the dual-slot config, the module-internal loader's graceful
+  no-op on read failure, and the no-SoT fast path.
 - **PR-HERMES-2** — Hermes Phase 2 platform-aware + family-aware system
   prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
   surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,

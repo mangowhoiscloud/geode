@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+import pytest
 from core.agent.tool_search import (
     MIN_INVOCATIONS,
     WILSON_THRESHOLD,
@@ -232,3 +233,37 @@ def test_min_invocations_constant_matches_tool_hints():
     )
 
     assert MIN_INVOCATIONS == HINTS_MIN_INVOCATIONS
+
+
+def test_load_recent_episodes_handles_missing_store(monkeypatch: pytest.MonkeyPatch):
+    """``tool_search.load_recent_episodes`` is the module-internal loader
+    used when callers invoke the ranker without going through
+    ``in_context_wiring``. The wiring opts to share ``tool_hints``'
+    loader as a shared-read optimisation; this test pins the parallel
+    public API so it isn't quietly dead code."""
+    import core.agent.tool_search as ts_module
+
+    class _ExplodingStore:
+        def recent(self, *, limit: int) -> list[object]:
+            raise OSError("disk on fire")
+
+    monkeypatch.setattr("core.memory.episodic.EpisodicStore", _ExplodingStore)
+    # Read failure → graceful empty list, never raises.
+    result = ts_module.load_recent_episodes()
+    assert result == []
+
+
+def test_load_recent_episodes_returns_store_output(monkeypatch: pytest.MonkeyPatch):
+    """Happy path — loader forwards the store's ``recent()`` result."""
+    import core.agent.tool_search as ts_module
+
+    expected = [_FakeEpisode("read", True), _FakeEpisode("read", False)]
+
+    class _OkStore:
+        def recent(self, *, limit: int) -> list[object]:
+            assert limit == ts_module.RECENT_WINDOW
+            return list(expected)
+
+    monkeypatch.setattr("core.memory.episodic.EpisodicStore", _OkStore)
+    result = ts_module.load_recent_episodes()
+    assert result == expected
