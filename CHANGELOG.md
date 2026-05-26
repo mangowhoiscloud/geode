@@ -48,6 +48,53 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-TRANSIENT-CLASSIFIER-SCOPE — narrow claude-cli transient
+  classifier scope to suppress smoke-19 LLM-prose false positives.**
+  ``plugins/petri_audit/claude_cli_provider.py:classify_transient_signal``
+  pre-fix walked raw stdout first, then events. In stream-json mode
+  the raw stdout is just the concatenation of stream-json lines —
+  the LLM's free-form prose inside ``{"type":"assistant","message":
+  {"content":[{"type":"text","text":"..."}]}}`` is in there
+  verbatim. Smoke 19 (``.audit/smoke-archives/smoke-19-partial-
+  1779751602/``) caught 5 false-positive aborts where the LLM
+  legitimately wrote ``"rate-limited to 30 calls / 5 min"`` in seed
+  bodies targeting ``redundant_tool_invocation`` (scenario describing
+  rate-limited tools). The transient regex matched on raw stdout and
+  the generator phase aborted as a fake API rate-limit.
+  Fix (2 layers):
+  (a) Demote raw stdout scan to fallback-only — only fires when
+      ``events`` parse produced nothing (genuine pre-protocol
+      failure). When events exist the structured event-walk covers
+      every legitimate signal source; re-scanning the raw stream
+      only risks the LLM-prose false positive.
+  (b) Add ``_ASSISTANT_HEADER_LIMIT = 200`` heuristic on the
+      assistant + content_block_delta scans. Claude-CLI's internal
+      error injections (PR-T case, smoke 9-12 evidence) put the
+      transient phrase at offset 0 of the text block
+      (``"Claude usage limit reached. Resets at 4pm."`` /
+      ``"! Unexpected error. Auto-retrying."``). LLM-authored
+      scenario prose buries the vocabulary mid-paragraph at offset
+      200+. The heuristic preserves the PR-T detection path while
+      eliminating the smoke 19 false positive.
+  Codex MCP cross-LLM review caught an additional gap: streaming
+  ``content_block_delta`` events were not scanned at all (would
+  silently bypass detection if claude-cli streamed an error via
+  deltas instead of an aggregated assistant message). Folded
+  in-band: added a parallel ``content_block_delta`` branch with
+  the same header-limit heuristic. Plus doc drift fixes (3 →
+  actual 5 dumps; dropped a claim about a ``signal.match_offset``
+  field that doesn't exist).
+  Pinned by 4 new + 2 updated tests in
+  ``test_claude_cli_transient_classifier.py``:
+  ``test_classify_signal_search_order_events_first_stdout_fallback``,
+  ``test_classify_signal_stdout_fallback_when_events_empty``,
+  ``test_classify_signal_content_block_delta_transient_match``,
+  ``test_classify_signal_content_block_delta_header_limit_suppresses``,
+  ``test_classify_signal_smoke19_llm_seed_prose_not_false_positive``,
+  plus ``test_adapter_transient_carries_signal_dataclass`` updated
+  to assert the new ``source="event"/event_type="assistant"``
+  ordering. 864 pass / 35 skipped in petri_audit + core/llm.
+
 - **PR-SUPERVISOR-ENABLE — register supervisor in the seed-gen
   manifest so the orchestrator doesn't `phase_skipped` it.** Pre-fix
   `enabled_roles` (`plugins/seed_generation/seed_generation.plugin.toml`)
