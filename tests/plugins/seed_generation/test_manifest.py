@@ -238,7 +238,7 @@ def test_bundled_manifest_proximity_role_loads_without_kind() -> None:
     clear_manifest_cache()
     manifest = load_manifest()
     proximity = manifest.get_role("proximity")
-    assert proximity.default_model == "claude-sonnet-4-6"
+    assert proximity.default_model == "claude-opus-4-7"
 
     toml_body = (
         Path(__file__).resolve().parents[3]

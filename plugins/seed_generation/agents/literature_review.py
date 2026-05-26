@@ -63,7 +63,7 @@ log = logging.getLogger(__name__)
 __all__ = ["LiteratureReview"]
 
 
-_DEFAULT_LITERATURE_REVIEW_MODEL = "claude-sonnet-4-6"
+_DEFAULT_LITERATURE_REVIEW_MODEL = "claude-opus-4-7"
 _LITERATURE_REVIEW_AGENT_NAME = "seed_literature_review"
 _TASK_TYPE = "seed-literature-review"
 

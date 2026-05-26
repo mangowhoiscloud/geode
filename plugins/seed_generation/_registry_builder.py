@@ -263,7 +263,7 @@ def populate_registry(
 # binding for (mismatch between picker.bindings and manifest.enabled_roles).
 # We log+continue rather than crashing so the operator gets a clear
 # "no registered agent" error at phase time pointing at the missing role.
-_DEFAULT_FALLBACK_MODEL = "claude-sonnet-4-6"
+_DEFAULT_FALLBACK_MODEL = "claude-opus-4-7"
 
 
 __all__ = ["build_subagent_manager", "populate_registry"]
