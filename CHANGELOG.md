@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.70] - 2026-05-26
+
+Single-fix PATCH rotation. Ships PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED
+(Sprint H2) — the real root-cause fix for smoke 20/21/22 ranker
+voter quorum collapse. The empty-output-text symptom traced to
+GEODE's ``translate_codex_response`` dropping SSE-delivered message
+items when the SDK's aggregated ``response.output[]`` was empty.
+Smoke 23 will validate end-to-end.
+
 ### Fixed
 
 - PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED (Sprint H2) — real root
