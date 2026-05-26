@@ -294,20 +294,19 @@ class SubTask:
     # difficulty-driven path (``_DIFFICULTY_TO_EFFORT`` →
     # ``settings.agentic_effort`` fallback). When set, wins over both
     # ``task.difficulty`` and ``settings.agentic_effort`` — used by
-    # the ranker voter pathway to pin ``effort="low"`` because the
-    # vote task (single A/B/tie + 1-sentence rationale) is a
-    # classification, not a multi-step reasoning problem. Smoke 20
-    # evidence: 36 codex-oauth-empty-text dumps at ``effort="medium"``
-    # (the silent SubTask default) where gpt-5.5 burned its entire
-    # output budget on encrypted reasoning items and emitted zero
-    # message text, collapsing the ranker phase. ctx7 OpenAI
-    # Responses API docs ``/websites/developers_openai_api`` →
-    # "reasoning.effort": "Reducing reasoning effort can result in
-    # faster responses and fewer tokens used on reasoning in a
-    # response". The canonical low-effort example uses gpt-5.5 with
-    # ``effort="low"`` for a single bash-script generation task; the
-    # voter A/B/tie call is a comparable single-shot output (one
-    # verdict + one ≤ 200-token rationale).
+    # the ranker voter pathway to pin ``effort="none"`` (Sprint G,
+    # 2026-05-26) because the vote task (single A/B/tie + 1-sentence
+    # rationale) is a classification, not a multi-step reasoning
+    # problem. Smoke 20 evidence: 36 codex-oauth-empty-text dumps at
+    # ``effort="medium"`` (the silent SubTask default) where gpt-5.5
+    # burned its entire output budget on encrypted reasoning items
+    # and emitted zero message text, collapsing the ranker phase.
+    # Smoke 21 confirmed the same failure mode under ``effort="low"``
+    # (PR-CODEX-GPT55-OUTPUT-EMIT), so Sprint G dropped to
+    # ``effort="none"`` — ctx7 OpenAI Responses API "Sampling
+    # Parameters" registers ``"none"`` as the documented mechanism
+    # to disable reasoning entirely on reasoning-capable models so
+    # the model emits user-facing text directly.
     effort: str = ""
 
 
