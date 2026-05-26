@@ -168,11 +168,11 @@ def build_default_lanes() -> LaneQueue:
         SessionLane (per-key serial, max=256)
             ↓
         Workload Lanes (per-workload cap, MUST be <= global)
-        ├── "gateway"          (max=DEFAULT_GATEWAY_CONCURRENCY, currently 4)  — Slack/Discord/Telegram messages
-        ├── "seed-generation"  (max=DEFAULT_SEED_PIPELINE_CONCURRENCY, currently 50)  — co-scientist 8-role sub-agent pipeline
+        ├── "gateway"          (max=GATEWAY, currently 4)  — Slack/Discord/Telegram
+        ├── "seed-generation"  (max=SEED_PIPELINE, currently 50)  — co-scientist 8-role
         └── (CLI/general sub-agent paths use global only)
             ↓
-        "global" (max=DEFAULT_GLOBAL_CONCURRENCY, currently 50) — total system capacity
+        "global" (max=GLOBAL, currently 50) — total system capacity
 
     Gateway messages acquire ["session", "gateway", "global"].
     Seed-generation phases acquire ["session", "seed-generation", "global"]

@@ -33,14 +33,18 @@ def real_queue(monkeypatch: pytest.MonkeyPatch) -> object:
 
 
 def test_seed_generation_lane_default_matches_global_safe_share() -> None:
-    """PR-LQ-Phase1 (2026-05-22) — seed-generation cap MUST be <= global.
+    """PR-LANE-CAP-50 (2026-05-27) — seed-generation cap MUST be <= global.
 
-    Pre-PR the cap was 16 while global was 8, a hierarchy violation that
-    advertised 16 slots a leaf semaphore could never deliver. Lowered
-    to 4 so the workload cap composes correctly with the global cap.
-    Re-raising requires growing global or introducing a sub-agent lane
-    (see [[project_lanequeue_handoff_2026_05_22]] Phase 2)."""
-    assert DEFAULT_SEED_PIPELINE_CONCURRENCY == 4
+    History:
+    - PR-LQ-Phase1 (2026-05-22): lowered cap 16 → 4 because workload
+      cap > global cap (8) advertised slots the leaf semaphore could
+      never deliver.
+    - PR-LANE-CAP-AGGRESSIVE (2026-05-27): kept global=8, seed-gen=4.
+    - PR-LANE-CAP-50 (2026-05-27): operator decision raised both
+      global and seed-gen to 50 in lockstep. The OpenClaw invariant
+      ``workload_lane <= global_lane`` is preserved at the new
+      ceiling (50 == 50)."""
+    assert DEFAULT_SEED_PIPELINE_CONCURRENCY == 50
     assert DEFAULT_SEED_PIPELINE_CONCURRENCY <= DEFAULT_GLOBAL_CONCURRENCY
 
 
