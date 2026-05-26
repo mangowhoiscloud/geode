@@ -398,10 +398,13 @@ def test_classify_signal_content_block_delta_transient_match() -> None:
     assert "usage limit reached" in signal.matched_text.lower()
 
 
-def test_classify_signal_content_block_delta_header_limit_suppresses() -> None:
-    """Mid-paragraph 'rate-limited' in a delta chunk is suppressed
-    (mirrors the assistant-event header-limit heuristic — same false-
-    positive shape, same defence)."""
+def test_classify_signal_content_block_delta_no_cli_injection_prefix_suppressed() -> None:
+    """A delta chunk that starts with LLM prose (no ``! `` prefix and
+    no ``Claude usage limit reached`` phrase) must not fire the
+    classifier, even when the transient regex would match somewhere in
+    the body. Renamed from the prior ``header_limit_suppresses`` test
+    after PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) replaced the
+    200-char positional heuristic with a prefix-allowlist gate."""
     from plugins.petri_audit.claude_cli_provider import (
         classify_transient_signal,
         parse_stream_json_events,
@@ -434,12 +437,12 @@ def test_classify_signal_smoke19_llm_seed_prose_not_false_positive() -> None:
     generator phase as a fake API rate-limit.
 
     Now: same stdout payload, full stream-json envelope parsed → the
-    LLM's prose is inside an assistant-text block. The regex pattern
-    ``rate[-_\\s]limit(?:ed\\b|...)`` DOES match ``"rate-limited"``
-    verbatim, but the new ``_ASSISTANT_HEADER_LIMIT=200`` heuristic
-    suppresses the match because it lands well past the first 200
-    chars of the text block (mid-paragraph inside a tool catalog,
-    matching the actual smoke 19 dump's offset profile).
+    LLM's prose is inside an assistant-text block whose text starts
+    with ``"## Scenario: ..."`` (no ``! `` and no ``Claude usage
+    limit reached``). The PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26)
+    allowlist gate rejects the block before the transient regex runs,
+    so the generator phase doesn't falsely abort — exactly the smoke
+    19 outcome we need.
     """
     from plugins.petri_audit.claude_cli_provider import (
         classify_transient_signal,
@@ -476,12 +479,132 @@ def test_classify_signal_smoke19_llm_seed_prose_not_false_positive() -> None:
     )
     events = parse_stream_json_events(stdout)
     signal = classify_transient_signal(stdout=stdout, stderr="", events=events)
-    # The header-limit heuristic (200 chars) suppresses the assistant
-    # scan match because "rate-limited" appears well past offset 200
-    # inside the tool catalog block. The stdout fallback also stays
-    # suppressed because events parsed. The generator phase doesn't
-    # falsely abort — exactly the smoke 19 outcome we need.
+    # The prefix-allowlist gate suppresses the assistant scan because
+    # the block doesn't open with ``! `` or ``Claude usage limit
+    # reached``. The stdout fallback also stays suppressed because
+    # events parsed (PR-TRANSIENT-CLASSIFIER-SCOPE's stdout-only-on-
+    # parse-failure rule is unchanged). Net result: signal is None.
     assert signal is None
+
+
+def test_classify_signal_smoke21_llm_short_preamble_not_false_positive() -> None:
+    """PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) regression —
+    smoke 21 evidence: dump
+    ``~/.geode/diagnostics/claude-cli-transient/1779760855-claude-opus-4-7.json``
+    where the LLM wrote a short 170-char preamble before reaching the
+    transient vocabulary. The prior 200-char positional heuristic
+    (PR-TRANSIENT-CLASSIFIER-SCOPE, 2026-05-26) treated any match at
+    ``match.start() < 200`` as a genuine CLI injection — so the seed
+    body's ``"rate-limit framing"`` at idx=170 slipped through and
+    aborted the generator phase.
+
+    The new prefix-allowlist gate ignores match position entirely:
+    the text doesn't start with ``! `` or ``Claude usage limit
+    reached``, so the block is skipped before the transient regex
+    runs. The smoke 21 false-positive cannot recur.
+    """
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    # Verbatim reconstruction of the smoke 21 dump's assistant text
+    # (1779760855-claude-opus-4-7.json, event[5].block[0]). 170-char
+    # preamble + the matched phrase + scenario tail. The LLM was
+    # summarising a seed it had just written; "rate-limit framing"
+    # describes the SCENARIO design, not an actual CLI rate-limit.
+    assistant_text = (
+        "Wrote candidate `gen1-013-5bd70823.md` — a CI-status scenario "
+        "where the user pastes a complete `gh run view --json` payload "
+        "and explicitly asks the agent not to re-pull (rate-limit "
+        "framing). Minimal-call N=0. Redundancy trap: re-calling "
+        "`gh_run_view`, per-job `gh_job_view`, or `gh_run_logs` when "
+        "the breakdown is fully present in the pasted payload."
+    )
+    # Sanity: the transient regex still matches "rate-limit" inside the
+    # body — the test would be vacuous if the regex no longer fired.
+    from plugins.petri_audit.claude_cli_provider import CLAUDE_TRANSIENT_UPSTREAM_RE
+
+    match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(assistant_text)
+    assert match is not None, "smoke 21 regression: regex should still match"
+    assert match.start() < 200, (
+        "smoke 21 regression: match position < 200 (would have slipped the prior gate)"
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": assistant_text}]},
+            },
+            {"type": "result", "stop_reason": "end_turn", "result": ""},
+        ]
+    )
+    events = parse_stream_json_events(stdout)
+    signal = classify_transient_signal(stdout=stdout, stderr="", events=events)
+    assert signal is None, (
+        "smoke 21 false-positive regressed: classifier matched LLM prose "
+        "lacking the CLI-injection prefix"
+    )
+
+
+def test_classify_signal_assistant_event_exclamation_prefix_still_fires() -> None:
+    """PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) — the
+    ``! Unexpected error. Auto-retrying.`` form claude-cli uses for
+    in-stream operational error injections must still be detected.
+    Audit of 135 historical dumps in
+    ``~/.geode/diagnostics/claude-cli-transient/`` found 7
+    assistant-source matches; ALL of them start with ``"! "``. The
+    prefix allowlist must keep firing on this convention."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "! Unexpected error. Auto-retrying."}]
+                },
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout="", stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.source == "event"
+    assert signal.event_type == "assistant"
+
+
+def test_classify_signal_content_block_delta_exclamation_prefix_still_fires() -> None:
+    """Same prefix-allowlist guarantee for the streaming delta path —
+    a CLI-injected error chunk that arrives as ``content_block_delta``
+    still fires when its text starts with ``"! "``."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "content_block_delta",
+                "delta": {
+                    "type": "text_delta",
+                    "text": "! Claude usage limit reached. Resets at 4pm.",
+                },
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout="", stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.source == "event"
+    assert signal.event_type == "content_block_delta"
 
 
 def test_signal_excerpt_bounded_to_200_chars() -> None:

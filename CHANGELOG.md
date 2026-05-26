@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- PR-TRANSIENT-CLI-INJECTION-PREFIX — claude-cli transient classifier's
+  ``event.type="assistant"`` and ``event.type="content_block_delta"``
+  scan branches now gate on a CLI-injection-prefix allowlist
+  (``_CLI_INJECTION_PREFIX_RE``) instead of the prior
+  ``_ASSISTANT_HEADER_LIMIT = 200`` positional heuristic. Smoke 21
+  (2026-05-26, dump 1779760855) falsified the 200-char rule: the LLM
+  wrote a short 170-char preamble (``"Wrote candidate `gen1-013-
+  5bd70823.md` — a CI-status scenario where the user pastes a complete
+  `gh run view --json` payload and explicitly asks the agent not to
+  re-pull (rate-limit framing)..."``) and the match at idx=170 slipped
+  through, aborting the generator phase. Audit of all 135 historical
+  dumps in ``~/.geode/diagnostics/claude-cli-transient/`` showed every
+  legitimate assistant-source match begins with ``! `` (claude-cli's
+  in-stream error injection convention) or with the literal phrase
+  ``Claude usage limit reached`` (PR-T smoke 9-12 incident). LLM prose
+  never opens with either pattern because the leading ``!`` is a
+  markdown convention LLMs avoid in narrative text. The new gate is
+  position-independent, so even if the CLI ever pads its injections
+  with extra header lines the rule still applies. Pinned by
+  ``test_classify_signal_smoke21_llm_short_preamble_not_false_positive``,
+  ``test_classify_signal_assistant_event_exclamation_prefix_still_fires``,
+  and ``test_classify_signal_content_block_delta_exclamation_prefix_still_fires``.
+
 ## [0.99.66] - 2026-05-26
 
 Seed-generation ranker-phase robustness rotation. 2 PR fixing two
