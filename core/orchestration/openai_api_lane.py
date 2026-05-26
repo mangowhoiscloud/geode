@@ -15,31 +15,31 @@ Distinct from ``codex_cli_lane`` because:
 - ``openai_api_lane`` gates **direct API call** (no subprocess, just
   ``openai.AsyncOpenAI.responses.create``); 429 surface differs.
 
-Why ``max_concurrent=10`` (PR-LANE-CAP-CONSERVATIVE, v0.99.75)
-=============================================================
+Why ``max_concurrent=6`` (PR-LANE-CAP-TIGHTER, v0.99.76)
+=======================================================
 
-Lowered from 50 (PR-LANE-CAP-50, v0.99.74) to **10** alongside the
-same-PR claude-cli lane drop. Local-RSS reasoning is identical to
-``claude_cli_lane.py``: a ranker burst at cap 50 panel-fires ~150
-voter tasks (50 × 3) and the host froze.
+Lowered from 10 (v0.99.75) to **6** in lockstep with the
+``claude_cli_lane`` 5 → 3 drop. Panel arithmetic: 3 matches × 2
+codex voters per match = 6 in-flight codex calls — exactly
+saturating this cap with zero queue depth, same balance the
+v0.99.75 default had at the 10/5 scale.
 
 Codex API calls are *not* subprocess-based — they fire from the
 parent Python process via ``openai.AsyncOpenAI.responses.create``,
-so the per-task cost is ~31 MB (measured on the freeze host, codex
-subprocess RSS — the API path stays in-process Python and is even
-cheaper). The cap-10 ceiling is **paired with** the new
-claude_cli_lane cap of 5: for the 1-claude + 2-codex panel,
-``ranker_max_inflight=5`` saturates 5 claude slots and 10 codex
-slots simultaneously without bursting.
+so the cap itself is not RSS-bound. The lower default exists only
+to keep the 1-claude + 2-codex panel balanced under the tighter
+``claude_cli_lane=3``; operators raising claude-cli should raise
+this in lockstep.
 
 **Upstream RPM headroom retained**: ChatGPT subscription bucket
-documents ~500 RPM aggregate; cap 10 with ~10s voter wallclock =
-~60 RPM — still 8× below the ceiling, so this is *not* a quota
-governor any more, just a panel-balance one.
+documents ~500 RPM aggregate; cap 6 with ~10s voter wallclock =
+~36 RPM — still 14× below the ceiling, so this is *not* a quota
+governor.
 
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Operators
-with bigger boxes raising ``claude_cli_lane`` should raise this
-in proportion (2× the new claude cap is the panel rule).
+Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of
+thumb: keep this at ``2 × claude_cli_lane`` for cross-provider
+panels; codex-only panels (no claude voter) can raise freely up to
+the 500 RPM tier ceiling.
 
 Why module-level (not LaneQueue-registered)
 ===========================================
@@ -80,24 +80,25 @@ OPENAI_API_LANE_NAME = "openai-api"
 OPENAI_API_LANE_MAX_ENV = "GEODE_OPENAI_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_OPENAI_API_LANE_MAX`."""
 
-DEFAULT_OPENAI_API_LANE_MAX = 10
-"""PR-LANE-CAP-CONSERVATIVE (v0.99.75, 2026-05-27) — lowered from 50.
+DEFAULT_OPENAI_API_LANE_MAX = 6
+"""PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — lowered from 10.
 
-Paired with ``claude_cli_lane=5`` for the standard 1-claude + 2-codex
-voter panel: ``ranker_max_inflight=5`` × 2 codex voters = 10 in-flight
-codex calls, exactly saturating this cap. The 50→10 drop is a sibling
-correction of the same-day claude-cli cap drop (see
-``claude_cli_lane.py`` for the freeze incident that motivated the
-sprint).
+Paired with the ``claude_cli_lane`` cap-3 default for the standard
+1-claude + 2-codex voter panel: ``ranker_max_inflight=3`` × 2 codex
+voters = 6 in-flight codex calls, exactly saturating this cap. The
+10 → 6 drop is the sibling correction of the same-PR claude-cli
+cap drop (see ``claude_cli_lane.py`` for why the operator's M3
+16 GB host's steady-state PhysMem unused — ~150-750 MB — couldn't
+absorb cap 5).
 
-Throughput-wise this still leaves ~440 RPM of the documented 500 RPM
-ChatGPT subscription headroom unused — the binding constraint is
-panel balance, not OpenAI quota.
+Throughput-wise this still leaves ~464 RPM of the documented 500
+RPM ChatGPT subscription headroom unused — the binding constraint
+is panel balance, not OpenAI quota.
 
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of thumb:
-keep this at ``2 × claude_cli_lane`` for cross-provider panels;
-operators running codex-only panels (no claude voter) can raise
-freely up to the 500 RPM tier ceiling."""
+Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of
+thumb: keep this at ``2 × claude_cli_lane`` for cross-provider
+panels; operators running codex-only panels (no claude voter) can
+raise freely up to the 500 RPM tier ceiling."""
 
 OPENAI_API_LANE_TIMEOUT_S = 7200.0
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to

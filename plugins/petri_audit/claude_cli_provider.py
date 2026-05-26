@@ -1127,8 +1127,8 @@ def register() -> None:
             # PR-LQ-Phase2 (2026-05-22) — share the
             # claude-cli-subagent lane with the self-improving-loop
             # mutator path so the host OAuth bucket (and now the host
-            # *RAM*) sees at most ``DEFAULT_CLAUDE_CLI_LANE_MAX`` (5
-            # after PR-LANE-CAP-CONSERVATIVE v0.99.75, 2026-05-27)
+            # *RAM*) sees at most ``DEFAULT_CLAUDE_CLI_LANE_MAX`` (3
+            # after PR-LANE-CAP-TIGHTER v0.99.76, 2026-05-27)
             # concurrent ``claude --print`` subprocesses. The lane runs
             # the blocking semaphore wait in a worker thread so the
             # event loop is not pinned while queued.

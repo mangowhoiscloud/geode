@@ -19,15 +19,18 @@ from plugins.seed_generation.agents.ranker import (
 )
 
 
-def test_default_is_five() -> None:
-    """The default cap is 5 — PR-LANE-CAP-CONSERVATIVE (v0.99.75,
-    2026-05-27) lowered from 50 to 5 after the gen1-broken_tool_use
-    smoke at cap 50 froze a 16 GB M3 host (50 × 425 MB ≈ 21 GB peak
-    claude-cli RSS). New cap balances the three lanes exactly: 5
-    matches × 3 voters = 15 tasks, saturating claude_cli_lane=5 + 2
-    × openai_api_lane=10 with zero hidden queue depth."""
-    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 5
-    assert resolve_ranker_max_inflight_matches() == 5
+def test_default_is_three() -> None:
+    """The default cap is 3 — PR-LANE-CAP-TIGHTER (v0.99.76,
+    2026-05-27) lowered from 5 to 3 because cap 5 still required ~3 GB
+    of free host RAM per burst (5 × ~487 MB per match) and the
+    operator's M3 16 GB host typically has 150-750 MB unused at
+    steady state. Cap 3 brings the burst to ~1.5 GB and survives
+    without an explicit desktop-app cleanup pass. New cap balances
+    the three lanes exactly: 3 matches × 3 voters = 9 tasks,
+    saturating claude_cli_lane=3 + 2 × openai_api_lane=6 with zero
+    hidden queue depth."""
+    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 3
+    assert resolve_ranker_max_inflight_matches() == 3
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:
