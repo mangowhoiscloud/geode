@@ -239,6 +239,8 @@ def test_propose_populates_cost_from_sidecar(
     mock_ctx.current_sections = {"# Setup": "current setup content"}
     mock_ctx.current_policies = {"prompt": {"# Setup": "current setup content"}}
     mock_ctx.target_dim = ""
+    mock_ctx.mutator_feedback_block = ""
+    mock_ctx.recent_applies_for_dedup = ()
     monkeypatch.setattr(runner_mod, "build_runner_context", lambda: mock_ctx)
     monkeypatch.setattr(runner_mod, "MUTATION_AUDIT_LOG_PATH", tmp_path / "mutations.jsonl")
 
@@ -285,6 +287,8 @@ def test_propose_clears_last_call_before_invocation(
     mock_ctx.current_sections = {"# Setup": "current setup content"}
     mock_ctx.current_policies = {"prompt": {"# Setup": "current setup content"}}
     mock_ctx.target_dim = ""
+    mock_ctx.mutator_feedback_block = ""
+    mock_ctx.recent_applies_for_dedup = ()
     monkeypatch.setattr(runner_mod, "build_runner_context", lambda: mock_ctx)
     monkeypatch.setattr(runner_mod, "MUTATION_AUDIT_LOG_PATH", tmp_path / "mutations.jsonl")
 
