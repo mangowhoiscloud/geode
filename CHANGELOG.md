@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.68] - 2026-05-26
+
+Single-change MINOR rotation. Ships PR-UPGRADE-ROLES-TOP-TIER —
+operator-directed bulk upgrade of every seed-generation role default
+to ``claude-opus-4-7`` (Anthropic top tier) and pilot's Petri audit
+``target_models`` to the provider-cross top-tier pair
+``[claude-opus-4-7, gpt-5.5]``. The codex-OAuth gpt-5.5 empty-output
+defect is NOT in this release — Sprint G handles it separately.
+
 ### Changed
 
 - PR-UPGRADE-ROLES-TOP-TIER — operator directive (2026-05-26): every
