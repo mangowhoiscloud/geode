@@ -423,9 +423,10 @@ def test_voter_prompt_carries_anti_phantom_directives() -> None:
 
 
 def test_mutation_eval_voter_tasks_pin_effort_none() -> None:
-    """Mutation-eval voter SubTasks pin ``effort="low"``.
+    """Mutation-eval voter SubTasks pin ``effort="none"`` (Sprint G,
+    2026-05-26 — supersedes the prior ``effort="low"`` from the
+    PR-CODEX-GPT55-OUTPUT-EMIT fix-up).
 
-    PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch, 2026-05-26) —
     mutation_eval reuses VOTE_SCHEMA + the gpt-5.5 A/B/tie shape from
     the ranker voter pathway. Without an explicit effort pin the
     SubTask would fall through to ``_DIFFICULTY_TO_EFFORT["medium"]``

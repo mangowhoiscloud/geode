@@ -9,11 +9,12 @@ reasoning items.
 Root cause (ctx7-grounded): the vote task is a 3-way A/B/tie
 classification + ≤ 200-token rationale — a single-step output that
 doesn't benefit from any reasoning depth. Per ctx7 OpenAI Responses
-API "Sampling Parameters", ``reasoning_effort`` enum supports
-``none`` (disables reasoning entirely) plus the new ``minimal`` value
-that GEODE's prior spec had omitted. The smoke 21 evidence showed
-``effort="low"`` still produced 60-624 reasoning tokens with empty
-output_text — only ``"none"`` guarantees no reasoning consumption.
+API "Sampling Parameters", ``reasoning_effort`` enum includes
+``none`` which disables reasoning entirely on reasoning-capable
+models. The smoke 21 evidence showed ``effort="low"`` still produced
+encrypted reasoning items consuming the full output budget with
+``output_text=""`` — ``"none"`` is the documented mechanism to
+prevent that consumption.
 
 ``max_output_tokens`` is NOT a fix here — the Codex OAuth backend
 rejects the field with 400 ``Unsupported parameter`` (pinned by
@@ -30,9 +31,12 @@ These tests pin:
 3. The ranker's voter SubTasks set ``effort="none"`` so the codex-oauth
    adapter forwards ``reasoning.effort="none"`` to the gpt-5.5 backend
    and gpt-5.5 emits the verdict directly without encrypted reasoning.
-4. The gpt-5.x spec includes ``"minimal"`` in
-   ``reasoning_effort_values`` (OpenAI docs registers 6 values; GEODE
-   previously listed 5).
+4. Every gpt-5.x spec admits ``"none"`` in ``reasoning_effort_values``
+   so the voter wire above remains valid for any operator-pinned
+   gpt-5.x model. (The OpenAI generic enum admits ``"minimal"`` as
+   well, but per-model docs for gpt-5.4 / gpt-5.5 do not — GEODE
+   does NOT advertise ``"minimal"`` on those specs to avoid handing
+   operators a value the server would reject at runtime.)
 """
 
 from __future__ import annotations
@@ -119,8 +123,8 @@ def test_build_worker_request_falls_back_when_effort_empty() -> None:
     assert req.effort == "medium", (
         f"Default SubTask (no effort, no difficulty) must resolve to "
         f"_DIFFICULTY_TO_EFFORT['medium']='medium' — got {req.effort!r}. "
-        f"If this changed, the ranker voter pathway's effort='low' "
-        f"override may also have drifted."
+        f"If this changed, the ranker voter pathway's effort='none' "
+        f"override (Sprint G) may also have drifted."
     )
 
 
@@ -213,24 +217,18 @@ def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
     assert tasks[0].effort == "none"
 
 
-def test_gpt5_family_spec_includes_minimal_effort() -> None:
-    """Sprint G (2026-05-26) — GEODE's gpt-5.x specs must list ``"minimal"``
-    in ``reasoning_effort_values``. OpenAI's Responses API "Sampling
-    Parameters" docs enumerate 6 valid values
-    (``none, minimal, low, medium, high, xhigh``); pre-Sprint-G GEODE
-    listed only 5 (``"minimal"`` was missing), so operators couldn't
-    select the docs-recommended floor-but-above-zero effort. This test
-    pins the registry alignment.
+def test_gpt5_family_spec_supports_none_effort() -> None:
+    """Sprint G (2026-05-26) — every gpt-5.x spec must list ``"none"``
+    in ``reasoning_effort_values`` so the voter pathway can disable
+    reasoning entirely. The ``"minimal"`` value the OpenAI generic
+    enum admits is intentionally NOT added across gpt-5.x — per-model
+    docs for gpt-5.4 / gpt-5.5 list only (none, low, medium, high,
+    xhigh) and adding ``"minimal"`` would let operators select an
+    effort the server rejects at runtime. (Codex MCP catch, 2026-05-26.)
     """
     from core.llm.adapters._openai_common import get_openai_model_spec
 
     for model_id in ("gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"):
         spec = get_openai_model_spec(model_id)
         assert spec.reasoning_effort_values is not None, model_id
-        assert "minimal" in spec.reasoning_effort_values, (
-            f"{model_id} spec missing 'minimal' effort — OpenAI docs "
-            f"register 6 values, got {spec.reasoning_effort_values!r}."
-        )
-        # Sprint G additionally relies on ``"none"`` being available
-        # so the voter pathway can disable reasoning entirely.
         assert "none" in spec.reasoning_effort_values, model_id
