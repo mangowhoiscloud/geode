@@ -15,26 +15,31 @@ Distinct from ``codex_cli_lane`` because:
 - ``openai_api_lane`` gates **direct API call** (no subprocess, just
   ``openai.AsyncOpenAI.responses.create``); 429 surface differs.
 
-Why ``max_concurrent=50``
-========================
+Why ``max_concurrent=10`` (PR-LANE-CAP-CONSERVATIVE, v0.99.75)
+=============================================================
 
-Mid-range default selected from three reference points:
+Lowered from 50 (PR-LANE-CAP-50, v0.99.74) to **10** alongside the
+same-PR claude-cli lane drop. Local-RSS reasoning is identical to
+``claude_cli_lane.py``: a ranker burst at cap 50 panel-fires ~150
+voter tasks (50 × 3) and the host froze.
 
-1. **OpenAI Codex Responses API**: ChatGPT subscription bucket
-   is documented to support ~500 RPM aggregate across all models
-   (per the public Codex CLI roll-out post-2025-Q4). gpt-5.x voter
-   calls average ~10s wallclock; 4 inflight × 10s = 0.4s/call
-   serialised throughput ≈ 150 RPM — well under 500.
-2. **codex_cli_lane=2** + ``audit_lane=1`` consume 3 slots of the
-   per-account budget when CLI flows are also active; the API lane
-   sits on top, so 4 keeps total per-account inflight ≤ 7.
-3. **PR-RANKER-PARALLEL** (the immediate consumer): for the typical
-   2-codex + 1-claude-cli voter panel, 4 codex slots = 2 matches'
-   worth of concurrent codex voters — paired with claude_cli_lane=2
-   the two match-side bottlenecks balance.
+Codex API calls are *not* subprocess-based — they fire from the
+parent Python process via ``openai.AsyncOpenAI.responses.create``,
+so the per-task cost is ~31 MB (measured on the freeze host, codex
+subprocess RSS — the API path stays in-process Python and is even
+cheaper). The cap-10 ceiling is **paired with** the new
+claude_cli_lane cap of 5: for the 1-claude + 2-codex panel,
+``ranker_max_inflight=5`` saturates 5 claude slots and 10 codex
+slots simultaneously without bursting.
 
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV` for tiers with
-higher quotas.
+**Upstream RPM headroom retained**: ChatGPT subscription bucket
+documents ~500 RPM aggregate; cap 10 with ~10s voter wallclock =
+~60 RPM — still 8× below the ceiling, so this is *not* a quota
+governor any more, just a panel-balance one.
+
+Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Operators
+with bigger boxes raising ``claude_cli_lane`` should raise this
+in proportion (2× the new claude cap is the panel rule).
 
 Why module-level (not LaneQueue-registered)
 ===========================================
@@ -75,24 +80,24 @@ OPENAI_API_LANE_NAME = "openai-api"
 OPENAI_API_LANE_MAX_ENV = "GEODE_OPENAI_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_OPENAI_API_LANE_MAX`."""
 
-DEFAULT_OPENAI_API_LANE_MAX = 50
-"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 16.
+DEFAULT_OPENAI_API_LANE_MAX = 10
+"""PR-LANE-CAP-CONSERVATIVE (v0.99.75, 2026-05-27) — lowered from 50.
 
-OpenAI Codex Responses API documents a 500 RPM aggregate per ChatGPT
-subscription bucket (verified against operator's ``prolite`` plan via
-the JWT's ``rate_limit`` claim window). Voter calls land in 10-15s
-wallclock each, so steady-state throughput = ``60s / call * cap``.
-At cap 16 that's ~64-96 RPM — well under the 500 RPM ceiling, even
-counting the codex_cli_lane (2 slots) + audit_lane (1 slot) running
-concurrently. Pre-raise the cap 4 only used ~24 RPM of the available
-500 budget; the burst from PR-RANKER-PARALLEL (2 × 59 codex voters
-inside ``asyncio.gather``) would queue 110+ calls behind the 4-slot
-cap → 1700s+ tail latency.
+Paired with ``claude_cli_lane=5`` for the standard 1-claude + 2-codex
+voter panel: ``ranker_max_inflight=5`` × 2 codex voters = 10 in-flight
+codex calls, exactly saturating this cap. The 50→10 drop is a sibling
+correction of the same-day claude-cli cap drop (see
+``claude_cli_lane.py`` for the freeze incident that motivated the
+sprint).
 
-Operator override via :data:`OPENAI_API_LANE_MAX_ENV` for tier
-upgrades or downgrades; the env stays the recommended tuning knob,
-the new default is a sane aggressive ceiling for the documented
-prolite/pro/enterprise tiers."""
+Throughput-wise this still leaves ~440 RPM of the documented 500 RPM
+ChatGPT subscription headroom unused — the binding constraint is
+panel balance, not OpenAI quota.
+
+Operator override via :data:`OPENAI_API_LANE_MAX_ENV`. Rule of thumb:
+keep this at ``2 × claude_cli_lane`` for cross-provider panels;
+operators running codex-only panels (no claude voter) can raise
+freely up to the 500 RPM tier ceiling."""
 
 OPENAI_API_LANE_TIMEOUT_S = 7200.0
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to

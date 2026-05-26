@@ -30,14 +30,15 @@ def _reset_lane() -> None:
     reset_openai_api_lane_for_tests()
 
 
-def test_default_max_concurrent_is_fifty() -> None:
-    """Default capacity 50 — PR-LANE-CAP-50 (2026-05-27) raised from
-    16 to 50 per operator decision. OpenAI Codex Responses API
-    documents 500 RPM aggregate per ChatGPT subscription bucket; cap
-    50 yields ~200-300 RPM steady state, well under the 500 RPM
-    ceiling with substantial burst headroom."""
-    assert DEFAULT_OPENAI_API_LANE_MAX == 50
-    assert resolve_openai_api_lane_max() == 50
+def test_default_max_concurrent_is_ten() -> None:
+    """Default capacity 10 — PR-LANE-CAP-CONSERVATIVE (v0.99.75,
+    2026-05-27) lowered from 50 to 10 after the cap-50 ranker burst
+    froze a 16 GB M3 host. Paired with ``claude_cli_lane=5`` for the
+    standard 1-claude + 2-codex voter panel: 5 matches × 2 codex
+    voters = exactly 10 in-flight, no queue. RPM headroom against
+    the 500 RPM ChatGPT subscription ceiling stays at ~440 RPM."""
+    assert DEFAULT_OPENAI_API_LANE_MAX == 10
+    assert resolve_openai_api_lane_max() == 10
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:

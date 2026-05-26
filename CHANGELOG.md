@@ -47,6 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.75] - 2026-05-27
+
+> PATCH rotation walking back v0.99.74's PR-LANE-CAP-50 raise after
+> the gen1-broken_tool_use smoke (2026-05-27 04:12 KST) froze the
+> 16 GB M3 host: 50 concurrent ``claude --print`` spawns ≈ 21 GB peak
+> RSS overwhelmed the box. The original cap-50 reasoning held in
+> isolation (Anthropic 50 RPM tier ceiling) but ignored a tighter
+> local floor — Node V8 spawn cost. Plus the develop-merged audit
+> adapter bootstrap fix, runner repo-root parents arithmetic repair,
+> and MUTATION_PROPOSED emit-site completion that were already
+> accumulated on develop.
+
+### Changed
+- **PR-LANE-CAP-CONSERVATIVE (2026-05-27)** — lower the three
+  freeze-implicated default caps after measuring per-subprocess RSS
+  on the freeze host (M3 16 GB):
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX`` 50 → **5**
+    (``core/orchestration/claude_cli_lane.py``). Each
+    ``claude --print`` is a fresh Node V8 (~425 MB resident);
+    50 × 425 MB ≈ 21 GB on a 16 GB host → macOS compressor thrash.
+  - ``DEFAULT_OPENAI_API_LANE_MAX`` 50 → **10**
+    (``core/orchestration/openai_api_lane.py``). Paired at
+    ``2 × claude_cli_lane`` so the standard 1-claude + 2-codex
+    voter panel saturates both lanes exactly when
+    ``ranker_max_inflight=5``.
+  - ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`` 50 → **5**
+    (``plugins/seed_generation/agents/ranker.py``). Matches the
+    ``claude_cli_lane`` cap so the ``asyncio.gather`` submission
+    queue depth = 0 instead of bursting past the lane.
+  Operator override knobs (``GEODE_CLAUDE_CLI_LANE_MAX`` /
+  ``GEODE_OPENAI_API_LANE_MAX`` /
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES``) are unchanged; operators on
+  larger hosts (32 GB+) should raise all three in lockstep using the
+  rule-of-thumb table in each module's docstring. Sibling lanes that
+  don't spawn subprocesses (``anthropic_api_lane`` HTTP-only,
+  ``global``, ``seed-generation``) stay at cap 50 — they are not
+  RSS-bounded. Test pins updated:
+  ``tests/core/orchestration/test_openai_api_lane.py::test_default_max_concurrent_is_ten`` +
+  ``tests/plugins/seed_generation/test_ranker_semaphore.py::test_default_is_five``;
+  the claude-cli lane test references ``DEFAULT_CLAUDE_CLI_LANE_MAX``
+  by name so it tracks the constant automatically.
+
 ### Fixed
 - **PR-AUDIT-TARGET-SOURCE-WIRE (2026-05-27)** — route the audit
   subprocess's target ``(provider, source)`` resolution through
