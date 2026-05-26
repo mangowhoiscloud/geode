@@ -20,7 +20,7 @@ jobs:
   # Hermes (frontier survey 2026-05-17).
   changes:
     name: Detect changes
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     if: github.event.pull_request.draft != true
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -42,7 +42,7 @@ jobs:
 
   lint:
     name: Lint & Format
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     needs: changes
     steps:
       - name: Skip — no code change
@@ -85,7 +85,7 @@ jobs:
 
   typecheck:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     needs: changes
     steps:
       - name: Skip — no code change
@@ -105,7 +105,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     needs: changes
     steps:
       - name: Skip — no code change
@@ -141,7 +141,7 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     needs: changes
     steps:
       - name: Skip — no code change
@@ -158,7 +158,7 @@ jobs:
 
   gate:
     name: Gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]  # PR-SEEDS-HIRES outage workaround (revert after GH Actions ubuntu-latest recovers)
     needs: [lint, typecheck, test, security]
     steps:
       - run: echo "All checks passed"
