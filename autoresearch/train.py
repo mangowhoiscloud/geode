@@ -2359,9 +2359,10 @@ def _revert_sot_after_reject(
     # ``run_id`` carries the AUDIT_RUN_ID (the per-audit correlation
     # key written into mutations.jsonl by runner.append_audit_log),
     # NOT the mutation_id — the mutation_id rides in its own field.
-    # The audit-subprocess-crash revert path uses ``_rollback_sot``
-    # (runner.py) instead of this function; that path is NOT wired
-    # by this PR and is deferred to a follow-up.
+    # The audit-subprocess-crash + audit-log-write-fail revert paths
+    # are wired through ``_rollback_sot`` (runner.py) by
+    # PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27); this function
+    # owns only the promote-gate reject path.
     from core.hooks.system import HookEvent
     from core.self_improving_loop._hooks import _fire_hook
 

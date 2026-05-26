@@ -279,3 +279,167 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     assert payload["reason"] == "promote_gate_reject"
     assert payload["run_id"] == "audit-run-xyz"  # audit_run_id, NOT mutation_id
     assert isinstance(payload["ts"], float)
+
+
+def test_rollback_sot_emits_mutation_reverted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27) — when the
+    runner's :meth:`_rollback_sot` triggers (audit-log write fails OR
+    audit subprocess crashes / exits non-zero), it must fire
+    ``HookEvent.MUTATION_REVERTED`` with the caller-supplied
+    ``reason`` (``audit_log_write_fail`` / ``audit_subprocess_crash`` /
+    ``audit_subprocess_nonzero``) so observability readers can
+    distinguish the trigger from the promote-gate reject path."""
+    from core.self_improving_loop.runner import Mutation, SelfImprovingLoopRunner
+
+    hooks = HookSystem()
+    captured: list[dict[str, Any]] = []
+    hooks.register(
+        HookEvent.MUTATION_REVERTED,
+        lambda event, data: captured.append(data),
+        name="capture_rollback_revert",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    written: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        "autoresearch.train.write_wrapper_prompt_sections",
+        lambda sections: written.append(dict(sections)),
+    )
+
+    mutation = Mutation(
+        mutation_id="rollback-mid",
+        target_kind="prompt",
+        target_section="evolver.system",
+        new_value="newval",
+        rationale="rollback test",
+        target_dim="dim_z",
+    )
+
+    # Simulate the audit-log-write-fail caller (OSError branch).
+    SelfImprovingLoopRunner._rollback_sot(
+        {"evolver.system": "pre-mutation"},
+        mutation=mutation,
+        exc=OSError("disk full"),
+        audit_run_id="audit-osfail-1",
+        reason="audit_log_write_fail",
+    )
+    assert written == [{"evolver.system": "pre-mutation"}]
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["mutation_id"] == "rollback-mid"
+    assert payload["target_kind"] == "prompt"
+    assert payload["target_path"] == "prompt.evolver.system"
+    assert payload["reason"] == "audit_log_write_fail"
+    assert payload["run_id"] == "audit-osfail-1"
+
+    # Simulate the audit-subprocess-crash caller — same function, different reason.
+    SelfImprovingLoopRunner._rollback_sot(
+        {"evolver.system": "pre-mutation"},
+        mutation=mutation,
+        exc=RuntimeError("subprocess died"),
+        audit_run_id="audit-crash-2",
+        reason="audit_subprocess_crash",
+    )
+    assert len(captured) == 2
+    assert captured[1]["reason"] == "audit_subprocess_crash"
+    assert captured[1]["run_id"] == "audit-crash-2"
+
+    # Default reason path (caller didn't thread one) — must still emit
+    # so listeners are not silently dropped.
+    SelfImprovingLoopRunner._rollback_sot(
+        {"evolver.system": "pre-mutation"},
+        mutation=mutation,
+        exc=Exception("unknown"),
+    )
+    assert len(captured) == 3
+    assert captured[2]["reason"] == "post_apply_failure"
+    assert captured[2]["run_id"] == ""
+
+
+def test_rollback_sot_policy_kind_emits_mutation_reverted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex MCP fold — also cover the non-prompt branch
+    (``write_policy``). The original ``test_rollback_sot_emits_mutation_reverted``
+    only stubbed ``write_wrapper_prompt_sections`` so the
+    ``write_policy`` half of the dispatch was uncovered."""
+    from core.self_improving_loop.runner import Mutation, SelfImprovingLoopRunner
+
+    hooks = HookSystem()
+    captured: list[dict[str, Any]] = []
+    hooks.register(
+        HookEvent.MUTATION_REVERTED,
+        lambda event, data: captured.append(data),
+        name="capture_policy_rollback",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    written: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "core.self_improving_loop.policies.write_policy",
+        lambda kind, sections: written.append((kind, dict(sections))),
+    )
+
+    mutation = Mutation(
+        mutation_id="policy-rollback-mid",
+        target_kind="tool_policy",
+        target_section="lane_caps",
+        new_value="newval",
+        rationale="policy rollback test",
+        target_dim="dim_a",
+    )
+    SelfImprovingLoopRunner._rollback_sot(
+        {"lane_caps": "prior"},
+        mutation=mutation,
+        exc=OSError("disk full"),
+        audit_run_id="audit-policy-rb",
+        reason="audit_log_write_fail",
+    )
+    assert written == [("tool_policy", {"lane_caps": "prior"})]
+    assert len(captured) == 1
+    assert captured[0]["target_kind"] == "tool_policy"
+    assert captured[0]["reason"] == "audit_log_write_fail"
+
+
+def test_rollback_sot_no_emit_when_rollback_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex MCP fold — the emit must be INSIDE the try block so a
+    rollback-write failure (rare: disk full while writing the rollback
+    itself) short-circuits BEFORE emit. Otherwise listeners would see
+    a 'reverted' signal when the SoT is actually divergent."""
+    from core.self_improving_loop.runner import Mutation, SelfImprovingLoopRunner
+
+    hooks = HookSystem()
+    captured: list[dict[str, Any]] = []
+    hooks.register(
+        HookEvent.MUTATION_REVERTED,
+        lambda event, data: captured.append(data),
+        name="capture_no_emit_on_writer_fail",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    def _writer_fails(sections: dict[str, str]) -> None:
+        raise OSError("rollback writer disk full")
+
+    monkeypatch.setattr("autoresearch.train.write_wrapper_prompt_sections", _writer_fails)
+
+    mutation = Mutation(
+        mutation_id="writer-fail-mid",
+        target_kind="prompt",
+        target_section="evolver.system",
+        new_value="newval",
+        rationale="writer-fail test",
+        target_dim="dim_b",
+    )
+    # ``_rollback_sot`` swallows the writer failure (logged, not raised)
+    # so the call returns normally. The pin is on the emit side: NO
+    # event captured.
+    SelfImprovingLoopRunner._rollback_sot(
+        {"evolver.system": "prior"},
+        mutation=mutation,
+        exc=OSError("original audit-log fail"),
+        audit_run_id="audit-doomed",
+        reason="audit_log_write_fail",
+    )
+    assert captured == []
