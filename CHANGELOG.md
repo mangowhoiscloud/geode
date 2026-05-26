@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-VAR-ADAPTIVE + PR-RESAMPLE-BUDGET** — Phase F bundle of the
+  2026-05-26 attribution sprint (selection-gate algorithm depth).
+  * **PR-VAR-ADAPTIVE**: percentile-based ``group_variance_threshold``
+    resolver. New config knobs ``group_variance_threshold_mode:
+    Literal["fixed", "percentile"] = "fixed"``,
+    ``group_variance_history_window: int = 30``,
+    ``group_variance_percentile: float = 0.05``. New SoT
+    ``autoresearch/state/group_variance_history.jsonl`` (git-tracked
+    via ``.gitignore`` negation, PR-G5b precedent). New
+    ``append_group_variance_history`` writer (called from
+    ``apply_group_proposals`` after every group sampling cycle,
+    regardless of accept/reject) + ``resolve_group_variance_threshold``
+    reader. Per-kind filter + below-window fallback to fixed value.
+    Closes the 2026-05-26 sprint Phase A audit's "fitness-scale
+    drift" concern.
+  * **PR-RESAMPLE-BUDGET**: optional retry-on-low-variance.
+    ``max_group_resamples: int = 0`` (ge=0, le=10) + flag
+    ``resample_on_low_variance: bool = False``. When both enabled and
+    ``_compute_group_advantage`` returns ``filtered_low_variance``,
+    ``apply_group_proposals`` cleans up sibling temp files and
+    recursively calls ``self.propose_group(N)`` + retry, bounded by
+    the budget. Default knob values preserve legacy "filtered →
+    cycle skip" behaviour. DAPO frontier equivalent:
+    ``max_num_gen_batches`` informative-batch retention. Pinned by
+    11 invariant tests in
+    ``tests/core/self_improving_loop/test_variance_adaptive_and_resample.py``.
+
 ### Changed
 
 - PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raise the per-adapter lane
