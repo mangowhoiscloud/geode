@@ -2119,6 +2119,115 @@ def _should_promote(
     )
 
 
+def _revert_sot_after_reject(
+    mutation_id: str,
+    *,
+    audit_log_path: Path | None = None,
+) -> tuple[bool, str]:
+    """Restore the target_section to its pre-mutation ``previous_value``
+    after the promotion gate rejects a runner-driven mutation.
+
+    PR-SOT-REVERT-ON-REJECT (2026-05-26). When the audit was triggered
+    by ``SelfImprovingLoopRunner`` (``GEODE_SIL_MUTATION_ID`` env set)
+    and :func:`_should_promote` returned ``False``, the SoT must be
+    rolled back; otherwise rejected mutations accumulate as permanent
+    state and the loop's regression-cause attribution becomes
+    undecomposable across cycles.
+
+    Lookup walks ``mutations.jsonl`` for the latest apply row matching
+    ``mutation_id`` (apply rows are written by ``runner.append_audit_log``
+    BEFORE the audit subprocess is invoked, so the row is always present
+    when the runner-driven path reaches this code).
+
+    Manual audits (no ``GEODE_SIL_MUTATION_ID`` env) are not handled by
+    this function — operator-driven mutations accumulate by design and
+    only an explicit ``geode self-improving revert`` would unwind them.
+
+    Returns ``(success, detail)``. Failure cases (mutation row missing,
+    file I/O error) log a WARNING and return ``(False, reason)`` so the
+    caller can surface the leak status in the audit's promoted_line.
+    """
+    from typing import cast
+
+    from core.self_improving_loop.mutations_reader import iter_mutations
+    from core.self_improving_loop.policies import load_policy, write_policy
+    from core.self_improving_loop.runner import ApplyRecord
+
+    # Note on type narrowing: ``iter_mutations(kinds={"applied"})``
+    # filters at the reader's discriminator (mutations_reader._parse_row)
+    # so every yielded row is an ApplyRecord. We avoid ``isinstance``
+    # because under pytest-cov import instrumentation the ApplyRecord
+    # class identity can drift between writer-side (mutations_reader's
+    # module-cached import) and reader-side (our function-local import),
+    # making isinstance False even when the row is structurally
+    # identical (CI failure on PR #1749 first attempt, 2026-05-26).
+    # ``cast`` gives mypy the narrowing without a runtime identity check.
+    apply_row: ApplyRecord | None = None
+    target_kind = ""
+    target_section = ""
+    previous_value = ""
+    # iter_mutations yields in file order (append-only); keep the LAST
+    # match so a re-applied mutation_id (rare; mutator should mint a
+    # fresh id) reverts to the most recent previous_value.
+    for row in iter_mutations(audit_log_path, kinds={"applied"}):
+        if row.mutation_id == mutation_id:
+            apply_row = cast(ApplyRecord, row)
+            target_kind = apply_row.target_kind
+            target_section = apply_row.target_section
+            previous_value = apply_row.previous_value
+
+    if apply_row is None:
+        log.warning(
+            "SoT revert skipped — mutation_id %r not found in mutations.jsonl",
+            mutation_id,
+        )
+        return False, f"mutation_id {mutation_id!r} not found"
+
+    # Insertion-vs-replacement parity: ``apply_mutation`` (runner.py:949-994)
+    # records ``previous_value = sections.get(target_section, "")``, so an
+    # empty previous_value can mean either (a) the section was absent
+    # before the mutation (insertion) or (b) it was present but empty
+    # (legitimate empty value). The symmetric revert deletes the key
+    # when previous_value is empty — otherwise the rejected mutation
+    # leaves a residual empty-string section, defeating the leak fix.
+    # Trade-off: a genuine empty-to-non-empty replacement reverts to
+    # absent rather than empty. Acceptable because the SoT schemas
+    # treat absent and empty-string equivalently at read time (both
+    # fall through to the section's bootstrap default).
+    try:
+        if target_kind == "prompt":
+            current = load_wrapper_prompt_sections()
+            if previous_value == "":
+                current.pop(target_section, None)
+            else:
+                current[target_section] = previous_value
+            write_wrapper_prompt_sections(current)
+        else:
+            current = load_policy(target_kind)
+            if previous_value == "":
+                current.pop(target_section, None)
+            else:
+                current[target_section] = previous_value
+            write_policy(target_kind, current)
+    except Exception as exc:
+        log.warning(
+            "SoT revert failed for mutation %s (kind=%s section=%s): %s",
+            mutation_id,
+            target_kind,
+            target_section,
+            exc,
+        )
+        return False, f"write failed ({type(exc).__name__})"
+
+    log.info(
+        "SoT reverted for rejected mutation %s (kind=%s section=%s)",
+        mutation_id,
+        target_kind,
+        target_section,
+    )
+    return True, f"{target_kind}.{target_section}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -2452,6 +2561,25 @@ def main() -> int:
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        else:
+            # PR-SOT-REVERT-ON-REJECT (2026-05-26) — when the audit was
+            # triggered by the mutator runner (GEODE_SIL_MUTATION_ID
+            # set) and the promotion gate rejected the mutation, revert
+            # the SoT so the loop doesn't accumulate rejected mutations
+            # as permanent state. Manual audits (no mutation_id env)
+            # intentionally accumulate operator-side changes; they are
+            # not auto-reverted (operator must use an explicit revert
+            # command). The detail string is appended to ``reason`` so
+            # the audit's printed ``baseline_promoted:`` line surfaces
+            # whether the leak prevention fired and the outcome.
+            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+            if _sil_mid_for_revert:
+                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+                reason = (
+                    f"{reason}; SoT reverted ({revert_detail})"
+                    if revert_ok
+                    else f"{reason}; SoT revert FAILED ({revert_detail})"
+                )
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
