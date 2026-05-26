@@ -6,8 +6,10 @@ summary while preserving the tail verbatim for continuity. Anthropic
 has server-side compaction (``compact_20260112``) and short-circuits
 at the top.
 
-**4 phases** (Hermes Phase 3, 2026-05-26, absorbing the Claude Code
-pattern):
+**4 phases** (Hermes Phase 3, 2026-05-26, absorbing Claude Code's
+tool_use/tool_result boundary + orphan handling — the broader
+thinking-block / image-block / citation surface is out of scope
+for this PR):
 
 1. **boundary** — find the cut index that won't split a
    ``tool_use`` / ``tool_result`` pair. Starts at
@@ -149,6 +151,9 @@ def find_safe_boundary(messages: list[dict[str, Any]], *, keep_recent: int) -> i
 # ── Phase 2: orphan tool_result cleanup ─────────────────────────────
 
 
+_ORPHAN_TOMBSTONE_TEXT = "[tool_result removed during compaction]"
+
+
 def strip_orphan_tool_results(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -159,9 +164,21 @@ def strip_orphan_tool_results(
     message in the kept tail is itself an orphan). Returns a new
     list — the input is not mutated.
 
-    Messages that lose ALL their content blocks after stripping are
-    dropped entirely so the result doesn't contain an empty
-    content list (which some providers reject).
+    **Matching contract**: a tool_result block survives iff
+    *any* assistant message in ``messages`` carries a ``tool_use``
+    with the same id. This is positional (ID appears somewhere)
+    rather than causal (ID appears in a strictly preceding assistant
+    message). The looser matcher is intentional for the post-
+    boundary cleanup since the boundary algorithm already
+    guarantees pair ordering for the recent tail; duplicate tool_use
+    ids that appear non-adjacently are unusual but legal.
+
+    **Role alternation preservation** (Codex MCP catch on
+    PR-Hermes-3): if a user message loses ALL its content blocks
+    to orphan stripping, the message is kept with a single
+    placeholder text block (rather than dropped entirely) so
+    consecutive-assistant role-alternation violations cannot occur
+    in the carry-forward tail.
     """
     all_use_ids: set[str] = set()
     for msg in messages:
@@ -184,6 +201,17 @@ def strip_orphan_tool_results(
             new_blocks.append(block)
         if new_blocks:
             cleaned.append({**msg, "content": new_blocks})
+        else:
+            # Empty content list would either be rejected by providers
+            # or, if simply dropped, would create role-alternation
+            # violations (two consecutive assistant messages). Insert a
+            # tombstone text block so the user-role slot survives.
+            cleaned.append(
+                {
+                    **msg,
+                    "content": [{"type": "text", "text": _ORPHAN_TOMBSTONE_TEXT}],
+                }
+            )
     return cleaned
 
 
