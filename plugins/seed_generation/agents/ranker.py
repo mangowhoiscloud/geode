@@ -425,7 +425,17 @@ class Ranker(BaseSeedAgent):
                     # 400 ``Unsupported parameter`` (pinned by
                     # ``test_codex_kwargs_does_not_send_max_output_tokens``
                     # and ``core/llm/providers/codex.py:325``).
-                    effort="none",
+                    #
+                    # PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H
+                    # follow-up, 2026-05-26) — operator override path.
+                    # Empty ``voter.effort`` (no operator override in
+                    # ``~/.geode/config.toml``) keeps the Sprint G
+                    # default ``"none"``; non-empty value flips this
+                    # voter to the operator-chosen effort without
+                    # requiring a code redeploy. The adapter validates
+                    # the value against the model's
+                    # ``reasoning_effort_values`` at request time.
+                    effort=voter.effort or "none",
                 )
             )
         return tasks

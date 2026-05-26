@@ -373,5 +373,153 @@ def test_strict_helper_derives_required_from_properties_keys() -> None:
     assert schema["additionalProperties"] is False
 
 
+# ──────────────────── PR-SCHEMA-TYPE-DRIFT-INVARIANT ───────────────────────
+#
+# Codex MCP retro-audit catch (post-PR-1 #1698, deferred to backlog item
+# #99). The existing 7 Loop-1 SoT drift tests above only compare
+# ``required`` key SETS — not property TYPES. A future schema-vs-parser
+# type drift (like the pre-PR-2 LITERATURE_REVIEW_SCHEMA pre-fix
+# ``articles_with_reasoning: array`` vs parser ``str(parsed.get(...))``,
+# or ``snapshots: array`` vs parser ``isinstance(snapshots_raw, dict)``)
+# would slip past the existing tests — the keys agree, the TYPES drift.
+#
+# This section pins each Loop-1 role's per-property JSON-Schema ``type``
+# against the type the parser / downstream consumer actually expects.
+# A future schema-tightening that changes ``"string"`` → ``"object"`` for
+# a parser that still does ``str(parsed.get(...))`` trips here, forcing
+# a conscious schema-OR-parser update.
+#
+# Convention: ``EXPECTED_TYPES[ROLE][prop]`` is either a JSON-Schema
+# primitive (``"string"``, ``"number"``, ``"boolean"``, ``"array"``,
+# ``"object"``) OR a tuple of primitives for nullable / union types
+# (e.g. CRITIQUE.rewrite_section accepts ``["string", "null"]``).
+
+
+def _schema_property_type(schema: dict, prop: str) -> str | tuple[str, ...]:
+    """Extract the ``type`` of a JSON-Schema property as a normalised
+    form: ``str`` for single-type, ``tuple[str, ...]`` for unions."""
+    spec = schema["properties"][prop]
+    decl = spec["type"]
+    if isinstance(decl, list):
+        return tuple(decl)
+    return decl
+
+
+_EXPECTED_TYPES: dict[str, dict[str, str | tuple[str, ...]]] = {
+    "PROXIMITY": {
+        "similarity_clusters": "array",
+    },
+    "CRITIQUE": {
+        "candidate_id": "string",
+        "target_dims_actual": "array",
+        "intended_dim_match": "boolean",
+        "strengths": "array",
+        "weaknesses": "array",
+        "judge_risk": "string",
+        "discrimination_estimate": "number",
+        "rewrite_section": ("string", "null"),
+    },
+    "PILOT": {
+        "candidate_id": "string",
+        "dim_means": "object",
+        "dim_stderr": "object",
+        "status": "string",
+    },
+    "VOTE": {
+        "match_id": "string",
+        "winner": "string",
+        "rationale": "string",
+    },
+    "EVOLVE": {
+        "parent_id": "string",
+        "evolved_id": "string",
+        "evolved_path": "string",
+        "rewrite_section": "string",
+        "verdict": "string",
+        "notes": "string",
+    },
+    "META_REVIEW": {
+        "coverage": "object",
+        "underrepresented_dims": "array",
+        "overrepresented_dims": "array",
+        "next_gen_priors": "object",
+        "elo_distribution": "object",
+        "evolution_yield": "object",
+        "session_summary": "string",
+    },
+    # LITERATURE_REVIEW — pre-PR-STRICT-COMPATIBLE-SCHEMAS the schema
+    # declared both ``articles_with_reasoning`` and ``snapshots`` as
+    # ``"array"`` while ``literature_review.py:164-166`` did
+    # ``str(parsed.get(...))`` + ``isinstance(snapshots_raw, dict)``.
+    # That bug is exactly what this whole section pins against.
+    "LITERATURE_REVIEW": {
+        "articles_with_reasoning": "string",
+        "snapshots": "object",
+    },
+    "SUPERVISOR": {
+        "research_goal_analysis": "object",
+        "phase_guidance": "object",
+        "session_summary": "string",
+    },
+}
+
+
+_SCHEMA_BY_ROLE: dict[str, dict] = {
+    "PROXIMITY": PROXIMITY_SCHEMA,
+    "CRITIQUE": CRITIQUE_SCHEMA,
+    "PILOT": PILOT_SCHEMA,
+    "VOTE": VOTE_SCHEMA,
+    "EVOLVE": EVOLVE_SCHEMA,
+    "META_REVIEW": META_REVIEW_SCHEMA,
+    "LITERATURE_REVIEW": LITERATURE_REVIEW_SCHEMA,
+    "SUPERVISOR": SUPERVISOR_SCHEMA,
+}
+
+
+@pytest.mark.parametrize(
+    "role,prop,expected",
+    [
+        (role, prop, expected)
+        for role, props in _EXPECTED_TYPES.items()
+        for prop, expected in props.items()
+    ],
+)
+def test_schema_property_type_matches_parser_expectation(
+    role: str, prop: str, expected: str | tuple[str, ...]
+) -> None:
+    """Per-property JSON-Schema ``type`` must match what the role's
+    parser actually does with the value. If this fails, schema-vs-parser
+    type drift is real — restore the parser-aligned type OR update
+    ``_EXPECTED_TYPES`` in lockstep with the parser change."""
+    schema = _SCHEMA_BY_ROLE[role]
+    actual = _schema_property_type(schema, prop)
+    assert actual == expected, (
+        f"{role}.{prop}: schema declares type={actual!r} but parser / "
+        f"downstream consumer expects {expected!r}. Either:\n"
+        "  (a) the schema regressed (restore the parser-aligned type), or\n"
+        "  (b) the parser contract intentionally changed (update "
+        "_EXPECTED_TYPES here in lockstep with the parser change).\n"
+        "``required``-only drift tests cannot catch type drift."
+    )
+
+
+def test_expected_types_covers_every_required_property() -> None:
+    """Every ``required`` key for each Loop-1 role must have an
+    ``_EXPECTED_TYPES`` entry. A new required field added to a schema
+    without a corresponding expected-type entry would silently slip
+    past the drift invariant above (no parametrize case → no failure).
+    """
+    for role, schema in _SCHEMA_BY_ROLE.items():
+        required = set(schema["required"])
+        covered = set(_EXPECTED_TYPES.get(role, {}).keys())
+        missing = required - covered
+        assert not missing, (
+            f"{role}: ``required`` keys {sorted(missing)} not covered by "
+            "_EXPECTED_TYPES. Add the expected JSON-Schema type for each "
+            "(based on what the role's parser does with the value) so the "
+            "drift invariant test covers the new fields."
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

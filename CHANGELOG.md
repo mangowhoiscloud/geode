@@ -47,6 +47,319 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.71] - 2026-05-26
+
+Sprint H closeout + backlog #99 cleanup. Bundles 4 PRs into one PATCH
+rotation: PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1 — extends
+F1 prefix allowlist to the result-event scan branch),
+PR-VOTER-EFFORT-OVERRIDE-HATCH (per-voter ``reasoning.effort`` operator
+surface + config.toml loader + enum validator),
+PR-CODEX-MULTITURN-PHASE-PRESERVE (round-trip ``ResponseOutputMessage.phase``
+across Codex multi-turn replay, full E2E wire chain with checkpoint /
+resume preservation), and PR-SCHEMA-TYPE-DRIFT-INVARIANT (per-property
+JSON-Schema ``type`` drift invariants — backlog #99 Codex MCP retro-audit
+fold).
+
+### Added
+
+- PR-SCHEMA-TYPE-DRIFT-INVARIANT (backlog #99, Codex MCP retro-audit
+  fold) — per-property JSON-Schema ``type`` drift invariants for the
+  8 Loop-1 seed-generation roles
+  (``test_json_schemas_wire.py::test_schema_property_type_matches_parser_expectation``).
+  Pre-fix the 7 SoT drift tests compared only ``required`` key sets;
+  a schema-vs-parser type mismatch (like the pre-PR-2 #1698
+  ``LITERATURE_REVIEW_SCHEMA`` ``articles_with_reasoning:"array"`` vs
+  parser ``str(parsed.get(...))``) slipped past because the key
+  agreed. New invariant pins each required property's schema ``type``
+  against the type the parser / downstream consumer actually expects
+  (string read / dict access / array iter / number aggregate /
+  boolean branch), plus a coverage guard
+  (``test_expected_types_covers_every_required_property``) that
+  forces a new required field to land with an expected-type entry.
+
+- PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up) — round-trip
+  preservation of ``ResponseOutputMessage.phase`` across the Codex
+  Responses API multi-turn replay. OpenAI's
+  ``ResponseOutputMessage.phase`` is
+  ``Optional[Literal["commentary", "final_answer"]]`` and the same
+  slot appears on ``EasyInputMessageParam`` so multi-turn callers
+  need to carry the attribution back to the next turn. Pre-fix the
+  field was dropped at capture, so every Codex multi-turn replay
+  surfaced messages with phase implicitly ``None`` — losing the
+  semantic distinction that the model uses to differentiate
+  intermediate reasoning commentary from the final answer. Full
+  wire chain: ``translate_codex_response`` captures phase from
+  ``ResponseOutputMessage`` items, surfaces on
+  ``AdapterCallResult.assistant_phase``;
+  ``agentic_response_from_adapter_result`` forwards into
+  ``AgenticResponse.assistant_phase``; ``AgenticLoop`` persists onto
+  ``_assistant_msg["phase"]`` (both end-turn + tool-use round
+  sites); ``adapter_request_from_legacy`` reads dict ``m["phase"]``
+  → ``Message.phase``; ``build_codex_input`` →
+  ``_convert_assistant_msg_to_responses`` emits
+  ``{"role": "assistant", "content": ..., "phase": ...}`` so the
+  Responses API ``EasyInputMessageParam.phase`` slot is populated on
+  replay. Empty phase (default) skips the field — back-compat with
+  every non-Codex adapter and pre-existing Codex calls. 11 unit
+  tests pin: capture from message item, capture for both
+  ``commentary`` + ``final_answer`` values, no-op when phase
+  missing, phase capture alongside populated ``response.output_text``,
+  replay emit when set, replay skip when empty, string-content path,
+  text+tool_use ordering (phase on text, not on function_call),
+  ``build_codex_input`` E2E, ``Message.phase`` default back-compat,
+  full round-trip capture → replay. Closes the deferred PR-D3 fold
+  catch (PR #1715, 2026-05-26) for analogous ``phase`` preservation
+  to ``summary`` — same surface, same fix shape.
+
+- PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up) — per-voter
+  ``reasoning.effort`` override propagation. ``VoterSpec.effort`` (new
+  optional string field on the judge-panel voter entry) lets
+  operators flip the whole judge panel via
+  ``[[seed_generation.judge_panel.voters]]`` arrays in
+  ``~/.geode/config.toml`` without a code redeploy. Empty (the
+  manifest default) preserves the Sprint G ``"none"`` floor that
+  ranker / mutation_eval already pin; non-empty value flows
+  through the picker (``VoterBinding.effort``) into the
+  ``SubTask.effort`` constructor at both voter dispatch sites
+  (``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` and
+  ``plugins/seed_generation/mutation_eval.py``). The new
+  ``_load_config_toml_voter_overrides`` reads
+  ``[[seed_generation.judge_panel.voters]]`` from
+  ``~/.geode/config.toml`` (per-voter full-panel replacement,
+  same semantics as the role-override file) so the advertised
+  config.toml hatch actually wires to the picker — Codex MCP HIGH
+  catch fold (the original PR didn't add the loader, so the
+  operator surface didn't work end-to-end). ``VoterSpec`` also
+  validates ``effort`` against the OpenAI Responses API
+  documented enum (``none, minimal, low, medium, high, xhigh`` +
+  empty) at manifest load so an operator typo fails fast instead
+  of silently flowing to the server — Codex MCP MEDIUM catch
+  fold. Closes the original Codex MCP HIGH catch from PR #1734
+  (Sprint G) — the prior hard-pin had no operator override surface
+  if effort tuning ever needed to change post-deploy. 12 unit
+  tests pin: spec defaults + accepts override, all-documented-enum
+  acceptance + bad-value rejection, binding carries effort, picker
+  propagation, ranker SubTask uses voter.effort, mutation_eval
+  same, ``source="auto"`` rejection still in place, config.toml
+  full-panel replacement, missing voters → fallback to manifest,
+  missing file → fallback, invalid entry skipped with WARN.
+
+### Fixed
+
+- PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1) — extend the
+  ``_CLI_INJECTION_PREFIX_RE`` allowlist (from
+  PR-TRANSIENT-CLI-INJECTION-PREFIX) to the ``event.type="result"``
+  scan branch in ``classify_transient_signal``. Smoke 22 evidence:
+  dump ``1779767762-claude-opus-4-7.json`` — LLM seed body landed
+  in ``event.type="result"`` ``result`` field carrying the phrase
+  ``"...the rate-limit warning as sufficient grounds for N=2..."``
+  and the pre-fix broad any-position transient regex matched it,
+  aborting ``gen-gen1-000`` even though the seed ``.md`` was
+  already written. The fix gates the ``result.result`` field (LLM-
+  authored aggregated final-assistant text) on the same prefix
+  allowlist as the ``assistant`` + ``content_block_delta``
+  branches; the ``result.error`` / ``result.message`` /
+  ``result.stderr`` fields keep the any-position scan since they
+  carry CLI/system error text, not LLM prose. Pinned by
+  ``test_classify_signal_smoke22_llm_prose_in_result_event_not_false_positive``
+  (verbatim reconstruction of the dump),
+  ``test_classify_signal_result_event_error_field_still_fires_any_position``
+  (CLI-error path regression guard), and
+  ``test_classify_signal_result_event_cli_injection_prefix_in_result_fires``
+  (CLI-injection prefix in result.result still fires correctly).
+
+### Added
+
+- **PR-SELF-IMPROVING-P6 — autoresearch surface (5 sub-pages) +
+  Karpathy port mapping doc + E2E +8 cases.** Sprint Phase 6 of the
+  self-improving hub plan ([[project_self_improving_hub_plan]]).
+  Operator directive 2026-05-26: "geode 의 plugin/autoresearch 코드에
+  원본에 대한 전체 컨택스트를 주입받고 진행해."
+
+  **Context injection**: `docs/design/autoresearch-port-mapping.md`
+  (580 lines, 11 sections, file:line citations throughout) maps every
+  concept from Karpathy's original autoresearch (MIT 2026-03,
+  `~/workspace/autoresearch/`) to GEODE's port. Schema-v2 baseline
+  namespaces (raw/normalized/axes/fitness/audit/promotion), the
+  4-axis fitness function (vs Karpathy's single `val_bpb`), the
+  14-file policy SoT (vs Karpathy's 1-file `train.py` edit surface),
+  the `ApplyRecord` W4 mutation ledger schema, and the closed-loop
+  topology (audit → fitness → promote → mutate → next audit) are all
+  cross-referenced with code line numbers. This becomes the
+  load-bearing context for the P6 paired-agent build.
+
+  **5 sub-pages** (paired-agent — designer visual spec
+  `docs/design/self-improving-autoresearch-visual-spec.md` 1579 lines +
+  frontend implementation):
+
+  - `/autoresearch/index.html` (7794 B) — landing: status block
+    (current baseline gen_tag / fitness / promote ts / harness-chipped
+    model trio / artifact counts), generation timeline from
+    `baseline_archive.jsonl` with Δ fitness + active-row highlight,
+    4-row sub-view records table (NOT card grid)
+  - `/autoresearch/baseline.html` (6990 B) — 7 namespace blocks for
+    schema v2 (`metadata` / `raw` / `normalized` / `axes` / `fitness`
+    / `audit` / `promotion`). v1 baseline rendered gracefully (raw
+    namespace synthesized from top-level `dim_means` + `dim_stderr`;
+    missing v2 namespaces show `<em>schema-v1 fallback</em>` notice).
+    Stale `.outdated-*` snapshot triggers a `.warning-banner` header.
+  - `/autoresearch/mutations.html` (5424 B) — mutations table
+    (ts_utc / gen_tag / mut_id / target_section / kind / mutator-model
+    chip / verdict / Δfitness / audit_eval_id SPA link), per-row
+    `<details>` drilldown with full JSON payload, filter strip
+    (informational, CSS-only no JS)
+  - `/autoresearch/results.html` (5628 B) — 12-col `results.tsv` table
+    (header from `RESULTS_TSV_HEADER` in `train.py:1284`), per-row
+    `<details>` paired with `results.jsonl` for 22-row dim_means /
+    dim_stderr / measurement_modality breakdown, fitness sparkline
+    column using Unicode block chars `▁▂▃▄▅▆▇█` (no SVG no JS)
+  - `/autoresearch/policies.html` (4970 B) — 14-row policies table
+    (filename / mtime / size / mutated-by-gen cross-reference from
+    `mutations.jsonl`), per-row `<details>` drilldown with
+    pretty-printed JSON `<pre class="policy-json">`
+
+  **No-publisher decision**: `autoresearch/state/*` is already
+  git-tracked under the repo, so the hub builder reads source files
+  directly. Avoids dual-SoT drift (per `[[feedback-latest-vs-
+  promoted-sot]]`) + extra publisher infra. Documented in
+  visual-spec §3.
+
+  **Builder extensions** (`scripts/build_self_improving_hub.py`,
+  +~750 lines):
+  - 6 loaders (`_load_baseline` with `.outdated-*` fallback /
+    `_load_baseline_archive` / `_load_mutations` / `_load_results_tsv`
+    / `_load_results_jsonl` / `_list_policies`)
+  - 5 renderers (`render_autoresearch_landing/baseline/mutations/
+    results/policies`)
+  - `_AutoresearchRenderCtx` dataclass + `_fitness_sparkline`
+    Unicode block helper + `_safe()` best-effort wrapper (one page
+    failure doesn't block the others)
+  - 6 new CLI flags (`--autoresearch-out-dir` + 5 template paths)
+
+  **CSS extensions** (`hub.css`, +~190 lines): `.warning-banner`,
+  `.gen-timeline-row.active`, `.fitness-sparkline`, `.policy-json`
+  pre, `.delta-positive` / `.delta-negative` / `.delta-noise`,
+  `.namespace-block`, `.filter-strip`, `.status-grid`. All composed
+  from existing tokens (`--bucket-autoresearch` opacity for warn,
+  `--bucket-seedgen` for positive delta). Zero new color tokens.
+
+  **E2E +8 tests** (21 → **29**):
+  `test_autoresearch_landing_renders` /
+  `test_autoresearch_baseline_renders` /
+  `test_autoresearch_baseline_stale_warning` /
+  `test_autoresearch_mutations_table_renders` /
+  `test_autoresearch_results_sparkline` /
+  `test_autoresearch_policies_lists_files` /
+  `test_autoresearch_pages_url_basepath_safety` /
+  `test_autoresearch_sidebar_consistent`. Plus
+  `test_autoresearch_baseline_schema_v1_renders_gracefully` for v1
+  fallback path. All 29 pass against current builder output, ruff +
+  ruff-format + mypy clean.
+
+  **Fixtures** under
+  `tests/fixtures/self_improving_hub/autoresearch/state/`: v2
+  baseline (6 namespaces filled), 3-row archive, 3-row mutations,
+  3-row tsv + jsonl, 4 policy JSONs.
+
+- **PR-SELF-IMPROVING-P5 — seed-generation surface (index + per-run
+  detail) + E2E self-verification suite.** Sprint Phase 5 of the
+  self-improving hub plan ([[project_self_improving_hub_plan]]) plus
+  the operator-mandated verification rigor uplift ("검증 절차 높이고.
+  E2E로 자체 동작 검증도 가능하게 해" — 2026-05-26).
+
+  **New surface** (paired-agent built — designer + frontend sub-agents
+  worked concurrently per operator directive):
+
+  - `docs/self-improving/seed-generation/index.html` — runs table
+    (run_id / gen_tag / target_dim / mutator + harness chip /
+    draft → surv / evolved / iters / cost USD / phases-count) +
+    8-phase pipeline legend + cost rollup
+  - `docs/self-improving/seed-generation/<run_id>/index.html` — per-
+    run detail with 9 sections: header / mutator banner / candidates
+    / survivors / evolved / phase `.eval` cards (linking to SPA
+    `#/tasks/<task_id>`) / reflections / pilot heatmap (22-dim ×
+    candidates) / meta-review (session_summary + next-gen priors +
+    Elo distribution + coverage bar chart) / cost rollup
+
+  **Heatmap discipline**: pilot scores use a 5-bucket warm ramp
+  composed entirely from existing tokens (`--rule-soft` for safe
+  baseline, opacity overlays on `--bucket-autoresearch` for warm
+  warning). High score = problematic per petri convention. Each cell
+  carries `aria-label="<dim> <mean>±<stderr>"` for screen readers
+  (color is secondary signal only).
+
+  **Builder extensions** (`scripts/build_self_improving_hub.py`):
+
+  - `_harness_chip(model)` helper factored out (shared by hub + seed
+    surfaces)
+  - `_load_per_run(bundle_seeds_dir, run_id)` + `render_seedgen_index`
+    + `render_seedgen_run` plus 8 private renderers (candidates /
+    survivors / evolved / phase cards / reflections / pilot heatmap /
+    meta-review / cost rollup)
+  - CLI: `--seedgen-out-dir` + `--seedgen-index-template` +
+    `--seedgen-run-template`
+  - `main()` writes hub then walks seedgen runs
+
+  **CSS extensions** (`docs/self-improving/assets/hub.css`):
+  `.run-detail-header`, `.mutator-banner`, `table.records.phases`,
+  `table.records.heatmap` with 5 score-bucket classes
+  (`.score-safe` / `.score-warn-1..4` / `.score-na`),
+  `.coverage-bar` + `.coverage-bar-fill`, `.cost-grid`,
+  `.phases-legend`, `.reflections`, `.session-summary`. No new color
+  tokens; everything reuses `--rule-soft` / `--bucket-autoresearch`
+  / `--bucket-seedgen`.
+
+  **DESIGN.md**: added
+  `docs/design/self-improving-seed-generation-visual-spec.md`
+  (~1100 lines, 17 sections). Master + 11 sibling page docs all
+  bumped to `geode_version: 0.99.65` (matches the P5 sprint baseline;
+  follow-up release rotation will bump to current main).
+
+  **E2E self-verification suite**
+  (`tests/test_self_improving_hub_e2e.py`, **30 cases**): Operator
+  directive 2026-05-26 — raise verification rigor + enable self E2E.
+  Suite runs the production builder against fixture data
+  (`tests/fixtures/self_improving_hub/`) and asserts every contract
+  documented in master + per-page DESIGN.md: build invariants /
+  fixture-not-gitignored / sidebar contract / 4-section contract /
+  harness chip mapping / URL safety / version stamp / empty state /
+  accessibility / no-emoji / DESIGN.md frontmatter parity / CSS
+  asset present + chip classes defined; plus seedgen-specific
+  (index renders / per-run page 9 sections / heatmap 22 columns /
+  phase cards link to SPA `#/tasks/...` / URL basepath safety /
+  coverage bars); plus autoresearch-specific (landing / baseline
+  namespaces / mutations ledger / results sparkline / policies
+  14-file table / sub-page basepath safety / schema-v1 fallback).
+
+  All 30 tests pass against current builder output (~5s wall-clock).
+  Lint clean, ruff format clean, mypy clean on
+  `build_self_improving_hub.py`.
+
+### Fixed
+
+- PR-SELF-IMPROVING-P5-FOLLOWUP — autoresearch sub-pages now write to
+  `<name>/index.html` instead of flat `<name>.html`, so the trailing-
+  slash sidebar URLs (`/geode/self-improving/autoresearch/baseline/`)
+  resolve on both `python -m http.server` (no auto-extension) and
+  GitHub Pages. The sidebar already used the dir-trailing-slash
+  pattern for seed-generation consistency, but the builder wrote
+  flat files — Pages auto-resolved (hiding the bug in production),
+  local preview returned 404. Builder now creates `baseline/`,
+  `mutations/`, `results/`, `policies/` directories under
+  `docs/self-improving/autoresearch/`. E2E fixture loader updated to
+  match. Pinned by the existing `test_autoresearch_pages_url_basepath
+  _safety` after path migration.
+- PR-SELF-IMPROVING-P5-FIXTURE — un-gitignored the audit-row fixture
+  `tests/fixtures/self_improving_hub/petri-bundle/logs/listing.json`
+  (was silently swallowed by the project-wide `logs/` ignore rule),
+  so CI clones the file and the builder produces the same audit
+  rows as local. Same anti-pattern as PR-G5b #1350 (Writer
+  destination tracked rule). Pinned by new
+  `test_fixture_files_not_gitignored` which walks the whole fixture
+  tree and asserts `git check-ignore` clean — prevents the
+  regression class.
+
 ## [0.99.70] - 2026-05-26
 
 Single-fix PATCH rotation. Ships PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED
@@ -222,33 +535,6 @@ are unrelated in code path but symbiotic at the system level: without
 E1 the ranker has no codex voters, without E2 the ranker has missing
 candidates to vote on. v0.99.66 ships both alongside the pre-existing
 voter task_id collision fix that E1 surfaced.
-
-### Fixed
-
-- PR-GENERATOR-PLAN-LEAK-FIX — seed generator silent partial-write defect
-  (smoke 20, 2/15 generator sub-agents reported `success=true` but wrote
-  no candidate `.md` file). Root cause: the supervisor-built per-task
-  description contained natural English connectors (` and `, ` then `)
-  that tripped `core.agent.plan._has_compound_indicators`, so
-  `decompose_async` fired with the decomposer system prompt inside the
-  sub-agent worker; claude-cli cached that prompt under the sub-agent's
-  session_id; `_persist_session_id` stamped it as the resume target;
-  the next `_call_llm` turn (now carrying the *generator* system prompt)
-  was dispatched with `resume_session_id` set, which makes
-  `build_subprocess_stdin` skip the system block on the rationale that
-  it's already cached. The model resumed the decomposer conversation
-  and emitted a `DecompositionResult`-shape JSON instead of calling
-  `seed_debate_turn` / `write_file`. Fix is two-layered:
-  (1) **structural** — `core.agent.worker._run_agentic` now constructs
-  the sub-agent `AgenticLoop` with `enable_goal_decomposition=False`
-  (sub-agents are specialised executors; the parent already decomposed);
-  (2) **defence-in-depth** — `_resolve_worker_outcome` downgrades
-  `success=True` to `False` when the loop's text is a planner-shape
-  JSON (all three `is_compound` / `goals` / `reasoning` keys with their
-  canonical types), surfacing the defect class explicitly via a
-  `decomposition_result_leak` summary cause instead of letting a
-  phantom seed slip past the IPC boundary.
-
 ## [0.99.65] - 2026-05-26
 
 Hermes Phase 1d.2 + Phase 3 absorption rotation. Ships the

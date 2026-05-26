@@ -1,0 +1,4 @@
+session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stability_score	info_mean	dim_count_engaged	verdict	description
+test-session-1	gen-1	a1b2c3d	0.612	0.55	0.62	0.71	0.80	0.50	17	keep	initial baseline
+test-session-2	gen-2	b2c3d4e	0.654	0.59	0.65	0.74	0.82	0.50	17	keep	tool-policy dispatch refined
+test-session-3	gen-3	c3d4e5f	0.7245	0.65	0.71	0.78	0.85	0.50	17	keep	framing_rules promoted

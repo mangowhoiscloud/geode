@@ -1,0 +1,4 @@
+{
+  "dispatch": "Prefer cheaper read tools first. Cap parallelism to 4.",
+  "edit": "Edit before Write. Read before Edit."
+}

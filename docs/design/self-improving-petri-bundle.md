@@ -1,9 +1,9 @@
 ---
 title: DESIGN.md · `/geode/self-improving/petri-bundle/` (Moved SPA)
-geode_version: 0.99.63
+geode_version: 0.99.65
 schema_version: 1
 last_updated: 2026-05-26
-applies_to_geode: ">=0.99.63"
+applies_to_geode: ">=0.99.65"
 parent: self-improving-hub-system.md
 ---
 

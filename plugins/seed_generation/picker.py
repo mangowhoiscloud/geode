@@ -136,11 +136,19 @@ class RoleBinding:
 
 @dataclass(frozen=True)
 class VoterBinding:
-    """Resolved auth binding for one judge-panel voter."""
+    """Resolved auth binding for one judge-panel voter.
+
+    ``effort`` is the per-voter ``reasoning.effort`` override (Sprint G/H
+    operator escape-hatch, 2026-05-26). Empty string lets the caller
+    (ranker / mutation_eval) apply its own default; operators set this
+    via ``~/.geode/config.toml`` voter entries when the default proves
+    wrong for a specific model.
+    """
 
     model: str
     provider: str
     source: str
+    effort: str = ""
 
 
 @dataclass(frozen=True)
@@ -290,6 +298,69 @@ def _load_config_toml_seed_overrides(target: Path) -> dict[str, dict[str, str]]:
             )
             continue
         out[role] = {k: str(v) for k, v in body.items() if isinstance(v, (str, int, float))}
+    return out
+
+
+def _load_config_toml_voter_overrides(target: Path) -> list[VoterSpec] | None:
+    """Read ``[[seed_generation.judge_panel.voters]]`` from
+    ``~/.geode/config.toml`` so operators can override the whole voter
+    panel (PR-VOTER-EFFORT-OVERRIDE-HATCH, Sprint G/H follow-up,
+    2026-05-26). Returns ``None`` when the file is missing, malformed,
+    or carries no voter array — caller falls back to the bundled
+    manifest. Returns an empty list when the operator deliberately
+    wants to leave the panel empty (caller will fail the diversity
+    gate, surfacing the misconfiguration clearly).
+
+    The operator config replaces the WHOLE panel rather than patching
+    individual voters by index — there is no stable unique identifier
+    for a voter (``(provider, source)`` can repeat), so a partial
+    override would need an index-based shape that's fragile against
+    manifest evolution. A full-panel override is simpler and matches
+    the role-override semantics already in use.
+    """
+    if not target.is_file():
+        return None
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        log.warning(
+            "seed-generation picker: %s is not valid TOML (%s) — ignoring voter overrides",
+            target,
+            exc,
+        )
+        return None
+    seed_section = raw.get("seed_generation")
+    if not isinstance(seed_section, dict):
+        return None
+    judge_section = seed_section.get("judge_panel")
+    if not isinstance(judge_section, dict):
+        return None
+    voters_raw = judge_section.get("voters")
+    if voters_raw is None:
+        return None
+    if not isinstance(voters_raw, list):
+        log.warning(
+            "seed-generation picker: config.toml [[seed_generation.judge_panel.voters]] "
+            "is not a TOML array — ignoring voter overrides"
+        )
+        return None
+    out: list[VoterSpec] = []
+    for entry in voters_raw:
+        if not isinstance(entry, dict):
+            log.warning(
+                "seed-generation picker: config.toml voter entry %r is not a table — ignoring",
+                entry,
+            )
+            continue
+        try:
+            out.append(VoterSpec.model_validate(entry))
+        except (ValueError, TypeError) as exc:
+            log.warning(
+                "seed-generation picker: config.toml voter entry %r is invalid (%s) — ignoring",
+                entry,
+                exc,
+            )
+            continue
     return out
 
 
@@ -461,14 +532,22 @@ def pick_bindings(
         if source in SUBSCRIPTION_SOURCES:
             subscription_paths.add(source)
 
+    # PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up,
+    # 2026-05-26) — when the operator has supplied a
+    # ``[[seed_generation.judge_panel.voters]]`` array in
+    # ``~/.geode/config.toml`` it replaces the bundled manifest's
+    # voter list entirely. Empty / missing → bundled manifest stays.
+    voter_overrides = _load_config_toml_voter_overrides(GLOBAL_CONFIG_TOML)
+    voter_specs = voter_overrides if voter_overrides is not None else manifest.judge_panel.voters
     voters: list[VoterBinding] = []
-    for voter in manifest.judge_panel.voters:
+    for voter in voter_specs:
         resolved_source = _resolve_voter_source(voter, auto_probe=auto_probe)
         voters.append(
             VoterBinding(
                 model=voter.model,
                 provider=voter.provider,
                 source=resolved_source,
+                effort=voter.effort,
             )
         )
         if resolved_source in SUBSCRIPTION_SOURCES:

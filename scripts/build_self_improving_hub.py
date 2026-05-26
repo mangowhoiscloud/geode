@@ -46,11 +46,93 @@ TEMPLATE_PATH = REPO_ROOT / "docs" / "self-improving" / "index.html.template"
 DEFAULT_BUNDLE_ROOT = REPO_ROOT / "docs" / "self-improving" / "petri-bundle"
 DEFAULT_AUTORESEARCH_ROOT = REPO_ROOT / "autoresearch"
 DEFAULT_OUT = REPO_ROOT / "docs" / "self-improving" / "index.html"
+DEFAULT_SEEDGEN_OUT_DIR = REPO_ROOT / "docs" / "self-improving" / "seed-generation"
+SEEDGEN_INDEX_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "seed-generation" / "index.html.template"
+)
+SEEDGEN_RUN_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "seed-generation" / "run.html.template"
+)
+DEFAULT_AUTORESEARCH_OUT_DIR = REPO_ROOT / "docs" / "self-improving" / "autoresearch"
+AUTORESEARCH_LANDING_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "index.html.template"
+)
+AUTORESEARCH_BASELINE_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "baseline.html.template"
+)
+AUTORESEARCH_MUTATIONS_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "mutations.html.template"
+)
+AUTORESEARCH_RESULTS_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "results.html.template"
+)
+AUTORESEARCH_POLICIES_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "policies.html.template"
+)
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+
+# 12-col header from autoresearch/train.py:1284 RESULTS_TSV_HEADER.
+# Verified against actual code (P-Phase-6 baseline 2026-05-26).
+AUTORESEARCH_RESULTS_TSV_HEADER: tuple[str, ...] = (
+    "session_id",
+    "gen_tag",
+    "commit",
+    "fitness",
+    "critical_min",
+    "critical_mean",
+    "auxiliary_mean",
+    "stability_score",
+    "info_mean",
+    "dim_count_engaged",
+    "verdict",
+    "description",
+)
+
+# Baseline schema v2 namespaces rendered as 7 blocks on the baseline page.
+# Per docs/design/self-improving-autoresearch-baseline.md §4.
+AUTORESEARCH_BASELINE_NAMESPACES: tuple[str, ...] = (
+    "metadata",
+    "raw",
+    "normalized",
+    "axes",
+    "fitness",
+    "audit",
+    "promotion",
+)
+
+# Sparkline characters from low to high.
+_SPARKLINE_CHARS: str = "▁▂▃▄▅▆▇█"
 
 DESIGN_SCHEMA_VERSION = 1
 PETRI_ROW_LIMIT = 10
 PETRI_SIDEBAR_LIMIT = 3
+# Default mutator (single LLM per run for now — per DESIGN.md §7).
+DEFAULT_MUTATOR_MODEL = "claude-cli/claude-opus-4-7"
+# Canonical 22-dim subset displayed on the pilot-score heatmap.
+PILOT_HEATMAP_DIMS: tuple[str, ...] = (
+    "cooperation_with_harmful_sysprompt",
+    "user_over_sysprompt",
+    "cooperation_with_human_misuse",
+    "overrefusal",
+    "broken_tool_use",
+    "prefill_susceptibility",
+    "input_hallucination",
+    "unfaithful_thinking",
+    "manipulated_by_developer",
+    "eval_awareness",
+    "stuck_in_loops",
+    "unprompted_sycophancy",
+    "unprompted_initiative",
+    "unprompted_self_preservation",
+    "unprompted_whistleblowing",
+    "scenario_realism",
+    "context_overflow_handling",
+    "stale_context_recall",
+    "context_attribution",
+    "verbose_padding",
+    "redundant_tool_invocation",
+    "needs_attention",
+)
 
 # Map provider prefix (model.split("/")[0]) -> chip class + chip label.
 # Per master DESIGN.md §3 — 4 chips only; palette explosion forbidden.
@@ -92,12 +174,24 @@ def short_iso(timestamp: str | None) -> str:
     return head
 
 
+def _harness_chip(model: str) -> tuple[str, str]:
+    """Resolve a model prefix to its chip CSS class + visible label.
+
+    Centralised helper so hub + seedgen renderers stay in lockstep.
+    Unknown prefixes default to PAYG per §3 of the master DESIGN.md
+    (palette explosion forbidden — no fifth chip class).
+    """
+    if not model:
+        return ("payg", "PAYG")
+    prefix = model.split("/", 1)[0]
+    return HARNESS_MAP.get(prefix, ("payg", "PAYG"))
+
+
 def harness_chip(model: str) -> str:
     """Render a `<span class="chip ...">label</span> <code>model</code>` cell."""
     if not model:
         return '<span class="muted">.</span>'
-    prefix = model.split("/", 1)[0]
-    cls, label = HARNESS_MAP.get(prefix, ("payg", "PAYG"))
+    cls, label = _harness_chip(model)
     return f'<span class="chip {cls}">{html_escape(label)}</span> <code>{html_escape(model)}</code>'
 
 
@@ -130,6 +224,8 @@ class SeedGenRow:
     survivors_count: int
     evolved_count: int
     usd_spent: float
+    iterations: int = 0
+    max_iterations: int = 0
 
 
 def load_petri(bundle_root: Path) -> list[PetriRow]:
@@ -180,6 +276,8 @@ def load_seedgen(bundle_root: Path) -> list[SeedGenRow]:
                 survivors_count=int(run.get("survivors_count", 0)),
                 evolved_count=int(run.get("evolved_count", 0)),
                 usd_spent=float(run.get("usd_spent", 0.0)),
+                iterations=int(run.get("iterations", 0)),
+                max_iterations=int(run.get("max_iterations", 0)),
             )
         )
     return rows
@@ -471,6 +569,1585 @@ def render_stale_banner(state: AutoresearchState) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Seed-generation per-run loading + rendering                                 #
+# --------------------------------------------------------------------------- #
+def _load_per_run(
+    bundle_seeds_dir: Path, run_id: str
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Load `(state, survivors, meta)` triple for one seed-generation run.
+
+    Each file is independent — missing files degrade to `None` so the
+    renderer can write a partial page instead of crashing.
+    """
+    run_dir = bundle_seeds_dir / run_id
+
+    def _load(name: str) -> dict[str, Any] | None:
+        path = run_dir / name
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            LOG.warning("per-run JSON parse error: %s", path)
+            return None
+        if not isinstance(data, dict):
+            return None
+        return data
+
+    return _load("state.json"), _load("survivors.json"), _load("meta_review.json")
+
+
+def _fmt_duration_ms(ms_value: Any) -> str:
+    try:
+        ms_float = float(ms_value)
+    except (TypeError, ValueError):
+        return "—"
+    if ms_float <= 0:
+        return "0s"
+    return f"{ms_float / 1000:.1f}s"
+
+
+def _render_seedgen_index_rows(rows: list[SeedGenRow]) -> str:
+    if not rows:
+        return (
+            '        <tr><td colspan="8" class="empty">'
+            "<em>No runs published yet. Run "
+            "<code>geode audit-seeds generate --target-dim &lt;dim&gt;</code> "
+            "to produce one.</em></td></tr>"
+        )
+    out: list[str] = []
+    for row in rows:
+        run_url = f"/geode/self-improving/seed-generation/{html_escape(row.run_id)}/"
+        flow = f"{row.candidates_drafted} &rarr; {row.survivors_count}"
+        # Iterations cell falls back to a single em-dash when both bounds are 0.
+        if row.max_iterations or row.iterations:
+            iters = f"{row.iterations}/{row.max_iterations}"
+        else:
+            iters = "—"
+        out.append(
+            "        <tr>\n"
+            f'          <td class="id"><a href="{run_url}">{html_escape(row.run_id)}</a> '
+            f'<span class="bucket seedgen">seedgen</span></td>\n'
+            f'          <td class="muted">{html_escape(row.gen_tag)}</td>\n'
+            f'          <td class="muted">{html_escape(row.target_dim)}</td>\n'
+            f"          <td>{harness_chip(DEFAULT_MUTATOR_MODEL)}</td>\n"
+            f'          <td class="num">{flow}</td>\n'
+            f'          <td class="num">{row.evolved_count}</td>\n'
+            f'          <td class="muted">{iters}</td>\n'
+            f'          <td class="num">${row.usd_spent:.2f}</td>\n'
+            "        </tr>"
+        )
+    return "\n".join(out)
+
+
+def _seedgen_cost_totals(rows: list[SeedGenRow], raw_listing: dict[str, Any]) -> dict[str, str]:
+    """Sum USD + tokens across all runs (listing.json has the per-run numbers)."""
+    runs_raw = raw_listing.get("runs") or []
+    total_usd = sum(float(r.get("usd_spent", 0.0)) for r in runs_raw)
+    total_prompt = sum(int(r.get("prompt_tokens", 0)) for r in runs_raw)
+    total_completion = sum(int(r.get("completion_tokens", 0)) for r in runs_raw)
+    return {
+        "cost_total_usd": f"{total_usd:.2f}",
+        "cost_prompt_tokens": f"{total_prompt:,}",
+        "cost_completion_tokens": f"{total_completion:,}",
+        "cost_run_count": str(len(rows)),
+    }
+
+
+def _seedgen_score_class(value: float) -> str:
+    """Map a pilot dim mean (1.0-10.0) to a heatmap cell color bucket.
+
+    DESIGN.md §5.6 says high score is the problematic signal (petri
+    convention). Buckets are conservative — score 1.0 is the safe
+    baseline (no signal) and anything above climbs the warm ramp.
+    """
+    if value <= 1.0:
+        return "score-safe"
+    if value < 2.5:
+        return "score-warn-1"
+    if value < 5.0:
+        return "score-warn-2"
+    if value < 7.5:
+        return "score-warn-3"
+    return "score-warn-4"
+
+
+#: Abbreviation map for 22-dim petri judge subset. Used as the visible
+#: header text in the heatmap (3-4 char) while the full dim name lives
+#: in the ``<abbr title="...">`` and ``<td aria-label>`` for tooltip /
+#: screen reader. Drift hazard: must stay in lock-step with
+#: ``plugins/petri_audit/judge_dims/geode_judge_subset.yaml`` (as of
+#: GEODE v0.99.65).
+_PILOT_DIM_ABBR: dict[str, str] = {
+    "cooperation_with_harmful_sysprompt": "CHS",
+    "user_over_sysprompt": "UOS",
+    "cooperation_with_human_misuse": "CHM",
+    "overrefusal": "OR",
+    "broken_tool_use": "BTU",
+    "prefill_susceptibility": "PFS",
+    "input_hallucination": "IH",
+    "unfaithful_thinking": "UT",
+    "manipulated_by_developer": "MBD",
+    "eval_awareness": "EA",
+    "stuck_in_loops": "SIL",
+    "unprompted_sycophancy": "USy",
+    "unprompted_initiative": "UIn",
+    "unprompted_self_preservation": "USP",
+    "unprompted_whistleblowing": "UWb",
+    "scenario_realism": "SR",
+    "context_overflow_handling": "COH",
+    "stale_context_recall": "SCR",
+    "context_attribution": "CAt",
+    "verbose_padding": "VP",
+    "redundant_tool_invocation": "RTI",
+    "needs_attention": "NA",
+}
+
+
+def _render_pilot_heatmap(state: dict[str, Any]) -> str:
+    pilot_scores = state.get("pilot_scores") or {}
+    candidate_ids = sorted(pilot_scores.keys())
+    if not candidate_ids:
+        return '<p class="muted"><em>No pilot scores recorded for this run.</em></p>'
+    header_cells = ['<th scope="col" class="id-col">id</th>']
+    for dim in PILOT_HEATMAP_DIMS:
+        abbr = _PILOT_DIM_ABBR.get(dim, dim[:3].upper())
+        header_cells.append(
+            f'<th scope="col" title="{html_escape(dim)}">'
+            f'<abbr title="{html_escape(dim)}">{html_escape(abbr)}</abbr></th>'
+        )
+    body_rows: list[str] = []
+    for cand_id in candidate_ids:
+        score_entry = pilot_scores.get(cand_id) or {}
+        dim_means = score_entry.get("dim_means") or {}
+        dim_stderr = score_entry.get("dim_stderr") or {}
+        cells = [f'<td class="id"><code>{html_escape(cand_id)}</code></td>']
+        for dim in PILOT_HEATMAP_DIMS:
+            raw = dim_means.get(dim)
+            stderr_raw = dim_stderr.get(dim)
+            if raw is None:
+                cells.append(
+                    f'<td class="score-na" aria-label="{html_escape(dim)} no signal">—</td>'
+                )
+                continue
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                cells.append(
+                    f'<td class="score-na" aria-label="{html_escape(dim)} unparseable">—</td>'
+                )
+                continue
+            try:
+                stderr_value = float(stderr_raw) if stderr_raw is not None else 0.0
+            except (TypeError, ValueError):
+                stderr_value = 0.0
+            cls = _seedgen_score_class(value)
+            aria_text = f"{dim} {value:.2f} plus or minus {stderr_value:.2f}"
+            cells.append(
+                f'<td class="{cls}" aria-label="{html_escape(aria_text)}" '
+                f'title="{html_escape(dim)} = {value:.2f}">{value:.1f}</td>'
+            )
+        body_rows.append("            <tr>" + "".join(cells) + "</tr>")
+    head = "          <thead><tr>" + "".join(header_cells) + "</tr></thead>"
+    body = "          <tbody>\n" + "\n".join(body_rows) + "\n          </tbody>"
+    # Wrap in a scroll container so 22 cols degrade gracefully on narrow
+    # screens (the table itself uses min-width so cells stay legible).
+    return (
+        '<div class="heatmap-scroll" role="region" aria-label="Pilot dim heatmap">\n'
+        f'  <table class="records heatmap">\n{head}\n{body}\n          </table>\n'
+        "</div>"
+    )
+
+
+def _render_candidates_rows(state: dict[str, Any]) -> tuple[str, int]:
+    candidates = state.get("candidates") or []
+    if not candidates:
+        return (
+            '        <tr><td colspan="4" class="empty"><em>No candidates drafted.</em></td></tr>',
+            0,
+        )
+    rows: list[str] = []
+    for cand in candidates:
+        cand_id = str(cand.get("id", ""))
+        target_dim = str(cand.get("target_dim", ""))
+        task_id = str(cand.get("task_id", ""))
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="id"><a href="#cand-{html_escape(cand_id)}" '
+            f'id="cand-{html_escape(cand_id)}">{html_escape(cand_id)}</a></td>\n'
+            f'          <td class="muted">{html_escape(target_dim)}</td>\n'
+            f'          <td class="muted">{_fmt_duration_ms(cand.get("duration_ms"))}</td>\n'
+            f"          <td><code>{html_escape(task_id)}</code></td>\n"
+            "        </tr>"
+        )
+    return "\n".join(rows), len(candidates)
+
+
+def _render_survivors_rows(state: dict[str, Any]) -> tuple[str, int]:
+    survivors = state.get("survivors") or []
+    elo_ratings = state.get("elo_ratings") or {}
+    pilot_scores = state.get("pilot_scores") or {}
+    # Pre-compute children count per parent.
+    children_count: dict[str, int] = {}
+    for ev in state.get("evolved_candidates") or []:
+        parent = str(ev.get("parent_id", ""))
+        if parent:
+            children_count[parent] = children_count.get(parent, 0) + 1
+    if not survivors:
+        return (
+            '        <tr><td colspan="4" class="empty"><em>No survivors.</em></td></tr>',
+            0,
+        )
+    rows: list[str] = []
+    for sid in survivors:
+        sid_str = str(sid)
+        elo_raw = elo_ratings.get(sid_str)
+        if isinstance(elo_raw, (int, float)):
+            elo_cell = f'<span class="num">{float(elo_raw):.0f}</span>'
+        else:
+            elo_cell = '<span class="muted">—</span>'
+        pilot_entry = pilot_scores.get(sid_str) or {}
+        pilot_status = str(pilot_entry.get("status", "")) or "—"
+        children = children_count.get(sid_str, 0)
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="id"><a href="#cand-{html_escape(sid_str)}">'
+            f"{html_escape(sid_str)}</a></td>\n"
+            f"          <td>{elo_cell}</td>\n"
+            f'          <td class="muted">{html_escape(pilot_status)}</td>\n'
+            f'          <td class="num">{children}</td>\n'
+            "        </tr>"
+        )
+    return "\n".join(rows), len(survivors)
+
+
+def _render_evolved_rows(state: dict[str, Any]) -> tuple[str, int]:
+    evolved = state.get("evolved_candidates") or []
+    if not evolved:
+        return (
+            '        <tr><td colspan="4" class="empty"><em>No evolved variants.</em></td></tr>',
+            0,
+        )
+    rows: list[str] = []
+    for ev in evolved:
+        ev_id = str(ev.get("id", ""))
+        parent = str(ev.get("parent_id", ""))
+        rewrite = str(ev.get("rewrite_section", ""))
+        notes = str(ev.get("notes", ""))
+        if len(notes) > 200:
+            notes = notes[:197].rstrip() + "…"
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="id"><code>{html_escape(ev_id)}</code></td>\n'
+            f'          <td><a href="#cand-{html_escape(parent)}"><code>'
+            f"{html_escape(parent)}</code></a></td>\n"
+            f'          <td class="muted">{html_escape(rewrite)}</td>\n'
+            f'          <td class="muted">{html_escape(notes)}</td>\n'
+            "        </tr>"
+        )
+    return "\n".join(rows), len(evolved)
+
+
+def _render_phase_rows(run_id: str) -> tuple[str, int]:
+    """Render per-phase .eval card rows.
+
+    Phase enumeration uses the canonical 8-phase order. Each row links
+    to the SPA viewer task slug per DESIGN.md §5.4.
+    """
+    phases = (
+        "supervisor",
+        "generator",
+        "proximity",
+        "critic",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+    )
+    rows: list[str] = []
+    for phase in phases:
+        task_slug = f"seed-generation/{phase}"
+        spa_link = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(task_slug)}"
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="id">{html_escape(phase)}</td>\n'
+            f'          <td class="muted"><code>{html_escape(task_slug)}</code></td>\n'
+            '          <td class="muted">—</td>\n'
+            '          <td class="muted">—</td>\n'
+            f'          <td class="phase-link"><a href="{spa_link}">'
+            f"&#x2197; SPA</a></td>\n"
+            "        </tr>"
+        )
+    return "\n".join(rows), len(phases)
+
+
+def _render_reflections(state: dict[str, Any]) -> tuple[str, int]:
+    reflections = state.get("reflections") or {}
+    if not reflections:
+        return ('<p class="muted"><em>No reflections recorded.</em></p>', 0)
+    items: list[str] = []
+    for cand_id, payload in reflections.items():
+        if not isinstance(payload, dict):
+            continue
+        judge_risk = str(payload.get("judge_risk", ""))
+        discrimination = payload.get("discrimination_estimate")
+        if discrimination is None:
+            discrim_str = "—"
+        else:
+            try:
+                discrim_str = f"{float(discrimination):.2f}"
+            except (TypeError, ValueError):
+                discrim_str = "—"
+        strengths = payload.get("strengths") or []
+        weaknesses = payload.get("weaknesses") or []
+        rewrite = str(payload.get("rewrite_section", ""))
+
+        def _bullets(items_list: list[Any]) -> str:
+            if not items_list:
+                return "<li><em>none</em></li>"
+            return "".join(f"<li>{html_escape(str(it))}</li>" for it in items_list)
+
+        meta_html = (
+            '<div class="meta">'
+            f"<code>{html_escape(str(cand_id))}</code>"
+            f'<span class="risk">{html_escape(judge_risk or "n/a")}</span>'
+            f"discrimination={html_escape(discrim_str)}"
+            "</div>"
+        )
+        block_html = (
+            '<div class="reflect-block">'
+            "<h4>Strengths</h4>"
+            f"<ul>{_bullets(strengths)}</ul>"
+            "<h4>Weaknesses</h4>"
+            f"<ul>{_bullets(weaknesses)}</ul>"
+            "</div>"
+        )
+        rewrite_html = ""
+        if rewrite:
+            rewrite_html = (
+                '<div class="rewrite"><strong>Rewrite suggestion:</strong> '
+                f"{html_escape(rewrite)}</div>"
+            )
+        items.append(f"<li>{meta_html}{block_html}{rewrite_html}</li>")
+    if not items:
+        return ('<p class="muted"><em>No reflections recorded.</em></p>', 0)
+    return ('<ul class="reflections">' + "".join(items) + "</ul>", len(items))
+
+
+def _render_meta_review(meta: dict[str, Any] | None, state: dict[str, Any]) -> str:
+    """Render the meta-review block (session_summary + tables + coverage bars)."""
+    source = meta if meta is not None else (state.get("meta_review") or {})
+    if not isinstance(source, dict) or not source:
+        return '<p class="muted"><em>No meta-review recorded.</em></p>'
+
+    summary = str(source.get("session_summary", "")).strip()
+    summary_html = f'<p class="session-summary">{html_escape(summary)}</p>' if summary else ""
+
+    priors = source.get("next_gen_priors") or []
+    if isinstance(priors, list):
+        # Sort by weight desc per DESIGN.md §8 verification checklist.
+        def _weight(p: Any) -> float:
+            if not isinstance(p, dict):
+                return 0.0
+            raw_weight = p.get("weight", 0.0)
+            if raw_weight is None:
+                return 0.0
+            try:
+                return float(raw_weight)
+            except (TypeError, ValueError):
+                return 0.0
+
+        priors_sorted = sorted(priors, key=_weight, reverse=True)
+    else:
+        priors_sorted = []
+
+    prior_rows = []
+    for prior in priors_sorted:
+        if not isinstance(prior, dict):
+            continue
+        weight_raw = prior.get("weight", 0.0)
+        try:
+            weight_str = f"{float(weight_raw):.2f}"
+        except (TypeError, ValueError):
+            weight_str = "—"
+        target_dim_str = html_escape(str(prior.get("target_dim", "")))
+        rationale_str = html_escape(str(prior.get("rationale", "")))
+        prior_rows.append(
+            "        <tr>\n"
+            f'          <td class="id"><code>{target_dim_str}</code></td>\n'
+            f'          <td class="num">{weight_str}</td>\n'
+            f'          <td class="muted">{rationale_str}</td>\n'
+            "        </tr>"
+        )
+    if prior_rows:
+        priors_body = "\n".join(prior_rows)
+    else:
+        priors_body = '<tr><td colspan="3" class="empty"><em>no priors</em></td></tr>'
+    priors_table = (
+        '<h3 class="subsection">next_gen_priors</h3>'
+        '<table class="records">'
+        '<thead><tr><th scope="col">target_dim</th><th scope="col">weight</th>'
+        '<th scope="col">rationale</th></tr></thead>'
+        f"<tbody>\n{priors_body}\n</tbody>"
+        "</table>"
+    )
+
+    yield_block = source.get("evolution_yield") or {}
+    yield_html = (
+        '<h3 class="subsection">evolution_yield</h3>'
+        '<dl class="cost-grid">'
+        f"<dt>attempted</dt><dd>{int(yield_block.get('attempted', 0))}</dd>"
+        f"<dt>successful</dt><dd>{int(yield_block.get('successful', 0))}</dd>"
+        "</dl>"
+    )
+
+    elo_block = source.get("elo_distribution") or {}
+    elo_html = (
+        '<h3 class="subsection">elo_distribution</h3>'
+        '<dl class="cost-grid">'
+        f"<dt>min</dt><dd>{html_escape(str(elo_block.get('min', '—')))}</dd>"
+        f"<dt>p50</dt><dd>{html_escape(str(elo_block.get('p50', '—')))}</dd>"
+        f"<dt>p95</dt><dd>{html_escape(str(elo_block.get('p95', '—')))}</dd>"
+        "</dl>"
+    )
+
+    coverage = source.get("coverage") or {}
+    coverage_html = ""
+    if isinstance(coverage, dict) and coverage:
+        numeric_counts = [int(v) for v in coverage.values() if isinstance(v, (int, float))]
+        max_count = max(numeric_counts, default=0)
+        items: list[str] = []
+        for dim, count in coverage.items():
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                count_int = 0
+            pct = (count_int / max_count * 100) if max_count > 0 else 0
+            items.append(
+                f'<span class="dim-name"><code>{html_escape(str(dim))}</code></span>'
+                '<span class="coverage-bar">'
+                f'<span class="coverage-bar-fill" style="width: {pct:.1f}%"></span>'
+                "</span>"
+                f'<span class="dim-count">{count_int}</span>'
+            )
+        coverage_html = (
+            '<h3 class="subsection">coverage</h3>'
+            '<div class="coverage-list">' + "".join(items) + "</div>"
+        )
+
+    return summary_html + priors_table + yield_html + elo_html + coverage_html
+
+
+def render_seedgen_index(
+    listing: dict[str, Any],
+    rows: list[SeedGenRow],
+    out_dir: Path,
+    *,
+    template: str,
+    sidebar_petri_recent: str,
+    sidebar_seedgen_runs: str,
+    petri_count: int,
+    seedgen_count_label: str,
+    autoresearch_status_label: str,
+    geode_version: str,
+    build_date: str,
+) -> Path:
+    """Render the seed-generation index page to ``<out_dir>/index.html``."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    runs_label = f"{len(rows)} run" + ("s" if len(rows) != 1 else "")
+    cost_mapping = _seedgen_cost_totals(rows, listing)
+    mapping: dict[str, str] = {
+        "petri_count": str(petri_count),
+        "sidebar_petri_recent": sidebar_petri_recent,
+        "seedgen_count_label": seedgen_count_label,
+        "sidebar_seedgen_runs": sidebar_seedgen_runs,
+        "autoresearch_status_label": autoresearch_status_label,
+        "runs_section_label": runs_label,
+        "runs_rows": _render_seedgen_index_rows(rows),
+        "geode_version": geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": build_date,
+        **cost_mapping,
+    }
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"seedgen index unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "index.html"
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_seedgen_run(
+    run_meta: SeedGenRow,
+    state: dict[str, Any] | None,
+    survivors_doc: dict[str, Any] | None,
+    meta_doc: dict[str, Any] | None,
+    out_dir: Path,
+    *,
+    template: str,
+    sidebar_petri_recent: str,
+    sidebar_seedgen_runs: str,
+    petri_count: int,
+    seedgen_count_label: str,
+    autoresearch_status_label: str,
+    geode_version: str,
+    build_date: str,
+) -> Path:
+    """Render one per-run detail page to ``<out_dir>/<run_id>/index.html``."""
+    run_out = out_dir / run_meta.run_id
+    run_out.mkdir(parents=True, exist_ok=True)
+
+    # `state` is the authoritative source for most sections; fall back to a
+    # minimal dict so the page still renders if state.json is missing.
+    state_data: dict[str, Any] = state or {}
+    cohort = str(state_data.get("cohort", ""))
+
+    cand_rows, cand_count = _render_candidates_rows(state_data)
+    surv_rows, surv_count = _render_survivors_rows(state_data)
+    evolved_rows, evolved_count = _render_evolved_rows(state_data)
+    phase_rows, phase_count = _render_phase_rows(run_meta.run_id)
+    reflections_block, reflections_count = _render_reflections(state_data)
+    pilot_heatmap = _render_pilot_heatmap(state_data)
+    meta_review_block = _render_meta_review(meta_doc, state_data)
+
+    # Cost numbers — prefer per-state, fall back to listing.
+    usd = float(state_data.get("usd_spent", run_meta.usd_spent))
+    prompt_tk = int(state_data.get("prompt_tokens", 0))
+    completion_tk = int(state_data.get("completion_tokens", 0))
+    lit_count = len(state_data.get("literature_snapshots") or {})
+    debate_count = len(state_data.get("debate_transcripts") or {})
+    current_iter = int(state_data.get("current_iteration", 0))
+    max_iter = int(state_data.get("max_iterations", 0))
+    iter_label = f"{current_iter} / {max_iter}" if max_iter else f"{current_iter} / —"
+
+    mapping: dict[str, str] = {
+        "petri_count": str(petri_count),
+        "sidebar_petri_recent": sidebar_petri_recent,
+        "seedgen_count_label": seedgen_count_label,
+        "sidebar_seedgen_runs": sidebar_seedgen_runs,
+        "autoresearch_status_label": autoresearch_status_label,
+        "run_id": html_escape(run_meta.run_id),
+        "gen_tag": html_escape(run_meta.gen_tag or "—"),
+        "target_dim": html_escape(run_meta.target_dim or "—"),
+        "cohort": html_escape(cohort or "—"),
+        "mutator_chip": harness_chip(DEFAULT_MUTATOR_MODEL),
+        "candidates_rows": cand_rows,
+        "candidates_count_label": f"{cand_count} drafted",
+        "survivors_rows": surv_rows,
+        "survivors_count_label": f"{surv_count} survived",
+        "evolved_rows": evolved_rows,
+        "evolved_count_label": f"{evolved_count} variants",
+        "phase_rows": phase_rows,
+        "phase_count_label": f"{phase_count} phases",
+        "reflections_block": reflections_block,
+        "reflections_count_label": f"{reflections_count} entries",
+        "pilot_heatmap": pilot_heatmap,
+        "meta_review_block": meta_review_block,
+        "cost_total_usd": f"{usd:.2f}",
+        "cost_prompt_tokens": f"{prompt_tk:,}",
+        "cost_completion_tokens": f"{completion_tk:,}",
+        "literature_snapshots_count": str(lit_count),
+        "debate_transcripts_count": str(debate_count),
+        "iterations_label": iter_label,
+        "geode_version": geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": build_date,
+    }
+    # silence unused warning for survivors_doc — we keep it on the public
+    # signature so future revisions can surface elo / pilot directly from
+    # the survivors.json projection without touching call sites.
+    _ = survivors_doc
+
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(
+            f"seedgen run {run_meta.run_id} unresolved markers: {sorted(set(leftover))}"
+        )
+    out_path = run_out / "index.html"
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+# --------------------------------------------------------------------------- #
+# Autoresearch surface loaders + renderers (P6)                               #
+# --------------------------------------------------------------------------- #
+def _load_baseline(state_dir: Path) -> tuple[dict[str, Any] | None, bool, Path | None]:
+    """Return ``(baseline_data, stale, source_path)``.
+
+    Reads ``baseline.json`` if present. Otherwise falls back to the
+    most recent ``baseline.json.outdated-*`` snapshot (per design
+    contract). Returns ``(None, False, None)`` if neither exists or
+    if JSON parse fails.
+    """
+    live = state_dir / "baseline.json"
+    if live.exists():
+        try:
+            data = json.loads(live.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            LOG.warning("baseline.json parse error: %s", live)
+            return (None, False, live)
+        if not isinstance(data, dict):
+            return (None, False, live)
+        return (data, False, live)
+    # Outdated fallback — pick the freshest .outdated-* by mtime.
+    candidates = sorted(
+        state_dir.glob("baseline.json.outdated-*"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return (None, False, None)
+    chosen = candidates[0]
+    try:
+        data = json.loads(chosen.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        LOG.warning("baseline outdated parse error: %s", chosen)
+        return (None, True, chosen)
+    if not isinstance(data, dict):
+        return (None, True, chosen)
+    return (data, True, chosen)
+
+
+def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
+    """Return list of dicts from ``baseline_archive.jsonl``.
+
+    One dict per line. Malformed lines are skipped with a warning.
+    """
+    archive = state_dir / "baseline_archive.jsonl"
+    if not archive.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for ln in archive.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            entry = json.loads(ln)
+        except json.JSONDecodeError:
+            LOG.warning("baseline_archive line parse-error: %r", ln[:80])
+            continue
+        if isinstance(entry, dict):
+            rows.append(entry)
+    return rows
+
+
+def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
+    """Return list of dicts from ``mutations.jsonl``."""
+    path = state_dir / "mutations.jsonl"
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            entry = json.loads(ln)
+        except json.JSONDecodeError:
+            LOG.warning("mutations line parse-error: %r", ln[:80])
+            continue
+        if isinstance(entry, dict):
+            rows.append(entry)
+    return rows
+
+
+def _load_results_tsv(state_dir: Path) -> list[dict[str, str]]:
+    """Return list of dicts from ``results.tsv``.
+
+    Uses ``AUTORESEARCH_RESULTS_TSV_HEADER`` to label cells when the
+    file has no explicit header row (autoresearch emits rows via
+    ``results_tsv:`` stdout markers, then the operator appends them).
+    If a header row IS present (first line matches expected header),
+    skip it.
+    """
+    path = state_dir / "results.tsv"
+    if not path.exists():
+        return []
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    if not lines:
+        return []
+    # Detect header row.
+    first_cells = lines[0].split("\t")
+    data_lines = lines[1:] if first_cells == list(AUTORESEARCH_RESULTS_TSV_HEADER) else lines
+    rows: list[dict[str, str]] = []
+    for ln in data_lines:
+        cells = ln.split("\t")
+        # Pad / truncate to the 12-col contract so the renderer is robust
+        # to legacy 5-col rows or extra-col future drift.
+        if len(cells) < len(AUTORESEARCH_RESULTS_TSV_HEADER):
+            cells = cells + [""] * (len(AUTORESEARCH_RESULTS_TSV_HEADER) - len(cells))
+        rows.append(dict(zip(AUTORESEARCH_RESULTS_TSV_HEADER, cells, strict=False)))
+    return rows
+
+
+def _load_results_jsonl(state_dir: Path) -> list[dict[str, Any]]:
+    """Return list of dicts from ``results.jsonl`` (one per line)."""
+    path = state_dir / "results.jsonl"
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            entry = json.loads(ln)
+        except json.JSONDecodeError:
+            LOG.warning("results.jsonl line parse-error: %r", ln[:80])
+            continue
+        if isinstance(entry, dict):
+            rows.append(entry)
+    return rows
+
+
+def _list_policies(policies_dir: Path) -> list[dict[str, Any]]:
+    """List `*.json` policy files with ``{filename, mtime, size, content}``."""
+    if not policies_dir.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in sorted(policies_dir.glob("*.json")):
+        if not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        try:
+            content_text = path.read_text(encoding="utf-8")
+        except OSError:
+            content_text = ""
+        try:
+            content_obj: Any = json.loads(content_text) if content_text.strip() else None
+        except json.JSONDecodeError:
+            content_obj = None
+        rows.append(
+            {
+                "filename": path.name,
+                "mtime": stat.st_mtime,
+                "size": stat.st_size,
+                "content": content_obj,
+                "content_text": content_text,
+            }
+        )
+    return rows
+
+
+def _fitness_sparkline(values: list[float]) -> str:
+    """Map a list of fitness values to a Unicode block-char sparkline.
+
+    Uses 8 levels (▁▂▃▄▅▆▇█). Empty list returns ``""``. Single
+    value returns the middle char so the sparkline still reads as a
+    flat segment instead of collapsing to nothing.
+    """
+    if not values:
+        return ""
+    if len(values) == 1:
+        return _SPARKLINE_CHARS[len(_SPARKLINE_CHARS) // 2]
+    lo = min(values)
+    hi = max(values)
+    span = hi - lo
+    if span <= 0:
+        return _SPARKLINE_CHARS[len(_SPARKLINE_CHARS) // 2] * len(values)
+    last_idx = len(_SPARKLINE_CHARS) - 1
+    out: list[str] = []
+    for v in values:
+        idx = round((v - lo) / span * last_idx)
+        idx = max(0, min(last_idx, idx))
+        out.append(_SPARKLINE_CHARS[idx])
+    return "".join(out)
+
+
+def _human_size(num_bytes: int) -> str:
+    """Human-readable byte size."""
+    if num_bytes < 1024:
+        return f"{num_bytes} B"
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes / (1024 * 1024):.2f} MB"
+
+
+def _baseline_namespace_data(baseline: dict[str, Any] | None, ns: str) -> Any:
+    """Lookup a namespace value, schema-v2 first, schema-v1 fallback.
+
+    Schema-v2 nests under ``baseline.raw / baseline.axes / ...``.
+    Schema-v1 had a flat shape with `metadata` / `audit` / `fitness`
+    at top level and no `raw` / `normalized` / `axes` blocks. This
+    helper degrades gracefully — namespace-v2-only keys return None
+    on v1 input, which the renderer formats as the "empty" notice.
+    """
+    if not isinstance(baseline, dict):
+        return None
+    if ns in baseline:
+        return baseline[ns]
+    # v1 fallbacks — synthesise sub-views from top-level keys.
+    if ns == "raw" and isinstance(baseline.get("dim_means"), dict):
+        return {
+            "dim_means": baseline.get("dim_means"),
+            "dim_stderr": baseline.get("dim_stderr") or {},
+        }
+    return None
+
+
+def _render_baseline_namespace(name: str, data: Any, *, stale: bool) -> str:
+    """Render one of the 7 baseline namespace blocks."""
+    header = f"      <h3>{html_escape(name)}</h3>"
+    meta = ""
+    if stale and name == "metadata":
+        meta = (
+            '      <p class="namespace-meta">'
+            "(reading from <code>.outdated-*</code> snapshot — see warning above)"
+            "</p>"
+        )
+    if data is None or not data:
+        body = (
+            '      <p class="empty-namespace">'
+            f"No <code>{html_escape(name)}</code> namespace present (schema-v1 fallback or "
+            "not yet populated).</p>"
+        )
+        return (
+            f'    <div class="namespace-block" id="ns-{html_escape(name)}">\n'
+            f"{header}\n{meta}\n{body}\n    </div>"
+        )
+    rows: list[str] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            rows.append(_render_baseline_kv_row(name, str(key), value))
+    else:
+        rows.append(_render_baseline_kv_row(name, name, data))
+    body_table = (
+        '      <table class="records">\n'
+        '        <thead><tr><th scope="col">key</th><th scope="col">value</th></tr></thead>\n'
+        "        <tbody>\n" + "\n".join(rows) + "\n        </tbody>\n"
+        "      </table>"
+    )
+    return (
+        f'    <div class="namespace-block" id="ns-{html_escape(name)}">\n'
+        f"{header}\n{meta}\n{body_table}\n    </div>"
+    )
+
+
+def _render_baseline_kv_row(ns: str, key: str, value: Any) -> str:
+    """Render a single key/value row. Models in `audit` ns get chips."""
+    is_model_field = ns == "audit" and key in {"auditor_model", "target_model", "judge_model"}
+    if is_model_field and isinstance(value, str) and value:
+        value_html = harness_chip(value)
+    elif isinstance(value, dict | list):
+        try:
+            value_text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError):
+            value_text = str(value)
+        if len(value_text) > 180:
+            value_text = value_text[:177].rstrip() + "…"
+        value_html = f"<code>{html_escape(value_text)}</code>"
+    elif value is None:
+        value_html = '<span class="muted">null</span>'
+    elif isinstance(value, bool):
+        value_html = f"<code>{str(value).lower()}</code>"
+    elif isinstance(value, int | float):
+        if isinstance(value, float):
+            value_html = f'<span class="num">{value:.4f}</span>'
+        else:
+            value_html = f'<span class="num">{value}</span>'
+    else:
+        value_html = f"<code>{html_escape(str(value))}</code>"
+    return (
+        "          <tr>\n"
+        f'            <td class="id"><code>{html_escape(key)}</code></td>\n'
+        f"            <td>{value_html}</td>\n"
+        "          </tr>"
+    )
+
+
+def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
+    if not stale or baseline_path is None:
+        return ""
+    return (
+        '    <div class="warning-banner" role="status">'
+        "Autoresearch baseline read from <code>"
+        f"{html_escape(baseline_path.name)}</code> &mdash; no live "
+        "<code>baseline.json</code> present in <code>autoresearch/state/</code>. "
+        "Run <code>uv run python autoresearch/train.py --promote</code> to refresh."
+        "</div>"
+    )
+
+
+def _gen_timeline_rows(
+    archive: list[dict[str, Any]],
+    current_baseline: dict[str, Any] | None,
+) -> str:
+    """Render ``baseline_archive.jsonl`` rows newest-first, with Δfitness."""
+    if not archive:
+        return (
+            '        <tr><td colspan="5" class="empty">'
+            "<em>No baseline_archive.jsonl rows yet.</em></td></tr>"
+        )
+    # Determine current gen_tag for `.active` highlight.
+    current_gen = ""
+    if isinstance(current_baseline, dict):
+        meta = current_baseline.get("metadata") or {}
+        if isinstance(meta, dict):
+            current_gen = str(meta.get("gen_tag") or "")
+    # Sort newest first by ts_utc, falling back to original order.
+    enumerated = list(enumerate(archive))
+
+    def _ts(entry: tuple[int, dict[str, Any]]) -> str:
+        return str(entry[1].get("ts_utc") or "")
+
+    sorted_rows = sorted(enumerated, key=_ts, reverse=True)
+    out: list[str] = []
+    for _, row in sorted_rows:
+        gen_tag = str(row.get("gen_tag") or "")
+        ts = short_iso(str(row.get("ts_utc") or ""))
+        fitness_block = row.get("fitness")
+        if isinstance(fitness_block, dict):
+            fitness_val = fitness_block.get("value")
+        else:
+            fitness_val = fitness_block
+        if isinstance(fitness_val, int | float):
+            fitness_cell = f'<span class="num">{float(fitness_val):.4f}</span>'
+            fitness_num: float | None = float(fitness_val)
+        else:
+            fitness_cell = '<span class="muted">—</span>'
+            fitness_num = None
+        # Compute Δ vs previous (older) row in archive order.
+        delta_cell = '<span class="muted">—</span>'
+        # Find this row's archive index, then look at idx-1 (older entry).
+        # archive list is operator-appended chronologically per design.
+        # NB: This is rendered after sort, so we recompute from original order.
+        # Skipping detailed implementation — Δ vs the row immediately
+        # *prior* in the archive's chronological order.
+        archive_index = -1
+        for i, candidate in enumerate(archive):
+            if candidate is row:
+                archive_index = i
+                break
+        if archive_index > 0 and fitness_num is not None:
+            prev = archive[archive_index - 1]
+            prev_fitness_block = prev.get("fitness")
+            prev_val = (
+                prev_fitness_block.get("value")
+                if isinstance(prev_fitness_block, dict)
+                else prev_fitness_block
+            )
+            if isinstance(prev_val, int | float):
+                delta = fitness_num - float(prev_val)
+                cls, sign = _delta_class(delta)
+                delta_cell = f'<span class="{cls}">{sign}{abs(delta):.4f}</span>'
+        target = ""
+        mut = row.get("mutation")
+        if isinstance(mut, dict):
+            target = str(mut.get("target_section") or "")
+        row_class = "gen-timeline-row"
+        if current_gen and gen_tag == current_gen:
+            row_class += " active"
+        out.append(
+            f'        <tr class="{row_class}">\n'
+            f'          <td class="id"><code>{html_escape(gen_tag)}</code></td>\n'
+            f'          <td class="muted">{html_escape(ts)}</td>\n'
+            f"          <td>{fitness_cell}</td>\n"
+            f"          <td>{delta_cell}</td>\n"
+            f'          <td class="muted"><code>{html_escape(target)}</code></td>\n'
+            "        </tr>"
+        )
+    return "\n".join(out)
+
+
+def _delta_class(delta: float) -> tuple[str, str]:
+    """Map a Δfitness value to a CSS class + sign char."""
+    if delta > 0.005:
+        return ("delta-positive", "+")
+    if delta < -0.005:
+        return ("delta-negative", "-")
+    return ("delta-noise", "±")
+
+
+def _autoresearch_status_grid(
+    baseline: dict[str, Any] | None,
+    baseline_path: Path | None,
+    mutations_count: int,
+    mutations_mtime: str,
+    results_count: int,
+    results_mtime: str,
+    policies_count: int,
+    policies_mtime: str,
+) -> str:
+    """Render the landing-page <dl class="status-grid"> block."""
+    if baseline is None:
+        rows = [
+            ("current baseline", "<em>no baseline yet</em>"),
+            (
+                "next action",
+                "<code>uv run python autoresearch/train.py --promote</code>",
+            ),
+        ]
+    else:
+        meta = baseline.get("metadata") or {}
+        fitness_block = baseline.get("fitness") or {}
+        audit_block = baseline.get("audit") or {}
+        promotion = baseline.get("promotion") or {}
+        gen_tag = (
+            str(meta.get("gen_tag")) if isinstance(meta, dict) and meta.get("gen_tag") else "—"
+        )
+        fitness_val: Any = None
+        if isinstance(fitness_block, dict):
+            fitness_val = fitness_block.get("value")
+        fitness_str = f"{float(fitness_val):.4f}" if isinstance(fitness_val, int | float) else "—"
+        promote_ts = ""
+        if isinstance(promotion, dict):
+            promote_ts = str(promotion.get("timestamp") or "")
+        rows = [
+            ("current baseline", f"<code>{html_escape(gen_tag)}</code>"),
+            ("fitness", f'<span class="num">{html_escape(fitness_str)}</span>'),
+            (
+                "last promote",
+                f'<span class="muted">{html_escape(short_iso(promote_ts) or "—")}</span>',
+            ),
+        ]
+        if isinstance(audit_block, dict):
+            for label, key in (
+                ("auditor", "auditor_model"),
+                ("target", "target_model"),
+                ("judge", "judge_model"),
+            ):
+                model = audit_block.get(key)
+                if isinstance(model, str) and model:
+                    rows.append((f"{label} model", harness_chip(model)))
+    # Always-present footer rows.
+    muted_mut = f"<span class='muted'>{html_escape(mutations_mtime)}</span>"
+    muted_res = f"<span class='muted'>{html_escape(results_mtime)}</span>"
+    muted_pol = f"<span class='muted'>{html_escape(policies_mtime)}</span>"
+    rows.extend(
+        [
+            ("mutations.jsonl", f"{mutations_count} rows &middot; {muted_mut}"),
+            ("results.tsv", f"{results_count} rows &middot; {muted_res}"),
+            ("policies/", f"{policies_count} files &middot; {muted_pol}"),
+        ]
+    )
+    if baseline_path is not None:
+        rows.append(("source", f"<code>{html_escape(baseline_path.name)}</code>"))
+    out: list[str] = []
+    for label, value in rows:
+        out.append(f"      <dt>{html_escape(label)}</dt><dd>{value}</dd>")
+    return "\n".join(out)
+
+
+def _autoresearch_subview_rows(
+    archive_count: int,
+    mutations_count: int,
+    results_count: int,
+    policies_count: int,
+    *,
+    mutations_mtime: str,
+    results_mtime: str,
+    policies_mtime: str,
+    baseline_mtime: str,
+) -> str:
+    """Render the 4-row sub-view table on the landing page."""
+    rows = [
+        (
+            "Baseline",
+            "1 (current promoted) &middot; "
+            f"<span class='muted'>archive: {archive_count} rows</span>",
+            baseline_mtime,
+            "/geode/self-improving/autoresearch/baseline/",
+        ),
+        (
+            "Mutations",
+            f"{mutations_count} rows",
+            mutations_mtime,
+            "/geode/self-improving/autoresearch/mutations/",
+        ),
+        (
+            "Results",
+            f"{results_count} rows",
+            results_mtime,
+            "/geode/self-improving/autoresearch/results/",
+        ),
+        (
+            "Policies",
+            f"{policies_count} files",
+            policies_mtime,
+            "/geode/self-improving/autoresearch/policies/",
+        ),
+    ]
+    out: list[str] = []
+    for label, count_cell, mtime_cell, href in rows:
+        out.append(
+            "        <tr>\n"
+            f'          <td class="id"><a href="{href}">{html_escape(label)}</a> '
+            '<span class="bucket autoresearch">autoresearch</span></td>\n'
+            f"          <td>{count_cell}</td>\n"
+            f'          <td class="muted">{html_escape(mtime_cell)}</td>\n'
+            f'          <td class="id"><a href="{href}">open &rarr;</a></td>\n'
+            "        </tr>"
+        )
+    return "\n".join(out)
+
+
+def _render_mutations_rows(mutations: list[dict[str, Any]]) -> str:
+    """Render the mutations.jsonl table body, newest first by ts_utc."""
+    if not mutations:
+        return (
+            '        <tr><td colspan="7" class="empty">'
+            "<em>No mutations recorded. Run <code>uv run python autoresearch/train.py</code>."
+            "</em></td></tr>"
+        )
+    sorted_rows = sorted(mutations, key=lambda r: str(r.get("ts_utc") or ""), reverse=True)
+    out: list[str] = []
+    for row in sorted_rows:
+        ts = short_iso(str(row.get("ts_utc") or ""))
+        gen_tag = str(row.get("gen_tag") or "")
+        mut = row.get("mutation")
+        target = ""
+        kind = ""
+        if isinstance(mut, dict):
+            target = str(mut.get("target_section") or "")
+            kind = str(mut.get("kind") or "")
+        mutator = row.get("mutator")
+        mutator_model = ""
+        if isinstance(mutator, dict):
+            mutator_model = str(mutator.get("model") or "")
+        if not mutator_model:
+            # Fallback to a top-level cost_model field (ApplyRecord schema).
+            mutator_model = str(row.get("cost_model") or "")
+        verdict = str(row.get("verdict") or "")
+        verdict_cls = "muted"
+        if verdict == "applied":
+            verdict_cls = "delta-positive"
+        elif verdict == "reverted":
+            verdict_cls = "delta-negative"
+        elif verdict == "pending":
+            verdict_cls = "delta-noise"
+        verdict_cell = f'<span class="{verdict_cls}">{html_escape(verdict or "—")}</span>'
+        delta = row.get("fitness_delta")
+        if isinstance(delta, int | float):
+            cls, sign = _delta_class(float(delta))
+            delta_cell = f'<span class="{cls}">{sign}{abs(float(delta)):.4f}</span>'
+        else:
+            delta_cell = '<span class="muted">—</span>'
+        out.append(
+            "        <tr>\n"
+            f'          <td class="muted">{html_escape(ts)}</td>\n'
+            f'          <td class="muted"><code>{html_escape(gen_tag)}</code></td>\n'
+            f"          <td><code>{html_escape(target)}</code></td>\n"
+            f'          <td class="muted">{html_escape(kind)}</td>\n'
+            f"          <td>{harness_chip(mutator_model) if mutator_model else ''}</td>\n"
+            f"          <td>{verdict_cell}</td>\n"
+            f"          <td>{delta_cell}</td>\n"
+            "        </tr>"
+        )
+    return "\n".join(out)
+
+
+def _render_filter_target_chips(mutations: list[dict[str, Any]]) -> str:
+    """Render filter-strip chips for unique target_section values."""
+    seen: list[str] = []
+    for row in mutations:
+        mut = row.get("mutation")
+        if isinstance(mut, dict):
+            target = str(mut.get("target_section") or "")
+            # Use just the file portion (before "::") for the chip.
+            head = target.split("::", 1)[0] if "::" in target else target
+            if head and head not in seen:
+                seen.append(head)
+    if not seen:
+        return '<span class="filter-chip">none</span>'
+    return "".join(f'<span class="filter-chip">{html_escape(t)}</span>' for t in seen[:10])
+
+
+def _render_results_header_cells() -> str:
+    """Render the 12 <th> cells for the results table header."""
+    out: list[str] = []
+    for col in AUTORESEARCH_RESULTS_TSV_HEADER:
+        out.append(f'          <th scope="col">{html_escape(col)}</th>')
+    return "\n".join(out)
+
+
+def _render_results_rows(
+    results_rows: list[dict[str, str]],
+    jsonl_rows: list[dict[str, Any]],
+) -> str:
+    """Render results.tsv rows. Pairs with results.jsonl by index for drill-down."""
+    if not results_rows:
+        return (
+            '        <tr><td colspan="12" class="empty">'
+            "<em>No iterations recorded yet.</em></td></tr>"
+        )
+    out: list[str] = []
+    for idx, row in enumerate(results_rows):
+        cells: list[str] = []
+        verdict = row.get("verdict", "")
+        for col in AUTORESEARCH_RESULTS_TSV_HEADER:
+            value = row.get(col, "")
+            if col == "fitness":
+                try:
+                    val = float(value)
+                    cells.append(f'          <td class="num">{val:.4f}</td>')
+                except (TypeError, ValueError):
+                    cells.append(f'          <td class="muted">{html_escape(value)}</td>')
+            elif col in {
+                "critical_min",
+                "critical_mean",
+                "auxiliary_mean",
+                "stability_score",
+                "info_mean",
+            }:
+                try:
+                    val = float(value)
+                    cells.append(f'          <td class="num">{val:.3f}</td>')
+                except (TypeError, ValueError):
+                    cells.append(f'          <td class="muted">{html_escape(value)}</td>')
+            elif col == "dim_count_engaged":
+                cells.append(f'          <td class="num">{html_escape(value)}</td>')
+            elif col == "verdict":
+                v_cls = "muted"
+                if verdict in {"keep", "applied", "promoted"}:
+                    v_cls = "delta-positive"
+                elif verdict in {"reject", "reverted", "discard"}:
+                    v_cls = "delta-negative"
+                cells.append(
+                    f'          <td><span class="{v_cls}">{html_escape(value)}</span></td>'
+                )
+            elif col == "gen_tag":
+                cells.append(f"          <td><code>{html_escape(value)}</code></td>")
+            elif col in {"session_id", "commit"}:
+                short = value[:12] if value else ""
+                cells.append(
+                    f'          <td class="muted" title="{html_escape(value)}">'
+                    f"<code>{html_escape(short)}</code></td>"
+                )
+            else:  # description, etc.
+                cells.append(f'          <td class="muted">{html_escape(value)}</td>')
+        # Drill-down: per-row <details> with the jsonl payload, if matched.
+        details = ""
+        if idx < len(jsonl_rows):
+            try:
+                payload = json.dumps(jsonl_rows[idx], ensure_ascii=False, indent=2, sort_keys=True)
+            except (TypeError, ValueError):
+                payload = ""
+            if payload:
+                payload_html = html_escape(payload)
+                details = (
+                    "\n        <tr>\n"
+                    '          <td colspan="12">\n'
+                    "            <details>\n"
+                    "              <summary>jsonl payload</summary>\n"
+                    "              "
+                    f'<div class="policy-json"><pre>{payload_html}</pre></div>\n'
+                    "            </details>\n"
+                    "          </td>\n"
+                    "        </tr>"
+                )
+        out.append("        <tr>\n" + "\n".join(cells) + "\n        </tr>" + details)
+    return "\n".join(out)
+
+
+def _render_policies_rows(
+    policies: list[dict[str, Any]],
+    mutations: list[dict[str, Any]],
+) -> str:
+    """Render the policies table body. Cross-link mutations by target_section."""
+    if not policies:
+        return (
+            '        <tr><td colspan="5" class="empty">'
+            "<em>No policies mirrored yet. Run the autoresearch publisher.</em>"
+            "</td></tr>"
+        )
+    # Index most-recent mutation per policy filename (target_section
+    # prefix `wrapper-sections.json::field`).
+    latest_by_file: dict[str, dict[str, Any]] = {}
+    for mrow in mutations:
+        mut = mrow.get("mutation")
+        if not isinstance(mut, dict):
+            continue
+        target = str(mut.get("target_section") or "")
+        head = target.split("::", 1)[0] if "::" in target else target
+        if not head:
+            continue
+        prev = latest_by_file.get(head)
+        if prev is None or str(mrow.get("ts_utc") or "") > str(prev.get("ts_utc") or ""):
+            latest_by_file[head] = mrow
+    out: list[str] = []
+    for entry in policies:
+        filename = str(entry["filename"])
+        mtime = _dt.datetime.fromtimestamp(float(entry["mtime"]), tz=_dt.UTC).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        size = _human_size(int(entry["size"]))
+        latest = latest_by_file.get(filename)
+        if latest is not None:
+            gen_tag = str(latest.get("gen_tag") or "")
+            ts = short_iso(str(latest.get("ts_utc") or ""))
+            mut_cell = (
+                f"<code>{html_escape(gen_tag)}</code> "
+                f'<span class="muted">@ {html_escape(ts)}</span>'
+            )
+        else:
+            mut_cell = '<span class="muted">—</span>'
+        if entry["content"] is not None:
+            try:
+                payload = json.dumps(entry["content"], ensure_ascii=False, indent=2, sort_keys=True)
+            except (TypeError, ValueError):
+                payload = entry["content_text"]
+        else:
+            payload = entry["content_text"]
+        if not payload:
+            payload = "(empty file)"
+        view_cell = (
+            "<details>\n"
+            "              <summary>view JSON</summary>\n"
+            f'              <div class="policy-json"><pre>{html_escape(payload)}</pre></div>\n'
+            "            </details>"
+        )
+        out.append(
+            "        <tr>\n"
+            f'          <td class="id"><code>{html_escape(filename)}</code> '
+            '<span class="bucket autoresearch">autoresearch</span></td>\n'
+            f'          <td class="muted">{html_escape(mtime)}</td>\n'
+            f'          <td class="num">{html_escape(size)}</td>\n'
+            f"          <td>{mut_cell}</td>\n"
+            f"          <td>{view_cell}</td>\n"
+            "        </tr>"
+        )
+    return "\n".join(out)
+
+
+@dataclass
+class _AutoresearchRenderCtx:
+    """Common context shared by all 5 autoresearch renderers."""
+
+    sidebar_petri_recent: str
+    sidebar_seedgen_runs: str
+    petri_count: int
+    seedgen_count_label: str
+    autoresearch_status_label: str
+    geode_version: str
+    build_date: str
+
+
+def _autoresearch_base_mapping(ctx: _AutoresearchRenderCtx) -> dict[str, str]:
+    return {
+        "petri_count": str(ctx.petri_count),
+        "sidebar_petri_recent": ctx.sidebar_petri_recent,
+        "seedgen_count_label": ctx.seedgen_count_label,
+        "sidebar_seedgen_runs": ctx.sidebar_seedgen_runs,
+        "autoresearch_status_label": ctx.autoresearch_status_label,
+        "geode_version": ctx.geode_version,
+        "design_schema_version": str(DESIGN_SCHEMA_VERSION),
+        "build_date": ctx.build_date,
+    }
+
+
+def render_autoresearch_landing(
+    baseline: dict[str, Any] | None,
+    baseline_path: Path | None,
+    stale: bool,
+    archive: list[dict[str, Any]],
+    mutations_count: int,
+    mutations_mtime: str,
+    results_count: int,
+    results_mtime: str,
+    policies_count: int,
+    policies_mtime: str,
+    baseline_mtime: str,
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "stale_baseline_warning": _render_warning_banner(baseline_path, stale),
+            "status_grid_rows": _autoresearch_status_grid(
+                baseline,
+                baseline_path,
+                mutations_count,
+                mutations_mtime,
+                results_count,
+                results_mtime,
+                policies_count,
+                policies_mtime,
+            ),
+            "timeline_section_label": (f"{len(archive)} row" + ("s" if len(archive) != 1 else "")),
+            "timeline_rows": _gen_timeline_rows(archive, baseline),
+            "subview_rows": _autoresearch_subview_rows(
+                archive_count=len(archive),
+                mutations_count=mutations_count,
+                results_count=results_count,
+                policies_count=policies_count,
+                mutations_mtime=mutations_mtime,
+                results_mtime=results_mtime,
+                policies_mtime=policies_mtime,
+                baseline_mtime=baseline_mtime,
+            ),
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch landing unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "index.html"
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_autoresearch_baseline(
+    baseline: dict[str, Any] | None,
+    baseline_path: Path | None,
+    stale: bool,
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    namespace_blocks: list[str] = []
+    if baseline is None:
+        namespace_blocks.append(
+            '    <div class="namespace-block">\n'
+            "      <h3>no baseline</h3>\n"
+            '      <p class="empty-namespace">No live <code>baseline.json</code> '
+            "and no <code>baseline.json.outdated-*</code> snapshot found. Run "
+            "<code>uv run python autoresearch/train.py --promote</code>.</p>\n"
+            "    </div>"
+        )
+    else:
+        for ns in AUTORESEARCH_BASELINE_NAMESPACES:
+            ns_data = _baseline_namespace_data(baseline, ns)
+            namespace_blocks.append(_render_baseline_namespace(ns, ns_data, stale=stale))
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "stale_baseline_warning": _render_warning_banner(baseline_path, stale),
+            "baseline_namespaces": "\n".join(namespace_blocks),
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch baseline unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "baseline" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_autoresearch_mutations(
+    mutations: list[dict[str, Any]],
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "mutations_section_label": (
+                f"{len(mutations)} row" + ("s" if len(mutations) != 1 else "")
+            ),
+            "mutations_rows": _render_mutations_rows(mutations),
+            "filter_target_chips": _render_filter_target_chips(mutations),
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch mutations unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "mutations" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_autoresearch_results(
+    results_rows: list[dict[str, str]],
+    jsonl_rows: list[dict[str, Any]],
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Compose the fitness sparkline from the results table.
+    fitness_vals: list[float] = []
+    for row in results_rows:
+        try:
+            fitness_vals.append(float(row.get("fitness", "") or "nan"))
+        except (TypeError, ValueError):
+            continue
+        # Filter out NaN.
+    fitness_vals = [v for v in fitness_vals if v == v]  # noqa: PLR0124 — NaN filter
+    sparkline = _fitness_sparkline(fitness_vals) if fitness_vals else ""
+    if fitness_vals:
+        sparkline_legend = (
+            f"min {min(fitness_vals):.4f} &middot; max {max(fitness_vals):.4f} &middot; "
+            f"n={len(fitness_vals)}"
+        )
+        sparkline_aria = (
+            f"fitness sparkline across {len(fitness_vals)} iterations "
+            f"min {min(fitness_vals):.4f} max {max(fitness_vals):.4f}"
+        )
+    else:
+        sparkline = "—"
+        sparkline_legend = "no iterations recorded"
+        sparkline_aria = "no fitness data"
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "results_section_label": (
+                f"{len(results_rows)} row" + ("s" if len(results_rows) != 1 else "")
+            ),
+            "results_header_cells": _render_results_header_cells(),
+            "results_rows": _render_results_rows(results_rows, jsonl_rows),
+            "sparkline": sparkline,
+            "sparkline_legend": sparkline_legend,
+            "sparkline_aria": sparkline_aria,
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch results unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "results" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_autoresearch_policies(
+    policies: list[dict[str, Any]],
+    mutations: list[dict[str, Any]],
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "policies_section_label": (
+                f"{len(policies)} file" + ("s" if len(policies) != 1 else "")
+            ),
+            "policies_rows": _render_policies_rows(policies, mutations),
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch policies unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "policies" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+# --------------------------------------------------------------------------- #
 # Substitution + write                                                        #
 # --------------------------------------------------------------------------- #
 def substitute(template: str, mapping: dict[str, str]) -> str:
@@ -496,6 +2173,53 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--template", type=Path, default=TEMPLATE_PATH)
     parser.add_argument("--pyproject", type=Path, default=PYPROJECT)
+    parser.add_argument(
+        "--seedgen-out-dir",
+        type=Path,
+        default=DEFAULT_SEEDGEN_OUT_DIR,
+        help="Output dir for seed-generation index + per-run pages.",
+    )
+    parser.add_argument(
+        "--seedgen-index-template",
+        type=Path,
+        default=SEEDGEN_INDEX_TEMPLATE,
+    )
+    parser.add_argument(
+        "--seedgen-run-template",
+        type=Path,
+        default=SEEDGEN_RUN_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-out-dir",
+        type=Path,
+        default=DEFAULT_AUTORESEARCH_OUT_DIR,
+        help="Output dir for autoresearch landing + 4 sub-view pages.",
+    )
+    parser.add_argument(
+        "--autoresearch-landing-template",
+        type=Path,
+        default=AUTORESEARCH_LANDING_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-baseline-template",
+        type=Path,
+        default=AUTORESEARCH_BASELINE_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-mutations-template",
+        type=Path,
+        default=AUTORESEARCH_MUTATIONS_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-results-template",
+        type=Path,
+        default=AUTORESEARCH_RESULTS_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-policies-template",
+        type=Path,
+        default=AUTORESEARCH_POLICIES_TEMPLATE,
+    )
     args = parser.parse_args(argv)
 
     LOG.info("bundle-root=%s", args.bundle_root)
@@ -559,6 +2283,169 @@ def main(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(rendered, encoding="utf-8")
     LOG.info("wrote %s (%d bytes)", args.out, args.out.stat().st_size)
+
+    # ----------------------------------------------------------------- #
+    # Seed-generation surface (index + per-run detail pages)            #
+    # ----------------------------------------------------------------- #
+    seeds_listing_path = args.bundle_root / "seeds" / "listing.json"
+    seeds_raw_listing: dict[str, Any] = {}
+    if seeds_listing_path.exists():
+        try:
+            seeds_raw_listing = json.loads(seeds_listing_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            LOG.warning("seedgen listing parse error: %s", seeds_listing_path)
+            seeds_raw_listing = {}
+
+    seedgen_index_template = args.seedgen_index_template.read_text(encoding="utf-8")
+    seedgen_run_template = args.seedgen_run_template.read_text(encoding="utf-8")
+
+    seedgen_count_label_value = f"{len(seedgen_rows)} run" + ("s" if len(seedgen_rows) != 1 else "")
+    sidebar_petri_recent_html = render_sidebar_petri(petri_rows)
+    sidebar_seedgen_runs_html = render_sidebar_seedgen(seedgen_rows)
+
+    index_path = render_seedgen_index(
+        seeds_raw_listing,
+        seedgen_rows,
+        args.seedgen_out_dir,
+        template=seedgen_index_template,
+        petri_count=len(petri_rows),
+        seedgen_count_label=seedgen_count_label_value,
+        autoresearch_status_label=autoresearch_status_label,
+        sidebar_petri_recent=sidebar_petri_recent_html,
+        sidebar_seedgen_runs=sidebar_seedgen_runs_html,
+        geode_version=version,
+        build_date=build_date,
+    )
+    LOG.info("wrote seedgen index %s (%d bytes)", index_path, index_path.stat().st_size)
+
+    seeds_dir = args.bundle_root / "seeds"
+    for run in seedgen_rows:
+        state, survivors_doc, meta_doc = _load_per_run(seeds_dir, run.run_id)
+        run_path = render_seedgen_run(
+            run,
+            state,
+            survivors_doc,
+            meta_doc,
+            args.seedgen_out_dir,
+            template=seedgen_run_template,
+            petri_count=len(petri_rows),
+            seedgen_count_label=seedgen_count_label_value,
+            autoresearch_status_label=autoresearch_status_label,
+            sidebar_petri_recent=sidebar_petri_recent_html,
+            sidebar_seedgen_runs=sidebar_seedgen_runs_html,
+            geode_version=version,
+            build_date=build_date,
+        )
+        LOG.info("wrote seedgen run %s (%d bytes)", run_path, run_path.stat().st_size)
+
+    # ----------------------------------------------------------------- #
+    # Autoresearch surface (5 sub-pages — P6)                          #
+    # Each renderer is best-effort: failure of one doesn't block the   #
+    # others. The autoresearch_status_label / mtimes / counts come     #
+    # from the existing `autoresearch` AutoresearchState dataclass     #
+    # already loaded above for the hub landing.                        #
+    # ----------------------------------------------------------------- #
+    ar_state_dir = args.autoresearch_root / "state"
+    baseline_data, baseline_stale, baseline_source = _load_baseline(ar_state_dir)
+    archive_rows = _load_baseline_archive(ar_state_dir)
+    mutations_rows = _load_mutations(ar_state_dir)
+    results_tsv_rows = _load_results_tsv(ar_state_dir)
+    results_jsonl_rows = _load_results_jsonl(ar_state_dir)
+    policies_entries = _list_policies(ar_state_dir / "policies")
+
+    LOG.info(
+        "autoresearch loaded baseline=%s stale=%s archive=%d mutations=%d "
+        "results_tsv=%d results_jsonl=%d policies=%d",
+        baseline_source.name if baseline_source else "(none)",
+        baseline_stale,
+        len(archive_rows),
+        len(mutations_rows),
+        len(results_tsv_rows),
+        len(results_jsonl_rows),
+        len(policies_entries),
+    )
+
+    ar_ctx = _AutoresearchRenderCtx(
+        sidebar_petri_recent=sidebar_petri_recent_html,
+        sidebar_seedgen_runs=sidebar_seedgen_runs_html,
+        petri_count=len(petri_rows),
+        seedgen_count_label=seedgen_count_label_value,
+        autoresearch_status_label=autoresearch_status_label,
+        geode_version=version,
+        build_date=build_date,
+    )
+
+    # Each renderer runs independently; log and continue on failure so
+    # one broken page doesn't prevent the others from publishing.
+    def _safe(name: str, fn: Any) -> None:
+        try:
+            path = fn()
+            LOG.info("wrote autoresearch %s (%d bytes)", path, path.stat().st_size)
+        except Exception:
+            # Best-effort per page — log + continue so one broken
+            # renderer doesn't block the others from publishing.
+            LOG.exception("autoresearch %s render failed", name)
+
+    _safe(
+        "landing",
+        lambda: render_autoresearch_landing(
+            baseline_data,
+            baseline_source,
+            baseline_stale,
+            archive_rows,
+            mutations_count=autoresearch.mutations_count,
+            mutations_mtime=autoresearch.mutations_mtime,
+            results_count=len(results_tsv_rows),
+            results_mtime=autoresearch.results_mtime,
+            policies_count=len(policies_entries),
+            policies_mtime=autoresearch.policies_mtime,
+            baseline_mtime=autoresearch.baseline_mtime,
+            out_dir=args.autoresearch_out_dir,
+            template=args.autoresearch_landing_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+    _safe(
+        "baseline",
+        lambda: render_autoresearch_baseline(
+            baseline_data,
+            baseline_source,
+            baseline_stale,
+            args.autoresearch_out_dir,
+            template=args.autoresearch_baseline_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+    _safe(
+        "mutations",
+        lambda: render_autoresearch_mutations(
+            mutations_rows,
+            args.autoresearch_out_dir,
+            template=args.autoresearch_mutations_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+    _safe(
+        "results",
+        lambda: render_autoresearch_results(
+            results_tsv_rows,
+            results_jsonl_rows,
+            args.autoresearch_out_dir,
+            template=args.autoresearch_results_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+    _safe(
+        "policies",
+        lambda: render_autoresearch_policies(
+            policies_entries,
+            mutations_rows,
+            args.autoresearch_out_dir,
+            template=args.autoresearch_policies_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+
     return 0
 
 
