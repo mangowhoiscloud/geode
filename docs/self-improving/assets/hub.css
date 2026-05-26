@@ -903,3 +903,82 @@ table.records .gen-timeline-row.active td:first-child {
   margin: 0;
   color: var(--ink);
 }
+
+/* ---------------------------------------------------------------------
+ * PR-SEEDS-HIRES P2 (2026-05-26) — high-resolution sub-page surfaces
+ * (/agents/, /agent/<task_id>/, /timeline/, /tournament/).
+ * Reuses existing tokens (--ink, --paper, --bucket-seedgen, --chip-*).
+ * No new color tokens.
+ * ------------------------------------------------------------------ */
+table.seedgen-agents {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.seedgen-agents td.num,
+table.seedgen-agents th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+details.turn {
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  margin: .35rem 0;
+  padding: .35rem .55rem;
+}
+details.turn > summary {
+  cursor: pointer;
+  font-weight: 500;
+  letter-spacing: .01em;
+  font-size: .9rem;
+}
+details.turn.user > summary { color: var(--bucket-petri); }
+details.turn.assistant > summary { color: var(--bucket-seedgen); }
+details.turn.session-end > summary { color: var(--bucket-autoresearch); }
+details.turn pre.msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--paper-tint);
+  padding: .55rem .7rem;
+  border-radius: 4px;
+  font-size: .8rem;
+  line-height: 1.45;
+  max-height: 30rem;
+  overflow-y: auto;
+}
+ul.event-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+ul.event-list li {
+  margin: .15rem 0;
+  font-size: .85rem;
+}
+section.phase-block {
+  border-left: 3px solid var(--bucket-seedgen);
+  padding-left: .8rem;
+}
+section.match h3 {
+  margin-top: 0;
+}
+table.records.votes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+table.records.votes td.rationale {
+  max-width: 38rem;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+.bucket.win-a {
+  background: rgba(13,110,253,.12);
+  color: var(--bucket-petri);
+}
+.bucket.win-b {
+  background: rgba(25,135,84,.12);
+  color: var(--bucket-seedgen);
+}
+.bucket.tie {
+  background: rgba(108,117,125,.12);
+  color: #6c757d;
+}

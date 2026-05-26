@@ -231,6 +231,54 @@ functional change.
   - `test_pr1_tournament_schema_complete` — voter_panel + matches schema
     + A/B/tie coverage so downstream renderer branches stay exercised.
 
+- **PR-SEEDS-HIRES (Phase 2: static render)** — 4 new hi-resolution
+  sub-pages per seed-generation run, reading the Phase 1 bundle data:
+
+  - `/seed-generation/<run_id>/agents/` — dense per-sub-agent table
+    (task_id link / phase chip / harness chip + model / turn count /
+    cost USD / duration). Sorted by phase order.
+  - `/seed-generation/<run_id>/agent/<task_id>/` — Langfuse-style
+    turn-by-turn page. Header `<dl>` with task metadata + result
+    summary; body is a sequence of collapsible `<details class="turn
+    [user|assistant|session-end]">` blocks, one per
+    `dialogue.jsonl` event. All collapsed by default — page renders
+    ~5 KB no matter how many turns.
+  - `/seed-generation/<run_id>/timeline/` — Phoenix-style 9-phase
+    nested span list. Per-phase `<section>` with duration + cost
+    header + nested `<details>` for sub-agent fan-out + filtered
+    hook events from `transcript.jsonl`.
+  - `/seed-generation/<run_id>/tournament/` — full Elo tournament
+    record with 3-voter panel breakdown per match (voter chip / vote
+    / rationale / duration) + Elo before→after deltas. Mixed-outcome
+    fixture (A win / B win / tie) keeps renderer branches exercised.
+
+  Builder: `scripts/build_self_improving_hub.py` adds
+  `_emit_seedgen_run_subpages` orchestrator + 4 body renderers
+  (`_render_agents_index_body`, `_render_agent_detail_body`,
+  `_render_timeline_body`, `_render_tournament_body`) + 3 data
+  loaders (`_load_subagents`, `_read_dialogue`, `_chip_for_subagent`)
+  + a shared `_render_seedgen_subpage` shell. The shell mirrors the
+  existing hub sidebar contract so all 4 sub-pages stay sidebar-
+  consistent.
+
+  CSS: `docs/self-improving/assets/hub.css` adds `.seedgen-agents`,
+  `.turn` + user/assistant/session-end variants, `.msg` pre-wrap
+  text body, `.event-list`, `.phase-block`, `.match`, `.votes`,
+  `.bucket.{win-a,win-b,tie}`. **Zero new color tokens** — every new
+  rule reuses `--bucket-{petri,seedgen,autoresearch}` + existing
+  paper / rule tokens (cotton single-substrate preserved).
+
+  DESIGN.md: `self-improving-seed-generation-conversations.md`,
+  `self-improving-seed-generation-timeline.md`,
+  `self-improving-seed-generation-tournament.md`.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **40 cases** — was 34):
+  `test_pr2_agents_index_renders`, `test_pr2_agent_detail_paginates
+  _via_details`, `test_pr2_timeline_shows_all_known_phases`,
+  `test_pr2_tournament_renders_three_voter_panel`,
+  `test_pr2_subpages_basepath_safe`, `test_pr2_subpages_no_js_framework`.
+
+
 ### Fixed
 
 - **PR-SOT-REVERT-ON-REJECT** — self-improving loop closed-loop silent
