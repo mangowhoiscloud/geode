@@ -56,6 +56,7 @@ from core.paths import (
     GLOBAL_TOOL_POLICY_PATH,
     GLOBAL_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
+    OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
 )
 
 log = logging.getLogger(__name__)
@@ -73,6 +74,35 @@ _LEGACY_FILE_NAMES: dict[str, str] = {
     "decomposition": "decomposition.json",
     "retrieval": "retrieval.json",
     "reflection": "reflection.json",
+}
+
+
+# PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27), Codex MCP review fix-up.
+# The runtime reader at ``core/agent/tool_descriptions_policy.py`` (ADR-013 T1)
+# honours a 3-layer resolution: env → operator-local
+# (``~/.geode/self-improving-loop/tool-descriptions.json``) → in-repo
+# (``autoresearch/state/policies/tool-descriptions.json``). Pre-fix the
+# mutator's ``load_policy("tool_descriptions")`` only saw the in-repo
+# layer, so an operator using the operator-local override would see
+# the runtime read from THERE while the mutator wrote to the in-repo
+# path — silent divergence + dual SoT drift.
+#
+# Fix: when the mutator reads ``tool_descriptions``, fall back to the
+# operator-local file if the in-repo file is absent. ``load_policy``
+# still writes to the in-repo path (so mutation history is auditable),
+# which on first write produces the in-repo SoT and the operator-
+# local file becomes secondary. Operators who want to keep the
+# operator-local file authoritative should either (a) opt the surface
+# out of the loop, or (b) accept that the first mutation graduates
+# their override to in-repo. This matches the read-write parity rule
+# in CLAUDE.md (every read path has a write path that lands in the
+# same SoT family).
+#
+# Kept as a dict instead of hardcoding in ``load_policy`` so future
+# kinds with the same 3-layer pattern (none today) extend by adding
+# an entry, not by branching on ``kind``.
+_OPERATOR_LOCAL_FALLBACK_PATHS: dict[str, Path] = {
+    "tool_descriptions": OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
 }
 
 
@@ -278,13 +308,31 @@ def load_policy(kind: str) -> dict[str, str]:
     row 의 contract 가 flat string-keyed 이므로 ``_flatten_nested``
     가 dotted-key flat 표현 (``"skill-name.description"`` 등) 으로
     변환해 반환.
+
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up) —
+    when the in-repo SoT is missing for a kind listed in
+    :data:`_OPERATOR_LOCAL_FALLBACK_PATHS` (today only
+    ``tool_descriptions``), fall back to the operator-local 3-layer-
+    reader path so the mutator sees the same content the runtime
+    reader sees. Without the fallback the mutator would propose
+    changes against an empty dict and silently diverge from
+    operator-local overrides.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {}
+        # PR-TOOL-DESCRIPTIONS-MUTATE — operator-local fallback for
+        # kinds whose runtime reader honours a 3-layer override.
+        operator_local = _OPERATOR_LOCAL_FALLBACK_PATHS.get(kind)
+        if operator_local is not None:
+            try:
+                raw = operator_local.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                return {}
+        else:
+            return {}
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:

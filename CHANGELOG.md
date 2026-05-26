@@ -60,11 +60,13 @@ functional change.
   empty block (graceful). Helper module
   ``core/self_improving_loop/mutator_feedback.py``.
 - **PR-MUTATOR-DEDUP-GUARD (2026-05-27)** — reject mutator proposals
-  whose ``(target_kind, target_section, new_value)`` triple has a
-  ``difflib.SequenceMatcher.ratio()`` above
-  ``mutator_dedup_threshold`` against any of the most-recent N
-  apply rows. Catches the LLM re-proposing a cosmetic edit despite
-  the contract suffix's repetition warning. New
+  whose ``new_value`` has a ``difflib.SequenceMatcher.ratio()`` above
+  ``mutator_dedup_threshold`` against a recent apply row with the
+  SAME ``(target_kind, target_section)``. The kind+section equality
+  gate runs before the ratio comparison so a long identical payload
+  on a different kind / section is not falsely flagged (Codex MCP
+  review catch — without the gate the long ``new_value`` payload
+  would dominate a joined-signature ratio). New
   ``RepetitiveMutationError(ValueError)`` so existing cycle-skip
   catches handle the rejection without the runner crashing. New
   knobs: ``mutator_dedup_window`` (default ``20``, mirrors the
@@ -82,7 +84,12 @@ functional change.
   (``{tool_name: {description: str, hints: list[str]}}``) joins
   the same flat ↔ nested machinery as ``skill_catalog`` /
   ``agent_contract``; ``hints`` is the only list-typed field.
-  Pin: ``_READER_ONLY_KINDS`` size assertion drops from 7 to 6.
+  Codex MCP review fix-up: ``load_policy("tool_descriptions")``
+  falls back to ``~/.geode/self-improving-loop/tool-descriptions.json``
+  when the in-repo SoT is absent, so the mutator iterates from the
+  same content the runtime reader's 3-layer resolution surfaces
+  (closes the dual-SoT drift concern). Pin: ``_READER_ONLY_KINDS``
+  size assertion drops from 7 to 6.
 
 ### Fixed
 - **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route

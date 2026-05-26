@@ -124,7 +124,8 @@ def test_feedback_block_header_counts_match_inputs() -> None:
 
 
 def test_dedup_distinct_kinds_never_match() -> None:
-    """Different ``target_kind`` ⇒ signature prefix differs ⇒ ratio low."""
+    """Different ``target_kind`` ⇒ kind gate skips the comparison
+    entirely; ``new_value`` similarity is never measured."""
     mutation = _StubMutation(target_kind="prompt", target_section="lead", new_value="Hello world.")
     recent = [
         _StubApplyRecord(
@@ -136,9 +137,49 @@ def test_dedup_distinct_kinds_never_match() -> None:
     ]
     finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
     assert not finding.is_repetitive
-    # Signatures differ only in 6-char prefix vs 11-char prefix; with the
-    # identical 22-char payload remainder ratio is still high but below 1.0.
-    assert 0.0 < finding.max_similarity < 1.0
+    # Codex MCP review (PR-MUTATOR-DEDUP-GUARD, 2026-05-27): the
+    # kind+section gate skips the SequenceMatcher call entirely when
+    # kinds differ, so best_ratio stays at 0.0 even when ``new_value``
+    # is identical.
+    assert finding.max_similarity == 0.0
+
+
+def test_dedup_distinct_sections_skipped_entirely() -> None:
+    """Same kind, different ``target_section`` ⇒ skipped (not a repeat)."""
+    mutation = _StubMutation(
+        target_kind="prompt", target_section="lead", new_value="Foo bar baz quux"
+    )
+    recent = [
+        _StubApplyRecord(
+            target_kind="prompt",
+            target_section="closing",
+            new_value="Foo bar baz quux",
+            mutation_id="prior-1",
+        )
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    assert not finding.is_repetitive
+    assert finding.max_similarity == 0.0
+
+
+def test_dedup_long_identical_value_across_kinds_does_not_trigger() -> None:
+    """Codex MCP regression: with a 500-char identical ``new_value``,
+    the pre-fix joined-signature ratio would exceed 0.85 even across
+    different kinds. The kind gate must prevent that — long identical
+    payloads on different kinds are NOT repetitive."""
+    long_value = "lorem ipsum dolor sit amet " * 20  # ~540 chars
+    mutation = _StubMutation(target_kind="prompt", target_section="lead", new_value=long_value)
+    recent = [
+        _StubApplyRecord(
+            target_kind="tool_policy",
+            target_section="lead",
+            new_value=long_value,
+            mutation_id="prior-1",
+        )
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    assert not finding.is_repetitive
+    assert finding.max_similarity == 0.0
 
 
 def test_dedup_exact_duplicate_triggers() -> None:

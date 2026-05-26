@@ -164,22 +164,6 @@ class RepetitionFinding:
     matched_target_section: str | None
 
 
-def _mutation_signature(target_kind: str, target_section: str, new_value: str) -> str:
-    """Concatenate the mutation-identifying fields into a string for
-    ``difflib.SequenceMatcher.ratio()`` comparison.
-
-    The triple (kind, section, value) is what
-    ``_MUTATION_CONTRACT_SUFFIX`` warns against repeating across
-    siblings — two mutations on *different* kinds or *different*
-    sections aren't repetitive even if their ``new_value`` is similar,
-    and two mutations on the same section with materially different
-    ``new_value`` are legitimate iterations. Comparing the joined
-    signature lets a small wording tweak within the same section
-    score >0.85 while a true rewrite scores well below.
-    """
-    return f"{target_kind}\n{target_section}\n{new_value}"
-
-
 def check_repetitive_mutation(
     mutation: Mutation,
     recent_applies: Iterable[ApplyRecord],
@@ -193,7 +177,17 @@ def check_repetitive_mutation(
     A ratio of exactly the threshold counts as repetitive — strictly
     less is fresh enough.
 
-    The check is short-circuit: as soon as the running maximum exceeds
+    The comparison gates on ``(target_kind, target_section)`` exact
+    equality FIRST, then runs ``difflib.SequenceMatcher.ratio()`` on
+    just the ``new_value`` payload. Without the gate the long
+    ``new_value`` payload (up to 600 chars per ``parse_mutation``'s
+    cap) would dominate the joined-signature ratio — two mutations on
+    *different* kinds or sections with identical text would score
+    above 0.85, contradicting the contract that "different section is
+    not a repeat". Codex MCP review of PR-MUTATOR-DEDUP-GUARD caught
+    this pre-merge.
+
+    The check is short-circuit: as soon as the running maximum crosses
     the threshold the loop stops, so a long apply-history with one
     obvious clone is cheap to scan.
 
@@ -201,28 +195,30 @@ def check_repetitive_mutation(
     ``is_repetitive`` is False — useful for telemetry that wants to
     log near-misses without blocking the mutation.
     """
-    current_sig = _mutation_signature(
-        mutation.target_kind, mutation.target_section, mutation.new_value
-    )
     best_ratio = 0.0
     best_id: str | None = None
     best_section: str | None = None
     for row in recent_applies:
-        prior_sig = _mutation_signature(
-            getattr(row, "target_kind", ""),
-            getattr(row, "target_section", ""),
-            getattr(row, "new_value", ""),
-        )
+        prior_kind = getattr(row, "target_kind", "")
+        prior_section = getattr(row, "target_section", "")
+        # Gate: a repeat requires same kind AND same section. Different
+        # kind or section = legitimately new mutation, ratio not even
+        # considered.
+        if prior_kind != mutation.target_kind:
+            continue
+        if prior_section != mutation.target_section:
+            continue
+        prior_value = getattr(row, "new_value", "")
         # SequenceMatcher.ratio() returns a float in [0, 1]. The autojunk
         # heuristic is fine for natural-language sections and a string
         # short enough for an LLM prompt; explicit autojunk=False would
         # only matter on multi-thousand-character payloads, which the
         # 600-char ``new_value`` cap rules out (parse_mutation enforces).
-        ratio = difflib.SequenceMatcher(None, prior_sig, current_sig).ratio()
+        ratio = difflib.SequenceMatcher(None, prior_value, mutation.new_value).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
             best_id = getattr(row, "mutation_id", None) or None
-            best_section = getattr(row, "target_section", None) or None
+            best_section = prior_section or None
             if ratio >= threshold:
                 # Short-circuit — no benefit to scanning further once a
                 # match crosses the gate.
