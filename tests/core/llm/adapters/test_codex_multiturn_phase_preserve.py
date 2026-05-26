@@ -154,6 +154,52 @@ def test_message_phase_default_empty_for_backcompat() -> None:
     assert m.phase == ""
 
 
+def test_phase_survives_checkpoint_resume_cycle(tmp_path) -> None:
+    """Codex MCP HIGH catch fold — ``_assistant_msg["phase"]`` must
+    survive the SQLite checkpoint/resume cycle. Pre-fold the session
+    manager's ``_extract_message_fields`` dropped the sidecar key on
+    the way IN (documented but not implemented), so resume saw
+    ``phase`` implicitly empty and the next-turn replay lost the
+    attribution. The fix folds Codex sidecar keys (``phase`` +
+    ``codex_reasoning_items``) into ``metadata`` at extract time and
+    un-folds them at ``_row_to_message``."""
+    from core.memory.session_manager import _extract_message_fields
+
+    # Extract phase as a top-level msg key
+    extracted = _extract_message_fields(
+        {"role": "assistant", "content": "first answer", "phase": "final_answer"}
+    )
+    # Phase should be folded into metadata (JSON-serialised at the column)
+    import json as _json
+
+    assert extracted["metadata"] is not None
+    parsed_meta = _json.loads(extracted["metadata"])
+    assert parsed_meta["phase"] == "final_answer"
+
+
+def test_codex_reasoning_items_also_survive_checkpoint(tmp_path) -> None:
+    """Same fold also rescues ``codex_reasoning_items`` which had been
+    silently dropped pre-fold (parallel bug surfaced by the same
+    Codex MCP review)."""
+    from core.memory.session_manager import _extract_message_fields
+
+    items = [{"type": "reasoning", "encrypted_content": "ENC_A", "summary": []}]
+    extracted = _extract_message_fields(
+        {
+            "role": "assistant",
+            "content": "answer",
+            "codex_reasoning_items": items,
+            "phase": "commentary",
+        }
+    )
+    import json as _json
+
+    assert extracted["metadata"] is not None
+    parsed_meta = _json.loads(extracted["metadata"])
+    assert parsed_meta["phase"] == "commentary"
+    assert parsed_meta["codex_reasoning_items"] == items
+
+
 def test_round_trip_phase_capture_to_replay() -> None:
     """Full round-trip — phase captured from a Codex response item
     survives back into the next-turn codex input."""
