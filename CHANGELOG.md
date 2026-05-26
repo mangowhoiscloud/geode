@@ -74,6 +74,41 @@ functional change.
 
 ### Added
 
+- **PR-SURFACE-CLARITY** — Phase H bundle (TARGET-KIND-DOC +
+  PARETO-INTEGRATE) closing the 2026-05-26 attribution sprint Phase A
+  audit §5 and §5.7 follow-ups.
+  * **TARGET-KIND-DOC**: ``core/self_improving_loop/policies.py``
+    introduces the ``_READER_ONLY_KINDS`` frozenset listing the 7 SoT
+    surfaces wired in ``autoresearch.train.run_audit``'s STRICT-mode
+    env block (``tool_descriptions`` / ``style_guide`` /
+    ``provider_routing`` / ``cache_policy`` / ``heuristics`` /
+    ``in_context_slots`` / ``few_shot_pool``) but NOT in
+    ``TARGET_KINDS``. Comment block above ``TARGET_KINDS`` explains
+    the asymmetry as intentional ADR-013 phased rollout and points
+    operators at the fail-fast ``parse_mutation`` ValueError when a
+    mutator emits a reader-only kind. Pinned by 4 invariant tests in
+    ``tests/core/self_improving_loop/test_target_kind_surface_doc.py``
+    (disjoint sets, fail-fast emission per kind, env-wiring parity,
+    size-7 sanity counter).
+  * **PARETO-INTEGRATE**: ``autoresearch.train.main`` now appends an
+    ``ArchiveEntry`` to ``BASELINE_ARCHIVE_PATH`` after the promote
+    decision is finalized (every cycle, accept + reject). The entry
+    carries full ``dim_means`` / ``dim_stderr`` plus ``promoted``
+    (bool) and ``reason`` (str) via ``ArchiveEntry.extra="allow"``
+    so downstream regret-analysis readers can compute the multi-axis
+    cost of rejecting mutation M. Gated by
+    ``[self_improving_loop.autoresearch] pareto_mode = true``
+    (operator opt-in; default off preserves backward-compat) AND
+    ``not args.dry_run`` (synthetic dim_means has no Pareto signal).
+    Wrapped in best-effort try/except — JSONL writer failure logs at
+    WARNING and the audit cycle continues, matching the existing
+    runner-side pareto wiring pattern (runner.py:1667-1673).
+    Pinned by 5 invariant tests in
+    ``tests/autoresearch/test_pareto_integrate_promote_gate.py``
+    (block presence, opt-in gating, ``promoted`` + ``reason`` field
+    join keys, single source of truth for the accept/reject bit,
+    best-effort error path).
+
 - **PR-MAX-GEN** — Outer-loop hardening: hard cap on total auto-trigger
   fires.
   * ``auto_trigger_mutator`` accepts a new ``max_generation: int = 0``

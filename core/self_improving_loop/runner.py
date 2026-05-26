@@ -1653,6 +1653,13 @@ class SelfImprovingLoopRunner:
                 _archive_appended = 0
                 _archive_failed = 0
                 for idx, proposal in enumerate(proposals):
+                    # PR-PARETO-INTEGRATE (2026-05-27) Codex MCP review
+                    # must-fix #1 — tag with ``phase="pre_audit_sibling"``
+                    # so this sibling row (fitness scalar, pre-audit) is
+                    # distinguishable from train.py's post-audit row
+                    # (full dim_means + promoted decision). Both writers
+                    # share the mutation_id join key but downstream
+                    # readers filter by phase.
                     entry = ArchiveEntry(
                         mutation_id=proposal.mutation.mutation_id,
                         group_id=group_id,
@@ -1660,6 +1667,7 @@ class SelfImprovingLoopRunner:
                         ts=time.time(),
                         dim_means={"fitness": float(fitness_values[idx])},
                         dim_stderr={},
+                        phase="pre_audit_sibling",
                     )
                     try:
                         append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)

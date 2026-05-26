@@ -135,6 +135,23 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 # 보존: ``GLOBAL_RETRIEVAL_POLICY_PATH`` 와 ``_KIND_TO_PATH`` 의 ``retrieval``
 # 매핑은 그대로 둠 — 미래 RAG 인프라 신설 시 별도 ADR 로 ``TARGET_KINDS``
 # 에 재추가 가능하도록 path-literal guard 유지.
+#
+# PR-TARGET-KIND-DOC (2026-05-27) — surface-clarity bundle. The 2026-05-26
+# attribution sprint Phase A audit (§5 mutation surface verification)
+# found an asymmetry: ``autoresearch.train.run_audit``'s env override
+# block (around line 868-903) wires STRICT-mode env vars for **13** SoT
+# files, but ``TARGET_KINDS`` below lists only **6 active** mutation
+# slots. The 7 difference is :data:`_READER_ONLY_KINDS` — reader-deployed
+# SoT surfaces that the audit subprocess consumes (read-only) but the
+# mutator cannot dispatch to. ADR-013 phased rollout intent: each
+# reader-only surface graduates in its own follow-up PR (matching the
+# ADR-012 M1/M2 precedent that opened ``skill_catalog`` and
+# ``agent_contract``). Mutator emitting a ``target_kind`` not in
+# ``TARGET_KINDS`` fails fast at ``parse_mutation`` (``runner.py:914``
+# ValueError) — fail-closed by design. The reader-only set is pinned
+# by ``tests/core/self_improving_loop/test_target_kind_surface_doc.py``
+# so a future PR that promotes any of them must remove the entry
+# explicitly rather than silently expanding mutator dispatch.
 TARGET_KINDS: tuple[str, ...] = (
     "prompt",
     "tool_policy",
@@ -172,6 +189,29 @@ _KIND_TO_PATH: dict[str, Path] = {
 # M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /
 # ``write_policy`` 의 flat ↔ nested 변환 dispatch 분기 키.
 _NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
+
+
+# PR-TARGET-KIND-DOC (2026-05-27) — reader-only SoT surfaces. These are
+# wired in ``autoresearch.train.run_audit``'s ``GEODE_*_OVERRIDE`` +
+# ``GEODE_*_STRICT`` env block (so the audit subprocess can read them
+# under operator-local overrides) but NOT in :data:`TARGET_KINDS` (so
+# the mutator can't dispatch to them). Each entry must graduate to
+# ``TARGET_KINDS`` via its own follow-up PR — phased rollout matches
+# the ADR-012 M1/M2 precedent. Frozen set so a future PR that adds an
+# entry to ``TARGET_KINDS`` *must* remove it here (the invariant test
+# in ``tests/core/self_improving_loop/test_target_kind_surface_doc.py``
+# verifies the two sets are disjoint).
+_READER_ONLY_KINDS: frozenset[str] = frozenset(
+    {
+        "tool_descriptions",
+        "style_guide",
+        "provider_routing",
+        "cache_policy",
+        "heuristics",
+        "in_context_slots",
+        "few_shot_pool",
+    }
+)
 
 
 def is_valid_target_kind(kind: str) -> bool:

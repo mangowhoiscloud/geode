@@ -360,9 +360,7 @@ def test_max_generation_post_lock_recheck_blocks_overshoot(
     assert "post-lock re-check" in status.detail
 
 
-def test_max_generation_emits_hook_event(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_max_generation_emits_hook_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Codex MCP review #2 (FAIL must-fix #3) — direct emission test.
     When the cap fires, the registered HookSystem must receive a
     ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED`` event with
