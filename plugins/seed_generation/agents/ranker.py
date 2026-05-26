@@ -421,9 +421,7 @@ class Ranker(BaseSeedAgent):
                     outcomes.append(outcome)
                 next_idx += 1
 
-            due_by_count = (
-                len(completed_ids) - last_dump_count >= _PARTIAL_CHECKPOINT_EVERY_MATCHES
-            )
+            due_by_count = len(completed_ids) - last_dump_count >= _PARTIAL_CHECKPOINT_EVERY_MATCHES
             due_by_time = time.monotonic() - last_dump_at >= _PARTIAL_CHECKPOINT_EVERY_SECONDS
             dirty = len(completed_ids) > last_dump_count
             if dirty and (due_by_count or due_by_time or force_dump):
