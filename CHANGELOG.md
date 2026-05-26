@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.66] - 2026-05-26
+
+Seed-generation ranker-phase robustness rotation. 2 PR fixing two
+independent smoke-20 defects: gpt-5.5 voter calls returning empty
+`output_text` 100% of the time (E1 — fixed by `effort="low"` pin
+based on ctx7 OpenAI Responses API docs grounding), and ~13%-rate
+generator sub-agent silent partial-writes (E2 — fixed by structural
+`enable_goal_decomposition=False` for sub-agents plus defence-in-depth
+`decomposition_result_leak` outcome detection). Both surfaced when
+smoke 20 ranker collapsed (quorum lost on every match). The two fixes
+are unrelated in code path but symbiotic at the system level: without
+E1 the ranker has no codex voters, without E2 the ranker has missing
+candidates to vote on. v0.99.66 ships both alongside the pre-existing
+voter task_id collision fix that E1 surfaced.
+
 ### Fixed
 
 - PR-GENERATOR-PLAN-LEAK-FIX — seed generator silent partial-write defect
