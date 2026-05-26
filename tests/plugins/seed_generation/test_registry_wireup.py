@@ -72,3 +72,48 @@ def test_populate_registry_ranker_receives_voters() -> None:
     # The Ranker stores voters on a private attribute; the externally-visible
     # invariant is that the registry has the ranker role + picker has voters.
     assert len(picker.voters) >= 1
+
+
+def test_populate_registry_supervisor_registered() -> None:
+    """PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor must be registered
+    (was silently skipped pre-fix with ``agent_not_registered`` in the
+    orchestrator transcript; smoke 19 evidence).
+
+    Pre-fix: ``enabled_roles`` did not include ``"supervisor"`` AND the
+    ``[seed_generation.role.supervisor]`` section was absent. The
+    main registration loop never visited supervisor, and the fallback
+    ``picker_result.bindings.get("supervisor")`` returned None
+    because the picker only resolves bindings for ``enabled_roles``.
+    Net effect: every smoke run emitted ``phase_skipped
+    reason=agent_not_registered`` for supervisor and the supervisor.json
+    checkpoint never landed.
+
+    Fix: added supervisor to manifest enabled_roles + role section +
+    Supervisor to ``_ROLE_TO_CLASS``. This test pins all three
+    necessary conditions.
+    """
+    picker = pick_bindings(auto_probe=False)
+    manifest = load_manifest()
+    # Necessary condition 1 — manifest enables supervisor.
+    assert "supervisor" in manifest.enabled_roles
+    # Necessary condition 2 — manifest defines a supervisor role spec.
+    assert "supervisor" in manifest.roles
+    # Necessary condition 3 — picker resolves a supervisor binding.
+    assert picker.bindings.get("supervisor") is not None
+    registry = PipelineRegistry()
+    populate_registry(registry, picker_result=picker, manifest=manifest)
+    # Sufficient condition — registry has the supervisor role.
+    assert "supervisor" in registry.list_roles(), (
+        "supervisor not registered — orchestrator will emit "
+        "phase_skipped reason=agent_not_registered (smoke 19 regression)"
+    )
+    supervisor = registry.get("supervisor")
+    assert supervisor is not None
+    # Concrete class check — must be Supervisor (not something else
+    # accidentally registered under the same role key).
+    from plugins.seed_generation.agents.supervisor import Supervisor
+
+    assert isinstance(supervisor, Supervisor)
+    # The supervisor binding's model is the manifest default (opus per
+    # the role docstring); confirm the wiring propagated.
+    assert supervisor.model == manifest.roles["supervisor"].default_model
