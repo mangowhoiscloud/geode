@@ -618,10 +618,14 @@ class Pipeline:
                 # resume re-runs failed phases instead of pretending
                 # they completed.
                 if iteration == 0 and self.state.run_dir is not None and phase_result.success:
+                    if phase == "ranker":
+                        self._apply_post_elo_dedup()
                     self._record_checkpoint(
                         phase,
                         duration_ms=(time.time() - phase_started) * 1000.0,
                     )
+                elif phase == "ranker" and phase_result.success:
+                    self._apply_post_elo_dedup()
                 # PR-COSCI-1 (2026-05-21) — abort early when the
                 # candidates pool is empty after a phase that should
                 # have populated or filtered it. The check is scoped
@@ -739,6 +743,41 @@ class Pipeline:
         # don't re-cluster (evolved candidates are deduped by the
         # Evolver's anti-convergence Jaccard guard, CSP-6).
         return True
+
+    def _apply_post_elo_dedup(self) -> None:
+        """Filter high-similarity survivor clusters after Ranker.
+
+        Proximity records semantic clusters before Pilot/Ranker have
+        score signal. This post-Elo pass mirrors open-coscientist's
+        high-similarity dedup rule, but uses GEODE's survivor ids, Elo
+        ratings, and Pilot dim means.
+        """
+        from plugins.seed_generation.dedup import dedup_survivors_by_cluster
+
+        if not self.state.survivors or not self.state.similarity_clusters:
+            return
+        filtered, removed = dedup_survivors_by_cluster(
+            survivors=list(self.state.survivors),
+            ratings=dict(self.state.elo_ratings),
+            pilot_scores=dict(self.state.pilot_scores),
+            similarity_clusters=list(self.state.similarity_clusters),
+        )
+        if not removed:
+            return
+        self.state.survivors = filtered
+        self.state.removed_duplicates.extend(removed)
+        log.info(
+            "seed-generation post-Elo dedup: removed %d high-similarity survivors",
+            len(removed),
+        )
+        _emit_orchestrator_event(
+            "post_elo_dedup_finished",
+            payload={
+                "removed": len(removed),
+                "survivors_before": len(filtered) + len(removed),
+                "survivors_after": len(filtered),
+            },
+        )
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
         """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
