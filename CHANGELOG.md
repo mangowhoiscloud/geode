@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.64] - 2026-05-26
+
+Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR
+(PR-HERMES-2, PR-CL-A2, PR-CODEX-MULTITURN-SUMMARY-PRESERVE,
+PR-TRANSIENT-CLASSIFIER-SCOPE, PR-SUPERVISOR-ENABLE) since
+v0.99.63. Ships platform/model-aware system-prompt fragments
+(Hermes Phase 2) and the Wilson-LB tool-ranking data layer (CL-A2)
+that the full A*-style policy will sit on. Codex multi-turn replay
+now preserves the reasoning-item `summary` field across all paths;
+the claude-cli transient classifier no longer false-positives on
+LLM-authored scenario prose; supervisor role wires through the
+seed-gen manifest end-to-end.
+
 ### Fixed
 - **PR-CODEX-MULTITURN-SUMMARY-PRESERVE — Codex Responses API
   multi-turn replay must carry `summary` on every reasoning item.**
