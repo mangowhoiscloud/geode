@@ -35,6 +35,7 @@ from core.llm.adapters.base import (
     QuotaWindows,
     StreamEvent,
 )
+from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
 log = logging.getLogger(__name__)
 
@@ -68,12 +69,23 @@ class AnthropicOAuthAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
-        try:
-            response = await client.messages.create(**build_create_kwargs(req))
-        except Exception as exc:
-            self._last_error = exc
-            log.warning("anthropic-oauth: messages.create failed model=%s err=%s", req.model, exc)
-            raise
+        # PR-OAUTH-API-LANES (2026-05-26) — gate concurrent API calls
+        # through the shared anthropic-api lane so a burst from
+        # PR-RANKER-PARALLEL stays under the per-account 429 floor.
+        # claude-cli subprocess flow uses claude_cli_lane (subprocess
+        # fork cost); this lane covers the direct API path.
+        lane_key = f"anthropic-oauth:{req.model}"
+        async with acquire_anthropic_api_lane_async(lane_key):
+            try:
+                response = await client.messages.create(**build_create_kwargs(req))
+            except Exception as exc:
+                self._last_error = exc
+                log.warning(
+                    "anthropic-oauth: messages.create failed model=%s err=%s",
+                    req.model,
+                    exc,
+                )
+                raise
         return translate_response(response)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:

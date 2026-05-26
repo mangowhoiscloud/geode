@@ -120,6 +120,25 @@ functional change.
 
 ### Added
 
+- PR-OAUTH-API-LANES (2026-05-26) — per-provider API lanes covering
+  the 4 direct-API adapters (`anthropic-oauth`, `anthropic-payg`,
+  `codex-oauth`, `openai-payg`) that previously had no concurrency
+  gate. Adds `core/orchestration/anthropic_api_lane.py` and
+  `core/orchestration/openai_api_lane.py` — each pools OAuth + PAYG
+  sources for the same provider on a single per-account semaphore.
+  Default `max_concurrent=4`, env override via
+  `GEODE_ANTHROPIC_API_LANE_MAX` / `GEODE_OPENAI_API_LANE_MAX`.
+  Wired into each adapter's `acomplete` with `async with
+  acquire_*_api_lane_async(key)`. Subprocess adapters (claude-cli,
+  codex-cli) keep their existing lanes unchanged — this PR is
+  additive only. Unblocks PR-RANKER-PARALLEL (next in sprint) by
+  giving the 177-call match-burst a per-provider 429 ceiling.
+  21 unit tests pin: default cap, env override (positive / empty /
+  non-integer / non-positive fallback), singleton identity, reset
+  isolation, sync + async acquire smoke, `asyncio.gather` burst →
+  throttled-to-cap invariant.
+
+
 - PR-SMOKE-LOG-FLAG (2026-05-26) — ``geode audit-seeds generate
   --smoke-log {auto,<path>}`` flag tees stdout + stderr into the
   GEODE-convention smoke archive without operator-managed ``>``

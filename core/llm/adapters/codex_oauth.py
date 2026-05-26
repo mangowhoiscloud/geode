@@ -42,6 +42,7 @@ from core.llm.adapters.base import (
     QuotaWindows,
     StreamEvent,
 )
+from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
 
@@ -107,19 +108,30 @@ class CodexOAuthAdapter:
         """
         client = self._get_client()
         kwargs = _build_codex_call_kwargs(req)
-        try:
-            async with client.responses.stream(**kwargs) as stream:
-                accumulated: list[Any] = []
-                async for event in stream:
-                    if getattr(event, "type", "") == "response.output_item.done":
-                        item = getattr(event, "item", None)
-                        if item is not None:
-                            accumulated.append(item)
-                final = await stream.get_final_response()
-        except Exception as exc:
-            self._last_error = exc
-            log.warning("codex-oauth: responses.stream failed model=%s err=%s", req.model, exc)
-            raise
+        # PR-OAUTH-API-LANES (2026-05-26) — gate concurrent API calls
+        # through the shared openai-api lane so PR-RANKER-PARALLEL's
+        # 177-call burst stays under the per-account 429 floor. The
+        # CLI subprocess flow has its own ``codex_cli_lane``; this
+        # lane covers the direct Responses API path.
+        lane_key = f"codex-oauth:{req.model}"
+        async with acquire_openai_api_lane_async(lane_key):
+            try:
+                async with client.responses.stream(**kwargs) as stream:
+                    accumulated: list[Any] = []
+                    async for event in stream:
+                        if getattr(event, "type", "") == "response.output_item.done":
+                            item = getattr(event, "item", None)
+                            if item is not None:
+                                accumulated.append(item)
+                    final = await stream.get_final_response()
+            except Exception as exc:
+                self._last_error = exc
+                log.warning(
+                    "codex-oauth: responses.stream failed model=%s err=%s",
+                    req.model,
+                    exc,
+                )
+                raise
         result = translate_codex_response(final, accumulated_items=accumulated)
         # PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex sometimes
         # returns ``output_text=""`` while emitting reasoning-only items
