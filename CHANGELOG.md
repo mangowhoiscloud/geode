@@ -47,6 +47,21 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-SOT-REVERT-ON-REJECT** — self-improving loop closed-loop silent
+  leak: when the runner-driven audit (`GEODE_SIL_MUTATION_ID` env set)
+  triggers `_should_promote=False`, the SoT is now reverted to its
+  pre-mutation state instead of leaving the rejected mutation as
+  permanent state. `autoresearch.train._revert_sot_after_reject` walks
+  `mutations.jsonl` for the apply row's `previous_value` and dispatches
+  through `load_wrapper_prompt_sections`/`write_wrapper_prompt_sections`
+  (prompt kind) or `policies.load_policy`/`policies.write_policy`
+  (policy kinds). Insertion case (`previous_value=""`) deletes the key
+  instead of writing back an empty string. Manual audits (no SIL env)
+  remain unchanged — operator-driven mutations accumulate by design.
+  Pinned by 9 invariant tests in `tests/autoresearch/test_sot_revert_on_reject.py`.
+
 ## [0.99.71] - 2026-05-26
 
 Sprint H closeout + backlog #99 cleanup. Bundles 4 PRs into one PATCH
