@@ -47,6 +47,51 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- PR-SMOKE-LOG-FLAG (2026-05-26) — ``geode audit-seeds generate
+  --smoke-log {auto,<path>}`` flag tees stdout + stderr into the
+  GEODE-convention smoke archive without operator-managed ``>``
+  redirect. ``auto`` resolves to
+  ``.audit/smoke-archives/smoke-<N>-<unix_ts>.log`` where ``N`` is the
+  next integer after the highest existing ``smoke-<int>-*.log``
+  filename in the archive directory; an explicit value is taken
+  literally. Implementation is a Python-level ``_TeeStream`` proxy
+  around ``sys.stdout`` / ``sys.stderr`` — best-effort secondary write
+  so a disk-full failure on the log can never crash the actual
+  pipeline (the primary stream stays authoritative). Subprocess output
+  (claude-cli, codex) keeps the original OS file descriptors and lands
+  in its own ``state/seed-generation/<run>/sub_agents/...`` SoT; the
+  smoke log captures exactly what the operator would have seen on the
+  terminal. Default (no flag) is unchanged — REPL / regular
+  ``audit-seeds generate`` invocations behave identically to pre-PR.
+  Pinned by 11 unit tests in
+  ``tests/plugins/seed_generation/test_smoke_log_flag.py``.
+
+- PR-HOOKEVENT-RESERVE — autoresearch mutation lifecycle event
+  namespace reservation. Adds 5 ``HookEvent`` members anchoring the
+  shared event taxonomy between two concurrent sprints:
+  (a) **autoresearch attribution sprint Phase G** — emit sites in
+  ``autoresearch/train.py:2407-2455`` (``_should_promote=False``
+  branch) + ``runner.py:1882-1888`` (subprocess returncode check)
+  for SoT-revert paths;
+  (b) **observability central SoT sprint** PR-5 wildcard firehose +
+  PR-10 autoresearch indexer that joins by ``mutation_id`` against
+  ``autoresearch/state/mutations.jsonl``. Reserving names + values
+  up-front prevents value drift once both sprints emit concurrently.
+  Members: ``MUTATION_PROPOSED`` / ``MUTATION_APPLIED`` /
+  ``MUTATION_REJECTED`` / ``MUTATION_REVERTED`` /
+  ``BASELINE_PROMOTED``. All 4 mutation lifecycle values use the
+  ``mutation_`` prefix so the wildcard subscriber's
+  ``startswith("mutation_")`` filter groups them as one taxonomy;
+  ``BASELINE_PROMOTED`` stays distinct from the pre-existing
+  ``MODEL_PROMOTED`` (pipeline-level retrain promotion) to avoid the
+  collision. Payload schema documented inline at ``core/hooks/system.py``
+  above the new members. Pinned by 4 unit tests in
+  ``tests/test_hookevent_mutation_baseline_reserve.py``: enum members
+  exist, ``mutation_`` prefix invariant, ``baseline_promoted``
+  literal value, distinctness from existing pipeline events.
+
 ### Fixed
 
 - **PR-SOT-REVERT-ON-AUDIT-FAIL** — self-improving loop closed-loop
