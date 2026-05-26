@@ -401,6 +401,63 @@ def test_rollback_sot_policy_kind_emits_mutation_reverted(
     assert captured[0]["reason"] == "audit_log_write_fail"
 
 
+def test_propose_emits_mutation_proposed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-MUTATION-PROPOSED-WIRE (2026-05-27) —
+    :meth:`SelfImprovingLoopRunner.propose` emits ``MUTATION_PROPOSED``
+    after the proposal is built (LLM parse + dedup gate + SoT load
+    succeeded) but BEFORE any apply. Payload uses the same schema as
+    the other MUTATION_* variants; ``run_id`` is empty because the
+    audit_run_id is minted later in apply_proposal."""
+    import json
+
+    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+
+    hooks = HookSystem()
+    captured: list[dict[str, Any]] = []
+    hooks.register(
+        HookEvent.MUTATION_PROPOSED,
+        lambda event, data: captured.append(data),
+        name="capture_mutation_proposed",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    # Stub the LLM call + context build so we don't hit real models or files.
+    canned_response = json.dumps(
+        {
+            "mutation_id": "proposed-mid",
+            "target_kind": "prompt",
+            "target_section": "evolver.system",
+            "new_value": "new prompt body",
+            "rationale": "test propose emit",
+            "target_dim": "dim_x",
+            "expected_dim": "dim_x",
+        }
+    )
+
+    def _stub_llm(system: str, user: str) -> str:
+        return canned_response
+
+    from core.self_improving_loop import runner as runner_mod
+
+    stub_ctx = runner_mod.RunnerContext(
+        current_sections={"evolver.system": "old prompt"},
+        current_policies={"prompt": {"evolver.system": "old prompt"}},
+    )
+    monkeypatch.setattr(runner_mod, "build_runner_context", lambda: stub_ctx)
+
+    sil = SelfImprovingLoopRunner(llm_call=_stub_llm)
+    proposal = sil.propose()
+
+    assert proposal.mutation.mutation_id == "proposed-mid"
+    assert len(captured) == 1
+    payload = captured[0]
+    assert payload["mutation_id"] == "proposed-mid"
+    assert payload["target_kind"] == "prompt"
+    assert payload["target_path"] == "prompt.evolver.system"
+    assert payload["run_id"] == ""  # not minted yet at propose time
+    assert isinstance(payload["ts"], float)
+
+
 def test_rollback_sot_no_emit_when_rollback_write_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

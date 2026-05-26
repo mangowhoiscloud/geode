@@ -159,6 +159,18 @@ def _build_propose_runner(
     mock_ctx.current_sections = {"# Setup": "current setup content"}
     mock_ctx.current_policies = {"prompt": {"# Setup": "current setup content"}}
     mock_ctx.target_dim = ""
+    # PR-FIX-DEVELOP-TEST-BREAKAGE (2026-05-27) — PR-MUTATOR-HISTORY-FEEDBACK
+    # (#1779) added a new ``ctx.mutator_feedback_block`` block read in
+    # ``_build_user_prompt``. Pre-PR the MagicMock auto-returned a
+    # MagicMock for the missing attr → ``"\n\n".join(blocks)`` failed
+    # with "expected str instance, MagicMock found". Set explicitly to
+    # empty string so the falsy guard at
+    # ``runner.py:_build_user_prompt`` skips appending.
+    mock_ctx.mutator_feedback_block = ""
+    # PR-MUTATOR-DEDUP-GUARD (#1779) — also reads
+    # ``ctx.recent_applies_for_dedup`` to gate the dedup guard. Empty
+    # tuple → guard skipped (legacy behaviour).
+    mock_ctx.recent_applies_for_dedup = ()
     monkeypatch.setattr(runner_mod, "build_runner_context", lambda: mock_ctx)
     # apply 가 disk 안 건드리도록 path mock
     monkeypatch.setattr(runner_mod, "MUTATION_AUDIT_LOG_PATH", tmp_path / "mutations.jsonl")
@@ -227,6 +239,8 @@ def test_propose_populates_cost_from_sidecar(
     mock_ctx.current_sections = {"# Setup": "current setup content"}
     mock_ctx.current_policies = {"prompt": {"# Setup": "current setup content"}}
     mock_ctx.target_dim = ""
+    mock_ctx.mutator_feedback_block = ""
+    mock_ctx.recent_applies_for_dedup = ()
     monkeypatch.setattr(runner_mod, "build_runner_context", lambda: mock_ctx)
     monkeypatch.setattr(runner_mod, "MUTATION_AUDIT_LOG_PATH", tmp_path / "mutations.jsonl")
 
@@ -273,6 +287,8 @@ def test_propose_clears_last_call_before_invocation(
     mock_ctx.current_sections = {"# Setup": "current setup content"}
     mock_ctx.current_policies = {"prompt": {"# Setup": "current setup content"}}
     mock_ctx.target_dim = ""
+    mock_ctx.mutator_feedback_block = ""
+    mock_ctx.recent_applies_for_dedup = ()
     monkeypatch.setattr(runner_mod, "build_runner_context", lambda: mock_ctx)
     monkeypatch.setattr(runner_mod, "MUTATION_AUDIT_LOG_PATH", tmp_path / "mutations.jsonl")
 

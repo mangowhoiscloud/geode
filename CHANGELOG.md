@@ -47,6 +47,55 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-RUNNER-REPO-ROOT-FIX (2026-05-27)** — repair the off-by-one
+  ``parents[N]`` arithmetic at three call sites in
+  ``core/self_improving_loop/runner.py`` (the
+  ``_git_commit_audit_log`` git operations and both
+  ``_invoke_autoresearch`` repo_root computations). PR-G5b
+  (2026-05-20) moved the audit log from
+  ``<repo>/state/mutations.jsonl`` to
+  ``<repo>/autoresearch/state/mutations.jsonl`` but the three
+  ``parents[1]`` derivations were not updated, so they resolved to
+  ``<repo>/autoresearch`` instead of the repo root. Latent because
+  unit tests mock the subprocess and live runs went through
+  ``geode audit-seeds generate`` / ``autoresearch/train.py``
+  directly; surfaces as ``[Errno 2] No such file or directory:
+  '<repo>/autoresearch/autoresearch/train.py'`` on the first real
+  ``SelfImprovingLoopRunner.run_once()`` with ``rerun_enabled=True``.
+  All three sites now use ``parents[2]``. Pinned by
+  ``tests/test_runner_repo_root_invariant.py`` (three assertions:
+  filesystem invariant, negative invariant on ``parents[1]``, and
+  source-level regex to fail-fast on a future regression).
+
+### Changed
+- **Self-improving loop config** —
+  ``[self_improving_loop.autoresearch] budget_minutes`` upper bound
+  raised from 60 to 600 minutes
+  (``core/config/self_improving_loop.py``). The 60-minute cap dated
+  from Pattern B's initial subscription-only scope; production
+  audits with multi-seed re-measurement (8+ seeds × judge+auditor
+  + claude-cli OAuth handshakes) routinely need 90-180 minutes.
+  Operators were forced to inline-edit the pydantic constraint to
+  exceed the cap. Lower bound (1 minute) and default (5 minutes)
+  unchanged.
+
+### Added
+- **PR-MUTATION-PROPOSED-WIRE (2026-05-27)** — emit
+  ``HookEvent.MUTATION_PROPOSED`` at
+  ``core/self_improving_loop/runner.py:propose`` after the LLM parse
+  + dedup gate + kind-aware SoT load all succeed, but BEFORE any
+  apply / audit. Closes the last remaining ``MUTATION_*`` emit gap
+  identified during the 2026-05-27 self-improving-loop observability
+  alignment audit (MUTATION_REJECTED stays deferred — semantic overlap
+  with MUTATION_REVERTED for runner-driven mutations). ``run_id`` is
+  empty in the payload because ``audit_run_id`` is minted later in
+  ``apply_proposal`` / ``apply_group_proposals``; listeners that need
+  to correlate proposed → applied join on ``mutation_id``. ``propose``
+  is the single entry point for single + group + swarm modes (group /
+  swarm call ``self.propose()`` internally), so this single emit-site
+  covers all three.
+
 ## [0.99.74] - 2026-05-27
 
 > PATCH rotation bundling the 2026-05-27 operations sprint:

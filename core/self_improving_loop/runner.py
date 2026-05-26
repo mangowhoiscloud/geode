@@ -1403,7 +1403,12 @@ def _git_commit_audit_log(
     argv without running real git.
     """
     try:
-        repo_root = log_path.resolve().parents[1]
+        # parents[2] = repo root. ``log_path`` is
+        # ``<repo>/autoresearch/state/mutations.jsonl``; parents[1]
+        # resolves to ``<repo>/autoresearch`` which is *inside* the git
+        # tree but is not the repo root and would silently rebase git
+        # operations against a non-canonical cwd.
+        repo_root = log_path.resolve().parents[2]
         subprocess.run(  # noqa: S603  # nosec B603 — argv = audit-log path
             ["git", "add", str(log_path)],  # noqa: S607  # nosec B607 — git in PATH
             cwd=str(repo_root),
@@ -1670,6 +1675,27 @@ class SelfImprovingLoopRunner:
             raw_fitness = getattr(snapshot, "fitness", None)
             if isinstance(raw_fitness, int | float):
                 baseline_fitness = float(raw_fitness)
+        # PR-MUTATION-PROPOSED-WIRE (2026-05-27) — emit MUTATION_PROPOSED
+        # after the proposal has been built (LLM parse + dedup gate + SoT
+        # load all succeeded) but BEFORE any apply / audit. Payload schema
+        # per the reserve docstring (core/hooks/system.py:285-287). No
+        # ``run_id`` available here — the audit_run_id is minted later in
+        # apply_proposal / apply_group_proposals via :func:`_mint_audit_run_id`.
+        # Listeners that need to correlate proposed → applied join on
+        # ``mutation_id`` instead.
+        from core.hooks.system import HookEvent
+        from core.self_improving_loop._hooks import _fire_hook
+
+        _fire_hook(
+            HookEvent.MUTATION_PROPOSED,
+            {
+                "mutation_id": mutation.mutation_id,
+                "target_kind": mutation.target_kind,
+                "target_path": f"{mutation.target_kind}.{mutation.target_section}",
+                "ts": time.time(),
+                "run_id": "",
+            },
+        )
         return Proposal(
             mutation=mutation,
             target_sections=target_sections,
@@ -1874,7 +1900,9 @@ class SelfImprovingLoopRunner:
                 audit_run_id = _mint_audit_run_id()
                 audit_run_ids.append(audit_run_id)
 
-                repo_root = (self.audit_log_path or MUTATION_AUDIT_LOG_PATH).resolve().parents[1]
+                # parents[2] = repo root (see apply_proposal note above —
+                # MUTATION_AUDIT_LOG_PATH = <repo>/autoresearch/state/mutations.jsonl).
+                repo_root = (self.audit_log_path or MUTATION_AUDIT_LOG_PATH).resolve().parents[2]
 
                 proc = _run_autoresearch_subprocess(
                     repo_root=repo_root,
@@ -2250,7 +2278,11 @@ class SelfImprovingLoopRunner:
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
-            repo_root = log_path.resolve().parents[1]
+            # MUTATION_AUDIT_LOG_PATH lives at <repo>/autoresearch/state/mutations.jsonl,
+            # so parents[2] is the repo root. parents[1] would point at
+            # <repo>/autoresearch and spawn `uv run python autoresearch/train.py`
+            # with cwd=autoresearch → ENOENT on autoresearch/autoresearch/train.py.
+            repo_root = log_path.resolve().parents[2]
             # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
             # ``proposal.original_sections`` so _invoke_autoresearch can
             # rollback the canonical SoT if the audit subprocess crashes
