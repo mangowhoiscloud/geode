@@ -42,15 +42,22 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "CHECKPOINT_SUBDIR",
+    "RANKER_PARTIAL_CHECKPOINT",
     "PhaseCheckpoint",
+    "RankerPartialCheckpoint",
     "list_completed_phases",
     "load_checkpoint",
+    "load_partial_ranker_checkpoint",
     "write_checkpoint",
+    "write_partial_ranker_checkpoint",
 ]
 
 
 CHECKPOINT_SUBDIR = "checkpoints"
 """Subdirectory under ``run_dir`` holding the per-phase JSON files."""
+
+RANKER_PARTIAL_CHECKPOINT = "ranker.partial.json"
+"""Mid-ranker checkpoint filename under ``<run_dir>/checkpoints``."""
 
 
 @dataclass(frozen=True)
@@ -92,6 +99,53 @@ class PhaseCheckpoint:
             duration_ms=float(payload.get("duration_ms", 0.0)),
             state_snapshot=dict(payload.get("state_snapshot", {})),
             error=payload.get("error"),
+        )
+
+
+@dataclass(frozen=True)
+class RankerPartialCheckpoint:
+    """Mid-phase Ranker checkpoint.
+
+    The Ranker dispatches match panels concurrently, but Elo mutation
+    remains ordered. This checkpoint records the ordered prefix that has
+    already been applied to ``partial_ratings`` so a resumed run can skip
+    those matches and continue from the same deterministic Elo state.
+    """
+
+    completed_match_ids: list[str]
+    partial_ratings: dict[str, float]
+    partial_outcomes_serialised: list[dict[str, Any]]
+    total_matches: int
+    last_checkpoint_at: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "completed_match_ids": self.completed_match_ids,
+            "partial_ratings": self.partial_ratings,
+            "partial_outcomes_serialised": self.partial_outcomes_serialised,
+            "total_matches": self.total_matches,
+            "last_checkpoint_at": self.last_checkpoint_at,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> RankerPartialCheckpoint:
+        completed_raw = payload.get("completed_match_ids", [])
+        ratings_raw = payload.get("partial_ratings", {})
+        outcomes_raw = payload.get("partial_outcomes_serialised", [])
+        if not isinstance(completed_raw, list):
+            completed_raw = []
+        if not isinstance(ratings_raw, dict):
+            ratings_raw = {}
+        if not isinstance(outcomes_raw, list):
+            outcomes_raw = []
+        return cls(
+            completed_match_ids=[str(item) for item in completed_raw],
+            partial_ratings={str(k): float(v) for k, v in ratings_raw.items()},
+            partial_outcomes_serialised=[
+                dict(item) for item in outcomes_raw if isinstance(item, dict)
+            ],
+            total_matches=int(payload.get("total_matches", 0)),
+            last_checkpoint_at=float(payload.get("last_checkpoint_at", 0.0)),
         )
 
 
@@ -147,6 +201,48 @@ def write_checkpoint(
     return target
 
 
+def write_partial_ranker_checkpoint(
+    run_dir: Path,
+    *,
+    completed_match_ids: list[str],
+    partial_ratings: dict[str, float],
+    partial_outcomes_serialised: list[dict[str, Any]],
+    total_matches: int,
+) -> Path:
+    """Write ``checkpoints/ranker.partial.json`` atomically."""
+    ck = RankerPartialCheckpoint(
+        completed_match_ids=list(completed_match_ids),
+        partial_ratings={str(k): float(v) for k, v in partial_ratings.items()},
+        partial_outcomes_serialised=[dict(item) for item in partial_outcomes_serialised],
+        total_matches=int(total_matches),
+        last_checkpoint_at=time.time(),
+    )
+    ck_dir = run_dir / CHECKPOINT_SUBDIR
+    ck_dir.mkdir(parents=True, exist_ok=True)
+    target = ck_dir / RANKER_PARTIAL_CHECKPOINT
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=".ranker.partial.",
+        suffix=".tmp",
+        dir=str(ck_dir),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(ck.to_dict(), fh, ensure_ascii=False, indent=2, default=str)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, target)
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        log.warning(
+            "checkpointer: failed to write ranker partial checkpoint at %s — %s",
+            target,
+            exc,
+        )
+        raise
+    return target
+
+
 def load_checkpoint(run_dir: Path, phase: str) -> PhaseCheckpoint | None:
     """Load a single phase's checkpoint, return None when absent.
 
@@ -169,6 +265,25 @@ def load_checkpoint(run_dir: Path, phase: str) -> PhaseCheckpoint | None:
         return PhaseCheckpoint.from_dict(payload)
     except (KeyError, TypeError, ValueError) as exc:
         log.warning("checkpointer: %s checkpoint at %s malformed — %s", phase, target, exc)
+        return None
+
+
+def load_partial_ranker_checkpoint(run_dir: Path) -> RankerPartialCheckpoint | None:
+    """Load ``checkpoints/ranker.partial.json`` when present and valid."""
+    target = run_dir / CHECKPOINT_SUBDIR / RANKER_PARTIAL_CHECKPOINT
+    if not target.is_file():
+        return None
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("checkpointer: ranker partial checkpoint at %s unreadable — %s", target, exc)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return RankerPartialCheckpoint.from_dict(payload)
+    except (TypeError, ValueError) as exc:
+        log.warning("checkpointer: ranker partial checkpoint at %s malformed — %s", target, exc)
         return None
 
 
