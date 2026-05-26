@@ -7,8 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.cli.commands import cmd_resume, resolve_action
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+from core.cli.commands import cmd_resume, resolve_action
 
 
 class TestResumeCommandMap:

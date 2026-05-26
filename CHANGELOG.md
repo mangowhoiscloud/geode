@@ -73,6 +73,132 @@ functional change.
   `decomposition_result_leak` summary cause instead of letting a
   phantom seed slip past the IPC boundary.
 
+## [0.99.65] - 2026-05-26
+
+Hermes Phase 1d.2 + Phase 3 absorption rotation. Ships the
+cross-project search index (`~/.geode/search/global.db` + `geode
+reindex` CLI + `session_search(scope="all")`) and the 4-phase
+compaction pipeline (`boundary` + `orphan_tool_result` +
+`summarize` + `carry_forward`), closing the deferred slice of the
+Hermes absorption plan. Phase 1 (DB SoT, FTS5, multi-proc WAL),
+Phase 2 (platform/family-aware system prompt) and Phase 4 (WAL)
+were already merged; this release finishes Phases 1d.2 + 3.
+
+### Added
+- **PR-HERMES-3** — 4-phase compaction pipeline. Refactors
+  `core/orchestration/compaction.py` from the pre-Hermes single-phase
+  LLM-summary + carry-forward into a 4-phase pipeline that absorbs
+  the tool_use/tool_result boundary + orphan-cleanup handling from
+  Claude Code's compaction surface (the broader thinking-block /
+  image-block / citation handling is out of scope here): (1)
+  **boundary** finds a cut index that won't split a
+  `tool_use` / `tool_result` pair (walks the boundary backward while
+  the tail's first message would orphan a tool_result from the
+  head); (2) **orphan_tool_result** defensively drops
+  `tool_result` blocks whose `tool_use_id` is absent from the
+  post-boundary message list (handles malformed checkpoints + the
+  worst-case where the boundary couldn't move back far enough);
+  (3) **summarize** retains the existing OpenAI / GLM LLM-summary
+  call against the head messages; (4) **carry_forward** retains
+  the 4-message preamble (summary + ack + marker + ack) followed
+  by the cleaned verbatim tail. Anthropic short-circuit at the top
+  preserved (server-side `compact_20260112`). 20 invariant tests
+  pin: low-message no-op, boundary stay-zero when keep_recent
+  exceeds length, no-walk when natural cut is plain text, single-
+  step walk to keep a pair, multi-step walks (chained-pair + walk-
+  through-alternating-pairs), no-walk when unmatched tool_result
+  has no parent, exact pin-at-zero in chained-pair worst case,
+  orphan-strip tombstone replacement for all-orphan user msg +
+  role-alternation between adjacent assistants preserved + sibling
+  text + matched pair + string-content messages,
+  Anthropic short-circuit, summary-failure no-op, end-to-end safe
+  boundary placement, preamble shape (`[Conversation Summary]` +
+  4-message preamble + tail), `__all__` stability, role-alternation
+  preservation via tombstone replacement for all-orphan user
+  messages (Codex MCP catch — dropping would break the
+  provider's role-alternation contract).
+  20 invariants total.
+- **PR-HERMES-1d.2** — cross-project search index + `geode reindex`
+  CLI. New `core/memory/search_index.py` (~300 LOC) maintains
+  `~/.geode/search/global.db` — an FTS5-backed ledger that mirrors
+  every per-project `sessions.db`'s `messages` rows so
+  `session_search(scope="all")` can answer cross-project recall
+  queries without opening N project DBs. The index is intentionally
+  rebuild-from-source (no ground truth lives here); operators run
+  `geode reindex` after a session-state change to refresh it.
+  Schema: single `indexed_messages` table + one external-content
+  `indexed_messages_fts` virtual table + insert/delete/update
+  triggers. Unique constraint on `(project_id, session_id,
+  message_id)` + per-project SQLite `SAVEPOINT` blocks inside a
+  `BEGIN IMMEDIATE` wipe-and-rebuild transaction make the rebuild
+  idempotent, stale-row-clearing in one shot, and crash-safe (one
+  project's transient read failure rolls back JUST that project's
+  partial rows; siblings stay intact). `PRAGMA busy_timeout=5000`
+  ensures the rebuild's reserved lock cooperates with concurrent
+  `session_search(scope="all")` readers. Result rows are
+  newest-timestamp-first (operator-driven recall over relevance
+  ranking; callers needing relevance can re-sort by the included
+  `score` field). The `session_search` tool now accepts `scope` ∈
+  {`project` (default, unchanged behaviour), `all`} and optional
+  `project_id` / `session_id` filters for the all-scope path —
+  both filters are pushed INTO the FTS5 SQL so the SQL `LIMIT`
+  semantics match what the operator expected. Hits returned by the
+  all-scope branch carry `project_id` + `project_slug` so the
+  agent can tell where each match came from. Missing `global.db`
+  (operator never ran reindex) is a graceful no-op —
+  `{matched: False, count: 0, reason: "global_index_not_built —
+  run 'geode reindex' first"}` — so the LLM can fall back to
+  scope=project. Background `SearchIndexer` thread + bounded queue
+  + PASSIVE checkpoint (originally drafted for Phase 1d in the
+  Hermes absorption plan) are intentionally deferred to a follow-up
+  1d.3 sprint; the rebuild-on-demand CLI ships the recall surface
+  first. 33 invariant tests pin: schema creation, rebuild
+  idempotency + stale-row clearing + per-project SAVEPOINT crash
+  safety + busy_timeout=5000 PRAGMA, iter_project_dbs graceful
+  no-op on missing root + skip
+  no-sessions-db dirs, timestamp-DESC-ordered FTS5 hits with
+  snippets, project_id + limit + session_id push-down filters,
+  scope-default fallback on typo, missing-index graceful no-op,
+  `geode reindex` CLI registered + empty-projects-root exit-zero
+  + 2-project rebuild populates global.db end-to-end, `--help`
+  text describes global.db + sessions.db.
+
+### Fixed
+- PR-CODEX-GPT55-OUTPUT-EMIT — gpt-5.5 voter calls in the seed-generation
+  ranker phase were running at the silent SubTask default
+  ``effort="medium"`` (via ``_DIFFICULTY_TO_EFFORT["medium"]``), causing
+  gpt-5.5 to consume the entire ``output_tokens`` budget (109-254 per
+  call across 36 dumps in smoke 20) on encrypted reasoning items and
+  emit ``output_text=""`` 100% of the time — every match either lost
+  quorum or got 1/3 votes from claude-cli alone, collapsing the entire
+  ranker phase. Adds ``SubTask.effort`` field (empty-default preserves
+  the legacy difficulty/settings path) and pins ``effort="low"`` on
+  voter SubTasks at ``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` per ctx7 OpenAI Responses API docs
+  (``/websites/developers_openai_api`` → "Reasoning effort": "Reducing
+  reasoning effort can result in faster responses and fewer tokens
+  used on reasoning"; the canonical low-effort example uses gpt-5.5
+  with ``effort="low"`` for a single bash-script generation task —
+  the voter A/B/tie call is a comparable single-shot output).
+  ``max_output_tokens`` is not viable on the codex-oauth backend
+  (400 ``Unsupported parameter`` per ``core/llm/providers/codex.py:325``
+  and existing ``test_codex_kwargs_does_not_send_max_output_tokens``).
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — also pins
+  ``effort="low"`` on ``plugins/seed_generation/mutation_eval.py``
+  voter SubTasks. The mutation-eval channel reuses VOTE_SCHEMA +
+  gpt-5.5 A/B/tie shape, so without an effort pin it would reproduce
+  the empty-text failure mode outside the ranker phase.
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — pre-existing
+  ranker voter ``task_id`` collision surfaced by this PR. The default
+  judge panel ships TWO ``openai.openai-codex`` voters and the old
+  shape ``vote-{match_id}-{provider}.{source}`` collided across
+  duplicate (provider, source) bindings; ``SubAgentManager._deduplicate``
+  silently dropped one, so the advertised 3-voter panel actually
+  dispatched only 2 voters per match. Now uses the per-voter ordinal
+  shape ``vote-{match_id}-v{idx:02d}-{provider}.{source}`` — same
+  pattern already in ``mutation_eval.py``. Pinned by
+  ``test_ranker_voter_task_ids_unique_across_duplicate_bindings``.
+
 ## [0.99.64] - 2026-05-26
 
 Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR

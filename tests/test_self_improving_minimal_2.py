@@ -401,7 +401,6 @@ def test_migrate_action_invokes_helper_for_every_target_kind(
     leave kinds silently un-migrated; we pin per-kind invocation
     so a refactor that breaks the loop surfaces here."""
     from core.cli.commands import self_improving as si_mod
-
     from core.self_improving_loop import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
