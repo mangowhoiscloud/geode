@@ -121,6 +121,31 @@ functional change.
   expected enabled set.
 
 ### Added
+- **PR-CL-A2** — Tool Selection ranker (CL-A2 of
+  `docs/plans/agentic-loop-evolution.md`). New
+  `core/agent/tool_search.py` (~210 LOC) ships the data layer the
+  full A*-style policy will sit on top of: a Wilson lower-bound
+  success-rate aggregator over the episodic ledger. Pure functions
+  `wilson_lower_bound(successes, total, z=1.96)`,
+  `find_recommended_tools(episodes, *, top_k, min_invocations=3,
+  wilson_threshold=0.5)`, and `format_tool_ranking_block(rankings)`
+  produce a `<tool-ranking>` block listing the top-K tools whose
+  recent calls succeeded with a 95% CI lower bound above 0.5. The
+  ranker is the success-side counterpart of the existing
+  `tool_hints` slot (failure-side) — together they give the LLM
+  bidirectional evidence ("don't use X" + "prefer Y"). Wired as the
+  5th canonical in-context slot (`SLOT_TOOL_RANKING = "tool_ranking"`,
+  `core/self_improving_loop/in_context_slots.py`) with shared-ledger
+  read (`in_context_wiring.apply_in_context_slots` reads
+  `episodes.jsonl` once even when both episodic slots are enabled).
+  29 invariant tests pin the Wilson formula (concrete pins for
+  5/5 → 0.5655 and 100/100 → 0.9630; convergence ordering for
+  9/10 < 90/100 < 900/1000 < 0.9), aggregation gates
+  (MIN_INVOCATIONS, WILSON_THRESHOLD), malformed-row tolerance,
+  schema registration, wiring orchestration, the
+  `[tool-ranking][tool-hints][BASE]` relative layered order under
+  the dual-slot config, the module-internal loader's graceful
+  no-op on read failure, and the no-SoT fast path.
 - **PR-HERMES-2** — Hermes Phase 2 platform-aware + family-aware system
   prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
   surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,

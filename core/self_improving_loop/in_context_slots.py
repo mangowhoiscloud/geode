@@ -88,17 +88,21 @@ _IN_CONTEXT_SLOTS_SOT_PATH = GLOBAL_IN_CONTEXT_SLOTS_PATH
 _OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH
 """Operator-local SoT path. Module-local alias for monkey-patch."""
 
-# 4 canonical slot identifiers.
+# 5 canonical slot identifiers — 4 from the original ADR-012 S5 set
+# plus ``tool_ranking`` (CL-A2, 2026-05-26) which complements
+# ``tool_hints`` with the positive (success-side) signal.
 SLOT_EXEMPLARS = "exemplars"
 SLOT_MEMORY_RECALL = "memory_recall"
 SLOT_RUBRIC_EXCERPTS = "rubric_excerpts"
 SLOT_TOOL_HINTS = "tool_hints"
+SLOT_TOOL_RANKING = "tool_ranking"
 
 CANONICAL_SLOTS: tuple[str, ...] = (
     SLOT_EXEMPLARS,
     SLOT_MEMORY_RECALL,
     SLOT_RUBRIC_EXCERPTS,
     SLOT_TOOL_HINTS,
+    SLOT_TOOL_RANKING,
 )
 
 # Valid ``injection_point`` choices — namespaces the system prompt
@@ -240,6 +244,7 @@ __all__ = [
     "SLOT_MEMORY_RECALL",
     "SLOT_RUBRIC_EXCERPTS",
     "SLOT_TOOL_HINTS",
+    "SLOT_TOOL_RANKING",
     "VALID_INJECTION_POINTS",
     "InContextSlot",
 ]
