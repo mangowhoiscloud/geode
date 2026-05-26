@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.71] - 2026-05-26
+
+Sprint H closeout + backlog #99 cleanup. Bundles 4 PRs into one PATCH
+rotation: PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1 — extends
+F1 prefix allowlist to the result-event scan branch),
+PR-VOTER-EFFORT-OVERRIDE-HATCH (per-voter ``reasoning.effort`` operator
+surface + config.toml loader + enum validator),
+PR-CODEX-MULTITURN-PHASE-PRESERVE (round-trip ``ResponseOutputMessage.phase``
+across Codex multi-turn replay, full E2E wire chain with checkpoint /
+resume preservation), and PR-SCHEMA-TYPE-DRIFT-INVARIANT (per-property
+JSON-Schema ``type`` drift invariants — backlog #99 Codex MCP retro-audit
+fold).
+
 ### Added
 
 - PR-SCHEMA-TYPE-DRIFT-INVARIANT (backlog #99, Codex MCP retro-audit
