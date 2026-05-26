@@ -383,12 +383,11 @@ class TestCallWithFailover:
         heartbeat.ts:217-226 ("MAX_ATTEMPTS = 4, then surrender or
         repeat 2h"). Without this clip a 5-attempt loop would
         ``IndexError`` on attempt 4."""
+        from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
         from plugins.petri_audit.claude_cli_provider import (
             ClaudeCliTransientUpstreamError,
             TransientSignal,
         )
-
-        from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
 
         signal = TransientSignal(matched_text="claude usage limit reached", source="event")
         transient_err = ClaudeCliTransientUpstreamError(
