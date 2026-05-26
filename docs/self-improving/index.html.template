@@ -51,9 +51,9 @@
 
       <div class="nav-section">Docs</div>
       <ul class="nav-list">
-        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
         <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
       </ul>
 
       <div class="nav-section">Meta</div>
@@ -106,7 +106,7 @@
       </thead>
       <tbody>
         <tr>
-          <td class="id"><a href="/geode/docs/petri">Petri Overview</a></td>
+          <td class="id"><a href="/geode/docs/petri/overview">Petri Overview</a></td>
           <td class="muted">Petri framework + GEODE wrapper, 3 model roles</td>
         </tr>
         <tr>
@@ -118,7 +118,7 @@
           <td class="muted"><code>geode audit</code> primary path + <code>inspect eval</code> raw</td>
         </tr>
         <tr>
-          <td class="id"><a href="/geode/docs/petri/dimensions">Judge Dimensions</a></td>
+          <td class="id"><a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></td>
           <td class="muted">22 dim subset + 38 dim full set</td>
         </tr>
         <tr>

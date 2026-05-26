@@ -545,11 +545,15 @@ def test_default_runner_factory_imports_runner_lazily() -> None:
 
     # Drop the runner if cached, so we can detect a lazy import
     mod_name = "core.self_improving_loop.runner"
-    sys.modules.pop(mod_name, None)
-    # Importing auto_trigger should NOT trigger the runner import
-    at_mod = importlib.import_module("core.self_improving_loop.auto_trigger")
-    importlib.reload(at_mod)
-    assert mod_name not in sys.modules, (
-        "auto_trigger must lazy-import SelfImprovingLoopRunner — "
-        "found in sys.modules after auto_trigger import"
-    )
+    original_runner = sys.modules.pop(mod_name, None)
+    try:
+        # Importing auto_trigger should NOT trigger the runner import
+        at_mod = importlib.import_module("core.self_improving_loop.auto_trigger")
+        importlib.reload(at_mod)
+        assert mod_name not in sys.modules, (
+            "auto_trigger must lazy-import SelfImprovingLoopRunner — "
+            "found in sys.modules after auto_trigger import"
+        )
+    finally:
+        if original_runner is not None:
+            sys.modules[mod_name] = original_runner

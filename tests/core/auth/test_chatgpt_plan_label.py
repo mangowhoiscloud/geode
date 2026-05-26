@@ -161,9 +161,7 @@ class TestResolveLocalLabel:
                 "chatgpt_plan_type": "prolite",
             }
         }
-        encoded = (
-            base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        )
+        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
         fake_token = f"hdr.{encoded}.sig"
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir()
