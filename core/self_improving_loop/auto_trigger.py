@@ -54,6 +54,7 @@ __all__ = [
     "acquire_auto_trigger_lock",
     "append_history_entry",
     "auto_trigger_mutator",
+    "count_fired_generations",
     "is_min_interval_satisfied",
     "read_last_run_timestamp",
     "register_auto_trigger",
@@ -98,6 +99,10 @@ STATE_TO_HOOK_EVENT: dict[str, str] = {
     "interval_blocked": "SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED",
     "runner_error": "SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR",
     "parse_error": "SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR",
+    # PR-MAX-GEN (2026-05-26) — generation cap state. HookEvent reserved
+    # in ``core/hooks/system.py`` alongside the sibling auto-trigger
+    # events; same ``{trigger_id, ts, detail}`` payload schema.
+    "max_generation_reached": "SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED",
 }
 """Maps terminal :class:`AutoTriggerStatus.state` → HookEvent enum name.
 
@@ -114,7 +119,7 @@ SoT for "trigger was registered or skipped"."""
 class AutoTriggerStatus:
     """Return shape from :func:`auto_trigger_mutator`.
 
-    Six terminal states:
+    Seven terminal states:
 
     * ``fired`` — runner.run_once completed; ``mutation`` carries the
       Mutation summary (target_section + new_value len), timestamp
@@ -129,6 +134,10 @@ class AutoTriggerStatus:
       (mutation parse / validation); ``error`` carries the message.
       Treated separately from ``runner_error`` so telemetry can
       distinguish "LLM produced garbage" from "infra crashed".
+    * ``max_generation_reached`` — PR-MAX-GEN (2026-05-26):
+      ``max_generation`` was set non-zero and the auto-trigger
+      history already contains that many ``fired`` rows. Hard stop
+      on unbounded firing. ``detail`` carries ``current/max``.
     """
 
     state: str
@@ -220,6 +229,44 @@ def is_min_interval_satisfied(
     current = now if now is not None else time.time()
     elapsed_minutes = (current - last_run) / 60.0
     return elapsed_minutes >= min_interval_minutes
+
+
+def count_fired_generations(history_path: Path | None = None) -> int:
+    """Count ``state="fired"`` rows in the auto-trigger history log.
+
+    PR-MAX-GEN (2026-05-26) — Phase A audit (§5.6) found that
+    ``auto_trigger_mutator`` had no max-generation gate, only the
+    ``min_interval_minutes`` floor. With min_interval=60 and cron fires
+    every hour, a misconfigured operator could accumulate hundreds of
+    fired generations without any hard stop. This counter is the data
+    feed for the new ``max_generation`` gate.
+
+    Best-effort read — missing file / malformed JSON / non-dict rows
+    are all skipped silently. The audit log is append-only so future-
+    proof: each call re-counts (no in-memory cache invalidation).
+
+    Returns 0 when the history log is absent (fresh repo / never fired).
+    """
+    target = history_path if history_path is not None else AUTO_TRIGGER_HISTORY_PATH
+    if not target.is_file():
+        return 0
+    n = 0
+    try:
+        with target.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict) and row.get("state") == "fired":
+                    n += 1
+    except OSError:
+        log.warning("auto_trigger: history read failed", exc_info=True)
+        return n
+    return n
 
 
 def append_history_entry(
@@ -314,6 +361,7 @@ def auto_trigger_mutator(
     *,
     enabled: bool,
     min_interval_minutes: int,
+    max_generation: int = 0,
     runner_factory: Callable[[], Any] | None = None,
     lock_path: Path | None = None,
     timestamp_path: Path | None = None,
@@ -321,7 +369,7 @@ def auto_trigger_mutator(
     hooks: Any = None,
     now: float | None = None,
 ) -> AutoTriggerStatus:
-    """One mutator firing — guarded by lockfile + min-interval.
+    """One mutator firing — guarded by lockfile + min-interval + max-generation.
 
     Args:
         enabled: Defensive gate. When False, return ``disabled``
@@ -329,6 +377,11 @@ def auto_trigger_mutator(
             registering the trigger in this case; this is belt+suspenders.
         min_interval_minutes: Floor between successful firings (see
             :class:`SchedulerConfig.min_interval_minutes`).
+        max_generation: PR-MAX-GEN (2026-05-26) — hard cap on total
+            ``fired`` rows in the history log. When non-zero and the
+            current count is at or above the cap, return
+            ``max_generation_reached`` without firing. ``0`` (default)
+            disables the cap — legacy unbounded behaviour preserved.
         runner_factory: Zero-arg callable returning an object with
             ``run_once() -> Mutation`` method. Defaults to
             :class:`SelfImprovingLoopRunner` constructed with no args.
@@ -352,6 +405,21 @@ def auto_trigger_mutator(
         # ``disabled`` is the only state that skips telemetry + history
         # (see STATE_TO_HOOK_EVENT docstring for rationale).
         return AutoTriggerStatus(state="disabled")
+
+    # PR-MAX-GEN (2026-05-26) — generation cap. Evaluated BEFORE the
+    # interval gate so a misconfigured cron with min_interval=0 still
+    # hits the cap, and BEFORE the lock so a saturated history doesn't
+    # consume the lock for a no-op fire. ``0`` means unlimited.
+    if max_generation > 0:
+        fired_count = count_fired_generations(history_path=history_path)
+        if fired_count >= max_generation:
+            return _finalize_status(
+                "max_generation_reached",
+                f"{fired_count}/{max_generation}",
+                hooks=hooks,
+                history_path=history_path,
+                ts=ts_now,
+            )
 
     if not is_min_interval_satisfied(
         min_interval_minutes=min_interval_minutes,
@@ -394,6 +462,24 @@ def auto_trigger_mutator(
                 history_path=history_path,
                 ts=ts_now,
             )
+
+        # PR-MAX-GEN (2026-05-26) Codex MCP must-fix #2 — re-check the
+        # generation cap AFTER acquiring the lock for the same reason
+        # the interval check does: two parallel callers can both read
+        # the pre-lock count as N-1, both proceed to fire, and overshoot
+        # the cap by 1. The post-lock recheck reads the freshly-written
+        # history (the previous holder appends + releases atomically) so
+        # the second caller sees count=N and blocks cleanly.
+        if max_generation > 0:
+            fired_count = count_fired_generations(history_path=history_path)
+            if fired_count >= max_generation:
+                return _finalize_status(
+                    "max_generation_reached",
+                    f"{fired_count}/{max_generation} (post-lock re-check)",
+                    hooks=hooks,
+                    history_path=history_path,
+                    ts=ts_now,
+                )
 
         # Codex MCP catch (PR-OL-A1 fix-up): runner construction itself
         # can raise (lazy import failure, runner __init__ side-effects).
@@ -460,6 +546,7 @@ def register_auto_trigger(
     enabled: bool,
     cron: str,
     min_interval_minutes: int,
+    max_generation: int = 0,
     runner_factory: Callable[[], Any] | None = None,
     hooks: Any = None,
 ) -> bool:
@@ -469,12 +556,17 @@ def register_auto_trigger(
     needs to call. Returns True when the trigger was registered, False
     when ``enabled=False`` (so the wiring layer can log the skip).
 
-    The callback closes over ``min_interval_minutes`` + ``runner_factory``
-    + ``hooks`` so the scheduler's bare ``callback(data)`` invocation
-    forwards into :func:`auto_trigger_mutator` with the right config
-    and telemetry sink. The callback swallows every exception (logs at
-    WARNING) — `TriggerManager`'s own error isolation is the second
-    layer of defense.
+    The callback closes over ``min_interval_minutes`` +
+    ``max_generation`` + ``runner_factory`` + ``hooks`` so the
+    scheduler's bare ``callback(data)`` invocation forwards into
+    :func:`auto_trigger_mutator` with the right config and telemetry
+    sink. The callback swallows every exception (logs at WARNING) —
+    `TriggerManager`'s own error isolation is the second layer of
+    defense.
+
+    PR-MAX-GEN (2026-05-26) — added ``max_generation`` so the wiring
+    layer can pass the scheduler config knob through to the mutator
+    cap gate. Default ``0`` preserves legacy unbounded behaviour.
     """
     if not enabled:
         log.info("auto_trigger: [self_improving_loop.scheduler] enabled=False; skip register")
@@ -487,6 +579,7 @@ def register_auto_trigger(
             status = auto_trigger_mutator(
                 enabled=True,
                 min_interval_minutes=min_interval_minutes,
+                max_generation=max_generation,
                 runner_factory=runner_factory,
                 hooks=hooks,
             )

@@ -1882,6 +1882,14 @@ def _write_baseline(
     bench_stderr: dict[str, float] | None = None,
     bench_sample_count: dict[str, int] | None = None,
     bench_rubric_version: str = "",
+    # PR-PROMOTE-STAMP (2026-05-26) — when the operator forces promotion
+    # via ``--promote`` instead of going through the ``_should_promote``
+    # gate, stamp the baseline.json with a ``manual_promote`` marker so
+    # later readers can distinguish operator-forced from gate-approved
+    # promotions. Default ``False`` preserves the legacy stamp-free
+    # auto-promote shape — callers that omit the flag produce identical
+    # baselines to pre-PR.
+    manual_promote: bool = False,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -1949,6 +1957,16 @@ def _write_baseline(
         "raw": raw_payload,
         "axes": axes_payload,
     }
+    # PR-PROMOTE-STAMP (2026-05-26) — operator-forced promotion via
+    # ``--promote`` stamps the baseline so audit-trail readers (e.g.
+    # ``/self-improving status``, observability indexer) can tell that
+    # the value was bypass-promoted, not gate-approved. Closes the
+    # silent-equivalence ambiguity flagged in the 2026-05-26 sprint
+    # Phase A audit (§5.5 ``baseline.json`` promoted SoT discussion).
+    if manual_promote:
+        baseline_payload["manual_promote"] = True
+        baseline_payload["promoted_by"] = "operator"
+        baseline_payload["promoted_at"] = baseline_payload["ts_utc"]
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -2603,7 +2621,12 @@ def main() -> int:
     elif args.no_promote:
         promoted_line = "false (--no-promote)"
     elif args.promote:
-        _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        # PR-PROMOTE-STAMP (2026-05-26) — operator-forced promotion
+        # bypasses ``_should_promote``. Stamp the baseline.json with
+        # ``manual_promote: true`` + ``promoted_by`` + ``promoted_at``
+        # so downstream readers can tell this baseline was approved
+        # by operator override, not by the auto-promote gate.
+        _write_baseline(dim_means, dim_stderr, manual_promote=True, **_baseline_provenance)
         promoted_line = "true (--promote, manual override)"
     else:
         # PR-3 of petri-schema-v2 (2026-05-23) — surface the v2

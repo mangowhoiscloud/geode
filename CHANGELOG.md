@@ -72,6 +72,64 @@ functional change.
   knob for tier upgrades / debug runs. Pinned by 6 new ranker
   semaphore unit tests + 2 updated lane default-value tests.
 
+### Added
+
+- **PR-MAX-GEN** — Outer-loop hardening: hard cap on total auto-trigger
+  fires.
+  * ``auto_trigger_mutator`` accepts a new ``max_generation: int = 0``
+    parameter. When non-zero, ``count_fired_generations`` reads
+    ``~/.geode/self-improving-loop/auto_trigger_history.jsonl`` and
+    blocks the next fire with state ``max_generation_reached`` (detail
+    ``current/max``) when the count is at or above the cap.
+  * The cap is checked BEFORE the lockfile acquisition (saturated
+    history doesn't consume the lock) AND AFTER (post-lock re-check
+    mirrors the existing ``is_min_interval_satisfied`` pattern so two
+    parallel callers can't both overshoot).
+  * Production wiring: new ``[self_improving_loop.scheduler]
+    max_generation`` config knob (default ``0`` = unlimited, max
+    ``100_000``). ``register_auto_trigger`` forwards the knob through
+    the scheduler callback. ``core/wiring/automation.py`` passes it
+    from ``load_self_improving_loop_config().scheduler.max_generation``.
+  * New HookEvent ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED``
+    reserved in ``core/hooks/system.py`` (same payload schema as
+    sibling auto-trigger events).
+  * Closes the 2026-05-26 autoresearch attribution sprint Phase A audit
+    (§5.6) finding that ``auto_trigger_mutator`` had only the
+    ``min_interval_minutes`` floor and no hard cap. Pinned by 13
+    invariant tests in
+    ``tests/core/self_improving_loop/test_auto_trigger_max_generation.py``
+    covering count helper edge cases, pre-lock cap, post-lock cap
+    recheck, production wiring forwarding, HookEvent reservation, and
+    direct emission.
+
+### Changed
+
+- **PR-PROMOTE-STAMP** — ``autoresearch.train._write_baseline``
+  accepts a new ``manual_promote: bool = False`` parameter. When
+  ``True``, the function stamps the baseline.json payload with three
+  additive top-level fields: ``manual_promote: true``,
+  ``promoted_by: "operator"``, ``promoted_at: <ts_utc>``. The
+  ``--promote`` operator override path in ``main()`` passes
+  ``manual_promote=True``. The auto-promote path keeps the default,
+  preserving backward-compat on baseline shape. Closes the audit
+  finding (§5.5) that downstream readers couldn't distinguish
+  operator-forced from gate-approved promotions. Pinned by 4
+  invariant tests in ``tests/autoresearch/test_promote_stamp.py``.
+
+### Fixed
+
+- **PR-DRY-RUN-NO-ATTR (pin only)** — The 2026-05-26 attribution
+  sprint Phase A audit flagged the risk of ``--dry-run`` cycles
+  writing synthetic ``fitness_delta=0`` attribution rows to
+  ``mutations.jsonl``. Verification during the sprint confirmed the
+  skip guard ``_attribution_should_write = not args.dry_run`` was
+  ALREADY in place at ``autoresearch/train.py:2692`` (post-PR-AR-L6).
+  No code change in this commit — added 2 static-source invariant
+  tests in ``tests/autoresearch/test_dry_run_no_attribution.py`` that
+  fail loudly if a future refactor strips the guard. Brittle by
+  design — the cost of false alarms is far below the cost of the
+  silent leak re-opening.
+
 ## [0.99.72] - 2026-05-26
 
 MINOR rotation. Ships PR-SEEDS-HIRES P1+P2+P3 — operator directive
