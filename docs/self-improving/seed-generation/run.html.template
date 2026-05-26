@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ run_id }} &middot; Seed Generation &middot; GEODE</title>
+<meta name="description" content="Seed-generation run detail: candidates, survivors, evolved variants, pilot scores, meta-review.">
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/">Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">{{ petri_count }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+{{ sidebar_petri_recent }}
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation <span class="count">{{ seedgen_count_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
+          <ul class="sub-nav">
+{{ sidebar_seedgen_runs }}
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">{{ run_id }} <span class="bucket seedgen">seedgen</span></h1>
+    <p class="page-sub">gen_tag <code>{{ gen_tag }}</code> &middot; target_dim <code>{{ target_dim }}</code></p>
+
+    <div class="run-detail-header">
+      <dl>
+        <dt>run_id</dt><dd><code>{{ run_id }}</code></dd>
+        <dt>gen_tag</dt><dd><code>{{ gen_tag }}</code></dd>
+        <dt>target_dim</dt><dd><code>{{ target_dim }}</code></dd>
+        <dt>cohort</dt><dd><code>{{ cohort }}</code></dd>
+      </dl>
+    </div>
+
+    <div class="mutator-banner">
+      <span class="role-label">mutator</span>
+      {{ mutator_chip }}
+    </div>
+
+    <h2 class="section"><span>Candidates &middot; {{ candidates_count_label }}</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">id</th>
+          <th scope="col">target_dim</th>
+          <th scope="col">duration</th>
+          <th scope="col">task_id</th>
+        </tr>
+      </thead>
+      <tbody>
+{{ candidates_rows }}
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Survivors &middot; {{ survivors_count_label }}</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">id</th>
+          <th scope="col">elo</th>
+          <th scope="col">pilot status</th>
+          <th scope="col">evolved children</th>
+        </tr>
+      </thead>
+      <tbody>
+{{ survivors_rows }}
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Evolved &middot; {{ evolved_count_label }}</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">id</th>
+          <th scope="col">parent</th>
+          <th scope="col">rewrite_section</th>
+          <th scope="col">notes</th>
+        </tr>
+      </thead>
+      <tbody>
+{{ evolved_rows }}
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Phase .eval cards &middot; {{ phase_count_label }}</span></h2>
+    <table class="records phases">
+      <thead>
+        <tr>
+          <th scope="col">phase</th>
+          <th scope="col">task</th>
+          <th scope="col">samples</th>
+          <th scope="col">score</th>
+          <th scope="col">SPA link</th>
+        </tr>
+      </thead>
+      <tbody>
+{{ phase_rows }}
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Reflections &middot; {{ reflections_count_label }}</span></h2>
+{{ reflections_block }}
+
+    <h2 class="section"><span>Pilot scores &middot; 22-dim matrix</span></h2>
+{{ pilot_heatmap }}
+
+    <h2 class="section"><span>Meta-review</span></h2>
+{{ meta_review_block }}
+
+    <h2 class="section"><span>Cost rollup</span></h2>
+    <dl class="cost-grid">
+      <dt>total USD</dt>
+      <dd>${{ cost_total_usd }}</dd>
+      <dt>prompt_tokens</dt>
+      <dd>{{ cost_prompt_tokens }}</dd>
+      <dt>completion_tokens</dt>
+      <dd>{{ cost_completion_tokens }}</dd>
+      <dt>literature_snapshots</dt>
+      <dd>{{ literature_snapshots_count }}</dd>
+      <dt>debate_transcripts</dt>
+      <dd>{{ debate_transcripts_count }}</dd>
+      <dt>iterations</dt>
+      <dd>{{ iterations_label }}</dd>
+    </dl>
+
+    <div class="build-info">
+      <p>Source: <code>docs/self-improving/petri-bundle/seeds/{{ run_id }}/</code> (<code>state.json</code> + <code>survivors.json</code> + <code>meta_review.json</code>).</p>
+      <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
+      <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
+      <p>Harness chip legend:
+        <span class="chip payg">PAYG</span>API key billing &middot;
+        <span class="chip claude">Claude Code</span>Max OAuth &middot;
+        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip geode">GEODE</span>self-target wrapper.
+      </p>
+      <p class="version-stamp">
+        Rendered against GEODE <code>v{{ geode_version }}</code> &middot; DESIGN.md schema {{ design_schema_version }} &middot; built {{ build_date }}.
+        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
+      </p>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

@@ -61,14 +61,21 @@ def _run_builder(
     *,
     bundle_root: Path | None = None,
     autoresearch_root: Path | None = None,
+    seedgen_out_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the hub builder against fixture roots, output into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Default the seedgen output to a sibling under the test's own out_dir so
+    # builder runs never write into production paths.
+    if seedgen_out_dir is None:
+        seedgen_out_dir = out_dir / "seed-generation"
     cmd: list[str] = [
         sys.executable,
         str(BUILDER),
         "--out",
         str(out_dir / "index.html"),
+        "--seedgen-out-dir",
+        str(seedgen_out_dir),
     ]
     if bundle_root is not None:
         cmd.extend(["--bundle-root", str(bundle_root)])
@@ -388,3 +395,181 @@ def test_css_asset_referenced_and_present(built_html: str) -> None:
     css_text = css.read_text(encoding="utf-8")
     for chip in ("chip.payg", "chip.claude", "chip.codex", "chip.geode"):
         assert f".{chip}" in css_text, f"hub.css missing .{chip} rule"
+
+
+# ---------------------------------------------------------------------------
+# 11. Seed-generation surface (index + per-run detail)
+# ---------------------------------------------------------------------------
+#
+# Phase 5 ships two new static pages built by the same script:
+#   - docs/self-improving/seed-generation/index.html               (runs catalog)
+#   - docs/self-improving/seed-generation/<run_id>/index.html      (per-run)
+#
+# Contracts:
+#   docs/design/self-improving-seed-generation-index.md
+#   docs/design/self-improving-seed-generation-run.md
+# Master tokens shared with hub:
+#   docs/design/self-improving-hub-system.md
+
+
+SEEDGEN_FIXTURE_RUN_ID = "test-run-001"
+
+
+@pytest.fixture(scope="module")
+def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    """Build the seed-generation index + per-run page once per session.
+
+    Returns a dict ``{"index": html, "run": html, "run_dir": Path}`` so the
+    tests below can share the same render.
+    """
+    out = tmp_path_factory.mktemp("seedgen-out")
+    hub_out = out / "hub"
+    seedgen_out = out / "seedgen"
+    result = subprocess.run(  # noqa: S603 — fixture invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(hub_out / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, (
+        f"seedgen builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    index_path = seedgen_out / "index.html"
+    run_path = seedgen_out / SEEDGEN_FIXTURE_RUN_ID / "index.html"
+    assert index_path.is_file(), f"seedgen index missing at {index_path}"
+    assert run_path.is_file(), f"seedgen run page missing at {run_path}"
+    return {
+        "index": index_path.read_text(encoding="utf-8"),
+        "run": run_path.read_text(encoding="utf-8"),
+    }
+
+
+def test_seedgen_index_renders(built_seedgen_pages: dict[str, str], built_html: str) -> None:
+    """Seed-gen index has the runs table with at least 1 row + sidebar identical to hub."""
+    index_html = built_seedgen_pages["index"]
+    # Sidebar 7 sections shared with hub.
+    for label in ("Hub", "Petri Audit", "Seed Generation", "Autoresearch", "Docs", "Meta"):
+        assert label in index_html, f"seedgen index missing sidebar section {label!r}"
+    assert "github.com/mangowhoiscloud/geode" in index_html, "GitHub link missing"
+    # Runs table — at least 1 row, fixture run id present.
+    assert SEEDGEN_FIXTURE_RUN_ID in index_html, "fixture run row missing from index"
+    # Active link contract — All runs is active on this page.
+    assert 'aria-current="page"' in index_html, "no aria-current on active link"
+    # Sidebar tree (sections list) is byte-equal across hub + seedgen index.
+    aside_re = re.compile(r"<aside[^>]*>.*?</aside>", flags=re.DOTALL)
+
+    def _section_labels(html: str) -> list[str]:
+        match = aside_re.search(html)
+        assert match is not None
+        return re.findall(
+            r'<div class="nav-section">([A-Za-z][A-Za-z ]*)',
+            match.group(0),
+        )
+
+    assert _section_labels(index_html) == _section_labels(built_html), (
+        "sidebar section order differs between hub and seedgen index"
+    )
+
+
+def test_seedgen_run_page_renders(built_seedgen_pages: dict[str, str]) -> None:
+    """Per-run page exists and has every required section per DESIGN.md §4."""
+    run_html = built_seedgen_pages["run"]
+    # 9 required sections — match by name fragment.
+    required_sections = [
+        "Candidates",
+        "Survivors",
+        "Evolved",
+        "Phase .eval cards",
+        "Reflections",
+        "Pilot scores",
+        "Meta-review",
+        "Cost rollup",
+    ]
+    h2_blocks = re.findall(r"<h2 class=\"section\"[^>]*>.*?</h2>", run_html, flags=re.DOTALL)
+    h2_joined = " ".join(h2_blocks)
+    for section in required_sections:
+        assert section in h2_joined, f"run page missing section h2 {section!r}"
+    # Header banner + mutator banner present.
+    assert "run-detail-header" in run_html, "run page missing run-detail-header banner"
+    assert "mutator-banner" in run_html, "run page missing mutator-banner"
+    # Run id appears in the page title.
+    assert f'<h1 class="page-title">{SEEDGEN_FIXTURE_RUN_ID}' in run_html, (
+        "run id missing from <h1>"
+    )
+
+
+def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> None:
+    """Heatmap table renders 22 dim columns (plus the id column on the left)."""
+    run_html = built_seedgen_pages["run"]
+    match = re.search(
+        r'<table class="records heatmap">(.*?)</table>',
+        run_html,
+        flags=re.DOTALL,
+    )
+    assert match is not None, "no heatmap table in run page"
+    table_html = match.group(1)
+    thead_match = re.search(r"<thead>(.*?)</thead>", table_html, flags=re.DOTALL)
+    assert thead_match is not None, "heatmap has no <thead>"
+    th_count = len(re.findall(r"<th[\s>]", thead_match.group(1)))
+    # Per DESIGN.md §5.6: 22 dim columns. Plus one "id" left header == 23 total.
+    assert th_count == 23, f"expected 23 <th> (22 dims + id), got {th_count}"
+    # And at least one warm-bucket cell appears (fixture has score=6.0 + 8.0).
+    assert "score-warn" in table_html, "no warm-bucket cell rendered despite >1 score"
+
+
+def test_seedgen_phase_eval_links_point_at_spa(built_seedgen_pages: dict[str, str]) -> None:
+    """Each phase .eval card links to ``/geode/self-improving/petri-bundle/#/tasks/...``."""
+    run_html = built_seedgen_pages["run"]
+    # Pull the phase-link table cells.
+    phase_links = re.findall(
+        r'<td class="phase-link"><a href="([^"]+)"',
+        run_html,
+    )
+    assert phase_links, "no phase .eval card links rendered"
+    for link in phase_links:
+        assert link.startswith("/geode/self-improving/petri-bundle/#/tasks/"), (
+            f"phase link {link!r} not pointing at SPA task slug"
+        )
+    # 8 phases per DESIGN.md §6.
+    assert len(phase_links) == 8, f"expected 8 phase links, got {len(phase_links)}"
+
+
+def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
+    """Every ``<a href>`` on both seedgen pages is /geode/-prefixed or external."""
+    for label in ("index", "run"):
+        hrefs = _collect_hrefs(built_seedgen_pages[label])
+        assert hrefs, f"no anchors found on seedgen {label} page"
+        for href in hrefs:
+            if href.startswith("#"):
+                continue
+            if href.startswith("https://") or href.startswith("http://"):
+                continue
+            if href.startswith("mailto:"):
+                continue
+            assert href.startswith("/geode/"), (
+                f"seedgen {label} href {href!r} missing /geode/ basePath"
+            )
+
+
+def test_seedgen_coverage_bars_render(built_seedgen_pages: dict[str, str]) -> None:
+    """Meta-review coverage section renders ``.coverage-bar`` elements."""
+    run_html = built_seedgen_pages["run"]
+    assert "coverage-list" in run_html, "coverage-list missing"
+    assert "coverage-bar" in run_html, "coverage-bar missing"
+    assert "coverage-bar-fill" in run_html, "coverage-bar-fill missing"
+    # CSS rule must define the chart container.
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    assert ".coverage-bar" in css, "hub.css missing .coverage-bar rule"
+    assert ".coverage-bar-fill" in css, "hub.css missing .coverage-bar-fill rule"

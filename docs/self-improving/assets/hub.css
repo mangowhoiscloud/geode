@@ -385,3 +385,280 @@ table.records .sub-row .id {
 
 /* Footer chip legend keeps chip spacing tighter inline */
 .build-info .chip { margin-right: .15rem; }
+
+/* ============================================================ */
+/* Seed-generation surface — per-run detail page                */
+/* ============================================================ */
+
+/* Header banner over the run detail page (mutator chip + run id) */
+.run-detail-header {
+  margin: 0 0 1.5rem;
+  padding: .9rem 1rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.run-detail-header dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .25rem .9rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+}
+
+.run-detail-header dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.run-detail-header dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+/* Prominent mutator banner above all section tables (per DESIGN.md §7) */
+.mutator-banner {
+  margin: 0 0 1.25rem;
+  padding: .55rem .8rem;
+  background: var(--paper-tint);
+  border-left: 3px solid var(--bucket-seedgen);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--ink-soft);
+}
+
+.mutator-banner .role-label {
+  color: var(--ink-faint);
+  margin-right: .35rem;
+}
+
+/* ============================================================ */
+/* table.records.phases — phase progress / .eval card table     */
+/* ============================================================ */
+table.records.phases td.id {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+table.records.phases td.phase-link a {
+  color: var(--accent);
+}
+
+/* ============================================================ */
+/* table.records.heatmap — 22-column pilot score matrix         */
+/* ============================================================ */
+table.records.heatmap {
+  font-size: .68rem;
+  table-layout: fixed;
+}
+
+table.records.heatmap thead th {
+  font-size: .56rem;
+  padding: .25rem .15rem .25rem 0;
+  white-space: nowrap;
+  letter-spacing: .02em;
+  /* Vertical-leaning header so 22 dim names fit on a single page */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-align: left;
+  height: 7.5rem;
+  vertical-align: bottom;
+}
+
+table.records.heatmap thead th:first-child {
+  writing-mode: horizontal-tb;
+  transform: none;
+  height: auto;
+}
+
+table.records.heatmap tbody td {
+  padding: .35rem .15rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+table.records.heatmap tbody td.id {
+  text-align: left;
+  padding-right: .6rem;
+  white-space: nowrap;
+}
+
+/* Heatmap cell color buckets — see DESIGN.md §5.6.
+ * Master DESIGN.md §3 strict rule 2: no new color tokens. Reuse
+ *   --rule-soft for safe baseline (score 1.0)
+ *   --bucket-autoresearch (#b45309) for the deliberate warm signal
+ *     (high score = problematic in petri convention)
+ * Gradient is opacity over the same warm tone — no new hex codes.
+ */
+table.records.heatmap td.score-safe   { background: var(--rule-soft); color: var(--ink-soft); }
+table.records.heatmap td.score-warn-1 { background: rgba(180, 83, 9, .12); color: var(--ink); }
+table.records.heatmap td.score-warn-2 { background: rgba(180, 83, 9, .25); color: var(--ink); }
+table.records.heatmap td.score-warn-3 { background: rgba(180, 83, 9, .45); color: #fff; }
+table.records.heatmap td.score-warn-4 { background: rgba(180, 83, 9, .70); color: #fff; }
+table.records.heatmap td.score-na     { background: transparent; color: var(--ink-faint); }
+
+/* ============================================================ */
+/* Coverage bar chart (meta-review per-dim coverage)            */
+/* ============================================================ */
+.coverage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: .25rem .75rem;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  align-items: center;
+}
+
+.coverage-list .dim-name {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.coverage-list .dim-count {
+  color: var(--ink-soft);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage-bar {
+  position: relative;
+  height: 8px;
+  background: var(--rule-soft);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.coverage-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--bucket-seedgen);
+  border-radius: 2px;
+}
+
+/* ============================================================ */
+/* Cost-grid (dl key/value pairs) for index + run cost rollups  */
+/* ============================================================ */
+.cost-grid {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: .25rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+}
+
+.cost-grid dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.cost-grid dd {
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================ */
+/* Reflections list (per-candidate critic output)               */
+/* ============================================================ */
+.reflections {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.reflections li {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: .65rem 0;
+}
+
+.reflections li:last-child { border-bottom: 0; }
+
+.reflections .meta {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--ink-soft);
+  margin-bottom: .35rem;
+}
+
+.reflections .meta .risk {
+  display: inline-block;
+  padding: .04rem .35rem;
+  border-radius: 3px;
+  background: var(--rule-soft);
+  color: var(--ink);
+  margin: 0 .35rem;
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.reflections .reflect-block {
+  margin: .25rem 0 .15rem;
+  font-size: .82rem;
+}
+
+.reflections .reflect-block h4 {
+  margin: .2rem 0 .05rem;
+  font-size: .62rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.reflections .reflect-block ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.reflections .rewrite {
+  font-size: .78rem;
+  color: var(--ink-soft);
+  margin-top: .25rem;
+}
+
+/* ============================================================ */
+/* Phases legend (seed-gen index page)                          */
+/* ============================================================ */
+.phases-legend {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .35rem 1rem;
+  font-size: .82rem;
+}
+
+.phases-legend dt {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.phases-legend dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* Session summary prose */
+.session-summary {
+  margin: .25rem 0 1rem;
+  color: var(--ink);
+  font-size: .9rem;
+  line-height: 1.55;
+  max-width: 780px;
+}

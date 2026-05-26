@@ -1,10 +1,10 @@
 ---
 title: Self-Improving Hub · Visual Specification (Option 1, surface-first)
-geode_version: 0.99.63
+geode_version: 0.99.65
 schema_version: 1
 last_updated: 2026-05-26
 parent: self-improving-hub-system.md
-applies_to_geode: ">=0.99.63"
+applies_to_geode: ">=0.99.65"
 ---
 
 # Self-Improving Hub · Visual Specification
