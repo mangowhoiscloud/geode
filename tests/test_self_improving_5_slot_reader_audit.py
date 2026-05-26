@@ -236,6 +236,8 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     """S0d (2026-05-21) — retrieval deprecated.
     M1 (2026-05-21) — skill_catalog 추가.
     M2 (2026-05-21) — agent_contract 추가 → 6 active slot.
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions 추가
+    → 7 active slot.
     retrieval 은 명시적 deprecate 유지; path constant + dict 매핑은
     보존 (별도 ADR 로 RAG 인프라 신설 시 복원 가능)."""
     import importlib
@@ -249,9 +251,10 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "reflection",
         "skill_catalog",
         "agent_contract",
+        "tool_descriptions",
     }
     assert target_kinds == expected, (
-        f"TARGET_KINDS 는 정확히 {expected} (post-M2). got={target_kinds}"
+        f"TARGET_KINDS 는 정확히 {expected} (post-tool_descriptions). got={target_kinds}"
     )
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
     # path constant 보존 — 미래 복원용

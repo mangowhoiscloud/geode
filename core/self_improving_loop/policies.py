@@ -52,9 +52,11 @@ from core.paths import (
     GLOBAL_REFLECTION_POLICY_PATH,
     GLOBAL_RETRIEVAL_POLICY_PATH,
     GLOBAL_SKILL_CATALOG_PATH,
+    GLOBAL_TOOL_DESCRIPTIONS_PATH,
     GLOBAL_TOOL_POLICY_PATH,
     GLOBAL_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
+    OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
 )
 
 log = logging.getLogger(__name__)
@@ -72,6 +74,35 @@ _LEGACY_FILE_NAMES: dict[str, str] = {
     "decomposition": "decomposition.json",
     "retrieval": "retrieval.json",
     "reflection": "reflection.json",
+}
+
+
+# PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27), Codex MCP review fix-up.
+# The runtime reader at ``core/agent/tool_descriptions_policy.py`` (ADR-013 T1)
+# honours a 3-layer resolution: env → operator-local
+# (``~/.geode/self-improving-loop/tool-descriptions.json``) → in-repo
+# (``autoresearch/state/policies/tool-descriptions.json``). Pre-fix the
+# mutator's ``load_policy("tool_descriptions")`` only saw the in-repo
+# layer, so an operator using the operator-local override would see
+# the runtime read from THERE while the mutator wrote to the in-repo
+# path — silent divergence + dual SoT drift.
+#
+# Fix: when the mutator reads ``tool_descriptions``, fall back to the
+# operator-local file if the in-repo file is absent. ``load_policy``
+# still writes to the in-repo path (so mutation history is auditable),
+# which on first write produces the in-repo SoT and the operator-
+# local file becomes secondary. Operators who want to keep the
+# operator-local file authoritative should either (a) opt the surface
+# out of the loop, or (b) accept that the first mutation graduates
+# their override to in-repo. This matches the read-write parity rule
+# in CLAUDE.md (every read path has a write path that lands in the
+# same SoT family).
+#
+# Kept as a dict instead of hardcoding in ``load_policy`` so future
+# kinds with the same 3-layer pattern (none today) extend by adding
+# an entry, not by branching on ``kind``.
+_OPERATOR_LOCAL_FALLBACK_PATHS: dict[str, Path] = {
+    "tool_descriptions": OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
 }
 
 
@@ -140,8 +171,10 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 # attribution sprint Phase A audit (§5 mutation surface verification)
 # found an asymmetry: ``autoresearch.train.run_audit``'s env override
 # block (around line 868-903) wires STRICT-mode env vars for **13** SoT
-# files, but ``TARGET_KINDS`` below lists only **6 active** mutation
-# slots. The 7 difference is :data:`_READER_ONLY_KINDS` — reader-deployed
+# files, but ``TARGET_KINDS`` below originally listed only **6 active**
+# mutation slots; PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) graduates
+# ``tool_descriptions`` so the split is now **7 active + 6 reader-only**.
+# The reader-only difference (:data:`_READER_ONLY_KINDS`) tracks the
 # SoT surfaces that the audit subprocess consumes (read-only) but the
 # mutator cannot dispatch to. ADR-013 phased rollout intent: each
 # reader-only surface graduates in its own follow-up PR (matching the
@@ -169,6 +202,19 @@ TARGET_KINDS: tuple[str, ...] = (
     # ``model`` field 는 Tier 2 (안전성 invariants) — 본 slot 에서 명시적
     # 제외. skill_catalog 와 동일 nested ↔ flat 변환 적용.
     "agent_contract",
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ADR-013 T1 graduation.
+    # The ``tool-descriptions.json`` reader has been live since
+    # 2026-05-21 (``core/agent/tool_descriptions_policy.py``), and the
+    # audit subprocess already wires ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE``
+    # for STRICT-mode reads (``autoresearch/train.py:878``). Graduating
+    # it to TARGET_KINDS opens the surface mutator can dispatch to —
+    # directly attacks Petri 17-dim's ``broken_tool_use`` (the dim
+    # whose pressure is best correlated with description quality per
+    # OpenAI function-calling docs). nested-schema kind:
+    # ``{tool_name: {description: str, hints: list[str]}}``; the
+    # ``_LIST_FIELDS_BY_KIND`` mapping below converts the comma-joined
+    # mutation row back to a list on write.
+    "tool_descriptions",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -184,11 +230,17 @@ _KIND_TO_PATH: dict[str, Path] = {
     "reflection": GLOBAL_REFLECTION_POLICY_PATH,
     "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
     "agent_contract": GLOBAL_AGENT_CONTRACTS_PATH,
+    "tool_descriptions": GLOBAL_TOOL_DESCRIPTIONS_PATH,
 }
 
 # M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /
 # ``write_policy`` 의 flat ↔ nested 변환 dispatch 분기 키.
-_NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
+# PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions joins the
+# nested-schema set; its disk shape is
+# ``{tool_name: {description: str, hints: list[str]}}`` so the flat
+# dotted-key contract (``"bash.description"`` etc.) reuses the same
+# load/write machinery as skill_catalog / agent_contract.
+_NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract", "tool_descriptions"})
 
 
 # PR-TARGET-KIND-DOC (2026-05-27) — reader-only SoT surfaces. These are
@@ -203,7 +255,10 @@ _NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
 # verifies the two sets are disjoint).
 _READER_ONLY_KINDS: frozenset[str] = frozenset(
     {
-        "tool_descriptions",
+        # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ``tool_descriptions``
+        # graduated from this set to :data:`TARGET_KINDS`; the operator-
+        # visible signal is now "mutator can dispatch", not "fail-fast at
+        # parse_mutation".
         "style_guide",
         "provider_routing",
         "cache_policy",
@@ -226,9 +281,29 @@ def is_valid_target_kind(kind: str) -> bool:
 def policy_path(kind: str) -> Path:
     """Return the SoT file path for ``kind``.
 
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    — when ``kind`` is in :data:`_OPERATOR_LOCAL_FALLBACK_PATHS` AND
+    the operator-local file exists on disk, that path wins over the
+    in-repo default. This mirrors the runtime reader's 3-layer
+    resolution (env → operator-local → in-repo) at
+    ``core/agent/tool_descriptions_policy.py:_load_tool_descriptions_override``
+    so the mutator's READ and WRITE both land on whichever file the
+    runtime actually reads. Without this parity the mutator would
+    write to the in-repo file while the runtime continued reading
+    operator-local — silent dual-SoT drift, a closed-loop breaker
+    for the autoresearch ``mutate → measure → baseline`` cycle.
+
+    The env layer is intentionally NOT consulted here — env paths are
+    set inside the audit subprocess (STRICT mode) which never invokes
+    the mutator, so adding env resolution would just add untestable
+    branches without operational benefit.
+
     Raises :class:`ValueError` on unknown kinds so the runner can
     fail closed rather than silently writing to an unexpected file.
     """
+    operator_local = _OPERATOR_LOCAL_FALLBACK_PATHS.get(kind)
+    if operator_local is not None and operator_local.is_file():
+        return operator_local
     try:
         return _KIND_TO_PATH[kind]
     except KeyError as exc:
@@ -253,6 +328,12 @@ def load_policy(kind: str) -> dict[str, str]:
     row 의 contract 가 flat string-keyed 이므로 ``_flatten_nested``
     가 dotted-key flat 표현 (``"skill-name.description"`` 등) 으로
     변환해 반환.
+
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    — :func:`policy_path` returns the operator-local path for
+    ``tool_descriptions`` when the operator-local file exists, so this
+    function transparently reads whichever layer the runtime reader
+    reads. Both READ and WRITE land on the same file.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
@@ -384,10 +465,17 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
 _BOOL_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "skill_catalog": frozenset({"user_invocable"}),
     "agent_contract": frozenset(),
+    "tool_descriptions": frozenset(),
 }
 _LIST_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "skill_catalog": frozenset(),
     "agent_contract": frozenset({"tools"}),
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ``hints`` is the only
+    # non-string field in the tool-descriptions schema (per
+    # ``core/agent/tool_descriptions_policy.py:_validate_schema``).
+    # ``_unflatten_nested`` splits the comma-separated mutation
+    # ``new_value`` into a list of stripped hint strings on write.
+    "tool_descriptions": frozenset({"hints"}),
 }
 
 

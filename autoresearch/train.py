@@ -875,9 +875,29 @@ def run_audit(
     if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
         env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
         env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
-    if GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
-        env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
-        env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    # — three resolution rules together close the dual-SoT drift:
+    # (1) honour any env override the caller already set (preserves
+    #     ``_run_autoresearch_subprocess``'s sibling-SoT temp path
+    #     for group sampling — pre-fix this audit block clobbered it),
+    # (2) when the operator-local file exists, use it (matches the
+    #     runtime reader's 3-layer resolution at
+    #     ``core/agent/tool_descriptions_policy.py``),
+    # (3) fall back to in-repo when neither is set.
+    # Matches ``core.self_improving_loop.policies:policy_path`` so
+    # mutator R/W + audit R + sibling audit all converge on the same
+    # file. Codex MCP review of PR-TOOL-DESCRIPTIONS-MUTATE caught
+    # rule (1) — without preserving the caller's env, group sampling's
+    # temp SoT would be silently replaced.
+    from core.paths import OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+
+    if "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" not in env:
+        if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+        elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
     if GLOBAL_SKILL_CATALOG_PATH.is_file():
         env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
         env["GEODE_SKILL_CATALOG_STRICT"] = "1"
