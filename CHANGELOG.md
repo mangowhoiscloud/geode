@@ -88,7 +88,56 @@ functional change.
   spec's `phase` parameter (separate concern, no current failure
   evidence).
 
+- **PR-SUPERVISOR-ENABLE — register supervisor in the seed-gen
+  manifest so the orchestrator doesn't `phase_skipped` it.** Pre-fix
+  `enabled_roles` (`plugins/seed_generation/seed_generation.plugin.toml`)
+  had 8 roles and `supervisor` was NOT one of them; `[seed_generation.
+  role.supervisor]` section did not exist either. Smoke 19 transcript
+  caught the consequence on line 4: `"event": "phase_skipped",
+  "payload": {"role": "supervisor", "reason": "agent_not_registered"}`.
+  Per the run's `state/seed-generation/<run_id>/sub_agents/` dir the
+  supervisor never spawned; per `checkpoints/` no `supervisor.json`
+  landed. PR-1 (#1698) SUPERVISOR_SCHEMA wire was a necessary fix
+  but not sufficient — schema couldn't reach the LLM because the
+  registry builder's main loop never visited supervisor (it iterates
+  `manifest.enabled_roles`). Fix: add `supervisor` to enabled_roles +
+  the matching role spec section (default_model `claude-opus-4-7`
+  per the Supervisor.py docstring, allowed list mirrors
+  meta_reviewer's run-level analyst pattern). `_ROLE_TO_CLASS` in
+  `_registry_builder.py` adds `Supervisor` so the main loop registers
+  it cleanly (the legacy fallback at the end stays as defensive code
+  for future manifest revisions). Pinned by 4 invariants in
+  `test_registry_wireup.py::test_populate_registry_supervisor_registered`
+  (manifest enabled_roles + role spec + picker binding + registry
+  registration + concrete-class check + model wiring) +
+  `test_bundled_manifest_loads` updated to include supervisor in the
+  expected enabled set.
+
 ### Added
+- **PR-HERMES-2** — Hermes Phase 2 platform-aware + family-aware system
+  prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
+  surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,
+  `mcp_remote`) to short directive blocks; `core/llm/model_guidance.py`
+  (~180 LOC) maps 5 LLM families (Anthropic / OpenAI / Google / xAI /
+  GLM-5+) to tool-grammar + reasoning-visibility directives. Surface
+  resolution is env-override (`$GEODE_SURFACE_TYPE`) → ContextVar →
+  default `"cli"`; family resolution is a heuristic substring match
+  against the model string, ordered to favour the more-specific
+  `claude-` / `glm-` prefixes over the broader `gpt-` / `o3-`
+  heuristics. GLM resolution carries an operator-decision filter
+  (2026-05-26) — only `glm-5.0+` resolves to `FAMILY_GLM`; older
+  `glm-4.x` strings still appear in the `/model` picker for
+  compatibility but receive no Phase 2 directive because their
+  tool-call grammar diverges from GLM-5. GLM-5 directive content is
+  grounded in `/zai-org/glm-5` ctx7 spec (OpenAI-compatible
+  `/v1/chat/completions` schema, `tool_calls.function.arguments` as
+  JSON-encoded string). Both renderers are wired into
+  `core/agent/system_prompt.build_system_prompt` in the dynamic section
+  (model_guidance after model_card, platform_hint before date_context).
+  Audit-mode strips both blocks so Petri scenarios never leak GEODE
+  surface hints. 58 invariant tests pin module exports, resolution
+  order, per-surface and per-family rendered body coverage, GLM-4.x
+  rejection, and wiring symmetry.
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
   `/geode/petri-bundle/` as the primary entry point for Petri audit /

@@ -177,6 +177,7 @@ def populate_registry(
     from plugins.seed_generation.agents.pilot import Pilot
     from plugins.seed_generation.agents.proximity import Proximity
     from plugins.seed_generation.agents.ranker import Ranker
+    from plugins.seed_generation.agents.supervisor import Supervisor
 
     _ROLE_TO_CLASS: dict[str, type[BaseSeedAgent]] = {
         "generator": Generator,
@@ -186,6 +187,16 @@ def populate_registry(
         "evolver": Evolver,
         "meta_reviewer": MetaReviewer,
         "literature_review": LiteratureReview,
+        # PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor now in
+        # ``enabled_roles`` (manifest fix). Registering via the main
+        # loop avoids the legacy ``"no agent class for role"`` warning
+        # the fallback path would have emitted, and makes the
+        # supervisor wiring symmetric with the other 7 roles. The
+        # legacy ``if "supervisor" not in registry.list_roles()``
+        # fallback below stays as defensive code (handles future
+        # manifest revisions that drop supervisor from enabled_roles
+        # but still expect it to spawn).
+        "supervisor": Supervisor,
     }
 
     for role_name in manifest.enabled_roles:
