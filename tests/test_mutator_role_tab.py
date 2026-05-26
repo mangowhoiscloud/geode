@@ -48,8 +48,9 @@ def test_current_model_for_mutator_reads_toml_when_set(
 ) -> None:
     """When ``settings_field=""`` the reader must consult the toml,
     not raise ``AttributeError`` on Settings."""
-    from core.cli.commands import model as model_mod
     from core.cli.commands._state import role_by_name
+
+    from core.cli.commands import model as model_mod
 
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text(
@@ -66,8 +67,9 @@ def test_current_model_for_mutator_returns_empty_when_unset(
 ) -> None:
     """Missing toml key → empty string (signals inherit-Settings.model
     per PR-MINIMAL-2 G1a)."""
-    from core.cli.commands import model as model_mod
     from core.cli.commands._state import role_by_name
+
+    from core.cli.commands import model as model_mod
 
     fake_toml = tmp_path / "config.toml"
     fake_toml.write_text("[other_section]\nkey = 'value'\n", encoding="utf-8")
@@ -80,8 +82,9 @@ def test_current_model_for_mutator_returns_empty_when_toml_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Missing config.toml → empty (fresh-install fallback)."""
-    from core.cli.commands import model as model_mod
     from core.cli.commands._state import role_by_name
+
+    from core.cli.commands import model as model_mod
 
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", tmp_path / "absent.toml")
     role = role_by_name("mutator")

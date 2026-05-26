@@ -94,7 +94,7 @@
   },
   {
     "name": "session_search",
-    "description": "Searches past conversation messages in the current project's session history via SQLite FTS5 index (Hermes Phase 1d). Returns matching messages with snippets and bm25 relevance scores. Use this to recall prior conversation context the LLM cannot remember from earlier turns — especially when the operator references something said in a previous session. Supports substring / partial-word recall via prefer_trigram=true for Korean / identifier fragments.",
+    "description": "Searches past conversation messages via SQLite FTS5 (Hermes Phase 1d + 1d.2). scope='project' (default) searches the current project's sessions.db (trigram-aware via prefer_trigram). scope='all' searches the cross-project ~/.geode/search/global.db rebuilt by 'geode reindex' — results include project_id/project_slug so the agent can tell where each hit came from. Returns matching messages with snippets and bm25 relevance scores. Use this to recall prior conversation context the LLM cannot remember from earlier turns.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -104,9 +104,19 @@
           "type": "string",
           "description": "Search query. Hyphens / dots / special chars are auto-sanitised; pass natural text or identifiers."
         },
+        "scope": {
+          "type": "string",
+          "enum": ["project", "all"],
+          "description": "'project' = current project's sessions.db (default). 'all' = cross-project ~/.geode/search/global.db rebuilt by 'geode reindex'.",
+          "default": "project"
+        },
         "session_id": {
           "type": "string",
-          "description": "Optional — restrict search to a single session by id. Omit to search across all sessions in the current project."
+          "description": "Optional — restrict search to a single session by id. Honoured by both scopes."
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Optional — restrict scope='all' results to one project. Ignored when scope='project' (the active session manager already pins the project)."
         },
         "limit": {
           "type": "integer",
@@ -115,7 +125,7 @@
         },
         "prefer_trigram": {
           "type": "boolean",
-          "description": "When true, query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. Default false.",
+          "description": "scope='project' only — query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. scope='all' always uses unicode61.",
           "default": false
         }
       },

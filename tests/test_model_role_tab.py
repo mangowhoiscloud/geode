@@ -118,13 +118,13 @@ def test_apply_model_dispatches_to_reflection_field(
     """The reflection branch must write to
     ``settings.cognitive_reflection_model`` (not ``settings.model``)
     and to the reflection env/toml keys."""
-    from core.cli.commands import model as _model_mod
     from core.cli.commands._state import ModelProfile
     from core.config import settings
 
     # Stub _check_provider_key + console + upsert_env + upsert_config_toml
     # to capture invocations without touching real .env / config.toml.
     from core.cli import commands as _pkg
+    from core.cli.commands import model as _model_mod
 
     monkeypatch.setattr(_pkg, "_check_provider_key", lambda _p: None)
     monkeypatch.setattr(_pkg, "get_conversation_context", lambda: None)
@@ -171,10 +171,10 @@ def test_apply_model_primary_skips_effort_for_reflection_role(
     with ``GEODE_AGENTIC_EFFORT`` even when ``effort=`` is passed
     (defensive — picker passes None for non-effort roles, but the
     dispatcher must double-check)."""
-    from core.cli.commands import model as _model_mod
     from core.cli.commands._state import ModelProfile
 
     from core.cli import commands as _pkg
+    from core.cli.commands import model as _model_mod
 
     monkeypatch.setattr(_pkg, "_check_provider_key", lambda _p: None)
     monkeypatch.setattr(_pkg, "get_conversation_context", lambda: None)

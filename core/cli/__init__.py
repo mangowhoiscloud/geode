@@ -343,6 +343,11 @@ from core.cli.outer_bundle import outer_bundle_command  # noqa: E402
 
 app.command(name="outer-bundle")(outer_bundle_command)
 
+# PR-Hermes-1d.2 (2026-05-26) — cross-project search index rebuild
+from core.cli.commands.reindex import reindex  # noqa: E402
+
+app.command(name="reindex")(reindex)
+
 
 def _version_option(value: bool) -> None:
     if value:

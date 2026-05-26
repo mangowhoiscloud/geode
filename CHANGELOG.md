@@ -47,6 +47,37 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-HERMES-1d.2** — cross-project search index + `geode reindex`
+  CLI. New `core/memory/search_index.py` (~300 LOC) maintains
+  `~/.geode/search/global.db` — an FTS5-backed ledger that mirrors
+  every per-project `sessions.db`'s `messages` rows so
+  `session_search(scope="all")` can answer cross-project recall
+  queries without opening N project DBs. The index is intentionally
+  rebuild-from-source (no ground truth lives here); operators run
+  `geode reindex` after a session-state change to refresh it.
+  Schema: single `indexed_messages` table + one external-content
+  `indexed_messages_fts` virtual table + insert/delete/update
+  triggers. Unique constraint on `(project_id, session_id,
+  message_id)` plus a `BEGIN IMMEDIATE` wipe-and-rebuild transaction
+  makes the rebuild idempotent and stale-row-clearing in one shot.
+  The `session_search` tool now accepts `scope` ∈ {`project` (default,
+  unchanged behaviour), `all`} and an optional `project_id` filter
+  for the all-scope path; hits returned by the all-scope branch
+  carry `project_id` + `project_slug` so the agent can tell where
+  each match came from. Missing `global.db` (operator never ran
+  reindex) is a graceful no-op — `{matched: False, count: 0,
+  reason: "global_index_not_built — run 'geode reindex' first"}` —
+  so the LLM can fall back to scope=project. 30 invariant tests
+  pin: schema creation, rebuild idempotency + stale-row clearing,
+  iter_project_dbs graceful no-op on missing root + skip
+  no-sessions-db dirs, bm25-ordered FTS5 hits with snippets,
+  project_id + limit filters, session_id post-filter, scope-default
+  fallback on typo, missing-index graceful no-op, `geode reindex`
+  CLI registered + empty-projects-root exit-zero + 2-project
+  rebuild populates global.db end-to-end, `--help` text describes
+  global.db + sessions.db.
+
 ## [0.99.64] - 2026-05-26
 
 Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR
