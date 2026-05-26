@@ -2030,7 +2030,8 @@ def render_autoresearch_baseline(
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
     if leftover:
         raise RuntimeError(f"autoresearch baseline unresolved markers: {sorted(set(leftover))}")
-    out_path = out_dir / "baseline.html"
+    out_path = out_dir / "baseline" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")
     return out_path
 
@@ -2057,7 +2058,8 @@ def render_autoresearch_mutations(
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
     if leftover:
         raise RuntimeError(f"autoresearch mutations unresolved markers: {sorted(set(leftover))}")
-    out_path = out_dir / "mutations.html"
+    out_path = out_dir / "mutations" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")
     return out_path
 
@@ -2111,7 +2113,8 @@ def render_autoresearch_results(
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
     if leftover:
         raise RuntimeError(f"autoresearch results unresolved markers: {sorted(set(leftover))}")
-    out_path = out_dir / "results.html"
+    out_path = out_dir / "results" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")
     return out_path
 
@@ -2138,7 +2141,8 @@ def render_autoresearch_policies(
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
     if leftover:
         raise RuntimeError(f"autoresearch policies unresolved markers: {sorted(set(leftover))}")
-    out_path = out_dir / "policies.html"
+    out_path = out_dir / "policies" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")
     return out_path
 

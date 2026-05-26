@@ -581,10 +581,10 @@ def test_seedgen_coverage_bars_render(built_seedgen_pages: dict[str, str]) -> No
 #
 # Phase 6 ships the 5-page autoresearch surface built by the same script:
 #   - docs/self-improving/autoresearch/index.html       (landing)
-#   - docs/self-improving/autoresearch/baseline.html    (7 namespace blocks)
-#   - docs/self-improving/autoresearch/mutations.html   (ledger table)
-#   - docs/self-improving/autoresearch/results.html     (12-col table + sparkline)
-#   - docs/self-improving/autoresearch/policies.html    (14-file table)
+#   - docs/self-improving/autoresearch/baseline/    (7 namespace blocks)
+#   - docs/self-improving/autoresearch/mutations/   (ledger table)
+#   - docs/self-improving/autoresearch/results/     (12-col table + sparkline)
+#   - docs/self-improving/autoresearch/policies/    (14-file table)
 #
 # Contracts:
 #   docs/design/self-improving-autoresearch.md (+ -baseline / -mutations
@@ -629,8 +629,13 @@ def built_autoresearch_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[s
     )
     pages: dict[str, str] = {}
     for name in ("index", "baseline", "mutations", "results", "policies"):
-        path = autoresearch_out / f"{name}.html"
-        assert path.is_file(), f"autoresearch {name}.html missing at {path}"
+        # `index` is the landing page; the rest are dir/index.html for trailing-slash URLs.
+        path = (
+            autoresearch_out / "index.html"
+            if name == "index"
+            else autoresearch_out / name / "index.html"
+        )
+        assert path.is_file(), f"autoresearch {name} page missing at {path}"
         pages[name] = path.read_text(encoding="utf-8")
     return pages
 
@@ -710,7 +715,7 @@ def test_autoresearch_baseline_stale_warning(tmp_path: Path) -> None:
         cwd=str(REPO_ROOT),
     )
     assert result.returncode == 0, result.stderr
-    baseline_html = (autoresearch_out / "baseline.html").read_text(encoding="utf-8")
+    baseline_html = (autoresearch_out / "baseline" / "index.html").read_text(encoding="utf-8")
     assert "warning-banner" in baseline_html, "warning banner missing on stale baseline page"
     assert "outdated-20260520" in baseline_html, "stale source filename missing from banner"
     # CSS rule must exist.
