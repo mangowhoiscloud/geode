@@ -610,8 +610,33 @@ def translate_codex_response(
     tool_uses: list[dict[str, Any]] = []
     reasoning_items: list[dict[str, Any]] = []
     reasoning_summaries: list[str] = []
+    # PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED (Sprint H2, 2026-05-26)
+    # — codex-oauth + gpt-5.x streaming has a documented discrepancy
+    # where SSE delivers ``response.output_item.done`` events with
+    # ``type=message role=assistant content=[ResponseOutputText(text=…)]``
+    # but the aggregated ``stream.get_final_response().output[]`` is
+    # empty (so ``response.output_text`` is also empty). Pre-fix the
+    # loop below only walked items_source for ``function_call`` +
+    # ``reasoning`` types — the message text was dropped on the
+    # floor every voter call returned ``output_text=""`` even though
+    # the model had emitted a complete response. The minimal probe at
+    # ``.audit/probes/probe_h6_minimal.py`` ("Say hello world")
+    # reproduces this with input=25 / output=17 tokens. Smoke 20/21/22
+    # ranker voter quorum collapse (97 codex-oauth-empty-text dumps in
+    # smoke 22 alone) all trace here. When ``response.output_text`` is
+    # empty AND accumulated items carry a message item, reconstruct
+    # the text from the SSE-delivered ``output_text`` content blocks.
+    fallback_text_parts: list[str] = []
     for item in items_source:
         itype = getattr(item, "type", "") if not isinstance(item, dict) else item.get("type", "")
+        if itype == "message" and not text:
+            content = _attr_or_key(item, "content") or []
+            for block in content:
+                block_type = _attr_or_key(block, "type")
+                if block_type == "output_text":
+                    block_text = _attr_or_key(block, "text") or ""
+                    if block_text:
+                        fallback_text_parts.append(block_text)
         if itype == "function_call":
             # Codex backend assigns ``call_id`` as the durable identifier — the
             # ``function_call_output`` reply on the next turn MUST reference
@@ -655,6 +680,12 @@ def translate_codex_response(
             if iid:
                 entry["id"] = iid
             reasoning_items.append(entry)
+    # PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED (Sprint H2, 2026-05-26) —
+    # promote the SSE-walked message text only when ``response.output_text``
+    # was empty. Skips a no-op concat when the aggregated value was
+    # already populated (non-streaming callers, non-defective backends).
+    if not text and fallback_text_parts:
+        text = "".join(fallback_text_parts)
     usage = getattr(response, "usage", None)
     return AdapterCallResult(
         text=text,
