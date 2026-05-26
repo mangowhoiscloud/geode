@@ -50,21 +50,27 @@ def _write(sot: Path, payload: dict[str, Any]) -> None:
 # Canonical schema ------------------------------------------------------------
 
 
-def test_canonical_slots_has_exactly_4_entries() -> None:
+def test_canonical_slots_has_exactly_5_entries() -> None:
+    """CL-A2 (2026-05-26) added ``tool_ranking`` as the 5th canonical
+    slot — the success-side counterpart of ``tool_hints``."""
     assert CANONICAL_SLOTS == (
         "exemplars",
         "memory_recall",
         "rubric_excerpts",
         "tool_hints",
+        "tool_ranking",
     )
-    assert len(CANONICAL_SLOTS) == 4
+    assert len(CANONICAL_SLOTS) == 5
 
 
 def test_slot_identifier_constants_match_canonical() -> None:
+    from core.self_improving_loop.in_context_slots import SLOT_TOOL_RANKING
+
     assert SLOT_EXEMPLARS == "exemplars"
     assert SLOT_MEMORY_RECALL == "memory_recall"
     assert SLOT_RUBRIC_EXCERPTS == "rubric_excerpts"
     assert SLOT_TOOL_HINTS == "tool_hints"
+    assert SLOT_TOOL_RANKING == "tool_ranking"
 
 
 def test_valid_injection_points_has_two_namespaces() -> None:
@@ -134,7 +140,7 @@ def test_load_rejects_bool_as_max_entries(isolated_sot: Path) -> None:
     assert _load_in_context_slots_override() is None
 
 
-def test_load_valid_payload_all_4_slots(isolated_sot: Path) -> None:
+def test_load_valid_payload_all_5_slots(isolated_sot: Path) -> None:
     payload = {
         "exemplars": {
             "max_entries": 3,
@@ -156,6 +162,11 @@ def test_load_valid_payload_all_4_slots(isolated_sot: Path) -> None:
             "rank_by": "success_rate",
             "injection_point": "tool_descriptions",
         },
+        "tool_ranking": {
+            "max_entries": 5,
+            "rank_by": "wilson_lb",
+            "injection_point": "system_prompt",
+        },
     }
     _write(isolated_sot, payload)
     result = _load_in_context_slots_override()
@@ -163,6 +174,7 @@ def test_load_valid_payload_all_4_slots(isolated_sot: Path) -> None:
     assert set(result.keys()) == set(CANONICAL_SLOTS)
     assert result["exemplars"].max_entries == 3
     assert result["tool_hints"].injection_point == "tool_descriptions"
+    assert result["tool_ranking"].rank_by == "wilson_lb"
 
 
 def test_load_partial_slots(isolated_sot: Path) -> None:
