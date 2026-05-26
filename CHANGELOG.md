@@ -70,11 +70,12 @@ functional change.
     sibling auto-trigger events).
   * Closes the 2026-05-26 autoresearch attribution sprint Phase A audit
     (§5.6) finding that ``auto_trigger_mutator`` had only the
-    ``min_interval_minutes`` floor and no hard cap. Pinned by 12
+    ``min_interval_minutes`` floor and no hard cap. Pinned by 13
     invariant tests in
     ``tests/core/self_improving_loop/test_auto_trigger_max_generation.py``
     covering count helper edge cases, pre-lock cap, post-lock cap
-    recheck, production wiring forwarding, and HookEvent reservation.
+    recheck, production wiring forwarding, HookEvent reservation, and
+    direct emission.
 
 ### Changed
 
@@ -89,6 +90,33 @@ functional change.
   finding (§5.5) that downstream readers couldn't distinguish
   operator-forced from gate-approved promotions. Pinned by 4
   invariant tests in ``tests/autoresearch/test_promote_stamp.py``.
+
+### Fixed
+
+- **PR-DRY-RUN-NO-ATTR (pin only)** — The 2026-05-26 attribution
+  sprint Phase A audit flagged the risk of ``--dry-run`` cycles
+  writing synthetic ``fitness_delta=0`` attribution rows to
+  ``mutations.jsonl``. Verification during the sprint confirmed the
+  skip guard ``_attribution_should_write = not args.dry_run`` was
+  ALREADY in place at ``autoresearch/train.py:2692`` (post-PR-AR-L6).
+  No code change in this commit — added 2 static-source invariant
+  tests in ``tests/autoresearch/test_dry_run_no_attribution.py`` that
+  fail loudly if a future refactor strips the guard. Brittle by
+  design — the cost of false alarms is far below the cost of the
+  silent leak re-opening.
+
+## [0.99.72] - 2026-05-26
+
+MINOR rotation. Ships PR-SEEDS-HIRES P1+P2+P3 — operator directive
+2026-05-26 to lift seed-generation hub to extreme resolution (every
+agent conversation, every procedure, active runs + current step,
+per-candidate phase evolution, every ranker match outcome). Plus
+the attribution sprint Phase A bundle: PR-GEN-COUNTER, PR-WIRE-1,
+PR-ATTR-INSPIRED-BY, PR-SMOKE-LOG-FLAG, PR-HOOKEVENT-RESERVE,
+PR-SOT-REVERT-ON-REJECT, PR-SOT-REVERT-ON-AUDIT-FAIL, and the
+ranker-parallel-lanes change. See section entries below.
+
+### Changed
 
 - **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
   independent tournament matches with ``asyncio.gather`` and applies
@@ -120,18 +148,6 @@ functional change.
   filtering, and non-high / non-survivor preservation.
 
 ### Fixed
-
-- **PR-DRY-RUN-NO-ATTR (pin only)** — The 2026-05-26 attribution
-  sprint Phase A audit flagged the risk of ``--dry-run`` cycles
-  writing synthetic ``fitness_delta=0`` attribution rows to
-  ``mutations.jsonl``. Verification during the sprint confirmed the
-  skip guard ``_attribution_should_write = not args.dry_run`` was
-  ALREADY in place at ``autoresearch/train.py:2692`` (post-PR-AR-L6).
-  No code change in this commit — added 2 static-source invariant
-  tests in ``tests/autoresearch/test_dry_run_no_attribution.py`` that
-  fail loudly if a future refactor strips the guard. Brittle by
-  design — the cost of false alarms is far below the cost of the
-  silent leak re-opening.
 
 - **PR-HUB-DOCS-LINK-FIX** — the self-improving hub's DOCS sidebar pointed
   at two Next.js routes that don't exist: ``/geode/docs/petri`` (no
