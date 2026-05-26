@@ -47,6 +47,35 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.76] - 2026-05-27
+
+> PATCH rotation tightening the v0.99.75 PR-LANE-CAP-CONSERVATIVE
+> defaults a step further. Cap 5/10/5 still demanded ~3 GB of free
+> host RAM per ranker burst, which the operator's M3 16 GB host
+> rarely has without explicit Slack/Chrome/Notion cleanup. Cap 3/6/3
+> brings the peak burst to ~1.5 GB so the safe default actually
+> survives the operator's typical 150-750 MB steady-state PhysMem
+> unused window. Plus the develop-merged ``AgenticLoop`` adapter
+> name-lookup fix that landed after v0.99.75.
+
+### Changed
+- **PR-LANE-CAP-TIGHTER (2026-05-27)** — drop the three
+  freeze-implicated cap defaults a step further on top of
+  PR-LANE-CAP-CONSERVATIVE (v0.99.75). Reason: cap 5 demanded
+  ~3 GB free host RAM that the 16 GB M3 host rarely has at steady
+  state. New burst at cap 3 ≈ 1.5 GB.
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX`` 5 → **3**
+    (``core/orchestration/claude_cli_lane.py``)
+  - ``DEFAULT_OPENAI_API_LANE_MAX`` 10 → **6**
+    (``core/orchestration/openai_api_lane.py``) — paired at
+    ``2 × claude_cli_lane`` for the 1-claude + 2-codex panel
+  - ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`` 5 → **3**
+    (``plugins/seed_generation/agents/ranker.py``)
+  Env override knobs unchanged. Operators on 32 GB hosts should
+  raise lockstep (``=6 / 12 / 6``). Test pins updated:
+  ``test_default_max_concurrent_is_six`` (was ``_is_ten``) and
+  ``test_default_is_three`` (was ``_is_five``).
+
 ### Fixed
 - **PR-AGENTIC-LOOP-ADAPTER-NAME-LOOKUP (2026-05-27)** — extend
   ``AgenticLoop`` adapter resolution to accept both adapter-name and
