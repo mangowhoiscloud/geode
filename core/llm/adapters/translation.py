@@ -67,16 +67,27 @@ def build_adapter_request(
         # legacy ``inject_reasoning_replay`` walker depends on (Codex MCP
         # A2 BLOCKER 3).
         reasoning_items: tuple[dict[str, Any], ...] = ()
+        phase: str = ""
         if role == "assistant":
             raw = m.get("codex_reasoning_items")
             if isinstance(raw, list):
                 reasoning_items = tuple(item for item in raw if isinstance(item, dict))
+            # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
+            # 2026-05-26) — forward the per-message phase attribution
+            # the AgenticLoop persisted from a prior Codex response so
+            # multi-turn replay carries the
+            # ``Literal["commentary", "final_answer"]`` semantic to the
+            # next ``EasyInputMessageParam.phase``.
+            phase_raw = m.get("phase")
+            if isinstance(phase_raw, str):
+                phase = phase_raw
         adapter_messages.append(
             Message(
                 role=role,
                 content=content,
                 tool_use_id=tool_use_id,
                 codex_reasoning_items=reasoning_items,
+                phase=phase,
             )
         )
     adapter_tools: list[ToolSpec] = [
@@ -152,6 +163,7 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         usage=usage,
         codex_reasoning_items=codex_reasoning_items,
         reasoning_summaries=reasoning_summaries,
+        assistant_phase=result.assistant_phase,
     )
 
 

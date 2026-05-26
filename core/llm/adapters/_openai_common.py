@@ -374,7 +374,7 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
                 # data drift surfaces.
                 replayed.setdefault("summary", [])
                 out.append(replayed)
-            out.extend(_convert_assistant_msg_to_responses(m.content))
+            out.extend(_convert_assistant_msg_to_responses(m.content, phase=m.phase))
             continue
         if m.role == "user":
             out.extend(_convert_user_msg_to_responses(m.content))
@@ -466,7 +466,11 @@ def _convert_user_msg_to_chat(content: Any) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _convert_assistant_msg_to_responses(content: Any) -> list[dict[str, Any]]:
+def _convert_assistant_msg_to_responses(
+    content: Any,
+    *,
+    phase: str = "",
+) -> list[dict[str, Any]]:
     """Anthropic assistant content → Responses API typed items.
 
     Splits text + tool_use into separate items (text becomes
@@ -474,13 +478,32 @@ def _convert_assistant_msg_to_responses(content: Any) -> list[dict[str, Any]]:
     ``{"type": "function_call", "call_id", "name", "arguments"}``) preserving
     the original ordering so the next-turn pairing with ``function_call_output``
     matches by ``call_id``.
+
+    ``phase`` (PR-CODEX-MULTITURN-PHASE-PRESERVE, Sprint H follow-up,
+    2026-05-26): when non-empty, attached to each text-bearing
+    ``{role: "assistant", ...}`` item so the OpenAI Responses API
+    ``EasyInputMessageParam.phase`` slot is populated. Empty (the
+    default) skips the field — back-compat with every non-Codex caller.
     """
     if isinstance(content, str):
-        return [{"role": "assistant", "content": content}]
+        out: dict[str, Any] = {"role": "assistant", "content": content}
+        if phase:
+            out["phase"] = phase
+        return [out]
     if not isinstance(content, list):
-        return [{"role": "assistant", "content": _stringify(content)}]
+        out = {"role": "assistant", "content": _stringify(content)}
+        if phase:
+            out["phase"] = phase
+        return [out]
     items: list[dict[str, Any]] = []
     text_parts: list[str] = []
+
+    def _emit_text_item() -> None:
+        out = {"role": "assistant", "content": "\n".join(text_parts)}
+        if phase:
+            out["phase"] = phase
+        items.append(out)
+
     for block in content:
         if not isinstance(block, dict):
             continue
@@ -489,7 +512,7 @@ def _convert_assistant_msg_to_responses(content: Any) -> list[dict[str, Any]]:
             text_parts.append(block.get("text", ""))
         elif btype == "tool_use":
             if text_parts:
-                items.append({"role": "assistant", "content": "\n".join(text_parts)})
+                _emit_text_item()
                 text_parts = []
             items.append(
                 {
@@ -500,8 +523,13 @@ def _convert_assistant_msg_to_responses(content: Any) -> list[dict[str, Any]]:
                 }
             )
     if text_parts:
-        items.append({"role": "assistant", "content": "\n".join(text_parts)})
-    return items if items else [{"role": "assistant", "content": ""}]
+        _emit_text_item()
+    if items:
+        return items
+    fallback = {"role": "assistant", "content": ""}
+    if phase:
+        fallback["phase"] = phase
+    return [fallback]
 
 
 def _convert_user_msg_to_responses(content: Any) -> list[dict[str, Any]]:
@@ -628,6 +656,15 @@ def translate_codex_response(
     # carry a message item, reconstruct the text from the
     # SSE-delivered ``output_text`` content blocks.
     fallback_text_parts: list[str] = []
+    # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
+    # — capture per-response ``phase`` attribution from the Codex
+    # message item. ``ResponseOutputMessage.phase`` is
+    # ``Optional[Literal["commentary", "final_answer"]]`` and appears
+    # symmetrically on ``EasyInputMessageParam`` so the replay path
+    # can carry the semantic attribution. Multiple message items per
+    # response are rare; LAST one wins (matches the last-message-wins
+    # shape of ``response.output_text``).
+    assistant_phase: str = ""
     for item in items_source:
         itype = getattr(item, "type", "") if not isinstance(item, dict) else item.get("type", "")
         if itype == "message" and not text:
@@ -651,6 +688,13 @@ def translate_codex_response(
                     refusal_text = _attr_or_key(block, "refusal") or ""
                     if refusal_text:
                         fallback_text_parts.append(refusal_text)
+        if itype == "message":
+            # Capture phase regardless of whether ``text`` was already
+            # populated by ``response.output_text`` — phase lives on
+            # the item, not on the aggregated text accessor.
+            phase_value = _attr_or_key(item, "phase")
+            if isinstance(phase_value, str) and phase_value:
+                assistant_phase = phase_value
         if itype == "function_call":
             # Codex backend assigns ``call_id`` as the durable identifier — the
             # ``function_call_output`` reply on the next turn MUST reference
@@ -712,6 +756,7 @@ def translate_codex_response(
         raw_response=response,
         reasoning_items=tuple(reasoning_items),
         reasoning_summaries=tuple(reasoning_summaries),
+        assistant_phase=assistant_phase,
     )
 
 

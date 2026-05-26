@@ -49,6 +49,40 @@ functional change.
 
 ### Added
 
+- PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up) — round-trip
+  preservation of ``ResponseOutputMessage.phase`` across the Codex
+  Responses API multi-turn replay. OpenAI's
+  ``ResponseOutputMessage.phase`` is
+  ``Optional[Literal["commentary", "final_answer"]]`` and the same
+  slot appears on ``EasyInputMessageParam`` so multi-turn callers
+  need to carry the attribution back to the next turn. Pre-fix the
+  field was dropped at capture, so every Codex multi-turn replay
+  surfaced messages with phase implicitly ``None`` — losing the
+  semantic distinction that the model uses to differentiate
+  intermediate reasoning commentary from the final answer. Full
+  wire chain: ``translate_codex_response`` captures phase from
+  ``ResponseOutputMessage`` items, surfaces on
+  ``AdapterCallResult.assistant_phase``;
+  ``agentic_response_from_adapter_result`` forwards into
+  ``AgenticResponse.assistant_phase``; ``AgenticLoop`` persists onto
+  ``_assistant_msg["phase"]`` (both end-turn + tool-use round
+  sites); ``adapter_request_from_legacy`` reads dict ``m["phase"]``
+  → ``Message.phase``; ``build_codex_input`` →
+  ``_convert_assistant_msg_to_responses`` emits
+  ``{"role": "assistant", "content": ..., "phase": ...}`` so the
+  Responses API ``EasyInputMessageParam.phase`` slot is populated on
+  replay. Empty phase (default) skips the field — back-compat with
+  every non-Codex adapter and pre-existing Codex calls. 11 unit
+  tests pin: capture from message item, capture for both
+  ``commentary`` + ``final_answer`` values, no-op when phase
+  missing, phase capture alongside populated ``response.output_text``,
+  replay emit when set, replay skip when empty, string-content path,
+  text+tool_use ordering (phase on text, not on function_call),
+  ``build_codex_input`` E2E, ``Message.phase`` default back-compat,
+  full round-trip capture → replay. Closes the deferred PR-D3 fold
+  catch (PR #1715, 2026-05-26) for analogous ``phase`` preservation
+  to ``summary`` — same surface, same fix shape.
+
 - PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up) — per-voter
   ``reasoning.effort`` override propagation. ``VoterSpec.effort`` (new
   optional string field on the judge-panel voter entry) lets

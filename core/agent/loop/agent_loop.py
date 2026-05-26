@@ -1948,6 +1948,13 @@ class AgenticLoop:
                 # ``input`` array. Other adapters ignore the field.
                 if getattr(response, "codex_reasoning_items", None):
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+                # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
+                # 2026-05-26) — persist phase from the Codex response so
+                # the next-turn replay carries ``EasyInputMessageParam.phase``.
+                # Other adapters ignore the field.
+                _phase = getattr(response, "assistant_phase", "")
+                if _phase:
+                    _assistant_msg["phase"] = _phase
                 messages.append(_assistant_msg)
                 self._sync_messages_to_context(messages)
                 await self._record_text_only_round(round_idx, text=text)
@@ -2060,6 +2067,11 @@ class AgenticLoop:
             # above for the rationale; same shape on tool-use rounds).
             if getattr(response, "codex_reasoning_items", None):
                 _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+            # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
+            # 2026-05-26) — same phase persistence on tool-use rounds.
+            _phase = getattr(response, "assistant_phase", "")
+            if _phase:
+                _assistant_msg["phase"] = _phase
             messages.append(_assistant_msg)
             messages.append({"role": "user", "content": tool_results})
             round_idx += 1

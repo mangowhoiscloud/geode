@@ -98,6 +98,16 @@ class AgenticResponse:
     # ``thinking`` content blocks. ``None`` when the call produced no
     # reasoning summary; never set by GLM/OpenAI Chat Completions.
     reasoning_summaries: list[str] | None = None
+    # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
+    # — assistant phase attribution from
+    # ``ResponseOutputMessage.phase`` (Codex Responses API). Captured
+    # by ``translate_codex_response``, forwarded via
+    # ``agentic_response_from_adapter_result``; AgenticLoop persists
+    # to the next-turn message dict so multi-turn replay carries the
+    # ``Literal["commentary", "final_answer"]`` attribution to the
+    # next ``EasyInputMessageParam.phase``. Empty string for non-Codex
+    # adapters and for Codex responses with no phase set.
+    assistant_phase: str = ""
 
 
 def inject_reasoning_replay(
