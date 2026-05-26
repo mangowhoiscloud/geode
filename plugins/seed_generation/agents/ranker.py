@@ -108,29 +108,32 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
     }
 
 
-# PR-LANE-CAP-AGGRESSIVE (2026-05-27) — phase-local concurrency cap for
-# the ranker's ``asyncio.gather`` match-dispatch burst. The cap exists
-# *on top* of the per-adapter lanes (claude_cli=4 / openai_api=16 /
-# anthropic_api=8) to bound the gather submission queue depth.
+# PR-LANE-CAP-50 (2026-05-27) — phase-local concurrency cap for the
+# ranker's ``asyncio.gather`` match-dispatch burst. The cap exists
+# *on top* of the per-adapter lanes (claude_cli=50 / openai_api=50 /
+# anthropic_api=50) to bound the gather submission queue depth.
 #
 # Concurrency budget (default 3-voter panel = 2 codex + 1 claude-cli):
-#   8 matches inflight * 3 voters = 24 voter tasks
-#     - claude-cli tasks: 8 (1 per match) — exceeds claude_cli_lane=4;
-#       4 wait in lane queue, 4 inflight
-#     - codex tasks: 16 (2 per match) — exactly openai_api_lane=16
-#   Net: codex saturates its lane; claude-cli runs at 100% utilisation
-#   with a depth-4 lane wait queue. Cap 8 is the equilibrium where
-#   neither lane is starved and neither is severely backlogged.
+#   50 matches inflight * 3 voters = 150 voter tasks
+#     - claude-cli tasks: 50 (1 per match) — exactly claude_cli_lane=50
+#     - codex tasks: 100 (2 per match) — 50 inflight + 50 in lane queue
+#   Net: claude-cli saturated, codex 50% utilised with depth-50 queue.
+#   Operator raised lane caps in lockstep so cap 50 is equilibrium
+#   for the documented per-account RPM ceilings (Anthropic tier 1
+#   50 RPM, Codex 500 RPM); higher tiers absorb burst headroom.
 #
-# Pre-cap a 59-match Loop 1 burst would push 177 task objects
-# into ``asyncio.wait`` queues simultaneously; the lanes throttle the
-# subprocess/API side but the awaiting task list itself becomes a
-# memory + scheduler tax. Cap 8 keeps gather "in-flight" at 24 tasks,
-# with the rest serialised behind the semaphore acquire — operator
-# can raise via :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` if the lane
-# caps are also raised proportionally.
-DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8
-"""Operator default = 8 simultaneous match dispatches inside
+# Pre-PR-LANE-CAP-50 (PR-LANE-CAP-AGGRESSIVE, cap 8) gave a 24-task
+# inflight ceiling. Pre-PR-RANKER-PARALLEL (no semaphore) a 59-match
+# Loop 1 burst would push 177 task objects into ``asyncio.wait``
+# queues simultaneously; lanes throttled the subprocess/API side but
+# the awaiting task list itself becomes a memory + scheduler tax.
+# Cap 50 lets the gather "in-flight" stay at 150 voter tasks across
+# the three lanes, with smaller surplus serialised behind the
+# semaphore acquire — operator can drop via
+# :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` if the local lane caps are
+# also lowered proportionally.
+DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 50
+"""Operator default = 50 simultaneous match dispatches inside
 ``asyncio.gather``. See :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` for
 runtime override."""
 

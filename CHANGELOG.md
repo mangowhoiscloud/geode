@@ -90,6 +90,38 @@ develop. See section entries below.
 
 ### Changed
 
+- PR-LANE-CAP-50 (2026-05-27) — raise every lane / queue concurrency
+  default to 50 per operator decision (follow-up to
+  PR-LANE-CAP-AGGRESSIVE, which raised to 4/16/8/8). Operator
+  rationale: cap claude_cli/openai_api/anthropic_api lanes at the
+  same aggressive ceiling so the ranker's ``asyncio.gather`` burst
+  (150 voter tasks) hits per-account RPM ceilings as the
+  *theoretical* limit, not the *configured* limit. New defaults:
+  - ``DEFAULT_MAX_CONCURRENT`` (Lane base): 4 → **50**
+  - ``DEFAULT_GLOBAL_CONCURRENCY`` (LaneQueue global lane): 8 → **50**
+  - ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` (seed-generation workload
+    lane): 4 → **50** (matches the new global so the hierarchy
+    invariant ``max(workload) <= max(global)`` holds at 50)
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX``: 4 → **50** (intentionally well
+    above the documented 3-4 sub-agent burst floor; operators on
+    Pro/Max tiers without sufficient pool headroom should drop via
+    ``GEODE_CLAUDE_CLI_LANE_MAX``)
+  - ``DEFAULT_OPENAI_API_LANE_MAX``: 16 → **50** (~200-300 RPM at
+    10-15s/call, well under Codex 500 RPM ceiling)
+  - ``DEFAULT_ANTHROPIC_API_LANE_MAX``: 8 → **50** (saturates tier 1
+    50 RPM; tier 1 accounts should drop via env override)
+  - ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES``: 8 → **50** (matches new
+    lane ceilings — 50 matches × 3 voters = 150 voter tasks
+    inflight against 100 per-lane budget)
+  Tests + docstrings updated to assert and rationale-document the new
+  defaults. Gateway concurrency (``DEFAULT_GATEWAY_CONCURRENCY=4``)
+  intentionally unchanged — Slack/Discord/Telegram inbound traffic
+  has a different sizing rationale (per-channel burst, not LLM
+  call concurrency). Operator env overrides
+  (``GEODE_{CLAUDE_CLI,OPENAI_API,ANTHROPIC_API}_LANE_MAX``,
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES``) remain the recommended
+  per-deployment tuning knob.
+
 - PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raise the per-adapter lane
   concurrency caps + lane timeouts + add a phase-local semaphore on
   the ranker's ``asyncio.gather`` match-dispatch. Pre-raise the

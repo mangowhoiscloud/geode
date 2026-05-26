@@ -207,9 +207,12 @@ class TestDefaultBuilders:
         sl = queue.session_lane
         assert sl is not None
         assert sl.max_sessions == 256
-        # Global Lane (total capacity)
+        # Global Lane (total capacity) — PR-LANE-CAP-50 (2026-05-27)
+        # raised from 8 to 50 per operator decision to absorb the
+        # ranker.py asyncio.gather burst (177-task spawn) without
+        # queueing behind a tight global semaphore.
         global_lane = queue.get_lane("global")
-        assert global_lane is not None and global_lane.max_concurrent == 8
+        assert global_lane is not None and global_lane.max_concurrent == 50
         # Gateway Lane (workload-specific cap)
         gw_lane = queue.get_lane("gateway")
         assert gw_lane is not None and gw_lane.max_concurrent == 4

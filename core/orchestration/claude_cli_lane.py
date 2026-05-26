@@ -26,7 +26,7 @@ lane is too restrictive for non-Claude-CLI traffic (API-billed
 Anthropic / OpenAI completions). The two flows need separate caps,
 which is why this lane sits alongside ``global`` rather than under it.
 
-Why ``max_concurrent=4`` (PR-LANE-CAP-AGGRESSIVE, 2026-05-27)
+Why ``max_concurrent=50`` (PR-LANE-CAP-50, 2026-05-27)
 ============================================================
 
 Raised from 2 (PR-RANKER-PARALLEL conservative default) to 4 per
@@ -133,7 +133,7 @@ silently fall back to the default — the lane should never harden into
 "no slots" mid-run because of a typo.
 """
 
-DEFAULT_CLAUDE_CLI_LANE_MAX = 4
+DEFAULT_CLAUDE_CLI_LANE_MAX = 50
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 2 to 4.
 
 Documented Claude Code burst-limiter floor is 3-4 slots per 5h pool.

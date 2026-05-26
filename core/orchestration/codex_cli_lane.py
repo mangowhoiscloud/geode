@@ -72,7 +72,7 @@ Symmetric with ``claude-cli-subagent``."""
 CODEX_CLI_LANE_MAX_ENV = "GEODE_CODEX_CLI_LANE_MAX"
 """Operator override for :data:`DEFAULT_CODEX_CLI_LANE_MAX`."""
 
-DEFAULT_CODEX_CLI_LANE_MAX = 2
+DEFAULT_CODEX_CLI_LANE_MAX = 50
 """Conservative cap until ChatGPT subscription / Codex CLI burst-limit
 behaviour is measured. Same value as the Claude side; the per-
 provider knob lets operators tune independently as data accumulates."""
