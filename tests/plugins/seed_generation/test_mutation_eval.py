@@ -422,7 +422,7 @@ def test_voter_prompt_carries_anti_phantom_directives() -> None:
     assert '"body": "after"' in desc
 
 
-def test_mutation_eval_voter_tasks_pin_effort_low() -> None:
+def test_mutation_eval_voter_tasks_pin_effort_none() -> None:
     """Mutation-eval voter SubTasks pin ``effort="low"``.
 
     PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch, 2026-05-26) —
@@ -464,11 +464,12 @@ def test_mutation_eval_voter_tasks_pin_effort_low() -> None:
 
     assert len(dispatched) == 3, f"expected 3 dispatched voter SubTasks; got {len(dispatched)}"
     for task in dispatched:
-        assert task.effort == "low", (
+        assert task.effort == "none", (
             f"mutation_eval voter SubTask {task.task_id} must pin "
-            f"effort='low' (got {task.effort!r}) — without the pin the "
-            f"gpt-5.5 voter reproduces the smoke 20 empty-text failure "
-            f"outside the ranker phase."
+            f"effort='none' (got {task.effort!r}) — without the pin the "
+            f"gpt-5.5 voter reproduces the smoke 20/21 empty-text failure "
+            f"outside the ranker phase. Sprint G supersedes prior "
+            f"effort='low' which smoke 21 confirmed ineffective."
         )
 
 

@@ -1,34 +1,25 @@
-"""PR-CODEX-GPT55-OUTPUT-EMIT — voter ``effort="low"`` wiring invariants.
+"""PR-GPT55-EMPTY-OUTPUT-EMIT (Sprint G) — voter ``effort="none"`` wiring invariants.
 
-Pins the fix for the smoke 20 defect: gpt-5.5 voter calls running at the
-silent ``effort="medium"`` default returned ``output_text=""`` 100% of
-the time, burning the entire output token budget (109-254 tokens per
-call across 36 dumps) on encrypted reasoning items and emitting ZERO
-message text — collapsing the ranker phase.
+Supersedes PR-CODEX-GPT55-OUTPUT-EMIT's ``effort="low"`` which smoke 21
+confirmed ineffective. Pins the Sprint G fix: gpt-5.5 voter calls now
+run with ``reasoning.effort="none"`` so the model emits the A/B/tie
+verdict directly without consuming any output budget on encrypted
+reasoning items.
 
 Root cause (ctx7-grounded): the vote task is a 3-way A/B/tie
-classification + ≤ 200-token rationale, but the SubTask had no per-task
-``effort`` override so it fell through to the ``_DIFFICULTY_TO_EFFORT``
-default ("medium"). For a reasoning model, "medium" allocates enough
-reasoning headroom that the entire ``output_tokens`` quota gets
-consumed before the model emits the visible message block — the OpenAI
-Responses API failure mode the docs call "Ran out of tokens during
-reasoning" (ctx7 ``/websites/developers_openai_api`` → "Allocating
-space for reasoning").
+classification + ≤ 200-token rationale — a single-step output that
+doesn't benefit from any reasoning depth. Per ctx7 OpenAI Responses
+API "Sampling Parameters", ``reasoning_effort`` enum supports
+``none`` (disables reasoning entirely) plus the new ``minimal`` value
+that GEODE's prior spec had omitted. The smoke 21 evidence showed
+``effort="low"`` still produced 60-624 reasoning tokens with empty
+output_text — only ``"none"`` guarantees no reasoning consumption.
 
 ``max_output_tokens`` is NOT a fix here — the Codex OAuth backend
 rejects the field with 400 ``Unsupported parameter`` (pinned by
 ``test_codex_kwargs_does_not_send_max_output_tokens`` and the comment
-at ``core/llm/providers/codex.py:325``). The only available knob is
-``reasoning.effort``.
-
-Per ctx7 OpenAI Responses API docs the canonical low-effort example
-uses gpt-5.5 with ``reasoning: {"effort": "low"}`` for a single
-bash-script generation task; the voter A/B/tie call is a comparable
-single-shot output (one verdict + one ≤ 200-token rationale). The
-"Reasoning effort" section explicitly says: "Reducing reasoning effort
-can result in faster responses and fewer tokens used on reasoning in a
-response."
+at ``core/llm/providers/codex.py:325``). ``reasoning.effort`` is the
+only available knob, and ``"none"`` is the floor of that knob.
 
 These tests pin:
 
@@ -36,8 +27,12 @@ These tests pin:
    (back-compat — preserves the legacy difficulty path).
 2. ``_build_worker_request`` honours ``SubTask.effort`` when set,
    overriding both ``task.difficulty`` and ``settings.agentic_effort``.
-3. The ranker's voter SubTasks set ``effort="low"`` so the codex-oauth
-   adapter forwards ``reasoning.effort="low"`` to the gpt-5.5 backend.
+3. The ranker's voter SubTasks set ``effort="none"`` so the codex-oauth
+   adapter forwards ``reasoning.effort="none"`` to the gpt-5.5 backend
+   and gpt-5.5 emits the verdict directly without encrypted reasoning.
+4. The gpt-5.x spec includes ``"minimal"`` in
+   ``reasoning_effort_values`` (OpenAI docs registers 6 values; GEODE
+   previously listed 5).
 """
 
 from __future__ import annotations
@@ -62,10 +57,10 @@ def test_subtask_has_effort_field_empty_default() -> None:
     assert task.effort == ""
 
 
-def test_subtask_effort_field_accepts_low() -> None:
-    """The ranker's voter SubTasks pin ``effort="low"`` per ctx7 guidance."""
-    task = SubTask(task_id="t1", description="x", task_type="analyze", effort="low")
-    assert task.effort == "low"
+def test_subtask_effort_field_accepts_none() -> None:
+    """The ranker's voter SubTasks pin ``effort="none"`` per Sprint G."""
+    task = SubTask(task_id="t1", description="x", task_type="analyze", effort="none")
+    assert task.effort == "none"
 
 
 def test_build_worker_request_uses_task_effort_when_set() -> None:
@@ -88,13 +83,13 @@ def test_build_worker_request_uses_task_effort_when_set() -> None:
         task_id="vote-m000-openai.subscription",
         description="vote",
         task_type="vote",
-        effort="low",
+        effort="none",
     )
     req = mgr._build_worker_request(task)
-    assert req.effort == "low", (
-        "WorkerRequest must inherit SubTask.effort='low' — otherwise the "
+    assert req.effort == "none", (
+        "WorkerRequest must inherit SubTask.effort='none' — otherwise the "
         "codex-oauth adapter forwards reasoning.effort=medium and gpt-5.5 "
-        "reproduces the smoke 20 empty-text failure mode."
+        "reproduces the smoke 20/21 empty-text failure mode."
     )
 
 
@@ -129,19 +124,16 @@ def test_build_worker_request_falls_back_when_effort_empty() -> None:
     )
 
 
-def test_ranker_voter_subtasks_pin_effort_low() -> None:
-    """Ranker SubTask construction pins ``effort="low"`` on EVERY voter task.
+def test_ranker_voter_subtasks_pin_effort_none() -> None:
+    """Ranker SubTask construction pins ``effort="none"`` on EVERY voter task.
 
-    This is the wire-through the smoke 20 fix depends on. Without it,
-    the SubTask carries empty ``effort`` and falls through to the
-    medium-default that produced 36 empty-text dumps. ctx7 OpenAI
-    Responses API docs (``/websites/developers_openai_api`` →
-    "Reasoning effort"): "Reducing reasoning effort can result in
-    faster responses and fewer tokens used on reasoning in a
-    response". The canonical low-effort example uses gpt-5.5 with
-    ``effort="low"`` for a single bash-script generation task; the
-    voter A/B/tie call is a comparable single-shot output (one
-    verdict + one ≤ 200-token rationale).
+    Sprint G supersedes the prior ``effort="low"`` pin (which smoke
+    21 confirmed ineffective — gpt-5.5 still produced 7+ empty-text
+    dumps with 60-624 reasoning tokens consumed). ctx7 OpenAI
+    Responses API "Sampling Parameters": ``reasoning_effort`` enum
+    includes ``"none"`` to disable reasoning entirely so the model
+    emits user-facing text directly. The voter A/B/tie + rationale
+    task is single-step classification — no reasoning depth needed.
     """
     voters = [
         VoterBinding(
@@ -173,25 +165,27 @@ def test_ranker_voter_subtasks_pin_effort_low() -> None:
         f"Ranker must spawn one task per voter — got {len(tasks)} tasks for {len(voters)} voters."
     )
     for task in tasks:
-        assert task.effort == "low", (
-            f"Voter SubTask {task.task_id} must pin effort='low' to keep "
+        assert task.effort == "none", (
+            f"Voter SubTask {task.task_id} must pin effort='none' to keep "
             f"gpt-5.5 from burning the output budget on encrypted reasoning. "
             f"Got effort={task.effort!r}. ctx7 reference: OpenAI Responses "
-            f"API 'Reasoning effort' section + the canonical low-effort "
-            f"bash-script example in the docs."
+            f"API 'Sampling Parameters' — ``reasoning_effort`` enum supports "
+            f"``none`` to disable reasoning entirely on reasoning-capable "
+            f"models. Prior ``effort='low'`` (PR-CODEX-GPT55-OUTPUT-EMIT) "
+            f"was ineffective per smoke 21 evidence."
         )
 
 
 def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
-    """Defence-in-depth: ``effort="low"`` does not regress the JSON schema wire.
+    """Defence-in-depth: ``effort="none"`` does not regress the JSON schema wire.
 
     The smoke 20 failure was a 2-gap defect (insufficient effort +
     insufficient schema enforcement). Both knobs must remain pinned;
     removing either re-opens the empty-text path. ctx7-grounded note:
     on the codex-oauth backend the schema rides through
     ``text.format = {type: "json_schema", ...}``; strict mode is
-    auto-detected (VOTE_SCHEMA lacks ``additionalProperties: false``
-    so strict=False).
+    auto-detected (VOTE_SCHEMA satisfies the OpenAI Structured
+    Outputs subset since PR-STRICT-COMPATIBLE-SCHEMAS).
     """
     from plugins.seed_generation.json_schemas import VOTE_SCHEMA
 
@@ -216,4 +210,27 @@ def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
         candidate_bodies={"c_a": "a", "c_b": "b"},
     )
     assert tasks[0].response_schema == VOTE_SCHEMA
-    assert tasks[0].effort == "low"
+    assert tasks[0].effort == "none"
+
+
+def test_gpt5_family_spec_includes_minimal_effort() -> None:
+    """Sprint G (2026-05-26) — GEODE's gpt-5.x specs must list ``"minimal"``
+    in ``reasoning_effort_values``. OpenAI's Responses API "Sampling
+    Parameters" docs enumerate 6 valid values
+    (``none, minimal, low, medium, high, xhigh``); pre-Sprint-G GEODE
+    listed only 5 (``"minimal"`` was missing), so operators couldn't
+    select the docs-recommended floor-but-above-zero effort. This test
+    pins the registry alignment.
+    """
+    from core.llm.adapters._openai_common import get_openai_model_spec
+
+    for model_id in ("gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"):
+        spec = get_openai_model_spec(model_id)
+        assert spec.reasoning_effort_values is not None, model_id
+        assert "minimal" in spec.reasoning_effort_values, (
+            f"{model_id} spec missing 'minimal' effort — OpenAI docs "
+            f"register 6 values, got {spec.reasoning_effort_values!r}."
+        )
+        # Sprint G additionally relies on ``"none"`` being available
+        # so the voter pathway can disable reasoning entirely.
+        assert "none" in spec.reasoning_effort_values, model_id

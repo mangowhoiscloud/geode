@@ -47,6 +47,37 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- PR-GPT55-EMPTY-OUTPUT-EMIT (Sprint G) — codex-OAuth gpt-5.5 voter
+  calls now pin ``reasoning.effort="none"``, superseding the prior
+  ``effort="low"`` (PR-CODEX-GPT55-OUTPUT-EMIT, 2026-05-26) which
+  smoke 21 confirmed ineffective: 7+ codex-oauth-empty-text dumps
+  reproduced the smoke-20 failure mode with gpt-5.5 still consuming
+  60-624 output tokens entirely on encrypted reasoning items
+  (``output_text=""`` 100% of calls, ranker quorum lost on every
+  observed match). ctx7 OpenAI Responses API "Sampling Parameters"
+  registers ``reasoning_effort`` as a 6-value enum
+  (``none, minimal, low, medium, high, xhigh``); ``"none"`` disables
+  reasoning entirely so the model emits user-facing text directly
+  — the documented behaviour for tasks that don't benefit from
+  reasoning depth, which the A/B/tie voter call is. The fix lives
+  at the same wire points as the prior PR: voter SubTask
+  construction in ``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` and the mutation-eval voter pathway in
+  ``plugins/seed_generation/mutation_eval.py``. Additionally adds
+  the OpenAI-documented ``"minimal"`` effort value to GEODE's
+  gpt-5.x spec registry in
+  ``core/llm/adapters/_openai_common.py`` so operators can pick
+  ``"minimal"`` as a floor-but-above-zero option via
+  ``~/.geode/config.toml``. Pinned by
+  ``test_ranker_voter_subtasks_pin_effort_none``,
+  ``test_mutation_eval_voter_tasks_pin_effort_none``, and
+  ``test_gpt5_family_spec_includes_minimal_effort``. The
+  ``max_output_tokens`` knob remains forbidden on codex-oauth
+  (subscription manages it server-side, 400 ``Unsupported
+  parameter``).
+
 ## [0.99.68] - 2026-05-26
 
 Single-change MINOR rotation. Ships PR-UPGRADE-ROLES-TOP-TIER —
