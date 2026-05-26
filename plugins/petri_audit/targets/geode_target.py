@@ -282,7 +282,20 @@ async def _default_geode_runner(
     #
     # ``disable_settings_drift`` is True iff the caller explicitly pinned
     # a target model — see N6-followup priority docstring above.
+    # The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
+    # does not go through ``core.wiring.container._build_llm_adapters``, the
+    # parent's bootstrap path. Without an explicit ``bootstrap_builtins()``
+    # here the registry is empty (``Known pairs: []``) and every target
+    # ``generate`` call inside this runner fails with
+    # ``AdapterNotFoundError: provider='openai' source='payg'``. Mirrors the
+    # ``core/agent/worker.py:817-823`` pattern for the sub-agent worker
+    # subprocess, which has the identical wiring gap. Idempotent — safe to
+    # re-call when the parent already populated the registry.
+    from core.llm.adapters.registry import bootstrap_builtins
+
     from core.llm.adapters import infer_provider_from_model
+
+    bootstrap_builtins()
 
     loop = AgenticLoop(
         ctx,

@@ -48,6 +48,29 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-AUDIT-ADAPTER-BOOTSTRAP-FIX (2026-05-27)** — call
+  ``core.llm.adapters.registry.bootstrap_builtins()`` inside
+  ``plugins/petri_audit/targets/geode_target.py:_default_geode_runner``
+  before constructing ``AgenticLoop``. The inspect-ai audit
+  subprocess (``uv run inspect eval inspect_petri/audit``) does not
+  go through ``core.wiring.container._build_llm_adapters`` — the
+  parent's wiring bootstrap path — so the subprocess's adapter
+  registry was empty (``Known pairs: []``) and every target
+  ``generate`` call failed with
+  ``AdapterNotFoundError: provider='openai' source='payg'``.
+  Latent because no unit test exercised the audit subprocess
+  end-to-end with a live target; surfaced during the first real
+  ``SelfImprovingLoopRunner.run_once(rerun_enabled=True,
+  rerun_dry_run=False)`` invocation, where target inference happened
+  zero times across 8 seeds × 5 max_turns × 5 samples and every
+  ``dim_means`` returned ``inspect_petri`` placeholder values —
+  rendering the autoresearch fitness signal a fake-success surface
+  that would have driven the promote/revert gate on bogus data.
+  Mirrors the equivalent fix at ``core/agent/worker.py:817-823`` for
+  the sub-agent worker subprocess (identical wiring gap). Pinned by
+  ``tests/test_geode_target_adapter_bootstrap.py`` (3 assertions:
+  source-level pin, idempotency contract, codex-oauth + claude-cli
+  registration after bootstrap).
 - **PR-RUNNER-REPO-ROOT-FIX (2026-05-27)** — repair the off-by-one
   ``parents[N]`` arithmetic at three call sites in
   ``core/self_improving_loop/runner.py`` (the
