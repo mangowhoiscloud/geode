@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.67] - 2026-05-26
+
+Single-fix PATCH rotation. Ships PR-TRANSIENT-CLI-INJECTION-PREFIX to
+land the prefix-allowlist gate on the claude-cli transient classifier
+ahead of the next smoke run. The codex-OAuth gpt-5.5 empty-output-text
+defect surfaced by smoke 20/21 is NOT in this release — it requires a
+separate root-cause investigation (max_output_tokens unsupported on
+codex-oauth, effort=low alone insufficient) tracked as Sprint G.
+
 ### Fixed
 
 - PR-TRANSIENT-CLI-INJECTION-PREFIX — claude-cli transient classifier's
