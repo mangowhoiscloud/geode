@@ -65,9 +65,13 @@ functional change.
   in-stream error injection convention) or with the literal phrase
   ``Claude usage limit reached`` (PR-T smoke 9-12 incident). LLM prose
   never opens with either pattern because the leading ``!`` is a
-  markdown convention LLMs avoid in narrative text. The new gate is
-  position-independent, so even if the CLI ever pads its injections
-  with extra header lines the rule still applies. Pinned by
+  markdown convention LLMs avoid in narrative text. The ``\A\s*``
+  anchor accepts arbitrary leading whitespace; Codex MCP audit of
+  the same 135-dump corpus confirmed 0 split-injection cases (a
+  theoretical delta-split where ``!`` and the transient phrase land
+  in separate ``content_block_delta`` chunks would slip the delta
+  branch, but the CLI emits an aggregated ``event.type="assistant"``
+  event for the same message that catches it). Pinned by
   ``test_classify_signal_smoke21_llm_short_preamble_not_false_positive``,
   ``test_classify_signal_assistant_event_exclamation_prefix_still_fires``,
   and ``test_classify_signal_content_block_delta_exclamation_prefix_still_fires``.

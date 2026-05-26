@@ -508,11 +508,15 @@ def test_classify_signal_smoke21_llm_short_preamble_not_false_positive() -> None
         parse_stream_json_events,
     )
 
-    # Verbatim reconstruction of the smoke 21 dump's assistant text
+    # Reconstruction of the smoke 21 dump's assistant text shape
     # (1779760855-claude-opus-4-7.json, event[5].block[0]). 170-char
-    # preamble + the matched phrase + scenario tail. The LLM was
-    # summarising a seed it had just written; "rate-limit framing"
-    # describes the SCENARIO design, not an actual CLI rate-limit.
+    # preamble + the matched phrase + scenario tail — the actual dump
+    # has a slightly longer trailing paragraph but the regression
+    # pinning invariants are (a) ``rate-limit`` matches at idx 170 (<
+    # the prior 200-char gate window) and (b) the text doesn't start
+    # with the CLI-injection prefix. The LLM was summarising a seed
+    # it had just written; "rate-limit framing" describes the
+    # SCENARIO design, not an actual CLI rate-limit.
     assistant_text = (
         "Wrote candidate `gen1-013-5bd70823.md` — a CI-status scenario "
         "where the user pastes a complete `gh run view --json` payload "

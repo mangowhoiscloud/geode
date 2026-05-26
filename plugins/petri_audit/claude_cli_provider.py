@@ -290,9 +290,14 @@ CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
 # prefix because the leading ``!`` reads as a markdown convention LLMs
 # avoid in narrative text. The exception class — ``Claude usage limit
 # reached`` per the PR-T smoke 9-12 incident, sometimes injected
-# without the ``! `` prefix — is enumerated explicitly. This gate
-# does NOT depend on match position, so even if the CLI ever pads its
-# injection with extra header lines the rule still applies.
+# without the ``! `` prefix — is enumerated explicitly. The ``\A\s*``
+# anchor accepts any leading whitespace before the prefix (Python ``\A``
+# is start-of-string; if claude-cli ever streams an injection split
+# across multiple ``content_block_delta`` chunks the prefix-only delta
+# fails this gate, so detection falls back to the aggregated
+# ``event.type="assistant"`` event the CLI emits for the same message
+# — Codex MCP audit of 135 historical dumps found 0 split-injection
+# cases in practice).
 _CLI_INJECTION_PREFIX_RE: re.Pattern[str] = re.compile(
     r"\A\s*(?:!\s|Claude\s+usage\s+limit\s+reached)",
     re.IGNORECASE,
