@@ -41,31 +41,34 @@ from plugins.seed_generation.picker import (
 
 
 def _make_manifest() -> SeedGenerationManifest:
-    """Build an in-memory manifest equivalent to the shipped TOML."""
+    """Build an in-memory manifest equivalent to the shipped TOML
+    (post PR-UPGRADE-ROLES-TOP-TIER, 2026-05-26 — every role default
+    is ``claude-opus-4-7``; allowed_models retains operator override
+    flexibility)."""
     roles = {
         "generator": SeedRoleSpec(
-            default_model="claude-sonnet-4-6",
-            allowed_models=["claude-sonnet-4-6", "claude-opus-4-7"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-sonnet-4-6"],
         ),
         "critic": SeedRoleSpec(
-            default_model="claude-sonnet-4-6",
-            allowed_models=["claude-sonnet-4-6"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-sonnet-4-6"],
         ),
         "proximity": SeedRoleSpec(
-            default_model="claude-sonnet-4-6",
-            allowed_models=["claude-sonnet-4-6"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-sonnet-4-6"],
         ),
         "pilot": SeedRoleSpec(
-            default_model="claude-haiku-4-5",
-            allowed_models=["claude-haiku-4-5"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-haiku-4-5"],
         ),
         "ranker": SeedRoleSpec(
-            default_model="claude-sonnet-4-6",
-            allowed_models=["claude-sonnet-4-6"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-sonnet-4-6"],
         ),
         "evolver": SeedRoleSpec(
-            default_model="claude-sonnet-4-6",
-            allowed_models=["claude-sonnet-4-6"],
+            default_model="claude-opus-4-7",
+            allowed_models=["claude-opus-4-7", "claude-sonnet-4-6"],
         ),
         "meta_reviewer": SeedRoleSpec(
             default_model="claude-opus-4-7",
@@ -74,9 +77,9 @@ def _make_manifest() -> SeedGenerationManifest:
     }
     judge_panel = JudgePanelSpec(
         voters=[
-            VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+            VoterSpec(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
             VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
-            VoterSpec(model="claude-haiku-4-5", provider="anthropic", source="api_key"),
+            VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
         ],
         required_diversity_providers=2,
     )
@@ -178,9 +181,11 @@ def test_pick_bindings_voter_panel_resolved() -> None:
         result = pick_bindings(manifest=manifest, overrides={})
     assert len(result.voters) == 3
     sources = {v.source for v in result.voters}
-    # Voters have explicit sources (claude-cli / openai-codex / api_key),
-    # none are "auto" so the OAuth probe doesn't change them.
-    assert sources == {"claude-cli", "openai-codex", "api_key"}
+    # Shipped panel (PR-UPGRADE-ROLES-TOP-TIER 2026-05-26): 2× openai-codex
+    # (gpt-5.5) + 1× claude-cli (claude-opus-4-7). Both diversity gates
+    # are satisfied (providers ≥ 2, paths ≥ 2). None are "auto" so the
+    # OAuth probe doesn't change them.
+    assert sources == {"claude-cli", "openai-codex"}
 
 
 def test_pick_bindings_diversity_providers_count() -> None:
@@ -411,7 +416,8 @@ def test_pick_bindings_rejects_override_model_outside_allowlist() -> None:
     # claude-haiku-4-5 is NOT in generator.allowed_models for this test fixture.
     overrides = {"generator": {"model": "claude-haiku-4-5"}}
     result = pick_bindings(manifest=manifest, overrides=overrides, auto_probe=False)
-    assert result.bindings["generator"].model == "claude-sonnet-4-6"  # default
+    # Default is claude-opus-4-7 after PR-UPGRADE-ROLES-TOP-TIER (2026-05-26).
+    assert result.bindings["generator"].model == "claude-opus-4-7"  # default
 
 
 def test_pick_bindings_rejects_override_source_outside_petri_allowed() -> None:

@@ -52,23 +52,30 @@ functional change.
 - PR-UPGRADE-ROLES-TOP-TIER — operator directive (2026-05-26): every
   seed-generation role default model is now ``claude-opus-4-7`` (the
   Anthropic top tier registered in GEODE's model spec). Replaces the
-  prior cost-tiered defaults that mixed ``claude-sonnet-4-6`` (8
-  roles) and ``claude-haiku-4-5`` (pilot's "cheap-fast inner-loop"
-  slot). The ranker judge panel's anthropic voter also moves from
+  prior cost-tiered defaults that mixed ``claude-sonnet-4-6`` (6
+  roles: generator/critic/proximity/ranker/evolver/literature_review)
+  and ``claude-haiku-4-5`` (pilot's "cheap-fast inner-loop" slot).
+  The ranker judge panel's anthropic voter also moves from
   ``claude-sonnet-4-6`` → ``claude-opus-4-7``; the two ``gpt-5.5``
   voters stay (already the OpenAI top tier per
-  ``core/llm/adapters/_openai_common.py`` registry). ``allowed_models``
-  lists are unchanged so operators retain per-deployment override
-  flexibility via ``~/.geode/config.toml``. Cost impact: per-run
-  spend rises ~3-5x in fan-out phases (generator 15-spawn, pilot
-  per-candidate Petri inner-loop, ranker 59-match × 3-voter panel)
-  but bypasses the smoke 17-21 quality regressions tied to lower-tier
-  models on schema-heavy tasks. Affects: 7 role TOML defaults
-  (generator/critic/proximity/pilot/ranker/evolver/literature_review)
-  + 8 ``_DEFAULT_*_MODEL`` code constants + 1 voter panel entry +
-  ``_DEFAULT_FALLBACK_MODEL`` in ``_registry_builder.py``. The
+  ``core/llm/adapters/_openai_common.py`` registry). The pilot
+  agent's Petri inner-loop ``target_models`` also moves from
+  ``["claude-haiku-4-5", "gpt-5.4-mini"]`` to
+  ``["claude-opus-4-7", "gpt-5.5"]`` (provider-cross top tier kept
+  for variance estimation). ``allowed_models`` lists are unchanged
+  so operators retain per-deployment override flexibility via
+  ``~/.geode/config.toml``. Cost impact: per-run spend rises ~3-5x
+  in fan-out phases (generator 15-spawn, pilot per-candidate Petri
+  inner-loop, ranker 59-match × 3-voter panel), and the 90s
+  pilot wall-time cap will time out more often on opus latency —
+  operators can pin a faster model via the per-role override. The
   codex-OAuth gpt-5.5 empty-output-text defect is unaffected — that
   fix is tracked separately as Sprint G (PR-GPT55-EMPTY-OUTPUT-EMIT).
+  Affects: 7 role TOML defaults + 8 ``_DEFAULT_*_MODEL`` code
+  constants (7 agent files + ``_DEFAULT_FALLBACK_MODEL`` in
+  ``_registry_builder.py``) + 1 judge_panel voter entry + pilot.md
+  prompt's ``target_models`` line. Pinned by
+  ``test_bundled_manifest_all_role_defaults_top_tier``.
 
 ## [0.99.67] - 2026-05-26
 
