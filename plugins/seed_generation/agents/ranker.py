@@ -108,32 +108,29 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
     }
 
 
-# PR-LANE-CAP-CONSERVATIVE (v0.99.75, 2026-05-27) — phase-local
+# PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — phase-local
 # concurrency cap for the ranker's ``asyncio.gather`` match-dispatch
-# burst. Sits on top of the per-adapter lanes (claude_cli=5 /
-# openai_api=10) and is sized to match them exactly so the gather
+# burst. Sits on top of the per-adapter lanes (claude_cli=3 /
+# openai_api=6) and is sized to match them exactly so the gather
 # submission queue doesn't grow a hidden depth.
 #
 # Concurrency budget (default 3-voter panel = 2 codex + 1 claude-cli):
-#   5 matches inflight * 3 voters = 15 voter tasks
-#     - claude-cli tasks: 5 (1 per match) — saturates claude_cli_lane=5
-#     - codex tasks: 10 (2 per match)    — saturates openai_api_lane=10
+#   3 matches inflight * 3 voters = 9 voter tasks
+#     - claude-cli tasks: 3 (1 per match) — saturates claude_cli_lane=3
+#     - codex tasks: 6 (2 per match)     — saturates openai_api_lane=6
 #   Net: all three caps balance with zero queue behind them.
 #
-# Why 5 (and not the previous 50): PR-LANE-CAP-50 (v0.99.74, same-day
-# release) targeted the Anthropic per-account RPM ceiling but ignored
-# local RSS. Each ``claude --print`` spawn is a fresh Node V8 process
-# (~425 MB measured); 50 of them ≈ 21 GB peak anonymous RSS on a
-# 16 GB host. The gen1-broken_tool_use smoke (2026-05-27 04:12 KST)
-# froze the host machine within ~60 s of the ranker's first
-# match-dispatch burst. See ``core/orchestration/claude_cli_lane.py``
-# for the per-lane derivation; this cap stays in lockstep with that
-# lane so the three caps share one rationale.
+# Why 3 (and not the prior v0.99.75 cap 5): cap 5 still needed ~3 GB
+# of free host RAM per burst, but the operator's M3 16 GB host
+# typically has 150-750 MB unused at steady state (Slack / Chrome /
+# Notion all running). Cap 3 brings the peak burst to ~1.5 GB and
+# survives without requiring the operator to close desktop apps
+# first — the "safe default" goal.
 #
 # Operators on bigger hardware should raise all three lockstep,
-# e.g. 32 GB host: ``RANKER_MAX_INFLIGHT_MATCHES=10`` +
-# ``CLAUDE_CLI_LANE_MAX=10`` + ``OPENAI_API_LANE_MAX=20``.
-DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 5
+# e.g. 32 GB host: ``RANKER_MAX_INFLIGHT_MATCHES=6`` +
+# ``CLAUDE_CLI_LANE_MAX=6`` + ``OPENAI_API_LANE_MAX=12``.
+DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 3
 """Default match-dispatch cap sized to the local-RSS-safe ceiling on
 a 16 GB host (see module-level comment). Operator override via
 :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV`."""

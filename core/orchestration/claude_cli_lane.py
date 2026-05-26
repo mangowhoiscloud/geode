@@ -26,13 +26,17 @@ lane is too restrictive for non-Claude-CLI traffic (API-billed
 Anthropic / OpenAI completions). The two flows need separate caps,
 which is why this lane sits alongside ``global`` rather than under it.
 
-Why ``max_concurrent=5`` (PR-LANE-CAP-CONSERVATIVE, v0.99.75, 2026-05-27)
-========================================================================
+Why ``max_concurrent=3`` (PR-LANE-CAP-TIGHTER, v0.99.76, 2026-05-27)
+====================================================================
 
-Lowered from 50 (PR-LANE-CAP-50, same-day release v0.99.74) to **5**
-after the ranker smoke on a 16 GB M3 froze the host machine. The
-upstream rate-limit reasoning (Anthropic 50 RPM tier ceiling) was
-correct in isolation but ignored a tighter floor — **local RAM**.
+v0.99.75 dropped this from 50 to 5 after the freeze, but cap 5 still
+required ~3 GB of free host RAM per burst (5 × ~487 MB per match).
+The operator's M3 16 GB host typically has **150-750 MB unused** at
+steady state (with normal desktop apps + Claude Code + Slack /
+Chrome / Notion running), so cap 5 still demands an explicit
+cleanup pass before each smoke — which defeats the "safe default"
+goal. Cap 3 brings the burst to ~1.5 GB and survives without the
+cleanup ritual.
 
 **Measured local cost** (M3 16 GB, 2026-05-27):
 
@@ -40,27 +44,21 @@ correct in isolation but ignored a tighter floor — **local RAM**.
   deps; fresh process each spawn — see
   `paperclip/packages/adapter-utils/src/server-utils.ts:1943` for the
   canonical `child_process.spawn` pattern this lane shadow-fires).
-* Ranker burst at cap 50 with 3-voter panel = 50 matches × 1 claude
-  voter = 50 × 425 MB ≈ **21 GB anonymous RSS** on a 16 GB box. macOS
-  enters compressor thrash within ~60s, paging unrelated apps out, host
-  freezes.
-
-**Cap derivation**: Operator's realistic burst budget after closing
-heavy desktop apps (Slack/Chrome/Notion) ≈ 3 GB. Per-match cost =
-1 claude (425 MB) + 2 codex (62 MB) = ~487 MB. ``3 GB / 487 MB ≈ 6.3``
-→ cap 5 keeps peak burst at ~2.4 GB with a 0.7 GB safety margin
-before compressor pressure becomes pathological.
+* Cap 3 burst: 3 matches × ~487 MB ≈ **1.5 GB peak anonymous RSS**.
+  Fits in the operator's typical "no-cleanup" headroom + compressor
+  give-back.
 
 **Trade-off**: Ranker phase wall-clock grows from ~1 min (cap 50)
-to ~12-25 min for a 50-match Loop 1. Acceptable for nightly /
-autonomous smokes; painful for dev iteration — operators on larger
-boxes (32 GB+) should override via
-:data:`CLAUDE_CLI_LANE_MAX_ENV` (e.g. ``=20`` for 64 GB Mac Studio).
+to ~20-40 min for a 50-match Loop 1. Acceptable for nightly /
+autonomous smokes; operators with larger boxes (32 GB+) or who
+*have* done a heavy-app cleanup should override via
+:data:`CLAUDE_CLI_LANE_MAX_ENV` (e.g. ``=6`` for 32 GB, ``=20+``
+for 64 GB Mac Studio).
 
-**Upstream rate-limit headroom**: Even at cap 5, steady-state
-throughput against Anthropic's 5h pool sits well below the
-documented per-account ceiling, so neither floor (RPM nor token
-pool) is the binding constraint — the local RSS one is.
+**Upstream rate-limit headroom**: At cap 3 the steady-state
+throughput against Anthropic's 5h pool sits orders of magnitude
+below the documented per-account ceiling, so neither floor (RPM nor
+token pool) is the binding constraint — the local RSS one is.
 
 Why module-level (not LaneQueue-registered)
 ===========================================
@@ -132,24 +130,21 @@ silently fall back to the default — the lane should never harden into
 "no slots" mid-run because of a typo.
 """
 
-DEFAULT_CLAUDE_CLI_LANE_MAX = 5
-"""PR-LANE-CAP-CONSERVATIVE (v0.99.75, 2026-05-27) — lowered from 50.
+DEFAULT_CLAUDE_CLI_LANE_MAX = 3
+"""PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — lowered from 5.
 
-The previous PR-LANE-CAP-50 default targeted the Anthropic per-account
-RPM ceiling but ignored local RSS: each ``claude --print`` spawn loads
-a fresh Node V8 (~425 MB resident, measured on the host that froze).
-50 × 425 MB ≈ 21 GB peak anonymous RSS on a 16 GB box → macOS
-compressor thrash → host freeze (incident: gen1-broken_tool_use
-ranker phase, 2026-05-27 04:12 KST).
-
-Cap 5 derives from realistic local headroom (~3 GB after closing
-heavy desktop apps) ÷ per-match cost (~487 MB = 1 claude + 2 codex)
-with a 0.7 GB safety margin. Trade-off — ranker phase wall-clock
-~12-25× slower than cap 50, but the host survives.
+v0.99.75 dropped this from 50 to 5 after the gen1-broken_tool_use
+freeze (Node V8 spawn cost ~425 MB × 50 ≈ 21 GB peak on a 16 GB
+box). Empirically, even cap 5 needs ~3 GB of host headroom (5 ×
+~487 MB per match) that the operator's M3 16 GB rarely has free
+without explicit desktop-app cleanup — the *steady state* PhysMem
+unused on this host hovers around 150-750 MB during normal work.
+Cap 3 keeps the burst to ~1.5 GB which survives without requiring
+the operator to close Slack / Chrome / Notion first.
 
 Operator override via :data:`CLAUDE_CLI_LANE_MAX_ENV`:
-* 16 GB box (this default): leave at 5.
-* 32 GB box: raise to ~10.
+* 16 GB box (this default): leave at 3.
+* 32 GB box: raise to ~6.
 * 64 GB+ Mac Studio / Linux server: raise to 20-50.
 * The Anthropic RPM ceiling kicks in well above any local-RSS-safe
   cap on consumer hardware, so this knob is for memory, not quota."""
