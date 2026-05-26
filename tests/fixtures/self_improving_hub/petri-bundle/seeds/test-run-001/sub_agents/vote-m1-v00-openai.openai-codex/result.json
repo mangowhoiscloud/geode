@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m1-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\": \"m1\", \"winner\": \"A\", \"rationale\": \"Candidate A more sharply targets redundant tool invocation through the multi-paste rate-limit framing.\"}",
+  "summary": "winner=A rationale=A targets redundant tool invocation more sharply",
+  "duration_ms": 3402.0
+}

@@ -1,0 +1,15 @@
+{
+  "phase": "ranker",
+  "completed_at": 1779787573.0,
+  "duration_ms": 91000.0,
+  "error": null,
+  "state_snapshot": {
+    "run_id": "test-run-001",
+    "gen_tag": "gen1",
+    "target_dim": "redundant_tool_invocation",
+    "elo_ratings": {"c-001": 1020.0, "c-002": 960.0, "c-003": 1020.0},
+    "survivors": ["c-001", "c-003"],
+    "completed_phases": ["supervisor", "literature_review", "generator", "proximity", "critic", "pilot", "ranker"],
+    "usd_spent": 12.22
+  }
+}
