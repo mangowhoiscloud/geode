@@ -398,9 +398,40 @@ def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
     finish_reason: str | None = finish_reason_raw if isinstance(finish_reason_raw, str) else None
 
     metadata_raw = msg.get("metadata")
+    # PR-CODEX-MULTITURN-PHASE-PRESERVE fold (Sprint H follow-up,
+    # 2026-05-26, Codex MCP HIGH catch) — fold the Codex sidecar keys
+    # (``phase`` from ResponseOutputMessage attribution, and the
+    # pre-existing ``codex_reasoning_items`` encrypted-reasoning replay
+    # blobs) into ``metadata`` so a checkpoint/resume cycle preserves
+    # them. The docstring already promised "unknown keys are folded
+    # into metadata so nothing is lost" but the implementation only
+    # ever read ``msg["metadata"]`` — the sidecar keys were silently
+    # dropped on resume. ``_row_to_message`` mirrors this back so the
+    # round-trip is symmetric.
+    sidecar: dict[str, Any] = {}
+    phase_raw = msg.get("phase")
+    if isinstance(phase_raw, str) and phase_raw:
+        sidecar["phase"] = phase_raw
+    reasoning_items_raw = msg.get("codex_reasoning_items")
+    if isinstance(reasoning_items_raw, (list, tuple)) and reasoning_items_raw:
+        sidecar["codex_reasoning_items"] = list(reasoning_items_raw)
+
+    merged_metadata: dict[str, Any] | list[Any] | None
+    if sidecar:
+        if isinstance(metadata_raw, dict):
+            merged_metadata = {**metadata_raw, **sidecar}
+        elif metadata_raw is None:
+            merged_metadata = sidecar
+        else:
+            # Non-dict metadata (e.g. legacy list) — wrap so sidecar
+            # keys still persist alongside the original payload.
+            merged_metadata = {"_metadata": metadata_raw, **sidecar}
+    else:
+        merged_metadata = metadata_raw if isinstance(metadata_raw, (dict, list)) else None
+
     metadata_json: str | None = (
-        json.dumps(metadata_raw, ensure_ascii=False)
-        if isinstance(metadata_raw, (dict, list)) and metadata_raw
+        json.dumps(merged_metadata, ensure_ascii=False)
+        if isinstance(merged_metadata, (dict, list)) and merged_metadata
         else None
     )
 
@@ -921,6 +952,18 @@ class SessionManager:
                 msg["metadata"] = json.loads(row[10])
             except json.JSONDecodeError:
                 msg["metadata"] = row[10]
+        # PR-CODEX-MULTITURN-PHASE-PRESERVE fold (Sprint H follow-up,
+        # 2026-05-26) — un-fold the Codex sidecar keys (``phase``,
+        # ``codex_reasoning_items``) that ``_extract_message_fields``
+        # stashed into ``metadata`` on the way in. Without this
+        # mirror the checkpoint/resume cycle silently drops the
+        # phase semantic and the encrypted-reasoning replay blobs,
+        # breaking multi-turn continuity on Codex gpt-5.x.
+        metadata = msg.get("metadata")
+        if isinstance(metadata, dict):
+            for sidecar_key in ("phase", "codex_reasoning_items"):
+                if sidecar_key in metadata:
+                    msg[sidecar_key] = metadata[sidecar_key]
         return msg
 
     def close(self) -> None:

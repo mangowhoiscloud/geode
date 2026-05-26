@@ -87,6 +87,15 @@ class Message:
     content: str | list[dict[str, Any]]
     tool_use_id: str | None = None
     codex_reasoning_items: tuple[dict[str, Any], ...] = ()
+    # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
+    # — per-message phase attribution captured from the prior Codex
+    # turn. OpenAI Responses API's ``ResponseOutputMessage`` carries
+    # ``phase: Literal["commentary", "final_answer"]``; that field
+    # appears symmetrically on ``EasyInputMessageParam`` so the
+    # adapter can replay the semantic attribution to the next turn.
+    # Empty string = no phase (skip the field on output dict).
+    # Codex adapter is the only producer; other adapters leave empty.
+    phase: str = ""
 
 
 @dataclass(frozen=True)
@@ -187,6 +196,17 @@ class AdapterCallResult:
     raw_response: Any = None
     reasoning_items: tuple[dict[str, Any], ...] = ()
     reasoning_summaries: tuple[str, ...] = ()
+    # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
+    # — per-response phase attribution from the Codex Responses API
+    # ``ResponseOutputMessage.phase`` field
+    # (Literal["commentary", "final_answer"]). Captured by
+    # ``translate_codex_response`` from the SSE-accumulated message
+    # item. Empty string when the response had no phase set or the
+    # adapter isn't Codex. The legacy bridge forwards this into
+    # :attr:`core.llm.agentic_response.AgenticResponse.assistant_phase`
+    # so the AgenticLoop can persist it on the next-turn message dict
+    # for multi-turn replay.
+    assistant_phase: str = ""
     # PR-V (2026-05-24, spec doc §3) — sessionId emitted by claude-cli's
     # ``system.init`` event (paperclip ``parse.ts:30``). Callers persist
     # this so the next turn can resume the same backend session via
