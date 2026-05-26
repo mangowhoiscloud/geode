@@ -68,6 +68,15 @@ functional change.
   and dispatches only the remaining matches. Pinned by checkpointer,
   resume, and Ranker invariants for round-trip, stale-plan rejection,
   final partial dump, and no replay of completed matches.
+- **PR-RANKER-DEDUP-POST-ELO** — seed-generation now applies an
+  open-coscientist-aligned post-Ranker survivor dedup pass before
+  Evolver dispatch. Within each high-similarity survivor cluster,
+  GEODE keeps the best candidate by ``(elo_rating, sum(dim_means),
+  candidate_id)``, removes lower-ranked near-duplicates from
+  ``state.survivors``, and appends audit rows to
+  ``state.removed_duplicates``. Pinned by pure helper and Pipeline
+  invariants covering Elo priority, Pilot-score tie-breaks, survivor
+  filtering, and non-high / non-survivor preservation.
 
 ### Fixed
 
