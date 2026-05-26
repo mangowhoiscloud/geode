@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.69] - 2026-05-26
+
+Single-fix PATCH rotation. Ships PR-GPT55-EMPTY-OUTPUT-EMIT
+(Sprint G) — codex-OAuth gpt-5.5 voter ``effort="low"`` →
+``"none"`` after smoke 21 confirmed the prior pin ineffective.
+Smoke 22 will validate end-to-end.
+
 ### Fixed
 
 - PR-GPT55-EMPTY-OUTPUT-EMIT (Sprint G) — codex-OAuth gpt-5.5 voter
