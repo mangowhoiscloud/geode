@@ -80,6 +80,20 @@ functional change.
 
 ### Fixed
 
+- **PR-HUB-DOCS-LINK-FIX** — the self-improving hub's DOCS sidebar pointed
+  at two Next.js routes that don't exist: ``/geode/docs/petri`` (no
+  ``overview`` suffix, returned 404) and ``/geode/docs/petri/dimensions``
+  (wrong slug, the real route is ``judge-dimensions``). Operator
+  surfaced the bug after the v0.99.71 production deploy. Rewrites both
+  in the four hub templates (``index.html.template`` + 3 autoresearch
+  ``.template`` + ``run.html.template``) and the 9 already-emitted
+  pages under ``docs/self-improving/``, plus the inspect_ai SPA
+  landing card at ``docs/self-improving/petri-bundle/landing.html``.
+  Pinned by new ``test_docs_petri_links_match_next_routes`` which
+  enumerates every ``/geode/docs/petri/<slug>`` href in the built HTML
+  and asserts ``slug ∈ {dir.name for dir in site/src/app/docs/petri/}``,
+  so a future Next.js rename or hub typo fails the gate before merge.
+
 - **PR-FIX-CHATGPT-PLAN-HALLUCINATION** — ChatGPT OAuth plan display now
   resolves the JWT ``chatgpt_plan_type`` slug into a product label
   instead of leaking raw slugs or hard-coding Plus. ``chatgpt_plan_label``
