@@ -169,3 +169,99 @@ def test_voter_spec_invalid_source_still_rejected_after_effort_addition() -> Non
     existing ``source="auto"`` rejection."""
     with pytest.raises(ValueError, match="auto"):
         VoterSpec(model="m", provider="anthropic", source="auto", effort="low")
+
+
+def test_voter_spec_rejects_invalid_effort_value() -> None:
+    """Codex MCP catch — operator typo (e.g. ``"loww"``) must fail at
+    manifest load, not silently flow to the server."""
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex", effort="loww")
+
+
+def test_voter_spec_accepts_all_documented_effort_values() -> None:
+    """Every value in the OpenAI Responses API documented enum + empty
+    sentinel must pass the validator."""
+    for effort in ("", "none", "minimal", "low", "medium", "high", "xhigh"):
+        v = VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex", effort=effort)
+        assert v.effort == effort
+
+
+def test_config_toml_voter_overrides_full_panel_replacement(tmp_path) -> None:
+    """Codex MCP HIGH catch — config.toml
+    ``[[seed_generation.judge_panel.voters]]`` must actually replace
+    the bundled manifest's voter list. Pre-fold the picker ignored
+    this section so the advertised operator override didn't work."""
+    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "gpt-5.5"\n'
+        'provider = "openai"\n'
+        'source = "openai-codex"\n'
+        'effort = "low"\n'
+        "\n"
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "claude-opus-4-7"\n'
+        'provider = "anthropic"\n'
+        'source = "claude-cli"\n'
+        'effort = "high"\n',
+        encoding="utf-8",
+    )
+    overrides = _load_config_toml_voter_overrides(cfg)
+    assert overrides is not None
+    assert len(overrides) == 2
+    assert overrides[0].model == "gpt-5.5"
+    assert overrides[0].effort == "low"
+    assert overrides[1].model == "claude-opus-4-7"
+    assert overrides[1].effort == "high"
+
+
+def test_config_toml_voter_overrides_missing_returns_none(tmp_path) -> None:
+    """When config.toml has no ``[[seed_generation.judge_panel.voters]]``
+    section the loader returns ``None`` so pick_bindings falls back to
+    the bundled manifest."""
+    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        '[seed_generation.role.generator]\nmodel = "claude-opus-4-7"\n',
+        encoding="utf-8",
+    )
+    overrides = _load_config_toml_voter_overrides(cfg)
+    assert overrides is None
+
+
+def test_config_toml_voter_overrides_missing_file_returns_none(tmp_path) -> None:
+    """Missing config.toml entirely → None."""
+    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+
+    overrides = _load_config_toml_voter_overrides(tmp_path / "nope.toml")
+    assert overrides is None
+
+
+def test_config_toml_voter_overrides_invalid_entry_skipped(tmp_path) -> None:
+    """A voter entry with bad effort is dropped (with a WARN) rather
+    than killing the whole load — operator can still bring up the
+    panel if one entry typo'd."""
+    from plugins.seed_generation.picker import _load_config_toml_voter_overrides
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "gpt-5.5"\n'
+        'provider = "openai"\n'
+        'source = "openai-codex"\n'
+        'effort = "BOGUS_EFFORT"\n'
+        "\n"
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "claude-opus-4-7"\n'
+        'provider = "anthropic"\n'
+        'source = "claude-cli"\n',
+        encoding="utf-8",
+    )
+    overrides = _load_config_toml_voter_overrides(cfg)
+    assert overrides is not None
+    # Only the valid entry survives.
+    assert len(overrides) == 1
+    assert overrides[0].model == "claude-opus-4-7"

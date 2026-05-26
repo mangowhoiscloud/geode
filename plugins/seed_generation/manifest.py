@@ -152,6 +152,26 @@ class VoterSpec(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _effort_in_enum(self) -> VoterSpec:
+        """Validate effort against the OpenAI Responses API documented
+        enum at manifest load time so an operator typo (e.g. ``"loww"``)
+        fails fast instead of surfacing as a 400 from the server at
+        ranker dispatch. Empty string is the sentinel meaning "use the
+        caller default" (ranker / mutation_eval pin ``"none"``).
+        Per-model availability (e.g. gpt-5.4 only ``low/medium/high``)
+        is enforced separately by the adapter at request time.
+        (Codex MCP catch — Sprint G/H follow-up, 2026-05-26.)
+        """
+        valid = {"", "none", "minimal", "low", "medium", "high", "xhigh"}
+        if self.effort not in valid:
+            raise ValueError(
+                f"voter ({self.model}, {self.provider}) effort={self.effort!r} "
+                f"is not a recognised OpenAI Responses API reasoning_effort "
+                f"value; expected one of {sorted(valid - {''})} or empty."
+            )
+        return self
+
 
 class JudgePanelSpec(BaseModel):
     """Ranker phase's 3-voter panel + diversity gate."""
