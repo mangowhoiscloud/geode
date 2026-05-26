@@ -2147,17 +2147,34 @@ def _revert_sot_after_reject(
     file I/O error) log a WARNING and return ``(False, reason)`` so the
     caller can surface the leak status in the audit's promoted_line.
     """
+    from typing import cast
+
     from core.self_improving_loop.mutations_reader import iter_mutations
     from core.self_improving_loop.policies import load_policy, write_policy
     from core.self_improving_loop.runner import ApplyRecord
 
+    # Note on type narrowing: ``iter_mutations(kinds={"applied"})``
+    # filters at the reader's discriminator (mutations_reader._parse_row)
+    # so every yielded row is an ApplyRecord. We avoid ``isinstance``
+    # because under pytest-cov import instrumentation the ApplyRecord
+    # class identity can drift between writer-side (mutations_reader's
+    # module-cached import) and reader-side (our function-local import),
+    # making isinstance False even when the row is structurally
+    # identical (CI failure on PR #1749 first attempt, 2026-05-26).
+    # ``cast`` gives mypy the narrowing without a runtime identity check.
     apply_row: ApplyRecord | None = None
+    target_kind = ""
+    target_section = ""
+    previous_value = ""
     # iter_mutations yields in file order (append-only); keep the LAST
     # match so a re-applied mutation_id (rare; mutator should mint a
     # fresh id) reverts to the most recent previous_value.
     for row in iter_mutations(audit_log_path, kinds={"applied"}):
-        if isinstance(row, ApplyRecord) and row.mutation_id == mutation_id:
-            apply_row = row
+        if row.mutation_id == mutation_id:
+            apply_row = cast(ApplyRecord, row)
+            target_kind = apply_row.target_kind
+            target_section = apply_row.target_section
+            previous_value = apply_row.previous_value
 
     if apply_row is None:
         log.warning(
@@ -2165,10 +2182,6 @@ def _revert_sot_after_reject(
             mutation_id,
         )
         return False, f"mutation_id {mutation_id!r} not found"
-
-    target_kind = apply_row.target_kind
-    target_section = apply_row.target_section
-    previous_value = apply_row.previous_value
 
     # Insertion-vs-replacement parity: ``apply_mutation`` (runner.py:949-994)
     # records ``previous_value = sections.get(target_section, "")``, so an
