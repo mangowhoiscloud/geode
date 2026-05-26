@@ -1354,6 +1354,30 @@ def append_audit_log(
     validated = ApplyRecord.model_validate(row).model_dump(exclude_none=True)
     with target.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(validated, ensure_ascii=False) + "\n")
+    # PR-MUTATION-EMIT-WIRE (2026-05-27) — emit MUTATION_APPLIED *after*
+    # the row write succeeds. The reserve docstring on
+    # ``HookEvent.MUTATION_APPLIED`` (core/hooks/system.py:285-287)
+    # documents the payload schema:
+    #   {"mutation_id": str, "target_kind": str, "target_path": str,
+    #    "ts": float, "run_id": str}
+    # ``kind`` rides as an extra field so listeners can distinguish
+    # ``"applied"`` (the canonical SoT-committed mutation) from
+    # ``"applied_sibling"`` / ``"pre_audit_sibling"`` (group sampling
+    # variants, no SoT effect but still part of the experiment record).
+    from core.hooks.system import HookEvent
+    from core.self_improving_loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.MUTATION_APPLIED,
+        {
+            "mutation_id": mutation.mutation_id,
+            "target_kind": mutation.target_kind,
+            "target_path": str(target),
+            "ts": time.time(),
+            "run_id": audit_run_id,
+            "kind": kind,
+        },
+    )
     return target
 
 
@@ -2031,6 +2055,8 @@ class SelfImprovingLoopRunner:
                     best_proposal.original_sections,
                     mutation=best_proposal.mutation,
                     exc=exc,
+                    audit_run_id=audit_run_ids[best_idx],
+                    reason="audit_log_write_fail",
                 )
                 raise
 
@@ -2213,7 +2239,13 @@ class SelfImprovingLoopRunner:
                 sub_agent_index=sub_agent_index,
             )
         except OSError as exc:
-            self._rollback_sot(proposal.original_sections, mutation=proposal.mutation, exc=exc)
+            self._rollback_sot(
+                proposal.original_sections,
+                mutation=proposal.mutation,
+                exc=exc,
+                audit_run_id=audit_run_id,
+                reason="audit_log_write_fail",
+            )
             raise
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
@@ -2277,6 +2309,8 @@ class SelfImprovingLoopRunner:
         *,
         mutation: Mutation,
         exc: BaseException,
+        audit_run_id: str = "",
+        reason: str = "post_apply_failure",
     ) -> None:
         """Restore the SoT to ``original_sections`` after a post-apply failure.
 
@@ -2326,6 +2360,34 @@ class SelfImprovingLoopRunner:
                 mutation.target_kind,
                 mutation.target_section,
             )
+            # PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27) — emit
+            # MUTATION_REVERTED after the rollback succeeds. PR-MUTATION-EMIT-WIRE
+            # (2026-05-27) covered only the promote-gate reject path
+            # (autoresearch/train.py:_revert_sot_after_reject). This site
+            # covers the symmetric audit-fail / audit-log-write-fail paths
+            # so the observability ledger never sees a mutation that was
+            # APPLIED but never REVERTED (silent SoT roll-back).
+            #
+            # ``reason`` is a free-form caller-supplied string (e.g.
+            # ``"audit_log_write_fail"`` / ``"audit_subprocess_crash"`` /
+            # ``"audit_subprocess_nonzero"``) so downstream readers can
+            # distinguish the trigger; default ``"post_apply_failure"``
+            # keeps the contract usable for callers that don't yet thread
+            # a specific reason.
+            from core.hooks.system import HookEvent
+            from core.self_improving_loop._hooks import _fire_hook
+
+            _fire_hook(
+                HookEvent.MUTATION_REVERTED,
+                {
+                    "mutation_id": mutation.mutation_id,
+                    "target_kind": mutation.target_kind,
+                    "target_path": f"{mutation.target_kind}.{mutation.target_section}",
+                    "ts": time.time(),
+                    "run_id": audit_run_id,
+                    "reason": reason,
+                },
+            )
         except Exception:  # pragma: no cover — defensive
             log.exception(
                 "self-improving-loop runner: audit-log write failed (%s) AND "
@@ -2374,7 +2436,13 @@ class SelfImprovingLoopRunner:
         except Exception as exc:
             log.warning("self-improving-loop autoresearch re-run failed", exc_info=True)
             if original_sections is not None and mutation is not None:
-                self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+                self._rollback_sot(
+                    original_sections,
+                    mutation=mutation,
+                    exc=exc,
+                    audit_run_id=audit_run_id,
+                    reason="audit_subprocess_crash",
+                )
             return
         if result.returncode != 0:
             log.warning(
@@ -2388,6 +2456,8 @@ class SelfImprovingLoopRunner:
                     original_sections,
                     mutation=mutation,
                     exc=RuntimeError(f"audit subprocess exit code {result.returncode}"),
+                    audit_run_id=audit_run_id,
+                    reason="audit_subprocess_nonzero",
                 )
 
     @staticmethod

@@ -92,6 +92,18 @@ functional change.
   mutator now writes to the same layer the runtime reads, preserving
   the autoresearch ``mutate → measure → baseline`` closed-loop visibility.
   Pin: ``_READER_ONLY_KINDS`` size assertion drops from 7 to 6.
+- **PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27)** — extend
+  MUTATION_REVERTED emit coverage to the symmetric ``_rollback_sot``
+  paths (audit-log-write-fail / audit-subprocess-crash /
+  audit-subprocess-nonzero). PR-MUTATION-EMIT-WIRE only covered the
+  promote-gate reject path (``autoresearch/train.py:_revert_sot_after_reject``);
+  the four ``_rollback_sot`` caller sites in
+  ``core/self_improving_loop/runner.py`` were left without emit. Added
+  ``audit_run_id`` + ``reason`` keyword args to ``_rollback_sot`` and
+  threaded specific reason strings (``audit_log_write_fail`` x2 /
+  ``audit_subprocess_crash`` / ``audit_subprocess_nonzero``) from each
+  caller. Pinned with ``tests/core/self_improving_loop/test_mutation_emit_wire.py::test_rollback_sot_emits_mutation_reverted``
+  (3 reason variants + default fallback).
 
 ### Fixed
 - **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route
@@ -108,6 +120,38 @@ functional change.
   the Anthropic Max OAuth pool replenished. Pinned with two new
   ``tests/test_model_failover.py`` cases (retry-within-primary +
   retries-exhausted-then-fall-back).
+
+### Added
+- **PR-MUTATION-EMIT-WIRE (2026-05-27)** — wire the writer-side emit
+  for ``HookEvent.MUTATION_APPLIED`` / ``MUTATION_REVERTED`` /
+  ``BASELINE_PROMOTED``. PR-HOOKEVENT-RESERVE (2026-05-26) added the
+  enum members + payload schema docstrings but left the emit sites
+  un-wired ("writers will emit these once the SoT-revert paths land").
+  This PR fills the gap:
+  - ``core/self_improving_loop/_hooks.py`` — new module mirroring
+    ``core/llm/router/_hooks.py``: ``set_self_improving_loop_hooks``
+    setter + ``_fire_hook`` helper with lazy-wire no-op contract.
+  - ``core/wiring/bootstrap.py`` — registers a plugin slot that calls
+    the new setter after ``HookSystem`` is constructed.
+  - ``core/self_improving_loop/runner.py:append_audit_log`` — emits
+    ``MUTATION_APPLIED`` after the row write succeeds (fires for every
+    ``kind`` so listeners distinguish ``"applied"`` / ``"applied_sibling"`` /
+    ``"pre_audit_sibling"`` via the ``kind`` extra field).
+  - ``autoresearch/train.py:_write_baseline`` — emits
+    ``BASELINE_PROMOTED`` after ``BASELINE_PATH.write_text`` succeeds,
+    with ``prior_baseline_path`` read pre-write + ``reason`` quoting
+    ``operator_force`` vs ``gate_approved``.
+  - ``autoresearch/train.py:_revert_sot_after_reject`` — emits
+    ``MUTATION_REVERTED`` with ``reason="promote_gate_reject"`` after
+    the SoT roll-back succeeds. ``run_id`` carries the audit_run_id
+    (not the mutation_id). Covers the promotion-gate reject path.
+    The audit-subprocess-crash revert path uses ``_rollback_sot``
+    in ``runner.py`` and is deferred to a follow-up PR.
+  Pinned with new ``tests/core/self_improving_loop/test_mutation_emit_wire.py``:
+  no-op-when-unwired + dispatch-when-wired + ``append_audit_log``
+  emit (``"applied"`` + ``"applied_sibling"``) + ``_write_baseline``
+  emit (BASELINE_PROMOTED) + ``_revert_sot_after_reject`` emit
+  (MUTATION_REVERTED, ``run_id`` = audit_run_id).
 
 ## [0.99.73] - 2026-05-27
 
