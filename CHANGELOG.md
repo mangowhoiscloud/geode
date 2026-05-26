@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.72] - 2026-05-26
+
+MINOR rotation. Ships PR-SEEDS-HIRES P1+P2+P3 — operator directive
+2026-05-26 to lift seed-generation hub to extreme resolution (every
+agent conversation, every procedure, active runs + current step,
+per-candidate phase evolution, every ranker match outcome). Plus
+the attribution sprint Phase A bundle: PR-GEN-COUNTER, PR-WIRE-1,
+PR-ATTR-INSPIRED-BY, PR-SMOKE-LOG-FLAG, PR-HOOKEVENT-RESERVE,
+PR-SOT-REVERT-ON-REJECT, PR-SOT-REVERT-ON-AUDIT-FAIL, and the
+ranker-parallel-lanes change. See section entries below.
+
 ### Changed
 
 - **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
