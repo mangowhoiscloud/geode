@@ -5,7 +5,7 @@ Pinned 2026-04-28 against:
   - openai-python ``responses/response_create_params.py:70-74``
     (``reasoning.encrypted_content`` semantics under ``store=False``)
   - openai-python ``responses/response_includable.py`` (include enum)
-  - Codex Plus parity: ``core/llm/providers/codex.py:347-348``
+  - Codex parity: ``core/llm/providers/codex.py:347-348``
 
 Verifies:
   1. ``_is_payg_reasoning_model`` gates gpt-5.x + o-series only.

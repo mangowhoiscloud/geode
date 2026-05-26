@@ -3,7 +3,7 @@
 Pre-fix the equivalence map (``openai ↔ openai-codex``,
 ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users saw the
 ``provider`` label in ``/login`` / ``/model`` and had no way to discover
-that a Codex Plus token and an OpenAI PAYG key both serve a ``gpt-5.x``
+that a Codex token and an OpenAI PAYG key both serve a ``gpt-5.x``
 request, or that a GLM Coding key shadows the PAYG endpoint.
 
 Contracts pinned here:

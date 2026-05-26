@@ -1,6 +1,6 @@
 """v0.52.5 — Provider switching E2E (3C2 cross-provider + 2 within-provider).
 
-GEODE supports 3 providers (OpenAI Codex Plus OAuth, Anthropic API key,
+GEODE supports 3 providers (OpenAI Codex OAuth, Anthropic API key,
 GLM Coding Plan/PAYG) and 2 within-provider Plan switches (Codex↔PAYG,
 Coding↔PAYG). v0.52.4 introduced plan-aware routing with kind-priority
 sort, so the routing-policy test suite already covers the *first*
@@ -10,10 +10,10 @@ endpoint, or A's credentials into B's call?
 
 5 paths covered:
 
-  Path A — Codex Plus OAuth → Anthropic API key  (cross-provider)
-  Path B — Codex Plus OAuth → GLM Coding Plan    (cross-provider)
+  Path A — Codex OAuth → Anthropic API key  (cross-provider)
+  Path B — Codex OAuth → GLM Coding Plan    (cross-provider)
   Path C — Anthropic        → GLM                (cross-provider)
-  Path D — Codex Plus OAuth → OpenAI PAYG        (within-provider Plan)
+  Path D — Codex OAuth → OpenAI PAYG        (within-provider Plan)
   Path E — GLM Coding       → GLM PAYG           (within-provider Plan)
 
 Each path asserts five contracts:
@@ -205,16 +205,16 @@ def isolated_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 # ---------------------------------------------------------------------------
-# Path A — Codex Plus OAuth → Anthropic API key (cross-provider)
+# Path A — Codex OAuth → Anthropic API key (cross-provider)
 # ---------------------------------------------------------------------------
 
 
 def test_path_a_codex_oauth_to_anthropic_apikey(isolated_auth) -> None:
-    """User on Codex Plus does ``/model claude-opus-4-7`` → Anthropic API."""
+    """User on Codex subscription does ``/model claude-opus-4-7`` → Anthropic API."""
     _register_codex_oauth()
     _register_anthropic_payg()
 
-    # Origin: gpt-5.5 routes to Codex Plus.
+    # Origin: gpt-5.5 routes to Codex.
     origin = resolve_routing("gpt-5.5")
     assert origin is not None
     assert origin.plan.provider == "openai-codex"
@@ -231,7 +231,7 @@ def test_path_a_codex_oauth_to_anthropic_apikey(isolated_auth) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Path B — Codex Plus OAuth → GLM Coding Plan (cross-provider)
+# Path B — Codex OAuth → GLM Coding Plan (cross-provider)
 # ---------------------------------------------------------------------------
 
 
@@ -273,12 +273,12 @@ def test_path_c_anthropic_to_glm(isolated_auth) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Path D — Codex Plus OAuth → OpenAI PAYG (within-provider Plan switch)
+# Path D — Codex OAuth → OpenAI PAYG (within-provider Plan switch)
 # ---------------------------------------------------------------------------
 
 
 def test_path_d_codex_oauth_to_openai_payg_within_provider(isolated_auth) -> None:
-    """Both Plans registered. Default routing prefers Codex Plus (OAuth) for
+    """Both Plans registered. Default routing prefers Codex (OAuth) for
     gpt-5.4 per kind-priority. After ``/login route gpt-5.4 openai-payg``
     explicit override the same model must route to PAYG."""
     _register_codex_oauth()

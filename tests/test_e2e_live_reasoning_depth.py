@@ -7,7 +7,7 @@ None of these tests run by default (`@pytest.mark.live`); run with:
     uv run pytest tests/test_e2e_live_reasoning_depth.py -v -m live
 
 Coverage:
-  - R1 (v0.55.0): Codex Plus ``encrypted_content`` round-trip.
+  - R1 (v0.55.0): Codex ``encrypted_content`` round-trip.
   - R2 (v0.58.0): GLM ``thinking`` field + ``reasoning_content`` extraction.
   - R3-mini (v0.60.0): PAYG OpenAI ``include`` + ``summary="auto"``.
   - R4-mini (v0.56.0): Anthropic adaptive-thinking ``effort=xhigh`` on Opus 4.7.
@@ -209,7 +209,7 @@ class TestGlmThinkingLive:
 
 
 # ---------------------------------------------------------------------------
-# R1 + R6 — Codex Plus encrypted reasoning (subscription path)
+# R1 + R6 — Codex encrypted reasoning (subscription path)
 # ---------------------------------------------------------------------------
 
 

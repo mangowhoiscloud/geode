@@ -49,6 +49,22 @@ functional change.
 
 ### Fixed
 
+- **PR-FIX-CHATGPT-PLAN-HALLUCINATION** — ChatGPT OAuth plan display now
+  resolves the JWT ``chatgpt_plan_type`` slug into a product label
+  instead of leaking raw slugs or hard-coding Plus. ``chatgpt_plan_label``
+  maps known tiers (Free / Plus / Pro / Pro Lite / Team / Business /
+  Enterprise / Edu), preserves a generic ``ChatGPT subscription`` fallback,
+  and title-cases future unknown slugs. ``/login openai`` now emits
+  ``Plan: ChatGPT Pro Lite`` for ``prolite`` accounts, the ``/login``
+  dashboard renders OpenAI Codex plan bindings with the same label, and
+  the credential-source display no longer formats raw ``ChatGPT prolite``.
+  Generic docs, comments, hub chips, and tests now refer to ChatGPT
+  subscription / Codex subscription paths rather than pretending every
+  OAuth account is Plus. Pinned by
+  ``tests/core/auth/test_chatgpt_plan_label.py``,
+  ``tests/test_login_plan_binding.py``, and
+  ``tests/test_oauth_path_display.py``.
+
 - **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
   longer collapses repeated audits at the same git commit into a
   single synthetic ``autoresearch-{commit}`` gen_tag. The 2026-05-26
@@ -19114,4 +19130,3 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
-

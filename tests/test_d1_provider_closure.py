@@ -59,7 +59,7 @@ def test_petri_role_source_accepts_claude_cli() -> None:
 
 
 def test_petri_role_source_accepts_openai_codex() -> None:
-    """``source = "openai-codex"`` 수락 (ChatGPT Plus OAuth)."""
+    """``source = "openai-codex"`` 수락 (ChatGPT OAuth)."""
     p = PetriRoleConfig(source="openai-codex")
     assert p.source == "openai-codex"
 

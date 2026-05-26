@@ -10,7 +10,7 @@ Pinned 2026-04-28 against:
     (low/medium/high/max/xhigh; xhigh is Opus 4.7-only)
   - OpenAI Responses effort enum: openai-python `shared/reasoning_effort.py`
     (none/minimal/low/medium/high/xhigh)
-  - Codex Plus enum: codex-rs `protocol/src/openai_models.rs:43-51`
+  - Codex enum: codex-rs `protocol/src/openai_models.rs:43-51`
     (None/Minimal/Low/Medium/High/XHigh)
   - GLM thinking enum: docs.z.ai/guides/capabilities/thinking-mode
     (binary enabled/disabled)

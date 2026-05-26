@@ -40,11 +40,13 @@ class _FakePlan:
         kind: str,
         display_name: str,
         subscription_tier: str | None = None,
+        provider: str = "glm",
     ) -> None:
         self.id = id
         self.kind = _FakePlanKind(kind)
         self.display_name = display_name
         self.subscription_tier = subscription_tier
+        self.provider = provider
 
 
 class _FakeRegistry:
@@ -93,6 +95,26 @@ def test_format_plan_binding_no_subscription_tier() -> None:
     assert "openai-payg" in out
     assert "payg" in out
     assert "OpenAI (PAYG)" in out
+
+
+def test_format_plan_binding_resolves_chatgpt_plan_slug() -> None:
+    """OpenAI Codex plan tiers are stored as JWT slugs but rendered as labels."""
+    from core.cli.commands.login import _format_plan_binding
+
+    registry = _FakeRegistry(
+        {
+            "openai-codex-geode": _FakePlan(
+                id="openai-codex-geode",
+                kind="oauth_borrowed",
+                display_name="OpenAI Codex (GEODE OAuth)",
+                subscription_tier="prolite",
+                provider="openai-codex",
+            )
+        }
+    )
+    out = _format_plan_binding(registry, "openai-codex-geode")
+    assert "ChatGPT Pro Lite" in out
+    assert "prolite" not in out
 
 
 # ---------------------------------------------------------------------------

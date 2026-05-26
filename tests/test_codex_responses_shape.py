@@ -132,7 +132,7 @@ def _capture_codex_kwargs(
 
 def test_tools_are_forwarded_to_codex(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pre-fix bug: tools list was silently dropped — function calling broken
-    on Codex Plus. Post-fix: must appear in stream() kwargs in Responses API
+    on Codex. Post-fix: must appear in stream() kwargs in Responses API
     flat-tool format ({type, name, description, parameters})."""
     tools = [
         {

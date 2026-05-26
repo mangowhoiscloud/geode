@@ -1,6 +1,6 @@
 """Module-level Lane for OpenAI API call concurrency (codex-oauth + payg).
 
-PR-OAUTH-API-LANES (2026-05-26) — covers ``openai-codex`` (ChatGPT Plus
+PR-OAUTH-API-LANES (2026-05-26) — covers ``openai-codex`` (ChatGPT
 subscription via Codex Responses API) and ``openai-payg`` (OpenAI
 API key). Both share the same per-account rate-limit bucket on
 OpenAI's server side; a single shared lane prevents a burst of
@@ -20,7 +20,7 @@ Why ``max_concurrent=4``
 
 Mid-range default selected from three reference points:
 
-1. **OpenAI Codex Responses API**: ChatGPT Plus subscription bucket
+1. **OpenAI Codex Responses API**: ChatGPT subscription bucket
    is documented to support ~500 RPM aggregate across all models
    (per the public Codex CLI roll-out post-2025-Q4). gpt-5.x voter
    calls average ~10s wallclock; 4 inflight × 10s = 0.4s/call

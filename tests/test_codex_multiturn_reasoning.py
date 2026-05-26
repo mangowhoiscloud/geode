@@ -1,4 +1,4 @@
-"""R1 — Codex Plus multi-turn encrypted reasoning round-trip invariants.
+"""R1 — Codex multi-turn encrypted reasoning round-trip invariants.
 
 Pinned 2026-04-28 against the 3-codebase consensus pattern (Hermes
 ``agent/codex_responses_adapter.py:228-246, 720-738`` + OpenClaw

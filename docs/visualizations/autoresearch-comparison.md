@@ -28,7 +28,7 @@
 |---|---|---|---|
 | **Domain** | GPT pre-training | LLM alignment auditing | GEODE's stated research goal is improving its own agent harness, not training a GPT |
 | **Mutation target** | model architecture / hyperparams / optimizer (Muon + AdamW) inside `train.py` | `WRAPPER_PROMPT_SECTIONS` dict + audit-runner hyperparameters (`BUDGET_MINUTES`, `TARGET_MODEL`, `JUDGE_MODEL`, `USE_OAUTH`, `SEED_LIMIT`, …) | wrapper-prompt sections are the only thing that can change agent behaviour without re-training the LLM |
-| **Workload** | one full GPT training run on a single GPU | one `geode audit` subprocess invocation (~5 min wall-clock) consuming ChatGPT Plus / Anthropic quota | matches GEODE's deployment reality |
+| **Workload** | one full GPT training run on a single GPU | one `geode audit` subprocess invocation (~5 min wall-clock) consuming ChatGPT subscription / Anthropic quota | matches GEODE's deployment reality |
 | **Metric** | `val_bpb` (validation bits-per-byte, lower better, vocab-size-independent) | AlphaEval fitness scalar — 17-dim weighted aggregate + stability axis, higher better | val_bpb is irrelevant for an agent harness; AlphaEval rubric is the agent-safety SoT |
 | **Optimiser** | Muon + AdamW gradient descent | none — it's a discrete prompt-mutation loop, not differentiable | wrapper-prompt sections are text, not weights |
 | **Promote signal** | val_bpb decreased | `decide_promote` rule: `raw_fitness_gain > max(prior_stderr, 0.05)` + every critical dim within `baseline_stderr + critical_margin` | statistical significance threshold under judge-LLM noise |

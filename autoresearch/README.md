@@ -46,7 +46,7 @@ Same three-file structure borrowed from Karpathy autoresearch:
 - **`program.md`** — instructions to the agent. Humans modify this.
 
 The Karpathy 5-min wall-clock budget maps onto the audit budget
-(default ~5 min, capped by ChatGPT Plus quota / Anthropic API spend).
+(default ~5 min, capped by ChatGPT subscription quota / Anthropic API spend).
 The `val_bpb` metric maps onto AlphaEval fitness — a 17-dim weighted
 aggregate (5 critical + 12 auxiliary) plus a derived stability axis
 (1.0 total weight, **higher = better**), with 3 info dims tracked
@@ -64,7 +64,7 @@ without spending budget.
 ## Quick start
 
 Requirements: `uv`, the GEODE `[audit]` extra (`inspect_ai`,
-`inspect_petri`), and either `~/.codex/auth.json` (ChatGPT Plus
+`inspect_petri`), and either `~/.codex/auth.json` (ChatGPT subscription
 OAuth) or `ANTHROPIC_API_KEY`.
 
 ```bash

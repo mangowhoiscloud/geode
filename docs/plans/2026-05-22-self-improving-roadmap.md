@@ -89,7 +89,7 @@ OL-A1 의 cron-fired runner 는 기존 mutator entry-point 의 `_default_llm_cal
 | `api_key` (default) | `call_with_failover` → `resolve_agentic_adapter(provider)` — `_ADAPTER_MAP` 의 4 entry (anthropic / openai / glm / openai-codex) | Anthropic PAYG (ANTHROPIC_API_KEY) / OpenAI PAYG (OPENAI_API_KEY) / GLM PAYG / **OpenAI subscription via OAuth** (`~/.codex/auth.json` — `CodexAgenticAdapter` 가 HTTP 로 chatgpt.com/backend-api/codex 호출) | API key env var 또는 OAuth token file 존재 |
 | `auto` | 동상 (model id 로 `infer_provider_from_model` 자동 매핑) | 동상 | 동상 |
 | `claude-cli` | `cli_subprocess.invoke_claude_cli` — `claude --print --output-format text --append-system-prompt <SYS> <USER>` subprocess | Claude Code Max **subscription** (CLI 의 OAuth) | (a) `claude` binary on `$PATH` (b) Claude Code CLI 가 로그인 상태 (c) TTY-less 환경에서 `--print` 모드 작동 (subprocess.run 의 `stdin=` 기본 안전) |
-| `openai-codex` (subprocess form) | `cli_subprocess.invoke_codex_cli` — `codex exec --skip-git-repo-check <combined>` subprocess | ChatGPT Plus/Pro **subscription** (CLI 의 OAuth) | (a) `codex` binary on `$PATH` (b) Codex CLI 가 로그인 상태 (c) `--skip-git-repo-check` flag 로 worktree 외부 실행 허용 |
+| `openai-codex` (subprocess form) | `cli_subprocess.invoke_codex_cli` — `codex exec --skip-git-repo-check <combined>` subprocess | ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise **subscription** (CLI 의 OAuth) | (a) `codex` binary on `$PATH` (b) Codex CLI 가 로그인 상태 (c) `--skip-git-repo-check` flag 로 worktree 외부 실행 허용 |
 
 **Cron 환경의 검증 포인트 (OL-A1 구현 시 필수 테스트)**
 
