@@ -48,6 +48,29 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-AUDIT-TARGET-SOURCE-WIRE (2026-05-27)** — route the audit
+  subprocess's target ``(provider, source)`` resolution through
+  ``plugins/petri_audit/registry.get_binding("target", model=...)``
+  in ``plugins/petri_audit/targets/geode_target.py:_default_geode_runner``,
+  then pass the resolved ``source`` to ``AgenticLoop(..., source=...)``.
+  Previously the runner constructed ``AgenticLoop`` with only the
+  ``provider`` kwarg and silently inherited the default
+  ``source="payg"``, so the operator's
+  ``[self_improving_loop.petri.target] source`` /
+  ``[petri.target] source`` setting was ignored. On Pattern B
+  (subscription-only with ``fallback_to_payg=false``) every target
+  ``generate`` call surfaced as
+  ``OpenAIPaygAdapter: OPENAI_API_KEY not set`` even with the
+  ``codex-oauth`` source explicitly configured. The fix uses the
+  same resolver the manual ``geode audit`` CLI consults, so the three
+  source categories — PAYG (``openai-payg`` / ``anthropic-payg``),
+  subscription OAuth (``claude-cli`` / ``codex-oauth`` /
+  ``anthropic-oauth``), and local CLI (``codex-cli``) — all reach
+  ``AgenticLoop`` as the operator configured them. Pinned by
+  ``tests/test_geode_target_source_wiring.py`` (8 assertions:
+  source-level paren-balanced scan for ``source=`` kwarg,
+  ``get_binding`` reference, six parametrised category × source
+  checks for adapter registration post-bootstrap).
 - **PR-AUDIT-ADAPTER-BOOTSTRAP-FIX (2026-05-27)** — call
   ``core.llm.adapters.registry.bootstrap_builtins()`` inside
   ``plugins/petri_audit/targets/geode_target.py:_default_geode_runner``
