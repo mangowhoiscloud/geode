@@ -223,7 +223,7 @@ class AutoresearchConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    budget_minutes: Annotated[int, Field(ge=1, le=60)] = 5
+    budget_minutes: Annotated[int, Field(ge=1, le=600)] = 5
 
     # Step J-b.1 — role sub-fields (the SoT relocation).
     target: PetriRoleConfig = Field(default_factory=PetriRoleConfig)
