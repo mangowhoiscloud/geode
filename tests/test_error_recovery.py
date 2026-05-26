@@ -435,11 +435,9 @@ class TestRecoveryHookEvents:
         assert len(received) == 1
         assert received[0]["tool_name"] == "list_subjects"
 
-    def test_total_hook_event_count(self) -> None:
-        """Verify total hook event count after H6 orphan pruning."""
-        assert (
-            len(HookEvent) == 74
-        )  # +6 PR-2 cognitive + 5 PR-OL-A1.5 auto-trigger + 3 PR-CL-BUDGET handoff
+    # Total HookEvent count assertion intentionally lives in
+    # tests/test_hooks.py::TestHookEvent::test_all_events_exist —
+    # PR-HOOKEVENT-RESERVE (2026-05-26) folded this site's duplicate.
 
 
 # ---------------------------------------------------------------------------
