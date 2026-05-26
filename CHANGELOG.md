@@ -63,6 +63,34 @@ functional change.
   ``tests/test_model_failover.py`` cases (retry-within-primary +
   retries-exhausted-then-fall-back).
 
+### Added
+- **PR-MUTATION-EMIT-WIRE (2026-05-27)** — wire the writer-side emit
+  for ``HookEvent.MUTATION_APPLIED`` / ``MUTATION_REVERTED`` /
+  ``BASELINE_PROMOTED``. PR-HOOKEVENT-RESERVE (2026-05-26) added the
+  enum members + payload schema docstrings but left the emit sites
+  un-wired ("writers will emit these once the SoT-revert paths land").
+  This PR fills the gap:
+  - ``core/self_improving_loop/_hooks.py`` — new module mirroring
+    ``core/llm/router/_hooks.py``: ``set_self_improving_loop_hooks``
+    setter + ``_fire_hook`` helper with lazy-wire no-op contract.
+  - ``core/wiring/bootstrap.py`` — registers a plugin slot that calls
+    the new setter after ``HookSystem`` is constructed.
+  - ``core/self_improving_loop/runner.py:append_audit_log`` — emits
+    ``MUTATION_APPLIED`` after the row write succeeds (fires for every
+    ``kind`` so listeners distinguish ``"applied"`` / ``"applied_sibling"`` /
+    ``"pre_audit_sibling"`` via the ``kind`` extra field).
+  - ``autoresearch/train.py:_write_baseline`` — emits
+    ``BASELINE_PROMOTED`` after ``BASELINE_PATH.write_text`` succeeds,
+    with ``prior_baseline_path`` read pre-write + ``reason`` quoting
+    ``operator_force`` vs ``gate_approved``.
+  - ``autoresearch/train.py:_revert_sot_after_reject`` — emits
+    ``MUTATION_REVERTED`` with ``reason="promote_gate_reject"`` after
+    the SoT roll-back succeeds (covers both reject + audit-fail
+    revert paths since both route through the same function).
+  Pinned with new ``tests/core/self_improving_loop/test_mutation_emit_wire.py``:
+  no-op-when-unwired contract + dispatch-when-wired + the runner emit
+  for both ``"applied"`` and ``"applied_sibling"`` kinds.
+
 ## [0.99.73] - 2026-05-27
 
 MINOR rotation. Ships the 2026-05-26 autoresearch attribution sprint
