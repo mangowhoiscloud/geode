@@ -699,3 +699,207 @@ table.records.heatmap td.score-na     { background: transparent; color: var(--in
   line-height: 1.55;
   max-width: 780px;
 }
+
+/* ============================================================ */
+/* Autoresearch surface (landing + baseline + mutations         */
+/* + results + policies)                                        */
+/*                                                              */
+/* Master DESIGN.md §3 strict rule 1: no new color tokens.      */
+/* Every signal below is composed from --bucket-autoresearch    */
+/* (warm), --bucket-seedgen (cool green), --ink-faint (muted),  */
+/* and the existing warning palette.                            */
+/* ============================================================ */
+
+/* Yellow / amber hairline banner used when baseline.json is    */
+/* read from a `.outdated-*` snapshot. Reuses the warning       */
+/* palette (already declared above) — no new tokens.            */
+.warning-banner {
+  margin: 0 0 1.5rem;
+  padding: .6rem .85rem;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 1px solid var(--warning-rule);
+  border-left: 3px solid var(--bucket-autoresearch);
+  border-radius: 3px;
+  font-size: .82rem;
+  font-family: var(--font-mono);
+}
+
+.warning-banner code { background: rgba(255, 255, 255, .55); }
+
+/* Generation timeline row highlight — the currently-promoted    */
+/* row is .active and gets a left rule + tinted background       */
+/* (autoresearch warm bucket at low opacity).                    */
+.gen-timeline-row.active td {
+  background: rgba(180, 83, 9, .08);
+  border-left: 3px solid var(--bucket-autoresearch);
+  font-weight: 600;
+}
+
+table.records .gen-timeline-row.active td:first-child {
+  padding-left: .45rem;
+}
+
+/* Inline Unicode block-char sparkline (no SVG, no JS).          */
+/* Used in the results table fitness column.                     */
+.fitness-sparkline {
+  font-family: var(--font-mono);
+  font-size: .92rem;
+  letter-spacing: 0;
+  white-space: pre;
+  color: var(--bucket-autoresearch);
+  vertical-align: baseline;
+}
+
+/* Policy JSON drill-down — overflow-safe pretty-print            */
+/* container. Used inside <details>/<pre> in policies.html.       */
+.policy-json {
+  margin: .35rem 0 0;
+  padding: .65rem .9rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: .74rem;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 24rem;
+}
+
+.policy-json pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Δ-fitness color buckets — derived from existing tokens.        */
+/* positive = seedgen green (improvement signal — matches the    */
+/* surface bucket convention since improvement = the loop is     */
+/* working). negative = autoresearch warm (regression signal).   */
+/* noise = ink-faint muted.                                      */
+.delta-positive {
+  color: var(--bucket-seedgen);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-negative {
+  color: var(--bucket-autoresearch);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-noise {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Baseline namespace block (h3 + table pattern, repeated 7x).    */
+.namespace-block {
+  margin: 1rem 0 1.5rem;
+}
+
+.namespace-block h3 {
+  margin: 0 0 .35rem;
+  font-size: .85rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink);
+}
+
+.namespace-block .namespace-meta {
+  margin: 0 0 .55rem;
+  font-size: .72rem;
+  font-family: var(--font-mono);
+  color: var(--ink-faint);
+}
+
+.namespace-block table.records {
+  margin-top: 0;
+}
+
+.namespace-block .empty-namespace {
+  color: var(--ink-faint);
+  font-style: italic;
+  font-size: .8rem;
+  margin: .25rem 0 0;
+}
+
+/* Filter strip on the mutations page — CSS-only, no JS.           */
+/* Render as a horizontal row of chips. Active state for the       */
+/* current filter (when the page is server-rendered with a         */
+/* selected filter, the active chip carries .active). The plain    */
+/* page (no JS) just shows the legend.                             */
+.filter-strip {
+  margin: 0 0 1rem;
+  padding: .5rem .75rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .55rem;
+  align-items: center;
+}
+
+.filter-strip .filter-label {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+  margin-right: .35rem;
+}
+
+.filter-strip .filter-chip {
+  display: inline-block;
+  padding: .12rem .5rem;
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.filter-strip .filter-chip.active {
+  background: var(--accent-faint);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Status grid (autoresearch landing). Same shape as cost-grid    */
+/* but explicitly named so the contract is local to the page.    */
+.status-grid {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .25rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  max-width: 780px;
+}
+
+.status-grid dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.status-grid dd {
+  margin: 0;
+  color: var(--ink);
+}

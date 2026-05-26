@@ -49,6 +49,97 @@ functional change.
 
 ### Added
 
+- **PR-SELF-IMPROVING-P6 — autoresearch surface (5 sub-pages) +
+  Karpathy port mapping doc + E2E +8 cases.** Sprint Phase 6 of the
+  self-improving hub plan ([[project_self_improving_hub_plan]]).
+  Operator directive 2026-05-26: "geode 의 plugin/autoresearch 코드에
+  원본에 대한 전체 컨택스트를 주입받고 진행해."
+
+  **Context injection**: `docs/design/autoresearch-port-mapping.md`
+  (580 lines, 11 sections, file:line citations throughout) maps every
+  concept from Karpathy's original autoresearch (MIT 2026-03,
+  `~/workspace/autoresearch/`) to GEODE's port. Schema-v2 baseline
+  namespaces (raw/normalized/axes/fitness/audit/promotion), the
+  4-axis fitness function (vs Karpathy's single `val_bpb`), the
+  14-file policy SoT (vs Karpathy's 1-file `train.py` edit surface),
+  the `ApplyRecord` W4 mutation ledger schema, and the closed-loop
+  topology (audit → fitness → promote → mutate → next audit) are all
+  cross-referenced with code line numbers. This becomes the
+  load-bearing context for the P6 paired-agent build.
+
+  **5 sub-pages** (paired-agent — designer visual spec
+  `docs/design/self-improving-autoresearch-visual-spec.md` 1579 lines +
+  frontend implementation):
+
+  - `/autoresearch/index.html` (7794 B) — landing: status block
+    (current baseline gen_tag / fitness / promote ts / harness-chipped
+    model trio / artifact counts), generation timeline from
+    `baseline_archive.jsonl` with Δ fitness + active-row highlight,
+    4-row sub-view records table (NOT card grid)
+  - `/autoresearch/baseline.html` (6990 B) — 7 namespace blocks for
+    schema v2 (`metadata` / `raw` / `normalized` / `axes` / `fitness`
+    / `audit` / `promotion`). v1 baseline rendered gracefully (raw
+    namespace synthesized from top-level `dim_means` + `dim_stderr`;
+    missing v2 namespaces show `<em>schema-v1 fallback</em>` notice).
+    Stale `.outdated-*` snapshot triggers a `.warning-banner` header.
+  - `/autoresearch/mutations.html` (5424 B) — mutations table
+    (ts_utc / gen_tag / mut_id / target_section / kind / mutator-model
+    chip / verdict / Δfitness / audit_eval_id SPA link), per-row
+    `<details>` drilldown with full JSON payload, filter strip
+    (informational, CSS-only no JS)
+  - `/autoresearch/results.html` (5628 B) — 12-col `results.tsv` table
+    (header from `RESULTS_TSV_HEADER` in `train.py:1284`), per-row
+    `<details>` paired with `results.jsonl` for 22-row dim_means /
+    dim_stderr / measurement_modality breakdown, fitness sparkline
+    column using Unicode block chars `▁▂▃▄▅▆▇█` (no SVG no JS)
+  - `/autoresearch/policies.html` (4970 B) — 14-row policies table
+    (filename / mtime / size / mutated-by-gen cross-reference from
+    `mutations.jsonl`), per-row `<details>` drilldown with
+    pretty-printed JSON `<pre class="policy-json">`
+
+  **No-publisher decision**: `autoresearch/state/*` is already
+  git-tracked under the repo, so the hub builder reads source files
+  directly. Avoids dual-SoT drift (per `[[feedback-latest-vs-
+  promoted-sot]]`) + extra publisher infra. Documented in
+  visual-spec §3.
+
+  **Builder extensions** (`scripts/build_self_improving_hub.py`,
+  +~750 lines):
+  - 6 loaders (`_load_baseline` with `.outdated-*` fallback /
+    `_load_baseline_archive` / `_load_mutations` / `_load_results_tsv`
+    / `_load_results_jsonl` / `_list_policies`)
+  - 5 renderers (`render_autoresearch_landing/baseline/mutations/
+    results/policies`)
+  - `_AutoresearchRenderCtx` dataclass + `_fitness_sparkline`
+    Unicode block helper + `_safe()` best-effort wrapper (one page
+    failure doesn't block the others)
+  - 6 new CLI flags (`--autoresearch-out-dir` + 5 template paths)
+
+  **CSS extensions** (`hub.css`, +~190 lines): `.warning-banner`,
+  `.gen-timeline-row.active`, `.fitness-sparkline`, `.policy-json`
+  pre, `.delta-positive` / `.delta-negative` / `.delta-noise`,
+  `.namespace-block`, `.filter-strip`, `.status-grid`. All composed
+  from existing tokens (`--bucket-autoresearch` opacity for warn,
+  `--bucket-seedgen` for positive delta). Zero new color tokens.
+
+  **E2E +8 tests** (21 → **29**):
+  `test_autoresearch_landing_renders` /
+  `test_autoresearch_baseline_renders` /
+  `test_autoresearch_baseline_stale_warning` /
+  `test_autoresearch_mutations_table_renders` /
+  `test_autoresearch_results_sparkline` /
+  `test_autoresearch_policies_lists_files` /
+  `test_autoresearch_pages_url_basepath_safety` /
+  `test_autoresearch_sidebar_consistent`. Plus
+  `test_autoresearch_baseline_schema_v1_renders_gracefully` for v1
+  fallback path. All 29 pass against current builder output, ruff +
+  ruff-format + mypy clean.
+
+  **Fixtures** under
+  `tests/fixtures/self_improving_hub/autoresearch/state/`: v2
+  baseline (6 namespaces filled), 3-row archive, 3-row mutations,
+  3-row tsv + jsonl, 4 policy JSONs.
+
 - **PR-SELF-IMPROVING-P5 — seed-generation surface (index + per-run
   detail) + E2E self-verification suite.** Sprint Phase 5 of the
   self-improving hub plan ([[project_self_improving_hub_plan]]) plus

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Autoresearch per-iteration results — 12-col results.tsv + per-row results.jsonl drill-down. Fitness sparkline shows trend.">
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/">Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">{{ petri_count }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+{{ sidebar_petri_recent }}
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation <span class="count">{{ seedgen_count_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
+          <ul class="sub-nav">
+{{ sidebar_seedgen_runs }}
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
+        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/" class="active" aria-current="page">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">Results <span class="bucket autoresearch">autoresearch</span></h1>
+    <p class="page-sub">Per-iteration ledger from <code>results.tsv</code> (12 columns, <code>RESULTS_TSV_HEADER</code> in <code>autoresearch/train.py:1284</code>). Each row pairs with one <code>results.jsonl</code> line for the full per-dim breakdown. Fitness trend rendered inline as a Unicode block sparkline.</p>
+
+    <h2 class="section"><span>Trend &middot; fitness sparkline</span></h2>
+    <p class="page-sub" style="margin-top: -0.5rem;">
+      <span class="role-label">fitness</span>
+      <span class="fitness-sparkline" aria-label="{{ sparkline_aria }}">{{ sparkline }}</span>
+      &nbsp;
+      <span class="muted">{{ sparkline_legend }}</span>
+    </p>
+
+    <h2 class="section"><span>Results &middot; {{ results_section_label }}</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+{{ results_header_cells }}
+        </tr>
+      </thead>
+      <tbody>
+{{ results_rows }}
+      </tbody>
+    </table>
+
+    <div class="build-info">
+      <p>Source: <code>autoresearch/state/results.tsv</code> + <code>autoresearch/state/results.jsonl</code> (12-col header per <code>RESULTS_TSV_HEADER</code>, train.py:1284).</p>
+      <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
+      <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
+      <p>Harness chip legend:
+        <span class="chip payg">PAYG</span>API key billing &middot;
+        <span class="chip claude">Claude Code</span>Max OAuth &middot;
+        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip geode">GEODE</span>self-target wrapper.
+      </p>
+      <p class="version-stamp">
+        Rendered against GEODE <code>v{{ geode_version }}</code> &middot; DESIGN.md schema {{ design_schema_version }} &middot; built {{ build_date }}.
+        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
+      </p>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

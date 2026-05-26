@@ -573,3 +573,275 @@ def test_seedgen_coverage_bars_render(built_seedgen_pages: dict[str, str]) -> No
     css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
     assert ".coverage-bar" in css, "hub.css missing .coverage-bar rule"
     assert ".coverage-bar-fill" in css, "hub.css missing .coverage-bar-fill rule"
+
+
+# ---------------------------------------------------------------------------
+# 12. Autoresearch surface (5 sub-pages)
+# ---------------------------------------------------------------------------
+#
+# Phase 6 ships the 5-page autoresearch surface built by the same script:
+#   - docs/self-improving/autoresearch/index.html       (landing)
+#   - docs/self-improving/autoresearch/baseline.html    (7 namespace blocks)
+#   - docs/self-improving/autoresearch/mutations.html   (ledger table)
+#   - docs/self-improving/autoresearch/results.html     (12-col table + sparkline)
+#   - docs/self-improving/autoresearch/policies.html    (14-file table)
+#
+# Contracts:
+#   docs/design/self-improving-autoresearch.md (+ -baseline / -mutations
+#   / -results / -policies sibling docs)
+# Master tokens shared with hub:
+#   docs/design/self-improving-hub-system.md
+
+
+@pytest.fixture(scope="module")
+def built_autoresearch_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    """Build the 5 autoresearch pages once per session against fixture data.
+
+    Returns a dict keyed by page name (``index`` / ``baseline`` /
+    ``mutations`` / ``results`` / ``policies``) -> rendered HTML text.
+    """
+    out = tmp_path_factory.mktemp("autoresearch-out")
+    hub_out = out / "hub"
+    seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
+    result = subprocess.run(  # noqa: S603 — fixture invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(hub_out / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, (
+        f"autoresearch builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    pages: dict[str, str] = {}
+    for name in ("index", "baseline", "mutations", "results", "policies"):
+        path = autoresearch_out / f"{name}.html"
+        assert path.is_file(), f"autoresearch {name}.html missing at {path}"
+        pages[name] = path.read_text(encoding="utf-8")
+    return pages
+
+
+def test_autoresearch_landing_renders(built_autoresearch_pages: dict[str, str]) -> None:
+    """Landing page has status block, generation timeline (3 rows from
+    fixture archive), and the 4-row sub-view table."""
+    html = built_autoresearch_pages["index"]
+    # Status grid section header + grid rows.
+    assert "Status" in html and "status-grid" in html, "status block missing"
+    # Generation timeline section with all 3 fixture archive rows.
+    assert "Generation timeline" in html, "timeline section header missing"
+    for gen in ("gen-1", "gen-2", "gen-3"):
+        assert gen in html, f"timeline row for {gen!r} missing"
+    # The 4 sub-view rows must all be present with their absolute paths.
+    for label, href in (
+        ("Baseline", "/geode/self-improving/autoresearch/baseline/"),
+        ("Mutations", "/geode/self-improving/autoresearch/mutations/"),
+        ("Results", "/geode/self-improving/autoresearch/results/"),
+        ("Policies", "/geode/self-improving/autoresearch/policies/"),
+    ):
+        assert label in html, f"sub-view row {label!r} missing"
+        assert href in html, f"sub-view link {href!r} missing"
+
+
+def test_autoresearch_baseline_renders(built_autoresearch_pages: dict[str, str]) -> None:
+    """Baseline page renders 7 namespace blocks for the v2 schema, plus
+    harness chips on the audit namespace's 3 model fields."""
+    html = built_autoresearch_pages["baseline"]
+    # 7 namespace block ids (no warning banner for live baseline).
+    expected_blocks = ("metadata", "raw", "normalized", "axes", "fitness", "audit", "promotion")
+    for ns in expected_blocks:
+        assert f'id="ns-{ns}"' in html, f"baseline namespace block {ns!r} missing"
+    # Total `namespace-block` divs must equal 7.
+    assert html.count('class="namespace-block"') == 7, (
+        f"expected 7 namespace blocks, got {html.count('class="namespace-block"')}"
+    )
+    # Audit namespace renders harness chips for 3 model roles.
+    assert "chip claude" in html, "auditor/judge claude chip missing"
+    assert "chip geode" in html, "target geode chip missing"
+    assert "claude-cli/claude-opus-4-7" in html
+    assert "geode/gpt-5.5" in html
+
+
+def test_autoresearch_baseline_stale_warning(tmp_path: Path) -> None:
+    """When live baseline.json is absent but `.outdated-*` exists, the
+    `.warning-banner` div renders on baseline + landing pages."""
+    # Build a fixture variant: only an outdated baseline file.
+    fake_ar = tmp_path / "fake-autoresearch"
+    state = fake_ar / "state"
+    state.mkdir(parents=True)
+    (state / "baseline.json.outdated-20260520").write_text(
+        '{"schema_version": 2, "metadata": {"gen_tag": "gen-old"}, '
+        '"fitness": {"value": 0.5}, "audit": {}, "promotion": {}}',
+        encoding="utf-8",
+    )
+    out = tmp_path / "out"
+    autoresearch_out = out / "autoresearch"
+    result = subprocess.run(  # noqa: S603 — fixture invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(fake_ar),
+            "--seedgen-out-dir",
+            str(out / "seedgen"),
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, result.stderr
+    baseline_html = (autoresearch_out / "baseline.html").read_text(encoding="utf-8")
+    assert "warning-banner" in baseline_html, "warning banner missing on stale baseline page"
+    assert "outdated-20260520" in baseline_html, "stale source filename missing from banner"
+    # CSS rule must exist.
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    assert ".warning-banner" in css, "hub.css missing .warning-banner rule"
+
+
+def test_autoresearch_mutations_table_renders(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """Mutations page has the table + filter strip + at least 1 row from fixture."""
+    html = built_autoresearch_pages["mutations"]
+    # Filter strip CSS-only component.
+    assert 'class="filter-strip"' in html, "mutation filter-strip missing"
+    # At least one fixture row's target section appears.
+    assert "wrapper-sections.json::sycophancy_guardrail" in html, "fixture row 1 missing"
+    assert "tool-policy.json::dispatch" in html, "fixture row 2 missing"
+    # Δfitness color classes appear (positive + negative + chips).
+    assert "delta-positive" in html, "delta-positive class missing on at least one row"
+    assert "delta-negative" in html, "delta-negative class missing on at least one row"
+    # Verdict values surface.
+    assert "applied" in html and "reverted" in html, "expected verdict labels missing"
+
+
+def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]) -> None:
+    """Results page renders the Unicode block-char fitness sparkline +
+    a 12-col table header sourced from RESULTS_TSV_HEADER."""
+    html = built_autoresearch_pages["results"]
+    assert 'class="fitness-sparkline"' in html, "fitness-sparkline span missing"
+    # At least one of the 8 block chars present (▁▂▃▄▅▆▇█).
+    block_chars = "▁▂▃▄▅▆▇█"
+    assert any(c in html for c in block_chars), (
+        "no Unicode block char rendered inside fitness-sparkline"
+    )
+    # All 12 header columns from RESULTS_TSV_HEADER.
+    expected_cols = (
+        "session_id",
+        "gen_tag",
+        "commit",
+        "fitness",
+        "critical_min",
+        "critical_mean",
+        "auxiliary_mean",
+        "stability_score",
+        "info_mean",
+        "dim_count_engaged",
+        "verdict",
+        "description",
+    )
+    th_count = html.count('<th scope="col">')
+    assert th_count >= 12, f"expected ≥12 <th scope='col'>, got {th_count}"
+    for col in expected_cols:
+        assert col in html, f"results table missing column {col!r}"
+    # CSS rule must exist.
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    assert ".fitness-sparkline" in css, "hub.css missing .fitness-sparkline rule"
+
+
+def test_autoresearch_policies_lists_14_files(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """Policies page has at least 1 row per fixture file (4 fixtures
+    used here; production would ship 14). Each row has JSON pretty-
+    print drill-down via .policy-json + <details>."""
+    html = built_autoresearch_pages["policies"]
+    fixture_files = (
+        "wrapper-sections.json",
+        "tool-policy.json",
+        "decomposition.json",
+        "retrieval.json",
+    )
+    for filename in fixture_files:
+        assert filename in html, f"policies row missing for {filename!r}"
+    # Drill-down: <details>/<pre> + .policy-json class on each row.
+    assert "<details>" in html, "policy drill-down <details> missing"
+    assert 'class="policy-json"' in html, ".policy-json class missing on drill-down"
+    # CSS rule must exist.
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    assert ".policy-json" in css, "hub.css missing .policy-json rule"
+    # Row count == fixture file count (the test never ships 14 fixture
+    # files; that scale is verified in production builds).
+    tbody_match = re.search(r"<tbody>(.*?)</tbody>", html, flags=re.DOTALL)
+    assert tbody_match is not None, "policies <tbody> missing"
+    row_count = tbody_match.group(1).count("<tr>")
+    assert row_count == len(fixture_files), (
+        f"expected {len(fixture_files)} policy rows, got {row_count}"
+    )
+
+
+def test_autoresearch_pages_url_basepath_safety(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """Master DESIGN.md §8: every ``<a href>`` on each of the 5 pages
+    is either ``/geode/``-prefixed or external (``https://``)."""
+    for name, html in built_autoresearch_pages.items():
+        hrefs = _collect_hrefs(html)
+        assert hrefs, f"autoresearch {name} page has no anchors at all"
+        for href in hrefs:
+            if href.startswith("#"):
+                continue
+            if href.startswith("https://") or href.startswith("http://"):
+                continue
+            if href.startswith("mailto:"):
+                continue
+            assert href.startswith("/geode/"), (
+                f"autoresearch {name} href {href!r} missing /geode/ basePath"
+            )
+
+
+def test_autoresearch_sidebar_consistent(
+    built_autoresearch_pages: dict[str, str],
+    built_html: str,
+) -> None:
+    """All 5 autoresearch pages share the same sidebar section order as
+    the hub landing (modulo the .active highlight)."""
+    aside_re = re.compile(r"<aside[^>]*>.*?</aside>", flags=re.DOTALL)
+
+    def _section_labels(html: str) -> list[str]:
+        match = aside_re.search(html)
+        assert match is not None, "no <aside> in page"
+        return re.findall(
+            r'<div class="nav-section">([A-Za-z][A-Za-z ]*)',
+            match.group(0),
+        )
+
+    hub_sections = _section_labels(built_html)
+    assert hub_sections, "hub sidebar has no nav-section labels"
+    for name, html in built_autoresearch_pages.items():
+        page_sections = _section_labels(html)
+        assert page_sections == hub_sections, (
+            f"autoresearch {name} sidebar sections {page_sections} differ from hub {hub_sections}"
+        )
+        # Each page must have its own active link.
+        assert 'aria-current="page"' in html, f"autoresearch {name} has no aria-current='page'"
