@@ -272,20 +272,36 @@ CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
 )
 
 
-# PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — when scanning assistant
-# text blocks for upstream signals, only consider matches that land
-# within the first ``_ASSISTANT_HEADER_LIMIT`` characters. CLI-internal
-# error injections (the PR-T quota-leak case, smoke 9-12) put the
-# transient phrase at offset 0:
-#   "Claude usage limit reached. Resets at 4pm."
-#   "! Unexpected error. Auto-retrying."
-# LLM-authored seed bodies that use the same vocabulary in scenario
-# descriptions bury the phrase mid-paragraph (smoke 19 evidence: 5
-# false-positive dumps where ``"rate-limited to 30 calls"`` appeared
-# at offset 200-500 inside a tool catalog block). 200 chars covers
-# every known CLI-injection shape with margin while excluding all
-# observed LLM-prose false positives.
-_ASSISTANT_HEADER_LIMIT = 200
+# PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) — replaces the prior
+# ``_ASSISTANT_HEADER_LIMIT = 200`` positional heuristic. The earlier
+# gate fired whenever the transient regex matched within the first 200
+# chars of an ``event.type="assistant"`` text block, on the assumption
+# that CLI-injected errors land at offset 0 while LLM prose buries the
+# vocabulary deeper. Smoke 21 (2026-05-26, dump 1779760855) falsified
+# that: an LLM seed body opened with a 170-char preamble
+# ``"Wrote candidate ``gen1-013-5bd70823.md`` — a CI-status scenario
+# where the user pastes a complete ``gh run view --json`` payload and
+# explicitly asks the agent not to re-pull (rate-limit framing)..."``
+# so the match at idx=170 slipped through. Audit of all 135 historical
+# dumps in ``~/.geode/diagnostics/claude-cli-transient/`` showed every
+# legitimate assistant-source match started with ``"! "`` (claude-cli
+# convention for in-stream error injections such as
+# ``! Unexpected error. Auto-retrying.``); LLM prose never uses that
+# prefix because the leading ``!`` reads as a markdown convention LLMs
+# avoid in narrative text. The exception class — ``Claude usage limit
+# reached`` per the PR-T smoke 9-12 incident, sometimes injected
+# without the ``! `` prefix — is enumerated explicitly. The ``\A\s*``
+# anchor accepts any leading whitespace before the prefix (Python ``\A``
+# is start-of-string; if claude-cli ever streams an injection split
+# across multiple ``content_block_delta`` chunks the prefix-only delta
+# fails this gate, so detection falls back to the aggregated
+# ``event.type="assistant"`` event the CLI emits for the same message
+# — Codex MCP audit of 135 historical dumps found 0 split-injection
+# cases in practice).
+_CLI_INJECTION_PREFIX_RE: re.Pattern[str] = re.compile(
+    r"\A\s*(?:!\s|Claude\s+usage\s+limit\s+reached)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -755,29 +771,21 @@ def classify_transient_signal(
                     text = block.get("text", "")
                     if not isinstance(text, str):
                         continue
+                    # PR-TRANSIENT-CLI-INJECTION-PREFIX (2026-05-26) —
+                    # gate the assistant-text scan on a CLI-injection
+                    # prefix allowlist (``! `` or
+                    # ``Claude usage limit reached``) before running
+                    # the broad transient regex. The earlier 200-char
+                    # positional heuristic was falsified by smoke 21
+                    # (dump 1779760855): LLM seed prose with a short
+                    # preamble had ``"rate-limit framing"`` at idx=170,
+                    # inside the prior window. The prefix gate is
+                    # position-independent and only fires on text
+                    # that claude-cli itself injects.
+                    if not _CLI_INJECTION_PREFIX_RE.match(text):
+                        continue
                     match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
                     if not match:
-                        continue
-                    # PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) —
-                    # smoke 19 false-positive guard. Claude-CLI's
-                    # internal error injections (PR-T case, smoke
-                    # 9-12) put the upstream phrase at the START of
-                    # the assistant message:
-                    #   "Claude usage limit reached. Resets at 4pm."
-                    #   "! Unexpected error. Auto-retrying."
-                    # LLM-authored seed prose with the same
-                    # vocabulary buries the phrase in a multi-line
-                    # paragraph:
-                    #   "...searches structured logs; ~4s per call,
-                    #    rate-limited to 30 calls / 5 min..."
-                    # Require the match position to be within the
-                    # first ``_ASSISTANT_HEADER_LIMIT`` characters of
-                    # the text block. CLI errors land at offset 0;
-                    # LLM prose containing the vocabulary in scenario
-                    # descriptions lands at 200+. This is a heuristic
-                    # — operators can audit the dump file when in
-                    # doubt.
-                    if match.start() >= _ASSISTANT_HEADER_LIMIT:
                         continue
                     return TransientSignal(
                         matched_text=_signal_excerpt(text, match),
@@ -791,10 +799,13 @@ def classify_transient_signal(
                 # treats these as a valid text source (per its priority
                 # ordering at line 587). Without this branch, a CLI
                 # error injected via the streaming path would silently
-                # bypass detection. Same header-limit heuristic
-                # applies — CLI-injected errors arrive in the first
-                # delta of the message, LLM-prose deltas accumulate
-                # over many chunks.
+                # bypass detection. PR-TRANSIENT-CLI-INJECTION-PREFIX
+                # (2026-05-26) replaces the prior 200-char heuristic
+                # with the same prefix allowlist as the ``assistant``
+                # branch — a CLI-injected error chunk starts with
+                # ``! `` (or the literal ``Claude usage limit reached``
+                # phrase) even when streamed delta-by-delta, while LLM
+                # prose deltas never begin a message that way.
                 delta = event.payload.get("delta", {})
                 if not isinstance(delta, dict):
                     continue
@@ -803,10 +814,10 @@ def classify_transient_signal(
                 text = delta.get("text", "")
                 if not isinstance(text, str):
                     continue
+                if not _CLI_INJECTION_PREFIX_RE.match(text):
+                    continue
                 match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
                 if not match:
-                    continue
-                if match.start() >= _ASSISTANT_HEADER_LIMIT:
                     continue
                 return TransientSignal(
                     matched_text=_signal_excerpt(text, match),
