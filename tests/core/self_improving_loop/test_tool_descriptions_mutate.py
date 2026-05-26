@@ -102,24 +102,20 @@ def test_parse_mutation_accepts_tool_descriptions_target_kind() -> None:
     assert mutation.target_section == "bash.description"
 
 
-def test_load_policy_falls_back_to_operator_local_when_in_repo_absent(
+def test_policy_path_resolves_to_operator_local_when_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Codex MCP review fix-up (PR-TOOL-DESCRIPTIONS-MUTATE, 2026-05-27):
-    when the in-repo SoT is missing, ``load_policy("tool_descriptions")``
-    must fall back to the operator-local path so the mutator iterates
-    from the same content the runtime reader sees. Without the
-    fallback the mutator would see ``{}`` and writes would silently
-    diverge from operator-local overrides."""
+    when the operator-local file exists, ``policy_path`` must return
+    it (matching the runtime reader's 3-layer resolution). Pins the
+    READ/WRITE parity rule — both halves now land on the same file
+    that the runtime actually reads, eliminating the dual-SoT drift
+    Codex flagged on the first review."""
     from core.self_improving_loop import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"
-    operator_local.write_text(
-        json.dumps({"bash": {"description": "Operator-local desc."}}),
-        encoding="utf-8",
-    )
-    # in-repo intentionally absent — operator-local must take over.
+    operator_local.write_text(json.dumps({"bash": {}}), encoding="utf-8")
     monkeypatch.setitem(policies_mod._KIND_TO_PATH, "tool_descriptions", in_repo)
     monkeypatch.setitem(
         policies_mod._OPERATOR_LOCAL_FALLBACK_PATHS,
@@ -127,28 +123,44 @@ def test_load_policy_falls_back_to_operator_local_when_in_repo_absent(
         operator_local,
     )
 
-    loaded = policies_mod.load_policy("tool_descriptions")
-    assert loaded["bash.description"] == "Operator-local desc."
+    assert policies_mod.policy_path("tool_descriptions") == operator_local
 
 
-def test_load_policy_prefers_in_repo_over_operator_local(
+def test_policy_path_falls_back_to_in_repo_when_operator_local_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Once the mutator writes to in-repo (post-first-mutation), the
-    in-repo SoT wins — operator-local fallback applies ONLY when the
-    in-repo file is absent. Pins the drift invariant: subsequent
-    operator-local edits do NOT propagate after the in-repo file is
-    materialised, by design."""
+    """No operator-local file present ⇒ the in-repo default wins
+    (legacy / fresh-repo behaviour)."""
+    from core.self_improving_loop import policies as policies_mod
+
+    in_repo = tmp_path / "in-repo.json"
+    operator_local = tmp_path / "operator-local.json"
+    # operator-local intentionally NOT created.
+    monkeypatch.setitem(policies_mod._KIND_TO_PATH, "tool_descriptions", in_repo)
+    monkeypatch.setitem(
+        policies_mod._OPERATOR_LOCAL_FALLBACK_PATHS,
+        "tool_descriptions",
+        operator_local,
+    )
+
+    assert policies_mod.policy_path("tool_descriptions") == in_repo
+
+
+def test_load_policy_reads_operator_local_when_it_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When operator-local exists, ``load_policy`` reads from it (so
+    the mutator sees what the runtime sees)."""
     from core.self_improving_loop import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"
     in_repo.write_text(
-        json.dumps({"bash": {"description": "In-repo wins."}}),
+        json.dumps({"bash": {"description": "In-repo content (stale)."}}),
         encoding="utf-8",
     )
     operator_local.write_text(
-        json.dumps({"bash": {"description": "Operator-local ignored."}}),
+        json.dumps({"bash": {"description": "Operator-local wins."}}),
         encoding="utf-8",
     )
     monkeypatch.setitem(policies_mod._KIND_TO_PATH, "tool_descriptions", in_repo)
@@ -159,4 +171,39 @@ def test_load_policy_prefers_in_repo_over_operator_local(
     )
 
     loaded = policies_mod.load_policy("tool_descriptions")
-    assert loaded["bash.description"] == "In-repo wins."
+    assert loaded["bash.description"] == "Operator-local wins."
+
+
+def test_write_policy_writes_to_operator_local_when_it_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read-write parity (CLAUDE.md rule): when operator-local exists,
+    ``write_policy`` also writes there so the next runtime read picks
+    up the mutator's change. Without this the mutator would write to
+    in-repo while the runtime continued reading operator-local —
+    closed-loop break."""
+    from core.self_improving_loop import policies as policies_mod
+
+    in_repo = tmp_path / "in-repo.json"
+    operator_local = tmp_path / "operator-local.json"
+    operator_local.write_text(
+        json.dumps({"bash": {"description": "Original."}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(policies_mod._KIND_TO_PATH, "tool_descriptions", in_repo)
+    monkeypatch.setitem(
+        policies_mod._OPERATOR_LOCAL_FALLBACK_PATHS,
+        "tool_descriptions",
+        operator_local,
+    )
+
+    policies_mod.write_policy(
+        "tool_descriptions",
+        {"bash.description": "Mutated."},
+    )
+    on_disk = json.loads(operator_local.read_text(encoding="utf-8"))
+    assert on_disk == {"bash": {"description": "Mutated."}}
+    assert not in_repo.exists(), (
+        "in-repo file must NOT be created when operator-local is the "
+        "resolved SoT — that would resurrect the dual-SoT drift."
+    )

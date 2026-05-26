@@ -84,12 +84,14 @@ functional change.
   (``{tool_name: {description: str, hints: list[str]}}``) joins
   the same flat ↔ nested machinery as ``skill_catalog`` /
   ``agent_contract``; ``hints`` is the only list-typed field.
-  Codex MCP review fix-up: ``load_policy("tool_descriptions")``
-  falls back to ``~/.geode/self-improving-loop/tool-descriptions.json``
-  when the in-repo SoT is absent, so the mutator iterates from the
-  same content the runtime reader's 3-layer resolution surfaces
-  (closes the dual-SoT drift concern). Pin: ``_READER_ONLY_KINDS``
-  size assertion drops from 7 to 6.
+  Codex MCP review fix-up: ``policy_path("tool_descriptions")``
+  resolves to the operator-local path
+  (``~/.geode/self-improving-loop/tool-descriptions.json``) when it
+  exists, so BOTH READ and WRITE land on whichever file the runtime
+  reader actually reads. Closes the dual-SoT drift concern — the
+  mutator now writes to the same layer the runtime reads, preserving
+  the autoresearch ``mutate → measure → baseline`` closed-loop visibility.
+  Pin: ``_READER_ONLY_KINDS`` size assertion drops from 7 to 6.
 
 ### Fixed
 - **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route

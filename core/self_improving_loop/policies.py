@@ -281,9 +281,29 @@ def is_valid_target_kind(kind: str) -> bool:
 def policy_path(kind: str) -> Path:
     """Return the SoT file path for ``kind``.
 
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    — when ``kind`` is in :data:`_OPERATOR_LOCAL_FALLBACK_PATHS` AND
+    the operator-local file exists on disk, that path wins over the
+    in-repo default. This mirrors the runtime reader's 3-layer
+    resolution (env → operator-local → in-repo) at
+    ``core/agent/tool_descriptions_policy.py:_load_tool_descriptions_override``
+    so the mutator's READ and WRITE both land on whichever file the
+    runtime actually reads. Without this parity the mutator would
+    write to the in-repo file while the runtime continued reading
+    operator-local — silent dual-SoT drift, a closed-loop breaker
+    for the autoresearch ``mutate → measure → baseline`` cycle.
+
+    The env layer is intentionally NOT consulted here — env paths are
+    set inside the audit subprocess (STRICT mode) which never invokes
+    the mutator, so adding env resolution would just add untestable
+    branches without operational benefit.
+
     Raises :class:`ValueError` on unknown kinds so the runner can
     fail closed rather than silently writing to an unexpected file.
     """
+    operator_local = _OPERATOR_LOCAL_FALLBACK_PATHS.get(kind)
+    if operator_local is not None and operator_local.is_file():
+        return operator_local
     try:
         return _KIND_TO_PATH[kind]
     except KeyError as exc:
@@ -309,30 +329,18 @@ def load_policy(kind: str) -> dict[str, str]:
     가 dotted-key flat 표현 (``"skill-name.description"`` 등) 으로
     변환해 반환.
 
-    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up) —
-    when the in-repo SoT is missing for a kind listed in
-    :data:`_OPERATOR_LOCAL_FALLBACK_PATHS` (today only
-    ``tool_descriptions``), fall back to the operator-local 3-layer-
-    reader path so the mutator sees the same content the runtime
-    reader sees. Without the fallback the mutator would propose
-    changes against an empty dict and silently diverge from
-    operator-local overrides.
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    — :func:`policy_path` returns the operator-local path for
+    ``tool_descriptions`` when the operator-local file exists, so this
+    function transparently reads whichever layer the runtime reader
+    reads. Both READ and WRITE land on the same file.
     """
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        # PR-TOOL-DESCRIPTIONS-MUTATE — operator-local fallback for
-        # kinds whose runtime reader honours a 3-layer override.
-        operator_local = _OPERATOR_LOCAL_FALLBACK_PATHS.get(kind)
-        if operator_local is not None:
-            try:
-                raw = operator_local.read_text(encoding="utf-8")
-            except FileNotFoundError:
-                return {}
-        else:
-            return {}
+        return {}
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
