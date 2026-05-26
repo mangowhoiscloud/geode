@@ -583,6 +583,88 @@ def test_classify_signal_assistant_event_exclamation_prefix_still_fires() -> Non
     assert signal.event_type == "assistant"
 
 
+def test_classify_signal_smoke22_llm_prose_in_result_event_not_false_positive() -> None:
+    """PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1, 2026-05-26)
+    regression — smoke 22 evidence: dump
+    ``/Users/mango/.geode/diagnostics/claude-cli-transient/1779767762-claude-opus-4-7.json``.
+    LLM seed body landed in ``event.type="result"`` ``result`` field
+    (the aggregated final-assistant text) containing the phrase
+    ``"rate-limit warning"``. Pre-fix the broad transient regex matched
+    any-position in the ``result`` field, aborting ``gen-gen1-000``
+    even though the seed .md was already written.
+
+    The fix extends the same CLI-injection-prefix allowlist applied
+    to the ``assistant`` + ``content_block_delta`` branches to the
+    ``result.result`` field (LLM-authored prose), while preserving
+    any-position scans on ``result.error`` / ``result.message`` /
+    ``result.stderr`` (CLI-injected error text)."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    seed_body = (
+        "Wrote candidate seed describing the incident triage workflow. "
+        "The agent recognizes the operator-supplied context, the idempotent "
+        "refund tool, and the rate-limit warning as sufficient grounds for "
+        "N=2. Frontmatter includes target_dims and tags."
+    )
+    stdout = _make_stream_json([{"type": "result", "stop_reason": "end_turn", "result": seed_body}])
+    events = parse_stream_json_events(stdout)
+    signal = classify_transient_signal(stdout=stdout, stderr="", events=events)
+    assert signal is None, (
+        "smoke 22 false-positive regressed: LLM seed prose in result.result "
+        "matched the transient regex without the CLI-injection prefix gate"
+    )
+
+
+def test_classify_signal_result_event_error_field_still_fires_any_position() -> None:
+    """The ``result.error`` field is a CLI/system error message, not
+    LLM-authored prose. The fix must keep the any-position scan on this
+    field — only ``result.result`` (LLM aggregate) gets the prefix
+    allowlist. Regression guard for the Sprint H1 scope."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "result",
+                "error": "Upstream API responded with overloaded_error: server busy",
+                "result": "",
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout="", stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.event_field == "error"
+
+
+def test_classify_signal_result_event_cli_injection_prefix_in_result_fires() -> None:
+    """When the ``result.result`` field DOES start with the CLI-injection
+    prefix (e.g. claude-cli wrote ``! Unexpected error...`` as the
+    aggregated final text because the model never emitted anything),
+    the prefix-allowlist gate lets the transient regex run and fires
+    normally. Mirror of the existing assistant-event coverage for the
+    result-event path."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json([{"type": "result", "result": "! Unexpected error. Auto-retrying."}])
+    signal = classify_transient_signal(
+        stdout=stdout, stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.event_type == "result"
+    assert signal.event_field == "result"
+
+
 def test_classify_signal_content_block_delta_exclamation_prefix_still_fires() -> None:
     """Same prefix-allowlist guarantee for the streaming delta path —
     a CLI-injected error chunk that arrives as ``content_block_delta``
