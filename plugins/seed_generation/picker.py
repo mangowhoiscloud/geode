@@ -194,7 +194,7 @@ def load_user_overrides(
 
        [seed_generation.role.pilot]
        source = "subscription"
-       model  = "claude-haiku-4-5"
+       model  = "claude-opus-4-7"
 
     The legacy ``~/.geode/seed-generation.toml`` schema (per-role top-level
     table) is still read when ``[seed_generation.role.*]`` is absent from

@@ -63,7 +63,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Critic"]
 
 
-_DEFAULT_CRITIC_MODEL = "claude-sonnet-4-6"
+_DEFAULT_CRITIC_MODEL = "claude-opus-4-7"
 _CRITIC_AGENT_NAME = "seed_critic"
 _TASK_TYPE = "seed-critique"
 
