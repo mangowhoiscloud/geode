@@ -486,10 +486,12 @@ class SchedulerConfig(BaseModel):
     expression. Suggested production value: ``100`` (covers ~25 days
     at min_interval=360 = 6h). Closes 2026-05-26 attribution sprint
     Phase A audit (§5.6) — runaway auto-trigger no-stop-condition
-    leak. Cap is best-effort (no post-lock recheck under concurrent
-    callers); operators needing strict uniqueness should also use a
-    cron expression that fires less frequently than
-    ``min_interval_minutes``."""
+    leak. The cap is checked both pre-lock (skips no-op lock acquire
+    when the history is already saturated) and post-lock (catches the
+    race where two parallel callers both observed count=N-1 before
+    either appended). Operators needing strict uniqueness across
+    independent host processes should also pick a cron expression
+    that fires less frequently than ``min_interval_minutes``."""
 
 
 class SelfImprovingLoopConfig(BaseModel):

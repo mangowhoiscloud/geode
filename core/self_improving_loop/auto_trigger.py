@@ -99,9 +99,9 @@ STATE_TO_HOOK_EVENT: dict[str, str] = {
     "interval_blocked": "SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED",
     "runner_error": "SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR",
     "parse_error": "SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR",
-    # PR-MAX-GEN (2026-05-26) — generation cap state. HookEvent not yet
-    # reserved (see follow-up HookEvent stub PR); ``_emit_state_event``
-    # graceful-skips the missing event name, so telemetry stays opt-in.
+    # PR-MAX-GEN (2026-05-26) — generation cap state. HookEvent reserved
+    # in ``core/hooks/system.py`` alongside the sibling auto-trigger
+    # events; same ``{trigger_id, ts, detail}`` payload schema.
     "max_generation_reached": "SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED",
 }
 """Maps terminal :class:`AutoTriggerStatus.state` → HookEvent enum name.

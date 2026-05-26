@@ -360,6 +360,52 @@ def test_max_generation_post_lock_recheck_blocks_overshoot(
     assert "post-lock re-check" in status.detail
 
 
+def test_max_generation_emits_hook_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex MCP review #2 (FAIL must-fix #3) — direct emission test.
+    When the cap fires, the registered HookSystem must receive a
+    ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED`` event with
+    the ``{trigger_id, ts, detail}`` payload. Pins the wiring from
+    ``_finalize_status`` → ``_emit_state_event`` →
+    ``STATE_TO_HOOK_EVENT[max_generation_reached]`` → ``HookEvent``."""
+    from core.hooks import HookEvent
+    from core.self_improving_loop import auto_trigger as mod
+
+    history = tmp_path / "history.jsonl"
+    for _ in range(3):
+        _write_history_row(history, state="fired")
+
+    captured: list[tuple[HookEvent, dict[str, Any]]] = []
+
+    class _FakeHooks:
+        def trigger(self, event: HookEvent, payload: dict[str, Any]) -> None:
+            captured.append((event, payload))
+
+    status = mod.auto_trigger_mutator(
+        enabled=True,
+        min_interval_minutes=0,
+        max_generation=3,
+        runner_factory=lambda: (_ for _ in ()).throw(  # pragma: no cover
+            AssertionError("runner must not fire")
+        ),
+        lock_path=tmp_path / "lock",
+        timestamp_path=tmp_path / "ts.txt",
+        history_path=history,
+        hooks=_FakeHooks(),
+    )
+
+    assert status.state == "max_generation_reached"
+    # Hook system received the cap-reached event with the canonical
+    # auto-trigger payload schema.
+    assert len(captured) == 1
+    event, payload = captured[0]
+    assert event is HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED
+    assert payload["trigger_id"] == mod.AUTO_TRIGGER_TRIGGER_ID
+    assert "ts" in payload
+    assert "3/3" in payload["detail"]
+
+
 def test_max_generation_disabled_state_short_circuits_before_cap(tmp_path: Path) -> None:
     """``enabled=False`` short-circuits BEFORE the cap check — disabled
     is a defensive guard that never touches disk."""
