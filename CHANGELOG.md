@@ -85,11 +85,15 @@ functional change.
     ``operator_force`` vs ``gate_approved``.
   - ``autoresearch/train.py:_revert_sot_after_reject`` — emits
     ``MUTATION_REVERTED`` with ``reason="promote_gate_reject"`` after
-    the SoT roll-back succeeds (covers both reject + audit-fail
-    revert paths since both route through the same function).
+    the SoT roll-back succeeds. ``run_id`` carries the audit_run_id
+    (not the mutation_id). Covers the promotion-gate reject path.
+    The audit-subprocess-crash revert path uses ``_rollback_sot``
+    in ``runner.py`` and is deferred to a follow-up PR.
   Pinned with new ``tests/core/self_improving_loop/test_mutation_emit_wire.py``:
-  no-op-when-unwired contract + dispatch-when-wired + the runner emit
-  for both ``"applied"`` and ``"applied_sibling"`` kinds.
+  no-op-when-unwired + dispatch-when-wired + ``append_audit_log``
+  emit (``"applied"`` + ``"applied_sibling"``) + ``_write_baseline``
+  emit (BASELINE_PROMOTED) + ``_revert_sot_after_reject`` emit
+  (MUTATION_REVERTED, ``run_id`` = audit_run_id).
 
 ## [0.99.73] - 2026-05-27
 

@@ -2356,10 +2356,12 @@ def _revert_sot_after_reject(
     # docstring (core/hooks/system.py:285-288):
     #   {"mutation_id": str, "target_kind": str, "target_path": str,
     #    "ts": float, "run_id": str, "reason": str}
-    # ``reason`` carries the gate verdict text so observability
-    # readers can distinguish "promote-gate reject" from
-    # "audit subprocess crash" (PR-SOT-REVERT-ON-AUDIT-FAIL site fires
-    # its own emit at autoresearch/train.py:2685).
+    # ``run_id`` carries the AUDIT_RUN_ID (the per-audit correlation
+    # key written into mutations.jsonl by runner.append_audit_log),
+    # NOT the mutation_id — the mutation_id rides in its own field.
+    # The audit-subprocess-crash revert path uses ``_rollback_sot``
+    # (runner.py) instead of this function; that path is NOT wired
+    # by this PR and is deferred to a follow-up.
     from core.hooks.system import HookEvent
     from core.self_improving_loop._hooks import _fire_hook
 
@@ -2370,7 +2372,7 @@ def _revert_sot_after_reject(
             "target_kind": target_kind,
             "target_path": f"{target_kind}.{target_section}",
             "ts": time.time(),
-            "run_id": os.environ.get("GEODE_SIL_MUTATION_ID", ""),
+            "run_id": os.environ.get("GEODE_SIL_AUDIT_RUN_ID", ""),
             "reason": "promote_gate_reject",
         },
     )
