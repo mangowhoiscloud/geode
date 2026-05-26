@@ -87,6 +87,53 @@ functional change.
   ``tests/core/cli/test_self_improving_wire1.py`` covering dispatcher
   routing, ``--last`` argv parsing, real-helper invocation
   (non-stub), and three empty-state branches per command.
+- **PR-SEEDS-HIRES (Phase 3: live + lineage)** — final 2 surfaces of
+  the seed-generation hi-resolution sprint:
+
+  - `/seed-generation/active/` — cross-run live dashboard. Filters
+    every run's `progress.json` where `current_phase != "done"`;
+    renders a dense table with phase / step / agent / ETA / updated.
+    Hybrid liveness: static build-time snapshot + inline ~50-line
+    vanilla JS poller that refetches each run's `progress.json`
+    every 5s, with `<meta http-equiv="refresh" content="60">` as
+    fallback. End-to-end latency ≤ 10s (PR 1's `_live_sync_loop` +
+    poller). No framework, no external script, ≤ 2 KB inline JS.
+  - `/seed-generation/<run_id>/lineage/` + per-candidate
+    `/lineage/<cand_id>/` — Phoenix-style time-ordered station list
+    per candidate (supervisor guidance / generator body / proximity
+    drop / critic reflection + debate / pilot dim_means / ranker
+    matches / evolver rewrite + unified diff between parent +
+    evolved bodies). Uses Python `difflib.unified_diff` — no dep.
+
+  Builder: `scripts/build_self_improving_hub.py` adds
+  `render_seedgen_active` + `_load_active_runs` + `_fmt_eta` +
+  `_fmt_relative_age` (active) + `emit_seedgen_lineage_pages` +
+  `_load_candidate_lineage` + `_render_lineage_index_body` +
+  `_render_lineage_detail_body` (lineage). `_render_seedgen_subpage`
+  sidebar extended with `Lineage` + `Active runs` entries. Active +
+  lineage emitters wired into `_emit_seedgen_run_subpages` + `main()`.
+
+  CSS: `docs/self-improving/assets/hub.css` adds `.active-runs`,
+  `.live-indicator` + `.dot` keyframe pulse, `.lineage-station`,
+  `pre.diff`, `pre.msg.cand-body`. **Zero new color tokens** —
+  reuses `--bucket-seedgen`, `--paper-tint`, `--rule-soft`.
+
+  DESIGN.md: `self-improving-seed-generation-active.md`,
+  `self-improving-seed-generation-lineage.md`.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **45 cases** — was 40):
+  `test_pr3_active_runs_lists_in_progress`,
+  `test_pr3_active_has_meta_refresh_and_js_poller` (cotton: inline JS
+  ≤ 2 KB, no `<script src=>`, no ESM imports),
+  `test_pr3_lineage_index_lists_candidates`,
+  `test_pr3_lineage_detail_renders_stations_and_diff`,
+  `test_pr3_lineage_basepath_safe`.
+
+  Closes the operator directive 2026-05-26: "활성 런, 런별로 현재 진행중인
+  에이전트와 스텝" + "각 시나리오가 절차순으로 어떻게 변화했는지". Combined with
+  PR 1 + PR 2, all 5 hi-resolution surfaces (conversations / procedures
+  / active runs / lineage / ranker matches) now ship.
+
 
 ### Changed
 

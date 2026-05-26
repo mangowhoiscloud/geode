@@ -1008,6 +1008,116 @@ def test_pr2_subpages_basepath_safe(built_seedgen_pages: dict[str, str]) -> None
             )
 
 
+@pytest.fixture(scope="module")
+def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    """Build the hub once with the active fixture run included so PR 3 tests can read it.
+
+    Separate module-scoped fixture (not folded into built_seedgen_pages) so PR
+    2 tests stay isolated from the test-run-002-active fixture.
+    """
+    out = tmp_path_factory.mktemp("seedgen-out-p3")
+    seedgen_out = out / "seedgen"
+    subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "hub" / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+        ],
+        check=True,
+        cwd=str(REPO_ROOT),
+    )
+    pages: dict[str, str] = {}
+    active_path = seedgen_out / "active" / "index.html"
+    if active_path.is_file():
+        pages["active"] = active_path.read_text(encoding="utf-8")
+    lineage_idx = seedgen_out / SEEDGEN_FIXTURE_RUN_ID / "lineage" / "index.html"
+    if lineage_idx.is_file():
+        pages[f"{SEEDGEN_FIXTURE_RUN_ID}/lineage"] = lineage_idx.read_text(encoding="utf-8")
+    lineage_root = seedgen_out / SEEDGEN_FIXTURE_RUN_ID / "lineage"
+    if lineage_root.is_dir():
+        for cand_dir in lineage_root.iterdir():
+            if not cand_dir.is_dir():
+                continue
+            page = cand_dir / "index.html"
+            if page.is_file():
+                pages[f"{SEEDGEN_FIXTURE_RUN_ID}/lineage/{cand_dir.name}"] = page.read_text(
+                    encoding="utf-8"
+                )
+    return pages
+
+
+def test_pr3_active_runs_lists_in_progress(built_pr3_pages: dict[str, str]) -> None:
+    """`/active/` lists test-run-002-active and excludes the done test-run-001."""
+    html = built_pr3_pages.get("active")
+    assert html, "active page missing"
+    assert "test-run-002-active" in html, "in-progress fixture run missing"
+    # done run must NOT appear in active table
+    assert (
+        '<td class="id"><a href="/geode/self-improving/seed-generation/test-run-001/">' not in html
+    ), "active page rendered a done run in the active table"
+    assert "ranker" in html
+    assert "vote 3 of 12" in html
+
+
+def test_pr3_active_has_meta_refresh_and_js_poller(built_pr3_pages: dict[str, str]) -> None:
+    """`/active/` has meta-refresh fallback + inline JS poller, no framework, <2KB."""
+    html = built_pr3_pages.get("active")
+    assert html, "active page missing"
+    assert 'http-equiv="refresh"' in html, "meta-refresh fallback missing"
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.DOTALL)
+    assert scripts, "no <script> blocks found"
+    for s in scripts:
+        assert " src=" not in s, "external <script src=> not allowed (cotton)"
+        assert "import " not in s and "from " not in s, "ESM imports forbidden (cotton)"
+        assert len(s) < 2000, f"inline JS {len(s)} chars exceeds 2 KB cotton cap"
+
+
+def test_pr3_lineage_index_lists_candidates(built_pr3_pages: dict[str, str]) -> None:
+    """`/lineage/` lists both original (c-001/c-002) and evolved (c-001-ev1) candidates."""
+    html = built_pr3_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/lineage")
+    assert html, "lineage index missing"
+    assert "c-001" in html and "c-002" in html
+    assert "c-001-ev1" in html, "evolved candidate missing from lineage index"
+
+
+def test_pr3_lineage_detail_renders_stations_and_diff(
+    built_pr3_pages: dict[str, str],
+) -> None:
+    """Per-candidate page has ≥4 phase stations + unified diff for evolved variants."""
+    html = built_pr3_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/lineage/c-001")
+    assert html, "lineage c-001 detail missing"
+    assert html.count('class="page-sub lineage-station"') >= 4, (
+        "expected ≥4 lineage stations for c-001 "
+        "(supervisor / generator / critic / pilot / ranker / evolver)"
+    )
+    assert 'class="diff"' in html, "evolver diff block missing"
+
+
+def test_pr3_lineage_basepath_safe(built_pr3_pages: dict[str, str]) -> None:
+    """Every href on lineage + active pages is /geode/-prefixed or external."""
+    for key in (
+        "active",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/lineage",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/lineage/c-001",
+    ):
+        html = built_pr3_pages.get(key)
+        if html is None:
+            continue
+        for href in _collect_hrefs(html):
+            if href.startswith(("#", "mailto:", "https://", "http://")):
+                continue
+            assert href.startswith("/geode/"), (
+                f"PR3 page {key} href {href!r} missing /geode/ basePath"
+            )
+
+
 def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> None:
     """Cotton discipline — PR 2 sub-pages must be pure static HTML."""
     for key in (

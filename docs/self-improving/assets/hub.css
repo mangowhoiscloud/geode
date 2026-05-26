@@ -982,3 +982,57 @@ table.records.votes td.rationale {
   background: rgba(108,117,125,.12);
   color: #6c757d;
 }
+
+/* ---------------------------------------------------------------------
+ * PR-SEEDS-HIRES P3 (2026-05-26) — Live + Lineage surfaces.
+ * `/active/` + `/lineage/<cand_id>/` pages. Reuses existing tokens.
+ * ------------------------------------------------------------------ */
+table.records.active-runs {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.records.active-runs td.num,
+table.records.active-runs th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .85rem;
+}
+.live-indicator .dot {
+  display: inline-block;
+  width: .55rem;
+  height: .55rem;
+  border-radius: 50%;
+  background: var(--bucket-seedgen);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%   { opacity: .35; }
+  50%  { opacity: 1; }
+  100% { opacity: .35; }
+}
+section.lineage-station {
+  border-left: 3px solid var(--bucket-seedgen);
+  padding-left: .85rem;
+}
+section.lineage-station h3 {
+  margin: .2rem 0 .5rem 0;
+  font-size: 1.05rem;
+}
+pre.diff {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--paper-tint);
+  padding: .7rem .85rem;
+  border-radius: 4px;
+  font-size: .8rem;
+  line-height: 1.4;
+  border: 1px solid var(--rule-soft);
+}
+pre.msg.cand-body {
+  border: 1px solid var(--rule-soft);
+}
