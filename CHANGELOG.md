@@ -47,6 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27)** — extend
+  MUTATION_REVERTED emit coverage to the symmetric ``_rollback_sot``
+  paths (audit-log-write-fail / audit-subprocess-crash /
+  audit-subprocess-nonzero). PR-MUTATION-EMIT-WIRE only covered the
+  promote-gate reject path (``autoresearch/train.py:_revert_sot_after_reject``);
+  the four ``_rollback_sot`` caller sites in
+  ``core/self_improving_loop/runner.py`` were left without emit. Added
+  ``audit_run_id`` + ``reason`` keyword args to ``_rollback_sot`` and
+  threaded specific reason strings (``audit_log_write_fail`` x2 /
+  ``audit_subprocess_crash`` / ``audit_subprocess_nonzero``) from each
+  caller. Pinned with ``tests/core/self_improving_loop/test_mutation_emit_wire.py::test_rollback_sot_emits_mutation_reverted``
+  (3 reason variants + default fallback).
+
 ### Fixed
 - **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route
   ``ClaudeCliTransientUpstreamError`` into the retry path with the
