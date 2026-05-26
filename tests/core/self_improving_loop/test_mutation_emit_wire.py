@@ -217,8 +217,9 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     with ``reason="promote_gate_reject"`` after the SoT roll-back
     succeeds. ``run_id`` carries ``GEODE_SIL_AUDIT_RUN_ID`` (the
     audit correlation key), NOT the mutation_id."""
-    from autoresearch import train
     from core.self_improving_loop.runner import Mutation, append_audit_log
+
+    from autoresearch import train
 
     # Seed a mutations.jsonl row that the revert function can look up.
     audit_log = tmp_path / "mutations.jsonl"
@@ -264,9 +265,7 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     )
     set_self_improving_loop_hooks(hooks)
 
-    success, detail = train._revert_sot_after_reject(
-        "revert-test-mid", audit_log_path=audit_log
-    )
+    success, detail = train._revert_sot_after_reject("revert-test-mid", audit_log_path=audit_log)
     assert success
     assert detail == "prompt.evolver.system"
     # SoT write happened (prior-value restored)
