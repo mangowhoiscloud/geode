@@ -412,8 +412,9 @@ class TestSessionCheckpointDualWrite:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """JSON checkpoint survives even when the DB mirror raises."""
-        from core.memory import session_manager as _sm_mod
         from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+        from core.memory import session_manager as _sm_mod
 
         def _boom(self, *_a: object, **_kw: object) -> int:
             raise RuntimeError("boom")
@@ -510,8 +511,9 @@ class TestSessionCheckpointDualWrite:
         import logging
         import sqlite3
 
-        from core.memory import session_manager as _sm_mod
         from core.memory.session_checkpoint import SessionCheckpoint, SessionState
+
+        from core.memory import session_manager as _sm_mod
 
         def _raise(self, *_a: object, **_kw: object) -> int:
             raise sqlite3.OperationalError("database is locked")

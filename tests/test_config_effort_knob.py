@@ -79,8 +79,9 @@ class TestPickerPersistence:
         """After picker confirms an effort, .geode/config.toml must
         carry it so the next session re-loads from the durable layer."""
         monkeypatch.chdir(tmp_path)
-        from core.cli.commands import MODEL_PROFILES, _apply_model
         from core.config import settings
+
+        from core.cli.commands import MODEL_PROFILES, _apply_model
 
         old_model = settings.model
         old_effort = getattr(settings, "agentic_effort", "high")

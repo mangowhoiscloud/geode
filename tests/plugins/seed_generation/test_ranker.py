@@ -555,3 +555,94 @@ def test_sub_task_model_field_wins_over_settings_default() -> None:
     # Per-task override.
     t2 = SubTask(task_id="t-2", description="d", task_type="analyze", model="claude-opus-4-7")
     assert t2.model == "claude-opus-4-7"
+
+
+def test_ranker_voter_task_ids_unique_across_duplicate_bindings() -> None:
+    """Two voters sharing (provider, source) produce DISTINCT task_ids.
+
+    PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch, 2026-05-26).
+    The default panel in
+    ``plugins/seed_generation/seed_generation.plugin.toml`` ships TWO
+    ``openai.openai-codex`` voters (cost-balance: 2x codex + 1x
+    claude-cli). Pre-fix the task_id shape
+    ``vote-{match_id}-{provider}.{source}`` collided across the two
+    codex voters, and ``SubAgentManager._deduplicate`` silently
+    dropped one — so the advertised 3-voter panel actually dispatched
+    only 2 voters per match. The fix injects a per-voter ordinal
+    (``v{idx:02d}``) into the task_id so duplicate bindings stay
+    distinct. Same pattern as ``mutation_eval.py``.
+    """
+    from plugins.seed_generation.tournament import MatchPlan
+
+    # Replicate the default manifest: two duplicate openai-codex bindings
+    # plus one claude-cli binding.
+    voters = [
+        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex"),
+        VoterBinding(model="claude-sonnet-4-6", provider="anthropic", source="claude-cli"),
+    ]
+    ranker = Ranker(
+        manager=_AlwaysAWinsManager(),  # type: ignore[arg-type]
+        voters=voters,
+        rng=random.Random(0),
+    )
+    match = MatchPlan(match_id="m000", a="c-00", b="c-01")
+    tasks = ranker._build_voter_tasks(
+        match,
+        pilot_means={"c-00": {}, "c-01": {}},
+        candidate_bodies={"c-00": "body a", "c-01": "body b"},
+    )
+
+    # 1. One task per voter — never collapsed by dedup.
+    assert len(tasks) == 3, (
+        f"Ranker must spawn one task per voter (got {len(tasks)} for 3 voters). "
+        f"Pre-fix the two duplicate openai-codex bindings collided on task_id "
+        f"and SubAgentManager._deduplicate dropped one."
+    )
+
+    # 2. All task_ids must be unique.
+    task_ids = [t.task_id for t in tasks]
+    assert len(set(task_ids)) == 3, (
+        f"Voter task_ids must be unique even for duplicate (provider, source) "
+        f"bindings — got {task_ids}. Pre-fix shape was "
+        f"'vote-{{match_id}}-{{provider}}.{{source}}' which collided."
+    )
+
+    # 3. Pin the actual shape so a regression to the un-disambiguated form
+    #    fails loudly (not just silently). The ordinal MUST appear in the
+    #    task_id string.
+    for idx, task in enumerate(tasks):
+        assert f"-v{idx:02d}-" in task.task_id, (
+            f"Voter {idx} task_id={task.task_id!r} missing the 'v{idx:02d}' "
+            f"ordinal — Codex MCP catch (2026-05-26) requires per-voter "
+            f"disambiguation in the task_id."
+        )
+
+
+def test_ranker_voter_task_ids_match_mutation_eval_shape() -> None:
+    """Cross-module consistency: ranker + mutation_eval share the v-ordinal shape.
+
+    Both modules dispatch the same VOTE_SCHEMA panel; both must
+    survive duplicate (provider, source) bindings. Pinning the shape
+    here prevents the two from drifting back out of sync.
+    """
+    from plugins.seed_generation.tournament import MatchPlan
+
+    voters = _voters()
+    ranker = Ranker(
+        manager=_AlwaysAWinsManager(),  # type: ignore[arg-type]
+        voters=voters,
+        rng=random.Random(0),
+    )
+    match = MatchPlan(match_id="match-xy", a="c-00", b="c-01")
+    tasks = ranker._build_voter_tasks(
+        match,
+        pilot_means={"c-00": {}, "c-01": {}},
+        candidate_bodies={"c-00": "x", "c-01": "y"},
+    )
+    # ranker shape: vote-{match_id}-v{idx:02d}-{provider}.{source}
+    expected_first = f"vote-match-xy-v00-{voters[0].provider}.{voters[0].source}"
+    assert tasks[0].task_id == expected_first, (
+        f"Ranker task_id shape drifted from mutation_eval — "
+        f"got {tasks[0].task_id!r}, expected {expected_first!r}."
+    )

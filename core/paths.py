@@ -371,6 +371,16 @@ GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed-generation.toml"
 # `__file__` in skill_registry, do NOT add a constant for them here.
 GLOBAL_SKILLS_DIR = GEODE_HOME / "skills"
 
+# PR-Hermes-1d.2 (2026-05-26) — cross-project search index. Mirrors a
+# subset of every per-project ``sessions.db`` ``messages`` table into a
+# single FTS5-backed ledger so ``session_search(scope="all")`` and the
+# ``geode reindex`` CLI command can answer "have I seen this anywhere
+# across my history?" without opening N project DBs. The index is a
+# rebuild-from-source artefact (no ground-truth lives here) so the
+# rebuild is idempotent.
+GLOBAL_SEARCH_DIR = GEODE_HOME / "search"
+GLOBAL_SEARCH_DB = GLOBAL_SEARCH_DIR / "global.db"
+
 # Project-scoped user data root
 GLOBAL_PROJECTS_DIR = GEODE_HOME / "projects"
 

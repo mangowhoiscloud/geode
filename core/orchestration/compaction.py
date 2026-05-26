@@ -1,9 +1,39 @@
-"""Client-side conversation compaction — LLM summary-based context management.
+"""Client-side conversation compaction — Hermes Phase 3 4-phase pipeline.
 
-For providers without server-side compaction (OpenAI, GLM), this module
-provides LLM-based conversation summarization when context approaches limits.
+For providers without server-side compaction (OpenAI, GLM, etc.) this
+module compresses the head of the message list into an LLM-generated
+summary while preserving the tail verbatim for continuity. Anthropic
+has server-side compaction (``compact_20260112``) and short-circuits
+at the top.
 
-Anthropic has server-side compaction (compact_20260112) and does not need this.
+**4 phases** (Hermes Phase 3, 2026-05-26, absorbing Claude Code's
+tool_use/tool_result boundary + orphan handling — the broader
+thinking-block / image-block / citation surface is out of scope
+for this PR):
+
+1. **boundary** — find the cut index that won't split a
+   ``tool_use`` / ``tool_result`` pair. Starts at
+   ``len(messages) - keep_recent`` and walks backwards while the
+   tail's first message would orphan a tool_result from the head.
+2. **orphan_tool_result** — defensive cleanup for the edge case
+   where the boundary algorithm hit index 0 (entire history fits
+   in tail but the head has tool_uses with no matching results, or
+   vice versa). Drops orphan tool_result blocks whose tool_use_id
+   no longer appears anywhere in the post-boundary message list.
+3. **summarize** — LLM call against the head messages, producing a
+   plain-text summary that follows the Claude-Code-style "preserve
+   task / decisions / state / refs / next steps" prompt.
+4. **carry_forward** — splice the summary + a compaction marker +
+   the cleaned tail so the agent continues with a hybrid view: a
+   compact narrative of the past + verbatim recent turns.
+
+Pre-Hermes-3 GEODE shipped phases 3+4 only (`compact_conversation`
+ran a single LLM summary + carry-forward). Without phase 1 the cut
+could split a `tool_use` / `tool_result` pair, raising "tool_result
+block does not match a preceding tool_use" at the provider's
+validator. Without phase 2 a malformed history (e.g., resumed from
+a checkpoint that lost its tool_use anchor) could carry an orphan
+tool_result through to the next LLM call.
 """
 
 from __future__ import annotations
@@ -36,10 +66,11 @@ async def compact_conversation(
     *,
     keep_recent: int = 10,
 ) -> tuple[list[dict[str, Any]], bool]:
-    """Compact conversation via LLM summarization.
+    """Compact conversation via 4-phase pipeline.
 
-    Returns (new_messages, did_compact).
-    Only runs for non-Anthropic providers (Anthropic uses server-side compaction).
+    Returns ``(new_messages, did_compact)``. Anthropic uses server-side
+    compaction so this is a no-op for that provider; non-Anthropic
+    providers run the full pipeline.
     """
     if provider == "anthropic":
         log.debug("Skipping client compaction — Anthropic uses server-side compaction")
@@ -49,38 +80,172 @@ async def compact_conversation(
         log.debug("Not enough messages to compact (%d <= %d)", len(messages), keep_recent + 2)
         return messages, False
 
-    # Split: messages to summarize vs. messages to keep
-    to_summarize = messages[:-keep_recent]
-    to_keep = messages[-keep_recent:]
+    # Phase 1 — boundary
+    boundary = find_safe_boundary(messages, keep_recent=keep_recent)
+    if boundary <= 0:
+        log.debug("compaction boundary at 0 — nothing to summarize")
+        return messages, False
 
-    # Build conversation text for summarization
+    to_summarize = messages[:boundary]
+    to_keep = messages[boundary:]
+
+    # Phase 2 — orphan tool_result cleanup
+    to_keep = strip_orphan_tool_results(to_keep)
+
+    # Phase 3 — summarize the head
     summary_input = _build_summary_input(to_summarize)
     if not summary_input.strip():
         return messages, False
-
-    # Call LLM for summarization
     summary = await _call_summarize(summary_input, provider, model)
     if not summary:
         log.warning("Compaction summary generation failed — keeping original messages")
         return messages, False
 
-    # Build new message list: summary + marker + recent messages
-    new_messages: list[dict[str, Any]] = [
-        {"role": "user", "content": f"[Conversation Summary]\n{summary}"},
-        {"role": "assistant", "content": "Understood. I have the summary context."},
-        {"role": "user", "content": COMPACTION_MARKER},
-        {"role": "assistant", "content": "Acknowledged. Continuing from where we left off."},
-        *to_keep,
-    ]
-
+    # Phase 4 — carry forward
+    new_messages = _carry_forward(summary, to_keep)
     log.info(
-        "Compacted conversation: %d → %d messages (summarized %d, kept %d recent)",
+        "Compacted conversation: %d → %d messages "
+        "(boundary=%d, summarized=%d, kept_recent=%d, post_orphan_cleanup=%d)",
         len(messages),
         len(new_messages),
+        boundary,
         len(to_summarize),
+        len(messages) - boundary,
         len(to_keep),
     )
     return new_messages, True
+
+
+# ── Phase 1: boundary ───────────────────────────────────────────────
+
+
+def find_safe_boundary(messages: list[dict[str, Any]], *, keep_recent: int) -> int:
+    """Return a cut index that won't split a ``tool_use`` / ``tool_result`` pair.
+
+    Starts at ``max(0, len(messages) - keep_recent)`` and walks
+    backwards while the boundary message is a ``tool_result`` whose
+    parent ``tool_use`` lives in the *previous* message. Each
+    backward step pulls the corresponding ``tool_use`` into the tail
+    so the pair stays together.
+
+    Stops moving when the boundary hits 0 — the caller is expected to
+    handle the entire-history-is-tool-pairs edge case via phase 2.
+    """
+    if len(messages) <= keep_recent:
+        return 0
+    boundary = len(messages) - keep_recent
+    while boundary > 0:
+        cur = messages[boundary]
+        prev = messages[boundary - 1]
+        cur_result_ids = _extract_tool_result_ids(cur)
+        if not cur_result_ids:
+            break
+        prev_use_ids = _extract_tool_use_ids(prev)
+        if cur_result_ids & prev_use_ids:
+            boundary -= 1
+            continue
+        break
+    return boundary
+
+
+# ── Phase 2: orphan tool_result cleanup ─────────────────────────────
+
+
+_ORPHAN_TOMBSTONE_TEXT = "[tool_result removed during compaction]"
+
+
+def strip_orphan_tool_results(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop ``tool_result`` blocks whose ``tool_use_id`` isn't anywhere in ``messages``.
+
+    Defensive cleanup for the case where the boundary algorithm
+    couldn't move the cut back far enough (e.g., the very first
+    message in the kept tail is itself an orphan). Returns a new
+    list — the input is not mutated.
+
+    **Matching contract**: a tool_result block survives iff
+    *any* assistant message in ``messages`` carries a ``tool_use``
+    with the same id. This is positional (ID appears somewhere)
+    rather than causal (ID appears in a strictly preceding assistant
+    message). The looser matcher is intentional for the post-
+    boundary cleanup since the boundary algorithm already
+    guarantees pair ordering for the recent tail; duplicate tool_use
+    ids that appear non-adjacently are unusual but legal.
+
+    **Role alternation preservation** (Codex MCP catch on
+    PR-Hermes-3): if a user message loses ALL its content blocks
+    to orphan stripping, the message is kept with a single
+    placeholder text block (rather than dropped entirely) so
+    consecutive-assistant role-alternation violations cannot occur
+    in the carry-forward tail.
+    """
+    all_use_ids: set[str] = set()
+    for msg in messages:
+        all_use_ids |= _extract_tool_use_ids(msg)
+
+    cleaned: list[dict[str, Any]] = []
+    for msg in messages:
+        content = msg.get("content")
+        if msg.get("role") != "user" or not isinstance(content, list):
+            cleaned.append(msg)
+            continue
+        new_blocks: list[Any] = []
+        for block in content:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_result"
+                and block.get("tool_use_id") not in all_use_ids
+            ):
+                continue
+            new_blocks.append(block)
+        if new_blocks:
+            cleaned.append({**msg, "content": new_blocks})
+        else:
+            # Empty content list would either be rejected by providers
+            # or, if simply dropped, would create role-alternation
+            # violations (two consecutive assistant messages). Insert a
+            # tombstone text block so the user-role slot survives.
+            cleaned.append(
+                {
+                    **msg,
+                    "content": [{"type": "text", "text": _ORPHAN_TOMBSTONE_TEXT}],
+                }
+            )
+    return cleaned
+
+
+def _extract_tool_use_ids(msg: dict[str, Any]) -> set[str]:
+    if msg.get("role") != "assistant":
+        return set()
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return set()
+    ids: set[str] = set()
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            tu_id = block.get("id")
+            if isinstance(tu_id, str) and tu_id:
+                ids.add(tu_id)
+    return ids
+
+
+def _extract_tool_result_ids(msg: dict[str, Any]) -> set[str]:
+    if msg.get("role") != "user":
+        return set()
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return set()
+    ids: set[str] = set()
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_result":
+            tr_id = block.get("tool_use_id")
+            if isinstance(tr_id, str) and tr_id:
+                ids.add(tr_id)
+    return ids
+
+
+# ── Phase 3: summarize ──────────────────────────────────────────────
 
 
 def _build_summary_input(messages: list[dict[str, Any]]) -> str:
@@ -167,3 +332,32 @@ async def _summarize_glm(conversation_text: str, model: str) -> str | None:
     if choice and choice.message and choice.message.content:
         return str(choice.message.content)
     return None
+
+
+# ── Phase 4: carry-forward ──────────────────────────────────────────
+
+
+def _carry_forward(summary: str, to_keep: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build the new message list: summary + marker + recent verbatim tail.
+
+    The summary lives in a 4-message preamble (user + assistant pair
+    twice: once to deliver the summary, once to gate the marker) so
+    the LLM has a consistent role-alternation pattern at the head of
+    the conversation. Empirically this is more stable than a single
+    system-style preamble at session resume.
+    """
+    return [
+        {"role": "user", "content": f"[Conversation Summary]\n{summary}"},
+        {"role": "assistant", "content": "Understood. I have the summary context."},
+        {"role": "user", "content": COMPACTION_MARKER},
+        {"role": "assistant", "content": "Acknowledged. Continuing from where we left off."},
+        *to_keep,
+    ]
+
+
+__all__ = [
+    "COMPACTION_MARKER",
+    "compact_conversation",
+    "find_safe_boundary",
+    "strip_orphan_tool_results",
+]

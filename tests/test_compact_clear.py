@@ -323,8 +323,9 @@ class TestModelSwitchGuard:
 
 class TestManageContextHandler:
     def test_status(self):
-        from core.cli.commands import set_conversation_context
         from core.cli.tool_handlers import _build_context_handlers
+
+        from core.cli.commands import set_conversation_context
 
         ctx = MagicMock()
         ctx.messages = [
@@ -342,8 +343,9 @@ class TestManageContextHandler:
         assert result["messages"] == 2
 
     def test_clear_needs_force(self):
-        from core.cli.commands import set_conversation_context
         from core.cli.tool_handlers import _build_context_handlers
+
+        from core.cli.commands import set_conversation_context
 
         ctx = MagicMock()
         ctx.messages = [_make_msg("user", "hi")]
@@ -355,8 +357,9 @@ class TestManageContextHandler:
         ctx.clear.assert_not_called()
 
     def test_clear_with_force(self):
-        from core.cli.commands import set_conversation_context
         from core.cli.tool_handlers import _build_context_handlers
+
+        from core.cli.commands import set_conversation_context
 
         ctx = MagicMock()
         ctx.messages = [_make_msg("user", "hi")]
@@ -368,8 +371,9 @@ class TestManageContextHandler:
         ctx.clear.assert_called_once()
 
     def test_no_context(self):
-        from core.cli.commands import set_conversation_context
         from core.cli.tool_handlers import _build_context_handlers
+
+        from core.cli.commands import set_conversation_context
 
         set_conversation_context(None)
         handlers = _build_context_handlers()

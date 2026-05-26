@@ -350,11 +350,24 @@ class Ranker(BaseSeedAgent):
         tasks: list[SubTask] = []
         from plugins.seed_generation.agents.base import picker_source_to_adapter_source
 
-        for voter in self._voters:
+        for idx, voter in enumerate(self._voters):
             voter_id = f"{voter.provider}.{voter.source}"
             tasks.append(
                 SubTask(
-                    task_id=f"vote-{match.match_id}-{voter_id}",
+                    # PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch,
+                    # 2026-05-26) — the default judge panel in
+                    # ``plugins/seed_generation/seed_generation.plugin.toml``
+                    # ships with TWO ``openai.openai-codex`` voters
+                    # (cost-balance: 2x codex + 1x claude-cli). Pre-fix
+                    # the task_id was ``vote-{match_id}-{provider}.{source}``
+                    # which collided for both codex voters;
+                    # ``SubAgentManager._deduplicate`` then silently
+                    # dropped one, so the advertised 3-voter panel
+                    # actually dispatched only 2 voters per match.
+                    # The per-voter ordinal ``v{idx:02d}`` disambiguates
+                    # duplicate (provider, source) bindings — same
+                    # pattern already used by ``mutation_eval.py``.
+                    task_id=f"vote-{match.match_id}-v{idx:02d}-{voter_id}",
                     description=self._build_description(
                         match=match,
                         voter=voter,
@@ -391,6 +404,36 @@ class Ranker(BaseSeedAgent):
                     model=voter.model,
                     # PR-JSON-WIRE (2026-05-25) — force vote JSON shape.
                     response_schema=VOTE_SCHEMA,
+                    # PR-CODEX-GPT55-OUTPUT-EMIT (2026-05-26) — pin
+                    # ``effort="low"`` for vote tasks. The vote is a
+                    # 3-way A/B/tie classification + 1-sentence
+                    # rationale (≤ 200 tokens per
+                    # ``plugins/seed_generation/agents/ranker.md``) —
+                    # NOT a multi-step reasoning problem. At the
+                    # silent SubTask default ``effort="medium"``,
+                    # smoke 20 produced 36
+                    # ``codex-oauth-empty-text`` dumps: gpt-5.5
+                    # burned all 109-254 output tokens on encrypted
+                    # reasoning and emitted ZERO message text,
+                    # collapsing the entire ranker phase (every
+                    # match either lost quorum or got 1/3 votes from
+                    # claude-cli alone). ctx7 OpenAI Responses API
+                    # docs (``/websites/developers_openai_api`` →
+                    # "Reasoning effort" + "Allocating space for
+                    # reasoning"): "Reducing reasoning effort can
+                    # result in faster responses and fewer tokens
+                    # used on reasoning in a response". The canonical
+                    # low-effort example in the docs uses gpt-5.5
+                    # with ``effort="low"`` for a single bash-script
+                    # generation task; the voter A/B/tie call is a
+                    # comparable single-shot output (one verdict +
+                    # one ≤ 200-token rationale).
+                    # ``max_output_tokens`` is NOT viable —
+                    # the Codex backend rejects it with 400
+                    # ``Unsupported parameter`` (pinned by
+                    # ``test_codex_kwargs_does_not_send_max_output_tokens``
+                    # and ``core/llm/providers/codex.py:325``).
+                    effort="low",
                 )
             )
         return tasks

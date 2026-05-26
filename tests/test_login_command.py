@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from core.cli.commands import cmd_login
 from core.llm.strategies.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
 from core.llm.strategies.plans import GLM_CODING_TIERS, default_plan_for_payg
+
+from core.cli.commands import cmd_login
 
 
 def _reset_state() -> None:
