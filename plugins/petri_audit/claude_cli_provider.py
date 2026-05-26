@@ -1127,9 +1127,10 @@ def register() -> None:
             # PR-LQ-Phase2 (2026-05-22) — share the
             # claude-cli-subagent lane with the self-improving-loop
             # mutator path so the host OAuth bucket sees at most
-            # ``DEFAULT_CLAUDE_CLI_LANE_MAX`` (=2) concurrent
-            # ``claude --print`` subprocesses. The lane runs the
-            # blocking semaphore wait in a worker thread so the
+            # ``DEFAULT_CLAUDE_CLI_LANE_MAX`` (raised to 4 in
+            # PR-LANE-CAP-AGGRESSIVE 2026-05-27 from the prior =2)
+            # concurrent ``claude --print`` subprocesses. The lane runs
+            # the blocking semaphore wait in a worker thread so the
             # event loop is not pinned while queued.
             from core.orchestration.claude_cli_lane import acquire_claude_cli_lane_async
 
