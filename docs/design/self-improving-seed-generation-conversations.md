@@ -44,7 +44,7 @@ All three files ship in the bundle via `bundle_sync._sync_subagents`
 |--------|--------|
 | `task_id` | dir name; links to `/agent/<task_id>/` |
 | `phase` | `session.json:metadata.phase` (fallback: task_id prefix) |
-| `model` | harness chip (Claude Code / Codex Plus / PAYG / GEODE) + raw model code |
+| `model` | harness chip (Claude Code / Codex / PAYG / GEODE) + raw model code |
 | `turns` | count of `user_message` + `assistant_message` events |
 | `cost` | `Σ session_end.total_cost` |
 | `duration` | `Σ session_end.duration_s` |

@@ -65,7 +65,7 @@
 
   <main class="content">
     <h1 class="page-title">GEODE Self-Improving Hub</h1>
-    <p class="page-sub">Anthropic Petri (inspect_ai) audit, self-improving-loop seed-generation, and autoresearch closed-loop. Three surfaces, one publish bundle. Each row shows the model used and the billing harness (PAYG = API key, Claude Code = Max OAuth, Codex Plus = ChatGPT Plus OAuth, GEODE = self-target wrapper).</p>
+    <p class="page-sub">Anthropic Petri (inspect_ai) audit, self-improving-loop seed-generation, and autoresearch closed-loop. Three surfaces, one publish bundle. Each row shows the model used and the billing harness (PAYG = API key, Claude Code = Max OAuth, Codex = ChatGPT OAuth, GEODE = self-target wrapper).</p>
 
 {{ stale_baseline_warning }}
 
@@ -135,7 +135,7 @@
       <p>Harness chip legend:
         <span class="chip payg">PAYG</span>API key billing &middot;
         <span class="chip claude">Claude Code</span>Max OAuth &middot;
-        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip codex">Codex</span>ChatGPT OAuth &middot;
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">

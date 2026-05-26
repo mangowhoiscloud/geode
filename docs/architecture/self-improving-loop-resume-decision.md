@@ -1,7 +1,7 @@
 # ADR — Outer-Loop Checkpoint + Resume on Credential Rollout
 
 > **Status**: Accepted (2026-05-19)
-> **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). When a subscription credential (Claude Code OAuth, ChatGPT Plus OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
+> **Scope**: GEODE self-improving-loop (autoresearch + seed-generation). When a subscription credential (Claude Code OAuth, ChatGPT OAuth) hits its quota mid-run, the operator must be able to swap accounts and **resume from the last completed unit of work** without re-spending budget on already-finished generations / candidates / matches.
 
 ## Context
 

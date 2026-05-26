@@ -8,7 +8,7 @@
 GEODE 의 4 auth path:
 
 - **A**: local `claude` CLI (Claude subscription via macOS keychain) — `claude_code_provider`
-- **B**: local `codex` CLI (ChatGPT Plus OAuth, device-code) — `codex_provider`
+- **B**: local `codex` CLI (ChatGPT OAuth, device-code) — `codex_provider`
 - **C**: OpenAI PAYG (sk-…) — `openai-payg`
 - **D**: Anthropic PAYG (sk-ant-…) — `anthropic-payg-geode`
 
@@ -126,7 +126,7 @@ Source value 는 Petri 의 `[petri.source.<family>].allowed` 와 1:1 (anthropic 
 - **OpenAI `text-embedding-3-small`** ($0.02 / 1M tok), 1536-dim.
 - 다른 provider (Voyage, Cohere) 후순위 — 본 ADR 의 결정은 OpenAI 단일.
 - routing.toml 의 `[embedding]` section 으로 user override 가능 (별도 sub-PR 의 enhancement).
-- credential — OpenAI PAYG (sk-…) 만 사용. ChatGPT Plus OAuth 는 embeddings API 미지원.
+- credential — OpenAI PAYG (sk-…) 만 사용. ChatGPT OAuth 는 embeddings API 미지원.
 
 ### 2. 7-role × 4-path picker (TUI)
 
@@ -177,7 +177,7 @@ Production chat 은 sk-ant-PAYG 만 사용.
 활성화하시겠습니까? [y/N]:
 ```
 
-ChatGPT Plus subscription (B path) 도 동등 notice.
+ChatGPT subscription (B path) 도 동등 notice.
 
 ### 4. Cost preview (`geode audit-seeds quota`)
 

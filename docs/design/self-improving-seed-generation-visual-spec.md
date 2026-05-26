@@ -390,7 +390,7 @@ When a future run records per-phase mutator overrides (`state.json.mutator_by_ph
 <div class="mutator-banner mutator-banner--split">
   <span class="label">Mutator</span>
   <span class="role-label">gen</span> <span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code>
-  <span class="role-label">critic</span> <span class="chip codex">Codex Plus</span> <code>codex/gpt-5.5</code>
+  <span class="role-label">critic</span> <span class="chip codex">Codex</span> <code>codex/gpt-5.5</code>
   <!-- one inline group per phase override -->
 </div>
 ```
@@ -1226,7 +1226,7 @@ Frontend agent self-verifies before PR:
 ### 17.3 Both pages
 
 - [ ] Page weighs < 80 KB gzipped (index typically ~10 KB, per-run ~30 KB; the 80 KB ceiling absorbs the heatmap)
-- [ ] All chips present + use locked vocabulary (`PAYG` / `Claude Code` / `Codex Plus` / `GEODE`)
+- [ ] All chips present + use locked vocabulary (`PAYG` / `Claude Code` / `Codex` / `GEODE`)
 - [ ] Same sidebar HTML structure as hub (only `.active` location changes)
 - [ ] HTML validates (W3C); CSS validates (no parse errors)
 - [ ] Lighthouse a11y score ≥ 95

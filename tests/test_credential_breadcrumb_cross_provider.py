@@ -2,7 +2,7 @@
 
 The v0.52.1 incident: GLM was exhausted (1113 Insufficient balance) but
 the LLM only saw rejection details for GLM profiles. The user had
-already registered Codex Plus OAuth and an Anthropic API key, but the
+already registered Codex OAuth and an Anthropic API key, but the
 breadcrumb did not mention them, so the model could not suggest
 ``/model gpt-5.4-mini`` as recovery.
 

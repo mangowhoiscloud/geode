@@ -19,7 +19,7 @@ documented in ``docs/design/self-improving-hub-system.md`` +
 3. **Section contract** — 4 main sections (Petri Audit / Seed Generation
    / Autoresearch / Documentation) each render with expected columns.
 4. **Harness chip mapping** — every model prefix resolves to the
-   correct chip class (PAYG / Claude Code / Codex Plus / GEODE).
+   correct chip class (PAYG / Claude Code / Codex / GEODE).
 5. **URL safety** — every ``href`` starts with ``/geode/`` (no missing
    basePath) or is an external ``https://``.
 6. **Version stamp** — ``pyproject.toml`` version is interpolated into
