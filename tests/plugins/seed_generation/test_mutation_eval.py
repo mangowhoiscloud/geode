@@ -422,5 +422,55 @@ def test_voter_prompt_carries_anti_phantom_directives() -> None:
     assert '"body": "after"' in desc
 
 
+def test_mutation_eval_voter_tasks_pin_effort_low() -> None:
+    """Mutation-eval voter SubTasks pin ``effort="low"``.
+
+    PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch, 2026-05-26) —
+    mutation_eval reuses VOTE_SCHEMA + the gpt-5.5 A/B/tie shape from
+    the ranker voter pathway. Without an explicit effort pin the
+    SubTask would fall through to ``_DIFFICULTY_TO_EFFORT["medium"]``
+    and reproduce the smoke 20 empty-text failure mode (gpt-5.5
+    burning the entire output budget on encrypted reasoning items)
+    outside the ranker phase. Same ctx7 grounding as
+    ``plugins/seed_generation/agents/ranker.py``.
+    """
+    voters = _three_voter_panel()
+    match_id = "effort-pin"
+    # Capture the dispatched tasks so we can inspect the SubTask.effort
+    # field directly — the result aggregate doesn't expose it.
+    dispatched: list[Any] = []
+
+    class _CapturingStubManager(_StubManager):
+        async def adelegate(
+            self,
+            tasks: list[Any],
+            *,
+            announce: bool = True,
+        ) -> list[_StubWorkerResult]:
+            dispatched.extend(tasks)
+            return await super().adelegate(tasks, announce=announce)
+
+    manager = _CapturingStubManager({})  # outputs empty — we only inspect dispatch
+    asyncio.run(
+        evaluate_mutation_pairwise(
+            before_response="b",
+            after_response="a",
+            scenario_seed="s",
+            voters=voters,
+            manager=manager,  # type: ignore[arg-type]
+            match_id=match_id,
+        )
+    )
+
+    assert len(dispatched) == 3, f"expected 3 dispatched voter SubTasks; got {len(dispatched)}"
+    for task in dispatched:
+        assert task.effort == "low", (
+            f"mutation_eval voter SubTask {task.task_id} must pin "
+            f"effort='low' (got {task.effort!r}) — without the pin the "
+            f"gpt-5.5 voter reproduces the smoke 20 empty-text failure "
+            f"outside the ranker phase."
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -137,6 +137,42 @@ were already merged; this release finishes Phases 1d.2 + 3.
   + 2-project rebuild populates global.db end-to-end, `--help`
   text describes global.db + sessions.db.
 
+### Fixed
+- PR-CODEX-GPT55-OUTPUT-EMIT — gpt-5.5 voter calls in the seed-generation
+  ranker phase were running at the silent SubTask default
+  ``effort="medium"`` (via ``_DIFFICULTY_TO_EFFORT["medium"]``), causing
+  gpt-5.5 to consume the entire ``output_tokens`` budget (109-254 per
+  call across 36 dumps in smoke 20) on encrypted reasoning items and
+  emit ``output_text=""`` 100% of the time — every match either lost
+  quorum or got 1/3 votes from claude-cli alone, collapsing the entire
+  ranker phase. Adds ``SubTask.effort`` field (empty-default preserves
+  the legacy difficulty/settings path) and pins ``effort="low"`` on
+  voter SubTasks at ``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` per ctx7 OpenAI Responses API docs
+  (``/websites/developers_openai_api`` → "Reasoning effort": "Reducing
+  reasoning effort can result in faster responses and fewer tokens
+  used on reasoning"; the canonical low-effort example uses gpt-5.5
+  with ``effort="low"`` for a single bash-script generation task —
+  the voter A/B/tie call is a comparable single-shot output).
+  ``max_output_tokens`` is not viable on the codex-oauth backend
+  (400 ``Unsupported parameter`` per ``core/llm/providers/codex.py:325``
+  and existing ``test_codex_kwargs_does_not_send_max_output_tokens``).
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — also pins
+  ``effort="low"`` on ``plugins/seed_generation/mutation_eval.py``
+  voter SubTasks. The mutation-eval channel reuses VOTE_SCHEMA +
+  gpt-5.5 A/B/tie shape, so without an effort pin it would reproduce
+  the empty-text failure mode outside the ranker phase.
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — pre-existing
+  ranker voter ``task_id`` collision surfaced by this PR. The default
+  judge panel ships TWO ``openai.openai-codex`` voters and the old
+  shape ``vote-{match_id}-{provider}.{source}`` collided across
+  duplicate (provider, source) bindings; ``SubAgentManager._deduplicate``
+  silently dropped one, so the advertised 3-voter panel actually
+  dispatched only 2 voters per match. Now uses the per-voter ordinal
+  shape ``vote-{match_id}-v{idx:02d}-{provider}.{source}`` — same
+  pattern already in ``mutation_eval.py``. Pinned by
+  ``test_ranker_voter_task_ids_unique_across_duplicate_bindings``.
+
 ## [0.99.64] - 2026-05-26
 
 Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR
