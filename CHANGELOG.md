@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **PR-WIRE-1** — Three new ``/self-improving`` REPL sub-actions wire
+  the three observability helpers identified as production-orphan
+  during the 2026-05-26 attribution sprint Phase A audit:
+  ``/self-improving credit [--last N]`` invokes
+  ``aggregate_credit_history``; ``/self-improving matrix [--last N]``
+  invokes ``compute_kind_dim_matrix`` + ``rank_dims_by_kind``;
+  ``/self-improving rollback-check [--last N]`` invokes
+  ``evaluate_rollback_condition`` against the current ``baseline.json``
+  + each apply row's stored ``rollback_condition`` predicate. Each
+  sub-action reads ``autoresearch/state/mutations.jsonl`` (the
+  git-tracked audit ledger), runs the helper, and prints a dense
+  table (``[[feedback-no-box-ui-no-emoji]]`` compliant — no card grids,
+  no emoji). Empty-state paths are pinned: no rows / no signal / no
+  predicates each emit a muted explanation line. Default N = 20.
+  Pinned by 15 invariant tests in
+  ``tests/core/cli/test_self_improving_wire1.py`` covering dispatcher
+  routing, ``--last`` argv parsing, real-helper invocation
+  (non-stub), and three empty-state branches per command.
+
 ### Changed
 
 - **PR-ATTR-INSPIRED-BY** — self-improving loop's group-sampling
