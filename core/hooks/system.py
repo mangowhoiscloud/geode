@@ -237,6 +237,13 @@ class HookEvent(Enum):
     SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED = "self_improving_auto_trigger_interval_blocked"
     SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR = "self_improving_auto_trigger_runner_error"
     SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR = "self_improving_auto_trigger_parse_error"
+    # PR-MAX-GEN (2026-05-26) — emitted when the auto-trigger hits the
+    # ``max_generation`` cap in ``~/.geode/self-improving-loop/auto_trigger_history.jsonl``.
+    # Same ``{trigger_id, ts, detail}`` payload schema; ``detail`` carries
+    # ``"current/max"`` (e.g. ``"100/100"``).
+    SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED = (
+        "self_improving_auto_trigger_max_generation_reached"
+    )
 
     # Wall-clock budget hand-off (PR-CL-BUDGET, 2026-05-23). Replaces the
     # prior turn hard-cap with a 2h time-cap + automatic T-10min hand-off.

@@ -476,6 +476,21 @@ class SchedulerConfig(BaseModel):
     *back-to-back* runs. Must satisfy ``min_interval_minutes <= cron
     period`` for the schedule to actually fire."""
 
+    max_generation: Annotated[int, Field(ge=0, le=100_000)] = 0
+    """PR-MAX-GEN (2026-05-26) — hard cap on total ``fired`` rows in
+    ``~/.geode/self-improving-loop/auto_trigger_history.jsonl``. When
+    the cap is reached the trigger returns ``max_generation_reached``
+    without invoking the mutator runner. ``0`` (default) preserves
+    legacy unbounded behaviour — recommended only for operators who
+    set ``min_interval_minutes`` aggressively and trust the cron
+    expression. Suggested production value: ``100`` (covers ~25 days
+    at min_interval=360 = 6h). Closes 2026-05-26 attribution sprint
+    Phase A audit (§5.6) — runaway auto-trigger no-stop-condition
+    leak. Cap is best-effort (no post-lock recheck under concurrent
+    callers); operators needing strict uniqueness should also use a
+    cron expression that fires less frequently than
+    ``min_interval_minutes``."""
+
 
 class SelfImprovingLoopConfig(BaseModel):
     """Top-level [self_improving_loop.*] config root.
