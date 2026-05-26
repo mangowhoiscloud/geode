@@ -31,10 +31,11 @@ from core.self_improving_loop import policies as _policies_mod
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_active_six() -> None:
+def test_target_kinds_contains_active_seven() -> None:
     """ADR-012 S0d — retrieval deprecated. M1 — skill_catalog 추가.
-    M2 (2026-05-21) — agent_contract 추가. Post-M2: 6 active mutation
-    targets."""
+    M2 (2026-05-21) — agent_contract 추가.
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions 추가.
+    Post-graduation: 7 active mutation targets."""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
@@ -42,6 +43,7 @@ def test_target_kinds_contains_active_six() -> None:
         "reflection",
         "skill_catalog",
         "agent_contract",
+        "tool_descriptions",
     }
 
 
@@ -61,13 +63,13 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 
 def test_policy_path_returns_distinct_paths() -> None:
-    """Distinct SoT per kind so policies evolve independently. M2 (2026-05-21)
-    후: 6 active kinds (skill_catalog + agent_contract 포함) + 보존된
-    retrieval 매핑 = 7 distinct paths."""
+    """Distinct SoT per kind so policies evolve independently.
+    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — 7 active kinds
+    (prompt / tool_policy / decomposition / reflection / skill_catalog /
+    agent_contract / tool_descriptions) + retrieval (deprecated but
+    path preserved) = 8 distinct paths."""
     paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
-    # 6 active (incl. skill_catalog post-M1 + agent_contract post-M2) +
-    # retrieval (deprecated but path preserved) = 7 unique paths.
-    assert len(set(paths.values())) == 7
+    assert len(set(paths.values())) == 8
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:

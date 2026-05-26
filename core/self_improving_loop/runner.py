@@ -345,6 +345,19 @@ class RunnerContext:
     target_dim: str = ""
     """The dim the runner will focus the mutation on. Picked from
     baseline via ``pick_regression_target_dim`` when present."""
+    mutator_feedback_block: str = ""
+    """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — compact textual summary
+    of recent apply + attribution history (per-dim credit + kind×dim
+    matrix), rendered by
+    :func:`core.self_improving_loop.mutator_feedback.format_mutator_feedback_block`.
+    Empty string when the feedback window is 0 or the history is empty;
+    the user-prompt builder drops the block silently in that case."""
+    recent_applies_for_dedup: tuple[ApplyRecord, ...] = ()
+    """PR-MUTATOR-DEDUP-GUARD (2026-05-27) — most-recent N apply rows
+    used by :func:`SelfImprovingLoopRunner.propose` to detect
+    repetitive mutations. Tuple (not list) so the context stays
+    safely shareable across parallel sibling propose calls. Empty
+    tuple when the dedup window is 0 (guard disabled)."""
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +391,15 @@ def build_runner_context() -> RunnerContext:
     its prompt. Pre-PR only ``prompt`` (wrapper-sections) was loaded;
     mutating the other 4 kinds was blind. The wrapper-only
     ``current_sections`` field stays populated for backwards compat.
+
+    PR-MUTATOR-HISTORY-FEEDBACK + PR-MUTATOR-DEDUP-GUARD (2026-05-27)
+    — also loads the most-recent N apply + attribution rows (N from
+    ``[self_improving_loop.autoresearch].mutator_feedback_window`` /
+    ``mutator_dedup_window``) so the mutator user prompt can carry a
+    history-feedback block and the dedup guard can compare against
+    prior apply rows. Both reads are best-effort; missing or empty
+    ``mutations.jsonl`` produces an empty block / empty tuple and the
+    loop behaves exactly as it did pre-PR.
     """
     from autoresearch.train import load_wrapper_prompt_sections
     from plugins.seed_generation.baseline_reader import (
@@ -386,6 +408,12 @@ def build_runner_context() -> RunnerContext:
         pick_regression_target_dim,
     )
 
+    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.self_improving_loop.mutations_reader import (
+        read_recent_applies,
+        read_recent_attributions,
+    )
+    from core.self_improving_loop.mutator_feedback import format_mutator_feedback_block
     from core.self_improving_loop.policies import TARGET_KINDS, load_policy
 
     baseline_snapshot = load_baseline()
@@ -400,12 +428,38 @@ def build_runner_context() -> RunnerContext:
     target_dim = ""
     if baseline_snapshot is not None:
         target_dim = pick_regression_target_dim(baseline_snapshot) or ""
+
+    cfg = load_self_improving_loop_config()
+    feedback_n = cfg.autoresearch.mutator_feedback_window
+    dedup_n = cfg.autoresearch.mutator_dedup_window
+    history_n = max(feedback_n, dedup_n)
+
+    feedback_block = ""
+    recent_applies: tuple[ApplyRecord, ...] = ()
+    if history_n > 0:
+        # Single ledger read shared by both surfaces — read once at the
+        # widest window and slice for each consumer. include_siblings=True
+        # because the dedup guard wants to see in-memory sibling mutations
+        # too (a sibling that scored just below the top-1 may be repeated
+        # next cycle if the LLM didn't internalise the dedup contract).
+        applies_window = read_recent_applies(history_n, include_siblings=True)
+        attributions_window = read_recent_attributions(history_n) if feedback_n > 0 else []
+        if feedback_n > 0:
+            feedback_block = format_mutator_feedback_block(
+                applies_window[-feedback_n:],
+                attributions_window[-feedback_n:],
+            )
+        if dedup_n > 0:
+            recent_applies = tuple(applies_window[-dedup_n:])
+
     return RunnerContext(
         baseline_snapshot=baseline_snapshot,
         meta_review_snapshot=meta_review_snapshot,
         current_sections=current_sections,
         current_policies=current_policies,
         target_dim=target_dim,
+        mutator_feedback_block=feedback_block,
+        recent_applies_for_dedup=recent_applies,
     )
 
 
@@ -458,10 +512,10 @@ _MUTATION_CONTRACT_SUFFIX = (
     "when omitted). Adding a new section key counts as a change; "
     "deleting does NOT (the runner ignores deletions).\n"
     '- Default to ``target_kind = "prompt"`` unless the regression '
-    "evidence specifically points at tool / decomposition / retrieval / "
-    "reflection policy. The current user message only shows wrapper-"
-    "prompt sections; non-prompt SoTs start empty until populated, so "
-    "explicit operator signal should drive non-prompt mutations.\n"
+    "evidence or recent-feedback block specifically points at a non-prompt "
+    "kind. The user message surfaces the FULL policy SoT for every active "
+    "TARGET_KINDS entry (PR-MINIMAL-2, 2026-05-21), so the mutator can "
+    "make an informed kind choice without operator hand-holding.\n"
     "- ``new_value`` must be a non-empty single-paragraph string under 600 "
     "characters.\n"
     "- ``rationale`` must cite the specific regression evidence or "
@@ -475,8 +529,14 @@ _MUTATION_CONTRACT_SUFFIX = (
     "- ``target_kind`` selects the policy SoT to mutate. One of "
     "``prompt`` (default, wrapper-sections.json), ``tool_policy`` "
     "(tool-policy.json), ``decomposition`` (decomposition.json), "
-    "``reflection`` (reflection.json). "
-    "Omit for prompt-level mutations. (``retrieval`` was deprecated "
+    "``reflection`` (reflection.json), ``skill_catalog`` "
+    "(skill-catalog.json), ``agent_contract`` (agent-contracts.json), "
+    "``tool_descriptions`` (tool-descriptions.json — PR-TOOL-DESCRIPTIONS-MUTATE "
+    "graduation, 2026-05-27). "
+    "Omit for prompt-level mutations. For ``tool_descriptions``, the "
+    "``target_section`` uses dotted notation: ``<tool_name>.description`` "
+    "(string replacement) or ``<tool_name>.hints`` (comma-separated list "
+    "of hint strings). (``retrieval`` was deprecated "
     "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
     "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
     "selecting ``target_section`` and writing ``new_value``, explicitly state "
@@ -502,7 +562,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "new_value": "<replacement text>",\n'
     '  "rationale": "<= 200 chars, citing the evidence>",\n'
     '  "target_dim": "<dim name the mutation aims at, or empty>",\n'
-    '  "target_kind": "<prompt|tool_policy|decomposition|reflection>",\n'
+    '  "target_kind": "<one of TARGET_KINDS — see the bullet list above>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
     '  "rollback_condition": "<one-line predicate, or empty>",\n'
     '  "principle": "<= 500 chars SPCT principle (P3-revised), or empty>"\n'
@@ -571,13 +631,19 @@ def _build_user_prompt(ctx: RunnerContext) -> str:
         priors = format_priors_block(ctx.meta_review_snapshot, target_dim=ctx.target_dim)
         if priors:
             blocks.append(priors)
+    # PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — surface recent
+    # per-dim credit + (kind × dim) attribution rollup. ``build_runner_context``
+    # already gated this on the operator's ``mutator_feedback_window``
+    # config knob (0 = disabled → empty string).
+    if ctx.mutator_feedback_block:
+        blocks.append(ctx.mutator_feedback_block)
     # PR-MINIMAL-2 (2026-05-21) — surface ALL 5 current policy SoTs
     # so the mutator LLM sees the full surface before proposing a
     # mutation. Falls back to wrapper-only (the legacy shape) when
     # ``current_policies`` is empty (older callers that built the
     # RunnerContext by hand without filling the new field).
     if ctx.current_policies:
-        policies_block = "Current policy SoT (5 kinds):\n" + json.dumps(
+        policies_block = f"Current policy SoT ({len(ctx.current_policies)} kinds):\n" + json.dumps(
             ctx.current_policies, indent=2, ensure_ascii=False, sort_keys=True
         )
     else:
@@ -1378,6 +1444,13 @@ _SIBLING_SOT_ENV_MAP: dict[str, str] = {
     "reflection": "GEODE_REFLECTION_POLICY_OVERRIDE",
     "skill_catalog": "GEODE_SKILL_CATALOG_OVERRIDE",
     "agent_contract": "GEODE_AGENT_CONTRACTS_OVERRIDE",
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — env wiring already
+    # exists in ``autoresearch/train.py`` (line ~878) for STRICT audit
+    # reads; the graduation requires the sibling-SoT propagation map
+    # to cover the new ``TARGET_KINDS`` entry too so group sampling
+    # can spawn audit subprocesses pointed at the temp tool-descriptions
+    # variant.
+    "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_OVERRIDE",
 }
 """P1-revised — sibling SoT temp file path 를 propagation 할 env var
 mapping (per ``Mutation.target_kind``). W3 인프라 (``autoresearch/train.py:809+``)
@@ -1390,6 +1463,10 @@ _SIBLING_SOT_STRICT_ENV_MAP: dict[str, str] = {
     "reflection": "GEODE_REFLECTION_POLICY_STRICT",
     "skill_catalog": "GEODE_SKILL_CATALOG_STRICT",
     "agent_contract": "GEODE_AGENT_CONTRACTS_STRICT",
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — strict-load env so the
+    # sibling audit subprocess fails fast on schema drift in the temp
+    # tool-descriptions JSON, matching the other nested-schema kinds.
+    "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_STRICT",
 }
 """``GEODE_<KIND>_STRICT=1`` mapping — sibling audit 의 strict-load.
 ``prompt`` kind 는 ``_load_wrapper_override`` 가 env path 가 set 되면
@@ -1546,6 +1623,32 @@ class SelfImprovingLoopRunner:
                 cost_elapsed_seconds=float(usage_snapshot.get("elapsed_seconds", 0.0)),
                 cost_model=str(usage_snapshot.get("model", "")),
             )
+        # PR-MUTATOR-DEDUP-GUARD (2026-05-27) — reject mutations whose
+        # ``(target_kind, target_section, new_value)`` triple is too
+        # similar to a recent apply row. ``build_runner_context`` gates
+        # this on ``mutator_dedup_window`` (0 = empty tuple → guard
+        # disabled, legacy behaviour). The threshold comes from the
+        # operator config; loading inside ``propose`` keeps the cost
+        # path lazy (mock-llm tests don't pay it).
+        if ctx.recent_applies_for_dedup:
+            from core.config.self_improving_loop import load_self_improving_loop_config
+            from core.self_improving_loop.mutator_feedback import (
+                RepetitiveMutationError,
+                check_repetitive_mutation,
+            )
+
+            threshold = load_self_improving_loop_config().autoresearch.mutator_dedup_threshold
+            finding = check_repetitive_mutation(mutation, ctx.recent_applies_for_dedup, threshold)
+            if finding.is_repetitive:
+                log.warning(
+                    "self-improving-loop: mutation %r rejected as repetitive "
+                    "(similarity=%.3f vs prior mutation_id=%r section=%r)",
+                    mutation.target_section,
+                    finding.max_similarity,
+                    finding.matched_mutation_id,
+                    finding.matched_target_section,
+                )
+                raise RepetitiveMutationError(finding, threshold)
         # PR-6 C-5 (Codex MCP catch) — apply_mutation dispatches by
         # target_kind, but ctx.current_sections is *always* the wrapper-
         # prompt sections (built by build_runner_context). Passing those
