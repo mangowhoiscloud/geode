@@ -37,10 +37,13 @@ P-checklist application:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
+import time
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
@@ -57,7 +60,6 @@ from plugins.seed_generation.tournament import (
     MatchOutcome,
     MatchPlan,
     apply_match,
-    initial_ratings,
     majority_winner,
     plan_matches,
     top_k,
@@ -73,6 +75,8 @@ __all__ = ["Ranker"]
 
 _DEFAULT_RANKER_MODEL = "claude-opus-4-7"
 _TASK_TYPE = "seed-ranker-vote"
+_PARTIAL_CHECKPOINT_EVERY_MATCHES = 10
+_PARTIAL_CHECKPOINT_EVERY_SECONDS = 120.0
 
 _REQUIRED_VOTE_FIELDS = ("match_id", "winner", "rationale")
 _VALID_WINNER_LABELS = frozenset({"A", "B", "tie"})
@@ -91,6 +95,17 @@ _CANDIDATE_BODY_UNAVAILABLE = (
     'Treat this match as ambiguous — emit ``winner: "tie"`` and note '
     "the unavailability in your rationale.)"
 )
+
+
+def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
+    return {
+        "match_id": outcome.match_id,
+        "a": outcome.a,
+        "b": outcome.b,
+        "winner": outcome.winner,
+        "votes": list(outcome.votes),
+        "voter_ids": list(outcome.voter_ids),
+    }
 
 
 class Ranker(BaseSeedAgent):
@@ -184,7 +199,6 @@ class Ranker(BaseSeedAgent):
         # well under any LLM context budget.
         candidate_bodies = self._read_candidate_bodies(state)
 
-        ratings = initial_ratings(candidate_ids)
         # CSP-8 (2026-05-22) — Proximity now emits clusters
         # (``state.similarity_clusters``) instead of a sparse pairwise
         # graph. Bracket seeding reverts to the legacy random-shuffle
@@ -192,14 +206,25 @@ class Ranker(BaseSeedAgent):
         # meta_reviewer + operator-readable state.json as a coverage
         # signal but does NOT feed the Elo bracket.
         match_plan = plan_matches(candidate_ids, rng=self._rng)
+        from plugins.seed_generation.resume import load_ranker_partial_resume
+
+        resume = load_ranker_partial_resume(
+            state.run_dir,
+            candidate_ids=candidate_ids,
+            match_plan=match_plan,
+        )
+        ratings = resume.ratings
         log.info(
-            "seed-generation ranker: %d candidates → %d matches × %d voters",
+            "seed-generation ranker: %d candidates → %d matches × %d voters "
+            "(resumed=%d pending=%d)",
             len(candidate_ids),
             len(match_plan),
             len(self._voters),
+            len(resume.completed_match_ids),
+            len(resume.pending_matches),
         )
 
-        outcomes: list[MatchOutcome] = []
+        outcomes: list[MatchOutcome] = list(resume.outcomes)
         # PR-SEEDS-HIRES (2026-05-26) — accumulate per-match details
         # (voter rationale + Elo before/after deltas) so the hub's
         # tournament page can render the full 3-voter panel breakdown
@@ -211,17 +236,40 @@ class Ranker(BaseSeedAgent):
         # expensive part is the voter panel call inside ``_play_match``;
         # the rating mutation must stay ordered by ``match_plan`` so the
         # same RNG seed still produces the same final Elo table.
-        match_results = await asyncio.gather(
-            *[
-                self._play_match(
-                    match,
-                    pilot_means=pilot_means,
-                    candidate_bodies=candidate_bodies,
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ] = asyncio.Queue()
+        checkpoint_task: asyncio.Task[None] | None = None
+        if state.run_dir is not None and resume.pending_matches:
+            checkpoint_task = asyncio.create_task(
+                self._partial_checkpoint_loop(
+                    run_dir=state.run_dir,
+                    match_plan=match_plan,
+                    result_queue=result_queue,
+                    base_completed_match_ids=list(resume.completed_match_ids),
+                    base_ratings=ratings,
+                    base_outcomes=outcomes,
+                    total_matches=len(match_plan),
                 )
-                for match in match_plan
-            ]
-        )
-        for match, (outcome, detail) in zip(match_plan, match_results, strict=True):
+            )
+        try:
+            match_results = await asyncio.gather(
+                *[
+                    self._play_match_with_checkpoint_report(
+                        match,
+                        pilot_means=pilot_means,
+                        candidate_bodies=candidate_bodies,
+                        result_queue=result_queue,
+                    )
+                    for match in resume.pending_matches
+                ]
+            )
+        finally:
+            if checkpoint_task is not None:
+                await result_queue.put(None)
+                with contextlib.suppress(Exception):
+                    await checkpoint_task
+        for match, (outcome, detail) in zip(resume.pending_matches, match_results, strict=True):
             elo_before = deepcopy(ratings)
             if outcome is None:
                 # Detail is still meaningful for quorum-lost matches —
@@ -285,6 +333,121 @@ class Ranker(BaseSeedAgent):
                 "survivors": survivors,
             },
         )
+
+    async def _play_match_with_checkpoint_report(
+        self,
+        match: MatchPlan,
+        *,
+        pilot_means: dict[str, dict[str, Any]],
+        candidate_bodies: dict[str, str],
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ],
+    ) -> tuple[MatchOutcome | None, dict[str, Any]]:
+        result = await self._play_match(
+            match,
+            pilot_means=pilot_means,
+            candidate_bodies=candidate_bodies,
+        )
+        await result_queue.put((match, result))
+        return result
+
+    async def _partial_checkpoint_loop(
+        self,
+        *,
+        run_dir: Path,
+        match_plan: list[MatchPlan],
+        result_queue: asyncio.Queue[
+            tuple[MatchPlan, tuple[MatchOutcome | None, dict[str, Any]]] | None
+        ],
+        base_completed_match_ids: list[str],
+        base_ratings: dict[str, float],
+        base_outcomes: list[MatchOutcome],
+        total_matches: int,
+    ) -> None:
+        """Persist the ordered Elo prefix while match panels run.
+
+        Match calls finish in arbitrary order, but the partial checkpoint
+        must only record the deterministic prefix that has been applied
+        to Elo in ``match_plan`` order.
+        """
+        from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
+
+        ratings = dict(base_ratings)
+        outcomes = list(base_outcomes)
+        completed_ids = list(base_completed_match_ids)
+        completed_set = set(completed_ids)
+        pending_results: dict[str, tuple[MatchOutcome | None, dict[str, Any]]] = {}
+        next_idx = 0
+        while next_idx < len(match_plan) and match_plan[next_idx].match_id in completed_set:
+            next_idx += 1
+
+        last_dump_count = len(completed_ids)
+        last_dump_at = time.monotonic()
+        force_dump = False
+
+        while True:
+            timeout = max(
+                0.1,
+                _PARTIAL_CHECKPOINT_EVERY_SECONDS - (time.monotonic() - last_dump_at),
+            )
+            timed_out = False
+            try:
+                item = await asyncio.wait_for(result_queue.get(), timeout=timeout)
+            except TimeoutError:
+                timed_out = True
+                item = None
+                force_dump = True
+
+            if item is None and not timed_out:
+                force_dump = True
+            elif item is not None:
+                match, result = item
+                pending_results[match.match_id] = result
+
+            while next_idx < len(match_plan):
+                match = match_plan[next_idx]
+                if match.match_id in completed_set:
+                    next_idx += 1
+                    continue
+                if match.match_id not in pending_results:
+                    break
+                result = pending_results.pop(match.match_id)
+                outcome, _detail = result
+                completed_set.add(match.match_id)
+                completed_ids.append(match.match_id)
+                if outcome is not None:
+                    apply_match(ratings, outcome, k_factor=self._k_factor)
+                    outcomes.append(outcome)
+                next_idx += 1
+
+            due_by_count = (
+                len(completed_ids) - last_dump_count >= _PARTIAL_CHECKPOINT_EVERY_MATCHES
+            )
+            due_by_time = time.monotonic() - last_dump_at >= _PARTIAL_CHECKPOINT_EVERY_SECONDS
+            dirty = len(completed_ids) > last_dump_count
+            if dirty and (due_by_count or due_by_time or force_dump):
+                try:
+                    write_partial_ranker_checkpoint(
+                        run_dir,
+                        completed_match_ids=completed_ids,
+                        partial_ratings=ratings,
+                        partial_outcomes_serialised=[
+                            _serialise_match_outcome(outcome) for outcome in outcomes
+                        ],
+                        total_matches=total_matches,
+                    )
+                except OSError as exc:
+                    log.warning(
+                        "seed-generation ranker: partial checkpoint write failed — %s",
+                        exc,
+                    )
+                last_dump_count = len(completed_ids)
+                last_dump_at = time.monotonic()
+                force_dump = False
+
+            if item is None and not timed_out:
+                break
 
     def _read_candidate_bodies(self, state: PipelineState) -> dict[str, str]:
         """Read each candidate's seed .md body once, keyed by candidate id.

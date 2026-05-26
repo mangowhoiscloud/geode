@@ -58,6 +58,16 @@ functional change.
   throttle for the resulting burst. Pinned by
   ``tests/plugins/seed_generation/test_ranker.py`` invariants for
   concurrent match dispatch and post-gather Elo ordering.
+- **PR-RANKER-PARTIAL-CHECKPOINT** — seed-generation Ranker now writes
+  ``checkpoints/ranker.partial.json`` while match panels run. The
+  partial checkpoint stores the ordered Elo-applied match prefix
+  (``completed_match_ids``), ``partial_ratings``,
+  ``partial_outcomes_serialised``, and ``total_matches`` with atomic
+  temp-file replacement. Resume accepts the checkpoint only when it
+  matches the current match-plan prefix, restores ratings/outcomes,
+  and dispatches only the remaining matches. Pinned by checkpointer,
+  resume, and Ranker invariants for round-trip, stale-plan rejection,
+  final partial dump, and no replay of completed matches.
 
 ### Fixed
 
