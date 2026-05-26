@@ -1288,6 +1288,30 @@ def append_audit_log(
     validated = ApplyRecord.model_validate(row).model_dump(exclude_none=True)
     with target.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(validated, ensure_ascii=False) + "\n")
+    # PR-MUTATION-EMIT-WIRE (2026-05-27) — emit MUTATION_APPLIED *after*
+    # the row write succeeds. The reserve docstring on
+    # ``HookEvent.MUTATION_APPLIED`` (core/hooks/system.py:285-287)
+    # documents the payload schema:
+    #   {"mutation_id": str, "target_kind": str, "target_path": str,
+    #    "ts": float, "run_id": str}
+    # ``kind`` rides as an extra field so listeners can distinguish
+    # ``"applied"`` (the canonical SoT-committed mutation) from
+    # ``"applied_sibling"`` / ``"pre_audit_sibling"`` (group sampling
+    # variants, no SoT effect but still part of the experiment record).
+    from core.hooks.system import HookEvent
+    from core.self_improving_loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.MUTATION_APPLIED,
+        {
+            "mutation_id": mutation.mutation_id,
+            "target_kind": mutation.target_kind,
+            "target_path": str(target),
+            "ts": time.time(),
+            "run_id": audit_run_id,
+            "kind": kind,
+        },
+    )
     return target
 
 

@@ -477,6 +477,18 @@ def build_hooks(
 
     _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
 
+    # PR-MUTATION-EMIT-WIRE (2026-05-27) — wire HookSystem into the
+    # self-improving-loop emit sites. The runner's ``append_audit_log``
+    # + train.py's ``BASELINE_PATH.write_text`` + the SoT-revert paths
+    # call :func:`_fire_hook` with the payload schema documented on
+    # the ``HookEvent.MUTATION_*`` / ``BASELINE_PROMOTED`` enum.
+    def _reg_self_improving_loop_hooks() -> None:
+        from core.self_improving_loop._hooks import set_self_improving_loop_hooks
+
+        set_self_improving_loop_hooks(hooks)
+
+    _register_plugin("self_improving_loop_hooks", _reg_self_improving_loop_hooks)
+
     # C6: Tool approval tracking hooks (HITL pattern learning → JSONL)
     def _reg_tool_approval() -> None:
         from core.hooks.approval_tracker import ApprovalTracker
