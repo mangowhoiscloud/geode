@@ -15,7 +15,7 @@ Distinct from ``codex_cli_lane`` because:
 - ``openai_api_lane`` gates **direct API call** (no subprocess, just
   ``openai.AsyncOpenAI.responses.create``); 429 surface differs.
 
-Why ``max_concurrent=4``
+Why ``max_concurrent=50``
 ========================
 
 Mid-range default selected from three reference points:

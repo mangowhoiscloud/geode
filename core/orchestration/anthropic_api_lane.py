@@ -15,7 +15,7 @@ Distinct from ``claude_cli_lane`` because:
   ``anthropic.AsyncClient.messages.create``); the burst pattern + 429
   surface differ.
 
-Why ``max_concurrent=4``
+Why ``max_concurrent=50``
 ========================
 
 Mid-range default selected from three reference points:
