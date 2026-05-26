@@ -422,9 +422,7 @@ def test_rollback_sot_no_emit_when_rollback_write_fails(
     def _writer_fails(sections: dict[str, str]) -> None:
         raise OSError("rollback writer disk full")
 
-    monkeypatch.setattr(
-        "autoresearch.train.write_wrapper_prompt_sections", _writer_fails
-    )
+    monkeypatch.setattr("autoresearch.train.write_wrapper_prompt_sections", _writer_fails)
 
     mutation = Mutation(
         mutation_id="writer-fail-mid",
