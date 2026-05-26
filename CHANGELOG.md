@@ -49,6 +49,21 @@ functional change.
 
 ### Added
 
+- PR-SCHEMA-TYPE-DRIFT-INVARIANT (backlog #99, Codex MCP retro-audit
+  fold) — per-property JSON-Schema ``type`` drift invariants for the
+  8 Loop-1 seed-generation roles
+  (``test_json_schemas_wire.py::test_schema_property_type_matches_parser_expectation``).
+  Pre-fix the 7 SoT drift tests compared only ``required`` key sets;
+  a schema-vs-parser type mismatch (like the pre-PR-2 #1698
+  ``LITERATURE_REVIEW_SCHEMA`` ``articles_with_reasoning:"array"`` vs
+  parser ``str(parsed.get(...))``) slipped past because the key
+  agreed. New invariant pins each required property's schema ``type``
+  against the type the parser / downstream consumer actually expects
+  (string read / dict access / array iter / number aggregate /
+  boolean branch), plus a coverage guard
+  (``test_expected_types_covers_every_required_property``) that
+  forces a new required field to land with an expected-type entry.
+
 - PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up) — round-trip
   preservation of ``ResponseOutputMessage.phase`` across the Codex
   Responses API multi-turn replay. OpenAI's
