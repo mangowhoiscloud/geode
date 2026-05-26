@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
+  independent tournament matches with ``asyncio.gather`` and applies
+  Elo updates afterward in the original ``match_plan`` order. This
+  preserves deterministic final ratings / survivor selection for a
+  fixed RNG seed while allowing the voter-panel LLM calls to overlap;
+  the provider lanes introduced by PR-OAUTH-API-LANES remain the
+  throttle for the resulting burst. Pinned by
+  ``tests/plugins/seed_generation/test_ranker.py`` invariants for
+  concurrent match dispatch and post-gather Elo ordering.
+
 ### Fixed
 
 - **PR-FIX-CHATGPT-PLAN-HALLUCINATION** — ChatGPT OAuth plan display now
