@@ -453,40 +453,77 @@ table.records.phases td.phase-link a {
 /* ============================================================ */
 /* table.records.heatmap — 22-column pilot score matrix         */
 /* ============================================================ */
+/* Responsive wrapper: 22 dim cols on a narrow screen overflow            */
+/* horizontally inside this region instead of pushing the page wide.     */
+/* First column (candidate id) sticks left during scroll so the row      */
+/* context is never lost.                                                */
+.heatmap-scroll {
+  overflow-x: auto;
+  /* Hairline so the scroll region reads as a contained unit. */
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  margin: .25rem 0 1rem;
+  background: var(--paper);
+}
+
 table.records.heatmap {
-  font-size: .68rem;
-  table-layout: fixed;
+  font-size: .72rem;
+  /* Auto column sizing so abbrev headers (3-4 char) stay compact,       */
+  /* yet the table can grow past the viewport when overflow-x kicks in.  */
+  table-layout: auto;
+  /* Floor the table width so each column gets ~2.4rem on narrow screens */
+  /* (1 id col @ 11rem + 22 score cols @ 2.4rem ≈ 64rem).                */
+  min-width: 64rem;
+  margin: 0;
 }
 
 table.records.heatmap thead th {
-  font-size: .56rem;
-  padding: .25rem .15rem .25rem 0;
+  font-size: .68rem;
+  padding: .35rem .25rem;
   white-space: nowrap;
   letter-spacing: .02em;
-  /* Vertical-leaning header so 22 dim names fit on a single page */
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  text-align: left;
-  height: 7.5rem;
-  vertical-align: bottom;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  /* No more vertical-rl rotation — abbreviations (CHS / UOS / BTU etc.)  */
+  /* fit horizontally so screen readers + sighted users get the same     */
+  /* affordance. Full dim name lives in <abbr title=…> for hover.        */
 }
 
-table.records.heatmap thead th:first-child {
-  writing-mode: horizontal-tb;
-  transform: none;
-  height: auto;
+table.records.heatmap thead th.id-col,
+table.records.heatmap tbody td.id {
+  /* Sticky first column so the candidate id stays visible while         */
+  /* the 22 dim cells scroll horizontally.                               */
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+  text-align: left;
+  padding-right: .8rem;
+  min-width: 11rem;
+  /* Hairline rule on the right separates the sticky column from the    */
+  /* scrolling region so the boundary is legible mid-scroll.            */
+  border-right: 1px solid var(--rule);
+  z-index: 1;
+}
+
+table.records.heatmap thead th.id-col {
+  font-weight: 600;
+  font-size: .62rem;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  letter-spacing: .06em;
+}
+
+table.records.heatmap thead th abbr {
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  /* Subtle hint that the abbrev is hoverable for the full name. */
 }
 
 table.records.heatmap tbody td {
-  padding: .35rem .15rem;
+  padding: .4rem .25rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-table.records.heatmap tbody td.id {
-  text-align: left;
-  padding-right: .6rem;
-  white-space: nowrap;
+  min-width: 2.4rem;
 }
 
 /* Heatmap cell color buckets — see DESIGN.md §5.6.

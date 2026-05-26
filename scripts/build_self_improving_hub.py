@@ -624,35 +624,91 @@ def _seedgen_score_class(value: float) -> str:
     return "score-warn-4"
 
 
+#: Abbreviation map for 22-dim petri judge subset. Used as the visible
+#: header text in the heatmap (3-4 char) while the full dim name lives
+#: in the ``<abbr title="...">`` and ``<td aria-label>`` for tooltip /
+#: screen reader. Drift hazard: must stay in lock-step with
+#: ``plugins/petri_audit/judge_dims/geode_judge_subset.yaml`` (as of
+#: GEODE v0.99.65).
+_PILOT_DIM_ABBR: dict[str, str] = {
+    "cooperation_with_harmful_sysprompt": "CHS",
+    "user_over_sysprompt": "UOS",
+    "cooperation_with_human_misuse": "CHM",
+    "overrefusal": "OR",
+    "broken_tool_use": "BTU",
+    "prefill_susceptibility": "PFS",
+    "input_hallucination": "IH",
+    "unfaithful_thinking": "UT",
+    "manipulated_by_developer": "MBD",
+    "eval_awareness": "EA",
+    "stuck_in_loops": "SIL",
+    "unprompted_sycophancy": "USy",
+    "unprompted_initiative": "UIn",
+    "unprompted_self_preservation": "USP",
+    "unprompted_whistleblowing": "UWb",
+    "scenario_realism": "SR",
+    "context_overflow_handling": "COH",
+    "stale_context_recall": "SCR",
+    "context_attribution": "CAt",
+    "verbose_padding": "VP",
+    "redundant_tool_invocation": "RTI",
+    "needs_attention": "NA",
+}
+
+
 def _render_pilot_heatmap(state: dict[str, Any]) -> str:
     pilot_scores = state.get("pilot_scores") or {}
     candidate_ids = sorted(pilot_scores.keys())
     if not candidate_ids:
         return '<p class="muted"><em>No pilot scores recorded for this run.</em></p>'
-    header_cells = ['<th scope="col">id</th>']
+    header_cells = ['<th scope="col" class="id-col">id</th>']
     for dim in PILOT_HEATMAP_DIMS:
-        header_cells.append(f'<th scope="col">{html_escape(dim)}</th>')
+        abbr = _PILOT_DIM_ABBR.get(dim, dim[:3].upper())
+        header_cells.append(
+            f'<th scope="col" title="{html_escape(dim)}">'
+            f'<abbr title="{html_escape(dim)}">{html_escape(abbr)}</abbr></th>'
+        )
     body_rows: list[str] = []
     for cand_id in candidate_ids:
         score_entry = pilot_scores.get(cand_id) or {}
         dim_means = score_entry.get("dim_means") or {}
+        dim_stderr = score_entry.get("dim_stderr") or {}
         cells = [f'<td class="id"><code>{html_escape(cand_id)}</code></td>']
         for dim in PILOT_HEATMAP_DIMS:
             raw = dim_means.get(dim)
+            stderr_raw = dim_stderr.get(dim)
             if raw is None:
-                cells.append('<td class="score-na">—</td>')
+                cells.append(
+                    f'<td class="score-na" aria-label="{html_escape(dim)} no signal">—</td>'
+                )
                 continue
             try:
                 value = float(raw)
             except (TypeError, ValueError):
-                cells.append('<td class="score-na">—</td>')
+                cells.append(
+                    f'<td class="score-na" aria-label="{html_escape(dim)} unparseable">—</td>'
+                )
                 continue
+            try:
+                stderr_value = float(stderr_raw) if stderr_raw is not None else 0.0
+            except (TypeError, ValueError):
+                stderr_value = 0.0
             cls = _seedgen_score_class(value)
-            cells.append(f'<td class="{cls}">{value:.1f}</td>')
+            aria_text = f"{dim} {value:.2f} plus or minus {stderr_value:.2f}"
+            cells.append(
+                f'<td class="{cls}" aria-label="{html_escape(aria_text)}" '
+                f'title="{html_escape(dim)} = {value:.2f}">{value:.1f}</td>'
+            )
         body_rows.append("            <tr>" + "".join(cells) + "</tr>")
     head = "          <thead><tr>" + "".join(header_cells) + "</tr></thead>"
     body = "          <tbody>\n" + "\n".join(body_rows) + "\n          </tbody>"
-    return f'<table class="records heatmap">\n{head}\n{body}\n        </table>'
+    # Wrap in a scroll container so 22 cols degrade gracefully on narrow
+    # screens (the table itself uses min-width so cells stay legible).
+    return (
+        '<div class="heatmap-scroll" role="region" aria-label="Pilot dim heatmap">\n'
+        f'  <table class="records heatmap">\n{head}\n{body}\n          </table>\n'
+        "</div>"
+    )
 
 
 def _render_candidates_rows(state: dict[str, Any]) -> tuple[str, int]:
