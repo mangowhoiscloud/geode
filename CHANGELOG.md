@@ -47,7 +47,182 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.64] - 2026-05-26
+
+Cognitive-loop + Hermes + adapter-robustness rotation. 5 PR
+(PR-HERMES-2, PR-CL-A2, PR-CODEX-MULTITURN-SUMMARY-PRESERVE,
+PR-TRANSIENT-CLASSIFIER-SCOPE, PR-SUPERVISOR-ENABLE) since
+v0.99.63. Ships platform/model-aware system-prompt fragments
+(Hermes Phase 2) and the Wilson-LB tool-ranking data layer (CL-A2)
+that the full A*-style policy will sit on. Codex multi-turn replay
+now preserves the reasoning-item `summary` field across all paths;
+the claude-cli transient classifier no longer false-positives on
+LLM-authored scenario prose; supervisor role wires through the
+seed-gen manifest end-to-end.
+
+### Fixed
+- **PR-CODEX-MULTITURN-SUMMARY-PRESERVE — Codex Responses API
+  multi-turn replay must carry `summary` on every reasoning item.**
+  Smoke 19 evidence: ~10 voter failures across the ranker phase, all
+  from `vote-m*-openai.openai-codex` retries, with
+  ``"✕ Invalid request. Missing required parameter:
+  'input[N].summary'."`` Root cause: the codex_oauth capture path at
+  ``core/llm/adapters/_openai_common.py:translate_codex_response``
+  only added the `summary` field when truthy:
+  ``if summary: entry["summary"] = summary``. On a high-effort gpt-5.x
+  run with no chain-of-thought summary, the captured reasoning item
+  lacked the field entirely. On the next-turn replay through
+  ``build_codex_input`` (PR-WORKER-SCHEMA-AWARE-RETRY's validator-
+  feedback retry triggered this exact path), the OpenAI Responses
+  API rejected the input because reasoning items REQUIRE a `summary`
+  field per spec (ctx7-grounded against
+  ``/websites/developers_openai_api`` "Keeping reasoning items in
+  context" + "Migrate to Responses" — `summary: []` is the empty-but-
+  present shape).
+  Fix: 2-layer defence:
+  (a) Capture-time (``translate_codex_response``):
+      ``entry["summary"] = summary if summary else []`` — always
+      present the field on freshly captured items.
+  (b) Replay-time (``build_codex_input``):
+      ``replayed.setdefault("summary", [])`` — defensive injection
+      against legacy persisted codex_reasoning_items dicts that lack
+      the field (Codex MCP catch — covers cross-process state
+      snapshots + externally constructed Message instances).
+  Pinned by 2 new tests in
+  ``tests/core/llm/adapters/test_codex_reasoning_replay.py``:
+  ``test_codex_reasoning_replay_preserves_empty_summary`` (legacy
+  captured dict missing summary still replays correctly) +
+  ``test_reasoning_item_capture_always_has_summary_field`` (capture
+  defaults summary to `[]` when SDK item has None / missing).
+  Codex MCP cross-LLM review caught 4 issues — all folded in-band:
+  defence-in-depth replay injection, strict test assertion (was
+  permissive `if "summary" in entry`), docstring accuracy fix, and
+  followup task #101 (PR-CODEX-MULTITURN-PHASE-PRESERVE) for the
+  spec's `phase` parameter (separate concern, no current failure
+  evidence).
+
+- **PR-TRANSIENT-CLASSIFIER-SCOPE — narrow claude-cli transient
+  classifier scope to suppress smoke-19 LLM-prose false positives.**
+  ``plugins/petri_audit/claude_cli_provider.py:classify_transient_signal``
+  pre-fix walked raw stdout first, then events. In stream-json mode
+  the raw stdout is just the concatenation of stream-json lines —
+  the LLM's free-form prose inside ``{"type":"assistant","message":
+  {"content":[{"type":"text","text":"..."}]}}`` is in there
+  verbatim. Smoke 19 (``.audit/smoke-archives/smoke-19-partial-
+  1779751602/``) caught 5 false-positive aborts where the LLM
+  legitimately wrote ``"rate-limited to 30 calls / 5 min"`` in seed
+  bodies targeting ``redundant_tool_invocation`` (scenario describing
+  rate-limited tools). The transient regex matched on raw stdout and
+  the generator phase aborted as a fake API rate-limit.
+  Fix (2 layers):
+  (a) Demote raw stdout scan to fallback-only — only fires when
+      ``events`` parse produced nothing (genuine pre-protocol
+      failure). When events exist the structured event-walk covers
+      every legitimate signal source; re-scanning the raw stream
+      only risks the LLM-prose false positive.
+  (b) Add ``_ASSISTANT_HEADER_LIMIT = 200`` heuristic on the
+      assistant + content_block_delta scans. Claude-CLI's internal
+      error injections (PR-T case, smoke 9-12 evidence) put the
+      transient phrase at offset 0 of the text block
+      (``"Claude usage limit reached. Resets at 4pm."`` /
+      ``"! Unexpected error. Auto-retrying."``). LLM-authored
+      scenario prose buries the vocabulary mid-paragraph at offset
+      200+. The heuristic preserves the PR-T detection path while
+      eliminating the smoke 19 false positive.
+  Codex MCP cross-LLM review caught an additional gap: streaming
+  ``content_block_delta`` events were not scanned at all (would
+  silently bypass detection if claude-cli streamed an error via
+  deltas instead of an aggregated assistant message). Folded
+  in-band: added a parallel ``content_block_delta`` branch with
+  the same header-limit heuristic. Plus doc drift fixes (3 →
+  actual 5 dumps; dropped a claim about a ``signal.match_offset``
+  field that doesn't exist).
+  Pinned by 4 new + 2 updated tests in
+  ``test_claude_cli_transient_classifier.py``:
+  ``test_classify_signal_search_order_events_first_stdout_fallback``,
+  ``test_classify_signal_stdout_fallback_when_events_empty``,
+  ``test_classify_signal_content_block_delta_transient_match``,
+  ``test_classify_signal_content_block_delta_header_limit_suppresses``,
+  ``test_classify_signal_smoke19_llm_seed_prose_not_false_positive``,
+  plus ``test_adapter_transient_carries_signal_dataclass`` updated
+  to assert the new ``source="event"/event_type="assistant"``
+  ordering. 864 pass / 35 skipped in petri_audit + core/llm.
+
+- **PR-SUPERVISOR-ENABLE — register supervisor in the seed-gen
+  manifest so the orchestrator doesn't `phase_skipped` it.** Pre-fix
+  `enabled_roles` (`plugins/seed_generation/seed_generation.plugin.toml`)
+  had 8 roles and `supervisor` was NOT one of them; `[seed_generation.
+  role.supervisor]` section did not exist either. Smoke 19 transcript
+  caught the consequence on line 4: `"event": "phase_skipped",
+  "payload": {"role": "supervisor", "reason": "agent_not_registered"}`.
+  Per the run's `state/seed-generation/<run_id>/sub_agents/` dir the
+  supervisor never spawned; per `checkpoints/` no `supervisor.json`
+  landed. PR-1 (#1698) SUPERVISOR_SCHEMA wire was a necessary fix
+  but not sufficient — schema couldn't reach the LLM because the
+  registry builder's main loop never visited supervisor (it iterates
+  `manifest.enabled_roles`). Fix: add `supervisor` to enabled_roles +
+  the matching role spec section (default_model `claude-opus-4-7`
+  per the Supervisor.py docstring, allowed list mirrors
+  meta_reviewer's run-level analyst pattern). `_ROLE_TO_CLASS` in
+  `_registry_builder.py` adds `Supervisor` so the main loop registers
+  it cleanly (the legacy fallback at the end stays as defensive code
+  for future manifest revisions). Pinned by 4 invariants in
+  `test_registry_wireup.py::test_populate_registry_supervisor_registered`
+  (manifest enabled_roles + role spec + picker binding + registry
+  registration + concrete-class check + model wiring) +
+  `test_bundled_manifest_loads` updated to include supervisor in the
+  expected enabled set.
+
 ### Added
+- **PR-CL-A2** — Tool Selection ranker (CL-A2 of
+  `docs/plans/agentic-loop-evolution.md`). New
+  `core/agent/tool_search.py` (~210 LOC) ships the data layer the
+  full A*-style policy will sit on top of: a Wilson lower-bound
+  success-rate aggregator over the episodic ledger. Pure functions
+  `wilson_lower_bound(successes, total, z=1.96)`,
+  `find_recommended_tools(episodes, *, top_k, min_invocations=3,
+  wilson_threshold=0.5)`, and `format_tool_ranking_block(rankings)`
+  produce a `<tool-ranking>` block listing the top-K tools whose
+  recent calls succeeded with a 95% CI lower bound above 0.5. The
+  ranker is the success-side counterpart of the existing
+  `tool_hints` slot (failure-side) — together they give the LLM
+  bidirectional evidence ("don't use X" + "prefer Y"). Wired as the
+  5th canonical in-context slot (`SLOT_TOOL_RANKING = "tool_ranking"`,
+  `core/self_improving_loop/in_context_slots.py`) with shared-ledger
+  read (`in_context_wiring.apply_in_context_slots` reads
+  `episodes.jsonl` once even when both episodic slots are enabled).
+  29 invariant tests pin the Wilson formula (concrete pins for
+  5/5 → 0.5655 and 100/100 → 0.9630; convergence ordering for
+  9/10 < 90/100 < 900/1000 < 0.9), aggregation gates
+  (MIN_INVOCATIONS, WILSON_THRESHOLD), malformed-row tolerance,
+  schema registration, wiring orchestration, the
+  `[tool-ranking][tool-hints][BASE]` relative layered order under
+  the dual-slot config, the module-internal loader's graceful
+  no-op on read failure, and the no-SoT fast path.
+- **PR-HERMES-2** — Hermes Phase 2 platform-aware + family-aware system
+  prompt fragments. `core/llm/platform_hints.py` (184 LOC) maps 6 GEODE
+  surfaces (`cli`, `serve_repl`, `slack`, `cron`, `worktree`,
+  `mcp_remote`) to short directive blocks; `core/llm/model_guidance.py`
+  (~180 LOC) maps 5 LLM families (Anthropic / OpenAI / Google / xAI /
+  GLM-5+) to tool-grammar + reasoning-visibility directives. Surface
+  resolution is env-override (`$GEODE_SURFACE_TYPE`) → ContextVar →
+  default `"cli"`; family resolution is a heuristic substring match
+  against the model string, ordered to favour the more-specific
+  `claude-` / `glm-` prefixes over the broader `gpt-` / `o3-`
+  heuristics. GLM resolution carries an operator-decision filter
+  (2026-05-26) — only `glm-5.0+` resolves to `FAMILY_GLM`; older
+  `glm-4.x` strings still appear in the `/model` picker for
+  compatibility but receive no Phase 2 directive because their
+  tool-call grammar diverges from GLM-5. GLM-5 directive content is
+  grounded in `/zai-org/glm-5` ctx7 spec (OpenAI-compatible
+  `/v1/chat/completions` schema, `tool_calls.function.arguments` as
+  JSON-encoded string). Both renderers are wired into
+  `core/agent/system_prompt.build_system_prompt` in the dynamic section
+  (model_guidance after model_card, platform_hint before date_context).
+  Audit-mode strips both blocks so Petri scenarios never leak GEODE
+  surface hints. 58 invariant tests pin module exports, resolution
+  order, per-surface and per-family rendered body coverage, GLM-4.x
+  rejection, and wiring symmetry.
 - **PR-SELF-IMPROVING-HUB** — `/geode/self-improving/` landing hub +
   full DESIGN.md scaffolding for 9 hub-surface pages. Replaces
   `/geode/petri-bundle/` as the primary entry point for Petri audit /

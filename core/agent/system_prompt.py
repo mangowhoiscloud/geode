@@ -31,6 +31,8 @@ from core.agent.style_guide_policy import (
     _load_style_guide_override,
     apply_style_guide_policy,
 )
+from core.llm.model_guidance import render_model_guidance
+from core.llm.platform_hints import render_platform_hint
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import ROUTER_SYSTEM
 from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH, get_project_root
@@ -241,6 +243,18 @@ def build_system_prompt(model: str = "") -> str:
         model_card = _build_model_card(model)
         if model_card:
             dynamic_parts.append(model_card)
+        # Hermes Phase 2 — family-aware guidance (Anthropic / OpenAI / Google
+        # / xAI). Graceful no-op when family unresolved.
+        guidance = render_model_guidance(model)
+        if guidance:
+            dynamic_parts.append(guidance)
+
+    # Hermes Phase 2 — surface-aware hint (cli / serve_repl / slack / cron /
+    # worktree / mcp_remote). Resolution honours $GEODE_SURFACE_TYPE then
+    # the ContextVar then "cli". Graceful no-op when surface unmapped.
+    hint = render_platform_hint()
+    if hint:
+        dynamic_parts.append(hint)
 
     dynamic_parts.append(_build_date_context())
 

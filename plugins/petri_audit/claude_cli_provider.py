@@ -272,6 +272,22 @@ CLAUDE_TRANSIENT_UPSTREAM_RE = re.compile(
 )
 
 
+# PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — when scanning assistant
+# text blocks for upstream signals, only consider matches that land
+# within the first ``_ASSISTANT_HEADER_LIMIT`` characters. CLI-internal
+# error injections (the PR-T quota-leak case, smoke 9-12) put the
+# transient phrase at offset 0:
+#   "Claude usage limit reached. Resets at 4pm."
+#   "! Unexpected error. Auto-retrying."
+# LLM-authored seed bodies that use the same vocabulary in scenario
+# descriptions bury the phrase mid-paragraph (smoke 19 evidence: 5
+# false-positive dumps where ``"rate-limited to 30 calls"`` appeared
+# at offset 200-500 inside a tool catalog block). 200 chars covers
+# every known CLI-injection shape with margin while excluding all
+# observed LLM-prose false positives.
+_ASSISTANT_HEADER_LIMIT = 200
+
+
 @dataclass(frozen=True, slots=True)
 class StreamJsonEvent:
     """One row of ``claude --print --output-format stream-json``.
@@ -663,27 +679,45 @@ def classify_transient_signal(
     events: list[StreamJsonEvent] | None = None,
 ) -> TransientSignal | None:
     """Return the first :class:`TransientSignal` hit on the union of
-    raw stdout, raw stderr, every parsed ``result`` event's free-text
-    fields, and every ``assistant`` text block's ``text``. ``None``
-    when nothing matches.
+    raw stderr, every parsed ``result`` event's free-text fields,
+    every ``assistant`` text block's ``text``, and raw stdout (only as
+    a fallback when ``events`` is empty). ``None`` when nothing matches.
 
     Pre-PR-T this was :func:`is_claude_transient_upstream_error`
     returning ``bool`` — callers couldn't tell which signal fired so
     the post-mortem could not act on the actual upstream signature
     (rate_limit vs overloaded vs quota-reset). The dataclass-returning
-    form preserves the matched substring + source field so
-    log readers and operators get an actionable diagnostic.
+    form preserves the matched substring + source field so log readers
+    and operators get an actionable diagnostic.
 
-    Search order matches paperclip's ``buildClaudeTransientHaystack``:
-    raw stdout / stderr first, then events in arrival order.
+    PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — narrowed the raw
+    stdout scan to fallback-only. ``claude --print --output-format
+    stream-json`` emits every stream-json chunk to stdout — including
+    the assistant's free-form prose inside
+    ``{"type":"assistant","message":{"content":[{"type":"text",
+    "text":"..."}]}}`` lines. The regex
+    ``CLAUDE_TRANSIENT_UPSTREAM_RE`` matched ``"rate-limited to 30
+    calls"`` inside the LLM's seed-body prose for the
+    ``redundant_tool_invocation`` audit dim
+    (smoke 19: 5 false-positive dumps in
+    ``~/.geode/diagnostics/claude-cli-transient/1779750554-...`` etc).
+    The fix: scan stderr + parsed event branches first; only fall
+    back to raw stdout when ``events`` parsing produced nothing
+    (genuine protocol-level failure with no structured output).
+
+    The ``assistant`` event walk is RETAINED (not removed) — PR-T
+    added it because claude-cli's internal retry storm leaks
+    ``"Claude usage limit reached. Resets at 4pm."`` into the
+    assistant stream (smoke 9-12 evidence), and dropping that scan
+    would regress detection of those genuine upstream signals.
+    The smoke 19 false positive came from the stdout scan, not the
+    assistant scan — the LLM's seed body was in a single block
+    matched by ``stdout`` source per the dump's ``signal.source``
+    field, not ``event``.
+
+    Search order: stderr → result-event fields → assistant text →
+    raw stdout (fallback only).
     """
-    if stdout:
-        match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(stdout)
-        if match:
-            return TransientSignal(
-                matched_text=_signal_excerpt(stdout, match),
-                source="stdout",
-            )
     if stderr:
         match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(stderr)
         if match:
@@ -691,44 +725,113 @@ def classify_transient_signal(
                 matched_text=_signal_excerpt(stderr, match),
                 source="stderr",
             )
-    if not events:
-        return None
-    for event in events:
-        if event.type == "result":
-            for key in ("result", "error", "message", "stderr"):
-                value = event.payload.get(key)
-                if not isinstance(value, str):
+    if events:
+        for event in events:
+            if event.type == "result":
+                for key in ("result", "error", "message", "stderr"):
+                    value = event.payload.get(key)
+                    if not isinstance(value, str):
+                        continue
+                    match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(value)
+                    if match:
+                        return TransientSignal(
+                            matched_text=_signal_excerpt(value, match),
+                            source="event",
+                            event_type="result",
+                            event_field=key,
+                        )
+            elif event.type == "assistant":
+                message = event.payload.get("message", {})
+                if not isinstance(message, dict):
                     continue
-                match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(value)
-                if match:
-                    return TransientSignal(
-                        matched_text=_signal_excerpt(value, match),
-                        source="event",
-                        event_type="result",
-                        event_field=key,
-                    )
-        elif event.type == "assistant":
-            message = event.payload.get("message", {})
-            if not isinstance(message, dict):
-                continue
-            content = message.get("content", [])
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if not isinstance(block, dict):
+                content = message.get("content", [])
+                if not isinstance(content, list):
                     continue
-                if block.get("type") != "text":
-                    continue
-                text = block.get("text", "")
-                if not isinstance(text, str):
-                    continue
-                match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
-                if match:
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") != "text":
+                        continue
+                    text = block.get("text", "")
+                    if not isinstance(text, str):
+                        continue
+                    match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
+                    if not match:
+                        continue
+                    # PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) —
+                    # smoke 19 false-positive guard. Claude-CLI's
+                    # internal error injections (PR-T case, smoke
+                    # 9-12) put the upstream phrase at the START of
+                    # the assistant message:
+                    #   "Claude usage limit reached. Resets at 4pm."
+                    #   "! Unexpected error. Auto-retrying."
+                    # LLM-authored seed prose with the same
+                    # vocabulary buries the phrase in a multi-line
+                    # paragraph:
+                    #   "...searches structured logs; ~4s per call,
+                    #    rate-limited to 30 calls / 5 min..."
+                    # Require the match position to be within the
+                    # first ``_ASSISTANT_HEADER_LIMIT`` characters of
+                    # the text block. CLI errors land at offset 0;
+                    # LLM prose containing the vocabulary in scenario
+                    # descriptions lands at 200+. This is a heuristic
+                    # — operators can audit the dump file when in
+                    # doubt.
+                    if match.start() >= _ASSISTANT_HEADER_LIMIT:
+                        continue
                     return TransientSignal(
                         matched_text=_signal_excerpt(text, match),
                         source="event",
                         event_type="assistant",
                     )
+            elif event.type == "content_block_delta":
+                # PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26, Codex
+                # MCP catch) — claude-cli streaming mode emits text
+                # deltas as separate events; ``_extract_assistant_text``
+                # treats these as a valid text source (per its priority
+                # ordering at line 587). Without this branch, a CLI
+                # error injected via the streaming path would silently
+                # bypass detection. Same header-limit heuristic
+                # applies — CLI-injected errors arrive in the first
+                # delta of the message, LLM-prose deltas accumulate
+                # over many chunks.
+                delta = event.payload.get("delta", {})
+                if not isinstance(delta, dict):
+                    continue
+                if delta.get("type") != "text_delta":
+                    continue
+                text = delta.get("text", "")
+                if not isinstance(text, str):
+                    continue
+                match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(text)
+                if not match:
+                    continue
+                if match.start() >= _ASSISTANT_HEADER_LIMIT:
+                    continue
+                return TransientSignal(
+                    matched_text=_signal_excerpt(text, match),
+                    source="event",
+                    event_type="content_block_delta",
+                )
+        # Events parsed successfully — the raw stdout is just the
+        # concatenation of those parsed lines (each line is a JSON
+        # event), so scanning it again would only re-surface the
+        # LLM's assistant prose as a false positive
+        # (PR-TRANSIENT-CLASSIFIER-SCOPE, smoke 19 fix). The
+        # event-walk above has already covered every structured
+        # field the CLI uses for genuine signals.
+        return None
+    # Events list is empty / None — parse failed entirely. The raw
+    # stdout is the only remaining signal source; if the CLI errored
+    # before any stream-json envelope was emitted, the assistant
+    # never produced content that could false-positive.
+    if stdout:
+        match = CLAUDE_TRANSIENT_UPSTREAM_RE.search(stdout)
+        if match:
+            return TransientSignal(
+                matched_text=_signal_excerpt(stdout, match),
+                source="stdout",
+            )
     return None
 
 

@@ -6,7 +6,7 @@ orchestrator consults the 4-slot SoT and applies the configured
 transforms to the outgoing ``messages`` + ``system`` text before they
 reach the provider.
 
-**4 slots → wiring status**:
+**5 slots → wiring status**:
 
 * ``exemplars`` — **wired**. Reads the M3 few-shot exemplar pool
   (`core/llm/few_shot_pool.py`) via ``_load_few_shot_pool_override`` →
@@ -25,7 +25,12 @@ reach the provider.
   (``~/.geode/memory/episodes.jsonl``), aggregates per-tool fail
   rate over a rolling window, and prepends a ``<tool-hints>`` block
   for tools whose recent calls have been failing above the threshold.
-  Closes the M4 sprint — all 4 in-context slots now active.
+* ``tool_ranking`` — **wired (CL-A2, 2026-05-26)**. Wilson LB
+  success-side counterpart of ``tool_hints``. Shares the same
+  episodic-ledger read so the disk-read budget per LLM call stays
+  at 1 even when both slots are active. Prepends a ``<tool-ranking>``
+  block with the top-K Wilson-LB-ranked tools above the confidence
+  threshold.
 
 **No-op fast path**: when ``_load_in_context_slots_override`` returns
 ``None`` (no SoT configured, the GEODE default), the orchestrator
@@ -82,6 +87,7 @@ def apply_in_context_slots(
             SLOT_MEMORY_RECALL,
             SLOT_RUBRIC_EXCERPTS,
             SLOT_TOOL_HINTS,
+            SLOT_TOOL_RANKING,
             _load_in_context_slots_override,
         )
 
@@ -157,27 +163,61 @@ def apply_in_context_slots(
         except Exception as exc:
             log.debug("rubric_excerpts slot apply failed: %s", exc, exc_info=True)
 
-    # tool_hints — M4.4.3 reader active. Reads episodic ledger,
-    # aggregates per-tool fail_rate, prepends a ``<tool-hints>`` block
-    # for tools failing above the threshold. Closes the M4 sprint —
-    # all 4 in-context slots now wired.
+    # tool_hints + tool_ranking — episodic-ledger readers. Share one
+    # read of ``episodes.jsonl`` when both slots are enabled so the
+    # disk-read budget per LLM call stays at 1, not 2. Both readers
+    # PREPEND to ``new_system``, so the relative layered order in the
+    # final prompt is ``[tool-ranking][tool-hints][BASE]`` (later
+    # prepend wins the head position). Pinned by
+    # ``test_wiring_emits_both_blocks_under_dual_slot_config``'s order
+    # invariant.
     tool_hints_cfg = slots.get(SLOT_TOOL_HINTS)
-    if tool_hints_cfg is not None:
+    tool_ranking_cfg = slots.get(SLOT_TOOL_RANKING)
+    if tool_hints_cfg is not None or tool_ranking_cfg is not None:
         try:
-            from core.self_improving_loop.tool_hints import (
-                find_failing_tools,
-                format_tool_hints_block,
-                load_recent_episodes,
-            )
+            from core.self_improving_loop.tool_hints import load_recent_episodes
 
             episodes = load_recent_episodes()
-            if episodes:
-                hints = find_failing_tools(episodes, top_k=tool_hints_cfg.max_entries)
-                block = format_tool_hints_block(hints)
-                if block:
-                    new_system = block + "\n\n" + new_system if new_system else block
         except Exception as exc:
-            log.debug("tool_hints slot apply failed: %s", exc, exc_info=True)
+            log.debug("episodic ledger read failed: %s", exc, exc_info=True)
+            episodes = []
+
+        # tool_hints — M4.4.3 reader (failure-side). Reads episodic
+        # ledger, aggregates per-tool fail_rate, prepends a
+        # ``<tool-hints>`` block for tools failing above the threshold.
+        if tool_hints_cfg is not None:
+            try:
+                from core.self_improving_loop.tool_hints import (
+                    find_failing_tools,
+                    format_tool_hints_block,
+                )
+
+                if episodes:
+                    hints = find_failing_tools(episodes, top_k=tool_hints_cfg.max_entries)
+                    block = format_tool_hints_block(hints)
+                    if block:
+                        new_system = block + "\n\n" + new_system if new_system else block
+            except Exception as exc:
+                log.debug("tool_hints slot apply failed: %s", exc, exc_info=True)
+
+        # tool_ranking — CL-A2 reader (success-side). Wilson LB over
+        # the same episodic window, prepends a ``<tool-ranking>``
+        # block for tools whose recent calls succeeded above the
+        # confidence threshold. Complements tool_hints.
+        if tool_ranking_cfg is not None:
+            try:
+                from core.agent.tool_search import (
+                    find_recommended_tools,
+                    format_tool_ranking_block,
+                )
+
+                if episodes:
+                    ranks = find_recommended_tools(episodes, top_k=tool_ranking_cfg.max_entries)
+                    block = format_tool_ranking_block(ranks)
+                    if block:
+                        new_system = block + "\n\n" + new_system if new_system else block
+            except Exception as exc:
+                log.debug("tool_ranking slot apply failed: %s", exc, exc_info=True)
 
     return new_messages, new_system
 
