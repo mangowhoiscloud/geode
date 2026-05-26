@@ -1008,20 +1008,66 @@ def run_audit(
         )
         raise RuntimeError(f"audit subprocess exit={proc.returncode}; see {RUN_LOG}")
 
-    summary_line = next(
-        (line for line in reversed(proc.stdout.splitlines()) if line.strip().startswith("{")),
-        None,
-    )
-    if summary_line is None:
-        raise RuntimeError(f"audit output missing summary JSON; see {RUN_LOG}")
-    summary = json.loads(summary_line)
-    dim_means = {k: float(v) for k, v in summary.get("dim_means", {}).items()}
-    dim_stderr = {k: float(v) for k, v in summary.get("dim_stderr", {}).items()}
-    # PR-2 (2026-05-23) — pass through PR-1 dim_extractor provenance.
-    # Older subprocess builds without PR-1 omit these keys; default to
-    # empty dicts so callers can detect "no provenance" without crashing.
-    sample_count = {k: int(v) for k, v in summary.get("sample_count", {}).items()}
-    measurement_modality = {k: str(v) for k, v in summary.get("measurement_modality", {}).items()}
+    # PR-TRAIN-EVAL-ARCHIVE-FALLBACK (2026-05-27) — primary path: read
+    # ``dim_means`` / ``dim_stderr`` / provenance directly from the
+    # ``.eval`` archive via ``core.audit.dim_extractor``. The audit
+    # subprocess's stdout JSON line was the legacy carrier of these
+    # aggregates, but any inspect_ai sample-side ``TypeError`` (e.g.
+    # ``Object of type Summary is not JSON serializable``) corrupts
+    # that final summary line and the parser raises while the eval
+    # archive itself is intact. Reading the archive directly makes
+    # the closed-loop robust to stdout corruption — the eval archive
+    # has been the canonical SoT for downstream readers since PR-G2
+    # (2026-05-20) anyway.
+    #
+    # Fall-through to the stdout JSON when the archive is missing or
+    # the extractor itself fails (defense in depth — preserves the
+    # legacy code path for environments where the archive symlink
+    # isn't wired, e.g. some test fixtures).
+    dim_means = {}
+    dim_stderr = {}
+    sample_count = {}
+    measurement_modality = {}
+
+    archive_path_str = _resolve_eval_archive_path()
+    archive_extracted = False
+    if archive_path_str:
+        try:
+            from core.audit.dim_extractor import extract_dim_aggregates
+
+            agg = extract_dim_aggregates(Path(archive_path_str))
+            dim_means = {k: float(v) for k, v in agg.get("dim_means", {}).items()}
+            dim_stderr = {k: float(v) for k, v in agg.get("dim_stderr", {}).items()}
+            sample_count = {k: int(v) for k, v in agg.get("sample_count", {}).items()}
+            measurement_modality = {
+                k: str(v) for k, v in agg.get("measurement_modality", {}).items()
+            }
+            archive_extracted = bool(dim_means)
+        except Exception as exc:
+            log.warning(
+                "eval archive extract failed at %s (%s); falling back to stdout JSON",
+                archive_path_str,
+                exc,
+                exc_info=True,
+            )
+
+    if not archive_extracted:
+        summary_line = next(
+            (line for line in reversed(proc.stdout.splitlines()) if line.strip().startswith("{")),
+            None,
+        )
+        if summary_line is None:
+            raise RuntimeError(f"audit output missing summary JSON; see {RUN_LOG}")
+        summary = json.loads(summary_line)
+        dim_means = {k: float(v) for k, v in summary.get("dim_means", {}).items()}
+        dim_stderr = {k: float(v) for k, v in summary.get("dim_stderr", {}).items()}
+        # PR-2 (2026-05-23) — pass through PR-1 dim_extractor provenance.
+        # Older subprocess builds without PR-1 omit these keys; default to
+        # empty dicts so callers can detect "no provenance" without crashing.
+        sample_count = {k: int(v) for k, v in summary.get("sample_count", {}).items()}
+        measurement_modality = {
+            k: str(v) for k, v in summary.get("measurement_modality", {}).items()
+        }
     total_seconds = time.time() - started
     return (
         dim_means,

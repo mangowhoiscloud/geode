@@ -486,6 +486,131 @@ def test_real_mode_raises_when_summary_json_missing(
         run_audit(dry_run=False)
 
 
+def test_real_mode_prefers_eval_archive_when_extract_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """PR-TRAIN-EVAL-ARCHIVE-FALLBACK — when the eval archive extracts
+    cleanly, train.py uses its dim aggregates and ignores whatever the
+    subprocess wrote to stdout. This is the path that unblocks
+    closed-loop after a Summary-serialization TypeError corrupts the
+    final stdout JSON line but leaves the archive intact.
+    """
+    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+
+    def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
+        result = MagicMock()
+        result.returncode = 0
+        # stdout JSON intentionally corrupted (mimics Summary-serialize TypeError)
+        result.stdout = "audit complete\n{not valid json\n"
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+
+    def _fake_extract(path: Any) -> dict[str, Any]:
+        return {
+            "dim_means": {"broken_tool_use": 1.0, "input_hallucination": 1.0},
+            "dim_stderr": {"broken_tool_use": 0.0, "input_hallucination": 0.0},
+            "sample_count": {"broken_tool_use": 5, "input_hallucination": 5},
+            "measurement_modality": {
+                "broken_tool_use": "judge_llm",
+                "input_hallucination": "judge_llm",
+            },
+        }
+
+    import core.audit.dim_extractor
+
+    monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _fake_extract)
+
+    dim_means, _stderr, _audit_s, _total_s, sc, mm = run_audit(dry_run=False)
+    assert dim_means["broken_tool_use"] == 1.0
+    assert dim_means["input_hallucination"] == 1.0
+    assert sc["broken_tool_use"] == 5
+    assert mm["broken_tool_use"] == "judge_llm"
+
+
+def test_real_mode_falls_back_to_stdout_when_archive_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When the archive resolves but ``extract_dim_aggregates`` returns
+    empty dicts (no numeric data — fresh archive, broken loader), the
+    parser falls through to the legacy stdout JSON path. Preserves the
+    pre-PR behaviour for environments where the archive isn't useful.
+    """
+    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+
+    def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = (
+            "audit complete\n"
+            + json.dumps({"dim_means": {"broken_tool_use": 9.9}, "dim_stderr": {}})
+            + "\n"
+        )
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+
+    import core.audit.dim_extractor
+
+    monkeypatch.setattr(
+        core.audit.dim_extractor,
+        "extract_dim_aggregates",
+        lambda _p: {
+            "dim_means": {},
+            "dim_stderr": {},
+            "sample_count": {},
+            "measurement_modality": {},
+        },
+    )
+
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    # Empty archive → stdout JSON's 9.9 wins.
+    assert dim_means["broken_tool_use"] == 9.9
+
+
+def test_real_mode_falls_back_to_stdout_when_archive_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When ``extract_dim_aggregates`` raises (corrupted archive, IO
+    error, inspect-ai version mismatch), the warning is logged and
+    the legacy stdout JSON path takes over. The closed loop must
+    continue rather than crash.
+    """
+    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+
+    def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = (
+            "audit complete\n"
+            + json.dumps({"dim_means": {"broken_tool_use": 7.7}, "dim_stderr": {}})
+            + "\n"
+        )
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+
+    def _raising_extract(_p: Any) -> dict[str, Any]:
+        raise RuntimeError("simulated archive corruption")
+
+    import core.audit.dim_extractor
+
+    monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _raising_extract)
+
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    # Extract raised → stdout JSON's 7.7 wins; no exception propagates.
+    assert dim_means["broken_tool_use"] == 7.7
+
+
 def test_dry_run_emits_finite_fitness() -> None:
     dim_means, dim_stderr, audit_seconds, _, _sc, _mm = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)

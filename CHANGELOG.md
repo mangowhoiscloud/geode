@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-TRAIN-EVAL-ARCHIVE-FALLBACK (2026-05-27)** —
+  ``autoresearch/train.py:run_audit`` now reads ``dim_means`` /
+  ``dim_stderr`` / ``sample_count`` / ``measurement_modality`` from
+  the inspect-ai eval archive (via
+  ``core.audit.dim_extractor.extract_dim_aggregates``) as the
+  primary path, falling back to the legacy subprocess-stdout JSON
+  line only when the archive is missing or the extractor raises.
+  Until this PR the subprocess's final stdout JSON line was the
+  only carrier of these aggregates, so any inspect-ai sample-side
+  ``TypeError`` (observed: ``Object of type Summary is not JSON
+  serializable`` from ``openai/types/responses/response_reasoning_item.py``)
+  corrupted that line and ``train.py`` raised before reaching the
+  baseline writer — even though the audit itself ran cleanly and
+  the archive was intact (15-minute audit + 219K target tokens
+  visible in ``~/.geode/petri/logs/latest.eval`` while
+  ``baseline.json`` stayed untouched). The eval archive has been
+  the canonical SoT for downstream readers since PR-G2
+  (2026-05-20); this PR brings the primary numeric-extract path
+  into the same SoT. Pinned by
+  ``tests/test_autoresearch_train.py`` (3 new assertions: archive
+  preferred when stdout corrupt; archive empty falls back; archive
+  raises falls back). Codex MCP review (1 round): caught warning
+  message lacked archive path + ``exc_info`` (fixed) and the
+  missing real-archive-read tests (added).
+
 ## [0.99.76] - 2026-05-27
 
 > PATCH rotation tightening the v0.99.75 PR-LANE-CAP-CONSERVATIVE
