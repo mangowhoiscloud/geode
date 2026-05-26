@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route
+  ``ClaudeCliTransientUpstreamError`` into the retry path with the
+  paperclip QUOTA_BACKOFF schedule (2m / 10m / 30m / 2h) so a
+  claude-cli 5h pool refresh window can be bridged automatically.
+  Pre-PR the bare ``except Exception`` branch in
+  ``core/llm/router/calls/_failover.py:136`` skipped the exception to
+  the next model after a single attempt; the SDK ``RETRYABLE_ERRORS``
+  tuple cannot include the plugin-imported exception (layer
+  violation + plugin-as-optional-dep). Smoke 24 surfaced this as 5/5
+  evolver phases hard-failing within 30s after 3 attempts each, even
+  though manual ``audit-seeds resume`` succeeded ~20 min later once
+  the Anthropic Max OAuth pool replenished. Pinned with two new
+  ``tests/test_model_failover.py`` cases (retry-within-primary +
+  retries-exhausted-then-fall-back).
+
 ## [0.99.73] - 2026-05-27
 
 MINOR rotation. Ships the 2026-05-26 autoresearch attribution sprint

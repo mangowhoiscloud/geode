@@ -312,6 +312,155 @@ class TestCallWithFailover:
         assert response is mock_response
         assert used_model == ANTHROPIC_SECONDARY
 
+    def test_claude_cli_transient_retries_within_same_model(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27) —
+        ``ClaudeCliTransientUpstreamError`` must be retried on the
+        same model (not fall through to the next model in the chain).
+
+        Pre-PR the bare ``except Exception`` branch immediately broke
+        the retry loop on this exception (smoke 24: 5/5 evolver
+        phases hard-failed within 30s after 3 attempts). Post-PR the
+        plugin-imported exception routes into a quota-class retry
+        with the long QUOTA_BACKOFF schedule.
+
+        Asserts:
+        - All ``max_retries`` attempts run on the primary model
+          (i.e. the exception was treated as retryable, not as a
+          chain-skip signal).
+        - The retry uses the QUOTA_BACKOFF schedule (we patch
+          ``asyncio.sleep`` to a no-op and capture the wait values).
+        - Eventually returns success when the transient resolves
+          (mirrors a pool refresh).
+        """
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+            TransientSignal,
+        )
+
+        signal = TransientSignal(matched_text="! Unexpected error. Auto-retrying.", source="event")
+        transient_err = ClaudeCliTransientUpstreamError(
+            "claude-cli upstream transient (pool exhausted)", signal=signal
+        )
+        mock_response = MagicMock()
+        call_count = {"n": 0}
+
+        async def call_fn(model: str) -> MagicMock:
+            call_count["n"] += 1
+            # Fail the first 2 attempts on primary; succeed on the 3rd.
+            if call_count["n"] < 3:
+                raise transient_err
+            return mock_response
+
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        response, used_model = asyncio.run(
+            call_with_failover(
+                [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY],
+                call_fn,
+                max_retries=3,
+                retry_base_delay=0.0,
+            )
+        )
+        assert response is mock_response
+        assert used_model == ANTHROPIC_PRIMARY  # retried within primary, no chain skip
+        assert call_count["n"] == 3
+        # Two sleeps fired (between attempts 1→2 and 2→3); both match the
+        # paperclip QUOTA_BACKOFF schedule (2m / 10m / 30m / 2h).
+        from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
+
+        assert sleeps == [QUOTA_BACKOFF_SECONDS[0], QUOTA_BACKOFF_SECONDS[1]]
+
+    def test_claude_cli_transient_clips_to_final_quota_tier(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """When ``max_retries`` exceeds ``len(QUOTA_BACKOFF_SECONDS)``,
+        every attempt past the schedule's tail repeats the final
+        ``7200.0`` (2h) wait — :func:`call_with_failover` uses
+        ``min(attempt, len(schedule) - 1)`` to clip, matching paperclip
+        heartbeat.ts:217-226 ("MAX_ATTEMPTS = 4, then surrender or
+        repeat 2h"). Without this clip a 5-attempt loop would
+        ``IndexError`` on attempt 4."""
+        from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+            TransientSignal,
+        )
+
+        signal = TransientSignal(matched_text="claude usage limit reached", source="event")
+        transient_err = ClaudeCliTransientUpstreamError(
+            "claude-cli upstream transient (quota, persistent)", signal=signal
+        )
+
+        async def call_fn(model: str) -> None:
+            raise transient_err
+
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        response, used_model = asyncio.run(
+            call_with_failover(
+                [ANTHROPIC_PRIMARY],  # single-model chain → no fallback
+                call_fn,
+                max_retries=6,  # exceeds len(QUOTA_BACKOFF_SECONDS) == 4
+                retry_base_delay=0.0,
+            )
+        )
+        assert response is None
+        assert used_model is None
+        # 5 sleeps fired (between attempts 1→2 through 5→6); the final
+        # 2 entries clip to the schedule tail (7200.0).
+        assert sleeps == [
+            QUOTA_BACKOFF_SECONDS[0],
+            QUOTA_BACKOFF_SECONDS[1],
+            QUOTA_BACKOFF_SECONDS[2],
+            QUOTA_BACKOFF_SECONDS[3],
+            QUOTA_BACKOFF_SECONDS[3],  # clipped: attempt=4 → schedule[3]
+        ]
+
+    def test_claude_cli_transient_exhausts_then_falls_back(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """When the transient never resolves on the primary model,
+        the loop exhausts ``max_retries`` then falls through to the
+        next model in the chain. Mirrors the model-chain semantics
+        the SDK ``RETRYABLE_ERRORS`` branch already provides."""
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+            TransientSignal,
+        )
+
+        signal = TransientSignal(matched_text="claude usage limit reached", source="event")
+        transient_err = ClaudeCliTransientUpstreamError(
+            "claude-cli upstream transient (quota)", signal=signal
+        )
+        mock_response = MagicMock()
+
+        async def call_fn(model: str) -> MagicMock:
+            if model == ANTHROPIC_PRIMARY:
+                raise transient_err
+            return mock_response
+
+        async def _fake_sleep(delay: float) -> None:
+            return None
+
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        response, used_model = asyncio.run(
+            call_with_failover(
+                [ANTHROPIC_PRIMARY, ANTHROPIC_SECONDARY],
+                call_fn,
+                max_retries=2,
+                retry_base_delay=0.0,
+            )
+        )
+        assert response is mock_response
+        assert used_model == ANTHROPIC_SECONDARY
+
 
 # ---------------------------------------------------------------------------
 # Fallback chain configuration
