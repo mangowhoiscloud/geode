@@ -162,6 +162,55 @@ functional change.
   ``tests/test_hookevent_mutation_baseline_reserve.py``: enum members
   exist, ``mutation_`` prefix invariant, ``baseline_promoted``
   literal value, distinctness from existing pipeline events.
+- **PR-SEEDS-HIRES (Phase 1: data plumbing)** — every seed-generation run
+  now publishes a full observability surface to the Pages bundle so the
+  hub can render extreme-resolution views in subsequent phases.
+
+  New bundle files under `docs/self-improving/petri-bundle/seeds/<run_id>/`:
+
+  - `transcript.jsonl` — per-run event log (phase + sub-agent + LLM-call
+    + tool-exec hook events from `core/hooks/system.py`).
+  - `progress.json` — live status `{current_phase, current_step,
+    current_agent_task_id, started_at, last_updated_at, phases_completed,
+    eta_seconds, usd_spent}`. Atomic via tmp+os.replace; written at
+    every phase boundary inside `Pipeline.arun`.
+  - `tournament.json` — per-match Elo tournament record with the full
+    3-voter panel (`voter_id`, `voter_model`, `voter_provider`, `vote`,
+    `rationale`, `duration_ms`, `parse_error`) and Elo before/after
+    deltas. Quorum-lost matches are surfaced with `quorum_lost: true`.
+  - `per_phase_costs.json` — `{<phase>: {cost_usd, prompt_tokens,
+    completion_tokens, duration_ms, agent_count}}` aggregated from
+    `sub_agents/*/dialogue.jsonl` `session_end` events.
+  - `sub_agents/<task_id>/{dialogue.jsonl, result.json, session.json}` —
+    per-sub-agent turn-by-turn transcript + structured output + session
+    metadata. No size cap per operator directive (resolution wins).
+  - `checkpoints/<phase>.json` — per-phase state snapshots (was already
+    written by `plugins/seed_generation/checkpointer.py`, now bundled).
+
+  Writers:
+
+  - `plugins/seed_generation/orchestrator.py` — new `_persist_progress`,
+    `_persist_per_phase_costs`, `_live_sync_loop` (5s background
+    incremental rsync to the bundle so the live page reflects in-flight
+    runs near-real-time). Kill switch `GEODE_SEED_LIVE_SYNC_DISABLED=1`.
+  - `plugins/seed_generation/agents/ranker.py` — `_persist_tournament_log`
+    (extracts per-voter rationale + Elo before/after from the existing
+    voter SubTask results; `_play_match` now returns a richer
+    `(MatchOutcome | None, match_detail)` tuple).
+  - `plugins/seed_generation/bundle_sync.py` — `_RUN_FILES_TO_SYNC`
+    extended; new `_sync_subagents` + `_sync_checkpoints` helpers + new
+    `sync_run_incremental` mtime-aware mid-run copy used by the live
+    writer.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **34 cases** — was 30):
+
+  - `test_pr1_bundle_includes_transcript_progress_tournament_costs` —
+    4 new top-level files exist under the fixture run.
+  - `test_pr1_subagent_triple_tracked` — every `sub_agents/<task_id>/`
+    carries the dialogue/result/session triple.
+  - `test_pr1_checkpoints_tracked` — at least one phase snapshot.
+  - `test_pr1_tournament_schema_complete` — voter_panel + matches schema
+    + A/B/tie coverage so downstream renderer branches stay exercised.
 
 ### Fixed
 

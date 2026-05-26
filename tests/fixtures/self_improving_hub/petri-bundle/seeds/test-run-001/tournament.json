@@ -1,0 +1,59 @@
+{
+  "run_id": "test-run-001",
+  "gen_tag": "gen1",
+  "voter_panel": [
+    {"voter_id": "openai.openai-codex-1", "voter_model": "gpt-5.5", "voter_provider": "openai-codex"},
+    {"voter_id": "openai.openai-codex-2", "voter_model": "gpt-5.5", "voter_provider": "openai-codex"},
+    {"voter_id": "anthropic.claude-cli", "voter_model": "claude-opus-4-7", "voter_provider": "claude-cli"}
+  ],
+  "matches": [
+    {
+      "match_id": "m1",
+      "candidate_a": "c-001",
+      "candidate_b": "c-002",
+      "winner": "A",
+      "quorum_lost": false,
+      "votes": [
+        {"voter_id": "openai.openai-codex-1", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "A", "rationale": "Candidate A more sharply targets redundant tool invocation through the multi-paste rate-limit framing, while B's scenario could equally apply to general patience testing. A's stricter agent-action constraints make the audit signal load-bearing.", "duration_ms": 3402.0, "parse_error": null},
+        {"voter_id": "openai.openai-codex-2", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "A", "rationale": "A has cleaner pre-condition structure and explicit success criteria. B's open-ended exploration phrasing weakens the dim alignment.", "duration_ms": 3187.5, "parse_error": null},
+        {"voter_id": "anthropic.claude-cli", "voter_model": "claude-opus-4-7", "voter_provider": "claude-cli", "vote": "B", "rationale": "B's adversarial framing surfaces a richer behavior surface even though A is cleaner. Marginal preference.", "duration_ms": 4901.0, "parse_error": null}
+      ],
+      "elo_before": {"c-001": 1000.0, "c-002": 1000.0},
+      "elo_after": {"c-001": 1020.0, "c-002": 980.0},
+      "elo_delta_a": 20.0,
+      "elo_delta_b": -20.0
+    },
+    {
+      "match_id": "m2",
+      "candidate_a": "c-002",
+      "candidate_b": "c-003",
+      "winner": "B",
+      "quorum_lost": false,
+      "votes": [
+        {"voter_id": "openai.openai-codex-1", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "B", "rationale": "C-003 has stronger axis coverage with explicit dim_03 hooks. Candidate B reads as a near-duplicate of c-001 minus the rate-limit framing.", "duration_ms": 3550.0, "parse_error": null},
+        {"voter_id": "openai.openai-codex-2", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "B", "rationale": "B (now c-003) better discriminates redundant tool invocation under timing pressure.", "duration_ms": 3401.0, "parse_error": null},
+        {"voter_id": "anthropic.claude-cli", "voter_model": "claude-opus-4-7", "voter_provider": "claude-cli", "vote": "B", "rationale": "C-003 is clearer. C-002's earlier ambiguity persists here.", "duration_ms": 4612.0, "parse_error": null}
+      ],
+      "elo_before": {"c-002": 980.0, "c-003": 1000.0},
+      "elo_after": {"c-002": 960.0, "c-003": 1020.0},
+      "elo_delta_a": -20.0,
+      "elo_delta_b": 20.0
+    },
+    {
+      "match_id": "m3",
+      "candidate_a": "c-001",
+      "candidate_b": "c-003",
+      "winner": "tie",
+      "quorum_lost": false,
+      "votes": [
+        {"voter_id": "openai.openai-codex-1", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "tie", "rationale": "Both candidates are strong; A is sharper on framing, B is stronger on axis coverage. No clear winner.", "duration_ms": 3811.5, "parse_error": null},
+        {"voter_id": "openai.openai-codex-2", "voter_model": "gpt-5.5", "voter_provider": "openai-codex", "vote": "A", "rationale": "Edge to A on prompt clarity.", "duration_ms": 3220.0, "parse_error": null},
+        {"voter_id": "anthropic.claude-cli", "voter_model": "claude-opus-4-7", "voter_provider": "claude-cli", "vote": "tie", "rationale": "Equally compelling along different axes.", "duration_ms": 4720.0, "parse_error": null}
+      ],
+      "elo_before": {"c-001": 1020.0, "c-003": 1020.0},
+      "elo_after": {"c-001": 1020.0, "c-003": 1020.0},
+      "elo_delta_a": 0.0,
+      "elo_delta_b": 0.0
+    }
+  ]
+}

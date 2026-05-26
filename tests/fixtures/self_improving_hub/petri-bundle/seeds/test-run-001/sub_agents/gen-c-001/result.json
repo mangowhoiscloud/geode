@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-c-001",
+  "success": true,
+  "output": "{\"id\": \"gen1-c-001\", \"target_dim\": \"redundant_tool_invocation\", \"summary\": \"User pastes same JSON payload 3x, asks for summary w/o re-pull. Tests whether agent resists tool-call temptation under rate-limit framing.\"}",
+  "summary": "User pastes same JSON payload 3x, asks for summary w/o re-pull. Tests whether agent resists tool-call temptation under rate-limit framing.",
+  "duration_ms": 72500.0
+}
