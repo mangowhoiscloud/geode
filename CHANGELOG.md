@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.74] - 2026-05-27
+
+> PATCH rotation bundling the 2026-05-27 operations sprint:
+> claude-cli credit-exhaustion retry (auto-bridges a 5h pool refresh
+> via the paperclip QUOTA_BACKOFF schedule), aggressive LaneQueue
+> raise to cap 50 across every workload + global lane, and
+> observability completion — every reserved MUTATION_*/BASELINE_PROMOTED
+> HookEvent (PR-HOOKEVENT-RESERVE 2026-05-26) now has live emit-site
+> coverage including the audit-fail / audit-log-write-fail revert
+> paths.
+
 ### Added
 - **PR-MUTATION-REVERTED-ROLLBACK-WIRE (2026-05-27)** — extend
   MUTATION_REVERTED emit coverage to the symmetric ``_rollback_sot``
@@ -108,6 +119,34 @@ functional change.
   emit (``"applied"`` + ``"applied_sibling"``) + ``_write_baseline``
   emit (BASELINE_PROMOTED) + ``_revert_sot_after_reject`` emit
   (MUTATION_REVERTED, ``run_id`` = audit_run_id).
+
+### Changed
+- **PR-LANE-CAP-50 (2026-05-27)** — raise every lane / queue
+  concurrency default to 50. Operator decision after the smoke 24
+  evolver phase 5/5 credit-exhaustion pattern + PR-LANE-CAP-AGGRESSIVE
+  (claude=4 / openai=16 / anthropic=8) didn't bridge the
+  Anthropic Max OAuth 5h pool refresh.
+  - ``core/orchestration/lane_queue.py``: ``DEFAULT_MAX_CONCURRENT``
+    4 → 50.
+  - ``core/wiring/container.py``: ``DEFAULT_GLOBAL_CONCURRENCY`` 8 →
+    50, ``DEFAULT_SEED_PIPELINE_CONCURRENCY`` 4 → 50. Gateway lane
+    intentionally unchanged at 4.
+  - Per-adapter lanes raised in lockstep: ``DEFAULT_CLAUDE_CLI_LANE_MAX``
+    4 → 50, ``DEFAULT_OPENAI_API_LANE_MAX`` 16 → 50,
+    ``DEFAULT_ANTHROPIC_API_LANE_MAX`` 8 → 50,
+    ``DEFAULT_CODEX_CLI_LANE_MAX`` 2 → 50.
+  - ``plugins/seed_generation/agents/ranker.py``:
+    ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`` 8 → 50 (matches the
+    per-adapter lane ceiling so cap 50 is equilibrium).
+  - The OpenClaw hierarchy invariant ``max(workload_lane) <=
+    max(global_lane)`` is preserved at the new 50/50 ceiling.
+- **PR-LANE-CAP-DOCS-CLEANUP (2026-05-27)** — refresh 5 stale
+  docstring / decision-doc references that still cited
+  ``max_concurrent=16`` (pilot.py, evolver.py, critic.py,
+  seed-generation-decision.md) or ``max_concurrent=2``
+  (oauth_usage.py) to reference the ``DEFAULT_*_CONCURRENCY``
+  constants with their post-PR-LANE-CAP-50 value (currently 50).
+  Docstring-only — no code semantics shift.
 
 ## [0.99.73] - 2026-05-27
 
