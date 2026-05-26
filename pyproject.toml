@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.69"
+version = "0.99.70"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -530,6 +530,15 @@ ignore_missing_imports = true
 # gate for these — a render gate (test_hero_frame_ratchet) catches real
 # regressions visually.
 module = ["scripts.visualizations.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Diagnostic probe scripts (PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED
+# Sprint H2, 2026-05-26 onwards) — these are operator-run reproducers
+# that introspect SDK response objects (ResponseUsage, ResponseOutputItem,
+# etc.) and intentionally use loose typing for ad-hoc debug printing.
+# Same pattern as scripts.visualizations.
+module = ["scripts.probes.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
