@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- PR-VOTER-EFFORT-OVERRIDE-HATCH (Sprint G/H follow-up) — per-voter
+  ``reasoning.effort`` override propagation. ``VoterSpec.effort`` (new
+  optional string field on the judge-panel voter entry in
+  ``plugins/seed_generation/seed_generation.plugin.toml``) lets
+  operators flip a single voter's effort via
+  ``~/.geode/config.toml`` without a code redeploy. Empty (the
+  manifest default) preserves the Sprint G ``"none"`` floor that
+  ranker / mutation_eval already pin; non-empty value flows
+  through the picker (``VoterBinding.effort``) into the
+  ``SubTask.effort`` constructor at both voter dispatch sites
+  (``plugins/seed_generation/agents/ranker.py``
+  ``_build_voter_tasks`` and
+  ``plugins/seed_generation/mutation_eval.py``). The adapter
+  validates the value against the model's
+  ``reasoning_effort_values`` registry at request time so
+  unsupported strings still surface as a clear error rather than
+  a silent server reject. Closes the Codex MCP HIGH catch from PR
+  #1734 (Sprint G) — the prior hard-pin had no operator override
+  surface if effort tuning ever needed to change post-deploy. 6
+  unit tests pin: spec defaults + accepts override, binding carries
+  effort, picker propagation, ranker SubTask uses voter.effort,
+  mutation_eval same, ``source="auto"`` rejection still in place.
+
 ### Fixed
 
 - PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1) — extend the

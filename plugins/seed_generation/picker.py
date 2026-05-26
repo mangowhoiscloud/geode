@@ -136,11 +136,19 @@ class RoleBinding:
 
 @dataclass(frozen=True)
 class VoterBinding:
-    """Resolved auth binding for one judge-panel voter."""
+    """Resolved auth binding for one judge-panel voter.
+
+    ``effort`` is the per-voter ``reasoning.effort`` override (Sprint G/H
+    operator escape-hatch, 2026-05-26). Empty string lets the caller
+    (ranker / mutation_eval) apply its own default; operators set this
+    via ``~/.geode/config.toml`` voter entries when the default proves
+    wrong for a specific model.
+    """
 
     model: str
     provider: str
     source: str
+    effort: str = ""
 
 
 @dataclass(frozen=True)
@@ -469,6 +477,7 @@ def pick_bindings(
                 model=voter.model,
                 provider=voter.provider,
                 source=resolved_source,
+                effort=voter.effort,
             )
         )
         if resolved_source in SUBSCRIPTION_SOURCES:

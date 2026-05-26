@@ -129,11 +129,19 @@ class VoterSpec(BaseModel):
       ``petri.source.<provider>.allowed``. The ``auto`` sentinel is rejected
       here — judge voters require a concrete binding so the panel diversity
       check is meaningful.
+    - ``effort`` — optional ``reasoning.effort`` override (Sprint G/H
+      operator escape-hatch, 2026-05-26). Empty string preserves the
+      ranker/mutation_eval default (``"none"``); operators can flip a
+      voter to ``"low"`` / ``"medium"`` / ``"high"`` / ``"xhigh"`` via
+      ``~/.geode/config.toml`` without redeploy when the default
+      proves wrong for a model. Adapter validates against the model's
+      ``reasoning_effort_values`` at request time.
     """
 
     model: str
     provider: str
     source: str
+    effort: str = ""
 
     @model_validator(mode="after")
     def _source_not_auto(self) -> VoterSpec:
