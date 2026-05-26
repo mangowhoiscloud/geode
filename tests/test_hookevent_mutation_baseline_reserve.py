@@ -96,6 +96,5 @@ def test_reserved_values_distinct_from_existing_pipeline_events() -> None:
         HookEvent.MODEL_PROMOTED.value,
     }
     assert new_values.isdisjoint(existing_values), (
-        f"Reserved mutation/baseline values collide with existing: "
-        f"{new_values & existing_values}"
+        f"Reserved mutation/baseline values collide with existing: {new_values & existing_values}"
     )
