@@ -65,10 +65,12 @@ functional change.
   response, surfacing as the worker treating the result as failure
   (smoke 22: 97 codex-oauth-empty-text dumps, all ranker matches
   observed lost quorum). Minimal isolated probe
-  (``.audit/probes/probe_h6_minimal.py``) with a 25-token prompt
-  ("Say 'hello world'") reproduces the empty
-  ``stream.get_final_response().output[]`` while SSE delivered the
-  message item correctly. Fix walks ``items_source`` (which honours
+  (``scripts/probes/probe_codex_oauth_message_recovery.py``) with a 25-token prompt
+  ("Say 'hello world'") — preserved at
+  ``scripts/probes/probe_codex_oauth_message_recovery.py`` in this PR for reproducibility —
+  reproduces the empty ``stream.get_final_response().output[]`` while
+  SSE delivered the message item correctly. Fix walks ``items_source``
+  (which honours
   ``accumulated_items`` first) for ``type="message"`` items when
   ``response.output_text`` is empty, concatenates
   ``content[].text`` from ``output_text`` content blocks, and

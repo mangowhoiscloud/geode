@@ -11,10 +11,11 @@ Root-cause evidence chain (smoke 20/21/22):
     ``response.output_text`` (which is empty when ``output[]`` is
     empty) AND only walked ``items_source`` for ``function_call`` +
     ``reasoning`` items — message text was dropped silently.
-  * Minimal probe (``.audit/probes/probe_h6_minimal.py``) with a
-    25-token prompt ("Say 'hello world'") reproduces the empty
-    ``response.output[]`` while SSE delivered the message item
-    correctly with text='hello world'.
+  * Minimal probe
+    (``scripts/probes/probe_codex_oauth_message_recovery.py``)
+    with a 25-token prompt ("Say 'hello world'") reproduces the
+    empty ``response.output[]`` while SSE delivered the message
+    item correctly with text='hello world'.
 
 Fix walks ``items_source`` (which honours ``accumulated_items``
 first) for ``type="message"`` items when ``response.output_text``
@@ -153,3 +154,38 @@ def test_falls_back_to_response_output_when_accumulated_none() -> None:
     response = SimpleNamespace(output_text="", output=[msg], status="completed", usage=None)
     result = translate_codex_response(response, accumulated_items=None)
     assert result.text == "from-response-output"
+
+
+def test_refusal_block_extracted_into_text() -> None:
+    """SDK ``ResponseOutputMessage.content`` can be ``ResponseOutputText``
+    OR ``ResponseOutputRefusal``. Refusal carries visible text in
+    ``.refusal``. Pre-fold the refusal path was silently dropped, so a
+    streamed refusal would have surfaced as ``text=""`` (transport
+    failure classification) instead of the actual model refusal.
+    (Codex MCP catch, Sprint H2 2026-05-26.)"""
+    refusal_block = SimpleNamespace(type="refusal", refusal="I cannot help with that.")
+    msg = SimpleNamespace(type="message", role="assistant", content=[refusal_block])
+    result = translate_codex_response(_empty_response(), accumulated_items=[msg])
+    assert result.text == "I cannot help with that."
+
+
+def test_mixed_interleaved_items_all_surface() -> None:
+    """Regression guard for the worst-case ordering — multiple message
+    items interleaved with reasoning + function_call items. The fix
+    must concatenate ALL message text in order, surface ALL reasoning
+    + function_call items, and not be confused by item ordering."""
+    reasoning_a = SimpleNamespace(
+        type="reasoning", encrypted_content="ENC_A", summary=[], id="rs_a"
+    )
+    msg_a = _message_item(_block(type="output_text", text="alpha "))
+    func_a = SimpleNamespace(type="function_call", call_id="call_a", name="tool_a", arguments="{}")
+    msg_b = _message_item(_block(type="output_text", text="beta"))
+    func_b = SimpleNamespace(type="function_call", call_id="call_b", name="tool_b", arguments="{}")
+    items = [reasoning_a, msg_a, func_a, msg_b, func_b]
+    result = translate_codex_response(_empty_response(), accumulated_items=items)
+    assert result.text == "alpha beta", (
+        f"Mixed-interleaved message items must concatenate in order; got {result.text!r}"
+    )
+    assert len(result.reasoning_items) == 1
+    assert len(result.tool_uses) == 2
+    assert [t["id"] for t in result.tool_uses] == ["call_a", "call_b"]

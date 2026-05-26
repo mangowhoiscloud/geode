@@ -620,12 +620,13 @@ def translate_codex_response(
     # ``reasoning`` types — the message text was dropped on the
     # floor every voter call returned ``output_text=""`` even though
     # the model had emitted a complete response. The minimal probe at
-    # ``.audit/probes/probe_h6_minimal.py`` ("Say hello world")
-    # reproduces this with input=25 / output=17 tokens. Smoke 20/21/22
-    # ranker voter quorum collapse (97 codex-oauth-empty-text dumps in
-    # smoke 22 alone) all trace here. When ``response.output_text`` is
-    # empty AND accumulated items carry a message item, reconstruct
-    # the text from the SSE-delivered ``output_text`` content blocks.
+    # ``scripts/probes/probe_codex_oauth_message_recovery.py``
+    # ("Say hello world") reproduces this with input=25 / output=17
+    # tokens. Smoke 20/21/22 ranker voter quorum collapse (97
+    # codex-oauth-empty-text dumps in smoke 22 alone) all trace here.
+    # When ``response.output_text`` is empty AND accumulated items
+    # carry a message item, reconstruct the text from the
+    # SSE-delivered ``output_text`` content blocks.
     fallback_text_parts: list[str] = []
     for item in items_source:
         itype = getattr(item, "type", "") if not isinstance(item, dict) else item.get("type", "")
@@ -633,10 +634,23 @@ def translate_codex_response(
             content = _attr_or_key(item, "content") or []
             for block in content:
                 block_type = _attr_or_key(block, "type")
+                # Per the OpenAI Python SDK, ``ResponseOutputMessage.content``
+                # contains either ``ResponseOutputText`` (visible model
+                # answer) or ``ResponseOutputRefusal`` (visible refusal
+                # message). Both carry user-facing text — extract from
+                # whichever variant the model emitted. Codex MCP catch
+                # (Sprint H2, 2026-05-26) — pre-fold the refusal path was
+                # silently dropped, so a streamed refusal would have
+                # surfaced as ``text=""`` (i.e. classified as transport
+                # failure instead of a real model refusal).
                 if block_type == "output_text":
                     block_text = _attr_or_key(block, "text") or ""
                     if block_text:
                         fallback_text_parts.append(block_text)
+                elif block_type == "refusal":
+                    refusal_text = _attr_or_key(block, "refusal") or ""
+                    if refusal_text:
+                        fallback_text_parts.append(refusal_text)
         if itype == "function_call":
             # Codex backend assigns ``call_id`` as the durable identifier — the
             # ``function_call_output`` reply on the next turn MUST reference
