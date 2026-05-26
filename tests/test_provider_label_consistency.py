@@ -14,9 +14,9 @@ walks the Path-B registry (``list_adapters``) instead.
 
 from __future__ import annotations
 
-from core.cli.commands import MODEL_PROFILES
 from core.config import _resolve_provider
 
+from core.cli.commands import MODEL_PROFILES
 from core.llm import adapters as _adapters_mod
 
 # Path-B registry collapses ``openai-codex`` onto ``openai`` (the source

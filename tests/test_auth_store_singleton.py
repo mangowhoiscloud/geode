@@ -31,8 +31,9 @@ class TestSingleStore:
 
     def test_cli_and_runtime_share_store(self) -> None:
         _reset_singletons()
-        from core.cli.commands import _get_profile_store
         from core.wiring.container import ensure_profile_store
+
+        from core.cli.commands import _get_profile_store
 
         runtime_store = ensure_profile_store()
         cli_store = _get_profile_store()
@@ -40,8 +41,9 @@ class TestSingleStore:
 
     def test_credential_added_via_cli_is_visible_to_rotator(self) -> None:
         _reset_singletons()
-        from core.cli.commands import _get_profile_store
         from core.wiring.container import get_profile_rotator
+
+        from core.cli.commands import _get_profile_store
 
         store = _get_profile_store()
         store.add(
