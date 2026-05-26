@@ -62,7 +62,9 @@ class _CapturingHooks:
 # ---------------------------------------------------------------------------
 
 
-def test_hook_event_has_five_auto_trigger_variants() -> None:
+def test_hook_event_has_auto_trigger_variants() -> None:
+    """PR-MAX-GEN (2026-05-26) added a sixth auto-trigger variant:
+    ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED``."""
     from core.hooks import HookEvent
 
     assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_FIRED.value == "self_improving_auto_trigger_fired"
@@ -78,10 +80,15 @@ def test_hook_event_has_five_auto_trigger_variants() -> None:
     assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR.value == (
         "self_improving_auto_trigger_parse_error"
     )
+    assert HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED.value == (
+        "self_improving_auto_trigger_max_generation_reached"
+    )
 
 
-def test_state_to_hook_event_map_covers_five_states_only() -> None:
-    """`disabled` is intentionally absent — see module docstring."""
+def test_state_to_hook_event_map_covers_terminal_states() -> None:
+    """`disabled` is intentionally absent — see module docstring.
+    PR-MAX-GEN (2026-05-26) added ``max_generation_reached`` for the
+    generation-cap state, bringing the map to six entries."""
     from core.self_improving_loop.auto_trigger import STATE_TO_HOOK_EVENT
 
     assert set(STATE_TO_HOOK_EVENT) == {
@@ -90,6 +97,7 @@ def test_state_to_hook_event_map_covers_five_states_only() -> None:
         "interval_blocked",
         "runner_error",
         "parse_error",
+        "max_generation_reached",
     }
     assert "disabled" not in STATE_TO_HOOK_EVENT
 

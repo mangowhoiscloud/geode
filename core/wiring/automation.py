@@ -114,6 +114,12 @@ def build_automation(
             enabled=sil_cfg.scheduler.enabled,
             cron=sil_cfg.scheduler.cron,
             min_interval_minutes=sil_cfg.scheduler.min_interval_minutes,
+            # PR-MAX-GEN (2026-05-26) — production wiring for the
+            # generation cap. ``0`` (config default) preserves legacy
+            # unbounded behaviour. Operators set a non-zero cap in
+            # ~/.geode/config.toml under [self_improving_loop.scheduler]
+            # max_generation = N.
+            max_generation=sil_cfg.scheduler.max_generation,
             hooks=hooks,
         )
     except Exception:
