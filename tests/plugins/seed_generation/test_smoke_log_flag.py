@@ -61,12 +61,26 @@ def test_next_smoke_counter_ignores_malformed_names(tmp_path: Path) -> None:
 
 def test_resolve_auto_returns_archives_path() -> None:
     """``auto`` resolves under ``.audit/smoke-archives/`` with the
-    ``smoke-<N>-<TS>.log`` naming convention."""
-    path = _resolve_smoke_log_path("auto", now_ts=1779999999)
+    ``smoke-<N>-<TS>-<pid>.log`` naming convention. The pid suffix
+    (Codex MCP MEDIUM catch fold) makes the path collision-free even
+    when two smoke processes start in the same wall-second."""
+    path = _resolve_smoke_log_path("auto", now_ts=1779999999, pid=42424)
     assert path.parent.name == "smoke-archives"
     assert path.parent.parent.name == ".audit"
     assert path.name.startswith("smoke-")
-    assert path.name.endswith("-1779999999.log")
+    assert path.name.endswith("-1779999999-42424.log")
+
+
+def test_resolve_auto_same_second_different_pid_distinct_paths() -> None:
+    """Two processes starting in the same wall-second pick distinct
+    filenames because the pid suffix differs — even if they pick the
+    same counter due to the directory scan racing the first writer's
+    ``open(..., "a")`` call."""
+    a = _resolve_smoke_log_path("auto", now_ts=1779999999, pid=1001)
+    b = _resolve_smoke_log_path("auto", now_ts=1779999999, pid=1002)
+    assert a != b
+    assert "1001" in a.name
+    assert "1002" in b.name
 
 
 def test_resolve_explicit_path_passes_through(tmp_path: Path) -> None:
@@ -79,26 +93,34 @@ def test_resolve_explicit_path_passes_through(tmp_path: Path) -> None:
 def test_setup_none_returns_none_and_leaves_stdout_untouched() -> None:
     """Default ``--smoke-log`` (None) is a no-op — the test invariant
     that smoke 23 / smoke 24 era operators do not get surprised when
-    omitting the flag."""
+    omitting the flag. Saves + restores BOTH ``sys.stdout`` and
+    ``sys.stderr`` (Codex MCP MEDIUM catch fold — the helper wraps
+    both streams, so the test must restore both)."""
     import sys
 
     orig_stdout = sys.stdout
+    orig_stderr = sys.stderr
     result = _setup_smoke_log_tee(None)
     try:
         assert result is None
         assert sys.stdout is orig_stdout
+        assert sys.stderr is orig_stderr
     finally:
         sys.stdout = orig_stdout
+        sys.stderr = orig_stderr
 
 
 def test_setup_writes_to_target_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When set, the tee actually writes through to the target file
     so the smoke log captures whatever ``print()`` / ``typer.echo``
-    emit."""
+    emit. Saves + restores BOTH streams (Codex MCP MEDIUM catch fold —
+    pre-fix this test leaked a ``_TeeStream`` ``sys.stderr`` to later
+    tests in the same pytest process)."""
     import sys
 
     log_path = tmp_path / "smoke-test.log"
     orig_stdout = sys.stdout
+    orig_stderr = sys.stderr
     result = _setup_smoke_log_tee(str(log_path))
     try:
         assert result == log_path
@@ -108,6 +130,7 @@ def test_setup_writes_to_target_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert "hello smoke log" in contents
     finally:
         sys.stdout = orig_stdout
+        sys.stderr = orig_stderr
 
 
 def test_tee_stream_forwards_write_count() -> None:

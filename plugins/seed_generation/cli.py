@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import shlex
 import sys
 import time
@@ -81,11 +82,16 @@ audit_seeds_app = typer.Typer(
 # Implementation note: this is a *Python-level* tee — we wrap
 # ``sys.stdout`` / ``sys.stderr`` with a ``_TeeStream`` proxy that
 # duplicates every write to the log file. Subprocesses spawned later
-# (claude-cli, codex) inherit the *original* OS file descriptors, so
-# their output does NOT land in this log (they have their own
-# transcript / sub_agent JSON SoT under ``state/seed-generation/.../``).
-# What this captures is exactly what the operator sees: cost preview
-# banner, ToS notice, phase status echoes, error tracebacks.
+# (claude-cli, codex) actually run with PIPE-captured stdout/stderr
+# (``core/orchestration/isolated_execution.py:414`` +
+# ``core/self_improving_loop/cli_subprocess.py:97`` both use
+# ``capture_output=True`` / ``stdout=PIPE``), so their raw output
+# never reaches the parent's terminal anyway — it lands in the
+# per-task ``state/seed-generation/<run>/sub_agents/<task>/`` records
+# via the PIPE. What THIS log captures is exactly what the operator
+# sees on their own terminal: the parent process's cost preview
+# banner, ToS notice, phase status echoes, and any tracebacks the
+# orchestrator surfaces.
 
 
 _SMOKE_ARCHIVES_DIR = Path(".audit") / "smoke-archives"
@@ -136,8 +142,10 @@ def _next_smoke_counter(archives: Path) -> int:
         return 1
     counters: list[int] = []
     for entry in archives.glob("smoke-*-*.log"):
-        # filename pattern: smoke-<N>-<TS>.log → split into 3 dash-parts
-        # plus extension. Tolerate malformed names.
+        # filename pattern: smoke-<N>-<TS>(-<pid>)?.log → at least 3
+        # dash-parts after the stem split. Tolerate both legacy
+        # (smoke-N-TS.log) and pid-suffixed (smoke-N-TS-PID.log)
+        # variants for migration.
         parts = entry.stem.split("-")
         if len(parts) >= 3 and parts[0] == "smoke":
             try:
@@ -147,19 +155,27 @@ def _next_smoke_counter(archives: Path) -> int:
     return (max(counters) + 1) if counters else 1
 
 
-def _resolve_smoke_log_path(value: str, *, now_ts: int | None = None) -> Path:
+def _resolve_smoke_log_path(
+    value: str, *, now_ts: int | None = None, pid: int | None = None
+) -> Path:
     """Resolve ``--smoke-log`` argument to an absolute Path.
 
-    - ``"auto"`` → ``.audit/smoke-archives/smoke-<next-N>-<unix_ts>.log``
-      where ``next-N`` is ``max(existing smoke-N)+1`` and ``unix_ts``
-      is ``int(time.time())`` (overridable for tests via ``now_ts``).
+    - ``"auto"`` → ``.audit/smoke-archives/smoke-<N>-<unix_ts>-<pid>.log``
+      where ``N`` is ``max(existing smoke-N)+1``, ``unix_ts`` is
+      ``int(time.time())``, and ``pid`` is ``os.getpid()``. Both
+      ``now_ts`` and ``pid`` are overridable for tests. The pid
+      suffix prevents collision when two smoke processes start in the
+      same wall-second (Codex MCP MEDIUM catch fold — pre-fix the
+      counter scan + ts could collide before either process touched
+      the directory, so two runs could pick identical paths).
     - any other value → treated as a literal path (relative or
       absolute). Parent directories are created in the caller.
     """
     if value == "auto":
         ts = now_ts if now_ts is not None else int(time.time())
+        pid_value = pid if pid is not None else os.getpid()
         next_n = _next_smoke_counter(_SMOKE_ARCHIVES_DIR)
-        return _SMOKE_ARCHIVES_DIR / f"smoke-{next_n}-{ts}.log"
+        return _SMOKE_ARCHIVES_DIR / f"smoke-{next_n}-{ts}-{pid_value}.log"
     return Path(value)
 
 
