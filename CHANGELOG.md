@@ -47,6 +47,47 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.66] - 2026-05-26
+
+Seed-generation ranker-phase robustness rotation. 2 PR fixing two
+independent smoke-20 defects: gpt-5.5 voter calls returning empty
+`output_text` 100% of the time (E1 — fixed by `effort="low"` pin
+based on ctx7 OpenAI Responses API docs grounding), and ~13%-rate
+generator sub-agent silent partial-writes (E2 — fixed by structural
+`enable_goal_decomposition=False` for sub-agents plus defence-in-depth
+`decomposition_result_leak` outcome detection). Both surfaced when
+smoke 20 ranker collapsed (quorum lost on every match). The two fixes
+are unrelated in code path but symbiotic at the system level: without
+E1 the ranker has no codex voters, without E2 the ranker has missing
+candidates to vote on. v0.99.66 ships both alongside the pre-existing
+voter task_id collision fix that E1 surfaced.
+
+### Fixed
+
+- PR-GENERATOR-PLAN-LEAK-FIX — seed generator silent partial-write defect
+  (smoke 20, 2/15 generator sub-agents reported `success=true` but wrote
+  no candidate `.md` file). Root cause: the supervisor-built per-task
+  description contained natural English connectors (` and `, ` then `)
+  that tripped `core.agent.plan._has_compound_indicators`, so
+  `decompose_async` fired with the decomposer system prompt inside the
+  sub-agent worker; claude-cli cached that prompt under the sub-agent's
+  session_id; `_persist_session_id` stamped it as the resume target;
+  the next `_call_llm` turn (now carrying the *generator* system prompt)
+  was dispatched with `resume_session_id` set, which makes
+  `build_subprocess_stdin` skip the system block on the rationale that
+  it's already cached. The model resumed the decomposer conversation
+  and emitted a `DecompositionResult`-shape JSON instead of calling
+  `seed_debate_turn` / `write_file`. Fix is two-layered:
+  (1) **structural** — `core.agent.worker._run_agentic` now constructs
+  the sub-agent `AgenticLoop` with `enable_goal_decomposition=False`
+  (sub-agents are specialised executors; the parent already decomposed);
+  (2) **defence-in-depth** — `_resolve_worker_outcome` downgrades
+  `success=True` to `False` when the loop's text is a planner-shape
+  JSON (all three `is_compound` / `goals` / `reasoning` keys with their
+  canonical types), surfacing the defect class explicitly via a
+  `decomposition_result_leak` summary cause instead of letting a
+  phantom seed slip past the IPC boundary.
+
 ## [0.99.65] - 2026-05-26
 
 Hermes Phase 1d.2 + Phase 3 absorption rotation. Ships the
