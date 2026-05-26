@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- PR-GENERATOR-PLAN-LEAK-FIX — seed generator silent partial-write defect
+  (smoke 20, 2/15 generator sub-agents reported `success=true` but wrote
+  no candidate `.md` file). Root cause: the supervisor-built per-task
+  description contained natural English connectors (` and `, ` then `)
+  that tripped `core.agent.plan._has_compound_indicators`, so
+  `decompose_async` fired with the decomposer system prompt inside the
+  sub-agent worker; claude-cli cached that prompt under the sub-agent's
+  session_id; `_persist_session_id` stamped it as the resume target;
+  the next `_call_llm` turn (now carrying the *generator* system prompt)
+  was dispatched with `resume_session_id` set, which makes
+  `build_subprocess_stdin` skip the system block on the rationale that
+  it's already cached. The model resumed the decomposer conversation
+  and emitted a `DecompositionResult`-shape JSON instead of calling
+  `seed_debate_turn` / `write_file`. Fix is two-layered:
+  (1) **structural** — `core.agent.worker._run_agentic` now constructs
+  the sub-agent `AgenticLoop` with `enable_goal_decomposition=False`
+  (sub-agents are specialised executors; the parent already decomposed);
+  (2) **defence-in-depth** — `_resolve_worker_outcome` downgrades
+  `success=True` to `False` when the loop's text is a planner-shape
+  JSON (all three `is_compound` / `goals` / `reasoning` keys with their
+  canonical types), surfacing the defect class explicitly via a
+  `decomposition_result_leak` summary cause instead of letting a
+  phantom seed slip past the IPC boundary.
+
 ## [0.99.65] - 2026-05-26
 
 Hermes Phase 1d.2 + Phase 3 absorption rotation. Ships the

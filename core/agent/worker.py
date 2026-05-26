@@ -411,6 +411,34 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # preserves legacy free-form text responses for callers that
         # didn't declare a schema (REPL, gateway, ad-hoc CLI).
         response_schema=request.response_schema,
+        # PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — disable goal
+        # decomposition for sub-agents. Sub-agents are specialised
+        # executors driven by an AgentDefinition + supervisor-built
+        # task description; the parent orchestrator already performed
+        # whatever decomposition was needed. Leaving it on caused a
+        # silent partial-write defect (smoke 20, 2/15 generator spawns):
+        # the per-task description contained natural English
+        # connectors ("frontmatter fields ... AND tags",
+        # "call ``seed_debate_turn`` ... then turn=2") that tripped
+        # ``_has_compound_indicators`` → ``decompose_async`` fired with
+        # the decomposer system prompt → claude-cli cached that prompt
+        # under the sub-agent's session_id → ``_persist_session_id``
+        # stamped it as the resume target → the next ``_call_llm``
+        # turn (now carrying the *generator* system prompt) was
+        # dispatched with ``resume_session_id`` set, which makes
+        # ``build_subprocess_stdin`` SKIP the system prompt block
+        # ("already cached"). claude-cli resumed the decomposer
+        # conversation, the model stayed in decomposition mode, and
+        # emitted a ``DecompositionResult``-shape JSON instead of
+        # calling ``seed_debate_turn`` / ``write_file``. Worker
+        # reported ``success=True`` (non-empty text, no error,
+        # ``termination_reason="unknown"``) but no seed markdown was
+        # written; downstream ranker hit FileNotFoundError and the
+        # PR-VOTER-PROMPT-ANTI-PHANTOM UNAVAILABLE sentinel kicked in.
+        # Evidence: ``state/seed-generation/gen1-redundant_tool_invocation/
+        # sub_agents/gen-gen1-000-fe17d6c5/result.json`` — output is a
+        # verbatim ``DecompositionResult`` JSON.
+        enable_goal_decomposition=False,
     )
 
     # 7. Build prompt
@@ -670,6 +698,56 @@ def _build_schema_retry_prompt(
     )
 
 
+# PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — defence-in-depth detector
+# for the ``DecompositionResult``-shape JSON leak documented at the
+# ``enable_goal_decomposition=False`` site above. The structural fix is
+# in ``_run_agentic`` (no decomposer call → no cached prompt to resume
+# from); this helper is the last safety net before a ``success=True``
+# row with a planner-shape body slips past into the orchestrator. The
+# three-key shape (``is_compound`` bool + ``goals`` list + ``reasoning``
+# string) matches ``core.agent.plan.DecompositionResult`` *exactly* —
+# no real sub-agent role emits that triple (seed_generator writes
+# markdown via ``write_file``; ranker / critic / proximity emit role
+# schemas with ``candidate_id`` / ``score`` / ``reason`` keys).
+_DECOMPOSITION_RESULT_KEYS: frozenset[str] = frozenset({"is_compound", "goals", "reasoning"})
+
+
+def _looks_like_decomposition_result(text: str) -> bool:
+    """Return True iff ``text``'s last balanced JSON object is a planner
+    ``DecompositionResult`` echo (the leak documented at the
+    ``enable_goal_decomposition=False`` worker call site).
+
+    Conservative: requires the parsed object to be a ``dict`` containing
+    ALL THREE planner keys with their canonical types (``is_compound``
+    bool + ``goals`` list + ``reasoning`` string). Single-key overlaps
+    (e.g. a role schema happening to include ``reasoning``) do not
+    match.
+    """
+    if not text or not text.strip():
+        return False
+    # Local import to keep ``worker.py``'s module-level import surface
+    # small (the IPC entry point should bootstrap without dragging in
+    # the SubAgentManager).
+    from core.agent.sub_agent import _last_balanced_json_object
+
+    candidate = _last_balanced_json_object(text)
+    if candidate is None:
+        return False
+    try:
+        parsed = json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(parsed, dict):
+        return False
+    if not _DECOMPOSITION_RESULT_KEYS.issubset(parsed.keys()):
+        return False
+    return (
+        isinstance(parsed.get("is_compound"), bool)
+        and isinstance(parsed.get("goals"), list)
+        and isinstance(parsed.get("reasoning"), str)
+    )
+
+
 def _resolve_worker_outcome(
     agentic_result: AgenticResult | None,
 ) -> tuple[bool, str, str]:
@@ -685,6 +763,18 @@ def _resolve_worker_outcome(
 
     success = bool(text) and not error and termination_reason not in _FAILURE_TERMINATION_REASONS
 
+    # PR-GENERATOR-PLAN-LEAK-FIX (2026-05-26) — defence-in-depth: even
+    # when the loop reports a clean termination with non-empty text, a
+    # ``DecompositionResult``-shape body means the sub-agent never
+    # executed its role tools (no ``seed_debate_turn`` / ``write_file``
+    # for a generator; no schema-keyed output for evaluator roles).
+    # Downgrade to ``success=False`` so the parent surfaces the defect
+    # in the timeline instead of accepting a phantom seed.
+    plan_leak = False
+    if success and _looks_like_decomposition_result(text):
+        success = False
+        plan_leak = True
+
     # Summary surfaces the actual failure cause when ``success`` is False so
     # parent timeline rows ("Tool returned: ...") explain WHY the sub-agent
     # produced no usable output instead of echoing the fallback UI string.
@@ -697,6 +787,10 @@ def _resolve_worker_outcome(
             cause_bits.append(error)
         if termination_reason and termination_reason != "unknown":
             cause_bits.append(f"termination_reason={termination_reason}")
+        if plan_leak:
+            cause_bits.append(
+                "decomposition_result_leak (planner JSON emitted instead of tool calls)"
+            )
 
     if cause_bits:
         summary = "Sub-agent failed: " + "; ".join(cause_bits)
