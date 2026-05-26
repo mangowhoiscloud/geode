@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from core.agent.sub_agent import SubResult, SubTask
@@ -266,7 +266,7 @@ def test_ranker_dispatches_matches_concurrently() -> None:
     state = _state_with_candidates(5)
     manager = _DelayedAlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(0),
     )
@@ -292,7 +292,7 @@ def test_ranker_applies_elo_after_parallel_dispatch_in_match_plan_order() -> Non
     state = _state_with_candidates(4)
     manager = _DelayedAlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(seed),
     )
