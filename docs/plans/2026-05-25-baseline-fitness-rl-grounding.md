@@ -33,7 +33,7 @@ GEODE 의 self-improving loop = RL 의 *policy gradient on non-Markovian environ
 | **D2** | scenario_realism → seed-gen feedback channel (mutator 분리). admirable / disappointing / needs_attention → self-improving loop baseline (B) 의 input |
 | **D3** | B (fitness) 식 fix 먼저, 가지치기 그 다음 |
 | **D4** | PSM (geode-scoring PSM Engine analyst_confidence multiplier) 거부 |
-| **D5** | P1-revised (GSPO/DAPO + EXAONE variance filter) 채택. P2-P5 후속 |
+| **D5** | P1-revised (DAPO-inspired variance gate + GRPO-inspired score whitening) 채택 — *selection layer only, no policy gradient*. P2-P5 후속 |
 
 ## 4. P1-revised 적용 plan
 
@@ -41,11 +41,11 @@ GEODE 의 self-improving loop = RL 의 *policy gradient on non-Markovian environ
 
 GEODE 의 mutator = Anthropic/OpenAI API endpoint, weight frozen. → frontier RL 의 learning layer (gradient descent, ratio clipping, KL penalty) 적용 X. **selection layer 3개만**:
 
-| 채택 | 출처 | GEODE 적용 |
+| 채택 (selection-only) | 출처 (inspired by) | GEODE 적용 |
 |---|---|---|
-| **Group baseline** | GRPO (DeepSeek R1) | N mutation → μ = mean(fitness) |
-| **Advantage normalization (whitening)** | GRPO | Â_i = (fitness_i - μ) / (σ + ε) |
-| **Variance filter (Dynamic Sampling)** | DAPO + EXAONE 4.5 zero-variance filter | σ < ε_var 면 group 폐기 |
+| **Group baseline** | GRPO-inspired (DeepSeekMath arXiv 2402.03300; GRPO uses it as policy-update baseline, we use it as selection baseline) | N mutation → μ = mean(fitness) |
+| **Score whitening (z-score)** | GRPO-inspired (same source; formula reused as selection-time ranking, not as policy gradient term) | score_i = (fitness_i - μ) / (σ + ε) |
+| **Variance gate** | DAPO-inspired (arXiv 2503.14476 *Dynamic Sampling* — applied at training time there, here at selection time) | σ < ε_var 면 group 폐기 |
 
 ### 4.2 DAPO 4 technique 중 본 sprint 채택
 
@@ -61,7 +61,7 @@ GEODE 의 mutator = Anthropic/OpenAI API endpoint, weight frozen. → frontier R
 | 항목 | 결정 | 비고 |
 |---|---|---|
 | group size N | **2** | config knob `[self_improving_loop.autoresearch] group_size`. 1=disabled, 2=MVP, 4=full |
-| variance threshold ε_var | **0.01** | config knob. EXAONE production value 미공개 → history 누적 (N≥30 cycle) 후 percentile-based 로 adapt |
+| variance threshold ε_var | **0.01** | config knob. Placeholder default — no externally-verified production value grounded for this knob. history 누적 (N≥30 cycle) 후 percentile-based 로 adapt (PR-VAR-ADAPTIVE follow-up) |
 | sibling SoT 처리 | **in-memory** | disk write 없음. audit subprocess spawn 시 env (W3 인프라) 로 SoT path propagate. 채택된 1개만 disk commit |
 | mutations.jsonl `kind` 확장 | `applied` (선택됨) + `applied_sibling` (선택 안 됨) + 기존 `attribution` | group_id field 추가 |
 | 폐기 시 동작 | cycle skip + log | 안전 default. 후속에 mutator 재시도 with higher temperature 옵션 |
@@ -100,8 +100,8 @@ GEODE 의 mutator = Anthropic/OpenAI API endpoint, weight frozen. → frontier R
 
 ```
 GEODE self-improving-loop 의 baseline RL grounding PR (P1-revised) diff 를 검증해줘.
-group baseline + advantage normalization + variance filter (DAPO Dynamic Sampling) 가
-frontier 의 selection layer 만 채택했는지 + weight 학습 layer (PPO ratio clip, KL penalty,
+group baseline + score whitening + variance gate (DAPO-inspired Dynamic Sampling, GRPO-inspired
+whitening) 가 frontier 의 selection layer 만 채택했는지 + weight 학습 layer (PPO ratio clip, KL penalty,
 gradient descent) 가 포함되지 않았는지 cross-check.
 
 특히 다음 anti-deception 패턴 확인:
@@ -188,10 +188,17 @@ gradient descent) 가 포함되지 않았는지 cross-check.
   - [[feedback-post-implementation-verification]] — RFC 작성 전 코드 검증 필수
   - [[feedback-codex-mcp-verification]] — §7 Codex MCP 검증
   - [[feedback-dual-sot-drift-invariant]] — sibling in-memory variant 의 drift 방지
-- Frontier:
-  - [DAPO arXiv 2503.14476](https://arxiv.org/html/2503.14476v1) — Dynamic Sampling 의 정확한 식
-  - [GRPO DeepSeekMath arXiv 2402.03300](https://arxiv.org/abs/2402.03300) — group baseline + advantage whitening
-  - [GSPO Qwen3 arXiv 2507.18071](https://arxiv.org/pdf/2507.18071) — sequence-level (GEODE 사상 정합)
-  - [EXAONE 4.5 arXiv 2604.08644](https://arxiv.org/html/2604.08644v1) — zero-variance filter production
+- Frontier inspiration (referenced for ideas, not formula citations
+  — verify against PDFs before quoting any specific formula):
+  - [DAPO arXiv 2503.14476](https://arxiv.org/html/2503.14476v1) — Dynamic Sampling concept (applied here at *selection* time, not as a training-time gradient filter)
+  - [GRPO DeepSeekMath arXiv 2402.03300](https://arxiv.org/abs/2402.03300) — group baseline + advantage whitening (formula reused as *selection* score, not as policy gradient term)
+  - [GSPO Qwen3 arXiv 2507.18071](https://arxiv.org/pdf/2507.18071) — sequence-level RL training (referenced for sequence-vs-token granularity discussion only; GEODE is not RL training)
   - [Solar Pro 3 SnapPO arXiv 2601.07022](https://arxiv.org/pdf/2601.07022) — cyclic producer-consumer (P5 후속)
   - [Dynamic Reward Weighting TACL '26 arXiv 2509.11452](https://arxiv.org/abs/2509.11452) — MORL P2-revised
+- Removed reference (2026-05-26 Phase A audit): EXAONE 4.5 arXiv
+  2604.08644 was previously cited as "zero-variance filter
+  production" grounding. WebFetch verification confirmed that paper
+  is the EXAONE 4.5 vision-language-model technical report (LG AI
+  Research) and contains no variance filter / Dynamic Sampling /
+  RL-training content. Citation removed to prevent fake-frontier
+  alignment from accumulating.

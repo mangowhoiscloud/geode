@@ -47,6 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-ATTR-INSPIRED-BY** — self-improving loop's group-sampling
+  selection layer docstrings + plan doc + config docstrings
+  downgraded from "DAPO Dynamic Sampling + GRPO advantage
+  normalization + EXAONE 4.5 zero-variance filter" (which overstated
+  the relationship) to **"DAPO-inspired variance gate +
+  GRPO-inspired group-relative scoring — not policy optimization, no
+  parameter update, no gradient"**. Removes the mis-citation of
+  EXAONE 4.5 (arXiv 2604.08644) verified during the 2026-05-26
+  attribution sprint Phase A audit: that paper is the EXAONE 4.5
+  vision-language model technical report from LG AI Research and
+  contains no variance filter / Dynamic Sampling / RL-training
+  content. Touched files: `core/self_improving_loop/runner.py`
+  (5 docstrings + 1 prompt-template line),
+  `core/config/self_improving_loop.py` (group_size +
+  group_variance_threshold knobs),
+  `core/self_improving_loop/credit_assignment.py` (module
+  docstring), `docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`
+  (D5 row + frontier table + section 4.2 + reference list).
+  No deterministic code-path change. One runtime-facing string did
+  change — the mutator LLM prompt template line in
+  `runner.py:_MUTATION_CONTRACT_SUFFIX` mentions the variance gate
+  in its sibling-uniqueness instruction, reworded from "DAPO Dynamic
+  Sampling variance filter" to "DAPO-inspired variance gate" so the
+  mutator's understanding stays consistent with the docstrings.
+  No test invalidation. Historical `CHANGELOG.md` entries for past
+  releases that mentioned the prior framing are intentionally left
+  unchanged (Keep a Changelog: released entries are immutable).
+
 ### Added
 
 - PR-SMOKE-LOG-FLAG (2026-05-26) — ``geode audit-seeds generate
@@ -93,6 +123,19 @@ functional change.
   literal value, distinctness from existing pipeline events.
 
 ### Fixed
+
+- **PR-SOT-REVERT-ON-REJECT** — self-improving loop closed-loop silent
+  leak: when the runner-driven audit (`GEODE_SIL_MUTATION_ID` env set)
+  triggers `_should_promote=False`, the SoT is now reverted to its
+  pre-mutation state instead of leaving the rejected mutation as
+  permanent state. `autoresearch.train._revert_sot_after_reject` walks
+  `mutations.jsonl` for the apply row's `previous_value` and dispatches
+  through `load_wrapper_prompt_sections`/`write_wrapper_prompt_sections`
+  (prompt kind) or `policies.load_policy`/`policies.write_policy`
+  (policy kinds). Insertion case (`previous_value=""`) deletes the key
+  instead of writing back an empty string. Manual audits (no SIL env)
+  remain unchanged — operator-driven mutations accumulate by design.
+  Pinned by 9 invariant tests in `tests/autoresearch/test_sot_revert_on_reject.py`.
 
 - **PR-SOT-REVERT-ON-AUDIT-FAIL** — self-improving loop closed-loop
   silent leak #2: `SelfImprovingLoopRunner._invoke_autoresearch` now
