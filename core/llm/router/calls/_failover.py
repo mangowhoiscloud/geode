@@ -134,6 +134,58 @@ async def call_with_failover(
                 if attempt < _max_retries - 1:
                     await _asyncio.sleep(wait)
             except Exception as exc:
+                # PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27) —
+                # ``ClaudeCliTransientUpstreamError`` lives under
+                # ``plugins/petri_audit`` so the core router cannot put
+                # it in ``_RETRYABLE_ERRORS`` (layer violation +
+                # plugin-as-optional-dep). Detect via lazy isinstance
+                # gate; treat as retryable with the long QUOTA backoff
+                # schedule (2m / 10m / 30m / 2h — paperclip
+                # heartbeat.ts:217-226). The shorter exponential
+                # ``_RETRYABLE_ERRORS`` schedule (max ~30s) cannot
+                # bridge an Anthropic 5h pool refresh window; smoke 24
+                # surfaced this as all 5 evolver phases hard-failing
+                # within 30s after 3 attempts each, even though manual
+                # ``resume`` succeeded ~20 min later once the pool
+                # replenished.
+                try:
+                    from plugins.petri_audit.claude_cli_provider import (
+                        ClaudeCliTransientUpstreamError,
+                    )
+
+                    is_claude_cli_transient = isinstance(exc, ClaudeCliTransientUpstreamError)
+                except ImportError:
+                    is_claude_cli_transient = False
+
+                if is_claude_cli_transient:
+                    from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
+
+                    last_error = exc
+                    schedule_idx = min(attempt, len(QUOTA_BACKOFF_SECONDS) - 1)
+                    wait = QUOTA_BACKOFF_SECONDS[schedule_idx]
+                    _elapsed = time.monotonic() - _t0_failover
+                    log.info(
+                        "Failover: model=%s attempt=%d/%d claude-cli transient "
+                        "(credit/pool exhaustion), retrying in %.0fs (quota schedule)",
+                        current_model,
+                        attempt + 1,
+                        _max_retries,
+                        wait,
+                    )
+                    _fire_hook(
+                        HookEvent.LLM_CALL_RETRIED,
+                        {
+                            "model": current_model,
+                            "attempt": attempt + 1,
+                            "max_retries": _max_retries,
+                            "delay_s": wait,
+                            "elapsed_s": _elapsed,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    if attempt < _max_retries - 1:
+                        await _asyncio.sleep(wait)
+                    continue
                 # Unexpected error: log and move on to next model
                 last_error = exc
                 log.debug(
