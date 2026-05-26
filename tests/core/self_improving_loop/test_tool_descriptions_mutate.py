@@ -174,6 +174,34 @@ def test_load_policy_reads_operator_local_when_it_exists(
     assert loaded["bash.description"] == "Operator-local wins."
 
 
+def test_audit_env_override_honours_operator_local_tool_descriptions() -> None:
+    """Codex MCP re-review (PR-TOOL-DESCRIPTIONS-MUTATE, 2026-05-27):
+    ``autoresearch/train.py:run_audit``'s env-override block for
+    ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` must honour the same
+    resolution order as the runtime reader (operator-local → in-repo).
+    Pre-fix the env was *always* set to the in-repo path when the
+    in-repo file existed, so audit silently bypassed an operator-
+    local override — closed-loop break in the mutate → measure path.
+
+    Source-inspection pin (same pattern as
+    ``test_reader_only_kinds_match_env_override_block``) so a future
+    refactor of the env-build block can't silently revert the fix
+    without tripping this test.
+    """
+    import inspect
+
+    from autoresearch import train as train_mod
+
+    src = inspect.getsource(train_mod)
+    assert "OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH" in src, (
+        "run_audit's env-override block must check "
+        "OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH before falling back to "
+        "GLOBAL_TOOL_DESCRIPTIONS_PATH — otherwise the env layer overrides "
+        "the operator's 3-layer resolution and the audit reads stale "
+        "in-repo content despite the mutator writing operator-local."
+    )
+
+
 def test_write_policy_writes_to_operator_local_when_it_exists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

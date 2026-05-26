@@ -875,7 +875,23 @@ def run_audit(
     if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
         env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
         env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
-    if GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    # — when the operator has populated
+    # ``~/.geode/self-improving-loop/tool-descriptions.json``, that
+    # file is the active SoT in the runtime's 3-layer resolution
+    # (env → operator-local → in-repo). Pre-fix this audit block
+    # *always* pointed env at the in-repo path, so the env layer
+    # silently overrode operator-local during audit — closed-loop
+    # break because the mutator just wrote to operator-local. Honour
+    # the same resolution order here: prefer operator-local, fall
+    # back to in-repo. Matches ``core.self_improving_loop.policies:policy_path``
+    # so mutator R/W + audit R all converge on the same file.
+    from core.paths import OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+
+    if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
+        env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
+        env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+    elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
         env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
         env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
     if GLOBAL_SKILL_CATALOG_PATH.is_file():
