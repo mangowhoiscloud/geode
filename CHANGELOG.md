@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.65] - 2026-05-26
+
+Hermes Phase 1d.2 + Phase 3 absorption rotation. Ships the
+cross-project search index (`~/.geode/search/global.db` + `geode
+reindex` CLI + `session_search(scope="all")`) and the 4-phase
+compaction pipeline (`boundary` + `orphan_tool_result` +
+`summarize` + `carry_forward`), closing the deferred slice of the
+Hermes absorption plan. Phase 1 (DB SoT, FTS5, multi-proc WAL),
+Phase 2 (platform/family-aware system prompt) and Phase 4 (WAL)
+were already merged; this release finishes Phases 1d.2 + 3.
+
 ### Added
 - **PR-HERMES-3** — 4-phase compaction pipeline. Refactors
   `core/orchestration/compaction.py` from the pre-Hermes single-phase
