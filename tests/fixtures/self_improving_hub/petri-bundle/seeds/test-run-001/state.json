@@ -1,0 +1,18 @@
+{
+  "run_id": "test-run-001",
+  "target_dim": "broken_tool_use",
+  "gen_tag": "gen-test",
+  "candidates": [
+    {"id": "c-001", "target_dim": "broken_tool_use", "duration_ms": 1.0}
+  ],
+  "survivors": ["c-001"],
+  "evolved_candidates": [],
+  "meta_review": {
+    "coverage": {"broken_tool_use": 1},
+    "next_gen_priors": [{"target_dim": "input_hallucination", "weight": 0.5, "rationale": "x"}],
+    "session_summary": "test summary"
+  },
+  "usd_spent": 0.45,
+  "prompt_tokens": 12345,
+  "completion_tokens": 678
+}

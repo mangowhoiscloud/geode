@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "metadata": {"gen_tag": "gen-test", "session_id": "test-session", "ts_utc": "2026-05-22T16:05:00+00:00"},
+  "fitness": {"value": 0.668, "formula_version": "compute_fitness_3axis_v2"},
+  "audit": {
+    "auditor_model": "claude-cli/claude-opus-4-7",
+    "target_model": "geode/gpt-5.5",
+    "judge_model": "claude-cli/claude-sonnet-4-6",
+    "usd_spent": 7.5
+  },
+  "promotion": {"timestamp": "2026-05-22T16:05:00+00:00"}
+}
