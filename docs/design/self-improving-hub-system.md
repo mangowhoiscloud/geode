@@ -1,9 +1,9 @@
 ---
 title: GEODE Self-Improving Hub Design System
-geode_version: 0.99.63
+geode_version: 0.99.65
 schema_version: 1
 last_updated: 2026-05-26
-applies_to_geode: ">=0.99.63"
+applies_to_geode: ">=0.99.65"
 sibling_pages:
   - self-improving-hub.md
   - self-improving-petri-bundle.md
@@ -252,10 +252,10 @@ Each per-page doc is the **contract** the frontend agent reads to produce HTML. 
 ```yaml
 ---
 title: <human title>
-geode_version: 0.99.63        # exact pyproject.toml version when this doc was authored
+geode_version: 0.99.65        # exact pyproject.toml version when this doc was authored
 schema_version: 1             # bumped on breaking change to THIS doc's contract
 last_updated: 2026-05-26
-applies_to_geode: ">=0.99.63" # version range this doc remains valid for
+applies_to_geode: ">=0.99.65" # version range this doc remains valid for
 ---
 ```
 
@@ -284,10 +284,10 @@ The version values are **build-time substituted** from `pyproject.toml` + CHANGE
 When citing data that may change, anchor to source with version:
 
 - ❌ "the 22 judge dimensions"
-- ✅ "the 22 judge dimensions ([`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`](../../plugins/petri_audit/judge_dims/geode_judge_subset.yaml), as of v0.99.63)"
+- ✅ "the 22 judge dimensions ([`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`](../../plugins/petri_audit/judge_dims/geode_judge_subset.yaml), as of v0.99.65)"
 
 - ❌ "8 pipeline phases"
-- ✅ "8 pipeline phases ([`plugins/seed_generation/orchestrator.py:_PHASE_ORDER`](../../plugins/seed_generation/orchestrator.py), as of v0.99.63)"
+- ✅ "8 pipeline phases ([`plugins/seed_generation/orchestrator.py:_PHASE_ORDER`](../../plugins/seed_generation/orchestrator.py), as of v0.99.65)"
 
 - ❌ "schema v2 baseline.json"
 - ✅ "schema v2 baseline.json (PR-2 of petri-schema-v2 cascade, v0.99.37+)"
@@ -297,7 +297,7 @@ When citing data that may change, anchor to source with version:
 
 ### Pinned constants (cite source + version)
 
-| Constant | Value as of v0.99.63 | Source |
+| Constant | Value as of v0.99.65 | Source |
 |---|---|---|
 | Judge dimension count (subset) | 22 | `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` |
 | Judge dimension count (full) | 38 | inspect-petri default |

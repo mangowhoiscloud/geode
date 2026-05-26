@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baseline &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Current promoted autoresearch baseline.json (schema v2). 7 namespaces: metadata / raw / normalized / axes / fitness / audit / promotion.">
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/">Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">{{ petri_count }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+{{ sidebar_petri_recent }}
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation <span class="count">{{ seedgen_count_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
+          <ul class="sub-nav">
+{{ sidebar_seedgen_runs }}
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
+        <li><a href="/geode/self-improving/autoresearch/baseline/" class="active" aria-current="page">Baseline</a></li>
+        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">Baseline <span class="bucket autoresearch">autoresearch</span></h1>
+    <p class="page-sub">Current promoted <code>baseline.json</code> rendered as 7 namespace blocks. Schema v2 (PR-2 cascade, v0.99.37+). Each namespace becomes a <code>&lt;table class="records"&gt;</code> with key/value rows; missing namespaces degrade to an empty-block notice.</p>
+
+{{ stale_baseline_warning }}
+
+{{ baseline_namespaces }}
+
+    <div class="build-info">
+      <p>Source: <code>autoresearch/state/baseline.json</code> (schema v2, PR-2 cascade).</p>
+      <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
+      <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
+      <p>Harness chip legend:
+        <span class="chip payg">PAYG</span>API key billing &middot;
+        <span class="chip claude">Claude Code</span>Max OAuth &middot;
+        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip geode">GEODE</span>self-target wrapper.
+      </p>
+      <p class="version-stamp">
+        Rendered against GEODE <code>v{{ geode_version }}</code> &middot; DESIGN.md schema {{ design_schema_version }} &middot; built {{ build_date }}.
+        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
+      </p>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoresearch &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Autoresearch closed-loop landing — current baseline status, generation timeline, and 4 sub-view links (baseline / mutations / results / policies).">
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/">Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">2</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/T6LMA3koV7BvpeLAmmioeF">audit_T6LMA3ko</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/gYhe2d2R8unMSpj8evXQYt">audit_gYhe2d2R</a></li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation <span class="count">1 run</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
+          <ul class="sub-nav">
+            <li><a href="/geode/self-improving/seed-generation/test-run-001/">test-run-001</a></li>
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">live</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/autoresearch/" class="active" aria-current="page">Overview</a></li>
+        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">Autoresearch <span class="bucket autoresearch">autoresearch</span></h1>
+    <p class="page-sub">Closed-loop self-improvement surface. Reads <code>autoresearch/state/</code> (baseline, mutations ledger, results table, 14 policy SoT files) and links to 4 sub-views. The status block below summarises the current promoted baseline; the generation timeline shows the recent promote history.</p>
+
+
+
+    <h2 class="section"><span>Status &middot; current baseline</span></h2>
+    <dl class="status-grid">
+      <dt>current baseline</dt><dd><code>gen-3</code></dd>
+      <dt>fitness</dt><dd><span class="num">0.7245</span></dd>
+      <dt>last promote</dt><dd><span class="muted">2026-05-26 05:00</span></dd>
+      <dt>auditor model</dt><dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
+      <dt>target model</dt><dd><span class="chip geode">GEODE</span> <code>geode/gpt-5.5</code></dd>
+      <dt>judge model</dt><dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-sonnet-4-6</code></dd>
+      <dt>mutations.jsonl</dt><dd>3 rows &middot; <span class='muted'>2026-05-26 02:46</span></dd>
+      <dt>results.tsv</dt><dd>3 rows &middot; <span class='muted'>—</span></dd>
+      <dt>policies/</dt><dd>4 files &middot; <span class='muted'>2026-05-26 02:46</span></dd>
+      <dt>source</dt><dd><code>baseline.json</code></dd>
+    </dl>
+
+    <h2 class="section"><span>Generation timeline &middot; 3 rows</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">gen_tag</th>
+          <th scope="col">ts</th>
+          <th scope="col">fitness</th>
+          <th scope="col">&Delta; fitness</th>
+          <th scope="col">mutation target</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="gen-timeline-row active">
+          <td class="id"><code>gen-3</code></td>
+          <td class="muted">2026-05-26 05:00</td>
+          <td><span class="num">0.7245</span></td>
+          <td><span class="delta-positive">+0.0705</span></td>
+          <td class="muted"><code>wrapper-sections.json::framing_rules</code></td>
+        </tr>
+        <tr class="gen-timeline-row">
+          <td class="id"><code>gen-2</code></td>
+          <td class="muted">2026-05-25 15:00</td>
+          <td><span class="num">0.6540</span></td>
+          <td><span class="delta-positive">+0.0420</span></td>
+          <td class="muted"><code>tool-policy.json::dispatch</code></td>
+        </tr>
+        <tr class="gen-timeline-row">
+          <td class="id"><code>gen-1</code></td>
+          <td class="muted">2026-05-24 10:00</td>
+          <td><span class="num">0.6120</span></td>
+          <td><span class="muted">—</span></td>
+          <td class="muted"><code>wrapper-sections.json::sycophancy_guardrail</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Sub-views &middot; 4 autoresearch sub-pages</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">sub-page</th>
+          <th scope="col">rows</th>
+          <th scope="col">last write</th>
+          <th scope="col">link</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a> <span class="bucket autoresearch">autoresearch</span></td>
+          <td>1 (current promoted) &middot; <span class='muted'>archive: 3 rows</span></td>
+          <td class="muted">2026-05-26 02:45</td>
+          <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">open &rarr;</a></td>
+        </tr>
+        <tr>
+          <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a> <span class="bucket autoresearch">autoresearch</span></td>
+          <td>3 rows</td>
+          <td class="muted">2026-05-26 02:46</td>
+          <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">open &rarr;</a></td>
+        </tr>
+        <tr>
+          <td class="id"><a href="/geode/self-improving/autoresearch/results/">Results</a> <span class="bucket autoresearch">autoresearch</span></td>
+          <td>3 rows</td>
+          <td class="muted">—</td>
+          <td class="id"><a href="/geode/self-improving/autoresearch/results/">open &rarr;</a></td>
+        </tr>
+        <tr>
+          <td class="id"><a href="/geode/self-improving/autoresearch/policies/">Policies</a> <span class="bucket autoresearch">autoresearch</span></td>
+          <td>4 files</td>
+          <td class="muted">2026-05-26 02:46</td>
+          <td class="id"><a href="/geode/self-improving/autoresearch/policies/">open &rarr;</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="build-info">
+      <p>Source: <code>autoresearch/state/baseline.json</code>, <code>baseline_archive.jsonl</code>, <code>mutations.jsonl</code>, <code>results.tsv</code>, <code>policies/*.json</code>.</p>
+      <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
+      <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
+      <p>Harness chip legend:
+        <span class="chip payg">PAYG</span>API key billing &middot;
+        <span class="chip claude">Claude Code</span>Max OAuth &middot;
+        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip geode">GEODE</span>self-target wrapper.
+      </p>
+      <p class="version-stamp">
+        Rendered against GEODE <code>v0.99.65</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-26 03:28.
+        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
+      </p>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

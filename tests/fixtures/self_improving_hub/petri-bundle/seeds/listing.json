@@ -1,0 +1,24 @@
+{
+  "kind": "seeds",
+  "count": 1,
+  "runs": [
+    {
+      "run_id": "test-run-001",
+      "gen_tag": "gen-test",
+      "target_dim": "broken_tool_use",
+      "candidates_drafted": 3,
+      "survivors_count": 2,
+      "evolved_count": 1,
+      "iterations": 0,
+      "max_iterations": 0,
+      "usd_spent": 0.45,
+      "prompt_tokens": 12345,
+      "completion_tokens": 678,
+      "has_meta_review": true,
+      "has_supervisor_guidance": false,
+      "literature_snapshots_count": 0,
+      "debate_transcripts_count": 0,
+      "url": "seeds/test-run-001/"
+    }
+  ]
+}

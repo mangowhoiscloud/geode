@@ -42,6 +42,13 @@ logs/
 # the rule it negates.
 !docs/petri-bundle/logs/
 !docs/petri-bundle/logs/**
+# Exception: self-improving hub E2E fixture. The hub builder
+# (scripts/build_self_improving_hub.py) reads listing.json from
+# this path during tests/test_self_improving_hub_e2e.py; without
+# this negation CI clones the repo without the fixture and the
+# audit-row assertions fail (same anti-pattern as PR-G5b #1350).
+!tests/fixtures/self_improving_hub/petri-bundle/logs/
+!tests/fixtures/self_improving_hub/petri-bundle/logs/**
 # CSP-14 (2026-05-23) — Pages-published seed-generation bundle. Same
 # bundle_sync pattern as the audit logs above: ``plugins/seed_generation/
 # bundle_sync.py`` auto-copies finished run artefacts (state.json,

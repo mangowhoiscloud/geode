@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seed Generation &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Catalog of GEODE seed-generation runs (candidates, survivors, evolved variants, meta-review).">
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/">Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">11</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/cuXC28imBo4pTc6VSVuujm">audit_cuXC28im</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/T6LMA3koV7BvpeLAmmioeF">audit_T6LMA3ko</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/6BcHVJQbe9RZhFw29HLZGw">audit_6BcHVJQb</a></li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation <span class="count">1 run</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/" class="active" aria-current="page">All runs</a>
+          <ul class="sub-nav">
+            <li><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/">gen1-redundant_tool_invocation</a></li>
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">stale</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">Seed Generation &middot; All runs</h1>
+    <p class="page-sub">Per-run catalog of GEODE's autonomous seed-generation pipeline. Each row links to a per-run detail page with candidates, survivors, evolved variants, pilot scores, and meta-review. Mutator chip shows the LLM responsible for drafting + critiquing + evolving candidates.</p>
+
+    <h2 class="section"><span>Runs &middot; 1 run</span></h2>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col">run_id</th>
+          <th scope="col">gen_tag</th>
+          <th scope="col">target_dim</th>
+          <th scope="col">mutator</th>
+          <th scope="col">draft &rarr; surv</th>
+          <th scope="col">evolved</th>
+          <th scope="col">iterations</th>
+          <th scope="col">cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="id"><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/">gen1-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
+          <td class="muted">gen1</td>
+          <td class="muted">redundant_tool_invocation</td>
+          <td><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></td>
+          <td class="num">2 &rarr; 2</td>
+          <td class="num">1</td>
+          <td class="muted">—</td>
+          <td class="num">$0.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Phases legend &middot; 8 pipeline phases</span></h2>
+    <dl class="phases-legend">
+      <dt>supervisor</dt>
+      <dd>Strategic guidance for the gen (target dims, scoping). 1 LLM call.</dd>
+      <dt>generator</dt>
+      <dd>Drafts N candidate seeds. N LLM calls in parallel.</dd>
+      <dt>proximity</dt>
+      <dd>Dedupes near-duplicates via similarity clustering. No LLM.</dd>
+      <dt>critic</dt>
+      <dd>Per-candidate reflection: strengths / weaknesses / discrimination_estimate. N calls.</dd>
+      <dt>pilot</dt>
+      <dd>Runs each candidate through a small audit, returning per-dim mean scores. Cost-heavy.</dd>
+      <dt>ranker</dt>
+      <dd>Pairwise tournament with judge panel to rank candidates by Elo.</dd>
+      <dt>evolver</dt>
+      <dd>Mutates top survivors into new variants. Jaccard guard.</dd>
+      <dt>meta_reviewer</dt>
+      <dd>Coverage report + next_gen_priors for the next iteration. 1 call.</dd>
+    </dl>
+
+    <h2 class="section"><span>Cost rollup &middot; across all runs</span></h2>
+    <dl class="cost-grid">
+      <dt>total USD</dt>
+      <dd>$0.00</dd>
+      <dt>prompt_tokens</dt>
+      <dd>0</dd>
+      <dt>completion_tk</dt>
+      <dd>0</dd>
+      <dt>runs</dt>
+      <dd>1</dd>
+    </dl>
+
+    <div class="build-info">
+      <p>Source: <code>docs/self-improving/petri-bundle/seeds/listing.json</code> + per-run <code>state.json</code> / <code>survivors.json</code> / <code>meta_review.json</code>.</p>
+      <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
+      <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
+      <p>Harness chip legend:
+        <span class="chip payg">PAYG</span>API key billing &middot;
+        <span class="chip claude">Claude Code</span>Max OAuth &middot;
+        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip geode">GEODE</span>self-target wrapper.
+      </p>
+      <p class="version-stamp">
+        Rendered against GEODE <code>v0.99.65</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-26 03:24.
+        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
+      </p>
+    </div>
+  </main>
+
+</div>
+</body>
+</html>

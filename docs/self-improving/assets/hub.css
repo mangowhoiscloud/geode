@@ -385,3 +385,521 @@ table.records .sub-row .id {
 
 /* Footer chip legend keeps chip spacing tighter inline */
 .build-info .chip { margin-right: .15rem; }
+
+/* ============================================================ */
+/* Seed-generation surface — per-run detail page                */
+/* ============================================================ */
+
+/* Header banner over the run detail page (mutator chip + run id) */
+.run-detail-header {
+  margin: 0 0 1.5rem;
+  padding: .9rem 1rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.run-detail-header dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .25rem .9rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+}
+
+.run-detail-header dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.run-detail-header dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+/* Prominent mutator banner above all section tables (per DESIGN.md §7) */
+.mutator-banner {
+  margin: 0 0 1.25rem;
+  padding: .55rem .8rem;
+  background: var(--paper-tint);
+  border-left: 3px solid var(--bucket-seedgen);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--ink-soft);
+}
+
+.mutator-banner .role-label {
+  color: var(--ink-faint);
+  margin-right: .35rem;
+}
+
+/* ============================================================ */
+/* table.records.phases — phase progress / .eval card table     */
+/* ============================================================ */
+table.records.phases td.id {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+table.records.phases td.phase-link a {
+  color: var(--accent);
+}
+
+/* ============================================================ */
+/* table.records.heatmap — 22-column pilot score matrix         */
+/* ============================================================ */
+/* Responsive wrapper: 22 dim cols on a narrow screen overflow            */
+/* horizontally inside this region instead of pushing the page wide.     */
+/* First column (candidate id) sticks left during scroll so the row      */
+/* context is never lost.                                                */
+.heatmap-scroll {
+  overflow-x: auto;
+  /* Hairline so the scroll region reads as a contained unit. */
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  margin: .25rem 0 1rem;
+  background: var(--paper);
+}
+
+table.records.heatmap {
+  font-size: .72rem;
+  /* Auto column sizing so abbrev headers (3-4 char) stay compact,       */
+  /* yet the table can grow past the viewport when overflow-x kicks in.  */
+  table-layout: auto;
+  /* Floor the table width so each column gets ~2.4rem on narrow screens */
+  /* (1 id col @ 11rem + 22 score cols @ 2.4rem ≈ 64rem).                */
+  min-width: 64rem;
+  margin: 0;
+}
+
+table.records.heatmap thead th {
+  font-size: .68rem;
+  padding: .35rem .25rem;
+  white-space: nowrap;
+  letter-spacing: .02em;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  /* No more vertical-rl rotation — abbreviations (CHS / UOS / BTU etc.)  */
+  /* fit horizontally so screen readers + sighted users get the same     */
+  /* affordance. Full dim name lives in <abbr title=…> for hover.        */
+}
+
+table.records.heatmap thead th.id-col,
+table.records.heatmap tbody td.id {
+  /* Sticky first column so the candidate id stays visible while         */
+  /* the 22 dim cells scroll horizontally.                               */
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+  text-align: left;
+  padding-right: .8rem;
+  min-width: 11rem;
+  /* Hairline rule on the right separates the sticky column from the    */
+  /* scrolling region so the boundary is legible mid-scroll.            */
+  border-right: 1px solid var(--rule);
+  z-index: 1;
+}
+
+table.records.heatmap thead th.id-col {
+  font-weight: 600;
+  font-size: .62rem;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  letter-spacing: .06em;
+}
+
+table.records.heatmap thead th abbr {
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  /* Subtle hint that the abbrev is hoverable for the full name. */
+}
+
+table.records.heatmap tbody td {
+  padding: .4rem .25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.4rem;
+}
+
+/* Heatmap cell color buckets — see DESIGN.md §5.6.
+ * Master DESIGN.md §3 strict rule 2: no new color tokens. Reuse
+ *   --rule-soft for safe baseline (score 1.0)
+ *   --bucket-autoresearch (#b45309) for the deliberate warm signal
+ *     (high score = problematic in petri convention)
+ * Gradient is opacity over the same warm tone — no new hex codes.
+ */
+table.records.heatmap td.score-safe   { background: var(--rule-soft); color: var(--ink-soft); }
+table.records.heatmap td.score-warn-1 { background: rgba(180, 83, 9, .12); color: var(--ink); }
+table.records.heatmap td.score-warn-2 { background: rgba(180, 83, 9, .25); color: var(--ink); }
+table.records.heatmap td.score-warn-3 { background: rgba(180, 83, 9, .45); color: #fff; }
+table.records.heatmap td.score-warn-4 { background: rgba(180, 83, 9, .70); color: #fff; }
+table.records.heatmap td.score-na     { background: transparent; color: var(--ink-faint); }
+
+/* ============================================================ */
+/* Coverage bar chart (meta-review per-dim coverage)            */
+/* ============================================================ */
+.coverage-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: .25rem .75rem;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  align-items: center;
+}
+
+.coverage-list .dim-name {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.coverage-list .dim-count {
+  color: var(--ink-soft);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage-bar {
+  position: relative;
+  height: 8px;
+  background: var(--rule-soft);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.coverage-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--bucket-seedgen);
+  border-radius: 2px;
+}
+
+/* ============================================================ */
+/* Cost-grid (dl key/value pairs) for index + run cost rollups  */
+/* ============================================================ */
+.cost-grid {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: .25rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+}
+
+.cost-grid dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.cost-grid dd {
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================ */
+/* Reflections list (per-candidate critic output)               */
+/* ============================================================ */
+.reflections {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.reflections li {
+  border-bottom: 1px solid var(--rule-soft);
+  padding: .65rem 0;
+}
+
+.reflections li:last-child { border-bottom: 0; }
+
+.reflections .meta {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--ink-soft);
+  margin-bottom: .35rem;
+}
+
+.reflections .meta .risk {
+  display: inline-block;
+  padding: .04rem .35rem;
+  border-radius: 3px;
+  background: var(--rule-soft);
+  color: var(--ink);
+  margin: 0 .35rem;
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.reflections .reflect-block {
+  margin: .25rem 0 .15rem;
+  font-size: .82rem;
+}
+
+.reflections .reflect-block h4 {
+  margin: .2rem 0 .05rem;
+  font-size: .62rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.reflections .reflect-block ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.reflections .rewrite {
+  font-size: .78rem;
+  color: var(--ink-soft);
+  margin-top: .25rem;
+}
+
+/* ============================================================ */
+/* Phases legend (seed-gen index page)                          */
+/* ============================================================ */
+.phases-legend {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .35rem 1rem;
+  font-size: .82rem;
+}
+
+.phases-legend dt {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.phases-legend dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* Session summary prose */
+.session-summary {
+  margin: .25rem 0 1rem;
+  color: var(--ink);
+  font-size: .9rem;
+  line-height: 1.55;
+  max-width: 780px;
+}
+
+/* ============================================================ */
+/* Autoresearch surface (landing + baseline + mutations         */
+/* + results + policies)                                        */
+/*                                                              */
+/* Master DESIGN.md §3 strict rule 1: no new color tokens.      */
+/* Every signal below is composed from --bucket-autoresearch    */
+/* (warm), --bucket-seedgen (cool green), --ink-faint (muted),  */
+/* and the existing warning palette.                            */
+/* ============================================================ */
+
+/* Yellow / amber hairline banner used when baseline.json is    */
+/* read from a `.outdated-*` snapshot. Reuses the warning       */
+/* palette (already declared above) — no new tokens.            */
+.warning-banner {
+  margin: 0 0 1.5rem;
+  padding: .6rem .85rem;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 1px solid var(--warning-rule);
+  border-left: 3px solid var(--bucket-autoresearch);
+  border-radius: 3px;
+  font-size: .82rem;
+  font-family: var(--font-mono);
+}
+
+.warning-banner code { background: rgba(255, 255, 255, .55); }
+
+/* Generation timeline row highlight — the currently-promoted    */
+/* row is .active and gets a left rule + tinted background       */
+/* (autoresearch warm bucket at low opacity).                    */
+.gen-timeline-row.active td {
+  background: rgba(180, 83, 9, .08);
+  border-left: 3px solid var(--bucket-autoresearch);
+  font-weight: 600;
+}
+
+table.records .gen-timeline-row.active td:first-child {
+  padding-left: .45rem;
+}
+
+/* Inline Unicode block-char sparkline (no SVG, no JS).          */
+/* Used in the results table fitness column.                     */
+.fitness-sparkline {
+  font-family: var(--font-mono);
+  font-size: .92rem;
+  letter-spacing: 0;
+  white-space: pre;
+  color: var(--bucket-autoresearch);
+  vertical-align: baseline;
+}
+
+/* Policy JSON drill-down — overflow-safe pretty-print            */
+/* container. Used inside <details>/<pre> in policies.html.       */
+.policy-json {
+  margin: .35rem 0 0;
+  padding: .65rem .9rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: .74rem;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 24rem;
+}
+
+.policy-json pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Δ-fitness color buckets — derived from existing tokens.        */
+/* positive = seedgen green (improvement signal — matches the    */
+/* surface bucket convention since improvement = the loop is     */
+/* working). negative = autoresearch warm (regression signal).   */
+/* noise = ink-faint muted.                                      */
+.delta-positive {
+  color: var(--bucket-seedgen);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-negative {
+  color: var(--bucket-autoresearch);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-noise {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Baseline namespace block (h3 + table pattern, repeated 7x).    */
+.namespace-block {
+  margin: 1rem 0 1.5rem;
+}
+
+.namespace-block h3 {
+  margin: 0 0 .35rem;
+  font-size: .85rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink);
+}
+
+.namespace-block .namespace-meta {
+  margin: 0 0 .55rem;
+  font-size: .72rem;
+  font-family: var(--font-mono);
+  color: var(--ink-faint);
+}
+
+.namespace-block table.records {
+  margin-top: 0;
+}
+
+.namespace-block .empty-namespace {
+  color: var(--ink-faint);
+  font-style: italic;
+  font-size: .8rem;
+  margin: .25rem 0 0;
+}
+
+/* Filter strip on the mutations page — CSS-only, no JS.           */
+/* Render as a horizontal row of chips. Active state for the       */
+/* current filter (when the page is server-rendered with a         */
+/* selected filter, the active chip carries .active). The plain    */
+/* page (no JS) just shows the legend.                             */
+.filter-strip {
+  margin: 0 0 1rem;
+  padding: .5rem .75rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .55rem;
+  align-items: center;
+}
+
+.filter-strip .filter-label {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+  margin-right: .35rem;
+}
+
+.filter-strip .filter-chip {
+  display: inline-block;
+  padding: .12rem .5rem;
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.filter-strip .filter-chip.active {
+  background: var(--accent-faint);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Status grid (autoresearch landing). Same shape as cost-grid    */
+/* but explicitly named so the contract is local to the page.    */
+.status-grid {
+  margin: .35rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .25rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  max-width: 780px;
+}
+
+.status-grid dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: .62rem;
+  font-weight: 600;
+  align-self: center;
+}
+
+.status-grid dd {
+  margin: 0;
+  color: var(--ink);
+}
