@@ -267,10 +267,65 @@ class AutoresearchConfig(BaseModel):
     *selection* gate, separate concern).
 
     Default 0.01 is a placeholder — no externally-verified production value
-    is currently grounded for this knob. ``baseline.json`` history (N≥30
-    cycle) 누적 후 percentile-based (5th percentile 미만 filter) 로 adapt
-    권장 (PR-VAR-ADAPTIVE follow-up). ``group_size`` 가 1 이면 무시.
+    is currently grounded for this knob. PR-VAR-ADAPTIVE (2026-05-27)
+    closes the follow-up with the ``group_variance_threshold_mode`` /
+    ``group_variance_history_window`` / ``group_variance_percentile``
+    knobs below. When ``mode="percentile"`` and the history has ≥window
+    entries, this fixed value is ignored in favour of the percentile.
     """
+
+    group_variance_threshold_mode: Literal["fixed", "percentile"] = "fixed"
+    """PR-VAR-ADAPTIVE (2026-05-27) — variance gate threshold source.
+
+    - ``"fixed"`` (default, backward-compat): use
+      ``group_variance_threshold`` as the hard floor regardless of
+      observed history. Legacy behaviour preserved.
+    - ``"percentile"``: read
+      ``autoresearch/state/group_variance_history.jsonl`` (git-tracked),
+      filter to the most recent ``group_variance_history_window``
+      entries for the active ``target_kind`` (when available — else
+      pooled across kinds), and use the ``group_variance_percentile``
+      th-percentile std as the threshold. When the history has fewer
+      than the window count, falls back to the fixed value so an
+      operator can enable the mode without bootstrapping a synthetic
+      history. Closes the 2026-05-26 attribution sprint Phase A
+      audit's "fitness-scale drift" concern — operators changing
+      fitness_margin_floor or weight schemas no longer need to
+      manually re-tune the variance threshold.
+    """
+
+    group_variance_history_window: Annotated[int, Field(ge=5, le=1000)] = 30
+    """PR-VAR-ADAPTIVE (2026-05-27) — number of history entries to use
+    when computing the percentile threshold. Default 30 ≈ 25 day window
+    at min_interval=20h. Below the window count the percentile mode
+    falls back to ``group_variance_threshold`` (fixed). Range floor of
+    5 ensures the percentile has enough samples to be meaningful;
+    ceiling of 1000 caps memory + read latency."""
+
+    group_variance_percentile: Annotated[float, Field(gt=0.0, lt=1.0)] = 0.05
+    """PR-VAR-ADAPTIVE (2026-05-27) — which percentile of historical
+    group std becomes the threshold. ``0.05`` = 5th percentile (skip
+    only the bottom 5% of historical variance, i.e. the truly
+    low-signal groups). Higher values (e.g. ``0.10``) are more
+    aggressive at filtering. Must be in ``(0.0, 1.0)`` — exact 0 / 1
+    are degenerate."""
+
+    max_group_resamples: Annotated[int, Field(ge=0, le=10)] = 0
+    """PR-RESAMPLE-BUDGET (2026-05-27) — number of additional group
+    proposals to attempt when ``_compute_group_advantage`` returns
+    ``filtered_low_variance``. ``0`` (default) preserves legacy
+    behaviour (one shot, low-variance group → cycle skip). Non-zero
+    enables a retry loop bounded by this budget. DAPO frontier
+    equivalent: ``max_num_gen_batches`` — informative-batch
+    retention. Each retry costs N audit subprocesses, so the
+    operator-facing knob is bounded at 10."""
+
+    resample_on_low_variance: bool = False
+    """PR-RESAMPLE-BUDGET (2026-05-27) — must be True for
+    ``max_group_resamples`` to take effect. Separate flag (vs reading
+    ``max_group_resamples > 0`` directly) so an operator can pre-set
+    the budget but keep the feature disabled until A/B data validates
+    it. Default False preserves backward-compat."""
 
     pareto_mode: bool = False
     """P2-revised (2026-05-25) — Pareto archive + Dynamic Reward Weighting

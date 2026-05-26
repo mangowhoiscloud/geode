@@ -37,6 +37,7 @@ Test strategy:
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import logging
@@ -66,9 +67,11 @@ __all__ = [
     "RunnerContext",
     "SelfImprovingLoopRunner",
     "_compute_group_advantage",
+    "append_group_variance_history",
     "apply_mutation",
     "build_runner_context",
     "parse_mutation",
+    "resolve_group_variance_threshold",
 ]
 
 
@@ -1061,6 +1064,119 @@ def _parse_fitness_from_subprocess_stdout(
     )
 
 
+def append_group_variance_history(
+    *,
+    group_id: str,
+    target_kind: str,
+    std: float,
+    n_siblings: int,
+    history_path: Path | None = None,
+) -> bool:
+    """Append one row to ``group_variance_history.jsonl``.
+
+    PR-VAR-ADAPTIVE (2026-05-27) — feeds the percentile resolver.
+    Every group-sampling cycle (regardless of accept/reject) appends
+    its observed std so the threshold can adapt to fitness-scale
+    drift without operator intervention.
+
+    Best-effort: any OSError (parent missing, disk full) logs at
+    WARNING and returns False. Callers ignore the return value
+    because telemetry failure must not break the mutator loop.
+    """
+    from core.paths import GROUP_VARIANCE_HISTORY_PATH
+
+    target = history_path if history_path is not None else GROUP_VARIANCE_HISTORY_PATH
+    row = {
+        "ts": time.time(),
+        "group_id": group_id,
+        "target_kind": target_kind,
+        "std": float(std),
+        "n_siblings": int(n_siblings),
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        log.warning("self-improving-loop: variance history append failed: %s", exc)
+        return False
+    return True
+
+
+def resolve_group_variance_threshold(
+    cfg_autoresearch: Any,
+    *,
+    target_kind: str | None = None,
+    history_path: Path | None = None,
+) -> tuple[float, str]:
+    """Resolve the variance gate threshold for the upcoming cycle.
+
+    PR-VAR-ADAPTIVE (2026-05-27) — when
+    ``group_variance_threshold_mode == "percentile"`` and the history
+    file contains at least ``group_variance_history_window`` entries
+    matching ``target_kind`` (or pooled across kinds when
+    ``target_kind`` is None), returns the corresponding percentile of
+    historical ``std`` values. Otherwise returns the legacy fixed
+    ``group_variance_threshold`` value.
+
+    Returns ``(threshold, source)`` where ``source`` is ``"fixed"`` or
+    ``"percentile"`` so callers can log which path fired (useful for
+    operators watching the adaptive knob converge on a stable value).
+
+    Best-effort: missing file / malformed rows / read OSError all
+    fall through to the fixed value (legacy behaviour preserved).
+    """
+    from core.paths import GROUP_VARIANCE_HISTORY_PATH
+
+    fixed = float(cfg_autoresearch.group_variance_threshold)
+    if getattr(cfg_autoresearch, "group_variance_threshold_mode", "fixed") != "percentile":
+        return fixed, "fixed"
+
+    window = int(getattr(cfg_autoresearch, "group_variance_history_window", 30))
+    percentile = float(getattr(cfg_autoresearch, "group_variance_percentile", 0.05))
+
+    target = history_path if history_path is not None else GROUP_VARIANCE_HISTORY_PATH
+    if not target.is_file():
+        return fixed, "fixed"
+
+    matched_stds: list[float] = []
+    try:
+        with target.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                if target_kind is not None and row.get("target_kind") != target_kind:
+                    continue
+                raw_std = row.get("std")
+                if isinstance(raw_std, int | float):
+                    matched_stds.append(float(raw_std))
+    except OSError:
+        log.warning("self-improving-loop: variance history read failed", exc_info=True)
+        return fixed, "fixed"
+
+    if len(matched_stds) < window:
+        return fixed, "fixed"
+
+    # Take the most recent ``window`` entries (history is append-only
+    # so file order == chronological).
+    recent = matched_stds[-window:]
+    recent_sorted = sorted(recent)
+    # Linear-interpolation percentile (matches numpy.quantile default).
+    pos = percentile * (len(recent_sorted) - 1)
+    lo_idx = int(pos)
+    hi_idx = min(lo_idx + 1, len(recent_sorted) - 1)
+    frac = pos - lo_idx
+    interpolated = recent_sorted[lo_idx] * (1 - frac) + recent_sorted[hi_idx] * frac
+    return interpolated, "percentile"
+
+
 def _compute_group_advantage(
     fitness_values: list[float],
     threshold: float,
@@ -1488,6 +1604,7 @@ class SelfImprovingLoopRunner:
         *,
         swarm_id: str = "",
         sub_agent_index: int | None = None,
+        _resample_attempt: int = 0,
     ) -> Mutation | None:
         """P1-revised (2026-05-25) — apply N sibling proposals → audit →
         variance gate → group-relative scoring → top-1 commit.
@@ -1527,6 +1644,21 @@ class SelfImprovingLoopRunner:
         Requires ``rerun_enabled=True`` — group advantage 가 real fitness
         에 의존하므로 audit 가 실제로 fire 되어야 함.
         """
+        # PR-VAR-ADAPTIVE (2026-05-27) Codex MCP review must-fix #1 —
+        # enforce homogeneous ``target_kind`` across siblings BEFORE
+        # any audit cost or rerun-enabled gate. The variance signal is
+        # only meaningful when N siblings touch the same SoT surface
+        # (different surfaces have different std scales, so mixing
+        # collapses the percentile resolver's per-kind filter).
+        if proposals:
+            _kinds = {p.mutation.target_kind for p in proposals}
+            if len(_kinds) > 1:
+                raise ValueError(
+                    f"apply_group_proposals requires homogeneous target_kind "
+                    f"across siblings (variance signal is per-kind, see "
+                    f"PR-VAR-ADAPTIVE); got {_kinds!r}"
+                )
+
         if len(proposals) == 1:
             return self.apply_proposal(
                 proposals[0],
@@ -1559,7 +1691,26 @@ class SelfImprovingLoopRunner:
         from core.config.self_improving_loop import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
-        threshold = cfg.autoresearch.group_variance_threshold
+        # PR-VAR-ADAPTIVE (2026-05-27) — variance gate threshold resolved
+        # via ``resolve_group_variance_threshold``. When
+        # ``group_variance_threshold_mode == "percentile"`` and the
+        # history has >= window entries for this target_kind, the
+        # threshold adapts to fitness-scale drift; otherwise falls
+        # through to the legacy fixed value. ``threshold_source`` is
+        # logged so operators can verify the adaptive knob is firing.
+        # Homogeneous ``target_kind`` is already enforced at function
+        # entry above (PR-VAR-ADAPTIVE Codex MCP review must-fix #1).
+        _resolve_kind = proposals[0].mutation.target_kind if proposals else None
+        # Codex MCP review must-fix #2 — threshold is re-resolved on each
+        # ``_resample_attempt`` (the recursive call re-enters this
+        # function), which means a resample sees the just-appended std
+        # of the failed attempt. This is intentional: each retry is a
+        # fresh selection cycle and the threshold should reflect the
+        # latest percentile. To freeze across retries, an operator
+        # would set ``mode="fixed"`` (which ignores history entirely).
+        threshold, threshold_source = resolve_group_variance_threshold(
+            cfg.autoresearch, target_kind=_resolve_kind
+        )
         mutator_temp = settings.temperature_self_improving_mutation
 
         # Codex MCP review #5 (2026-05-25) — temperature guard 를 N audit 비용
@@ -1620,12 +1771,68 @@ class SelfImprovingLoopRunner:
                 mutator_temperature=mutator_temp,
             )
 
+            # PR-VAR-ADAPTIVE (2026-05-27) — append the observed group
+            # std to the history file (best-effort; failure logs WARNING
+            # but doesn't break the cycle). The resolver above reads
+            # this on the *next* cycle to compute the percentile
+            # threshold, so the gate self-adapts to fitness-scale drift.
+            # We log regardless of filtered/ok status — both are valid
+            # variance signals to learn from.
+            if len(fitness_values) >= 2:
+                _mean = sum(fitness_values) / len(fitness_values)
+                _observed_std = (
+                    sum((v - _mean) ** 2 for v in fitness_values) / len(fitness_values)
+                ) ** 0.5
+                append_group_variance_history(
+                    group_id=group_id,
+                    target_kind=_resolve_kind or "",
+                    std=_observed_std,
+                    n_siblings=len(fitness_values),
+                )
+
             if status == "filtered_low_variance":
+                # PR-RESAMPLE-BUDGET (2026-05-27) — when
+                # ``resample_on_low_variance=True`` and we haven't
+                # exhausted ``max_group_resamples``, propose a fresh
+                # sibling group and retry the audit. DAPO frontier
+                # equivalent: ``max_num_gen_batches`` informative-batch
+                # retention. The default config (budget=0, flag=False)
+                # preserves the legacy "filtered → cycle skip" behaviour.
+                _max_resamples = (
+                    int(cfg.autoresearch.max_group_resamples)
+                    if cfg.autoresearch.resample_on_low_variance
+                    else 0
+                )
+                if _resample_attempt < _max_resamples:
+                    log.info(
+                        "self-improving-loop: group %s filtered (low variance, "
+                        "std < %s, source=%s). resample attempt %d/%d.",
+                        group_id,
+                        threshold,
+                        threshold_source,
+                        _resample_attempt + 1,
+                        _max_resamples,
+                    )
+                    # Cleanup sibling temp files of this attempt before
+                    # recursing — the new attempt will create its own.
+                    for sibling_path in sibling_sot_paths:
+                        with contextlib.suppress(OSError):
+                            sibling_path.unlink(missing_ok=True)
+                    new_proposals = self.propose_group(len(proposals))
+                    return self.apply_group_proposals(
+                        new_proposals,
+                        swarm_id=swarm_id,
+                        sub_agent_index=sub_agent_index,
+                        _resample_attempt=_resample_attempt + 1,
+                    )
                 log.info(
                     "self-improving-loop: group %s filtered (low variance, "
-                    "std < %s). cycle skipped, no SoT commit.",
+                    "std < %s, source=%s). cycle skipped, no SoT commit "
+                    "(after %d resample attempt(s)).",
                     group_id,
                     threshold,
+                    threshold_source,
+                    _resample_attempt,
                 )
                 return None
             if status != "ok" or advantages is None:
