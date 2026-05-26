@@ -488,7 +488,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     "part of a sibling group (``group_size > 1``), each sibling MUST target a "
     "meaningfully different section or strategy. Repeating the same "
     "``target_section`` + ``new_value`` across siblings collapses group "
-    "variance to zero, trips the DAPO Dynamic Sampling variance filter, and "
+    "variance to zero, trips the DAPO-inspired variance gate, and "
     "the entire cycle's audit cost is discarded (see plan "
     "``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §6).\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
@@ -1067,18 +1067,36 @@ def _compute_group_advantage(
     *,
     mutator_temperature: float,
 ) -> tuple[list[float] | None, str]:
-    """P1-revised (2026-05-25) — DAPO Dynamic Sampling + GRPO advantage normalization.
+    """P1-revised (2026-05-25) — DAPO-inspired variance gate + GRPO-inspired group-relative scoring.
+
+    **Not policy optimization; no parameter update; no gradient.** This is
+    an *inference-time* candidate-selection heuristic — N sibling
+    mutations are audited in parallel, low-signal groups (std < ε) are
+    skipped, and the remaining group's z-score is used to pick top-1
+    for canonical SoT commit.
 
     Plan: ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.1.
 
-    Frontier source: DAPO (ByteDance/Tsinghua arXiv 2503.14476) 의 Dynamic
-    Sampling — group reward variance ≈ 0 batch 폐기. EXAONE 4.5 (LG, arXiv
-    2604.08644) 의 zero-variance filter production 검증. GRPO (DeepSeek R1
-    arXiv 2402.03300) 의 advantage whitening.
+    Frontier inspiration (concept reference only — abstract-level
+    descriptions verified via WebFetch 2026-05-26; specific formulas
+    are NOT formally cited here because the PDF full-text was not
+    full-text-audited for this sprint; do not re-claim any specific
+    DAPO/GRPO result as "exact" without re-verifying against the PDF):
 
-    Returns (advantages, status):
-    - status="ok" + advantages = z-score whitening if group std > threshold
-    - status="filtered_low_variance" + advantages=None if std < threshold
+    - DAPO (ByteDance/Tsinghua, arXiv 2503.14476). Abstract introduces
+      "Decoupled Clip and Dynamic Sampling Policy Optimization". The
+      idea of skipping low-signal sampling groups is what GEODE
+      borrows for *selection-time* filtering — distinct from DAPO's
+      *training-time* use.
+    - GRPO (DeepSeekMath, arXiv 2402.03300). Abstract describes GRPO
+      as a PPO variant using group-relative scoring. GEODE uses
+      group-relative z-score ranking as a *selection* score for
+      top-1 sibling mutation commit — distinct from GRPO's use as a
+      policy-update advantage.
+
+    Returns (scores, status):
+    - status="ok" + scores = z-score ranking if group std > threshold
+    - status="filtered_low_variance" + scores=None if std < threshold
       → caller cycle skip (audit cost wasted 회피)
     - status="group_too_small" if N < 2 (legacy group_size=1 mode 는 caller
       가 본 helper 호출 안 함, 본 분기는 invariant test 용)
@@ -1419,9 +1437,10 @@ class SelfImprovingLoopRunner:
     def propose_group(self, n: int) -> list[Proposal]:
         """P1-revised (2026-05-25) — propose N sibling Mutations in parallel.
 
-        Frontier source: GRPO (DeepSeek R1) 의 group sampling + Promptbreeder
-        의 multi-prompt 동시 평가. plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``
-        §4.3 MVP scope.
+        Frontier inspiration: GRPO-inspired group sampling (DeepSeekMath
+        arXiv 2402.03300 — borrows the N-sibling-parallel idea, not the
+        policy-update gradient) + Promptbreeder 의 multi-prompt 동시 평가.
+        plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.3 MVP scope.
 
         Each sibling shares the same baseline state (same system + user
         prompt). Stochasticity comes from ``Settings.temperature_self_improving_mutation``
@@ -1471,12 +1490,13 @@ class SelfImprovingLoopRunner:
         sub_agent_index: int | None = None,
     ) -> Mutation | None:
         """P1-revised (2026-05-25) — apply N sibling proposals → audit →
-        variance filter → advantage normalization → top-1 commit.
+        variance gate → group-relative scoring → top-1 commit.
 
-        Frontier source: DAPO Dynamic Sampling (variance filter) + GRPO
-        whitening (advantage normalization) + EXAONE 4.5 zero-variance
-        filter (production threshold). plan §4.3 + §5 (W3 env propagation
-        infra 재활용).
+        Frontier inspiration: DAPO-inspired variance gate (arXiv 2503.14476;
+        skip low-signal groups) + GRPO-inspired whitening (DeepSeekMath
+        arXiv 2402.03300; z-score ranking, used here as a *selection*
+        score, not a policy-update advantage). plan §4.3 + §5 (W3 env
+        propagation infra 재활용).
 
         Steps:
 
@@ -1900,8 +1920,9 @@ class SelfImprovingLoopRunner:
         - ``group_size=1`` (default, legacy): :meth:`propose` +
           :meth:`apply_proposal` 그대로 (single mutation, REINFORCE-style)
         - ``group_size>=2``: :meth:`propose_group` +
-          :meth:`apply_group_proposals` (DAPO Dynamic Sampling + GRPO
-          advantage normalization + variance filter top-1 commit)
+          :meth:`apply_group_proposals` (DAPO-inspired variance gate +
+          GRPO-inspired score whitening, mutation-selection only — not
+          policy gradient / not RL training)
 
         Variance filter trigger 시 ``None`` 반환 (cycle skip, no SoT
         commit). legacy mode 는 항상 ``Mutation`` 반환.
