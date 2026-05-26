@@ -129,7 +129,7 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
 # with the rest serialised behind the semaphore acquire — operator
 # can raise via :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` if the lane
 # caps are also raised proportionally.
-DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8
+DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 50
 """Operator default = 8 simultaneous match dispatches inside
 ``asyncio.gather``. See :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` for
 runtime override."""

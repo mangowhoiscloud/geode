@@ -133,7 +133,7 @@ silently fall back to the default — the lane should never harden into
 "no slots" mid-run because of a typo.
 """
 
-DEFAULT_CLAUDE_CLI_LANE_MAX = 4
+DEFAULT_CLAUDE_CLI_LANE_MAX = 50
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 2 to 4.
 
 Documented Claude Code burst-limiter floor is 3-4 slots per 5h pool.

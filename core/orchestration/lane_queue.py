@@ -23,7 +23,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MAX_CONCURRENT = 4
+DEFAULT_MAX_CONCURRENT = 50
 DEFAULT_TIMEOUT_S = 300.0  # 5 minutes
 
 
