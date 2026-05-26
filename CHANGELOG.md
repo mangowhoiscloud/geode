@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.73] - 2026-05-27
+
+MINOR rotation. Ships the 2026-05-26 autoresearch attribution sprint
+Phase A audit's three remaining bundles: outer-loop hardening
+(PR-OUTER-LOOP-HARDENING — max_generation cap + promote_stamp +
+dry-run attribution invariant pin), surface clarity
+(PR-SURFACE-CLARITY — TARGET_KINDS reader-only documentation +
+Pareto archive promote-gate integration), and selection-gate
+algorithm depth (PR-ALGO-DEPTH — percentile-based variance
+threshold + resample budget). Plus PR-LANE-CAP-AGGRESSIVE from
+develop. See section entries below.
+
 ### Added
 
 - **PR-VAR-ADAPTIVE + PR-RESAMPLE-BUDGET** — Phase F bundle of the
