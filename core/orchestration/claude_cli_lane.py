@@ -26,42 +26,41 @@ lane is too restrictive for non-Claude-CLI traffic (API-billed
 Anthropic / OpenAI completions). The two flows need separate caps,
 which is why this lane sits alongside ``global`` rather than under it.
 
-Why ``max_concurrent=50`` (PR-LANE-CAP-50, 2026-05-27)
-============================================================
+Why ``max_concurrent=5`` (PR-LANE-CAP-CONSERVATIVE, v0.99.75, 2026-05-27)
+========================================================================
 
-Raised from 2 (PR-RANKER-PARALLEL conservative default) to 4 per
-operator decision "공격적으로 늘려" + the measured PR-RANKER-PARALLEL
-burst evidence (Loop 1: 59 matches × 1 anthropic voter = 59
-``claude --print`` forks queued behind the prior cap-2 ceiling, tail
-latency past 5min).
+Lowered from 50 (PR-LANE-CAP-50, same-day release v0.99.74) to **5**
+after the ranker smoke on a 16 GB M3 froze the host machine. The
+upstream rate-limit reasoning (Anthropic 50 RPM tier ceiling) was
+correct in isolation but ignored a tighter floor — **local RAM**.
 
-**Burst-limiter reality**: Claude Code's documented sub-agent burst
-floor is 3-4 *exclusive of* the operator's host session — the host's
-own OAuth claim does NOT consume a sub-agent slot. So cap 4 = 4
-``claude --print`` sub-agents running concurrently against the
-shared 5h pool, with the host's interactive session as a separate
-budget line item. The two share the same 5h pool *token total* but
-their inflight counts are independent.
+**Measured local cost** (M3 16 GB, 2026-05-27):
 
-**Aggressive headroom trade-off**: Cap 4 sits at the upper edge of
-the documented floor. Two stacked watch-outs:
+* `claude --print` subprocess RSS: ~425 MB per voter (Node V8 + bundled
+  deps; fresh process each spawn — see
+  `paperclip/packages/adapter-utils/src/server-utils.ts:1943` for the
+  canonical `child_process.spawn` pattern this lane shadow-fires).
+* Ranker burst at cap 50 with 3-voter panel = 50 matches × 1 claude
+  voter = 50 × 425 MB ≈ **21 GB anonymous RSS** on a 16 GB box. macOS
+  enters compressor thrash within ~60s, paging unrelated apps out, host
+  freezes.
 
-1. **Pool exhaustion still possible** — the 5h pool's *token*
-   budget is a separate ceiling. Smoke 25 (2026-05-26) hit
-   ``model_action_required`` after ~2h of sustained sub-agent
-   traffic. Cap-raise alone doesn't prevent that; the pool must
-   refresh before resume.
-2. **Host session contention**: if the operator's interactive
-   session is mid-multi-turn while a smoke runs at cap 4, the
-   shared 5h pool drains faster. Operators on Max20x tier with
-   larger pools may raise via :data:`CLAUDE_CLI_LANE_MAX_ENV`;
-   operators on lower tiers may lower to 2-3.
+**Cap derivation**: Operator's realistic burst budget after closing
+heavy desktop apps (Slack/Chrome/Notion) ≈ 3 GB. Per-match cost =
+1 claude (425 MB) + 2 codex (62 MB) = ~487 MB. ``3 GB / 487 MB ≈ 6.3``
+→ cap 5 keeps peak burst at ~2.4 GB with a 0.7 GB safety margin
+before compressor pressure becomes pathological.
 
-**Pre-flight measurement gap**: [[project_lanequeue_handoff_2026_05_22]]
-called for a one-time measurement of the actual burst threshold.
-The PR-LANE-CAP-AGGRESSIVE raise rests on smoke-24-25 empirical
-data (cap 2 demonstrably idle ~95% of the 5h pool RPM budget)
-rather than the original public-doc grounding.
+**Trade-off**: Ranker phase wall-clock grows from ~1 min (cap 50)
+to ~12-25 min for a 50-match Loop 1. Acceptable for nightly /
+autonomous smokes; painful for dev iteration — operators on larger
+boxes (32 GB+) should override via
+:data:`CLAUDE_CLI_LANE_MAX_ENV` (e.g. ``=20`` for 64 GB Mac Studio).
+
+**Upstream rate-limit headroom**: Even at cap 5, steady-state
+throughput against Anthropic's 5h pool sits well below the
+documented per-account ceiling, so neither floor (RPM nor token
+pool) is the binding constraint — the local RSS one is.
 
 Why module-level (not LaneQueue-registered)
 ===========================================
@@ -133,24 +132,27 @@ silently fall back to the default — the lane should never harden into
 "no slots" mid-run because of a typo.
 """
 
-DEFAULT_CLAUDE_CLI_LANE_MAX = 50
-"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 2 to 4.
+DEFAULT_CLAUDE_CLI_LANE_MAX = 5
+"""PR-LANE-CAP-CONSERVATIVE (v0.99.75, 2026-05-27) — lowered from 50.
 
-Documented Claude Code burst-limiter floor is 3-4 slots per 5h pool.
-Operator's host Claude Code session occupies 1 slot; the remaining 3
-go to ranker / mutator / audit-spawned sub-agents. Pre-raise the
-ranker's ``asyncio.gather`` burst (`ranker.py:256`) queued all
-voter-side claude-cli calls behind 2-slot cap → 89 × 70s = ~104min
-worst-case lane queue wait, well past the (also raised) 7200s
-timeout. The new cap matches the documented public floor exactly,
-with the host slot accounted for, so a long-running smoke (Loop 1
-ranker with 59 matches × 1 anthropic voter = 59 claude-cli forks) no
-longer creates a queue depth deeper than the 5h pool can sustain.
+The previous PR-LANE-CAP-50 default targeted the Anthropic per-account
+RPM ceiling but ignored local RSS: each ``claude --print`` spawn loads
+a fresh Node V8 (~425 MB resident, measured on the host that froze).
+50 × 425 MB ≈ 21 GB peak anonymous RSS on a 16 GB box → macOS
+compressor thrash → host freeze (incident: gen1-broken_tool_use
+ranker phase, 2026-05-27 04:12 KST).
 
-Operator override via :data:`CLAUDE_CLI_LANE_MAX_ENV` for Max20x tier
-operators with larger 5h pools (5-6) or single-account audit hosts
-that need to push to the documented 4-slot ceiling without host-
-session contention."""
+Cap 5 derives from realistic local headroom (~3 GB after closing
+heavy desktop apps) ÷ per-match cost (~487 MB = 1 claude + 2 codex)
+with a 0.7 GB safety margin. Trade-off — ranker phase wall-clock
+~12-25× slower than cap 50, but the host survives.
+
+Operator override via :data:`CLAUDE_CLI_LANE_MAX_ENV`:
+* 16 GB box (this default): leave at 5.
+* 32 GB box: raise to ~10.
+* 64 GB+ Mac Studio / Linux server: raise to 20-50.
+* The Anthropic RPM ceiling kicks in well above any local-RSS-safe
+  cap on consumer hardware, so this knob is for memory, not quota."""
 
 CLAUDE_CLI_LANE_TIMEOUT_S = 7200.0
 """PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to

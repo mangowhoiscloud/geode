@@ -14,12 +14,14 @@ Why this exists
 The :class:`Lane` introduced in Phase 2
 (:mod:`core.orchestration.claude_cli_lane`) caps concurrent
 ``claude --print`` fan-out at ``DEFAULT_CLAUDE_CLI_LANE_MAX``
-(currently 50, raised from 2 by PR-LANE-CAP-50 2026-05-27). That cap
-is necessary but not sufficient: the 5-hour token bucket can be 90 %
-drained while the burst limiter is fully reset, and the next acquire
-would burn the last few percent for marginal value. paperclip solves
-this by polling ``/api/oauth/usage`` before each spawn and backing
-off when ``five_hour.utilization >= 0.8``.
+(currently 5 after PR-LANE-CAP-CONSERVATIVE v0.99.75; previously
+raised to 50 by PR-LANE-CAP-50 v0.99.74 before the 16 GB host
+freeze incident). That cap is necessary but not sufficient: the
+5-hour token bucket can be 90 % drained while the burst limiter
+is fully reset, and the next acquire would burn the last few
+percent for marginal value. paperclip solves this by polling
+``/api/oauth/usage`` before each spawn and backing off when
+``five_hour.utilization >= 0.8``.
 
 Path notes
 ==========
