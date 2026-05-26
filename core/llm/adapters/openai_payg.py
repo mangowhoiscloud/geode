@@ -37,6 +37,7 @@ from core.llm.adapters.base import (
     QuotaWindows,
     StreamEvent,
 )
+from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
 
@@ -110,16 +111,21 @@ class OpenAIPaygAdapter:
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
         kwargs = self._build_kwargs(req, stream=False)
-        try:
-            response = await client.chat.completions.create(**kwargs)
-        except Exception as exc:
-            self._last_error = exc
-            log.warning(
-                "openai-payg: chat.completions.create failed model=%s err=%s",
-                req.model,
-                exc,
-            )
-            raise
+        # PR-OAUTH-API-LANES (2026-05-26) — pooled with codex-oauth in
+        # the same per-account openai-api lane (OpenAI rate-limits
+        # per-account, not per-source).
+        lane_key = f"openai-payg:{req.model}"
+        async with acquire_openai_api_lane_async(lane_key):
+            try:
+                response = await client.chat.completions.create(**kwargs)
+            except Exception as exc:
+                self._last_error = exc
+                log.warning(
+                    "openai-payg: chat.completions.create failed model=%s err=%s",
+                    req.model,
+                    exc,
+                )
+                raise
         return translate_chat_response(response)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
