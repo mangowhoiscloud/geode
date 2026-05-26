@@ -61,11 +61,27 @@ functional change.
   ``_build_voter_tasks`` per ctx7 OpenAI Responses API docs
   (``/websites/developers_openai_api`` → "Reasoning effort": "Reducing
   reasoning effort can result in faster responses and fewer tokens
-  used on reasoning"; the canonical example uses ``effort: "low"`` for
-  a similarly compact classification task). ``max_output_tokens`` is
-  not viable on the codex-oauth backend (400 ``Unsupported parameter``
-  per ``core/llm/providers/codex.py:325`` and existing
-  ``test_codex_kwargs_does_not_send_max_output_tokens``).
+  used on reasoning"; the canonical low-effort example uses gpt-5.5
+  with ``effort="low"`` for a single bash-script generation task —
+  the voter A/B/tie call is a comparable single-shot output).
+  ``max_output_tokens`` is not viable on the codex-oauth backend
+  (400 ``Unsupported parameter`` per ``core/llm/providers/codex.py:325``
+  and existing ``test_codex_kwargs_does_not_send_max_output_tokens``).
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — also pins
+  ``effort="low"`` on ``plugins/seed_generation/mutation_eval.py``
+  voter SubTasks. The mutation-eval channel reuses VOTE_SCHEMA +
+  gpt-5.5 A/B/tie shape, so without an effort pin it would reproduce
+  the empty-text failure mode outside the ranker phase.
+- PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch) — pre-existing
+  ranker voter ``task_id`` collision surfaced by this PR. The default
+  judge panel ships TWO ``openai.openai-codex`` voters and the old
+  shape ``vote-{match_id}-{provider}.{source}`` collided across
+  duplicate (provider, source) bindings; ``SubAgentManager._deduplicate``
+  silently dropped one, so the advertised 3-voter panel actually
+  dispatched only 2 voters per match. Now uses the per-voter ordinal
+  shape ``vote-{match_id}-v{idx:02d}-{provider}.{source}`` — same
+  pattern already in ``mutation_eval.py``. Pinned by
+  ``test_ranker_voter_task_ids_unique_across_duplicate_bindings``.
 
 ## [0.99.64] - 2026-05-26
 

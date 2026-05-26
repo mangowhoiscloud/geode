@@ -304,8 +304,10 @@ class SubTask:
     # Responses API docs ``/websites/developers_openai_api`` →
     # "reasoning.effort": "Reducing reasoning effort can result in
     # faster responses and fewer tokens used on reasoning in a
-    # response" + the canonical example uses ``effort: "low"`` for a
-    # similarly simple bash-script task.
+    # response". The canonical low-effort example uses gpt-5.5 with
+    # ``effort="low"`` for a single bash-script generation task; the
+    # voter A/B/tie call is a comparable single-shot output (one
+    # verdict + one ≤ 200-token rationale).
     effort: str = ""
 
 

@@ -22,11 +22,13 @@ rejects the field with 400 ``Unsupported parameter`` (pinned by
 at ``core/llm/providers/codex.py:325``). The only available knob is
 ``reasoning.effort``.
 
-Per ctx7 OpenAI Responses API docs the canonical example uses
-``reasoning: {"effort": "low"}`` for a similarly compact task (single
-bash-script generation) and the "Reasoning effort" section
-explicitly says: "Reducing reasoning effort can result in faster
-responses and fewer tokens used on reasoning in a response."
+Per ctx7 OpenAI Responses API docs the canonical low-effort example
+uses gpt-5.5 with ``reasoning: {"effort": "low"}`` for a single
+bash-script generation task; the voter A/B/tie call is a comparable
+single-shot output (one verdict + one ≤ 200-token rationale). The
+"Reasoning effort" section explicitly says: "Reducing reasoning effort
+can result in faster responses and fewer tokens used on reasoning in a
+response."
 
 These tests pin:
 
@@ -111,12 +113,20 @@ def test_build_worker_request_falls_back_when_effort_empty() -> None:
     mgr._time_budget_s = 0.0  # type: ignore[attr-defined]
     task = SubTask(task_id="t1", description="x", task_type="analyze")
     req = mgr._build_worker_request(task)
-    # Legacy path: ``difficulty`` defaults to "medium" via getattr fallback,
-    # ``_DIFFICULTY_TO_EFFORT["medium"]`` → "medium". The exact value isn't
-    # the point — we just confirm we didn't crash and we didn't end up at
-    # the "low" sentinel reserved for the override path.
-    assert req.effort != "low" or req.effort in {"low", "medium", "high"}
-    assert req.effort  # non-empty fallback
+    # Legacy path: ``difficulty`` defaults to "medium" via the
+    # ``getattr(task, "difficulty", "medium")`` fallback at
+    # ``core/agent/sub_agent.py:719``, so
+    # ``_DIFFICULTY_TO_EFFORT["medium"]`` resolves to ``"medium"``.
+    # PIN the exact value — a previous tautological form
+    # (``req.effort != "low" or req.effort in {low,medium,high}``)
+    # was True for any non-empty string and would not catch a
+    # regression that changed default SubTask semantics.
+    assert req.effort == "medium", (
+        f"Default SubTask (no effort, no difficulty) must resolve to "
+        f"_DIFFICULTY_TO_EFFORT['medium']='medium' — got {req.effort!r}. "
+        f"If this changed, the ranker voter pathway's effort='low' "
+        f"override may also have drifted."
+    )
 
 
 def test_ranker_voter_subtasks_pin_effort_low() -> None:
@@ -126,9 +136,12 @@ def test_ranker_voter_subtasks_pin_effort_low() -> None:
     the SubTask carries empty ``effort`` and falls through to the
     medium-default that produced 36 empty-text dumps. ctx7 OpenAI
     Responses API docs (``/websites/developers_openai_api`` →
-    "Reasoning effort"): low effort is the recommended setting for
-    classification + short rationale, and the canonical reasoning
-    example uses ``effort: "low"`` for a similarly compact task.
+    "Reasoning effort"): "Reducing reasoning effort can result in
+    faster responses and fewer tokens used on reasoning in a
+    response". The canonical low-effort example uses gpt-5.5 with
+    ``effort="low"`` for a single bash-script generation task; the
+    voter A/B/tie call is a comparable single-shot output (one
+    verdict + one ≤ 200-token rationale).
     """
     voters = [
         VoterBinding(
