@@ -47,6 +47,18 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
+  independent tournament matches with ``asyncio.gather`` and applies
+  Elo updates afterward in the original ``match_plan`` order. This
+  preserves deterministic final ratings / survivor selection for a
+  fixed RNG seed while allowing the voter-panel LLM calls to overlap;
+  the provider lanes introduced by PR-OAUTH-API-LANES remain the
+  throttle for the resulting burst. Pinned by
+  ``tests/plugins/seed_generation/test_ranker.py`` invariants for
+  concurrent match dispatch and post-gather Elo ordering.
+
 ### Fixed
 
 - **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
@@ -19114,4 +19126,3 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
-

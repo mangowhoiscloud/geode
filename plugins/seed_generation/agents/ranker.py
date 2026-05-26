@@ -36,6 +36,7 @@ P-checklist application:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
@@ -205,13 +206,23 @@ class Ranker(BaseSeedAgent):
         # per match. ``state.elo_ratings`` only carries the FINAL ratings;
         # this list carries the per-match trace.
         match_details: list[dict[str, Any]] = []
-        for match in match_plan:
+        # PR-RANKER-PARALLEL (2026-05-26) — dispatch every independent
+        # match concurrently, then apply Elo sequentially below. The
+        # expensive part is the voter panel call inside ``_play_match``;
+        # the rating mutation must stay ordered by ``match_plan`` so the
+        # same RNG seed still produces the same final Elo table.
+        match_results = await asyncio.gather(
+            *[
+                self._play_match(
+                    match,
+                    pilot_means=pilot_means,
+                    candidate_bodies=candidate_bodies,
+                )
+                for match in match_plan
+            ]
+        )
+        for match, (outcome, detail) in zip(match_plan, match_results, strict=True):
             elo_before = deepcopy(ratings)
-            outcome, detail = await self._play_match(
-                match,
-                pilot_means=pilot_means,
-                candidate_bodies=candidate_bodies,
-            )
             if outcome is None:
                 # Detail is still meaningful for quorum-lost matches —
                 # surface the partial voter responses in the hub.
