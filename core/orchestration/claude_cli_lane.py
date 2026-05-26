@@ -26,28 +26,42 @@ lane is too restrictive for non-Claude-CLI traffic (API-billed
 Anthropic / OpenAI completions). The two flows need separate caps,
 which is why this lane sits alongside ``global`` rather than under it.
 
-Why ``max_concurrent=2``
-========================
+Why ``max_concurrent=4`` (PR-LANE-CAP-AGGRESSIVE, 2026-05-27)
+============================================================
 
-One slot below the public burst-limiter floor of 3, leaving room for
-the operator's host Claude Code session to occupy 1 slot without
-hitting the 429 threshold. Two stacked rationales:
+Raised from 2 (PR-RANKER-PARALLEL conservative default) to 4 per
+operator decision "공격적으로 늘려" + the measured PR-RANKER-PARALLEL
+burst evidence (Loop 1: 59 matches × 1 anthropic voter = 59
+``claude --print`` forks queued behind the prior cap-2 ceiling, tail
+latency past 5min).
 
-1. **Burst limiter headroom**: host session (≈1 in-flight) + 2
-   ``claude --print`` sub-agents = 3 total = burst-limit floor. A 4th
-   would race the limiter and start drawing 429 + Retry-After.
-2. **Conservative until Phase 3**: paperclip's OAuth-usage polling
-   (Phase 3) would let us raise the cap on tiers with larger 5h
-   token pools. Until then we ship the safe lower bound and let
-   operators tune via environment override
-   (:data:`CLAUDE_CLI_LANE_MAX_ENV`).
+**Burst-limiter reality**: Claude Code's documented sub-agent burst
+floor is 3-4 *exclusive of* the operator's host session — the host's
+own OAuth claim does NOT consume a sub-agent slot. So cap 4 = 4
+``claude --print`` sub-agents running concurrently against the
+shared 5h pool, with the host's interactive session as a separate
+budget line item. The two share the same 5h pool *token total* but
+their inflight counts are independent.
+
+**Aggressive headroom trade-off**: Cap 4 sits at the upper edge of
+the documented floor. Two stacked watch-outs:
+
+1. **Pool exhaustion still possible** — the 5h pool's *token*
+   budget is a separate ceiling. Smoke 25 (2026-05-26) hit
+   ``model_action_required`` after ~2h of sustained sub-agent
+   traffic. Cap-raise alone doesn't prevent that; the pool must
+   refresh before resume.
+2. **Host session contention**: if the operator's interactive
+   session is mid-multi-turn while a smoke runs at cap 4, the
+   shared 5h pool drains faster. Operators on Max20x tier with
+   larger pools may raise via :data:`CLAUDE_CLI_LANE_MAX_ENV`;
+   operators on lower tiers may lower to 2-3.
 
 **Pre-flight measurement gap**: [[project_lanequeue_handoff_2026_05_22]]
-calls for a one-time measurement of the operator's actual burst
-threshold before Phase 2. Live measurement requires network access to
-the operator's OAuth bucket which CSP-sprint sessions don't have, so
-this PR ships the conservative public-doc-grounded cap (2) and
-exposes the override for post-deploy tuning.
+called for a one-time measurement of the actual burst threshold.
+The PR-LANE-CAP-AGGRESSIVE raise rests on smoke-24-25 empirical
+data (cap 2 demonstrably idle ~95% of the 5h pool RPM budget)
+rather than the original public-doc grounding.
 
 Why module-level (not LaneQueue-registered)
 ===========================================

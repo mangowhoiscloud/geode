@@ -111,15 +111,24 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
 # PR-LANE-CAP-AGGRESSIVE (2026-05-27) — phase-local concurrency cap for
 # the ranker's ``asyncio.gather`` match-dispatch burst. The cap exists
 # *on top* of the per-adapter lanes (claude_cli=4 / openai_api=16 /
-# anthropic_api=8) to bound the gather submission queue depth — each
-# match spawns 3 voter sub-agents (~1 claude-cli + 2 codex), so cap 8
-# matches = 8 claude-cli + 16 codex inflight, exactly the per-lane
-# ceiling. Pre-cap a 59-match Loop 1 burst would push 177 task objects
+# anthropic_api=8) to bound the gather submission queue depth.
+#
+# Concurrency budget (default 3-voter panel = 2 codex + 1 claude-cli):
+#   8 matches inflight * 3 voters = 24 voter tasks
+#     - claude-cli tasks: 8 (1 per match) — exceeds claude_cli_lane=4;
+#       4 wait in lane queue, 4 inflight
+#     - codex tasks: 16 (2 per match) — exactly openai_api_lane=16
+#   Net: codex saturates its lane; claude-cli runs at 100% utilisation
+#   with a depth-4 lane wait queue. Cap 8 is the equilibrium where
+#   neither lane is starved and neither is severely backlogged.
+#
+# Pre-cap a 59-match Loop 1 burst would push 177 task objects
 # into ``asyncio.wait`` queues simultaneously; the lanes throttle the
 # subprocess/API side but the awaiting task list itself becomes a
-# memory + scheduler tax. Cap 8 keeps gather "in-flight" at
-# ``cap * voter_count`` = ``8 * 3 = 24`` tasks, with the rest serialised
-# behind the semaphore acquire.
+# memory + scheduler tax. Cap 8 keeps gather "in-flight" at 24 tasks,
+# with the rest serialised behind the semaphore acquire — operator
+# can raise via :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` if the lane
+# caps are also raised proportionally.
 DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8
 """Operator default = 8 simultaneous match dispatches inside
 ``asyncio.gather``. See :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` for
