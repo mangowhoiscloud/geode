@@ -262,6 +262,32 @@ class HookEvent(Enum):
     TURN_VERIFY_PASSED = "turn_verify_passed"
     TURN_VERIFY_FAILED = "turn_verify_failed"
 
+    # Autoresearch mutation lifecycle (PR-HOOKEVENT-RESERVE, 2026-05-26).
+    # Reserved as the shared event namespace between two concurrent
+    # sprints: (a) autoresearch attribution sprint Phase G
+    # (PR-SOT-REVERT-ON-REJECT, PR-SOT-REVERT-ON-AUDIT-FAIL) — the
+    # writers will emit these once the SoT-revert paths land in
+    # ``autoresearch/train.py:2407-2455`` + ``runner.py:1882-1888``;
+    # (b) observability central SoT sprint PR-5 wildcard firehose +
+    # PR-10 autoresearch indexer — the wildcard listener captures
+    # every event into ``events`` SQLite, the autoresearch_indexer
+    # cross-references against ``autoresearch/state/mutations.jsonl``
+    # by ``mutation_id``. Reserving the names + values up-front avoids
+    # value drift once both sprints start emitting concurrently.
+    #
+    # Payload schema (every variant):
+    #   {"mutation_id": str, "target_kind": str, "target_path": str,
+    #    "ts": float, "run_id": str}
+    # MUTATION_REJECTED / REVERTED also carry ``"reason": str``.
+    # BASELINE_PROMOTED replaces ``mutation_id`` semantics with
+    # ``"baseline_path": str`` + ``"prior_baseline_path": str`` + the
+    # ``"reason": str`` quote from ``_should_promote``.
+    MUTATION_PROPOSED = "mutation_proposed"
+    MUTATION_APPLIED = "mutation_applied"
+    MUTATION_REJECTED = "mutation_rejected"
+    MUTATION_REVERTED = "mutation_reverted"
+    BASELINE_PROMOTED = "baseline_promoted"
+
 
 @dataclass
 class HookResult:

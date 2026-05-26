@@ -31,10 +31,14 @@ P-checklist application:
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 import shlex
 import sys
+import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import IO, Any
 
 import typer
@@ -63,6 +67,140 @@ audit_seeds_app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+# ─────────── PR-SMOKE-LOG-FLAG helpers (2026-05-26) ──────────────────────
+#
+# Operators have been redirecting smoke stdout to
+# ``.audit/smoke-archives/smoke-<N>-<TS>.log`` by hand on every smoke
+# invocation since smoke 21. The `>` redirect is easy to forget (it
+# landed in ``/tmp/`` on smoke 24) and yields a stale convention with
+# no compile-time gate. This flag makes the path resolution automatic
+# while staying opt-in (default off — REPL / regular ``audit-seeds
+# generate`` invocations stay unchanged).
+#
+# Implementation note: this is a *Python-level* tee — we wrap
+# ``sys.stdout`` / ``sys.stderr`` with a ``_TeeStream`` proxy that
+# duplicates every write to the log file. Subprocesses spawned later
+# (claude-cli, codex) actually run with PIPE-captured stdout/stderr
+# (``core/orchestration/isolated_execution.py:414`` +
+# ``core/self_improving_loop/cli_subprocess.py:97`` both use
+# ``capture_output=True`` / ``stdout=PIPE``), so their raw output
+# never reaches the parent's terminal anyway — it lands in the
+# per-task ``state/seed-generation/<run>/sub_agents/<task>/`` records
+# via the PIPE. What THIS log captures is exactly what the operator
+# sees on their own terminal: the parent process's cost preview
+# banner, ToS notice, phase status echoes, and any tracebacks the
+# orchestrator surfaces.
+
+
+_SMOKE_ARCHIVES_DIR = Path(".audit") / "smoke-archives"
+
+
+class _TeeStream:
+    """Write-side TextIO proxy that duplicates writes to a second handle.
+
+    Used by ``_setup_smoke_log_tee`` to mirror ``sys.stdout`` /
+    ``sys.stderr`` into the smoke-archives log without losing terminal
+    output. The proxy forwards all other attribute access to the
+    primary stream so ``typer.echo`` / Rich output keep working.
+    """
+
+    def __init__(self, primary: IO[str], secondary: IO[str]) -> None:
+        self._primary = primary
+        self._secondary = secondary
+
+    def write(self, s: str) -> int:
+        n = self._primary.write(s)
+        # Best-effort: a failed log write must never crash the actual
+        # pipeline. The primary stream's write count is what callers
+        # expect.
+        with contextlib.suppress(Exception):
+            self._secondary.write(s)
+            self._secondary.flush()
+        return n
+
+    def flush(self) -> None:
+        self._primary.flush()
+        with contextlib.suppress(Exception):
+            self._secondary.flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._primary, name)
+
+
+def _next_smoke_counter(archives: Path) -> int:
+    """Return the next smoke-<N> integer based on existing filenames.
+
+    Walks ``.audit/smoke-archives/smoke-<N>-<TS>.log`` files and
+    returns ``max(N) + 1``. Returns 1 when the directory is empty or
+    no smoke-<N>-* files exist. The TS suffix is preserved separately
+    in ``_resolve_smoke_log_path`` so two smoke runs in the same
+    wall-second still get distinct paths.
+    """
+    if not archives.exists():
+        return 1
+    counters: list[int] = []
+    for entry in archives.glob("smoke-*-*.log"):
+        # filename pattern: smoke-<N>-<TS>(-<pid>)?.log → at least 3
+        # dash-parts after the stem split. Tolerate both legacy
+        # (smoke-N-TS.log) and pid-suffixed (smoke-N-TS-PID.log)
+        # variants for migration.
+        parts = entry.stem.split("-")
+        if len(parts) >= 3 and parts[0] == "smoke":
+            try:
+                counters.append(int(parts[1]))
+            except ValueError:
+                continue
+    return (max(counters) + 1) if counters else 1
+
+
+def _resolve_smoke_log_path(
+    value: str, *, now_ts: int | None = None, pid: int | None = None
+) -> Path:
+    """Resolve ``--smoke-log`` argument to an absolute Path.
+
+    - ``"auto"`` → ``.audit/smoke-archives/smoke-<N>-<unix_ts>-<pid>.log``
+      where ``N`` is ``max(existing smoke-N)+1``, ``unix_ts`` is
+      ``int(time.time())``, and ``pid`` is ``os.getpid()``. Both
+      ``now_ts`` and ``pid`` are overridable for tests. The pid
+      suffix prevents collision when two smoke processes start in the
+      same wall-second (Codex MCP MEDIUM catch fold — pre-fix the
+      counter scan + ts could collide before either process touched
+      the directory, so two runs could pick identical paths).
+    - any other value → treated as a literal path (relative or
+      absolute). Parent directories are created in the caller.
+    """
+    if value == "auto":
+        ts = now_ts if now_ts is not None else int(time.time())
+        pid_value = pid if pid is not None else os.getpid()
+        next_n = _next_smoke_counter(_SMOKE_ARCHIVES_DIR)
+        return _SMOKE_ARCHIVES_DIR / f"smoke-{next_n}-{ts}-{pid_value}.log"
+    return Path(value)
+
+
+def _setup_smoke_log_tee(value: str | None) -> Path | None:
+    """Install a Python-level stdout/stderr tee for a smoke run.
+
+    When ``value`` is ``None`` (the default), returns ``None`` and
+    leaves ``sys.stdout`` / ``sys.stderr`` untouched — the
+    pre-PR-SMOKE-LOG-FLAG behavior. When set, resolves the target
+    path, opens it line-buffered in text-append mode, and replaces
+    both standard streams with ``_TeeStream`` proxies.
+
+    The log file handle is intentionally NOT closed at function exit
+    — the audit-seeds run lives for the rest of the process; closing
+    here would terminate logging mid-pipeline. Process exit closes the
+    fd automatically via the OS.
+    """
+    if not value:
+        return None
+    target = _resolve_smoke_log_path(value)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fh = target.open("a", encoding="utf-8", buffering=1)  # line-buffered
+    sys.stdout = _TeeStream(sys.stdout, fh)
+    sys.stderr = _TeeStream(sys.stderr, fh)
+    return target
 
 
 def _get_seed_generation_config() -> Any:
@@ -195,6 +333,17 @@ def audit_seeds_generate(
             "Omit to keep the single-dim contract (empty list)."
         ),
     ),
+    smoke_log: str | None = typer.Option(
+        None,
+        "--smoke-log",
+        help=(
+            "PR-SMOKE-LOG-FLAG (2026-05-26): auto-tee stdout + stderr to "
+            "``.audit/smoke-archives/`` so operators do not have to "
+            "remember the `> .audit/smoke-archives/smoke-<N>-<TS>.log` "
+            "redirect every time. Accepts: ``auto`` (next smoke counter, "
+            "current unix ts), or an explicit path. Omit to disable."
+        ),
+    ),
 ) -> None:
     """Generate a new candidate batch — runs picker → cost preview →
     pre-flight → confirm → Pipeline.arun().
@@ -204,6 +353,9 @@ def audit_seeds_generate(
     when omitted, then fall back to module defaults
     (``"gen1"`` / ``15``).
     """
+    smoke_log_path = _setup_smoke_log_tee(smoke_log)
+    if smoke_log_path is not None:
+        typer.echo(f"[smoke-log] capturing stdout + stderr to {smoke_log_path}")
     cfg = _get_seed_generation_config()
     resolved_gen_tag = gen_tag if gen_tag is not None else cfg.default_gen_tag
     resolved_candidates = candidates if candidates is not None else cfg.candidates_default
