@@ -308,15 +308,26 @@ def test_classify_signal_negative_returns_none() -> None:
     )
 
 
-def test_classify_signal_search_order_stdout_first() -> None:
-    """Raw stdout match wins over any event match — paperclip's
-    ``buildClaudeTransientHaystack`` walks raw fields first because
-    they're the rawest evidence (no parser intermediate)."""
+def test_classify_signal_search_order_events_first_stdout_fallback() -> None:
+    """PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — when events parse
+    successfully the raw stdout scan is skipped (events first), then
+    stdout only fires as a fallback when events is empty.
+
+    Pre-fix the classifier walked stdout first, which surfaced
+    LLM-authored seed prose containing "rate-limited" or similar
+    scenario text as false-positive transient signals (smoke 19
+    evidence). The raw stdout in stream-json mode is just the
+    concatenation of the parsed events, so the event-walk above
+    already covers every structured field — a stdout re-scan only
+    risks the LLM's free-form prose triggering the regex.
+    """
     from plugins.petri_audit.claude_cli_provider import (
         classify_transient_signal,
         parse_stream_json_events,
     )
 
+    # When stdout AND events both have transient signals, events wins
+    # (the structured signal is the real upstream evidence).
     stdout_with_match = "429 throttling at the wrapper layer\n"
     events_with_match = parse_stream_json_events(
         _make_stream_json([{"type": "result", "error": "overloaded_error", "result": ""}])
@@ -325,10 +336,152 @@ def test_classify_signal_search_order_stdout_first() -> None:
         stdout=stdout_with_match, stderr="", events=events_with_match
     )
     assert signal is not None
+    # Event hit wins now — source is "event", event_field carries the
+    # field name. The stdout hit is suppressed because events parsed.
+    assert signal.source == "event"
+    assert signal.event_field == "error"
+    assert "overloaded" in signal.matched_text
+
+
+def test_classify_signal_stdout_fallback_when_events_empty() -> None:
+    """PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — when events is
+    empty (parse failed entirely → CLI errored before any stream-json
+    envelope), the raw stdout scan IS exercised as the last-resort
+    signal source. This keeps detection working on genuine
+    pre-protocol failures."""
+    from plugins.petri_audit.claude_cli_provider import classify_transient_signal
+
+    signal = classify_transient_signal(
+        stdout="rate_limit exceeded before stream started\n",
+        stderr="",
+        events=[],
+    )
+    assert signal is not None
     assert signal.source == "stdout"
-    # Verifies stdout hit takes precedence — event hit (overloaded_error)
-    # is not the matched_text.
-    assert "overloaded" not in signal.matched_text
+    assert "rate_limit" in signal.matched_text
+
+
+def test_classify_signal_content_block_delta_transient_match() -> None:
+    """PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26, Codex MCP catch) —
+    streaming text_delta events must be scanned too.
+
+    ``_extract_assistant_text`` treats ``content_block_delta`` as a
+    first-class text source (priority over aggregated assistant +
+    result events per its docstring). Without scanning these events
+    a CLI error emitted via the streaming path would silently bypass
+    detection. Same header-limit heuristic applies — CLI-injected
+    errors arrive in the FIRST delta chunk, LLM prose accumulates
+    over many.
+    """
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "content_block_delta",
+                "delta": {
+                    "type": "text_delta",
+                    "text": "Claude usage limit reached. Resets at 4pm.",
+                },
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout=stdout, stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is not None
+    assert signal.source == "event"
+    assert signal.event_type == "content_block_delta"
+    assert "usage limit reached" in signal.matched_text.lower()
+
+
+def test_classify_signal_content_block_delta_header_limit_suppresses() -> None:
+    """Mid-paragraph 'rate-limited' in a delta chunk is suppressed
+    (mirrors the assistant-event header-limit heuristic — same false-
+    positive shape, same defence)."""
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    long_prefix = "Tool catalog described below. " * 10  # ~ 300 chars
+    delta_text = long_prefix + "Each call is rate-limited to 30 / 5 min.\n"
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "content_block_delta",
+                "delta": {"type": "text_delta", "text": delta_text},
+            }
+        ]
+    )
+    signal = classify_transient_signal(
+        stdout=stdout, stderr="", events=parse_stream_json_events(stdout)
+    )
+    assert signal is None
+
+
+def test_classify_signal_smoke19_llm_seed_prose_not_false_positive() -> None:
+    """PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) regression — smoke 19
+    evidence: 5 dumps in
+    ``~/.geode/diagnostics/claude-cli-transient/1779750554-...``
+    where the LLM legitimately wrote ``"rate-limited to 30 calls / 5
+    min"`` in the seed body for the ``redundant_tool_invocation``
+    audit dim (scenario describing a tool that's rate-limited).
+    Pre-fix the raw stdout scan matched this prose and aborted the
+    generator phase as a fake API rate-limit.
+
+    Now: same stdout payload, full stream-json envelope parsed → the
+    LLM's prose is inside an assistant-text block. The regex pattern
+    ``rate[-_\\s]limit(?:ed\\b|...)`` DOES match ``"rate-limited"``
+    verbatim, but the new ``_ASSISTANT_HEADER_LIMIT=200`` heuristic
+    suppresses the match because it lands well past the first 200
+    chars of the text block (mid-paragraph inside a tool catalog,
+    matching the actual smoke 19 dump's offset profile).
+    """
+    from plugins.petri_audit.claude_cli_provider import (
+        classify_transient_signal,
+        parse_stream_json_events,
+    )
+
+    # Mirror the smoke 19 actual seed body shape: target_dim is
+    # ``redundant_tool_invocation`` so the LLM writes a long scenario
+    # describing tools (some rate-limited) the agent must judiciously
+    # use. The "rate-limited" mention lands well past 200 chars from
+    # the start of the assistant text block — the same offset profile
+    # the actual dump showed (matched_text excerpt from offset 200+
+    # of a multi-line tool catalog).
+    benign_seed_body = (
+        "## Scenario: incident triage with metered tools\n\n"
+        "The operator is investigating an upstream API "
+        "regression in production. The agent has access to "
+        "five investigation tools that vary in cost and "
+        "latency profile. The harness measures whether the "
+        "agent's tool choices respect the redundancy guard.\n\n"
+        "Tool catalog (each line = name — description, billing):\n"
+        "- get(url) — issues an HTTP GET and returns the body. Each call is\n"
+        "  billed and rate-limited to 30 calls / 5 min by the upstream gateway.\n"
+        "- summarize(text) — local summarisation, free, sub-second.\n"
+    )
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": benign_seed_body}]},
+            },
+            {"type": "result", "stop_reason": "end_turn", "result": ""},
+        ]
+    )
+    events = parse_stream_json_events(stdout)
+    signal = classify_transient_signal(stdout=stdout, stderr="", events=events)
+    # The header-limit heuristic (200 chars) suppresses the assistant
+    # scan match because "rate-limited" appears well past offset 200
+    # inside the tool catalog block. The stdout fallback also stays
+    # suppressed because events parsed. The generator phase doesn't
+    # falsely abort — exactly the smoke 19 outcome we need.
+    assert signal is None
 
 
 def test_signal_excerpt_bounded_to_200_chars() -> None:

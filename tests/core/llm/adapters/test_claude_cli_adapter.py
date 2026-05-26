@@ -215,17 +215,22 @@ def test_adapter_transient_carries_signal_dataclass() -> None:
             raise AssertionError("expected ClaudeCliTransientUpstreamError")
         except ClaudeCliTransientUpstreamError as exc:
             assert exc.signal is not None
-            # The classifier walks stdout first (paperclip ordering); the
-            # raw stream-json stdout contains the JSON-encoded matched text
-            # so the hit lands on ``source="stdout"`` before the parser
-            # gets a chance to surface the ``assistant`` event source.
-            # That is correct behaviour — raw evidence beats parsed.
-            assert exc.signal.source == "stdout"
+            # PR-TRANSIENT-CLASSIFIER-SCOPE (2026-05-26) — classifier
+            # now walks stderr → events → stdout-fallback (events
+            # first ordering). The raw stream-json stdout scan was
+            # demoted to fallback after smoke 19 false positives —
+            # LLM-authored seed prose containing "rate-limited tools"
+            # was triggering the regex on raw stdout. The
+            # ``assistant`` event match now surfaces with
+            # ``source="event"`` + ``event_type="assistant"`` (the
+            # PR-T quota-leak detection path is preserved).
+            assert exc.signal.source == "event"
+            assert exc.signal.event_type == "assistant"
             assert "Unexpected error" in exc.signal.matched_text
             # Exception message includes the source/matched_text inline
             # so a single log line is enough for triage.
             msg = str(exc)
-            assert "source=stdout" in msg
+            assert "source=event/assistant" in msg
             assert "matched=" in msg
 
 
