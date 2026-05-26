@@ -30,24 +30,29 @@ index than per-event JSONL).
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from plugins.seed_generation.checkpointer import (
     list_completed_phases,
     load_checkpoint,
+    load_partial_ranker_checkpoint,
 )
 from plugins.seed_generation.orchestrator import (
     _ITERATION_PHASE_ORDER,
     _PHASE_ORDER,
     PipelineState,
 )
+from plugins.seed_generation.tournament import MatchOutcome, MatchPlan, WinnerLabel, initial_ratings
 
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "RankerPartialResume",
     "ResumeError",
     "hydrate_state",
+    "load_ranker_partial_resume",
     "next_phase_to_run",
     "resolve_resume_target",
 ]
@@ -55,6 +60,16 @@ __all__ = [
 
 class ResumeError(RuntimeError):
     """Raised when the run directory can't be resumed (missing / corrupt)."""
+
+
+@dataclass(frozen=True)
+class RankerPartialResume:
+    """Ranker resume cursor derived from ``ranker.partial.json``."""
+
+    completed_match_ids: tuple[str, ...]
+    ratings: dict[str, float]
+    outcomes: list[MatchOutcome]
+    pending_matches: list[MatchPlan]
 
 
 def next_phase_to_run(run_dir: Path) -> str | None:
@@ -159,6 +174,65 @@ def resolve_resume_target(run_dir: Path) -> tuple[PipelineState, str | None]:
     return state, next_phase
 
 
+def load_ranker_partial_resume(
+    run_dir: Path | None,
+    *,
+    candidate_ids: list[str],
+    match_plan: list[MatchPlan],
+) -> RankerPartialResume:
+    """Return Ranker ratings/outcomes/pending plan after partial resume.
+
+    The partial checkpoint is only accepted when its completed ids form
+    an ordered prefix of the current ``match_plan`` and ``total_matches``
+    still matches. This avoids replaying a checkpoint created for a
+    different candidate set or RNG schedule.
+    """
+    fresh = RankerPartialResume(
+        completed_match_ids=(),
+        ratings=initial_ratings(candidate_ids),
+        outcomes=[],
+        pending_matches=list(match_plan),
+    )
+    if run_dir is None:
+        return fresh
+    ck = load_partial_ranker_checkpoint(run_dir)
+    if ck is None:
+        return fresh
+    if ck.total_matches != len(match_plan):
+        log.warning(
+            "seed-generation resume: ignoring ranker partial checkpoint "
+            "(total_matches=%d, current_plan=%d)",
+            ck.total_matches,
+            len(match_plan),
+        )
+        return fresh
+
+    completed_ids = list(ck.completed_match_ids)
+    expected_prefix = [match.match_id for match in match_plan[: len(completed_ids)]]
+    if completed_ids != expected_prefix:
+        log.warning(
+            "seed-generation resume: ignoring ranker partial checkpoint "
+            "because completed_match_ids are not the current match-plan prefix",
+        )
+        return fresh
+
+    outcomes = _deserialize_ranker_outcomes(ck.partial_outcomes_serialised)
+    pending = [match for match in match_plan if match.match_id not in set(completed_ids)]
+    ratings = initial_ratings(candidate_ids)
+    ratings.update({cid: rating for cid, rating in ck.partial_ratings.items() if cid in ratings})
+    log.info(
+        "seed-generation resume: ranker partial checkpoint restored %d/%d matches",
+        len(completed_ids),
+        len(match_plan),
+    )
+    return RankerPartialResume(
+        completed_match_ids=tuple(completed_ids),
+        ratings=ratings,
+        outcomes=outcomes,
+        pending_matches=pending,
+    )
+
+
 def _path_or_none(value: Any) -> Path | None:
     if value in (None, ""):
         return None
@@ -171,6 +245,29 @@ def _dict_or_none(value: Any) -> dict[str, float] | None:
     if not isinstance(value, dict):
         return None
     return {str(k): float(v) for k, v in value.items()}
+
+
+def _deserialize_ranker_outcomes(payloads: list[dict[str, Any]]) -> list[MatchOutcome]:
+    outcomes: list[MatchOutcome] = []
+    valid_winners = {"A", "B", "tie"}
+    for payload in payloads:
+        winner = payload.get("winner")
+        if winner not in valid_winners:
+            continue
+        winner_label = cast(WinnerLabel, winner)
+        votes = tuple(cast(WinnerLabel, v) for v in payload.get("votes", []) if v in valid_winners)
+        voter_ids = tuple(str(v) for v in payload.get("voter_ids", []))
+        outcomes.append(
+            MatchOutcome(
+                match_id=str(payload.get("match_id", "")),
+                a=str(payload.get("a", "")),
+                b=str(payload.get("b", "")),
+                winner=winner_label,
+                votes=votes,
+                voter_ids=voter_ids,
+            )
+        )
+    return outcomes
 
 
 # Re-export _ITERATION_PHASE_ORDER for tests that assert symmetry with

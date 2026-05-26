@@ -483,7 +483,7 @@ Indent = `padding-left: 24px;` (`1.5rem`). The prefix glyph is U+2514 `└` foll
 |---|---|---|
 | `.chip.payg`   | `PAYG`        | `anthropic/…`, `openai/…` (raw provider API key billing) |
 | `.chip.claude` | `Claude Code` | `claude-cli/…` (Claude Code Max OAuth) |
-| `.chip.codex`  | `Codex Plus`  | `codex/…`, `openai-codex/…` (ChatGPT Plus OAuth) |
+| `.chip.codex`  | `Codex`  | `codex/…`, `openai-codex/…` (ChatGPT OAuth) |
 | `.chip.geode`  | `GEODE`       | `geode/…` (self-target wrapper) |
 
 Frontend agent does **not** localize chip text. Always English. Always exactly as above.
@@ -622,7 +622,7 @@ The middle dot is U+00B7 (`·`), surrounded by single spaces.
   <p>Harness chip legend:
     <span class="chip payg">PAYG</span>API key billing ·
     <span class="chip claude">Claude Code</span>Max OAuth ·
-    <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth ·
+    <span class="chip codex">Codex</span>ChatGPT OAuth ·
     <span class="chip geode">GEODE</span>self-target wrapper.
   </p>
   <p>Repo: <a href="https://github.com/mangowhoiscloud/geode"><code>github.com/mangowhoiscloud/geode</code></a></p>
@@ -656,7 +656,7 @@ If any placeholder cannot be resolved at build time → CI fails. **No silent de
 
 ### 8.4 Anchor invariant
 
-The legend paragraph must contain all four chips in the exact order `PAYG · Claude Code · Codex Plus
+The legend paragraph must contain all four chips in the exact order `PAYG · Claude Code · Codex
 · GEODE`. This order is fixed so visitors building muscle memory across pages always see chips in
 the same slot. Per-page DESIGN.md `verification_checklist` test asserts this order via regex.
 

@@ -19,7 +19,7 @@ documented in ``docs/design/self-improving-hub-system.md`` +
 3. **Section contract** — 4 main sections (Petri Audit / Seed Generation
    / Autoresearch / Documentation) each render with expected columns.
 4. **Harness chip mapping** — every model prefix resolves to the
-   correct chip class (PAYG / Claude Code / Codex Plus / GEODE).
+   correct chip class (PAYG / Claude Code / Codex / GEODE).
 5. **URL safety** — every ``href`` starts with ``/geode/`` (no missing
    basePath) or is an external ``https://``.
 6. **Version stamp** — ``pyproject.toml`` version is interpolated into
@@ -292,6 +292,33 @@ def test_every_href_is_basepath_safe(built_html: str) -> None:
         if href.startswith("mailto:"):
             continue
         assert href.startswith("/geode/"), f"href {href!r} missing /geode/ basePath prefix"
+
+
+def test_docs_petri_links_match_next_routes(built_html: str) -> None:
+    """Every ``/geode/docs/petri/<slug>`` link in the hub must point at an
+    existing Next.js route under ``site/src/app/docs/petri/<slug>/page.tsx``.
+    Otherwise the live site returns 404 even though the local preview path
+    looks valid. Caught after PR-SELF-IMPROVING-P5 shipped with stale slugs
+    (``/petri`` → 404 instead of ``/petri/overview``; ``/petri/dimensions`` →
+    404 instead of ``/petri/judge-dimensions``).
+    """
+    routes_root = REPO_ROOT / "site" / "src" / "app" / "docs" / "petri"
+    assert routes_root.is_dir(), f"Next.js docs/petri/ routes dir missing at {routes_root}"
+    valid_slugs = {
+        p.name for p in routes_root.iterdir() if p.is_dir() and (p / "page.tsx").is_file()
+    }
+    bad: list[str] = []
+    for href in _collect_hrefs(built_html):
+        m = re.match(r"^/geode/docs/petri/([^/?#]+)/?$", href)
+        if not m:
+            continue
+        slug = m.group(1)
+        if slug not in valid_slugs:
+            bad.append(href)
+    assert not bad, (
+        f"links point at non-existent Next.js routes: {bad}. "
+        f"Valid slugs under site/src/app/docs/petri/: {sorted(valid_slugs)}"
+    )
 
 
 # ---------------------------------------------------------------------------

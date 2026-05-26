@@ -2,7 +2,7 @@
 
 Pre-fix ``settings.forced_login_method = {"openai": "apikey"}`` silently
 re-sorted the plan chain in ``_apply_forced_login_method`` so a user
-selecting ``gpt-5.5`` expecting Codex Plus quietly ended up on PAYG.
+selecting ``gpt-5.5`` expecting Codex quietly ended up on PAYG.
 The picker now surfaces the override with a ``(forced: <method>)``
 suffix in both the interactive and non-tty list views, mirroring the
 M5 ``(login required)`` badge.

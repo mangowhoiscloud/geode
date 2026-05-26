@@ -165,7 +165,7 @@ class TestGlmAdapterSendsThinkingField:
     def test_clear_thinking_default_preserves_history(self) -> None:
         """``clear_thinking=False`` keeps prior-turn ``reasoning_content``
         in the model's context — matches R1's multi-turn-reasoning-
-        preservation goal on Codex Plus."""
+        preservation goal on Codex."""
         from core.llm.providers import glm as glm_mod
 
         with open(glm_mod.__file__, encoding="utf-8") as f:

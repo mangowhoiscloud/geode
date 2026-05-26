@@ -285,6 +285,10 @@ def _format_plan_binding(registry: Any, plan_id: str) -> str:
         return f"{plan_id} [muted](unbound)[/muted]"
     kind = plan.kind.value
     tier = getattr(plan, "subscription_tier", None)
+    if getattr(plan, "provider", "") == "openai-codex":
+        from core.auth.oauth_login import chatgpt_plan_label
+
+        tier = chatgpt_plan_label(tier)
     tier_suffix = f"·{tier}" if tier else ""
     display = getattr(plan, "display_name", "") or plan_id
     return f"[bold]{plan_id}[/bold] [muted]({kind}{tier_suffix} · {display})[/muted]"
@@ -321,7 +325,12 @@ def _login_show_status() -> None:
     if plans:
         for plan in plans:
             usage = registry.usage_for(plan.id)
-            tier_label = f" · {plan.subscription_tier}" if plan.subscription_tier else ""
+            subscription_tier = plan.subscription_tier
+            if getattr(plan, "provider", "") == "openai-codex":
+                from core.auth.oauth_login import chatgpt_plan_label
+
+                subscription_tier = chatgpt_plan_label(subscription_tier)
+            tier_label = f" · {subscription_tier}" if subscription_tier else ""
             quota_label = ""
             if plan.quota is not None:
                 remaining = usage.remaining_in_window(plan)
@@ -474,7 +483,7 @@ def _login_add_interactive(_args: str) -> None:
         (
             "subscription",
             "Subscription (GLM Coding Lite/Pro/Max · "
-            "ChatGPT Plus/Pro/Business/Enterprise · "
+            "ChatGPT Plus/Pro/Pro Lite/Team/Business/Enterprise/Edu · "
             "Claude Pro/Max ×5/Max ×20/Team)",
         ),
         ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, GLM PAYG)"),
@@ -708,8 +717,9 @@ def _format_credential_source_label(provider: str, source: str) -> str:
             return "ChatGPT subscription (audit extra not installed)"
         if meta is None:
             return "(no Codex auth.json detected)"
-        plan = meta.get("plan_type") or "unknown plan"
-        return f"ChatGPT {plan}"
+        from core.auth.oauth_login import chatgpt_plan_label
+
+        return chatgpt_plan_label(meta.get("plan_type"))
     return source
 
 

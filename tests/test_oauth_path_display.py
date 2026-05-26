@@ -65,3 +65,17 @@ def test_oauth_success_uses_auth_store_path() -> None:
         "Legacy ``stored_at=str(AUTH_STORE_PATH)`` regression detected — "
         "this displayed auth.json while writing to auth.toml (B1)."
     )
+
+
+def test_oauth_success_uses_chatgpt_plan_label() -> None:
+    """The login success line must render JWT plan slugs as product labels.
+
+    Pre-fix ``/login openai`` printed raw ``Plan: prolite`` for a Pro Lite
+    account. The UI event should receive the display label instead.
+    """
+    src = inspect.getsource(_oauth)
+    success_call = src.find("emit_oauth_login_success(")
+    assert success_call >= 0
+    block = src[success_call : success_call + 500]
+    assert "chatgpt_plan_label(plan_type)" in block
+    assert "plan_type=plan_type or" not in block

@@ -452,7 +452,7 @@ Per master DESIGN.md §3, each of `auditor_model` / `target_model` / `judge_mode
 ```html
 <dl class="status-grid">
   <dt>auditor</dt>
-  <dd><span class="chip codex">Codex Plus</span> <code>codex/gpt-5-codex-high</code></dd>
+  <dd><span class="chip codex">Codex</span> <code>codex/gpt-5-codex-high</code></dd>
   <dt>target</dt>
   <dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
   <dt>judge</dt>

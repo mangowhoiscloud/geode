@@ -173,7 +173,7 @@ def test_guard_present_for_codex() -> None:
     from core.agent.system_prompt import _build_model_card
 
     _build_model_card.cache_clear()
-    # Codex Plus model id from CODEX_PRIMARY
+    # Codex model id from CODEX_PRIMARY
     card = _build_model_card("gpt-5.3-codex")
     # Codex routes through OpenAI provider in _resolve_provider; check the
     # guard fires.  If the resolver renames codex models later this test

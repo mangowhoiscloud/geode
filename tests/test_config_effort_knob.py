@@ -6,7 +6,7 @@ Verifies:
   2. ``_apply_model`` from the picker persists effort + model to
      ``.geode/config.toml`` (durable layer), not just ``.env``.
   3. PAYG ``openai.py`` adapter sends ``store=False`` (parity with
-     Codex Plus, R3-mini follow-up).
+     Codex, R3-mini follow-up).
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ class TestPickerPersistence:
 class TestPaygStoreFalse:
     def test_store_false_in_openai_kwargs(self) -> None:
         """Source-pin: the PAYG adapter must send ``store=False`` so it
-        matches Codex Plus and avoids server-side response retention."""
+        matches Codex and avoids server-side response retention."""
         from core.llm.providers import openai as openai_mod
 
         src = inspect.getsource(openai_mod)
@@ -112,7 +112,7 @@ class TestPaygStoreFalse:
 
     def test_codex_plus_still_uses_store_false(self) -> None:
         """Regression guard — extracting the shared replay walker
-        in v0.60.0 must not have dropped Codex Plus's store=False."""
+        in v0.60.0 must not have dropped Codex.s store=False."""
         from core.llm.providers import codex as codex_mod
 
         src = inspect.getsource(codex_mod)

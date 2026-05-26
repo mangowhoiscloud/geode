@@ -141,8 +141,8 @@ HARNESS_MAP: dict[str, tuple[str, str]] = {
     "anthropic": ("payg", "PAYG"),
     "openai": ("payg", "PAYG"),
     "claude-cli": ("claude", "Claude Code"),
-    "codex": ("codex", "Codex Plus"),
-    "openai-codex": ("codex", "Codex Plus"),
+    "codex": ("codex", "Codex"),
+    "openai-codex": ("codex", "Codex"),
     "geode": ("geode", "GEODE"),
 }
 

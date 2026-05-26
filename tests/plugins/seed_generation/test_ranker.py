@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from core.agent.sub_agent import SubResult, SubTask
@@ -173,6 +173,37 @@ class _MostFailManager:
         return results
 
 
+class _DelayedAlwaysAWinsManager:
+    """All voters say A wins, with a sleep that exposes match concurrency."""
+
+    def __init__(self) -> None:
+        self.received_tasks: list[SubTask] = []
+        self.active = 0
+        self.max_active = 0
+        self.started_match_ids: list[str] = []
+        self.finished_match_ids: list[str] = []
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        self.received_tasks.extend(tasks)
+        match_id = str(tasks[0].args["match_id"]) if tasks else "unknown"
+        self.started_match_ids.append(match_id)
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        self.finished_match_ids.append(match_id)
+        return [
+            SubResult(
+                task_id=t.task_id,
+                description=t.description,
+                success=True,
+                output=_good_vote(t.args["match_id"], winner="A"),
+                duration_ms=10.0,
+            )
+            for t in tasks
+        ]
+
+
 def test_ranker_requires_two_voters() -> None:
     with pytest.raises(ValueError, match=r"requires"):
         Ranker(manager=_AlwaysAWinsManager(), voters=[_voters()[0]])  # type: ignore[arg-type]
@@ -203,7 +234,7 @@ def test_ranker_produces_elo_ratings_and_survivors() -> None:
     state = _state_with_candidates(4)
     manager = _AlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(42),
     )
@@ -228,6 +259,159 @@ def test_ranker_dispatches_3_voters_per_match() -> None:
     asyncio.run(ranker.aexecute(state))
     # Each match has 3 voters; total tasks = 3 * match_count
     assert len(manager.received_tasks) % 3 == 0
+
+
+def test_ranker_dispatches_matches_concurrently() -> None:
+    """PR-RANKER-PARALLEL — independent matches are fanned out together."""
+    state = _state_with_candidates(5)
+    manager = _DelayedAlwaysAWinsManager()
+    ranker = Ranker(
+        manager=cast(Any, manager),
+        voters=_voters(),
+        rng=random.Random(0),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+    assert result.success
+    assert manager.max_active > 1, (
+        "Ranker should dispatch multiple match panels concurrently; "
+        f"observed max_active={manager.max_active}"
+    )
+    assert len(manager.started_match_ids) == len(manager.finished_match_ids)
+
+
+def test_ranker_applies_elo_after_parallel_dispatch_in_match_plan_order() -> None:
+    """Elo remains deterministic even when match calls complete asynchronously."""
+    from plugins.seed_generation.tournament import (
+        MatchOutcome,
+        apply_match,
+        initial_ratings,
+        plan_matches,
+    )
+
+    seed = 42
+    state = _state_with_candidates(4)
+    manager = _DelayedAlwaysAWinsManager()
+    ranker = Ranker(
+        manager=cast(Any, manager),
+        voters=_voters(),
+        rng=random.Random(seed),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+
+    candidate_ids = [c["id"] for c in state.candidates]
+    expected = initial_ratings(candidate_ids)
+    voter_ids = tuple(f"{v.provider}.{v.source}" for v in _voters())
+    for match in plan_matches(candidate_ids, rng=random.Random(seed)):
+        apply_match(
+            expected,
+            MatchOutcome(
+                match_id=match.match_id,
+                a=match.a,
+                b=match.b,
+                winner="A",
+                votes=("A", "A", "A"),
+                voter_ids=voter_ids,
+            ),
+        )
+    assert result.output["elo_ratings"] == expected
+    assert manager.max_active > 1
+
+
+def test_ranker_writes_partial_checkpoint(tmp_path: Any) -> None:
+    """PR-RANKER-PARTIAL-CHECKPOINT — final prefix is resumable."""
+    from plugins.seed_generation.checkpointer import load_partial_ranker_checkpoint
+    from plugins.seed_generation.tournament import plan_matches
+
+    seed = 7
+    state = _state_with_candidates(5)
+    state.run_dir = tmp_path
+    manager = _DelayedAlwaysAWinsManager()
+    ranker = Ranker(
+        manager=cast(Any, manager),
+        voters=_voters(),
+        rng=random.Random(seed),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+
+    assert result.success
+    ck = load_partial_ranker_checkpoint(tmp_path)
+    assert ck is not None
+    expected_plan = plan_matches([c["id"] for c in state.candidates], rng=random.Random(seed))
+    assert ck.total_matches == len(expected_plan)
+    assert ck.completed_match_ids == [match.match_id for match in expected_plan]
+    assert ck.partial_ratings == result.output["elo_ratings"]
+
+
+def test_ranker_resumes_from_partial_checkpoint_without_replaying_completed_match(
+    tmp_path: Any,
+) -> None:
+    """A partial checkpoint skips the already-applied match prefix."""
+    from plugins.seed_generation.checkpointer import write_partial_ranker_checkpoint
+    from plugins.seed_generation.tournament import (
+        MatchOutcome,
+        apply_match,
+        initial_ratings,
+        plan_matches,
+    )
+
+    seed = 11
+    state = _state_with_candidates(4)
+    state.run_dir = tmp_path
+    candidate_ids = [c["id"] for c in state.candidates]
+    match_plan = plan_matches(candidate_ids, rng=random.Random(seed))
+    first = match_plan[0]
+    voter_ids = tuple(f"{v.provider}.{v.source}" for v in _voters())
+    first_outcome = MatchOutcome(
+        match_id=first.match_id,
+        a=first.a,
+        b=first.b,
+        winner="A",
+        votes=("A", "A", "A"),
+        voter_ids=voter_ids,
+    )
+    partial_ratings = initial_ratings(candidate_ids)
+    apply_match(partial_ratings, first_outcome)
+    write_partial_ranker_checkpoint(
+        tmp_path,
+        completed_match_ids=[first.match_id],
+        partial_ratings=partial_ratings,
+        partial_outcomes_serialised=[
+            {
+                "match_id": first_outcome.match_id,
+                "a": first_outcome.a,
+                "b": first_outcome.b,
+                "winner": first_outcome.winner,
+                "votes": list(first_outcome.votes),
+                "voter_ids": list(first_outcome.voter_ids),
+            }
+        ],
+        total_matches=len(match_plan),
+    )
+
+    manager = _DelayedAlwaysAWinsManager()
+    ranker = Ranker(
+        manager=cast(Any, manager),
+        voters=_voters(),
+        rng=random.Random(seed),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+
+    expected = initial_ratings(candidate_ids)
+    for match in match_plan:
+        apply_match(
+            expected,
+            MatchOutcome(
+                match_id=match.match_id,
+                a=match.a,
+                b=match.b,
+                winner="A",
+                votes=("A", "A", "A"),
+                voter_ids=voter_ids,
+            ),
+        )
+    assert result.output["elo_ratings"] == expected
+    assert first.match_id not in manager.started_match_ids
+    assert set(manager.started_match_ids) == {match.match_id for match in match_plan[1:]}
 
 
 def test_ranker_split_votes_become_ties() -> None:

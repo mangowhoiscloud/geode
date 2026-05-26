@@ -90,6 +90,35 @@ functional change.
   operator-forced from gate-approved promotions. Pinned by 4
   invariant tests in ``tests/autoresearch/test_promote_stamp.py``.
 
+- **PR-RANKER-PARALLEL** — seed-generation Ranker now dispatches all
+  independent tournament matches with ``asyncio.gather`` and applies
+  Elo updates afterward in the original ``match_plan`` order. This
+  preserves deterministic final ratings / survivor selection for a
+  fixed RNG seed while allowing the voter-panel LLM calls to overlap;
+  the provider lanes introduced by PR-OAUTH-API-LANES remain the
+  throttle for the resulting burst. Pinned by
+  ``tests/plugins/seed_generation/test_ranker.py`` invariants for
+  concurrent match dispatch and post-gather Elo ordering.
+- **PR-RANKER-PARTIAL-CHECKPOINT** — seed-generation Ranker now writes
+  ``checkpoints/ranker.partial.json`` while match panels run. The
+  partial checkpoint stores the ordered Elo-applied match prefix
+  (``completed_match_ids``), ``partial_ratings``,
+  ``partial_outcomes_serialised``, and ``total_matches`` with atomic
+  temp-file replacement. Resume accepts the checkpoint only when it
+  matches the current match-plan prefix, restores ratings/outcomes,
+  and dispatches only the remaining matches. Pinned by checkpointer,
+  resume, and Ranker invariants for round-trip, stale-plan rejection,
+  final partial dump, and no replay of completed matches.
+- **PR-RANKER-DEDUP-POST-ELO** — seed-generation now applies an
+  open-coscientist-aligned post-Ranker survivor dedup pass before
+  Evolver dispatch. Within each high-similarity survivor cluster,
+  GEODE keeps the best candidate by ``(elo_rating, sum(dim_means),
+  candidate_id)``, removes lower-ranked near-duplicates from
+  ``state.survivors``, and appends audit rows to
+  ``state.removed_duplicates``. Pinned by pure helper and Pipeline
+  invariants covering Elo priority, Pilot-score tie-breaks, survivor
+  filtering, and non-high / non-survivor preservation.
+
 ### Fixed
 
 - **PR-DRY-RUN-NO-ATTR (pin only)** — The 2026-05-26 attribution
@@ -103,6 +132,36 @@ functional change.
   fail loudly if a future refactor strips the guard. Brittle by
   design — the cost of false alarms is far below the cost of the
   silent leak re-opening.
+
+- **PR-HUB-DOCS-LINK-FIX** — the self-improving hub's DOCS sidebar pointed
+  at two Next.js routes that don't exist: ``/geode/docs/petri`` (no
+  ``overview`` suffix, returned 404) and ``/geode/docs/petri/dimensions``
+  (wrong slug, the real route is ``judge-dimensions``). Operator
+  surfaced the bug after the v0.99.71 production deploy. Rewrites both
+  in the four hub templates (``index.html.template`` + 3 autoresearch
+  ``.template`` + ``run.html.template``) and the 9 already-emitted
+  pages under ``docs/self-improving/``, plus the inspect_ai SPA
+  landing card at ``docs/self-improving/petri-bundle/landing.html``.
+  Pinned by new ``test_docs_petri_links_match_next_routes`` which
+  enumerates every ``/geode/docs/petri/<slug>`` href in the built HTML
+  and asserts ``slug ∈ {dir.name for dir in site/src/app/docs/petri/}``,
+  so a future Next.js rename or hub typo fails the gate before merge.
+
+- **PR-FIX-CHATGPT-PLAN-HALLUCINATION** — ChatGPT OAuth plan display now
+  resolves the JWT ``chatgpt_plan_type`` slug into a product label
+  instead of leaking raw slugs or hard-coding Plus. ``chatgpt_plan_label``
+  maps known tiers (Free / Plus / Pro / Pro Lite / Team / Business /
+  Enterprise / Edu), preserves a generic ``ChatGPT subscription`` fallback,
+  and title-cases future unknown slugs. ``/login openai`` now emits
+  ``Plan: ChatGPT Pro Lite`` for ``prolite`` accounts, the ``/login``
+  dashboard renders OpenAI Codex plan bindings with the same label, and
+  the credential-source display no longer formats raw ``ChatGPT prolite``.
+  Generic docs, comments, hub chips, and tests now refer to ChatGPT
+  subscription / Codex subscription paths rather than pretending every
+  OAuth account is Plus. Pinned by
+  ``tests/core/auth/test_chatgpt_plan_label.py``,
+  ``tests/test_login_plan_binding.py``, and
+  ``tests/test_oauth_path_display.py``.
 
 - **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
   longer collapses repeated audits at the same git commit into a
@@ -19169,4 +19228,3 @@ Initial release of GEODE — Undervalued IP Discovery Agent.
 [0.7.0]: https://github.com/mangowhoiscloud/geode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/mangowhoiscloud/geode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mangowhoiscloud/geode/releases/tag/v0.6.0
-

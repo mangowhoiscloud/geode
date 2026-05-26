@@ -398,6 +398,33 @@ def test_record_checkpoint_writes_per_phase_files(tmp_path) -> None:
     assert "meta_reviewer" in meta_review_ck["state_snapshot"]["completed_phases"]
 
 
+def test_pipeline_applies_post_elo_dedup_before_evolver() -> None:
+    state = PipelineState(run_id="t-dedup", target_dim="x", gen_tag="gen2")
+    state.survivors = ["c-a", "c-b", "c-c"]
+    state.elo_ratings = {"c-a": 1000.0, "c-b": 1040.0, "c-c": 990.0}
+    state.pilot_scores = {
+        "c-a": {"dim_means": {"dim_01": 0.9}},
+        "c-b": {"dim_means": {"dim_01": 0.1}},
+    }
+    state.similarity_clusters = [
+        {
+            "cluster_id": "cluster-a",
+            "topic": "same failure mode",
+            "similar_hypotheses": [
+                {"candidate_id": "c-a", "similarity_degree": "high"},
+                {"candidate_id": "c-b", "similarity_degree": "high"},
+                {"candidate_id": "c-c", "similarity_degree": "low"},
+            ],
+        }
+    ]
+
+    Pipeline(state, PipelineRegistry())._apply_post_elo_dedup()
+
+    assert state.survivors == ["c-b", "c-c"]
+    assert state.removed_duplicates[-1]["candidate_id"] == "c-a"
+    assert state.removed_duplicates[-1]["kept_instead"] == "c-b"
+
+
 class _SoftFailAgent(BaseSeedAgent):
     """Agent that returns ``status="error"`` without raising — mirrors
     smoke 17 proximity phase (LLM emitted non-JSON narrative, the

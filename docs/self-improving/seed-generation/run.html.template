@@ -51,9 +51,9 @@
 
       <div class="nav-section">Docs</div>
       <ul class="nav-list">
-        <li><a href="/geode/docs/petri">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
         <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/dimensions">Judge dimensions</a></li>
+        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
       </ul>
 
       <div class="nav-section">Meta</div>
@@ -174,7 +174,7 @@
       <p>Harness chip legend:
         <span class="chip payg">PAYG</span>API key billing &middot;
         <span class="chip claude">Claude Code</span>Max OAuth &middot;
-        <span class="chip codex">Codex Plus</span>ChatGPT Plus OAuth &middot;
+        <span class="chip codex">Codex</span>ChatGPT OAuth &middot;
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
