@@ -234,7 +234,7 @@ def test_ranker_produces_elo_ratings_and_survivors() -> None:
     state = _state_with_candidates(4)
     manager = _AlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(42),
     )
@@ -327,7 +327,7 @@ def test_ranker_writes_partial_checkpoint(tmp_path: Any) -> None:
     state.run_dir = tmp_path
     manager = _DelayedAlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(seed),
     )
@@ -390,7 +390,7 @@ def test_ranker_resumes_from_partial_checkpoint_without_replaying_completed_matc
 
     manager = _DelayedAlwaysAWinsManager()
     ranker = Ranker(
-        manager=manager,  # type: ignore[arg-type]
+        manager=cast(Any, manager),
         voters=_voters(),
         rng=random.Random(seed),
     )
