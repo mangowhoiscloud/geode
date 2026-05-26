@@ -375,6 +375,56 @@ class TestCallWithFailover:
 
         assert sleeps == [QUOTA_BACKOFF_SECONDS[0], QUOTA_BACKOFF_SECONDS[1]]
 
+    def test_claude_cli_transient_clips_to_final_quota_tier(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        """When ``max_retries`` exceeds ``len(QUOTA_BACKOFF_SECONDS)``,
+        every attempt past the schedule's tail repeats the final
+        ``7200.0`` (2h) wait — :func:`call_with_failover` uses
+        ``min(attempt, len(schedule) - 1)`` to clip, matching paperclip
+        heartbeat.ts:217-226 ("MAX_ATTEMPTS = 4, then surrender or
+        repeat 2h"). Without this clip a 5-attempt loop would
+        ``IndexError`` on attempt 4."""
+        from plugins.petri_audit.claude_cli_provider import (
+            ClaudeCliTransientUpstreamError,
+            TransientSignal,
+        )
+
+        from core.llm.claude_cli_errors import QUOTA_BACKOFF_SECONDS
+
+        signal = TransientSignal(matched_text="claude usage limit reached", source="event")
+        transient_err = ClaudeCliTransientUpstreamError(
+            "claude-cli upstream transient (quota, persistent)", signal=signal
+        )
+
+        async def call_fn(model: str) -> None:
+            raise transient_err
+
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("asyncio.sleep", _fake_sleep)
+
+        response, used_model = asyncio.run(
+            call_with_failover(
+                [ANTHROPIC_PRIMARY],  # single-model chain → no fallback
+                call_fn,
+                max_retries=6,  # exceeds len(QUOTA_BACKOFF_SECONDS) == 4
+                retry_base_delay=0.0,
+            )
+        )
+        assert response is None
+        assert used_model is None
+        # 5 sleeps fired (between attempts 1→2 through 5→6); the final
+        # 2 entries clip to the schedule tail (7200.0).
+        assert sleeps == [
+            QUOTA_BACKOFF_SECONDS[0],
+            QUOTA_BACKOFF_SECONDS[1],
+            QUOTA_BACKOFF_SECONDS[2],
+            QUOTA_BACKOFF_SECONDS[3],
+            QUOTA_BACKOFF_SECONDS[3],  # clipped: attempt=4 → schedule[3]
+        ]
+
     def test_claude_cli_transient_exhausts_then_falls_back(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         """When the transient never resolves on the primary model,
         the loop exhausts ``max_retries`` then falls through to the
