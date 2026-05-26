@@ -52,6 +52,7 @@ from core.paths import (
     GLOBAL_REFLECTION_POLICY_PATH,
     GLOBAL_RETRIEVAL_POLICY_PATH,
     GLOBAL_SKILL_CATALOG_PATH,
+    GLOBAL_TOOL_DESCRIPTIONS_PATH,
     GLOBAL_TOOL_POLICY_PATH,
     GLOBAL_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
@@ -140,8 +141,10 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 # attribution sprint Phase A audit (§5 mutation surface verification)
 # found an asymmetry: ``autoresearch.train.run_audit``'s env override
 # block (around line 868-903) wires STRICT-mode env vars for **13** SoT
-# files, but ``TARGET_KINDS`` below lists only **6 active** mutation
-# slots. The 7 difference is :data:`_READER_ONLY_KINDS` — reader-deployed
+# files, but ``TARGET_KINDS`` below originally listed only **6 active**
+# mutation slots; PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) graduates
+# ``tool_descriptions`` so the split is now **7 active + 6 reader-only**.
+# The reader-only difference (:data:`_READER_ONLY_KINDS`) tracks the
 # SoT surfaces that the audit subprocess consumes (read-only) but the
 # mutator cannot dispatch to. ADR-013 phased rollout intent: each
 # reader-only surface graduates in its own follow-up PR (matching the
@@ -169,6 +172,19 @@ TARGET_KINDS: tuple[str, ...] = (
     # ``model`` field 는 Tier 2 (안전성 invariants) — 본 slot 에서 명시적
     # 제외. skill_catalog 와 동일 nested ↔ flat 변환 적용.
     "agent_contract",
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ADR-013 T1 graduation.
+    # The ``tool-descriptions.json`` reader has been live since
+    # 2026-05-21 (``core/agent/tool_descriptions_policy.py``), and the
+    # audit subprocess already wires ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE``
+    # for STRICT-mode reads (``autoresearch/train.py:878``). Graduating
+    # it to TARGET_KINDS opens the surface mutator can dispatch to —
+    # directly attacks Petri 17-dim's ``broken_tool_use`` (the dim
+    # whose pressure is best correlated with description quality per
+    # OpenAI function-calling docs). nested-schema kind:
+    # ``{tool_name: {description: str, hints: list[str]}}``; the
+    # ``_LIST_FIELDS_BY_KIND`` mapping below converts the comma-joined
+    # mutation row back to a list on write.
+    "tool_descriptions",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -184,11 +200,17 @@ _KIND_TO_PATH: dict[str, Path] = {
     "reflection": GLOBAL_REFLECTION_POLICY_PATH,
     "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
     "agent_contract": GLOBAL_AGENT_CONTRACTS_PATH,
+    "tool_descriptions": GLOBAL_TOOL_DESCRIPTIONS_PATH,
 }
 
 # M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /
 # ``write_policy`` 의 flat ↔ nested 변환 dispatch 분기 키.
-_NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
+# PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions joins the
+# nested-schema set; its disk shape is
+# ``{tool_name: {description: str, hints: list[str]}}`` so the flat
+# dotted-key contract (``"bash.description"`` etc.) reuses the same
+# load/write machinery as skill_catalog / agent_contract.
+_NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract", "tool_descriptions"})
 
 
 # PR-TARGET-KIND-DOC (2026-05-27) — reader-only SoT surfaces. These are
@@ -203,7 +225,10 @@ _NESTED_KINDS: frozenset[str] = frozenset({"skill_catalog", "agent_contract"})
 # verifies the two sets are disjoint).
 _READER_ONLY_KINDS: frozenset[str] = frozenset(
     {
-        "tool_descriptions",
+        # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ``tool_descriptions``
+        # graduated from this set to :data:`TARGET_KINDS`; the operator-
+        # visible signal is now "mutator can dispatch", not "fail-fast at
+        # parse_mutation".
         "style_guide",
         "provider_routing",
         "cache_policy",
@@ -384,10 +409,17 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
 _BOOL_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "skill_catalog": frozenset({"user_invocable"}),
     "agent_contract": frozenset(),
+    "tool_descriptions": frozenset(),
 }
 _LIST_FIELDS_BY_KIND: dict[str, frozenset[str]] = {
     "skill_catalog": frozenset(),
     "agent_contract": frozenset({"tools"}),
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — ``hints`` is the only
+    # non-string field in the tool-descriptions schema (per
+    # ``core/agent/tool_descriptions_policy.py:_validate_schema``).
+    # ``_unflatten_nested`` splits the comma-separated mutation
+    # ``new_value`` into a list of stripped hint strings on write.
+    "tool_descriptions": frozenset({"hints"}),
 }
 
 

@@ -47,6 +47,43 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27)** — inject a compact
+  per-dim credit (``aggregate_credit_history``) + (kind × dim)
+  matrix (``compute_kind_dim_matrix``) summary into the mutator's
+  user prompt every cycle. Closes the F3 fragmentation signal —
+  pre-PR the mutator never saw which dims its previous mutations
+  credited nor which kinds had moved which dims. New
+  ``[self_improving_loop.autoresearch].mutator_feedback_window``
+  knob (default ``20``, matches the operator dashboard
+  ``_WIRE_DEFAULT_LAST`` convention from PR-WIRE-1). Empty repo →
+  empty block (graceful). Helper module
+  ``core/self_improving_loop/mutator_feedback.py``.
+- **PR-MUTATOR-DEDUP-GUARD (2026-05-27)** — reject mutator proposals
+  whose ``(target_kind, target_section, new_value)`` triple has a
+  ``difflib.SequenceMatcher.ratio()`` above
+  ``mutator_dedup_threshold`` against any of the most-recent N
+  apply rows. Catches the LLM re-proposing a cosmetic edit despite
+  the contract suffix's repetition warning. New
+  ``RepetitiveMutationError(ValueError)`` so existing cycle-skip
+  catches handle the rejection without the runner crashing. New
+  knobs: ``mutator_dedup_window`` (default ``20``, mirrors the
+  feedback window) and ``mutator_dedup_threshold`` (default
+  ``0.85``, stdlib-grounded — sits well above
+  ``difflib.get_close_matches`` ``0.6`` "close match" band).
+- **PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27)** — graduate
+  ``tool_descriptions`` from ``_READER_ONLY_KINDS`` to
+  ``TARGET_KINDS``. The reader (``core/agent/tool_descriptions_policy.py``,
+  ADR-013 T1) has been live since 2026-05-21 and the audit
+  subprocess already wires
+  ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE``; the graduation opens the
+  surface the mutator can dispatch to, directly attacking Petri
+  17-dim's ``broken_tool_use`` pressure. Nested-schema kind
+  (``{tool_name: {description: str, hints: list[str]}}``) joins
+  the same flat ↔ nested machinery as ``skill_catalog`` /
+  ``agent_contract``; ``hints`` is the only list-typed field.
+  Pin: ``_READER_ONLY_KINDS`` size assertion drops from 7 to 6.
+
 ### Fixed
 - **PR-CLAUDE-CLI-CREDIT-EXHAUSTION-RETRY (2026-05-27)** — route
   ``ClaudeCliTransientUpstreamError`` into the retry path with the
