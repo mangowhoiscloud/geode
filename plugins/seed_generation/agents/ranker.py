@@ -108,6 +108,51 @@ def _serialise_match_outcome(outcome: MatchOutcome) -> dict[str, Any]:
     }
 
 
+# PR-LANE-CAP-AGGRESSIVE (2026-05-27) — phase-local concurrency cap for
+# the ranker's ``asyncio.gather`` match-dispatch burst. The cap exists
+# *on top* of the per-adapter lanes (claude_cli=4 / openai_api=16 /
+# anthropic_api=8) to bound the gather submission queue depth — each
+# match spawns 3 voter sub-agents (~1 claude-cli + 2 codex), so cap 8
+# matches = 8 claude-cli + 16 codex inflight, exactly the per-lane
+# ceiling. Pre-cap a 59-match Loop 1 burst would push 177 task objects
+# into ``asyncio.wait`` queues simultaneously; the lanes throttle the
+# subprocess/API side but the awaiting task list itself becomes a
+# memory + scheduler tax. Cap 8 keeps gather "in-flight" at
+# ``cap * voter_count`` = ``8 * 3 = 24`` tasks, with the rest serialised
+# behind the semaphore acquire.
+DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8
+"""Operator default = 8 simultaneous match dispatches inside
+``asyncio.gather``. See :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` for
+runtime override."""
+
+RANKER_MAX_INFLIGHT_MATCHES_ENV = "GEODE_RANKER_MAX_INFLIGHT_MATCHES"
+"""Operator override — raise / lower the phase-local cap. Invalid
+values silently fall back to the default (lane should never harden
+into "no slots" from a typo)."""
+
+
+def resolve_ranker_max_inflight_matches() -> int:
+    """Resolve the effective phase-local match-dispatch cap.
+
+    Defaults to :data:`DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`; honours
+    :data:`RANKER_MAX_INFLIGHT_MATCHES_ENV` as a positive integer.
+    Non-positive / non-integer overrides fall back silently — the cap
+    must never harden into 0 mid-run from a typo.
+    """
+    import os
+
+    raw = os.environ.get(RANKER_MAX_INFLIGHT_MATCHES_ENV, "").strip()
+    if not raw:
+        return DEFAULT_RANKER_MAX_INFLIGHT_MATCHES
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return DEFAULT_RANKER_MAX_INFLIGHT_MATCHES
+    if parsed <= 0:
+        return DEFAULT_RANKER_MAX_INFLIGHT_MATCHES
+    return parsed
+
+
 class Ranker(BaseSeedAgent):
     """Elo tournament orchestrator with 3-voter judge panel.
 
@@ -253,16 +298,27 @@ class Ranker(BaseSeedAgent):
                 )
             )
         try:
-            match_results = await asyncio.gather(
-                *[
-                    self._play_match_with_checkpoint_report(
+            # PR-LANE-CAP-AGGRESSIVE (2026-05-27) — wrap each
+            # ``_play_match_with_checkpoint_report`` in a phase-local
+            # semaphore acquire so the gather submission queue depth
+            # never exceeds :data:`DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`.
+            # The per-adapter lanes (claude_cli_lane=4 / openai_api_lane=16)
+            # already throttle the downstream subprocess/API calls; this
+            # cap keeps the gather "in-flight" task count from balloon-
+            # ing past the lane ceiling on a 59-match Loop 1 burst.
+            match_semaphore = asyncio.Semaphore(resolve_ranker_max_inflight_matches())
+
+            async def _bounded_play(match: MatchPlan) -> tuple[MatchOutcome | None, dict[str, Any]]:
+                async with match_semaphore:
+                    return await self._play_match_with_checkpoint_report(
                         match,
                         pilot_means=pilot_means,
                         candidate_bodies=candidate_bodies,
                         result_queue=result_queue,
                     )
-                    for match in resume.pending_matches
-                ]
+
+            match_results = await asyncio.gather(
+                *[_bounded_play(match) for match in resume.pending_matches]
             )
         finally:
             if checkpoint_task is not None:

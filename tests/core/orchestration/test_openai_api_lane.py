@@ -30,11 +30,16 @@ def _reset_lane() -> None:
     reset_openai_api_lane_for_tests()
 
 
-def test_default_max_concurrent_is_four() -> None:
-    """See module docstring — OpenAI Codex Responses API 500 RPM
-    bucket leaves substantial headroom for 4 concurrent calls."""
-    assert DEFAULT_OPENAI_API_LANE_MAX == 4
-    assert resolve_openai_api_lane_max() == 4
+def test_default_max_concurrent_is_sixteen() -> None:
+    """Default capacity 16 — PR-LANE-CAP-AGGRESSIVE (2026-05-27)
+    raised from 4 to 16. OpenAI Codex Responses API documents a 500
+    RPM aggregate per ChatGPT subscription bucket; voter calls land
+    in 10-15s wallclock each, so steady-state throughput at cap 16
+    is ~64-96 RPM — well under the 500 RPM ceiling. Pre-raise the
+    cap-4 wasted ~95% of the available budget while the ranker's
+    asyncio.gather burst queued 110+ calls behind it."""
+    assert DEFAULT_OPENAI_API_LANE_MAX == 16
+    assert resolve_openai_api_lane_max() == 16
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:

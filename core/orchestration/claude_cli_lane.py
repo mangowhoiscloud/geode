@@ -119,17 +119,40 @@ silently fall back to the default — the lane should never harden into
 "no slots" mid-run because of a typo.
 """
 
-DEFAULT_CLAUDE_CLI_LANE_MAX = 2
-"""One slot below the documented 3-4 burst limiter floor so the
-operator's host Claude Code session occupies the spare slot without
-crossing the 429 threshold. See the module docstring for the full
-rationale."""
+DEFAULT_CLAUDE_CLI_LANE_MAX = 4
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 2 to 4.
 
-CLAUDE_CLI_LANE_TIMEOUT_S = 300.0
-"""5 minutes. A legitimate ``claude --print`` for mutator-sized prompts
-finishes in seconds-to-tens-of-seconds; an inspect_ai eval call may
-take a minute or two. The lane wait should outlast a queued slow
-call but not so long that a genuinely-stuck subprocess hides the
+Documented Claude Code burst-limiter floor is 3-4 slots per 5h pool.
+Operator's host Claude Code session occupies 1 slot; the remaining 3
+go to ranker / mutator / audit-spawned sub-agents. Pre-raise the
+ranker's ``asyncio.gather`` burst (`ranker.py:256`) queued all
+voter-side claude-cli calls behind 2-slot cap → 89 × 70s = ~104min
+worst-case lane queue wait, well past the (also raised) 7200s
+timeout. The new cap matches the documented public floor exactly,
+with the host slot accounted for, so a long-running smoke (Loop 1
+ranker with 59 matches × 1 anthropic voter = 59 claude-cli forks) no
+longer creates a queue depth deeper than the 5h pool can sustain.
+
+Operator override via :data:`CLAUDE_CLI_LANE_MAX_ENV` for Max20x tier
+operators with larger 5h pools (5-6) or single-account audit hosts
+that need to push to the documented 4-slot ceiling without host-
+session contention."""
+
+CLAUDE_CLI_LANE_TIMEOUT_S = 7200.0
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to
+7200s (2h). Pre-raise the ranker's parallel match-burst could send
+the last-queued voter to a 60-100min wait, well past 5min — the lane
+would fall through to "timeout" and surface a `TimeoutError` even
+though the subprocess itself was perfectly healthy. The 2h timeout
+covers the worst-case Loop 1 ranker (59 matches × ~70s/voter / cap 4
+= ~17min steady state, with retries up to ~1h). A genuinely-stuck
+subprocess still surfaces — just on a 2h boundary instead of 5min.
+
+Pre-raise rationale (retained for context): A legitimate
+``claude --print`` for mutator-sized prompts finishes in
+seconds-to-tens-of-seconds; an inspect_ai eval call may take a minute
+or two. The lane wait should outlast a queued slow call but not so
+long that a genuinely-stuck subprocess hides the
 problem from operators."""
 
 

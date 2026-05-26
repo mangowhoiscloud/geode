@@ -47,6 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raise the per-adapter lane
+  concurrency caps + lane timeouts + add a phase-local semaphore on
+  the ranker's ``asyncio.gather`` match-dispatch. Pre-raise the
+  conservative defaults (claude_cli=2, openai_api=4, anthropic_api=4,
+  Lane.timeout_s=300) left the documented per-account RPM budgets
+  ~95% idle while PR-RANKER-PARALLEL's 59-match Loop 1 burst queued
+  100+ voter calls behind 4-slot caps, pushing tail latency past the
+  5-minute lane timeout. New defaults match documented OpenAI Codex
+  Responses (500 RPM) + Anthropic tier 1 (50 RPM) ceilings:
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX``: 2 → **4** (Max OAuth burst floor)
+  - ``DEFAULT_OPENAI_API_LANE_MAX``: 4 → **16** (500 RPM / 10-15s call)
+  - ``DEFAULT_ANTHROPIC_API_LANE_MAX``: 4 → **8** (50 RPM / 60-70s call)
+  - ``*_LANE_TIMEOUT_S``: 300s → **7200s (2h)** (gather burst tail)
+  Adds ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8`` + env override
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES`` so the phase-local
+  ``asyncio.Semaphore(8)`` bounds the gather "in-flight" task count
+  (8 matches × 3 voters = 24 tasks max), matching the per-lane
+  ceiling exactly. Operator overrides (``GEODE_CLAUDE_CLI_LANE_MAX``,
+  ``GEODE_OPENAI_API_LANE_MAX``, ``GEODE_ANTHROPIC_API_LANE_MAX``,
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES``) stay the recommended tuning
+  knob for tier upgrades / debug runs. Pinned by 6 new ranker
+  semaphore unit tests + 2 updated lane default-value tests.
+
 ## [0.99.72] - 2026-05-26
 
 MINOR rotation. Ships PR-SEEDS-HIRES P1+P2+P3 — operator directive

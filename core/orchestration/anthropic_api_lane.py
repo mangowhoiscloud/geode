@@ -80,16 +80,24 @@ ANTHROPIC_API_LANE_NAME = "anthropic-api"
 ANTHROPIC_API_LANE_MAX_ENV = "GEODE_ANTHROPIC_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_ANTHROPIC_API_LANE_MAX`."""
 
-DEFAULT_ANTHROPIC_API_LANE_MAX = 4
-"""Default concurrent Anthropic API calls (oauth + payg pooled).
+DEFAULT_ANTHROPIC_API_LANE_MAX = 8
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 8.
 
-See module docstring for the three-point rationale (Anthropic tier 1
-50 RPM, claude_cli_lane + audit_lane co-existence, PR-RANKER-PARALLEL
-match-burst headroom)."""
+Anthropic tier 1 documents 50 RPM aggregate per account. Voter calls
+land in 60-70s wallclock each → steady-state ~0.86 inflight per cap
+slot, so cap 8 = ~7 RPM steady state, well under the 50 RPM
+ceiling. The ranker.py panel uses claude-cli (subprocess, gated by
+``claude_cli_lane``) for the anthropic voter, NOT direct API, so the
+8-slot cap here exists to cover hybrid panels and the autoresearch
+mutator's direct API path; it is the natural pair to
+``claude_cli_lane`` raised to 4 in the same PR.
 
-ANTHROPIC_API_LANE_TIMEOUT_S = 300.0
-"""5 minutes — survives a queued slow call but surfaces a genuinely
-stuck call to operators."""
+Operator override via :data:`ANTHROPIC_API_LANE_MAX_ENV` for
+enterprise tiers with higher per-account RPM budgets."""
+
+ANTHROPIC_API_LANE_TIMEOUT_S = 7200.0
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to
+7200s (2h). Same rationale as the sibling lanes."""
 
 
 _ANTHROPIC_API_LANE: Lane | None = None

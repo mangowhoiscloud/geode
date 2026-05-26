@@ -33,12 +33,16 @@ def _reset_lane() -> None:
     reset_anthropic_api_lane_for_tests()
 
 
-def test_default_max_concurrent_is_four() -> None:
-    """Default capacity 4 — see module docstring's three-point
-    rationale (Anthropic tier 1 50 RPM, claude_cli_lane co-existence,
-    PR-RANKER-PARALLEL match-burst headroom)."""
-    assert DEFAULT_ANTHROPIC_API_LANE_MAX == 4
-    assert resolve_anthropic_api_lane_max() == 4
+def test_default_max_concurrent_is_eight() -> None:
+    """Default capacity 8 — PR-LANE-CAP-AGGRESSIVE (2026-05-27) raised
+    from 4 to 8. Anthropic tier 1 documents 50 RPM aggregate per
+    account; voter calls land in 60-70s wallclock each → steady-state
+    ~0.86 inflight per cap slot, so cap 8 = ~7 RPM steady state, well
+    under the 50 RPM ceiling. Pre-raise the cap-4 only used ~3 RPM
+    of the available 50, leaving 47 RPM idle while the ranker burst
+    queued behind a tight cap."""
+    assert DEFAULT_ANTHROPIC_API_LANE_MAX == 8
+    assert resolve_anthropic_api_lane_max() == 8
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:
