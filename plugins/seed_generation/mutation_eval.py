@@ -258,18 +258,21 @@ async def evaluate_mutation_pairwise(
                 model=voter.model,
                 source=picker_source_to_adapter_source(voter.source),
                 response_schema=VOTE_SCHEMA,
-                # PR-CODEX-GPT55-OUTPUT-EMIT fix-up (Codex MCP catch,
-                # 2026-05-26) — mutation_eval voters reuse the same
+                # PR-GPT55-EMPTY-OUTPUT-EMIT (Sprint G, 2026-05-26)
+                # — supersedes the prior PR-CODEX-GPT55-OUTPUT-EMIT
+                # fix-up ``effort="low"`` which smoke 21 confirmed
+                # ineffective. mutation_eval voters reuse the same
                 # VOTE_SCHEMA + gpt-5.5 A/B/tie shape as the ranker
-                # voter pathway. Without an explicit effort pin they
-                # would inherit the SubTask difficulty default
-                # ("medium" → ``_DIFFICULTY_TO_EFFORT["medium"]``)
-                # and reproduce the smoke 20 empty-text failure mode
-                # outside the ranker phase. Same ctx7 grounding as
-                # ``plugins/seed_generation/agents/ranker.py`` —
-                # OpenAI Responses API "Reasoning effort" guidance
-                # for single-shot classification + short rationale.
-                effort="low",
+                # voter pathway, so the same ``effort="none"`` fix
+                # applies — disable reasoning entirely so gpt-5.5
+                # emits the single-step classification verdict
+                # directly instead of consuming the output budget
+                # on encrypted reasoning items. Same ctx7 grounding
+                # as ``plugins/seed_generation/agents/ranker.py``:
+                # OpenAI Responses API "Sampling Parameters"
+                # reasoning_effort enum supports ``"none"`` to
+                # disable reasoning on reasoning-capable models.
+                effort="none",
             )
         )
     results = await manager.adelegate(tasks, announce=False)
