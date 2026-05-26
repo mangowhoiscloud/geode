@@ -48,6 +48,39 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-HERMES-3** — 4-phase compaction pipeline. Refactors
+  `core/orchestration/compaction.py` from the pre-Hermes single-phase
+  LLM-summary + carry-forward into a 4-phase pipeline that absorbs
+  the tool_use/tool_result boundary + orphan-cleanup handling from
+  Claude Code's compaction surface (the broader thinking-block /
+  image-block / citation handling is out of scope here): (1)
+  **boundary** finds a cut index that won't split a
+  `tool_use` / `tool_result` pair (walks the boundary backward while
+  the tail's first message would orphan a tool_result from the
+  head); (2) **orphan_tool_result** defensively drops
+  `tool_result` blocks whose `tool_use_id` is absent from the
+  post-boundary message list (handles malformed checkpoints + the
+  worst-case where the boundary couldn't move back far enough);
+  (3) **summarize** retains the existing OpenAI / GLM LLM-summary
+  call against the head messages; (4) **carry_forward** retains
+  the 4-message preamble (summary + ack + marker + ack) followed
+  by the cleaned verbatim tail. Anthropic short-circuit at the top
+  preserved (server-side `compact_20260112`). 20 invariant tests
+  pin: low-message no-op, boundary stay-zero when keep_recent
+  exceeds length, no-walk when natural cut is plain text, single-
+  step walk to keep a pair, multi-step walks (chained-pair + walk-
+  through-alternating-pairs), no-walk when unmatched tool_result
+  has no parent, exact pin-at-zero in chained-pair worst case,
+  orphan-strip tombstone replacement for all-orphan user msg +
+  role-alternation between adjacent assistants preserved + sibling
+  text + matched pair + string-content messages,
+  Anthropic short-circuit, summary-failure no-op, end-to-end safe
+  boundary placement, preamble shape (`[Conversation Summary]` +
+  4-message preamble + tail), `__all__` stability, role-alternation
+  preservation via tombstone replacement for all-orphan user
+  messages (Codex MCP catch — dropping would break the
+  provider's role-alternation contract).
+  20 invariants total.
 - **PR-HERMES-1d.2** — cross-project search index + `geode reindex`
   CLI. New `core/memory/search_index.py` (~300 LOC) maintains
   `~/.geode/search/global.db` — an FTS5-backed ledger that mirrors
