@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-SOT-REVERT-ON-AUDIT-FAIL** — self-improving loop closed-loop
+  silent leak #2: `SelfImprovingLoopRunner._invoke_autoresearch` now
+  checks the audit subprocess's `returncode` and rolls the canonical
+  SoT back to `proposal.original_sections` when the subprocess
+  crashes (Exception) or exits non-zero. Without this, a crashed
+  audit left the SoT mutated and the baseline unchanged, giving the
+  next cycle no signal to attribute the regression to. `_rollback_sot`'s
+  `exc` parameter type is widened from `OSError` to `BaseException`
+  so the synthesized `RuntimeError` for non-zero exit codes type-checks.
+  `apply_proposal` (the singleton group_size=1 path) now forwards
+  `proposal.original_sections` to the invoker. Pinned by 7 invariant
+  tests covering returncode=0 (no rollback), non-zero rollback,
+  Exception rollback, None-guard backward-compat, and the widened exc type.
+
 ## [0.99.71] - 2026-05-26
 
 Sprint H closeout + backlog #99 cleanup. Bundles 4 PRs into one PATCH

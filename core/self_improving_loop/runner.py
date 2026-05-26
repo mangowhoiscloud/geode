@@ -1881,10 +1881,16 @@ class SelfImprovingLoopRunner:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
             repo_root = log_path.resolve().parents[1]
+            # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
+            # ``proposal.original_sections`` so _invoke_autoresearch can
+            # rollback the canonical SoT if the audit subprocess crashes
+            # or exits non-zero. Without this, a crashed audit leaves
+            # the SoT mutated and the baseline unchanged — silent leak.
             self._invoke_autoresearch(
                 repo_root,
                 audit_run_id=audit_run_id,
                 mutation=proposal.mutation,
+                original_sections=proposal.original_sections,
             )
         self._append_self_improving_loop_index(proposal.mutation, previous_value)
         return proposal.mutation
@@ -1931,17 +1937,29 @@ class SelfImprovingLoopRunner:
         original_sections: dict[str, str],
         *,
         mutation: Mutation,
-        exc: OSError,
+        exc: BaseException,
     ) -> None:
         """Restore the SoT to ``original_sections`` after a post-apply failure.
 
-        G5b.fix3 — invoked from ``run_once`` when
+        G5b.fix3 — original use: invoked from ``run_once`` when
         :func:`append_audit_log` raises ``OSError`` *after*
         :func:`apply_mutation` has already written the new sections to
         disk. The SoT must be rolled back to the pre-mutation state so
         the loop never persists a mutation that has no audit-log row;
         otherwise the git-as-optimiser ledger and the live state would
         diverge silently.
+
+        PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — extended use: also
+        invoked from :meth:`_invoke_autoresearch` when the post-commit
+        audit subprocess raises (caught as ``Exception``) or exits
+        non-zero (synthesized as ``RuntimeError`` carrying the exit
+        code). ``exc`` type is widened from ``OSError`` to
+        ``BaseException`` so the synthesized RuntimeError type-checks —
+        but the in-process catch boundary in
+        :meth:`_invoke_autoresearch` is ``Exception``, so
+        KeyboardInterrupt / SystemExit still propagate without
+        triggering rollback. The log message is structural; the exact
+        exception type lands in the formatted output.
 
         Rollback failure is itself logged but never raised in place of
         the original ``exc`` — the caller already has the more useful
@@ -1984,6 +2002,7 @@ class SelfImprovingLoopRunner:
         *,
         audit_run_id: str = "",
         mutation: Mutation | None = None,
+        original_sections: dict[str, str] | None = None,
     ) -> None:
         """Wrap the autoresearch subprocess so tests can override.
 
@@ -1991,17 +2010,46 @@ class SelfImprovingLoopRunner:
         mutation_id + expected_dim to the subprocess env so the
         attribution row written after the audit carries the same
         cross-ref keys as the apply row.
+
+        PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — when the subprocess
+        crashes (Exception) or exits non-zero (returncode != 0), the
+        canonical SoT mutation this audit was supposed to validate is
+        rolled back via :meth:`_rollback_sot`. Without rollback a
+        crashed audit leaves the SoT mutated and the baseline
+        unchanged — the next cycle has no signal to attribute the
+        regression to.
+
+        ``original_sections`` is the pre-mutation SoT
+        (``proposal.original_sections``). When ``None`` (callers that
+        didn't migrate, or mutation is None), rollback is skipped and
+        the legacy graceful-log behaviour is preserved.
         """
         try:
-            _run_autoresearch_subprocess(
+            result = _run_autoresearch_subprocess(
                 repo_root=repo_root,
                 dry_run=self.rerun_dry_run,
                 audit_run_id=audit_run_id,
                 mutation_id=mutation.mutation_id if mutation is not None else "",
                 expected_dim=mutation.expected_dim if mutation is not None else None,
             )
-        except Exception:  # pragma: no cover — defensive
+        except Exception as exc:
             log.warning("self-improving-loop autoresearch re-run failed", exc_info=True)
+            if original_sections is not None and mutation is not None:
+                self._rollback_sot(original_sections, mutation=mutation, exc=exc)
+            return
+        if result.returncode != 0:
+            log.warning(
+                "self-improving-loop autoresearch re-run exited non-zero "
+                "(returncode=%d); stderr tail: %s",
+                result.returncode,
+                (result.stderr or "")[-500:],
+            )
+            if original_sections is not None and mutation is not None:
+                self._rollback_sot(
+                    original_sections,
+                    mutation=mutation,
+                    exc=RuntimeError(f"audit subprocess exit code {result.returncode}"),
+                )
 
     @staticmethod
     def _append_self_improving_loop_index(mutation: Mutation, previous_value: str) -> None:
