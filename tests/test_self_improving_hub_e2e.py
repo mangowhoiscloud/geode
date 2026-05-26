@@ -482,10 +482,26 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
     run_path = seedgen_out / SEEDGEN_FIXTURE_RUN_ID / "index.html"
     assert index_path.is_file(), f"seedgen index missing at {index_path}"
     assert run_path.is_file(), f"seedgen run page missing at {run_path}"
-    return {
+    pages: dict[str, str] = {
         "index": index_path.read_text(encoding="utf-8"),
         "run": run_path.read_text(encoding="utf-8"),
     }
+    # PR-SEEDS-HIRES P2 (2026-05-26) — load every emitted hi-res sub-page
+    # so tests below can assert on them directly (no separate build needed).
+    run_root = seedgen_out / SEEDGEN_FIXTURE_RUN_ID
+    for sub in ("agents", "timeline", "tournament"):
+        sub_path = run_root / sub / "index.html"
+        if sub_path.is_file():
+            pages[f"{SEEDGEN_FIXTURE_RUN_ID}/{sub}"] = sub_path.read_text(encoding="utf-8")
+    agent_root = run_root / "agent"
+    if agent_root.is_dir():
+        for task_dir in agent_root.iterdir():
+            page = task_dir / "index.html"
+            if page.is_file():
+                pages[f"{SEEDGEN_FIXTURE_RUN_ID}/agent/{task_dir.name}"] = page.read_text(
+                    encoding="utf-8"
+                )
+    return pages
 
 
 def test_seedgen_index_renders(built_seedgen_pages: dict[str, str], built_html: str) -> None:
@@ -917,6 +933,93 @@ def test_pr1_checkpoints_tracked() -> None:
     assert cp.is_dir(), "checkpoints/ dir missing"
     json_files = list(cp.glob("*.json"))
     assert json_files, "checkpoints/ has no *.json snapshots"
+
+
+def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
+    """`/agents/` lists each sub-agent with harness chip + cost + duration."""
+    html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agents")
+    assert html, "agents index sub-page missing"
+    assert 'class="records seedgen-agents"' in html
+    assert "gen-c-001" in html
+    # Harness chip rendered for the gen-c-001 model (claude-opus-4-7 = Claude Code).
+    assert 'class="chip claude"' in html or "Claude Code" in html
+
+
+def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, str]) -> None:
+    """`/agent/<task_id>/` renders turn-by-turn `<details>` blocks + session_end summary."""
+    html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agent/gen-c-001")
+    assert html, "gen-c-001 agent detail page missing"
+    assert html.count("<details") >= 3, (
+        f"expected ≥3 <details> blocks in agent detail; got {html.count('<details')}"
+    )
+    assert "session_end" in html
+    assert "USD" in html or "$" in html, "cost label missing"
+    # Anchor back to /agents/ index for navigation.
+    assert f"/seed-generation/{SEEDGEN_FIXTURE_RUN_ID}/agents/" in html
+
+
+def test_pr2_timeline_shows_all_known_phases(built_seedgen_pages: dict[str, str]) -> None:
+    """`/timeline/` lists every phase present in transcript.jsonl + per_phase_costs.json."""
+    html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/timeline")
+    assert html, "timeline sub-page missing"
+    for phase in (
+        "supervisor",
+        "literature_review",
+        "generator",
+        "proximity",
+        "critic",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+    ):
+        assert phase in html, f"timeline missing phase {phase!r}"
+
+
+def test_pr2_tournament_renders_three_voter_panel(built_seedgen_pages: dict[str, str]) -> None:
+    """`/tournament/` renders match sections + 3-voter table + Elo delta."""
+    html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/tournament")
+    assert html, "tournament sub-page missing"
+    assert html.count('class="page-sub match"') >= 3, (
+        "expected ≥3 match sections (fixture has 3 matches)"
+    )
+    assert html.count('class="records votes"') >= 3, "expected per-match votes tables"
+    assert "Elo" in html
+    # Mixed-outcome coverage — A win, B win, and tie all present in fixture.
+    assert ">A<" in html and ">B<" in html and ">tie<" in html
+
+
+def test_pr2_subpages_basepath_safe(built_seedgen_pages: dict[str, str]) -> None:
+    """Every href on the new sub-pages is either /geode/-prefixed or external."""
+    for key in (
+        f"{SEEDGEN_FIXTURE_RUN_ID}/agents",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/timeline",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/tournament",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/agent/gen-c-001",
+    ):
+        html = built_seedgen_pages.get(key)
+        if html is None:
+            continue
+        for href in _collect_hrefs(html):
+            if href.startswith(("#", "mailto:", "https://", "http://")):
+                continue
+            assert href.startswith("/geode/"), (
+                f"sub-page {key} href {href!r} missing /geode/ basePath"
+            )
+
+
+def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> None:
+    """Cotton discipline — PR 2 sub-pages must be pure static HTML."""
+    for key in (
+        f"{SEEDGEN_FIXTURE_RUN_ID}/agents",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/timeline",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/tournament",
+        f"{SEEDGEN_FIXTURE_RUN_ID}/agent/gen-c-001",
+    ):
+        html = built_seedgen_pages.get(key)
+        if html is None:
+            continue
+        assert "<script" not in html, f"sub-page {key} has JS — cotton rule violated"
 
 
 def test_pr1_tournament_schema_complete() -> None:
