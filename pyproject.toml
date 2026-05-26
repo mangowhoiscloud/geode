@@ -533,6 +533,15 @@ module = ["scripts.visualizations.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+# Diagnostic probe scripts (PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED
+# Sprint H2, 2026-05-26 onwards) — these are operator-run reproducers
+# that introspect SDK response objects (ResponseUsage, ResponseOutputItem,
+# etc.) and intentionally use loose typing for ad-hoc debug printing.
+# Same pattern as scripts.visualizations.
+module = ["scripts.probes.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 # inspect_ai's `@agent(name=...)` decorator has no stubs, so mypy treats
 # anything it wraps as untyped. Confine the relaxation to petri_audit
 # modules that legitimately consume the external decorator.

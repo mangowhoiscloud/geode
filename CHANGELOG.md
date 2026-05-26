@@ -47,6 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- PR-CODEX-OAUTH-MESSAGE-FROM-ACCUMULATED (Sprint H2) — real root
+  cause of smoke 20/21/22 ranker voter quorum collapse: codex-oauth
+  + gpt-5.x streaming has a documented discrepancy where SSE
+  delivers ``response.output_item.done`` events with
+  ``type=message role=assistant
+  content=[ResponseOutputText(text=…)]`` correctly, but the
+  aggregated ``stream.get_final_response().output[]`` returned by
+  the OpenAI SDK is empty (so ``response.output_text`` is also
+  empty). Pre-fix ``translate_codex_response`` read ``text`` only
+  from ``response.output_text`` and walked ``items_source`` only for
+  ``function_call`` + ``reasoning`` items — the message text was
+  dropped silently. Every codex voter call returned
+  ``output_text=""`` even though the model emitted a complete
+  response, surfacing as the worker treating the result as failure
+  (smoke 22: 97 codex-oauth-empty-text dumps, all ranker matches
+  observed lost quorum). Minimal isolated probe
+  (``scripts/probes/probe_codex_oauth_message_recovery.py``) with a 25-token prompt
+  ("Say 'hello world'") — preserved at
+  ``scripts/probes/probe_codex_oauth_message_recovery.py`` in this PR for reproducibility —
+  reproduces the empty ``stream.get_final_response().output[]`` while
+  SSE delivered the message item correctly. Fix walks ``items_source``
+  (which honours
+  ``accumulated_items`` first) for ``type="message"`` items when
+  ``response.output_text`` is empty, concatenates
+  ``content[].text`` from ``output_text`` content blocks, and
+  promotes that into ``result.text``. Pinned by 7 unit tests in
+  ``tests/core/llm/adapters/test_codex_oauth_message_from_accumulated.py``.
+  Supersedes the prior empty-text hypotheses (PR-CODEX-GPT55-OUTPUT-EMIT
+  effort=low, PR-GPT55-EMPTY-OUTPUT-EMIT effort=none) which both
+  changed the reasoning effort knob without addressing the actual
+  defect — the bug was in GEODE's adapter, not in the model.
+
 ## [0.99.69] - 2026-05-26
 
 Single-fix PATCH rotation. Ships PR-GPT55-EMPTY-OUTPUT-EMIT
