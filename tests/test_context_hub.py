@@ -294,15 +294,17 @@ class TestCmdApply:
 
     def test_apply_list_empty(self) -> None:
         """Calling /apply with no tracked applications should not raise."""
-        from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
+
+        from core.cli.commands import cmd_apply
 
         with patch.object(ApplicationTracker, "list", return_value=[]):
             cmd_apply("")
 
     def test_apply_add(self, tmp_path: Path) -> None:
-        from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
+
+        from core.cli.commands import cmd_apply
 
         with (
             patch.object(ApplicationTracker, "__init__", return_value=None),
@@ -316,8 +318,9 @@ class TestCmdApply:
             assert entry.position == "AI Engineer"
 
     def test_apply_status_update(self) -> None:
-        from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
+
+        from core.cli.commands import cmd_apply
 
         with (
             patch.object(ApplicationTracker, "__init__", return_value=None),
@@ -326,8 +329,9 @@ class TestCmdApply:
             cmd_apply("status Anthropic interview")
 
     def test_apply_remove(self) -> None:
-        from core.cli.commands import cmd_apply
         from core.memory.vault import ApplicationTracker
+
+        from core.cli.commands import cmd_apply
 
         with (
             patch.object(ApplicationTracker, "__init__", return_value=None),

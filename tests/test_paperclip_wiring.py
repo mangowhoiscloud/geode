@@ -452,8 +452,9 @@ def test_persist_full_config_uses_plural_roles_path(
     next config load raises ``ValidationError``. Codex MCP catch on
     PR-PAPERCLIP.
     """
-    from core.cli.commands import self_improving
     from core.config.self_improving_loop import load_self_improving_loop_config
+
+    from core.cli.commands import self_improving
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
