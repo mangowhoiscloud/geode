@@ -80,8 +80,9 @@ class Pilot(BaseSeedAgent):
     information needed). Pilot is the most expensive per-call phase
     (~1 Petri audit per candidate, 2 target models × 1 paraphrase), so
     fan-out matters: a 10-survivor batch runs in roughly one rollout's
-    wall-time, gated by the ``seed-generation`` Lane (max_concurrent=16,
-    see ``core/wiring/container.py``).
+    wall-time, gated by the ``seed-generation`` Lane
+    (``DEFAULT_SEED_PIPELINE_CONCURRENCY``, currently 50 — see
+    ``core/wiring/container.py``).
     """
 
     def __init__(

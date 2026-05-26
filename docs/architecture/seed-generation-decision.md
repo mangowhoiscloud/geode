@@ -23,7 +23,7 @@ AI co-scientist paper 의 6-agent topology (Generation / Reflection / Ranking / 
 |---|---|---|
 | Token budget guard | soft warning at $0.50 / sub-agent (cumulative), hard kill at $2.00 | 무인 진화 시 runaway 회피. config 가능 (`SEED_PIPELINE_BUDGET_SOFT_USD` / `_HARD_USD` env). |
 | Pipeline run budget cap | soft $0.30 / gen, hard $1.00 / gen | tournament 60 match × 3 judge × ~$0.02 = ~$3.6 의 worst-case 제어. config 가능. |
-| Concurrency Lane | `seed-generation` Lane, `max_concurrent=16` (기본 `global` Lane 의 max=8 별도) | 15-20 candidate parallel + tournament match 의 wall-time 감소 |
+| Concurrency Lane | `seed-generation` Lane, `DEFAULT_SEED_PIPELINE_CONCURRENCY` (currently 50, raised from 16 by PR-LANE-CAP-50 2026-05-27); shares ceiling with `global` Lane (`DEFAULT_GLOBAL_CONCURRENCY` also 50) | 50 candidate parallel + tournament match 의 wall-time 감소, per-adapter lanes 50 도 동일 ceiling |
 | Sub-agent recursion depth | `max_depth=1` (현 SubAgentManager 기본) | parent AgenticLoop central supervisor. 6-phase 모두 표현 가능 |
 | Bootstrap (첫 generation) | `baseline=None` → cross-axis gate 비활성, simple weighted sum 반환 | baseline 측정 자체가 첫 gen 의 결과. ADR-002 §5 참조 |
 
