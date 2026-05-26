@@ -405,13 +405,24 @@ class AgenticLoop:
         # in the legacy provider key but collapse to ``openai`` in the
         # registry (the Codex source is encoded on the ``source`` axis
         # as ``subscription``).
-        # Same shape as :func:`core.self_improving_loop.runner._normalize_provider_for_registry`
-        # and :func:`core.agent.loop._reflection._normalize_provider_for_registry`;
-        # this third copy stays inline rather than hoisted because the
-        # helper is 4 lines.
+        # Related copies in ``runner.py:_normalize_provider_for_registry``
+        # and ``_reflection.py:_normalize_provider_for_registry`` — those
+        # only map ``openai-codex → openai``; this site additionally maps
+        # ``zhipuai → glm``. The three are NOT fully sync'd; align them
+        # if a caller ever surfaces ``zhipuai`` on the reflection /
+        # mutator paths.
         _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
         registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
-        self._new_adapter: Any = resolve_for(registry_provider, self._source)
+        # Adapter resolution: direct registry-name lookup first
+        # (``codex-oauth`` / ``claude-cli`` / ``openai-payg`` / ...),
+        # falling back to the legacy category-axis path for
+        # non-migrated callers (``payg`` / ``subscription`` / ``adapter``).
+        from core.llm.adapters.registry import AdapterNotFoundError, get_adapter
+
+        try:
+            self._new_adapter: Any = get_adapter(self._source)
+        except AdapterNotFoundError:
+            self._new_adapter = resolve_for(registry_provider, self._source)
         # PR-COMM-3b (2026-05-24) — cache the latest claude-cli sessionId
         # the adapter emitted so the SESSION_ENDED hook payload can carry
         # it through to the agent_runtime_state SQLite writer (registered

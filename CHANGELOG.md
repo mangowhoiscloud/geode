@@ -47,6 +47,36 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-AGENTIC-LOOP-ADAPTER-NAME-LOOKUP (2026-05-27)** — extend
+  ``AgenticLoop`` adapter resolution to accept both adapter-name and
+  category source values. Until this PR the loop's
+  ``resolve_for(provider, source)`` call required source to be one of
+  the three concrete categories (``payg`` / ``subscription`` /
+  ``adapter``). Callers that passed a registered adapter name
+  (``codex-oauth`` / ``claude-cli`` / ``openai-payg`` / ...) raised
+  ``ValueError: source not concrete`` and the audit subprocess
+  silently fell back to the default ``"payg"`` even when the operator
+  explicitly configured a subscription adapter — surfacing as
+  ``OPENAI_API_KEY not set`` for every target call on Pattern B
+  (subscription-only with ``fallback_to_payg=false``). The fix tries
+  ``get_adapter(name)`` first and falls through to the legacy
+  ``resolve_for`` only on miss, so all three source categories
+  (payg / subscription / local-cli) resolve cleanly regardless of
+  which form the caller passes.
+- **PR-AGENTIC-LOOP-ADAPTER-NAME-LOOKUP / petri alias** —
+  ``plugins/petri_audit/targets/geode_target.py:_default_geode_runner``
+  translates the Petri-surface source alias (``"openai-codex"``,
+  returned by ``get_binding("target")``) to the GEODE registry-side
+  canonical name (``"codex-oauth"``) before passing it to
+  ``AgenticLoop``. Only the ``openai-codex`` ↔ ``codex-oauth`` pair
+  diverges between the two namespaces; the remaining adapter names
+  (``claude-cli`` / ``anthropic-oauth`` / ``codex-cli`` / ``*-payg``)
+  are identical across both. Pinned by
+  ``tests/test_agentic_loop_adapter_name_lookup.py`` (11 assertions:
+  source-level dual-lookup pin, 8 parametrised adapter-name resolves,
+  petri alias translation, category-axis fallback).
+
 ## [0.99.75] - 2026-05-27
 
 > PATCH rotation walking back v0.99.74's PR-LANE-CAP-50 raise after
