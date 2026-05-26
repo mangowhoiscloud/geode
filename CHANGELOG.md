@@ -47,6 +47,165 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.73] - 2026-05-27
+
+MINOR rotation. Ships the 2026-05-26 autoresearch attribution sprint
+Phase A audit's three remaining bundles: outer-loop hardening
+(PR-OUTER-LOOP-HARDENING — max_generation cap + promote_stamp +
+dry-run attribution invariant pin), surface clarity
+(PR-SURFACE-CLARITY — TARGET_KINDS reader-only documentation +
+Pareto archive promote-gate integration), and selection-gate
+algorithm depth (PR-ALGO-DEPTH — percentile-based variance
+threshold + resample budget). Plus PR-LANE-CAP-AGGRESSIVE from
+develop. See section entries below.
+
+### Added
+
+- **PR-VAR-ADAPTIVE + PR-RESAMPLE-BUDGET** — Phase F bundle of the
+  2026-05-26 attribution sprint (selection-gate algorithm depth).
+  * **PR-VAR-ADAPTIVE**: percentile-based ``group_variance_threshold``
+    resolver. New config knobs ``group_variance_threshold_mode:
+    Literal["fixed", "percentile"] = "fixed"``,
+    ``group_variance_history_window: int = 30``,
+    ``group_variance_percentile: float = 0.05``. New SoT
+    ``autoresearch/state/group_variance_history.jsonl`` (git-tracked
+    via ``.gitignore`` negation, PR-G5b precedent). New
+    ``append_group_variance_history`` writer (called from
+    ``apply_group_proposals`` after every group sampling cycle,
+    regardless of accept/reject) + ``resolve_group_variance_threshold``
+    reader. Per-kind filter + below-window fallback to fixed value.
+    Closes the 2026-05-26 sprint Phase A audit's "fitness-scale
+    drift" concern.
+  * **PR-RESAMPLE-BUDGET**: optional retry-on-low-variance.
+    ``max_group_resamples: int = 0`` (ge=0, le=10) + flag
+    ``resample_on_low_variance: bool = False``. When both enabled and
+    ``_compute_group_advantage`` returns ``filtered_low_variance``,
+    ``apply_group_proposals`` cleans up sibling temp files and
+    recursively calls ``self.propose_group(N)`` + retry, bounded by
+    the budget. Default knob values preserve legacy "filtered →
+    cycle skip" behaviour. DAPO frontier equivalent:
+    ``max_num_gen_batches`` informative-batch retention. Pinned by
+    11 invariant tests in
+    ``tests/core/self_improving_loop/test_variance_adaptive_and_resample.py``.
+
+### Changed
+
+- PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raise the per-adapter lane
+  concurrency caps + lane timeouts + add a phase-local semaphore on
+  the ranker's ``asyncio.gather`` match-dispatch. Pre-raise the
+  conservative defaults (claude_cli=2, openai_api=4, anthropic_api=4,
+  Lane.timeout_s=300) left the documented per-account RPM budgets
+  ~95% idle while PR-RANKER-PARALLEL's 59-match Loop 1 burst queued
+  100+ voter calls behind 4-slot caps, pushing tail latency past the
+  5-minute lane timeout. New defaults match documented OpenAI Codex
+  Responses (500 RPM) + Anthropic tier 1 (50 RPM) ceilings:
+  - ``DEFAULT_CLAUDE_CLI_LANE_MAX``: 2 → **4** (Max OAuth burst floor)
+  - ``DEFAULT_OPENAI_API_LANE_MAX``: 4 → **16** (500 RPM / 10-15s call)
+  - ``DEFAULT_ANTHROPIC_API_LANE_MAX``: 4 → **8** (50 RPM / 60-70s call)
+  - ``*_LANE_TIMEOUT_S``: 300s → **7200s (2h)** (gather burst tail)
+  Adds ``DEFAULT_RANKER_MAX_INFLIGHT_MATCHES = 8`` + env override
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES`` so the phase-local
+  ``asyncio.Semaphore(8)`` bounds the gather "in-flight" task count
+  (8 matches × 3 voters = 24 tasks max), matching the per-lane
+  ceiling exactly. Operator overrides (``GEODE_CLAUDE_CLI_LANE_MAX``,
+  ``GEODE_OPENAI_API_LANE_MAX``, ``GEODE_ANTHROPIC_API_LANE_MAX``,
+  ``GEODE_RANKER_MAX_INFLIGHT_MATCHES``) stay the recommended tuning
+  knob for tier upgrades / debug runs. Pinned by 6 new ranker
+  semaphore unit tests + 2 updated lane default-value tests.
+
+### Added
+
+- **PR-SURFACE-CLARITY** — Phase H bundle (TARGET-KIND-DOC +
+  PARETO-INTEGRATE) closing the 2026-05-26 attribution sprint Phase A
+  audit §5 and §5.7 follow-ups.
+  * **TARGET-KIND-DOC**: ``core/self_improving_loop/policies.py``
+    introduces the ``_READER_ONLY_KINDS`` frozenset listing the 7 SoT
+    surfaces wired in ``autoresearch.train.run_audit``'s STRICT-mode
+    env block (``tool_descriptions`` / ``style_guide`` /
+    ``provider_routing`` / ``cache_policy`` / ``heuristics`` /
+    ``in_context_slots`` / ``few_shot_pool``) but NOT in
+    ``TARGET_KINDS``. Comment block above ``TARGET_KINDS`` explains
+    the asymmetry as intentional ADR-013 phased rollout and points
+    operators at the fail-fast ``parse_mutation`` ValueError when a
+    mutator emits a reader-only kind. Pinned by 4 invariant tests in
+    ``tests/core/self_improving_loop/test_target_kind_surface_doc.py``
+    (disjoint sets, fail-fast emission per kind, env-wiring parity,
+    size-7 sanity counter).
+  * **PARETO-INTEGRATE**: ``autoresearch.train.main`` now appends an
+    ``ArchiveEntry`` to ``BASELINE_ARCHIVE_PATH`` after the promote
+    decision is finalized (every cycle, accept + reject). The entry
+    carries full ``dim_means`` / ``dim_stderr`` plus ``promoted``
+    (bool) and ``reason`` (str) via ``ArchiveEntry.extra="allow"``
+    so downstream regret-analysis readers can compute the multi-axis
+    cost of rejecting mutation M. Gated by
+    ``[self_improving_loop.autoresearch] pareto_mode = true``
+    (operator opt-in; default off preserves backward-compat) AND
+    ``not args.dry_run`` (synthetic dim_means has no Pareto signal).
+    Wrapped in best-effort try/except — JSONL writer failure logs at
+    WARNING and the audit cycle continues, matching the existing
+    runner-side pareto wiring pattern (runner.py:1667-1673).
+    Pinned by 5 invariant tests in
+    ``tests/autoresearch/test_pareto_integrate_promote_gate.py``
+    (block presence, opt-in gating, ``promoted`` + ``reason`` field
+    join keys, single source of truth for the accept/reject bit,
+    best-effort error path).
+
+- **PR-MAX-GEN** — Outer-loop hardening: hard cap on total auto-trigger
+  fires.
+  * ``auto_trigger_mutator`` accepts a new ``max_generation: int = 0``
+    parameter. When non-zero, ``count_fired_generations`` reads
+    ``~/.geode/self-improving-loop/auto_trigger_history.jsonl`` and
+    blocks the next fire with state ``max_generation_reached`` (detail
+    ``current/max``) when the count is at or above the cap.
+  * The cap is checked BEFORE the lockfile acquisition (saturated
+    history doesn't consume the lock) AND AFTER (post-lock re-check
+    mirrors the existing ``is_min_interval_satisfied`` pattern so two
+    parallel callers can't both overshoot).
+  * Production wiring: new ``[self_improving_loop.scheduler]
+    max_generation`` config knob (default ``0`` = unlimited, max
+    ``100_000``). ``register_auto_trigger`` forwards the knob through
+    the scheduler callback. ``core/wiring/automation.py`` passes it
+    from ``load_self_improving_loop_config().scheduler.max_generation``.
+  * New HookEvent ``SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED``
+    reserved in ``core/hooks/system.py`` (same payload schema as
+    sibling auto-trigger events).
+  * Closes the 2026-05-26 autoresearch attribution sprint Phase A audit
+    (§5.6) finding that ``auto_trigger_mutator`` had only the
+    ``min_interval_minutes`` floor and no hard cap. Pinned by 13
+    invariant tests in
+    ``tests/core/self_improving_loop/test_auto_trigger_max_generation.py``
+    covering count helper edge cases, pre-lock cap, post-lock cap
+    recheck, production wiring forwarding, HookEvent reservation, and
+    direct emission.
+
+### Changed
+
+- **PR-PROMOTE-STAMP** — ``autoresearch.train._write_baseline``
+  accepts a new ``manual_promote: bool = False`` parameter. When
+  ``True``, the function stamps the baseline.json payload with three
+  additive top-level fields: ``manual_promote: true``,
+  ``promoted_by: "operator"``, ``promoted_at: <ts_utc>``. The
+  ``--promote`` operator override path in ``main()`` passes
+  ``manual_promote=True``. The auto-promote path keeps the default,
+  preserving backward-compat on baseline shape. Closes the audit
+  finding (§5.5) that downstream readers couldn't distinguish
+  operator-forced from gate-approved promotions. Pinned by 4
+  invariant tests in ``tests/autoresearch/test_promote_stamp.py``.
+
+### Fixed
+
+- **PR-DRY-RUN-NO-ATTR (pin only)** — The 2026-05-26 attribution
+  sprint Phase A audit flagged the risk of ``--dry-run`` cycles
+  writing synthetic ``fitness_delta=0`` attribution rows to
+  ``mutations.jsonl``. Verification during the sprint confirmed the
+  skip guard ``_attribution_should_write = not args.dry_run`` was
+  ALREADY in place at ``autoresearch/train.py:2692`` (post-PR-AR-L6).
+  No code change in this commit — added 2 static-source invariant
+  tests in ``tests/autoresearch/test_dry_run_no_attribution.py`` that
+  fail loudly if a future refactor strips the guard. Brittle by
+  design — the cost of false alarms is far below the cost of the
+  silent leak re-opening.
+
 ## [0.99.72] - 2026-05-26
 
 MINOR rotation. Ships PR-SEEDS-HIRES P1+P2+P3 — operator directive

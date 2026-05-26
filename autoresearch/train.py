@@ -1882,6 +1882,14 @@ def _write_baseline(
     bench_stderr: dict[str, float] | None = None,
     bench_sample_count: dict[str, int] | None = None,
     bench_rubric_version: str = "",
+    # PR-PROMOTE-STAMP (2026-05-26) — when the operator forces promotion
+    # via ``--promote`` instead of going through the ``_should_promote``
+    # gate, stamp the baseline.json with a ``manual_promote`` marker so
+    # later readers can distinguish operator-forced from gate-approved
+    # promotions. Default ``False`` preserves the legacy stamp-free
+    # auto-promote shape — callers that omit the flag produce identical
+    # baselines to pre-PR.
+    manual_promote: bool = False,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -1949,6 +1957,16 @@ def _write_baseline(
         "raw": raw_payload,
         "axes": axes_payload,
     }
+    # PR-PROMOTE-STAMP (2026-05-26) — operator-forced promotion via
+    # ``--promote`` stamps the baseline so audit-trail readers (e.g.
+    # ``/self-improving status``, observability indexer) can tell that
+    # the value was bypass-promoted, not gate-approved. Closes the
+    # silent-equivalence ambiguity flagged in the 2026-05-26 sprint
+    # Phase A audit (§5.5 ``baseline.json`` promoted SoT discussion).
+    if manual_promote:
+        baseline_payload["manual_promote"] = True
+        baseline_payload["promoted_by"] = "operator"
+        baseline_payload["promoted_at"] = baseline_payload["ts_utc"]
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -2603,7 +2621,12 @@ def main() -> int:
     elif args.no_promote:
         promoted_line = "false (--no-promote)"
     elif args.promote:
-        _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        # PR-PROMOTE-STAMP (2026-05-26) — operator-forced promotion
+        # bypasses ``_should_promote``. Stamp the baseline.json with
+        # ``manual_promote: true`` + ``promoted_by`` + ``promoted_at``
+        # so downstream readers can tell this baseline was approved
+        # by operator override, not by the auto-promote gate.
+        _write_baseline(dim_means, dim_stderr, manual_promote=True, **_baseline_provenance)
         promoted_line = "true (--promote, manual override)"
     else:
         # PR-3 of petri-schema-v2 (2026-05-23) — surface the v2
@@ -2667,6 +2690,83 @@ def main() -> int:
                 )
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
+
+    # PR-PARETO-INTEGRATE (2026-05-27) — multi-axis preservation. The
+    # 2026-05-26 attribution sprint Phase A audit (§5.7) found that
+    # ``pareto_archive.append_archive_entry`` was wired only inside
+    # ``runner.apply_group_proposals`` (sibling-group path, fitness scalar
+    # only) and never from ``train.py``'s promote gate. The promote gate
+    # is the *only* point where the full ``dim_means`` (multi-axis
+    # observation) crosses paths with the accept/reject decision — without
+    # archiving here, every rejected mutation's per-dim scores are lost
+    # the moment we move to the next cycle.
+    #
+    # Writes when:
+    #   1. ``[self_improving_loop.autoresearch] pareto_mode = true``
+    #      (operator opt-in; default off preserves backward-compat).
+    #   2. Not ``--dry-run`` (synthetic dim_means carries no Pareto signal).
+    #
+    # The entry uses ``extra="allow"`` to attach ``promoted`` + ``reason``
+    # so downstream readers can compute "regret" — what was rejected and
+    # by which gate? Cycle-wide multi-axis history is preserved regardless
+    # of the binary accept/reject outcome.
+    if not args.dry_run:
+        try:
+            from core.config.self_improving_loop import load_self_improving_loop_config
+
+            _sil_cfg = load_self_improving_loop_config()
+            if _sil_cfg.autoresearch.pareto_mode:
+                from core.paths import BASELINE_ARCHIVE_PATH
+                from core.self_improving_loop.pareto_archive import (
+                    ArchiveEntry,
+                    append_archive_entry,
+                )
+
+                _pareto_mid = (
+                    os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+                    or f"manual-{commit[:8]}-{int(started_at)}"
+                )
+                _pareto_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
+                _pareto_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
+                # ``promoted`` and ``reason`` rides on ArchiveEntry's
+                # ``extra="allow"`` — they're not core schema but
+                # downstream regret-analysis readers join on them.
+                # ``promoted_line`` is set in every promote branch
+                # (dry-run/--no-promote/--promote/auto). It starts with
+                # ``"true ("`` only when the baseline was actually
+                # promoted; ``"false ("`` covers rejection + dry-run
+                # synthetic + explicit no-promote. Derive boolean from
+                # that single source so all four branches agree.
+                _was_promoted = promoted_line.startswith("true")
+                # Codex MCP review (CONDITIONAL_PASS must-fix #1) — when
+                # the runner's apply_group_proposals fires sibling
+                # subprocesses, it ALSO writes pareto archive rows (with
+                # fitness scalar only, pre-audit). Adding train.py's
+                # post-audit row would duplicate the mutation_id key
+                # downstream readers join on. We tag with ``phase``
+                # (extra="allow") so the two writers coexist with
+                # distinguishable rows: runner = ``pre_audit_sibling``
+                # (fitness scalar, all N siblings), train = ``post_audit``
+                # (full dim_means + promoted decision, single outcome).
+                entry = ArchiveEntry(
+                    mutation_id=_pareto_mid,
+                    group_id=_pareto_group_id,
+                    audit_run_id=_pareto_audit_run_id,
+                    ts=time.time(),
+                    dim_means={k: float(v) for k, v in dim_means.items()},
+                    dim_stderr={k: float(v) for k, v in (dim_stderr or {}).items()},
+                    promoted=_was_promoted,
+                    reason=promoted_line,
+                    phase="post_audit",
+                )
+                append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)
+        except Exception:
+            # Best-effort: archive append must not break the audit
+            # cycle. Failures land in train.py log but don't propagate.
+            log.warning(
+                "PR-PARETO-INTEGRATE: archive append failed (cycle continues)",
+                exc_info=True,
+            )
 
     # W2 (2026-05-25) + PR-AR-L6 (2026-05-26) — closed loop attribution.
     # Two paths:

@@ -199,6 +199,12 @@ autoresearch/state/*
 # append, dominated entry prune lineage 보존. silent-ignored writer 회피
 # (PR-G5b #1350 precedent).
 !autoresearch/state/baseline_archive.jsonl
+# PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
+# percentile-based variance gate. Same git-tracked invariant as
+# mutations.jsonl / baseline_archive.jsonl. Without this negation the
+# percentile threshold would silently lose history under the broad
+# ``autoresearch/state/*`` ignore — exactly the PR-G5b #1350 incident.
+!autoresearch/state/group_variance_history.jsonl
 # PR-RATCHET-1 (2026-05-21) — 5 mutation-target JSONs (wrapper-sections /
 # tool-policy / decomposition / retrieval / reflection) moved in-repo
 # from ~/.geode/self-improving-loop/ so `git diff` shows the current

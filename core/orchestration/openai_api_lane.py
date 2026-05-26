@@ -75,15 +75,32 @@ OPENAI_API_LANE_NAME = "openai-api"
 OPENAI_API_LANE_MAX_ENV = "GEODE_OPENAI_API_LANE_MAX"
 """Operator override for :data:`DEFAULT_OPENAI_API_LANE_MAX`."""
 
-DEFAULT_OPENAI_API_LANE_MAX = 4
-"""Default concurrent OpenAI API calls (codex-oauth + payg pooled).
+DEFAULT_OPENAI_API_LANE_MAX = 16
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 4 to 16.
 
-See module docstring for the three-point rationale (OpenAI Codex
-Responses API 500 RPM bucket, codex_cli_lane co-existence,
-PR-RANKER-PARALLEL match-burst headroom)."""
+OpenAI Codex Responses API documents a 500 RPM aggregate per ChatGPT
+subscription bucket (verified against operator's ``prolite`` plan via
+the JWT's ``rate_limit`` claim window). Voter calls land in 10-15s
+wallclock each, so steady-state throughput = ``60s / call * cap``.
+At cap 16 that's ~64-96 RPM — well under the 500 RPM ceiling, even
+counting the codex_cli_lane (2 slots) + audit_lane (1 slot) running
+concurrently. Pre-raise the cap 4 only used ~24 RPM of the available
+500 budget; the burst from PR-RANKER-PARALLEL (2 × 59 codex voters
+inside ``asyncio.gather``) would queue 110+ calls behind the 4-slot
+cap → 1700s+ tail latency.
 
-OPENAI_API_LANE_TIMEOUT_S = 300.0
-"""5 minutes — same rationale as the Anthropic API lane."""
+Operator override via :data:`OPENAI_API_LANE_MAX_ENV` for tier
+upgrades or downgrades; the env stays the recommended tuning knob,
+the new default is a sane aggressive ceiling for the documented
+prolite/pro/enterprise tiers."""
+
+OPENAI_API_LANE_TIMEOUT_S = 7200.0
+"""PR-LANE-CAP-AGGRESSIVE (2026-05-27) — raised from 300s (5min) to
+7200s (2h). Same rationale as ``claude_cli_lane`` — the parallel
+ranker burst can push the last-queued voter well past 5min even
+under the new 16-cap if a single 429 cascades. 2h matches the
+ranker phase's hard time budget; a genuinely-stuck call still
+surfaces at the 2h boundary."""
 
 
 _OPENAI_API_LANE: Lane | None = None
