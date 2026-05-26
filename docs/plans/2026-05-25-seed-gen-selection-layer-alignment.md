@@ -11,7 +11,7 @@ selection layer 가 develop 에 5 PR 으로 누적 머지된 상태:
 
 | PR | 모듈 | 핵심 신호 추가 |
 |----|------|---------------|
-| #1641 P1-revised | `runner._compute_group_advantage` + `propose_group(N)` | DAPO variance filter + GRPO whitening |
+| #1641 P1-revised | `runner._compute_group_advantage` + `propose_group(N)` | DAPO-inspired variance gate + GRPO-inspired z-score whitening (selection-only) |
 | #1645 P2-revised | `core/self_improving_loop/pareto_archive.py` | Pareto front per dim (`baseline_archive.jsonl`) |
 | #1648 P3-revised | `core/self_improving_loop/anchor_confidence.py` (ANCHOR_DIMS_POSITIVE/NEGATIVE) | anchor confidence multiplier `[0.7, 1.0]` |
 | #1650 P4 | `core/self_improving_loop/swarm_scaffolding.py` | sub-agent fan-out + mean/median/max aggregation |

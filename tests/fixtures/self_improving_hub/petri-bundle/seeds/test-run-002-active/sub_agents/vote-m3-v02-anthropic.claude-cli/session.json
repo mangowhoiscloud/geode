@@ -1,0 +1,13 @@
+{
+  "session_id": "vote-m3-v02-active-x9a212",
+  "task_id": "vote-m3-v02-anthropic.claude-cli",
+  "model": "claude-opus-4-7",
+  "provider": "claude-cli",
+  "created_at": 1779788210.0,
+  "metadata": {
+    "phase": "ranker",
+    "role": "ranker_voter",
+    "match_id": "m3",
+    "voter_id": "anthropic.claude-cli"
+  }
+}

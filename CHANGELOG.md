@@ -47,6 +47,77 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR-GEN-COUNTER** — ``autoresearch.train._resolve_gen_tag`` no
+  longer collapses repeated audits at the same git commit into a
+  single synthetic ``autoresearch-{commit}`` gen_tag. The 2026-05-26
+  attribution sprint Phase A audit (§5.6) found that every audit at
+  one commit shared the same gen_tag, making cross-cycle attribution
+  decomposition impossible. Post-PR the resolver reads
+  ``~/.geode/self-improving-loop/sessions.jsonl``, finds rows whose
+  gen_tag starts with ``autoresearch-{commit}``, parses the optional
+  ``-gen{N}`` suffix, and emits ``autoresearch-{commit}-gen{N+1}``.
+  Legacy rows without a suffix count as ``gen0`` (next emission is
+  ``gen1``). The ``AUTORESEARCH_GEN_TAG`` operator override still
+  wins. Best-effort reads — malformed JSON / non-dict rows / OSError
+  during scan all fall through gracefully to ``gen1``. Pinned by 11
+  invariant tests in
+  ``tests/autoresearch/test_gen_tag_monotonic.py`` covering fresh
+  history, increments, legacy mixing, per-commit isolation, override
+  precedence, malformed-row tolerance, and OSError fallback.
+
+### Added
+
+- **PR-WIRE-1** — Three new ``/self-improving`` REPL sub-actions wire
+  the three observability helpers identified as production-orphan
+  during the 2026-05-26 attribution sprint Phase A audit:
+  ``/self-improving credit [--last N]`` invokes
+  ``aggregate_credit_history``; ``/self-improving matrix [--last N]``
+  invokes ``compute_kind_dim_matrix`` + ``rank_dims_by_kind``;
+  ``/self-improving rollback-check [--last N]`` invokes
+  ``evaluate_rollback_condition`` against the current ``baseline.json``
+  + each apply row's stored ``rollback_condition`` predicate. Each
+  sub-action reads ``autoresearch/state/mutations.jsonl`` (the
+  git-tracked audit ledger), runs the helper, and prints a dense
+  table (``[[feedback-no-box-ui-no-emoji]]`` compliant — no card grids,
+  no emoji). Empty-state paths are pinned: no rows / no signal / no
+  predicates each emit a muted explanation line. Default N = 20.
+  Pinned by 15 invariant tests in
+  ``tests/core/cli/test_self_improving_wire1.py`` covering dispatcher
+  routing, ``--last`` argv parsing, real-helper invocation
+  (non-stub), and three empty-state branches per command.
+
+### Changed
+
+- **PR-ATTR-INSPIRED-BY** — self-improving loop's group-sampling
+  selection layer docstrings + plan doc + config docstrings
+  downgraded from "DAPO Dynamic Sampling + GRPO advantage
+  normalization + EXAONE 4.5 zero-variance filter" (which overstated
+  the relationship) to **"DAPO-inspired variance gate +
+  GRPO-inspired group-relative scoring — not policy optimization, no
+  parameter update, no gradient"**. Removes the mis-citation of
+  EXAONE 4.5 (arXiv 2604.08644) verified during the 2026-05-26
+  attribution sprint Phase A audit: that paper is the EXAONE 4.5
+  vision-language model technical report from LG AI Research and
+  contains no variance filter / Dynamic Sampling / RL-training
+  content. Touched files: `core/self_improving_loop/runner.py`
+  (5 docstrings + 1 prompt-template line),
+  `core/config/self_improving_loop.py` (group_size +
+  group_variance_threshold knobs),
+  `core/self_improving_loop/credit_assignment.py` (module
+  docstring), `docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`
+  (D5 row + frontier table + section 4.2 + reference list).
+  No deterministic code-path change. One runtime-facing string did
+  change — the mutator LLM prompt template line in
+  `runner.py:_MUTATION_CONTRACT_SUFFIX` mentions the variance gate
+  in its sibling-uniqueness instruction, reworded from "DAPO Dynamic
+  Sampling variance filter" to "DAPO-inspired variance gate" so the
+  mutator's understanding stays consistent with the docstrings.
+  No test invalidation. Historical `CHANGELOG.md` entries for past
+  releases that mentioned the prior framing are intentionally left
+  unchanged (Keep a Changelog: released entries are immutable).
+
 ### Added
 
 - PR-OAUTH-API-LANES (2026-05-26) — per-provider API lanes covering
@@ -110,6 +181,84 @@ functional change.
   ``tests/test_hookevent_mutation_baseline_reserve.py``: enum members
   exist, ``mutation_`` prefix invariant, ``baseline_promoted``
   literal value, distinctness from existing pipeline events.
+- **PR-SEEDS-HIRES (Phase 1: data plumbing)** — every seed-generation run
+  now publishes a full observability surface to the Pages bundle so the
+  hub can render extreme-resolution views in subsequent phases.
+
+  New bundle files under `docs/self-improving/petri-bundle/seeds/<run_id>/`:
+
+  - `transcript.jsonl` — per-run event log (phase + sub-agent + LLM-call
+    + tool-exec hook events from `core/hooks/system.py`).
+  - `progress.json` — live status `{current_phase, current_step,
+    current_agent_task_id, started_at, last_updated_at, phases_completed,
+    eta_seconds, usd_spent}`. Atomic via tmp+os.replace; written at
+    every phase boundary inside `Pipeline.arun`.
+  - `tournament.json` — per-match Elo tournament record with the full
+    3-voter panel (`voter_id`, `voter_model`, `voter_provider`, `vote`,
+    `rationale`, `duration_ms`, `parse_error`) and Elo before/after
+    deltas. Quorum-lost matches are surfaced with `quorum_lost: true`.
+  - `per_phase_costs.json` — `{<phase>: {cost_usd, prompt_tokens,
+    completion_tokens, duration_ms, agent_count}}` aggregated from
+    `sub_agents/*/dialogue.jsonl` `session_end` events.
+  - `sub_agents/<task_id>/{dialogue.jsonl, result.json, session.json}` —
+    per-sub-agent turn-by-turn transcript + structured output + session
+    metadata. No size cap per operator directive (resolution wins).
+  - `checkpoints/<phase>.json` — per-phase state snapshots (was already
+    written by `plugins/seed_generation/checkpointer.py`, now bundled).
+
+  Writers:
+
+  - `plugins/seed_generation/orchestrator.py` — new `_persist_progress`,
+    `_persist_per_phase_costs`, `_live_sync_loop` (5s background
+    incremental rsync to the bundle so the live page reflects in-flight
+    runs near-real-time). Kill switch `GEODE_SEED_LIVE_SYNC_DISABLED=1`.
+  - `plugins/seed_generation/agents/ranker.py` — `_persist_tournament_log`
+    (extracts per-voter rationale + Elo before/after from the existing
+    voter SubTask results; `_play_match` now returns a richer
+    `(MatchOutcome | None, match_detail)` tuple).
+  - `plugins/seed_generation/bundle_sync.py` — `_RUN_FILES_TO_SYNC`
+    extended; new `_sync_subagents` + `_sync_checkpoints` helpers + new
+    `sync_run_incremental` mtime-aware mid-run copy used by the live
+    writer.
+
+  E2E pins (`tests/test_self_improving_hub_e2e.py`, **34 cases** — was 30):
+
+  - `test_pr1_bundle_includes_transcript_progress_tournament_costs` —
+    4 new top-level files exist under the fixture run.
+  - `test_pr1_subagent_triple_tracked` — every `sub_agents/<task_id>/`
+    carries the dialogue/result/session triple.
+  - `test_pr1_checkpoints_tracked` — at least one phase snapshot.
+  - `test_pr1_tournament_schema_complete` — voter_panel + matches schema
+    + A/B/tie coverage so downstream renderer branches stay exercised.
+
+### Fixed
+
+- **PR-SOT-REVERT-ON-REJECT** — self-improving loop closed-loop silent
+  leak: when the runner-driven audit (`GEODE_SIL_MUTATION_ID` env set)
+  triggers `_should_promote=False`, the SoT is now reverted to its
+  pre-mutation state instead of leaving the rejected mutation as
+  permanent state. `autoresearch.train._revert_sot_after_reject` walks
+  `mutations.jsonl` for the apply row's `previous_value` and dispatches
+  through `load_wrapper_prompt_sections`/`write_wrapper_prompt_sections`
+  (prompt kind) or `policies.load_policy`/`policies.write_policy`
+  (policy kinds). Insertion case (`previous_value=""`) deletes the key
+  instead of writing back an empty string. Manual audits (no SIL env)
+  remain unchanged — operator-driven mutations accumulate by design.
+  Pinned by 9 invariant tests in `tests/autoresearch/test_sot_revert_on_reject.py`.
+
+- **PR-SOT-REVERT-ON-AUDIT-FAIL** — self-improving loop closed-loop
+  silent leak #2: `SelfImprovingLoopRunner._invoke_autoresearch` now
+  checks the audit subprocess's `returncode` and rolls the canonical
+  SoT back to `proposal.original_sections` when the subprocess
+  crashes (Exception) or exits non-zero. Without this, a crashed
+  audit left the SoT mutated and the baseline unchanged, giving the
+  next cycle no signal to attribute the regression to. `_rollback_sot`'s
+  `exc` parameter type is widened from `OSError` to `BaseException`
+  so the synthesized `RuntimeError` for non-zero exit codes type-checks.
+  `apply_proposal` (the singleton group_size=1 path) now forwards
+  `proposal.original_sections` to the invoker. Pinned by 7 invariant
+  tests covering returncode=0 (no rollback), non-zero rollback,
+  Exception rollback, None-guard backward-compat, and the widened exc type.
 
 ## [0.99.71] - 2026-05-26
 

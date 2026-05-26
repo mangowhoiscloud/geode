@@ -93,6 +93,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1529,17 +1530,101 @@ def _resolve_session_id() -> str:
     return f"{stamp}-{short}"
 
 
+_GEN_SUFFIX_RE = re.compile(r"-gen(\d+)$")
+
+
+def _next_gen_counter_for_commit(commit: str, sessions_path: Path | None = None) -> int:
+    """Return the next monotonic ``gen{N}`` counter for ``commit``.
+
+    PR-GEN-COUNTER (2026-05-26) — fix the attribution silent leak found
+    in the 2026-05-26 sprint Phase A audit (§5.6): pre-PR,
+    ``_resolve_gen_tag(commit)`` returned ``autoresearch-{commit}``
+    deterministically, so repeated audits at the same commit collapsed
+    onto the same gen_tag — every attribution row at that commit
+    looked like the same generation. This function reads
+    ``sessions.jsonl``, finds rows whose gen_tag starts with
+    ``autoresearch-{commit}``, parses the optional ``-gen{N}`` suffix,
+    and returns ``max(N) + 1``. Rows without the suffix (legacy
+    pre-PR format) count as ``gen0`` so the next is ``gen1``.
+
+    ``sessions_path`` parameter is for testability; default reads
+    ``SESSIONS_INDEX_PATH``.
+    """
+    target = sessions_path if sessions_path is not None else SESSIONS_INDEX_PATH
+    if not target.is_file():
+        return 1
+    max_n = 0
+    saw_commit = False
+    prefix = f"autoresearch-{commit}"
+    try:
+        with target.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                tag = row.get("gen_tag", "")
+                if not isinstance(tag, str) or not tag.startswith(prefix):
+                    continue
+                saw_commit = True
+                # Match either ``<prefix>`` (legacy = gen0 implied) or
+                # ``<prefix>-gen<N>`` (post-PR explicit counter).
+                suffix = tag[len(prefix) :]
+                if suffix == "":
+                    continue  # legacy gen0 — max_n stays at 0
+                m = _GEN_SUFFIX_RE.match(suffix)
+                if m:
+                    try:
+                        n = int(m.group(1))
+                    except ValueError:
+                        # Regex restricts to ``\d+`` so this cannot fire
+                        # in practice, but ``int`` *can* raise on
+                        # absurdly long digit strings. Treat as if the
+                        # row didn't match so the scan continues.
+                        continue
+                    max_n = max(max_n, n)
+    except OSError:
+        # Reading sessions.jsonl is best-effort — fall through to gen1.
+        return 1
+    if not saw_commit:
+        return 1
+    return max_n + 1
+
+
 def _resolve_gen_tag(commit: str) -> str:
     """Return the gen_tag for this audit.
 
     Honours ``AUTORESEARCH_GEN_TAG`` so a parent driver (e.g. seed-
     pipeline cycle) can label generations consistently across runs.
-    Default: ``autoresearch-<commit>``.
+    Default: ``autoresearch-<commit>-gen<N>`` where ``N`` is the next
+    monotonic counter for this commit's history in ``sessions.jsonl``.
+
+    PR-GEN-COUNTER (2026-05-26) — switched from ``autoresearch-{commit}``
+    (collision-prone) to ``autoresearch-{commit}-gen{N}`` so repeated
+    audits at the same commit don't collapse into one synthetic
+    generation. Legacy gen_tags in old sessions.jsonl (no ``-gen{N}``
+    suffix) are treated as ``gen0`` — the next emission is ``gen1``.
+
+    Concurrency: the counter scan + emission are NOT atomic. Two
+    overlapping ``_resolve_gen_tag`` calls (e.g. seed-gen cycle +
+    manual ``geode audit`` overlap) can both observe the same
+    ``max(N)`` and emit the same ``gen{N+1}``, since the session row
+    is appended only at run end. This is acceptable as a best-effort
+    counter — gen_tag uniqueness is NOT guaranteed under concurrency.
+    Operators who need strict uniqueness should pin the tag via
+    ``AUTORESEARCH_GEN_TAG`` from the parent driver. See Codex MCP
+    review (PR-GEN-COUNTER CONDITIONAL_PASS #2, 2026-05-26).
     """
     override = os.environ.get("AUTORESEARCH_GEN_TAG", "").strip()
     if override:
         return override
-    return f"autoresearch-{commit}"
+    counter = _next_gen_counter_for_commit(commit)
+    return f"autoresearch-{commit}-gen{counter}"
 
 
 def _append_session_index(
@@ -2119,6 +2204,115 @@ def _should_promote(
     )
 
 
+def _revert_sot_after_reject(
+    mutation_id: str,
+    *,
+    audit_log_path: Path | None = None,
+) -> tuple[bool, str]:
+    """Restore the target_section to its pre-mutation ``previous_value``
+    after the promotion gate rejects a runner-driven mutation.
+
+    PR-SOT-REVERT-ON-REJECT (2026-05-26). When the audit was triggered
+    by ``SelfImprovingLoopRunner`` (``GEODE_SIL_MUTATION_ID`` env set)
+    and :func:`_should_promote` returned ``False``, the SoT must be
+    rolled back; otherwise rejected mutations accumulate as permanent
+    state and the loop's regression-cause attribution becomes
+    undecomposable across cycles.
+
+    Lookup walks ``mutations.jsonl`` for the latest apply row matching
+    ``mutation_id`` (apply rows are written by ``runner.append_audit_log``
+    BEFORE the audit subprocess is invoked, so the row is always present
+    when the runner-driven path reaches this code).
+
+    Manual audits (no ``GEODE_SIL_MUTATION_ID`` env) are not handled by
+    this function — operator-driven mutations accumulate by design and
+    only an explicit ``geode self-improving revert`` would unwind them.
+
+    Returns ``(success, detail)``. Failure cases (mutation row missing,
+    file I/O error) log a WARNING and return ``(False, reason)`` so the
+    caller can surface the leak status in the audit's promoted_line.
+    """
+    from typing import cast
+
+    from core.self_improving_loop.mutations_reader import iter_mutations
+    from core.self_improving_loop.policies import load_policy, write_policy
+    from core.self_improving_loop.runner import ApplyRecord
+
+    # Note on type narrowing: ``iter_mutations(kinds={"applied"})``
+    # filters at the reader's discriminator (mutations_reader._parse_row)
+    # so every yielded row is an ApplyRecord. We avoid ``isinstance``
+    # because under pytest-cov import instrumentation the ApplyRecord
+    # class identity can drift between writer-side (mutations_reader's
+    # module-cached import) and reader-side (our function-local import),
+    # making isinstance False even when the row is structurally
+    # identical (CI failure on PR #1749 first attempt, 2026-05-26).
+    # ``cast`` gives mypy the narrowing without a runtime identity check.
+    apply_row: ApplyRecord | None = None
+    target_kind = ""
+    target_section = ""
+    previous_value = ""
+    # iter_mutations yields in file order (append-only); keep the LAST
+    # match so a re-applied mutation_id (rare; mutator should mint a
+    # fresh id) reverts to the most recent previous_value.
+    for row in iter_mutations(audit_log_path, kinds={"applied"}):
+        if row.mutation_id == mutation_id:
+            apply_row = cast(ApplyRecord, row)
+            target_kind = apply_row.target_kind
+            target_section = apply_row.target_section
+            previous_value = apply_row.previous_value
+
+    if apply_row is None:
+        log.warning(
+            "SoT revert skipped — mutation_id %r not found in mutations.jsonl",
+            mutation_id,
+        )
+        return False, f"mutation_id {mutation_id!r} not found"
+
+    # Insertion-vs-replacement parity: ``apply_mutation`` (runner.py:949-994)
+    # records ``previous_value = sections.get(target_section, "")``, so an
+    # empty previous_value can mean either (a) the section was absent
+    # before the mutation (insertion) or (b) it was present but empty
+    # (legitimate empty value). The symmetric revert deletes the key
+    # when previous_value is empty — otherwise the rejected mutation
+    # leaves a residual empty-string section, defeating the leak fix.
+    # Trade-off: a genuine empty-to-non-empty replacement reverts to
+    # absent rather than empty. Acceptable because the SoT schemas
+    # treat absent and empty-string equivalently at read time (both
+    # fall through to the section's bootstrap default).
+    try:
+        if target_kind == "prompt":
+            current = load_wrapper_prompt_sections()
+            if previous_value == "":
+                current.pop(target_section, None)
+            else:
+                current[target_section] = previous_value
+            write_wrapper_prompt_sections(current)
+        else:
+            current = load_policy(target_kind)
+            if previous_value == "":
+                current.pop(target_section, None)
+            else:
+                current[target_section] = previous_value
+            write_policy(target_kind, current)
+    except Exception as exc:
+        log.warning(
+            "SoT revert failed for mutation %s (kind=%s section=%s): %s",
+            mutation_id,
+            target_kind,
+            target_section,
+            exc,
+        )
+        return False, f"write failed ({type(exc).__name__})"
+
+    log.info(
+        "SoT reverted for rejected mutation %s (kind=%s section=%s)",
+        mutation_id,
+        target_kind,
+        target_section,
+    )
+    return True, f"{target_kind}.{target_section}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -2452,6 +2646,25 @@ def main() -> int:
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        else:
+            # PR-SOT-REVERT-ON-REJECT (2026-05-26) — when the audit was
+            # triggered by the mutator runner (GEODE_SIL_MUTATION_ID
+            # set) and the promotion gate rejected the mutation, revert
+            # the SoT so the loop doesn't accumulate rejected mutations
+            # as permanent state. Manual audits (no mutation_id env)
+            # intentionally accumulate operator-side changes; they are
+            # not auto-reverted (operator must use an explicit revert
+            # command). The detail string is appended to ``reason`` so
+            # the audit's printed ``baseline_promoted:`` line surfaces
+            # whether the leak prevention fired and the outcome.
+            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+            if _sil_mid_for_revert:
+                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+                reason = (
+                    f"{reason}; SoT reverted ({revert_detail})"
+                    if revert_ok
+                    else f"{reason}; SoT revert FAILED ({revert_detail})"
+                )
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 

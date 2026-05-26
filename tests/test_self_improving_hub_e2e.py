@@ -36,6 +36,7 @@ documented in ``docs/design/self-improving-hub-system.md`` +
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -881,3 +882,65 @@ def test_autoresearch_sidebar_consistent(
         )
         # Each page must have its own active link.
         assert 'aria-current="page"' in html, f"autoresearch {name} has no aria-current='page'"
+
+
+# ---------------------------------------------------------------------------
+# 11. PR-SEEDS-HIRES (2026-05-26) — high-resolution data surface
+# ---------------------------------------------------------------------------
+
+
+_HIRES_FIXTURE = FIXTURE_ROOT / "petri-bundle" / "seeds" / "test-run-001"
+
+
+def test_pr1_bundle_includes_transcript_progress_tournament_costs() -> None:
+    """PR-SEEDS-HIRES bundle: 4 new top-level files alongside state.json."""
+    for name in ("transcript.jsonl", "progress.json", "tournament.json", "per_phase_costs.json"):
+        assert (_HIRES_FIXTURE / name).is_file(), (
+            f"PR-SEEDS-HIRES expected {name} under {_HIRES_FIXTURE}"
+        )
+
+
+def test_pr1_subagent_triple_tracked() -> None:
+    """Every ``sub_agents/<task_id>/`` dir carries the dialogue + result + session triple."""
+    sub_agents_root = _HIRES_FIXTURE / "sub_agents"
+    assert sub_agents_root.is_dir(), "sub_agents/ dir missing from fixture"
+    task_dirs = [p for p in sub_agents_root.iterdir() if p.is_dir()]
+    assert task_dirs, "sub_agents/ has no task subdirs"
+    for td in task_dirs:
+        for fname in ("dialogue.jsonl", "result.json", "session.json"):
+            assert (td / fname).is_file(), f"sub_agents/{td.name}/{fname} missing"
+
+
+def test_pr1_checkpoints_tracked() -> None:
+    """At least one ``checkpoints/<phase>.json`` snapshot per fixture run."""
+    cp = _HIRES_FIXTURE / "checkpoints"
+    assert cp.is_dir(), "checkpoints/ dir missing"
+    json_files = list(cp.glob("*.json"))
+    assert json_files, "checkpoints/ has no *.json snapshots"
+
+
+def test_pr1_tournament_schema_complete() -> None:
+    """tournament.json must carry per-voter rationale + Elo before/after deltas.
+
+    Pinned because the hub /tournament/ page (PR 2) renders these exact
+    keys — drift between writer + renderer would silently regress the
+    high-resolution surface.
+    """
+    data = json.loads((_HIRES_FIXTURE / "tournament.json").read_text(encoding="utf-8"))
+    assert isinstance(data.get("voter_panel"), list) and len(data["voter_panel"]) >= 2
+    matches = data.get("matches")
+    assert isinstance(matches, list) and len(matches) >= 1
+    seen_winners: set[str] = set()
+    for m in matches:
+        assert {"match_id", "candidate_a", "candidate_b", "votes"} <= m.keys()
+        assert isinstance(m["votes"], list) and len(m["votes"]) >= 2
+        for v in m["votes"]:
+            assert {"voter_id", "voter_model", "voter_provider", "vote", "rationale"} <= v.keys()
+        assert {"elo_before", "elo_after", "elo_delta_a", "elo_delta_b"} <= m.keys()
+        assert m["winner"] in {"A", "B", "tie", None}
+        if isinstance(m["winner"], str):
+            seen_winners.add(m["winner"])
+    # Mixed-outcome coverage so the renderer's per-state branches are exercised.
+    assert seen_winners == {"A", "B", "tie"}, (
+        f"tournament fixture must cover A/B/tie outcomes (got {sorted(seen_winners)})"
+    )

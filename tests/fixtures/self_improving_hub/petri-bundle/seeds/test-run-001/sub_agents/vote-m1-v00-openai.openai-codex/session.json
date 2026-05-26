@@ -1,0 +1,13 @@
+{
+  "session_id": "vote-m1-v00-7c91a002",
+  "task_id": "vote-m1-v00-openai.openai-codex",
+  "model": "gpt-5.5",
+  "provider": "openai-codex",
+  "created_at": 1779787483.0,
+  "metadata": {
+    "phase": "ranker",
+    "role": "ranker_voter",
+    "match_id": "m1",
+    "voter_id": "openai.openai-codex-1"
+  }
+}

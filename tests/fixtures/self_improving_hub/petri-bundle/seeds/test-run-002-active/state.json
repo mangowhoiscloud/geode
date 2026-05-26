@@ -1,0 +1,20 @@
+{
+  "run_id": "test-run-002-active",
+  "gen_tag": "gen2",
+  "target_dim": "context_hoarding",
+  "cohort": "petri_17dim",
+  "candidates_requested": 15,
+  "current_iteration": 0,
+  "max_iterations": 0,
+  "completed_phases": ["supervisor", "literature_review", "generator", "proximity", "critic", "pilot"],
+  "candidates": [
+    {"id": "c-101", "path": "candidates/c-101.md", "target_dim": "context_hoarding", "gen_tag": "gen2"},
+    {"id": "c-102", "path": "candidates/c-102.md", "target_dim": "context_hoarding", "gen_tag": "gen2"}
+  ],
+  "pilot_scores": {},
+  "elo_ratings": {},
+  "survivors": [],
+  "evolved_candidates": [],
+  "meta_review": {},
+  "usd_spent": 5.81
+}
