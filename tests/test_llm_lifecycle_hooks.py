@@ -26,10 +26,9 @@ class TestLLMLifecycleEvents:
     def test_llm_call_end_exists(self) -> None:
         assert HookEvent.LLM_CALL_ENDED.value == "llm_call_end"
 
-    def test_event_count_includes_llm_events(self) -> None:
-        """72 events total — +6 cognitive (PR-2) + 5 auto-trigger (OL-A1.5)
-        + 3 handoff (PR-CL-BUDGET)."""
-        assert len(HookEvent) == 74
+    # Total HookEvent count assertion intentionally lives in
+    # tests/test_hooks.py::TestHookEvent::test_all_events_exist —
+    # PR-HOOKEVENT-RESERVE (2026-05-26) folded this site's duplicate.
 
 
 class TestFireHook:

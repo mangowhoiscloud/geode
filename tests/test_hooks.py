@@ -10,9 +10,17 @@ from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
 
 class TestHookEvent:
     def test_all_events_exist(self):
-        assert (
-            len(HookEvent) == 74
-        )  # +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger + 3 PR-CL-BUDGET handoff
+        # Canonical total-count assertion for the HookEvent enum.
+        # PR-HOOKEVENT-RESERVE (2026-05-26) consolidated this — the 3
+        # sibling files (test_error_recovery.py, test_mcp_lifecycle.py,
+        # test_llm_lifecycle_hooks.py) used to duplicate this assertion,
+        # so every new HookEvent broke 4 tests in lockstep. They now
+        # assert only their topic-specific event existence; total count
+        # lives here.
+        # Tally: +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
+        # + 3 PR-CL-BUDGET handoff + 5 PR-HOOKEVENT-RESERVE (mutation /
+        # baseline lifecycle).
+        assert len(HookEvent) == 79
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"
