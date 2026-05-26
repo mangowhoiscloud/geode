@@ -19,15 +19,15 @@ from plugins.seed_generation.agents.ranker import (
 )
 
 
-def test_default_is_fifty() -> None:
-    """The default cap is 50 — PR-LANE-CAP-50 (2026-05-27) raised
-    from 8 to 50 per operator decision to match the per-adapter
-    lane ceilings (all three lanes raised to 50). 50 matches × 3
-    voters = 150 voter tasks inflight; lane caps absorb (50
-    claude-cli + 50 openai-api = 100 budget, with the 50 surplus
-    queueing inside each lane's semaphore)."""
-    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 50
-    assert resolve_ranker_max_inflight_matches() == 50
+def test_default_is_five() -> None:
+    """The default cap is 5 — PR-LANE-CAP-CONSERVATIVE (v0.99.75,
+    2026-05-27) lowered from 50 to 5 after the gen1-broken_tool_use
+    smoke at cap 50 froze a 16 GB M3 host (50 × 425 MB ≈ 21 GB peak
+    claude-cli RSS). New cap balances the three lanes exactly: 5
+    matches × 3 voters = 15 tasks, saturating claude_cli_lane=5 + 2
+    × openai_api_lane=10 with zero hidden queue depth."""
+    assert DEFAULT_RANKER_MAX_INFLIGHT_MATCHES == 5
+    assert resolve_ranker_max_inflight_matches() == 5
 
 
 def test_env_override_positive_int(monkeypatch: pytest.MonkeyPatch) -> None:

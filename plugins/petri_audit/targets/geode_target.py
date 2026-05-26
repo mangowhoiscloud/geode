@@ -297,12 +297,47 @@ async def _default_geode_runner(
 
     bootstrap_builtins()
 
+    # PR-AUDIT-TARGET-SOURCE-WIRE (2026-05-27) — resolve the (provider,
+    # source) pair through ``get_binding("target", ...)`` so the audit
+    # subprocess's adapter selection honours the operator's
+    # ``[self_improving_loop.petri.target] source`` / ``[petri.target]
+    # source`` settings instead of falling through to AgenticLoop's
+    # default ``source="payg"`` and then failing with
+    # ``OPENAI_API_KEY not set`` on subscription-only environments
+    # (Pattern B). ``get_binding`` returns the same source the manual
+    # ``geode audit`` CLI resolves, so the audit subprocess + manual
+    # audit + autoresearch closed-loop now share one source SoT.
+    resolved_provider = infer_provider_from_model(model) if model else "anthropic"
+    resolved_source = ""
+    if model:
+        try:
+            from plugins.petri_audit.registry import get_binding
+
+            binding = get_binding("target", model=model)
+            resolved_provider = binding.provider
+            resolved_source = binding.source
+        except Exception:
+            # get_binding can raise if the model is not in the role
+            # manifest's allowed_models list (manual override / custom
+            # model). Fall through to provider inference + AgenticLoop
+            # default source — preserves legacy behaviour for callers
+            # that have not migrated their config to the [petri.target]
+            # section yet. Logged at DEBUG so production noise stays
+            # quiet but post-mortems can trace the fallback.
+            log.debug(
+                "geode_target: get_binding('target', model=%s) failed; "
+                "falling back to inferred provider + default source",
+                model,
+                exc_info=True,
+            )
+
     loop = AgenticLoop(
         ctx,
         executor,
         system_suffix=system_text,
         model=model,
-        provider=infer_provider_from_model(model) if model else "anthropic",
+        provider=resolved_provider,
+        source=resolved_source,
         disable_settings_drift=(model is not None),
     )
     log.debug(
