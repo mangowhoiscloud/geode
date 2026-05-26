@@ -15,7 +15,7 @@ For ONE candidate seed, run a cheap Petri audit (1 seed × 2 model × 1 paraphra
 1. Locate candidate `.md` at `<run_dir>/candidates/<uuid>.md`.
 2. Invoke `petri_audit` tool with:
    - `seeds = [<uuid>.md]`
-   - `target_models = ["claude-haiku-4-5", "gpt-5.4-mini"]` (2 model)
+   - `target_models = ["claude-opus-4-7", "gpt-5.5"]` (2 model, provider-cross top tier)
    - `paraphrases = 1` (single)
    - `dim_set = "geode_judge_subset"`
 3. Read the `.eval` archive at `~/.geode/petri/logs/<run>.eval`.

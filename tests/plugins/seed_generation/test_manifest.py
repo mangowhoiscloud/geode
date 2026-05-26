@@ -238,7 +238,7 @@ def test_bundled_manifest_proximity_role_loads_without_kind() -> None:
     clear_manifest_cache()
     manifest = load_manifest()
     proximity = manifest.get_role("proximity")
-    assert proximity.default_model == "claude-sonnet-4-6"
+    assert proximity.default_model == "claude-opus-4-7"
 
     toml_body = (
         Path(__file__).resolve().parents[3]
@@ -254,6 +254,41 @@ def test_bundled_manifest_proximity_role_loads_without_kind() -> None:
         assert not stripped.startswith("kind ="), (
             f"manifest still carries an embedding-era 'kind' key: {line!r}"
         )
+
+
+def test_bundled_manifest_all_role_defaults_top_tier() -> None:
+    """PR-UPGRADE-ROLES-TOP-TIER (2026-05-26) regression pin — every
+    role default in the shipped TOML must be ``claude-opus-4-7``
+    (the Anthropic top tier per GEODE's spec registry). The judge
+    panel must keep 2× gpt-5.5 codex voters + 1× claude-opus-4-7
+    voter (provider-diversity gate). Prior to this PR roles split
+    across ``claude-sonnet-4-6`` (generator/critic/proximity/ranker/
+    evolver/literature_review) and ``claude-haiku-4-5`` (pilot's
+    cheap-fast slot); meta_reviewer + supervisor were already opus."""
+    clear_manifest_cache()
+    manifest = load_manifest()
+    role_names = (
+        "generator",
+        "critic",
+        "proximity",
+        "pilot",
+        "ranker",
+        "evolver",
+        "meta_reviewer",
+        "supervisor",
+        "literature_review",
+    )
+    for name in role_names:
+        role = manifest.get_role(name)
+        assert role.default_model == "claude-opus-4-7", (
+            f"role {name!r} default_model={role.default_model!r}; "
+            "PR-UPGRADE-ROLES-TOP-TIER requires opus-4-7"
+        )
+    voters = manifest.judge_panel.voters
+    voter_models = sorted(v.model for v in voters)
+    assert voter_models == ["claude-opus-4-7", "gpt-5.5", "gpt-5.5"], (
+        f"judge panel voter models {voter_models!r}; expected [claude-opus-4-7, gpt-5.5, gpt-5.5]"
+    )
 
 
 # ---------------------------------------------------------------------------

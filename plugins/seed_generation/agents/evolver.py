@@ -56,7 +56,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Evolver"]
 
 
-_DEFAULT_EVOLVER_MODEL = "claude-sonnet-4-6"
+_DEFAULT_EVOLVER_MODEL = "claude-opus-4-7"
 _EVOLVER_AGENT_NAME = "seed_evolver"
 _TASK_TYPE = "seed-evolve"
 

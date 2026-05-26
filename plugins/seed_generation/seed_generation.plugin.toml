@@ -56,7 +56,7 @@ enabled_roles = [
 # ── Roles ────────────────────────────────────────────────────────────────────
 
 [seed_generation.role.generator]
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -73,7 +73,7 @@ role_contract = "plugins/seed_generation/agents/generator.md"
 num_turns = 0
 
 [seed_generation.role.critic]
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 # ``claude-opus-4-7`` accepted so operators on the Claude Code Max
 # subscription can route critic on the strongest available reasoning
 # model when running through ``source = "claude-cli"``.
@@ -91,7 +91,7 @@ role_contract = "plugins/seed_generation/agents/critic.md"
 # (paper §3). Pre-CSP-8 was an embedding call to text-embedding-3-small;
 # now an LLM completion call like every other role. CSP-10 dropped the
 # ``kind`` field from the schema (every role is completion now).
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 # ``claude-opus-4-7`` accepted for the same Claude Code Max routing
 # reason as critic — proximity is also a reasoning-heavy role.
 allowed_models = [
@@ -104,11 +104,16 @@ allowed_models = [
 role_contract = "plugins/seed_generation/agents/proximity.md"
 
 [seed_generation.role.pilot]
-# Cheap-fast slot — runs inside the Petri inner-loop on every candidate.
-default_model = "claude-haiku-4-5"
-# ``claude-opus-4-7`` accepted so operators can opt into a stronger
-# pilot when iteration cost is acceptable (manifest default stays
-# haiku for the cheap-fast contract).
+# Pilot orchestrates a Petri inner-loop audit per candidate. Default
+# tier moved to ``claude-opus-4-7`` (PR-UPGRADE-ROLES-TOP-TIER,
+# 2026-05-26) under operator directive that all role LLMs run on the
+# Anthropic top tier — see CHANGELOG. The 90s wall-time cap in
+# pilot.md is unchanged; operators tightening the per-candidate
+# budget can override the model via
+# ``~/.geode/config.toml``'s ``[seed_generation.role.pilot] model``.
+default_model = "claude-opus-4-7"
+# Override paths: operators can pin a faster/cheaper model via the
+# allowlist below when the 90s wall-time becomes a bottleneck.
 allowed_models = [
     "claude-opus-4-7",
     "claude-haiku-4-5",
@@ -120,7 +125,7 @@ role_contract = "plugins/seed_generation/agents/pilot.md"
 [seed_generation.role.ranker]
 # 3-judge panel orchestrator. Its own default_model is a placeholder —
 # the panel's voter binding (below) drives actual LLM calls.
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -129,7 +134,7 @@ allowed_models = [
 role_contract = "plugins/seed_generation/agents/ranker.md"
 
 [seed_generation.role.evolver]
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -170,7 +175,7 @@ role_contract = "plugins/seed_generation/agents/supervisor.md"
 # in ``~/.geode/config.toml`` to opt into the external arxiv fetch +
 # git-tracked snapshot loop.
 [seed_generation.role.literature_review]
-default_model = "claude-sonnet-4-6"
+default_model = "claude-opus-4-7"
 allowed_models = [
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -192,8 +197,9 @@ queries_per_run = 3
 [seed_generation.judge_panel]
 # Default voter mix: 2 reviewers on OpenAI gpt-5.5 via openai-codex
 # (ChatGPT Plus subscription / Codex Responses API) + 1 reviewer on
-# Anthropic claude-sonnet-4-6 via claude-cli (Claude Code Max
-# subscription). Both diversity gates are satisfied:
+# Anthropic claude-opus-4-7 via claude-cli (Claude Code Max
+# subscription, top tier per PR-UPGRADE-ROLES-TOP-TIER 2026-05-26).
+# Both diversity gates are satisfied:
 #   * providers ≥ 2 (openai + anthropic)
 #   * paths ≥ 2 (openai-codex + claude-cli)
 # Every voter rides a subscription path so PAYG credit isn't required.
@@ -212,6 +218,6 @@ provider = "openai"
 source = "openai-codex"
 
 [[seed_generation.judge_panel.voters]]
-model = "claude-sonnet-4-6"
+model = "claude-opus-4-7"
 provider = "anthropic"
 source = "claude-cli"
