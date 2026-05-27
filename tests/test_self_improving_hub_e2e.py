@@ -1117,14 +1117,22 @@ def test_pr3_lineage_index_lists_candidates(built_pr3_pages: dict[str, str]) -> 
 def test_pr3_lineage_detail_renders_stations_and_diff(
     built_pr3_pages: dict[str, str],
 ) -> None:
-    """Per-candidate page has ≥4 phase stations + unified diff for evolved variants."""
+    """Per-candidate page has ≥4 phase stations + link to dedicated diff page.
+
+    PR-HUB-VIS-CYCLE1 (2026-05-28) — inline ``<pre class="diff">`` block
+    moved out to a separate side-by-side diff route. Lineage detail now
+    surfaces a ``→ side-by-side diff (parent ↔ evolved)`` link in the
+    evolver station instead, and the diff page itself renders parent +
+    evolved MD side-by-side via marked.js.
+    """
     html = built_pr3_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/lineage/c-001")
     assert html, "lineage c-001 detail missing"
     assert html.count('class="page-sub lineage-station"') >= 4, (
         "expected ≥4 lineage stations for c-001 "
         "(supervisor / generator / critic / pilot / ranker / evolver)"
     )
-    assert 'class="diff"' in html, "evolver diff block missing"
+    assert "side-by-side diff" in html, "evolver diff page link missing"
+    assert "/diff/" in html, "evolver diff route link missing"
 
 
 def test_pr3_lineage_basepath_safe(built_pr3_pages: dict[str, str]) -> None:
