@@ -1628,7 +1628,7 @@ def _render_seedgen_subpage(
 <body>
 <div class="shell">
 {sidebar_html}
-<main>
+<main class="content">
   <header class="page-head">
     <h2>{html_escape(title)}</h2>
   </header>
