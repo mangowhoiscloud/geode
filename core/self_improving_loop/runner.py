@@ -824,10 +824,15 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # Step J-b.2 (Path-B API path) — resolve_for + acomplete.
     from core.config import settings as _settings
     from core.llm.adapters import resolve_for
+    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.base import AdapterCallRequest, Message
     from core.llm.router import call_with_failover
 
-    adapter = resolve_for(_normalize_provider_for_registry(provider), "payg")
+    # PR-SOURCE-ROUTING (2026-05-28) — mutator dispatch used to hard-code
+    # ``"payg"`` so subscription-only Pattern B sent every mutator turn
+    # to the depleted PAYG endpoint. ``infer_source`` mirrors the
+    # AgenticLoop main-path resolution.
+    adapter = resolve_for(_normalize_provider_for_registry(provider), infer_source(provider))
     mutator_temperature = _settings.temperature_self_improving_mutation
 
     async def _do_call(m: str) -> object:

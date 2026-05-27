@@ -284,12 +284,16 @@ async def reflect_async(
     # swallowed at WARN" guarantee).
     try:
         provider = _resolve_provider(model)
-        # Step J-b.3 (2026-05-23) — Path-B Protocol dispatch. The
-        # registry's ``payg`` source covers both API-key and OAuth
-        # subscription paths for our reflection model surface;
-        # downstream credential rotation still happens inside the
-        # adapter.
-        adapter = resolve_for(_normalize_provider_for_registry(provider), "payg")
+        # PR-SOURCE-ROUTING (2026-05-28) — reflection used to hard-code
+        # ``"payg"`` so a subscription-only operator (Pattern B) routed
+        # the reflection turn through the depleted PAYG endpoint while
+        # the main loop's gpt-5.x turns landed on the subscription
+        # endpoint. :func:`infer_source` mirrors the AgenticLoop main-
+        # path resolution so the reflection sub-call shares the same
+        # credential source as the parent.
+        from core.llm.adapters._source_inference import infer_source
+
+        adapter = resolve_for(_normalize_provider_for_registry(provider), infer_source(provider))
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(state, tool_summary)
 

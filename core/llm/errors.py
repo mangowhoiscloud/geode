@@ -295,6 +295,13 @@ def classify_llm_error(exc: Exception) -> tuple[str, str, str]:
     import anthropic
 
     if isinstance(exc, anthropic.RateLimitError):
+        # PR-SOURCE-ROUTING (2026-05-28) — mirror the OpenAI branch:
+        # ``is_billing_fatal`` checks for ``permission_error`` /
+        # ``billing_error`` codes (see ``_ANTHROPIC_BILLING_TYPES``) so a
+        # quota-exhausted Anthropic key surfaces as billing, not as a
+        # transient rate-limit.
+        if is_billing_fatal(exc):
+            return _ERROR_CLASSIFICATION["billing"]
         return _ERROR_CLASSIFICATION["rate_limit"]
     if isinstance(exc, anthropic.APITimeoutError):
         return _ERROR_CLASSIFICATION["timeout"]
@@ -530,6 +537,19 @@ def _classify_openai_error(exc: Exception) -> tuple[str, str, str] | None:
     if isinstance(exc, openai.AuthenticationError):
         return _ERROR_CLASSIFICATION["auth"]
     if isinstance(exc, openai.RateLimitError):
+        # PR-SOURCE-ROUTING (2026-05-28) — the OpenAI SDK raises
+        # ``RateLimitError`` for BOTH transient 429 throttling AND
+        # PAYG ``insufficient_quota`` / ``billing_hard_limit_reached``
+        # (the latter two indicate balance depletion, not throttling).
+        # Without this branch a depleted PAYG bucket surfaces as
+        # "Switch to a different model with /model" — the wrong action
+        # (switching model still hits the same depleted bucket).
+        # ``is_billing_fatal`` inspects ``exc.body['error']['code']``
+        # so OAuth subscription 429s (no ``insufficient_quota`` code)
+        # still classify as rate_limit and follow the existing retry
+        # path.
+        if is_billing_fatal(exc):
+            return _ERROR_CLASSIFICATION["billing"]
         return _ERROR_CLASSIFICATION["rate_limit"]
     if isinstance(exc, openai.APITimeoutError):
         return _ERROR_CLASSIFICATION["timeout"]
