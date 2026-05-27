@@ -149,3 +149,49 @@ def test_build_system_prompt_includes_program_md_content() -> None:
         f"_build_system_prompt must splice in program.md body — "
         f"needle {needle!r} not found in built prompt"
     )
+
+
+def test_program_md_can_table_matches_target_kinds() -> None:
+    """PR-PROGRAMMD-TARGET-KIND-SYNC (2026-05-28) drift invariant.
+
+    ``autoresearch/program.md`` lists the agent-authoritative
+    ``target_kind`` surface in a markdown table under "The agent CAN".
+    The mutator LLM reads this table verbatim (program.md is spliced
+    into the system prompt), so any row missing here equals a
+    target_kind the mutator will never propose — and any extra row
+    here is a target_kind that fails-closed at ``parse_mutation``.
+
+    Pre-fix incident: program.md listed 5 kinds (prompt / tool_policy /
+    decomposition / retrieval / reflection) while ``TARGET_KINDS`` had 7
+    (skill_catalog / agent_contract / tool_descriptions added,
+    retrieval deprecated in ADR-012 S0d). Cycle 1-12 observed mutator
+    never proposing skill_catalog / agent_contract / tool_descriptions
+    because the table didn't surface them.
+
+    This invariant pins the table → TARGET_KINDS equivalence so a
+    future M3/M4 graduation cannot silently regress to the same drift.
+    """
+    import re
+
+    from core.self_improving_loop.policies import TARGET_KINDS
+
+    from core.self_improving_loop import runner as runner_mod
+
+    program_md = runner_mod._load_program_md()
+    assert program_md is not None
+
+    # Match rows of the form: "| `<kind>` | `<filename>.json` | ..."
+    # Both the kind and filename are backtick-wrapped in the table.
+    row_pattern = re.compile(
+        r"^\s*\|\s*`(\w+)`\s*\|\s*`[\w\-]+\.json`\s*\|",
+        re.MULTILINE,
+    )
+    table_kinds = set(row_pattern.findall(program_md))
+    target_kinds = set(TARGET_KINDS)
+
+    assert table_kinds == target_kinds, (
+        f"program.md 'CAN' table kinds {sorted(table_kinds)!r} != "
+        f"TARGET_KINDS {sorted(target_kinds)!r}. "
+        f"Missing from program.md: {sorted(target_kinds - table_kinds)!r}; "
+        f"extra in program.md: {sorted(table_kinds - target_kinds)!r}."
+    )

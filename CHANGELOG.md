@@ -48,6 +48,29 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-PROGRAMMD-TARGET-KIND-SYNC (2026-05-28)** — Sync
+  ``autoresearch/program.md`` "The agent CAN" markdown table with the
+  actual ``TARGET_KINDS`` tuple in
+  ``core/self_improving_loop/policies.py:188``. Pre-fix the table
+  listed 5 kinds (``prompt`` / ``tool_policy`` / ``decomposition`` /
+  ``retrieval`` / ``reflection``) while ``TARGET_KINDS`` had 7
+  (``skill_catalog`` + ``agent_contract`` + ``tool_descriptions``
+  graduated in ADR-012 M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE;
+  ``retrieval`` deprecated in ADR-012 S0d, reader never wired). Since
+  ``program.md`` is spliced verbatim into the mutator LLM's system
+  prompt by ``runner.py:_build_system_prompt``, the missing rows
+  silently shrank the mutator's effective exploration surface — cycle
+  1-12 (2026-05-26 → 05-28) observed 11/12 proposals stuck on
+  ``prompt`` × ``tool_result_handling``, with zero attempts on
+  ``skill_catalog`` / ``agent_contract`` / ``tool_descriptions``.
+  Table re-formatted to 7 rows + nested-schema explanation (dotted-key
+  flattening for the three M1/M2/T1 graduates) + retrieval deprecation
+  note. Pinned by
+  ``tests/test_self_improving_minimal_1.py::test_program_md_can_table_matches_target_kinds``
+  — a regex extracts kind names from the markdown table and asserts
+  set-equality with ``TARGET_KINDS``, so a future M3/M4 graduation
+  cannot silently regress to the same drift.
+
 - **PR-PETRI-CACHE-DEFAULT-OFF (2026-05-28)** — Flips the
   ``cache`` default to ``False`` across the petri-audit surface
   (``plugins/petri_audit/runner.py:run_audit``,
