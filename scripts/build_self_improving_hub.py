@@ -849,11 +849,98 @@ def _render_evolved_rows(state: dict[str, Any]) -> tuple[str, int]:
     return "\n".join(rows), len(evolved)
 
 
+def _read_eval_header(log_path: Path) -> dict[str, Any] | None:
+    """Read ``header.json`` from an inspect_ai ``.eval`` archive.
+
+    ``.eval`` is a ZIP file whose members are Zstandard-compressed
+    (compress_type=93). Python 3.12 ``zipfile`` stdlib lacks zstd
+    support (3.14 ships it), and ``ZipFile.open(info)`` raises
+    ``NotImplementedError`` before we can hand off to ``zstandard``.
+
+    Workaround: parse the ZIP local-file-header at the entry's
+    ``header_offset`` to skip name + extra fields, read the raw
+    compressed payload, then stream-decompress with ``zstandard``
+    (stream API tolerates frames without an explicit content size,
+    unlike one-shot ``decompress``).
+    """
+    try:
+        import io
+        import struct
+        import zipfile
+
+        import zstandard
+
+        with zipfile.ZipFile(log_path) as z:
+            info = z.getinfo("header.json")
+            with open(log_path, "rb") as f:
+                f.seek(info.header_offset)
+                local_hdr = f.read(30)
+                if len(local_hdr) != 30:
+                    return None
+                unpacked = struct.unpack("<IHHHHHIIIHH", local_hdr)
+                csize = unpacked[7]
+                name_len = unpacked[9]
+                extra_len = unpacked[10]
+                f.read(name_len + extra_len)
+                compressed = f.read(csize)
+        dctx = zstandard.ZstdDecompressor()
+        header_raw = dctx.stream_reader(io.BytesIO(compressed)).read().decode("utf-8")
+        parsed = json.loads(header_raw)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
+def _scan_phase_eval_logs(run_id: str) -> dict[str, dict[str, Any]]:
+    """Scan ``petri-bundle/logs/`` for ``seedgen-<phase>_<run_id>.eval``
+    files and extract each one's ``eval.task_id`` from header.json.
+
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — the inspect_ai SPA route
+    ``#/tasks/<task_id>`` expects the 22-char header task_id, not the
+    slash-separated ``seed-generation/<phase>`` task slug. Build-time
+    read the actual task_id so links are guaranteed to load.
+
+    Returns ``{phase: {task_id, task_name, log_path}}``. Missing or
+    unreadable files are silently skipped — the caller falls back to
+    the slug link.
+    """
+    logs_dir = REPO_ROOT / "docs" / "self-improving" / "petri-bundle" / "logs"
+    if not logs_dir.is_dir():
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for log in logs_dir.glob(f"*_seedgen-*_{run_id}.eval"):
+        try:
+            middle = log.name.split("_", 2)[1]  # "seedgen-<phase>"
+            phase = middle.removeprefix("seedgen-")
+        except (IndexError, ValueError):
+            continue
+        header = _read_eval_header(log)
+        if not isinstance(header, dict):
+            continue
+        eval_block = header.get("eval") if isinstance(header, dict) else {}
+        if not isinstance(eval_block, dict):
+            continue
+        task_id = str(eval_block.get("task_id") or "")
+        task_name = str(eval_block.get("task") or f"seed-generation/{phase}")
+        if not task_id:
+            continue
+        result[phase] = {
+            "task_id": task_id,
+            "log_path": log,
+            "task_name": task_name,
+        }
+    return result
+
+
 def _render_phase_rows(run_id: str) -> tuple[str, int]:
     """Render per-phase .eval card rows.
 
-    Phase enumeration uses the canonical 8-phase order. Each row links
-    to the SPA viewer task slug per DESIGN.md §5.4.
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — SPA link now uses the
+    22-char ``task_id`` extracted from the .eval header instead of the
+    ``seed-generation/<phase>`` slug. The slug form silently fails to
+    resolve on the inspect_ai SPA; ``task_id`` is the canonical route
+    key. Falls back to the slug + ``(slug)`` link annotation when the
+    .eval header is missing or unreadable.
     """
     phases = (
         "supervisor",
@@ -865,18 +952,22 @@ def _render_phase_rows(run_id: str) -> tuple[str, int]:
         "evolver",
         "meta_reviewer",
     )
+    phase_meta = _scan_phase_eval_logs(run_id)
     rows: list[str] = []
     for phase in phases:
-        task_slug = f"seed-generation/{phase}"
-        spa_link = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(task_slug)}"
+        info = phase_meta.get(phase)
+        task_slug = info["task_name"] if info else f"seed-generation/{phase}"
+        route_key = info["task_id"] if info else task_slug
+        spa_link = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(str(route_key))}"
+        link_label = "&#x2197; SPA" if info else "&#x2197; SPA (slug)"
         rows.append(
             "        <tr>\n"
             f'          <td class="id">{html_escape(phase)}</td>\n'
-            f'          <td class="muted"><code>{html_escape(task_slug)}</code></td>\n'
+            f'          <td class="muted"><code>{html_escape(str(task_slug))}</code></td>\n'
             '          <td class="muted">—</td>\n'
             '          <td class="muted">—</td>\n'
             f'          <td class="phase-link"><a href="{spa_link}">'
-            f"&#x2197; SPA</a></td>\n"
+            f"{link_label}</a></td>\n"
             "        </tr>"
         )
     return "\n".join(rows), len(phases)
@@ -1155,6 +1246,15 @@ def render_seedgen_run(
         "geode_version": geode_version,
         "design_schema_version": str(DESIGN_SCHEMA_VERSION),
         "build_date": build_date,
+        # PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — surface the
+        # candidates / lineage / tournament sub-views on the run page
+        # so operators don't depend on the sidebar alone.
+        "subview_links": _render_seedgen_subview_links(
+            run_meta.run_id,
+            candidates_count=cand_count,
+            survivors_count=surv_count,
+            evolved_count=evolved_count,
+        ),
     }
     # silence unused warning for survivors_doc — we keep it on the public
     # signature so future revisions can surface elo / pilot directly from
@@ -1314,6 +1414,34 @@ def _emit_seedgen_run_subpages(
             )
             (out_dir / "candidates").mkdir(parents=True, exist_ok=True)
             (out_dir / "candidates" / "index.html").write_text(catalog_html, encoding="utf-8")
+
+            # PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — per-cid MD viewer.
+            # Enumerates every draft + every evolved cid so an operator
+            # can read each MD body in isolation (lighter than the full
+            # 5-station lineage page).
+            md_cids: list[str] = []
+            for cand in state.get("candidates") or []:
+                if isinstance(cand, dict) and cand.get("id"):
+                    md_cids.append(str(cand["id"]))
+            for ev in state.get("evolved_candidates") or []:
+                if isinstance(ev, dict) and ev.get("id"):
+                    md_cids.append(str(ev["id"]))
+            for cid in md_cids:
+                cand_viewer_body = _render_candidate_md_viewer_body(
+                    run_id=run_id,
+                    cand_id=cid,
+                    state=state,
+                    bundle_dir=run_bundle_dir,
+                )
+                cand_viewer_html = _render_seedgen_subpage(
+                    title=f"Candidate {cid} — {run_id}",
+                    active_link="candidates",
+                    body=cand_viewer_body,
+                    common=common,
+                )
+                cand_viewer_dir = out_dir / "candidates" / cid
+                cand_viewer_dir.mkdir(parents=True, exist_ok=True)
+                (cand_viewer_dir / "index.html").write_text(cand_viewer_html, encoding="utf-8")
 
 
 def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
@@ -1744,7 +1872,16 @@ def _render_timeline_body(
 
 
 def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
-    """Per-match section with 3-voter panel + Elo before/after deltas."""
+    """Tournament progression page — match-by-match selection history.
+
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — restructured to anchor the
+    page to the **MD ↔ MD matching + selection history** flow per
+    operator feedback. Each match links both candidate cids to their
+    per-cid MD viewer page; voter rationale moved into ``<details>``
+    expander to keep the chronological match list scannable. New
+    top-level Elo summary table joins survivors + non-survivors so the
+    operator sees who got selected and by how much.
+    """
     if bundle_dir is None:
         return (
             '<section class="page-sub"><p class="muted">No bundle data for this run.</p></section>'
@@ -1762,6 +1899,13 @@ def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
         return (
             '<section class="page-sub"><p class="muted">tournament.json unreadable.</p></section>'
         )
+    state_path = bundle_dir / "state.json"
+    state: dict[str, Any] = {}
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            state = {}
     matches = data.get("matches") or []
     voter_panel = data.get("voter_panel") or []
     panel_chips: list[str] = []
@@ -1771,52 +1915,162 @@ def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
             f'<span class="chip {chip_class}">{chip_label}</span> '
             f"<code>{html_escape(v.get('voter_id', '—'))}</code>"
         )
+    elo_ratings = state.get("elo_ratings") or {}
+    survivors = {str(s) for s in state.get("survivors") or []}
+    per_cid: dict[str, dict[str, Any]] = {}
+    winners_total = ties_total = quorum_lost_total = 0
+    voter_ok = voter_fail = 0
+    for m in matches:
+        a = m.get("candidate_a")
+        b = m.get("candidate_b")
+        winner = m.get("winner")
+        if winner is None:
+            quorum_lost_total += 1
+        elif winner == "tie":
+            ties_total += 1
+        else:
+            winners_total += 1
+        for v in m.get("votes") or []:
+            if isinstance(v, dict):
+                if v.get("parse_error"):
+                    voter_fail += 1
+                else:
+                    voter_ok += 1
+        for cid, side in ((a, "A"), (b, "B")):
+            if not cid:
+                continue
+            row = per_cid.setdefault(str(cid), {"w": 0, "l": 0, "t": 0, "ql": 0, "delta": 0.0})
+            if winner is None:
+                row["ql"] += 1
+            elif winner == "tie":
+                row["t"] += 1
+            elif winner == side:
+                row["w"] += 1
+            else:
+                row["l"] += 1
+            elo_b_val = (m.get("elo_before") or {}).get(cid)
+            elo_a_val = (m.get("elo_after") or {}).get(cid)
+            if isinstance(elo_b_val, (int, float)) and isinstance(elo_a_val, (int, float)):
+                row["delta"] += float(elo_a_val) - float(elo_b_val)
+    cid_rows: list[str] = []
+    for cid in sorted(per_cid, key=lambda c: -float(elo_ratings.get(c, 1000.0))):
+        row = per_cid[cid]
+        final_elo = elo_ratings.get(cid)
+        elo_cell = (
+            f'<span class="num">{float(final_elo):.0f}</span>'
+            if isinstance(final_elo, (int, float))
+            else '<span class="muted">—</span>'
+        )
+        star = "★" if cid in survivors else ""
+        cid_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/candidates/{html_escape(cid)}/"
+        )
+        cid_rows.append(
+            f'<tr><td class="id"><a href="{cid_link}">'
+            f"<code>{html_escape(cid)}</code></a> {star}</td>"
+            f"<td>{row['w']}-{row['l']}-{row['t']}</td>"
+            f"<td>{row['ql']}</td>"
+            f'<td class="num">{row["delta"]:+.1f}</td>'
+            f"<td>{elo_cell}</td></tr>"
+        )
+    banner = ""
+    if quorum_lost_total == len(matches) and matches:
+        banner = (
+            '<section class="page-sub stale-banner">'
+            "<p><strong>ranker integrity warning</strong> — all "
+            f"{quorum_lost_total} matches lost quorum. Survivor selection "
+            "is id-ordered, not merit-ordered. See per-cid lineage → ranker "
+            "station for voter parse_error breakdown.</p></section>"
+        )
+    voter_pct = 0.0
+    if (voter_ok + voter_fail) > 0:
+        voter_pct = 100.0 * voter_fail / (voter_ok + voter_fail)
+    summary_html = (
+        '<section class="page-sub">'
+        f'<p class="muted">3-voter panel: {" · ".join(panel_chips) or "—"}</p>'
+        f'<p class="muted">{len(matches)} matches · '
+        f"{winners_total} ratified · {ties_total} tied · "
+        f"{quorum_lost_total} quorum_lost · "
+        f"voter parse_error rate {voter_pct:.1f}% "
+        f"({voter_fail}/{voter_ok + voter_fail})</p>"
+        "<h3>Per-candidate Elo summary</h3>"
+        '<table class="records">'
+        "<thead><tr><th>cid</th><th>W-L-T</th><th>quorum_lost</th>"
+        '<th class="num">Σ Elo Δ</th><th class="num">final Elo</th></tr></thead>'
+        f"<tbody>{''.join(cid_rows)}</tbody></table>"
+        "</section>"
+    )
     match_sections: list[str] = []
     for m in matches:
-        votes_html: list[str] = []
-        for v in m.get("votes", []):
-            vote = v.get("vote") or "—"
-            vote_class = {"A": "win-a", "B": "win-b", "tie": "tie"}.get(str(vote), "muted")
-            votes_html.append(
-                f"<tr><td><code>{html_escape(v.get('voter_id', '—'))}</code></td>"
-                f'<td><span class="bucket {vote_class}">{html_escape(str(vote))}</span></td>'
-                f'<td class="rationale">{html_escape(str(v.get("rationale") or "—"))}</td>'
-                f'<td class="num">{float(v.get("duration_ms") or 0) / 1000:.1f}s</td>'
-                "</tr>"
-            )
-        elo_before = m.get("elo_before", {})
-        elo_after = m.get("elo_after", {})
-        cand_a = m.get("candidate_a", "?")
-        cand_b = m.get("candidate_b", "?")
+        elo_before = m.get("elo_before") or {}
+        elo_after = m.get("elo_after") or {}
+        cand_a = str(m.get("candidate_a") or "?")
+        cand_b = str(m.get("candidate_b") or "?")
         delta_a = float(m.get("elo_delta_a", 0) or 0)
         delta_b = float(m.get("elo_delta_b", 0) or 0)
-        winner_label = m.get("winner") or "quorum lost"
+        winner = m.get("winner")
+        if winner is None:
+            winner_chip = '<span class="bucket warn">quorum_lost</span>'
+        elif winner == "tie":
+            winner_chip = '<span class="bucket muted">tie</span>'
+        else:
+            winner_chip = f'<span class="bucket seedgen">winner: {html_escape(str(winner))}</span>'
+        cid_a_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/candidates/{html_escape(cand_a)}/"
+        )
+        cid_b_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/candidates/{html_escape(cand_b)}/"
+        )
+        votes_html: list[str] = []
+        for v in m.get("votes") or []:
+            if not isinstance(v, dict):
+                continue
+            prov = html_escape(str(v.get("voter_provider", "?")))
+            model = html_escape(str(v.get("voter_model", "?")))
+            vote = v.get("vote")
+            parse_err = v.get("parse_error")
+            duration_s = float(v.get("duration_ms") or 0) / 1000
+            if parse_err:
+                chip = f'<span class="bucket warn">{prov}: fail</span>'
+                rationale_block = (
+                    f'<p class="muted">parse_error: <code>{html_escape(str(parse_err))}</code></p>'
+                )
+            else:
+                vote_label = html_escape(str(vote) if vote is not None else "—")
+                chip = f'<span class="bucket seedgen">{prov}: {vote_label}</span>'
+                rationale = str(v.get("rationale") or "—")
+                rationale_block = f'<pre class="msg">{html_escape(rationale)}</pre>'
+            votes_html.append(
+                f"<details><summary>{chip} <code>{model}</code> "
+                f'<span class="muted">({duration_s:.1f}s)</span></summary>'
+                f"{rationale_block}</details>"
+            )
+        votes_block = "".join(votes_html) or '<span class="muted">no voters</span>'
         match_sections.append(
             f'<section class="page-sub match">'
-            f"<h3>Match {html_escape(str(m.get('match_id', '?')))} "
-            f'— winner: <span class="bucket seedgen">{html_escape(str(winner_label))}</span></h3>'
-            f'<p class="muted">'
-            f"<code>{html_escape(cand_a)}</code> "
-            f"Elo {float(elo_before.get(cand_a, 1000.0)):.1f} → "
-            f"{float(elo_after.get(cand_a, 1000.0)):.1f} "
-            f"(Δ {delta_a:+.1f}) · "
-            f"<code>{html_escape(cand_b)}</code> "
-            f"Elo {float(elo_before.get(cand_b, 1000.0)):.1f} → "
-            f"{float(elo_after.get(cand_b, 1000.0)):.1f} "
-            f"(Δ {delta_b:+.1f})</p>"
-            f'<table class="records votes">'
-            f"<thead><tr><th>voter</th><th>vote</th><th>rationale</th>"
-            f'<th class="num">duration</th></tr></thead>'
-            f"<tbody>{''.join(votes_html)}</tbody></table>"
+            f"<h3>Match <code>{html_escape(str(m.get('match_id', '?')))}</code> "
+            f"— {winner_chip}</h3>"
+            "<p>"
+            f'A: <a href="{cid_a_link}"><code>{html_escape(cand_a)}</code></a>'
+            f' <span class="muted">Elo '
+            f"{float(elo_before.get(cand_a, 1000.0)):.1f} → "
+            f"{float(elo_after.get(cand_a, 1000.0)):.1f} (Δ {delta_a:+.1f})"
+            "</span>"
+            "<br>"
+            f'B: <a href="{cid_b_link}"><code>{html_escape(cand_b)}</code></a>'
+            f' <span class="muted">Elo '
+            f"{float(elo_before.get(cand_b, 1000.0)):.1f} → "
+            f"{float(elo_after.get(cand_b, 1000.0)):.1f} (Δ {delta_b:+.1f})"
+            "</span>"
+            "</p>"
+            '<p class="muted">voters (click to expand):</p>'
+            f"{votes_block}"
             "</section>"
         )
-    return f"""<section class="page-sub">
-  <p class="muted">3-voter panel: {" · ".join(panel_chips) or "—"}</p>
-  <p class="muted">{len(matches)} match{"es" if len(matches) != 1 else ""}
-  with per-voter rationale + Elo delta.</p>
-</section>
-{"".join(match_sections)}
-"""
+    return banner + summary_html + "".join(match_sections)
 
 
 # --------------------------------------------------------------------------- #
@@ -2356,6 +2610,180 @@ def _render_lineage_detail_body(run_id: str, cand_id: str, stations: list[dict[s
         # PR-HUB-VIS-CYCLE1 (2026-05-28) — marked.js so the generator
         # station's MD body renders with headings / lists / code blocks.
         + _marked_js_loader_html()
+    )
+
+
+def _render_seedgen_subview_links(
+    run_id: str,
+    *,
+    candidates_count: int,
+    survivors_count: int,
+    evolved_count: int,
+) -> str:
+    """4-card grid linking to the run's sub-views.
+
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — addresses operator
+    feedback that the tournament / candidates / lineage / agents pages
+    had no on-page entry point (only the sidebar). Rendered as a
+    `<div class="run-subviews">` containing 4 anchored cards with the
+    count + a single-line description each.
+
+    All 4 routes are emitted unconditionally by
+    :func:`_emit_seedgen_run_subpages`, so the links are always valid.
+    """
+    base = f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+    cards = [
+        (
+            f"{base}/candidates/",
+            "Candidates",
+            f"{candidates_count} drafts",
+            "All-MD catalog: critic risk / pilot top1 / ranker / evolved",
+        ),
+        (
+            f"{base}/tournament/",
+            "Tournament",
+            "match history",
+            "MD ↔ MD pairings, voter rationale, per-cid Elo summary",
+        ),
+        (
+            f"{base}/lineage/",
+            "Lineage",
+            f"{candidates_count + evolved_count} cids",
+            "Per-candidate 5-station journey (generator → evolver)",
+        ),
+        (
+            f"{base}/agents/",
+            "Agents",
+            "sub-agent dialogues",
+            "Per-task transcript (generator / critic / pilot / vote / evolver)",
+        ),
+    ]
+    items: list[str] = []
+    for href, label, count_label, desc in cards:
+        items.append(
+            f'<a class="subview-card" href="{href}">'
+            f"<h3>{html_escape(label)} "
+            f'<span class="count muted">{html_escape(count_label)}</span></h3>'
+            f'<p class="muted">{html_escape(desc)}</p>'
+            "</a>"
+        )
+    return "".join(items)
+
+
+def _render_candidate_md_viewer_body(
+    run_id: str,
+    cand_id: str,
+    state: dict[str, Any],
+    bundle_dir: Path,
+) -> str:
+    """Per-cid MD viewer page — generator MD body in isolation + flow links.
+
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — Option B from the prior
+    plan MD. Renders the candidate's full MD body via marked.js without
+    the surrounding 5-station lineage chrome, so the operator can read
+    one seed in isolation. Header surfaces the candidate's status
+    (drafted / survivor / evolver parent / evolved-of) and provides
+    direct flow links to:
+
+    * `/candidates/` — back to the catalog
+    * `/lineage/<cid>/` — full 5-station journey
+    * `/lineage/<cid>/diff/` — side-by-side diff (when evolved exists)
+    * `/tournament/` — filter to this cid's match history (anchor)
+    """
+    md_path = bundle_dir / "candidates" / f"{cand_id}.md"
+    # Evolved variants live in candidates_evolved/<cid>e-<hash>.md.
+    if not md_path.is_file():
+        md_path = bundle_dir / "candidates_evolved" / f"{cand_id}.md"
+    if not md_path.is_file():
+        # Last fallback — survivors/ convenience copy.
+        md_path = bundle_dir / "survivors" / f"{cand_id}.md"
+    if not md_path.is_file():
+        return (
+            '<section class="page-sub">'
+            f'<p class="muted">MD body for <code>{html_escape(cand_id)}</code> '
+            "not found in bundle.</p></section>"
+        )
+    try:
+        md_body = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return (
+            '<section class="page-sub">'
+            f'<p class="muted">MD body for <code>{html_escape(cand_id)}</code> '
+            "could not be read.</p></section>"
+        )
+    survivors = {str(s) for s in state.get("survivors") or []}
+    evolved = state.get("evolved_candidates") or []
+    parent_to_evolved: dict[str, str] = {}
+    evolved_to_parent: dict[str, str] = {}
+    for ev in evolved:
+        if isinstance(ev, dict):
+            parent_to_evolved[str(ev.get("parent_id", ""))] = str(ev.get("id", ""))
+            evolved_to_parent[str(ev.get("id", ""))] = str(ev.get("parent_id", ""))
+    target_dim = str(state.get("target_dim", ""))
+    elo = state.get("elo_ratings", {}).get(cand_id)
+    chips: list[str] = []
+    if cand_id in survivors:
+        chips.append('<span class="bucket seedgen">survivor</span>')
+    if cand_id in parent_to_evolved:
+        ev_cid = parent_to_evolved[cand_id]
+        diff_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/lineage/{html_escape(cand_id)}/diff/"
+        )
+        chips.append(
+            f'<span class="bucket seedgen">evolved → <a href="{diff_link}">'
+            f"<code>{html_escape(ev_cid)}</code></a></span>"
+        )
+    if cand_id in evolved_to_parent:
+        parent_cid = evolved_to_parent[cand_id]
+        parent_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/candidates/{html_escape(parent_cid)}/"
+        )
+        chips.append(
+            f'<span class="bucket seedgen">evolved-of: '
+            f'<a href="{parent_link}"><code>{html_escape(parent_cid)}</code></a></span>'
+        )
+    if not chips:
+        chips.append('<span class="bucket muted">drafted (eliminated)</span>')
+    catalog_link = f"/geode/self-improving/seed-generation/{html_escape(run_id)}/candidates/"
+    lineage_link = (
+        f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+        f"/lineage/{html_escape(cand_id)}/"
+    )
+    tournament_link = (
+        f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+        f"/tournament/#match-{html_escape(cand_id)}"
+    )
+    elo_cell = (
+        f'Elo <span class="num">{float(elo):.0f}</span>'
+        if isinstance(elo, (int, float))
+        else '<span class="muted">no Elo</span>'
+    )
+    raw_md_link = (
+        f"/geode/self-improving/petri-bundle/seeds/{html_escape(run_id)}"
+        f"/{html_escape(md_path.parent.name)}/{html_escape(md_path.name)}"
+    )
+    return (
+        '<section class="page-sub run-detail-header">'
+        f'<p><a href="{catalog_link}">← back to all candidates</a></p>'
+        '<dl class="status-grid">'
+        f"<dt>cid</dt><dd><code>{html_escape(cand_id)}</code></dd>"
+        f"<dt>target_dim</dt><dd><code>{html_escape(target_dim)}</code></dd>"
+        f"<dt>status</dt><dd>{' '.join(chips)}</dd>"
+        f"<dt>ranking</dt><dd>{elo_cell}</dd>"
+        f"<dt>flow</dt><dd>"
+        f'<a href="{lineage_link}">5-station lineage</a> · '
+        f'<a href="{tournament_link}">ranker match history</a> · '
+        f'<a href="{raw_md_link}">raw .md</a>'
+        "</dd>"
+        "</dl></section>"
+        '<section class="page-sub">'
+        '<article class="markdown-body" data-md-target="md-body"></article>'
+        '<script type="text/markdown" data-md-source="md-body">'
+        f"{html_escape(md_body)}</script>"
+        "</section>"
+        f"{_marked_js_loader_html()}"
     )
 
 
