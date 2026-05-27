@@ -151,6 +151,13 @@ def _get_async_codex_client() -> Any:
                     log.warning("Codex OAuth token not available")
                     return None
 
+                # PR-CODEX-OUTPUT-NULL (2026-05-28) — mirror the adapter
+                # builder: install the parse_response workaround so the
+                # legacy provider path is also safe on openai >= 2.26.
+                from core.llm.adapters._codex_sdk_workaround import install as _install
+
+                _install()
+
                 _async_codex_client = openai.AsyncOpenAI(
                     api_key=token,
                     base_url=CODEX_BASE_URL,
