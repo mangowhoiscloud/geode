@@ -27,10 +27,12 @@ Mid-range default selected from three reference points:
    without crossing the 50 RPM ceiling on the typical seed-gen Loop
    (59 matches × 1 anthropic voter = 59 RPM if fully parallel, well
    under 50 RPM when amortised across the ~5-min wallclock).
-2. **claude_cli_lane=2** + ``audit_lane=1`` already consume 3 slots
+2. **claude_cli_lane=3** + ``audit_lane=1`` already consume 4 slots
    of the per-account budget when active; the API lane sits on top,
-   so 4 keeps total per-account inflight ≤ 7 (still under the soft
-   throttle threshold per [[project_lanequeue_handoff_2026_05_22]]).
+   so the historical "4 keeps total per-account inflight ≤ 7" budget
+   line still holds — claude-cli's cap has only ever moved within
+   the small-integer band (2 → 4 → 50 → 5 → 3) and stays well below
+   the soft throttle threshold per [[project_lanequeue_handoff_2026_05_22]].
 3. **PR-RANKER-PARALLEL** (the immediate consumer) needs the lane to
    smooth a 59-match burst, not to add ceiling — 4 is enough for
    60% wallclock reduction without 429 spikes (vs unbounded → ~30%

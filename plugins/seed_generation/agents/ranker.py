@@ -308,11 +308,11 @@ class Ranker(BaseSeedAgent):
                 )
             )
         try:
-            # PR-LANE-CAP-AGGRESSIVE (2026-05-27) — wrap each
+            # PR-LANE-CAP-TIGHTER (v0.99.76, 2026-05-27) — wrap each
             # ``_play_match_with_checkpoint_report`` in a phase-local
             # semaphore acquire so the gather submission queue depth
             # never exceeds :data:`DEFAULT_RANKER_MAX_INFLIGHT_MATCHES`.
-            # The per-adapter lanes (claude_cli_lane=4 / openai_api_lane=16)
+            # The per-adapter lanes (claude_cli_lane=3 / openai_api_lane=6)
             # already throttle the downstream subprocess/API calls; this
             # cap keeps the gather "in-flight" task count from balloon-
             # ing past the lane ceiling on a 59-match Loop 1 burst.
