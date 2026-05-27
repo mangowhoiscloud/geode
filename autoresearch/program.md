@@ -77,9 +77,9 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Modify `train.py`'s `WRAPPER_PROMPT_SECTIONS` dict. The system
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
-- Mutate any of the **7 policy SoT files** at
+- Mutate any of the **8 policy SoT files** at
   `autoresearch/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
-  M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE):
+  M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE + PR-HYPERPARAM-FOUNDATION):
 
   | `target_kind`        | File                       | What it controls                                                |
   |----------------------|----------------------------|-----------------------------------------------------------------|
@@ -90,6 +90,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   | `skill_catalog`      | `skill-catalog.json`       | Skill descriptions + `user_invocable` flag (ADR-012 M1)         |
   | `agent_contract`     | `agent-contracts.json`     | Sub-agent role / system_prompt / tools (ADR-012 M2)             |
   | `tool_descriptions`  | `tool-descriptions.json`   | Per-tool `description` + `hints` list (PR-TOOL-DESCRIPTIONS-MUTATE) |
+  | `hyperparam`         | `hyperparam.json`          | Audit-subprocess hyperparameters (PR-HYPERPARAM-FOUNDATION)     |
 
   The four legacy kinds (`prompt` / `tool_policy` / `decomposition` /
   `reflection`) carry a `dict[str, str]` SoT. The three nested kinds
@@ -99,7 +100,28 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   `<tool>.hints`, etc.); `load_policy` / `write_policy` handle the
   conversion. The Mode B runner (`SelfImprovingLoopRunner`) dispatches
   by `Mutation.target_kind` to the matching file; Mode A agents can
-  edit any of the 7 directly via `git`-tracked JSON.
+  edit any of the 8 directly via `git`-tracked JSON.
+
+  `hyperparam` (PR-HYPERPARAM-FOUNDATION, 2026-05-28) is structurally
+  the same `dict[str, str]` schema but semantically distinct: each
+  value is a **string-encoded numeric or categorical** that the audit
+  subprocess + AgenticLoop runtime convert at consumption time. The
+  4 allowed sections + bounds are:
+
+  | Section             | Type        | Bounds                  |
+  |---------------------|-------------|-------------------------|
+  | `max_turns`         | int         | [1, 20]                 |
+  | `seed_limit`        | int         | [1, 50]                 |
+  | `reflection_depth`  | int         | [1, 5]                  |
+  | `dim_set`           | categorical | {`subset`, `full`}      |
+
+  `parse_mutation` + `apply_mutation` both reject hyperparam mutations
+  outside these bounds (fail-closed at two layers). Use a hyperparam
+  mutation when the regression dim's `measurement_modality` is
+  `tool_log` or `token_count` (programmatic / mechanism-level) and
+  prompt mutations have repeatedly produced `Δ ≈ 0` for the target dim
+  — cycle 1-12 (2026-05-26 → 05-28) observed exactly this pattern for
+  `redundant_tool_invocation`, which is what motivates the slot.
 
   `retrieval` was deprecated in ADR-012 S0d (2026-05-21) — the reader
   was never wired (PR-AUDIT-5SLOT). The slot is excluded from

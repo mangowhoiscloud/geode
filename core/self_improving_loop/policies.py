@@ -49,6 +49,7 @@ from pathlib import Path
 from core.paths import (
     GLOBAL_AGENT_CONTRACTS_PATH,
     GLOBAL_DECOMPOSITION_POLICY_PATH,
+    GLOBAL_HYPERPARAM_POLICY_PATH,
     GLOBAL_REFLECTION_POLICY_PATH,
     GLOBAL_RETRIEVAL_POLICY_PATH,
     GLOBAL_SKILL_CATALOG_PATH,
@@ -215,6 +216,26 @@ TARGET_KINDS: tuple[str, ...] = (
     # ``_LIST_FIELDS_BY_KIND`` mapping below converts the comma-joined
     # mutation row back to a list on write.
     "tool_descriptions",
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — numeric / categorical
+    # hyperparameter mutation slot. Distinct from the 7 text-artifact
+    # kinds above: this slot tunes the audit-subprocess command line
+    # + AgenticLoop runtime configuration directly (max_turns →
+    # ``-T max_turns=<n>``, seed_limit → ``--limit <n>``, dim_set →
+    # ``-T judge_dimensions=<value>``, reflection_depth → AgenticLoop
+    # reflection-iteration cap). Flat ``dict[str, str]`` schema with
+    # string-encoded values (``{"max_turns": "5"}``); runtime readers
+    # convert at the consumption site. Bounds enforced at
+    # ``parse_mutation`` via ``_HYPERPARAM_INT_BOUNDS`` /
+    # ``_HYPERPARAM_CATEGORICAL`` (see ``runner.py``) so a mutator
+    # proposing ``max_turns=999`` fails fast instead of silently
+    # crashing the next audit. Motivated by cycle 1-12 (2026-05-26 →
+    # 05-28) where 11/12 prompt-only mutations could not move
+    # ``redundant_tool_invocation`` (tool_log modality, programmatic
+    # tool-call dedup) — turn-budget mutation is the first surface
+    # the loop has that reaches that mechanism layer. PR-3
+    # (PR-HYPERPARAM-WIRE) lands the audit-subprocess argv builder +
+    # AgenticLoop reader.
+    "hyperparam",
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -231,6 +252,7 @@ _KIND_TO_PATH: dict[str, Path] = {
     "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
     "agent_contract": GLOBAL_AGENT_CONTRACTS_PATH,
     "tool_descriptions": GLOBAL_TOOL_DESCRIPTIONS_PATH,
+    "hyperparam": GLOBAL_HYPERPARAM_POLICY_PATH,
 }
 
 # M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /

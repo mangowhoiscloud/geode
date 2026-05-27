@@ -532,12 +532,22 @@ _MUTATION_CONTRACT_SUFFIX = (
     "``reflection`` (reflection.json), ``skill_catalog`` "
     "(skill-catalog.json), ``agent_contract`` (agent-contracts.json), "
     "``tool_descriptions`` (tool-descriptions.json — PR-TOOL-DESCRIPTIONS-MUTATE "
-    "graduation, 2026-05-27). "
+    "graduation, 2026-05-27), or ``hyperparam`` (hyperparam.json — "
+    "PR-HYPERPARAM-FOUNDATION graduation, 2026-05-28: numeric / categorical "
+    "audit-budget tuning). "
     "Omit for prompt-level mutations. For ``tool_descriptions``, the "
     "``target_section`` uses dotted notation: ``<tool_name>.description`` "
     "(string replacement) or ``<tool_name>.hints`` (comma-separated list "
-    "of hint strings). (``retrieval`` was deprecated "
-    "in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
+    "of hint strings). For ``hyperparam``, the ``target_section`` is one of "
+    "``max_turns`` (integer, bounds [1, 20]), ``seed_limit`` (integer, "
+    "bounds [1, 50]), ``reflection_depth`` (integer, bounds [1, 5]), or "
+    "``dim_set`` (categorical, ∈ {subset, full}); ``new_value`` is the "
+    'string-encoded value (``"5"`` not ``5``). Use a hyperparam mutation '
+    "when the regression dim's measurement_modality is ``tool_log`` or "
+    "``token_count`` (programmatic / mechanism-level) and prompt mutations "
+    "have repeatedly produced ``Δ ≈ 0`` for the target dim. (``retrieval`` "
+    "was deprecated in ADR-012 S0d, 2026-05-21 — see policies.py "
+    "docstring.)\n"
     "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
     "selecting ``target_section`` and writing ``new_value``, explicitly state "
     "the judging principle that motivates this mutation — what specific axis "
@@ -880,6 +890,68 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     return text
 
 
+# PR-HYPERPARAM-FOUNDATION (2026-05-28) — bounds map for the
+# ``hyperparam`` target_kind. Two shapes:
+#
+#   _HYPERPARAM_INT_BOUNDS:   key → (min, max) for integer-valued knobs
+#   _HYPERPARAM_CATEGORICAL:  key → allowed-string set
+#
+# Bounds chosen so a worst-case mutator proposal cannot:
+#   - run the audit forever (``max_turns ≤ 20`` keeps single-sample
+#     wall-clock under ~60 min even on the slowest claude-cli OAuth lane)
+#   - explode the audit cost (``seed_limit ≤ 50`` caps the per-cycle
+#     sample fan-out — current default 8)
+#   - silently disable the loop (``max_turns ≥ 1``, ``seed_limit ≥ 1``)
+#   - select an undefined dim_set (only ``subset`` / ``full`` are
+#     resolved by ``plugins/petri_audit/dim_set_resolver.py``)
+_HYPERPARAM_INT_BOUNDS: dict[str, tuple[int, int]] = {
+    "max_turns": (1, 20),
+    "seed_limit": (1, 50),
+    "reflection_depth": (1, 5),
+}
+_HYPERPARAM_CATEGORICAL: dict[str, frozenset[str]] = {
+    "dim_set": frozenset({"subset", "full"}),
+}
+_HYPERPARAM_ALLOWED_KEYS: frozenset[str] = frozenset(
+    list(_HYPERPARAM_INT_BOUNDS.keys()) + list(_HYPERPARAM_CATEGORICAL.keys())
+)
+
+
+def _validate_hyperparam_bounds(section: str, value: str) -> None:
+    """Validate a ``hyperparam`` mutation's ``(target_section, new_value)`` pair.
+
+    Raises :class:`ValueError` if ``section`` is unknown, if a numeric
+    section's ``value`` cannot be cast to int, or if the resulting
+    integer / categorical is outside the documented bounds. The bounds
+    are documented inline in the mutator system-prompt suffix
+    (``_MUTATION_CONTRACT_SUFFIX``) so a fail-closed parse here mirrors
+    what the LLM was told.
+    """
+    if section not in _HYPERPARAM_ALLOWED_KEYS:
+        raise ValueError(
+            f"hyperparam target_section {section!r} not in allowed set "
+            f"{sorted(_HYPERPARAM_ALLOWED_KEYS)!r}"
+        )
+    if section in _HYPERPARAM_INT_BOUNDS:
+        lo, hi = _HYPERPARAM_INT_BOUNDS[section]
+        try:
+            n = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"hyperparam {section} new_value {value!r} must be an integer-convertible string"
+            ) from exc
+        if not (lo <= n <= hi):
+            raise ValueError(f"hyperparam {section}={n} out of bounds [{lo}, {hi}]")
+        return
+    # categorical branch — must hit, since _HYPERPARAM_ALLOWED_KEYS
+    # is the union of the two maps.
+    allowed = _HYPERPARAM_CATEGORICAL[section]
+    if value not in allowed:
+        raise ValueError(
+            f"hyperparam {section} new_value {value!r} must be one of {sorted(allowed)!r}"
+        )
+
+
 def parse_mutation(raw: str) -> Mutation:
     """Extract a :class:`Mutation` from the LLM's raw response.
 
@@ -982,6 +1054,14 @@ def parse_mutation(raw: str) -> Mutation:
     target_kind = kind_raw.strip() or "prompt"
     if target_kind not in TARGET_KINDS:
         raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam kind 별 bounds
+    # 검사. mutator 가 ``max_turns=999`` 같은 유효 범위 밖 numeric 또는
+    # ``dim_set="bogus"`` 같은 유효 카테고리 밖 값을 propose 시 audit
+    # 시점에 silently crash 하기 전에 parse 시점에 fail-closed.
+    # Boundary completeness rule (CLAUDE.md → CANNOT → Quality):
+    # apply 시점에도 동일 가드를 적용해 두 layer 모두 보호.
+    if target_kind == "hyperparam":
+        _validate_hyperparam_bounds(target_section.strip(), new_value)
     mutation_id_raw = payload.get("mutation_id")
     # Mutation has a default_factory; pass only when the LLM supplied one.
     if isinstance(mutation_id_raw, str) and mutation_id_raw.strip():
@@ -1048,6 +1128,16 @@ def apply_mutation(
         sections[mutation.target_section] = mutation.new_value
         write_wrapper_prompt_sections(sections)
         return sections, previous_value
+
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — second-layer bounds gate.
+    # parse_mutation already validates at LLM-response time, but the
+    # apply path is reached from other entrypoints (manual ``apply_mutation``
+    # calls in tests / slash / re-runs of a parsed mutation), so a
+    # ``Mutation`` constructed outside ``parse_mutation`` cannot rely on
+    # the first gate. Defensive depth (CLAUDE.md → Wiring Verification →
+    # Conditional Read Parity).
+    if mutation.target_kind == "hyperparam":
+        _validate_hyperparam_bounds(mutation.target_section, mutation.new_value)
 
     # PR-6 policy kinds — tool_policy / decomposition / retrieval /
     # reflection. ``current_sections`` override is honoured for symmetry
@@ -1456,6 +1546,15 @@ _SIBLING_SOT_ENV_MAP: dict[str, str] = {
     # can spawn audit subprocesses pointed at the temp tool-descriptions
     # variant.
     "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_OVERRIDE",
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — env literal landed in
+    # ``autoresearch/train.py`` so the env-map ↔ TARGET_KINDS invariant
+    # passes against the 8-kind tuple. The audit-subprocess consumer
+    # (``plugins/petri_audit/runner.py:build_command`` reading the SoT
+    # and translating to inspect-petri ``-T`` flags) ships in PR-3
+    # (PR-HYPERPARAM-WIRE). Until then the env var is set but no
+    # reader inside the audit subprocess loads it — a deliberate 2-PR
+    # seam (foundation → wire-through).
+    "hyperparam": "GEODE_HYPERPARAM_OVERRIDE",
 }
 """P1-revised — sibling SoT temp file path 를 propagation 할 env var
 mapping (per ``Mutation.target_kind``). W3 인프라 (``autoresearch/train.py:809+``)
@@ -1472,6 +1571,13 @@ _SIBLING_SOT_STRICT_ENV_MAP: dict[str, str] = {
     # sibling audit subprocess fails fast on schema drift in the temp
     # tool-descriptions JSON, matching the other nested-schema kinds.
     "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_STRICT",
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — strict-load env name
+    # mirrors the other simple-shape kinds. PR-3 (PR-HYPERPARAM-WIRE)
+    # will land the reader that honours the STRICT flag (current
+    # build_command reads inspect-petri argv directly, but the wire-
+    # through PR adds an SoT->argv translator that will respect
+    # STRICT=1 on schema drift).
+    "hyperparam": "GEODE_HYPERPARAM_STRICT",
 }
 """``GEODE_<KIND>_STRICT=1`` mapping — sibling audit 의 strict-load.
 ``prompt`` kind 는 ``_load_wrapper_override`` 가 env path 가 set 되면

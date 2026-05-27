@@ -31,11 +31,14 @@ from core.self_improving_loop import policies as _policies_mod
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_active_seven() -> None:
+def test_target_kinds_contains_active_eight() -> None:
     """ADR-012 S0d — retrieval deprecated. M1 — skill_catalog 추가.
     M2 (2026-05-21) — agent_contract 추가.
     PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions 추가.
-    Post-graduation: 7 active mutation targets."""
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam 추가 (numeric /
+    categorical surface for audit-subprocess command-line knobs +
+    AgenticLoop runtime config).
+    Post-graduation: 8 active mutation targets."""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
@@ -44,6 +47,7 @@ def test_target_kinds_contains_active_seven() -> None:
         "skill_catalog",
         "agent_contract",
         "tool_descriptions",
+        "hyperparam",
     }
 
 
@@ -64,12 +68,12 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 def test_policy_path_returns_distinct_paths() -> None:
     """Distinct SoT per kind so policies evolve independently.
-    PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — 7 active kinds
-    (prompt / tool_policy / decomposition / reflection / skill_catalog /
-    agent_contract / tool_descriptions) + retrieval (deprecated but
-    path preserved) = 8 distinct paths."""
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — 8 active kinds (prompt /
+    tool_policy / decomposition / reflection / skill_catalog /
+    agent_contract / tool_descriptions / hyperparam) + retrieval
+    (deprecated but path preserved) = 9 distinct paths."""
     paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
-    assert len(set(paths.values())) == 8
+    assert len(set(paths.values())) == 9
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:
@@ -480,12 +484,15 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
 
 
 def test_global_policy_paths_under_policies_dir() -> None:
-    """All 5 SoT paths live under the same in-repo dir
+    """All SoT paths live under the same in-repo dir
     (``autoresearch/state/policies/``) — operators expect them
     co-located, and the in-repo location is git-tracked so ``git diff``
-    shows the current mutation state (PR-RATCHET-1, 2026-05-21)."""
+    shows the current mutation state (PR-RATCHET-1, 2026-05-21).
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) adds the hyperparam SoT path
+    to the co-location invariant."""
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_HYPERPARAM_POLICY_PATH,
         GLOBAL_POLICIES_DIR,
         GLOBAL_REFLECTION_POLICY_PATH,
         GLOBAL_RETRIEVAL_POLICY_PATH,
@@ -499,5 +506,177 @@ def test_global_policy_paths_under_policies_dir() -> None:
         GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_RETRIEVAL_POLICY_PATH,
         GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_HYPERPARAM_POLICY_PATH,
     ):
         assert path.parent == GLOBAL_POLICIES_DIR
+
+
+# ---------------------------------------------------------------------------
+# PR-HYPERPARAM-FOUNDATION (2026-05-28) — bounds validator invariants
+# ---------------------------------------------------------------------------
+
+
+def test_hyperparam_bounds_accepts_valid_int() -> None:
+    """Valid integer-section + in-bounds value → no raise."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    _validate_hyperparam_bounds("max_turns", "5")
+    _validate_hyperparam_bounds("max_turns", "1")
+    _validate_hyperparam_bounds("max_turns", "20")
+    _validate_hyperparam_bounds("seed_limit", "8")
+    _validate_hyperparam_bounds("seed_limit", "50")
+    _validate_hyperparam_bounds("reflection_depth", "3")
+    _validate_hyperparam_bounds("reflection_depth", "5")
+
+
+def test_hyperparam_bounds_accepts_valid_categorical() -> None:
+    """Valid categorical-section + allowed value → no raise."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    _validate_hyperparam_bounds("dim_set", "subset")
+    _validate_hyperparam_bounds("dim_set", "full")
+
+
+def test_hyperparam_bounds_rejects_unknown_section() -> None:
+    """Section not in the allow-list → ValueError. Defends against
+    mutator inventing knobs the runtime doesn't read."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    with pytest.raises(ValueError, match="not in allowed set"):
+        _validate_hyperparam_bounds("unknown_section", "5")
+    with pytest.raises(ValueError, match="not in allowed set"):
+        _validate_hyperparam_bounds("BUDGET_MINUTES", "30")
+
+
+def test_hyperparam_bounds_rejects_out_of_range_int() -> None:
+    """Integer-section + value outside [lo, hi] → ValueError."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    with pytest.raises(ValueError, match="out of bounds"):
+        _validate_hyperparam_bounds("max_turns", "0")
+    with pytest.raises(ValueError, match="out of bounds"):
+        _validate_hyperparam_bounds("max_turns", "21")
+    with pytest.raises(ValueError, match="out of bounds"):
+        _validate_hyperparam_bounds("seed_limit", "51")
+    with pytest.raises(ValueError, match="out of bounds"):
+        _validate_hyperparam_bounds("reflection_depth", "0")
+    with pytest.raises(ValueError, match="out of bounds"):
+        _validate_hyperparam_bounds("reflection_depth", "6")
+
+
+def test_hyperparam_bounds_rejects_non_integer_string() -> None:
+    """Integer-section + non-numeric value → ValueError. Defends against
+    mutator emitting ``"5.5"`` or ``"high"`` for an int knob."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    with pytest.raises(ValueError, match="integer-convertible"):
+        _validate_hyperparam_bounds("max_turns", "high")
+    with pytest.raises(ValueError, match="integer-convertible"):
+        _validate_hyperparam_bounds("seed_limit", "many")
+    with pytest.raises(ValueError, match="integer-convertible"):
+        _validate_hyperparam_bounds("max_turns", "5.5")
+
+
+def test_hyperparam_bounds_rejects_invalid_categorical() -> None:
+    """Categorical-section + value not in allow-set → ValueError."""
+    from core.self_improving_loop.runner import _validate_hyperparam_bounds
+
+    with pytest.raises(ValueError, match="must be one of"):
+        _validate_hyperparam_bounds("dim_set", "bogus")
+    with pytest.raises(ValueError, match="must be one of"):
+        _validate_hyperparam_bounds("dim_set", "all")
+    with pytest.raises(ValueError, match="must be one of"):
+        _validate_hyperparam_bounds("dim_set", "")
+
+
+def test_parse_mutation_hyperparam_kind_valid() -> None:
+    """End-to-end parse path for a valid hyperparam mutation."""
+    import json
+
+    from core.self_improving_loop.runner import parse_mutation
+
+    payload = json.dumps(
+        {
+            "target_kind": "hyperparam",
+            "target_section": "max_turns",
+            "new_value": "3",
+            "rationale": "Try shorter audit budget — cycle 1-12 had Δ=0 for redundant_tool_invocation under prompt mutation; shorter turn budget directly reduces tool-call surface.",
+            "target_dim": "redundant_tool_invocation",
+            "expected_dim": {"redundant_tool_invocation": -1.0},
+        }
+    )
+    m = parse_mutation(payload)
+    assert m.target_kind == "hyperparam"
+    assert m.target_section == "max_turns"
+    assert m.new_value == "3"
+
+
+def test_parse_mutation_hyperparam_kind_rejects_out_of_bounds() -> None:
+    """Mutator proposing ``max_turns=999`` is caught at parse, not at
+    audit subprocess invocation. Cycle protection."""
+    import json
+
+    from core.self_improving_loop.runner import parse_mutation
+
+    payload = json.dumps(
+        {
+            "target_kind": "hyperparam",
+            "target_section": "max_turns",
+            "new_value": "999",
+            "rationale": "more turns",
+            "target_dim": "redundant_tool_invocation",
+            "expected_dim": {"redundant_tool_invocation": -0.5},
+        }
+    )
+    with pytest.raises(ValueError, match="out of bounds"):
+        parse_mutation(payload)
+
+
+def test_apply_mutation_hyperparam_kind_writes_sot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """apply_mutation routes hyperparam through the generic write_policy
+    path (flat dict[str, str]) — same machinery as the other simple
+    kinds, no special-case writer. Test isolation redirects the SoT
+    path to a tmp file so the canonical
+    ``autoresearch/state/policies/hyperparam.json`` is not mutated."""
+    from core.self_improving_loop.runner import Mutation, apply_mutation
+
+    target = tmp_path / "hyperparam.json"
+    _redirect_kind(monkeypatch, "hyperparam", target)
+    starting = {"max_turns": "5", "seed_limit": "8", "dim_set": "subset", "reflection_depth": "3"}
+    mutation = Mutation(
+        target_section="max_turns",
+        new_value="7",
+        rationale="test apply path",
+        target_kind="hyperparam",
+    )
+    new_sections, previous_value = apply_mutation(mutation, current_sections=starting)
+    assert previous_value == "5"
+    assert new_sections["max_turns"] == "7"
+    # Other keys unchanged
+    assert new_sections["seed_limit"] == "8"
+    assert new_sections["dim_set"] == "subset"
+
+
+def test_apply_mutation_hyperparam_kind_rejects_out_of_bounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second-layer defense: an externally-constructed Mutation that
+    bypassed parse_mutation cannot still write garbage to the SoT.
+    SoT path redirected for isolation; the raise should happen before
+    any write_policy call, so the tmp file stays untouched as well."""
+    from core.self_improving_loop.runner import Mutation, apply_mutation
+
+    target = tmp_path / "hyperparam.json"
+    _redirect_kind(monkeypatch, "hyperparam", target)
+    bad = Mutation(
+        target_section="max_turns",
+        new_value="999",
+        rationale="bypass parse",
+        target_kind="hyperparam",
+    )
+    with pytest.raises(ValueError, match="out of bounds"):
+        apply_mutation(bad, current_sections={"max_turns": "5"})
+    # Bounds violation must precede the write.
+    assert not target.exists()

@@ -47,6 +47,59 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-HYPERPARAM-FOUNDATION (2026-05-28)** — Adds the 8th
+  ``target_kind`` slot ``hyperparam`` to ``TARGET_KINDS``, opening a
+  numeric / categorical mutation surface that targets the
+  audit-subprocess command line + AgenticLoop runtime config directly
+  (instead of an LLM-facing wrapper prompt). Motivated by cycle 1-12
+  (2026-05-26 → 05-28, sessions through PR-PETRI-CACHE-DEFAULT-OFF /
+  PR-PROGRAMMD-TARGET-KIND-SYNC) where 11/12 prompt-only mutations
+  produced ``Δ = 0`` for ``redundant_tool_invocation`` — the dim's
+  ``measurement_modality = tool_log`` (programmatic tool-call dedup
+  count) lives below the prompt-following surface, so prompt mutation
+  cannot reach the mechanism. Hyperparam mutation lets the loop tune
+  the audit budget itself (``max_turns``, ``seed_limit``,
+  ``reflection_depth``, ``dim_set``) so the regression dim can move
+  via budget shrink rather than via wrapper-prompt coaching. Schema:
+  flat ``dict[str, str]`` (same shape as the 4 simple-shape kinds);
+  values are string-encoded numerics / categoricals; runtime readers
+  convert at consumption time. Bounds: ``max_turns ∈ [1, 20]``,
+  ``seed_limit ∈ [1, 50]``, ``reflection_depth ∈ [1, 5]``,
+  ``dim_set ∈ {subset, full}`` — enforced at both
+  ``parse_mutation`` (LLM-response time) and ``apply_mutation``
+  (externally-constructed Mutation time) per the boundary-completeness
+  rule. Adds ``GLOBAL_HYPERPARAM_POLICY_PATH``,
+  ``_KIND_TO_PATH["hyperparam"]``, ``_SIBLING_SOT_ENV_MAP["hyperparam"]
+  = "GEODE_HYPERPARAM_OVERRIDE"``,
+  ``_SIBLING_SOT_STRICT_ENV_MAP["hyperparam"]
+  = "GEODE_HYPERPARAM_STRICT"``, the env-literal block in
+  ``autoresearch/train.py`` that propagates the SoT path to the audit
+  subprocess (read-only until PR-3 lands the consumer), and an initial
+  ``autoresearch/state/policies/hyperparam.json`` with defaults
+  matching the current hardcoded audit invocation
+  (``max_turns="5"``, ``seed_limit="8"``, ``dim_set="subset"``,
+  ``reflection_depth="3"``). Mutator system prompt
+  (``_MUTATION_CONTRACT_SUFFIX`` + ``program.md`` "CAN" table) updated
+  with the 8th kind + bounds documentation +
+  ``measurement_modality`` guidance ("use hyperparam when target dim
+  is ``tool_log`` / ``token_count`` and prompt mutations produced
+  ``Δ ≈ 0``"). Pinned by 17 new assertions across
+  ``tests/test_policy_mutation.py`` (bounds validator unit tests,
+  end-to-end parse_mutation acceptance / rejection, apply_mutation
+  isolation against tmp_path) + updates to 4 existing
+  count-coupled tests
+  (``test_target_kinds_count_is_8_post_hyperparam``,
+  ``test_target_kinds_contains_active_eight``,
+  ``test_policy_path_returns_distinct_paths`` 9-path,
+  ``test_active_slots_registered_as_mutation_targets`` 8-set in
+  ADR-012 + 5-slot reader audit, ``test_program_md_can_table_matches_target_kinds``
+  drift invariant auto-extending to 8-row). The audit-subprocess argv
+  translator (``max_turns`` → ``-T max_turns=<n>``, ``seed_limit`` →
+  ``--limit <n>``, ``dim_set`` → ``-T judge_dimensions=<value>``,
+  ``reflection_depth`` → AgenticLoop config) lands in PR-3
+  (PR-HYPERPARAM-WIRE) — this PR is foundation-only.
+
 ### Changed
 - **PR-PROGRAMMD-TARGET-KIND-SYNC (2026-05-28)** — Sync
   ``autoresearch/program.md`` "The agent CAN" markdown table with the

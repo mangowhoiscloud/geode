@@ -1,0 +1,6 @@
+{
+  "max_turns": "5",
+  "seed_limit": "8",
+  "dim_set": "subset",
+  "reflection_depth": "3"
+}

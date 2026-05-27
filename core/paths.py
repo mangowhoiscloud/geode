@@ -257,6 +257,20 @@ GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
 GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
 # ADR-013 T1 (2026-05-21) — Tool descriptions mutation SoT.
 GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
+# PR-HYPERPARAM-FOUNDATION (2026-05-28) — numeric / categorical
+# hyperparameter mutation SoT. Distinct from the 7 text-artifact kinds:
+# this slot directly tunes the audit-subprocess command line
+# (max_turns → -T max_turns=<n>, seed_limit → --limit <n>, dim_set
+# → -T judge_dimensions=..., reflection_depth → AgenticLoop config).
+# Cycle 1-12 (2026-05-26 → 05-28) observed 11/12 prompt-only mutations
+# stuck on redundant_tool_invocation with Δ=0 because the dim's
+# measurement_modality (tool_log: programmatic dedup count) lives below
+# the LLM's prompt-following surface — only mechanism-level levers
+# (turn budget, sample count) can move it. Values are string-encoded
+# at the SoT (``{"max_turns": "5"}``) for schema consistency with the
+# other 4 simple-shape kinds; runtime readers convert to int /
+# categorical at the consumption site (PR-HYPERPARAM-WIRE).
+GLOBAL_HYPERPARAM_POLICY_PATH = GLOBAL_POLICIES_DIR / "hyperparam.json"
 # PR-BACKFILL-SOT (2026-05-21) — operator-local SoT layer for the 4 active
 # mutation surface readers (tool_policy / reflection / decomposition /
 # tool_descriptions). Per-machine overrides without touching in-repo
