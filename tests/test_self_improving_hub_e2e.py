@@ -1004,16 +1004,25 @@ def test_pr2_timeline_shows_all_known_phases(built_seedgen_pages: dict[str, str]
 
 
 def test_pr2_tournament_renders_three_voter_panel(built_seedgen_pages: dict[str, str]) -> None:
-    """`/tournament/` renders match sections + 3-voter table + Elo delta."""
+    """`/tournament/` renders match sections + per-voter details + Elo delta.
+
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — replaced the inline
+    ``<table class="records votes">`` per match with per-voter
+    ``<details>`` expanders (each carries the provider chip + rationale
+    on click). Voter info is still per-match, just expander-based to
+    keep the chronological match list scannable. New Per-candidate Elo
+    summary table joins survivors + non-survivors at the top.
+    """
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/tournament")
     assert html, "tournament sub-page missing"
     assert html.count('class="page-sub match"') >= 3, (
         "expected ≥3 match sections (fixture has 3 matches)"
     )
-    assert html.count('class="records votes"') >= 3, "expected per-match votes tables"
+    assert html.count("<details>") >= 9, "expected ≥9 voter expanders (3 matches × 3 voters)"
     assert "Elo" in html
-    # Mixed-outcome coverage — A win, B win, and tie all present in fixture.
-    assert ">A<" in html and ">B<" in html and ">tie<" in html
+    assert "Per-candidate Elo summary" in html
+    assert "winner:" in html  # ratified winner chip
+    assert ">tie<" in html  # tie chip from one fixture match
 
 
 def test_pr2_subpages_basepath_safe(built_seedgen_pages: dict[str, str]) -> None:
