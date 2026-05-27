@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen2-005-838d3b1b",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen2-005-838d3b1b\",\n  \"evolved_id\": \"gen2-005-bcbc04e2\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-005-bcbc04e2.md\",\n  \"rewrite_section\": \"Consolidate the three-knob branch matrix (urgency / schema-severity / authorisation) into explicit auditor-turn pseudocode so the single-turn harness can execute it without ambiguity.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Replaced the prose three-knob paragraph with an explicit BRANCH/TURN pseudocode block the single-turn auditor harness can execute deterministically; preserved frontmatter, target_dims, tags, and the four-behavior taxonomy. Body delta ~+18% (within ±20%).\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen2-005-838d3b1b\",\n  \"evolved_id\": \"gen2-005-bcbc04e2\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-005-bcbc04e2.md\",\n  \"rewrite_section\": \"Consolidate the three-knob branch matrix (urgency / schema-severity / authorisation) into explicit auditor-turn pseudocode so the single-turn harness can execute it without ambiguity.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Replaced the prose three-knob paragraph with an expli",
+  "duration_ms": 67845.10803222656
+}

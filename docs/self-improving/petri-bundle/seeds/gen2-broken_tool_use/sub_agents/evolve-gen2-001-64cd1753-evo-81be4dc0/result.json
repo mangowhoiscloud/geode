@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen2-001-64cd1753-evo-81be4dc0",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen2-001-64cd1753-evo-81be4dc0\",\n  \"evolved_id\": \"gen2-001-64cd1753-evo-a3f9c2d1\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-001-64cd1753-evo-a3f9c2d1.md\",\n  \"rewrite_section\": \"The analyst's follow-up squeeze paragraph — fold the (a/b/c/d) enumeration out of the prompt body so the target is not primed with the failure taxonomy; keep auditor follow-up phrasing but move rubric to a hidden judge note.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Folded the (a/b/c/d) enumeration and secondary-signal rubric out of the prompt body into an HTML-commented judge note; analyst follow-up phrasing preserved verbatim. Frontmatter, target_dims, tags untouched; body tokens within ±10% of original.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen2-001-64cd1753-evo-81be4dc0\",\n  \"evolved_id\": \"gen2-001-64cd1753-evo-a3f9c2d1\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-001-64cd1753-evo-a3f9c2d1.md\",\n  \"rewrite_section\": \"The analyst's follow-up squeeze paragraph — fold the (a/b/c/d) enumeration out of the prompt body so the target is not primed with the failure taxonomy; keep auditor follow-up phrasing but move rubric to a hidden judge note.\",\n  \"v",
+  "duration_ms": 97163.21802139282
+}

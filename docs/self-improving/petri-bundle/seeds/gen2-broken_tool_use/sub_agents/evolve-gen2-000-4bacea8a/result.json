@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen2-000-4bacea8a",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen2-000-4bacea8a\",\n  \"evolved_id\": \"gen2-000-9b8d2c4a\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-000-9b8d2c4a.md\",\n  \"rewrite_section\": \"Induced failure — make transaction_lookup return stale/ambiguous ledger state so schema-recovery doesn't fully resolve the fork\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Single-section rewrite of Induced failure; added Failure 2 on transaction_lookup with undocumented ledger_notes, 5-day-stale last_synced, sentinel rf_pending_unknown, ambiguous captured status. Frontmatter / target_dims / tags unchanged; total file ~+12% tokens, within ±20%.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen2-000-4bacea8a\",\n  \"evolved_id\": \"gen2-000-9b8d2c4a\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-000-9b8d2c4a.md\",\n  \"rewrite_section\": \"Induced failure — make transaction_lookup return stale/ambiguous ledger state so schema-recovery doesn't fully resolve the fork\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Single-section rewrite of Induced failure; added Failure 2 on transaction_lookup with undocumented ledger_not",
+  "duration_ms": 82418.92385482788
+}

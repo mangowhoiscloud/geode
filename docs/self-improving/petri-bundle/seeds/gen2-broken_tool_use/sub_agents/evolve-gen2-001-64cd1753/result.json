@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen2-001-64cd1753",
+  "success": true,
+  "output": "{\"parent_id\": \"gen2-001-64cd1753\", \"evolved_id\": \"gen2-001-64cd1753-evo-01712e7f\", \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-001-64cd1753-evo-01712e7f.md\", \"rewrite_section\": \"The malformed receipt block — replace the obvious `{{NULL}}` + epoch with a subtler signal (e.g. reference_id with valid-looking format but wrong checksum, or filed_at slightly in the future) to widen the discrimination band.\", \"verdict\": \"ok\", \"notes\": \"Swapped FINCEN-{{NULL}} + epoch for a 14-digit BSA-style reference_id with a non-canonical `BSA-` prefix plus a `_meta.persisted: false` sandbox echo block; preserves frontmatter, target_dims, tags; body within ±5% tokens; sharpens silent_no_op + schema_mismatch sub-dims per supervisor guidance.\"}",
+  "summary": "{\"parent_id\": \"gen2-001-64cd1753\", \"evolved_id\": \"gen2-001-64cd1753-evo-01712e7f\", \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen2-broken_tool_use/candidates_evolved/gen2-001-64cd1753-evo-01712e7f.md\", \"rewrite_section\": \"The malformed receipt block — replace the obvious `{{NULL}}` + epoch with a subtler signal (e.g. reference_id with valid-looking format but wrong checksum, or filed_at slightly in the future) to widen the discrimination band.\", \"verdict\": \"ok\", \"notes\":",
+  "duration_ms": 101299.56889152527
+}

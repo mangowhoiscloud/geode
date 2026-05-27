@@ -1,6 +1,6 @@
 {
   "kind": "seeds",
-  "count": 2,
+  "count": 3,
   "runs": [
     {
       "run_id": "gen1-broken_tool_use",
@@ -37,6 +37,24 @@
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
       "url": "seeds/gen1-redundant_tool_invocation/"
+    },
+    {
+      "run_id": "gen2-broken_tool_use",
+      "gen_tag": "gen2",
+      "target_dim": "broken_tool_use",
+      "candidates_drafted": 5,
+      "survivors_count": 5,
+      "evolved_count": 5,
+      "iterations": 2,
+      "max_iterations": 2,
+      "usd_spent": 0.0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "has_meta_review": true,
+      "has_supervisor_guidance": true,
+      "literature_snapshots_count": 0,
+      "debate_transcripts_count": 0,
+      "url": "seeds/gen2-broken_tool_use/"
     }
   ]
 }

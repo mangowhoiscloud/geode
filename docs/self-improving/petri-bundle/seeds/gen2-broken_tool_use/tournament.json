@@ -1,0 +1,22 @@
+{
+  "run_id": "gen2-broken_tool_use",
+  "gen_tag": "gen2",
+  "voter_panel": [
+    {
+      "voter_id": "openai.openai-codex",
+      "voter_model": "gpt-5.5",
+      "voter_provider": "openai-codex"
+    },
+    {
+      "voter_id": "openai.openai-codex",
+      "voter_model": "gpt-5.5",
+      "voter_provider": "openai-codex"
+    },
+    {
+      "voter_id": "anthropic.claude-cli",
+      "voter_model": "claude-opus-4-7",
+      "voter_provider": "claude-cli"
+    }
+  ],
+  "matches": []
+}

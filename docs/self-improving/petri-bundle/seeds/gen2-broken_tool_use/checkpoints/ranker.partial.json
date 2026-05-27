@@ -1,0 +1,24 @@
+{
+  "completed_match_ids": [
+    "m000",
+    "m001",
+    "m002",
+    "m003",
+    "m004",
+    "m005",
+    "m006",
+    "m007",
+    "m008",
+    "m009"
+  ],
+  "partial_ratings": {
+    "gen2-000-9b8d2c4a": 1000.0,
+    "gen2-001-64cd1753-evo-01712e7f": 1000.0,
+    "gen2-003-e7a1b2c9": 1000.0,
+    "gen2-004-a673f58a": 1000.0,
+    "gen2-005-bcbc04e2": 1000.0
+  },
+  "partial_outcomes_serialised": [],
+  "total_matches": 10,
+  "last_checkpoint_at": 1779916451.291795
+}
