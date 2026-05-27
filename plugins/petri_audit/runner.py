@@ -521,7 +521,7 @@ def run_audit(
     seeds: int = 1,
     max_turns: int = 10,
     tags: str | None = None,
-    cache: bool = True,
+    cache: bool = False,
     dim_set: str | None = DEFAULT_DIM_SET,
     seed_select: str | None = None,
     target_tools: str = "none",

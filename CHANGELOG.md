@@ -47,6 +47,42 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-PETRI-CACHE-DEFAULT-OFF (2026-05-28)** — Flips the
+  ``cache`` default to ``False`` across the petri-audit surface
+  (``plugins/petri_audit/runner.py:run_audit``,
+  ``plugins/petri_audit/cli_audit.py`` typer + argparse entry
+  points, ``core/cli/tool_handlers/audit.py`` tool handler kwarg
+  fallback). Closed-loop measurement reliability fix: inspect-ai's
+  ``CacheEntry._cache_key`` hashes ``(model config exc.
+  {max_connections, adaptive_connections, max_retries, timeout,
+  cache, batch}, input messages, base_url, tool_choice, tools,
+  expiry, scopes, epoch)`` into an md5 pickle file under
+  ``$INSPECT_CACHE_DIR/generate/<model>/`` (default
+  ``~/Library/Caches/inspect_ai/generate/`` on Darwin, expiry 1W).
+  In a self-improving closed loop the mutator only edits the
+  target wrapper while the auditor/judge prompts (defined inside
+  inspect-petri's task code) are stable cycle-over-cycle, so the
+  auditor and judge ``generate`` calls HIT cached trajectories
+  from prior cycles — observed during the 10-cycle run ending
+  2026-05-27 as ``fitness_delta`` deterministically returning to
+  ``{-1.155, -1.156, -1.733}`` regardless of mutation while
+  ``audit_seconds`` varied 181-503s. The 36 ``OPENAI_API_KEY not
+  set`` matches in the same period were string-grep hits inside
+  cached failed-run transcripts, not live warnings. Default OFF
+  restores the one-mutation-one-trajectory invariant the loop's
+  attribution row relies on, at the cost of a fresh
+  auditor+target+judge regenerate per audit (~$2-5/cycle vs
+  ~$0.05-0.30 with cache). The CLI argparse path now carries an
+  explicit ``--cache / --no-cache`` mutually exclusive group
+  (previously only ``--no-cache`` was wired); the Typer surface
+  already had the bidirectional ``--cache/--no-cache`` flag pair,
+  just with the inverted default. All 18 existing tests already
+  pass ``cache=True`` or ``cache=False`` explicitly, so the
+  default flip is invisible to the assertion suite (39 passed, 3
+  skipped on direct surface; 828 passed in the broader audit/cache
+  grep slice).
+
 ### Removed
 - **PR-REVERT-MUTATION-CODE-FOUNDATION (2026-05-28)** — Reverts
   PR-MUTATION-CODE-FOUNDATION (#1802, commit 31ae281f) so main
