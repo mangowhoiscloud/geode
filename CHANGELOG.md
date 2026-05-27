@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.78] - 2026-05-28
+
+> PATCH release. Cleans up the v0.99.39 LLMAdapter sprint's
+> legacy-vs-new coexistence: deletes the three orphan
+> ``*AgenticAdapter`` classes that the new adapter registry already
+> replaced (PR-LEGACY-PROVIDER-REMOVAL), and works around the
+> ``openai>=2.26`` ``parse_response`` crash on Codex backend
+> ``response.completed`` events that landed silently between the v0.99.39
+> sprint and the user's first ``/login openai`` smoke
+> (PR-CODEX-OUTPUT-NULL). The v0.99.77 PR-SOURCE-ROUTING fix routed
+> ``gpt-5.x`` to the subscription bucket; this release makes those
+> requests actually complete.
+
 ### Removed
 - **PR-LEGACY-PROVIDER-REMOVAL (2026-05-28)** — delete the three legacy
   ``*AgenticAdapter`` classes (``OpenAIAgenticAdapter``,
