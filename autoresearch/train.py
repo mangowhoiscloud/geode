@@ -852,6 +852,7 @@ def run_audit(
         GLOBAL_DECOMPOSITION_POLICY_PATH,
         GLOBAL_FEW_SHOT_POOL_PATH,
         GLOBAL_HEURISTICS_PATH,
+        GLOBAL_HYPERPARAM_POLICY_PATH,
         GLOBAL_IN_CONTEXT_SLOTS_PATH,
         GLOBAL_PROVIDER_ROUTING_PATH,
         GLOBAL_REFLECTION_POLICY_PATH,
@@ -922,6 +923,18 @@ def run_audit(
     if GLOBAL_FEW_SHOT_POOL_PATH.is_file():
         env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(GLOBAL_FEW_SHOT_POOL_PATH)
         env["GEODE_FEW_SHOT_POOL_STRICT"] = "1"
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam SoT path
+    # propagation. PR-2 lands the env literal so the sibling-SoT env-map
+    # invariant test passes against the 8-kind TARGET_KINDS. The actual
+    # consumption — ``plugins/petri_audit/runner.py:build_command``
+    # reading the SoT and translating each key to an inspect-petri
+    # ``-T`` flag — lands in PR-3 (PR-HYPERPARAM-WIRE). Until then the
+    # env var is set but no reader inside the audit subprocess loads it;
+    # this is a deliberate 2-PR seam (foundation → wire-through) to
+    # keep each PR's scope small.
+    if GLOBAL_HYPERPARAM_POLICY_PATH.is_file():
+        env["GEODE_HYPERPARAM_OVERRIDE"] = str(GLOBAL_HYPERPARAM_POLICY_PATH)
+        env["GEODE_HYPERPARAM_STRICT"] = "1"
     timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
 
     _emit_journal(
