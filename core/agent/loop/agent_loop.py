@@ -389,7 +389,22 @@ class AgenticLoop:
         # review ("no silent fallback") is preserved — if the requested
         # ``(provider, source)`` isn't in the registry, ``resolve_for``
         # raises and the loop refuses to start.
-        self._source = source or "payg"
+        #
+        # PR-SOURCE-ROUTING (2026-05-28) — the unconditional ``"payg"``
+        # default silently routed every interactive CLI call (the daemon
+        # path at ``core/server/supervised/services.py:211`` never passes
+        # ``source=``) through the PAYG endpoint even when the operator
+        # had completed ``/login openai`` and the
+        # ``openai-codex-geode:user`` OAuth profile was sitting in the
+        # ProfileStore. :func:`infer_source` consults the
+        # ``{provider}_credential_source`` setting + the ProfileStore so
+        # an OAuth-registered provider promotes to ``"subscription"`` by
+        # default; callers that pass an explicit ``source=`` still win.
+        if not source:
+            from core.llm.adapters._source_inference import infer_source
+
+            source = infer_source(provider)
+        self._source = source
         # PR-JSON-WIRE (2026-05-25) — per-loop structured-output JSON
         # Schema. When non-None, every ``_call_llm`` populates
         # ``AdapterCallRequest.response_schema`` with this value so

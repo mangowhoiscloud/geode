@@ -239,6 +239,13 @@ def test_default_llm_call_normalizes_openai_codex_provider(
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
+    # PR-SOURCE-ROUTING (2026-05-28) — runner now consults
+    # :func:`core.llm.adapters._source_inference.infer_source` instead of
+    # hard-coding ``"payg"``. Pin the test to the historical API-path
+    # default by stubbing the inference helper; the live behaviour
+    # (settings + ProfileStore promotion) is covered by
+    # ``tests/test_source_routing_regression.py``.
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _p: "payg")
 
     captured: dict[str, object] = {"provider": None, "source": None}
 
@@ -267,7 +274,8 @@ def test_default_llm_call_normalizes_openai_codex_provider(
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from openai-payg"
     # Provider normalisation: ``openai-codex`` (legacy key) → ``openai``
-    # (Path-B registry key). Source stays ``payg`` per API-path default.
+    # (Path-B registry key). Source resolved via stubbed ``infer_source``
+    # returning the API-path default.
     assert captured == {"provider": "openai", "source": "payg"}
 
 
