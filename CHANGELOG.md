@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.77] - 2026-05-28
+
+> PATCH release. Operational regression fix: gpt-5.x interactive turns
+> were silently routing to PAYG even after ``/login openai`` registered
+> the ChatGPT subscription OAuth profile. Three stacked regressions
+> from the self-improving adapter sprint (PR-MAINPATH-1 /
+> PR-MAINPATH-67 / PR-DRIFT-CUT) collapsed every gpt-5.x dispatch to
+> the openai-payg adapter; ``insufficient_quota`` then mis-classified
+> as ``rate_limit`` so the operator-facing hint said "switch model"
+> instead of "change credential source". Also bundles the
+> previously-staged hyperparam wire (audit subprocess argv now honours
+> ``autoresearch/state/policies/hyperparam.json``).
+
 ### Fixed
 - **PR-SOURCE-ROUTING (2026-05-28)** — restore subscription-bucket routing
   for OAuth-registered providers. Three stacked regressions converted every
