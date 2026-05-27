@@ -231,8 +231,9 @@ def test_adr_cites_train_py_dim_weights_location() -> None:
 def test_active_slots_registered_as_mutation_targets() -> None:
     """S0d (2026-05-21) — retrieval deprecated; M1 — skill_catalog 추가;
     M2 (2026-05-21) — agent_contract 추가; PR-TOOL-DESCRIPTIONS-MUTATE
-    (2026-05-27, #1779) — tool_descriptions graduated from reader-only
-    to active mutation target → 7 active slot."""
+    (2026-05-27, #1779) — tool_descriptions graduated;
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam graduated from
+    new numeric / categorical surface → 8 active slot."""
     import importlib
 
     mod = importlib.import_module("core.self_improving_loop.policies")
@@ -245,9 +246,10 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "reflection",
         "skill_catalog",
         "agent_contract",
+        "hyperparam",
     }
     assert target_kinds == expected, (
-        f"TARGET_KINDS 는 {expected} (post-tool_descriptions). got={target_kinds}"
+        f"TARGET_KINDS 는 {expected} (post-hyperparam). got={target_kinds}"
     )
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
 
