@@ -47,6 +47,54 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-SOURCE-ROUTING (2026-05-28)** — restore subscription-bucket routing
+  for OAuth-registered providers. Three stacked regressions converted every
+  interactive ``gpt-5.x`` turn into a PAYG call even after the operator had
+  completed ``/login openai`` (which registers the
+  ``openai-codex-geode:user`` OAuth profile in :class:`ProfileStore`):
+
+  1. ``AgenticLoop.__init__`` defaulted ``source`` to literal ``"payg"`` so
+     the daemon path (``core/server/supervised/services.py:211`` →
+     ``AgenticLoop(...)`` with no ``source=`` kwarg), the fork-skill path
+     (``core/cli/bootstrap.py:206``), and any sub-agent worker that
+     received ``SubTask.source=""`` (``core/agent/worker.py:374``)
+     collapsed every ``provider="openai-codex"`` call to
+     ``resolve_for("openai", "payg")`` → ``openai-payg`` → ``api.openai.com``.
+     The ``openai_credential_source`` setting written by ``/login source
+     openai oauth`` was defined but never read by any dispatch site.
+  2. ``core/agent/loop/_reflection.py:292`` and
+     ``core/self_improving_loop/runner.py:830`` hard-coded ``"payg"`` so
+     even an explicitly subscription-only Pattern B reflected / mutated
+     through the depleted PAYG endpoint while the main loop sat on the
+     subscription endpoint.
+  3. ``core/llm/errors.py:_classify_openai_error`` returned ``"rate_limit"``
+     for every ``openai.RateLimitError`` — but the OpenAI SDK raises that
+     class for both transient 429 throttling AND ``insufficient_quota`` /
+     ``billing_hard_limit_reached`` (PAYG balance depletion). The
+     operator-facing hint surfaced as "Switch to a different model with
+     ``/model``" instead of "change credential source" — switching model
+     still hit the same depleted bucket.
+
+  Fix introduces ``core/llm/adapters/_source_inference.py`` :func:`infer_source`
+  which consults the ``{provider}_credential_source`` setting + the
+  ProfileStore (any OAuth profile present → promote to ``"subscription"``)
+  and threads it through (a) the AgenticLoop default at
+  ``core/agent/loop/agent_loop.py:392``, (b) the reflection dispatch at
+  ``core/agent/loop/_reflection.py``, and (c) the self-improving mutator
+  dispatch at ``core/self_improving_loop/runner.py``. Callers that pass
+  an explicit ``source=`` kwarg still win (audit-subprocess path via
+  PR #1792 is preserved). ``classify_llm_error`` now gates the
+  ``RateLimitError`` branches (OpenAI + Anthropic) on
+  :func:`is_billing_fatal` so quota-depleted PAYG surfaces as ``"billing"``.
+
+  Pinned by ``tests/test_source_routing_regression.py`` (15 assertions
+  across 3 layers: infer_source resolution priority, AgenticLoop dispatch
+  picks codex-oauth when OAuth profile present, classifier maps
+  ``insufficient_quota`` → billing) plus the legacy ``payg``-default test
+  in ``tests/test_paperclip_wiring.py`` updated to stub ``infer_source``
+  so the API-path pin stays deterministic.
+
 ### Added
 - **PR-HYPERPARAM-WIRE (2026-05-28)** — Wires the hyperparam mutation
   SoT (``autoresearch/state/policies/hyperparam.json``, landed in
