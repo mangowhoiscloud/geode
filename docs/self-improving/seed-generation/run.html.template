@@ -81,6 +81,9 @@
       {{ mutator_chip }}
     </div>
 
+    <h2 class="section"><span>Sub-views</span></h2>
+    <div class="run-subviews">{{ subview_links }}</div>
+
     <h2 class="section"><span>Candidates &middot; {{ candidates_count_label }}</span></h2>
     <table class="records">
       <thead>

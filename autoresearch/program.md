@@ -77,22 +77,36 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Modify `train.py`'s `WRAPPER_PROMPT_SECTIONS` dict. The system
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
-- Mutate any of the **5 policy SoT files** at
-  `autoresearch/state/policies/` (PR-MINIMAL-2, 2026-05-21):
+- Mutate any of the **7 policy SoT files** at
+  `autoresearch/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
+  M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE):
 
-  | `target_kind`  | File                            | What it controls                     |
-  |----------------|---------------------------------|--------------------------------------|
-  | `prompt`       | `wrapper-sections.json`         | Wrapper prompt section text (legacy) |
-  | `tool_policy`  | `tool-policy.json`              | Tool selection priority + permissions |
-  | `decomposition`| `decomposition.json`            | Task decomposition heuristics         |
-  | `retrieval`    | `retrieval.json`                | Retrieval (RAG / memory) policies     |
-  | `reflection`   | `reflection.json`               | Self-reflection gate parameters       |
+  | `target_kind`        | File                       | What it controls                                                |
+  |----------------------|----------------------------|-----------------------------------------------------------------|
+  | `prompt`             | `wrapper-sections.json`    | Wrapper prompt section text (legacy)                            |
+  | `tool_policy`        | `tool-policy.json`         | Tool selection priority + permissions                           |
+  | `decomposition`      | `decomposition.json`       | Task decomposition heuristics                                   |
+  | `reflection`         | `reflection.json`          | Self-reflection gate parameters                                 |
+  | `skill_catalog`      | `skill-catalog.json`       | Skill descriptions + `user_invocable` flag (ADR-012 M1)         |
+  | `agent_contract`     | `agent-contracts.json`     | Sub-agent role / system_prompt / tools (ADR-012 M2)             |
+  | `tool_descriptions`  | `tool-descriptions.json`   | Per-tool `description` + `hints` list (PR-TOOL-DESCRIPTIONS-MUTATE) |
 
-  Each file is a `dict[str, str]` (same schema as wrapper-sections so
-  one editing pattern works across all 5). The Mode B runner
-  (`SelfImprovingLoopRunner`) dispatches by `Mutation.target_kind`
-  to the matching file; Mode A agents can edit any of the 5 directly
-  via `git`-tracked JSON.
+  The four legacy kinds (`prompt` / `tool_policy` / `decomposition` /
+  `reflection`) carry a `dict[str, str]` SoT. The three nested kinds
+  (`skill_catalog` / `agent_contract` / `tool_descriptions`) carry a
+  `dict[str, dict]` SoT on disk but the mutation row stays
+  `dict[str, str]` via dotted-key flattening (`<skill>.description`,
+  `<tool>.hints`, etc.); `load_policy` / `write_policy` handle the
+  conversion. The Mode B runner (`SelfImprovingLoopRunner`) dispatches
+  by `Mutation.target_kind` to the matching file; Mode A agents can
+  edit any of the 7 directly via `git`-tracked JSON.
+
+  `retrieval` was deprecated in ADR-012 S0d (2026-05-21) — the reader
+  was never wired (PR-AUDIT-5SLOT). The slot is excluded from
+  `TARGET_KINDS`, so mutator submissions with `target_kind="retrieval"`
+  fail-closed at `parse_mutation`. The mapping in
+  `policies.py:_KIND_TO_PATH` is preserved for a future
+  re-introduction.
 - Tune hyperparameters on `train.py`: `BUDGET_MINUTES`, `SEED_LIMIT`,
   `MAX_TURNS`, `DIM_SET_NAME`, `SOURCE`. Change **one at a time** so the
   fitness delta is attributable. The `auditor` / `target` / `judge` role

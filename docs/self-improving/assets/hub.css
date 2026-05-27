@@ -1088,8 +1088,47 @@ pre.msg.cand-body {
   margin: .4rem 0;
   color: var(--ink-soft);
 }
+/* PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — bucket.warn uses the
+   official --warning-* tokens from the master DESIGN.md instead of
+   ad-hoc amber. Matches the autoresearch stale-baseline banner tone. */
 .bucket.warn {
-  background: var(--warn-tint, #fef3c7);
-  color: var(--warn-ink, #92400e);
-  border: 1px solid var(--warn-rule, #fde68a);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  border: 1px solid var(--warning-rule);
+}
+
+/* PR-HUB-VIS-CYCLE1-FOLLOWUP — Sub-view entry card grid on the per-run
+   index page. Hairline-only per master DESIGN.md (no shadow, no lift). */
+.run-subviews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .75rem;
+  margin: .5rem 0 1.5rem;
+}
+.subview-card {
+  display: block;
+  padding: .85rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.subview-card:hover {
+  border-color: var(--ink-faint);
+  background: var(--paper-tint);
+}
+.subview-card h3 {
+  margin: 0 0 .35rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.subview-card h3 .count {
+  font-weight: 400;
+  font-size: .85em;
+}
+.subview-card p {
+  margin: 0;
+  font-size: .85rem;
 }
