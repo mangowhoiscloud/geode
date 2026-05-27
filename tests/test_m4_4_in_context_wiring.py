@@ -206,15 +206,14 @@ def test_anthropic_agentic_call_imports_orchestrator() -> None:
     assert "apply_in_context_slots(messages, system=system)" in src
 
 
-def test_openai_agentic_call_imports_orchestrator() -> None:
-    """openai.py 의 agentic_call 도 같은 wiring path."""
-    import inspect
-
-    from core.llm.providers import openai as _oai
-
-    src = inspect.getsource(_oai.OpenAIAgenticAdapter.agentic_call)
-    assert "from core.self_improving_loop.in_context_wiring import apply_in_context_slots" in src
-    assert "apply_in_context_slots(messages, system=system)" in src
+# PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — the
+# ``test_openai_agentic_call_imports_orchestrator`` companion to
+# ``test_anthropic_agentic_call_imports_orchestrator`` was removed
+# alongside ``OpenAIAgenticAdapter``. The OpenAI / Codex / GLM PAYG +
+# subscription paths now route through ``core/llm/adapters/*`` instead.
+# Wiring ``apply_in_context_slots`` into those adapters is tracked as
+# follow-up scope (the orchestrator currently only fires for the
+# Anthropic ``ClaudeAgenticAdapter`` paperclip wrapper).
 
 
 def test_orchestrator_module_public_api() -> None:

@@ -14,9 +14,13 @@ Pre-fix gaps surfaced by ``docs/research/v0531-defect-scan.md``:
        ``_resolve_provider("gpt-5.5")`` returned ``"openai-codex"`` (the
        v0.53.0 _CODEX_ONLY_MODELS map). UI picker showed wrong label.
 
-D1 (CircuitBreaker call-pattern parity) was dropped when the breaker was
-removed from the LLM path (PR-MAINPATH-5-CB) — see ``core/llm/fallback.py``
-history. The three remaining contracts (D2/D3/D4) are still pinned below.
+PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — the D2 invariants moved from
+the deleted legacy ``*AgenticAdapter`` classes to the v0.99.39+ adapter
+registry (``openai-payg`` / ``codex-oauth`` / ``glm-payg``). The new
+adapters all share the same ``except Exception as exc: ... raise``
+pattern in ``acomplete`` so any ``BillingError`` raised inside the
+``responses.stream`` / ``messages.create`` call propagates up to the
+agent loop's quota-panel handler unchanged.
 """
 
 from __future__ import annotations
@@ -24,28 +28,26 @@ from __future__ import annotations
 import inspect
 
 import core.llm.providers.anthropic as _anthropic_mod
-import core.llm.providers.codex as _codex_mod
-import core.llm.providers.glm as _glm_mod
-import core.llm.providers.openai as _openai_mod
 from core.llm.errors import BillingError
 
 # ---------------------------------------------------------------------------
-# D2 — All adapters re-raise BillingError so the loop can render the panel
+# D2 — All adapters propagate BillingError so the loop can render the panel
 # ---------------------------------------------------------------------------
 
 
-def _has_billing_error_reraise(adapter_class: type) -> bool:
-    """Heuristic: source must contain ``isinstance(exc, BillingError)`` +
-    a bare ``raise`` close together (the v0.53.2 re-raise pattern)."""
-    src = inspect.getsource(adapter_class)
-    if "BillingError" not in src or "isinstance(exc, BillingError)" not in src:
-        return False
-    # The bare ``raise`` must follow the isinstance check (within 5 lines).
+def _has_bare_raise_in_except(adapter_class_or_module: type | object) -> bool:
+    """Heuristic: the source must contain ``except Exception as exc:`` (or
+    similar) followed by a bare ``raise`` within 12 lines. The bare raise
+    propagates ANY exception caught (including ``BillingError``) up to
+    the agent loop without swallowing it into ``self.last_error`` /
+    returning ``None`` (the v0.53.1 swallowing bug)."""
+    src = inspect.getsource(adapter_class_or_module)
     lines = src.splitlines()
     for i, line in enumerate(lines):
-        if "isinstance(exc, BillingError)" in line:
-            window = lines[i : i + 6]
-            if any(stripped == "raise" for stripped in (ln.strip() for ln in window)):
+        stripped = line.strip()
+        if stripped.startswith("except ") and "Exception" in stripped:
+            window = lines[i : i + 12]
+            if any(ln.strip() == "raise" for ln in window):
                 return True
     return False
 
@@ -53,47 +55,58 @@ def _has_billing_error_reraise(adapter_class: type) -> bool:
 def test_anthropic_reraises_billing_error() -> None:
     """Anthropic was the only provider that already raised BillingError
     (via the LLMBadRequestError branch). v0.53.2 also adds the bare-Exception
-    branch to mirror the OpenAI/Codex/GLM fix shape."""
+    branch to mirror the OpenAI/Codex/GLM fix shape. ``ClaudeAgenticAdapter``
+    is part of the legacy paperclip path that we keep — the invariant
+    holds on its ``agentic_call``."""
     src = inspect.getsource(_anthropic_mod.ClaudeAgenticAdapter.agentic_call)
-    assert "BillingError" in src
-    # Either path (LLMBadRequestError or generic) results in a raise.
-    assert "raise BillingError" in src or _has_billing_error_reraise(
+    assert "BillingError" in src, "ClaudeAgenticAdapter must mention BillingError in source"
+    assert "raise BillingError" in src or _has_bare_raise_in_except(
         _anthropic_mod.ClaudeAgenticAdapter
+    ), "ClaudeAgenticAdapter must either explicitly raise BillingError or bare-raise from except"
+
+
+def test_openai_payg_adapter_propagates_billing_error() -> None:
+    """PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — invariant migrated from
+    ``OpenAIAgenticAdapter`` (deleted) to ``OpenAIPaygAdapter`` (registry).
+    Without bare-raise in the adapter's ``acomplete`` the v0.53.0
+    quota_exhausted IPC panel never fires for OpenAI PAYG."""
+    from core.llm.adapters.openai_payg import OpenAIPaygAdapter
+
+    assert _has_bare_raise_in_except(OpenAIPaygAdapter.acomplete), (
+        "OpenAIPaygAdapter.acomplete must bare-raise from its except so "
+        "BillingError propagates to AgenticLoop._emit_quota_panel"
     )
 
 
-def test_openai_reraises_billing_error() -> None:
-    """v0.53.2 D2 fix: OpenAI agentic_call must re-raise BillingError
-    instead of swallowing it into self.last_error. Pre-fix the v0.52.3
-    is_billing_fatal raise from the retry loop was caught here and
-    converted to None."""
-    assert _has_billing_error_reraise(_openai_mod.OpenAIAgenticAdapter), (
-        "OpenAI agentic_call must re-raise BillingError — without it the "
-        "v0.53.0 quota_exhausted IPC panel never fires for OpenAI"
+def test_codex_oauth_adapter_propagates_billing_error() -> None:
+    """PR-LEGACY-PROVIDER-REMOVAL — migrated from ``CodexAgenticAdapter``
+    (deleted) to ``CodexOAuthAdapter`` (ChatGPT subscription path).
+    Without this the Plus subscription quota exhaustion silently returns
+    None and the user sees nothing."""
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+
+    assert _has_bare_raise_in_except(CodexOAuthAdapter.acomplete), (
+        "CodexOAuthAdapter.acomplete must bare-raise so subscription quota "
+        "exhaustion surfaces as the quota_exhausted panel"
     )
 
 
-def test_codex_reraises_billing_error() -> None:
-    """v0.53.2 D2 fix for Codex (Plus subscription quota path)."""
-    assert _has_billing_error_reraise(_codex_mod.CodexAgenticAdapter), (
-        "Codex agentic_call must re-raise BillingError — without it Plus "
-        "quota exhaustion silently returns None and the user sees nothing"
-    )
+def test_glm_payg_adapter_propagates_billing_error() -> None:
+    """PR-LEGACY-PROVIDER-REMOVAL — migrated from ``GlmAgenticAdapter``
+    (deleted) to ``GlmPaygAdapter`` (registry). The v0.52.3 incident was
+    on this very provider, so panel parity matters most here."""
+    from core.llm.adapters.glm_payg import GlmPaygAdapter
 
-
-def test_glm_reraises_billing_error() -> None:
-    """v0.53.2 D2 fix for GLM (the v0.52.3 incident provider — code 1113)."""
-    assert _has_billing_error_reraise(_glm_mod.GlmAgenticAdapter), (
-        "GLM agentic_call must re-raise BillingError — the v0.52.3 incident "
-        "was on this very provider, so panel parity matters most here"
+    assert _has_bare_raise_in_except(GlmPaygAdapter.acomplete), (
+        "GlmPaygAdapter.acomplete must bare-raise so GLM 1113/1114 quota "
+        "errors propagate as BillingError to the quota panel"
     )
 
 
 def test_billing_error_propagates_through_adapter_isinstance_check() -> None:
-    """Functional sanity: BillingError IS-A Exception, so it would be
-    caught by ``except Exception:``. The re-raise path must trigger
-    BEFORE the generic catch swallows it. Verified by direct subclass
-    relationship check."""
+    """Functional sanity: BillingError IS-A Exception, so a bare ``raise``
+    inside ``except Exception:`` re-emits it without swallowing. Verified
+    by direct subclass relationship check."""
     assert issubclass(BillingError, Exception)
 
 
