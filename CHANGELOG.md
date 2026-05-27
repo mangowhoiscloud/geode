@@ -47,6 +47,40 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-OUTPUT-NULL (2026-05-28)** — work around an ``openai>=2.26``
+  streaming-parser crash on every Codex subscription call. The ChatGPT
+  backend at ``chatgpt.com/backend-api/codex`` delivers ``response.completed``
+  events with ``output: null`` (the actual items arrive as separate
+  ``response.output_item.done`` events that the SDK's accumulator collects
+  into its own snapshot). Starting at SDK 2.26 ``ResponseStreamState.
+  accumulate_event`` calls ``openai.lib._parsing._responses.parse_response
+  (event.response)`` on every ``response.completed`` and ``parse_response``
+  iterates ``response.output`` unconditionally — so ``output is None``
+  raises ``TypeError: 'NoneType' object is not iterable`` during the
+  ``async for event in stream`` loop in ``CodexOAuthAdapter.acomplete``,
+  before our own ``accumulated`` list could absorb the items. Result on
+  the operator's machine: PR-SOURCE-ROUTING (#1822) correctly routed
+  ``gpt-5.x`` to the subscription endpoint and received HTTP 200, but
+  every call then crashed with ``unknown`` error and retried 5× before
+  surfacing ``model_action_required``. Hermes pins ``openai==2.24.0`` and
+  never hit this; GEODE's ``openai>=2.26.0`` resolves to 2.30.0.
+
+  ``core/llm/adapters/_codex_sdk_workaround.py:install()`` patches
+  ``parse_response`` (and the symbol re-imported into the streaming
+  module) to coerce ``response.output`` from ``None`` to ``[]`` before
+  delegating to the original parser. The CodexOAuthAdapter's existing
+  ``accumulated`` list + ``translate_codex_response`` pipeline then
+  produces the real items as before. Installed lazily on the first
+  Codex client construction (adapter ``build_async_codex_client`` AND
+  legacy provider ``_get_async_codex_client``), idempotent across the
+  process. Removable once a future ``openai`` SDK release fixes
+  ``parse_response`` to handle ``response.output is None``.
+
+  Pinned by ``tests/test_codex_sdk_workaround.py`` (5 assertions:
+  unpatched-crash repro, patched-coerce success, idempotence + streaming
+  module rebound, and source-level pins on both client builders).
+
 ## [0.99.77] - 2026-05-28
 
 > PATCH release. Operational regression fix: gpt-5.x interactive turns
