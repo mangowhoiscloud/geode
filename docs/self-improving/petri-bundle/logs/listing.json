@@ -384,5 +384,350 @@
       "value": 0.08333333333333333,
       "params": {}
     }
+  },
+  "2026-05-26T21-00-23-00-00_audit_8cfoYsBhCTXwFoNnVgb89p.eval": {
+    "eval_id": "nabLr2vRMJkUNRokYdaZx9",
+    "run_id": "iHNoJ3zSRg6hQYi2CJniDs",
+    "task": "inspect_petri/audit",
+    "task_id": "8cfoYsBhCTXwFoNnVgb89p",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T21:00:23+00:00",
+    "completed_at": "2026-05-26T21:18:08+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T21-22-18-00-00_audit_bVjXKmGd59Sy74FfsW4xxM.eval": {
+    "eval_id": "GAw4sv7RLuzk4BY23J6Wu5",
+    "run_id": "5zXZd5obDPnSsS6qLfKa8k",
+    "task": "inspect_petri/audit",
+    "task_id": "bVjXKmGd59Sy74FfsW4xxM",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T21:22:18+00:00",
+    "completed_at": "2026-05-26T21:23:31+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T21-51-30-00-00_audit_e8Y55zyBHS4QmrqQ9VgbBA.eval": {
+    "eval_id": "4FiwL7eXKWU8zz9sSPCdLS",
+    "run_id": "JyRM9m3TWCAWdH5UcH8YrB",
+    "task": "inspect_petri/audit",
+    "task_id": "e8Y55zyBHS4QmrqQ9VgbBA",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T21:51:30+00:00",
+    "completed_at": "2026-05-26T21:51:56+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T22-03-32-00-00_audit_PRwmkG35xdi6jCMurCvVPb.eval": {
+    "eval_id": "Tu3VpKXcyZ374YxFdDEqEs",
+    "run_id": "DKrkeHAssVwLhDGmQHFHjf",
+    "task": "inspect_petri/audit",
+    "task_id": "PRwmkG35xdi6jCMurCvVPb",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T22:03:32+00:00",
+    "completed_at": "2026-05-26T22:03:44+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T22-46-56-00-00_audit_QAbZqfZZXiPP3vkjnqJub9.eval": {
+    "eval_id": "Kx9vqQh9zzqb4L3qk7JxRc",
+    "run_id": "g42fi8K8NUkkf4LUmfc5dQ",
+    "task": "inspect_petri/audit",
+    "task_id": "QAbZqfZZXiPP3vkjnqJub9",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T22:46:56+00:00",
+    "completed_at": "2026-05-26T23:04:18+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-05-59-00-00_audit_TXDyZYk7km6MMTDvJDKUAX.eval": {
+    "eval_id": "bauq5oxzsy4bZf6hN3WWZN",
+    "run_id": "7e9N9Kdis8U6n2fmYf8iZ2",
+    "task": "inspect_petri/audit",
+    "task_id": "TXDyZYk7km6MMTDvJDKUAX",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:05:59+00:00",
+    "completed_at": "2026-05-26T23:09:08+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-11-11-00-00_audit_GF9ih9ZQaw2Yn4ixef2gyp.eval": {
+    "eval_id": "i9xBYhozsAkuvTnSnv8fcK",
+    "run_id": "oXn7VrP2fTtuZPyJjTzsyA",
+    "task": "inspect_petri/audit",
+    "task_id": "GF9ih9ZQaw2Yn4ixef2gyp",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:11:11+00:00",
+    "completed_at": "2026-05-26T23:14:59+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-15-54-00-00_audit_AsEsCGZ76tyPRWB9TdnLzK.eval": {
+    "eval_id": "Wz623JN4KocxcCkk9XCBMm",
+    "run_id": "i3Ao8pScpGQNpK3kRXgLFB",
+    "task": "inspect_petri/audit",
+    "task_id": "AsEsCGZ76tyPRWB9TdnLzK",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:15:54+00:00",
+    "completed_at": "2026-05-26T23:18:33+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-20-04-00-00_audit_343xnr7iuM9eYTPbj3YVHr.eval": {
+    "eval_id": "Y9UpmoEL4JJhV66mRi2KHG",
+    "run_id": "TDP9CoSdignLfh9Dh6J6uL",
+    "task": "inspect_petri/audit",
+    "task_id": "343xnr7iuM9eYTPbj3YVHr",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:20:04+00:00",
+    "completed_at": "2026-05-26T23:25:12+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-26-07-00-00_audit_NXy29bKkax2aS96H5rB2Sa.eval": {
+    "eval_id": "ck4LnhntdRJ24ozzQAASSY",
+    "run_id": "NcBG9wk4yDVE6Zv3W8vx2y",
+    "task": "inspect_petri/audit",
+    "task_id": "NXy29bKkax2aS96H5rB2Sa",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:26:07+00:00",
+    "completed_at": "2026-05-26T23:30:01+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-31-15-00-00_audit_BULWzBE9qvyvgXw9vbfwWf.eval": {
+    "eval_id": "bfdDr2yCebCHxWjbdQcfeD",
+    "run_id": "HAC8snuS8Q7MYvkqZtfVjd",
+    "task": "inspect_petri/audit",
+    "task_id": "BULWzBE9qvyvgXw9vbfwWf",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:31:15+00:00",
+    "completed_at": "2026-05-26T23:37:04+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-38-06-00-00_audit_MSQiEGi4Zu98f3xgYbYVZA.eval": {
+    "eval_id": "M64Xp4fJmJfZPr5Wh9LtTF",
+    "run_id": "X4fd75e3NW4A4NfZqBeJk9",
+    "task": "inspect_petri/audit",
+    "task_id": "MSQiEGi4Zu98f3xgYbYVZA",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:38:06+00:00",
+    "completed_at": "2026-05-26T23:42:22+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-42-50-00-00_audit_AdsporVRpyMvfbWhkFAaDD.eval": {
+    "eval_id": "AsSyeqisa39zejNVcta5vu",
+    "run_id": "EAP4sFuogejZ5pp2yWxQEi",
+    "task": "inspect_petri/audit",
+    "task_id": "AdsporVRpyMvfbWhkFAaDD",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:42:50+00:00",
+    "completed_at": "2026-05-26T23:50:51+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-51-32-00-00_audit_LhvVEmc69G22QuXe64xctt.eval": {
+    "eval_id": "bkS4NY7bXa9PeGPU4gkBaj",
+    "run_id": "kArv32MUXhHShHaxwALPLX",
+    "task": "inspect_petri/audit",
+    "task_id": "LhvVEmc69G22QuXe64xctt",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:51:32+00:00",
+    "completed_at": "2026-05-26T23:57:13+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval": {
+    "eval_id": "LaeDcdGWDtR5bNitttd5dX",
+    "run_id": "9dikurR9AgJU9hFpTF7bA5",
+    "task": "inspect_petri/audit",
+    "task_id": "j93DMHTB2Lfea8rTHsB4gn",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "none/none",
+    "model_roles": {
+      "auditor": "claude-cli/claude-opus-4-7",
+      "target": "geode/gpt-5.5",
+      "judge": "claude-cli/claude-opus-4-7"
+    },
+    "started_at": "2026-05-26T23:57:39+00:00",
+    "completed_at": "2026-05-27T00:04:49+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
   }
 }
