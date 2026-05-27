@@ -1036,3 +1036,60 @@ pre.diff {
 pre.msg.cand-body {
   border: 1px solid var(--rule-soft);
 }
+
+/* PR-HUB-VIS-CYCLE1 (2026-05-28) — evolver diff side-by-side layout
+   + marked.js-rendered MD body styling + warn bucket chip. */
+.evolver-diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.evolver-diff-grid .diff-col h3 {
+  margin: 0 0 .5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+@media (max-width: 1100px) {
+  .evolver-diff-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.markdown-body {
+  background: var(--paper-tint);
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  padding: .9rem 1.1rem;
+  font-size: .9rem;
+  line-height: 1.5;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  margin: .8rem 0 .4rem 0;
+}
+.markdown-body code {
+  background: var(--paper);
+  padding: .1rem .35rem;
+  border-radius: 3px;
+  font-size: .85em;
+}
+.markdown-body pre {
+  background: var(--paper);
+  padding: .6rem .8rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  border: 1px solid var(--rule-soft);
+}
+.markdown-body ul, .markdown-body ol {
+  padding-left: 1.4rem;
+  margin: .3rem 0;
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--bucket-seedgen);
+  padding-left: .8rem;
+  margin: .4rem 0;
+  color: var(--ink-soft);
+}
+.bucket.warn {
+  background: var(--warn-tint, #fef3c7);
+  color: var(--warn-ink, #92400e);
+  border: 1px solid var(--warn-rule, #fde68a);
+}

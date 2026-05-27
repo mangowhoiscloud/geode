@@ -64,10 +64,12 @@ def test_sync_copies_optional_files(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert (bundle / "meta_review.json").is_file()
 
 
-def test_sync_copies_only_survivor_candidates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Drafts that didn't survive are NOT copied to the publish bundle."""
+def test_sync_copies_all_candidate_drafts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-HUB-VIS-CYCLE1 (2026-05-28) — every draft in ``candidates/`` is
+    copied to the bundle so the per-cycle catalog can render the full
+    set, not just survivors. Reverses the prior survivor-only policy
+    (which left 13/15 cycle-1 drafts invisible to hub readers).
+    """
     repo = _make_repo(tmp_path, monkeypatch)
     run = _make_run_dir(
         repo,
@@ -79,7 +81,7 @@ def test_sync_copies_only_survivor_candidates(
                 {"id": "c-2"},
                 {"id": "c-3"},
             ],
-            "survivors": ["c-1", "c-3"],  # c-2 dropped
+            "survivors": ["c-1", "c-3"],  # c-2 eliminated
         },
     )
     # Write 3 candidate bodies on disk.
@@ -88,8 +90,32 @@ def test_sync_copies_only_survivor_candidates(
     sync_run_to_bundle(run)
     bundle_cands = repo / "docs/self-improving/petri-bundle/seeds/r-003/candidates"
     assert (bundle_cands / "c-1.md").is_file()
-    assert not (bundle_cands / "c-2.md").exists(), "non-survivor draft leaked into publish bundle"
+    assert (bundle_cands / "c-2.md").is_file(), "non-survivor draft missing from bundle"
     assert (bundle_cands / "c-3.md").is_file()
+
+
+def test_sync_copies_candidates_evolved_subdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``candidates_evolved/<cid>.md`` (evolver outputs) lands in the bundle."""
+    repo = _make_repo(tmp_path, monkeypatch)
+    run = _make_run_dir(repo, "r-003e", state={"run_id": "r-003e"})
+    (run / "candidates_evolved").mkdir(parents=True, exist_ok=True)
+    (run / "candidates_evolved" / "c-1e-aaaa.md").write_text("# evolved\n", encoding="utf-8")
+    sync_run_to_bundle(run)
+    bundle_evo = repo / "docs/self-improving/petri-bundle/seeds/r-003e/candidates_evolved"
+    assert (bundle_evo / "c-1e-aaaa.md").is_file()
+
+
+def test_sync_copies_survivors_subdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``survivors/<cid>.md`` convenience copies land in the bundle."""
+    repo = _make_repo(tmp_path, monkeypatch)
+    run = _make_run_dir(repo, "r-003s", state={"run_id": "r-003s"})
+    (run / "survivors").mkdir(parents=True, exist_ok=True)
+    (run / "survivors" / "c-1.md").write_text("# survivor\n", encoding="utf-8")
+    sync_run_to_bundle(run)
+    bundle_surv = repo / "docs/self-improving/petri-bundle/seeds/r-003s/survivors"
+    assert (bundle_surv / "c-1.md").is_file()
 
 
 def test_sync_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,17 +157,20 @@ def test_sync_missing_run_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_sync_malformed_state_json_recovers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """state.json is unparseable → state.json still copied, survivor copy skipped."""
+    """state.json is unparseable → state.json still copied verbatim, and the
+    on-disk MDs are copied via direct filesystem scan (no longer depends on
+    parsing state.json for the survivor list)."""
     repo = _make_repo(tmp_path, monkeypatch)
     run_dir = repo / "state/seed-generation/r-007"
     (run_dir / "candidates").mkdir(parents=True)
     (run_dir / "state.json").write_text("{not json", encoding="utf-8")
     (run_dir / "candidates" / "c-x.md").write_text("# c-x\n", encoding="utf-8")
     sync_run_to_bundle(run_dir)
-    # state.json still copied (verbatim) — only survivor enumeration is best-effort.
+    # state.json still copied verbatim.
     assert (repo / "docs/self-improving/petri-bundle/seeds/r-007/state.json").is_file()
-    # No survivor list → candidates dir is empty / absent.
-    assert not (repo / "docs/self-improving/petri-bundle/seeds/r-007/candidates").exists()
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — MD scan no longer reads state.json,
+    # so the on-disk c-x.md lands in the bundle even with malformed state.
+    assert (repo / "docs/self-improving/petri-bundle/seeds/r-007/candidates/c-x.md").is_file()
 
 
 # ── iter_synced_runs ──────────────────────────────────────────────────────
@@ -177,3 +206,24 @@ def test_iter_synced_runs_skips_unparseable(
     (bundle2 / "state.json").write_text(json.dumps({"run_id": "r-good"}), encoding="utf-8")
     runs = iter_synced_runs()
     assert [r["run_id"] for r in runs] == ["r-good"]
+
+
+# ── PR-HUB-VIS-CYCLE1 catalog row + diff page invariants ─────────────────
+
+
+def test_md_subdirs_synced_via_helper_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Direct unit test for _sync_md_subdirs (helper-level invariant)."""
+    from plugins.seed_generation.bundle_sync import _sync_md_subdirs
+
+    repo = _make_repo(tmp_path, monkeypatch)
+    src = repo / "state/seed-generation/r-100"
+    dst = repo / "docs/self-improving/petri-bundle/seeds/r-100"
+    for sub in ("candidates", "candidates_evolved", "survivors"):
+        (src / sub).mkdir(parents=True, exist_ok=True)
+        (src / sub / f"{sub}-md.md").write_text(f"# {sub}\n", encoding="utf-8")
+    dst.mkdir(parents=True, exist_ok=True)
+    _sync_md_subdirs(src, dst)
+    for sub in ("candidates", "candidates_evolved", "survivors"):
+        assert (dst / sub / f"{sub}-md.md").is_file()

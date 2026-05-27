@@ -163,24 +163,14 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
             log.warning("bundle_sync: copy %s → %s failed: %s", src, dst, exc)
             continue
 
-    # Copy SURVIVOR candidate bodies only (not the full drafts).
-    survivor_ids = _read_survivor_ids(state_json)
-    if survivor_ids:
-        cand_bundle_dir = bundle_dir / "candidates"
-        try:
-            cand_bundle_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            log.warning("bundle_sync: cannot create candidates dir: %s", exc)
-        else:
-            for survivor_id in survivor_ids:
-                src = src_dir / "candidates" / f"{survivor_id}.md"
-                if not src.is_file():
-                    continue
-                dst = cand_bundle_dir / src.name
-                try:
-                    shutil.copy2(src, dst)
-                except OSError as exc:
-                    log.warning("bundle_sync: survivor %s copy failed: %s", survivor_id, exc)
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — copy ALL three MD subdirs so the
+    # hub catalog can render every draft (not just survivors). Cycle 1
+    # measurement: 15 drafts + ≤ K evolved + ≤ K survivor copies =
+    # ~25 × 2 KB ≈ 50 KB/run, well under any storage budget. The prior
+    # survivor-only copy left 13/15 drafts invisible to the published
+    # bundle so the "per-candidate journey" view couldn't render
+    # non-survivor MDs.
+    _sync_md_subdirs(src_dir, bundle_dir)
 
     # PR-SEEDS-HIRES (2026-05-26) — hi-resolution observability surface.
     # Walks ``sub_agents/<task_id>/`` + ``checkpoints/<phase>.json``
@@ -212,6 +202,60 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
 
     log.info("bundle_sync: %s → %s", run_id, bundle_dir)
     return bundle_dir
+
+
+_MD_SUBDIRS = ("candidates", "candidates_evolved", "survivors")
+"""Per-cycle MD body directories. ``candidates/`` holds every draft body
+(15 in cycle 1); ``candidates_evolved/`` holds the evolver outputs
+(top-K from ranker, e.g. 5 in cycle 1); ``survivors/`` is a convenience
+copy of the survivor subset (so the hub catalog can link to one place
+without joining state.json)."""
+
+
+def _sync_md_subdirs(src_dir: Path, bundle_dir: Path) -> None:
+    """Mirror ``candidates/`` + ``candidates_evolved/`` + ``survivors/`` verbatim.
+
+    All three are flat ``<cid>.md`` directories; tolerant of any being
+    absent (e.g. an aborted run with no survivors yet). Used by the
+    final-sync path; the incremental live-sync path has its own
+    mtime-aware variant.
+    """
+    for subdir_name in _MD_SUBDIRS:
+        src_subdir = src_dir / subdir_name
+        if not src_subdir.is_dir():
+            continue
+        dst_subdir = bundle_dir / subdir_name
+        try:
+            dst_subdir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            log.warning("bundle_sync: cannot create %s: %s", dst_subdir, exc)
+            continue
+        for md in sorted(src_subdir.glob("*.md")):
+            try:
+                shutil.copy2(md, dst_subdir / md.name)
+            except OSError as exc:
+                log.warning("bundle_sync: %s/%s copy failed: %s", subdir_name, md.name, exc)
+
+
+def _incremental_sync_md_subdirs(src_dir: Path, bundle_dir: Path) -> None:
+    """Mtime-aware variant of :func:`_sync_md_subdirs` for the 5s live loop."""
+    for subdir_name in _MD_SUBDIRS:
+        src_subdir = src_dir / subdir_name
+        if not src_subdir.is_dir():
+            continue
+        dst_subdir = bundle_dir / subdir_name
+        try:
+            dst_subdir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        for md in src_subdir.glob("*.md"):
+            dst = dst_subdir / md.name
+            if dst.is_file() and dst.stat().st_mtime >= md.stat().st_mtime:
+                continue
+            try:
+                shutil.copy2(md, dst)
+            except OSError:
+                continue
 
 
 def _sync_subagents(src_dir: Path, bundle_dir: Path) -> None:
@@ -328,6 +372,8 @@ def sync_run_incremental(run_dir: Path | str) -> Path | None:
     _incremental_sync_subagents(src_dir / "sub_agents", bundle_dir / "sub_agents")
     # Checkpoints — incremental glob
     _incremental_sync_checkpoints(src_dir / "checkpoints", bundle_dir / "checkpoints")
+    # MD subdirs (candidates / candidates_evolved / survivors) — incremental glob
+    _incremental_sync_md_subdirs(src_dir, bundle_dir)
     return bundle_dir
 
 
