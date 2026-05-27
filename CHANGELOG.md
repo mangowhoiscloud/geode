@@ -48,6 +48,41 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **PR-HYPERPARAM-WIRE (2026-05-28)** — Wires the hyperparam mutation
+  SoT (``autoresearch/state/policies/hyperparam.json``, landed in
+  PR-HYPERPARAM-FOUNDATION) into the audit-subprocess argv builder.
+  ``autoresearch/train.py:_build_audit_command`` now reads the SoT
+  (env-path override → in-repo default → graceful empty on
+  missing/malformed) and overlays the three argv-relevant keys onto
+  ``cfg`` defaults:
+  ``max_turns`` → ``--max-turns <n>`` (inspect-petri ``-T max_turns``
+  downstream),
+  ``seed_limit`` → ``--seeds <n>`` (``--limit`` downstream),
+  ``dim_set`` → ``--dim-set <value>`` (``-T judge_dimensions``
+  downstream).
+  Resolution precedence (highest wins): mutation SoT value → cfg
+  default. A mutator-proposed ``max_turns=3`` now actually flows
+  through ``argv[-T max_turns=3]`` into the next audit's inspect-petri
+  run instead of stopping at the SoT JSON. Fallback path covers the
+  edge cases ``parse_mutation`` 's bounds guard cannot
+  (operator-hand-edited SoT to non-int-castable string, key absent,
+  JSON parse failure) — log + use cfg default, never crash the loop.
+  ``reflection_depth`` is **intentionally NOT wired here** because it
+  is a GEODE runtime knob (AgenticLoop reflection-iteration cap), not
+  an inspect-petri argv — the inspect-petri ``target=geode/gpt-5.5``
+  trajectory does not run the GEODE AgenticLoop, so wiring
+  ``reflection_depth`` into ``argv`` would have no measurement
+  effect. Documented in the ``_build_audit_command`` docstring; a
+  follow-up PR will wire it into the GEODE CLI runtime where it does
+  matter. Pinned by 7 new assertions in
+  ``tests/test_autoresearch_train.py``: ``_load_hyperparam_overrides``
+  missing/malformed/env-path branches; ``_hyperparam_int`` override
+  vs missing vs uncastable; ``_build_audit_command`` argv with vs
+  without SoT. Existing
+  ``test_build_audit_command_reads_from_config`` updated to point
+  ``GEODE_HYPERPARAM_OVERRIDE`` at a missing path so cfg-only assertions
+  keep their meaning under the new SoT-precedence contract.
+
 - **PR-HYPERPARAM-FOUNDATION (2026-05-28)** — Adds the 8th
   ``target_kind`` slot ``hyperparam`` to ``TARGET_KINDS``, opening a
   numeric / categorical mutation surface that targets the

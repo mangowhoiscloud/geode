@@ -172,16 +172,151 @@ def test_get_autoresearch_config_defaults_match_module_constants(
     assert cfg.max_turns == MAX_TURNS
 
 
-def test_build_audit_command_reads_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_hyperparam_overrides_missing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-HYPERPARAM-WIRE (2026-05-28) — graceful return on missing SoT."""
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(tmp_path / "nonexistent.json"))
+    assert auto_train._load_hyperparam_overrides() == {}
+
+
+def test_load_hyperparam_overrides_malformed_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-HYPERPARAM-WIRE — malformed JSON → graceful empty (caller
+    falls through to cfg defaults; loop doesn't crash)."""
+    p = tmp_path / "hyperparam.json"
+    p.write_text("not json at all", encoding="utf-8")
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(p))
+    assert auto_train._load_hyperparam_overrides() == {}
+
+
+def test_load_hyperparam_overrides_via_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-HYPERPARAM-WIRE — env var path overrides default path."""
+    import json as _json
+
+    p = tmp_path / "hyperparam.json"
+    p.write_text(
+        _json.dumps({"max_turns": "3", "seed_limit": "12"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(p))
+    overrides = auto_train._load_hyperparam_overrides()
+    assert overrides == {"max_turns": "3", "seed_limit": "12"}
+
+
+def test_hyperparam_int_uses_override_when_present() -> None:
+    """PR-HYPERPARAM-WIRE — ``_hyperparam_int`` casts override to int."""
+    assert auto_train._hyperparam_int({"max_turns": "7"}, "max_turns", 5) == 7
+    assert auto_train._hyperparam_int({"seed_limit": "20"}, "seed_limit", 8) == 20
+
+
+def test_hyperparam_int_falls_back_on_missing_key() -> None:
+    """PR-HYPERPARAM-WIRE — absent key → cfg default."""
+    assert auto_train._hyperparam_int({}, "max_turns", 5) == 5
+    assert auto_train._hyperparam_int({"dim_set": "subset"}, "max_turns", 5) == 5
+
+
+def test_hyperparam_int_falls_back_on_uncastable() -> None:
+    """PR-HYPERPARAM-WIRE — non-int-castable override → cfg default
+    (defensive — parse_mutation's bounds guard is the primary layer)."""
+    assert auto_train._hyperparam_int({"max_turns": "not-a-number"}, "max_turns", 5) == 5
+    assert auto_train._hyperparam_int({"max_turns": "5.5"}, "max_turns", 5) == 5
+
+
+def test_build_audit_command_applies_hyperparam_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-HYPERPARAM-WIRE — mutation SoT values flow into the audit
+    subprocess argv, overriding cfg defaults. This is the wire the PR
+    closes — without it, a mutator-proposed ``max_turns=3`` lands in
+    ``hyperparam.json`` but never reaches the inspect-petri ``-T``
+    flag, leaving the audit with the cfg default (5).
+    """
+    import json as _json
+    from types import SimpleNamespace
+
+    p = tmp_path / "hyperparam.json"
+    p.write_text(
+        _json.dumps({"max_turns": "3", "seed_limit": "12", "dim_set": "full"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(p))
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            budget_minutes=10,
+            target_model=None,
+            judge_model=None,
+            source="api_key",
+            seed_limit=25,  # would be on argv without override
+            seed_select="plugins/petri_audit/seeds_safe10",
+            dim_set="legacy",  # would be on argv without override
+            max_turns=20,  # would be on argv without override
+        ),
+    )
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    argv = auto_train._build_audit_command()
+    # Override values present.
+    assert "3" in argv  # max_turns
+    assert "12" in argv  # seed_limit
+    assert "full" in argv  # dim_set
+    # cfg defaults NOT present (override won).
+    assert "25" not in argv
+    assert "20" not in argv
+    assert "legacy" not in argv
+
+
+def test_build_audit_command_no_hyperparam_sot_falls_back_to_cfg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-HYPERPARAM-WIRE — when the SoT file is missing, ``_build_audit_command``
+    uses cfg defaults (no behavior change from pre-PR baseline)."""
+    from types import SimpleNamespace
+
+    # Point env to a non-existent path so the override path returns {}.
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(tmp_path / "absent.json"))
+    monkeypatch.setattr(
+        auto_train,
+        "_get_autoresearch_config",
+        lambda: SimpleNamespace(
+            budget_minutes=10,
+            target_model=None,
+            judge_model=None,
+            source="api_key",
+            seed_limit=25,
+            seed_select="plugins/petri_audit/seeds_safe10",
+            dim_set="legacy",
+            max_turns=20,
+        ),
+    )
+    monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
+    argv = auto_train._build_audit_command()
+    # cfg defaults all present.
+    assert "25" in argv  # seed_limit
+    assert "20" in argv  # max_turns
+    assert "legacy" in argv  # dim_set
+
+
+def test_build_audit_command_reads_from_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Monkeypatching _get_autoresearch_config flows through to argv.
 
     PR-MINIMAL-2 (2026-05-21) — ``use_oauth: bool`` replaced by
     ``source: Source`` (B1). ``source == "api_key"`` is the only
     value that suppresses ``--use-oauth``; any other source enables
     it (subscription credential).
+
+    PR-HYPERPARAM-WIRE (2026-05-28) — point ``GEODE_HYPERPARAM_OVERRIDE``
+    at a missing path so the hyperparam SoT override returns ``{}`` and
+    cfg defaults flow through unchanged (this test predates hyperparam
+    SoT and asserts the cfg-only contract).
     """
     from types import SimpleNamespace
 
+    monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(tmp_path / "absent.json"))
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",

@@ -683,6 +683,74 @@ def _emit_journal(
     ).append(event, level=level, payload=payload or {})
 
 
+def _hyperparam_int(overrides: dict[str, str], key: str, fallback: int) -> int:
+    """Cast a hyperparam SoT value to int, fall back on missing / bad value.
+
+    Mutator's ``parse_mutation`` already validated integer-castability +
+    bounds, so the cast normally succeeds. The fallback path covers two
+    edge cases:
+
+    1. Operator hand-edited ``hyperparam.json`` to an invalid value
+       (typo, wrong type); we don't want the audit subprocess to crash
+       — log + use the cfg default.
+    2. Key absent from SoT (mutator hasn't touched it yet, or the
+       SoT is the post-init default with only a subset of keys);
+       cfg default is the right answer.
+    """
+    raw = overrides.get(key)
+    if raw is None:
+        return fallback
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        log.warning(
+            "hyperparam SoT %r=%r is not int-castable; falling back to %r",
+            key,
+            raw,
+            fallback,
+        )
+        return fallback
+
+
+def _load_hyperparam_overrides() -> dict[str, str]:
+    """PR-HYPERPARAM-WIRE (2026-05-28) — read the hyperparam mutation
+    SoT and return the override dict, or ``{}`` on absence / parse failure.
+
+    Resolution order matches the other policy SoTs:
+      1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by audit subprocess
+         + sibling sampling, see runner.py ``_SIBLING_SOT_ENV_MAP``)
+      2. ``GLOBAL_HYPERPARAM_POLICY_PATH``
+         (``autoresearch/state/policies/hyperparam.json``)
+
+    Return value is a flat ``dict[str, str]`` — same shape as the SoT
+    JSON. Caller is responsible for type-casting + bounds validation
+    (mutator already validated at parse_mutation; this is the
+    runtime-consumer side).
+
+    Returns ``{}`` (graceful) if the file is missing or unreadable so
+    the closed-loop default still flows through. Bounds violations
+    that survived ``parse_mutation`` / ``apply_mutation`` 's two-layer
+    guard would surface as ``ValueError`` from inspect-petri itself
+    (its ``max_turns`` solver arg is a positive int).
+    """
+    env_path = os.environ.get("GEODE_HYPERPARAM_OVERRIDE")
+    if env_path:
+        path = Path(env_path)
+    else:
+        from core.paths import GLOBAL_HYPERPARAM_POLICY_PATH
+
+        path = GLOBAL_HYPERPARAM_POLICY_PATH
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if isinstance(k, str)}
+
+
 def _build_audit_command() -> list[str]:
     """Construct the ``geode audit`` subprocess argv.
 
@@ -702,19 +770,37 @@ def _build_audit_command() -> list[str]:
     flow through this builder because they're autoresearch-specific
     (not per-role) — the ``--use-oauth`` flag fires whenever
     ``cfg.source`` is anything other than ``"api_key"``.
+
+    PR-HYPERPARAM-WIRE (2026-05-28) — ``cfg.{seed_limit, dim_set,
+    max_turns}`` are now overridable by the mutation SoT at
+    ``autoresearch/state/policies/hyperparam.json``. Resolution
+    precedence (highest wins): mutation SoT value → autoresearch
+    config default. The mutator-proposed values went through
+    ``parse_mutation`` 's bounds guard, so by the time they reach
+    this argv builder the integer cast is already safe; we still
+    fall back to the config default on missing key or stringified
+    value that fails int() (defensive — bounds guard is the primary
+    layer, this is just so a malformed SoT doesn't crash the closed
+    loop). ``reflection_depth`` is NOT wired here — it's a GEODE
+    runtime knob (AgenticLoop reflection-iteration cap), not an
+    inspect-petri argv, and lands in a follow-up PR.
     """
     cfg = _get_autoresearch_config()
+    overrides = _load_hyperparam_overrides()
+    effective_seed_limit = _hyperparam_int(overrides, "seed_limit", cfg.seed_limit)
+    effective_dim_set = overrides.get("dim_set") or cfg.dim_set
+    effective_max_turns = _hyperparam_int(overrides, "max_turns", cfg.max_turns)
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
     argv += [
         "--seed-select",
         _resolve_seed_select(),
         "--seeds",
-        str(cfg.seed_limit),
+        str(effective_seed_limit),
         "--dim-set",
-        cfg.dim_set,
+        effective_dim_set,
         "--max-turns",
-        str(cfg.max_turns),
+        str(effective_max_turns),
         "--live",
         "--yes",
     ]
