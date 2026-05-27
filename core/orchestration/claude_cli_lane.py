@@ -155,8 +155,8 @@ CLAUDE_CLI_LANE_TIMEOUT_S = 7200.0
 the last-queued voter to a 60-100min wait, well past 5min — the lane
 would fall through to "timeout" and surface a `TimeoutError` even
 though the subprocess itself was perfectly healthy. The 2h timeout
-covers the worst-case Loop 1 ranker (59 matches × ~70s/voter / cap 4
-= ~17min steady state, with retries up to ~1h). A genuinely-stuck
+covers the worst-case Loop 1 ranker (59 matches × ~70s/voter / cap 3
+= ~23min steady state, with retries up to ~1h). A genuinely-stuck
 subprocess still surfaces — just on a 2h boundary instead of 5min.
 
 Pre-raise rationale (retained for context): A legitimate

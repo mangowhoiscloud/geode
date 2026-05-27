@@ -240,7 +240,17 @@ def audit(
         "— inspect-petri default; lets the auditor fabricate tool results, "
         "useful for capability dim studies).",
     ),
-    cache: bool = typer.Option(True, "--cache/--no-cache", help="Petri cache parameter."),
+    cache: bool = typer.Option(
+        False,
+        "--cache/--no-cache",
+        help="Petri cache parameter. Default OFF — inspect-ai trajectory cache "
+        "(``cache_key = (model config, input messages, base_url, tools, "
+        "expiry, scopes, epoch)`` md5) is shared across audits at the same "
+        "process / host, so closed-loop measurement can silently HIT a "
+        "trajectory recorded by a different mutation and replay its score. "
+        "Opt in with ``--cache`` only when you intentionally want to amortise "
+        "auditor/judge generate cost across repeated identical seeds.",
+    ),
     dry_run: bool = typer.Option(
         True,
         "--dry-run/--live",
@@ -326,7 +336,9 @@ def _build_slash_parser() -> argparse.ArgumentParser:
         dest="judge_mode",
         choices=["legacy", "split"],
     )
-    parser.add_argument("--no-cache", action="store_false", dest="cache", default=True)
+    cache_group = parser.add_mutually_exclusive_group()
+    cache_group.add_argument("--cache", action="store_true", dest="cache", default=False)
+    cache_group.add_argument("--no-cache", action="store_false", dest="cache")
     parser.add_argument("--live", action="store_false", dest="dry_run", default=True)
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument("--yes", "-y", action="store_true", default=False)

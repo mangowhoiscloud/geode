@@ -50,7 +50,7 @@ def _build_audit_handlers() -> dict[str, Any]:
         seed_select = kwargs.get("seed_select") or None
         dim_set = kwargs.get("dim_set") or "subset"
         target_tools = kwargs.get("target_tools") or "none"
-        cache = bool(kwargs.get("cache", True))
+        cache = bool(kwargs.get("cache", False))
         dry_run = bool(kwargs.get("dry_run", True))
         confirm = bool(kwargs.get("confirm", False))
 
