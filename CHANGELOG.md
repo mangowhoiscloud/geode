@@ -47,6 +47,33 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-MUTATION-CODE-FOUNDATION (2026-05-28, Phase 3.0)** —
+  ``core/self_improving_loop/code_mutation_whitelist.py`` ships as the
+  absolute floor for the upcoming source-code mutation surface
+  (``target_kind="plugin_impl"``, Phase 3.1). Layer 1 — path whitelist
+  (``is_path_allowed`` / ``validate_diff_paths`` /
+  ``validate_plugin_impl_target``) accepts only ``plugins/<section>/``
+  and ``tests/plugins/<section>/``; everything else (``core/``,
+  ``autoresearch/``, ``.github/``, ``CLAUDE.md``, sibling plugins,
+  ``..`` traversal, absolute paths) raises
+  ``MutationPathDeniedError``. Reserved names (``petri_audit``,
+  ``seed_generation``) are frozen against collision. Layer 2 —
+  ``find_evolve_blocks`` scans for ``# EVOLVE-BLOCK-START`` /
+  ``# EVOLVE-BLOCK-END`` markers (AlphaEvolve §A pattern); flat-only,
+  ValueError on nested/unmatched/unclosed. Anti-pattern reference: DGM
+  (arXiv 2505.22954) reward-hacking incident where the agent edited
+  its own tool wrapper to suppress the instrumentation the fitness
+  checker depended on — prompt-level "do not modify X" was not
+  enforcement; only post-mutation diff-checking against a path
+  whitelist would have caught it. Pinned by 41 unit assertions in
+  ``tests/test_code_mutation_whitelist.py`` (snake_case + reserved
+  guards, lookalike-prefix denial, path traversal, EVOLVE-BLOCK edge
+  cases). No behavior change for the 7 active text-artifact target
+  kinds; PR 3.1 wires this module into the apply path along with the
+  ``plugin_impl`` TARGET_KINDS extension + ``patch_blob`` Mutation
+  field.
+
 ### Fixed
 - **PR-TRAIN-EVAL-ARCHIVE-FALLBACK (2026-05-27)** —
   ``autoresearch/train.py:run_audit`` now reads ``dim_means`` /
