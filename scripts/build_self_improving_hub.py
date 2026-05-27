@@ -1304,6 +1304,16 @@ def _emit_seedgen_run_subpages(
                 geode_version=common["geode_version"],
                 build_date=common["build_date"],
             )
+            # PR-HUB-VIS-CYCLE1 (2026-05-28) — all-MD catalog page
+            catalog_body = _render_candidates_catalog_body(run_id, state, run_bundle_dir)
+            catalog_html = _render_seedgen_subpage(
+                title=f"Candidates — {run_id}",
+                active_link="candidates",
+                body=catalog_body,
+                common=common,
+            )
+            (out_dir / "candidates").mkdir(parents=True, exist_ok=True)
+            (out_dir / "candidates" / "index.html").write_text(catalog_html, encoding="utf-8")
 
 
 def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
@@ -1462,6 +1472,8 @@ def _render_seedgen_subpage(
         "Tournament</a></li>"
         f'<li><a href="{base}/seed-generation/{rid}/lineage/"'
         f"{' aria-current="page"' if active_link == 'lineage' else ''}>Lineage</a></li>"
+        f'<li><a href="{base}/seed-generation/{rid}/candidates/"'
+        f"{' aria-current="page"' if active_link == 'candidates' else ''}>Candidates</a></li>"
         f'<li><a href="{base}/seed-generation/active/"'
         f"{' aria-current="page"' if active_link == 'active' else ''}>Active runs</a></li>"
         "</ul>"
@@ -2017,6 +2029,10 @@ def _load_candidate_lineage(
         stations.append({"phase": "supervisor", "body": body})
 
     # generator — body of the candidate .md file (if available).
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — embed raw MD in a <script type="text/markdown">
+    # tag so the client-side marked.js renderer (loaded by hub.css's sibling
+    # markdown.js asset) can render headings / lists / code blocks. The raw
+    # text is kept verbatim (preserves YAML frontmatter + indentation).
     cand_body_path = bundle_dir / "candidates" / f"{cand_id}.md"
     if cand_body_path.is_file():
         try:
@@ -2027,7 +2043,12 @@ def _load_candidate_lineage(
             stations.append(
                 {
                     "phase": "generator",
-                    "body": f'<pre class="msg cand-body">{html_escape(cand_body)}</pre>',
+                    "body": (
+                        '<article class="markdown-body" data-md-target="generator-'
+                        f'{html_escape(cand_id)}"></article>'
+                        '<script type="text/markdown" data-md-source="generator-'
+                        f'{html_escape(cand_id)}">{html_escape(cand_body)}</script>'
+                    ),
                 }
             )
 
@@ -2117,7 +2138,15 @@ def _load_candidate_lineage(
                 }
             )
 
-    # ranker — matches this candidate played in tournament.json
+    # ranker — matches this candidate played in tournament.json.
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — extended:
+    #   1. winner=None now renders as `quorum_lost` chip (was incorrectly
+    #      counted as "lost" in the prior implementation — cycle 1 had
+    #      all 59 matches quorum_lost from codex voter failures and the
+    #      old UI would have read as "100% loss")
+    #   2. Per-voter rationale expandable via <details> with provider chip
+    #      + parse_error surface (separate sprint will fix the codex voter
+    #      itself; this PR only makes the failure visible)
     t_path = bundle_dir / "tournament.json"
     if t_path.is_file():
         try:
@@ -2125,58 +2154,121 @@ def _load_candidate_lineage(
         except (OSError, json.JSONDecodeError):
             t_data = {}
         match_rows: list[str] = []
+        won = lost = tied = quorum_lost = 0
+        voter_ok = voter_fail = 0
         for m in t_data.get("matches") or []:
             if cand_id not in (m.get("candidate_a"), m.get("candidate_b")):
                 continue
             side = "A" if m.get("candidate_a") == cand_id else "B"
             opp = m.get("candidate_b") if side == "A" else m.get("candidate_a")
-            elo_before = m.get("elo_before", {}).get(cand_id, 1000.0)
-            elo_after = m.get("elo_after", {}).get(cand_id, 1000.0)
+            elo_before = (m.get("elo_before") or {}).get(cand_id, 1000.0)
+            elo_after = (m.get("elo_after") or {}).get(cand_id, 1000.0)
             delta = float(elo_after) - float(elo_before)
             winner = m.get("winner")
-            won = "won" if winner == side else ("tied" if winner == "tie" else "lost")
+            if winner is None:
+                outcome = "quorum_lost"
+                outcome_class = "warn"
+                quorum_lost += 1
+            elif winner == "tie":
+                outcome = "tied"
+                outcome_class = "muted"
+                tied += 1
+            elif winner == side:
+                outcome = "won"
+                outcome_class = "seedgen"
+                won += 1
+            else:
+                # winner == opposing side ("A" or "B" that is NOT this cand)
+                outcome = "lost"
+                outcome_class = "muted"
+                lost += 1
+            # Per-voter rationale expander.
+            voter_blocks: list[str] = []
+            for v in m.get("votes") or []:
+                if not isinstance(v, dict):
+                    continue
+                prov = html_escape(str(v.get("voter_provider", "?")))
+                model = html_escape(str(v.get("voter_model", "?")))
+                vote_val = v.get("vote")
+                rationale = str(v.get("rationale") or "")
+                parse_err = v.get("parse_error")
+                if parse_err:
+                    voter_fail += 1
+                    parse_err_html = html_escape(str(parse_err))
+                    rationale_block = (
+                        f'<p class="muted">parse_error: <code>{parse_err_html}</code></p>'
+                    )
+                    chip = f'<span class="bucket warn">{prov}: fail</span>'
+                else:
+                    voter_ok += 1
+                    rationale_block = f'<pre class="msg">{html_escape(rationale) or "—"}</pre>'
+                    vote_label = html_escape(str(vote_val) if vote_val is not None else "—")
+                    chip = f'<span class="bucket seedgen">{prov}: {vote_label}</span>'
+                voter_blocks.append(
+                    f"<details><summary>{chip} <code>{model}</code></summary>"
+                    f"{rationale_block}</details>"
+                )
+            voters_html = "".join(voter_blocks) or '<span class="muted">no voters</span>'
             match_rows.append(
                 f"<tr><td><code>{html_escape(str(m.get('match_id', '?')))}</code></td>"
                 f"<td>{side} vs <code>{html_escape(str(opp))}</code></td>"
-                f'<td><span class="bucket seedgen">{won}</span></td>'
+                f'<td><span class="bucket {outcome_class}">{outcome}</span></td>'
                 f'<td class="num">{float(elo_before):.1f} → '
-                f"{float(elo_after):.1f} (Δ {delta:+.1f})</td></tr>"
+                f"{float(elo_after):.1f} (Δ {delta:+.1f})</td>"
+                f"<td>{voters_html}</td></tr>"
             )
         if match_rows:
+            summary_parts = [f"{won}W-{lost}L-{tied}T"]
+            if quorum_lost > 0:
+                summary_parts.append(f"quorum_lost {quorum_lost}")
+            if voter_fail > 0:
+                summary_parts.append(f"voter_fail {voter_fail}/{voter_ok + voter_fail}")
+            summary = " · ".join(summary_parts)
             stations.append(
                 {
                     "phase": "ranker",
                     "body": (
+                        f'<p class="muted">{html_escape(summary)}</p>'
                         '<table class="records">'
                         "<thead><tr><th>match</th><th>side / opponent</th>"
-                        '<th>outcome</th><th class="num">Elo</th></tr></thead>'
+                        '<th>outcome</th><th class="num">Elo</th>'
+                        "<th>voters (click to expand)</th></tr></thead>"
                         f"<tbody>{''.join(match_rows)}</tbody></table>"
                     ),
                 }
             )
 
-    # evolver — evolved_candidates rows where parent_id == cand_id
+    # evolver — evolved_candidates rows where parent_id == cand_id.
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — replaces the inline unified_diff
+    # ``<pre>`` block with a link to the dedicated side-by-side diff page
+    # (rendered via marked.js). Diff content is no longer inline on the
+    # lineage page so the page stays light + the diff page can use the
+    # full viewport for two rendered MD columns.
     evolved = state.get("evolved_candidates", []) if isinstance(state, dict) else []
+    # The run_id is implicit from the bundle_dir path. We resolve it to
+    # build the diff page link.
+    try:
+        # bundle_dir = docs/self-improving/petri-bundle/seeds/<run_id>/
+        run_id_for_link = bundle_dir.name
+    except AttributeError:
+        run_id_for_link = ""
     for ev in evolved or []:
         if not isinstance(ev, dict) or ev.get("parent_id") != cand_id:
             continue
         ev_id = str(ev.get("id", "?"))
-        ev_body_path = bundle_dir / "candidates" / f"{ev_id}.md"
-        diff_html = ""
-        if cand_body_path.is_file() and ev_body_path.is_file():
-            import difflib
-
-            try:
-                src_lines = cand_body_path.read_text(encoding="utf-8").splitlines()
-                dst_lines = ev_body_path.read_text(encoding="utf-8").splitlines()
-                diff = difflib.unified_diff(
-                    src_lines, dst_lines, fromfile=cand_id, tofile=ev_id, lineterm=""
-                )
-                diff_text = "\n".join(diff)
-                if diff_text:
-                    diff_html = f'<pre class="diff">{html_escape(diff_text)}</pre>'
-            except OSError:
-                diff_html = ""
+        ev_body_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
+        # PR-HUB-VIS-CYCLE1: candidates_evolved/ is the new canonical
+        # location. Fall back to legacy candidates/<ev_id>.md for runs
+        # synced before bundle_sync started copying the evolved subdir.
+        if not ev_body_path.is_file():
+            ev_body_path = bundle_dir / "candidates" / f"{ev_id}.md"
+        diff_link_html = ""
+        if cand_body_path.is_file() and ev_body_path.is_file() and run_id_for_link:
+            diff_link_html = (
+                f'<p><a href="/geode/self-improving/seed-generation/'
+                f"{html_escape(run_id_for_link)}/lineage/{html_escape(cand_id)}/diff/"
+                f'">→ side-by-side diff (parent ↔ evolved)</a></p>'
+            )
         m_axis = html_escape(str(ev.get("mutation_axis", "—")))
         m_rewrite = html_escape(str(ev.get("rewrite_section", "—")))
         m_notes = html_escape(str(ev.get("notes", "—")))
@@ -2189,7 +2281,7 @@ def _load_candidate_lineage(
                     f"<dt>mutation_axis</dt><dd>{m_axis}</dd>"
                     f"<dt>rewrite_section</dt><dd>{m_rewrite}</dd>"
                     f"<dt>notes</dt><dd>{m_notes}</dd>"
-                    "</dl>" + diff_html
+                    "</dl>" + diff_link_html
                 ),
             }
         )
@@ -2259,7 +2351,291 @@ def _render_lineage_detail_body(run_id: str, cand_id: str, stations: list[dict[s
         '<section class="page-sub run-detail-header">'
         f'<p><a href="{back_link}">← back to lineage index</a></p>'
         f"<dl><dt>candidate</dt><dd><code>{html_escape(cand_id)}</code></dd>"
-        f"<dt>stations</dt><dd>{len(stations)}</dd></dl></section>" + "".join(sections)
+        f"<dt>stations</dt><dd>{len(stations)}</dd></dl></section>"
+        + "".join(sections)
+        # PR-HUB-VIS-CYCLE1 (2026-05-28) — marked.js so the generator
+        # station's MD body renders with headings / lists / code blocks.
+        + _marked_js_loader_html()
+    )
+
+
+def _marked_js_loader_html() -> str:
+    """Marked.js CDN load + auto-renderer for ``<script type="text/markdown">``.
+
+    PR-HUB-VIS-CYCLE1 (2026-05-28) — finds every script tag with
+    ``data-md-source="<key>"`` and renders its content into the matching
+    ``<article data-md-target="<key>">`` via ``marked.parse()``. The CDN
+    URL is jsdelivr ``marked@13/marked.min.js``; an SRI hash will be
+    added in a follow-up PR once the operator picks the exact version
+    they want pinned.
+    """
+    return (
+        '<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js" '
+        'crossorigin="anonymous"></script>'
+        "<script>"
+        "(function () {"
+        '  const sources = document.querySelectorAll("script[type=\\"text/markdown\\"]");'
+        "  sources.forEach(function (s) {"
+        '    const key = s.getAttribute("data-md-source");'
+        "    if (!key) return;"
+        "    const target = document.querySelector("
+        '      "article[data-md-target=\\"" + key + "\\"]"'
+        "    );"
+        '    if (!target || typeof marked === "undefined") return;'
+        '    target.innerHTML = marked.parse(s.textContent || s.innerText || "");'
+        "  });"
+        "})();"
+        "</script>"
+    )
+
+
+def _render_evolver_diff_body(
+    run_id: str,
+    cand_id: str,
+    ev_meta: dict[str, Any],
+    parent_md: str,
+    evolved_md: str,
+) -> str:
+    """Side-by-side rendered MD diff page (parent vs evolved).
+
+    PR-HUB-VIS-CYCLE1 (2026-05-28) — client-side marked.js render of two
+    full MD bodies in two columns. Top of page: ``rewrite_section`` +
+    ``notes`` from evolver checkpoint as context.
+    """
+    ev_id = str(ev_meta.get("id", "?"))
+    rewrite_section = html_escape(str(ev_meta.get("rewrite_section", "—")))
+    notes = html_escape(str(ev_meta.get("notes", "—")))
+    mutation_axis = html_escape(str(ev_meta.get("mutation_axis", "—")))
+    back_link = (
+        f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+        f"/lineage/{html_escape(cand_id)}/"
+    )
+    parent_size = len(parent_md.encode("utf-8"))
+    evolved_size = len(evolved_md.encode("utf-8"))
+    return (
+        '<section class="page-sub run-detail-header">'
+        f'<p><a href="{back_link}">← back to lineage ({html_escape(cand_id)})</a></p>'
+        '<dl class="status-grid">'
+        f"<dt>parent</dt><dd><code>{html_escape(cand_id)}</code> "
+        f"({parent_size} bytes)</dd>"
+        f"<dt>evolved</dt><dd><code>{html_escape(ev_id)}</code> "
+        f"({evolved_size} bytes, Δ {evolved_size - parent_size:+d})</dd>"
+        f"<dt>mutation_axis</dt><dd>{mutation_axis}</dd>"
+        f"<dt>rewrite_section</dt><dd>{rewrite_section}</dd>"
+        f"<dt>notes</dt><dd>{notes}</dd>"
+        "</dl></section>"
+        '<section class="page-sub evolver-diff-grid">'
+        '<div class="diff-col parent-col">'
+        f"<h3>parent <code>{html_escape(cand_id)}</code></h3>"
+        f'<article class="markdown-body" data-md-target="parent"></article>'
+        f'<script type="text/markdown" data-md-source="parent">'
+        f"{html_escape(parent_md)}</script>"
+        "</div>"
+        '<div class="diff-col evolved-col">'
+        f"<h3>evolved <code>{html_escape(ev_id)}</code></h3>"
+        f'<article class="markdown-body" data-md-target="evolved"></article>'
+        f'<script type="text/markdown" data-md-source="evolved">'
+        f"{html_escape(evolved_md)}</script>"
+        "</div>"
+        "</section>"
+        f"{_marked_js_loader_html()}"
+    )
+
+
+def _summarise_ranker_for_cid(cid: str, tournament: dict[str, Any]) -> dict[str, int | float | str]:
+    """Per-cid ranker summary from ``tournament.json``.
+
+    Returns ``{w, l, t, quorum_lost, voter_failed, elo_delta, status_label}``
+    where ``status_label`` is the hub-displayed chip:
+
+    * ``"<W>-<L>-<T>"`` when at least one match ratified for this cid
+    * ``"<W>-<L>-<T> · quorum_lost <N>"`` when some but not all matches lost quorum
+    * ``"all quorum_lost (<N>)"`` when zero ratified — PR-HUB-VIS-CYCLE1
+      cycle-1 dominant case driven by the codex voter failure issue.
+    """
+    matches = tournament.get("matches") or []
+    won = lost = tied = quorum_lost = 0
+    voter_failed = 0
+    elo_delta = 0.0
+    for m in matches:
+        a = m.get("candidate_a")
+        b = m.get("candidate_b")
+        if cid not in (a, b):
+            continue
+        side = "A" if a == cid else "B"
+        opp_side = "B" if side == "A" else "A"
+        winner = m.get("winner")
+        if winner is None:
+            quorum_lost += 1
+        elif winner == "tie":
+            tied += 1
+        elif winner == side:
+            won += 1
+        elif winner == opp_side:
+            lost += 1
+        elo_before = (m.get("elo_before") or {}).get(cid)
+        elo_after = (m.get("elo_after") or {}).get(cid)
+        if isinstance(elo_before, (int, float)) and isinstance(elo_after, (int, float)):
+            elo_delta += float(elo_after) - float(elo_before)
+        for v in m.get("votes") or []:
+            if isinstance(v, dict) and v.get("parse_error"):
+                voter_failed += 1
+    total_decisive = won + lost + tied
+    if total_decisive == 0 and quorum_lost > 0:
+        status = f"all quorum_lost ({quorum_lost})"
+    elif quorum_lost > 0:
+        status = f"{won}-{lost}-{tied} · quorum_lost {quorum_lost}"
+    else:
+        status = f"{won}-{lost}-{tied}"
+    return {
+        "w": won,
+        "l": lost,
+        "t": tied,
+        "quorum_lost": quorum_lost,
+        "voter_failed": voter_failed,
+        "elo_delta": elo_delta,
+        "status_label": status,
+    }
+
+
+def _render_candidates_catalog_body(
+    run_id: str,
+    state: dict[str, Any],
+    bundle_dir: Path,
+) -> str:
+    """All-MD catalog — one row per draft (regardless of survivor status).
+
+    PR-HUB-VIS-CYCLE1 (2026-05-28) — addresses cycle 1 hub gap where
+    13/15 non-survivor drafts had no surface in the hub (only survivor
+    cards in the index page). This page joins state.json's
+    ``candidates`` / ``reflections`` / ``pilot_scores`` / ``elo_ratings``
+    / ``survivors`` / ``evolved_candidates`` with ``tournament.json``
+    per-cid ranker summary so operators see the complete journey
+    (including quorum_lost and off-target chips) for every draft.
+    """
+    candidates = state.get("candidates") or []
+    if not candidates:
+        return (
+            '<section class="page-sub">'
+            '<p class="muted">No drafts recorded for this run.</p></section>'
+        )
+    reflections = state.get("reflections") or {}
+    pilot_scores = state.get("pilot_scores") or {}
+    elo_ratings = state.get("elo_ratings") or {}
+    survivors = {str(s) for s in state.get("survivors") or []}
+    evolved = state.get("evolved_candidates") or []
+    parent_to_evolved: dict[str, str] = {}
+    for ev in evolved:
+        if isinstance(ev, dict):
+            parent_to_evolved[str(ev.get("parent_id", ""))] = str(ev.get("id", ""))
+
+    target_dim = str(state.get("target_dim", ""))
+
+    t_path = bundle_dir / "tournament.json"
+    tournament: dict[str, Any] = {}
+    if t_path.is_file():
+        try:
+            tournament = json.loads(t_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            tournament = {}
+
+    rows: list[str] = []
+    quorum_lost_total = 0
+    pilot_fail_count = 0
+    off_target_count = 0
+    for cand in candidates:
+        if not isinstance(cand, dict):
+            continue
+        cid = str(cand.get("id", ""))
+        # critic
+        r = reflections.get(cid) if isinstance(reflections.get(cid), dict) else {}
+        risk = str((r or {}).get("judge_risk", "—"))
+        # pilot
+        ps = pilot_scores.get(cid) if isinstance(pilot_scores.get(cid), dict) else {}
+        means = (ps or {}).get("dim_means") if isinstance(ps, dict) else None
+        if isinstance(means, dict) and means:
+            sorted_means = sorted(
+                ((k, v) for k, v in means.items() if isinstance(v, (int, float))),
+                key=lambda kv: -float(kv[1]),
+            )
+            if sorted_means and float(sorted_means[0][1]) > 0.0:
+                top_dim, top_val = sorted_means[0]
+                pilot_cell = f"<code>{html_escape(top_dim)}</code> {float(top_val):.1f}"
+                off_target = top_dim != target_dim and target_dim
+            else:
+                pilot_cell = '<span class="bucket warn">pilot-fail</span>'
+                pilot_fail_count += 1
+                off_target = False
+        else:
+            pilot_cell = '<span class="muted">—</span>'
+            off_target = False
+        if off_target:
+            off_target_count += 1
+            pilot_cell += ' <span class="bucket warn">off-target</span>'
+        # ranker
+        ranker = _summarise_ranker_for_cid(cid, tournament)
+        quorum_lost_total += int(ranker["quorum_lost"])
+        ranker_cell = html_escape(str(ranker["status_label"]))
+        # elo
+        elo_val = elo_ratings.get(cid)
+        elo_cell = (
+            f'<span class="num">{float(elo_val):.0f}</span>'
+            if isinstance(elo_val, (int, float))
+            else '<span class="muted">—</span>'
+        )
+        # survivor + evolved
+        surv_cell = "★" if cid in survivors else ""
+        ev_id = parent_to_evolved.get(cid, "")
+        if ev_id:
+            ev_link = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/lineage/{html_escape(ev_id)}/"
+            )
+            evolved_cell = f'<a href="{ev_link}"><code>{html_escape(ev_id)}</code></a>'
+        else:
+            evolved_cell = '<span class="muted">—</span>'
+        # link to lineage page
+        lineage_link = (
+            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+            f"/lineage/{html_escape(cid)}/"
+        )
+        rows.append(
+            f'        <tr><td class="id"><a href="{lineage_link}">'
+            f"<code>{html_escape(cid)}</code></a></td>"
+            f"<td>{html_escape(risk)}</td>"
+            f"<td>{pilot_cell}</td>"
+            f"<td>{ranker_cell}</td>"
+            f'<td class="num">{elo_cell}</td>'
+            f"<td>{surv_cell}</td>"
+            f"<td>{evolved_cell}</td></tr>"
+        )
+
+    banner = ""
+    if quorum_lost_total > 0:
+        total_matches = len(tournament.get("matches") or [])
+        banner = (
+            '<section class="page-sub stale-banner">'
+            "<p><strong>ranker integrity warning</strong> — "
+            f"{quorum_lost_total} per-cid quorum_lost events across "
+            f"{total_matches} matches. Survivor selection may be id-ordered "
+            "rather than merit-ordered. See per-cid lineage page → ranker station "
+            "for voter parse_error breakdown.</p></section>"
+        )
+
+    return (
+        f"{banner}"
+        '<section class="page-sub">'
+        f'<p class="muted">{len(candidates)} drafts · target_dim '
+        f"<code>{html_escape(target_dim)}</code> · "
+        f"{pilot_fail_count} pilot-fail · {off_target_count} off-target · "
+        f"{len(survivors)} survivors · {len(parent_to_evolved)} evolved.</p>"
+        '<table class="records">'
+        "<thead><tr>"
+        "<th>cid</th><th>critic risk</th><th>pilot top1</th>"
+        '<th>ranker</th><th class="num">elo</th>'
+        "<th>survived?</th><th>evolved →</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
     )
 
 
@@ -2319,6 +2695,44 @@ def emit_seedgen_lineage_pages(
         cand_dir = out_dir / "lineage" / cid
         cand_dir.mkdir(parents=True, exist_ok=True)
         (cand_dir / "index.html").write_text(detail_html, encoding="utf-8")
+
+    # PR-HUB-VIS-CYCLE1 (2026-05-28) — emit side-by-side diff page for
+    # every parent_id ↔ evolved_id pair. Skipped silently when either MD
+    # body is missing from disk.
+    for ev in state.get("evolved_candidates") or []:
+        if not isinstance(ev, dict):
+            continue
+        parent_id = str(ev.get("parent_id", ""))
+        ev_id = str(ev.get("id", ""))
+        if not parent_id or not ev_id:
+            continue
+        parent_md_path = bundle_dir / "candidates" / f"{parent_id}.md"
+        evolved_md_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
+        if not evolved_md_path.is_file():
+            evolved_md_path = bundle_dir / "candidates" / f"{ev_id}.md"
+        if not parent_md_path.is_file() or not evolved_md_path.is_file():
+            continue
+        try:
+            parent_md = parent_md_path.read_text(encoding="utf-8")
+            evolved_md = evolved_md_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        diff_body = _render_evolver_diff_body(
+            run_id=run_id,
+            cand_id=parent_id,
+            ev_meta=ev,
+            parent_md=parent_md,
+            evolved_md=evolved_md,
+        )
+        diff_html = _render_seedgen_subpage(
+            title=f"Diff {parent_id} → {ev_id} — {run_id}",
+            active_link="lineage",
+            body=diff_body,
+            common=common,
+        )
+        diff_dir = out_dir / "lineage" / parent_id / "diff"
+        diff_dir.mkdir(parents=True, exist_ok=True)
+        (diff_dir / "index.html").write_text(diff_html, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
