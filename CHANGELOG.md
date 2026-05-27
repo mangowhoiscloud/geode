@@ -47,6 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+- **PR-LEGACY-PROVIDER-REMOVAL (2026-05-28)** — delete the three legacy
+  ``*AgenticAdapter`` classes (``OpenAIAgenticAdapter``,
+  ``CodexAgenticAdapter``, ``GlmAgenticAdapter``) that the
+  v0.99.39 LLMAdapter sprint (PR-MAINPATH-1 / PR-MAINPATH-67) was meant
+  to replace. The agent loop's main-path dispatch already routes through
+  the v0.99.39+ adapter registry (``openai-payg``, ``codex-oauth``,
+  ``glm-payg``, plus the legacy paperclip ``ClaudeAdapter`` /
+  ``OpenAIAdapter`` wrappers for the cross-LLM-verify Protocol only) —
+  the three Agentic classes had zero production callers, only a long
+  tail of source-level pinning tests. Coexistence was a maintenance
+  liability: the v0.99.39 sprint that introduced the new adapters did
+  not delete the old ones, so a token-refresh or schema-evolution change
+  had to be made in both places to keep parity. The audit (this PR's
+  parallel sub-agent run) caught two existing skews: ``_reflection.py``
+  consults ``infer_source()`` while the legacy plan_registry path was
+  unreachable, and ``_get_async_codex_client`` had a stale-token
+  invalidation gap (no ``reset_codex_client()`` call after
+  ``/login openai``) that was harmless only because the legacy path was
+  already orphaned.
+
+  Helper functions still needed by the new adapters (``_resolve_codex_token``,
+  ``build_codex_oauth_headers``, ``_resolve_openai_key``,
+  ``_get_async_openai_client``, ``reset_openai_client``,
+  ``_resolve_glm_endpoint``, ``_get_async_glm_client``,
+  ``reset_glm_client``) stay in ``core/llm/providers/`` along with the
+  ``OpenAIAdapter`` paperclip wrapper (a different Protocol —
+  ``LLMClientPort`` for cross-LLM verify, not ``LLMAdapter`` for the
+  agent loop). 13 legacy test files removed (only assertions on the
+  deleted-class internals); ``tests/test_provider_parity_v0532.py``
+  D2 invariants migrated to the equivalent adapter classes
+  (``test_openai_payg_adapter_propagates_billing_error`` etc.).
+
+  Reference subscription logic (legacy ``CodexAgenticAdapter.agentic_call``)
+  contributed one backfill: the pre-send input-shape diagnostic
+  (``_log_codex_input_shape``) that catches ``input[i].content == null``
+  regressions at WARN level rather than as a body-less 400. The legacy
+  ``call_with_failover`` cross-model fallback wrap was deliberately not
+  carried over (PR-DRIFT-CUT semantics: operator manages ``/model``).
+
 ### Fixed
 - **PR-CODEX-OUTPUT-NULL (2026-05-28)** — work around an ``openai>=2.26``
   streaming-parser crash on every Codex subscription call. The ChatGPT

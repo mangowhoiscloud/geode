@@ -102,18 +102,22 @@ class TestPickerPersistence:
 
 
 class TestPaygStoreFalse:
-    def test_store_false_in_openai_kwargs(self) -> None:
-        """Source-pin: the PAYG adapter must send ``store=False`` so it
-        matches Codex and avoids server-side response retention."""
-        from core.llm.providers import openai as openai_mod
-
-        src = inspect.getsource(openai_mod)
-        assert '"store": False' in src
-
     def test_codex_plus_still_uses_store_false(self) -> None:
-        """Regression guard — extracting the shared replay walker
-        in v0.60.0 must not have dropped Codex.s store=False."""
-        from core.llm.providers import codex as codex_mod
+        """Regression guard — Codex subscription backend mandates
+        ``store=False``; the kwargs builder for the OAuth adapter must
+        keep it.
 
-        src = inspect.getsource(codex_mod)
+        PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pin migrated from the
+        deleted ``core.llm.providers.codex.CodexAgenticAdapter.agentic_call``
+        to ``core.llm.adapters.codex_oauth._build_codex_call_kwargs`` (the
+        single shared builder used by ``CodexOAuthAdapter.acomplete`` and
+        ``.astream``).
+
+        The companion PAYG ``store=False`` pin was retired: the new PAYG
+        adapter (``core.llm.adapters.openai_payg.OpenAIPaygAdapter``)
+        uses the Chat Completions API which has no ``store`` field, so
+        the invariant does not apply on that path."""
+        from core.llm.adapters import codex_oauth as codex_oauth_mod
+
+        src = inspect.getsource(codex_oauth_mod)
         assert '"store": False' in src
