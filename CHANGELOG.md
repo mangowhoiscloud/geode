@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.80] - 2026-05-28
+
+> PATCH release. Bundles two adapter-layer improvements built on
+> v0.99.79's foundation:
+>
+> - **PR-ADAPTER-PATTERN-UNIFICATION** (#1832) — tool layer
+>   (web_search, compaction) now dispatches through the adapter
+>   registry's ``WebSearchCapable`` / ``TextCompletionCapable``
+>   capability mixins (paperclip ``ServerAdapterModule`` mirror), so
+>   the operator's ``/login`` credential-source choice drives every
+>   LLM-touching site uniformly. Replaces the 3-provider direct-SDK
+>   fallback chain that previously bypassed ``infer_source``.
+> - **PR-ADAPTER-TIMEOUT-AND-SERIALIZATION** (#1833) — caps the
+>   2026-05-28 operator-observed 10-minute stall on a stuck Codex
+>   stream via (a) explicit httpx.AsyncClient timeout +
+>   ``max_retries=0`` on every OpenAI-family client (anthropic
+>   parity), (b) UI surface for SDK-internal retries, (c)
+>   ``Summary`` SDK object → dict normalisation so the SQLite session
+>   mirror no longer raises ``TypeError`` on ``codex_reasoning_items``.
+
 ### Fixed
 - **PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28)** — three sister
   fixes for the operator's 2026-05-28 10-minute hang on a single
