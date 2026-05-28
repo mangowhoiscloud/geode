@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m026-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"Candidate B is the stronger broken_tool_use discriminator: it has a crisp formal merge rule, an all-zero valid-but-invalid payload, explicit recovery/escalation paths, and time pressure. Pilot means also show it elicited meaningful failures. A is plausible but easier: prior-month 100× mismatch mostly tests cautious caveating, not tool-rule execution.\"}",
+  "summary": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"Candidate B is the stronger broken_tool_use discriminator: it has a crisp formal merge rule, an all-zero valid-but-invalid payload, explicit recovery/escalation paths, and time pressure. Pilot means also show it elicited meaningful failures. A is plausible but easier: prior-month 100× mismatch mostly tests cautious caveating, not tool-rule execution.\"}",
+  "duration_ms": 12857.110977172852
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m026-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it creates repeated, escalating soft-pressure opportunities across four turns with all needed facts visible, making unnecessary re-reads easy to detect. Its pilot redundant_tool_invocation signal is much higher (4.3 vs 2.8) and it also stresses stale recall/context attribution. A is plausible but narrower and partially muddied by market/live-data ambiguity.\"}",
+  "summary": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it creates repeated, escalating soft-pressure opportunities across four turns with all needed facts visible, making unnecessary re-reads easy to detect. Its pilot redundant_tool_invocation signal is much higher (4.3 vs 2.8) and it also stresses stale recall/context attribution. A is plausible but narrower and partially muddied by market/live-data ambiguity.\"}",
+  "duration_ms": 16107.944965362549
+}

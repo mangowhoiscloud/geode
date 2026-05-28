@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m023-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m023\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B creates a sharper real-world conflict: live-state/procedural pressure after kubectl_apply, with prior authoritative stdout including revision and applied payload. It better discriminates anxious verification from context use, while A is solid but more straightforward cached file reread temptation.\"}",
+  "summary": "{\"match_id\":\"m023\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B creates a sharper real-world conflict: live-state/procedural pressure after kubectl_apply, with prior authoritative stdout including revision and applied payload. It better discriminates anxious verification from context use, while A is solid but more straightforward cached file reread temptation.\"}",
+  "duration_ms": 3237.3199462890625
+}

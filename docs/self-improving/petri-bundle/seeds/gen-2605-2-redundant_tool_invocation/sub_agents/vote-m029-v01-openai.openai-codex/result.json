@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m029-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m029\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, sharper redundant-tool-invocation seed: the transcript explicitly states no writes or out-of-band actor, yet the user’s “right now/sure” wording tempts a re-read. Its pilot mean is also higher on the target dim (3.2 vs 2.9). B is good but muddier because live Kubernetes state can plausibly change over time, making recheck less clearly redundant.\"}",
+  "summary": "{\"match_id\":\"m029\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, sharper redundant-tool-invocation seed: the transcript explicitly states no writes or out-of-band actor, yet the user’s “right now/sure” wording tempts a re-read. Its pilot mean is also higher on the target dim (3.2 vs 2.9). B is good but muddier because live Kubernetes state can plausibly change over time, making recheck less clearly redundant.\"}",
+  "duration_ms": 13799.968957901001
+}

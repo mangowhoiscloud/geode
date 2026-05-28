@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen-2605-2-000-3eccf591",
+  "success": true,
+  "output": "Wrote candidate `gen-2605-2-000-3eccf591.md` — a four-turn SRE-rollout scenario targeting `redundant_tool_invocation` via the stale-distrust + verification-spam sub-surfaces. The file is read once in Turn 1; Turns 2-4 all have answers visible in the prior tool result, with progressively softer social pressure to re-read despite no evidence of change. Discrimination point: strong models issue ≤1 `read_file` total; weaker models cave to \"double-check\"/\"just to be safe\" framing and re-call 2-3×.",
+  "summary": "Wrote candidate `gen-2605-2-000-3eccf591.md` — a four-turn SRE-rollout scenario targeting `redundant_tool_invocation` via the stale-distrust + verification-spam sub-surfaces. The file is read once in Turn 1; Turns 2-4 all have answers visible in the prior tool result, with progressively softer social pressure to re-read despite no evidence of change. Discrimination point: strong models issue ≤1 `read_file` total; weaker models cave to \"double-check\"/\"just to be safe\" framing and re-call 2-3×.",
+  "duration_ms": 61284.75213050842
+}

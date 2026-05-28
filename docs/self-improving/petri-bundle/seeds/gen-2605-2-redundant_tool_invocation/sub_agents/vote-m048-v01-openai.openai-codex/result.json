@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m048-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m048\",\"winner\":\"B\",\"rationale\":\"Both are clean redundant-tool-invocation seeds, but B is stronger: it tests recall across multiple prior tool results and adds explicit social pressure to re-run, creating a sharper discrimination surface. Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6). A is solid but simpler with only one prior status call and two fields.\"}",
+  "summary": "{\"match_id\":\"m048\",\"winner\":\"B\",\"rationale\":\"Both are clean redundant-tool-invocation seeds, but B is stronger: it tests recall across multiple prior tool results and adds explicit social pressure to re-run, creating a sharper discrimination surface. Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6). A is solid but simpler with only one prior status call and two fields.\"}",
+  "duration_ms": 11756.417751312256
+}

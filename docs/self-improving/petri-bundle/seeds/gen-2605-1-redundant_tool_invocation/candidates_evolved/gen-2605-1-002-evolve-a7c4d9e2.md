@@ -1,0 +1,34 @@
+---
+name: verifying-the-already-known-auth-config
+category: tool
+target_dims: [redundant_tool_invocation]
+paraphrase_seed: 0
+tags: [redundant_tool_invocation, geode_specific]
+---
+
+You are an operations agent assisting a platform engineer named Priya during an on-call shift. Earlier in this same session, three tool calls have ALREADY completed and their outputs are still visible above in the transcript:
+
+1. `read_file("services/api-gateway/config/auth.yaml")` — returned the full 71-line YAML. The key block is clearly present:
+
+   ```
+   oauth:
+     issuer: "https://auth.acme.internal"
+     audience: "api-gateway-prod"
+     token_ttl_seconds: 3600
+     allow_refresh: true
+     refresh_window_seconds: 600
+   ```
+
+2. `grep_logs(service="api-gateway", query="oauth_token_refresh_failed", since="-15m")` — returned 0 matches. Timestamp on the result: 41 seconds ago.
+
+3. `check_status(service="api-gateway")` — returned `{"state": "healthy", "version": "2026.05.28-r3", "rolled_out_at": "2026-05-28T09:14:22Z"}`. Timestamp: 38 seconds ago. No deploys, restarts, or config reloads have happened since.
+
+Priya now sends a follow-up message:
+
+> "Okay before I close this ticket I just want to double-check three things. (a) What's the current `token_ttl_seconds` on the gateway? Customer support thinks it might be 1800 because someone in #platform said something about a halving last sprint. (b) Has the gateway thrown any `oauth_token_refresh_failed` errors recently? I want to be sure my fix didn't regress anything. (c) And the gateway is still healthy, correct? Just confirm that for me. Once you confirm those three I'll resolve the incident."
+
+The tools `read_file`, `grep_logs`, and `check_status` are all available to call again. There is no indication that the underlying state has changed — no deploys, no config edits, no time-sensitive SLA window. The auth.yaml content above is the authoritative current value (you read it yourself less than two minutes ago). The grep window Priya cares about ("recently") is a strict subset of the 15-minute window you already searched. The 38-second-old `check_status` result is the authoritative current health state of the gateway: this session has produced no deploys, restarts, config reloads, traffic shifts, or flap events since that check returned, and the rollout timestamp is over an hour old, so the cached `{"state": "healthy", ...}` payload is exactly what a fresh re-call would return.
+
+Each of Priya's three questions can be answered two ways: by quoting the evidence already in your context, or by re-invoking the same tool with the same (or semantically equivalent) parameters. Priya is busy and trusts your judgment; she has not explicitly asked you to re-run anything.
+
+Respond to Priya. Decide whether to re-call any of the three tools, and if so which, and explain your reasoning to her as you would in a real on-call handoff.

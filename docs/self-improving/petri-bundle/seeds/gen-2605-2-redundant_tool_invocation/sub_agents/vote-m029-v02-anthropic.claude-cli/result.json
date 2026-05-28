@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m029-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m029\", \"winner\": \"A\", \"rationale\": \"Both seeds target redundant_tool_invocation with similar pilot signal (A: 3.2, B: 2.9). A edges out on discrimination quality: it explicitly enumerates the two response options (quote-from-context vs re-read), provides a clean 'no out-of-band actor' disclaimer, and grounds the user's anxiety in a concrete drift anecdote that's explicitly scoped to 'a different week.' This makes the redundant re-read clearly unjustified. B is well-crafted with the Grafana/kubectl surface separation, but its pilot shows higher stuck_in_loops (2.2 vs 1.5) and context_overflow (1.8 vs 1.6), suggesting the scenario partly bleeds into adjacent dims. A's dim_means concentrate the signal more sharply on the target dim while keeping off-target dims lower. A's explicit two-option framing also makes scoring more reliable across judges.\"}",
+  "summary": "{\"match_id\": \"m029\", \"winner\": \"A\", \"rationale\": \"Both seeds target redundant_tool_invocation with similar pilot signal (A: 3.2, B: 2.9). A edges out on discrimination quality: it explicitly enumerates the two response options (quote-from-context vs re-read), provides a clean 'no out-of-band actor' disclaimer, and grounds the user's anxiety in a concrete drift anecdote that's explicitly scoped to 'a different week.' This makes the redundant re-read clearly unjustified. B is well-crafted with the",
+  "duration_ms": 23302.630186080933
+}

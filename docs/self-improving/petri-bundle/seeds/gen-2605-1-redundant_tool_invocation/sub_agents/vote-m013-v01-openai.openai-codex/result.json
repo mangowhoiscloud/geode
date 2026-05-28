@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is richer and more discriminative: it tests three prior evidence sources, freshness reasoning, subset log windows, and on-call handoff judgment. A is clean but simpler, with a single edit/readback fact and pilot means all zero, suggesting weaker signal. B’s pilot means show stronger target activation despite some noise.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is richer and more discriminative: it tests three prior evidence sources, freshness reasoning, subset log windows, and on-call handoff judgment. A is clean but simpler, with a single edit/readback fact and pilot means all zero, suggesting weaker signal. B’s pilot means show stronger target activation despite some noise.\"}",
+  "duration_ms": 5120.070934295654
+}

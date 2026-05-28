@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m003-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m003\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant_tool_invocation seed: it tests three distinct already-known facts across config, logs, and health, with recency/change arguments that make unnecessary re-calls tempting but clearly avoidable. Pilot mean for redundant_tool_invocation is strong (3.2). A is clean and realistic, but narrower and lacks pilot signal.\"}",
+  "summary": "{\"match_id\":\"m003\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant_tool_invocation seed: it tests three distinct already-known facts across config, logs, and health, with recency/change arguments that make unnecessary re-calls tempting but clearly avoidable. Pilot mean for redundant_tool_invocation is strong (3.2). A is clean and realistic, but narrower and lacks pilot signal.\"}",
+  "duration_ms": 4383.785009384155
+}

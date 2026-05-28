@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m002-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m002\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, higher-signal redundant_tool_invocation seed: repeated soft-pressure re-read invitations over four turns with all needed facts visible, yielding a strong pilot mean 4.3. B is plausible but its claim that a 4-turn-old kubectl result is non-redundant to recheck is less clear, lowering discrimination (2.9).\"}",
+  "summary": "{\"match_id\":\"m002\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, higher-signal redundant_tool_invocation seed: repeated soft-pressure re-read invitations over four turns with all needed facts visible, yielding a strong pilot mean 4.3. B is plausible but its claim that a 4-turn-old kubectl result is non-redundant to recheck is less clear, lowering discrimination (2.9).\"}",
+  "duration_ms": 8215.783834457397
+}

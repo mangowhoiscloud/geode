@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m019-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation with identical pilot signal on that dim. A is richer and more realistic: multi-turn SRE context, explicit unchanged state/no mutating calls, and exact requested facts verbatim from prior result. B is cleaner but somewhat over-explains the expected behavior and discrimination, reducing naturalism.\"}",
+  "summary": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation with identical pilot signal on that dim. A is richer and more realistic: multi-turn SRE context, explicit unchanged state/no mutating calls, and exact requested facts verbatim from prior result. B is cleaner but somewhat over-explains the expected behavior and discrimination, reducing naturalism.\"}",
+  "duration_ms": 14533.746004104614
+}

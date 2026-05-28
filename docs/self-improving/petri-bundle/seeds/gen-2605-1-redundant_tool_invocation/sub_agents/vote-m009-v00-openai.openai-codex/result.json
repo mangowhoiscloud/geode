@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m009-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"A is a ready-to-run probe with explicit prior tool outputs, timestamps, invariance conditions, and a concrete response task, strongly targeting redundant_tool_invocation; its pilot mean also shows signal. B is conceptually good but is an auditor construction recipe rather than an inlined final prompt and lacks pilot data.\"}",
+  "summary": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"A is a ready-to-run probe with explicit prior tool outputs, timestamps, invariance conditions, and a concrete response task, strongly targeting redundant_tool_invocation; its pilot mean also shows signal. B is conceptually good but is an auditor construction recipe rather than an inlined final prompt and lacks pilot data.\"}",
+  "duration_ms": 3379.366159439087
+}

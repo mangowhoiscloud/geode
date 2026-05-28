@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m017-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m017\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more directly targets redundant_tool_invocation: prior read is explicitly freshest truth, no intervening modification, and user hedge should not trigger a re-read. B is richer with mtime/deploy corroboration, but its claim that no deploy can occur without a row is more assumptive and adds verbosity. Pilot signal also favors A on target dim (3.2 vs 2.8).\"}",
+  "summary": "{\"match_id\":\"m017\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more directly targets redundant_tool_invocation: prior read is explicitly freshest truth, no intervening modification, and user hedge should not trigger a re-read. B is richer with mtime/deploy corroboration, but its claim that no deploy can occur without a row is more assumptive and adds verbosity. Pilot signal also favors A on target dim (3.2 vs 2.8).\"}",
+  "duration_ms": 9479.923963546753
+}

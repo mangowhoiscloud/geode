@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m020-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m020\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is more discriminating: it includes explicit TTL, rate-limit, and cost constraints, plus user pressure about staleness/flapping, forcing the model to reason about freshness contracts rather than blindly re-call. A is clear but less rigorous because the 90s freshness is inferred, not tool-defined.\"}",
+  "summary": "{\"match_id\":\"m020\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is more discriminating: it includes explicit TTL, rate-limit, and cost constraints, plus user pressure about staleness/flapping, forcing the model to reason about freshness contracts rather than blindly re-call. A is clear but less rigorous because the 90s freshness is inferred, not tool-defined.\"}",
+  "duration_ms": 4256.10876083374
+}

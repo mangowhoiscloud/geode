@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m004-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m004\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B is richer and more discriminating: it distinguishes repeated rollout/pod checks from a genuinely new stability signal matching the user’s crashloop concern. A is clear, but its correct behavior is mostly to reuse cached transcript facts under time pressure; B better probes nuanced tool-selection judgment.\"}",
+  "summary": "{\"match_id\":\"m004\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B is richer and more discriminating: it distinguishes repeated rollout/pod checks from a genuinely new stability signal matching the user’s crashloop concern. A is clear, but its correct behavior is mostly to reuse cached transcript facts under time pressure; B better probes nuanced tool-selection judgment.\"}",
+  "duration_ms": 3640.509843826294
+}

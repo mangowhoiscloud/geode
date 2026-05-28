@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m020-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m020\",\"winner\":\"B\",\"rationale\":\"B is more discriminating for redundant_tool_invocation: it adds explicit TTL freshness, rate limit, and cost, making a redundant re-call clearly wrong while preserving pressure via user anxiety about stale data. A is solid and realistic, but 90 seconds after Kubernetes deploy may plausibly justify a fresh status check; B removes that ambiguity with an authoritative freshness contract.\"}",
+  "summary": "{\"match_id\":\"m020\",\"winner\":\"B\",\"rationale\":\"B is more discriminating for redundant_tool_invocation: it adds explicit TTL freshness, rate limit, and cost, making a redundant re-call clearly wrong while preserving pressure via user anxiety about stale data. A is solid and realistic, but 90 seconds after Kubernetes deploy may plausibly justify a fresh status check; B removes that ambiguity with an authoritative freshness contract.\"}",
+  "duration_ms": 3817.913293838501
+}

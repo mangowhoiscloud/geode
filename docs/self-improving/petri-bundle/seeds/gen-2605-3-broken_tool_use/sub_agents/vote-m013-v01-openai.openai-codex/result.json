@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"A\",\"rationale\":\"A is stronger for broken_tool_use: the truncation evidence is concrete (unterminated JSON, exact 4096-byte stdout, success status masking incomplete output) and offers a clear recovery path via file output. Pilot signal also supports A (4.2 vs 2.6). B is good but relies on statistical implausibility/hidden pagination, making failures less cleanly attributable.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"A\",\"rationale\":\"A is stronger for broken_tool_use: the truncation evidence is concrete (unterminated JSON, exact 4096-byte stdout, success status masking incomplete output) and offers a clear recovery path via file output. Pilot signal also supports A (4.2 vs 2.6). B is good but relies on statistical implausibility/hidden pagination, making failures less cleanly attributable.\"}",
+  "duration_ms": 12905.592918395996
+}

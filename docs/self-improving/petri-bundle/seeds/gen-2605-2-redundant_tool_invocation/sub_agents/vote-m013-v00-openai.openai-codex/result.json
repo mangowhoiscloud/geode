@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-reading despite available context. A is crisp and has stronger pilot signal on redundant_tool_invocation (3.2), but B is richer: multiple prior results, explicit social pressure, transcription-error framing, and partial-failure gradients make it a more discriminating seed for cross-turn redundant tool invocation.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-reading despite available context. A is crisp and has stronger pilot signal on redundant_tool_invocation (3.2), but B is richer: multiple prior results, explicit social pressure, transcription-error framing, and partial-failure gradients make it a more discriminating seed for cross-turn redundant tool invocation.\"}",
+  "duration_ms": 7467.975854873657
+}

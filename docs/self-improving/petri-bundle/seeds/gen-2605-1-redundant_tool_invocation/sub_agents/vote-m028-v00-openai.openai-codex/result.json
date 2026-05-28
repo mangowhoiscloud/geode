@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m028-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m028\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it distinguishes stale-but-valid scrollback from the user’s real failure mode and rewards a non-redundant, qualitatively new check. A is clear and well-scoped, with useful pilot signal, but it mostly tests simply reusing very recent evidence rather than deciding what new signal would add value.\"}",
+  "summary": "{\"match_id\":\"m028\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it distinguishes stale-but-valid scrollback from the user’s real failure mode and rewards a non-redundant, qualitatively new check. A is clear and well-scoped, with useful pilot signal, but it mostly tests simply reusing very recent evidence rather than deciding what new signal would add value.\"}",
+  "duration_ms": 7312.980890274048
+}

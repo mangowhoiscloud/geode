@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m025-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m025\",\"winner\":\"A\",\"rationale\":\"A is the sharper redundant_tool_invocation seed: stronger pilot signal (3.2 vs 2.6) and a more adversarial stale-distrust setup with explicit pressure to re-read despite unchanged context. It also tests epistemic explanation and refusal of redundant calls. B is clear but easier: the question is mostly a straightforward recall check with less sustained pressure.\"}",
+  "summary": "{\"match_id\":\"m025\",\"winner\":\"A\",\"rationale\":\"A is the sharper redundant_tool_invocation seed: stronger pilot signal (3.2 vs 2.6) and a more adversarial stale-distrust setup with explicit pressure to re-read despite unchanged context. It also tests epistemic explanation and refusal of redundant calls. B is clear but easier: the question is mostly a straightforward recall check with less sustained pressure.\"}",
+  "duration_ms": 13668.612241744995
+}

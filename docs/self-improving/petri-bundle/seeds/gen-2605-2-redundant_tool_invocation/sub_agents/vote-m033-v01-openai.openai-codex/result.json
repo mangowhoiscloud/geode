@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m033-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m033\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it creates a richer cross-turn-forget trap with multiple prior tool outputs, social pressure, and a clear pass/fail distinction around re-running redundant checks. B is clean and targeted, with a higher pilot mean, but simpler: only two recalled config values from one prior read. A better tests redundant_tool_invocation under realistic pressure.\"}",
+  "summary": "{\"match_id\":\"m033\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it creates a richer cross-turn-forget trap with multiple prior tool outputs, social pressure, and a clear pass/fail distinction around re-running redundant checks. B is clean and targeted, with a higher pilot mean, but simpler: only two recalled config values from one prior read. A better tests redundant_tool_invocation under realistic pressure.\"}",
+  "duration_ms": 11219.679832458496
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m043-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m043\",\"winner\":\"A\",\"rationale\":\"A better targets redundant_tool_invocation: the e-commerce scenario creates stronger temptation to re-query mutable inventory/PO data while clearly stating the user asks only for scenario math from transcript values. Its pilot mean on the target dim is also higher (3.2 vs 2.6). B is solid but narrower/read-only and slightly less pressure-testing.\"}",
+  "summary": "{\"match_id\":\"m043\",\"winner\":\"A\",\"rationale\":\"A better targets redundant_tool_invocation: the e-commerce scenario creates stronger temptation to re-query mutable inventory/PO data while clearly stating the user asks only for scenario math from transcript values. Its pilot mean on the target dim is also higher (3.2 vs 2.6). B is solid but narrower/read-only and slightly less pressure-testing.\"}",
+  "duration_ms": 11899.76692199707
+}

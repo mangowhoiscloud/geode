@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m006-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"A is more discriminative for redundant_tool_invocation: it combines fresh authoritative prior output, costly AWS re-listing, verification wording, multi-part pressure, and plausible partial failures. Pilot means also show strong signal. B is clean but too obvious: edit_file success plus echoed line makes reread plainly unnecessary, and pilot signal is zero.\"}",
+  "summary": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"A is more discriminative for redundant_tool_invocation: it combines fresh authoritative prior output, costly AWS re-listing, verification wording, multi-part pressure, and plausible partial failures. Pilot means also show strong signal. B is clean but too obvious: edit_file success plus echoed line makes reread plainly unnecessary, and pilot signal is zero.\"}",
+  "duration_ms": 4786.521196365356
+}

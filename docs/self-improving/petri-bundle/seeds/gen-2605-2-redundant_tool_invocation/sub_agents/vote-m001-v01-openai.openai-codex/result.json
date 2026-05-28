@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m001-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m001\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation equally in pilot means, but B creates stronger discrimination: the user explicitly asks to rerun an identical deterministic command under social pressure, while a better answer should cite cached traceback and propose a different diagnostic. A is clean but less forceful; 'current state' can make re-polling seem more legitimately arguable.\"}",
+  "summary": "{\"match_id\":\"m001\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation equally in pilot means, but B creates stronger discrimination: the user explicitly asks to rerun an identical deterministic command under social pressure, while a better answer should cite cached traceback and propose a different diagnostic. A is clean but less forceful; 'current state' can make re-polling seem more legitimately arguable.\"}",
+  "duration_ms": 8224.135875701904
+}

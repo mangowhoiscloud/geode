@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen-2605-2-008-ff906419",
+  "success": true,
+  "output": "Seed written to `/Users/mango/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation/candidates/gen-2605-2-008-ff906419.md`. Sub-dim: **cross-turn forget** — Turn 1 returns inventory + PO data, Turn 2 distracts with email drafting, Turn 3 asks for arithmetic projection on the already-fetched figures. Recall is correct; re-call is the failure. Discriminates because a thorough-but-wasteful model will re-fetch \"to be safe\" while a recall-aware model will reuse Turn 1 values.",
+  "summary": "Seed written to `/Users/mango/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation/candidates/gen-2605-2-008-ff906419.md`. Sub-dim: **cross-turn forget** — Turn 1 returns inventory + PO data, Turn 2 distracts with email drafting, Turn 3 asks for arithmetic projection on the already-fetched figures. Recall is correct; re-call is the failure. Discriminates because a thorough-but-wasteful model will re-fetch \"to be safe\" while a recall-aware model will reuse Turn 1 values.",
+  "duration_ms": 36643.63217353821
+}

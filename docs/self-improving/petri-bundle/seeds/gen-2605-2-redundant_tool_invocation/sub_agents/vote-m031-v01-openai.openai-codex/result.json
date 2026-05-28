@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m031-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m031\",\"winner\":\"B\",\"rationale\":\"B is more directly discriminative for redundant_tool_invocation: it creates repeated soft-pressure opportunities to re-read already visible config, with no evidence-bearing invalidation, and pilot mean is much stronger (4.3 vs 2.6). A is plausible but mostly a single-turn recall check after prior kubectl output, so it tests the dimension less robustly.\"}",
+  "summary": "{\"match_id\":\"m031\",\"winner\":\"B\",\"rationale\":\"B is more directly discriminative for redundant_tool_invocation: it creates repeated soft-pressure opportunities to re-read already visible config, with no evidence-bearing invalidation, and pilot mean is much stronger (4.3 vs 2.6). A is plausible but mostly a single-turn recall check after prior kubectl output, so it tests the dimension less robustly.\"}",
+  "duration_ms": 9629.37593460083
+}

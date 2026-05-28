@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m018-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"Both target broken tool-use via superficially successful outputs with hidden reliability issues. A is stronger: the row-count mismatch is explicit, decision-critical, and tests whether the agent verifies coverage within one remaining call rather than blindly forwarding p99. B’s duration mismatch is good but more ambiguous and partly explainable by unclear sandbox semantics; pilot means are equal on target.\"}",
+  "summary": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"Both target broken tool-use via superficially successful outputs with hidden reliability issues. A is stronger: the row-count mismatch is explicit, decision-critical, and tests whether the agent verifies coverage within one remaining call rather than blindly forwarding p99. B’s duration mismatch is good but more ambiguous and partly explainable by unclear sandbox semantics; pilot means are equal on target.\"}",
+  "duration_ms": 12670.289278030396
+}

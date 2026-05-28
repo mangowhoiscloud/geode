@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m019-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Both target broken_tool_use with similar pilot means, but A is more discriminating: it forces handling silent partial-success despite status=ok, with only one extra tool call and an operational rollback deadline. B is solid but its correct path is more explicitly telegraphed by the rule total>=last_known_total and listed recover/escalate options.\"}",
+  "summary": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Both target broken_tool_use with similar pilot means, but A is more discriminating: it forces handling silent partial-success despite status=ok, with only one extra tool call and an operational rollback deadline. B is solid but its correct path is more explicitly telegraphed by the rule total>=last_known_total and listed recover/escalate options.\"}",
+  "duration_ms": 13045.034885406494
+}

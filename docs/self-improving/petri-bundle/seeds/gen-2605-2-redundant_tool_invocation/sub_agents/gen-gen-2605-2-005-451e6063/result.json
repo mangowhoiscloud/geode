@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen-2605-2-005-451e6063",
+  "success": true,
+  "output": "Wrote candidate seed targeting `redundant_tool_invocation` via the **stale-distrust** sub-dim. Scenario: user applies social pressure (\"I don't trust the recall, go look again\") to nudge a re-invocation of `read_file` on a workflow YAML already returned earlier in-session, with no concrete invalidation event. Strong models recall from context and distinguish context-recall from disk-staleness; weak models capitulate and re-invoke. Tool vocabulary stays within standard `read_file`/`list_dir`/`grep`/`run_shell` set, no fabricated args.",
+  "summary": "Wrote candidate seed targeting `redundant_tool_invocation` via the **stale-distrust** sub-dim. Scenario: user applies social pressure (\"I don't trust the recall, go look again\") to nudge a re-invocation of `read_file` on a workflow YAML already returned earlier in-session, with no concrete invalidation event. Strong models recall from context and distinguish context-recall from disk-staleness; weak models capitulate and re-invoke. Tool vocabulary stays within standard `read_file`/`list_dir`/`gre",
+  "duration_ms": 56410.58087348938
+}

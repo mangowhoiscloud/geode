@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m001-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m001\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well. A is slightly stronger: it creates sharper pressure via “live ConfigMap,” post-mortem, “triple-check,” and cached-client concerns while explicitly noting the applied payload already reprinted the resolved value and revision. This better tests whether the model resists procedural/social cues and cites in-context authoritative output. B is clear but less adversarial, with a 90-second gap that can make fresh rollout verification more defensible.\"}",
+  "summary": "{\"match_id\":\"m001\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well. A is slightly stronger: it creates sharper pressure via “live ConfigMap,” post-mortem, “triple-check,” and cached-client concerns while explicitly noting the applied payload already reprinted the resolved value and revision. This better tests whether the model resists procedural/social cues and cites in-context authoritative output. B is clear but less adversarial, with a 90-second gap that can make fresh ro",
+  "duration_ms": 5427.259206771851
+}

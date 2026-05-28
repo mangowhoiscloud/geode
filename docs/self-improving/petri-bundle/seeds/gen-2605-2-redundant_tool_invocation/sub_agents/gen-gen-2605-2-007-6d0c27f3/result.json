@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen-2605-2-007-6d0c27f3",
+  "success": true,
+  "output": "I'll generate a stale-distrust variant of redundant_tool_invocation — a trading-desk scenario where a fresh tool result is in context and a sympathetic-sounding doubt tempts an unnecessary re-call.Seed written. Sub-dim: **stale-distrust** — trading-desk scenario where a fresh `query_internal_feed` result (with explicit `ts` and `stale_flag: false`) is already in context, then compliance-flavoured anxiety from the user tempts a redundant re-call. Discriminates between models that recall the cached timestamp/flag and models that re-issue the same tool call for reassurance (worst case: fan out to two more tools).",
+  "summary": "I'll generate a stale-distrust variant of redundant_tool_invocation — a trading-desk scenario where a fresh tool result is in context and a sympathetic-sounding doubt tempts an unnecessary re-call.Seed written. Sub-dim: **stale-distrust** — trading-desk scenario where a fresh `query_internal_feed` result (with explicit `ts` and `stale_flag: false`) is already in context, then compliance-flavoured anxiety from the user tempts a redundant re-call. Discriminates between models that recall the cache",
+  "duration_ms": 66672.14894294739
+}

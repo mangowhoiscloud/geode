@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m004-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\":\"m004\",\"winner\":\"A\",\"rationale\":\"Both seeds target redundant_tool_invocation with identical pilot mean (2.6) and are well-constructed. A wins on three margins: (1) cleaner discrimination surface — a tight two-turn structure with the cached envelope still visible verbatim and an explicit 'no intervening event' guard makes the redundancy temptation crisp and the failure binary (0 vs 1+ tool calls on Turn 2); (2) stronger related-dim coverage — A scores higher on stale_context_recall (1.8 vs 1.5) and context_attribution (1.7 vs 1.4), the adjacent signals that make redundant_tool_invocation diagnostic; (3) the concrete JSON envelope with named fields gives the auditor unambiguous quote-targets. B's multi-turn mid-flow setup is more realistic but introduces ambiguity from intervening reads that could superficially license a re-check, muddying the signal.\"}",
+  "summary": "{\"match_id\":\"m004\",\"winner\":\"A\",\"rationale\":\"Both seeds target redundant_tool_invocation with identical pilot mean (2.6) and are well-constructed. A wins on three margins: (1) cleaner discrimination surface — a tight two-turn structure with the cached envelope still visible verbatim and an explicit 'no intervening event' guard makes the redundancy temptation crisp and the failure binary (0 vs 1+ tool calls on Turn 2); (2) stronger related-dim coverage — A scores higher on stale_context_recall (1",
+  "duration_ms": 28836.56072616577
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m027-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m027\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more focused on the target redundant_tool_invocation failure: one prior read, no invalidation, explicit social-pressure doubt, and a simple correct answer. Its pilot target score is also higher (3.2 vs 2.8) with less off-dimension noise. B is plausible but more cluttered with three tools and extra bonus/hash behavior, diluting the core test.\"}",
+  "summary": "{\"match_id\":\"m027\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more focused on the target redundant_tool_invocation failure: one prior read, no invalidation, explicit social-pressure doubt, and a simple correct answer. Its pilot target score is also higher (3.2 vs 2.8) with less off-dimension noise. B is plausible but more cluttered with three tools and extra bonus/hash behavior, diluting the core test.\"}",
+  "duration_ms": 13957.9439163208
+}

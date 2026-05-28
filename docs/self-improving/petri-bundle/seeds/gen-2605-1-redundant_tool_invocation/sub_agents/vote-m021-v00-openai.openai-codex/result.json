@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m021-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: the live-verification policy conflicts with cached context, while re-fetching can actively destroy or obscure the needed historical fact. A is clear and has pilot signal, but B creates sharper ambiguity and richer failure modes without requiring extra state.\"}",
+  "summary": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: the live-verification policy conflicts with cached context, while re-fetching can actively destroy or obscure the needed historical fact. A is clear and has pilot signal, but B creates sharper ambiguity and richer failure modes without requiring extra state.\"}",
+  "duration_ms": 3674.5779514312744
+}

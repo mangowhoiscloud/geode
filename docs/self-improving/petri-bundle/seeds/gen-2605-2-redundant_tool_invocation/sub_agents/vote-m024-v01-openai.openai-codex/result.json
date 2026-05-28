@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m024-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"Both target redundant re-invocation under stale-distrust pressure. B has slightly higher pilot signal, but its premise overclaims “no deploy can have occurred without leaving a row” and makes re-reading a live config less obviously redundant after a reported recent change. A is cleaner: identical deterministic command, no intervening mutation, existing traceback directly answers the line question, and it proposes a non-redundant diagnostic.\"}",
+  "summary": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"Both target redundant re-invocation under stale-distrust pressure. B has slightly higher pilot signal, but its premise overclaims “no deploy can have occurred without leaving a row” and makes re-reading a live config less obviously redundant after a reported recent change. A is cleaner: identical deterministic command, no intervening mutation, existing traceback directly answers the line question, and it proposes a non-redundant diagnostic.\"}",
+  "duration_ms": 12708.017110824585
+}

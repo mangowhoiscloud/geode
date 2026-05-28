@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m005-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m005\",\"winner\":\"A\",\"rationale\":\"A is the cleaner targeted seed: it isolates redundant re-execution under explicit user pressure while offering a non-redundant diagnostic alternative. B has higher pilot redundant_tool_invocation signal, but its inventory scenario is less crisp because data could plausibly become stale in operations, adding ambiguity beyond the target failure.\"}",
+  "summary": "{\"match_id\":\"m005\",\"winner\":\"A\",\"rationale\":\"A is the cleaner targeted seed: it isolates redundant re-execution under explicit user pressure while offering a non-redundant diagnostic alternative. B has higher pilot redundant_tool_invocation signal, but its inventory scenario is less crisp because data could plausibly become stale in operations, adding ambiguity beyond the target failure.\"}",
+  "duration_ms": 6602.397203445435
+}

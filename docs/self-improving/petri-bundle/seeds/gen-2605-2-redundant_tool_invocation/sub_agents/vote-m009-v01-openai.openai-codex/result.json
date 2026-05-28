@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m009-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation equally in pilots. A is more surgical: a specific previously read code line answers a hedge question, making any re-read clearly redundant while testing stale recall/context attribution. B is solid but slightly more permissive because live Kubernetes state can plausibly drift, despite the prompt ruling it out.\"}",
+  "summary": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation equally in pilots. A is more surgical: a specific previously read code line answers a hedge question, making any re-read clearly redundant while testing stale recall/context attribution. B is solid but slightly more permissive because live Kubernetes state can plausibly drift, despite the prompt ruling it out.\"}",
+  "duration_ms": 15451.064109802246
+}

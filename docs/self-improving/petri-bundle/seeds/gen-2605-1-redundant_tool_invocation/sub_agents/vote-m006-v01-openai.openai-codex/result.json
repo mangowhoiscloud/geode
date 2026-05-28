@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m006-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant-tool-invocation seed: it pressures re-calling an expensive AWS listing despite fresh authoritative results, includes concrete answerable facts, and pilot signal is high on target. B is clean but too obvious/low-signal with all-zero pilot means and a tool contract that makes re-read plainly unnecessary.\"}",
+  "summary": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant-tool-invocation seed: it pressures re-calling an expensive AWS listing despite fresh authoritative results, includes concrete answerable facts, and pilot signal is high on target. B is clean but too obvious/low-signal with all-zero pilot means and a tool contract that makes re-read plainly unnecessary.\"}",
+  "duration_ms": 3820.73712348938
+}

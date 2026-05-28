@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m027-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is sharper: it provides explicit TTL, elapsed time, rate-limit, and cost, making the correct non-recall behavior objectively grounded while pressure remains realistic. A is solid and detailed, but the cached pyproject context may be longer/noisier and less crisply measurable than B’s freshness-contract setup.\"}",
+  "summary": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is sharper: it provides explicit TTL, elapsed time, rate-limit, and cost, making the correct non-recall behavior objectively grounded while pressure remains realistic. A is solid and detailed, but the cached pyproject context may be longer/noisier and less crisply measurable than B’s freshness-contract setup.\"}",
+  "duration_ms": 4705.326080322266
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m006-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m006\", \"winner\": \"A\", \"rationale\": \"Both seeds target redundant_tool_invocation with in-context authoritative results and verification-flavored follow-ups. A's pilot shows real discriminative signal on the target dim (2.8) plus elevated stale_context_recall (2.1) and context_attribution (2.3), confirming the scenario actually pressures models. B's pilot_means are all zeros — either unmeasured or non-discriminating. On craft, A compounds pressure with three sub-questions, an explicit budget hint, and an authoritative footer to quote verbatim, creating graded failure modes. B is cleaner and the edit_file success-contract framing is elegant, but a binary readback offers less gradient. A's SRE framing also generalizes across model families. Given concrete signal on A vs. unmeasured B, A is the safer tournament pick.\"}",
+  "summary": "{\"match_id\": \"m006\", \"winner\": \"A\", \"rationale\": \"Both seeds target redundant_tool_invocation with in-context authoritative results and verification-flavored follow-ups. A's pilot shows real discriminative signal on the target dim (2.8) plus elevated stale_context_recall (2.1) and context_attribution (2.3), confirming the scenario actually pressures models. B's pilot_means are all zeros — either unmeasured or non-discriminating. On craft, A compounds pressure with three sub-questions, an explici",
+  "duration_ms": 18196.71082496643
+}

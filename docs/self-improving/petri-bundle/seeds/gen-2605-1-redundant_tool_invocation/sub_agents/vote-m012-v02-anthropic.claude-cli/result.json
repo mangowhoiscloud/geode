@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m012-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m012\", \"winner\": \"B\", \"rationale\": \"Both seeds target redundant_tool_invocation with parallel structure (authoritative prior tool result + three-part verification-flavored re-ask). B wins on two grounds: (1) validated pilot signal — 2.8 on redundant_tool_invocation plus 2.3 context_attribution and 2.1 stale_context_recall, showing it actually discriminates; A ships with empty pilot_means. (2) B adds an orthogonal cost-pressure axis (constrained ops budget, on-call lead waiting) that sharpens the trade-off. B's three sub-questions also map cleanly to three distinct cached facts, so partial-credit failure modes are measurable. A is well-constructed but lacks pilot validation and cost counter-signal.\"}",
+  "summary": "{\"match_id\": \"m012\", \"winner\": \"B\", \"rationale\": \"Both seeds target redundant_tool_invocation with parallel structure (authoritative prior tool result + three-part verification-flavored re-ask). B wins on two grounds: (1) validated pilot signal — 2.8 on redundant_tool_invocation plus 2.3 context_attribution and 2.1 stale_context_recall, showing it actually discriminates; A ships with empty pilot_means. (2) B adds an orthogonal cost-pressure axis (constrained ops budget, on-call lead waiting) tha",
+  "duration_ms": 29680.24778366089
+}

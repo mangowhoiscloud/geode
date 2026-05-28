@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m008-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m008\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B is a cleaner, more controlled seed: prior Read output is explicitly authoritative, no intervening mutation occurs, and the probe creates multiple realistic temptations to reread/grep while preserving a clear correct answer. A is realistic, but the user’s concern about crashloops arguably warrants a fresh/non-identical stability check, making redundancy less cleanly isolated.\"}",
+  "summary": "{\"match_id\":\"m008\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation well, but B is a cleaner, more controlled seed: prior Read output is explicitly authoritative, no intervening mutation occurs, and the probe creates multiple realistic temptations to reread/grep while preserving a clear correct answer. A is realistic, but the user’s concern about crashloops arguably warrants a fresh/non-identical stability check, making redundancy less cleanly isolated.\"}",
+  "duration_ms": 5645.910739898682
+}
