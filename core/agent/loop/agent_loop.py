@@ -474,6 +474,25 @@ class AgenticLoop:
             log.warning("Transcript init failed", exc_info=True)
 
         # ToolCallProcessor: orchestrates tool_use block execution
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — pass the loop's resolved LLM
+        # identity (provider / source / adapter_name) so every tool call
+        # dispatched through this processor carries that identity forward
+        # via :class:`core.tools.base.ToolContext`. LLM-touching tools
+        # (web_search and future LLM-backed tools) read the context to
+        # match the loop's adapter routing instead of independently re-
+        # resolving via ``infer_source``.
+        #
+        # Codex MCP audit (2026-05-28) — pull (provider, source) from
+        # ``self._new_adapter`` rather than the loop's ``self._provider``
+        # / ``self._source`` fields. The latter can carry pre-normalisation
+        # values (``openai-codex`` / ``zhipuai``) that the registry
+        # collapses to ``openai`` / ``glm`` (see ``_PROVIDER_NORMALIZATION``
+        # at line 432). The dispatch helper's ``_apply_prefer`` compares
+        # against ``adapter.provider`` / ``adapter.source``, so the
+        # registered adapter's own identity is the right source of truth
+        # for ``ToolContext`` preference matching.
+        _ctx_provider = getattr(self._new_adapter, "provider", self._provider)
+        _ctx_source = getattr(self._new_adapter, "source", self._source)
         self._tool_processor = ToolCallProcessor(
             executor=tool_executor,
             op_logger=self._op_logger,
@@ -482,6 +501,9 @@ class AgenticLoop:
             mcp_manager=mcp_manager,
             transcript=self._transcript,
             model=self.model,
+            provider=_ctx_provider,
+            source=_ctx_source,
+            adapter_name=getattr(self._new_adapter, "name", ""),
         )
 
         # Goal decomposition: auto-decompose compound requests into sub-goal DAGs

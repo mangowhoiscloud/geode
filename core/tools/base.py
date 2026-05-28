@@ -84,9 +84,28 @@ class Tool(Protocol):
 class ToolContext:
     """Runtime context passed to async-capable tools.
 
-    The first async migration slice does not require every tool handler to
-    consume this yet; it establishes the shared contract used by later IPC,
-    cancellation, and sub-agent work.
+    The four LLM-identity fields (``provider`` / ``source`` / ``model`` /
+    ``adapter_name``) carry the AgenticLoop's currently-resolved adapter
+    routing forward into tool execution — PR-TOOL-EXEC-CONTEXT (2026-05-28),
+    paperclip ``AdapterExecutionContext.agent`` analogue
+    (``packages/adapter-utils/src/types.ts``).
+
+    Without this propagation an LLM-touching tool (web_search, future
+    web_extract / web_crawl / summarise) re-runs the adapter resolution
+    chain from scratch via ``infer_source(provider)`` — drawing solely
+    from operator settings + ProfileStore — so the tool may land on a
+    different (provider, source) pair than the orchestration loop's main
+    LLM call. That is fine when the operator has one credential per
+    provider, but breaks the moment a session is intentionally driven by
+    Claude OAuth subscription while PAYG keys also sit in the environment.
+    Tools that read these fields can pass ``prefer_provider`` /
+    ``prefer_source`` to ``core.llm.adapters.dispatch`` helpers so the
+    candidate ordering matches the loop's choice.
+
+    Most tools do not consume these fields — they are injected as a single
+    ``_tool_context=`` kwarg that the tool's ``**kwargs`` splat absorbs
+    silently. Only LLM-touching tools opt in by reading
+    ``kwargs.get("_tool_context")``.
     """
 
     session_id: str = ""
@@ -95,6 +114,14 @@ class ToolContext:
     is_subagent: bool = False
     cancellation: asyncio.Event | None = None
     progress: Any | None = None
+    # LLM-identity propagation (PR-TOOL-EXEC-CONTEXT) — empty string when
+    # the loop has not resolved an adapter yet, or when a tool is invoked
+    # outside an AgenticLoop (CLI utility / test harness). Consumers must
+    # treat empty as "no preference".
+    provider: str = ""
+    source: str = ""
+    model: str = ""
+    adapter_name: str = ""
 
 
 @runtime_checkable
