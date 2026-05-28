@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # 1. ToolContext dataclass shape
 # ---------------------------------------------------------------------------
@@ -74,52 +76,94 @@ def test_tool_context_accepts_loop_routing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _fake_adapter(name: str, provider: str, source: str) -> Any:
-    """Tiny adapter stand-in for ``_apply_prefer`` ordering tests."""
-    a = MagicMock()
+def _fake_adapter(
+    name: str, provider: str, source: str, *, capability: str = "supports_web_search"
+) -> Any:
+    """Tiny adapter stand-in for ``_select_adapter`` tests."""
+    a = MagicMock(spec_set=["name", "provider", "source", capability, "aweb_search"])
     a.name = name
     a.provider = provider
     a.source = source
+    setattr(a, capability, True)
+    a.aweb_search = MagicMock()
     return a
 
 
-def test_apply_prefer_floats_exact_match_first() -> None:
-    from core.llm.adapters.dispatch import _apply_prefer
-
-    cands = [
-        _fake_adapter("openai-payg", "openai", "payg"),
-        _fake_adapter("anthropic-payg", "anthropic", "payg"),
-        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
-        _fake_adapter("glm-payg", "glm", "payg"),
-    ]
-    out = _apply_prefer(cands, prefer_provider="anthropic", prefer_source="subscription")
-    assert out[0].name == "anthropic-oauth"
-    # Provider-only match comes second, then source-only, then everything else.
-    assert out[1].name == "anthropic-payg"
-
-
-def test_apply_prefer_provider_only_floats_provider_block_first() -> None:
-    from core.llm.adapters.dispatch import _apply_prefer
+def test_select_adapter_exact_match_required_with_prefer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-NO-FALLBACK — when both ``prefer_provider`` and ``prefer_source``
+    are given, ``_select_adapter`` returns the exact match or ``None`` —
+    never widens to a partial match."""
+    from core.llm.adapters.dispatch import _select_adapter
 
     cands = [
         _fake_adapter("openai-payg", "openai", "payg"),
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
         _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
     ]
-    out = _apply_prefer(cands, prefer_provider="anthropic", prefer_source=None)
-    assert {out[0].name, out[1].name} == {"anthropic-payg", "anthropic-oauth"}
-    assert out[2].name == "openai-payg"
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
+
+    # Exact match — anthropic-oauth picked.
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider="anthropic",
+        prefer_source="subscription",
+        provider_order=("anthropic", "openai", "glm"),
+    )
+    assert picked is not None and picked.name == "anthropic-oauth"
+
+    # No exact match for (openai, subscription) — even though openai-payg
+    # is registered, dispatch refuses to widen.
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider="openai",
+        prefer_source="subscription",
+        provider_order=("anthropic", "openai", "glm"),
+    )
+    assert picked is None
 
 
-def test_apply_prefer_empty_preference_returns_input_unchanged() -> None:
-    from core.llm.adapters.dispatch import _apply_prefer
+def test_select_adapter_default_resolved_uses_infer_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without preference, ``_select_adapter`` picks the first provider in
+    order with an adapter whose source equals ``infer_source(provider)``."""
+    from core.llm.adapters.dispatch import _select_adapter
 
     cands = [
         _fake_adapter("anthropic-payg", "anthropic", "payg"),
+        _fake_adapter("anthropic-oauth", "anthropic", "subscription"),
         _fake_adapter("openai-payg", "openai", "payg"),
     ]
-    out = _apply_prefer(cands, prefer_provider=None, prefer_source=None)
-    assert [a.name for a in out] == ["anthropic-payg", "openai-payg"]
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
+    monkeypatch.setattr(
+        "core.llm.adapters._source_inference.infer_source",
+        lambda provider: "subscription" if provider == "anthropic" else "payg",
+    )
+
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider=None,
+        prefer_source=None,
+        provider_order=("anthropic", "openai", "glm"),
+    )
+    assert picked is not None and picked.name == "anthropic-oauth"
+
+
+def test_select_adapter_returns_none_when_no_capable_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.llm.adapters.dispatch import _select_adapter
+
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [])
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider=None,
+        prefer_source=None,
+        provider_order=("anthropic", "openai", "glm"),
+    )
+    assert picked is None
 
 
 # ---------------------------------------------------------------------------
@@ -233,11 +277,11 @@ def test_processor_builds_tool_context_for_each_dispatch() -> None:
 def test_agentic_loop_passes_identity_to_processor() -> None:
     """Source-level pin: AgenticLoop must pull provider / source from the
     RESOLVED adapter (``self._new_adapter``), not the loop's pre-
-    normalisation ``self._provider`` / ``self._source``. Codex MCP audit
-    catch — the loop carries ``openai-codex`` / ``zhipuai`` strings that
-    the registry collapses to ``openai`` / ``glm``; ``_apply_prefer``
-    compares against the adapter's own identity so passing the pre-
-    normalisation values would silently miss every match."""
+    normalisation ``self._provider`` / ``self._source``. The registry
+    collapses ``openai-codex → openai`` / ``zhipuai → glm``; the
+    strict-dispatch helper (``_select_adapter`` PR-NO-FALLBACK) compares
+    against the adapter's own identity so the pre-normalisation values
+    would silently miss every match."""
     src = (
         Path(__file__).resolve().parents[1] / "core" / "agent" / "loop" / "agent_loop.py"
     ).read_text(encoding="utf-8")
@@ -270,38 +314,35 @@ def test_handler_signature_gating_skips_closed_signature_handlers() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. End-to-end: web_search_via_adapters honours preference
+# 7. End-to-end: web_search_via_adapters honours exact-match preference
 # ---------------------------------------------------------------------------
 
 
-def test_web_search_via_adapters_prefers_matching_adapter() -> None:
-    """When the loop is on anthropic-subscription, dispatch must try the
-    anthropic-subscription web_search adapter first — even if the default
-    candidate order would have put a PAYG adapter ahead."""
+def test_web_search_via_adapters_routes_to_exact_match() -> None:
+    """PR-NO-FALLBACK — when the loop is on anthropic-subscription,
+    dispatch routes to anthropic-oauth (the exact match). The PAYG sibling
+    is registered but never tried — strict single-adapter mode."""
     from core.llm.adapters.base import WebSearchResult
     from core.llm.adapters.dispatch import web_search_via_adapters
 
-    payg = MagicMock()
+    payg = MagicMock(spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"])
     payg.name = "anthropic-payg"
     payg.provider = "anthropic"
     payg.source = "payg"
+    payg.supports_web_search = True
     payg.aweb_search = AsyncMock(
         return_value=WebSearchResult(query="q", text="from-payg", adapter_name="anthropic-payg")
     )
-    sub = MagicMock()
+    sub = MagicMock(spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"])
     sub.name = "anthropic-oauth"
     sub.provider = "anthropic"
     sub.source = "subscription"
+    sub.supports_web_search = True
     sub.aweb_search = AsyncMock(
         return_value=WebSearchResult(query="q", text="from-sub", adapter_name="anthropic-oauth")
     )
 
-    # Patch _capability_candidates so dispatch sees only these two adapters
-    # in default (payg-first) order; the preference must float sub ahead.
-    with patch(
-        "core.llm.adapters.dispatch._capability_candidates",
-        return_value=[payg, sub],
-    ):
+    with patch("core.llm.adapters.dispatch.list_adapters", return_value=[payg, sub]):
         result = asyncio.run(
             web_search_via_adapters("q", prefer_provider="anthropic", prefer_source="subscription")
         )
@@ -309,3 +350,41 @@ def test_web_search_via_adapters_prefers_matching_adapter() -> None:
     assert result.adapter_name == "anthropic-oauth"
     sub.aweb_search.assert_called_once()
     payg.aweb_search.assert_not_called()
+
+
+def test_web_search_via_adapters_no_fallback_on_billing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-NO-FALLBACK — billing-fatal on the selected adapter raises
+    immediately. No fallback to other capable adapters even when they are
+    registered + healthy."""
+    from core.llm.adapters.dispatch import web_search_via_adapters
+    from core.llm.errors import BillingError
+
+    selected = MagicMock(
+        spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"]
+    )
+    selected.name = "anthropic-payg"
+    selected.provider = "anthropic"
+    selected.source = "payg"
+    selected.supports_web_search = True
+    selected.aweb_search = AsyncMock(
+        side_effect=BillingError("quota exceeded", provider="anthropic")
+    )
+    fallback = MagicMock(
+        spec_set=["name", "provider", "source", "supports_web_search", "aweb_search"]
+    )
+    fallback.name = "openai-payg"
+    fallback.provider = "openai"
+    fallback.source = "payg"
+    fallback.supports_web_search = True
+    fallback.aweb_search = AsyncMock()  # Should NEVER be called.
+
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [selected, fallback])
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+
+    with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
+        asyncio.run(web_search_via_adapters("q"))
+
+    selected.aweb_search.assert_called_once()
+    fallback.aweb_search.assert_not_called()

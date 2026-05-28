@@ -94,15 +94,17 @@ async def _call_budget_llm(prompt: str) -> str | None:
     from core.config import settings
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
+        AdapterUnavailableError,
         complete_text_via_adapters,
     )
     from core.llm.errors import BillingError
 
-    # Per-provider model selection (Codex MCP audit 2026-05-28) — pass the
-    # operator's ``learning_extract_model`` ONLY to GLM (where the default
-    # ``glm-4.7-flash`` belongs); let Anthropic / OpenAI fallbacks use
-    # each adapter's own primary so cross-provider fallback actually
-    # succeeds instead of asking Anthropic to call ``glm-4.7-flash``.
+    # PR-NO-FALLBACK (2026-05-28) — strict single-adapter dispatch tries
+    # exactly one adapter (the operator-default-resolved first match of
+    # ``provider_order``) and never silently widens. Returning ``None`` on
+    # any failure keeps the extraction hook a soft hint — the loop's
+    # main path is unaffected. Per-attempt observability lands in the
+    # serve log via dispatch's ``ADAPTER_DISPATCH_ATTEMPT`` hook.
     try:
         result = await complete_text_via_adapters(
             prompt,
@@ -111,10 +113,13 @@ async def _call_budget_llm(prompt: str) -> str | None:
             model_by_provider={"glm": settings.learning_extract_model},
         )
     except BillingError:
-        log.debug("LLM extract: all candidate adapters billing-fatal")
+        log.debug("LLM extract: adapter credit exhausted")
+        return None
+    except AdapterUnavailableError:
+        log.debug("LLM extract: no capable adapter registered")
         return None
     except AdapterDispatchError:
-        log.debug("LLM extract: no capable adapter succeeded")
+        log.debug("LLM extract: single attempt transient failure")
         return None
     except Exception:
         log.debug("LLM extract call failed", exc_info=True)

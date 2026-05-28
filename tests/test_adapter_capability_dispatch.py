@@ -1,27 +1,26 @@
-"""Regression pin for PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28).
+"""Regression pin for PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) +
+PR-NO-FALLBACK (2026-05-28).
 
 The capability-based dispatch layer (``core/llm/adapters/dispatch.py``)
-centralises web_search and text-completion fan-out so tools never bypass
-the adapter registry with hardcoded PAYG clients. These tests pin:
+centralises web_search and text-completion via the adapter registry.
+PR-NO-FALLBACK (2026-05-28) replaced the fallback-chain semantics with
+strict single-adapter dispatch — the operator's explicit ``/login source``
+is the sole switch, no silent cross-provider / cross-source fallback.
+
+These tests pin:
 
 1. ``WebSearchCapable`` / ``TextCompletionCapable`` mixin Protocols are
    defined and runtime-checkable on the canonical adapters.
-2. ``web_search_via_adapters`` raises :class:`AdapterDispatchError` when
-   the registry has no capable adapter, raises :class:`BillingError` when
-   every candidate hit billing-fatal, and returns the first successful
-   :class:`WebSearchResult` otherwise.
-3. ``complete_text_via_adapters`` mirrors the same semantics for the
-   text-completion capability.
-4. Source preference honours the same :func:`infer_source` flow as the
-   agent loop main path — subscription-promoted operators see subscription
-   adapters before PAYG.
-5. ``GeneralWebSearchTool`` + ``WebSearchTool`` no longer carry direct SDK
-   client imports (source-level pin) — they delegate to the dispatch
-   helper instead.
-
-Live HTTP is not required — adapters are monkey-patched with stub
-``aweb_search`` / ``acomplete_text`` implementations that return canned
-results or raise the desired error class.
+2. ``web_search_via_adapters`` selects exactly one adapter and:
+   - returns its :class:`WebSearchResult` on success
+   - raises :class:`BillingError` with adapter context on billing-fatal
+   - raises :class:`AdapterDispatchError` on transient (no retry)
+   - raises :class:`AdapterUnavailableError` when no adapter matches
+3. ``complete_text_via_adapters`` mirrors the same semantics.
+4. Adapter selection honours the operator's ``infer_source`` resolution
+   so the dispatch lands on the operator-configured source.
+5. ``GeneralWebSearchTool`` + ``WebSearchTool`` delegate to the dispatch
+   helper (source-level pin — no direct SDK imports).
 """
 
 from __future__ import annotations
@@ -40,6 +39,7 @@ from core.llm.adapters.base import (
 )
 from core.llm.adapters.dispatch import (
     AdapterDispatchError,
+    AdapterUnavailableError,
     complete_text_via_adapters,
     web_search_via_adapters,
 )
@@ -154,26 +154,34 @@ def test_glm_payg_adapter_advertises_web_search_and_text_completion() -> None:
     assert isinstance(adapter, TextCompletionCapable)
 
 
-def test_codex_oauth_adapter_does_not_advertise_web_search() -> None:
-    """Codex backend (chatgpt.com) web_search support unconfirmed (frontier
-    audit 2026-05-28). Adapter must not advertise the capability so the
-    dispatch layer skips it instead of attempting + failing."""
+def test_codex_oauth_adapter_advertises_web_search() -> None:
+    """PR-NO-FALLBACK (2026-05-28) — the Codex backend exposes the same
+    Responses API contract as PAYG; the openai-python SDK's ``ToolParam``
+    Union accepts ``{"type": "web_search"}`` independent of which endpoint
+    the client targets. ``codex-oauth`` MUST advertise the capability so
+    an operator on a ChatGPT subscription gets web_search routed through
+    their OAuth token (no PAYG key needed) — the prior conservative
+    ``False`` caused the routing leak that landed web_search on
+    ``glm-payg`` for Codex-OAuth operators."""
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
     adapter = CodexOAuthAdapter()
-    assert not getattr(adapter, "supports_web_search", False), (
-        "CodexOAuthAdapter accidentally advertises supports_web_search; "
-        "the dispatch layer will try it and fail on Codex backend's "
-        "lack of web_search tool support."
+    assert adapter.supports_web_search is True
+    assert callable(getattr(adapter, "aweb_search", None)), (
+        "CodexOAuthAdapter.supports_web_search=True must be backed by a "
+        "callable ``aweb_search`` method — dispatch skips flag-set / "
+        "method-missing adapters with a warning."
     )
 
 
 # ---------------------------------------------------------------------------
-# web_search_via_adapters — fallback chain semantics
+# web_search_via_adapters — strict single-adapter semantics (PR-NO-FALLBACK)
 # ---------------------------------------------------------------------------
 
 
-def test_web_search_via_adapters_returns_first_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_web_search_via_adapters_returns_selected_adapter_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
@@ -185,12 +193,17 @@ def test_web_search_via_adapters_returns_first_success(monkeypatch: pytest.Monke
         ],
     )
     result = asyncio.run(web_search_via_adapters("test query"))
-    assert result.adapter_name == "anthropic-payg"  # first in provider_order
+    # Strict default-resolved: first provider in DEFAULT_PROVIDER_ORDER
+    # whose infer_source matches a registered adapter — anthropic-payg.
+    assert result.adapter_name == "anthropic-payg"
 
 
-def test_web_search_via_adapters_falls_through_transient_failures(
+def test_web_search_via_adapters_raises_dispatch_error_on_transient_no_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """PR-NO-FALLBACK — transient failure on the selected adapter raises
+    :class:`AdapterDispatchError` immediately. No silent retry to another
+    provider; the operator must switch source explicitly via ``/login``."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
@@ -198,19 +211,22 @@ def test_web_search_via_adapters_falls_through_transient_failures(
             _StubWebSearchAdapter(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="transient"
             ),
+            # openai-payg present + healthy, but dispatch must NOT use it
+            # as a fallback — the strict-single-adapter contract requires
+            # the operator to switch source explicitly.
             _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
         ],
     )
-    result = asyncio.run(web_search_via_adapters("test query"))
-    assert result.adapter_name == "openai-payg"
+    with pytest.raises(AdapterDispatchError, match=r"anthropic-payg .*failed"):
+        asyncio.run(web_search_via_adapters("test query"))
 
 
-def test_web_search_via_adapters_raises_billing_when_all_billing_fatal(
+def test_web_search_via_adapters_raises_billing_on_selected_adapter_no_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Reproduces the operator's PAYG-everywhere outage: all 3 providers
-    return billing-fatal → single :class:`BillingError` instead of N
-    silent retries."""
+    """PR-NO-FALLBACK — billing-fatal on the selected adapter surfaces
+    :class:`BillingError` immediately with adapter context, even when
+    other healthy adapters are registered."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
@@ -218,48 +234,80 @@ def test_web_search_via_adapters_raises_billing_when_all_billing_fatal(
             _StubWebSearchAdapter(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="billing"
             ),
-            _StubWebSearchAdapter(
-                name="openai-payg", provider="openai", source="payg", mode="billing"
-            ),
-            _StubWebSearchAdapter(name="glm-payg", provider="glm", source="payg", mode="billing"),
+            _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
+            _StubWebSearchAdapter(name="glm-payg", provider="glm", source="payg", mode="ok"),
         ],
     )
-    with pytest.raises(BillingError):
+    with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
         asyncio.run(web_search_via_adapters("test"))
 
 
-def test_web_search_via_adapters_raises_dispatch_error_with_no_candidates(
+def test_web_search_via_adapters_raises_unavailable_with_no_candidates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _install_stubs(monkeypatch, [])
-    with pytest.raises(AdapterDispatchError, match="no registered adapter"):
+    with pytest.raises(AdapterUnavailableError, match="no adapter registered"):
         asyncio.run(web_search_via_adapters("test"))
 
 
-def test_web_search_via_adapters_raises_dispatch_error_when_all_transient(
+def test_web_search_via_adapters_raises_unavailable_when_prefer_does_not_match(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """PR-NO-FALLBACK — when ``prefer_provider`` + ``prefer_source`` are
+    given (from AgenticLoop's ToolContext) and no registered adapter
+    matches both exactly, dispatch refuses to widen — raises
+    :class:`AdapterUnavailableError` so the operator switches explicitly."""
+    _force_payg_first(monkeypatch)
+    _install_stubs(
+        monkeypatch,
+        [
+            _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
+        ],
+    )
+    with pytest.raises(AdapterUnavailableError, match="no adapter registered matching"):
+        asyncio.run(
+            web_search_via_adapters(
+                "test",
+                prefer_provider="anthropic",
+                prefer_source="subscription",
+            )
+        )
+
+
+def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the AgenticLoop's adapter is anthropic-oauth, dispatch must
+    route web_search to anthropic-oauth — even though anthropic-payg is
+    also registered and would be the default-resolved pick."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
         [
             _StubWebSearchAdapter(
-                name="anthropic-payg", provider="anthropic", source="payg", mode="transient"
+                name="anthropic-payg", provider="anthropic", source="payg", mode="ok"
             ),
             _StubWebSearchAdapter(
-                name="openai-payg", provider="openai", source="payg", mode="transient"
+                name="anthropic-oauth",
+                provider="anthropic",
+                source="subscription",
+                mode="ok",
             ),
         ],
     )
-    with pytest.raises(AdapterDispatchError, match=r"all .* adapters failed"):
-        asyncio.run(web_search_via_adapters("test"))
+    result = asyncio.run(
+        web_search_via_adapters("test", prefer_provider="anthropic", prefer_source="subscription")
+    )
+    assert result.adapter_name == "anthropic-oauth"
 
 
-def test_web_search_subscription_promoted_when_infer_source_is_subscription(
+def test_web_search_via_adapters_default_uses_infer_source_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When :func:`infer_source` returns ``"subscription"`` for a provider,
-    subscription-source adapters land before PAYG within that provider."""
+    """When no preference, dispatch picks the adapter whose source equals
+    ``infer_source(provider)`` for the first provider in provider_order
+    that has a capable adapter. ``infer_source`` returning ``subscription``
+    for anthropic → anthropic-oauth is the selected adapter."""
     monkeypatch.setattr(
         "core.llm.adapters._source_inference.infer_source",
         lambda provider: "subscription" if provider == "anthropic" else "payg",
@@ -303,11 +351,13 @@ def test_complete_text_via_adapters_returns_first_success(
     assert "completed by anthropic-payg" in result.text
 
 
-def test_complete_text_via_adapters_provider_order_overrides_default(
+def test_complete_text_via_adapters_provider_order_picks_first_capable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Caller-supplied ``provider_order`` floats the requested provider
-    to the front (mirrors compaction's per-call provider intent)."""
+    """PR-NO-FALLBACK — caller-supplied ``provider_order`` is the *preference
+    seed* for the operator-default-resolved path. Dispatch picks the first
+    provider in the order with a registered capable adapter, then tries
+    only that single adapter (no fallback on failure)."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
@@ -324,6 +374,28 @@ def test_complete_text_via_adapters_provider_order_overrides_default(
         complete_text_via_adapters("prompt", provider_order=("openai", "anthropic", "glm"))
     )
     assert result.text.endswith("openai-payg")
+
+
+def test_complete_text_via_adapters_raises_billing_no_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-NO-FALLBACK — billing-fatal on the selected adapter raises
+    :class:`BillingError` immediately even when other healthy adapters
+    are registered."""
+    _force_payg_first(monkeypatch)
+    _install_stubs(
+        monkeypatch,
+        [
+            _StubTextCompletionAdapter(
+                name="anthropic-payg", provider="anthropic", source="payg", mode="billing"
+            ),
+            _StubTextCompletionAdapter(
+                name="openai-payg", provider="openai", source="payg", mode="ok"
+            ),
+        ],
+    )
+    with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
+        asyncio.run(complete_text_via_adapters("prompt"))
 
 
 # ---------------------------------------------------------------------------

@@ -52,14 +52,17 @@ async def _context_exhausted_message(user_input: str) -> str:
     from core.config import ANTHROPIC_BUDGET
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
+        AdapterUnavailableError,
         complete_text_via_adapters,
     )
     from core.llm.errors import BillingError
 
-    # Per-provider model selection (Codex MCP audit 2026-05-28) — Haiku
-    # specifically for Anthropic; OpenAI / GLM fallbacks use their own
-    # cheap defaults so a Codex-subscription-only operator still gets a
-    # localised notice instead of an "Anthropic Haiku" 404 cascade.
+    # PR-NO-FALLBACK (2026-05-28) — strict single-adapter dispatch picks
+    # the first provider in this order whose ``infer_source`` resolves to
+    # a registered adapter, then tries that single adapter. The static
+    # ``_EXHAUSTED_FALLBACK`` covers every failure mode; the dispatch
+    # layer's INFO log records exactly which adapter was tried and why
+    # it failed so operators see honest per-attempt observability.
     try:
         result = await complete_text_via_adapters(
             user_input[:200],
@@ -69,10 +72,13 @@ async def _context_exhausted_message(user_input: str) -> str:
             model_by_provider={"anthropic": ANTHROPIC_BUDGET},
         )
     except BillingError:
-        log.debug("Exhausted message: every adapter billing-fatal — static fallback")
+        log.debug("Exhausted message: adapter credit exhausted — static fallback")
+        return _EXHAUSTED_FALLBACK
+    except AdapterUnavailableError:
+        log.debug("Exhausted message: no capable adapter registered — static fallback")
         return _EXHAUSTED_FALLBACK
     except AdapterDispatchError:
-        log.debug("Exhausted message: no capable adapter — static fallback")
+        log.debug("Exhausted message: single attempt transient failure — static fallback")
         return _EXHAUSTED_FALLBACK
     except Exception:
         log.debug("Exhausted message LLM call failed, using fallback", exc_info=True)
