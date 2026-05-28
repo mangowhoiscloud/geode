@@ -48,6 +48,32 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-SPCT-FEWSHOT-PROMPT (2026-05-28)** — Replace the SPCT principle
+  guidance in ``_MUTATION_CONTRACT_SUFFIX`` (mutator system prompt
+  body) with a length-anchored variant + two grounded few-shot
+  examples. Post PR-SPCT-CAP-1000 the cap was raised 500→1000, but
+  mutator's principle distribution shifted upward in tandem (cycle
+  14/15/16/17 of 2026-05-28 16:56–17:51 produced 1064-1478 char
+  principles in 10/12 attempts, 83% fail rate at cap 1000). Cap
+  expansion alone is not effective — LLM treats the explicit char
+  count as a recommendation, not a constraint. New guidance:
+  (1) **"CONCISE" + "STRICT HARD CAP" + REJECT 결과 명시** —
+  principle 가 cap 위반 시 cycle 폐기, mutator dispatch cost wasted,
+  loop no progress 라고 명시. (2) **target 300-600 chars (3-5
+  sentences)** — concrete length goal 보다 cap. (3) **two
+  grounded few-shot examples (487 / 391 chars)** — anchor 효과,
+  cycle 11-13 의 실제 mutator principle 본을 차용해서 in-distribution.
+  (4) **"NO LONGER than these examples" + "restating context is
+  FORBIDDEN"** — 음성 prompt 로 verbose 패턴 차단. (5) response
+  schema 의 ``"principle": "<= 1000 chars ..."`` 도
+  ``"concise SPCT principle, target 300-600 chars, HARD CAP 1000
+  chars — see examples in the instruction body; restating context =
+  REJECT"`` 으로 갱신. 변경 위치: ``runner.py`` 의
+  ``_MUTATION_CONTRACT_SUFFIX`` (principle 섹션 + response schema 두
+  곳). Pinned by 21 existing SPCT tests + 8 minimal_1 tests (29
+  pass), drift invariant ``test_program_md_can_table_matches_target_kinds``
+  (regex extracts kinds from program.md, no SPCT impact).
+
 - **PR-SPCT-CAP-1000 (2026-05-28)** — Raise SPCT principle char cap
   500 → 1000 in ``core/self_improving_loop/runner.py``. v0.99.81 의
   codex fix 후 cycle 14/15/16 의 6/6 attempts 모두 principle length
