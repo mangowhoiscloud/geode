@@ -283,7 +283,7 @@ async def _default_geode_runner(
     # ``disable_settings_drift`` is True iff the caller explicitly pinned
     # a target model — see N6-followup priority docstring above.
     # The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
-    # does not go through ``core.wiring.container._build_llm_adapters``, the
+    # does not go through ``core.runtime.GeodeRuntime._build_core``, the
     # parent's bootstrap path. Without an explicit ``bootstrap_builtins()``
     # here the registry is empty (``Known pairs: []``) and every target
     # ``generate`` call inside this runner fails with

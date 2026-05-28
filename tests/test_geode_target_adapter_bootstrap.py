@@ -2,7 +2,7 @@
 adapter-registry bootstrap.
 
 The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
-does not go through ``core.wiring.container._build_llm_adapters``, the
+does not go through ``core.runtime.GeodeRuntime._build_core``, the
 parent's wiring bootstrap path. Without an explicit ``bootstrap_builtins()``
 call before constructing ``AgenticLoop`` inside ``_default_geode_runner``,
 the audit subprocess's adapter registry stays empty and every target

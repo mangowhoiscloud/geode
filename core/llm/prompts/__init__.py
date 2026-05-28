@@ -112,11 +112,6 @@ _router = _load_template("router")
 ROUTER_SYSTEM: str = _router["system"]
 AGENTIC_SUFFIX: str = _router["agentic_suffix"]
 
-_cross_llm = _load_template("cross_llm")
-CROSS_LLM_SYSTEM: str = _cross_llm["system"]
-CROSS_LLM_RESCORE: str = _cross_llm["rescore"]
-CROSS_LLM_DUAL_VERIFY: str = _cross_llm["dual_verify"]
-
 _tool_augmented = _load_template("tool_augmented")
 ANALYST_TOOLS_SUFFIX: str = _tool_augmented["analyst_tools"]
 SYNTHESIZER_TOOLS_SUFFIX: str = _tool_augmented["synthesizer_tools"]
@@ -138,9 +133,6 @@ PROMPT_VERSIONS: dict[str, str] = {
     "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
     "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
     "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
-    "CROSS_LLM_SYSTEM": _hash_prompt(CROSS_LLM_SYSTEM),
-    "CROSS_LLM_RESCORE": _hash_prompt(CROSS_LLM_RESCORE),
-    "CROSS_LLM_DUAL_VERIFY": _hash_prompt(CROSS_LLM_DUAL_VERIFY),
     "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
     "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
 }
@@ -166,9 +158,6 @@ _PINNED_HASHES: dict[str, str] = {
     "ANALYST_USER": "5fb494ca5cc8",
     "COMMENTARY_SYSTEM": "488d8916d958",
     "COMMENTARY_USER": "2024ac4eba69",
-    "CROSS_LLM_DUAL_VERIFY": "af09d54c3888",
-    "CROSS_LLM_RESCORE": "029da6a59d0b",
-    "CROSS_LLM_SYSTEM": "bf303f600fce",
     "EVALUATOR_AXES": "44136fa355b3",
     "EVALUATOR_SYSTEM": "6f6cb9030222",
     "EVALUATOR_USER": "ad832adfadf0",
@@ -202,9 +191,6 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
         "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
         "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
         "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
-        "CROSS_LLM_SYSTEM": _hash_prompt(CROSS_LLM_SYSTEM),
-        "CROSS_LLM_RESCORE": _hash_prompt(CROSS_LLM_RESCORE),
-        "CROSS_LLM_DUAL_VERIFY": _hash_prompt(CROSS_LLM_DUAL_VERIFY),
         "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
         "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
         # Axes hashes (3)
@@ -234,9 +220,6 @@ __all__ = [
     "AXES_VERSIONS",
     "COMMENTARY_SYSTEM",
     "COMMENTARY_USER",
-    "CROSS_LLM_DUAL_VERIFY",
-    "CROSS_LLM_RESCORE",
-    "CROSS_LLM_SYSTEM",
     "EVALUATOR_AXES",
     "EVALUATOR_SYSTEM",
     "EVALUATOR_USER",

@@ -9,26 +9,14 @@ import asyncio
 import inspect
 import json
 import logging
-import re
 import threading
 import time
-from collections.abc import AsyncIterator, Callable
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from collections.abc import Callable
+from typing import Any
 
 from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
-from core.llm.fallback import (
-    retry_with_backoff_generic,
-    retry_with_backoff_generic_async,
-)
+from core.llm.fallback import retry_with_backoff_generic_async
 from core.llm.token_tracker import LLMUsage, get_tracker
-
-if TYPE_CHECKING:
-    # Pydantic is a heavy import (~100 ms cumulative). The ``BaseModel``
-    # bound is only consumed by mypy so a forward-reference string keeps
-    # runtime free of the pydantic tree.
-    from pydantic import BaseModel
-
-T = TypeVar("T", bound="BaseModel")
 
 log = logging.getLogger(__name__)
 
@@ -134,156 +122,18 @@ async def _run_tool_executor_async(
 
 
 class OpenAIAdapter:
-    """OpenAI GPT adapter implementing LLMClientPort.
+    """OpenAI-compatible async tool-use orchestrator.
 
-    Provides the same interface as ClaudeAdapter but backed by OpenAI API.
+    Powers OpenAI + GLM tool-use paths from
+    :func:`core.llm.router.calls.tools.call_llm_with_tools_async` — the legacy
+    sync ``generate`` / ``generate_structured`` / ``generate_parsed`` /
+    ``agenerate_stream`` surface (``LLMClientPort``) was removed in
+    PR-LLMCLIENTPORT-COLLAPSE (2026-05-28); only the
+    :meth:`agenerate_with_tools` orchestration is load-bearing.
     """
 
     def __init__(self, default_model: str = DEFAULT_OPENAI_MODEL) -> None:
         self._default_model = default_model
-
-    @property
-    def model_name(self) -> str:
-        """Return the default model name for cross-LLM verification."""
-        return self._default_model
-
-    def generate(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-    ) -> str:
-        client = _get_openai_client()
-        target = model or self._default_model
-
-        def _do_call(*, model: str) -> str:
-            response = client.chat.completions.create(
-                model=model,
-                max_completion_tokens=max_tokens,
-                temperature=temperature,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                timeout=120.0,
-            )
-            # Track usage
-            if response.usage:
-                in_tok = response.usage.prompt_tokens
-                out_tok = response.usage.completion_tokens or 0
-                get_tracker().record(model, in_tok, out_tok)
-
-            choice = response.choices[0]
-            return choice.message.content or ""
-
-        result: str = self._retry_with_backoff(_do_call, model=target)
-        return result
-
-    def generate_structured(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-    ) -> dict[str, Any]:
-        raw = self.generate(
-            system, user, model=model, max_tokens=max_tokens, temperature=temperature
-        )
-        text = raw.strip()
-        text = re.sub(r"^```\w*\s*\n", "", text)
-        text = re.sub(r"\n```\s*$", "", text)
-        try:
-            result: dict[str, Any] = json.loads(text)
-        except json.JSONDecodeError as exc:
-            log.error("Failed to parse OpenAI JSON response. Raw text: %s", text[:500])
-            raise ValueError(f"OpenAI returned invalid JSON: {exc}") from exc
-        return result
-
-    def generate_parsed(
-        self,
-        system: str,
-        user: str,
-        *,
-        output_model: type[T],
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-    ) -> T:
-        """Generate structured output using OpenAI's chat.completions.parse().
-
-        Uses native Pydantic integration for guaranteed valid JSON.
-        """
-        client = _get_openai_client()
-        target = model or self._default_model
-
-        def _do_call(*, model: str) -> T:
-            response = client.beta.chat.completions.parse(
-                model=model,
-                max_completion_tokens=max_tokens,
-                temperature=temperature,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format=output_model,
-                timeout=120.0,
-            )
-            # Track usage
-            if response.usage:
-                in_tok = response.usage.prompt_tokens
-                out_tok = response.usage.completion_tokens or 0
-                get_tracker().record(model, in_tok, out_tok)
-
-            choice = response.choices[0]
-            if choice.message.parsed is None:
-                raise ValueError("OpenAI returned null parsed output")
-            return cast(T, choice.message.parsed)
-
-        result: T = self._retry_with_backoff(_do_call, model=target)
-        return result
-
-    async def agenerate_stream(
-        self,
-        system: str,
-        user: str,
-        *,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
-    ) -> AsyncIterator[str]:
-        client = _get_async_openai_client()
-        target_model = model or self._default_model
-
-        async def _do_stream(*, model: str) -> Any:
-            response = client.chat.completions.create(
-                model=model,
-                max_completion_tokens=max_tokens,
-                temperature=temperature,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                stream=True,
-                stream_options={"include_usage": True},
-                timeout=120.0,
-            )
-            if inspect.isawaitable(response):
-                return await response
-            return response
-
-        stream = await self._aretry_with_backoff(_do_stream, model=target_model)
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-            if hasattr(chunk, "usage") and chunk.usage is not None:
-                in_tok = chunk.usage.prompt_tokens or 0
-                out_tok = chunk.usage.completion_tokens or 0
-                get_tracker().record(target_model, in_tok, out_tok)
 
     async def agenerate_with_tools(
         self,
@@ -383,25 +233,6 @@ class OpenAIAdapter:
             tool_calls=all_tool_calls,
             usage=all_usage,
             rounds=max_tool_rounds,
-        )
-
-    def _retry_with_backoff(self, fn: Any, *, model: str) -> Any:
-        """Retry with exponential backoff + model fallback.
-
-        Delegates to the shared ``retry_with_backoff_generic`` from fallback.py.
-        """
-        import openai
-
-        return retry_with_backoff_generic(
-            fn,
-            model=model,
-            fallback_models=list(OPENAI_FALLBACK_MODELS),
-            retryable_errors=_get_retryable_errors(),
-            bad_request_error=openai.BadRequestError,
-            billing_message=(
-                "OpenAI API billing/credit error. Check your OpenAI account billing settings."
-            ),
-            provider_label="OpenAI",
         )
 
     async def _aretry_with_backoff(self, fn: Any, *, model: str) -> Any:

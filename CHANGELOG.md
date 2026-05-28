@@ -47,6 +47,61 @@ functional change.
 
 ## [Unreleased]
 
+### Removed
+- **PR-LLMCLIENTPORT-COLLAPSE (2026-05-28)** — the parallel
+  ``LLMClientPort`` hierarchy is gone. ``LLMAdapter`` (one async
+  ``acomplete`` + central dispatch in ``core/llm/adapters/dispatch.py``)
+  is the single registry / call surface.
+
+  Production audit found the entire ``LLMClientPort`` stack was
+  dead infrastructure kept alive by re-exports, not by callers:
+
+  - ``LLMClientPort`` Protocol + the sync ``ClaudeAdapter`` /
+    ``OpenAIAdapter.generate`` / ``.generate_structured`` /
+    ``.generate_parsed`` / ``.agenerate_stream`` surface — DELETED.
+    The only production caller of ``OpenAIAdapter`` is
+    ``call_llm_with_tools_async`` (router/calls/tools.py) which uses
+    ``.agenerate_with_tools`` — the surviving load-bearing surface;
+    OpenAIAdapter now exposes only that method + its async retry.
+  - ``LLMJsonCallable`` / ``LLMTextCallable`` / ``LLMParsedCallable``
+    node-DI Protocols + the ``set_llm_callable`` / ``get_llm_json`` /
+    ``get_llm_parsed`` / ``get_secondary_llm_*`` ContextVar chain
+    (``core/llm/router/_di.py``) — DELETED. ``set_llm_callable`` had
+    one caller (``build_llm_adapters``); the ``get_*`` accessors had
+    ZERO downstream consumers — every grep returned only the
+    re-exports.
+  - ``core/verification/cross_llm.py`` (225 lines:
+    ``run_cross_llm_check`` + ``run_dual_adapter_check``) — DELETED.
+    Zero production callers (only ``tests/test_cross_llm.py``); the
+    ``CROSS_LLM_SYSTEM`` / ``CROSS_LLM_RESCORE`` /
+    ``CROSS_LLM_DUAL_VERIFY`` prompts +
+    ``core/llm/prompts/cross_llm.md`` template + ``cross_llm``
+    GeodeState field deleted with them.
+  - ``core/wiring/container.py::build_llm_adapters`` — DELETED. Its
+    only production effect was registering the 8 LLMAdapter built-ins
+    via ``bootstrap_builtins()``, which now runs directly from
+    ``runtime._build_core``. The ``llm_adapter`` / ``secondary_adapter``
+    fields on ``RuntimeCoreConfig`` + ``GeodeRuntime`` are gone (never
+    read externally).
+  - Obsolete tests deleted: ``tests/test_cross_llm.py``,
+    ``tests/test_claude_adapter.py``, ``tests/test_openai_adapter.py``,
+    ``tests/test_llm_port.py``, ``tests/test_port_compliance.py``,
+    ``tests/test_ports.py``. ``tests/test_tool_use.py`` rewritten so
+    the Anthropic block calls ``call_llm_with_tools_async`` directly
+    instead of going through ``ClaudeAdapter`` (same coverage, one
+    fewer indirection).
+
+  Why this was the right scope (vs. the conservative "migrate
+  callers" plan first sketched): the GAP audit showed callers
+  to migrate did not exist. ``ClaudeAdapter`` was a thin facade
+  over ``call_llm`` / ``call_llm_json`` / ``call_llm_parsed`` /
+  ``call_llm_with_tools_async`` — i.e. one OO wrapper around four
+  already-async-friendly procedural functions. Pre-cleanup contract
+  count: 2 Protocols (``LLMClientPort`` × 6 methods + ``LLMAdapter``
+  × 6 methods) + 3 node-DI Protocols + 2 wrapper classes + 1 dead
+  cross-LLM module + 1 unused DI ContextVar chain. Post-cleanup:
+  ``LLMAdapter`` alone. Net: -1,422 / +59 LoC.
+
 ### Changed
 - **PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28)** — Phase 2
   follow-up to PR-ADAPTER-PATTERN-UNIFICATION (#1832): the last two

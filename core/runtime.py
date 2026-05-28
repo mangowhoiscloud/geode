@@ -59,7 +59,6 @@ from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
 from core.hooks import HookSystem
-from core.llm.router import LLMClientPort
 from core.memory.port import SessionStorePort
 from core.memory.session_key import build_session_key, build_thread_config
 from core.orchestration.lane_queue import LaneQueue
@@ -105,14 +104,12 @@ class RuntimeCoreConfig:
     policy_chain: PolicyChain
     tool_registry: ToolRegistry
     run_log: RunLog
-    llm_adapter: LLMClientPort
     config_watcher: ConfigWatcher
     stuck_detector: StuckDetector
     lane_queue: LaneQueue
     project_memory: ProjectMemory
     session_key: str
     subject_id: str
-    secondary_adapter: LLMClientPort | None = None
     profile_store: ProfileStore | None = None
     profile_rotator: ProfileRotator | None = None
     cooldown_tracker: CooldownTracker | None = None
@@ -172,8 +169,6 @@ class GeodeRuntime:
         self.policy_chain = core.policy_chain
         self.tool_registry = core.tool_registry
         self.run_log = core.run_log
-        self.llm_adapter = core.llm_adapter
-        self.secondary_adapter = core.secondary_adapter
         self.profile_store = core.profile_store
         self.profile_rotator = core.profile_rotator
         self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
@@ -277,14 +272,12 @@ class GeodeRuntime:
             policy_chain=core["policy_chain"],
             tool_registry=core["tool_registry"],
             run_log=core["run_log"],
-            llm_adapter=core["llm_adapter"],
             config_watcher=core["config_watcher"],
             stuck_detector=core["stuck_detector"],
             lane_queue=core["lane_queue"],
             project_memory=memory["project_memory"],
             session_key=session_key,
             subject_id=subject_id,
-            secondary_adapter=core["secondary_adapter"],
             profile_store=core["profile_store"],
             profile_rotator=core["profile_rotator"],
             cooldown_tracker=core["cooldown_tracker"],
@@ -325,10 +318,14 @@ class GeodeRuntime:
         policy_chain = infra.build_default_policies()
         tool_registry = infra.build_default_registry()
         profile_store, profile_rotator, cooldown_tracker = infra.build_auth()
-        llm_adapter, secondary_adapter = infra.build_llm_adapters(
-            tool_registry,
-            policy_chain,
-        )
+        # PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — was
+        # ``infra.build_llm_adapters(...)`` whose sole production effect was
+        # registering the 8 LLMAdapter built-ins. Call the registry bootstrap
+        # directly now; the legacy ``set_llm_callable`` ContextVar chain that
+        # surrounded it had no production consumer.
+        from core.llm.adapters.registry import bootstrap_builtins
+
+        bootstrap_builtins()
         config_watcher = bootstrap.build_config_watcher(hooks=hooks)
         lane_queue = infra.build_default_lanes()
         return {
@@ -341,8 +338,6 @@ class GeodeRuntime:
             "profile_store": profile_store,
             "profile_rotator": profile_rotator,
             "cooldown_tracker": cooldown_tracker,
-            "llm_adapter": llm_adapter,
-            "secondary_adapter": secondary_adapter,
             "config_watcher": config_watcher,
             "lane_queue": lane_queue,
         }

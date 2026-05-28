@@ -11,8 +11,6 @@ from typing import Any
 from core.auth.cooldown import CooldownTracker
 from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
-from core.llm.providers.openai import OpenAIAdapter
-from core.llm.router import ClaudeAdapter, LLMClientPort
 from core.orchestration.lane_queue import LaneQueue
 from core.tools.policy import PolicyChain, ToolPolicy
 from core.tools.registry import ToolRegistry, ToolSearchTool
@@ -372,39 +370,3 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
         log.debug("Codex CLI refresher registration skipped")
 
     return profile_store, profile_rotator, cooldown_tracker
-
-
-def build_llm_adapters(
-    tool_registry: ToolRegistry,
-    policy_chain: PolicyChain,
-) -> tuple[LLMClientPort, LLMClientPort | None]:
-    """Build LLM adapters and inject callables into contextvars.
-
-    CSP-15 (2026-05-23) — also registers the v0.99.39 :class:`LLMAdapter`
-    Protocol built-ins (anthropic-payg / anthropic-oauth / claude-cli /
-    openai-payg / codex-oauth / codex-cli) into the module-global adapter
-    registry. The new ``LLMAdapter`` surface is independent from the legacy
-    ``LLMClientPort`` returned here — both coexist until the AgenticLoop
-    migration lands (follow-up #A in
-    ``docs/plans/2026-05-23-llm-adapter-abstraction.md``).
-    """
-    from core.config import settings
-    from core.llm.adapters.registry import bootstrap_builtins
-    from core.llm.router import set_llm_callable
-
-    # Register the 6 Layer 3 adapters once per process. Idempotent.
-    bootstrap_builtins()
-
-    llm_adapter: LLMClientPort = ClaudeAdapter()
-    secondary_adapter: LLMClientPort | None = None
-    if settings.openai_api_key:
-        secondary_adapter = OpenAIAdapter()
-
-    set_llm_callable(
-        llm_adapter.generate_structured,
-        llm_adapter.generate,
-        parsed_fn=llm_adapter.generate_parsed,
-        secondary_json_fn=(secondary_adapter.generate_structured if secondary_adapter else None),
-        secondary_parsed_fn=(secondary_adapter.generate_parsed if secondary_adapter else None),
-    )
-    return llm_adapter, secondary_adapter
