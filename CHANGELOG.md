@@ -47,6 +47,98 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28)** — restore the GoF
+  Adapter pattern's "uniform interface + adaptee SDK isolation +
+  config-driven switching" invariant to the tool layer. The v0.99.39
+  ``core/llm/adapters/`` registry was previously only consumed by the
+  agent loop main path (PR-SOURCE-ROUTING #1822); web_search and
+  compaction reimplemented their own 3-provider direct-SDK chains with
+  PAYG-hardcoded clients, so the operator's ``/login`` credential
+  source choice (settings + ProfileStore) silently failed to switch
+  those call sites. Tools fell into the "all PAYG depleted → 6× silent
+  retry" trap the user hit on 2026-05-28.
+
+  Paperclip-pattern alignment (``server/src/adapters/registry.ts:768``):
+  capability mixin Protocols (``WebSearchCapable``,
+  ``TextCompletionCapable``) on top of the core ``LLMAdapter`` Protocol,
+  with explicit ``supports_*`` flags + centralised dispatch
+  (``core/llm/adapters/dispatch.py``) that enumerates registered
+  adapters by ``(provider × operator-preferred source)`` via the same
+  :func:`infer_source` flow the agent loop uses. Tool callers never
+  instantiate provider SDKs directly — they call
+  ``web_search_via_adapters()`` / ``complete_text_via_adapters()`` and
+  the adapter that matches the operator's settings handles the
+  outbound HTTP. Billing-fatal failures (``BillingError`` or
+  :func:`is_billing_fatal`-classified SDK exceptions) surface as a
+  single actionable hint instead of N silent retries.
+
+  OpenAI text completion uses the Responses API (the forward-going
+  surface + wire-shape parity with the agent loop's main ``acomplete``);
+  GLM family adapters stay on Chat Completions because z.ai's
+  OpenAI-compatibility surface lacks Responses support.
+
+  ### Capability advertisement
+  - ``AnthropicPaygAdapter`` / ``AnthropicOAuthAdapter``: web_search +
+    text_completion (Anthropic OAuth supports the same
+    ``web_search_20260209`` tool API per the frontier audit).
+  - ``OpenAIPaygAdapter``: web_search (Responses ``web_search`` tool) +
+    text_completion (Responses API path).
+  - ``CodexOAuthAdapter``: text_completion (Responses on the
+    chatgpt.com/backend-api/codex endpoint). web_search is NOT
+    advertised — the Codex backend's support for the hosted
+    ``web_search`` tool is unconfirmed and falsely advertising would
+    break the dispatch fallback chain on every call. Codex MCP audit
+    BLOCKER (2026-05-28).
+  - ``GlmPaygAdapter`` / ``GlmCodingPlanAdapter``: web_search +
+    text_completion (z.ai native ``web_search`` Chat Completions tool;
+    Coding Plan endpoint speaks the same wire shape, so the dispatch
+    chain skips on actual 400/1113 errors if support diverges).
+
+  ### Migrated call sites
+  - ``core/tools/web_tools.py::GeneralWebSearchTool`` (HIGH) — formerly
+    ``_anthropic_search`` / ``_openai_search`` / ``_glm_search`` direct
+    PAYG instantiation trio.
+  - ``core/tools/web_search.py::WebSearchTool`` (HIGH, legacy duplicate)
+    — same migration.
+  - ``core/orchestration/compaction.py::_call_summarize`` (HIGH) —
+    formerly ``_summarize_openai`` / ``_summarize_glm`` provider fan-out
+    via ``_get_openai_client`` / ``_get_glm_client``.
+
+  ### Deferred to follow-up sprint
+  - ``core/hooks/llm_extract_learning.py:116,141`` — sync hook signature
+    + bridges to ``asyncio.run`` need a coordinated change.
+  - ``core/agent/loop/models.py:58`` — one-shot context-exhausted
+    Haiku call; low-traffic.
+  - ``core/llm/router/calls/{text,tools,streaming}.py`` +
+    ``core/wiring/container.py:401`` — paperclip ``LLMClientPort``
+    Protocol (cross-LLM verify), a different Protocol than
+    ``LLMAdapter``; consolidating both Protocols is a separate sprint.
+  - ``experimental/*`` — prototype isolation preserved.
+
+  ### Safety + correctness from Codex MCP audit
+  - ``_capability_candidates`` checks both the ``supports_*`` flag AND
+    a callable method (``aweb_search`` / ``acomplete_text``); a
+    contract-bug adapter that advertises a flag without the method
+    logs a WARN and is skipped instead of crashing the dispatch as
+    transient.
+  - ``BillingError`` precedence is documented: in a mixed billing +
+    transient candidate set, billing wins because (a) the operator
+    can act on it immediately and (b) the transient may resolve once
+    the billing is fixed.
+  - ``core/tools/definitions.json::general_web_search.description``
+    refreshed: "3-provider native fallback chain" → "adapter registry
+    WebSearchCapable chain (subscription endpoints promoted ahead of
+    PAYG per operator settings)".
+
+  Pinned by ``tests/test_adapter_capability_dispatch.py`` (16
+  assertions: capability isinstance mixins on 4 canonical adapters,
+  CodexOAuthAdapter intentionally skipping web_search, dispatch
+  first-success / billing / transient / no-candidates branches,
+  source-preference subscription promotion, source-level pins that
+  ``web_tools`` / ``web_search`` / ``compaction`` no longer import
+  provider SDKs directly).
+
 ## [0.99.79] - 2026-05-28
 
 > PATCH release. Single fix: content-first stop_reason derivation in

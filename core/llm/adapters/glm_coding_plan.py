@@ -39,6 +39,8 @@ from core.llm.adapters.base import (
     ModelSpec,
     QuotaWindows,
     StreamEvent,
+    TextCompletionResult,
+    WebSearchResult,
 )
 
 log = logging.getLogger(__name__)
@@ -57,6 +59,15 @@ class GlmCodingPlanAdapter:
     provider: str = "glm"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
+    # PR-ADAPTER-PATTERN-UNIFICATION — Coding Plan subscription endpoint
+    # speaks the same Chat Completions wire shape as the PAYG endpoint, so
+    # web_search + text_completion both work. The frontier audit
+    # (2026-05-28) did not directly confirm Coding Plan web_search support,
+    # but z.ai's Coding Plan terms state full PAYG-API parity; we advertise
+    # both capabilities and let the dispatch fallback chain skip on actual
+    # 400 / 1113 errors if support diverges.
+    supports_web_search: bool = True
+    supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
@@ -104,6 +115,37 @@ class GlmCodingPlanAdapter:
             )
             raise
         return translate_chat_response(response)
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        from core.config import GLM_PRIMARY
+        from core.llm.adapters._capability_impls import glm_web_search
+
+        return await glm_web_search(
+            self._get_client(),
+            query=query,
+            max_results=max_results,
+            model=GLM_PRIMARY,
+            adapter_name=self.name,
+        )
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult:
+        from core.config import GLM_PRIMARY
+        from core.llm.adapters._capability_impls import openai_chat_complete_text
+
+        return await openai_chat_complete_text(
+            self._get_client(),
+            prompt=prompt,
+            system=system,
+            model=model or GLM_PRIMARY,
+            max_tokens=max_tokens,
+        )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()

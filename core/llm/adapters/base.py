@@ -320,6 +320,91 @@ class LLMAdapter(Protocol):
     def detect_credential(self) -> CredentialDetection | None: ...
 
 
+# ---------------------------------------------------------------------------
+# Capability protocols — PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28)
+# ---------------------------------------------------------------------------
+# Paperclip-pattern alignment (``packages/adapter-utils/src/types.ts:349``):
+# adapters declare optional capabilities (web_search, text_completion,
+# instructions_bundle, ...) via mixin Protocols + explicit ``supports_*``
+# boolean flags. Centralised fallback chains (``core/llm/adapters/dispatch.py``)
+# iterate registered adapters by source preference (subscription > payg) and
+# pick the first that advertises the capability.
+#
+# Why split the Protocol: the core ``LLMAdapter`` stays minimal (one method)
+# so adding an adapter only requires implementing ``acomplete`` + identity
+# attrs. Tool-side capabilities (web_search, text_completion) are opt-in via
+# mixin so non-LLM adapters or local-CLI subprocess adapters can omit them
+# without satisfying spurious stubs.
+
+
+@dataclass(frozen=True)
+class WebSearchResult:
+    """Single web_search call result — provider-agnostic.
+
+    ``text`` is the model's synthesised summary of search hits (titles + URLs +
+    brief blurbs). ``source_urls`` is the extracted URL list when the provider
+    exposes it (Anthropic ``web_search_tool_result`` blocks); other providers
+    leave it empty.
+    """
+
+    query: str
+    text: str
+    source_urls: tuple[str, ...] = ()
+    adapter_name: str = ""
+
+
+@dataclass(frozen=True)
+class TextCompletionResult:
+    """Single-turn text completion result — used by compaction / extraction."""
+
+    text: str
+    usage: UsageSummary
+
+
+@runtime_checkable
+class WebSearchCapable(Protocol):
+    """Mixin Protocol — adapters that natively support web search.
+
+    Centralised dispatch (``core/llm/adapters/dispatch.web_search_via_adapters``)
+    enumerates registered adapters via ``isinstance(adapter, WebSearchCapable)``
+    so a tool caller never has to know which provider is configured. Operator
+    switches PAYG ↔ Subscription via ``settings.{provider}_credential_source``
+    + ProfileStore presence — the same ``infer_source`` flow the agent loop
+    uses.
+    """
+
+    # Identity attrs shared with :class:`LLMAdapter` — included on the mixin
+    # so callers narrowing via ``isinstance(adapter, WebSearchCapable)`` can
+    # still read provider/source for fallback ordering.
+    name: str
+    provider: str
+    source: str
+    supports_web_search: bool
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult: ...
+
+
+@runtime_checkable
+class TextCompletionCapable(Protocol):
+    """Mixin Protocol — adapters that support a one-shot ``(system, prompt) ->
+    text`` call. Used by compaction (conversation summary) and learning
+    extraction (Haiku-tier hooks) where a full agentic loop is overkill."""
+
+    name: str
+    provider: str
+    source: str
+    supports_text_completion: bool
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult: ...
+
+
 __all__ = [
     "CONCRETE_SOURCES",
     "SOURCE_ADAPTER",
@@ -336,6 +421,10 @@ __all__ = [
     "ModelSpec",
     "QuotaWindows",
     "StreamEvent",
+    "TextCompletionCapable",
+    "TextCompletionResult",
     "ToolSpec",
     "UsageSummary",
+    "WebSearchCapable",
+    "WebSearchResult",
 ]
