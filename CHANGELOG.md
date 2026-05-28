@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-SPCT-CAP-1000 (2026-05-28)** — Raise SPCT principle char cap
+  500 → 1000 in ``core/self_improving_loop/runner.py``. v0.99.81 의
+  codex fix 후 cycle 14/15/16 의 6/6 attempts 모두 principle length
+  500-805 char (median ~600) 에서 fail —
+  ``parse_mutation`` 의 cap guard 가 systematic 으로 trip. GEODE 의
+  mutator context (new baseline + 6 attribution rows + 8 target_kind
+  표 + measurement_modality 가이드) 부피가 DeepSeek-GRM 의 frontier
+  prototype 보다 풍부해서 mutator 가 생성하는 principle 도 자연
+  스럽게 길어진 결과. SPCT 의 "self-generated concise judging
+  principle" 원칙은 보존하되 GEODE context 에 맞춰 cap 2× 완화.
+  변경 site: ``Mutation`` pydantic field
+  (``max_length=1000``), ``parse_mutation`` 의 length guard 문구 +
+  raise threshold, ``_MUTATION_CONTRACT_SUFFIX`` 의 ``"<= 1000 chars"``
+  안내 두 곳, ``Mutation.principle`` docstring. Pinned by
+  ``tests/core/self_improving_loop/test_p3_anchor_spct.py``: rename
+  ``test_principle_exceeds_500_raises`` →
+  ``test_principle_exceeds_1000_raises`` (1001 char) + 추가
+  ``test_principle_at_or_under_1000_accepted`` (800 char 사이즈,
+  cycle 14-16 의 typical 값).
+
 ## [0.99.81] - 2026-05-28
 
 > MINOR release. Eight-PR sprint focused on adapter-layer correctness
