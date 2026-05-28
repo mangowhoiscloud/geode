@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.hooks.system import HookEvent
@@ -70,84 +70,61 @@ def _build_context(data: dict[str, Any]) -> str:
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
 
 
-def _call_budget_llm(prompt: str) -> str | None:
+async def _call_budget_llm(prompt: str) -> str | None:
     """Call a budget model for extraction. Returns text or None on failure.
 
-    Fallback order: GLM-flash (free, zai_api_key) → Anthropic Haiku
-    (anthropic_api_key). In an OAuth-only environment with no zai /
-    anthropic key, returns ``None`` — graceful, the caller treats
-    extraction as a soft hint and proceeds without it.
+    PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — dispatches through
+    :func:`core.llm.adapters.dispatch.complete_text_via_adapters` so the
+    full operator credential surface (PAYG + Subscription + local-CLI)
+    drives extraction with one switch. The legacy provider-direct
+    ``_call_glm_flash`` / ``_call_haiku`` helpers — each instantiating a
+    fresh sync SDK client + raising bare ``Exception`` to ``log.debug``
+    — are replaced by the central dispatch chain's billing-fatal /
+    transient handling. Returns ``None`` (graceful) when every capable
+    adapter fails so the caller treats extraction as a soft hint.
 
-    TODO (follow-up PR): add a ``_call_codex_oauth`` path so a ChatGPT
-    subscription quota can drive the extraction (matches the
-    PR #1133 OAuth bridge for Petri's judge/auditor). The Codex
-    ``/v1/responses`` streaming-only request shape lives in
-    ``plugins/petri_audit/codex_provider.py`` and would need to be
-    factored out before reuse here.
+    Provider preference defaults to ``("glm", "anthropic", "openai")``
+    — preserves the original "GLM-flash free tier first, Haiku second"
+    ordering. The third slot (``openai``) is new: a Codex-subscription
+    operator with no Anthropic/GLM credentials now gets an extraction
+    path via the GPT-5 Responses endpoint, matching the operator-facing
+    intent the v0.99.79 sprint chase ("config-driven switching across
+    every LLM-touching site").
     """
-    try:
-        from core.config import settings
+    from core.config import settings
+    from core.llm.adapters.dispatch import (
+        AdapterDispatchError,
+        AdapterUnavailableError,
+        complete_text_via_adapters,
+    )
+    from core.llm.errors import BillingError
 
-        # Try GLM-flash first (free), then Haiku
-        if settings.zai_api_key:
-            return _call_glm_flash(prompt, settings.zai_api_key)
-        if settings.anthropic_api_key:
-            return _call_haiku(prompt, settings.anthropic_api_key)
+    # PR-NO-FALLBACK (2026-05-28) — strict single-adapter dispatch tries
+    # exactly one adapter (the operator-default-resolved first match of
+    # ``provider_order``) and never silently widens. Returning ``None`` on
+    # any failure keeps the extraction hook a soft hint — the loop's
+    # main path is unaffected. Per-attempt observability lands in the
+    # serve log via dispatch's ``ADAPTER_DISPATCH_ATTEMPT`` hook.
+    try:
+        result = await complete_text_via_adapters(
+            prompt,
+            max_tokens=300,
+            provider_order=("glm", "anthropic", "openai"),
+            model_by_provider={"glm": settings.learning_extract_model},
+        )
+    except BillingError:
+        log.debug("LLM extract: adapter credit exhausted")
+        return None
+    except AdapterUnavailableError:
+        log.debug("LLM extract: no capable adapter registered")
+        return None
+    except AdapterDispatchError:
+        log.debug("LLM extract: single attempt transient failure")
         return None
     except Exception:
         log.debug("LLM extract call failed", exc_info=True)
         return None
-
-
-def _call_glm_flash(prompt: str, api_key: str) -> str | None:
-    """Call the GLM free-tier model picked by ``settings.learning_extract_model``.
-
-    PR-1 G-D — pre-fix the model id was a ``"glm-4.7-flash"`` literal,
-    so an operator who wanted to flip to a different free model had to
-    edit this hook. The literal is now wired through the settings so a
-    ``GEODE_LEARNING_EXTRACT_MODEL=glm-5-flash`` env var (or
-    ``config.toml [llm] learning_extract_model``) flips it without
-    touching code.
-    """
-    import openai
-
-    from core.config import GLM_BASE_URL, settings
-
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url=GLM_BASE_URL,
-    )
-    try:
-        resp = client.chat.completions.create(
-            model=settings.learning_extract_model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.0,
-            timeout=10.0,
-        )
-        return resp.choices[0].message.content if resp.choices else None
-    finally:
-        client.close()
-
-
-def _call_haiku(prompt: str, api_key: str) -> str | None:
-    """Call Claude Haiku (budget tier)."""
-    import anthropic
-
-    from core.config import ANTHROPIC_BUDGET
-
-    client = anthropic.Anthropic(api_key=api_key)
-    try:
-        resp = client.messages.create(
-            model=ANTHROPIC_BUDGET,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=10.0,
-        )
-        block = resp.content[0] if resp.content else None
-        return block.text if block and hasattr(block, "text") else None
-    finally:
-        client.close()
+    return result.text or None
 
 
 def _parse_extractions(text: str) -> list[tuple[str, str]]:
@@ -174,7 +151,7 @@ def _parse_extractions(text: str) -> list[tuple[str, str]]:
     return results[:3]  # max 3 per extraction
 
 
-def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
+def make_llm_extract_handler() -> tuple[str, Callable[..., Awaitable[None]]]:
     """Create TURN_COMPLETE handler for LLM-based learning extraction.
 
     Claude Code extractMemories pattern: cursor-based incremental extraction
@@ -188,7 +165,7 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
     last_extract_ts: float = float("-inf")
     _seen_inputs: set[int] = set()  # hash of already-extracted user inputs
 
-    def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
+    async def _on_turn_complete(event: HookEvent, data: dict[str, Any]) -> None:
         nonlocal turn_count, session_extractions, last_extract_ts
 
         turn_count += 1
@@ -231,7 +208,7 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., None]]:
             return
 
         prompt = _EXTRACT_PROMPT.format(context=context)
-        llm_output = _call_budget_llm(prompt)
+        llm_output = await _call_budget_llm(prompt)
         if not llm_output:
             return
 

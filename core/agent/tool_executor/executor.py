@@ -157,9 +157,9 @@ class ToolExecutor:
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
-                    raw = await self._call_handler_async(handler, tool_input)
+                    raw = await self._call_handler_async(handler, tool_input, context=context)
             else:
-                raw = await self._call_handler_async(handler, tool_input)
+                raw = await self._call_handler_async(handler, tool_input, context=context)
             return self._normalize_raw_result(tool_name, raw)
         except Exception as exc:
             return self._classify_execution_exception(tool_name, exc)
@@ -169,11 +169,52 @@ class ToolExecutor:
     ) -> tuple[dict[str, Any] | None, bool]:
         return await self._approval.apply_safety_gates_async(tool_name, tool_input)
 
-    async def _call_handler_async(self, handler: ToolHandler, tool_input: dict[str, Any]) -> Any:
+    async def _call_handler_async(
+        self,
+        handler: ToolHandler,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
+    ) -> Any:
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — inject the loop's
+        # ``ToolContext`` as a reserved ``_tool_context`` kwarg. Handlers
+        # that accept it (via explicit signature OR ``**kwargs`` splat)
+        # get the loop's adapter routing; handlers with closed signatures
+        # (no ``**kwargs``, no explicit ``_tool_context`` parameter) are
+        # detected via ``inspect.signature`` and called without the extra
+        # key so a third-party plugin handler that wires explicit
+        # parameters does not crash with ``unexpected keyword argument``.
+        # The underscore prefix on ``_tool_context`` prevents accidental
+        # collision with tool-arg JSON keys the LLM might emit.
+        kwargs: dict[str, Any] = dict(tool_input)
+        if context is not None and self._handler_accepts_tool_context(handler):
+            kwargs["_tool_context"] = context
         if self._is_async_handler(handler):
-            raw = handler(**tool_input)
+            raw = handler(**kwargs)
             return await cast(Awaitable[Any], raw)
-        return await asyncio.to_thread(handler, **tool_input)
+        return await asyncio.to_thread(handler, **kwargs)
+
+    @staticmethod
+    def _handler_accepts_tool_context(handler: ToolHandler) -> bool:
+        """Return True iff *handler* can receive ``_tool_context=`` —
+        either via ``**kwargs`` or via an explicit named parameter.
+
+        Defensive: an unanalysable signature (C-extension callable,
+        functools.partial with mangled introspection) defaults to True
+        so we preserve the v0.99.x behaviour where every handler used
+        ``**kwargs``. False only when the handler has a closed signature
+        that does NOT include ``_tool_context``.
+        """
+        try:
+            sig = inspect.signature(handler)
+        except (TypeError, ValueError):
+            return True
+        for param in sig.parameters.values():
+            if param.kind is inspect.Parameter.VAR_KEYWORD:
+                return True
+            if param.name == "_tool_context":
+                return True
+        return False
 
     @staticmethod
     def _is_async_handler(handler: ToolHandler) -> bool:

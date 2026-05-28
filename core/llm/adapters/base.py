@@ -345,20 +345,41 @@ class WebSearchResult:
     brief blurbs). ``source_urls`` is the extracted URL list when the provider
     exposes it (Anthropic ``web_search_tool_result`` blocks); other providers
     leave it empty.
+
+    ``adapter_name`` / ``adapter_provider`` / ``adapter_source`` carry the
+    routing identity forward into the tool layer so the tool's
+    ``tool_exec_end`` metadata can answer "which adapter handled this"
+    inline — operators no longer need to cross-correlate by timestamp
+    with ``ADAPTER_DISPATCH_ATTEMPT`` events
+    (PR-DISPATCH-OBS-EXT 2026-05-28). The fields default to empty
+    strings so existing capability impls (which set only ``adapter_name``)
+    still build a valid result; the dispatch layer enriches them with
+    the selected adapter's ``provider`` / ``source`` after a successful
+    call.
     """
 
     query: str
     text: str
     source_urls: tuple[str, ...] = ()
     adapter_name: str = ""
+    adapter_provider: str = ""
+    adapter_source: str = ""
 
 
 @dataclass(frozen=True)
 class TextCompletionResult:
-    """Single-turn text completion result — used by compaction / extraction."""
+    """Single-turn text completion result — used by compaction / extraction.
+
+    Same adapter-identity fields as :class:`WebSearchResult` for the same
+    reason (PR-DISPATCH-OBS-EXT 2026-05-28) — the compaction / extraction
+    callers can now record which adapter actually handled the call.
+    """
 
     text: str
     usage: UsageSummary
+    adapter_name: str = ""
+    adapter_provider: str = ""
+    adapter_source: str = ""
 
 
 @runtime_checkable

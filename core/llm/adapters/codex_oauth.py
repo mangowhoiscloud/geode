@@ -42,6 +42,7 @@ from core.llm.adapters.base import (
     QuotaWindows,
     StreamEvent,
     TextCompletionResult,
+    WebSearchResult,
 )
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
@@ -59,13 +60,30 @@ class CodexOAuthAdapter:
     provider: str = "openai"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
-    # PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — text_completion supported
-    # via the same Responses API path the agent loop's main ``acomplete`` uses
-    # (chatgpt.com/backend-api/codex/responses). web_search is NOT advertised:
-    # the Codex backend's support for the ``web_search`` hosted tool is
-    # unconfirmed (frontier audit 2026-05-28) and falsely advertising would
-    # break the dispatch fallback chain by trying + failing on every call.
-    supports_web_search: bool = False
+    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled.
+    # PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — **verified live**: the
+    # Codex backend (``chatgpt.com/backend-api/codex/responses``) returns
+    # 200 OK to ``{"type": "web_search"}`` with real web search results
+    # (OpenAI help-center URLs etc.), confirmed via direct adapter call
+    # at 2026-05-28 14:50 KST (11.2s response). The live test revealed
+    # two backend-specific constraints that PAYG Responses API does NOT
+    # enforce — both now enforced in :meth:`aweb_search`:
+    #
+    #   1. ``instructions`` field mandatory — Codex backend returns 400
+    #      ``Instructions are required`` without it (PAYG treats it as
+    #      optional).
+    #   2. ``input`` must be a typed-item list, not a plain string —
+    #      Codex backend returns 400 ``Input must be a list`` for the
+    #      string form (PAYG accepts both shapes).
+    #
+    # SDK-contract evidence (workflow §4d doc-attestation): openai-python
+    # ``ToolParam`` Union (``openai/types/responses/tool_param.py``)
+    # accepts ``{"type": "web_search"}``; Codex CLI Responses endpoint
+    # accepts ``tools: array`` per ``codex-rs/codex-api/README.md::POST
+    # /responses``. SDK contract was the necessary upstream check; the
+    # two 400 responses + 200 OK after fixing proved the backend
+    # actually exposes the tool.
+    supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
@@ -203,6 +221,92 @@ class CodexOAuthAdapter:
             system=system,
             model=model or CODEX_PRIMARY,
             max_tokens=max_tokens,
+        )
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        """Codex-subscription web_search via Responses API ``web_search``
+        hosted tool.
+
+        Codex backend requires ``store=False`` (same constraint as
+        :meth:`acomplete` — backend reject 400 without it) and uses the
+        ``responses.stream`` event-driven aggregation path because
+        non-streaming ``responses.create`` returns structurally empty
+        bodies on this endpoint. We mirror that pattern instead of
+        reusing the PAYG-only :func:`openai_web_search` helper which
+        targets the standard Responses endpoint.
+
+        Codex MCP audit catch (2026-05-28) — the prior version delegated
+        to ``openai_web_search`` directly, which would fail on Codex
+        OAuth with ``Unsupported parameter`` or empty output, and the
+        dispatch layer would surface a confusing ``BillingError``
+        (because :func:`is_billing_fatal` doesn't match shape errors)
+        even though the real issue is the call shape mismatch.
+        """
+        from core.config import CODEX_PRIMARY
+
+        client = self._get_client()
+        text_parts: list[str] = []
+        source_urls: list[str] = []
+        # PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — live test progression:
+        #
+        # 1st attempt (PR-NO-FALLBACK initial) → 400 ``Instructions are
+        #    required``. Codex backend enforces ``instructions`` field
+        #    mandatory on every Responses request (mirrors :meth:`acomplete`
+        #    which threads the loop's system prompt into it).
+        # 2nd attempt (instructions added as string ``input``) → 400
+        #    ``Input must be a list``. Codex backend ALSO requires
+        #    ``input`` to be a typed-item array, same as :meth:`acomplete`
+        #    via :func:`build_codex_input`. The standard Responses API
+        #    accepts a plain string; Codex backend tightens the contract.
+        #
+        # Final shape — single user message wrapped in the typed-item array
+        # the backend expects (``{"role": "user", "content": "..."}`` is a
+        # valid entry per ``_convert_user_msg_to_responses``).
+        user_prompt = (
+            f"Search the web for: {query}. Return up to {max_results} relevant "
+            "results with titles, URLs, and brief summaries."
+        )
+        kwargs = {
+            "model": CODEX_PRIMARY,
+            "instructions": (
+                "Use the web_search tool to find current information. "
+                "Return up to the requested number of relevant results with "
+                "titles, URLs, and brief summaries."
+            ),
+            "input": [{"role": "user", "content": user_prompt}],
+            "tools": [{"type": "web_search"}],
+            "store": False,
+        }
+        async with client.responses.stream(**kwargs) as stream:
+            async for event in stream:
+                ev_type = getattr(event, "type", "")
+                if ev_type == "response.output_item.done":
+                    item = getattr(event, "item", None)
+                    if item is None:
+                        continue
+                    if getattr(item, "type", "") == "message":
+                        for sub in getattr(item, "content", []) or []:
+                            if getattr(sub, "type", "") == "output_text":
+                                sub_text = getattr(sub, "text", "")
+                                if sub_text:
+                                    text_parts.append(sub_text)
+                    if getattr(item, "type", "") == "web_search_call":
+                        for entry in getattr(item, "results", []) or []:
+                            url = getattr(entry, "url", None)
+                            if url:
+                                source_urls.append(url)
+            await stream.get_final_response()
+        if not text_parts:
+            raise RuntimeError(
+                "codex-oauth web_search: empty output_text — Codex backend "
+                "may have rejected the web_search tool for this account. "
+                "Try /login source payg to use openai-payg instead."
+            )
+        return WebSearchResult(
+            query=query,
+            text="\n".join(text_parts),
+            source_urls=tuple(source_urls),
+            adapter_name=self.name,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:

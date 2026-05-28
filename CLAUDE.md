@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.80
+- **Version**: 0.99.81
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 393 core + 69 plugins = 462
-- **Tests**: 8485 (+5 live)
+- **Modules**: 396 core + 69 plugins = 465
+- **Tests**: 8504 (+5 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -99,6 +99,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
 | | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
 | | No dual SoT (disk + fallback literal) without shared anchor + drift invariant test | Drift prevention. *Incident: PR-MINIMAL-2 #1398 (2026-05-21) — `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` divergence* |
+| | No external-SDK / 3rd-party-backend capability assumption (e.g. ``supports_X=True``, hosted tool acceptance, model availability) hardcoded as ``True`` without `ctx7 library` + `ctx7 docs` verification first; if ctx7 is ambiguous, mark the assumption ``unverified — live test required`` in the docstring and surface the live-test as an explicit pending verification | Doc-before-behaviour. *Incident: PR-NO-FALLBACK #1839 (2026-05-28) — `codex_oauth.supports_web_search` flipped False → True based on SDK ``ToolParam`` Union alone; Codex backend's actual acceptance of ``{"type": "web_search"}`` is undocumented in ctx7 / Codex CLI repo, so the assumption needed a live-test gate rather than a behavioural test* |
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
 | | No leaving `[Unreleased]` on main | Release discipline |
 | | No version mismatch across 5 locations | Single source of truth |
@@ -223,7 +224,19 @@ All 4 [Quality Gates](#quality-gates) must pass (lint / type / test / CLI smoke)
 
 Run the `anti-deception-checklist` skill — it covers test deletion/disabling, lint bypass (`# noqa`, `# type: ignore`), coverage regression, secret exposure, and dependency downgrade. Any FAIL verdict blocks merge.
 
-**4d. Verification team (large-scale changes only)**
+**4d. External-contract attestation — doc-before-behaviour**
+
+When the PR introduces or flips an assumption about an external SDK or 3rd-party backend (capability flag, hosted tool acceptance, endpoint behaviour, model availability), run `ctx7 library <name>` → `ctx7 docs <id> "<question>"` **before** any agent-behaviour live test. Three outcomes:
+
+| ctx7 result | Action |
+|-------------|--------|
+| Confirms the assumption | Cite the ctx7 source (file path on GitHub) in the docstring next to the assumption (`# ref: openai/types/responses/tool_param.py:ToolParam`). |
+| Refutes the assumption | Revert the change. Open a separate decision branch about why the assumption was tempting (often a misread doc, fix the misread). |
+| **Ambiguous** (SDK contract allows, backend acceptance undocumented) | Mark the assumption ``unverified — live test required`` in the docstring + open a follow-up task. Do not let the behaviour land in production behind a True-flag without the live-test gate. Honest error message on the dispatch path is the safety net but does not substitute for the gate. |
+
+*Incident: PR-NO-FALLBACK #1839 (2026-05-28) flipped `codex_oauth.supports_web_search` to `True` based on the SDK `ToolParam` Union alone; ctx7 of `/openai/codex` showed Responses API accepts a `tools` array but does NOT document which `type` values the Codex backend accepts. The assumption should have shipped as `unverified` until a live test confirmed.*
+
+**4e. Verification team (large-scale changes only)**
 
 See `verification-team` + `anti-deception-checklist` skills.
 

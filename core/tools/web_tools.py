@@ -153,33 +153,63 @@ class GeneralWebSearchTool:
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — see WebSearchTool.aexecute
+        # for the same rationale: prefer the loop's resolved (provider,
+        # source) so the same ``/login`` choice that switches the main LLM
+        # path also switches the web_search adapter selection.
+        ctx = kwargs.get("_tool_context")
+        prefer_provider = getattr(ctx, "provider", "") or None
+        prefer_source = getattr(ctx, "source", "") or None
         from core.llm.adapters.dispatch import (
             AdapterDispatchError,
+            AdapterUnavailableError,
             web_search_via_adapters,
         )
         from core.llm.errors import BillingError
         from core.tools.base import tool_error
 
         try:
-            result = await web_search_via_adapters(query, max_results=max_results)
+            result = await web_search_via_adapters(
+                query,
+                max_results=max_results,
+                prefer_provider=prefer_provider,
+                prefer_source=prefer_source,
+            )
         except BillingError as exc:
+            # PR-NO-FALLBACK (2026-05-28) — surface the dispatch error
+            # verbatim; it already names the exact (adapter, source) that
+            # exhausted and the explicit ``/login source`` switch hint.
             return tool_error(
-                f"web_search: provider quota exhausted ({exc.provider or 'all configured'}). "
-                f"Add credits or run /login source <provider> to switch credential type.",
+                str(exc),
                 error_type="permission",
                 recoverable=False,
                 hint=(
-                    "Top up at console.anthropic.com / platform.openai.com / z.ai, or "
-                    "register a subscription via /login openai (ChatGPT) / claude /login."
+                    "Top up the exhausted credential, or switch source via "
+                    "/login source <subscription|payg|cli>. No automatic fallback."
                 ),
                 context={"query": query, "provider": exc.provider},
+            )
+        except AdapterUnavailableError as exc:
+            return tool_error(
+                str(exc),
+                error_type="dependency",
+                recoverable=False,
+                hint=(
+                    "Your current source has no web_search-capable adapter. "
+                    "Run /adapters to list available sources and /login source "
+                    "<subscription|payg|cli> to switch explicitly."
+                ),
+                context={"query": query},
             )
         except AdapterDispatchError as exc:
             return tool_error(
                 str(exc),
                 error_type="connection",
                 recoverable=True,
-                hint="Retry, rephrase the query, or check adapter availability via /adapters.",
+                hint=(
+                    "Retry, rephrase the query, or check adapter availability via "
+                    "/adapters. No automatic fallback — this is the single attempt result."
+                ),
                 context={"query": query},
             )
         return {
@@ -188,6 +218,12 @@ class GeneralWebSearchTool:
                 "search_results": result.text,
                 "source": result.adapter_name,
                 "source_urls": list(result.source_urls),
+                # PR-DISPATCH-OBS-EXT (2026-05-28) — inline adapter
+                # provider + source so ``tool_exec_end`` metadata answers
+                # "which adapter handled this" without operators having to
+                # cross-correlate by timestamp with ADAPTER_DISPATCH_ATTEMPT.
+                "adapter_provider": result.adapter_provider,
+                "adapter_source": result.adapter_source,
             }
         }
 

@@ -289,17 +289,20 @@ async def _call_summarize(conversation_text: str, provider: str, model: str) -> 
     """
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
+        AdapterUnavailableError,
         complete_text_via_adapters,
     )
     from core.llm.errors import BillingError
 
     # Map legacy provider key to the registry-canonical provider name.
     canonical = {"zhipuai": "glm"}.get(provider, provider)
-    # Float the requested provider to the front of the iteration order
-    # (matches the legacy "provider==openai → call OpenAI" behaviour) but
-    # let the dispatch fall through to alternates if the requested provider
-    # is unavailable (legacy code returned None and the caller would skip
-    # compaction silently).
+    # PR-NO-FALLBACK (2026-05-28) — ``provider_order`` is now a *preference
+    # seed* for the dispatch's default-resolved path, not a fallback chain.
+    # Dispatch picks the first provider whose ``infer_source`` resolves to a
+    # registered adapter, then tries exactly that one. If the requested
+    # provider is the operator's actual configured one, it lands there;
+    # otherwise dispatch may pick a different operator-configured provider
+    # but never silently retries elsewhere on failure.
     default_order = ("anthropic", "openai", "glm")
     if canonical in default_order:
         provider_order = (canonical, *(p for p in default_order if p != canonical))
@@ -316,16 +319,23 @@ async def _call_summarize(conversation_text: str, provider: str, model: str) -> 
         )
     except BillingError:
         log.warning(
-            "Compaction summarization: all candidate providers hit billing-fatal "
-            "(provider=%s model=%s)",
+            "Compaction summarization: adapter credit exhausted "
+            "(provider=%s model=%s) — see dispatch.ADAPTER_DISPATCH_ATTEMPT log for adapter name",
+            provider,
+            model,
+        )
+        return None
+    except AdapterUnavailableError:
+        log.warning(
+            "Compaction summarization: no text-completion-capable adapter "
+            "registered (provider=%s model=%s)",
             provider,
             model,
         )
         return None
     except AdapterDispatchError:
         log.warning(
-            "Compaction summarization: no text-completion-capable adapter "
-            "succeeded (provider=%s model=%s)",
+            "Compaction summarization: single attempt transient failure (provider=%s model=%s)",
             provider,
             model,
         )

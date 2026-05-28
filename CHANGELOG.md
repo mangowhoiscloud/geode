@@ -47,6 +47,435 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.81] - 2026-05-28
+
+> MINOR release. Eight-PR sprint focused on adapter-layer correctness
+> + observability:
+>
+> - **PR-EXTRACT-LEARNING-MODELS-ADAPTER** (#1836) — last HIGH-traffic
+>   direct-SDK sites migrated to capability dispatch
+> - **PR-LLMCLIENTPORT-COLLAPSE** (#1837) — -1422 LoC dead parallel
+>   adapter hierarchy removed
+> - **PR-TOOL-EXEC-CONTEXT** (#1838) — AgenticLoop adapter routing
+>   propagates into tool dispatch
+> - **PR-NO-FALLBACK** (#1839) — strict single-adapter dispatch;
+>   silent cross-provider / cross-source fallback disabled
+> - **PR-DOC-VERIFY** (#1840) — workflow §4d: doc-before-behaviour
+>   gate for external SDK / 3rd-party backend capability assumptions
+> - **PR-CODEX-INSTRUCTIONS-FIX** (#1841) — codex-oauth web_search
+>   verified live (instructions mandatory + input typed-item list)
+> - **PR-DISPATCH-OBS-EXT** (#1842) — tool-result adapter inline +
+>   serve.log restored + ``geode adapters stats`` CLI +
+>   per-session adapter usage
+> - **PR-CODEX-NO-KEEPALIVE** (#1843) — Codex backend httpx
+>   keep-alive disabled; first-call-after-idle ``APIConnectionError``
+>   (4 ms stale-connection failure) eliminated
+
+### Fixed
+- **PR-CODEX-NO-KEEPALIVE (2026-05-28)** — Codex backend
+  (``chatgpt.com/backend-api/codex/responses``) first-call-after-idle
+  ``APIConnectionError`` eliminated by disabling httpx keep-alive
+  reuse for the Codex OAuth client specifically.
+
+  **Diagnosed via PR-DISPATCH-OBS-EXT observability**:
+  ``adapter_dispatch_attempt`` events in
+  ``~/.geode/runs/subject_gateway_analysis.jsonl`` showed a clean
+  pattern at 2026-05-28 15:44:37 KST (run_id ``f6c51cc5e18d``) — 4
+  parallel ``general_web_search`` calls fired in 4 ms. First call
+  hit ``APIConnectionError`` in **4 ms** (no network roundtrip).
+  Next 3 calls succeeded in 12 / 19 / ~unknown s. Root cause: a
+  previous ``gpt-5.5`` LLM call (8.3 s) had left an idle HTTP/2
+  connection in httpx's keep-alive pool. The Codex backend closes
+  idle connections aggressively (sub-second to a few-second window)
+  without a GOAWAY frame the client can observe in time. The first
+  ``web_search`` reused the now-stale pooled connection → ``httpx
+  .WriteError`` → openai SDK ``APIConnectionError`` instantly.
+  Subsequent calls opened fresh connections and succeeded.
+
+  **Fix**: ``build_async_codex_client`` in ``core/llm/adapters/
+  _openai_common.py`` constructs its own ``httpx.AsyncClient`` with
+  ``httpx.Limits(max_keepalive_connections=0, ...)``. Every Codex
+  call opens a fresh TCP+TLS connection. Costs ~100-300 ms TLS
+  handshake per call but eliminates the stale-connection failure
+  mode entirely. Other OpenAI-family endpoints (api.openai.com
+  PAYG, api.z.ai GLM PAYG, GLM Coding Plan) keep the default
+  ``settings.llm_max_keepalive_connections = 5`` policy via the
+  shared ``_build_async_httpx_client`` helper — they have proper
+  server-side idle timeout policies + GOAWAY signaling.
+
+  **Live verification 2026-05-28 16:00 KST**: 4 parallel
+  ``web_search_via_adapters`` calls through codex-oauth → 4/4
+  ``200 OK`` (7.4 / 7.6 / 10.2 / 41.8 s). No 4 ms ``APIConnection
+  Error``. Each dispatch INFO log line confirms the success
+  outcome.
+
+  Pinned by ``tests/test_codex_no_keepalive.py`` (2 source-level
+  assertions: codex builder body contains ``max_keepalive_connec
+  tions=0``, the default helper still reads
+  ``settings.llm_max_keepalive_connections``, the codex builder
+  does NOT delegate to the default ``_build_async_httpx_client``).
+
+### Added
+- **PR-DISPATCH-OBS-EXT (2026-05-28)** — four observability
+  enhancements layered on PR-NO-FALLBACK's strict-dispatch + per-attempt
+  hook. Operator-facing answer to "which adapter actually handled this
+  call?" without grep+timestamp cross-correlation.
+
+  1. **Tool result adapter inline** —
+     :class:`core.llm.adapters.base.WebSearchResult` +
+     :class:`TextCompletionResult` gain ``adapter_name`` /
+     ``adapter_provider`` / ``adapter_source`` fields (all ``str = ""``
+     defaults). ``dispatch.web_search_via_adapters`` +
+     ``dispatch.complete_text_via_adapters`` enrich via
+     ``dataclasses.replace`` after the capability impl returns — single
+     point of enrichment so the 4 web_search impls and 4 text_completion
+     impls don't all have to update. ``web_tools.py`` + ``web_search.py``
+     surface the new fields in the tool result dict; ``tool_exec_end``
+     metadata now carries them inline.
+
+  2. **Serve log file recovery** —
+     :func:`core.cli.typer_serve.serve` wires a ``RotatingFileHandler``
+     at ``~/.geode/logs/serve.log`` (10MB × 5 backups) with auto-mkdir.
+     The legacy serve.log writer was deleted in a prior v0.99.x cleanup;
+     ``cmd_lifecycle`` status was still pointing at
+     ``SERVE_LOG_PATH`` but nothing populated it. Restored so dispatch
+     INFO logs persist across serve restarts.
+
+  3. **CLI dispatch stats** — new ``geode adapters stats [--since 1h]
+     [--runs-dir DIR]`` reads ``ADAPTER_DISPATCH_ATTEMPT`` events from
+     ``~/.geode/runs/*.jsonl``, filters by time window, aggregates by
+     ``(capability, adapter_name, provider, source)`` into a dense table
+     with per-outcome counts (success / billing / transient / unavailable)
+     + p50/p95 latency. ``--since`` parser supports s/m/h/d/w suffixes.
+
+  4. **Session-end adapter usage** — new ``ContextVar`` per session;
+     ``begin_session_adapter_tracking`` (called by AgenticLoop at
+     SESSION_STARTED) resets it; ``_fire_attempt`` increments;
+     ``get_session_adapter_usage`` reads. ``_lifecycle.py`` emits
+     ``adapter_usage`` ``{adapter_name: {outcome: count}}`` into
+     SESSION_ENDED payload, then calls ``end_session_adapter_tracking``
+     to clear (Codex MCP audit catch — without the reset, a leaked
+     post-finalization dispatch would mutate a stale counter). Caveat
+     documented: TURN_COMPLETED hooks (e.g. ``turn_llm_extract``) fire
+     AFTER SESSION_ENDED is built, so their dispatch attempts are not
+     in this aggregate — they belong to turn_complete accounting.
+
+  Pinned by ``tests/test_dispatch_obs_ext.py`` (15 assertions:
+  dataclass field shape, single-point enrichment, counter accumulate,
+  outside-session empty, source-level pins for lifecycle + agent_loop +
+  tools + typer_serve, CLI stats parses jsonl + rejects malformed
+  --since + empty-window message, end_session_adapter_tracking clears
+  counter).
+
+### Fixed
+- **PR-CODEX-INSTRUCTIONS-FIX (2026-05-28)** — codex-oauth
+  ``aweb_search`` now satisfies two Codex-backend-specific call-shape
+  constraints discovered via PR-DOC-VERIFY's mandatory live test gate.
+  The PR-NO-FALLBACK initial impl reused the PAYG call shape, which
+  the Codex backend rejected with sequential 400s:
+
+  1. 1st live call → ``400 {'detail': 'Instructions are required'}``.
+     PAYG Responses API treats ``instructions`` as optional; Codex
+     backend enforces it as mandatory on every request (same constraint
+     :meth:`acomplete` already honours).
+  2. 2nd live call (after adding ``instructions``) → ``400 {'detail':
+     'Input must be a list'}``. PAYG accepts ``input`` as a plain
+     string OR typed-item array; Codex backend requires the typed-item
+     list shape (same constraint :meth:`acomplete` already honours via
+     :func:`build_codex_input`).
+  3. 3rd live call (after both fixes) → **200 OK** with real web
+     search results (OpenAI help-center URLs etc.), 11.2s response.
+
+  The docstring attestation flips from ``unverified — live test
+  required`` (PR-DOC-VERIFY) to ``verified live`` with the live-call
+  evidence cited. ``test_codex_oauth_adapter_advertises_web_search``
+  updated to pin the new ``verified live`` string so a future silent
+  docstring rewrite cannot strip the evidence trail.
+
+  **Demonstrates the value of CLAUDE.md §4d (doc-before-behaviour) +
+  PR-NO-FALLBACK's honest dispatch errors working together**: ctx7 was
+  ambiguous on backend acceptance → docstring marked ``unverified`` →
+  live test surfaced the actual constraints one at a time (each as a
+  clean ``AdapterDispatchError`` from the dispatch layer with the 400
+  body) → both fixed in a single follow-up PR → docstring flipped to
+  ``verified live`` with evidence.
+
+### Changed
+- **PR-DOC-VERIFY (2026-05-28)** — workflow: doc-before-behaviour for
+  external SDK / 3rd-party backend capability assumptions. New
+  CANNOT rule (``Quality`` row) + new ``§4d. External-contract
+  attestation`` step in the Verify (Implementation GAP Audit) workflow:
+  any PR that introduces or flips ``supports_X = True`` (or asserts a
+  backend endpoint accepts a particular tools / parameter / model id)
+  must run ``ctx7 library`` + ``ctx7 docs`` first. Three outcomes:
+
+  | ctx7 result | Action |
+  |-------------|--------|
+  | Confirms | Cite the source path in the docstring |
+  | Refutes | Revert + fix the misread |
+  | Ambiguous | Mark ``unverified — live test required`` in docstring, open the live-test gate explicitly |
+
+  Retroactively applied to PR-NO-FALLBACK #1839 —
+  ``codex_oauth.supports_web_search = True`` docstring now carries the
+  ``unverified — live test required`` attestation because ctx7 of
+  ``/openai/codex`` documents the Responses ``tools`` array shape but
+  does NOT enumerate which ``type`` values the Codex backend accepts.
+  The Codex CLI's own internal web search uses a different schema
+  (``codex-rs/ext/web-search/`` ``{"search_query": [...]}``), making
+  the hosted ``{"type": "web_search"}`` acceptance unverified until a
+  live call confirms.
+  ``tests/test_adapter_capability_dispatch.py::test_codex_oauth_adapter_advertises_web_search``
+  pins the docstring attestation presence so it cannot be silently
+  dropped during a future docstring rewrite.
+
+  Operator caught the workflow gap: behaviour verification (serve
+  restart + live web_search trigger) was offered before the doc
+  verification ran. The strict-dispatch error contract from
+  PR-NO-FALLBACK is the operational safety net, but it does not
+  substitute for the gate — a True flag landing in production based on
+  SDK contract inference alone is the exact pattern that creates
+  silent regressions when the backend later changes behaviour.
+
+- **PR-NO-FALLBACK (2026-05-28)** — adapter dispatch is now strict
+  single-adapter: the operator's explicit ``/login source`` choice is
+  the sole switch. Silent cross-provider / cross-source fallback
+  (Anthropic → OpenAI → GLM, PAYG → Subscription) is removed because it
+  exposes the operator to unexpected billing — a Codex-subscription
+  user reported their web_search silently landing on a GLM coding plan
+  they had configured for a different workflow, then surfaced as
+  ``provider quota exhausted (glm)`` even though the operator never
+  asked for GLM.
+
+  Three coordinated changes:
+
+  1. **Phase 1 — codex-oauth web_search enabled** (the routing leak's
+     true root cause). ``core/llm/adapters/codex_oauth.py``
+     ``supports_web_search`` False → True + dedicated ``aweb_search``
+     implementation using ``responses.stream(store=False, ...)`` —
+     the Codex backend's mandatory call shape (same as ``acomplete``).
+     The openai-python SDK's ``ToolParam`` union accepts ``{"type":
+     "web_search"}`` independent of which Responses endpoint the client
+     targets, so a ChatGPT-subscription operator's web_search now
+     routes through their OAuth token with no PAYG key required.
+
+     Codex MCP audit catch — initial pass delegated to the PAYG-only
+     ``openai_web_search`` helper which calls non-streaming
+     ``responses.create`` without ``store=False``; that would fail on
+     Codex OAuth backend and surface a confusing ``BillingError``.
+     Fixed by inlining the Codex-specific stream call.
+
+  2. **Phase 3 — Strict single-adapter dispatch**
+     (``core/llm/adapters/dispatch.py``). Replaced the
+     ``_apply_prefer`` fallback chain with ``_select_adapter`` which
+     returns exactly one adapter or ``None``:
+
+     - Both ``prefer_provider`` and ``prefer_source`` set (AgenticLoop
+       ToolContext path): exact match REQUIRED; partial or unmatched
+       preferences raise :class:`AdapterUnavailableError`.
+     - Partial preference (only one set) treated identically to no
+       match — strict mode never silently widens.
+     - Neither set (hook / compaction callers): operator's default-
+       resolved adapter via ``infer_source(provider)`` for the first
+       provider in ``provider_order`` with a registered capable
+       adapter.
+
+     ``web_search_via_adapters`` + ``complete_text_via_adapters`` call
+     ``_select_adapter`` once, try the single result once, and raise
+     :class:`BillingError` / new :class:`AdapterUnavailableError` /
+     :class:`AdapterDispatchError` on failure — every error carries the
+     attempted adapter name + source so the operator sees exactly which
+     credential was tried. Every error message embeds the explicit
+     ``/login source <subscription|payg|cli>`` switch hint so the
+     three credential types are visible as the *only* path to change
+     routing.
+
+  3. **Phase 2 — Per-attempt observability**. New
+     :class:`core.llm.adapters.dispatch.AdapterAttempt` dataclass +
+     ``_fire_attempt`` helper emits ``HookEvent.ADAPTER_DISPATCH_ATTEMPT``
+     (new enum value, 81st) for every dispatch try with adapter name,
+     provider, source, capability, outcome
+     (``success`` / ``billing`` / ``transient`` / ``unavailable``),
+     elapsed ms, and the failure's ``error_type`` / truncated
+     ``error_msg``. INFO-level log line per attempt complements the
+     hook so operators see one structured row per dispatch in the
+     serve log instead of having to reconstruct what was tried from
+     downstream exceptions.
+
+  Callers updated to handle the new error class:
+  ``core/tools/web_tools.py`` + ``core/tools/web_search.py`` catch
+  :class:`AdapterUnavailableError` separately and return a
+  ``dependency`` error pointing at ``/adapters`` + ``/login source``.
+  ``core/agent/loop/models.py::_context_exhausted_message``,
+  ``core/hooks/llm_extract_learning.py``,
+  ``core/orchestration/compaction.py`` all carry the new exception
+  branch with the same `_EXHAUSTED_FALLBACK`/`return None` graceful
+  contracts they had before.
+
+  Pinned by ``tests/test_adapter_capability_dispatch.py`` (16 tests)
+  + ``tests/test_tool_exec_context.py`` (15 tests covering
+  ``_select_adapter`` exact-match enforcement, no-fallback on billing,
+  exact-match routing, default-resolved via ``infer_source``)
+  + ``tests/test_hooks.py::test_all_events_exist`` updated to 81.
+
+### Added
+- **PR-TOOL-EXEC-CONTEXT (2026-05-28)** — LLM-touching tools now
+  receive the AgenticLoop's resolved adapter routing via
+  :class:`core.tools.base.ToolContext` so the operator's ``/login``
+  credential-source choice that drives the main LLM path also drives
+  the tool's adapter selection. Previously each ``web_search`` tool
+  call re-ran ``infer_source(provider)`` independently and could land
+  on a different (provider, source) than the orchestration loop.
+
+  Reference: paperclip ``AdapterExecutionContext`` at
+  ``packages/adapter-utils/src/types.ts`` — adapter ``execute(ctx)``
+  receives full agent + runtime context. GEODE adopts the same shape.
+
+  Wiring chain (top to bottom):
+
+  1. ``core/tools/base.py::ToolContext`` — added four LLM-identity
+     fields (``provider``, ``source``, ``model``, ``adapter_name``;
+     all ``str = ""`` defaults so callers outside an AgenticLoop are
+     not forced to fill them).
+  2. ``core/agent/loop/agent_loop.py`` — passes the resolved
+     ``self._new_adapter.provider`` / ``.source`` / ``.name`` into the
+     ``ToolCallProcessor`` constructor. Reads from the adapter (not
+     the loop's pre-normalisation ``self._provider`` / ``self._source``)
+     because the registry collapses ``openai-codex → openai`` /
+     ``zhipuai → glm`` (Codex MCP audit catch — the dispatch helper
+     compares against ``adapter.provider`` / ``adapter.source``).
+  3. ``core/agent/tool_executor/processor.py::ToolCallProcessor`` —
+     ``__init__`` accepts ``provider`` / ``source`` / ``adapter_name``;
+     dispatch loop builds a fresh ``ToolContext`` per tool call and
+     forwards it via ``executor.aexecute(..., context=ctx)``.
+  4. ``core/agent/tool_executor/executor.py::_call_handler_async`` —
+     injects ``_tool_context=`` into the handler's kwargs **only when
+     the handler signature accepts it** (``**kwargs`` splat or
+     explicit ``_tool_context`` param). Third-party plugin handlers
+     with closed signatures are detected via ``inspect.signature`` and
+     skipped (Codex MCP CONCERN fix).
+  5. ``core/cli/tool_handlers/delegated.py`` + ``clarification.py`` —
+     ``_make_delegate_handler`` pops ``_tool_context`` from kwargs and
+     forwards via ``_safe_delegate(..., context=ctx)`` which re-injects
+     it before calling the tool's ``aexecute``.
+  6. ``core/tools/web_tools.py::GeneralWebSearchTool.aexecute`` +
+     ``core/tools/web_search.py::WebSearchTool.aexecute`` — read
+     ``kwargs.get("_tool_context")`` and pass ``prefer_provider`` +
+     ``prefer_source`` to ``web_search_via_adapters``.
+  7. ``core/llm/adapters/dispatch.py`` — new ``_apply_prefer``
+     helper stable-reorders candidates so exact (provider, source)
+     match floats first, then provider-only, then source-only, then
+     everything else. ``web_search_via_adapters`` +
+     ``complete_text_via_adapters`` gain
+     ``prefer_provider: str | None = None`` /
+     ``prefer_source: str | None = None`` params; empty preference
+     falls through to the default candidate order so existing callers
+     are unaffected.
+
+  Pinned by ``tests/test_tool_exec_context.py`` (14 assertions:
+  ``ToolContext`` shape, ``_apply_prefer`` correctness across all
+  4 rank buckets + stability, source-level pins on web tools /
+  processor / agent_loop wiring, ``_safe_delegate`` context injection
+  with + without context, end-to-end ``web_search_via_adapters``
+  preference behaviour with default-order-overridden candidates,
+  handler signature gating for closed-signature plugin handlers).
+
+### Removed
+- **PR-LLMCLIENTPORT-COLLAPSE (2026-05-28)** — the parallel
+  ``LLMClientPort`` hierarchy is gone. ``LLMAdapter`` (one async
+  ``acomplete`` + central dispatch in ``core/llm/adapters/dispatch.py``)
+  is the single registry / call surface.
+
+  Production audit found the entire ``LLMClientPort`` stack was
+  dead infrastructure kept alive by re-exports, not by callers:
+
+  - ``LLMClientPort`` Protocol + the sync ``ClaudeAdapter`` /
+    ``OpenAIAdapter.generate`` / ``.generate_structured`` /
+    ``.generate_parsed`` / ``.agenerate_stream`` surface — DELETED.
+    The only production caller of ``OpenAIAdapter`` is
+    ``call_llm_with_tools_async`` (router/calls/tools.py) which uses
+    ``.agenerate_with_tools`` — the surviving load-bearing surface;
+    OpenAIAdapter now exposes only that method + its async retry.
+  - ``LLMJsonCallable`` / ``LLMTextCallable`` / ``LLMParsedCallable``
+    node-DI Protocols + the ``set_llm_callable`` / ``get_llm_json`` /
+    ``get_llm_parsed`` / ``get_secondary_llm_*`` ContextVar chain
+    (``core/llm/router/_di.py``) — DELETED. ``set_llm_callable`` had
+    one caller (``build_llm_adapters``); the ``get_*`` accessors had
+    ZERO downstream consumers — every grep returned only the
+    re-exports.
+  - ``core/verification/cross_llm.py`` (225 lines:
+    ``run_cross_llm_check`` + ``run_dual_adapter_check``) — DELETED.
+    Zero production callers (only ``tests/test_cross_llm.py``); the
+    ``CROSS_LLM_SYSTEM`` / ``CROSS_LLM_RESCORE`` /
+    ``CROSS_LLM_DUAL_VERIFY`` prompts +
+    ``core/llm/prompts/cross_llm.md`` template + ``cross_llm``
+    GeodeState field deleted with them.
+  - ``core/wiring/container.py::build_llm_adapters`` — DELETED. Its
+    only production effect was registering the 8 LLMAdapter built-ins
+    via ``bootstrap_builtins()``, which now runs directly from
+    ``runtime._build_core``. The ``llm_adapter`` / ``secondary_adapter``
+    fields on ``RuntimeCoreConfig`` + ``GeodeRuntime`` are gone (never
+    read externally).
+  - Obsolete tests deleted: ``tests/test_cross_llm.py``,
+    ``tests/test_claude_adapter.py``, ``tests/test_openai_adapter.py``,
+    ``tests/test_llm_port.py``, ``tests/test_port_compliance.py``,
+    ``tests/test_ports.py``. ``tests/test_tool_use.py`` rewritten so
+    the Anthropic block calls ``call_llm_with_tools_async`` directly
+    instead of going through ``ClaudeAdapter`` (same coverage, one
+    fewer indirection).
+
+  Why this was the right scope (vs. the conservative "migrate
+  callers" plan first sketched): the GAP audit showed callers
+  to migrate did not exist. ``ClaudeAdapter`` was a thin facade
+  over ``call_llm`` / ``call_llm_json`` / ``call_llm_parsed`` /
+  ``call_llm_with_tools_async`` — i.e. one OO wrapper around four
+  already-async-friendly procedural functions. Pre-cleanup contract
+  count: 2 Protocols (``LLMClientPort`` × 6 methods + ``LLMAdapter``
+  × 6 methods) + 3 node-DI Protocols + 2 wrapper classes + 1 dead
+  cross-LLM module + 1 unused DI ContextVar chain. Post-cleanup:
+  ``LLMAdapter`` alone. Net: -1,422 / +59 LoC.
+
+### Changed
+- **PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28)** — Phase 2
+  follow-up to PR-ADAPTER-PATTERN-UNIFICATION (#1832): the last two
+  HIGH-traffic LLM-touching sites that still instantiated provider
+  SDKs directly now route through ``complete_text_via_adapters``.
+
+  1. ``core/hooks/llm_extract_learning.py`` — TURN_COMPLETED hook
+     for learning-pattern extraction. ``_call_budget_llm`` sync→async
+     + dispatch; ``_call_glm_flash`` / ``_call_haiku`` helpers
+     (each instantiating a fresh sync SDK client) deleted. Handler
+     ``_on_turn_complete`` also async (``HookSystem.trigger_async``
+     supports async handlers, fired from ``_lifecycle.py:351`` for
+     this event). Provider order ``("glm", "anthropic", "openai")``
+     preserves the historic free-tier-first preference.
+  2. ``core/agent/loop/models.py::_context_exhausted_message`` —
+     one-shot Haiku call for the context-exhausted localised notice.
+     ``anthropic.Anthropic`` direct instantiation removed; sync→async;
+     all 3 callers (``agent_loop.py:1562/1627/1682``) updated to
+     ``await``. Provider order ``("anthropic", "openai", "glm")``
+     keeps Haiku first while opening fallback for Codex-subscription-
+     only operators (the previous code silently returned the English
+     ``_EXHAUSTED_FALLBACK`` for any operator without an Anthropic
+     key — entire localisation point defeated).
+
+  Codex MCP audit caught a BLOCKER on the first pass: passing a
+  single ``model=`` to every fallback adapter meant Anthropic tried
+  to call ``glm-4.7-flash`` and OpenAI tried ``claude-haiku-*``,
+  guaranteeing every fallback to fail. ``complete_text_via_adapters``
+  now accepts ``model_by_provider: dict[str, str]`` so the caller
+  pins the provider-specific model only where it owns the choice
+  (GLM-flash for the extraction hook, Haiku for the exhausted
+  notice) and lets every other adapter use its own primary. Without
+  this fallback is theatre.
+
+  Pinned by ``tests/test_extract_learning_models_adapter.py`` (8
+  assertions: async signatures on both sites, source-level pins that
+  ``import anthropic`` / ``import openai`` are gone, helper deletions
+  confirmed, provider_order preserved, 3 awaited call sites in
+  agent_loop.py). ``test_glm_flash_hook_reads_settings_learning_extract_model``
+  updated to read ``_call_budget_llm`` source (the renamed homing
+  spot for the ``settings.learning_extract_model`` pass-through).
+
 ## [0.99.80] - 2026-05-28
 
 > PATCH release. Bundles two adapter-layer improvements built on

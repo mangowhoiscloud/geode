@@ -1,36 +1,55 @@
-"""Central dispatch — capability-based adapter fallback chains.
+"""Central dispatch — strict single-adapter routing.
 
-PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28). Paperclip-pattern alignment
-(``server/src/adapters/registry.ts:768`` ``findActiveServerAdapter``): tool
-callers (web_search, compaction, learning extraction) never instantiate
-provider SDKs directly. They call into this module's helpers, which:
+PR-NO-FALLBACK (2026-05-28). Replaces the prior fallback-chain pattern
+that silently walked PAYG → Subscription, Anthropic → OpenAI → GLM until
+something succeeded. The operator's explicit ``/login source`` choice is
+the **sole** switch — silent cross-provider / cross-source fallback
+exposes the operator to unexpected billing (a Codex-subscription user
+should never have web_search silently land on a GLM coding plan they
+happen to have configured for a different workflow).
 
-1. Enumerate adapters in the registry advertising the requested capability
-   (``isinstance(adapter, WebSearchCapable)`` etc.)
-2. Order by source preference — operator's ``{provider}_credential_source``
-   setting + ProfileStore OAuth presence drives whether subscription adapters
-   land before PAYG (same :func:`infer_source` flow the agent loop uses)
-3. Try each in order, distinguishing billing-fatal (no retry helps) from
-   transient (try next provider) failures
-4. Raise :class:`BillingError` when every candidate hit billing-fatal so the
-   operator sees a single actionable hint instead of N retry timeouts
-5. Raise :class:`AdapterDispatchError` when every candidate failed for
-   non-billing reasons (network, schema, etc.)
+Each dispatch call:
 
-Without this central layer, every tool re-implemented its own
-``try Anthropic / try OpenAI / try GLM`` chain with hardcoded PAYG clients —
-which broke operator settings-driven switching (PR-SOURCE-ROUTING #1822 only
-fixed the agent loop main path; tools stayed fragmented).
+1. **Selects exactly one adapter** via:
+
+   a. ``(prefer_provider, prefer_source)`` when both given — the
+      AgenticLoop's resolved adapter identity (via
+      :class:`core.tools.base.ToolContext` from PR-TOOL-EXEC-CONTEXT).
+      An exact ``(provider, source)`` match is required; partial /
+      unmatched preferences raise :class:`AdapterUnavailableError`.
+   b. Operator's default-resolved adapter (``infer_source`` + provider
+      order) when no preference — for hook / compaction callers
+      outside the tool-dispatch flow.
+
+2. **Tries that single adapter exactly once.** No fallback to other
+   adapters even on failure.
+
+3. **On failure** → raises a structured error with an honest hint
+   listing all three credential-source switch options (subscription,
+   PAYG, agent-CLI) so the operator can make an informed manual switch:
+
+   - :class:`BillingError`: credit / quota exhausted on this source.
+   - :class:`AdapterUnavailableError`: no adapter registered matches.
+   - :class:`AdapterDispatchError`: transient error from the single
+     attempt.
+
+Observability — every attempt fires
+:attr:`core.hooks.HookEvent.ADAPTER_DISPATCH_ATTEMPT` and logs at INFO
+level with adapter name, capability, outcome, elapsed time. The
+structured ``attempt`` payload becomes a single row in serve logs /
+journals so operators can trace exactly which adapter was tried.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
+import time
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
 from core.llm.adapters.base import (
-    SOURCE_PAYG,
-    SOURCE_SUBSCRIPTION,
     TextCompletionResult,
     WebSearchResult,
 )
@@ -40,28 +59,131 @@ from core.llm.errors import BillingError, is_billing_fatal
 log = logging.getLogger(__name__)
 
 
-class AdapterDispatchError(RuntimeError):
-    """Raised when every capable adapter failed for non-billing reasons."""
+_DEFAULT_PROVIDER_ORDER: tuple[str, ...] = ("anthropic", "openai", "glm")
 
 
 # ---------------------------------------------------------------------------
-# Ordering — paperclip ``findActiveServerAdapter`` mirror with source pref
+# Per-session adapter usage counter — PR-DISPATCH-OBS-EXT (2026-05-28)
 # ---------------------------------------------------------------------------
+#
+# A ContextVar holding an ``{adapter_name: {outcome: count}}`` map. Set fresh
+# at session start (via :func:`begin_session_adapter_tracking`), incremented
+# inside :func:`_fire_attempt`, read at session end (via
+# :func:`get_session_adapter_usage`) so the SESSION_ENDED hook payload can
+# carry an aggregate breakdown of which adapter handled how many calls and
+# with what outcome — the operator-facing answer to "what did this session
+# actually route through" in one row, not N rows.
+#
+# Defaults to ``None`` so dispatches outside an AgenticLoop session (CLI
+# helpers, tests, hooks running between sessions) silently skip the
+# accumulation — the per-attempt hook + INFO log remain the universal
+# observability surface.
+
+_session_adapter_usage_ctx: ContextVar[dict[str, dict[str, int]] | None] = ContextVar(
+    "session_adapter_usage", default=None
+)
 
 
-def _source_preference(provider: str) -> tuple[str, ...]:
-    """Return source ordering for *provider* based on operator settings.
+def begin_session_adapter_tracking() -> None:
+    """Reset the session-scoped adapter usage counter.
 
-    Uses the same :func:`core.llm.adapters._source_inference.infer_source`
-    flow as the agent loop main path so the tool layer is consistent with
-    the dispatch the operator already configured via ``/login``.
+    Called once by :class:`AgenticLoop` at session start so dispatch
+    attempts during this session accumulate into a fresh dict that
+    SESSION_ENDED can emit.
     """
-    from core.llm.adapters._source_inference import infer_source
+    _session_adapter_usage_ctx.set({})
 
-    primary = infer_source(provider)
-    if primary == SOURCE_SUBSCRIPTION:
-        return (SOURCE_SUBSCRIPTION, SOURCE_PAYG)
-    return (SOURCE_PAYG, SOURCE_SUBSCRIPTION)
+
+def get_session_adapter_usage() -> dict[str, dict[str, int]]:
+    """Return the current session's adapter usage breakdown.
+
+    Empty dict when called outside a tracked session — safe for callers
+    that emit unconditionally.
+    """
+    counter = _session_adapter_usage_ctx.get()
+    return dict(counter) if counter is not None else {}
+
+
+def end_session_adapter_tracking() -> None:
+    """Clear the per-session counter back to ``None`` (Codex MCP audit
+    2026-05-28).
+
+    Called by the lifecycle helper AFTER it has read the final breakdown
+    via :func:`get_session_adapter_usage` so any stray dispatch that
+    fires in the same context after session finalisation (background
+    hook task, leaked async coroutine) does not mutate a stale counter
+    that no longer corresponds to an active session.
+    """
+    _session_adapter_usage_ctx.set(None)
+
+
+_SOURCE_SWITCH_HINT = (
+    "Switch credential source explicitly via /login: "
+    "/login source subscription | payg | cli. "
+    "Automatic cross-provider / cross-source fallback is disabled "
+    "(PR-NO-FALLBACK 2026-05-28) to prevent unintended billing."
+)
+
+
+# ---------------------------------------------------------------------------
+# Structured error types — every error carries the attempted adapter so
+# operators can see exactly what was tried.
+# ---------------------------------------------------------------------------
+
+
+class AdapterDispatchError(RuntimeError):
+    """Raised when the single attempted adapter failed for a non-billing,
+    non-availability reason (network, schema, etc.)."""
+
+    def __init__(self, message: str, *, attempt: AdapterAttempt | None = None) -> None:
+        super().__init__(message)
+        self.attempt = attempt
+
+
+class AdapterUnavailableError(RuntimeError):
+    """Raised when no registered adapter satisfies the dispatch criteria.
+
+    Two trigger conditions:
+
+    - The capability flag is not advertised by any registered adapter
+      (e.g. ``codex-cli`` does not currently expose web_search).
+    - A preference ``(prefer_provider, prefer_source)`` was given but
+      no registered adapter matches both.
+
+    In both cases the operator's options are honest and finite — the
+    error message lists every registered adapter so they know what
+    sources are available to switch to.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterAttempt:
+    """One adapter try — emitted as ``ADAPTER_DISPATCH_ATTEMPT`` hook
+    payload and surfaced in error messages so operators can correlate
+    the failure to a specific (adapter, capability) pair.
+
+    ``outcome`` is one of:
+
+    - ``"success"`` — call returned a result.
+    - ``"billing"`` — billing-fatal (quota / 402 / 401 / OAuth credit).
+    - ``"transient"`` — connection / 5xx / schema-shape mismatch.
+    - ``"unavailable"`` — adapter pre-flight check failed before the
+      actual call (no credential, missing client, etc.).
+    """
+
+    adapter_name: str
+    provider: str
+    source: str
+    capability: str
+    outcome: str
+    elapsed_ms: float
+    error_type: str = ""
+    error_msg: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Adapter selection — strict (no fallback)
+# ---------------------------------------------------------------------------
 
 
 _CAPABILITY_METHOD: dict[str, str] = {
@@ -70,28 +192,13 @@ _CAPABILITY_METHOD: dict[str, str] = {
 }
 
 
-def _capability_candidates(
-    capability_attr: str,
-    *,
-    provider_order: tuple[str, ...] = ("anthropic", "openai", "glm"),
-) -> list[Any]:
-    """Enumerate registered adapters advertising the named capability flag
-    (e.g. ``"supports_web_search"``), ordered by provider priority + operator
-    source preference within each provider.
-
-    Returns ``list[Any]`` deliberately — callers narrow via the matching
-    capability Protocol's mixin methods at the call site. Returning the
-    capability-typed list would require a TypeVar bound to a runtime_checkable
-    Protocol, which mypy rejects as ``Only concrete class can be given``.
-
-    Codex MCP audit (2026-05-28) — both the ``supports_*`` flag AND the
-    matching async method must be present. A flag-set / method-missing
-    adapter would raise ``AttributeError`` mid-dispatch and that error
-    would be classified as transient, silently masking the contract bug.
-    The ``_CAPABILITY_METHOD`` lookup guards both halves.
-    """
+def _capability_adapters(capability_attr: str) -> list[Any]:
+    """Enumerate adapters advertising the capability AND implementing the
+    matching async method. A flag-set / method-missing adapter is dropped
+    with a warning — that contract bug would otherwise present as a
+    transient ``AttributeError`` at call time."""
     method_name = _CAPABILITY_METHOD.get(capability_attr, "")
-    by_provider: dict[str, list[Any]] = {}
+    out: list[Any] = []
     for adapter in list_adapters():
         if not getattr(adapter, capability_attr, False):
             continue
@@ -104,89 +211,263 @@ def _capability_candidates(
                 method_name,
             )
             continue
-        by_provider.setdefault(adapter.provider, []).append(adapter)
-    ordered: list[Any] = []
-    for provider in provider_order:
-        candidates = by_provider.get(provider, [])
-        if not candidates:
-            continue
-        source_pref = _source_preference(provider)
-        candidates.sort(
-            key=lambda a: source_pref.index(a.source) if a.source in source_pref else 99
-        )
-        ordered.extend(candidates)
-    # Trailing providers not in the priority list (future plugins) — append
-    # in registration order so they remain reachable.
-    for provider, candidates in by_provider.items():
-        if provider not in provider_order:
-            ordered.extend(candidates)
-    return ordered
+        out.append(adapter)
+    return out
 
 
-# ---------------------------------------------------------------------------
-# web_search — replaces the 3-provider direct-SDK chain in ``web_tools.py``
-# ---------------------------------------------------------------------------
+def _select_adapter(
+    capability_attr: str,
+    *,
+    prefer_provider: str | None,
+    prefer_source: str | None,
+    provider_order: tuple[str, ...],
+) -> Any | None:
+    """Return exactly one adapter or ``None`` (strict — no fallback chain).
 
+    Selection rule:
 
-async def web_search_via_adapters(query: str, *, max_results: int = 5) -> WebSearchResult:
-    """Route a web-search request through the adapter registry.
+    - **Both** ``prefer_provider`` and ``prefer_source`` set: exact match
+      required. No match → ``None`` (caller raises
+      :class:`AdapterUnavailableError` with the available adapters list).
+    - **Partial preference** (only one of the two set): treated identically
+      to "no match" — strict mode never silently widens to a different
+      provider or source. Returns ``None``. The AgenticLoop always supplies
+      both via ``ToolContext``, so partial preference indicates a caller
+      bug worth surfacing rather than papering over.
+    - **Neither set** (hook / compaction / orphan callers): operator's
+      default-resolved adapter — first provider in ``provider_order`` for
+      which ``infer_source`` resolves to a registered capable adapter.
 
-    Iterates web-search-capable adapters in (provider × source) priority and
-    returns the first success. Error precedence on exhausted candidates:
-
-    1. If ANY candidate hit billing-fatal (no candidate succeeded), surface
-       that :class:`BillingError` — operator's actionable next step is to
-       add credits or switch credential source. This includes the
-       "mixed billing + transient" case: billing wins because (a) the
-       operator can act on it immediately and (b) the transient may
-       resolve once the billing is fixed.
-    2. Otherwise (all transient), wrap the last transient in
-       :class:`AdapterDispatchError`.
-
-    This replaces the 6× silent-retry pattern that the legacy
-    ``web_tools.py`` would have done — operator sees one actionable error.
+    Codex MCP audit (2026-05-28) — pre-PR partial preference fell
+    through to the default-resolved path, which contradicted the
+    docstring claim that partial preferences raise unavailable and was an
+    uncovered widening surface.
     """
-    candidates = _capability_candidates("supports_web_search")
-    if not candidates:
-        raise AdapterDispatchError(
-            "web_search: no registered adapter advertises supports_web_search=True"
+    capable = _capability_adapters(capability_attr)
+    if not capable:
+        return None
+
+    # Partial-or-full preference path. Exact match required; partial =
+    # missing-half = no match (strict mode never silently widens).
+    if prefer_provider or prefer_source:
+        if not (prefer_provider and prefer_source):
+            return None
+        for adapter in capable:
+            if adapter.provider == prefer_provider and adapter.source == prefer_source:
+                return adapter
+        return None
+
+    # Default-resolved path — operator settings + ProfileStore + provider order.
+    from core.llm.adapters._source_inference import infer_source
+
+    for provider in provider_order:
+        provider_pool = [a for a in capable if a.provider == provider]
+        if not provider_pool:
+            continue
+        resolved_source = infer_source(provider)
+        for adapter in provider_pool:
+            if adapter.source == resolved_source:
+                return adapter
+        # No exact source match for this provider's resolved source — refuse
+        # to widen. Move to next provider in operator-configured order.
+    return None
+
+
+def _registered_adapter_summary() -> str:
+    """One-line ``(provider/source, ...)`` listing for error messages so
+    operators see what alternatives exist to switch to."""
+    parts = [f"{a.name}({a.provider}/{a.source})" for a in list_adapters()]
+    return ", ".join(parts) if parts else "<none registered>"
+
+
+# ---------------------------------------------------------------------------
+# Observability — per-attempt hook fire + INFO log
+# ---------------------------------------------------------------------------
+
+
+def _fire_attempt(attempt: AdapterAttempt) -> None:
+    """Fire ``ADAPTER_DISPATCH_ATTEMPT`` hook + INFO log + accumulate
+    per-session counter.
+
+    Hook payload mirrors :class:`AdapterAttempt` fields so journal /
+    serve-log writers see a single structured row per attempt. Hook
+    failures must not poison dispatch — :func:`fire_hook` swallows
+    handler errors at DEBUG; the surrounding try guards module-load
+    edge cases (router hooks not yet wired).
+
+    PR-DISPATCH-OBS-EXT (2026-05-28) — also increments the per-session
+    ``_session_adapter_usage_ctx`` counter so SESSION_ENDED can surface
+    an aggregate ``{adapter_name: {outcome: count}}`` breakdown without
+    requiring the lifecycle helper to re-parse the per-attempt event
+    stream.
+    """
+    counter = _session_adapter_usage_ctx.get()
+    if counter is not None:
+        bucket = counter.setdefault(attempt.adapter_name, {})
+        bucket[attempt.outcome] = bucket.get(attempt.outcome, 0) + 1
+    log.info(
+        "dispatch[%s] %s (%s/%s) → %s in %.0fms%s",
+        attempt.capability,
+        attempt.adapter_name,
+        attempt.provider,
+        attempt.source,
+        attempt.outcome,
+        attempt.elapsed_ms,
+        f" [{attempt.error_type}: {attempt.error_msg[:120]}]" if attempt.error_msg else "",
+    )
+    try:
+        # The router's ``_hooks_ctx`` is the same HookSystem the agent
+        # loop / tool executor write to — set once during runtime
+        # bootstrap via ``set_router_hooks``. Reusing it keeps dispatch
+        # observability in the same stream as LLM_CALL_* / TOOL_EXEC_*
+        # events instead of standing up a parallel ContextVar.
+        from core.hooks.dispatch import fire_hook
+        from core.hooks.system import HookEvent
+        from core.llm.router._hooks import _hooks_ctx
+
+        fire_hook(
+            _hooks_ctx,
+            HookEvent.ADAPTER_DISPATCH_ATTEMPT,
+            {
+                "adapter_name": attempt.adapter_name,
+                "provider": attempt.provider,
+                "source": attempt.source,
+                "capability": attempt.capability,
+                "outcome": attempt.outcome,
+                "elapsed_ms": attempt.elapsed_ms,
+                "error_type": attempt.error_type,
+                "error_msg": attempt.error_msg,
+            },
         )
-    last_billing: BillingError | None = None
-    last_other: Exception | None = None
-    for adapter in candidates:
-        try:
-            result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
-            log.debug("web_search_via_adapters: success via %s", adapter.name)
-            return result
-        except BillingError as exc:
-            last_billing = exc
-            log.debug("web_search_via_adapters: billing-fatal on %s: %s", adapter.name, exc)
-            continue
-        except Exception as exc:
-            if is_billing_fatal(exc):
-                last_billing = BillingError(
-                    str(exc),
-                    provider=adapter.provider,
-                    plan_id="",
-                    plan_display_name=adapter.name,
-                )
-                log.debug(
-                    "web_search_via_adapters: classified billing on %s: %s", adapter.name, exc
-                )
-                continue
-            last_other = exc
-            log.debug("web_search_via_adapters: transient on %s: %s", adapter.name, exc)
-            continue
-    if last_billing is not None:
-        raise last_billing
-    raise AdapterDispatchError(
-        f"web_search: all {len(candidates)} web-search-capable adapters failed. "
-        f"Last error: {last_other!r}"
+    except Exception as exc:
+        log.debug("ADAPTER_DISPATCH_ATTEMPT hook fire failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# web_search — strict single-adapter dispatch
+# ---------------------------------------------------------------------------
+
+
+async def web_search_via_adapters(
+    query: str,
+    *,
+    max_results: int = 5,
+    prefer_provider: str | None = None,
+    prefer_source: str | None = None,
+) -> WebSearchResult:
+    """Route a web-search request through the adapter registry, strictly
+    using one adapter (no fallback chain).
+
+    See module docstring for the selection rule + error contract.
+    ``prefer_provider`` / ``prefer_source`` flow from the AgenticLoop via
+    :class:`core.tools.base.ToolContext` (PR-TOOL-EXEC-CONTEXT) — when
+    set, the exact (provider, source) match is required.
+    """
+    capability = "supports_web_search"
+    adapter = _select_adapter(
+        capability,
+        prefer_provider=prefer_provider,
+        prefer_source=prefer_source,
+        provider_order=_DEFAULT_PROVIDER_ORDER,
+    )
+    if adapter is None:
+        raise AdapterUnavailableError(
+            f"web_search: no adapter registered matching "
+            f"(provider={prefer_provider!r}, source={prefer_source!r}). "
+            f"Registered adapters: {_registered_adapter_summary()}. " + _SOURCE_SWITCH_HINT
+        )
+
+    t0 = time.monotonic()
+    try:
+        result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+    except BillingError as exc:
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        attempt = AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="billing",
+            elapsed_ms=elapsed_ms,
+            error_type=type(exc).__name__,
+            error_msg=str(exc),
+        )
+        _fire_attempt(attempt)
+        # Re-raise with adapter context attached so the tool layer can show
+        # the operator exactly which credential was exhausted.
+        billing = BillingError(
+            f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. " + _SOURCE_SWITCH_HINT,
+            provider=adapter.provider,
+            plan_id=getattr(exc, "plan_id", ""),
+            plan_display_name=adapter.name,
+            upgrade_url=getattr(exc, "upgrade_url", ""),
+            resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
+        )
+        raise billing from exc
+    except Exception as exc:
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        if is_billing_fatal(exc):
+            attempt = AdapterAttempt(
+                adapter_name=adapter.name,
+                provider=adapter.provider,
+                source=adapter.source,
+                capability=capability,
+                outcome="billing",
+                elapsed_ms=elapsed_ms,
+                error_type=type(exc).__name__,
+                error_msg=str(exc),
+            )
+            _fire_attempt(attempt)
+            raise BillingError(
+                f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
+                + _SOURCE_SWITCH_HINT,
+                provider=adapter.provider,
+                plan_id="",
+                plan_display_name=adapter.name,
+            ) from exc
+        attempt = AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="transient",
+            elapsed_ms=elapsed_ms,
+            error_type=type(exc).__name__,
+            error_msg=str(exc),
+        )
+        _fire_attempt(attempt)
+        raise AdapterDispatchError(
+            f"web_search via {adapter.name} ({adapter.source}) failed: "
+            f"{type(exc).__name__}: {exc}. "
+            f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
+            attempt=attempt,
+        ) from exc
+
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    _fire_attempt(
+        AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="success",
+            elapsed_ms=elapsed_ms,
+        )
+    )
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — enrich the result with the selected
+    # adapter's identity so the tool layer can surface it inline in
+    # ``tool_exec_end`` metadata. Single-point enrichment avoids touching
+    # every capability impl in :mod:`_capability_impls`.
+    return dataclasses.replace(
+        result,
+        adapter_name=adapter.name,
+        adapter_provider=adapter.provider,
+        adapter_source=adapter.source,
     )
 
 
 # ---------------------------------------------------------------------------
-# text_completion — replaces direct SDK calls in compaction / extraction
+# text_completion — strict single-adapter dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -196,52 +477,139 @@ async def complete_text_via_adapters(
     system: str = "",
     model: str = "",
     max_tokens: int = 1024,
-    provider_order: tuple[str, ...] = ("anthropic", "openai", "glm"),
+    provider_order: tuple[str, ...] = _DEFAULT_PROVIDER_ORDER,
+    model_by_provider: dict[str, str] | None = None,
+    prefer_provider: str | None = None,
+    prefer_source: str | None = None,
 ) -> TextCompletionResult:
-    """Route a single-turn text-completion request through the adapter registry.
+    """Route a single-turn text-completion request through the adapter
+    registry — strict single-adapter dispatch, no fallback.
 
-    Used by conversation compaction + learning extraction — single LLM round-
-    trip, no tool use, no streaming. Same billing-fatal vs transient
-    distinction as :func:`web_search_via_adapters`.
+    Used by conversation compaction + learning extraction + context-
+    exhausted message. ``model_by_provider`` retained for the per-adapter
+    model override (e.g. ``{"glm": "glm-4.7-flash", "anthropic":
+    ANTHROPIC_BUDGET}``) — applies to the single selected adapter; the
+    pre-PR multi-adapter foot-gun (passing GLM's model to Anthropic in
+    cross-provider fallback) is gone because there is no cross-provider
+    fallback any more.
+
+    ``prefer_provider`` / ``prefer_source`` flow from the AgenticLoop's
+    :class:`core.tools.base.ToolContext` for tool-dispatch callers;
+    hook / compaction callers (outside the tool flow) leave them ``None``
+    and the dispatch resolves via operator's ``infer_source`` settings.
     """
-    candidates = _capability_candidates("supports_text_completion", provider_order=provider_order)
-    if not candidates:
-        raise AdapterDispatchError(
-            "complete_text: no registered adapter advertises supports_text_completion=True"
+    capability = "supports_text_completion"
+    adapter = _select_adapter(
+        capability,
+        prefer_provider=prefer_provider,
+        prefer_source=prefer_source,
+        provider_order=provider_order,
+    )
+    if adapter is None:
+        raise AdapterUnavailableError(
+            f"complete_text: no adapter registered matching "
+            f"(provider={prefer_provider!r}, source={prefer_source!r}). "
+            f"Registered adapters: {_registered_adapter_summary()}. " + _SOURCE_SWITCH_HINT
         )
-    last_billing: BillingError | None = None
-    last_other: Exception | None = None
-    for adapter in candidates:
-        try:
-            text_result: TextCompletionResult = await adapter.acomplete_text(
-                prompt, system=system, model=model, max_tokens=max_tokens
-            )
-            log.debug("complete_text_via_adapters: success via %s", adapter.name)
-            return text_result
-        except BillingError as exc:
-            last_billing = exc
-            continue
-        except Exception as exc:
-            if is_billing_fatal(exc):
-                last_billing = BillingError(
-                    str(exc),
+
+    overrides = model_by_provider or {}
+    chosen_model = overrides.get(adapter.provider, model)
+    t0 = time.monotonic()
+    try:
+        result: TextCompletionResult = await adapter.acomplete_text(
+            prompt, system=system, model=chosen_model, max_tokens=max_tokens
+        )
+    except BillingError as exc:
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        attempt = AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="billing",
+            elapsed_ms=elapsed_ms,
+            error_type=type(exc).__name__,
+            error_msg=str(exc),
+        )
+        _fire_attempt(attempt)
+        raise BillingError(
+            f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. " + _SOURCE_SWITCH_HINT,
+            provider=adapter.provider,
+            plan_id=getattr(exc, "plan_id", ""),
+            plan_display_name=adapter.name,
+            upgrade_url=getattr(exc, "upgrade_url", ""),
+            resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
+        ) from exc
+    except Exception as exc:
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        if is_billing_fatal(exc):
+            _fire_attempt(
+                AdapterAttempt(
+                    adapter_name=adapter.name,
                     provider=adapter.provider,
-                    plan_id="",
-                    plan_display_name=adapter.name,
+                    source=adapter.source,
+                    capability=capability,
+                    outcome="billing",
+                    elapsed_ms=elapsed_ms,
+                    error_type=type(exc).__name__,
+                    error_msg=str(exc),
                 )
-                continue
-            last_other = exc
-            continue
-    if last_billing is not None:
-        raise last_billing
-    raise AdapterDispatchError(
-        f"complete_text: all {len(candidates)} text-completion-capable adapters failed. "
-        f"Last error: {last_other!r}"
+            )
+            raise BillingError(
+                f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
+                + _SOURCE_SWITCH_HINT,
+                provider=adapter.provider,
+                plan_id="",
+                plan_display_name=adapter.name,
+            ) from exc
+        attempt = AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="transient",
+            elapsed_ms=elapsed_ms,
+            error_type=type(exc).__name__,
+            error_msg=str(exc),
+        )
+        _fire_attempt(attempt)
+        raise AdapterDispatchError(
+            f"complete_text via {adapter.name} ({adapter.source}) failed: "
+            f"{type(exc).__name__}: {exc}. "
+            f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
+            attempt=attempt,
+        ) from exc
+
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    _fire_attempt(
+        AdapterAttempt(
+            adapter_name=adapter.name,
+            provider=adapter.provider,
+            source=adapter.source,
+            capability=capability,
+            outcome="success",
+            elapsed_ms=elapsed_ms,
+        )
+    )
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — mirror the web_search enrichment so
+    # text-completion callers (compaction / extraction / context-exhausted)
+    # can record which adapter handled the call without re-querying the
+    # registry.
+    return dataclasses.replace(
+        result,
+        adapter_name=adapter.name,
+        adapter_provider=adapter.provider,
+        adapter_source=adapter.source,
     )
 
 
 __all__ = [
+    "AdapterAttempt",
     "AdapterDispatchError",
+    "AdapterUnavailableError",
+    "begin_session_adapter_tracking",
     "complete_text_via_adapters",
+    "end_session_adapter_tracking",
+    "get_session_adapter_usage",
     "web_search_via_adapters",
 ]

@@ -246,11 +246,19 @@ def test_settings_carries_learning_extract_model_field() -> None:
 
 
 def test_glm_flash_hook_reads_settings_learning_extract_model() -> None:
+    """PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — the dedicated
+    ``_call_glm_flash`` helper was deleted when the extraction hook
+    migrated to ``complete_text_via_adapters``. The settings-driven
+    model id requirement now lives on the dispatch helper: the helper
+    must still pass ``settings.learning_extract_model`` (not a literal)
+    as the requested model so operators can flip it without code edits.
+    """
     from core.hooks import llm_extract_learning
 
-    src = inspect.getsource(llm_extract_learning._call_glm_flash)
+    src = inspect.getsource(llm_extract_learning._call_budget_llm)
     assert 'model="glm-4.7-flash"' not in src, (
-        "PR-1 G-D — the GLM hook must read settings.learning_extract_model instead of the literal."
+        "PR-1 G-D + PR-EXTRACT-LEARNING-MODELS-ADAPTER — the extraction "
+        "hook must read settings.learning_extract_model, not a literal."
     )
     assert "settings.learning_extract_model" in src
 

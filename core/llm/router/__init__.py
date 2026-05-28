@@ -48,11 +48,6 @@ if TYPE_CHECKING:
 # name on the package. ``calls._route_provider`` calls the leaf binding from
 # ``core.config`` directly, so the supported test path is the leaf module.
 from core.config import _resolve_provider as _resolve_provider
-from core.llm.adapters import ClaudeAdapter as ClaudeAdapter
-from core.llm.adapters import LLMClientPort as LLMClientPort
-from core.llm.adapters import LLMJsonCallable as LLMJsonCallable
-from core.llm.adapters import LLMParsedCallable as LLMParsedCallable
-from core.llm.adapters import LLMTextCallable as LLMTextCallable
 
 # v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
 # LLMBadRequestError, LLMConnectionError, LLMInternalServerError,
@@ -61,9 +56,9 @@ from core.llm.adapters import LLMTextCallable as LLMTextCallable
 # ``core.llm.errors.__getattr__`` at module load and pulled the 248 ms
 # anthropic SDK graph into the cold-start path, even though nothing in
 # the codebase imports these names from ``core.llm.router`` (verified
-# 2026-05-08 grep — only ``LLMClientPort`` / ``LLM*Callable`` /
-# ``LLMUsageAccumulator`` are pulled from this package).  Public API
-# preserved via the module-level ``__getattr__`` hook below: any future
+# 2026-05-08 grep — only ``LLMUsageAccumulator`` is pulled from this
+# package post-LLMCLIENTPORT-COLLAPSE).  Public API preserved via the
+# module-level ``__getattr__`` hook below: any future
 # ``from core.llm.router import LLMRateLimitError`` still resolves on
 # demand, deferring the SDK load until first access.
 from core.llm.fallback import retry_with_backoff_generic as retry_with_backoff_generic
@@ -94,33 +89,6 @@ from core.llm.token_tracker import reset_usage_accumulator as reset_usage_accumu
 from core.llm.token_tracker import track_token_usage as track_token_usage
 
 # Local sub-module re-exports
-from ._di import (
-    _llm_json_ctx as _llm_json_ctx,
-)
-from ._di import (
-    _llm_parsed_ctx as _llm_parsed_ctx,
-)
-from ._di import (
-    _secondary_llm_json_ctx as _secondary_llm_json_ctx,
-)
-from ._di import (
-    _secondary_llm_parsed_ctx as _secondary_llm_parsed_ctx,
-)
-from ._di import (
-    get_llm_json as get_llm_json,
-)
-from ._di import (
-    get_llm_parsed as get_llm_parsed,
-)
-from ._di import (
-    get_secondary_llm_json as get_secondary_llm_json,
-)
-from ._di import (
-    get_secondary_llm_parsed as get_secondary_llm_parsed,
-)
-from ._di import (
-    set_llm_callable as set_llm_callable,
-)
 from ._hooks import (
     _fire_hook as _fire_hook,
 )
