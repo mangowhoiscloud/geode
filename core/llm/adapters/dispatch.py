@@ -70,6 +70,46 @@ _CAPABILITY_METHOD: dict[str, str] = {
 }
 
 
+def _apply_prefer(
+    candidates: list[Any],
+    *,
+    prefer_provider: str | None,
+    prefer_source: str | None,
+) -> list[Any]:
+    """Stable-reorder candidates so the (provider, source) matching the
+    caller's preference comes first.
+
+    PR-TOOL-EXEC-CONTEXT (2026-05-28). The AgenticLoop already resolved
+    an adapter for its main LLM dispatch; LLM-touching tools called
+    inside that loop pass the loop's ``(provider, source)`` as a
+    preference so dispatch keeps the operator's single ``/login``
+    choice consistent across the main path and the tool calls.
+
+    Empty / ``None`` preference falls through to the default
+    provider-priority + per-provider source preference order built by
+    :func:`_capability_candidates`. Partial preferences are honoured —
+    e.g. only ``prefer_provider`` set still floats the chosen provider's
+    candidates ahead, but their internal (source) order is the dispatch
+    default.
+    """
+    if not prefer_provider and not prefer_source:
+        return candidates
+
+    def _rank(adapter: Any) -> int:
+        # Exact provider+source match wins, then provider-only, then source-only,
+        # then everything else. Stable sort preserves the dispatch default
+        # ordering within each rank bucket.
+        if prefer_provider and adapter.provider == prefer_provider:
+            if prefer_source and adapter.source == prefer_source:
+                return 0
+            return 1
+        if prefer_source and adapter.source == prefer_source:
+            return 2
+        return 3
+
+    return sorted(candidates, key=_rank)
+
+
 def _capability_candidates(
     capability_attr: str,
     *,
@@ -128,7 +168,13 @@ def _capability_candidates(
 # ---------------------------------------------------------------------------
 
 
-async def web_search_via_adapters(query: str, *, max_results: int = 5) -> WebSearchResult:
+async def web_search_via_adapters(
+    query: str,
+    *,
+    max_results: int = 5,
+    prefer_provider: str | None = None,
+    prefer_source: str | None = None,
+) -> WebSearchResult:
     """Route a web-search request through the adapter registry.
 
     Iterates web-search-capable adapters in (provider × source) priority and
@@ -145,8 +191,20 @@ async def web_search_via_adapters(query: str, *, max_results: int = 5) -> WebSea
 
     This replaces the 6× silent-retry pattern that the legacy
     ``web_tools.py`` would have done — operator sees one actionable error.
+
+    PR-TOOL-EXEC-CONTEXT (2026-05-28) — ``prefer_provider`` /
+    ``prefer_source`` come from the AgenticLoop's resolved LLM identity
+    via :class:`core.tools.base.ToolContext`. When set, the candidate
+    matching (provider, source) is tried first, with fallbacks still
+    iterated on failure — so an operator running on Claude OAuth
+    subscription gets web_search on the same subscription instead of
+    independently re-resolving to PAYG.
     """
-    candidates = _capability_candidates("supports_web_search")
+    candidates = _apply_prefer(
+        _capability_candidates("supports_web_search"),
+        prefer_provider=prefer_provider,
+        prefer_source=prefer_source,
+    )
     if not candidates:
         raise AdapterDispatchError(
             "web_search: no registered adapter advertises supports_web_search=True"
@@ -198,6 +256,8 @@ async def complete_text_via_adapters(
     max_tokens: int = 1024,
     provider_order: tuple[str, ...] = ("anthropic", "openai", "glm"),
     model_by_provider: dict[str, str] | None = None,
+    prefer_provider: str | None = None,
+    prefer_source: str | None = None,
 ) -> TextCompletionResult:
     """Route a single-turn text-completion request through the adapter registry.
 
@@ -222,8 +282,20 @@ async def complete_text_via_adapters(
     failed) makes Anthropic call its API with ``model=glm-4.7-flash`` and
     fail. Callers should pass ``model_by_provider`` when fallback across
     providers is intended.
+
+    PR-TOOL-EXEC-CONTEXT (2026-05-28) — ``prefer_provider`` /
+    ``prefer_source`` parameters mirror :func:`web_search_via_adapters`
+    so future LLM-backed tools (web_extract / web_crawl / summarise) can
+    pass the AgenticLoop's resolved adapter forward and stay on the
+    operator's chosen credential surface. Current hook / extraction
+    callers leave them ``None`` because they live outside the tool
+    dispatch flow.
     """
-    candidates = _capability_candidates("supports_text_completion", provider_order=provider_order)
+    candidates = _apply_prefer(
+        _capability_candidates("supports_text_completion", provider_order=provider_order),
+        prefer_provider=prefer_provider,
+        prefer_source=prefer_source,
+    )
     if not candidates:
         raise AdapterDispatchError(
             "complete_text: no registered adapter advertises supports_text_completion=True"

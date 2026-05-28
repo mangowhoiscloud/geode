@@ -51,14 +51,22 @@ def _make_delegate_handler(
     module_path: str,
     class_name: str,
 ) -> Callable[..., dict[str, Any]]:
-    """Return a handler that lazily imports *class_name* from *module_path* and delegates."""
+    """Return a handler that lazily imports *class_name* from *module_path* and delegates.
+
+    PR-TOOL-EXEC-CONTEXT (2026-05-28) — pulls the framework-injected
+    ``_tool_context`` (set by ``ToolCallProcessor``) out of ``kwargs`` and
+    forwards it to ``_safe_delegate`` so the underlying tool's
+    ``aexecute`` receives it. The reserved-name kwarg must not reach the
+    LLM-arg validation path inside the tool, hence the explicit pop.
+    """
 
     def _handler(**kwargs: Any) -> dict[str, Any]:
         import importlib
 
+        tool_context = kwargs.pop("_tool_context", None)
         mod = importlib.import_module(module_path)
         tool_cls = getattr(mod, class_name)
-        return _safe_delegate(tool_cls, kwargs)
+        return _safe_delegate(tool_cls, kwargs, context=tool_context)
 
     return _handler
 

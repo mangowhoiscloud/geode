@@ -153,6 +153,13 @@ class GeneralWebSearchTool:
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — see WebSearchTool.aexecute
+        # for the same rationale: prefer the loop's resolved (provider,
+        # source) so the same ``/login`` choice that switches the main LLM
+        # path also switches the web_search adapter selection.
+        ctx = kwargs.get("_tool_context")
+        prefer_provider = getattr(ctx, "provider", "") or None
+        prefer_source = getattr(ctx, "source", "") or None
         from core.llm.adapters.dispatch import (
             AdapterDispatchError,
             web_search_via_adapters,
@@ -161,7 +168,12 @@ class GeneralWebSearchTool:
         from core.tools.base import tool_error
 
         try:
-            result = await web_search_via_adapters(query, max_results=max_results)
+            result = await web_search_via_adapters(
+                query,
+                max_results=max_results,
+                prefer_provider=prefer_provider,
+                prefer_source=prefer_source,
+            )
         except BillingError as exc:
             return tool_error(
                 f"web_search: provider quota exhausted ({exc.provider or 'all configured'}). "

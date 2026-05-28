@@ -53,6 +53,9 @@ class ToolCallProcessor:
         mcp_manager: Any | None = None,
         transcript: Any | None = None,
         model: str = "",
+        provider: str = "",
+        source: str = "",
+        adapter_name: str = "",
     ) -> None:
         self._executor = executor
         self._op_logger = op_logger
@@ -61,6 +64,14 @@ class ToolCallProcessor:
         self._mcp_manager = mcp_manager
         self._transcript = transcript
         self._model = model
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — loop's LLM-identity carried
+        # forward into every tool dispatch as a ``ToolContext`` so LLM-
+        # touching tools (web_search, future web_extract / summarise)
+        # prefer the same (provider, source) the loop main path resolved
+        # instead of re-running ``infer_source`` from scratch.
+        self._provider = provider
+        self._source = source
+        self._adapter_name = adapter_name
 
         # Per-run mutable state — reset via reset()
         self._consecutive_failures: dict[str, int] = {}
@@ -235,8 +246,24 @@ class ToolCallProcessor:
             # Execute via ToolExecutor async path. Legacy sync handlers are
             # adapted inside the executor instead of wrapping the whole
             # executor call in a worker thread.
+            #
+            # PR-TOOL-EXEC-CONTEXT (2026-05-28) — build a fresh
+            # ``ToolContext`` per tool call carrying the loop's LLM identity
+            # (provider / source / model / adapter_name) so LLM-touching
+            # tools route through the same adapter the orchestration loop is
+            # using instead of independently re-resolving via
+            # ``infer_source``. Tools that do not consume the context absorb
+            # the ``_tool_context`` kwarg through their ``**kwargs`` splat.
+            from core.tools.base import ToolContext
+
+            tool_ctx = ToolContext(
+                provider=self._provider,
+                source=self._source,
+                model=self._model,
+                adapter_name=self._adapter_name,
+            )
             _t0 = time.monotonic()
-            result = await self._executor.aexecute(tool_name, tool_input)
+            result = await self._executor.aexecute(tool_name, tool_input, context=tool_ctx)
             _elapsed_ms = (time.monotonic() - _t0) * 1000
 
             # Hook: TOOL_EXEC_END (feedback — fires for all completions)

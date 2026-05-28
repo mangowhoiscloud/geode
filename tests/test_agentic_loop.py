@@ -246,7 +246,13 @@ class TestToolExecutor:
 
         results = asyncio.run(processor.process(response))
 
-        executor.aexecute.assert_awaited_once_with("list_subjects", {"limit": 2})
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — processor now passes
+        # ``context=tool_ctx`` (ToolContext) on every dispatch. Match
+        # positional args + presence of context kwarg, ignore its body.
+        executor.aexecute.assert_awaited_once()
+        call = executor.aexecute.await_args
+        assert call.args == ("list_subjects", {"limit": 2})
+        assert "context" in call.kwargs
         executor.execute.assert_not_called()
         assert results[0]["tool_use_id"] == "toolu_async"
         assert '"status": "ok"' in results[0]["content"]
@@ -287,7 +293,11 @@ class TestToolExecutor:
 
         results = asyncio.run(processor.process(response))
 
-        executor.aexecute.assert_awaited_once_with("list_subjects", {"limit": 3})
+        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — see test_process_uses_executor_aexecute
+        executor.aexecute.assert_awaited_once()
+        call = executor.aexecute.await_args
+        assert call.args == ("list_subjects", {"limit": 3})
+        assert "context" in call.kwargs
         assert '"status": "hooked"' in results[0]["content"]
 
     def test_serialize_offloaded_result_awaits_async_hook(self, tmp_path: Any) -> None:

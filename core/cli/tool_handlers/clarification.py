@@ -13,9 +13,12 @@ CLAUDE.md Naming CANNOT row: catch-all suffixes (``_helpers`` /
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.async_runtime import run_process_coroutine
+
+if TYPE_CHECKING:
+    from core.tools.base import ToolContext
 
 
 def _clarify(
@@ -34,13 +37,27 @@ def _clarify(
     }
 
 
-def _safe_delegate(tool_class: type, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Wrap delegated tool execution -- catch KeyError as clarification."""
+def _safe_delegate(
+    tool_class: type,
+    kwargs: dict[str, Any],
+    *,
+    context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Wrap delegated tool execution -- catch KeyError as clarification.
+
+    PR-TOOL-EXEC-CONTEXT (2026-05-28) — when a non-None ``context`` is
+    given, inject it as ``_tool_context=`` into the tool's ``aexecute``
+    kwargs. Tools that consume LLM-identity (web_search and future
+    LLM-backed tools) read ``kwargs.get("_tool_context")``; tools that do
+    not care absorb the extra key through their ``**kwargs`` splat.
+    """
     try:
         tool = tool_class()
         aexecute = getattr(tool, "aexecute", None)
         if not callable(aexecute):
             raise TypeError(f"{tool_class.__name__} must implement aexecute()")
+        if context is not None:
+            kwargs["_tool_context"] = context
         result: dict[str, Any] = run_process_coroutine(aexecute(**kwargs))
         return result
     except (KeyError, TypeError) as exc:

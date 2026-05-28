@@ -47,6 +47,68 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-TOOL-EXEC-CONTEXT (2026-05-28)** — LLM-touching tools now
+  receive the AgenticLoop's resolved adapter routing via
+  :class:`core.tools.base.ToolContext` so the operator's ``/login``
+  credential-source choice that drives the main LLM path also drives
+  the tool's adapter selection. Previously each ``web_search`` tool
+  call re-ran ``infer_source(provider)`` independently and could land
+  on a different (provider, source) than the orchestration loop.
+
+  Reference: paperclip ``AdapterExecutionContext`` at
+  ``packages/adapter-utils/src/types.ts`` — adapter ``execute(ctx)``
+  receives full agent + runtime context. GEODE adopts the same shape.
+
+  Wiring chain (top to bottom):
+
+  1. ``core/tools/base.py::ToolContext`` — added four LLM-identity
+     fields (``provider``, ``source``, ``model``, ``adapter_name``;
+     all ``str = ""`` defaults so callers outside an AgenticLoop are
+     not forced to fill them).
+  2. ``core/agent/loop/agent_loop.py`` — passes the resolved
+     ``self._new_adapter.provider`` / ``.source`` / ``.name`` into the
+     ``ToolCallProcessor`` constructor. Reads from the adapter (not
+     the loop's pre-normalisation ``self._provider`` / ``self._source``)
+     because the registry collapses ``openai-codex → openai`` /
+     ``zhipuai → glm`` (Codex MCP audit catch — the dispatch helper
+     compares against ``adapter.provider`` / ``adapter.source``).
+  3. ``core/agent/tool_executor/processor.py::ToolCallProcessor`` —
+     ``__init__`` accepts ``provider`` / ``source`` / ``adapter_name``;
+     dispatch loop builds a fresh ``ToolContext`` per tool call and
+     forwards it via ``executor.aexecute(..., context=ctx)``.
+  4. ``core/agent/tool_executor/executor.py::_call_handler_async`` —
+     injects ``_tool_context=`` into the handler's kwargs **only when
+     the handler signature accepts it** (``**kwargs`` splat or
+     explicit ``_tool_context`` param). Third-party plugin handlers
+     with closed signatures are detected via ``inspect.signature`` and
+     skipped (Codex MCP CONCERN fix).
+  5. ``core/cli/tool_handlers/delegated.py`` + ``clarification.py`` —
+     ``_make_delegate_handler`` pops ``_tool_context`` from kwargs and
+     forwards via ``_safe_delegate(..., context=ctx)`` which re-injects
+     it before calling the tool's ``aexecute``.
+  6. ``core/tools/web_tools.py::GeneralWebSearchTool.aexecute`` +
+     ``core/tools/web_search.py::WebSearchTool.aexecute`` — read
+     ``kwargs.get("_tool_context")`` and pass ``prefer_provider`` +
+     ``prefer_source`` to ``web_search_via_adapters``.
+  7. ``core/llm/adapters/dispatch.py`` — new ``_apply_prefer``
+     helper stable-reorders candidates so exact (provider, source)
+     match floats first, then provider-only, then source-only, then
+     everything else. ``web_search_via_adapters`` +
+     ``complete_text_via_adapters`` gain
+     ``prefer_provider: str | None = None`` /
+     ``prefer_source: str | None = None`` params; empty preference
+     falls through to the default candidate order so existing callers
+     are unaffected.
+
+  Pinned by ``tests/test_tool_exec_context.py`` (14 assertions:
+  ``ToolContext`` shape, ``_apply_prefer`` correctness across all
+  4 rank buckets + stability, source-level pins on web tools /
+  processor / agent_loop wiring, ``_safe_delegate`` context injection
+  with + without context, end-to-end ``web_search_via_adapters``
+  preference behaviour with default-order-overridden candidates,
+  handler signature gating for closed-signature plugin handlers).
+
 ### Removed
 - **PR-LLMCLIENTPORT-COLLAPSE (2026-05-28)** — the parallel
   ``LLMClientPort`` hierarchy is gone. ``LLMAdapter`` (one async
