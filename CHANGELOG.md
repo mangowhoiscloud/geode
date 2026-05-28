@@ -47,6 +47,48 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28)** — Phase 2
+  follow-up to PR-ADAPTER-PATTERN-UNIFICATION (#1832): the last two
+  HIGH-traffic LLM-touching sites that still instantiated provider
+  SDKs directly now route through ``complete_text_via_adapters``.
+
+  1. ``core/hooks/llm_extract_learning.py`` — TURN_COMPLETED hook
+     for learning-pattern extraction. ``_call_budget_llm`` sync→async
+     + dispatch; ``_call_glm_flash`` / ``_call_haiku`` helpers
+     (each instantiating a fresh sync SDK client) deleted. Handler
+     ``_on_turn_complete`` also async (``HookSystem.trigger_async``
+     supports async handlers, fired from ``_lifecycle.py:351`` for
+     this event). Provider order ``("glm", "anthropic", "openai")``
+     preserves the historic free-tier-first preference.
+  2. ``core/agent/loop/models.py::_context_exhausted_message`` —
+     one-shot Haiku call for the context-exhausted localised notice.
+     ``anthropic.Anthropic`` direct instantiation removed; sync→async;
+     all 3 callers (``agent_loop.py:1562/1627/1682``) updated to
+     ``await``. Provider order ``("anthropic", "openai", "glm")``
+     keeps Haiku first while opening fallback for Codex-subscription-
+     only operators (the previous code silently returned the English
+     ``_EXHAUSTED_FALLBACK`` for any operator without an Anthropic
+     key — entire localisation point defeated).
+
+  Codex MCP audit caught a BLOCKER on the first pass: passing a
+  single ``model=`` to every fallback adapter meant Anthropic tried
+  to call ``glm-4.7-flash`` and OpenAI tried ``claude-haiku-*``,
+  guaranteeing every fallback to fail. ``complete_text_via_adapters``
+  now accepts ``model_by_provider: dict[str, str]`` so the caller
+  pins the provider-specific model only where it owns the choice
+  (GLM-flash for the extraction hook, Haiku for the exhausted
+  notice) and lets every other adapter use its own primary. Without
+  this fallback is theatre.
+
+  Pinned by ``tests/test_extract_learning_models_adapter.py`` (8
+  assertions: async signatures on both sites, source-level pins that
+  ``import anthropic`` / ``import openai`` are gone, helper deletions
+  confirmed, provider_order preserved, 3 awaited call sites in
+  agent_loop.py). ``test_glm_flash_hook_reads_settings_learning_extract_model``
+  updated to read ``_call_budget_llm`` source (the renamed homing
+  spot for the ``settings.learning_extract_model`` pass-through).
+
 ## [0.99.80] - 2026-05-28
 
 > PATCH release. Bundles two adapter-layer improvements built on
