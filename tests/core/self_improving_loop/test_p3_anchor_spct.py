@@ -78,9 +78,11 @@ class TestParseMutationPrinciple:
         mutation = parse_mutation(raw)
         assert mutation.principle == ""
 
-    def test_principle_exceeds_500_raises(self) -> None:
-        """C3-3: principle > 500 chars → ValueError (concise principle 강제)."""
-        oversize = "x" * 501
+    def test_principle_exceeds_1000_raises(self) -> None:
+        """C3-3: principle > 1000 chars → ValueError (concise principle 강제).
+        PR-SPCT-CAP-1000 (2026-05-28) raised the cap from 500 → 1000 after
+        cycle 14/15/16 observed 500-805 char proposals in 6/6 attempts."""
+        oversize = "x" * 1001
         raw = json.dumps(
             {
                 "target_section": "role",
@@ -89,8 +91,24 @@ class TestParseMutationPrinciple:
                 "principle": oversize,
             }
         )
-        with pytest.raises(ValueError, match=r"principle length .* exceeds 500"):
+        with pytest.raises(ValueError, match=r"principle length .* exceeds 1000"):
             parse_mutation(raw)
+
+    def test_principle_at_or_under_1000_accepted(self) -> None:
+        """C3-3b: principle ≤ 1000 chars → accepted (post-PR-SPCT-CAP-1000)."""
+        # 800 char — typical cycle 14-16 observed length, must pass after PR.
+        valid = "x" * 800
+        raw = json.dumps(
+            {
+                "target_section": "role",
+                "new_value": "test",
+                "rationale": "test",
+                "principle": valid,
+            }
+        )
+        mutation = parse_mutation(raw)
+        assert mutation.principle == valid
+        assert len(mutation.principle) == 800
 
 
 # ---------------------------------------------------------------------------
