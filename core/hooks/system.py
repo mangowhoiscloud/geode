@@ -162,7 +162,18 @@ class HookEvent(Enum):
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
 
     # Cross-provider fallback (LLM resilience)
+    # PR-NO-FALLBACK (2026-05-28) — cross-provider fallback removed;
+    # the enum value is retained for back-compat (plugins may still
+    # subscribe) but no production emit-site fires it any more.
     FALLBACK_CROSS_PROVIDER = "fallback_cross_provider"
+
+    # Per-adapter dispatch attempt — fired by
+    # ``core.llm.adapters.dispatch._fire_attempt`` for every single-adapter
+    # try. Payload: adapter_name, provider, source, capability, outcome
+    # (success/billing/transient/unavailable), elapsed_ms, error_type,
+    # error_msg. Lets operators trace exactly which adapter handled a
+    # web_search / complete_text call without having to parse serve logs.
+    ADAPTER_DISPATCH_ATTEMPT = "adapter_dispatch_attempt"
 
     # Pipeline timeout (B3)
     PIPELINE_TIMEOUT = "pipeline_timeout"

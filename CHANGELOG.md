@@ -47,6 +47,88 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-NO-FALLBACK (2026-05-28)** — adapter dispatch is now strict
+  single-adapter: the operator's explicit ``/login source`` choice is
+  the sole switch. Silent cross-provider / cross-source fallback
+  (Anthropic → OpenAI → GLM, PAYG → Subscription) is removed because it
+  exposes the operator to unexpected billing — a Codex-subscription
+  user reported their web_search silently landing on a GLM coding plan
+  they had configured for a different workflow, then surfaced as
+  ``provider quota exhausted (glm)`` even though the operator never
+  asked for GLM.
+
+  Three coordinated changes:
+
+  1. **Phase 1 — codex-oauth web_search enabled** (the routing leak's
+     true root cause). ``core/llm/adapters/codex_oauth.py``
+     ``supports_web_search`` False → True + dedicated ``aweb_search``
+     implementation using ``responses.stream(store=False, ...)`` —
+     the Codex backend's mandatory call shape (same as ``acomplete``).
+     The openai-python SDK's ``ToolParam`` union accepts ``{"type":
+     "web_search"}`` independent of which Responses endpoint the client
+     targets, so a ChatGPT-subscription operator's web_search now
+     routes through their OAuth token with no PAYG key required.
+
+     Codex MCP audit catch — initial pass delegated to the PAYG-only
+     ``openai_web_search`` helper which calls non-streaming
+     ``responses.create`` without ``store=False``; that would fail on
+     Codex OAuth backend and surface a confusing ``BillingError``.
+     Fixed by inlining the Codex-specific stream call.
+
+  2. **Phase 3 — Strict single-adapter dispatch**
+     (``core/llm/adapters/dispatch.py``). Replaced the
+     ``_apply_prefer`` fallback chain with ``_select_adapter`` which
+     returns exactly one adapter or ``None``:
+
+     - Both ``prefer_provider`` and ``prefer_source`` set (AgenticLoop
+       ToolContext path): exact match REQUIRED; partial or unmatched
+       preferences raise :class:`AdapterUnavailableError`.
+     - Partial preference (only one set) treated identically to no
+       match — strict mode never silently widens.
+     - Neither set (hook / compaction callers): operator's default-
+       resolved adapter via ``infer_source(provider)`` for the first
+       provider in ``provider_order`` with a registered capable
+       adapter.
+
+     ``web_search_via_adapters`` + ``complete_text_via_adapters`` call
+     ``_select_adapter`` once, try the single result once, and raise
+     :class:`BillingError` / new :class:`AdapterUnavailableError` /
+     :class:`AdapterDispatchError` on failure — every error carries the
+     attempted adapter name + source so the operator sees exactly which
+     credential was tried. Every error message embeds the explicit
+     ``/login source <subscription|payg|cli>`` switch hint so the
+     three credential types are visible as the *only* path to change
+     routing.
+
+  3. **Phase 2 — Per-attempt observability**. New
+     :class:`core.llm.adapters.dispatch.AdapterAttempt` dataclass +
+     ``_fire_attempt`` helper emits ``HookEvent.ADAPTER_DISPATCH_ATTEMPT``
+     (new enum value, 81st) for every dispatch try with adapter name,
+     provider, source, capability, outcome
+     (``success`` / ``billing`` / ``transient`` / ``unavailable``),
+     elapsed ms, and the failure's ``error_type`` / truncated
+     ``error_msg``. INFO-level log line per attempt complements the
+     hook so operators see one structured row per dispatch in the
+     serve log instead of having to reconstruct what was tried from
+     downstream exceptions.
+
+  Callers updated to handle the new error class:
+  ``core/tools/web_tools.py`` + ``core/tools/web_search.py`` catch
+  :class:`AdapterUnavailableError` separately and return a
+  ``dependency`` error pointing at ``/adapters`` + ``/login source``.
+  ``core/agent/loop/models.py::_context_exhausted_message``,
+  ``core/hooks/llm_extract_learning.py``,
+  ``core/orchestration/compaction.py`` all carry the new exception
+  branch with the same `_EXHAUSTED_FALLBACK`/`return None` graceful
+  contracts they had before.
+
+  Pinned by ``tests/test_adapter_capability_dispatch.py`` (16 tests)
+  + ``tests/test_tool_exec_context.py`` (15 tests covering
+  ``_select_adapter`` exact-match enforcement, no-fallback on billing,
+  exact-match routing, default-resolved via ``infer_source``)
+  + ``tests/test_hooks.py::test_all_events_exist`` updated to 81.
+
 ### Added
 - **PR-TOOL-EXEC-CONTEXT (2026-05-28)** — LLM-touching tools now
   receive the AgenticLoop's resolved adapter routing via

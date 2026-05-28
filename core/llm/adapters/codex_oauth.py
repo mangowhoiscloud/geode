@@ -42,6 +42,7 @@ from core.llm.adapters.base import (
     QuotaWindows,
     StreamEvent,
     TextCompletionResult,
+    WebSearchResult,
 )
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
@@ -59,13 +60,18 @@ class CodexOAuthAdapter:
     provider: str = "openai"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
-    # PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — text_completion supported
-    # via the same Responses API path the agent loop's main ``acomplete`` uses
-    # (chatgpt.com/backend-api/codex/responses). web_search is NOT advertised:
-    # the Codex backend's support for the ``web_search`` hosted tool is
-    # unconfirmed (frontier audit 2026-05-28) and falsely advertising would
-    # break the dispatch fallback chain by trying + failing on every call.
-    supports_web_search: bool = False
+    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled. The Codex
+    # backend (chatgpt.com/backend-api/codex/responses) exposes the same
+    # Responses API contract as the PAYG endpoint; the openai-python
+    # SDK's ``ToolParam`` union accepts ``{"type": "web_search"}`` /
+    # ``{"type": "web_search_preview"}`` independent of which Responses
+    # endpoint the client targets. Reusing :func:`openai_web_search`
+    # routes the call through the same OAuth token the operator's
+    # ``/login openai`` registered — no PAYG key required, no cross-
+    # source fallback. Pre-PR's conservative ``False`` was the source of
+    # the routing leak that made web_search silently land on glm-payg
+    # when the operator was on Codex OAuth.
+    supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
@@ -203,6 +209,71 @@ class CodexOAuthAdapter:
             system=system,
             model=model or CODEX_PRIMARY,
             max_tokens=max_tokens,
+        )
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        """Codex-subscription web_search via Responses API ``web_search``
+        hosted tool.
+
+        Codex backend requires ``store=False`` (same constraint as
+        :meth:`acomplete` — backend reject 400 without it) and uses the
+        ``responses.stream`` event-driven aggregation path because
+        non-streaming ``responses.create`` returns structurally empty
+        bodies on this endpoint. We mirror that pattern instead of
+        reusing the PAYG-only :func:`openai_web_search` helper which
+        targets the standard Responses endpoint.
+
+        Codex MCP audit catch (2026-05-28) — the prior version delegated
+        to ``openai_web_search`` directly, which would fail on Codex
+        OAuth with ``Unsupported parameter`` or empty output, and the
+        dispatch layer would surface a confusing ``BillingError``
+        (because :func:`is_billing_fatal` doesn't match shape errors)
+        even though the real issue is the call shape mismatch.
+        """
+        from core.config import CODEX_PRIMARY
+
+        client = self._get_client()
+        text_parts: list[str] = []
+        source_urls: list[str] = []
+        kwargs = {
+            "model": CODEX_PRIMARY,
+            "input": (
+                f"Search the web for: {query}. Return up to {max_results} relevant "
+                "results with titles, URLs, and brief summaries."
+            ),
+            "tools": [{"type": "web_search"}],
+            "store": False,
+        }
+        async with client.responses.stream(**kwargs) as stream:
+            async for event in stream:
+                ev_type = getattr(event, "type", "")
+                if ev_type == "response.output_item.done":
+                    item = getattr(event, "item", None)
+                    if item is None:
+                        continue
+                    if getattr(item, "type", "") == "message":
+                        for sub in getattr(item, "content", []) or []:
+                            if getattr(sub, "type", "") == "output_text":
+                                sub_text = getattr(sub, "text", "")
+                                if sub_text:
+                                    text_parts.append(sub_text)
+                    if getattr(item, "type", "") == "web_search_call":
+                        for entry in getattr(item, "results", []) or []:
+                            url = getattr(entry, "url", None)
+                            if url:
+                                source_urls.append(url)
+            await stream.get_final_response()
+        if not text_parts:
+            raise RuntimeError(
+                "codex-oauth web_search: empty output_text — Codex backend "
+                "may have rejected the web_search tool for this account. "
+                "Try /login source payg to use openai-payg instead."
+            )
+        return WebSearchResult(
+            query=query,
+            text="\n".join(text_parts),
+            source_urls=tuple(source_urls),
+            adapter_name=self.name,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:

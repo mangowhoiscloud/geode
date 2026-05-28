@@ -20,8 +20,9 @@ class TestHookEvent:
         # Tally: +6 PR-2 cognitive + 5 OL-A1.5 auto-trigger
         # + 3 PR-CL-BUDGET handoff + 5 PR-HOOKEVENT-RESERVE (mutation /
         # baseline lifecycle) + 1 PR-MAX-GEN
-        # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED).
-        assert len(HookEvent) == 80
+        # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
+        # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT).
+        assert len(HookEvent) == 81
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"
