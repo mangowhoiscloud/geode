@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.79] - 2026-05-28
+
+> PATCH release. Single fix: content-first stop_reason derivation in
+> the adapter bridge (PR-CODEX-STOP-REASON-TOOL-USE). The Codex
+> backend's universal ``status="completed"`` response caused
+> ``_translate_stop_reason`` to map every tool-call response to
+> ``"end_turn"`` — the agent loop skipped tool execution, the next
+> turn's input carried a ``function_call`` without
+> ``function_call_output``, and the Codex backend rejected with
+> ``"No tool output found"`` 400. Frontier-pattern aligned with
+> paperclip + hermes (both derive the terminal flag from actual
+> presence of tool/function-call items, not the provider string).
+
 ### Fixed
 - **PR-CODEX-STOP-REASON-TOOL-USE (2026-05-28)** — the Codex backend at
   ``chatgpt.com/backend-api/codex`` returns ``status="completed"`` for
