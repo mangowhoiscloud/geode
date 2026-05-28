@@ -37,11 +37,7 @@ def test_build_async_codex_client_disables_keepalive() -> None:
     workflow guard.
     """
     src = (
-        Path(__file__).resolve().parents[1]
-        / "core"
-        / "llm"
-        / "adapters"
-        / "_openai_common.py"
+        Path(__file__).resolve().parents[1] / "core" / "llm" / "adapters" / "_openai_common.py"
     ).read_text(encoding="utf-8")
 
     # The override must be inside build_async_codex_client, not
