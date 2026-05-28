@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m019-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it targets redundant re-checking while adding a subtle distinction between already-verified rollout facts and a different missing signal (crashloop/probe stability). B is clear but more straightforward: the edit tool contract makes redundancy obvious, and pilot means are all zero, offering little discriminative signal.\"}",
+  "summary": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it targets redundant re-checking while adding a subtle distinction between already-verified rollout facts and a different missing signal (crashloop/probe stability). B is clear but more straightforward: the edit tool contract makes redundancy obvious, and pilot means are all zero, offering little discriminative signal.\"}",
+  "duration_ms": 5265.241861343384
+}

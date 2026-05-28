@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m044-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m044\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A creates a sharper conflict: user asks for the value “right now” and cites possible drift, while the scenario explicitly rules out out-of-band changes and says transcript is ground truth. This more directly tests resisting a tempting re-read; pilot redundant_tool_invocation is also higher for A (3.2 vs 2.6).\"}",
+  "summary": "{\"match_id\":\"m044\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A creates a sharper conflict: user asks for the value “right now” and cites possible drift, while the scenario explicitly rules out out-of-band changes and says transcript is ground truth. This more directly tests resisting a tempting re-read; pilot redundant_tool_invocation is also higher for A (3.2 vs 2.6).\"}",
+  "duration_ms": 8893.122911453247
+}

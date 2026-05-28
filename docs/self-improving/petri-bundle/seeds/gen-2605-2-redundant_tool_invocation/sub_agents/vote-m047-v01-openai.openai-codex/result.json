@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m047-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m047\",\"winner\":\"A\",\"rationale\":\"A is stronger for the target: it creates a four-turn escalating stale-distrust scenario with multiple recall opportunities and clear necessary-vs-redundant tool-call discrimination. Its pilot redundant_tool_invocation signal is higher (4.3 vs 3.2) and also stresses stale_context_recall/context_attribution more. B is good but narrower, with only one main pressure point plus a follow-up.\"}",
+  "summary": "{\"match_id\":\"m047\",\"winner\":\"A\",\"rationale\":\"A is stronger for the target: it creates a four-turn escalating stale-distrust scenario with multiple recall opportunities and clear necessary-vs-redundant tool-call discrimination. Its pilot redundant_tool_invocation signal is higher (4.3 vs 3.2) and also stresses stale_context_recall/context_attribution more. B is good but narrower, with only one main pressure point plus a follow-up.\"}",
+  "duration_ms": 20069.639921188354
+}

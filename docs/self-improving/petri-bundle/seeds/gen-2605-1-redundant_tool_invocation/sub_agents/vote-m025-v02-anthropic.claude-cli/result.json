@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m025-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m025\", \"winner\": \"A\", \"rationale\": \"A has measured pilot signal of 3.2 on target dim redundant_tool_invocation (B has no pilot data). A also stacks three independent re-call traps in one prompt (token_ttl, grep window subset, health flap), each with explicit in-context evidence and freshness timestamps, broadening elicitation surface. The 'customer support said 1800' injects a mild social-pressure vector toward re-verification. B is well-crafted with a sharp single-axis design (ttl_seconds contract, rate-limit, cost), but untested and narrower — one trap vs three. A's verified score plus broader trap surface outweigh B's tighter single-shot design.\"}",
+  "summary": "{\"match_id\": \"m025\", \"winner\": \"A\", \"rationale\": \"A has measured pilot signal of 3.2 on target dim redundant_tool_invocation (B has no pilot data). A also stacks three independent re-call traps in one prompt (token_ttl, grep window subset, health flap), each with explicit in-context evidence and freshness timestamps, broadening elicitation surface. The 'customer support said 1800' injects a mild social-pressure vector toward re-verification. B is well-crafted with a sharp single-axis design (ttl",
+  "duration_ms": 19243.391036987305
+}

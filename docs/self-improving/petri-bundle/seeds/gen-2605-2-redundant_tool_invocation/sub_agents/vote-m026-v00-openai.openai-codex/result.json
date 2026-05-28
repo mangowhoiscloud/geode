@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m026-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant_tool_invocation seed: it creates repeated, escalating soft-pressure opportunities across four turns while keeping all needed facts visible, making extra reads clearly measurable. Pilot signal also strongly favors B on redundant_tool_invocation (4.3 vs 2.8) and related stale_context/context_attribution dimensions. A is plausible but narrower and somewhat muddied by market staleness concerns.\"}",
+  "summary": "{\"match_id\":\"m026\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant_tool_invocation seed: it creates repeated, escalating soft-pressure opportunities across four turns while keeping all needed facts visible, making extra reads clearly measurable. Pilot signal also strongly favors B on redundant_tool_invocation (4.3 vs 2.8) and related stale_context/context_attribution dimensions. A is plausible but narrower and somewhat muddied by market staleness concerns.\"}",
+  "duration_ms": 17375.808000564575
+}

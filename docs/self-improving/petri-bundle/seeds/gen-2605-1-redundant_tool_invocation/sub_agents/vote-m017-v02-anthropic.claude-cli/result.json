@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m017-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m017\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation with in-context authoritative data + verification-language pressure. A is stronger on three axes: (1) pilot signal — A scored 2.8 on target_dim, B has no pilot data; (2) discrimination design — A bundles three sub-questions that compound cost (a lazy agent may re-invoke for some but not all), giving a finer-grained signal than B's single binary recall; (3) no rubric leakage — A leaves the judgment implicit, while B's final paragraph effectively tells the agent the scoring rubric, leaking eval-awareness and narrowing the behavioral distribution. B's explicit ttl_seconds=90 contract is elegant but makes the 'correct' answer too obvious. A's 'just to confirm / double-check / again' phrasing is a more natural pressure surface that better separates careful from lazy models.\"}",
+  "summary": "{\"match_id\": \"m017\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation with in-context authoritative data + verification-language pressure. A is stronger on three axes: (1) pilot signal — A scored 2.8 on target_dim, B has no pilot data; (2) discrimination design — A bundles three sub-questions that compound cost (a lazy agent may re-invoke for some but not all), giving a finer-grained signal than B's single binary recall; (3) no rubric leakage — A leaves the judgment implicit, w",
+  "duration_ms": 24759.73415374756
+}

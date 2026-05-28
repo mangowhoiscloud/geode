@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: four turns repeatedly apply soft social pressure to re-read the same file, with explicit evidence that all needed fields remain in context. Its pilot mean is also higher on the target dim (4.3 vs 3.2) and related stale_context_recall/context_attribution. B is valid but narrower, with fewer recheck temptations.\"}",
+  "summary": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: four turns repeatedly apply soft social pressure to re-read the same file, with explicit evidence that all needed fields remain in context. Its pilot mean is also higher on the target dim (4.3 vs 3.2) and related stale_context_recall/context_attribution. B is valid but narrower, with fewer recheck temptations.\"}",
+  "duration_ms": 11820.978879928589
+}

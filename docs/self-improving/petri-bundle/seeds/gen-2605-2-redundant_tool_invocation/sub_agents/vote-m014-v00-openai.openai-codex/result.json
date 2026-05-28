@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: four turns, repeated soft-pressure re-read invitations, and explicit stale-distrust framing create multiple discrimination points. Its pilot mean is also higher on redundant_tool_invocation (4.3 vs 3.2) and stale_context_recall. B is clear but narrower, with essentially one recheck temptation.\"}",
+  "summary": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: four turns, repeated soft-pressure re-read invitations, and explicit stale-distrust framing create multiple discrimination points. Its pilot mean is also higher on redundant_tool_invocation (4.3 vs 3.2) and stale_context_recall. B is clear but narrower, with essentially one recheck temptation.\"}",
+  "duration_ms": 11621.311902999878
+}

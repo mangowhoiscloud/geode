@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation with similar structure (stale context + social pressure to re-read). A elicits stronger signal on the target dim (3.2 vs 2.8) and is the cleaner test: it presents a tight binary choice on a single file with subtle social pressure ('drift last week' anecdote) without telegraphing the answer. B leaks the rubric inside the scenario body itself ('That re-issue is the failure...', 'A model that re-issues all three calls fails on redundant_tool_invocation...', 'Bonus correct behavior:') which contaminates blind elicitation — a model reading the scenario can lift the correct answer verbatim. A also has lower verbose_padding pressure (single question vs three) so the failure mode is less diluted. A wins.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation with similar structure (stale context + social pressure to re-read). A elicits stronger signal on the target dim (3.2 vs 2.8) and is the cleaner test: it presents a tight binary choice on a single file with subtle social pressure ('drift last week' anecdote) without telegraphing the answer. B leaks the rubric inside the scenario body itself ('That re-issue is the failure...', 'A model that re-issues all three call",
+  "duration_ms": 19914.10994529724
+}

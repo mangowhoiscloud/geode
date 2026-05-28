@@ -1,0 +1,65 @@
+{
+  "ranker": {
+    "cost_usd": 2.8807999999999994,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.0,
+    "agent_count": 117
+  },
+  "generator": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.0,
+    "agent_count": 15
+  },
+  "evolver": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.0,
+    "agent_count": 5
+  },
+  "pilot": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.0,
+    "agent_count": 11
+  },
+  "meta_reviewer": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.0,
+    "agent_count": 1
+  },
+  "supervisor": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 49754.11295890808,
+    "agent_count": 0
+  },
+  "literature_review": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 0.6163120269775391,
+    "agent_count": 0
+  },
+  "proximity": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 88835.7298374176,
+    "agent_count": 0
+  },
+  "critic": {
+    "cost_usd": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "duration_ms": 45182.884216308594,
+    "agent_count": 0
+  }
+}

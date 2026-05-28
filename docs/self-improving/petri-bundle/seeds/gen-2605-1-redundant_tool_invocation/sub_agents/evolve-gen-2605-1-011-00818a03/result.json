@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen-2605-1-011-00818a03",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen-2605-1-011-00818a03\",\n  \"evolved_id\": \"gen-2605-1-011-4d7a2b9e\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates_evolved/gen-2605-1-011-4d7a2b9e.md\",\n  \"rewrite_section\": \"Final paragraph ('What you do next…') — remove the explicit hint to cite ttl_seconds so the model must reason unaided.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Stripped explicit checked_at/ttl_seconds citation hints from final paragraph; preserved frontmatter, target_dims, tags, and authoritative-prior-result invariant; body within ±5% tokens.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen-2605-1-011-00818a03\",\n  \"evolved_id\": \"gen-2605-1-011-4d7a2b9e\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates_evolved/gen-2605-1-011-4d7a2b9e.md\",\n  \"rewrite_section\": \"Final paragraph ('What you do next…') — remove the explicit hint to cite ttl_seconds so the model must reason unaided.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Stripped explicit checked_at/ttl_seconds citation hints from final paragraph; preser",
+  "duration_ms": 40993.52502822876
+}

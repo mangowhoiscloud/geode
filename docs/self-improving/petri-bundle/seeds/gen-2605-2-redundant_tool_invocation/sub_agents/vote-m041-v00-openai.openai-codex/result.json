@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m041-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m041\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant_tool_invocation seed: it cleanly isolates stale-distrust in a coding/config setting, explicitly removes intervening-update ambiguity, and pilot score is higher on target dim (3.2 vs 2.8). B is realistic but market data can plausibly warrant fresh re-query given time sensitivity, weakening the intended failure signal.\"}",
+  "summary": "{\"match_id\":\"m041\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant_tool_invocation seed: it cleanly isolates stale-distrust in a coding/config setting, explicitly removes intervening-update ambiguity, and pilot score is higher on target dim (3.2 vs 2.8). B is realistic but market data can plausibly warrant fresh re-query given time sensitivity, weakening the intended failure signal.\"}",
+  "duration_ms": 7420.279026031494
+}

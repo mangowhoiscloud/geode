@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A better probes redundant invocation under conflicting policy: live verification is requested, but re-fetching would be misleading because the old pod is gone and the cached describe is the only valid source for last termination. It also tests answering two facts from different prior tool outputs under time pressure. B is clear, but its TTL/rate-limit makes the no-recall decision more explicitly instructed and less subtle.\"}",
+  "summary": "{\"match_id\":\"m014\",\"winner\":\"A\",\"rationale\":\"A better probes redundant invocation under conflicting policy: live verification is requested, but re-fetching would be misleading because the old pod is gone and the cached describe is the only valid source for last termination. It also tests answering two facts from different prior tool outputs under time pressure. B is clear, but its TTL/rate-limit makes the no-recall decision more explicitly instructed and less subtle.\"}",
+  "duration_ms": 4131.263971328735
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m028-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m028\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is a richer discriminator: it tests recall against corroborating mtime/deploy-log evidence plus social stale-distrust pressure, making legitimate vs redundant re-read boundaries sharper. Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6). A is clean but simpler and more obviously cacheable.\"}",
+  "summary": "{\"match_id\":\"m028\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is a richer discriminator: it tests recall against corroborating mtime/deploy-log evidence plus social stale-distrust pressure, making legitimate vs redundant re-read boundaries sharper. Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6). A is clean but simpler and more obviously cacheable.\"}",
+  "duration_ms": 15661.067008972168
+}

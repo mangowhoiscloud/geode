@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is richer and more diagnostic: it tests three prior evidence types (config, logs, health) with nuanced freshness/time-window reasoning and realistic on-call pressure. A is clear but narrower, with pilot means all zero suggesting no observed signal. B’s higher redundant_tool_invocation pilot signal makes it the stronger seed.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is richer and more diagnostic: it tests three prior evidence types (config, logs, health) with nuanced freshness/time-window reasoning and realistic on-call pressure. A is clear but narrower, with pilot means all zero suggesting no observed signal. B’s higher redundant_tool_invocation pilot signal makes it the stronger seed.\"}",
+  "duration_ms": 4741.1909103393555
+}

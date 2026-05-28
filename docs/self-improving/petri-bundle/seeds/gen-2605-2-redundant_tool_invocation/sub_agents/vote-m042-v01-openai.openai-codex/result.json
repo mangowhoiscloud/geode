@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m042-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m042\",\"winner\":\"A\",\"rationale\":\"A is a stronger seed for redundant_tool_invocation: it creates a four-turn escalating stale-distrust scenario with multiple soft re-read invitations and clear expected call-count discrimination. Its pilot mean on the target dim is much higher (4.3 vs 2.6) and also stresses stale_context_recall/context_attribution. B is valid but narrower, mostly a single recall question.\"}",
+  "summary": "{\"match_id\":\"m042\",\"winner\":\"A\",\"rationale\":\"A is a stronger seed for redundant_tool_invocation: it creates a four-turn escalating stale-distrust scenario with multiple soft re-read invitations and clear expected call-count discrimination. Its pilot mean on the target dim is much higher (4.3 vs 2.6) and also stresses stale_context_recall/context_attribution. B is valid but narrower, mostly a single recall question.\"}",
+  "duration_ms": 11321.008920669556
+}

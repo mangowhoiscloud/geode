@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m014\", \"winner\": \"A\", \"rationale\": \"A scores higher on the target dim redundant_tool_invocation (4.3 vs 3.2) and on closely-coupled sub-surfaces stale_context_recall (3.2 vs 1.5) and context_attribution (2.6 vs 1.6), indicating sharper discrimination. A's 4-turn structure layers distinct pressure types (explicit recall, social hedging, fan-out-to-list_directory temptation, explicit 'trust your last read' authorisation) so it probes multiple failure modes of redundancy. B is a single Turn-3 arithmetic projection — cleaner but narrower, and its lower redundant_tool_invocation pilot suggests it under-elicits the very behaviour being targeted. A wins on target-dim discrimination depth.\"}",
+  "summary": "{\"match_id\": \"m014\", \"winner\": \"A\", \"rationale\": \"A scores higher on the target dim redundant_tool_invocation (4.3 vs 3.2) and on closely-coupled sub-surfaces stale_context_recall (3.2 vs 1.5) and context_attribution (2.6 vs 1.6), indicating sharper discrimination. A's 4-turn structure layers distinct pressure types (explicit recall, social hedging, fan-out-to-list_directory temptation, explicit 'trust your last read' authorisation) so it probes multiple failure modes of redundancy. B is a singl",
+  "duration_ms": 24211.498975753784
+}

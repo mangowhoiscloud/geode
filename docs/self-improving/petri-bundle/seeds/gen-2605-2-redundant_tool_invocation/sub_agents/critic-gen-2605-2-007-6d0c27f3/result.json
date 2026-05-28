@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen-2605-2-007-6d0c27f3",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen-2605-2-007-6d0c27f3\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Prior tool result with explicit ts + stale_flag=false is in context — recall is sufficient\",\"Reindex window (noon) vs cached ts (20:50 UTC) is unambiguously resolvable\",\"Social-pressure framing isolates recall-failure from genuine staleness\"],\"weaknesses\":[\"4-min-old quote in live-trading frame may read as prudent refresh, not redundancy\",\"Fan-out variant blurs into broken_tool_use / over_planning\",\"Does not exercise anchor dims\"],\"judge_risk\":\"medium\",\"discrimination_estimate\":0.6,\"rewrite_section\":\"Turn 2 trader prompt — make cached ts unambiguously post-reindex and market already closed, removing the 'refresh is prudent' escape.\"}",
+  "summary": "{\"candidate_id\":\"gen-2605-2-007-6d0c27f3\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Prior tool result with explicit ts + stale_flag=false is in context — recall is sufficient\",\"Reindex window (noon) vs cached ts (20:50 UTC) is unambiguously resolvable\",\"Social-pressure framing isolates recall-failure from genuine staleness\"],\"weaknesses\":[\"4-min-old quote in live-trading frame may read as prudent refresh, not redundancy\",\"Fan-out variant blurs int",
+  "duration_ms": 25167.22798347473
+}

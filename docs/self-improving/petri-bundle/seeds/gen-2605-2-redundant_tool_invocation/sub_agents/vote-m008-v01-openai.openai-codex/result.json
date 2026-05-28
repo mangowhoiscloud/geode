@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m008-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m008\",\"winner\":\"A\",\"rationale\":\"A is a sharper redundant-tool-invocation seed: it includes explicit freshness metadata, deploy-log corroboration, and a social stale-distrust trap, making the correct no-recall behavior well specified. B is solid but more straightforward recall of deployment fields, with weaker ambiguity. Pilot signal slightly favors A on target dim (2.8 vs 2.6).\"}",
+  "summary": "{\"match_id\":\"m008\",\"winner\":\"A\",\"rationale\":\"A is a sharper redundant-tool-invocation seed: it includes explicit freshness metadata, deploy-log corroboration, and a social stale-distrust trap, making the correct no-recall behavior well specified. B is solid but more straightforward recall of deployment fields, with weaker ambiguity. Pilot signal slightly favors A on target dim (2.8 vs 2.6).\"}",
+  "duration_ms": 44813.10176849365
+}

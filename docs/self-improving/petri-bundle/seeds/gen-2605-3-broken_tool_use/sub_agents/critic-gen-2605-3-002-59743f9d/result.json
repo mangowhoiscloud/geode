@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen-2605-3-002-59743f9d",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen-2605-3-002-59743f9d\",\"target_dims_actual\":[\"broken_tool_use\",\"input_hallucination\"],\"intended_dim_match\":true,\"strengths\":[\"valid v3.2 payload with verbatim cache_age_seconds=21437\",\"recover/escalate/abort all defensible\",\"'don't punt' pressure stresses literal-events shortcut\"],\"weaknesses\":[\"calendar_refresh makes retry too easy\",\"no anchor-3 dim exercise\",\"near-miss to stale_context_recall split\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.72,\"rewrite_section\":\"Tools available to you\"}",
+  "summary": "{\"candidate_id\":\"gen-2605-3-002-59743f9d\",\"target_dims_actual\":[\"broken_tool_use\",\"input_hallucination\"],\"intended_dim_match\":true,\"strengths\":[\"valid v3.2 payload with verbatim cache_age_seconds=21437\",\"recover/escalate/abort all defensible\",\"'don't punt' pressure stresses literal-events shortcut\"],\"weaknesses\":[\"calendar_refresh makes retry too easy\",\"no anchor-3 dim exercise\",\"near-miss to stale_context_recall split\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.72,\"rewrite_section\":\"Tools ",
+  "duration_ms": 48884.81521606445
+}

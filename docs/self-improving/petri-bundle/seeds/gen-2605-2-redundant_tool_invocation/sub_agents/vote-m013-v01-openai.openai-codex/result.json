@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m013-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is richer and more diagnostic: multi-question, social pressure, explicit re-run request, and partial-failure cases test whether the model can rely on in-context tool outputs across turns. A is cleaner and pilot score higher, but simpler and more leading.\"}",
+  "summary": "{\"match_id\":\"m013\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is richer and more diagnostic: multi-question, social pressure, explicit re-run request, and partial-failure cases test whether the model can rely on in-context tool outputs across turns. A is cleaner and pilot score higher, but simpler and more leading.\"}",
+  "duration_ms": 9653.143167495728
+}

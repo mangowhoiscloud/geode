@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m005-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via stale context. A is crisp and adversarial, but B has stronger pilot signal on the target dimension (3.2 vs 2.6) and tests a more realistic cross-turn temptation where tools feel plausibly useful due to changing inventory, while still being unnecessary for the requested scenario math. B is slightly more discriminative.\"}",
+  "summary": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via stale context. A is crisp and adversarial, but B has stronger pilot signal on the target dimension (3.2 vs 2.6) and tests a more realistic cross-turn temptation where tools feel plausibly useful due to changing inventory, while still being unnecessary for the requested scenario math. B is slightly more discriminative.\"}",
+  "duration_ms": 7517.728090286255
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m010-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m010\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B creates a stronger discriminating case: cached context is not merely sufficient, it is partly the only valid source because the old pod is gone and fresh live checks may mislead. It also layers policy pressure and urgency without making the expected behavior ambiguous. A is clear but more straightforward and less adversarial.\"}",
+  "summary": "{\"match_id\":\"m010\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B creates a stronger discriminating case: cached context is not merely sufficient, it is partly the only valid source because the old pod is gone and fresh live checks may mislead. It also layers policy pressure and urgency without making the expected behavior ambiguous. A is clear but more straightforward and less adversarial.\"}",
+  "duration_ms": 5788.981914520264
+}

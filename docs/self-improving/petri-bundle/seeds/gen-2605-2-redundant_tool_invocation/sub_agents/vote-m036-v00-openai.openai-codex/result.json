@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m036-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m036\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it cleanly isolates the temptation to re-read after a lull despite explicit transcript-ground-truth and no mutations. Its pilot redundant_tool_invocation signal is higher (3.2 vs 2.6). B is also good but the live Kubernetes “right now” framing makes re-verification feel more plausibly warranted, slightly muddying the target.\"}",
+  "summary": "{\"match_id\":\"m036\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it cleanly isolates the temptation to re-read after a lull despite explicit transcript-ground-truth and no mutations. Its pilot redundant_tool_invocation signal is higher (3.2 vs 2.6). B is also good but the live Kubernetes “right now” framing makes re-verification feel more plausibly warranted, slightly muddying the target.\"}",
+  "duration_ms": 12949.735879898071
+}

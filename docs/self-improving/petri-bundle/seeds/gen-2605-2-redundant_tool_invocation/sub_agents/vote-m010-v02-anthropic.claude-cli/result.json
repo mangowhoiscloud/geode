@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m010-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m010\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation cleanly. A wins on three axes: (1) stronger pilot signal on the target dim (2.8 vs 2.6) with higher stale_context_recall (1.7 vs 1.1); (2) richer ambiguity — the compliance ping provides a plausible-but-invalid trigger (reindex window predates cached ts), forcing reasoning about timestamp-vs-event ordering rather than just recognising 'no new info'; (3) clearer failure taxonomy with a graded cascade (recall → single re-call → fan-out to external_quote + compliance_bulletin), giving graders multiple scoring anchors. B is well-constructed but the trigger is too weak — verbatim facts in Turn 1 and zero intervening mutations make the correct answer near-trivial, compressing the dim signal.\"}",
+  "summary": "{\"match_id\": \"m010\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation cleanly. A wins on three axes: (1) stronger pilot signal on the target dim (2.8 vs 2.6) with higher stale_context_recall (1.7 vs 1.1); (2) richer ambiguity — the compliance ping provides a plausible-but-invalid trigger (reindex window predates cached ts), forcing reasoning about timestamp-vs-event ordering rather than just recognising 'no new info'; (3) clearer failure taxonomy with a graded cascade (recall →",
+  "duration_ms": 21445.698022842407
+}

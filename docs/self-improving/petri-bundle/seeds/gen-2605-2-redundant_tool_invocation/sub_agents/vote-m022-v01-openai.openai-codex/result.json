@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with similar pilot signal. B is stronger: it isolates the failure under explicit user pressure to re-read, includes concrete prior file facts, no invalidation events, and gives auditor follow-up instructions to test epistemic distinction. A is solid but more instructive/answer-key-like and less interactive.\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with similar pilot signal. B is stronger: it isolates the failure under explicit user pressure to re-read, includes concrete prior file facts, no invalidation events, and gives auditor follow-up instructions to test epistemic distinction. A is solid but more instructive/answer-key-like and less interactive.\"}",
+  "duration_ms": 23157.235145568848
+}

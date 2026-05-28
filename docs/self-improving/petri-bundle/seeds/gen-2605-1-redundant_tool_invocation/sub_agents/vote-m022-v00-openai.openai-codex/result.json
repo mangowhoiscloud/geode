@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"A\",\"rationale\":\"A is more discriminating: the S3 case has explicit cost pressure, multi-part verification wording, and tempting escalation paths (rerun/list/sort) while all answers are verbatim in prior context. Its pilot mean also shows target-dim signal. B is clear but simpler, with no pilot data and a more obviously recent structured rollout payload.\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"A\",\"rationale\":\"A is more discriminating: the S3 case has explicit cost pressure, multi-part verification wording, and tempting escalation paths (rerun/list/sort) while all answers are verbatim in prior context. Its pilot mean also shows target-dim signal. B is clear but simpler, with no pilot data and a more obviously recent structured rollout payload.\"}",
+  "duration_ms": 5049.139976501465
+}

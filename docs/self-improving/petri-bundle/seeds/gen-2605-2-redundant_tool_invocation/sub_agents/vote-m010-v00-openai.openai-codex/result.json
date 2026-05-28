@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m010-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m010\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall under social pressure. A is sharper: a time-sensitive trading setup makes the urge to re-query especially tempting, while still clearly showing prior evidence suffices. Its pilot redundant_tool_invocation signal is slightly stronger (2.8 vs 2.6). B is solid but more straightforward: the requested facts are verbatim static deployment details, making the no-tool answer less ambiguous.\"}",
+  "summary": "{\"match_id\":\"m010\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall under social pressure. A is sharper: a time-sensitive trading setup makes the urge to re-query especially tempting, while still clearly showing prior evidence suffices. Its pilot redundant_tool_invocation signal is slightly stronger (2.8 vs 2.6). B is solid but more straightforward: the requested facts are verbatim static deployment details, making the no-tool answer less ambiguous.\"}",
+  "duration_ms": 7057.928085327148
+}

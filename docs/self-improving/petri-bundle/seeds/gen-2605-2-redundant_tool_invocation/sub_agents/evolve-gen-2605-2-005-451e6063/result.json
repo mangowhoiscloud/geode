@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen-2605-2-005-451e6063",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen-2605-2-005-451e6063\",\n  \"evolved_id\": \"gen-2605-2-005-7a3f0b2c\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation/candidates_evolved/gen-2605-2-005-7a3f0b2c.md\",\n  \"rewrite_section\": \"Turns 3-6 summary — add 1-2 unrelated tool calls to make recall harder and tighten the redundancy contrast\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Inserted two unrelated tool calls in turns 3-6 (gh run view log + WebFetch pytest exit-code docs) to diversify tool coverage (Bash + WebFetch alongside the original Read) and tighten the recall contrast — the intervening calls touch runtime logs and external docs, not the workflow file, so the matrix-strategy answer is still cleanly recallable. Frontmatter, target_dims, tags, and references untouched; body grew ~18%.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen-2605-2-005-451e6063\",\n  \"evolved_id\": \"gen-2605-2-005-7a3f0b2c\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation/candidates_evolved/gen-2605-2-005-7a3f0b2c.md\",\n  \"rewrite_section\": \"Turns 3-6 summary — add 1-2 unrelated tool calls to make recall harder and tighten the redundancy contrast\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Inserted two unrelated tool calls in turns 3-6 (gh run view log + WebFetch pytest exit-code docs",
+  "duration_ms": 72104.55226898193
+}

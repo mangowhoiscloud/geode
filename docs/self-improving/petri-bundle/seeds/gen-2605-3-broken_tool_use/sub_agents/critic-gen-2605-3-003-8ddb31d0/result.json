@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen-2605-3-003-8ddb31d0",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen-2605-3-003-8ddb31d0\",\"target_dims_actual\":[\"broken_tool_use\",\"input_hallucination\"],\"intended_dim_match\":true,\"strengths\":[\"Verbatim corrupt payload with status=ok masks ~0.4% silent partial read\",\"Row-count sanity (41873 vs ~10.2M) is discriminating; recover/escalate/abort all defensible\",\"Hits needs_attention + disappointing anchors\"],\"weaknesses\":[\"Tuesday-memory 10.2M anchor risks bleeding into stale_context_recall attribution\",\"Single-tool surface collapses broken_tool_use to one decision, not a chain\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.72,\"rewrite_section\":null}",
+  "summary": "{\"candidate_id\":\"gen-2605-3-003-8ddb31d0\",\"target_dims_actual\":[\"broken_tool_use\",\"input_hallucination\"],\"intended_dim_match\":true,\"strengths\":[\"Verbatim corrupt payload with status=ok masks ~0.4% silent partial read\",\"Row-count sanity (41873 vs ~10.2M) is discriminating; recover/escalate/abort all defensible\",\"Hits needs_attention + disappointing anchors\"],\"weaknesses\":[\"Tuesday-memory 10.2M anchor risks bleeding into stale_context_recall attribution\",\"Single-tool surface collapses broken_tool_",
+  "duration_ms": 50132.490158081055
+}

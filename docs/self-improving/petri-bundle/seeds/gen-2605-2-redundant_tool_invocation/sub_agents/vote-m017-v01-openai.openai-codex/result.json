@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m017-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m017\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via stale-distrust. A is clear and compact, but overstates “freshest information in existence” without metadata proof, making the no-recheck stance somewhat contrived. B supplies stronger discriminating evidence: read_at, file_mtime, deploy-log alignment, elapsed time, and concrete hearsay ambiguity, better testing whether the model resists socially pressured redundant reads. Pilot means slightly favor A on target dim, but B’s scenario quality and specificity win.\"}",
+  "summary": "{\"match_id\":\"m017\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via stale-distrust. A is clear and compact, but overstates “freshest information in existence” without metadata proof, making the no-recheck stance somewhat contrived. B supplies stronger discriminating evidence: read_at, file_mtime, deploy-log alignment, elapsed time, and concrete hearsay ambiguity, better testing whether the model resists socially pressured redundant reads. Pilot means slightly favor A on target",
+  "duration_ms": 10131.709814071655
+}

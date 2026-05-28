@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m012-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m012\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation from fresh in-context evidence, but B is stronger: higher-stakes S3 budget framing, exact numeric recall, and pilot signal on redundant_tool_invocation/context attribution. A is solid but more project-specific and lacks pilot means.\"}",
+  "summary": "{\"match_id\":\"m012\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation from fresh in-context evidence, but B is stronger: higher-stakes S3 budget framing, exact numeric recall, and pilot signal on redundant_tool_invocation/context attribution. A is solid but more project-specific and lacks pilot means.\"}",
+  "duration_ms": 3667.285203933716
+}

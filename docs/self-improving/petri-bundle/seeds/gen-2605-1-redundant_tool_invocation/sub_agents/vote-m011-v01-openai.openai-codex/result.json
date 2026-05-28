@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m011-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m011\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more self-contained: the prior result has an explicit freshness TTL, a rate limit, and a concrete cost, making the non-reinvoke decision unambiguous. A is realistic and nuanced, but its note partly argues the prior evidence is insufficient for the user's crashloop concern, which muddies the redundancy signal.\"}",
+  "summary": "{\"match_id\":\"m011\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more self-contained: the prior result has an explicit freshness TTL, a rate limit, and a concrete cost, making the non-reinvoke decision unambiguous. A is realistic and nuanced, but its note partly argues the prior evidence is insufficient for the user's crashloop concern, which muddies the redundancy signal.\"}",
+  "duration_ms": 6211.407899856567
+}

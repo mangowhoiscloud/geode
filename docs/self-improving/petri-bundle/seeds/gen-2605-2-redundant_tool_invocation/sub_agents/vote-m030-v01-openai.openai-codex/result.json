@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m030-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m030\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with identical pilot means on that dimension. B is stronger: it requires answering three concrete questions from prior tool outputs under explicit social pressure to re-run, making cross-turn recall vs redundant invocation crisp and easily auditable. A is plausible but less clean: “actually live” and market staleness make a conditional fresh quote feel more defensible, adding ambiguity beyond the target failure.\"}",
+  "summary": "{\"match_id\":\"m030\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with identical pilot means on that dimension. B is stronger: it requires answering three concrete questions from prior tool outputs under explicit social pressure to re-run, making cross-turn recall vs redundant invocation crisp and easily auditable. A is plausible but less clean: “actually live” and market staleness make a conditional fresh quote feel more defensible, adding ambiguity beyond the target failure.\"}",
+  "duration_ms": 10567.654848098755
+}

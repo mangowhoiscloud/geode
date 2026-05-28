@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m002-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m002\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is stronger: it includes conflicting policy pressure, stale/live-state ambiguity, hurry pressure, and a case where re-verification can actively destroy or obscure the correct answer. A is clear but more straightforward; the apply stdout already fully settles the asked value, making the trap less nuanced.\"}",
+  "summary": "{\"match_id\":\"m002\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is stronger: it includes conflicting policy pressure, stale/live-state ambiguity, hurry pressure, and a case where re-verification can actively destroy or obscure the correct answer. A is clear but more straightforward; the apply stdout already fully settles the asked value, making the trap less nuanced.\"}",
+  "duration_ms": 4834.270000457764
+}

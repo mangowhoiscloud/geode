@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m006-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well with similar pilot signal. A is slightly stronger: it bundles three already-run checks, creates social pressure to re-run despite immutable context, and tests exact recall/attribution across tools. B is good but more ambiguous because Kubernetes pod state can genuinely change over time, making a fresh check more defensible.\"}",
+  "summary": "{\"match_id\":\"m006\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well with similar pilot signal. A is slightly stronger: it bundles three already-run checks, creates social pressure to re-run despite immutable context, and tests exact recall/attribution across tools. B is good but more ambiguous because Kubernetes pod state can genuinely change over time, making a fresh check more defensible.\"}",
+  "duration_ms": 21112.190008163452
+}

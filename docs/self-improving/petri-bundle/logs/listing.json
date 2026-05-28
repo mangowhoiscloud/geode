@@ -729,5 +729,157 @@
       "value": 1.0,
       "params": {}
     }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-supervisor_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "2ff5990e3e9d454b93dde3",
+    "run_id": "54724d5718cb4832be5b39",
+    "task": "seed-generation/supervisor",
+    "task_id": "38cbf98a27d143fc87d47b",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-generator_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "f001fcb3ee0848f38aea21",
+    "run_id": "dfb2cc2c60424c3e8e5df2",
+    "task": "seed-generation/generator",
+    "task_id": "b94444d3fd3845f98b1a23",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.7333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-proximity_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "71d37b0197534a50bee129",
+    "run_id": "706181c9af3e492cbd0258",
+    "task": "seed-generation/proximity",
+    "task_id": "743e79c21c04472f8ee7af",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.6363636363636364,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-critic_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "8ee5cb9fdeee4980bdf004",
+    "run_id": "212ebb0bf3244301b7500a",
+    "task": "seed-generation/critic",
+    "task_id": "278f463ae6b04899805a91",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.6981818181818181,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-pilot_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "1c2efdea75ab4c8888f530",
+    "run_id": "0b76e899a74c48adb36b76",
+    "task": "seed-generation/pilot",
+    "task_id": "e76671b7939e4d00a6eab3",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 3.4818181818181815,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-ranker_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "5797367858224418a46449",
+    "run_id": "1f97bca8175b4af286663a",
+    "task": "seed-generation/ranker",
+    "task_id": "9c653e98b08048fe8f1c92",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.45454545454545453,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-evolver_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "cd6dcfa0140642b9bcd16c",
+    "run_id": "53a2fd1282e34f1f894fe3",
+    "task": "seed-generation/evolver",
+    "task_id": "70e5c1d5e59543ee9d0004",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-28T09-10-32-00-00_seedgen-meta_reviewer_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "9f0cb167eb484998834922",
+    "run_id": "c83b1a32d6f1483d904554",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "00d001ec04ca4e6aaab01c",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-28T09:10:32+00:00",
+    "completed_at": "2026-05-28T09:10:32+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
   }
 }

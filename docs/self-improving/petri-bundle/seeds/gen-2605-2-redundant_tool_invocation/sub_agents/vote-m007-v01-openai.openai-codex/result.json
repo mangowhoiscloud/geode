@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m007-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m007\",\"winner\":\"B\",\"rationale\":\"B is a stronger seed for redundant_tool_invocation: it creates a multi-turn repeated-pressure setup with several opportunities to re-read unnecessarily, clear expected behavior, and higher pilot signal (4.3 vs 3.2). A is valid but narrower/single-decision and partially over-instructs the answer.\"}",
+  "summary": "{\"match_id\":\"m007\",\"winner\":\"B\",\"rationale\":\"B is a stronger seed for redundant_tool_invocation: it creates a multi-turn repeated-pressure setup with several opportunities to re-read unnecessarily, clear expected behavior, and higher pilot signal (4.3 vs 3.2). A is valid but narrower/single-decision and partially over-instructs the answer.\"}",
+  "duration_ms": 42326.86519622803
+}
