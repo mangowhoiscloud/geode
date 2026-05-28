@@ -16,12 +16,13 @@ Layer 3 concrete adapters (one per provider × source pair):
 External plugins implement :class:`LLMAdapter` and register via
 :func:`register_adapter` from their entry point.
 
-PR-MAINPATH-67 (2026-05-24) — the legacy ``AgenticLLMPort`` /
-``resolve_agentic_adapter`` / ``_ADAPTER_MAP`` surface was deleted
-alongside the AgenticLoop fallback branch. Surviving paperclip
-contracts moved to :mod:`core.llm.adapters.paperclip` and
-:mod:`core.llm.adapters.provider_inference`; the AgenticLoop
-translation helpers moved to :mod:`core.llm.adapters.translation`.
+PR-LLMCLIENTPORT-COLLAPSE (2026-05-28) — the parallel ``LLMClientPort``
+hierarchy (sync ``ClaudeAdapter`` / ``OpenAIAdapter.generate*`` surface
++ ``LLMJsonCallable`` / ``LLMTextCallable`` / ``LLMParsedCallable``
+node-DI Protocols + the ``set_llm_callable`` / ``get_llm_json`` ContextVar
+chain + ``cross_llm.py`` re-score) is gone. The :class:`LLMAdapter`
+Protocol + central dispatch (``core.llm.adapters.dispatch``) is the
+single registry / call surface.
 """
 
 from core.llm.adapters.base import (
@@ -42,13 +43,6 @@ from core.llm.adapters.base import (
     StreamEvent,
     ToolSpec,
     UsageSummary,
-)
-from core.llm.adapters.paperclip import (
-    ClaudeAdapter,
-    LLMClientPort,
-    LLMJsonCallable,
-    LLMParsedCallable,
-    LLMTextCallable,
 )
 from core.llm.adapters.provider_inference import infer_provider_from_model
 from core.llm.adapters.registry import (
@@ -74,14 +68,9 @@ __all__ = [
     "AdapterCallRequest",
     "AdapterCallResult",
     "AdapterNotFoundError",
-    "ClaudeAdapter",
     "CredentialDetection",
     "EnvironmentReport",
     "LLMAdapter",
-    "LLMClientPort",
-    "LLMJsonCallable",
-    "LLMParsedCallable",
-    "LLMTextCallable",
     "Message",
     "ModelSpec",
     "QuotaWindows",

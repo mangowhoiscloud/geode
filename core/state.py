@@ -56,7 +56,6 @@ class GeodeState(TypedDict, total=False):
     evaluations: Annotated[dict[str, dict[str, Any]], _merge_dicts]
     result: dict[str, Any]
     guardrails: GuardrailResult
-    cross_llm: dict[str, Any]
     dry_run: bool
     verbose: bool
     skip_verification: bool

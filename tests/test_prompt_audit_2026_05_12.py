@@ -143,7 +143,6 @@ def test_math_formatting_instruction_reaches_agentic_system_prompt(
     [
         ("analyst", {"system", "user"}),
         ("commentary", {"system", "user"}),
-        ("cross_llm", {"system", "rescore", "dual_verify"}),
         ("decomposer", {"system"}),
         ("evaluator", {"system", "user"}),
         ("router", {"system", "agentic_suffix"}),

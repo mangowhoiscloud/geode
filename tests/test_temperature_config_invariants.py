@@ -94,10 +94,6 @@ _RATCHET_SITES = (
         "_settings.temperature_reflection",
     ),
     (
-        Path("core/verification/cross_llm.py"),
-        "settings.temperature_verification",
-    ),
-    (
         Path("core/llm/commentary.py"),
         "_settings.temperature_commentary",
     ),

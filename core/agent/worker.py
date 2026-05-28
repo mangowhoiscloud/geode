@@ -813,7 +813,7 @@ def main() -> None:
     # Post-MAINPATH-1 (#1572) the AgenticLoop's main body resolves the LLM
     # call site through Path-B ``core.llm.adapters.registry.resolve_for``.
     # The worker subprocess does not go through
-    # ``core.wiring.container._build_llm_adapters`` (the parent's wiring
+    # ``core.runtime.GeodeRuntime._build_core`` (the parent's wiring
     # bootstrap), so without an explicit ``bootstrap_builtins()`` here
     # the worker's registry is empty and every sub-agent call crashes
     # with ``AdapterNotFoundError: Known pairs: []``. Idempotent — safe

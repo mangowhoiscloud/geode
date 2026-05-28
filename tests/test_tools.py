@@ -203,19 +203,15 @@ class TestToolRegistry:
             _build_notification_handlers,
         )
         from core.runtime import GeodeRuntime
-        from core.wiring.container import build_llm_adapters
 
         calendar_source = inspect.getsource(_build_calendar_handlers)
         notification_source = inspect.getsource(_build_notification_handlers)
         runtime_source = inspect.getsource(GeodeRuntime.get_tool_state_injection)
-        container_source = inspect.getsource(build_llm_adapters)
 
         assert "list_tool.execute(" not in calendar_source
         assert "create_tool.execute(" not in calendar_source
         assert "notification_tool.execute(" not in notification_source
         assert "tool_registry.execute(" not in runtime_source
-        assert "registry.execute(" not in container_source
-        assert "tool_fn" not in container_source
         assert ".aexecute(" in calendar_source
         assert ".aexecute(" in notification_source
         assert ".aexecute(" in runtime_source

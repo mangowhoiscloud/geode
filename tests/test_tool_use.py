@@ -1,7 +1,7 @@
 """Tests for LLM tool-use loop (generate_with_tools).
 
 Tests use mocked API responses to verify multi-turn tool calling
-for both ClaudeAdapter and OpenAIAdapter.
+for the Anthropic dispatch (``call_llm_with_tools_async``) + OpenAIAdapter.
 """
 
 from __future__ import annotations
@@ -130,12 +130,12 @@ class TestToolUseResult:
 
 
 # ---------------------------------------------------------------------------
-# ClaudeAdapter.agenerate_with_tools tests
+# call_llm_with_tools_async (Anthropic path) tests
 # ---------------------------------------------------------------------------
 
 
-class TestClaudeAdapterToolUse:
-    """Tests for ClaudeAdapter tool-use loop.
+class TestAnthropicToolUseDispatch:
+    """Tests for the Anthropic branch of ``call_llm_with_tools_async``.
 
     All tests pass model="claude-opus-4-6" explicitly to ensure Anthropic SDK
     routing regardless of settings.model (which may be set to a non-Anthropic
@@ -149,11 +149,10 @@ class TestClaudeAdapterToolUse:
         mock_client.messages.create.return_value = _make_anthropic_text_response("Hello")
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "system prompt",
                 "user prompt",
                 tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
@@ -174,11 +173,10 @@ class TestClaudeAdapterToolUse:
         mock_client.messages.create.return_value = _make_anthropic_text_response("Hello")
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "system prompt",
                 "user prompt",
                 tools=[{"name": "dummy", "description": "test", "input_schema": {}}],
@@ -201,7 +199,7 @@ class TestClaudeAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
         executor_calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -209,9 +207,8 @@ class TestClaudeAdapterToolUse:
             executor_calls.append((name, kwargs))
             return {"data": "search result"}
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "system",
                 "user",
                 tools=[{"name": "search", "description": "search", "input_schema": {}}],
@@ -237,7 +234,7 @@ class TestClaudeAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
         executor_calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -245,9 +242,8 @@ class TestClaudeAdapterToolUse:
             executor_calls.append((name, kwargs))
             return {"data": "async search result"}
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "system",
                 "user",
                 tools=[{"name": "search", "description": "search", "input_schema": {}}],
@@ -273,14 +269,13 @@ class TestClaudeAdapterToolUse:
         ]
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
         def failing_executor(name: str, **kwargs: Any) -> dict[str, Any]:
             raise RuntimeError("Tool broke")
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "sys",
                 "usr",
                 tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
@@ -303,11 +298,10 @@ class TestClaudeAdapterToolUse:
         ] + [_make_anthropic_text_response("Forced end")]
         mock_get_client.return_value = mock_client
 
-        from core.llm.router import ClaudeAdapter
+        from core.llm.router import call_llm_with_tools_async
 
-        adapter = ClaudeAdapter()
         result = asyncio.run(
-            adapter.agenerate_with_tools(
+            call_llm_with_tools_async(
                 "sys",
                 "usr",
                 tools=[{"name": "dummy_tool", "description": "t", "input_schema": {}}],
