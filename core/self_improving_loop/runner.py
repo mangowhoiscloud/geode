@@ -555,11 +555,32 @@ _MUTATION_CONTRACT_SUFFIX = (
     "selecting ``target_section`` and writing ``new_value``, explicitly state "
     "the judging principle that motivates this mutation — what specific axis "
     "of GEODE behaviour should it move, and why? Output the principle as a "
-    "short string in the ``principle`` field (<= 1000 chars). This is the "
-    "SPCT (DeepSeek-GRM 2026-Q1) frontier — self-generated principles "
-    "anchor self-judge drift and let downstream attribution (PR-3 W2 hook) "
-    "trace causal hypothesis. legacy callers (P3 이전) may omit; empty "
-    "string is graceful.\n"
+    "**CONCISE** string in the ``principle`` field. **STRICT 1000-character "
+    "HARD CAP** enforced by ``parse_mutation``: if exceeded the mutation is "
+    "REJECTED, the cycle's mutator dispatch cost is wasted, and the loop "
+    "advances with no progress. Target length is **300-600 characters** "
+    "(3-5 sentences). Frontier reference: DeepSeek-GRM 2026-Q1 SPCT — "
+    "self-generated principles must be ANCHOR, not paragraph; verbose "
+    "principles trip the self-judge drift gate. Two grounded examples:\n"
+    '  GOOD (487 chars): "Tool calls are costly state queries, not free '
+    "reads: a well-calibrated agent treats prior tool output as "
+    "authoritative within the task scope, batches independent queries in "
+    "parallel, and escalates ambiguity to the user before retrying. This "
+    "principle targets redundant_tool_invocation by tightening the LLM's "
+    "mental model of when re-querying is justified — the tool_log modality "
+    'measures dedup count, so prompt-level dedup discipline is the lever."\n'
+    '  GOOD (391 chars): "redundant_tool_invocation is a tool_log '
+    "measurement: it counts repeated tool calls within an episode. Magnitude "
+    "is mechanically bounded above by max_turns (N turns → at most N-1 "
+    "redundancies possible), so shrinking the turn budget is a direct "
+    "mechanism-level lever, distinct from the prompt-level coaching that "
+    'cycle 11-14 attempted."\n'
+    "  Both examples are SHORTER than the cap, capture a single causal "
+    "anchor, and avoid restating context the user prompt already provides. "
+    "Your principle should be NO LONGER than these examples; restating "
+    "audit history, attribution rows, target_kind table, or "
+    "measurement_modality guidance is FORBIDDEN — those are already "
+    "context. legacy callers (P3 이전) may omit; empty string is graceful.\n"
     "- **Group sampling (P1-revised, 2026-05-25)**: when this invocation is "
     "part of a sibling group (``group_size > 1``), each sibling MUST target a "
     "meaningfully different section or strategy. Repeating the same "
@@ -578,7 +599,9 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_kind": "<one of TARGET_KINDS — see the bullet list above>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
     '  "rollback_condition": "<one-line predicate, or empty>",\n'
-    '  "principle": "<= 1000 chars SPCT principle (P3-revised), or empty>"\n'
+    '  "principle": "concise SPCT principle, target 300-600 chars, HARD '
+    "CAP 1000 chars — see examples in the instruction body; restating "
+    'context = REJECT"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
