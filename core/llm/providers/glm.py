@@ -63,6 +63,7 @@ def _get_glm_client() -> Any:
                 _glm_client = openai.OpenAI(
                     api_key=api_key,
                     base_url=base_url,
+                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
                 )
     return _glm_client
 
@@ -79,6 +80,7 @@ def _get_async_glm_client() -> Any:
                 _async_glm_client = openai.AsyncOpenAI(
                     api_key=api_key,
                     base_url=base_url,
+                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
                 )
     return _async_glm_client
 

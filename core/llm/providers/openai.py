@@ -61,26 +61,39 @@ def _resolve_openai_key() -> str:
 
 
 def _get_openai_client() -> Any:
-    """Lazy import and return cached OpenAI client (thread-safe)."""
+    """Lazy import and return cached OpenAI client (thread-safe).
+
+    PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28, Codex MCP MED) —
+    ``max_retries=0`` matches the adapter-side invariant
+    (``_openai_common.build_async_openai_client``) so legacy callers that
+    still hit this singleton (paperclip ``OpenAIAdapter``,
+    ``llm_extract_learning``, ``models.py``) don't compound SDK + app
+    retry loops on stalled streams.
+    """
     global _openai_client
     if _openai_client is None:
         with _openai_lock:
             if _openai_client is None:
                 import openai
 
-                _openai_client = openai.OpenAI(api_key=_resolve_openai_key())
+                _openai_client = openai.OpenAI(api_key=_resolve_openai_key(), max_retries=0)
     return _openai_client
 
 
 def _get_async_openai_client() -> Any:
-    """Lazy import and return cached async OpenAI client (thread-safe)."""
+    """Lazy import and return cached async OpenAI client (thread-safe).
+
+    See :func:`_get_openai_client` for the ``max_retries=0`` rationale.
+    """
     global _async_openai_client
     if _async_openai_client is None:
         with _async_openai_lock:
             if _async_openai_client is None:
                 import openai
 
-                _async_openai_client = openai.AsyncOpenAI(api_key=_resolve_openai_key())
+                _async_openai_client = openai.AsyncOpenAI(
+                    api_key=_resolve_openai_key(), max_retries=0
+                )
     return _async_openai_client
 
 
