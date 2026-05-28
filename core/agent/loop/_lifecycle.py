@@ -169,6 +169,30 @@ def _final_hook_payloads(
     if new_adapter is not None:
         adapter_type = str(getattr(new_adapter, "name", ""))
 
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — read the per-session adapter
+    # usage counter (populated by dispatch._fire_attempt across the
+    # session's lifetime) and emit it inline. Operators see "this session
+    # routed N calls through codex-oauth (3 success, 1 transient) +
+    # 2 calls through glm-payg (2 success)" without having to parse the
+    # ADAPTER_DISPATCH_ATTEMPT event stream.
+    #
+    # Caveat — captures attempts up to SESSION_ENDED emission. TURN_COMPLETED
+    # hooks (e.g. ``turn_llm_extract`` calling complete_text_via_adapters)
+    # fire AFTER this payload is built, so their dispatch attempts are NOT
+    # in this aggregate. Acceptable: post-turn extraction belongs to
+    # ``turn_complete`` accounting, not session_end. Codex MCP audit
+    # 2026-05-28 — limitation documented.
+    #
+    # Reset to ``None`` after read so any leaked post-finalization
+    # dispatch (background async hook) doesn't mutate a stale counter.
+    from core.llm.adapters.dispatch import (
+        end_session_adapter_tracking,
+        get_session_adapter_usage,
+    )
+
+    adapter_usage = get_session_adapter_usage()
+    end_session_adapter_tracking()
+
     session_ended = {
         "model": loop.model,
         "provider": loop._provider,
@@ -182,6 +206,8 @@ def _final_hook_payloads(
         "component": component,
         "adapter_type": adapter_type,
         "claude_cli_session_id": getattr(loop, "_last_emitted_session_id", ""),
+        # PR-DISPATCH-OBS-EXT (2026-05-28) — per-session aggregate.
+        "adapter_usage": adapter_usage,
     }
     turn_completed = {
         "user_input": user_input,
