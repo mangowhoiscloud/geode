@@ -60,17 +60,28 @@ class CodexOAuthAdapter:
     provider: str = "openai"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
-    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled. The Codex
-    # backend (chatgpt.com/backend-api/codex/responses) exposes the same
-    # Responses API contract as the PAYG endpoint; the openai-python
-    # SDK's ``ToolParam`` union accepts ``{"type": "web_search"}`` /
-    # ``{"type": "web_search_preview"}`` independent of which Responses
-    # endpoint the client targets. Reusing :func:`openai_web_search`
-    # routes the call through the same OAuth token the operator's
-    # ``/login openai`` registered — no PAYG key required, no cross-
-    # source fallback. Pre-PR's conservative ``False`` was the source of
-    # the routing leak that made web_search silently land on glm-payg
-    # when the operator was on Codex OAuth.
+    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled. SDK-contract-
+    # level confirmation: openai-python SDK's ``ToolParam`` Union
+    # (``openai/types/responses/tool_param.py``) accepts
+    # ``{"type": "web_search"}`` independent of which Responses endpoint
+    # the client targets, and the Codex backend
+    # (chatgpt.com/backend-api/codex/responses) accepts the same
+    # ``tools`` array shape per ``codex-rs/codex-api/README.md::POST
+    # /responses``.
+    #
+    # ``unverified — live test required`` (CLAUDE.md §4d, PR-DOC-VERIFY
+    # 2026-05-28): ctx7 of ``/openai/codex`` does NOT document which
+    # ``type`` values the Codex backend actually accepts in the ``tools``
+    # array. The Codex CLI's own internal web search uses a DIFFERENT
+    # tool schema (``web_run`` ext at ``codex-rs/ext/web-search/``,
+    # ``{"search_query": [{"q": "..."}]}``) which suggests the hosted
+    # ``{"type": "web_search"}`` may not be available on the Codex
+    # backend. The strict-dispatch error contract (PR-NO-FALLBACK) is
+    # the operational safety net — if the backend rejects the tool the
+    # operator sees an honest ``AdapterDispatchError`` naming
+    # ``codex-oauth`` rather than a silent GLM fallback — but the True
+    # flag itself awaits a live web_search call confirmation before
+    # this assumption hardens into a stable contract.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)

@@ -48,6 +48,41 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-DOC-VERIFY (2026-05-28)** — workflow: doc-before-behaviour for
+  external SDK / 3rd-party backend capability assumptions. New
+  CANNOT rule (``Quality`` row) + new ``§4d. External-contract
+  attestation`` step in the Verify (Implementation GAP Audit) workflow:
+  any PR that introduces or flips ``supports_X = True`` (or asserts a
+  backend endpoint accepts a particular tools / parameter / model id)
+  must run ``ctx7 library`` + ``ctx7 docs`` first. Three outcomes:
+
+  | ctx7 result | Action |
+  |-------------|--------|
+  | Confirms | Cite the source path in the docstring |
+  | Refutes | Revert + fix the misread |
+  | Ambiguous | Mark ``unverified — live test required`` in docstring, open the live-test gate explicitly |
+
+  Retroactively applied to PR-NO-FALLBACK #1839 —
+  ``codex_oauth.supports_web_search = True`` docstring now carries the
+  ``unverified — live test required`` attestation because ctx7 of
+  ``/openai/codex`` documents the Responses ``tools`` array shape but
+  does NOT enumerate which ``type`` values the Codex backend accepts.
+  The Codex CLI's own internal web search uses a different schema
+  (``codex-rs/ext/web-search/`` ``{"search_query": [...]}``), making
+  the hosted ``{"type": "web_search"}`` acceptance unverified until a
+  live call confirms.
+  ``tests/test_adapter_capability_dispatch.py::test_codex_oauth_adapter_advertises_web_search``
+  pins the docstring attestation presence so it cannot be silently
+  dropped during a future docstring rewrite.
+
+  Operator caught the workflow gap: behaviour verification (serve
+  restart + live web_search trigger) was offered before the doc
+  verification ran. The strict-dispatch error contract from
+  PR-NO-FALLBACK is the operational safety net, but it does not
+  substitute for the gate — a True flag landing in production based on
+  SDK contract inference alone is the exact pattern that creates
+  silent regressions when the backend later changes behaviour.
+
 - **PR-NO-FALLBACK (2026-05-28)** — adapter dispatch is now strict
   single-adapter: the operator's explicit ``/login source`` choice is
   the sole switch. Silent cross-provider / cross-source fallback
