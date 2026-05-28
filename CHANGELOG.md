@@ -47,6 +47,50 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-NO-KEEPALIVE (2026-05-28)** — Codex backend
+  (``chatgpt.com/backend-api/codex/responses``) first-call-after-idle
+  ``APIConnectionError`` eliminated by disabling httpx keep-alive
+  reuse for the Codex OAuth client specifically.
+
+  **Diagnosed via PR-DISPATCH-OBS-EXT observability**:
+  ``adapter_dispatch_attempt`` events in
+  ``~/.geode/runs/subject_gateway_analysis.jsonl`` showed a clean
+  pattern at 2026-05-28 15:44:37 KST (run_id ``f6c51cc5e18d``) — 4
+  parallel ``general_web_search`` calls fired in 4 ms. First call
+  hit ``APIConnectionError`` in **4 ms** (no network roundtrip).
+  Next 3 calls succeeded in 12 / 19 / ~unknown s. Root cause: a
+  previous ``gpt-5.5`` LLM call (8.3 s) had left an idle HTTP/2
+  connection in httpx's keep-alive pool. The Codex backend closes
+  idle connections aggressively (sub-second to a few-second window)
+  without a GOAWAY frame the client can observe in time. The first
+  ``web_search`` reused the now-stale pooled connection → ``httpx
+  .WriteError`` → openai SDK ``APIConnectionError`` instantly.
+  Subsequent calls opened fresh connections and succeeded.
+
+  **Fix**: ``build_async_codex_client`` in ``core/llm/adapters/
+  _openai_common.py`` constructs its own ``httpx.AsyncClient`` with
+  ``httpx.Limits(max_keepalive_connections=0, ...)``. Every Codex
+  call opens a fresh TCP+TLS connection. Costs ~100-300 ms TLS
+  handshake per call but eliminates the stale-connection failure
+  mode entirely. Other OpenAI-family endpoints (api.openai.com
+  PAYG, api.z.ai GLM PAYG, GLM Coding Plan) keep the default
+  ``settings.llm_max_keepalive_connections = 5`` policy via the
+  shared ``_build_async_httpx_client`` helper — they have proper
+  server-side idle timeout policies + GOAWAY signaling.
+
+  **Live verification 2026-05-28 16:00 KST**: 4 parallel
+  ``web_search_via_adapters`` calls through codex-oauth → 4/4
+  ``200 OK`` (7.4 / 7.6 / 10.2 / 41.8 s). No 4 ms ``APIConnection
+  Error``. Each dispatch INFO log line confirms the success
+  outcome.
+
+  Pinned by ``tests/test_codex_no_keepalive.py`` (2 source-level
+  assertions: codex builder body contains ``max_keepalive_connec
+  tions=0``, the default helper still reads
+  ``settings.llm_max_keepalive_connections``, the codex builder
+  does NOT delegate to the default ``_build_async_httpx_client``).
+
 ### Added
 - **PR-DISPATCH-OBS-EXT (2026-05-28)** — four observability
   enhancements layered on PR-NO-FALLBACK's strict-dispatch + per-attempt
