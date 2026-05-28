@@ -117,11 +117,14 @@ class ApplyRecord(BaseModel):
     재구성 가능. group_size=1 (legacy) 일 때 None."""
     group_advantage: float | None = None
     """P1-revised — advantage normalization z-score. group_size=1 일 때 None."""
-    principle: str | None = Field(default=None, max_length=500)
+    principle: str | None = Field(default=None, max_length=1000)
     """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시
     한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
-    None 일 때 legacy (P3 이전 mutation row). max 500 chars (parse_mutation
-    guard)."""
+    None 일 때 legacy (P3 이전 mutation row).
+    PR-SPCT-CAP-1000 (2026-05-28) — cap 500 → 1000. cycle 14/15/16 6
+    attempts 모두 500-805 char 범위로 fail. GEODE 의 mutator context
+    (new baseline + attribution history + 8 target_kind + modality
+    가이드) 부피가 frontier prototype 보다 크므로 cap 2× 완화."""
     causal_hypothesis: str | None = Field(default=None, max_length=500)
     """A.6 (PR-20, 2026-05-25) — Conditional Reward Modeling (CRM, arXiv
     2509.26578) 패턴. mutator 가 mutation 직전 명시한 "dim X 의 Y 효과
@@ -552,7 +555,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     "selecting ``target_section`` and writing ``new_value``, explicitly state "
     "the judging principle that motivates this mutation — what specific axis "
     "of GEODE behaviour should it move, and why? Output the principle as a "
-    "short string in the ``principle`` field (<= 500 chars). This is the "
+    "short string in the ``principle`` field (<= 1000 chars). This is the "
     "SPCT (DeepSeek-GRM 2026-Q1) frontier — self-generated principles "
     "anchor self-judge drift and let downstream attribution (PR-3 W2 hook) "
     "trace causal hypothesis. legacy callers (P3 이전) may omit; empty "
@@ -575,7 +578,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     '  "target_kind": "<one of TARGET_KINDS — see the bullet list above>",\n'
     '  "expected_dim": {"<dim>": 0.0, ...},\n'
     '  "rollback_condition": "<one-line predicate, or empty>",\n'
-    '  "principle": "<= 500 chars SPCT principle (P3-revised), or empty>"\n'
+    '  "principle": "<= 1000 chars SPCT principle (P3-revised), or empty>"\n'
     "}\n"
 )
 """Appended to program.md so the runner can scope it to a single mutation step.
@@ -1027,12 +1030,18 @@ def parse_mutation(raw: str) -> Mutation:
     rollback_raw = payload.get("rollback_condition", "")
     rollback_condition = rollback_raw.strip() if isinstance(rollback_raw, str) else ""
     # P3-revised (2026-05-25, SPCT pattern) — principle 추출. LLM 이 명시
-    # 안 하면 (legacy 또는 mutator omit) 빈 문자열. max 500 chars guard.
+    # 안 하면 (legacy 또는 mutator omit) 빈 문자열.
+    # PR-SPCT-CAP-1000 (2026-05-28) — cap 500 → 1000. cycle 14/15/16 6
+    # attempts 모두 500-805 char (median ~600) 로 fail. GEODE 의 mutator
+    # context 부피 (new baseline + attribution rows + 8 target_kind 표 +
+    # measurement_modality 가이드) 가 풍부해진 만큼 principle 도 자연
+    # 스럽게 길어짐. DeepSeek-GRM 의 "concise" 원칙은 보존하되 GEODE
+    # context 에 맞춰 cap 2× 완화.
     principle_raw = payload.get("principle", "")
     principle = principle_raw.strip() if isinstance(principle_raw, str) else ""
-    if len(principle) > 500:
+    if len(principle) > 1000:
         raise ValueError(
-            f"principle length {len(principle)} exceeds 500 char cap "
+            f"principle length {len(principle)} exceeds 1000 char cap "
             f"(SPCT principle must be concise — frontier reference: "
             f"DeepSeek-GRM)"
         )
