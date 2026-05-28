@@ -165,7 +165,11 @@ def adapters_stats(
                         continue
                     try:
                         d = json.loads(line)
-                    except Exception:  # noqa: S112 — malformed jsonl line, count + skip
+                    except json.JSONDecodeError:
+                        # Malformed jsonl line — count via rows_scanned, skip
+                        # rather than abort the whole window analysis. ruff
+                        # S112 / bandit B112 are satisfied by the narrow
+                        # exception type (not bare ``Exception``).
                         continue
                     if d.get("timestamp", 0) < cutoff:
                         continue
