@@ -1559,7 +1559,7 @@ class AgenticLoop:
                     )
                     self._sync_messages_to_context(messages)
                     result = AgenticResult(
-                        text=_context_exhausted_message(user_input),
+                        text=await _context_exhausted_message(user_input),
                         tool_calls=self._tool_processor.tool_log,
                         rounds=round_idx + 1,
                         error="context_exhausted",
@@ -1624,7 +1624,7 @@ class AgenticLoop:
                 )
                 self._sync_messages_to_context(messages)
                 result = AgenticResult(
-                    text=_context_exhausted_message(user_input),
+                    text=await _context_exhausted_message(user_input),
                     tool_calls=self._tool_processor.tool_log,
                     rounds=round_idx + 1,
                     error="context_exhausted",
@@ -1679,7 +1679,7 @@ class AgenticLoop:
                         )
                         self._sync_messages_to_context(messages)
                         result = AgenticResult(
-                            text=_context_exhausted_message(user_input),
+                            text=await _context_exhausted_message(user_input),
                             tool_calls=self._tool_processor.tool_log,
                             rounds=round_idx + 1,
                             error="context_exhausted",

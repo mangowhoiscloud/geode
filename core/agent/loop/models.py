@@ -33,41 +33,51 @@ _EXHAUSTED_SYSTEM = (
 )
 
 
-def _context_exhausted_message(user_input: str) -> str:
+async def _context_exhausted_message(user_input: str) -> str:
     """Generate context-exhausted message in the user's language via lightweight LLM call.
 
-    Fallback order: Anthropic Haiku (anthropic_api_key) → static
-    ``_EXHAUSTED_FALLBACK`` text. In an OAuth-only environment with no
-    anthropic key, returns the static fallback — graceful, the loop
-    surfaces the static notice to the user. No silent failure.
+    PR-EXTRACT-LEARNING-MODELS-ADAPTER (2026-05-28) — dispatches through
+    :func:`core.llm.adapters.dispatch.complete_text_via_adapters` so a
+    ChatGPT-subscription-only operator (no Anthropic key) finally gets
+    a language-matched notice. The previous direct ``anthropic.Anthropic``
+    instantiation returned the static English fallback for that operator
+    every time, defeating the localisation intent. Provider preference
+    ``("anthropic", "openai", "glm")`` preserves the historic Haiku-
+    first ordering while opening the gpt-5.x + GLM paths.
 
-    TODO (follow-up PR): add a Codex OAuth path so ChatGPT subscription
-    subscription quota can drive the language-matching call. The Codex
-    ``/v1/responses`` streaming request shape lives in
-    ``plugins/petri_audit/codex_provider.py`` and would need to be
-    factored out before reuse here.
+    Returns the static ``_EXHAUSTED_FALLBACK`` on every failure (billing,
+    transient, no-credential) — graceful by design, the loop surfaces
+    SOME message to the user even on a fully-degraded credential surface.
     """
+    from core.config import ANTHROPIC_BUDGET
+    from core.llm.adapters.dispatch import (
+        AdapterDispatchError,
+        complete_text_via_adapters,
+    )
+    from core.llm.errors import BillingError
+
+    # Per-provider model selection (Codex MCP audit 2026-05-28) — Haiku
+    # specifically for Anthropic; OpenAI / GLM fallbacks use their own
+    # cheap defaults so a Codex-subscription-only operator still gets a
+    # localised notice instead of an "Anthropic Haiku" 404 cascade.
     try:
-        import anthropic
-
-        from core.config import ANTHROPIC_BUDGET, settings
-
-        if not settings.anthropic_api_key:
-            return _EXHAUSTED_FALLBACK
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        resp = client.messages.create(
-            model=ANTHROPIC_BUDGET,
-            max_tokens=150,
+        result = await complete_text_via_adapters(
+            user_input[:200],
             system=_EXHAUSTED_SYSTEM,
-            messages=[{"role": "user", "content": user_input[:200]}],
+            max_tokens=150,
+            provider_order=("anthropic", "openai", "glm"),
+            model_by_provider={"anthropic": ANTHROPIC_BUDGET},
         )
-        block = resp.content[0] if resp.content else None
-        text = block.text if block and hasattr(block, "text") else ""
-        return text or _EXHAUSTED_FALLBACK
+    except BillingError:
+        log.debug("Exhausted message: every adapter billing-fatal — static fallback")
+        return _EXHAUSTED_FALLBACK
+    except AdapterDispatchError:
+        log.debug("Exhausted message: no capable adapter — static fallback")
+        return _EXHAUSTED_FALLBACK
     except Exception:
         log.debug("Exhausted message LLM call failed, using fallback", exc_info=True)
         return _EXHAUSTED_FALLBACK
+    return (result.text or "").strip() or _EXHAUSTED_FALLBACK
 
 
 @dataclass

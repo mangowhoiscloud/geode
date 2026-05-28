@@ -197,12 +197,31 @@ async def complete_text_via_adapters(
     model: str = "",
     max_tokens: int = 1024,
     provider_order: tuple[str, ...] = ("anthropic", "openai", "glm"),
+    model_by_provider: dict[str, str] | None = None,
 ) -> TextCompletionResult:
     """Route a single-turn text-completion request through the adapter registry.
 
     Used by conversation compaction + learning extraction — single LLM round-
     trip, no tool use, no streaming. Same billing-fatal vs transient
     distinction as :func:`web_search_via_adapters`.
+
+    Model selection (Codex MCP audit 2026-05-28, PR-EXTRACT-LEARNING-MODELS-
+    ADAPTER) — three layers, most specific first:
+
+    1. ``model_by_provider[adapter.provider]`` — per-provider override; the
+       caller knows which model to ask each provider for (e.g.
+       ``{"glm": "glm-4.7-flash", "anthropic": ANTHROPIC_BUDGET}``).
+    2. ``model`` — single model id; passed to every candidate. Use only
+       when the caller is confident every fallback adapter accepts it
+       (e.g. the model is a no-op string that each adapter ignores).
+    3. ``""`` (empty) — each adapter's ``acomplete_text`` falls back to
+       its own primary (``ANTHROPIC_PRIMARY``, ``OPENAI_PRIMARY``, etc.).
+
+    Without per-provider mapping the fallback chain becomes a foot-gun:
+    passing ``model="glm-4.7-flash"`` to the Anthropic adapter (because GLM
+    failed) makes Anthropic call its API with ``model=glm-4.7-flash`` and
+    fail. Callers should pass ``model_by_provider`` when fallback across
+    providers is intended.
     """
     candidates = _capability_candidates("supports_text_completion", provider_order=provider_order)
     if not candidates:
@@ -211,10 +230,12 @@ async def complete_text_via_adapters(
         )
     last_billing: BillingError | None = None
     last_other: Exception | None = None
+    overrides = model_by_provider or {}
     for adapter in candidates:
+        chosen_model = overrides.get(adapter.provider, model)
         try:
             text_result: TextCompletionResult = await adapter.acomplete_text(
-                prompt, system=system, model=model, max_tokens=max_tokens
+                prompt, system=system, model=chosen_model, max_tokens=max_tokens
             )
             log.debug("complete_text_via_adapters: success via %s", adapter.name)
             return text_result
