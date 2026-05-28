@@ -134,6 +134,7 @@ def _get_codex_client() -> Any:
                     api_key=token,
                     base_url=CODEX_BASE_URL,
                     default_headers=build_codex_oauth_headers(token),
+                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
                 )
     return _codex_client
 
@@ -162,6 +163,7 @@ def _get_async_codex_client() -> Any:
                     api_key=token,
                     base_url=CODEX_BASE_URL,
                     default_headers=build_codex_oauth_headers(token),
+                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
                 )
     return _async_codex_client
 

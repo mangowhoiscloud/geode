@@ -123,10 +123,19 @@ class WebFetchTool:
 
 
 class GeneralWebSearchTool:
-    """Search the web via 3-provider native web search fallback chain.
+    """Search the web via the adapter registry's WebSearchCapable chain.
 
-    Priority: Anthropic (Opus) → OpenAI (gpt-5.4) → GLM (glm-5).
-    Each provider uses its native web search tool — no external API keys needed.
+    PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — replaces the legacy
+    "instantiate Anthropic/OpenAI/GLM clients with PAYG keys" trio that
+    bypassed the adapter registry and PR-SOURCE-ROUTING's
+    :func:`infer_source` flow. The tool now delegates to
+    :func:`core.llm.adapters.dispatch.web_search_via_adapters`, which
+    enumerates registered adapters with ``supports_web_search=True`` and
+    orders them by (provider preference) × (operator's source preference
+    via :func:`infer_source`) — so the same ``/login`` choice that switches
+    the agent loop's main LLM dispatch now also switches the web_search
+    tool. Billing-fatal failures surface as :class:`BillingError` with the
+    actionable hint instead of six silent retries.
     """
 
     @property
@@ -141,174 +150,48 @@ class GeneralWebSearchTool:
             f"Today is {today.isoformat()} (year {today.year})."
         )
 
-    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
-
-        # 1. Anthropic (primary)
-        result = self._anthropic_search(query, max_results)
-        if result:
-            return result
-
-        # 2. OpenAI Responses API (fallback 1)
-        result = self._openai_search(query, max_results)
-        if result:
-            return result
-
-        # 3. GLM native web_search (fallback 2)
-        result = self._glm_search(query, max_results)
-        if result:
-            return result
-
+        from core.llm.adapters.dispatch import (
+            AdapterDispatchError,
+            web_search_via_adapters,
+        )
+        from core.llm.errors import BillingError
         from core.tools.base import tool_error
 
-        return tool_error(
-            "All web search providers failed",
-            error_type="connection",
-            recoverable=True,
-            hint="Retry or rephrase the query.",
-            context={"query": query},
-        )
-
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        """Run provider web-search clients off the event loop."""
-        return await asyncio.to_thread(self._execute_sync, **kwargs)
-
-    def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        """Anthropic native web search via Messages API."""
         try:
-            from core.config import ANTHROPIC_PRIMARY, settings
-            from core.llm.router import get_anthropic_client
-
-            if not settings.anthropic_api_key:
-                return None
-
-            today = date.today()
-            client = get_anthropic_client()
-            response = client.messages.create(
-                model=ANTHROPIC_PRIMARY,
-                max_tokens=1024,
-                tools=[{"type": "web_search_20260209", "name": "web_search"}],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Today is {today.isoformat()}. "
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=60.0,
-            )
-            text_parts: list[str] = []
-            source_urls: list[str] = []
-            for block in response.content:
-                if hasattr(block, "text"):
-                    text_parts.append(block.text)
-                if getattr(block, "type", "") == "web_search_tool_result":
-                    for entry in getattr(block, "content", []):
-                        url = getattr(entry, "url", None)
-                        if url:
-                            source_urls.append(url)
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "anthropic_web_search",
-                    "source_urls": source_urls,
-                }
-            }
-        except Exception as exc:
-            log.debug("Anthropic web search failed: %s", exc)
-            return None
-
-    def _openai_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        """OpenAI native web search via Responses API.
-
-        Uses settings.openai_api_key directly (not ProfileRotator) because
-        Codex CLI OAuth tokens lack web_search permission → 401.
-        """
-        try:
-            import openai
-
-            from core.config import OPENAI_PRIMARY, settings
-
-            if not settings.openai_api_key:
-                return None
-
-            today = date.today()
-            client = openai.OpenAI(api_key=settings.openai_api_key)
-            response = client.responses.create(
-                model=OPENAI_PRIMARY,
-                tools=[{"type": "web_search"}],
-                input=(
-                    f"Today is {today.isoformat()}. "
-                    f"Search the web for: {query}. "
-                    f"Return up to {max_results} relevant results "
-                    "with titles, URLs, and brief summaries."
+            result = await web_search_via_adapters(query, max_results=max_results)
+        except BillingError as exc:
+            return tool_error(
+                f"web_search: provider quota exhausted ({exc.provider or 'all configured'}). "
+                f"Add credits or run /login source <provider> to switch credential type.",
+                error_type="permission",
+                recoverable=False,
+                hint=(
+                    "Top up at console.anthropic.com / platform.openai.com / z.ai, or "
+                    "register a subscription via /login openai (ChatGPT) / claude /login."
                 ),
+                context={"query": query, "provider": exc.provider},
             )
-            text_parts: list[str] = []
-            for item in response.output:
-                if getattr(item, "type", "") == "message":
-                    for sub in getattr(item, "content", []):
-                        if getattr(sub, "type", "") == "output_text":
-                            text = getattr(sub, "text", "")
-                            if text:
-                                text_parts.append(text)
-            if not text_parts:
-                return None
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "openai_web_search",
-                }
+        except AdapterDispatchError as exc:
+            return tool_error(
+                str(exc),
+                error_type="connection",
+                recoverable=True,
+                hint="Retry, rephrase the query, or check adapter availability via /adapters.",
+                context={"query": query},
+            )
+        return {
+            "result": {
+                "query": result.query,
+                "search_results": result.text,
+                "source": result.adapter_name,
+                "source_urls": list(result.source_urls),
             }
-        except Exception as exc:
-            log.debug("OpenAI web search failed: %s", exc)
-            return None
+        }
 
-    def _glm_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        """GLM native web search via Chat Completions API."""
-        try:
-            from core.config import GLM_BASE_URL, GLM_PRIMARY, settings
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        from core.async_runtime import run_process_coroutine
 
-            if not settings.zai_api_key:
-                return None
-
-            import openai
-
-            client = openai.OpenAI(api_key=settings.zai_api_key, base_url=GLM_BASE_URL)
-            today = date.today()
-            response = client.chat.completions.create(
-                model=GLM_PRIMARY,
-                tools=[{"type": "web_search", "web_search": {"enable": True}}],  # type: ignore[list-item]  # GLM native tool
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Today is {today.isoformat()}. "
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=60.0,
-            )
-            choice = response.choices[0] if response.choices else None
-            if choice and choice.message.content:
-                return {
-                    "result": {
-                        "query": query,
-                        "search_results": choice.message.content,
-                        "source": "glm_web_search",
-                    }
-                }
-            return None
-        except Exception as exc:
-            log.debug("GLM web search failed: %s", exc)
-            return None
+        return run_process_coroutine(self.aexecute(**kwargs))

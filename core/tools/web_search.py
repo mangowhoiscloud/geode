@@ -1,15 +1,22 @@
-"""Generic web search tool — Anthropic / OpenAI / GLM 3-provider fallback.
+"""WebSearchTool — signal-flavoured web search tool (``web_search`` name).
 
-Domain-agnostic: any plugin can register this tool.
+PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — formerly carried its own
+3-provider direct-SDK fallback chain identical to ``GeneralWebSearchTool``.
+Now both tools delegate to :func:`core.llm.adapters.dispatch.web_search_via_adapters`
+so the operator's ``/login`` credential-source choice drives PAYG ↔
+Subscription switching uniformly.
+
+The only meaningful difference between this tool and
+``GeneralWebSearchTool`` is the description (signal-pipeline framing vs
+general-purpose) and the registered tool name (``web_search`` vs
+``general_web_search``). Both are kept until callers consolidate on one
+name.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
-
-from core.config import ANTHROPIC_PRIMARY
 
 log = logging.getLogger(__name__)
 
@@ -32,11 +39,7 @@ _WEB_SEARCH_PARAMETERS: dict[str, Any] = {
 
 
 class WebSearchTool:
-    """Tool for real-time web search via 3-provider native fallback.
-
-    Priority: Anthropic (Opus) → OpenAI (gpt-5.4) → GLM (glm-5).
-    Falls back to stub data when all providers are unavailable.
-    """
+    """Signal-flavoured web search tool — uses the adapter registry chain."""
 
     @property
     def name(self) -> str:
@@ -54,150 +57,50 @@ class WebSearchTool:
     def parameters(self) -> dict[str, Any]:
         return _WEB_SEARCH_PARAMETERS
 
-    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
         query: str = kwargs["query"]
         max_results: int = kwargs.get("max_results", 5)
+        from core.llm.adapters.dispatch import (
+            AdapterDispatchError,
+            web_search_via_adapters,
+        )
+        from core.llm.errors import BillingError
+        from core.tools.base import tool_error
 
-        result = self._anthropic_search(query, max_results)
-        if result:
-            return result
-
-        result = self._openai_search(query, max_results)
-        if result:
-            return result
-
-        result = self._glm_search(query, max_results)
-        if result:
-            return result
-
-        return self._stub_result(query, "all_providers_failed")
-
-    async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
-        """Run provider web-search clients off the event loop."""
-        return await asyncio.to_thread(self._execute_sync, **kwargs)
-
-    def _anthropic_search(self, query: str, max_results: int) -> dict[str, Any] | None:
         try:
-            from core.config import settings
-            from core.llm.router import get_anthropic_client
-
-            if not settings.anthropic_api_key:
-                return None
-            client = get_anthropic_client()
-            response = client.messages.create(
-                model=ANTHROPIC_PRIMARY,
-                max_tokens=1024,
-                tools=[{"type": "web_search_20260209", "name": "web_search"}],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=30.0,
-            )
-            text_parts: list[str] = []
-            for block in response.content:
-                if hasattr(block, "text"):
-                    text_parts.append(block.text)
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "anthropic_web_search",
-                }
-            }
-        except Exception:
-            log.debug("Anthropic web search failed for signal tool", exc_info=True)
-            return None
-
-    def _openai_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        try:
-            from core.config import OPENAI_PRIMARY, settings
-            from core.llm.providers.openai import _get_openai_client
-
-            if not settings.openai_api_key:
-                return None
-            client = _get_openai_client()
-            response = client.responses.create(
-                model=OPENAI_PRIMARY,
-                tools=[{"type": "web_search"}],
-                input=(
-                    f"Search the web for: {query}. "
-                    f"Return up to {max_results} relevant results "
-                    "with titles, URLs, and brief summaries."
+            result = await web_search_via_adapters(query, max_results=max_results)
+        except BillingError as exc:
+            return tool_error(
+                f"web_search: provider quota exhausted ({exc.provider or 'all configured'}).",
+                error_type="permission",
+                recoverable=False,
+                hint=(
+                    "Top up at console.anthropic.com / platform.openai.com / z.ai, or "
+                    "register a subscription via /login openai (ChatGPT) / claude /login."
                 ),
+                context={"query": query, "provider": exc.provider},
             )
-            text_parts: list[str] = []
-            for item in response.output:
-                if getattr(item, "type", "") == "message":
-                    for sub in getattr(item, "content", []):
-                        if getattr(sub, "type", "") == "output_text":
-                            text = getattr(sub, "text", "")
-                            if text:
-                                text_parts.append(text)
-            if not text_parts:
-                return None
-            return {
-                "result": {
-                    "query": query,
-                    "search_results": "\n".join(text_parts),
-                    "source": "openai_web_search",
-                }
-            }
-        except Exception:
-            log.debug("OpenAI web search failed for signal tool", exc_info=True)
-            return None
-
-    def _glm_search(self, query: str, max_results: int) -> dict[str, Any] | None:
-        try:
-            from core.config import GLM_BASE_URL, GLM_PRIMARY, settings
-
-            if not settings.zai_api_key:
-                return None
-            import openai
-
-            client = openai.OpenAI(api_key=settings.zai_api_key, base_url=GLM_BASE_URL)
-            response = client.chat.completions.create(
-                model=GLM_PRIMARY,
-                tools=[{"type": "web_search", "web_search": {"enable": True}}],  # type: ignore[list-item]  # GLM native tool
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Search the web for: {query}. "
-                            f"Return up to {max_results} relevant results "
-                            "with titles, URLs, and brief summaries."
-                        ),
-                    }
-                ],
-                timeout=30.0,
+        except AdapterDispatchError as exc:
+            return tool_error(
+                str(exc),
+                error_type="connection",
+                recoverable=True,
+                hint="Retry, rephrase the query, or check adapter availability.",
+                context={"query": query},
             )
-            choice = response.choices[0] if response.choices else None
-            if choice and choice.message.content:
-                return {
-                    "result": {
-                        "query": query,
-                        "search_results": choice.message.content,
-                        "source": "glm_web_search",
-                    }
-                }
-            return None
-        except Exception:
-            log.debug("GLM web search failed for signal tool", exc_info=True)
-            return None
-
-    @staticmethod
-    def _stub_result(query: str, reason: str) -> dict[str, Any]:
         return {
             "result": {
-                "query": query,
-                "search_results": f"Web search unavailable ({reason}). "
-                "Use fixture data or retry later.",
-                "source": "web_search_stub",
+                "query": result.query,
+                "search_results": result.text,
+                "source": result.adapter_name,
+                "source_urls": list(result.source_urls),
             }
         }
+
+    def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
+        from core.async_runtime import run_process_coroutine
+
+        return run_process_coroutine(self.aexecute(**kwargs))
+
+
+__all__ = ["WebSearchTool"]

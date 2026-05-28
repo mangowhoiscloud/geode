@@ -36,6 +36,8 @@ from core.llm.adapters.base import (
     ModelSpec,
     QuotaWindows,
     StreamEvent,
+    TextCompletionResult,
+    WebSearchResult,
 )
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
@@ -50,6 +52,11 @@ class OpenAIPaygAdapter:
     provider: str = "openai"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
+    # PR-ADAPTER-PATTERN-UNIFICATION — Responses API web_search hosted tool
+    # works on the PAYG endpoint. The Codex backend subscription endpoint
+    # does not advertise web_search support (frontier audit 2026-05-28).
+    supports_web_search: bool = True
+    supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
@@ -107,6 +114,46 @@ class OpenAIPaygAdapter:
         if req.stop_sequences:
             kwargs["stop"] = list(req.stop_sequences)
         return kwargs
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        from core.config import OPENAI_PRIMARY
+        from core.llm.adapters._capability_impls import openai_web_search
+
+        return await openai_web_search(
+            self._get_client(),
+            query=query,
+            max_results=max_results,
+            model=OPENAI_PRIMARY,
+            adapter_name=self.name,
+        )
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult:
+        """Single-turn text completion via the OpenAI Responses API.
+
+        Responses is the forward-going surface
+        (per developers.openai.com/api/docs) and the same API the Codex
+        backend speaks — sharing it here keeps the per-provider request
+        shape uniform with the agent loop's main ``acomplete`` path.
+        Chat Completions stays only on GLM adapters where z.ai's
+        OpenAI-compatibility surface lacks Responses support.
+        """
+        from core.config import OPENAI_PRIMARY
+        from core.llm.adapters._capability_impls import openai_responses_complete_text
+
+        return await openai_responses_complete_text(
+            self._get_client(),
+            prompt=prompt,
+            system=system,
+            model=model or OPENAI_PRIMARY,
+            max_tokens=max_tokens,
+        )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
