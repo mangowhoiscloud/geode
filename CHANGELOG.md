@@ -47,6 +47,30 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.81] - 2026-05-28
+
+> MINOR release. Eight-PR sprint focused on adapter-layer correctness
+> + observability:
+>
+> - **PR-EXTRACT-LEARNING-MODELS-ADAPTER** (#1836) — last HIGH-traffic
+>   direct-SDK sites migrated to capability dispatch
+> - **PR-LLMCLIENTPORT-COLLAPSE** (#1837) — -1422 LoC dead parallel
+>   adapter hierarchy removed
+> - **PR-TOOL-EXEC-CONTEXT** (#1838) — AgenticLoop adapter routing
+>   propagates into tool dispatch
+> - **PR-NO-FALLBACK** (#1839) — strict single-adapter dispatch;
+>   silent cross-provider / cross-source fallback disabled
+> - **PR-DOC-VERIFY** (#1840) — workflow §4d: doc-before-behaviour
+>   gate for external SDK / 3rd-party backend capability assumptions
+> - **PR-CODEX-INSTRUCTIONS-FIX** (#1841) — codex-oauth web_search
+>   verified live (instructions mandatory + input typed-item list)
+> - **PR-DISPATCH-OBS-EXT** (#1842) — tool-result adapter inline +
+>   serve.log restored + ``geode adapters stats`` CLI +
+>   per-session adapter usage
+> - **PR-CODEX-NO-KEEPALIVE** (#1843) — Codex backend httpx
+>   keep-alive disabled; first-call-after-idle ``APIConnectionError``
+>   (4 ms stale-connection failure) eliminated
+
 ### Fixed
 - **PR-CODEX-NO-KEEPALIVE (2026-05-28)** — Codex backend
   (``chatgpt.com/backend-api/codex/responses``) first-call-after-idle
