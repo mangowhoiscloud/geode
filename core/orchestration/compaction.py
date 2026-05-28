@@ -335,8 +335,7 @@ async def _call_summarize(conversation_text: str, provider: str, model: str) -> 
         return None
     except AdapterDispatchError:
         log.warning(
-            "Compaction summarization: single attempt transient failure "
-            "(provider=%s model=%s)",
+            "Compaction summarization: single attempt transient failure (provider=%s model=%s)",
             provider,
             model,
         )
