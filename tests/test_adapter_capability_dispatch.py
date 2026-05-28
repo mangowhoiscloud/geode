@@ -164,14 +164,14 @@ def test_codex_oauth_adapter_advertises_web_search() -> None:
     conservative ``False`` was the root cause of the routing leak that
     landed web_search on ``glm-payg`` for Codex-OAuth operators.
 
-    PR-DOC-VERIFY (2026-05-28) — pins the ``unverified — live test
-    required`` attestation per CLAUDE.md §4d. The Codex backend's actual
-    acceptance of ``{"type": "web_search"}`` is undocumented in ctx7
-    (``/openai/codex`` enumerates the request shape but not valid tool
-    types; the Codex CLI's internal web search uses a different schema).
-    Behavioural confirmation requires a live call; this test pins the
-    docstring attestation so the assumption cannot harden into stable
-    contract through a silent docstring rewrite."""
+    PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — flipped the docstring
+    attestation from ``unverified — live test required`` to **verified
+    live** after the Codex backend returned 200 OK with real web search
+    results. Two backend-specific constraints (``instructions`` mandatory,
+    ``input`` typed-item list) the live test discovered are now enforced
+    in :meth:`aweb_search`. This test pins the verified attestation
+    string presence so a future silent docstring rewrite cannot drop
+    the evidence trail."""
     import inspect
 
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter
@@ -184,12 +184,12 @@ def test_codex_oauth_adapter_advertises_web_search() -> None:
         "method-missing adapters with a warning."
     )
     src = inspect.getsource(CodexOAuthAdapter)
-    assert "unverified — live test required" in src, (
+    assert "verified live" in src, (
         "CodexOAuthAdapter.supports_web_search=True must carry the "
-        "``unverified — live test required`` attestation per CLAUDE.md §4d "
-        "(doc-before-behaviour). The flag was flipped True based on SDK "
-        "contract alone; Codex backend acceptance of the hosted web_search "
-        "tool is undocumented in ctx7 and requires live confirmation."
+        "``verified live`` attestation per CLAUDE.md §4d (doc-before-"
+        "behaviour). PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) flipped the "
+        "docstring from ``unverified`` after the Codex backend returned "
+        "200 OK with real web search results."
     )
 
 

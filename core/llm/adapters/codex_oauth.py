@@ -60,28 +60,29 @@ class CodexOAuthAdapter:
     provider: str = "openai"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
-    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled. SDK-contract-
-    # level confirmation: openai-python SDK's ``ToolParam`` Union
-    # (``openai/types/responses/tool_param.py``) accepts
-    # ``{"type": "web_search"}`` independent of which Responses endpoint
-    # the client targets, and the Codex backend
-    # (chatgpt.com/backend-api/codex/responses) accepts the same
-    # ``tools`` array shape per ``codex-rs/codex-api/README.md::POST
-    # /responses``.
+    # PR-NO-FALLBACK (2026-05-28) — web_search re-enabled.
+    # PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — **verified live**: the
+    # Codex backend (``chatgpt.com/backend-api/codex/responses``) returns
+    # 200 OK to ``{"type": "web_search"}`` with real web search results
+    # (OpenAI help-center URLs etc.), confirmed via direct adapter call
+    # at 2026-05-28 14:50 KST (11.2s response). The live test revealed
+    # two backend-specific constraints that PAYG Responses API does NOT
+    # enforce — both now enforced in :meth:`aweb_search`:
     #
-    # ``unverified — live test required`` (CLAUDE.md §4d, PR-DOC-VERIFY
-    # 2026-05-28): ctx7 of ``/openai/codex`` does NOT document which
-    # ``type`` values the Codex backend actually accepts in the ``tools``
-    # array. The Codex CLI's own internal web search uses a DIFFERENT
-    # tool schema (``web_run`` ext at ``codex-rs/ext/web-search/``,
-    # ``{"search_query": [{"q": "..."}]}``) which suggests the hosted
-    # ``{"type": "web_search"}`` may not be available on the Codex
-    # backend. The strict-dispatch error contract (PR-NO-FALLBACK) is
-    # the operational safety net — if the backend rejects the tool the
-    # operator sees an honest ``AdapterDispatchError`` naming
-    # ``codex-oauth`` rather than a silent GLM fallback — but the True
-    # flag itself awaits a live web_search call confirmation before
-    # this assumption hardens into a stable contract.
+    #   1. ``instructions`` field mandatory — Codex backend returns 400
+    #      ``Instructions are required`` without it (PAYG treats it as
+    #      optional).
+    #   2. ``input`` must be a typed-item list, not a plain string —
+    #      Codex backend returns 400 ``Input must be a list`` for the
+    #      string form (PAYG accepts both shapes).
+    #
+    # SDK-contract evidence (workflow §4d doc-attestation): openai-python
+    # ``ToolParam`` Union (``openai/types/responses/tool_param.py``)
+    # accepts ``{"type": "web_search"}``; Codex CLI Responses endpoint
+    # accepts ``tools: array`` per ``codex-rs/codex-api/README.md::POST
+    # /responses``. SDK contract was the necessary upstream check; the
+    # two 400 responses + 200 OK after fixing proved the backend
+    # actually exposes the tool.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
@@ -246,12 +247,33 @@ class CodexOAuthAdapter:
         client = self._get_client()
         text_parts: list[str] = []
         source_urls: list[str] = []
+        # PR-CODEX-INSTRUCTIONS-FIX (2026-05-28) — live test progression:
+        #
+        # 1st attempt (PR-NO-FALLBACK initial) → 400 ``Instructions are
+        #    required``. Codex backend enforces ``instructions`` field
+        #    mandatory on every Responses request (mirrors :meth:`acomplete`
+        #    which threads the loop's system prompt into it).
+        # 2nd attempt (instructions added as string ``input``) → 400
+        #    ``Input must be a list``. Codex backend ALSO requires
+        #    ``input`` to be a typed-item array, same as :meth:`acomplete`
+        #    via :func:`build_codex_input`. The standard Responses API
+        #    accepts a plain string; Codex backend tightens the contract.
+        #
+        # Final shape — single user message wrapped in the typed-item array
+        # the backend expects (``{"role": "user", "content": "..."}`` is a
+        # valid entry per ``_convert_user_msg_to_responses``).
+        user_prompt = (
+            f"Search the web for: {query}. Return up to {max_results} relevant "
+            "results with titles, URLs, and brief summaries."
+        )
         kwargs = {
             "model": CODEX_PRIMARY,
-            "input": (
-                f"Search the web for: {query}. Return up to {max_results} relevant "
-                "results with titles, URLs, and brief summaries."
+            "instructions": (
+                "Use the web_search tool to find current information. "
+                "Return up to the requested number of relevant results with "
+                "titles, URLs, and brief summaries."
             ),
+            "input": [{"role": "user", "content": user_prompt}],
             "tools": [{"type": "web_search"}],
             "store": False,
         }

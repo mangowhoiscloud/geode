@@ -47,6 +47,39 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-INSTRUCTIONS-FIX (2026-05-28)** — codex-oauth
+  ``aweb_search`` now satisfies two Codex-backend-specific call-shape
+  constraints discovered via PR-DOC-VERIFY's mandatory live test gate.
+  The PR-NO-FALLBACK initial impl reused the PAYG call shape, which
+  the Codex backend rejected with sequential 400s:
+
+  1. 1st live call → ``400 {'detail': 'Instructions are required'}``.
+     PAYG Responses API treats ``instructions`` as optional; Codex
+     backend enforces it as mandatory on every request (same constraint
+     :meth:`acomplete` already honours).
+  2. 2nd live call (after adding ``instructions``) → ``400 {'detail':
+     'Input must be a list'}``. PAYG accepts ``input`` as a plain
+     string OR typed-item array; Codex backend requires the typed-item
+     list shape (same constraint :meth:`acomplete` already honours via
+     :func:`build_codex_input`).
+  3. 3rd live call (after both fixes) → **200 OK** with real web
+     search results (OpenAI help-center URLs etc.), 11.2s response.
+
+  The docstring attestation flips from ``unverified — live test
+  required`` (PR-DOC-VERIFY) to ``verified live`` with the live-call
+  evidence cited. ``test_codex_oauth_adapter_advertises_web_search``
+  updated to pin the new ``verified live`` string so a future silent
+  docstring rewrite cannot strip the evidence trail.
+
+  **Demonstrates the value of CLAUDE.md §4d (doc-before-behaviour) +
+  PR-NO-FALLBACK's honest dispatch errors working together**: ctx7 was
+  ambiguous on backend acceptance → docstring marked ``unverified`` →
+  live test surfaced the actual constraints one at a time (each as a
+  clean ``AdapterDispatchError`` from the dispatch layer with the 400
+  body) → both fixed in a single follow-up PR → docstring flipped to
+  ``verified live`` with evidence.
+
 ### Changed
 - **PR-DOC-VERIFY (2026-05-28)** — workflow: doc-before-behaviour for
   external SDK / 3rd-party backend capability assumptions. New
