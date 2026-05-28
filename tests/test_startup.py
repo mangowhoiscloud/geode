@@ -554,9 +554,13 @@ class TestGlmClient:
             from core.llm.providers.glm import _get_glm_client
 
             _get_glm_client()
+            # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — singleton
+            # builder now pins ``max_retries=0`` so SDK retry does not
+            # compound with GEODE app retry.
             mock_openai_mod.OpenAI.assert_called_once_with(
                 api_key="test-key",
                 base_url=GLM_BASE_URL,
+                max_retries=0,
             )
 
 
