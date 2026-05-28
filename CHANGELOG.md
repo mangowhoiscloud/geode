@@ -47,6 +47,58 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-CODEX-STOP-REASON-TOOL-USE (2026-05-28)** — the Codex backend at
+  ``chatgpt.com/backend-api/codex`` returns ``status="completed"`` for
+  EVERY successful response, regardless of whether the model emitted
+  ``function_call`` items. The v0.99.39+ adapter bridge
+  ``core/llm/adapters/translation.py:_translate_stop_reason`` only
+  looked at the provider string, so ``"completed"`` mapped to
+  ``"end_turn"``. The agent loop then terminated the turn (treating
+  the response as text-only), appended the assistant message with
+  ``tool_use`` blocks BUT skipped tool execution, and the next turn's
+  input carried a ``function_call`` with no matching
+  ``function_call_output``. The Codex backend rejected with
+  ``"No tool output found for function call call_XXXX"`` 400.
+
+  Symptom from the operator's serve log (2026-05-28 08:51:54): turn 2's
+  first LLM call returned 225 output tokens including 2
+  ``function_call`` items, the next LLM call fired 1 ms later (no tool
+  execution time), and ``_log_codex_input_shape`` (backfilled in
+  PR-LEGACY-PROVIDER-REMOVAL) surfaced the missing
+  ``function_call_output`` items at WARN. The legacy
+  ``core/llm/agentic_response.py:normalize_openai_responses`` (used by
+  the deleted ``CodexAgenticAdapter``) had derived ``stop_reason`` from
+  ``has_function_calls`` for exactly this reason; the adapter
+  migration dropped that gate.
+
+  Fix elevates ``has_tool_uses`` (content) to the sole authority over
+  ``stop_reason`` derivation — the provider string never wins on its
+  own. Mirror anti-pattern (provider says ``"tool_use"`` /
+  ``"tool_calls"`` but the adapter forgot to populate ``tool_uses``)
+  also terminates with ``"end_turn"`` plus a WARN flagging the likely
+  extraction bug — preventing the agent loop spin that would have no
+  tool to execute. Frontier-pattern alignment verified against
+  paperclip ``codex-local/src/ui/parse-stdout.ts:194`` + hermes
+  ``agent/codex_responses_adapter.py:1034`` — both derive the terminal
+  flag from the actual presence of tool/function-call items.
+
+  Pinned by ``tests/test_codex_stop_reason_tool_use.py`` (10
+  assertions: Codex / Anthropic / OpenAI Chat / unknown strings ×
+  tool_uses on/off contract cases, mirror-anti-pattern WARN trigger,
+  2 end-to-end through ``agentic_response_from_adapter_result``).
+
+  The B/C sibling sites identified in the 2026-05-28 anti-pattern
+  audit — ``core/llm/adapters/codex_cli.py:124`` (subprocess wraps a
+  CLI agent that handles its own tool execution; emits
+  ``tool_uses=()``) and ``core/llm/adapters/claude_cli.py:241``
+  (``_extract_stop_reason`` may return ``"tool_calls"`` on a
+  petri-audit ``--max-turns 1`` boundary while ``tool_uses=()``) — are
+  implicitly covered by the new strict gate: both flow through this
+  single bridge and the content-first rule keeps them on
+  ``"end_turn"``. No per-adapter patch needed (defence in depth
+  centralised in one place).
+
 ## [0.99.78] - 2026-05-28
 
 > PATCH release. Cleans up the v0.99.39 LLMAdapter sprint's
