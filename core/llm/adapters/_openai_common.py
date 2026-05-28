@@ -217,9 +217,20 @@ def build_async_openai_client(api_key: str, *, base_url: str | None = None) -> o
         raise ValueError("build_async_openai_client: api_key is empty")
     import openai
 
+    _ensure_sdk_observability_installed()
+    http_client = _build_async_httpx_client()
+    # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28, Codex MCP BLOCKER) —
+    # ``max_retries=0`` disables the SDK-internal retry loop. Without this,
+    # SDK retry x app retry compounds: 300s read-timeout * 2 SDK attempts +
+    # GEODE's own ``_LLM_RETRY_CAP`` retries = 10+ minute spin under stall.
+    # Anthropic adapter applies the same invariant
+    # (``_anthropic_common.py:60``). Single source of retry truth =
+    # AgenticLoop's ``_call_llm`` retry path.
     if base_url:
-        return openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
-    return openai.AsyncOpenAI(api_key=api_key)
+        return openai.AsyncOpenAI(
+            api_key=api_key, base_url=base_url, http_client=http_client, max_retries=0
+        )
+    return openai.AsyncOpenAI(api_key=api_key, http_client=http_client, max_retries=0)
 
 
 def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
@@ -243,11 +254,60 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     # workaround before the first Codex backend call. Idempotent across
     # process lifetime; only patches when the openai SDK is importable.
     _install_codex_workaround()
+    _ensure_sdk_observability_installed()
 
     return openai.AsyncOpenAI(
         api_key=api_key,
         base_url=CODEX_BASE_URL,
         default_headers=build_codex_oauth_headers(api_key),
+        http_client=_build_async_httpx_client(),
+        # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION — see ``build_async_openai_client``
+        # for the retry-compound rationale (Codex MCP BLOCKER 2026-05-28).
+        max_retries=0,
+    )
+
+
+def _ensure_sdk_observability_installed() -> None:
+    """Install the SDK retry → UI bridge once. Safe to call repeatedly."""
+    from core.llm.adapters._sdk_retry_visibility import install as _install_retry_bridge
+
+    _install_retry_bridge()
+
+
+def _build_async_httpx_client() -> Any:
+    """PR-ADAPTER-TIMEOUT (2026-05-28) — share Anthropic adapter's timeout
+    policy with every OpenAI-family client (PAYG OpenAI, Codex OAuth, GLM
+    PAYG, GLM Coding Plan).
+
+    Without an explicit ``http_client``, ``AsyncOpenAI`` uses the SDK's
+    default httpx instance whose read-timeout defaults are long enough that
+    a stalled ``responses.stream`` on the Codex backend silently waited
+    ~10 minutes before the SDK's retry loop kicked in (operator-observed
+    incident 2026-05-28 11:06→11:16, 620062 ms latency). Pinning
+    ``settings.llm_read_timeout`` here caps the stall window — the
+    SDK's ``max_retries`` (default 2) then triggers within minutes
+    instead of hours.
+
+    Reads the same ``llm_*_timeout`` / ``llm_*_connections`` settings the
+    Anthropic adapter consumes so operators tune both providers with one
+    knob (``config.toml [llm]`` or ``GEODE_LLM_READ_TIMEOUT``).
+    """
+    import httpx
+
+    from core.config import settings
+
+    return httpx.AsyncClient(
+        limits=httpx.Limits(
+            max_connections=settings.llm_max_connections,
+            max_keepalive_connections=settings.llm_max_keepalive_connections,
+            keepalive_expiry=settings.llm_keepalive_expiry,
+        ),
+        timeout=httpx.Timeout(
+            connect=settings.llm_connect_timeout,
+            read=settings.llm_read_timeout,
+            write=settings.llm_write_timeout,
+            pool=settings.llm_pool_timeout,
+        ),
     )
 
 
@@ -734,7 +794,19 @@ def translate_codex_response(
             # context") the field is structurally required even when
             # there's no chain-of-thought summary to surface.
             summary = _attr_or_key(item, "summary")
-            entry["summary"] = summary if summary else []
+            # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — the OpenAI
+            # SDK returns ``summary`` as a list of ``ResponseReasoningItem.
+            # Summary`` Pydantic objects. Storing them verbatim in
+            # ``entry["summary"]`` propagates the SDK type all the way into
+            # ``AgenticResponse.codex_reasoning_items`` and then into the
+            # SQLite session mirror, which fails with
+            # ``TypeError: Object of type Summary is not JSON serializable``
+            # (operator log 2026-05-28 11:16:39 — session_manager.py:433).
+            # JSON checkpoint survived (separate writer), but per-turn
+            # message mirror was lost. Normalise to plain ``dict``
+            # (``{"type": "summary_text", "text": ...}``) so downstream
+            # persistence sees only JSON-safe primitives.
+            entry["summary"] = _normalize_summary_list(summary)
             if summary and isinstance(summary, list):
                 for s in summary:
                     t = s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "") or ""
@@ -764,6 +836,47 @@ def translate_codex_response(
         reasoning_summaries=tuple(reasoning_summaries),
         assistant_phase=assistant_phase,
     )
+
+
+def _normalize_summary_list(summary: Any) -> list[dict[str, Any]]:
+    """PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28) — convert OpenAI
+    SDK ``Summary`` Pydantic objects (or dicts, or unknown) to a list of
+    plain ``{"type": "summary_text", "text": ...}`` dicts so the result
+    is JSON-serialisable downstream (SQLite session mirror, JSON
+    checkpoint, IPC payload).
+
+    Returns ``[]`` for missing / falsy input — matches the original
+    ``summary if summary else []`` shape so the Responses API replay
+    (``build_codex_input``) keeps accepting it.
+    """
+    if not summary or not isinstance(summary, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in summary:
+        if isinstance(item, dict):
+            out.append(dict(item))
+            continue
+        # Pydantic v2 SDK object — prefer ``model_dump(mode="json")`` so
+        # nested types (e.g. datetime, IntEnum) also coerce to JSON-safe
+        # primitives. Fall back to plain ``model_dump()`` if a future SDK
+        # variant doesn't accept the kwarg, and finally to manual
+        # ``.text`` / ``.type`` extraction. Codex MCP review (2026-05-28).
+        dump = getattr(item, "model_dump", None)
+        if callable(dump):
+            dumped: dict[str, Any] | None = None
+            for kwargs in ({"mode": "json"}, {}):
+                try:
+                    dumped = dict(dump(**kwargs))
+                    break
+                except Exception as exc:
+                    log.debug("Summary.model_dump(%r) failed: %s", kwargs, exc)
+            if dumped is not None:
+                out.append(dumped)
+                continue
+        text = getattr(item, "text", "") or ""
+        kind = getattr(item, "type", "summary_text") or "summary_text"
+        out.append({"type": str(kind), "text": str(text)})
+    return out
 
 
 def _attr_or_key(item: Any, name: str) -> Any:

@@ -47,6 +47,59 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-ADAPTER-TIMEOUT-AND-SERIALIZATION (2026-05-28)** — three sister
+  fixes for the operator's 2026-05-28 10-minute hang on a single
+  ``gpt-5.5`` turn (serve log 11:06:19 → 11:16:39, 620062 ms latency):
+
+  **A. httpx Timeout wiring + SDK retry pinning.**
+  ``core/llm/adapters/_openai_common.build_async_openai_client`` and
+  ``build_async_codex_client`` previously used the openai SDK's default
+  httpx client, whose read-timeout defaults are long enough that a
+  stalled Codex backend stream silently waited ~10 minutes before the
+  SDK's retry loop kicked in. Both builders now attach an explicit
+  ``httpx.AsyncClient`` with ``settings.llm_*_timeout`` — the same
+  policy the Anthropic adapter has had since v0.99.39 (single source
+  of truth = ``[llm]`` settings). Codex MCP audit BLOCKER caught the
+  second half: without ``max_retries=0`` on the openai client, the SDK
+  retry (default 2) compounds with GEODE's own ``_LLM_RETRY_CAP``
+  retries — capping the read-timeout alone would still leave
+  ``300 s × 2 SDK attempts`` ≈ 10 min before app retry runs. Pinning
+  ``max_retries=0`` on every OpenAI-family client (adapter builders
+  AND legacy provider singletons in ``core/llm/providers/{openai,
+  codex, glm}.py``) mirrors Anthropic's invariant
+  (``_anthropic_common.py:60``) — single source of retry truth =
+  AgenticLoop's ``_call_llm`` retry path.
+
+  **B. SDK retry → UI bridge.** The openai SDK logs ``Retrying request
+  to /responses in 0.49 seconds`` at INFO level on the
+  ``openai._base_client`` logger, but the line landed only in the
+  serve log file — operators watching the CLI spinner saw an opaque
+  hang. New module ``core/llm/adapters/_sdk_retry_visibility.py``
+  installs a ``logging.Handler`` on that logger that re-emits the
+  retry through GEODE's existing ``emit_llm_retry`` event surface
+  (same UI affordance the agent-loop-side retry already uses). Install
+  is idempotent + wired into both adapter client builders.
+
+  **C. Summary SDK object → dict normalisation.** The same incident's
+  serve log surfaced ``TypeError: Object of type Summary is not JSON
+  serializable`` from ``core/memory/session_manager.py:433`` because
+  ``translate_codex_response`` stored OpenAI SDK
+  ``ResponseReasoningItem.Summary`` Pydantic objects verbatim in
+  ``codex_reasoning_items[*]["summary"]``. JSON checkpoint survived
+  (separate writer) but the per-turn SQLite session mirror was lost.
+  New ``_normalize_summary_list`` helper coerces each summary element
+  to a plain ``{"type": "summary_text", "text": ...}`` dict via
+  ``model_dump(mode="json")`` (Pydantic v2 canonical JSON shape) with
+  fallback to ``model_dump()`` then ``.text`` / ``.type`` attribute
+  extraction — so downstream SQLite mirror, JSON checkpoint, and IPC
+  payload only see JSON-safe primitives.
+
+  Pinned by ``tests/test_adapter_timeout_and_serialization.py`` (12
+  assertions) + ``tests/test_adapter_max_retries.py`` (6 assertions —
+  source-level retry pins on every OpenAI-family client builder and
+  the Anthropic parity guard).
+
 ### Changed
 - **PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28)** — restore the GoF
   Adapter pattern's "uniform interface + adaptee SDK isolation +
