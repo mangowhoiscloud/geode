@@ -14,6 +14,7 @@ was removed; this is now the sole call-site for both helpers.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from core.llm.adapters.base import (
@@ -28,6 +29,8 @@ from core.llm.agentic_response import (
     TextBlock,
     ToolUseBlock,
 )
+
+log = logging.getLogger(__name__)
 
 
 def build_adapter_request(
@@ -159,7 +162,7 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
     reasoning_summaries = list(result.reasoning_summaries) if result.reasoning_summaries else None
     return AgenticResponse(
         content=blocks,
-        stop_reason=_translate_stop_reason(result.stop_reason),
+        stop_reason=_translate_stop_reason(result.stop_reason, bool(result.tool_uses)),
         usage=usage,
         codex_reasoning_items=codex_reasoning_items,
         reasoning_summaries=reasoning_summaries,
@@ -167,19 +170,50 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
     )
 
 
-def _translate_stop_reason(stop: str) -> str:
+def _translate_stop_reason(stop: str, has_tool_uses: bool) -> str:
     """Map provider-flavoured stop reasons → AgenticLoop's two-value enum.
 
     :attr:`AgenticResponse.stop_reason` is one of ``"tool_use"`` /
-    ``"end_turn"``. Provider strings map as follows:
+    ``"end_turn"``. **Content is the source of truth** —
+    ``has_tool_uses`` decides single-handedly, the provider string is
+    only consulted to log adapter extraction bugs.
 
-    - Anthropic ``"tool_use"`` → ``"tool_use"``
-    - OpenAI ``"tool_calls"`` → ``"tool_use"``
-    - Codex ``"completed"`` / Anthropic ``"end_turn"`` / OpenAI ``"stop"`` /
-      anything else → ``"end_turn"``
+    PR-CODEX-STOP-REASON-TOOL-USE (2026-05-28) original case — the Codex
+    backend at ``chatgpt.com/backend-api/codex`` returns
+    ``status="completed"`` for EVERY successful response, regardless of
+    whether the model emitted ``function_call`` items. Without the
+    content-first gate the agent loop terminates the turn (treating the
+    response as ``"end_turn"``), appends the assistant message with
+    ``tool_use`` blocks BUT skips tool execution, and the next turn's
+    input carries a ``function_call`` with no matching
+    ``function_call_output`` — the Codex backend rejects with ``"No
+    tool output found for function call call_XXXX"`` 400.
+
+    Frontier-pattern alignment (2026-05-28 audit of paperclip
+    ``codex-local/src/ui/parse-stdout.ts:194`` + hermes
+    ``agent/codex_responses_adapter.py:1034``): both derive the terminal
+    flag from the actual presence of tool/function-call items in the
+    response payload. We mirror that invariant — provider string never
+    wins on its own.
+
+    The mirror-case anti-pattern (provider says ``"tool_use"`` / ``"tool_calls"``
+    but ``tool_uses`` is empty) typically means the adapter failed to
+    populate ``AdapterCallResult.tool_uses``. We log a WARN with the
+    incoming string and terminate the turn — preventing an agent-loop
+    spin that has no tool to execute, and surfacing the underlying
+    extraction bug for the next maintainer.
     """
-    if stop in ("tool_use", "tool_calls"):
+    if has_tool_uses:
         return "tool_use"
+    if stop in ("tool_use", "tool_calls"):
+        log.warning(
+            "translate_stop_reason: provider sent stop_reason=%r but "
+            "AdapterCallResult.tool_uses is empty — treating as 'end_turn'. "
+            "Likely cause: the adapter that produced this result did not "
+            "extract tool_use blocks from the response. Frontier pattern: "
+            "tool extraction must populate tool_uses before this bridge runs.",
+            stop,
+        )
     return "end_turn"
 
 
