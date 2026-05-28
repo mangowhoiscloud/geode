@@ -47,6 +47,93 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.78] - 2026-05-28
+
+> PATCH release. Cleans up the v0.99.39 LLMAdapter sprint's
+> legacy-vs-new coexistence: deletes the three orphan
+> ``*AgenticAdapter`` classes that the new adapter registry already
+> replaced (PR-LEGACY-PROVIDER-REMOVAL), and works around the
+> ``openai>=2.26`` ``parse_response`` crash on Codex backend
+> ``response.completed`` events that landed silently between the v0.99.39
+> sprint and the user's first ``/login openai`` smoke
+> (PR-CODEX-OUTPUT-NULL). The v0.99.77 PR-SOURCE-ROUTING fix routed
+> ``gpt-5.x`` to the subscription bucket; this release makes those
+> requests actually complete.
+
+### Removed
+- **PR-LEGACY-PROVIDER-REMOVAL (2026-05-28)** — delete the three legacy
+  ``*AgenticAdapter`` classes (``OpenAIAgenticAdapter``,
+  ``CodexAgenticAdapter``, ``GlmAgenticAdapter``) that the
+  v0.99.39 LLMAdapter sprint (PR-MAINPATH-1 / PR-MAINPATH-67) was meant
+  to replace. The agent loop's main-path dispatch already routes through
+  the v0.99.39+ adapter registry (``openai-payg``, ``codex-oauth``,
+  ``glm-payg``, plus the legacy paperclip ``ClaudeAdapter`` /
+  ``OpenAIAdapter`` wrappers for the cross-LLM-verify Protocol only) —
+  the three Agentic classes had zero production callers, only a long
+  tail of source-level pinning tests. Coexistence was a maintenance
+  liability: the v0.99.39 sprint that introduced the new adapters did
+  not delete the old ones, so a token-refresh or schema-evolution change
+  had to be made in both places to keep parity. The audit (this PR's
+  parallel sub-agent run) caught two existing skews: ``_reflection.py``
+  consults ``infer_source()`` while the legacy plan_registry path was
+  unreachable, and ``_get_async_codex_client`` had a stale-token
+  invalidation gap (no ``reset_codex_client()`` call after
+  ``/login openai``) that was harmless only because the legacy path was
+  already orphaned.
+
+  Helper functions still needed by the new adapters (``_resolve_codex_token``,
+  ``build_codex_oauth_headers``, ``_resolve_openai_key``,
+  ``_get_async_openai_client``, ``reset_openai_client``,
+  ``_resolve_glm_endpoint``, ``_get_async_glm_client``,
+  ``reset_glm_client``) stay in ``core/llm/providers/`` along with the
+  ``OpenAIAdapter`` paperclip wrapper (a different Protocol —
+  ``LLMClientPort`` for cross-LLM verify, not ``LLMAdapter`` for the
+  agent loop). 13 legacy test files removed (only assertions on the
+  deleted-class internals); ``tests/test_provider_parity_v0532.py``
+  D2 invariants migrated to the equivalent adapter classes
+  (``test_openai_payg_adapter_propagates_billing_error`` etc.).
+
+  Reference subscription logic (legacy ``CodexAgenticAdapter.agentic_call``)
+  contributed one backfill: the pre-send input-shape diagnostic
+  (``_log_codex_input_shape``) that catches ``input[i].content == null``
+  regressions at WARN level rather than as a body-less 400. The legacy
+  ``call_with_failover`` cross-model fallback wrap was deliberately not
+  carried over (PR-DRIFT-CUT semantics: operator manages ``/model``).
+
+### Fixed
+- **PR-CODEX-OUTPUT-NULL (2026-05-28)** — work around an ``openai>=2.26``
+  streaming-parser crash on every Codex subscription call. The ChatGPT
+  backend at ``chatgpt.com/backend-api/codex`` delivers ``response.completed``
+  events with ``output: null`` (the actual items arrive as separate
+  ``response.output_item.done`` events that the SDK's accumulator collects
+  into its own snapshot). Starting at SDK 2.26 ``ResponseStreamState.
+  accumulate_event`` calls ``openai.lib._parsing._responses.parse_response
+  (event.response)`` on every ``response.completed`` and ``parse_response``
+  iterates ``response.output`` unconditionally — so ``output is None``
+  raises ``TypeError: 'NoneType' object is not iterable`` during the
+  ``async for event in stream`` loop in ``CodexOAuthAdapter.acomplete``,
+  before our own ``accumulated`` list could absorb the items. Result on
+  the operator's machine: PR-SOURCE-ROUTING (#1822) correctly routed
+  ``gpt-5.x`` to the subscription endpoint and received HTTP 200, but
+  every call then crashed with ``unknown`` error and retried 5× before
+  surfacing ``model_action_required``. Hermes pins ``openai==2.24.0`` and
+  never hit this; GEODE's ``openai>=2.26.0`` resolves to 2.30.0.
+
+  ``core/llm/adapters/_codex_sdk_workaround.py:install()`` patches
+  ``parse_response`` (and the symbol re-imported into the streaming
+  module) to coerce ``response.output`` from ``None`` to ``[]`` before
+  delegating to the original parser. The CodexOAuthAdapter's existing
+  ``accumulated`` list + ``translate_codex_response`` pipeline then
+  produces the real items as before. Installed lazily on the first
+  Codex client construction (adapter ``build_async_codex_client`` AND
+  legacy provider ``_get_async_codex_client``), idempotent across the
+  process. Removable once a future ``openai`` SDK release fixes
+  ``parse_response`` to handle ``response.output is None``.
+
+  Pinned by ``tests/test_codex_sdk_workaround.py`` (5 assertions:
+  unpatched-crash repro, patched-coerce success, idempotence + streaming
+  module rebound, and source-level pins on both client builders).
+
 ## [0.99.77] - 2026-05-28
 
 > PATCH release. Operational regression fix: gpt-5.x interactive turns

@@ -108,6 +108,15 @@ class CodexOAuthAdapter:
         """
         client = self._get_client()
         kwargs = _build_codex_call_kwargs(req)
+        # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
+        # diagnostic backfilled from the now-deleted
+        # ``CodexAgenticAdapter.agentic_call``. The Codex backend rejects
+        # ``input[i].content == null`` with 400 ``"input[i].content must be
+        # array or string, got null"``; surfacing a structured per-item
+        # shape line at WARN whenever any prefix entry has ``content=None``
+        # makes that regression debuggable from the daemon log without
+        # needing a wire trace. Capped at first 30 entries.
+        _log_codex_input_shape(kwargs.get("input"))
         # PR-OAUTH-API-LANES (2026-05-26) — gate concurrent API calls
         # through the shared openai-api lane so PR-RANKER-PARALLEL's
         # 177-call burst stays under the per-account 429 floor. The
@@ -466,6 +475,55 @@ def _dump_empty_text_postmortem(
     except OSError as exc:
         log.debug("codex-oauth: postmortem dump write failed: %s", exc)
         return None
+
+
+def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:
+    """Backfilled from legacy ``CodexAgenticAdapter.agentic_call`` (v0.53.3).
+
+    Emit a per-item shape line whenever the prefix carries any
+    ``content=None`` entry, or unconditionally at DEBUG. The Codex backend
+    rejects ``input[i].content == null`` with 400 ``"input[i].content must
+    be array or string, got null"`` and the resulting body-less exception
+    is hard to triage without seeing which item misbehaved.
+    """
+    if not isinstance(resp_input, list) or not resp_input:
+        return
+    has_null = any(isinstance(m, dict) and m.get("content") is None for m in resp_input[:cap])
+    if not (has_null or log.isEnabledFor(logging.DEBUG)):
+        return
+    shape_parts: list[str] = []
+    for idx, item in enumerate(resp_input[:cap]):
+        if not isinstance(item, dict):
+            shape_parts.append(f"[{idx}]{type(item).__name__}")
+            continue
+        kind = item.get("type") or item.get("role") or "<unknown>"
+        if "content" in item:
+            content = item["content"]
+            ctype = (
+                "None"
+                if content is None
+                else f"str({len(content)})"
+                if isinstance(content, str)
+                else f"list({len(content)})"
+                if isinstance(content, list)
+                else type(content).__name__
+            )
+            shape_parts.append(f"[{idx}]{kind} content={ctype}")
+        elif "output" in item:
+            output = item["output"]
+            otype = (
+                "None"
+                if output is None
+                else f"str({len(output)})"
+                if isinstance(output, str)
+                else f"list({len(output)})"
+                if isinstance(output, list)
+                else type(output).__name__
+            )
+            shape_parts.append(f"[{idx}]{kind} output={otype}")
+        else:
+            shape_parts.append(f"[{idx}]{kind} keys={sorted(item.keys())}")
+    log.warning("codex-oauth resp_input shape: %s", " | ".join(shape_parts))
 
 
 __all__ = ["CodexOAuthAdapter"]

@@ -236,7 +236,13 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     import openai
 
     from core.config import CODEX_BASE_URL
+    from core.llm.adapters._codex_sdk_workaround import install as _install_codex_workaround
     from core.llm.providers.codex import build_codex_oauth_headers
+
+    # PR-CODEX-OUTPUT-NULL (2026-05-28) — install the SDK parse_response
+    # workaround before the first Codex backend call. Idempotent across
+    # process lifetime; only patches when the openai SDK is importable.
+    _install_codex_workaround()
 
     return openai.AsyncOpenAI(
         api_key=api_key,
