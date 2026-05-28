@@ -241,12 +241,33 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     the header + base_url plumbing here). The ``originator: codex_cli_rs``
     header and ``ChatGPT-Account-ID`` (extracted from the JWT) are mandatory
     — the Codex backend rejects unsigned requests with 401.
+
+    PR-CODEX-NO-KEEPALIVE (2026-05-28) — the Codex backend
+    (``chatgpt.com/backend-api/codex/responses``) closes idle HTTP/2
+    connections aggressively (sub-second to a few-second window)
+    without sending a GOAWAY frame the client can observe in time.
+    First call after an idle period silently reuses a stale connection
+    from httpx's keep-alive pool → ``httpx.WriteError`` → openai SDK
+    ``APIConnectionError`` in ~4ms (no roundtrip). Observed pattern:
+    4 parallel ``web_search`` calls right after a slower LLM call —
+    first one fails instantly, next three open fresh connections and
+    succeed (12-19s typical). Traced via PR-DISPATCH-OBS-EXT's
+    ``adapter_dispatch_attempt`` events 2026-05-28 15:44:37 KST.
+
+    Fix: this client overrides ``max_keepalive_connections=0`` so every
+    Codex backend call opens a fresh TCP+TLS connection. Costs
+    ~100-300ms TLS handshake per call but eliminates the stale-
+    connection failure mode entirely. Other OpenAI-family endpoints
+    (api.openai.com PAYG, api.z.ai GLM PAYG, GLM Coding Plan) keep the
+    default keep-alive policy via :func:`_build_async_httpx_client` —
+    they have proper server-side idle timeout policies + GOAWAY signaling.
     """
     if not api_key:
         raise ValueError("build_async_codex_client: api_key is empty")
+    import httpx
     import openai
 
-    from core.config import CODEX_BASE_URL
+    from core.config import CODEX_BASE_URL, settings
     from core.llm.adapters._codex_sdk_workaround import install as _install_codex_workaround
     from core.llm.providers.codex import build_codex_oauth_headers
 
@@ -256,11 +277,30 @@ def build_async_codex_client(api_key: str) -> openai.AsyncOpenAI:
     _install_codex_workaround()
     _ensure_sdk_observability_installed()
 
+    # PR-CODEX-NO-KEEPALIVE (2026-05-28) — Codex-specific httpx client
+    # with ``max_keepalive_connections=0`` (see method docstring for the
+    # stale-connection rationale). Other timeout / pool settings mirror
+    # :func:`_build_async_httpx_client` so operators tune both with the
+    # same ``settings.llm_*`` knobs.
+    codex_http_client = httpx.AsyncClient(
+        limits=httpx.Limits(
+            max_connections=settings.llm_max_connections,
+            max_keepalive_connections=0,
+            keepalive_expiry=settings.llm_keepalive_expiry,
+        ),
+        timeout=httpx.Timeout(
+            connect=settings.llm_connect_timeout,
+            read=settings.llm_read_timeout,
+            write=settings.llm_write_timeout,
+            pool=settings.llm_pool_timeout,
+        ),
+    )
+
     return openai.AsyncOpenAI(
         api_key=api_key,
         base_url=CODEX_BASE_URL,
         default_headers=build_codex_oauth_headers(api_key),
-        http_client=_build_async_httpx_client(),
+        http_client=codex_http_client,
         # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION — see ``build_async_openai_client``
         # for the retry-compound rationale (Codex MCP BLOCKER 2026-05-28).
         max_retries=0,

@@ -306,7 +306,16 @@ def test_translate_codex_response_emits_json_safe_summary() -> None:
 def test_openai_common_documents_timeout_fix() -> None:
     """Pin the helper name + intent in the source. A future refactor
     that drops ``_build_async_httpx_client`` would lose the timeout cap
-    and regress the 10-minute spin — this test fails loudly."""
+    and regress the 10-minute spin — this test fails loudly.
+
+    PR-CODEX-NO-KEEPALIVE (2026-05-28) — ``build_async_codex_client``
+    constructs its own inline ``httpx.AsyncClient`` (with
+    ``max_keepalive_connections=0`` to avoid Codex-backend stale-
+    connection failures) instead of delegating to
+    ``_build_async_httpx_client``. The httpx timeout settings still
+    flow through ``settings.llm_*`` so the original 10-minute spin
+    guarantee is preserved — the assertion now checks the timeout-
+    related settings reads inside the codex builder body."""
     from pathlib import Path
 
     src = (
@@ -316,12 +325,24 @@ def test_openai_common_documents_timeout_fix() -> None:
         "_openai_common.py no longer defines _build_async_httpx_client — "
         "OpenAI/Codex/GLM clients lose explicit Timeout pin."
     )
-    # Both client builders must wire through the helper.
+    # build_async_openai_client wires via the shared helper.
     assert re.search(r"def build_async_openai_client.*?http_client", src, re.DOTALL), (
         "build_async_openai_client lost its http_client= wiring"
     )
-    assert re.search(
-        r"def build_async_codex_client.*?http_client=_build_async_httpx_client",
-        src,
-        re.DOTALL,
-    ), "build_async_codex_client lost its http_client= wiring"
+    # build_async_codex_client now has its own inline httpx client
+    # (PR-CODEX-NO-KEEPALIVE) but still wires it via ``http_client=`` and
+    # still reads the same llm_*_timeout settings the shared helper
+    # uses, so the 10-minute-spin guarantee is preserved.
+    codex_body_match = re.search(r"def build_async_codex_client.*?(?=\n\ndef |\Z)", src, re.DOTALL)
+    assert codex_body_match is not None, "build_async_codex_client missing"
+    codex_src = codex_body_match.group(0)
+    assert "http_client=codex_http_client" in codex_src, (
+        "build_async_codex_client lost its http_client= wiring"
+    )
+    assert "settings.llm_read_timeout" in codex_src, (
+        "build_async_codex_client lost the llm_read_timeout pin — "
+        "the 10-minute-spin guarantee is at risk"
+    )
+    assert "settings.llm_connect_timeout" in codex_src, (
+        "build_async_codex_client lost the llm_connect_timeout pin"
+    )
