@@ -155,14 +155,25 @@ def test_glm_payg_adapter_advertises_web_search_and_text_completion() -> None:
 
 
 def test_codex_oauth_adapter_advertises_web_search() -> None:
-    """PR-NO-FALLBACK (2026-05-28) — the Codex backend exposes the same
-    Responses API contract as PAYG; the openai-python SDK's ``ToolParam``
-    Union accepts ``{"type": "web_search"}`` independent of which endpoint
-    the client targets. ``codex-oauth`` MUST advertise the capability so
-    an operator on a ChatGPT subscription gets web_search routed through
-    their OAuth token (no PAYG key needed) — the prior conservative
-    ``False`` caused the routing leak that landed web_search on
-    ``glm-payg`` for Codex-OAuth operators."""
+    """PR-NO-FALLBACK (2026-05-28) — SDK-contract level: openai-python
+    SDK's ``ToolParam`` Union accepts ``{"type": "web_search"}`` and
+    ``codex-rs/codex-api/README.md`` documents the Responses endpoint
+    accepts a ``tools`` array. ``codex-oauth`` advertises the capability
+    so an operator on a ChatGPT subscription gets web_search routed
+    through their OAuth token (no PAYG key needed) — the prior
+    conservative ``False`` was the root cause of the routing leak that
+    landed web_search on ``glm-payg`` for Codex-OAuth operators.
+
+    PR-DOC-VERIFY (2026-05-28) — pins the ``unverified — live test
+    required`` attestation per CLAUDE.md §4d. The Codex backend's actual
+    acceptance of ``{"type": "web_search"}`` is undocumented in ctx7
+    (``/openai/codex`` enumerates the request shape but not valid tool
+    types; the Codex CLI's internal web search uses a different schema).
+    Behavioural confirmation requires a live call; this test pins the
+    docstring attestation so the assumption cannot harden into stable
+    contract through a silent docstring rewrite."""
+    import inspect
+
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
     adapter = CodexOAuthAdapter()
@@ -171,6 +182,14 @@ def test_codex_oauth_adapter_advertises_web_search() -> None:
         "CodexOAuthAdapter.supports_web_search=True must be backed by a "
         "callable ``aweb_search`` method — dispatch skips flag-set / "
         "method-missing adapters with a warning."
+    )
+    src = inspect.getsource(CodexOAuthAdapter)
+    assert "unverified — live test required" in src, (
+        "CodexOAuthAdapter.supports_web_search=True must carry the "
+        "``unverified — live test required`` attestation per CLAUDE.md §4d "
+        "(doc-before-behaviour). The flag was flipped True based on SDK "
+        "contract alone; Codex backend acceptance of the hosted web_search "
+        "tool is undocumented in ctx7 and requires live confirmation."
     )
 
 
