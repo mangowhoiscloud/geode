@@ -274,64 +274,66 @@ def _build_summary_input(messages: list[dict[str, Any]]) -> str:
 
 
 async def _call_summarize(conversation_text: str, provider: str, model: str) -> str | None:
-    """Call the appropriate LLM provider to generate a summary."""
+    """Call the LLM to generate a conversation summary.
+
+    PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — formerly fanned out to
+    ``_summarize_openai`` / ``_summarize_glm`` via direct PAYG client
+    builders (``_get_openai_client`` / ``_get_glm_client``). Now delegates
+    to :func:`core.llm.adapters.dispatch.complete_text_via_adapters` which
+    enumerates registered text-completion-capable adapters by operator
+    source preference, honouring the same ``infer_source`` flow as the
+    agent loop main path. The legacy ``provider`` argument now seeds the
+    candidate ordering: it floats the requested provider to the front
+    while keeping the fallback chain (operator might have only one
+    provider's credentials).
+    """
+    from core.llm.adapters.dispatch import (
+        AdapterDispatchError,
+        complete_text_via_adapters,
+    )
+    from core.llm.errors import BillingError
+
+    # Map legacy provider key to the registry-canonical provider name.
+    canonical = {"zhipuai": "glm"}.get(provider, provider)
+    # Float the requested provider to the front of the iteration order
+    # (matches the legacy "provider==openai → call OpenAI" behaviour) but
+    # let the dispatch fall through to alternates if the requested provider
+    # is unavailable (legacy code returned None and the caller would skip
+    # compaction silently).
+    default_order = ("anthropic", "openai", "glm")
+    if canonical in default_order:
+        provider_order = (canonical, *(p for p in default_order if p != canonical))
+    else:
+        provider_order = default_order
+
     try:
-        if provider == "openai":
-            return await _summarize_openai(conversation_text, model)
-        elif provider in ("glm", "zhipuai"):
-            return await _summarize_glm(conversation_text, model)
-        else:
-            log.warning("Unknown provider '%s' for compaction — skipping", provider)
-            return None
+        result = await complete_text_via_adapters(
+            conversation_text,
+            system=_COMPACTION_PROMPT,
+            model=model,
+            max_tokens=2048,
+            provider_order=provider_order,
+        )
+    except BillingError:
+        log.warning(
+            "Compaction summarization: all candidate providers hit billing-fatal "
+            "(provider=%s model=%s)",
+            provider,
+            model,
+        )
+        return None
+    except AdapterDispatchError:
+        log.warning(
+            "Compaction summarization: no text-completion-capable adapter "
+            "succeeded (provider=%s model=%s)",
+            provider,
+            model,
+        )
+        return None
     except Exception:
         log.exception("Compaction summarization failed for provider=%s", provider)
         return None
-
-
-async def _summarize_openai(conversation_text: str, model: str) -> str | None:
-    """Generate summary using OpenAI provider."""
-    from core.llm.providers.openai import _get_openai_client
-
-    client = _get_openai_client()
-    if client is None:
-        return None
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": _COMPACTION_PROMPT},
-            {"role": "user", "content": conversation_text},
-        ],
-        max_tokens=2048,
-        temperature=0.0,
-    )
-    choice = response.choices[0] if response.choices else None
-    if choice and choice.message and choice.message.content:
-        return str(choice.message.content)
-    return None
-
-
-async def _summarize_glm(conversation_text: str, model: str) -> str | None:
-    """Generate summary using GLM provider (OpenAI-compatible API)."""
-    from core.llm.providers.glm import _get_glm_client
-
-    client = _get_glm_client()
-    if client is None:
-        return None
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": _COMPACTION_PROMPT},
-            {"role": "user", "content": conversation_text},
-        ],
-        max_tokens=2048,
-        temperature=0.0,
-    )
-    choice = response.choices[0] if response.choices else None
-    if choice and choice.message and choice.message.content:
-        return str(choice.message.content)
-    return None
+    return result.text or None
 
 
 # ── Phase 4: carry-forward ──────────────────────────────────────────

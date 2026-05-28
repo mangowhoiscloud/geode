@@ -34,6 +34,8 @@ from core.llm.adapters.base import (
     ModelSpec,
     QuotaWindows,
     StreamEvent,
+    TextCompletionResult,
+    WebSearchResult,
 )
 from core.orchestration.anthropic_api_lane import acquire_anthropic_api_lane_async
 
@@ -51,6 +53,9 @@ class AnthropicOAuthAdapter:
     provider: str = "anthropic"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
+    # PR-ADAPTER-PATTERN-UNIFICATION — same web_search tool API as PAYG endpoint.
+    supports_web_search: bool = True
+    supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
@@ -87,6 +92,37 @@ class AnthropicOAuthAdapter:
                 )
                 raise
         return translate_response(response)
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        from core.config import ANTHROPIC_PRIMARY
+        from core.llm.adapters._capability_impls import anthropic_web_search
+
+        return await anthropic_web_search(
+            self._get_client(),
+            query=query,
+            max_results=max_results,
+            model=ANTHROPIC_PRIMARY,
+            adapter_name=self.name,
+        )
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult:
+        from core.config import ANTHROPIC_PRIMARY
+        from core.llm.adapters._capability_impls import anthropic_complete_text
+
+        return await anthropic_complete_text(
+            self._get_client(),
+            prompt=prompt,
+            system=system,
+            model=model or ANTHROPIC_PRIMARY,
+            max_tokens=max_tokens,
+        )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()

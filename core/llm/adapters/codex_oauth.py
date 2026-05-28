@@ -41,6 +41,7 @@ from core.llm.adapters.base import (
     ModelSpec,
     QuotaWindows,
     StreamEvent,
+    TextCompletionResult,
 )
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
@@ -58,6 +59,14 @@ class CodexOAuthAdapter:
     provider: str = "openai"
     source: str = SOURCE_SUBSCRIPTION
     billing_type: AdapterBillingType = AdapterBillingType.SUBSCRIPTION
+    # PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — text_completion supported
+    # via the same Responses API path the agent loop's main ``acomplete`` uses
+    # (chatgpt.com/backend-api/codex/responses). web_search is NOT advertised:
+    # the Codex backend's support for the ``web_search`` hosted tool is
+    # unconfirmed (frontier audit 2026-05-28) and falsely advertising would
+    # break the dispatch fallback chain by trying + failing on every call.
+    supports_web_search: bool = False
+    supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
@@ -167,6 +176,34 @@ class CodexOAuthAdapter:
                 dump_path or "<dump failed>",
             )
         return result
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult:
+        """Single-turn text completion via the Codex subscription Responses
+        endpoint. Same wire shape as :meth:`acomplete` minus tools/multi-turn
+        — the Codex backend's mandatory ``store=False`` + ``instructions``
+        field constraints are handled by ``openai_responses_complete_text``.
+        """
+        from core.config import CODEX_PRIMARY
+        from core.llm.adapters._capability_impls import openai_responses_complete_text
+
+        # Codex backend forbids ``max_output_tokens`` (server-managed); we
+        # rely on the helper passing it as ``max_output_tokens`` and let the
+        # backend ignore-or-reject as documented. ``CODEX_PRIMARY`` mirrors
+        # what ``acomplete`` defaults to.
+        return await openai_responses_complete_text(
+            self._get_client(),
+            prompt=prompt,
+            system=system,
+            model=model or CODEX_PRIMARY,
+            max_tokens=max_tokens,
+        )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()

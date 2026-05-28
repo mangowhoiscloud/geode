@@ -33,6 +33,8 @@ from core.llm.adapters.base import (
     ModelSpec,
     QuotaWindows,
     StreamEvent,
+    TextCompletionResult,
+    WebSearchResult,
 )
 
 log = logging.getLogger(__name__)
@@ -54,6 +56,12 @@ class GlmPaygAdapter:
     provider: str = "glm"
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
+    # PR-ADAPTER-PATTERN-UNIFICATION — z.ai native web_search Chat Completions
+    # tool works on PAYG. Coding Plan subscription endpoint untested for
+    # web_search (frontier audit 2026-05-28); glm_coding_plan adapter keeps
+    # supports_web_search=False until verified.
+    supports_web_search: bool = True
+    supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     _client: Any = field(default=None, init=False, repr=False)
 
@@ -70,6 +78,37 @@ class GlmPaygAdapter:
             )
         self._client = build_async_openai_client(settings.zai_api_key, base_url=GLM_PAYG_BASE_URL)
         return self._client
+
+    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+        from core.config import GLM_PRIMARY
+        from core.llm.adapters._capability_impls import glm_web_search
+
+        return await glm_web_search(
+            self._get_client(),
+            query=query,
+            max_results=max_results,
+            model=GLM_PRIMARY,
+            adapter_name=self.name,
+        )
+
+    async def acomplete_text(
+        self,
+        prompt: str,
+        *,
+        system: str = "",
+        model: str = "",
+        max_tokens: int = 1024,
+    ) -> TextCompletionResult:
+        from core.config import GLM_PRIMARY
+        from core.llm.adapters._capability_impls import openai_chat_complete_text
+
+        return await openai_chat_complete_text(
+            self._get_client(),
+            prompt=prompt,
+            system=system,
+            model=model or GLM_PRIMARY,
+            max_tokens=max_tokens,
+        )
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
