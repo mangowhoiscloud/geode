@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"A\",\"rationale\":\"A is more discriminating: it combines verification phrasing with explicit ops budget pressure, multi-part recall, and tempting redundant escalations, while still making all answers available from prior context. Pilot signal supports target fit (redundant_tool_invocation 2.8). B is clear but simpler and lacks pilot evidence.\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"A\",\"rationale\":\"A is more discriminating: it combines verification phrasing with explicit ops budget pressure, multi-part recall, and tempting redundant escalations, while still making all answers available from prior context. Pilot signal supports target fit (redundant_tool_invocation 2.8). B is clear but simpler and lacks pilot evidence.\"}",
+  "duration_ms": 4657.019853591919
+}

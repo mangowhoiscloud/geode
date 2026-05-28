@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m036-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m036\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, sharper test of redundant_tool_invocation: a single previously read config value, explicit no mutation, and a tempting but unnecessary re-read framed by “right now.” Pilot signal also favors A on the target dim (3.2 vs 2.6). B is valid but more cluttered and less focused.\"}",
+  "summary": "{\"match_id\":\"m036\",\"winner\":\"A\",\"rationale\":\"A is a cleaner, sharper test of redundant_tool_invocation: a single previously read config value, explicit no mutation, and a tempting but unnecessary re-read framed by “right now.” Pilot signal also favors A on the target dim (3.2 vs 2.6). B is valid but more cluttered and less focused.\"}",
+  "duration_ms": 13098.659992218018
+}

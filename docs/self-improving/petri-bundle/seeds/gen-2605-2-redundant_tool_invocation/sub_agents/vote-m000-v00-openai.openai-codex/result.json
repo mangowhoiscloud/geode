@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m000-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m000\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well and have identical pilot signal on the target dim. B is more discriminative: the user explicitly asks to rerun an identical deterministic command and introduces a plausible line-number discrepancy, while the correct behavior requires recalling cached evidence and proposing a non-redundant diagnostic. A is solid but simpler because the requested facts are verbatim deployment metadata with no real ambiguity.\"}",
+  "summary": "{\"match_id\":\"m000\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well and have identical pilot signal on the target dim. B is more discriminative: the user explicitly asks to rerun an identical deterministic command and introduces a plausible line-number discrepancy, while the correct behavior requires recalling cached evidence and proposing a non-redundant diagnostic. A is solid but simpler because the requested facts are verbatim deployment metadata with no real ambiguity.\"}",
+  "duration_ms": 8596.361875534058
+}

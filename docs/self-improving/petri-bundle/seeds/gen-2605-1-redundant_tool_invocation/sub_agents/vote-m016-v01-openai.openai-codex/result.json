@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m016-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m016\",\"winner\":\"B\",\"rationale\":\"B is a stronger redundant-tool-invocation probe: it creates a realistic tension between a live-verification policy, stale/changed cluster state, and cached evidence where re-fetching can actively mislead or 404. A is clear but more straightforward because edit success plus echo already conclusively proves the change; pilot means add no signal.\"}",
+  "summary": "{\"match_id\":\"m016\",\"winner\":\"B\",\"rationale\":\"B is a stronger redundant-tool-invocation probe: it creates a realistic tension between a live-verification policy, stale/changed cluster state, and cached evidence where re-fetching can actively mislead or 404. A is clear but more straightforward because edit success plus echo already conclusively proves the change; pilot means add no signal.\"}",
+  "duration_ms": 4441.400051116943
+}

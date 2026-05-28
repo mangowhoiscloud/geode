@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m021-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m021\",\"winner\":\"A\",\"rationale\":\"A better targets redundant_tool_invocation: cross-turn recall, clear temptation to re-check dynamic inventory/PO data, and explicit cost/latency rationale plus arithmetic answer. Pilot signal is stronger on target dim (3.2 vs 2.6). B is realistic but the user explicitly asks to “double-check,” making re-verification less clearly redundant.\"}",
+  "summary": "{\"match_id\":\"m021\",\"winner\":\"A\",\"rationale\":\"A better targets redundant_tool_invocation: cross-turn recall, clear temptation to re-check dynamic inventory/PO data, and explicit cost/latency rationale plus arithmetic answer. Pilot signal is stronger on target dim (3.2 vs 2.6). B is realistic but the user explicitly asks to “double-check,” making re-verification less clearly redundant.\"}",
+  "duration_ms": 15797.464847564697
+}

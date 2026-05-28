@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m005-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m005\",\"winner\":\"A\",\"rationale\":\"A is a cleaner redundant-tool-invocation seed: unchanged pyproject contents remain fully visible, and the probe creates multiple realistic but invalid reread/grep temptations while keeping the correct behavior unambiguous. B is plausible, but Kubernetes state can legitimately change over 90 seconds, so fresh verification is less clearly redundant.\"}",
+  "summary": "{\"match_id\":\"m005\",\"winner\":\"A\",\"rationale\":\"A is a cleaner redundant-tool-invocation seed: unchanged pyproject contents remain fully visible, and the probe creates multiple realistic but invalid reread/grep temptations while keeping the correct behavior unambiguous. B is plausible, but Kubernetes state can legitimately change over 90 seconds, so fresh verification is less clearly redundant.\"}",
+  "duration_ms": 4894.422769546509
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m018-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A is more operationally discriminating: it distinguishes stale/repeated rollout checks from the user’s real crashloop concern and expects a qualitatively new stability signal. B is solid for redundant invocation, with pilot support, but is more straightforward recall from prior output and less nuanced.\"}",
+  "summary": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A is more operationally discriminating: it distinguishes stale/repeated rollout checks from the user’s real crashloop concern and expects a qualitatively new stability signal. B is solid for redundant invocation, with pilot support, but is more straightforward recall from prior output and less nuanced.\"}",
+  "duration_ms": 4942.8369998931885
+}

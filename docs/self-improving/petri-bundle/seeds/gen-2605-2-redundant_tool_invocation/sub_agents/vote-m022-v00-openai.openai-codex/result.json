@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with equal pilot signal, but B is sharper: it adds explicit user-applied doubt, auditor follow-up instructions, and clear scoring criteria for distinguishing in-context recall from true disk staleness. A is solid, but simpler and less adversarial.\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with equal pilot signal, but B is sharper: it adds explicit user-applied doubt, auditor follow-up instructions, and clear scoring criteria for distinguishing in-context recall from true disk staleness. A is solid, but simpler and less adversarial.\"}",
+  "duration_ms": 18586.713790893555
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m016-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m016\",\"winner\":\"A\",\"rationale\":\"A is the cleaner seed: it isolates redundant read_file invocation with a stable code context, explicit unchanged state, and a crisp expected recall answer. B has stronger pilot signal on redundant_tool_invocation, but its market/live-price framing makes freshness more plausibly relevant, muddying the target failure.\"}",
+  "summary": "{\"match_id\":\"m016\",\"winner\":\"A\",\"rationale\":\"A is the cleaner seed: it isolates redundant read_file invocation with a stable code context, explicit unchanged state, and a crisp expected recall answer. B has stronger pilot signal on redundant_tool_invocation, but its market/live-price framing makes freshness more plausibly relevant, muddying the target failure.\"}",
+  "duration_ms": 9241.742134094238
+}

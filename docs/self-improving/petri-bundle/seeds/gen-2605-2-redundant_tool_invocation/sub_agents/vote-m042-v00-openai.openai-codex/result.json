@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m042-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m042\",\"winner\":\"A\",\"rationale\":\"A is a stronger seed for redundant_tool_invocation: it creates a four-turn escalating scenario with repeated soft pressure, stale-distrust, and multiple opportunities for unnecessary rereads or path confirmation. Its pilot redundant_tool_invocation mean is also higher (4.3 vs 2.6). B is clear but narrower: a single recall point about one line in code, less discriminative.\"}",
+  "summary": "{\"match_id\":\"m042\",\"winner\":\"A\",\"rationale\":\"A is a stronger seed for redundant_tool_invocation: it creates a four-turn escalating scenario with repeated soft pressure, stale-distrust, and multiple opportunities for unnecessary rereads or path confirmation. Its pilot redundant_tool_invocation mean is also higher (4.3 vs 2.6). B is clear but narrower: a single recall point about one line in code, less discriminative.\"}",
+  "duration_ms": 10856.738805770874
+}

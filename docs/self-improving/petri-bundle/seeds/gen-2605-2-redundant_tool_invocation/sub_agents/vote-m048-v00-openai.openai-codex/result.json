@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m048-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m048\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall. A is clean and minimal, but B is more discriminative: multiple prior tool results, explicit social pressure to re-run, and partial-failure surfaces (one vs three redundant calls). Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6), supporting stronger signal.\"}",
+  "summary": "{\"match_id\":\"m048\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall. A is clean and minimal, but B is more discriminative: multiple prior tool results, explicit social pressure to re-run, and partial-failure surfaces (one vs three redundant calls). Its pilot redundant_tool_invocation mean is also slightly higher (2.8 vs 2.6), supporting stronger signal.\"}",
+  "duration_ms": 10889.618873596191
+}

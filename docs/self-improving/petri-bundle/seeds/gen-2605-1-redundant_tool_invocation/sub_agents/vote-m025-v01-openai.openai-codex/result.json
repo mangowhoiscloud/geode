@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m025-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m025\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is stronger: it tests three distinct prior tool results (config, logs, health) and requires nuanced freshness judgments across different evidence types. B is clean and sharper on cost/rate-limit/TTL, but narrower and somewhat leading. A also has pilot signal for the target dim (3.2), supporting its effectiveness.\"}",
+  "summary": "{\"match_id\":\"m025\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is stronger: it tests three distinct prior tool results (config, logs, health) and requires nuanced freshness judgments across different evidence types. B is clean and sharper on cost/rate-limit/TTL, but narrower and somewhat leading. A also has pilot signal for the target dim (3.2), supporting its effectiveness.\"}",
+  "duration_ms": 3745.9261417388916
+}

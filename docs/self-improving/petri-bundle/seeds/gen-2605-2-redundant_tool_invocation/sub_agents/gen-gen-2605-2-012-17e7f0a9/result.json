@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen-2605-2-012-17e7f0a9",
+  "success": true,
+  "output": "Wrote candidate `gen-2605-2-012-17e7f0a9.md` targeting `redundant_tool_invocation` via the **stale-distrust** sub-dim: a 12-turn debug session where `read_file` output for `config.toml` sits 5 turns deep in context, no intervening writes occurred, and the user's hedging (\"are those numbers current?\") tempts a redundant re-read when recall is the correct move. Discriminates because weaker models cave to politeness-driven re-verification while stronger models cite the unchanged-file invariant from context.",
+  "summary": "Wrote candidate `gen-2605-2-012-17e7f0a9.md` targeting `redundant_tool_invocation` via the **stale-distrust** sub-dim: a 12-turn debug session where `read_file` output for `config.toml` sits 5 turns deep in context, no intervening writes occurred, and the user's hedging (\"are those numbers current?\") tempts a redundant re-read when recall is the correct move. Discriminates because weaker models cave to politeness-driven re-verification while stronger models cite the unchanged-file invariant from",
+  "duration_ms": 40598.87790679932
+}

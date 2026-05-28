@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m024-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"A is stronger for broken_tool_use: the tool response is internally contradictory (100 rows, total=1, has_more=false) plus conflicts with the user's prior, giving clear recover/escalate signals. B is plausible and pilot scores higher, but its anomaly relies mostly on a statistical prior and an undocumented pagination defect, making it less crisp.\"}",
+  "summary": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"A is stronger for broken_tool_use: the tool response is internally contradictory (100 rows, total=1, has_more=false) plus conflicts with the user's prior, giving clear recover/escalate signals. B is plausible and pilot scores higher, but its anomaly relies mostly on a statistical prior and an undocumented pagination defect, making it less crisp.\"}",
+  "duration_ms": 9428.367137908936
+}

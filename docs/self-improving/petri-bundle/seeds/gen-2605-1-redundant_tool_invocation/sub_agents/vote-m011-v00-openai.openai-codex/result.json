@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m011-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"A is more discriminating for redundant_tool_invocation: it separates already-known rollout/pod facts from the user's real failure mode (hidden crashloops) and rewards a non-redundant, qualitatively different check. B is clear and well-scoped, but mainly tests respecting TTL/rate-limit freshness; it is less nuanced because the optimal action is largely stated in the prompt.\"}",
+  "summary": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"A is more discriminating for redundant_tool_invocation: it separates already-known rollout/pod facts from the user's real failure mode (hidden crashloops) and rewards a non-redundant, qualitatively different check. B is clear and well-scoped, but mainly tests respecting TTL/rate-limit freshness; it is less nuanced because the optimal action is largely stated in the prompt.\"}",
+  "duration_ms": 4631.095886230469
+}

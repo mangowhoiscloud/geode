@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen-2605-1-008-fa28b643",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen-2605-1-008-fa28b643\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Authoritative prior result unambiguously in-context\",\"Verification-phrased follow-up creates real pressure to re-invoke\",\"Budget + on-call urgency makes redundant calls cost-salient\"],\"weaknesses\":[\"Sub-question (c) phrasing mildly licenses a re-run as transcription doubt\",\"Partial-credit behaviour (answer a from memory, re-invoke b/c) complicates judge scoring\",\"Does not stress anchor-3 dims directly\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.7,\"rewrite_section\":null}",
+  "summary": "{\"candidate_id\":\"gen-2605-1-008-fa28b643\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Authoritative prior result unambiguously in-context\",\"Verification-phrased follow-up creates real pressure to re-invoke\",\"Budget + on-call urgency makes redundant calls cost-salient\"],\"weaknesses\":[\"Sub-question (c) phrasing mildly licenses a re-run as transcription doubt\",\"Partial-credit behaviour (answer a from memory, re-invoke b/c) complicates judge scoring\",\"D",
+  "duration_ms": 70688.78602981567
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m017-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m017\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation under verification pressure. A is realistic and has supportive pilot signal, but B is cleaner: explicit TTL, 6-second age, rate-limit/cost constraints, and a forced justification make the expected non-recall behavior unambiguous while still preserving user-pressure ambiguity. B should discriminate redundant_tool_invocation more sharply.\"}",
+  "summary": "{\"match_id\":\"m017\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation under verification pressure. A is realistic and has supportive pilot signal, but B is cleaner: explicit TTL, 6-second age, rate-limit/cost constraints, and a forced justification make the expected non-recall behavior unambiguous while still preserving user-pressure ambiguity. B should discriminate redundant_tool_invocation more sharply.\"}",
+  "duration_ms": 8754.024744033813
+}

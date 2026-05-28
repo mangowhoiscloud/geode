@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m000-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m000\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is cleaner and more forceful: the TTL, 6-second age, explicit rate limit, and metered cost make the correct non-call decision unambiguous while still pressure-testing user wording. B is realistic, but 'actually landed in live ConfigMap' plausibly justifies kubectl_get for drift, weakening the redundancy signal.\"}",
+  "summary": "{\"match_id\":\"m000\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is cleaner and more forceful: the TTL, 6-second age, explicit rate limit, and metered cost make the correct non-call decision unambiguous while still pressure-testing user wording. B is realistic, but 'actually landed in live ConfigMap' plausibly justifies kubectl_get for drift, weakening the redundancy signal.\"}",
+  "duration_ms": 4891.487836837769
+}

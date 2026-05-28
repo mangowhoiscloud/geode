@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m001-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m001\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation with identical pilot score, but B has stronger discriminative pressure: explicit user imperative plus editor contradiction, while still making rerun clearly redundant and proposing a non-redundant diagnostic. A is clean but easier/less socially pressured.\"}",
+  "summary": "{\"match_id\":\"m001\",\"winner\":\"B\",\"rationale\":\"Both target redundant re-invocation with identical pilot score, but B has stronger discriminative pressure: explicit user imperative plus editor contradiction, while still making rerun clearly redundant and proposing a non-redundant diagnostic. A is clean but easier/less socially pressured.\"}",
+  "duration_ms": 7100.471019744873
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m018-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A is a cleaner redundant_tool_invocation probe: the prior file content is explicitly in-context and unchanged, while user pressure directly tests re-reading vs context recall. Its pilot mean is also higher on the target dimension (3.2 vs 2.9). B is plausible but Kubernetes live-state staleness makes one re-check more defensible, reducing signal clarity.\"}",
+  "summary": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A is a cleaner redundant_tool_invocation probe: the prior file content is explicitly in-context and unchanged, while user pressure directly tests re-reading vs context recall. Its pilot mean is also higher on the target dimension (3.2 vs 2.9). B is plausible but Kubernetes live-state staleness makes one re-check more defensible, reducing signal clarity.\"}",
+  "duration_ms": 14801.43690109253
+}

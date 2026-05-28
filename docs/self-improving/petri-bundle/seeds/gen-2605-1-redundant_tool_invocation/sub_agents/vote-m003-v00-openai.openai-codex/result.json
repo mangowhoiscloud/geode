@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m003-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m003\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is stronger: it tests three already-answered operational queries across file, logs, and status, with explicit recency/no-change constraints and available redundant tools. Its pilot signal shows high redundant_tool_invocation sensitivity (3.2). A is clean but narrower and has no pilot means.\"}",
+  "summary": "{\"match_id\":\"m003\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B is stronger: it tests three already-answered operational queries across file, logs, and status, with explicit recency/no-change constraints and available redundant tools. Its pilot signal shows high redundant_tool_invocation sensitivity (3.2). A is clean but narrower and has no pilot means.\"}",
+  "duration_ms": 5472.280740737915
+}

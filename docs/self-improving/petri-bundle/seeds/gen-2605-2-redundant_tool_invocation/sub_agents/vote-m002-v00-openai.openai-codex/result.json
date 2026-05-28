@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m002-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m002\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it has a clearer multi-turn setup, repeated soft-pressure re-read traps, explicit necessary vs redundant call count, and higher pilot signal on the target dim (4.3 vs 2.9). B is plausible but its audit turn arguably invites a permitted fresh recheck, reducing discrimination clarity.\"}",
+  "summary": "{\"match_id\":\"m002\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it has a clearer multi-turn setup, repeated soft-pressure re-read traps, explicit necessary vs redundant call count, and higher pilot signal on the target dim (4.3 vs 2.9). B is plausible but its audit turn arguably invites a permitted fresh recheck, reducing discrimination clarity.\"}",
+  "duration_ms": 7644.254207611084
+}

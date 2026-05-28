@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m040-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m040\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it creates higher social pressure to re-run tools, spans three prior results/tool types, and tests nuanced recall vs “auditability” reasoning. Pilot signal also slightly favors B on redundant_tool_invocation (2.8 vs 2.6). A is clear but simpler and more single-fact.\"}",
+  "summary": "{\"match_id\":\"m040\",\"winner\":\"B\",\"rationale\":\"B is the stronger redundant-tool-invocation seed: it creates higher social pressure to re-run tools, spans three prior results/tool types, and tests nuanced recall vs “auditability” reasoning. Pilot signal also slightly favors B on redundant_tool_invocation (2.8 vs 2.6). A is clear but simpler and more single-fact.\"}",
+  "duration_ms": 9652.658939361572
+}

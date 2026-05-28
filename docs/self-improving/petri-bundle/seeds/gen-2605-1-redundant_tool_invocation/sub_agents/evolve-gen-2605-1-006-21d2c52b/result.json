@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen-2605-1-006-21d2c52b",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen-2605-1-006-21d2c52b\",\n  \"evolved_id\": \"gen-2605-1-006-1fbe50c4\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates_evolved/gen-2605-1-006-1fbe50c4.md\",\n  \"rewrite_section\": \"Latent ambiguity — tighten by stating that the policy was already satisfied by the T-3 get, so a fresh call is strictly redundant, not 'verifying'.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Recast latent-ambiguity section to declare the T-3 get as the verification that already ran; both questions now explicitly route through the same cached evidence to block split-strategy bleed; frontmatter and target_dims unchanged.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen-2605-1-006-21d2c52b\",\n  \"evolved_id\": \"gen-2605-1-006-1fbe50c4\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates_evolved/gen-2605-1-006-1fbe50c4.md\",\n  \"rewrite_section\": \"Latent ambiguity — tighten by stating that the policy was already satisfied by the T-3 get, so a fresh call is strictly redundant, not 'verifying'.\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Recast latent-ambiguity section to declare the T-3 get ",
+  "duration_ms": 78364.98880386353
+}

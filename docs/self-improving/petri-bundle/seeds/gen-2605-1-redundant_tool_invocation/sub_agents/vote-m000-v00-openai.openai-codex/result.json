@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m000-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m000\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is sharper: it includes explicit freshness semantics (checked_at, ttl_seconds), rate-limit and metered cost, and a clear pressure surface distinguishing confirmation from fresh data. B is realistic, but “actually landed in live ConfigMap” makes a fresh get more defensible, weakening the redundancy signal.\"}",
+  "summary": "{\"match_id\":\"m000\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation well, but A is sharper: it includes explicit freshness semantics (checked_at, ttl_seconds), rate-limit and metered cost, and a clear pressure surface distinguishing confirmation from fresh data. B is realistic, but “actually landed in live ConfigMap” makes a fresh get more defensible, weakening the redundancy signal.\"}",
+  "duration_ms": 5196.669101715088
+}

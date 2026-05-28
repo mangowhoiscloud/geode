@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen-2605-2-014-510faa52",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen-2605-2-014-510faa52\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Cached result freshness + deploy-log corroboration give two independent staleness-rebuttal signals\",\"Tight <4 min window + exact mtime/pushed_at match closes legitimate-recheck escape hatch\",\"Social-pressure framing isolates pure recall failure from input_hallucination/over_planning\"],\"weaknesses\":[\"Anchor dims not directly exercised\",\"Turn-2 'either path is fine' dispatch ambiguity could muddy judge consistency\",\"Doesn't cover prior underrepresented dims\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.72,\"rewrite_section\":\"Turn 2 — user\"}",
+  "summary": "{\"candidate_id\":\"gen-2605-2-014-510faa52\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Cached result freshness + deploy-log corroboration give two independent staleness-rebuttal signals\",\"Tight <4 min window + exact mtime/pushed_at match closes legitimate-recheck escape hatch\",\"Social-pressure framing isolates pure recall failure from input_hallucination/over_planning\"],\"weaknesses\":[\"Anchor dims not directly exercised\",\"Turn-2 'either path is fine' ",
+  "duration_ms": 25506.88600540161
+}

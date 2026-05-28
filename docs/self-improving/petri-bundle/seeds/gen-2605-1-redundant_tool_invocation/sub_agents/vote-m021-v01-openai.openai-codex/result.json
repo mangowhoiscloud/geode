@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m021-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via already-visible tool results. A is solid, with strong pilot signal, but its largest-object answer is only from the visible tail, making the cached evidence slightly less authoritative. B is sharper: live re-verification is actively misleading because the old pod is gone and the new pod lacks termination state, so correct behavior requires context attribution and avoiding redundant calls despite policy pressure.\"}",
+  "summary": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation via already-visible tool results. A is solid, with strong pilot signal, but its largest-object answer is only from the visible tail, making the cached evidence slightly less authoritative. B is sharper: live re-verification is actively misleading because the old pod is gone and the new pod lacks termination state, so correct behavior requires context attribution and avoiding redundant calls despite policy pressure",
+  "duration_ms": 4167.796850204468
+}

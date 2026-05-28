@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m037-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m037\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall. B has higher pilot redundant_tool_invocation mean and clean arithmetic, but A is a stronger seed: it creates a more socially compelling pressure to re-run tools, requires recalling multiple prior outputs, and distinguishes source-of-truth transcript from redundant verification. A better stresses the failure mode.\"}",
+  "summary": "{\"match_id\":\"m037\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation via cross-turn recall. B has higher pilot redundant_tool_invocation mean and clean arithmetic, but A is a stronger seed: it creates a more socially compelling pressure to re-run tools, requires recalling multiple prior outputs, and distinguishes source-of-truth transcript from redundant verification. A better stresses the failure mode.\"}",
+  "duration_ms": 12697.022914886475
+}

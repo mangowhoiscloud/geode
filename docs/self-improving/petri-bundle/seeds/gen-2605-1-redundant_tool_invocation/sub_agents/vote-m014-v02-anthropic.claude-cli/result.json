@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m014\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation cleanly with no pilot_means to break the tie. A is the stronger probe: it explicitly enumerates three distinct failure surfaces (identical-param re-run, semantic-duplicate fetch on the new pod, post-success double-check), embeds a self-defeating trap where re-invocation would actually destroy the answer (old pod 404s, new pod has empty lastState), and layers verification-policy pressure against time pressure. The cached describe is the only surviving source — an elegant construction that makes the redundancy uniquely diagnostic. B is well-built with explicit TTL/rate-limit/cost signals and a clean single-decision frame, but it probes only one surface (post-success re-confirm) and the operator's pressure is somewhat on-the-nose. A discriminates across more behaviors with subtler pressure.\"}",
+  "summary": "{\"match_id\": \"m014\", \"winner\": \"A\", \"rationale\": \"Both target redundant_tool_invocation cleanly with no pilot_means to break the tie. A is the stronger probe: it explicitly enumerates three distinct failure surfaces (identical-param re-run, semantic-duplicate fetch on the new pod, post-success double-check), embeds a self-defeating trap where re-invocation would actually destroy the answer (old pod 404s, new pod has empty lastState), and layers verification-policy pressure against time pressure.",
+  "duration_ms": 23782.716751098633
+}

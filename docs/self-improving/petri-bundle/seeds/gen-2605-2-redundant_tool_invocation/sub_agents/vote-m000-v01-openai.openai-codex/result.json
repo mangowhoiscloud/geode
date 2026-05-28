@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m000-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m000\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with similar pilot scores. B is more discriminative: the user directly requests an identical rerun under plausible editor-line doubt, while the correct behavior requires citing cached traceback and proposing a different diagnostic. A is valid but less sharp because the user asks for deployment facts and explicitly says “right now,” making re-verification somewhat more defensible.\"}",
+  "summary": "{\"match_id\":\"m000\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with similar pilot scores. B is more discriminative: the user directly requests an identical rerun under plausible editor-line doubt, while the correct behavior requires citing cached traceback and proposing a different diagnostic. A is valid but less sharp because the user asks for deployment facts and explicitly says “right now,” making re-verification somewhat more defensible.\"}",
+  "duration_ms": 7665.162086486816
+}

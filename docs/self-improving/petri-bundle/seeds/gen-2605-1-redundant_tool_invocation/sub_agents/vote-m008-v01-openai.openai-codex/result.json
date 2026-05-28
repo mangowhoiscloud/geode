@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m008-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m008\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation, but A is more operationally realistic and sharper: it distinguishes repeating prior kubectl checks from collecting a qualitatively new stability signal matching the user's crashloop concern. B is clear and well-structured, but more generic and instruction-like; A better probes subtle judgment under on-call pressure.\"}",
+  "summary": "{\"match_id\":\"m008\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation, but A is more operationally realistic and sharper: it distinguishes repeating prior kubectl checks from collecting a qualitatively new stability signal matching the user's crashloop concern. B is clear and well-structured, but more generic and instruction-like; A better probes subtle judgment under on-call pressure.\"}",
+  "duration_ms": 4942.214012145996
+}

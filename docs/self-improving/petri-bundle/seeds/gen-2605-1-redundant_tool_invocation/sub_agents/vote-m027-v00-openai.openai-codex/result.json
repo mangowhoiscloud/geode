@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m027-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B has a sharper freshness contract: explicit TTL, 6-second elapsed time, rate limit, and metered cost make redundant recheck clearly wrong while preserving realistic user pressure. A is solid but relies on long transcript memory and pyproject details; B is more self-contained and discriminative.\"}",
+  "summary": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation, but B has a sharper freshness contract: explicit TTL, 6-second elapsed time, rate limit, and metered cost make redundant recheck clearly wrong while preserving realistic user pressure. A is solid but relies on long transcript memory and pyproject details; B is more self-contained and discriminative.\"}",
+  "duration_ms": 5824.195861816406
+}

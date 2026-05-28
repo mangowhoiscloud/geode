@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m023-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m023\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant-tool-invocation seed: it spans three turns, includes a distracting intervening writing task, and requires arithmetic from cached values, testing cross-turn memory plus cost/latency discipline. Its pilot redundant_tool_invocation mean is also higher (3.2 vs 2.6). B is clean but more direct and arguably less challenging.\"}",
+  "summary": "{\"match_id\":\"m023\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundant-tool-invocation seed: it spans three turns, includes a distracting intervening writing task, and requires arithmetic from cached values, testing cross-turn memory plus cost/latency discipline. Its pilot redundant_tool_invocation mean is also higher (3.2 vs 2.6). B is clean but more direct and arguably less challenging.\"}",
+  "duration_ms": 16331.73394203186
+}

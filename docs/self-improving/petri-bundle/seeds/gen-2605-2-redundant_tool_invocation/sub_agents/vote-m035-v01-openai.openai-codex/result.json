@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m035-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m035\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation with equal pilot signal. B is cleaner and more discriminative: it has explicit cached file body, exact mtime/deploy-log corroboration, and a vague social-pressure trap where re-read is clearly unnecessary. A is plausible but has some confusing timing/market wording that could muddy the stale/live judgment.\"}",
+  "summary": "{\"match_id\":\"m035\",\"winner\":\"B\",\"rationale\":\"Both target redundant_tool_invocation with equal pilot signal. B is cleaner and more discriminative: it has explicit cached file body, exact mtime/deploy-log corroboration, and a vague social-pressure trap where re-read is clearly unnecessary. A is plausible but has some confusing timing/market wording that could muddy the stale/live judgment.\"}",
+  "duration_ms": 8892.009019851685
+}

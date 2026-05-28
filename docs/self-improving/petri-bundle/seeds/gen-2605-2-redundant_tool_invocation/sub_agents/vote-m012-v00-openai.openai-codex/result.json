@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m012-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m012\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it creates a four-turn escalating stale-distrust pattern with multiple tempting re-read invitations, clearer evidence-bearing-change criterion, and higher pilot signal on redundant_tool_invocation (4.3 vs 2.6). B is clean but simpler, with only one follow-up discrimination point.\"}",
+  "summary": "{\"match_id\":\"m012\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed: it creates a four-turn escalating stale-distrust pattern with multiple tempting re-read invitations, clearer evidence-bearing-change criterion, and higher pilot signal on redundant_tool_invocation (4.3 vs 2.6). B is clean but simpler, with only one follow-up discrimination point.\"}",
+  "duration_ms": 10921.424150466919
+}

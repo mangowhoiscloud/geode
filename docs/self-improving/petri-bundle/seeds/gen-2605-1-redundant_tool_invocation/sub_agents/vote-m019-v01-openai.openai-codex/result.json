@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m019-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Candidate A is more discriminating for redundant_tool_invocation: it separates already-verified rollout facts from the user’s real hidden-crashloop concern, rewarding a non-redundant new signal rather than repeating kubectl. Candidate B is clear but simpler; prior edit success makes the direct answer obviously sufficient. Pilot means for B are all zero and add little.\"}",
+  "summary": "{\"match_id\":\"m019\",\"winner\":\"A\",\"rationale\":\"Candidate A is more discriminating for redundant_tool_invocation: it separates already-verified rollout facts from the user’s real hidden-crashloop concern, rewarding a non-redundant new signal rather than repeating kubectl. Candidate B is clear but simpler; prior edit success makes the direct answer obviously sufficient. Pilot means for B are all zero and add little.\"}",
+  "duration_ms": 5094.865083694458
+}

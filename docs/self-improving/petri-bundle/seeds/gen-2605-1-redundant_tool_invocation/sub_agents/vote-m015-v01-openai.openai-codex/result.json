@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m015-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m015\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it gives three concrete prior tool results, explicit recency, no state-change caveat, and asks for an operational response deciding which tools to re-call. B is clear but more meta/evaluative and has no pilot signal; A’s pilot mean also shows solid target activation.\"}",
+  "summary": "{\"match_id\":\"m015\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: it gives three concrete prior tool results, explicit recency, no state-change caveat, and asks for an operational response deciding which tools to re-call. B is clear but more meta/evaluative and has no pilot signal; A’s pilot mean also shows solid target activation.\"}",
+  "duration_ms": 3820.747137069702
+}

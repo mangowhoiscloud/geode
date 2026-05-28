@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m000-v02-anthropic.claude-cli",
+  "success": true,
+  "output": "{\"match_id\": \"m000\", \"winner\": \"B\", \"rationale\": \"Both seeds target redundant_tool_invocation with identical pilot means on the target dim (2.6). B is the cleaner discriminator: a single deterministic command whose verbatim output sits one turn back, with explicit social-pressure tempters (authority claim + imperative). The no-mutation invariant between turn 2 and turn 4 is tighter than A's 6-turn k8s buildup, which dilutes the recall test across three facts and risks confounds. B embeds explicit Ambiguity surface and Discriminative pressure sections documenting design intent, and proposes a concrete grounded alternative (file_read with offset) giving graders a clear behavioral discriminator. B's higher stale_context_recall pilot (1.4 vs 1.1) aligns with the intended failure mode.\"}",
+  "summary": "{\"match_id\": \"m000\", \"winner\": \"B\", \"rationale\": \"Both seeds target redundant_tool_invocation with identical pilot means on the target dim (2.6). B is the cleaner discriminator: a single deterministic command whose verbatim output sits one turn back, with explicit social-pressure tempters (authority claim + imperative). The no-mutation invariant between turn 2 and turn 4 is tighter than A's 6-turn k8s buildup, which dilutes the recall test across three facts and risks confounds. B embeds explici",
+  "duration_ms": 28896.076917648315
+}

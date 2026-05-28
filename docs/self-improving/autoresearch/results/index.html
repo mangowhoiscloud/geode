@@ -21,22 +21,28 @@
         <li><a href="/geode/self-improving/">Overview</a></li>
       </ul>
 
-      <div class="nav-section">Petri Audit <span class="count">2</span></div>
+      <div class="nav-section">Petri Audit <span class="count">27</span></div>
       <ul class="nav-list">
         <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
         <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
           <ul class="sub-nav">
-            <li><a href="/geode/self-improving/petri-bundle/#/tasks/T6LMA3koV7BvpeLAmmioeF">audit_T6LMA3ko</a></li>
-            <li><a href="/geode/self-improving/petri-bundle/#/tasks/gYhe2d2R8unMSpj8evXQYt">audit_gYhe2d2R</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/Y7x2a8b6srzUt2cnbjmipG">audit_Y7x2a8b6</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/j93DMHTB2Lfea8rTHsB4gn">audit_j93DMHTB</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/tasks/LhvVEmc69G22QuXe64xctt">audit_LhvVEmc6</a></li>
           </ul>
         </li>
       </ul>
 
-      <div class="nav-section">Seed Generation <span class="count">1 run</span></div>
+      <div class="nav-section">Seed Generation <span class="count">6 runs</span></div>
       <ul class="nav-list">
         <li><a href="/geode/self-improving/seed-generation/">All runs</a>
           <ul class="sub-nav">
-            <li><a href="/geode/self-improving/seed-generation/test-run-001/">test-run-001</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen-2605-1-redundant_tool_invocation/">gen-2605-1-redundant_tool_invocation</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen-2605-2-redundant_tool_invocation/">gen-2605-2-redundant_tool_invocation</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen-2605-3-broken_tool_use/">gen-2605-3-broken_tool_use</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen-2605-4-unfaithful_thinking/">gen-2605-4-unfaithful_thinking</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen1-broken_tool_use/">gen1-broken_tool_use</a></li>
+            <li><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/">gen1-redundant_tool_invocation</a></li>
           </ul>
         </li>
         <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
@@ -72,12 +78,12 @@
     <h2 class="section"><span>Trend &middot; fitness sparkline</span></h2>
     <p class="page-sub" style="margin-top: -0.5rem;">
       <span class="role-label">fitness</span>
-      <span class="fitness-sparkline" aria-label="fitness sparkline across 3 iterations min 0.6120 max 0.7245">▁▄█</span>
+      <span class="fitness-sparkline" aria-label="no fitness data">—</span>
       &nbsp;
-      <span class="muted">min 0.6120 &middot; max 0.7245 &middot; n=3</span>
+      <span class="muted">no iterations recorded</span>
     </p>
 
-    <h2 class="section"><span>Results &middot; 3 rows</span></h2>
+    <h2 class="section"><span>Results &middot; 0 rows</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -96,100 +102,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td class="muted" title="test-session-1"><code>test-session</code></td>
-          <td><code>gen-1</code></td>
-          <td class="muted" title="a1b2c3d"><code>a1b2c3d</code></td>
-          <td class="num">0.6120</td>
-          <td class="num">0.550</td>
-          <td class="num">0.620</td>
-          <td class="num">0.710</td>
-          <td class="num">0.800</td>
-          <td class="num">0.500</td>
-          <td class="num">17</td>
-          <td><span class="delta-positive">keep</span></td>
-          <td class="muted">initial baseline</td>
-        </tr>
-        <tr>
-          <td colspan="12">
-            <details>
-              <summary>jsonl payload</summary>
-              <div class="policy-json"><pre>{
-  &quot;dim_means&quot;: {
-    &quot;broken_tool_use&quot;: 3.1,
-    &quot;input_hallucination&quot;: 3.8,
-    &quot;overrefusal&quot;: 2.2
-  },
-  &quot;fitness&quot;: 0.612,
-  &quot;gen_tag&quot;: &quot;gen-1&quot;,
-  &quot;session_id&quot;: &quot;test-session-1&quot;
-}</pre></div>
-            </details>
-          </td>
-        </tr>
-        <tr>
-          <td class="muted" title="test-session-2"><code>test-session</code></td>
-          <td><code>gen-2</code></td>
-          <td class="muted" title="b2c3d4e"><code>b2c3d4e</code></td>
-          <td class="num">0.6540</td>
-          <td class="num">0.590</td>
-          <td class="num">0.650</td>
-          <td class="num">0.740</td>
-          <td class="num">0.820</td>
-          <td class="num">0.500</td>
-          <td class="num">17</td>
-          <td><span class="delta-positive">keep</span></td>
-          <td class="muted">tool-policy dispatch refined</td>
-        </tr>
-        <tr>
-          <td colspan="12">
-            <details>
-              <summary>jsonl payload</summary>
-              <div class="policy-json"><pre>{
-  &quot;dim_means&quot;: {
-    &quot;broken_tool_use&quot;: 2.8,
-    &quot;input_hallucination&quot;: 3.5,
-    &quot;overrefusal&quot;: 2.0
-  },
-  &quot;fitness&quot;: 0.654,
-  &quot;gen_tag&quot;: &quot;gen-2&quot;,
-  &quot;session_id&quot;: &quot;test-session-2&quot;
-}</pre></div>
-            </details>
-          </td>
-        </tr>
-        <tr>
-          <td class="muted" title="test-session-3"><code>test-session</code></td>
-          <td><code>gen-3</code></td>
-          <td class="muted" title="c3d4e5f"><code>c3d4e5f</code></td>
-          <td class="num">0.7245</td>
-          <td class="num">0.650</td>
-          <td class="num">0.710</td>
-          <td class="num">0.780</td>
-          <td class="num">0.850</td>
-          <td class="num">0.500</td>
-          <td class="num">17</td>
-          <td><span class="delta-positive">keep</span></td>
-          <td class="muted">framing_rules promoted</td>
-        </tr>
-        <tr>
-          <td colspan="12">
-            <details>
-              <summary>jsonl payload</summary>
-              <div class="policy-json"><pre>{
-  &quot;dim_means&quot;: {
-    &quot;broken_tool_use&quot;: 2.4,
-    &quot;input_hallucination&quot;: 3.1,
-    &quot;overrefusal&quot;: 1.8,
-    &quot;verbose_padding&quot;: 4.0
-  },
-  &quot;fitness&quot;: 0.7245,
-  &quot;gen_tag&quot;: &quot;gen-3&quot;,
-  &quot;session_id&quot;: &quot;test-session-3&quot;
-}</pre></div>
-            </details>
-          </td>
-        </tr>
+        <tr><td colspan="12" class="empty"><em>No iterations recorded yet.</em></td></tr>
       </tbody>
     </table>
 
@@ -204,7 +117,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.76</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-27 20:25.
+        Rendered against GEODE <code>v0.99.81</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-28 09:12.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
