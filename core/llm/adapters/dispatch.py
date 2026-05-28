@@ -42,8 +42,10 @@ journals so operators can trace exactly which adapter was tried.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,6 +60,62 @@ log = logging.getLogger(__name__)
 
 
 _DEFAULT_PROVIDER_ORDER: tuple[str, ...] = ("anthropic", "openai", "glm")
+
+
+# ---------------------------------------------------------------------------
+# Per-session adapter usage counter — PR-DISPATCH-OBS-EXT (2026-05-28)
+# ---------------------------------------------------------------------------
+#
+# A ContextVar holding an ``{adapter_name: {outcome: count}}`` map. Set fresh
+# at session start (via :func:`begin_session_adapter_tracking`), incremented
+# inside :func:`_fire_attempt`, read at session end (via
+# :func:`get_session_adapter_usage`) so the SESSION_ENDED hook payload can
+# carry an aggregate breakdown of which adapter handled how many calls and
+# with what outcome — the operator-facing answer to "what did this session
+# actually route through" in one row, not N rows.
+#
+# Defaults to ``None`` so dispatches outside an AgenticLoop session (CLI
+# helpers, tests, hooks running between sessions) silently skip the
+# accumulation — the per-attempt hook + INFO log remain the universal
+# observability surface.
+
+_session_adapter_usage_ctx: ContextVar[dict[str, dict[str, int]] | None] = ContextVar(
+    "session_adapter_usage", default=None
+)
+
+
+def begin_session_adapter_tracking() -> None:
+    """Reset the session-scoped adapter usage counter.
+
+    Called once by :class:`AgenticLoop` at session start so dispatch
+    attempts during this session accumulate into a fresh dict that
+    SESSION_ENDED can emit.
+    """
+    _session_adapter_usage_ctx.set({})
+
+
+def get_session_adapter_usage() -> dict[str, dict[str, int]]:
+    """Return the current session's adapter usage breakdown.
+
+    Empty dict when called outside a tracked session — safe for callers
+    that emit unconditionally.
+    """
+    counter = _session_adapter_usage_ctx.get()
+    return dict(counter) if counter is not None else {}
+
+
+def end_session_adapter_tracking() -> None:
+    """Clear the per-session counter back to ``None`` (Codex MCP audit
+    2026-05-28).
+
+    Called by the lifecycle helper AFTER it has read the final breakdown
+    via :func:`get_session_adapter_usage` so any stray dispatch that
+    fires in the same context after session finalisation (background
+    hook task, leaked async coroutine) does not mutate a stale counter
+    that no longer corresponds to an active session.
+    """
+    _session_adapter_usage_ctx.set(None)
+
 
 _SOURCE_SWITCH_HINT = (
     "Switch credential source explicitly via /login: "
@@ -228,14 +286,25 @@ def _registered_adapter_summary() -> str:
 
 
 def _fire_attempt(attempt: AdapterAttempt) -> None:
-    """Fire ``ADAPTER_DISPATCH_ATTEMPT`` hook + INFO log.
+    """Fire ``ADAPTER_DISPATCH_ATTEMPT`` hook + INFO log + accumulate
+    per-session counter.
 
     Hook payload mirrors :class:`AdapterAttempt` fields so journal /
     serve-log writers see a single structured row per attempt. Hook
     failures must not poison dispatch — :func:`fire_hook` swallows
     handler errors at DEBUG; the surrounding try guards module-load
     edge cases (router hooks not yet wired).
+
+    PR-DISPATCH-OBS-EXT (2026-05-28) — also increments the per-session
+    ``_session_adapter_usage_ctx`` counter so SESSION_ENDED can surface
+    an aggregate ``{adapter_name: {outcome: count}}`` breakdown without
+    requiring the lifecycle helper to re-parse the per-attempt event
+    stream.
     """
+    counter = _session_adapter_usage_ctx.get()
+    if counter is not None:
+        bucket = counter.setdefault(attempt.adapter_name, {})
+        bucket[attempt.outcome] = bucket.get(attempt.outcome, 0) + 1
     log.info(
         "dispatch[%s] %s (%s/%s) → %s in %.0fms%s",
         attempt.capability,
@@ -385,7 +454,16 @@ async def web_search_via_adapters(
             elapsed_ms=elapsed_ms,
         )
     )
-    return result
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — enrich the result with the selected
+    # adapter's identity so the tool layer can surface it inline in
+    # ``tool_exec_end`` metadata. Single-point enrichment avoids touching
+    # every capability impl in :mod:`_capability_impls`.
+    return dataclasses.replace(
+        result,
+        adapter_name=adapter.name,
+        adapter_provider=adapter.provider,
+        adapter_source=adapter.source,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -513,13 +591,25 @@ async def complete_text_via_adapters(
             elapsed_ms=elapsed_ms,
         )
     )
-    return result
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — mirror the web_search enrichment so
+    # text-completion callers (compaction / extraction / context-exhausted)
+    # can record which adapter handled the call without re-querying the
+    # registry.
+    return dataclasses.replace(
+        result,
+        adapter_name=adapter.name,
+        adapter_provider=adapter.provider,
+        adapter_source=adapter.source,
+    )
 
 
 __all__ = [
     "AdapterAttempt",
     "AdapterDispatchError",
     "AdapterUnavailableError",
+    "begin_session_adapter_tracking",
     "complete_text_via_adapters",
+    "end_session_adapter_tracking",
+    "get_session_adapter_usage",
     "web_search_via_adapters",
 ]

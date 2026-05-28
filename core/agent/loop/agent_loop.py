@@ -831,6 +831,14 @@ class AgenticLoop:
             self._transcript.record_session_start(model=self.model, provider=self._provider)
             self._transcript.record_user_message(user_input)
 
+        # PR-DISPATCH-OBS-EXT (2026-05-28) — start a fresh per-session
+        # adapter usage counter so dispatch attempts during this session
+        # accumulate into a dict that SESSION_ENDED can emit as
+        # ``adapter_usage`` aggregate.
+        from core.llm.adapters.dispatch import begin_session_adapter_tracking
+
+        begin_session_adapter_tracking()
+
         # Hook: SESSION_START
         if self._hooks:
             await self._hooks.trigger_async(

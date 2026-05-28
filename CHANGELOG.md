@@ -47,6 +47,58 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-DISPATCH-OBS-EXT (2026-05-28)** — four observability
+  enhancements layered on PR-NO-FALLBACK's strict-dispatch + per-attempt
+  hook. Operator-facing answer to "which adapter actually handled this
+  call?" without grep+timestamp cross-correlation.
+
+  1. **Tool result adapter inline** —
+     :class:`core.llm.adapters.base.WebSearchResult` +
+     :class:`TextCompletionResult` gain ``adapter_name`` /
+     ``adapter_provider`` / ``adapter_source`` fields (all ``str = ""``
+     defaults). ``dispatch.web_search_via_adapters`` +
+     ``dispatch.complete_text_via_adapters`` enrich via
+     ``dataclasses.replace`` after the capability impl returns — single
+     point of enrichment so the 4 web_search impls and 4 text_completion
+     impls don't all have to update. ``web_tools.py`` + ``web_search.py``
+     surface the new fields in the tool result dict; ``tool_exec_end``
+     metadata now carries them inline.
+
+  2. **Serve log file recovery** —
+     :func:`core.cli.typer_serve.serve` wires a ``RotatingFileHandler``
+     at ``~/.geode/logs/serve.log`` (10MB × 5 backups) with auto-mkdir.
+     The legacy serve.log writer was deleted in a prior v0.99.x cleanup;
+     ``cmd_lifecycle`` status was still pointing at
+     ``SERVE_LOG_PATH`` but nothing populated it. Restored so dispatch
+     INFO logs persist across serve restarts.
+
+  3. **CLI dispatch stats** — new ``geode adapters stats [--since 1h]
+     [--runs-dir DIR]`` reads ``ADAPTER_DISPATCH_ATTEMPT`` events from
+     ``~/.geode/runs/*.jsonl``, filters by time window, aggregates by
+     ``(capability, adapter_name, provider, source)`` into a dense table
+     with per-outcome counts (success / billing / transient / unavailable)
+     + p50/p95 latency. ``--since`` parser supports s/m/h/d/w suffixes.
+
+  4. **Session-end adapter usage** — new ``ContextVar`` per session;
+     ``begin_session_adapter_tracking`` (called by AgenticLoop at
+     SESSION_STARTED) resets it; ``_fire_attempt`` increments;
+     ``get_session_adapter_usage`` reads. ``_lifecycle.py`` emits
+     ``adapter_usage`` ``{adapter_name: {outcome: count}}`` into
+     SESSION_ENDED payload, then calls ``end_session_adapter_tracking``
+     to clear (Codex MCP audit catch — without the reset, a leaked
+     post-finalization dispatch would mutate a stale counter). Caveat
+     documented: TURN_COMPLETED hooks (e.g. ``turn_llm_extract``) fire
+     AFTER SESSION_ENDED is built, so their dispatch attempts are not
+     in this aggregate — they belong to turn_complete accounting.
+
+  Pinned by ``tests/test_dispatch_obs_ext.py`` (15 assertions:
+  dataclass field shape, single-point enrichment, counter accumulate,
+  outside-session empty, source-level pins for lifecycle + agent_loop +
+  tools + typer_serve, CLI stats parses jsonl + rejects malformed
+  --since + empty-window message, end_session_adapter_tracking clears
+  counter).
+
 ### Fixed
 - **PR-CODEX-INSTRUCTIONS-FIX (2026-05-28)** — codex-oauth
   ``aweb_search`` now satisfies two Codex-backend-specific call-shape

@@ -218,6 +218,12 @@ class GeneralWebSearchTool:
                 "search_results": result.text,
                 "source": result.adapter_name,
                 "source_urls": list(result.source_urls),
+                # PR-DISPATCH-OBS-EXT (2026-05-28) — inline adapter
+                # provider + source so ``tool_exec_end`` metadata answers
+                # "which adapter handled this" without operators having to
+                # cross-correlate by timestamp with ADAPTER_DISPATCH_ATTEMPT.
+                "adapter_provider": result.adapter_provider,
+                "adapter_source": result.adapter_source,
             }
         }
 

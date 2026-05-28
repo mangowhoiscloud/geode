@@ -33,10 +33,36 @@ def serve(
     import signal
     import time as _time
 
-    _logging.basicConfig(
-        level=_logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    # PR-DISPATCH-OBS-EXT (2026-05-28) — restore serve.log file handler.
+    # The legacy serve.log path (``~/.geode/logs/serve.log``) was deleted
+    # at some point in the v0.99.x cleanup. Without a file handler the
+    # INFO-level dispatch events (per-attempt observability from
+    # PR-NO-FALLBACK) only go to stdout, lost on serve restart. The
+    # ``cmd_lifecycle`` status command also depends on SERVE_LOG_PATH
+    # existing (``cmd_lifecycle.py:319``).
+    from logging.handlers import RotatingFileHandler
+
+    from core.paths import SERVE_LOG_PATH
+
+    SERVE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _fmt = _logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+    _file_handler = RotatingFileHandler(
+        SERVE_LOG_PATH, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
+    _file_handler.setLevel(_logging.INFO)
+    _file_handler.setFormatter(_fmt)
+    _stream_handler = _logging.StreamHandler()
+    _stream_handler.setLevel(_logging.INFO)
+    _stream_handler.setFormatter(_fmt)
+    _root = _logging.getLogger()
+    _root.setLevel(_logging.INFO)
+    # Replace any pre-existing handlers (basicConfig may have been invoked
+    # earlier by an imported module) so we don't double-log.
+    for _h in list(_root.handlers):
+        _root.removeHandler(_h)
+    _root.addHandler(_file_handler)
+    _root.addHandler(_stream_handler)
+    log.info("serve.log opened: %s (10MB x5 rotation)", SERVE_LOG_PATH)
 
     # ContextVars only (memory, profile, env) — no resource creation
     from core.cli.bootstrap import setup_contextvars

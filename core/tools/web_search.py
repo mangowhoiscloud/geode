@@ -124,6 +124,9 @@ class WebSearchTool:
                 "search_results": result.text,
                 "source": result.adapter_name,
                 "source_urls": list(result.source_urls),
+                # PR-DISPATCH-OBS-EXT (2026-05-28) — see GeneralWebSearchTool
+                "adapter_provider": result.adapter_provider,
+                "adapter_source": result.adapter_source,
             }
         }
 
