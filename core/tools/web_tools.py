@@ -122,8 +122,6 @@ class WebFetchTool:
                 return re.sub(r"\s+", " ", text).strip()
 
 
-
-
 class GeneralWebSearchTool:
     """Search the web via the adapter registry's WebSearchCapable chain.
 

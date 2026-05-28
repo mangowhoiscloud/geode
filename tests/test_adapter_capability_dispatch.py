@@ -64,9 +64,7 @@ class _StubWebSearchAdapter:
 
     async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
         if self._mode == "billing":
-            raise BillingError(
-                "stub billing", provider=self.provider, plan_display_name=self.name
-            )
+            raise BillingError("stub billing", provider=self.provider, plan_display_name=self.name)
         if self._mode == "transient":
             raise RuntimeError(f"stub transient failure from {self.name}")
         return WebSearchResult(
@@ -95,9 +93,7 @@ class _StubTextCompletionAdapter:
         max_tokens: int = 1024,
     ) -> TextCompletionResult:
         if self._mode == "billing":
-            raise BillingError(
-                "stub billing", provider=self.provider, plan_display_name=self.name
-            )
+            raise BillingError("stub billing", provider=self.provider, plan_display_name=self.name)
         if self._mode == "transient":
             raise RuntimeError(f"stub transient failure from {self.name}")
         return TextCompletionResult(
@@ -116,9 +112,7 @@ def _install_stubs(monkeypatch: pytest.MonkeyPatch, stubs: list[Any]) -> None:
 def _force_payg_first(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin :func:`infer_source` to always return ``"payg"`` so the source
     preference is deterministic across machines (PAYG → subscription)."""
-    monkeypatch.setattr(
-        "core.llm.adapters._source_inference.infer_source", lambda provider: "payg"
-    )
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +181,7 @@ def test_web_search_via_adapters_returns_first_success(monkeypatch: pytest.Monke
             _StubWebSearchAdapter(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="ok"
             ),
-            _StubWebSearchAdapter(
-                name="openai-payg", provider="openai", source="payg", mode="ok"
-            ),
+            _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
         ],
     )
     result = asyncio.run(web_search_via_adapters("test query"))
@@ -206,9 +198,7 @@ def test_web_search_via_adapters_falls_through_transient_failures(
             _StubWebSearchAdapter(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="transient"
             ),
-            _StubWebSearchAdapter(
-                name="openai-payg", provider="openai", source="payg", mode="ok"
-            ),
+            _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
         ],
     )
     result = asyncio.run(web_search_via_adapters("test query"))
@@ -231,9 +221,7 @@ def test_web_search_via_adapters_raises_billing_when_all_billing_fatal(
             _StubWebSearchAdapter(
                 name="openai-payg", provider="openai", source="payg", mode="billing"
             ),
-            _StubWebSearchAdapter(
-                name="glm-payg", provider="glm", source="payg", mode="billing"
-            ),
+            _StubWebSearchAdapter(name="glm-payg", provider="glm", source="payg", mode="billing"),
         ],
     )
     with pytest.raises(BillingError):
@@ -344,9 +332,9 @@ def test_complete_text_via_adapters_provider_order_overrides_default(
 
 
 def test_web_tools_general_web_search_delegates_to_dispatch() -> None:
-    src = (
-        Path(__file__).resolve().parents[1] / "core" / "tools" / "web_tools.py"
-    ).read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "core" / "tools" / "web_tools.py").read_text(
+        encoding="utf-8"
+    )
     # The legacy 3-provider direct-SDK chain must be gone.
     assert "_anthropic_search" not in src, (
         "web_tools.py still defines the legacy ``_anthropic_search`` method — "
@@ -362,9 +350,9 @@ def test_web_tools_general_web_search_delegates_to_dispatch() -> None:
 
 
 def test_web_search_legacy_tool_delegates_to_dispatch() -> None:
-    src = (
-        Path(__file__).resolve().parents[1] / "core" / "tools" / "web_search.py"
-    ).read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "core" / "tools" / "web_search.py").read_text(
+        encoding="utf-8"
+    )
     assert "_anthropic_search" not in src, "web_search.py still has legacy direct-SDK chain"
     assert "web_search_via_adapters" in src
 
