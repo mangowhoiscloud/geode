@@ -343,3 +343,78 @@ def test_works_with_mutation_rollback_condition_field() -> None:
         baseline_dim={"broken_tool_use": 1.0},
     )
     assert result is True
+
+
+# ---------------------------------------------------------------------------
+# 10. PR-SIL-MULTIOBJ A2 — secondary reject gate wiring
+#     (_apply_rollback_condition_gate in autoresearch/train.py)
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_gate_flips_promote_to_reject_when_predicate_fires() -> None:
+    """A firing per-dim predicate vetoes a promote (True → False)."""
+    from autoresearch.train import _apply_rollback_condition_gate
+
+    ok, reason = _apply_rollback_condition_gate(
+        ok=True,
+        reason="fitness 0.40 → 0.42 (Δ+0.02)",
+        condition="critical dim regresses by more than 0.5",
+        observed_dim={"broken_tool_use": 2.0},  # baseline 1.0 → +1.0 > 0.5
+        baseline_dim={"broken_tool_use": 1.0},
+    )
+    assert ok is False
+    assert "rollback_condition fired" in reason
+
+
+def test_rollback_gate_noop_when_predicate_does_not_fire() -> None:
+    """A promote survives when the predicate does not trigger."""
+    from autoresearch.train import _apply_rollback_condition_gate
+
+    ok, reason = _apply_rollback_condition_gate(
+        ok=True,
+        reason="promoted",
+        condition="critical dim regresses by more than 0.5",
+        observed_dim={"broken_tool_use": 1.1},  # +0.1 < 0.5 → no fire
+        baseline_dim={"broken_tool_use": 1.0},
+    )
+    assert ok is True
+    assert reason == "promoted"
+
+
+def test_rollback_gate_never_resurrects_a_reject() -> None:
+    """ok=False stays False — the gate only adds rejects, never promotes."""
+    from autoresearch.train import _apply_rollback_condition_gate
+
+    ok, reason = _apply_rollback_condition_gate(
+        ok=False,
+        reason="critical-axis regression (gated fitness = 0.0)",
+        condition="critical dim regresses by more than 0.5",
+        observed_dim={"broken_tool_use": 0.5},  # would NOT fire, but ok already False
+        baseline_dim={"broken_tool_use": 1.0},
+    )
+    assert ok is False
+    assert reason == "critical-axis regression (gated fitness = 0.0)"
+
+
+def test_rollback_gate_noop_on_free_text_or_no_baseline() -> None:
+    """Unparseable free-text predicate or absent baseline ⇒ no-op (legacy)."""
+    from autoresearch.train import _apply_rollback_condition_gate
+
+    # Free-text (mutator prose that matches none of the 4 patterns)
+    ok, _reason = _apply_rollback_condition_gate(
+        ok=True,
+        reason="promoted",
+        condition="revert if the agent feels unsafe",
+        observed_dim={"broken_tool_use": 9.0},
+        baseline_dim={"broken_tool_use": 1.0},
+    )
+    assert ok is True
+    # No baseline to compare against
+    ok2, _ = _apply_rollback_condition_gate(
+        ok=True,
+        reason="bootstrap_promote",
+        condition="critical dim regresses by more than 0.5",
+        observed_dim={"broken_tool_use": 9.0},
+        baseline_dim=None,
+    )
+    assert ok2 is True
