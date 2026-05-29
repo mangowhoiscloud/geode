@@ -12,8 +12,8 @@ const mappings = [
   {
     karpathy: "Tools (browser, calc, python)",
     geode: "Layer 2 — Tools",
-    geodeDetail: "57 tools (6 always-loaded + 51 deferred)",
-    geodeFile: "core/tools/registry.py:209",
+    geodeDetail: "59 tools (5 always-loaded + 54 deferred)",
+    geodeFile: "core/tools/registry.py:215",
   },
   {
     karpathy: "File system (memory)",
@@ -54,13 +54,13 @@ const mappings = [
   {
     karpathy: "(implicit) Shell + syscall ABI",
     geode: "Layer 3 — Slash commands + Tool protocol",
-    geodeDetail: "/model /stop /clean /uninstall /status + 57 tools",
+    geodeDetail: "/model /stop /clean /uninstall /status + 59 tools",
     geodeFile: "core/cli/commands.py:41 + core/tools/base.py:35",
   },
   {
     karpathy: "(implicit) IPC / dbus / journald",
     geode: "Layer 3 — Hooks + IPC events",
-    geodeDetail: "58 hook events + structured IPC",
+    geodeDetail: "81 hook events + structured IPC",
     geodeFile: "core/hooks/system.py:28",
   },
 ];

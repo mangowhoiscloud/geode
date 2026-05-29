@@ -8,8 +8,8 @@ export default function Page() {
       slug="harness/hooks"
       title="Hook System"
       titleKo="훅 시스템"
-      summary="58 lifecycle events grouped into 14 categories. Listeners can observe, intercept, or modify."
-      summaryKo="58개 라이프사이클 이벤트, 14개 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
+      summary="81 lifecycle events grouped into 14 categories. Listeners can observe, intercept, or modify."
+      summaryKo="81개 라이프사이클 이벤트, 14개 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
     >
       <Bi
         ko={
@@ -47,7 +47,7 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              총 14개 그룹, 58개 이벤트 (표에는 주요 항목만 요약). <code>core/hooks/system.py</code>
+              총 14개 그룹, 81개 이벤트 (표에는 주요 항목만 요약). <code>core/hooks/system.py</code>
               소스 주석은 이벤트를 더 세분화하여 (subagent 라이프사이클, agentic turn, 세션,
               LLM 호출, 도구 승인, serve 라이프사이클, MCP 서버) 분류하며, 표에서는 관련 하위
               섹션을 묶어서 표시했습니다.
@@ -119,7 +119,7 @@ hooks.register(
               </tbody>
             </table>
             <p>
-              Total: 14 groups, 58 events (table summarises the major ones). The
+              Total: 14 groups, 81 events (table summarises the major ones). The
               <code>core/hooks/system.py</code> source comments group events into
               finer sub-sections (subagent lifecycle, agentic turn, session,
               LLM call, tool approval, serve lifecycle, MCP server) — the table

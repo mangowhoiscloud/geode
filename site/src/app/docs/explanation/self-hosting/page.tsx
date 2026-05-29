@@ -27,7 +27,7 @@ export default function Page() {
               <tbody>
                 <tr><td>Hash ratchet</td><td>프롬프트 해시 18개 핀</td><td>CI 5단계 게이트</td></tr>
                 <tr><td>Layered memory</td><td>5계층 ContextAssembler</td><td>4계층 CLAUDE.md (managed → user → project → local)</td></tr>
-                <tr><td>Hooks</td><td>58 runtime 이벤트</td><td>41 scaffold skills</td></tr>
+                <tr><td>Hooks</td><td>81 runtime 이벤트</td><td>41 scaffold skills</td></tr>
                 <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 22 규칙</td></tr>
                 <tr><td>Loop + termination</td><td>while(tool_use), 50 라운드, 5 종료 경로</td><td>8-Step workflow</td></tr>
               </tbody>
@@ -60,7 +60,7 @@ export default function Page() {
               <tbody>
                 <tr><td>Hash ratchet</td><td>20 prompt-hash pins</td><td>5-stage CI gate</td></tr>
                 <tr><td>Layered memory</td><td>5-tier ContextAssembler</td><td>4-tier CLAUDE.md (managed → user → project → local)</td></tr>
-                <tr><td>Hooks</td><td>58 runtime events</td><td>41 scaffold skills</td></tr>
+                <tr><td>Hooks</td><td>81 runtime events</td><td>41 scaffold skills</td></tr>
                 <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 22 rules</td></tr>
                 <tr><td>Loop + termination</td><td>while(tool_use), 50 rounds, 5 termination paths</td><td>8-step workflow</td></tr>
               </tbody>
