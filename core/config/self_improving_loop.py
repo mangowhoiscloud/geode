@@ -52,6 +52,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.config.credential_source import CredentialSource
 from core.paths import GLOBAL_CONFIG_TOML
 
 log = logging.getLogger(__name__)
@@ -69,21 +70,24 @@ __all__ = [
 ]
 
 
-# PR-SIL-5THEME C6 (2026-05-23) — D1 provider closure. PAYG (``api_key``)
-# 가 ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` 의 Literal
-# 에서 제거됨 (durable operator decision per ``project_payg_exclusion_decision.md``,
-# 2026-05-23) — autoresearch / Petri audit 의 provider 선택지에서 영구
-# exclude. 잔존 옵션: ``claude-cli`` (Claude Code Max OAuth) /
-# ``openai-codex`` (ChatGPT subscription OAuth) / ``auto`` (manifest cascade).
-# ``api_key`` 설정 시 Pydantic ValidationError 가 명시 PAYG 사용을 reject
-# — PR-C-P1 의 silent-fallback 차단 패턴 재사용.
+# PR-CRED-SOURCE-CENTRALIZE (2026-05-29) — ``Source`` is now a backward-compat
+# re-export of the canonical :class:`core.config.credential_source.CredentialSource`
+# enum (single SoT). Previously this module, ``MutatorConfig.source``,
+# ``plugins.seed_generation.auth_coverage.Source`` and
+# ``settings.{provider}_credential_source`` each spelled the source set
+# differently (``api_key`` in some, not others; ``auto`` in some, not others) —
+# they now all reference one enum, so a change can no longer silently diverge.
 #
-# **인프라 보존**: ``MutatorConfig.source`` (line 248 의 별도 Literal) 는
-# api_key 포함 4-element 유지 — mutator LLM 호출은 audit role 과 별개,
-# operator 가 Anthropic API key 로 mutator 운영 자유. ``credential_source.py``
-# 의 PAYG fallback 코드 경로도 보존 (다른 caller 가 명시 호출 시 활성).
-Source = Literal["claude-cli", "openai-codex", "auto"]
-"""Credential source label — matches ``plugins.petri_audit.petri.plugin.toml``."""
+# PAYG: ``api_key`` is a valid member again. The
+# ``project_payg_exclusion_decision`` intent — a subscription-only run must not
+# *silently* fall through to PAYG — is preserved at resolution time
+# (``plugins.petri_audit.credential_source.resolve_credential_source`` filters
+# ``api_key`` out of ``auto`` expansion unless ``[self_improving_loop]
+# fallback_to_payg=true``); an operator may still *explicitly* set
+# ``source = "api_key"`` to opt in. The earlier type-level exclusion only caused
+# the fragmentation above and blocked that explicit opt-in.
+Source = CredentialSource
+"""Backward-compat alias of :class:`CredentialSource` (the canonical enum)."""
 
 
 class SelfImprovingLoopBindings(BaseModel):
@@ -181,7 +185,7 @@ class PetriRoleConfig(BaseModel):
     # 가 PAYG 까지 fallback 할 수 있어서 silent leak risk — 명시
     # ``claude-cli`` (Claude Code Max OAuth) 이 default 면 leak 0. operator
     # 가 explicit 으로 ``auto`` 또는 ``openai-codex`` 명시 시 그대로 적용.
-    source: Source = "claude-cli"
+    source: Source = CredentialSource.CLAUDE_CLI
 
 
 class AutoresearchConfig(BaseModel):
@@ -453,7 +457,7 @@ class AutoresearchConfig(BaseModel):
     # 으로 ``api_key`` 는 ``Source`` literal 에서 제거. ``auto`` 는 manifest
     # cascade 가 PAYG 까지 silent fallback 가능 → ``claude-cli`` (Claude
     # Code Max OAuth) 가 새 default.
-    source: Source = "claude-cli"
+    source: Source = CredentialSource.CLAUDE_CLI
     """Credential source for the audit subprocess. PR-SIL-5THEME C6 후 PAYG
     (``api_key``) 는 Source literal 에서 제거. ``claude-cli`` = Claude Code
     Max OAuth (default), ``openai-codex`` = ChatGPT subscription OAuth, ``auto`` =
@@ -514,9 +518,9 @@ class MutatorConfig(BaseModel):
     """``None`` → inherit ``Settings.model``. Operator sets this only
     when the mutator LLM must differ from the GEODE primary (e.g.
     use a smaller model to keep mutation cost down)."""
-    source: Literal["auto", "api_key", "claude-cli", "openai-codex"] = "auto"
-    """Mirrors :data:`Source`. The router's credential rotator
-    consumes the same enum implicitly via ``[petri.source.<provider>]``."""
+    source: CredentialSource = CredentialSource.AUTO
+    """Canonical :class:`CredentialSource`. The router's credential rotator
+    consumes the same enum via ``[petri.source.<provider>]``."""
     max_tokens: Annotated[int, Field(ge=128, le=200_000)] = 1024
     """Passed through to ``adapter.acomplete``."""
 

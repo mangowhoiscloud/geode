@@ -33,6 +33,12 @@ __all__ = [
 
 Component = Literal["seed_generation", "petri_audit", "autoresearch", "geode_main"]
 Family = Literal["anthropic", "openai"]
+# Concrete auth-path sources — the non-AUTO members of the canonical
+# ``core.config.credential_source.CredentialSource``. Kept as a Literal (not the
+# enum) because an auth *path* is always a concrete destination, never the
+# ``AUTO`` resolver mode. Pinned to the canonical enum by
+# ``test_credential_source_centralized.test_auth_coverage_source_is_concrete_subset``
+# so it cannot silently drift (PR-CRED-SOURCE-CENTRALIZE).
 Source = Literal["claude-cli", "openai-codex", "api_key"]
 
 

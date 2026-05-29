@@ -1,55 +1,57 @@
-"""PR-SIL-5THEME C6 — D1 provider B/C closure tests.
+"""D1 provider closure tests — closure now enforced at *resolution*, not type.
 
-operator decision (durable memory ``project_payg_exclusion_decision.md``,
-2026-05-23) 으로 autoresearch / Petri audit 의 provider 선택지에서 PAYG
-(``api_key``) 영구 exclude. 잔존 옵션 = claude-cli / openai-codex / auto.
+PR-CRED-SOURCE-CENTRALIZE (2026-05-29) reversed the original type-level
+exclusion: ``api_key`` was removed from the ``Source`` Literal so the config
+*rejected* it. That caused the credential-source fragmentation (``api_key`` in
+some enums, not others) and blocked an operator who explicitly opts into PAYG.
 
-C6 의 3 wiring:
-1. ``Source`` literal 에서 ``api_key`` 제거 → Pydantic 가 reject (silent
-   leak 차단)
-2. ``PetriRoleConfig.source`` + ``AutoresearchConfig.source`` default
-   ``auto → claude-cli`` (subscription-first 명시)
-3. ``autoresearch/prepare.py`` 의 ``check_subscription_cli_for_source``
-   pre-flight — binary 부재 시 actionable error
+The D1 *intent* — a subscription-only run must not **silently** fall through to
+PAYG — is unchanged, but it is now enforced at **resolution** time:
+``resolve_credential_source(fallback_to_payg=False)`` filters ``api_key`` out of
+``auto`` expansion. ``api_key`` is a valid :class:`CredentialSource` member, so
+the config accepts an *explicit* ``source = "api_key"`` (the deliberate opt-in)
+while ``auto`` still never silently bills the API key. See
+``test_credential_source_centralized.py`` for the resolution-gate + enum-drift
+invariants.
+
+Remaining wiring (unchanged):
+- ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` default
+  ``claude-cli`` (subscription-first).
+- ``autoresearch/prepare.py`` ``check_subscription_cli_for_source`` pre-flight.
 """
 
 from __future__ import annotations
 
 import pytest
 from autoresearch.prepare import check_subscription_cli_for_source
+from core.config.credential_source import CredentialSource
 from core.config.self_improving_loop import (
     AutoresearchConfig,
     PetriRoleConfig,
 )
-from pydantic import ValidationError
 
 # ---------------------------------------------------------------------------
 # 1. Source literal — api_key reject
 # ---------------------------------------------------------------------------
 
 
-def test_petri_role_source_api_key_rejected() -> None:
-    """PetriRoleConfig 에 ``source = "api_key"`` 설정 시 Pydantic 가 reject —
-    PAYG 가 audit role 선택지에서 영구 제거됐다는 invariant.
+def test_petri_role_source_accepts_api_key() -> None:
+    """PetriRoleConfig now ACCEPTS ``source = "api_key"`` (centralized enum).
 
-    operator 가 config.toml 에 ``[self_improving_loop.petri.target]
-    source = "api_key"`` 명시 → ValidationError + 어느 값이 invalid 인지
-    명시되는 Pydantic 메시지로 surface.
+    PR-CRED-SOURCE-CENTRALIZE: ``api_key`` is a valid ``CredentialSource``
+    member, so an operator can explicitly opt into PAYG for an audit role. The
+    silent-fallback closure moved to resolution (``fallback_to_payg`` gate),
+    asserted in ``test_credential_source_centralized.py``.
     """
-    with pytest.raises(ValidationError) as exc_info:
-        PetriRoleConfig(source="api_key")  # type: ignore[arg-type]
-    msg = str(exc_info.value)
-    assert "source" in msg
-    assert "api_key" in msg
+    p = PetriRoleConfig(source="api_key")
+    assert p.source == CredentialSource.API_KEY
+    assert p.source == "api_key"  # StrEnum compares equal to its wire string
 
 
-def test_autoresearch_source_api_key_rejected() -> None:
-    """AutoresearchConfig 도 동일 — ``source = "api_key"`` Pydantic reject."""
-    with pytest.raises(ValidationError) as exc_info:
-        AutoresearchConfig(source="api_key")  # type: ignore[arg-type]
-    msg = str(exc_info.value)
-    assert "source" in msg
-    assert "api_key" in msg
+def test_autoresearch_source_accepts_api_key() -> None:
+    """AutoresearchConfig likewise accepts an explicit ``source = "api_key"``."""
+    a = AutoresearchConfig(source="api_key")
+    assert a.source == CredentialSource.API_KEY
 
 
 def test_petri_role_source_accepts_claude_cli() -> None:
@@ -163,22 +165,19 @@ def test_preflight_unknown_source_graceful_skip() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_backend_matrix_api_key_rejected_petri_role() -> None:
-    """4-backend matrix: api_key 만 reject, 다른 3 (claude-cli / openai-codex /
-    auto) 는 accept."""
-    # Reject
-    with pytest.raises(ValidationError):
-        PetriRoleConfig(source="api_key")  # type: ignore[arg-type]
-    # Accept (3 valid sources)
-    for source in ("claude-cli", "openai-codex", "auto"):
-        cfg = PetriRoleConfig(source=source)  # type: ignore[arg-type]
+def test_backend_matrix_all_sources_accepted_petri_role() -> None:
+    """4-source matrix: all four canonical sources (incl. ``api_key``) accept.
+
+    Post-centralization the config no longer type-rejects ``api_key``; every
+    ``CredentialSource`` member is a valid config value.
+    """
+    for source in CredentialSource:
+        cfg = PetriRoleConfig(source=source)
         assert cfg.source == source
 
 
-def test_backend_matrix_api_key_rejected_autoresearch() -> None:
-    """AutoresearchConfig 도 같은 matrix."""
-    with pytest.raises(ValidationError):
-        AutoresearchConfig(source="api_key")  # type: ignore[arg-type]
-    for source in ("claude-cli", "openai-codex", "auto"):
-        cfg = AutoresearchConfig(source=source)  # type: ignore[arg-type]
+def test_backend_matrix_all_sources_accepted_autoresearch() -> None:
+    """AutoresearchConfig accepts every canonical source too."""
+    for source in CredentialSource:
+        cfg = AutoresearchConfig(source=source)
         assert cfg.source == source

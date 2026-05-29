@@ -8,9 +8,14 @@ exposed only for type hints and test fixtures.
 
 from __future__ import annotations
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from core.config.credential_source import (
+    DISABLE_SENTINEL,
+    LEGACY_OAUTH_ALIAS,
+    CredentialSource,
+)
 from core.paths import GLOBAL_ENV_FILE
 
 
@@ -385,8 +390,27 @@ class Settings(BaseSettings):
     # take precedence. No subscription-plan names are hardcoded — the
     # picker labels each source with the plan info pulled from the
     # active credential blob.
-    anthropic_credential_source: str = "auto"  # "auto" | "oauth" | "api_key" | "none"
-    openai_credential_source: str = "auto"  # "auto" | "oauth" | "api_key" | "none"
+    # Valid values: the canonical ``CredentialSource`` members
+    # (auto / api_key / claude-cli / openai-codex) plus the legacy provider-
+    # agnostic ``oauth`` alias and the ``none`` disable sentinel — validated
+    # against the single SoT below (PR-CRED-SOURCE-CENTRALIZE).
+    anthropic_credential_source: str = "auto"
+    openai_credential_source: str = "auto"
+
+    @field_validator("anthropic_credential_source", "openai_credential_source")
+    @classmethod
+    def _validate_credential_source(cls, v: str) -> str:
+        """Validate against the canonical credential-source set + legacy aliases.
+
+        Keeps these operator-facing settings from drifting from
+        :class:`core.config.credential_source.CredentialSource`. ``oauth``
+        (legacy agnostic alias, normalised per-provider downstream) and ``none``
+        (disable) are accepted in addition to the concrete enum members.
+        """
+        allowed = {s.value for s in CredentialSource} | {LEGACY_OAUTH_ALIAS, DISABLE_SENTINEL}
+        if v not in allowed:
+            raise ValueError(f"credential source must be one of {sorted(allowed)}, got {v!r}")
+        return v
 
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
