@@ -170,6 +170,57 @@ class TestW2SubprocessEnvPropagation:
         assert "GEODE_SIL_MUTATION_ID" not in captured
         assert "GEODE_SIL_EXPECTED_DIM" not in captured
 
+    def test_run_autoresearch_subprocess_sets_rollback_condition_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """PR-SIL-MULTIOBJ A2 — ``rollback_condition`` propagates to the
+        subprocess env so train.py's secondary gate can evaluate it."""
+        captured: dict[str, str] = {}
+
+        def fake_run(argv: list[str], *args: object, **kwargs: object) -> object:
+            env = kwargs.get("env") or {}
+            captured.update({k: v for k, v in env.items() if k.startswith("GEODE_SIL_")})
+
+            class _Fake:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return _Fake()
+
+        monkeypatch.setattr("core.self_improving_loop.runner.subprocess.run", fake_run)
+        _run_autoresearch_subprocess(
+            repo_root=tmp_path,
+            dry_run=True,
+            rollback_condition="critical dim regresses by more than 0.5",
+        )
+        assert captured["GEODE_SIL_ROLLBACK_CONDITION"] == "critical dim regresses by more than 0.5"
+
+    def test_run_autoresearch_subprocess_skips_rollback_condition_when_empty(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Empty rollback_condition ⇒ env unset ⇒ train.py skips the gate."""
+        captured: dict[str, str] = {}
+
+        def fake_run(argv: list[str], *args: object, **kwargs: object) -> object:
+            env = kwargs.get("env") or {}
+            captured.update({k: v for k, v in env.items() if k.startswith("GEODE_SIL_")})
+
+            class _Fake:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return _Fake()
+
+        monkeypatch.setattr("core.self_improving_loop.runner.subprocess.run", fake_run)
+        _run_autoresearch_subprocess(repo_root=tmp_path, dry_run=True, rollback_condition="")
+        assert "GEODE_SIL_ROLLBACK_CONDITION" not in captured
+
 
 # ---------------------------------------------------------------------------
 # W3 — audit_run_id field on apply row

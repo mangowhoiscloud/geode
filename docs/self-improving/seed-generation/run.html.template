@@ -38,7 +38,7 @@
 {{ sidebar_seedgen_runs }}
           </ul>
         </li>
-        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 
       <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
@@ -154,10 +154,10 @@
     <h2 class="section"><span>Meta-review</span></h2>
 {{ meta_review_block }}
 
-    <h2 class="section"><span>Cost rollup</span></h2>
+    <h2 class="section"><span>Token rollup</span></h2>
     <dl class="cost-grid">
-      <dt>total USD</dt>
-      <dd>${{ cost_total_usd }}</dd>
+      <dt>total tokens</dt>
+      <dd>{{ cost_total_tokens }}</dd>
       <dt>prompt_tokens</dt>
       <dd>{{ cost_prompt_tokens }}</dd>
       <dt>completion_tokens</dt>

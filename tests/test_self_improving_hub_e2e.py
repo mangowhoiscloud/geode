@@ -538,6 +538,10 @@ def test_seedgen_index_renders(built_seedgen_pages: dict[str, str], built_html: 
     for label in ("Hub", "Petri Audit", "Seed Generation", "Autoresearch", "Docs", "Meta"):
         assert label in index_html, f"seedgen index missing sidebar section {label!r}"
     assert "github.com/mangowhoiscloud/geode" in index_html, "GitHub link missing"
+    # The seed-runs sidebar link goes to the docs site, so it is labeled as
+    # such — not the misleading "Run dashboard" (2026-05-29).
+    assert "Run dashboard" not in index_html, "stale 'Run dashboard' label should be relabeled"
+    assert "Seed runs (docs)" in index_html, "relabeled seed-runs docs link missing"
     # Runs table — at least 1 row, fixture run id present.
     assert SEEDGEN_FIXTURE_RUN_ID in index_html, "fixture run row missing from index"
     # Active link contract — All runs is active on this page.
@@ -570,7 +574,7 @@ def test_seedgen_run_page_renders(built_seedgen_pages: dict[str, str]) -> None:
         "Reflections",
         "Pilot scores",
         "Meta-review",
-        "Cost rollup",
+        "Token rollup",
     ]
     h2_blocks = re.findall(r"<h2 class=\"section\"[^>]*>.*?</h2>", run_html, flags=re.DOTALL)
     h2_joined = " ".join(h2_blocks)
@@ -1023,13 +1027,26 @@ def test_pr1_checkpoints_tracked() -> None:
 
 
 def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
-    """`/agents/` lists each sub-agent with harness chip + cost + duration."""
+    """`/agents/` lists each sub-agent with harness chip + cost + duration.
+
+    Regression for the cli-local PAYG-misclassification (2026-05-29): a
+    sub-agent that ran via the Claude Code CLI records the bare model provider
+    (``anthropic``) in session_start + a ``claude_cli_session_id`` in
+    session.json (the gen-c-001 fixture now mirrors that real shape). Keying
+    the chip off the provider mislabels it PAYG; ``_resolve_subagent_model``
+    overrides the source to ``claude-cli`` so it renders Claude Code with
+    source-aligned naming.
+    """
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agents")
     assert html, "agents index sub-page missing"
     assert 'class="records seedgen-agents"' in html
     assert "gen-c-001" in html
-    # Harness chip rendered for the gen-c-001 model (claude-opus-4-7 = Claude Code).
+    # gen-c-001 ran via claude-cli (cli-local) despite provider=anthropic →
+    # Claude Code chip + source-aligned model name, NOT PAYG.
     assert 'class="chip claude"' in html or "Claude Code" in html
+    assert "claude-cli/claude-opus-4-7" in html, "expected source-aligned cli-local model name"
+    # The codex voter (provider openai-codex) keeps its Codex chip.
+    assert 'class="chip codex"' in html or "Codex" in html, "codex voter chip missing"
 
 
 def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, str]) -> None:
@@ -1040,7 +1057,9 @@ def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, s
         f"expected ≥3 <details> blocks in agent detail; got {html.count('<details')}"
     )
     assert "session_end" in html
-    assert "USD" in html or "$" in html, "cost label missing"
+    # Cost (USD, $0 on subscription) was replaced by token counts (2026-05-29).
+    assert "tokens" in html, "token label missing"
+    assert "USD" not in html and "cost (USD)" not in html, "stale USD cost label remains"
     # Anchor back to /agents/ index for navigation.
     assert f"/seed-generation/{SEEDGEN_FIXTURE_RUN_ID}/agents/" in html
 
@@ -1083,6 +1102,20 @@ def test_pr2_tournament_renders_three_voter_panel(built_seedgen_pages: dict[str,
     assert "Per-candidate Elo summary" in html
     assert "winner:" in html  # ratified winner chip
     assert ">tie<" in html  # tie chip from one fixture match
+    # Elo computation method annotated on the page (2026-05-29).
+    assert "how Elo is computed" in html, "Elo method explainer missing"
+    assert "1 + 10^" in html, "Elo expected-score formula missing"
+    assert "K = 32" in html, "Elo K-factor missing"
+    # Voter rationale renders in <pre class="msg">; hub.css must give it a base
+    # wrap rule so long rationale does not run off the page horizontally
+    # (2026-05-29 — the bare pre.msg had no wrap rule, only details.turn pre.msg).
+    assert 'class="msg"' in html, "voter rationale not in pre.msg"
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    msg_rule = re.search(r"(?<![.\w])pre\.msg\s*\{[^}]*\}", css)
+    assert msg_rule is not None, "hub.css missing base pre.msg rule"
+    assert "pre-wrap" in msg_rule.group(0) and "overflow-wrap" in msg_rule.group(0), (
+        "base pre.msg must wrap responsively (pre-wrap + overflow-wrap)"
+    )
 
 
 def test_pr2_subpages_basepath_safe(built_seedgen_pages: dict[str, str]) -> None:

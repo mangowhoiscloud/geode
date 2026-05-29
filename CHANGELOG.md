@@ -47,6 +47,102 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.84] - 2026-05-29
+
+> PATCH — self-improving hub polish + loop multi-objective wiring. Hub
+> re-paletted to the docs dark warm theme, Elo method annotated, agents
+> cli-local source chips, cost figures replaced with token counts, voter
+> rationale wrap, plus the loop's Tchebycheff group-selection + rollback
+> auto-evaluation + cache-hygiene wiring.
+
+### Changed
+- **PR-HUB-COST-TOKENS (2026-05-29)** — Replace every USD "cost" figure on the
+  self-improving hub with token counts. Subscription runs report
+  `usd_spent` as $0.00, so the dollar columns were dead. The seed-generation
+  runs tables, the per-run + cross-run rollups (renamed "Cost rollup" →
+  "Token rollup", USD line dropped, an aggregate `total_tokens` added on top of
+  the prompt/completion breakdown — no duplicate axis), the agents table + agent
+  detail, and the timeline per-phase/per-agent lines now show
+  `prompt + completion` tokens (sub-agent totals from each `session_end`,
+  run/rollup totals from `prompt_tokens`/`completion_tokens`). `SeedGenRow` +
+  `_load_subagents` gained a `total_tokens` field. Pinned by the agent-detail +
+  run-page token assertions in `test_self_improving_hub_e2e`.
+- **PR-HUB-DARK-PALETTE (2026-05-29)** — Re-palette the self-improving hub
+  (`docs/self-improving/assets/hub.css`) from the light Bootstrap-ish scheme to
+  the dark warm Anthropic palette of the docs site (`site/DESIGN.md` §2): warm
+  near-black stone substrate (`--paper #181816`), cream ink (`--ink #ede7da`),
+  amethyst runtime accent (`--accent #a573e8`) + citrine warm signal, so the
+  hub and `/docs` read as one cohesive editorial surface. Semantic-token flip
+  plus dark variants for the hardcoded sites (harness chips, bucket labels,
+  warning code background, seed-generation hero SVG, tie chip). HTML is
+  unchanged — every hub page links `hub.css`, so the theme flips on deploy.
+
+### Added
+- **PR-SIL-MULTIOBJ (2026-05-29)** — Wire the self-improving loop's
+  previously orphan multi-objective infrastructure into the live decision
+  path, plus measurement hygiene. Four parts:
+  - **Tchebycheff group selection (A1)** — `apply_group_proposals` now
+    selects the winning sibling by a Tchebycheff (worst-weighted-gap)
+    scalar via `_select_best_idx`, calling the previously test-only
+    `compute_tchebycheff` / `compute_ideal_point` with `DIM_WEIGHTS` so a
+    critical-axis gap dominates an auxiliary gap (non-compensatory,
+    safety-first). Gated on `pareto_mode` + `group_size ≥ 2`; the default
+    path keeps the linear GRPO-whitened advantage unchanged. The
+    `FITNESS_RESULT` sentinel emitted by `autoresearch/train.py` now
+    additively carries the per-sibling `dim_means` / `dim_stderr` vector
+    (parsed by the new graceful `_parse_dim_means_from_subprocess_stdout`)
+    — the multi-dim capture the prior `pareto_mode` archive PR deferred.
+  - **`rollback_condition` auto-evaluation (A2)** — the mutator's own
+    `rollback_condition` predicate is now propagated to the audit
+    subprocess via `GEODE_SIL_ROLLBACK_CONDITION` and auto-evaluated as a
+    *secondary* per-dim reject gate (calls the previously
+    observability-only `evaluate_rollback_condition`). Two paths: the
+    single-mutation promote path evaluates it in
+    `_apply_rollback_condition_gate` after `_should_promote` (flips
+    promote → reject); the group path evaluates the winner's predicate in
+    `apply_group_proposals` against its measured dim vector vs the
+    promoted baseline and skips the commit on a fire. It can only veto —
+    never the reverse; the primary scalar safety gate is unchanged.
+  - **inspect-ai cache hygiene (A3)** — new `purge_inspect_cache()`
+    (delegates to inspect_ai's own `cache_clear`, graceful without the
+    `[audit]` extra) + a `--purge-cache` flag on `autoresearch/train.py`
+    for closed-loop measurement hygiene, pinned by a regression test that
+    `_build_audit_command` never enables the trajectory cache.
+  - **signal polarity normalisation (A4)** — new `signal_polarity` helper
+    (`to_signed_improvement` / `metric_polarity`) emits a canonical
+    `signed_improvement` field on every attribution row (`+` = improvement
+    regardless of a metric's native direction — Petri dims are
+    lower-is-better, so their sign is flipped). The higher-is-better field
+    set is derived from the canonical ux/admire/bench weight dicts (no
+    second copy, pinned by a drift test).
+
+### Fixed
+- **PR-HUB-POLISH (2026-05-29)** — Two hub display corrections bundled with the
+  dark re-palette. (1) The tournament page now annotates **how Elo is computed**
+  (initial 1000, logistic expected score `1/(1+10^((R_b-R_a)/400))`, update
+  `R += K·(S-E)` with `K=32`, 3-voter majority ≥2 else quorum_lost, top-5
+  survivors) in a `<details>` next to the per-candidate Elo summary, sourced
+  from `plugins/seed_generation/tournament.py`. (2) The "Run dashboard ↗"
+  sidebar link was relabeled **"Seed runs (docs) ↗"** across the single sidebar
+  source (`_render_hub_sidebar`) + the 7 page templates — it links to the docs
+  site's seed-runs page, not an in-hub dashboard.
+- **PR-HUB-AGENTS-CHIP-WRAP (2026-05-29)** — Two self-improving hub display
+  fixes. (1) The seed-generation `/agents/` page mislabeled every cli-local
+  sub-agent as **PAYG**: session.json omits model/provider for CLI-managed
+  agents, so the harness chip fell back to an empty model → PAYG default.
+  `_resolve_subagent_model()` now reads the real model + provider from
+  `dialogue.jsonl`'s `session_start` and reflects the execution **source**,
+  not the model's billing provider — a `claude_cli_session_id` marks a Claude
+  Code (cli-local) run (chip + source-aligned `claude-cli/claude-opus-4-7`
+  naming) while the codex path already records `openai-codex`. gen-2605-2 went
+  from 196 PAYG rows to 98 Claude Code + 98 Codex, 0 PAYG. (2) The voter
+  rationale `<pre class="msg">` on the tournament + lineage ranker station had
+  no base wrap rule and ran off the page horizontally; added a base `pre.msg`
+  rule (`pre-wrap` + `word-break` + `overflow-wrap: anywhere`) so it wraps
+  responsively. Pinned by the strengthened `test_pr2_agents_index_renders`
+  (gen-c-001 fixture now mirrors the real `anthropic` + `claude_cli_session_id`
+  shape) + a `pre.msg` wrap assertion in `test_pr2_tournament_renders_three_voter_panel`.
+
 ## [0.99.83] - 2026-05-29
 
 > PATCH — self-improving hub data-integrity sprint. gen1 broken-link

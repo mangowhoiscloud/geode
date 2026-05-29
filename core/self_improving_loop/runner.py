@@ -1221,7 +1221,11 @@ def _parse_fitness_from_subprocess_stdout(
     """Parse the ``FITNESS_RESULT: {...}`` sentinel line from
     ``autoresearch/train.py`` stdout end-of-run.
 
-    Sentinel format: ``FITNESS_RESULT: {"fitness": <float>, "audit_run_id": "<id>"}``
+    Sentinel format (PR-SIL-MULTIOBJ A1): ``FITNESS_RESULT: {"fitness":
+    <float>, "audit_run_id": "<id>", "dim_means": {...}, "dim_stderr":
+    {...}}``. This parser reads only the scalar ``fitness`` (+ audit id);
+    the per-dim vectors are read separately by
+    :func:`_parse_dim_means_from_subprocess_stdout`.
 
     Raises RuntimeError when the sentinel is missing or unparseable —
     fail-fast so group sampling cycle aborts cleanly instead of producing
@@ -1255,6 +1259,146 @@ def _parse_fitness_from_subprocess_stdout(
         f"sentinel — autoresearch/train.py end-of-run print missing or stdout "
         f"truncated. audit_run_id={audit_run_id}"
     )
+
+
+def _parse_dim_means_from_subprocess_stdout(
+    stdout: str,
+    *,
+    audit_run_id: str,
+    sibling_idx: int,
+) -> dict[str, float]:
+    """Parse the additive per-dim ``dim_means`` map from the sentinel.
+
+    PR-SIL-MULTIOBJ A1 — companion to
+    :func:`_parse_fitness_from_subprocess_stdout`. The same
+    ``FITNESS_RESULT`` line carries a ``dim_means`` map; this returns it
+    so the group caller can run a Tchebycheff (worst-weighted-gap)
+    selection over siblings.
+
+    *Graceful* by contract: returns ``{}`` (never raises) when the
+    sentinel is absent, unparseable, or predates the additive field, and
+    skips any individual value that is not float-castable. A missing
+    vector only disables the Tchebycheff upgrade for that group — the
+    scalar fitness parser above stays the fail-fast guard for a
+    fully-missing sentinel, so this can never mask an audit failure.
+    """
+    for raw_line in reversed(stdout.splitlines()):
+        line = raw_line.strip()
+        if not line.startswith(_FITNESS_RESULT_SENTINEL):
+            continue
+        payload_str = line[len(_FITNESS_RESULT_SENTINEL) :].strip()
+        try:
+            payload = json.loads(payload_str)
+        except json.JSONDecodeError:
+            return {}
+        raw_means = payload.get("dim_means") if isinstance(payload, dict) else None
+        if not isinstance(raw_means, dict):
+            return {}
+        out: dict[str, float] = {}
+        for dim, value in raw_means.items():
+            try:
+                out[str(dim)] = float(value)
+            except (TypeError, ValueError):
+                continue
+        if (
+            out
+            and audit_run_id
+            and str(payload.get("audit_run_id", ""))
+            not in (
+                "",
+                audit_run_id,
+            )
+        ):
+            log.warning(
+                "self-improving-loop: sibling[%d] dim_means audit_run_id mismatch "
+                "(expected %s) — dropping vector to avoid cross-sibling mixup",
+                sibling_idx,
+                audit_run_id,
+            )
+            return {}
+        return out
+    return {}
+
+
+def _select_best_idx(
+    *,
+    advantages: list[float],
+    sibling_dim_means: list[dict[str, float]],
+    pareto_mode: bool,
+    group_id: str,
+) -> int:
+    """Pick the winning sibling index from a group audit.
+
+    Default (``pareto_mode`` off, or any sibling missing its dim vector):
+    linear top-1 by the GRPO-whitened advantage — unchanged legacy
+    behaviour.
+
+    ``pareto_mode`` on **and** every sibling carries a full dim vector:
+    Tchebycheff (worst-weighted-gap) selection. Each sibling's raw
+    ``dim_means`` is transformed to higher-is-better scores via
+    ``_dim_score``; the ideal point z* is the per-dim best across the
+    group; the winner minimises the max weighted gap to z*
+    (``compute_tchebycheff`` returns the negated gap, so ``argmax`` =
+    closest to ideal). ``DIM_WEIGHTS`` are reused as the Tchebycheff
+    weights so a critical-axis gap (weight 0.10) dominates an auxiliary
+    gap (~0.0333) — a non-compensatory, safety-first selection that the
+    linear scalar advantage cannot express. Both candidate indices are
+    logged for comparison.
+    """
+    linear_idx = max(range(len(advantages)), key=lambda i: advantages[i])
+    if not pareto_mode:
+        return linear_idx
+    if len(sibling_dim_means) != len(advantages) or any(not dm for dm in sibling_dim_means):
+        log.warning(
+            "self-improving-loop: group %s — pareto_mode set but sibling dim "
+            "vectors incomplete (%d/%d non-empty); linear advantage selection",
+            group_id,
+            sum(1 for dm in sibling_dim_means if dm),
+            len(advantages),
+        )
+        return linear_idx
+
+    from autoresearch.train import DIM_WEIGHTS, _dim_score
+
+    from core.self_improving_loop.tchebycheff import (
+        compute_ideal_point,
+        compute_tchebycheff,
+    )
+
+    score_vectors = [
+        {dim: _dim_score(means[dim]) for dim in DIM_WEIGHTS if dim in means}
+        for means in sibling_dim_means
+    ]
+    # Score every sibling on the SAME axes — the intersection of weighted
+    # dims present in all siblings. Without this a sibling whose raw vector
+    # has no DIM_WEIGHTS overlap (or only a partial set) would yield an
+    # empty / short score vector and a Tchebycheff scalar of 0.0, which —
+    # since real scalars are negated gaps (≤ 0) — would spuriously beat
+    # every genuine sibling at ``argmax``. Empty intersection ⇒ linear
+    # fallback (no fair multi-dim comparison is possible).
+    common_dims = set.intersection(*(set(v) for v in score_vectors))
+    if not common_dims:
+        log.warning(
+            "self-improving-loop: group %s — no weighted dim common to all "
+            "siblings; linear advantage selection",
+            group_id,
+        )
+        return linear_idx
+    score_vectors = [{dim: vec[dim] for dim in common_dims} for vec in score_vectors]
+    ideal = compute_ideal_point(score_vectors)
+    tcheby = [
+        compute_tchebycheff(vec, weights=DIM_WEIGHTS, ideal_point=ideal) for vec in score_vectors
+    ]
+    tcheby_idx = max(range(len(tcheby)), key=lambda i: tcheby[i])
+    log.info(
+        "self-improving-loop: group %s — selection linear=sibling[%d] "
+        "tchebycheff=sibling[%d] (tcheby scalars=%s)",
+        group_id,
+        linear_idx,
+        tcheby_idx,
+        [round(t, 4) for t in tcheby],
+    )
+    return tcheby_idx
 
 
 def append_group_variance_history(
@@ -1632,6 +1776,7 @@ def _run_autoresearch_subprocess(
     sibling_sot_path: Path | None = None,
     group_id: str = "",
     no_promote: bool = False,
+    rollback_condition: str = "",
 ) -> subprocess.CompletedProcess[str]:
     """Spawn ``autoresearch/train.py`` for the post-mutation audit.
 
@@ -1666,6 +1811,14 @@ def _run_autoresearch_subprocess(
         env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(expected_dim or {}, ensure_ascii=False)
     if group_id:
         env["GEODE_SIL_GROUP_ID"] = group_id
+    # PR-SIL-MULTIOBJ A2 (2026-05-29) — propagate the mutation's
+    # ``rollback_condition`` predicate so train.py's promote decision can
+    # auto-evaluate it (``evaluate_rollback_condition``) as a *secondary*
+    # reject gate. Empty string ⇒ env unset ⇒ train.py skips the check
+    # (legacy behaviour). The sibling no_promote audits never promote, so
+    # this only bites on the winner's promote run.
+    if rollback_condition:
+        env["GEODE_SIL_ROLLBACK_CONDITION"] = rollback_condition
     # PR-11 P3.1 (2026-05-25) — anchor_confidence_mode env forward. config
     # default 가 False 라 set 안 된 sibling/legacy 동작 영향 0. True 일
     # 때만 train.py 의 caller 가 ``compute_fitness`` 에 multiplier 인자를
@@ -2027,6 +2180,7 @@ class SelfImprovingLoopRunner:
         )
 
         fitness_values: list[float] = []
+        sibling_dim_means: list[dict[str, float]] = []  # PR-SIL-MULTIOBJ A1
         audit_run_ids: list[str] = []
         sibling_sot_paths: list[Path] = []
         sibling_previous_values: list[str] = []
@@ -2062,6 +2216,16 @@ class SelfImprovingLoopRunner:
                     proc.stdout, audit_run_id=audit_run_id, sibling_idx=idx
                 )
                 fitness_values.append(fitness)
+                # PR-SIL-MULTIOBJ A1 — capture the per-dim vector only when
+                # pareto_mode is on (the sole consumer is the Tchebycheff
+                # selection below); pareto-off keeps the legacy linear path
+                # with zero extra parsing.
+                if cfg.autoresearch.pareto_mode:
+                    sibling_dim_means.append(
+                        _parse_dim_means_from_subprocess_stdout(
+                            proc.stdout, audit_run_id=audit_run_id, sibling_idx=idx
+                        )
+                    )
 
             advantages, status = _compute_group_advantage(
                 fitness_values,
@@ -2193,8 +2357,14 @@ class SelfImprovingLoopRunner:
                     _archive_failed,
                 )
 
-            # Top-1 by advantage
-            best_idx = max(range(len(advantages)), key=lambda i: advantages[i])
+            # Top-1 — Tchebycheff (worst-weighted-gap) when pareto_mode +
+            # full sibling dim vectors are available; else linear advantage.
+            best_idx = _select_best_idx(
+                advantages=advantages,
+                sibling_dim_means=sibling_dim_means,
+                pareto_mode=cfg.autoresearch.pareto_mode,
+                group_id=group_id,
+            )
             best_proposal = proposals[best_idx]
             log.info(
                 "self-improving-loop: group %s — best=sibling[%d] advantage=%.4f fitness=%.4f",
@@ -2203,6 +2373,43 @@ class SelfImprovingLoopRunner:
                 advantages[best_idx],
                 fitness_values[best_idx],
             )
+
+            # PR-SIL-MULTIOBJ A2 (group path) — secondary reject gate for
+            # the group winner. Group mode commits the winner directly
+            # (no ``_should_promote`` re-run, so train.py's A2 gate never
+            # fires here), so evaluate the mutator's ``rollback_condition``
+            # against the winner's measured dim vector (captured above for
+            # A1) vs the promoted baseline. A firing predicate skips the
+            # commit (cycle yields no SoT change) — it can only veto, never
+            # loosen. Gated on pareto_mode (vectors present) + a non-empty
+            # predicate; unparseable predicates evaluate False (no-op).
+            if (
+                cfg.autoresearch.pareto_mode
+                and best_proposal.mutation.rollback_condition
+                and best_idx < len(sibling_dim_means)
+                and sibling_dim_means[best_idx]
+            ):
+                from plugins.seed_generation.baseline_reader import load_baseline
+
+                from core.self_improving_loop.rollback_condition import (
+                    evaluate_rollback_condition,
+                )
+
+                _baseline_snap = load_baseline()
+                _baseline_dim = _baseline_snap.dim_means if _baseline_snap is not None else None
+                if _baseline_dim and evaluate_rollback_condition(
+                    best_proposal.mutation.rollback_condition,
+                    observed_dim=sibling_dim_means[best_idx],
+                    baseline_dim=_baseline_dim,
+                ):
+                    log.info(
+                        "self-improving-loop: group %s — winner sibling[%d] "
+                        "rollback_condition fired [%s]; skipping commit (no SoT change)",
+                        group_id,
+                        best_idx,
+                        best_proposal.mutation.rollback_condition,
+                    )
+                    return None
 
             # Commit best to canonical SoT + apply row (kind="applied")
             _committed_sections, previous_value = apply_mutation(
@@ -2607,6 +2814,7 @@ class SelfImprovingLoopRunner:
                 audit_run_id=audit_run_id,
                 mutation_id=mutation.mutation_id if mutation is not None else "",
                 expected_dim=mutation.expected_dim if mutation is not None else None,
+                rollback_condition=(mutation.rollback_condition if mutation is not None else ""),
             )
         except Exception as exc:
             log.warning("self-improving-loop autoresearch re-run failed", exc_info=True)

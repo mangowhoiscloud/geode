@@ -749,3 +749,50 @@ def test_n4_estimator_lands_within_landing_zone_for_known_runs() -> None:
         f"estimate ${n6_estimate:.2f} = {ratio:.2f}, want 0.30-1.50. "
         "Re-tune TokenAssumptions or update the historical anchor."
     )
+
+
+# ---------------------------------------------------------------------------
+# purge_inspect_cache — PR-SIL-MULTIOBJ A3 (closed-loop cache hygiene)
+# ---------------------------------------------------------------------------
+
+
+def test_purge_inspect_cache_uses_inspect_api_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When inspect_ai is importable, purge delegates to its ``cache_clear``
+    (SoT for the cache location) and returns True.
+
+    A fake ``inspect_ai.model`` module is injected so the *real* cache is
+    never touched — important because the live loop relies on it.
+    """
+    import sys
+    import types
+
+    from plugins.petri_audit.runner import purge_inspect_cache
+
+    calls = {"clear": 0}
+    fake_model = types.ModuleType("inspect_ai.model")
+    fake_model.cache_clear = lambda model="": (
+        calls.__setitem__("clear", calls["clear"] + 1),
+        True,
+    )[1]  # type: ignore[attr-defined]
+    fake_model.cache_path = lambda model="": Path("fake-inspect-cache")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+    monkeypatch.setitem(sys.modules, "inspect_ai.model", fake_model)
+
+    assert purge_inspect_cache() is True
+    assert calls["clear"] == 1
+
+
+def test_purge_inspect_cache_graceful_without_audit_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the [audit] extra (inspect_ai import fails) → returns False,
+    never raises."""
+    import sys
+
+    from plugins.petri_audit.runner import purge_inspect_cache
+
+    # Force `from inspect_ai.model import ...` to raise ImportError.
+    monkeypatch.setitem(sys.modules, "inspect_ai.model", None)
+    assert purge_inspect_cache() is False

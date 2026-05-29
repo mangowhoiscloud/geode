@@ -59,6 +59,21 @@ def test_build_audit_command_uses_current_geode_audit_flags() -> None:
         assert stale not in argv, f"unexpected flag {stale} present in {argv}"
 
 
+def test_build_audit_command_never_enables_inspect_cache() -> None:
+    """PR-SIL-MULTIOBJ A3 — closed-loop measurement hygiene regression pin.
+
+    The autoresearch audit argv must never enable inspect_ai's trajectory
+    cache: a cached trajectory for an identical seed replays a stale score
+    and corrupts the mutation-vs-baseline comparison. ``geode audit``
+    defaults to ``--no-cache``, so the invariant is simply that this
+    builder never adds a cache-enabling token (``--cache`` / ``cache=true``).
+    """
+    argv = _build_audit_command()
+    joined = " ".join(str(a) for a in argv).lower()
+    assert "--cache" not in argv
+    assert "cache=true" not in joined
+
+
 def test_wrapper_override_hook_ready_is_true() -> None:
     assert WRAPPER_OVERRIDE_HOOK_READY is True
 

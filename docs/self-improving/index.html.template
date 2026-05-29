@@ -38,7 +38,7 @@
 {{ sidebar_seedgen_runs }}
           </ul>
         </li>
-        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 
       <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
@@ -82,7 +82,7 @@
     <h2 class="section"><span>Seed Generation &middot; {{ seedgen_section_label }}</span></h2>
     <table class="records">
       <thead>
-        <tr><th>run_id</th><th>gen_tag</th><th>target_dim</th><th>mutator</th><th>draft &rarr; surv &rarr; evolved</th><th>cost USD</th></tr>
+        <tr><th>run_id</th><th>gen_tag</th><th>target_dim</th><th>mutator</th><th>draft &rarr; surv &rarr; evolved</th><th>tokens</th></tr>
       </thead>
       <tbody>
 {{ seedgen_rows }}
