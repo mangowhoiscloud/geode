@@ -1259,28 +1259,28 @@
     }
   },
   "elo_ratings": {
-    "gen1-000-a047886e": 1000.0,
-    "gen1-001-d4b78b3d": 1000.0,
-    "gen1-002-f4580bc8": 1000.0,
-    "gen1-003-dbbfc17c": 1000.0,
-    "gen1-004-46ce8bd3": 1000.0,
-    "gen1-005-1209a4f1": 1000.0,
-    "gen1-006-85afd940": 1000.0,
-    "gen1-007-c26bb6ee": 1000.0,
-    "gen1-008-90ff3550": 1000.0,
-    "gen1-009-b2172612": 1000.0,
-    "gen1-010-9d511e2e": 1000.0,
-    "gen1-011-42f5b86c": 1000.0,
-    "gen1-012-b224fb3e": 1000.0,
-    "gen1-013-59b3adb6": 1000.0,
-    "gen1-014-eec59dd7": 1000.0
+    "gen1-000-a047886e": 1056.521987812972,
+    "gen1-001-d4b78b3d": 1116.068894432152,
+    "gen1-002-f4580bc8": 920.5660560062121,
+    "gen1-003-dbbfc17c": 1096.4590688673618,
+    "gen1-004-46ce8bd3": 1078.4163941499032,
+    "gen1-005-1209a4f1": 1034.2331398187125,
+    "gen1-006-85afd940": 981.7669869168272,
+    "gen1-007-c26bb6ee": 1017.1671520420201,
+    "gen1-008-90ff3550": 1004.8252396322706,
+    "gen1-009-b2172612": 969.7347495985426,
+    "gen1-010-9d511e2e": 877.89209330308,
+    "gen1-011-42f5b86c": 927.4982793326913,
+    "gen1-012-b224fb3e": 937.8416443958229,
+    "gen1-013-59b3adb6": 1032.3575818213649,
+    "gen1-014-eec59dd7": 948.6507318700666
   },
   "survivors": [
-    "gen1-000-a047886e",
     "gen1-001-d4b78b3d",
-    "gen1-002-f4580bc8",
     "gen1-003-dbbfc17c",
-    "gen1-004-46ce8bd3"
+    "gen1-004-46ce8bd3",
+    "gen1-000-a047886e",
+    "gen1-005-1209a4f1"
   ],
   "evolved_candidates": [
     {
@@ -1557,5 +1557,18 @@
   "removed_duplicates": [],
   "debate_transcripts": {},
   "articles_with_reasoning": "",
-  "literature_snapshots": {}
+  "literature_snapshots": {},
+  "reeval": {
+    "ts_iso": "2026-05-29",
+    "reason": "original run had 118/118 openai-codex voter_call_failed -> 59/59 matches quorum_lost -> Elo flat 1000.0, survivors id-ordered",
+    "recovered_with": "Codex voter restored (effort=none); 177/177 votes ok, 0 quorum_lost",
+    "original_survivors_id_ordered": [
+      "gen1-000-a047886e",
+      "gen1-001-d4b78b3d",
+      "gen1-002-f4580bc8",
+      "gen1-003-dbbfc17c",
+      "gen1-004-46ce8bd3"
+    ],
+    "note": "evolved_candidates predate this re-evaluation (the evolver ran on the original id-ordered selection); they are retained as the historical record."
+  }
 }
