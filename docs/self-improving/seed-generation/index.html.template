@@ -38,6 +38,7 @@
 {{ sidebar_seedgen_runs }}
           </ul>
         </li>
+        <li><a href="/geode/self-improving/seed-generation/bundle/">Phase log viewer &#x2197;</a></li>
         <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 

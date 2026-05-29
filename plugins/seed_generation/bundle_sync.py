@@ -82,6 +82,17 @@ def _bundle_seeds_dir() -> Path:
     return _resolve_repo_root() / "docs" / "self-improving/petri-bundle" / "seeds"
 
 
+def _seedgen_eval_logs_dir() -> Path:
+    """Resolved logs dir for the seed-generation inspect bundle.
+
+    Seed-generation phase ``.eval`` archives publish to their OWN bundle
+    (``docs/self-improving/seed-generation/bundle/``), NOT the audit
+    petri-bundle, so the alignment-audit viewer stays scoped to audits.
+    Lazy resolution so ``GEODE_REPO_ROOT`` test fixtures take effect.
+    """
+    return _resolve_repo_root() / "docs" / "self-improving" / "seed-generation" / "bundle" / "logs"
+
+
 # Public constant — readers usually want to import this directly.
 BUNDLE_SEEDS_DIR = _bundle_seeds_dir
 
@@ -180,9 +191,12 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
     _sync_checkpoints(src_dir, bundle_dir)
 
     # PR-SEEDS-EVAL-EXPORT (2026-05-25) — additionally synthesise per-
-    # phase inspect_ai ``.eval`` archives so the SPA viewer at
-    # ``docs/self-improving/petri-bundle/index.html`` (and the live Pages mirror) shows
-    # each phase of the run as a task card alongside the audit ones.
+    # phase inspect_ai ``.eval`` archives so an SPA viewer shows each
+    # phase of the run as a task card.
+    # PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — these now publish to the
+    # seed-generation's OWN inspect bundle
+    # (``docs/self-improving/seed-generation/bundle/``), NOT the audit
+    # petri-bundle, so the alignment-audit viewer stays scoped to audits.
     # Best-effort: a converter failure does not block the JSON sync that
     # already succeeded above. ``GEODE_SEED_EVAL_EXPORT_DISABLED=1`` lets
     # operators opt out of the secondary publish path independently of
@@ -191,7 +205,7 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
         try:
             from plugins.seed_generation.eval_export import export_run_to_evals
 
-            logs_dir = _bundle_seeds_dir().parent / "logs"
+            logs_dir = _seedgen_eval_logs_dir()
             export_run_to_evals(bundle_dir, logs_dir)
         except Exception:
             log.warning(
