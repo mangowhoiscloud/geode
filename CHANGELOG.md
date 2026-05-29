@@ -47,6 +47,38 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-MUTATIONS-REDESIGN (2026-05-29)** — Rebuild the autoresearch
+  `/self-improving/autoresearch/mutations/` page against the live
+  `mutations.jsonl` schema. The renderer keyed off a stale nested
+  `ts_utc` / `mutation{}` / `mutator{}` / `verdict` shape (the fixture
+  matched it so the E2E stayed green), but the runner now emits a flat
+  schema in two row kinds — an APPLY record (`target_kind` /
+  `target_section` / `previous_value` → `new_value` / `rationale` /
+  `principle` / `target_dim`) and a separate ATTRIBUTION record
+  (`fitness_before` / `fitness_after` / `fitness_delta` /
+  `attribution_score` / `significant` / `observed_dim`) — so every column
+  rendered empty against production data. `_join_mutation_records()` now
+  joins the two kinds by `mutation_id` (one row per mutation, newest
+  applied first; attribution may be absent until the post-mutation audit
+  lands), and the table surfaces applied-at, target, aimed dim + measured
+  move + significance chip, `fitness_before → fitness_after` Δ,
+  attribution score, a derived outcome chip (improved / regressed / noise
+  / pending audit), and a `payload` drill-down (before → after value,
+  rationale, principle, rollback_condition, audit_run_id). The
+  non-functional CSS-only filter mockup (static chips with no behaviour)
+  is removed in favour of a real aggregate summary block
+  (`_render_mutations_summary`: outcome counts + mean Δfitness + target
+  kinds + aimed dims); the dead `.filter-strip` CSS is pruned. Fixture +
+  `test_autoresearch_mutations_table_renders` rewritten to the live flat
+  schema. Folded a Codex-MCP catch: the **policies** page's "mutated by"
+  cross-ref shared the same drift (it indexed `mutation["target_section"]`
+  with a `::` filename prefix + `ts_utc`, so every row rendered `—`); it
+  now maps the flat `target_kind` → policy filename via
+  `_TARGET_KIND_TO_POLICY_FILE` (a stdlib-only mirror of core's
+  `_KIND_TO_PATH`, pinned in lockstep by `test_policy_file_map_matches_core`)
+  and shows the latest section + applied-at + outcome per file.
+
 ## [0.99.82] - 2026-05-29
 
 ### Added
