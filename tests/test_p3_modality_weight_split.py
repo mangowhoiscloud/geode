@@ -227,9 +227,10 @@ def test_should_promote_n1_widening_conservative_default_for_missing_modality() 
 
 
 def test_n1_fitness_margin_floor_constant_value() -> None:
-    """``N1_FITNESS_MARGIN_FLOOR`` 의 값이 PR-3 의 결정 (0.20) 그대로.
-    drift 시 widening 효과 silently 변동 — invariant 로 pin."""
-    assert N1_FITNESS_MARGIN_FLOOR == 0.20
+    """``N1_FITNESS_MARGIN_FLOOR`` invariant. PR-MARGIN-FITNESS-SCALE
+    (2026-05-30) re-tuned it to the fitness scale: 0.20 → 0.05 (10× the
+    0.005 default epsilon). drift 시 N=1 widening 효과 silently 변동 — pin."""
+    assert N1_FITNESS_MARGIN_FLOOR == 0.05
 
 
 # ---------------------------------------------------------------------------

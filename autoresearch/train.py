@@ -93,8 +93,10 @@ import argparse
 import json
 import logging
 import os
+import random
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -2176,9 +2178,126 @@ def _write_baseline(
 # undefined under ddof=1), so the legacy ``max(stderr, 0.05)`` floor
 # collapses to ``0.05`` — letting any 0.05+ raw fitness Δ promote even
 # though the prior measurement carries no stability signal. The N=1
-# floor is set to ``0.20`` (4× the default) to require a clearly-above-
-# noise gain before overwriting an under-sampled baseline.
-N1_FITNESS_MARGIN_FLOOR = 0.20
+# floor is fitness-scale (PR-MARGIN-FITNESS-SCALE 2026-05-30) and set to
+# ``0.05`` (10× the default ``0.005`` epsilon) to require a clearly-above-
+# noise gain before overwriting an under-sampled baseline whose
+# fitness-aggregate stderr would be under-estimated (N=1 dims contribute
+# zero MC noise).
+N1_FITNESS_MARGIN_FLOOR = 0.05
+
+# PR-MARGIN-FITNESS-SCALE (2026-05-30) — the promote margin lives on the
+# FITNESS scale (0–1 weighted aggregate), not the raw dim scale (1–10). The
+# correct noise unit is the stderr of ``compute_fitness`` itself, estimated by
+# propagating each dim's measurement stderr through the aggregate via Monte
+# Carlo. ``_MARGIN_GAIN_SIGMA`` scales the gain's stderr
+# (sqrt(sigma_prior**2 + sigma_current**2), two independent audits) — 1.0 = a
+# one-standard-error band. Seeded RNG ⇒ the margin is deterministic for a given
+# baseline. Replaces the prior ``max(baseline_stderr.values())`` which applied
+# the noisiest single dim's 1–10 stderr (input_hallucination's 0.97) as a 0–1
+# fitness threshold — a measured 75.7× over-estimate that made every mutation
+# structurally unpromotable (2026-05-30 10-cycle run: 6 real audits, 0 promote,
+# all "gain +0.01 ≤ margin 0.97"; the fitness-aggregate stderr was ~0.013).
+_MARGIN_GAIN_SIGMA = 1.0
+_FITNESS_MARGIN_MC_SAMPLES = 1000
+_FITNESS_MARGIN_MC_SEED = 1729
+
+
+def _fitness_scale_stderr(
+    means: dict[str, float],
+    stderr: dict[str, float] | None,
+    *,
+    measurement_modality: dict[str, str] | None = None,
+    ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    anchor_means: dict[str, float] | None = None,
+    anchor_confidence_mode: bool = False,
+) -> float:
+    """Monte-Carlo stderr of ``compute_fitness`` under per-dim measurement noise.
+
+    Perturbs each ``means[dim]`` by ``N(0, stderr[dim])`` and returns the stdev
+    of the resulting raw fitness (``baseline_means=None`` — plain weighted sum,
+    same scale the promote gate compares on). This is the FITNESS-scale noise.
+
+    Seeded ⇒ deterministic for a given ``(means, stderr)``. Returns ``0.0`` when
+    there is no measurable noise (``stderr`` absent / all-zero) — the caller's
+    ``fitness_margin_floor`` then supplies the zero-noise guard.
+    """
+    if not stderr or not any(stderr.get(k, 0.0) > 0.0 for k in means):
+        return 0.0
+    rng = random.Random(_FITNESS_MARGIN_MC_SEED)
+    samples: list[float] = []
+    for _ in range(_FITNESS_MARGIN_MC_SAMPLES):
+        perturbed = {k: means[k] + rng.gauss(0.0, stderr.get(k, 0.0)) for k in means}
+        samples.append(
+            compute_fitness(
+                perturbed,
+                stderr,
+                measurement_modality=measurement_modality,
+                anchor_means=anchor_means,
+                anchor_confidence_mode=anchor_confidence_mode,
+                ux_means=ux_means,
+                admire_means=admire_means,
+            )
+        )
+    return statistics.stdev(samples) if len(samples) > 1 else 0.0
+
+
+def _fitness_stderr_bootstrap(
+    per_sample: list[dict[str, float]],
+    *,
+    measurement_modality: dict[str, str] | None = None,
+    ux_means: dict[str, float] | None = None,
+    admire_means: dict[str, float] | None = None,
+    anchor_confidence_mode: bool = False,
+) -> float | None:
+    """Sample-level bootstrap of ``compute_fitness``'s stderr (gold standard).
+
+    ``per_sample`` is the sample-indexed row list from
+    ``dim_extractor`` (``list[{dim: value}]``, one dict per audit sample). Each
+    bootstrap round resamples whole sample ROWS with replacement, then
+    recomputes per-dim **mean AND stderr** from the resampled rows and feeds
+    both into :func:`compute_fitness` — matching exactly how the promote gate
+    computes ``current_raw`` / ``prior_raw`` (so the stability axis + anchor
+    multiplier are estimated, not stubbed). Resampling whole rows captures
+    inter-dim correlation (every dim is scored from the same N seeds), which a
+    2026-05-30 cross-check measured at ~1.10× the per-dim-independent estimate
+    (:func:`_fitness_scale_stderr`, anti-conservative). Returns ``None`` for
+    <2 rows; the caller then falls back to the per-dim estimate.
+    """
+    n = len(per_sample)
+    if n < 2:
+        return None
+    dims = sorted({d for row in per_sample for d in row})
+    if not dims:
+        return None
+    rng = random.Random(_FITNESS_MARGIN_MC_SEED)
+    fits: list[float] = []
+    for _ in range(_FITNESS_MARGIN_MC_SAMPLES):
+        draw = [per_sample[rng.randrange(n)] for _ in range(n)]
+        means: dict[str, float] = {}
+        stderrs: dict[str, float] = {}
+        for dim in dims:
+            vals = [row[dim] for row in draw if dim in row]
+            if not vals:
+                continue
+            means[dim] = statistics.fmean(vals)
+            stderrs[dim] = statistics.stdev(vals) / (len(vals) ** 0.5) if len(vals) > 1 else 0.0
+        anchor = (
+            {a: means[a] for a in ANCHOR_DIMS if a in means} if anchor_confidence_mode else None
+        )
+        fits.append(
+            compute_fitness(
+                means,
+                stderrs,
+                measurement_modality=measurement_modality,
+                anchor_means=anchor,
+                anchor_confidence_mode=anchor_confidence_mode,
+                ux_means=ux_means,
+                admire_means=admire_means,
+            )
+        )
+    return statistics.stdev(fits) if len(fits) > 1 else None
+
 
 # PR-L8 (2026-05-26) — bootstrap baseline ratchet. Fresh-start (no prior
 # baseline.json) used to auto-promote ANY first audit, leaving the loop
@@ -2255,15 +2374,21 @@ def _should_promote(
     baseline_means: dict[str, float] | None,
     baseline_stderr: dict[str, float] | None,
     *,
-    # PR-PROMOTE-RATE-BUNDLE 2026-05-29 — Option A. fitness_margin_floor
-    # 0.05 -> 0.02 default. 함께 적용된 critical_margin 0.5 Option D 가
-    # critical-floor collapse 차단 후 actual fitness signal 통과 시점에,
-    # 0.05 threshold 는 cy11-23 의 observed noise floor — sample stderr
-    # mean ~0.02-0.03 on 5-sample audit — 보다 strict. 0.02 로 완화해
-    # noise floor 위 micro-improvement 가 PROMOTE 후보로 surface 됨.
-    # 안전 audit 의 critical 강한 regress 차단은 critical_margin Option
-    # D + n1_critical N=1 widening N1_FITNESS_MARGIN_FLOOR 0.20 둘이 부담.
-    fitness_margin_floor: float = 0.02,
+    # PR-MARGIN-FITNESS-SCALE 2026-05-30 — fitness_margin_floor is now a
+    # FITNESS-scale epsilon (0.005), a zero-noise guard, NOT the binding
+    # margin. The binding margin is the fitness-aggregate gain stderr (MC,
+    # below). The prior 0.02 was calibrated against the broken dim-scale
+    # margin; the empirical fitness-aggregate stderr of a real 8-sample
+    # baseline is ~0.013, so the floor only kicks in when both audits carry
+    # ~zero measurement noise. Critical-regress protection stays with
+    # critical_margin (Option D) + the N=1 widening floor (0.05).
+    fitness_margin_floor: float = 0.005,
+    # PR-MARGIN-FITNESS-SCALE (2026-05-30) — sample-bootstrap fitness stderr
+    # (captures inter-dim correlation) passed by the audit caller. When None
+    # (tests / v1 baselines / summary-only path) the margin falls back to the
+    # per-dim-independent MC ``_fitness_scale_stderr`` (a ~10% lower bound).
+    baseline_fitness_stderr: float | None = None,
+    current_fitness_stderr: float | None = None,
     baseline_sample_count: dict[str, int] | None = None,
     # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. 이전엔 internal
     # compute_fitness 호출에 bench 전달 0 → Goodhart bidirectional gate
@@ -2453,10 +2578,40 @@ def _should_promote(
             for dim in CRITICAL_DIMS
         )
     effective_floor = N1_FITNESS_MARGIN_FLOOR if n1_critical else fitness_margin_floor
-    margin = max(
-        max(baseline_stderr.values(), default=effective_floor),
-        effective_floor,
+    # PR-MARGIN-FITNESS-SCALE (2026-05-30) — margin = the gain's own stderr on
+    # the fitness scale (sqrt of the two audits' MC fitness-stderr), floored at
+    # the zero-noise epsilon. NOT max(dim_stderr) (dim scale → 75.7× too large).
+    # Prefer the sample bootstrap (passed by the audit caller; captures
+    # inter-dim correlation). Fall back to the per-dim-independent MC for
+    # callers without per-sample data (tests, v1 baselines, summary path).
+    sigma_prior = (
+        baseline_fitness_stderr
+        if baseline_fitness_stderr is not None
+        else _fitness_scale_stderr(
+            baseline_means,
+            baseline_stderr,
+            measurement_modality=baseline_measurement_modality,
+            ux_means=baseline_ux_means,
+            admire_means=baseline_admire_means,
+            anchor_means=_baseline_anchor or None,
+            anchor_confidence_mode=anchor_confidence_mode,
+        )
     )
+    sigma_current = (
+        current_fitness_stderr
+        if current_fitness_stderr is not None
+        else _fitness_scale_stderr(
+            current_means,
+            current_stderr,
+            measurement_modality=measurement_modality,
+            ux_means=ux_means,
+            admire_means=admire_means,
+            anchor_means=_current_anchor or None,
+            anchor_confidence_mode=anchor_confidence_mode,
+        )
+    )
+    gain_stderr = (sigma_prior**2 + sigma_current**2) ** 0.5
+    margin = max(_MARGIN_GAIN_SIGMA * gain_stderr, effective_floor)
     if current_raw <= prior_raw + margin:
         reason_suffix = ", N=1 critical" if n1_critical else ""
         return (

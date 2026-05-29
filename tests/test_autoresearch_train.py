@@ -1618,14 +1618,15 @@ def test_should_promote_accepts_significant_improvement() -> None:
 
 
 def test_should_promote_floor_protects_against_zero_stderr() -> None:
-    """``fitness_margin_floor`` kicks in when baseline_stderr is empty.
+    """``fitness_margin_floor`` (the zero-noise epsilon) kicks in when there
+    is no measurable fitness noise (empty stderr → MC σ = 0).
 
-    PR-PROMOTE-RATE-BUNDLE (2026-05-29) — Option A lowered the default
-    floor 0.05 → 0.02; this test still pins the floor-mechanism shape
-    (margin string surfaces in reason) but updates the literal."""
+    PR-MARGIN-FITNESS-SCALE (2026-05-30) — the floor is now a FITNESS-scale
+    epsilon (0.005), the zero-noise guard beneath the bootstrap gain-stderr
+    margin. This test pins that the floor surfaces in the reason string."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
-    baseline_stderr: dict[str, float] = {}  # empty → margin would be 0
-    # Tiny gain that would pass with margin=0 but fails with floor=0.02.
+    baseline_stderr: dict[str, float] = {}  # empty → gain stderr = 0
+    # Tiny gain (~0.0005) that would pass with margin=0 but fails the 0.005 floor.
     current_means = dict.fromkeys(CRITICAL_DIMS, 2.99)
     ok, reason = _should_promote(
         current_means,
@@ -1634,7 +1635,7 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
         baseline_stderr=baseline_stderr,
     )
     assert ok is False
-    assert "margin 0.02" in reason
+    assert "margin 0.0050" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -1653,8 +1654,9 @@ def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
     """
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)  # N=1 → stderr 0
-    # 0.06 improvement (well above 0.05 default floor) on every critical dim.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # ~0.015 fitness gain: above the 0.005 default floor (would promote at
+    # N>=2) but below the 0.05 N=1 widening floor → rejected only by widening.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
     ok, reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1663,7 +1665,7 @@ def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
         baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 1),
     )
     assert ok is False
-    assert "0.2000" in reason or "margin 0.20" in reason
+    assert "margin 0.0500" in reason
     assert "N=1 critical" in reason
 
 
@@ -1673,8 +1675,8 @@ def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
     the gate for well-sampled baselines."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    # Same 0.06 gain that PR-3 N=1 path rejects above.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # Same ~0.015 gain the N=1 path rejects above — here it clears the 0.005 floor.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
     ok, _reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1682,7 +1684,7 @@ def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
         baseline_stderr=baseline_stderr,
         baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 5),
     )
-    # 0.06 raw gain on every critical dim > 0.05 floor → promote.
+    # ~0.015 gain > 0.005 default floor (N>=2 → no widening) → promote.
     assert ok is True
 
 
@@ -1729,7 +1731,7 @@ def test_should_promote_n1_gate_fires_when_single_critical_dim_n1() -> None:
     where one slow-to-converge dim drags the whole margin wider."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)  # ~0.015 gain (< 0.05 N=1 floor)
     sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
     # Single critical dim at N=1.
     first_critical = next(iter(CRITICAL_DIMS))
