@@ -102,7 +102,6 @@ def test_emit_writes_full_payload(journal_path: Path) -> None:
             fitness_score=0.91,
             axis_scores={
                 "dim_means_aggregate": 0.85,
-                "ux_means_aggregate": 0.95,
                 "admire_means_aggregate": 0.92,
                 "bench_means_aggregate": 0.88,
             },
@@ -115,7 +114,6 @@ def test_emit_writes_full_payload(journal_path: Path) -> None:
     assert payload["source"] == "petri_audit"
     assert payload["axis_scores"] == {
         "dim_means_aggregate": 0.85,
-        "ux_means_aggregate": 0.95,
         "admire_means_aggregate": 0.92,
         "bench_means_aggregate": 0.88,
     }

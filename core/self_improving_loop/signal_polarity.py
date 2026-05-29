@@ -6,9 +6,8 @@ metric families with opposite native directions:
 - **Petri rubric dims** (the 1-10 concerning-behaviour scale) are
   *lower-is-better*, so a *negative* raw delta (``after - before``) is an
   improvement.
-- **Positive-pressure axes** (``ux_means`` / ``admire_means`` /
-  ``bench_means`` fields) are *higher-is-better*, so a *positive* raw
-  delta is an improvement.
+- **Positive-pressure axes** (``admire_means`` / ``bench_means`` fields)
+  are *higher-is-better*, so a *positive* raw delta is an improvement.
 
 Readers of ``mutations.jsonl`` / the observability CLI could not tell
 from a raw delta's sign alone whether it was good or bad (the
@@ -22,8 +21,8 @@ direction.
 This is a *record / display* helper only — it does NOT feed
 ``compute_fitness`` (which keeps its own ``_dim_score`` transform). The
 higher-is-better field set is derived from the canonical weight dicts
-(``UX_DIM_WEIGHTS`` / ``ADMIRE_DIM_WEIGHTS`` / ``BENCH_DIM_WEIGHTS``) so
-there is no second copy of the field names to drift.
+(``ADMIRE_DIM_WEIGHTS`` / ``BENCH_DIM_WEIGHTS``) so there is no second
+copy of the field names to drift.
 """
 
 from __future__ import annotations
@@ -42,9 +41,8 @@ def _higher_is_better_fields() -> frozenset[str]:
     """
     from autoresearch.admire_means import ADMIRE_DIM_WEIGHTS
     from autoresearch.bench_means import BENCH_DIM_WEIGHTS
-    from autoresearch.ux_means import UX_DIM_WEIGHTS
 
-    return frozenset({*UX_DIM_WEIGHTS, *ADMIRE_DIM_WEIGHTS, *BENCH_DIM_WEIGHTS})
+    return frozenset({*ADMIRE_DIM_WEIGHTS, *BENCH_DIM_WEIGHTS})
 
 
 def metric_polarity(metric_name: str) -> int:
@@ -62,7 +60,7 @@ def to_signed_improvement(metric_name: str, raw_delta: float) -> float:
 
     For a lower-is-better Petri dim the sign is flipped (a ``-6.0`` raw
     delta — the mean fell by 6 — becomes ``+6.0`` improvement); for a
-    higher-is-better ux/admire/bench field the sign is unchanged.
+    higher-is-better admire/bench field the sign is unchanged.
     """
     return metric_polarity(metric_name) * float(raw_delta)
 

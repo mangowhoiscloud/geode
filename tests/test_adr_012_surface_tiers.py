@@ -85,13 +85,13 @@ def test_tier_2_forbids_mutator_and_fitness_gate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Fitness 3축 + admire_means / ux_means
+# 3. Fitness 3축 — dim_means / admire_means / bench_means (ux-removed)
 # ---------------------------------------------------------------------------
 
 
 def test_fitness_three_axes_named() -> None:
     text = _read_adr()
-    for axis in ("dim_means", "ux_means", "admire_means"):
+    for axis in ("dim_means", "admire_means", "bench_means"):
         assert axis in text, f"fitness axis not named: {axis}"
 
 

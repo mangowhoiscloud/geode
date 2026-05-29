@@ -1,7 +1,9 @@
-"""ADR-012 S2 — `admire_means` fitness 축 + 3축 다축화 invariants.
+"""ADR-012 S2 — `admire_means` fitness 축 invariants (ux-removed 2026-05-30).
 
-S2 scope: schema + math + ranker hook interface + compute_fitness 3축
-재배분. ranker.py 의 실제 ELO + voter panel 호출 wiring 은 S2b (별도 PR).
+S2 scope: schema + math + ranker hook interface + compute_fitness 2축
+재배분 (dim + admire). ux_means 축은 PR-MARGIN-FITNESS-SCALE 에서 제거 —
+compute_fitness 의 분기는 dim-only / admire 2축 / bench 3축.
+ranker.py 의 실제 ELO + voter panel 호출 wiring 은 S2b (별도 PR).
 """
 
 from __future__ import annotations
@@ -15,13 +17,10 @@ from autoresearch.admire_means import (
 )
 from autoresearch.train import (
     FITNESS_ADMIRE_WEIGHT,
+    FITNESS_DIM_3AX,
     FITNESS_DIM_WEIGHT,
-    FITNESS_UX_WEIGHT,
-    UX_FITNESS_DIM_WEIGHT,
-    UX_FITNESS_UX_WEIGHT,
     compute_fitness,
 )
-from autoresearch.ux_means import UX_DIM_WEIGHTS
 
 # ---------------------------------------------------------------------------
 # 1. Schema constants
@@ -36,13 +35,14 @@ def test_admire_dim_weights_exact_2_fields() -> None:
     assert set(ADMIRE_DIM_WEIGHTS) == {"pairwise_win_rate", "human_calibration_corr"}
 
 
-def test_3_axis_fitness_weights_sum_to_one() -> None:
-    assert abs(FITNESS_DIM_WEIGHT + FITNESS_UX_WEIGHT + FITNESS_ADMIRE_WEIGHT - 1.0) < 1e-9
+def test_2_axis_fitness_weights_sum_to_one() -> None:
+    assert abs(FITNESS_DIM_WEIGHT + FITNESS_ADMIRE_WEIGHT - 1.0) < 1e-9
 
 
 def test_3_axis_dim_weight_smaller_than_2_axis_dim_weight() -> None:
-    """S2 신설로 dim 비중이 0.70 → 0.40 으로 감소 (양의 압력 두 축 추가)."""
-    assert FITNESS_DIM_WEIGHT < UX_FITNESS_DIM_WEIGHT
+    """추가 양의 압력 축(bench)이 활성화되면 dim 비중이 더 감소한다
+    (2축 dim 0.70 → 3축 dim 0.55)."""
+    assert FITNESS_DIM_3AX < FITNESS_DIM_WEIGHT
 
 
 def test_calibration_threshold_in_valid_range() -> None:
@@ -174,58 +174,31 @@ def test_validate_rejects_non_dict() -> None:
 
 
 def test_compute_fitness_both_none_dim_only() -> None:
-    """ux + admire 둘 다 None → dim-only fallback (S1 backwards compat)."""
+    """admire + bench 둘 다 None → dim-only fallback."""
     dim_means = {"broken_tool_use": 5.0}
-    f_both_none = compute_fitness(dim_means, ux_means=None, admire_means=None)
+    f_both_none = compute_fitness(dim_means, admire_means=None, bench_means=None)
     f_default = compute_fitness(dim_means)
     assert f_both_none == f_default
 
 
-def test_compute_fitness_ux_only_uses_2_axis_weights() -> None:
-    """ux 만 주어지면 S1 의 0.7/0.3 (backwards compat) — 3축 재배분 아님."""
-    dim_means = {"broken_tool_use": 5.0}
-    ux = dict.fromkeys(UX_DIM_WEIGHTS, 1.0)
-    f = compute_fitness(dim_means, ux_means=ux, admire_means=None)
-    base = compute_fitness(dim_means)
-    expected = base * UX_FITNESS_DIM_WEIGHT + 1.0 * UX_FITNESS_UX_WEIGHT
-    assert abs(f - expected) < 1e-9
-
-
-def test_compute_fitness_3_axis_with_admire() -> None:
-    """ux + admire 모두 → 3축 재배분 (0.4/0.3/0.3)."""
-    dim_means = {"broken_tool_use": 5.0}
-    ux = dict.fromkeys(UX_DIM_WEIGHTS, 1.0)
-    admire = {"pairwise_win_rate": 1.0, "human_calibration_corr": 1.0}
-    f = compute_fitness(dim_means, ux_means=ux, admire_means=admire)
-    base = compute_fitness(dim_means)
-    expected = FITNESS_DIM_WEIGHT * base + FITNESS_UX_WEIGHT * 1.0 + FITNESS_ADMIRE_WEIGHT * 1.0
-    assert abs(f - expected) < 1e-9
-
-
-def test_compute_fitness_admire_only_with_neutral_ux() -> None:
-    """admire 만 주어지면 ux 는 neutral 0.5 로 처리 + 3축 활성화."""
+def test_compute_fitness_2_axis_with_admire() -> None:
+    """admire 만 주어지면 2축 재배분 (dim 0.70 + admire 0.30)."""
     dim_means = {"broken_tool_use": 5.0}
     admire = {"pairwise_win_rate": 1.0, "human_calibration_corr": 1.0}
-    f = compute_fitness(dim_means, ux_means=None, admire_means=admire)
+    f = compute_fitness(dim_means, admire_means=admire)
     base = compute_fitness(dim_means)
-    expected = (
-        FITNESS_DIM_WEIGHT * base
-        + FITNESS_UX_WEIGHT * 0.5  # neutral
-        + FITNESS_ADMIRE_WEIGHT * 1.0
-    )
+    expected = FITNESS_DIM_WEIGHT * base + FITNESS_ADMIRE_WEIGHT * 1.0
     assert abs(f - expected) < 1e-9
 
 
 def test_compute_fitness_critical_gate_strict_reject_with_admire() -> None:
-    """admire+ux 가 perfect 여도 critical dim regress 면 fitness=0."""
+    """admire 가 perfect 여도 critical dim regress 면 fitness=0."""
     dim_means = {"broken_tool_use": 10.0}
     baseline_means = {"broken_tool_use": 5.0}
     admire = {"pairwise_win_rate": 1.0, "human_calibration_corr": 1.0}
-    ux = dict.fromkeys(UX_DIM_WEIGHTS, 1.0)
     f = compute_fitness(
         dim_means,
         baseline_means=baseline_means,
-        ux_means=ux,
         admire_means=admire,
     )
     assert f == 0.0
@@ -233,18 +206,14 @@ def test_compute_fitness_critical_gate_strict_reject_with_admire() -> None:
 
 def test_compute_fitness_dim_weight_redistributed_when_admire_active() -> None:
     """S2 의 핵심 효과 — admire 활성화 시 dim 비중이 감소. 같은 dim 점수
-    + perfect ux/admire → 3축 fitness < 2축 (S1) fitness (dim 0.4 < 0.7)."""
+    + zero admire → 2축 fitness < dim-only fitness (dim 0.70 < 1.0)."""
     dim_means = {"broken_tool_use": 5.0}
-    ux = dict.fromkeys(UX_DIM_WEIGHTS, 0.0)  # zero ux to isolate dim weight effect
     admire = {"pairwise_win_rate": 0.0, "human_calibration_corr": 0.0}
     base = compute_fitness(dim_means)
-    f_3axis = compute_fitness(dim_means, ux_means=ux, admire_means=admire)
-    f_2axis = compute_fitness(dim_means, ux_means=ux)
-    # 3축: base*0.4 + 0*0.3 + 0*0.3 = base*0.4
-    # 2축: base*0.7 + 0*0.3 = base*0.7
-    assert f_3axis < f_2axis  # dim 비중 감소 직접 검증
-    assert abs(f_3axis - base * FITNESS_DIM_WEIGHT) < 1e-9
-    assert abs(f_2axis - base * UX_FITNESS_DIM_WEIGHT) < 1e-9
+    f_2axis = compute_fitness(dim_means, admire_means=admire)
+    # 2축: base*0.70 + 0*0.30 = base*0.70 < base (dim-only)
+    assert f_2axis < base  # dim 비중 감소 직접 검증
+    assert abs(f_2axis - base * FITNESS_DIM_WEIGHT) < 1e-9
 
 
 # ---------------------------------------------------------------------------

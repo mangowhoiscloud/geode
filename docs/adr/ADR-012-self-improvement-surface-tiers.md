@@ -31,7 +31,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 이 ADR 은 GEODE 의 self-improvement 표면을 다음 4가지 축으로 재정렬한다.
 
 1. **Tier 1 / Tier 2** 분리 — mutation 허용/금지 영역의 명시적 정의
-2. **Fitness 다축화** — `dim_means` (현재) + `ux_means` + `admire_means` 의 multi-axis strict-reject ratchet
+2. **Fitness 다축화** — `dim_means` + `admire_means` + `bench_means` 의 multi-axis strict-reject ratchet (`ux_means` 축은 2026-05-30 에 제거 — §Decision.2)
 3. **Surrogate fine-tune 5 경로** — weight 권한 없이 inference-only 채널에서 dataset 이 5축 진화를 증폭하는 메커니즘
 4. **단기 → 중기 → 장기 성장 곡선** + **의사결정 게이트 G1-G6**
 
@@ -68,9 +68,11 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 
 `tests/test_adr_012_tier_2_deny_list.py` (이 PR 에서 신설) 가 Tier 2 deny-list 를 강제한다 — Tier 2 파일이 `TARGET_KIND_TO_SOT_FILE` 또는 mutation dispatcher 의 target 목록에 등장하면 즉시 test 실패. PR-AUDIT-5SLOT 의 ratchet 패턴 (`test_ratchet_policies_in_repo.py`) 은 policy SoT 의 gitignore/migration 만 pin 하므로 별개의 deny-list 가 필요했고, 이 ADR PR 이 그 deny-list 의 첫 invariant 를 함께 도입한다.
 
-### 2. Fitness 다축화 — 4축 multi-axis strict-reject ratchet
+### 2. Fitness 다축화 — 3축 multi-axis strict-reject ratchet
 
-> **2026-05-23 amendment (PR-SIL-5THEME C1)** — 초안의 3축 (dim + ux + admire) 에서 **bench_means** 가 추가되어 **4축** 으로 확장됐다. 초기 운영의 `seed_pool_diversity` 슬롯은 cohort diversity 신호 readers 의 부재 + ELO tournament 가 panel diversity 를 이미 흡수하는 점이 확인돼 **명시적 deprecate**. 코드 상수 `FITNESS_DIM_4AX / FITNESS_UX_4AX / FITNESS_ADMIRE_4AX / FITNESS_BENCH_4AX` (`autoresearch/train.py:344-350`, sum=1.0 assert) 가 ground-truth.
+> **2026-05-30 amendment (PR-MARGIN-FITNESS-SCALE)** — `ux_means` (행동 metric) 축이 fitness 에서 **제거**됐다. fitness 는 순수 Petri dim aggregate + (예약된) `admire_means` + `bench_means` 의 **3축** 으로 회귀. 근거: ux collector 가 cycle-0 에 빈 dict 를 반환해 promote gate 에 의미있는 신호를 주지 못했고, margin 재설계(아래 §S6 의 fitness-scale gain-stderr) 시 fitness 를 dim-scale 로 단순화하는 편이 명확. 코드 상수 `FITNESS_DIM_3AX 0.55 / FITNESS_ADMIRE_3AX 0.20 / FITNESS_BENCH_3AX 0.25` (`autoresearch/train.py`, sum=1.0 assert) + admire-only 2축 `FITNESS_DIM_WEIGHT 0.70 / FITNESS_ADMIRE_WEIGHT 0.30` 가 ground-truth.
+>
+> **2026-05-23 amendment (PR-SIL-5THEME C1, superseded by 2026-05-30)** — 초안의 3축 (dim + ux + admire) 에서 **bench_means** 가 추가되어 4축 으로 확장됐었다. 초기 운영의 `seed_pool_diversity` 슬롯은 cohort diversity 신호 readers 의 부재 + ELO tournament 가 panel diversity 를 이미 흡수하는 점이 확인돼 **명시적 deprecate**.
 
 현재 `baseline.json` 의 fitness 는 `dim_means` 1축. 이 ADR 은 세 축을 추가한다 (S1 `ux_means`, S2 `admire_means`, S6 `bench_means`).
 
@@ -86,20 +88,22 @@ baseline.json {
     "eval_archive":  "<path>"
   },
   "axes": {
-    "ux_means":      {success_rate, token_cost, revert_ratio, latency},          # S1 (행동, 양의 압력)
     "admire_means":  {pairwise_win_rate, human_calibration_corr},                # S2 (체감, 양의 압력)
     "bench_means":   {swe_bench_pro_pass, livecodebench_pro_accuracy, ...}       # S6 (capability, 양의 압력)
+    # ux_means 축은 PR-MARGIN-FITNESS-SCALE (2026-05-30) 에서 제거 — 더 이상 emit 안 함
   }
 }
 ```
 
-> **Deprecated slot — `seed_pool_diversity`** (2026-05-23 amendment): 초안에 4번째 묶음으로 명시됐으나 코드 0 grep, ELO tournament 의 cross-provider panel (`required_diversity_providers ≥ 2`) 이 diversity 신호를 admire_means 안에 이미 흡수. 명시적 deprecate — fitness 축 산정 4축 (dim + ux + admire + bench) 에서 제외.
+> **Deprecated slot — `seed_pool_diversity`** (2026-05-23 amendment): 초안에 4번째 묶음으로 명시됐으나 코드 0 grep, ELO tournament 의 cross-provider panel (`required_diversity_providers ≥ 2`) 이 diversity 신호를 admire_means 안에 이미 흡수. 명시적 deprecate — fitness 축 산정 3축 (dim + admire + bench) 에서 제외.
 
-**Promote 규칙**: 4 축 모두 baseline 대비 monotonic 또는 within-stderr 일 때만. 한 축이라도 regress 면 strict reject — AlphaEvolve 식 다축 정책 그대로. **§S6 (bench) 추가 후의 cross-validation 규칙**: dim promote + bench regress = `alignment_only_fooling`, bench promote + dim critical regress = `capability_at_alignment_cost`. 두 conflict 모두 strict-reject (`compute_fitness → 0.0`) — Goodhart 양방향 방어.
+**Promote 규칙**: 3 축 모두 baseline 대비 monotonic 또는 within-stderr 일 때만. 한 축이라도 regress 면 strict reject — AlphaEvolve 식 다축 정책 그대로. **§S6 (bench) 추가 후의 cross-validation 규칙**: dim promote + bench regress = `alignment_only_fooling`, bench promote + dim critical regress = `capability_at_alignment_cost`. 두 conflict 모두 strict-reject (`compute_fitness → 0.0`) — Goodhart 양방향 방어.
 
-축별 권장 가중치 (2026-05-23 amendment 후): `dim_means` 0.30, `ux_means` 0.25, `admire_means` 0.20, `bench_means` 0.25 (sum=1.0). 운영하면서 `[self_improving_loop.fitness] axis_weights = {...}` TOML 으로 조정.
+축별 권장 가중치 (3축, ux-removed 2026-05-30): `dim_means` 0.55, `admire_means` 0.20, `bench_means` 0.25 (sum=1.0). admire 만 활성인 2축 fallback 은 `dim_means` 0.70, `admire_means` 0.30. 운영하면서 `[self_improving_loop.fitness] axis_weights = {...}` TOML 으로 조정.
 
-#### `ux_means` 구성 (S1 신설)
+#### `ux_means` 구성 (S1 신설 — SUPERSEDED, PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거)
+
+> 이 축은 더 이상 fitness 에 기여하지 않는다 (위 §Decision.2 의 2026-05-30 amendment). 아래 표는 역사적 기록 — `autoresearch/ux_means.py` 모듈과 `compute_fitness` 의 ux 분기는 삭제됐다.
 
 | 필드 | 출처 | 측정 단위 |
 |---|---|---|

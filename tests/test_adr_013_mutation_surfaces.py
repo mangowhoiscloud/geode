@@ -205,10 +205,11 @@ def test_followup_pr_sequence_t1_through_t6() -> None:
 
 
 def test_each_surface_cites_fitness_axis_impact() -> None:
-    """각 표면이 dim_means / ux_means / admire_means / bench_means 중 어디에
-    영향 미치는지 명시 — ADR-012 의 fitness 다축화와 호환."""
+    """각 표면이 dim_means / admire_means / bench_means 중 어디에 영향
+    미치는지 (또는 cost/style knob 인지) 명시 — ADR-012 의 fitness 다축화와
+    호환. ux_means 축은 PR-MARGIN-FITNESS-SCALE (2026-05-30) 에 제거됐다."""
     text = _read_adr()
-    for axis in ("broken_tool_use", "ux_means", "token_cost_norm", "gaia_accuracy"):
+    for axis in ("broken_tool_use", "gaia_accuracy"):
         assert axis in text, f"fitness axis impact not cited: {axis}"
 
 

@@ -22,30 +22,32 @@ def test_to_signed_improvement_flips_lower_is_better_petri_dim() -> None:
 
 
 def test_to_signed_improvement_preserves_higher_is_better_axis() -> None:
-    """ux/admire/bench fields keep their sign (higher raw = improvement)."""
-    assert to_signed_improvement("success_rate", 0.2) == 0.2
-    assert to_signed_improvement("pairwise_win_rate", -0.1) == -0.1
+    """admire/bench fields keep their sign (higher raw = improvement)."""
+    assert to_signed_improvement("pairwise_win_rate", 0.2) == 0.2
+    assert to_signed_improvement("swe_bench_pro_pass", -0.1) == -0.1
 
 
 def test_metric_polarity_values() -> None:
     assert metric_polarity("broken_tool_use") == -1  # Petri, lower-is-better
     assert metric_polarity("redundant_tool_invocation") == -1
-    assert metric_polarity("success_rate") == 1  # ux, higher-is-better
     assert metric_polarity("swe_bench_pro_pass") == 1  # bench
     assert metric_polarity("pairwise_win_rate") == 1  # admire
-    # Unknown metric defaults to lower-is-better (Petri is the default family)
+    # Unknown metric defaults to lower-is-better (Petri is the default family).
+    # ux fields (e.g. success_rate) were removed (PR-MARGIN-FITNESS-SCALE)
+    # → no longer higher-is-better, fall through to the -1 default.
+    assert metric_polarity("success_rate") == -1
     assert metric_polarity("some_future_dim") == -1
 
 
 def test_higher_is_better_set_derived_from_canonical_weights() -> None:
-    """Drift guard — the +1 polarity set is exactly the union of the three
-    canonical weight dicts, so there is no hand-maintained second copy to
-    drift from the SoT."""
+    """Drift guard — the +1 polarity set is exactly the union of the
+    canonical weight dicts (admire + bench; ux removed
+    PR-MARGIN-FITNESS-SCALE), so there is no hand-maintained second copy
+    to drift from the SoT."""
     from autoresearch.admire_means import ADMIRE_DIM_WEIGHTS
     from autoresearch.bench_means import BENCH_DIM_WEIGHTS
-    from autoresearch.ux_means import UX_DIM_WEIGHTS
 
-    expected = {*UX_DIM_WEIGHTS, *ADMIRE_DIM_WEIGHTS, *BENCH_DIM_WEIGHTS}
+    expected = {*ADMIRE_DIM_WEIGHTS, *BENCH_DIM_WEIGHTS}
     for field in expected:
         assert metric_polarity(field) == 1, f"{field} should be higher-is-better"
 

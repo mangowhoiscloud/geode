@@ -17,7 +17,6 @@ record fields, not payload fields):
       "fitness_score": 0.82,
       "axis_scores": {
         "dim_means_aggregate": 0.78,
-        "ux_means_aggregate": 0.84,
         "admire_means_aggregate": 0.90,
         "bench_means_aggregate": 0.75
       },
@@ -62,9 +61,9 @@ def emit_eval_response_recorded(
         prompt: User-side message verbatim (M4.1 will use as DPO ``prompt``).
         response: Assistant-side message verbatim (will land in
             ``chosen`` or ``rejected`` pile depending on ``rollback_flag``).
-        fitness_score: 4-axis weighted aggregate (S3 의 baseline.json 의
+        fitness_score: weighted fitness aggregate (S3 의 baseline.json 의
             compute_fitness output). 0.0~1.0+. Higher = better.
-        axis_scores: Per-axis breakdown (dim/ux/admire/bench aggregates).
+        axis_scores: Per-axis breakdown (dim/admire/bench aggregates).
             Optional — when None, the event still carries the scalar
             fitness_score; M4.1 의 ratchet 은 scalar 면 충분히 작동.
         source: Free-form provenance tag (``"petri_audit"`` /

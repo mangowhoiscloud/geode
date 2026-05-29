@@ -1,7 +1,8 @@
-"""``bench_means`` fitness 축 — ADR-012 §S6 (4축 fitness 의 4번째 축).
+"""``bench_means`` fitness 축 — ADR-012 §S6 (3축 fitness 의 3번째 축,
+ux-removed 2026-05-30).
 
-S1 의 ``ux_means`` (행동) + S2 의 ``admire_means`` (체감) 옆에 추가되는
-**capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기)
+S2 의 ``admire_means`` (체감) 옆에 추가되는 **capability** 양의 압력
+축. Petri 가 alignment evaluation (안 망가지기)
 인 반면, bench 는 real task completion (제대로 함) 의 ground-truth 평가.
 
 ADR-012 §S6 가 schema + math + cross-validation gate 명세, §S6b 가 이
@@ -61,16 +62,15 @@ substitution 추가:
 - bench promote + Petri critical regress → ``capability_at_alignment_cost``
 - 두 conflict 모두 ``compute_fitness`` 의 strict-reject (0.0) 발화.
 
-**ADR-012 §Decision.2 의 4축 fitness 가중치** (2026-05-23 amendment 후):
+**ADR-012 §Decision.2 의 3축 fitness 가중치** (ux-removed 2026-05-30):
 
-- ``dim_means`` (Petri 17-22 dim, 음의 압력) — 0.30
-- ``ux_means`` (행동 4-field, S1) — 0.25
+- ``dim_means`` (Petri 17-22 dim, 음의 압력) — 0.55
 - ``admire_means`` (체감 2-field, S2) — 0.20
 - ``bench_means`` (capability 7-field, S6) — 0.25
 
-코드 상수 ground-truth: ``autoresearch/train.py`` 의 ``FITNESS_DIM_4AX
-/ FITNESS_UX_4AX / FITNESS_ADMIRE_4AX / FITNESS_BENCH_4AX`` (sum=1.0
-assert).
+코드 상수 ground-truth: ``autoresearch/train.py`` 의 ``FITNESS_DIM_3AX
+/ FITNESS_ADMIRE_3AX / FITNESS_BENCH_3AX`` (sum=1.0 assert). ux_means
+축은 PR-MARGIN-FITNESS-SCALE 에서 제거.
 
 **Frontier sources** (2026-05):
 
