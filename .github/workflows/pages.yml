@@ -3,10 +3,13 @@ name: Deploy site to GitHub Pages
 # Builds the Next.js static export under `site/` and deploys it to GitHub
 # Pages. Site URL after deploy: https://mangowhoiscloud.github.io/geode/
 #
-# Triggers on changes to `site/**`, this workflow, or any of the SOT files
-# that `sync-stats` reads (CHANGELOG.md, pyproject.toml, CLAUDE.md). A docs
-# page like `/docs/reference/changelog` therefore stays in sync with
-# CHANGELOG.md without a separate commit to `site/`.
+# Triggers on changes to `site/**`, the self-improving hub under
+# `docs/self-improving/**` (copied into `site/out/self-improving/` at build
+# time), this workflow, or any of the SOT files that `sync-stats` reads
+# (CHANGELOG.md, pyproject.toml, CLAUDE.md). A docs page like
+# `/docs/reference/changelog` therefore stays in sync with CHANGELOG.md
+# without a separate commit to `site/`, and a hub rebuild (seed-generation /
+# mutations / autoresearch HTML) deploys without needing a `site/` touch.
 #
 # Daily 09:00 KST cron also runs as a safety net so the docs page can never
 # fall more than 24 hours behind even if Pages settings get changed by an
@@ -20,7 +23,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
-      - "docs/self-improving/petri-bundle/**"
+      - "docs/self-improving/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
       - "CHANGELOG.md"
@@ -32,7 +35,7 @@ on:
   pull_request:
     paths:
       - "site/**"
-      - "docs/self-improving/petri-bundle/**"
+      - "docs/self-improving/**"
       - "docs/audits/**"
       - "plugins/petri_audit/judge_dims/**"
       - ".pymarkdown.json"
