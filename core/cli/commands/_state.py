@@ -51,6 +51,7 @@ class ModelProfile:
 # scan when Codex subscription OAuth is registered (v0.52.4 routing policy);
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
 MODEL_PROFILES: list[ModelProfile] = [
+    ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
     ModelProfile(ANTHROPIC_PRIMARY, "anthropic", "Opus 4.7", "$$$"),
     ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
     ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),

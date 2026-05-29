@@ -19,6 +19,14 @@
 # ── Anthropic (verified 2026-04-23) ───────────────────────────────────────
 # Source: https://platform.claude.com/docs/en/docs/about-claude/pricing
 
+# Opus 4.8 pricing mirrors the established Opus 4.5+ tier ($5 / $25). ctx7
+# platform docs index only up to the 4.6/4.7 pages; refresh against the
+# pricing source above on the next quarterly pass if Anthropic publishes a
+# distinct 4.8 rate.
+[pricing.anthropic."claude-opus-4-8"]
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+
 [pricing.anthropic."claude-opus-4-7"]
 input_per_mtok = 5.00
 output_per_mtok = 25.00
@@ -120,13 +128,14 @@ input_per_mtok = 0.00
 output_per_mtok = 0.00  # free tier (limited-time)
 
 # ── Context windows (verified 2026-04-26 / GLM 2026-05-12 GAP-X1) ─────────
-# Anthropic: 1M tokens for opus-4-6/7 + sonnet-4-6; 200K for legacy.
+# Anthropic: 1M tokens for opus-4-6/7/8 + sonnet-4-6; 200K for legacy.
 # OpenAI 5.x: 1.05M tokens for gpt-5.5/5.4/5.4-mini; 200K for 5.3-codex
 # + reasoning (o3/o4-mini). GLM: all share 202_752 (z.ai rounds to 200K
 # in marketing; precise value matters for the 200K guard's early-trip
 # margin).
 
 [context_windows]
+"claude-opus-4-8"            = 1000000
 "claude-opus-4-7"            = 1000000
 "claude-opus-4-6"            = 1000000
 "claude-opus-4-5"            = 200000
