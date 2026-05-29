@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.83] - 2026-05-29
+
+> PATCH — self-improving hub data-integrity sprint. gen1 broken-link
+> recovery (bundle sync gap), mutations page rebuilt against the live
+> flat schema, and the gen1-broken tournament re-evaluated with the
+> recovered Codex voter.
+
 ### Fixed
 - **PR-GEN1-BROKEN-REEVAL (2026-05-29)** — Re-evaluate the `gen1-broken_tool_use`
   self-improving run's tournament with the recovered Codex voter. The original
