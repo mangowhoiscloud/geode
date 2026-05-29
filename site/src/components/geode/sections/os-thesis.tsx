@@ -28,8 +28,8 @@ const values = [
     id: "V3",
     title: "Compute ABI",
     titleKo: "Compute ABI",
-    body: "4 providers × R1-R9 reasoning wire audit. GLM thinking is GEODE-only.",
-    bodyKo: "4 프로바이더 × R1-R9 리즈닝 와이어 감사. GLM thinking 활성화는 GEODE 단독.",
+    body: "One ABI across providers. R1-R9 reasoning wire audit. GLM thinking is GEODE-only.",
+    bodyKo: "프로바이더를 단일 ABI로. R1-R9 리즈닝 와이어 감사. GLM thinking 활성화는 GEODE 단독.",
   },
   {
     id: "V4",
@@ -42,8 +42,8 @@ const values = [
     id: "V5",
     title: "Operator Discipline",
     titleKo: "운영 규율",
-    body: "Solo. 130+ releases. Zero regression. Built by its own scaffold.",
-    bodyKo: "단독 개발. 130+ 릴리스. 회귀 없음. 자기 스캐폴드로 구축.",
+    body: "Solo. Ratchet discipline, zero regression. Built by its own scaffold.",
+    bodyKo: "단독 개발. ratchet 규율로 회귀 없이. 자기 스캐폴드로 구축.",
   },
 ];
 

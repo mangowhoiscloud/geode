@@ -69,7 +69,7 @@ const mirrors = [
   {
     pattern: "Multi-perspective verification",
     artifactLabel: "Cross-LLM verification",
-    artifactBody: "RESCORE + DUAL_VERIFY across 4 providers. CV<0.05 anchoring detection.",
+    artifactBody: "RESCORE + DUAL_VERIFY across providers. CV<0.05 anchoring detection.",
     artifactFile: "core/llm/prompts/cross_llm.md",
     scaffoldLabel: "Verification Team",
     scaffoldBody: "4 personas (Beck/Karpathy/Steinberger/Cherny) + Anti-Deception checklist.",
