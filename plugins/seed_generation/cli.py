@@ -774,20 +774,6 @@ def run_audit_seeds(
                         "seed-generation: --target-dims-attribution auto → "
                         f"{resolved_attribution!r} (top-3 worst-regressed)\n"
                     )
-            # PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V4) — read
-            # ``AutoresearchConfig.pareto_mode`` for the G5 gate.
-            # Best-effort: fall through to False when the config
-            # surface is unavailable in test contexts (mirrors the
-            # _get_seed_generation_config defensive pattern above).
-            pareto_mode = False
-            try:
-                from core.config.self_improving_loop import (
-                    load_self_improving_loop_config,
-                )
-
-                pareto_mode = bool(load_self_improving_loop_config().autoresearch.pareto_mode)
-            except Exception:
-                pareto_mode = False
             _dispatch_pipeline(
                 picker_result=picker_result,
                 target_dim=resolved_dim,
@@ -800,7 +786,6 @@ def run_audit_seeds(
                 meta_review_snapshot=meta_review_snapshot,
                 max_iterations=max_iterations,
                 target_dims_attribution=resolved_attribution,
-                pareto_mode=pareto_mode,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -834,7 +819,6 @@ def _dispatch_pipeline(
     meta_review_snapshot: Any = None,
     max_iterations: int = 0,
     target_dims_attribution: list[str] | None = None,
-    pareto_mode: bool = False,
 ) -> None:
     """Build orchestrator + run.
 
@@ -870,7 +854,6 @@ def _dispatch_pipeline(
         run_id=run_id,
         target_dim=target_dim,
         target_dims_attribution=list(target_dims_attribution or []),
-        pareto_mode=pareto_mode,
         gen_tag=gen_tag,
         candidates_requested=candidates_requested,
         run_dir=run_dir,

@@ -53,10 +53,8 @@ _KNOWN_ACTIONS = frozenset(
         "config",
         "source",
         # PR-WIRE-1 (2026-05-26) — operator visibility into the previously
-        # orphan observability helpers (credit_assignment / kind_dim_matrix /
-        # rollback_condition). See ``feedback-sot-revert-on-reject`` memory
-        # for the audit context.
-        "credit",
+        # orphan observability helpers (kind_dim_matrix / rollback_condition).
+        # See ``feedback-sot-revert-on-reject`` memory for the audit context.
         "matrix",
         "rollback-check",
     }
@@ -107,10 +105,6 @@ def cmd_self_improving(args: str) -> None:
     # PR-WIRE-1 (2026-05-26) — operator-facing visibility into the previously
     # orphan helpers. Each sub-action reads mutations.jsonl, runs the helper,
     # renders a dense table.
-    if action == "credit":
-        _cmd_credit(parts[1:])
-        return
-
     if action == "matrix":
         _cmd_matrix(parts[1:])
         return
@@ -124,7 +118,7 @@ def cmd_self_improving(args: str) -> None:
     console.print(
         "  [muted]Available now: [/muted]"
         "status / run / history / rollback / migrate / config / source / "
-        "credit / matrix / rollback-check"
+        "matrix / rollback-check"
     )
     console.print()
 
@@ -1184,18 +1178,15 @@ def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
 # ---------------------------------------------------------------------------
 #
 # Phase A audit of the 2026-05-26 autoresearch attribution sprint found
-# three observability helpers (``compute_credit_assignment`` /
-# ``compute_kind_dim_matrix`` / ``evaluate_rollback_condition``) that
-# were defined in ``core/self_improving_loop/`` but had zero production
-# callers — only test fixtures imported them. PR-16/17/18 had shipped
-# the helpers as "operator dashboard" infrastructure with caller wiring
-# explicitly deferred (each module docstring said so).
+# two observability helpers (``compute_kind_dim_matrix`` /
+# ``evaluate_rollback_condition``) that were defined in
+# ``core/self_improving_loop/`` but had zero production callers — only
+# test fixtures imported them. PR-17/18 had shipped the helpers as
+# "operator dashboard" infrastructure with caller wiring explicitly
+# deferred (each module docstring said so).
 #
-# This PR closes that gap by wiring the helpers through three new
+# This PR closes that gap by wiring the helpers through two new
 # REPL sub-actions:
-#
-#   /self-improving credit [--last N]
-#     → aggregate_credit_history (signed per-dim credit across N apply rows)
 #
 #   /self-improving matrix [--last N]
 #     → compute_kind_dim_matrix + rank_dims_by_kind (kind × dim contribution
@@ -1223,50 +1214,6 @@ def _parse_last_n(opts: list[str], default: int = _WIRE_DEFAULT_LAST) -> int:
             except ValueError:
                 pass
     return default
-
-
-def _cmd_credit(opts: list[str]) -> None:
-    """Render ``aggregate_credit_history`` over the most recent N apply rows.
-
-    Wires the previously orphan ``core.self_improving_loop.credit_assignment``
-    helpers. Reads ``mutations.jsonl``, filters to ``applied`` rows, runs
-    the aggregator, prints a dense ``dim → cumulative_credit`` table sorted
-    by absolute credit descending.
-
-    Empty state when:
-    - No mutations yet (file absent / no applied rows)
-    - All rows lack ``group_advantage`` (legacy group_size=1 mode)
-    - All rows lack ``expected_dim`` (mutator didn't commit dim deltas)
-    """
-    from core.paths import MUTATION_AUDIT_LOG_PATH
-    from core.self_improving_loop.credit_assignment import aggregate_credit_history
-    from core.self_improving_loop.mutations_reader import read_recent_applies
-
-    last_n = _parse_last_n(opts)
-    rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
-
-    console.print()
-    console.print(f"  [header]Credit assignment[/header] (last {last_n} apply rows)")
-    if not rows:
-        console.print("    [muted]no applied mutations yet[/muted]")
-        console.print()
-        return
-
-    credit = aggregate_credit_history(rows)
-    if not credit:
-        console.print(
-            "    [muted]no group_advantage or expected_dim signal across the window — "
-            "group_size=1 legacy mode, or mutator didn't commit per-dim deltas[/muted]"
-        )
-        console.print()
-        return
-
-    ranked = sorted(credit.items(), key=lambda kv: abs(kv[1]), reverse=True)
-    name_width = max(len(d) for d, _ in ranked)
-    console.print(f"    [muted]{'dim':<{name_width}}  cumulative_credit[/muted]")
-    for dim, value in ranked:
-        console.print(f"    {dim:<{name_width}}  {value:+.4f}")
-    console.print()
 
 
 def _cmd_matrix(opts: list[str]) -> None:

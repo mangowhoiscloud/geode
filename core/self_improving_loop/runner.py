@@ -89,9 +89,11 @@ class ApplyRecord(BaseModel):
 
     ts: float
     kind: str = Field(default="applied", pattern=r"^applied(_sibling)?$")
-    """P1-revised (2026-05-25) — ``applied`` (group 의 top-1 채택) 또는
-    ``applied_sibling`` (group 의 non-best, in-memory only). legacy
-    group_size=1 mode 는 항상 ``applied``."""
+    """``applied`` is the canonical kind. The ``applied_sibling`` variant
+    is a vestigial reader-side allowance (no current writer) retained so
+    legacy on-disk rows from the removed group-sampling era still parse;
+    PR-GROUP-REMOVAL (2026-05-29) reverted the loop to pure (1+1)-ES so
+    every fresh row is ``applied``."""
     mutation_id: str
     target_kind: str
     target_section: str
@@ -543,13 +545,6 @@ _MUTATION_CONTRACT_SUFFIX = (
     "audit history, attribution rows, target_kind table, or "
     "measurement_modality guidance is FORBIDDEN — those are already "
     "context. legacy callers (P3 이전) may omit; empty string is graceful.\n"
-    "- **Group sampling (P1-revised, 2026-05-25)**: when this invocation is "
-    "part of a sibling group (``group_size > 1``), each sibling MUST target a "
-    "meaningfully different section or strategy. Repeating the same "
-    "``target_section`` + ``new_value`` across siblings collapses group "
-    "variance to zero, trips the DAPO-inspired variance gate, and "
-    "the entire cycle's audit cost is discarded (see plan "
-    "``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §6).\n"
     "- Respond with a single JSON object — NO surrounding prose, NO code fences.\n"
     "\n"
     "Response schema:\n"
@@ -1152,136 +1147,6 @@ def apply_mutation(
     return sections, previous_value
 
 
-def _apply_sibling_in_memory_with_value(
-    proposal: Proposal,
-) -> tuple[dict[str, str], str, Path]:
-    """P1-revised — write sibling SoT to OS temp file, returning the
-    new sections + previous_value + temp path.
-
-    Canonical SoT (``autoresearch/state/policies/*.json``) 는 건드리지
-    않음. audit subprocess 가 temp path 를 ``GEODE_<KIND>_OVERRIDE`` env
-    로 받아 strict mode read (W3 PR-3 인프라).
-    """
-    from core.self_improving_loop.policies import write_sibling_in_memory
-
-    new_sections = dict(proposal.target_sections)
-    previous_value = new_sections.get(proposal.mutation.target_section, "")
-    new_sections[proposal.mutation.target_section] = proposal.mutation.new_value
-    sibling_path = write_sibling_in_memory(proposal.mutation.target_kind, new_sections)
-    return new_sections, previous_value, sibling_path
-
-
-_FITNESS_RESULT_SENTINEL = "FITNESS_RESULT: "
-
-
-def _parse_fitness_from_subprocess_stdout(
-    stdout: str,
-    *,
-    audit_run_id: str,
-    sibling_idx: int,
-) -> float:
-    """Parse the ``FITNESS_RESULT: {...}`` sentinel line from
-    ``autoresearch/train.py`` stdout end-of-run.
-
-    Sentinel format (PR-SIL-MULTIOBJ A1): ``FITNESS_RESULT: {"fitness":
-    <float>, "audit_run_id": "<id>", "dim_means": {...}, "dim_stderr":
-    {...}}``. This parser reads only the scalar ``fitness`` (+ audit id);
-    the per-dim vectors are read separately by
-    :func:`_parse_dim_means_from_subprocess_stdout`.
-
-    Raises RuntimeError when the sentinel is missing or unparseable —
-    fail-fast so group sampling cycle aborts cleanly instead of producing
-    silent-zero advantages.
-    """
-    for line in reversed(stdout.splitlines()):
-        line = line.strip()
-        if line.startswith(_FITNESS_RESULT_SENTINEL):
-            payload_str = line[len(_FITNESS_RESULT_SENTINEL) :].strip()
-            try:
-                payload = json.loads(payload_str)
-                fitness = float(payload.get("fitness"))
-                returned_audit_id = str(payload.get("audit_run_id", ""))
-                if returned_audit_id and returned_audit_id != audit_run_id:
-                    log.warning(
-                        "self-improving-loop: sibling[%d] FITNESS_RESULT audit_run_id "
-                        "mismatch (expected %s, got %s) — possible env "
-                        "propagation drift",
-                        sibling_idx,
-                        audit_run_id,
-                        returned_audit_id,
-                    )
-                return fitness
-            except (json.JSONDecodeError, TypeError, ValueError) as exc:
-                raise RuntimeError(
-                    f"sibling[{sibling_idx}] FITNESS_RESULT parse failed: {exc} "
-                    f"(payload: {payload_str!r})"
-                ) from exc
-    raise RuntimeError(
-        f"sibling[{sibling_idx}] audit subprocess did not emit FITNESS_RESULT "
-        f"sentinel — autoresearch/train.py end-of-run print missing or stdout "
-        f"truncated. audit_run_id={audit_run_id}"
-    )
-
-
-def _parse_dim_means_from_subprocess_stdout(
-    stdout: str,
-    *,
-    audit_run_id: str,
-    sibling_idx: int,
-) -> dict[str, float]:
-    """Parse the additive per-dim ``dim_means`` map from the sentinel.
-
-    PR-SIL-MULTIOBJ A1 — companion to
-    :func:`_parse_fitness_from_subprocess_stdout`. The same
-    ``FITNESS_RESULT`` line carries a ``dim_means`` map; this returns it
-    so the group caller can run a Tchebycheff (worst-weighted-gap)
-    selection over siblings.
-
-    *Graceful* by contract: returns ``{}`` (never raises) when the
-    sentinel is absent, unparseable, or predates the additive field, and
-    skips any individual value that is not float-castable. A missing
-    vector only disables the Tchebycheff upgrade for that group — the
-    scalar fitness parser above stays the fail-fast guard for a
-    fully-missing sentinel, so this can never mask an audit failure.
-    """
-    for raw_line in reversed(stdout.splitlines()):
-        line = raw_line.strip()
-        if not line.startswith(_FITNESS_RESULT_SENTINEL):
-            continue
-        payload_str = line[len(_FITNESS_RESULT_SENTINEL) :].strip()
-        try:
-            payload = json.loads(payload_str)
-        except json.JSONDecodeError:
-            return {}
-        raw_means = payload.get("dim_means") if isinstance(payload, dict) else None
-        if not isinstance(raw_means, dict):
-            return {}
-        out: dict[str, float] = {}
-        for dim, value in raw_means.items():
-            try:
-                out[str(dim)] = float(value)
-            except (TypeError, ValueError):
-                continue
-        if (
-            out
-            and audit_run_id
-            and str(payload.get("audit_run_id", ""))
-            not in (
-                "",
-                audit_run_id,
-            )
-        ):
-            log.warning(
-                "self-improving-loop: sibling[%d] dim_means audit_run_id mismatch "
-                "(expected %s) — dropping vector to avoid cross-sibling mixup",
-                sibling_idx,
-                audit_run_id,
-            )
-            return {}
-        return out
-    return {}
-
-
 def append_audit_log(
     mutation: Mutation,
     *,
@@ -1396,8 +1261,8 @@ def _git_commit_audit_log(
 
 
 def _mint_audit_run_id() -> str:
-    """Codex MCP review F5 (Dedup) — apply_proposal / apply_group_proposals
-    의 audit_run_id 생성 식을 single source 로 통일. UUID4 의 hex prefix[:12]
+    """Codex MCP review F5 (Dedup) — ``apply_proposal`` 의 audit_run_id
+    생성 식을 single source 로 통일. UUID4 의 hex prefix[:12]
     (W3 PR-3 의 within-ledger correlation key format).
     """
     return uuid.uuid4().hex[:12]
@@ -1666,7 +1531,7 @@ class SelfImprovingLoopRunner:
         # load all succeeded) but BEFORE any apply / audit. Payload schema
         # per the reserve docstring (core/hooks/system.py:285-287). No
         # ``run_id`` available here — the audit_run_id is minted later in
-        # apply_proposal / apply_group_proposals via :func:`_mint_audit_run_id`.
+        # ``apply_proposal`` via :func:`_mint_audit_run_id`.
         # Listeners that need to correlate proposed → applied join on
         # ``mutation_id`` instead.
         from core.hooks.system import HookEvent

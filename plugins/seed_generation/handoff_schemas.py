@@ -66,28 +66,6 @@ ANCHOR_MEANS_FIELD: Final[dict[str, Any]] = {
 }
 
 
-# PR-SG-SELECTION-ALIGN (2026-05-25) — G5 Pareto front block (evolver only).
-# Mirrors the row shape produced by
-# ``core.self_improving_loop.pareto_archive.read_pareto_front``.
-# Each entry is an already-admitted, non-dominated mutation in the
-# current ``target_dims_attribution`` scope.
-PARETO_FRONT_FIELD: Final[dict[str, Any]] = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "dims": {
-                "type": "object",
-                "additionalProperties": {"type": "number"},
-            },
-            "fitness": {"type": "number"},
-        },
-        "required": ["id", "dims"],
-    },
-}
-
-
 GENERATOR_HANDOFF: Final[dict[str, Any]] = _additive(
     properties={
         "target_dim": {"type": "string"},
@@ -270,7 +248,6 @@ EVOLVE_HANDOFF: Final[dict[str, Any]] = _additive(
         "target_dims_attribution": {"type": "array", "items": {"type": "string"}},
         "anchor_means": ANCHOR_MEANS_FIELD,
         "scenario_realism": {"type": "number"},
-        "pareto_front": PARETO_FRONT_FIELD,
     },
     required=["parent_id", "parent_path", "target_dim", "rewrite_section"],
 )
@@ -278,8 +255,8 @@ EVOLVE_HANDOFF: Final[dict[str, Any]] = _additive(
 Pulls Critic's ``rewrite_section`` + ``weaknesses`` and Pilot's
 ``dim_means`` so the LLM knows which dim regressed.
 PR-SG-SELECTION-ALIGN — adds anchor_means + scenario_realism +
-target_dims_attribution + pareto_front so the rewrite respects the
-selection layer's Pareto archive boundaries and anchor confidence."""
+target_dims_attribution so the rewrite respects the selection layer's
+anchor confidence."""
 
 
 META_REVIEW_HANDOFF: Final[dict[str, Any]] = _additive(
@@ -363,7 +340,6 @@ __all__ = [
     "GENERATOR_HANDOFF",
     "LITERATURE_REVIEW_HANDOFF",
     "META_REVIEW_HANDOFF",
-    "PARETO_FRONT_FIELD",
     "PILOT_HANDOFF",
     "PROXIMITY_HANDOFF",
     "VOTE_HANDOFF",

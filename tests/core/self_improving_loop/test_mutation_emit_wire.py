@@ -121,8 +121,8 @@ def test_append_audit_log_emits_mutation_applied(tmp_path: Path) -> None:
 
 def test_append_audit_log_emit_sibling_kind(tmp_path: Path) -> None:
     """Sibling rows (``kind="applied_sibling"``) also emit MUTATION_APPLIED
-    — listeners distinguish by the ``kind`` extra field. group sampling
-    + dedup-detection downstream readers need the sibling rows."""
+    — listeners distinguish by the ``kind`` extra field. dedup-detection
+    downstream readers need the sibling rows."""
     from core.self_improving_loop.runner import Mutation, append_audit_log
 
     hooks = HookSystem()
@@ -148,8 +148,6 @@ def test_append_audit_log_emit_sibling_kind(tmp_path: Path) -> None:
         log_path=tmp_path / "mutations.jsonl",
         audit_run_id="sibling-run-id",
         kind="applied_sibling",
-        group_id="group-001",
-        group_advantage=0.1,
     )
     assert len(captured) == 1
     assert captured[0]["kind"] == "applied_sibling"

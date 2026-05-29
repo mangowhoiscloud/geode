@@ -286,16 +286,8 @@ class Evolver(BaseSeedAgent):
                 supervisor_guidance=state.supervisor_guidance,
                 articles_with_reasoning=state.articles_with_reasoning,
                 # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer
-                # context: Pareto-scope dim list + run_dir for the
-                # pareto_front reader to locate baseline_archive.jsonl.
-                # PR-SG-SELECTION-ALIGN-FIX (V4) — `pareto_mode` gate
-                # from PipelineState (default False) so a stale archive
-                # from a prior `pareto_mode=True` cycle doesn't leak
-                # into evolver handoff when the current cycle is
-                # linear-scalarization.
+                # context: the attribution dim scope for the rewrite.
                 target_dims_attribution=list(state.target_dims_attribution),
-                run_dir=state.run_dir,
-                pareto_mode=state.pareto_mode,
             )
             tasks.append(
                 SubTask(
@@ -329,8 +321,6 @@ class Evolver(BaseSeedAgent):
         supervisor_guidance: dict[str, Any] | None = None,
         articles_with_reasoning: str = "",
         target_dims_attribution: list[str] | None = None,
-        run_dir: Any = None,
-        pareto_mode: bool = False,
     ) -> str:
         """Compose the per-survivor user message for the sub-agent.
 
@@ -421,11 +411,10 @@ class Evolver(BaseSeedAgent):
         # baseline_evidence is structured per-dim worst-K rows; pass-through.
         if baseline_snapshot is not None and isinstance(baseline_snapshot, dict):
             handoff["baseline_evidence"] = baseline_snapshot
-        # PR-SG-SELECTION-ALIGN (2026-05-25) — G1/G2/G4/G5 surface.
+        # PR-SG-SELECTION-ALIGN (2026-05-25) — G1/G2/G4 surface.
         # anchor 3 + scenario_realism source priority: in-run pilot
         # dim_means (most recent) → baseline_snapshot.dim_means
-        # fallback. Pareto front pulled from baseline_archive.jsonl
-        # when run_dir + target_dims_attribution both present.
+        # fallback.
         from plugins.seed_generation.handoff_schemas import (
             extract_anchor_means,
             extract_scenario_realism,
@@ -442,17 +431,6 @@ class Evolver(BaseSeedAgent):
             handoff["scenario_realism"] = scenario_realism
         if target_dims_attribution:
             handoff["target_dims_attribution"] = list(target_dims_attribution)
-            # PR-SG-SELECTION-ALIGN-FIX (V4) — gate Pareto front embed
-            # on the live `pareto_mode` knob. Without this, a stale
-            # baseline_archive.jsonl from a prior pareto_mode=True
-            # cycle would leak into the evolver handoff even when the
-            # current cycle has linear scalarization, mis-cuing the
-            # rewrite toward archive points the selection layer no
-            # longer curates.
-            if pareto_mode:
-                pareto_front = _read_pareto_front_safe(run_dir, list(target_dims_attribution))
-                if pareto_front:
-                    handoff["pareto_front"] = pareto_front
         # Keep `weakness_summary` / `means_summary` references — they're
         # consumed only by this function (no leak); local-only.
         _ = (weakness_summary, means_summary)
@@ -520,8 +498,6 @@ class Evolver(BaseSeedAgent):
         score + comparison target. Threshold raised 0.70 → 0.90 to
         match the prompt's single-section ±20% rewrite contract.
         """
-        from pathlib import Path
-
         from core.utils.similarity import jaccard_similarity, shingles
 
         evolved_path = parsed.get("evolved_path")
@@ -577,30 +553,3 @@ class Evolver(BaseSeedAgent):
                         if score >= ANTI_CONVERGENCE_JACCARD_THRESHOLD:
                             return (True, score, label)
         return (False, max_score, max_against)
-
-
-def _read_pareto_front_safe(run_dir: Any, target_dims: list[str]) -> list[dict[str, Any]]:
-    """Return the current Pareto front from ``baseline_archive.jsonl``
-    within the active ``target_dims`` scope.
-
-    PR-SG-SELECTION-ALIGN (2026-05-25, G5) — silent fall-through:
-    when ``run_dir`` is None, the archive file is missing, or
-    ``target_dims`` is empty, returns ``[]`` so the evolver handoff
-    omits the ``pareto_front`` key entirely. Caller decides whether
-    to embed.
-    """
-    if not run_dir or not target_dims:
-        return []
-    try:
-        archive_path = Path(run_dir) / "baseline_archive.jsonl"
-    except TypeError:
-        return []
-    if not archive_path.is_file():
-        return []
-    try:
-        from core.self_improving_loop.pareto_archive import read_pareto_front
-
-        return read_pareto_front(archive_path, target_dims)
-    except Exception as exc:  # pragma: no cover — defensive
-        log.warning("evolver: read_pareto_front raised: %s", exc)
-        return []

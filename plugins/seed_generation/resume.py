@@ -123,7 +123,6 @@ def hydrate_state(run_dir: Path) -> PipelineState:
         gen_tag=str(snap["gen_tag"]),
         cohort=str(snap.get("cohort", "petri_17dim")),
         target_dims_attribution=list(snap.get("target_dims_attribution", []) or []),
-        pareto_mode=bool(snap.get("pareto_mode", False)),
         candidates_requested=int(snap.get("candidates_requested", 15)),
         max_iterations=int(snap.get("max_iterations", 0)),
         current_iteration=int(snap.get("current_iteration", 0)),

@@ -3002,83 +3002,6 @@ def main() -> int:
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
-    # PR-PARETO-INTEGRATE (2026-05-27) — multi-axis preservation. The
-    # 2026-05-26 attribution sprint Phase A audit (§5.7) found that
-    # ``pareto_archive.append_archive_entry`` was wired only inside
-    # ``runner.apply_group_proposals`` (sibling-group path, fitness scalar
-    # only) and never from ``train.py``'s promote gate. The promote gate
-    # is the *only* point where the full ``dim_means`` (multi-axis
-    # observation) crosses paths with the accept/reject decision — without
-    # archiving here, every rejected mutation's per-dim scores are lost
-    # the moment we move to the next cycle.
-    #
-    # Writes when:
-    #   1. ``[self_improving_loop.autoresearch] pareto_mode = true``
-    #      (operator opt-in; default off preserves backward-compat).
-    #   2. Not ``--dry-run`` (synthetic dim_means carries no Pareto signal).
-    #
-    # The entry uses ``extra="allow"`` to attach ``promoted`` + ``reason``
-    # so downstream readers can compute "regret" — what was rejected and
-    # by which gate? Cycle-wide multi-axis history is preserved regardless
-    # of the binary accept/reject outcome.
-    if not args.dry_run:
-        try:
-            from core.config.self_improving_loop import load_self_improving_loop_config
-
-            _sil_cfg = load_self_improving_loop_config()
-            if _sil_cfg.autoresearch.pareto_mode:
-                from core.paths import BASELINE_ARCHIVE_PATH
-                from core.self_improving_loop.pareto_archive import (
-                    ArchiveEntry,
-                    append_archive_entry,
-                )
-
-                _pareto_mid = (
-                    os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
-                    or f"manual-{commit[:8]}-{int(started_at)}"
-                )
-                _pareto_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
-                _pareto_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
-                # ``promoted`` and ``reason`` rides on ArchiveEntry's
-                # ``extra="allow"`` — they're not core schema but
-                # downstream regret-analysis readers join on them.
-                # ``promoted_line`` is set in every promote branch
-                # (dry-run/--no-promote/--promote/auto). It starts with
-                # ``"true ("`` only when the baseline was actually
-                # promoted; ``"false ("`` covers rejection + dry-run
-                # synthetic + explicit no-promote. Derive boolean from
-                # that single source so all four branches agree.
-                _was_promoted = promoted_line.startswith("true")
-                # Codex MCP review (CONDITIONAL_PASS must-fix #1) — when
-                # the runner's apply_group_proposals fires sibling
-                # subprocesses, it ALSO writes pareto archive rows (with
-                # fitness scalar only, pre-audit). Adding train.py's
-                # post-audit row would duplicate the mutation_id key
-                # downstream readers join on. We tag with ``phase``
-                # (extra="allow") so the two writers coexist with
-                # distinguishable rows: runner = ``pre_audit_sibling``
-                # (fitness scalar, all N siblings), train = ``post_audit``
-                # (full dim_means + promoted decision, single outcome).
-                entry = ArchiveEntry(
-                    mutation_id=_pareto_mid,
-                    group_id=_pareto_group_id,
-                    audit_run_id=_pareto_audit_run_id,
-                    ts=time.time(),
-                    dim_means={k: float(v) for k, v in dim_means.items()},
-                    dim_stderr={k: float(v) for k, v in (dim_stderr or {}).items()},
-                    promoted=_was_promoted,
-                    reason=promoted_line,
-                    phase="post_audit",
-                )
-                append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)
-        except Exception:
-            # Best-effort: archive append must not break the audit
-            # cycle. Failures land in train.py log but don't propagate.
-            log.warning(
-                "PR-PARETO-INTEGRATE: archive append failed (cycle continues)",
-                exc_info=True,
-            )
-
     # W2 (2026-05-25) + PR-AR-L6 (2026-05-26) — closed loop attribution.
     # Two paths:
     #
@@ -3091,15 +3014,13 @@ def main() -> int:
     # 2. Manual standalone audit — operator runs ``train.py`` (or
     #    ``--promote``) outside the mutator runner; envs absent. Row is
     #    still written with a synthetic ``mutation_id`` (``manual-{commit
-    #    [:8]}-{audit_uuid[:8]}``) + ``source="manual"`` so the
-    #    ``compute_credit_assignment`` learning corpus and operator-side
+    #    [:8]}-{audit_uuid[:8]}``) + ``source="manual"`` so operator-side
     #    fitness analytics keep the manual cycle in their ledger.
     #
     # ``--dry-run`` always skips — synthetic dim_means carries no signal.
     _sil_mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
     _sil_audit_run_id = os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip()
     _sil_expected_raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "")
-    _sil_group_id = os.environ.get("GEODE_SIL_GROUP_ID", "").strip()
     _attribution_should_write = not args.dry_run
     _attribution_is_manual = _attribution_should_write and not (
         _sil_mutation_id and _sil_audit_run_id
@@ -3152,7 +3073,6 @@ def main() -> int:
                 fitness_before=_sil_fitness_before,
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
-                group_id=_sil_group_id,
                 source=_sil_source,
             )
         except Exception:  # pragma: no cover — defensive
@@ -3276,26 +3196,19 @@ def main() -> int:
     except Exception:  # pragma: no cover — defensive
         log.debug("OL-C2 few-shot pool append failed", exc_info=True)
 
-    # P1-revised (2026-05-25 baseline RL grounding) — FITNESS_RESULT sentinel
-    # for group sampling caller. ``runner.py:_parse_fitness_from_subprocess_stdout``
-    # tail-parses this line to extract per-sibling fitness for group
-    # statistic (mean / std / advantage). Always emitted on the success
-    # path (even when GEODE_SIL_* env not set) so non-group callers ignore
+    # FITNESS_RESULT sentinel — a structured stdout line a parent process
+    # spawning ``train.py`` as a subprocess can tail-parse to recover the
+    # final fitness + per-dim ``dim_means`` (+ ``dim_stderr``) without
+    # re-reading baseline.json. Always emitted on the success path (even
+    # when GEODE_SIL_* env not set) so callers that don't need it ignore
     # it safely.
     #
-    # PR-SIL-MULTIOBJ A1 (2026-05-29) — the sentinel now also carries the
-    # per-dim ``dim_means`` (+ ``dim_stderr``) vector so the group caller
-    # can run a Tchebycheff (worst-weighted-gap) selection over siblings
-    # instead of the linear scalar-only advantage. Additive only: the
-    # legacy parser path reads ``fitness`` + ``audit_run_id`` and ignores
-    # the extra keys, so single-mutation / non-pareto callers are unaffected.
-    #
-    # Codex MCP review #8 (2026-05-25) — failure path (e.g. early-return
-    # at line ~2030 audit failure 또는 quota gate trip) DOES NOT emit this
-    # sentinel. The parser (``_parse_fitness_from_subprocess_stdout``) is
-    # fail-fast on missing sentinel → caller (apply_group_proposals) raises
-    # RuntimeError 로 cycle abort. 즉 failure path 의 no-sentinel 은 의도된
-    # 동작 (silent zero-fitness fallback 회피).
+    # PR-GROUP-REMOVAL (2026-05-29) — the (1+λ) group/swarm sampling caller
+    # that consumed this sentinel via ``runner.py`` was removed; the
+    # sentinel is retained as a generic subprocess-result channel. The
+    # failure path (audit failure / quota gate trip) DOES NOT emit it, so a
+    # parser should be fail-fast on a missing sentinel rather than falling
+    # back to a silent zero-fitness.
     print(
         "FITNESS_RESULT: "
         + json.dumps(

@@ -351,13 +351,6 @@ MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 # Append-only, mutation 의 17-dim fitness vector 보존. AlphaEvolve
 # evolutionary DB + DGM lineage archive 의 frontier 패턴 차용.
 BASELINE_ARCHIVE_PATH = _AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
-# PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
-# percentile-based variance gate threshold. Append-only JSONL row per
-# group sampling cycle. Same git-tracked + .gitignore-negation pattern
-# as ``mutations.jsonl`` and ``baseline_archive.jsonl`` (PR-G5b
-# precedent — writer destination must be tracked or the archive
-# silently disappears under the broad ``autoresearch/state/*`` ignore).
-GROUP_VARIANCE_HISTORY_PATH = _AUTORESEARCH_STATE_DIR / "group_variance_history.jsonl"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per
