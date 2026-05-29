@@ -38,11 +38,13 @@ class TestSessionTranscriptWrite:
         assert events[5]["event"] == "cost"
         assert events[6]["event"] == "session_end"
 
-    def test_text_truncation(self, tx: SessionTranscript) -> None:
+    def test_body_captured_in_full(self, tx: SessionTranscript) -> None:
+        # PR-TRANSCRIPT-FULL-BODY — dialogue.jsonl keeps the whole turn body
+        # (only the pipeline-timeline mirror preview stays short).
         long_text = "x" * 1000
         tx.record_user_message(long_text)
         events = tx.read_events()
-        assert len(events[0]["text"]) <= 503  # 500 + "..."
+        assert events[0]["text"] == long_text
 
     def test_tool_input_truncation(self, tx: SessionTranscript) -> None:
         long_input = {"data": "y" * 500}
