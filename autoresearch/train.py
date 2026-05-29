@@ -2552,6 +2552,18 @@ def _should_promote(
             return False, f"cross-validation conflict ({bench_conflict})"
         return False, "critical-axis regression (gated fitness = 0.0)"
 
+    # NOTE (bench scope): ``current_raw`` / ``prior_raw`` and the
+    # ``_fitness_scale_stderr`` fallbacks below intentionally OMIT
+    # ``bench_means`` — the gain comparison + margin run on the dim(+admire)
+    # fitness scale. ``gated`` above DOES pass bench for its Goodhart
+    # cross-validation strict-reject, but the gain/σ math cannot include
+    # bench yet: bench has no per-sample rows (it comes from a separate
+    # inspect-ai collector, not ``per_sample``), so the bootstrap stderr
+    # can't be bench-inclusive. bench is OFF in production (Path C
+    # federation), so current_raw / gated / the bootstrap all stay on the
+    # same scale today. Threading bench through the gain + σ paths lands
+    # with the Path C bench-wiring PR. (Pre-existing asymmetry — current_raw
+    # never carried bench even before ux removal.)
     current_raw = compute_fitness(
         current_means,
         current_stderr,

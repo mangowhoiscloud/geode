@@ -220,11 +220,11 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 
 ### S6. Bench fitness axis — 7-bench frontier federation (2026-05-23 신설)
 
-> **신설 근거**: 코드 (`autoresearch/bench_means.py` + `autoresearch/train.py` 의 `FITNESS_BENCH_4AX=0.25`) 가 4번째 fitness 축 `bench_means` 를 이미 정의했고 §Decision.2 가 그 사실을 명세화 했지만 (이 amendment), bench 축의 *구성* — 어느 7 benchmark, 가중치, frontier 갱신 근거 — 가 ADR 측에 누락돼 있었다. 본 §S6 가 그 빈자리를 채운다.
+> **신설 근거**: 코드 (`autoresearch/bench_means.py` + `autoresearch/train.py` 의 `FITNESS_BENCH_3AX=0.25`; ux 제거 전엔 `FITNESS_BENCH_4AX`) 가 `bench_means` fitness 축을 이미 정의했고 §Decision.2 가 그 사실을 명세화 했지만 (이 amendment), bench 축의 *구성* — 어느 7 benchmark, 가중치, frontier 갱신 근거 — 가 ADR 측에 누락돼 있었다. 본 §S6 가 그 빈자리를 채운다. (ux 제거 2026-05-30 후 bench 는 3번째 축.)
 
 #### S6.1 — Bench 의 역할
 
-`dim_means` (Petri alignment, 음의 압력) + `ux_means` / `admire_means` (양의 압력) 옆에 추가되는 **capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기), bench 는 real task completion (제대로 함) 의 ground-truth 평가.
+`dim_means` (Petri alignment, 음의 압력) + `admire_means` (양의 압력) 옆에 추가되는 **capability** 양의 압력 축. Petri 가 alignment evaluation (안 망가지기), bench 는 real task completion (제대로 함) 의 ground-truth 평가. (`ux_means` 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거.)
 
 #### S6.2 — 7-bench schema (2026-05 frontier 갱신, F1.b LCB substitution 후 확정)
 
@@ -255,7 +255,7 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 - **alignment_only_fooling**: dim_means promote (Petri 개선) + bench_means regress (capability 저하) → fooling 의심, strict reject
 - **capability_at_alignment_cost**: bench_means promote + dim critical regress → capability gain at alignment cost, strict reject
 
-두 conflict 모두 `compute_fitness → 0.0` 발화 (`autoresearch/bench_means.py:detect_cross_validation_conflict` + `autoresearch/train.py:compute_fitness` 의 4-axis 분기에서 호출).
+두 conflict 모두 `compute_fitness → 0.0` 발화 (`autoresearch/bench_means.py:detect_cross_validation_conflict` + `autoresearch/train.py:compute_fitness` 의 bench(3-axis) 분기에서 호출).
 
 #### S6.5 — Frontier sources (2026-05)
 
@@ -282,16 +282,16 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 - A1 graceful-skip 패턴: Docker / VM 미가용 시 해당 bench 만 skip, `missing_benches` 에 등록, neutral fallback (0.5) 으로 fitness 계산 진행
 - per-bench provenance 동시 emit: `bench_stderr` (sample-level pass/fail 에서 자동 산출) / `bench_sample_count` / `bench_rubric_version="v1-7bench-2026-05"`
 
-#### S6b.2 — `main()` 의 4-axis fitness 활성
+#### S6b.2 — `main()` 의 bench(3-axis) fitness 활성
 
 - `run_audit` 직후 `collect_bench_means_from_inspect_ai` 호출
-- `compute_fitness(... bench_means=current_bench, baseline_bench_means=baseline_bench)` 4-axis 분기 활성 (현재 분기는 정의돼 있으나 호출 0회, S6b 가 firing path 활성화)
+- `compute_fitness(... bench_means=current_bench, baseline_bench_means=baseline_bench)` bench(3-axis) 분기 활성 (현재 분기는 정의돼 있으나 호출 0회, S6b 가 firing path 활성화)
 - `_baseline_provenance` dict 에 `bench_means` + provenance 슬롯 추가 → `_write_baseline` 가 axes.bench_means + raw.bench_provenance 영속화
 - `_should_promote` internal compute_fitness 에 bench 전달 → cross-validation gate 가 promote 결정에 영향
 
 #### S6b.3 — Observability 페이로드 확장
 
-- `format_results_jsonl_row`: `bench_means` / `ux_means` / `admire_means` + per-axis aggregate 컬럼 emit
+- `format_results_jsonl_row`: `bench_means` / `admire_means` + per-axis aggregate 컬럼 emit (`ux_means` 제거 2026-05-30)
 - OL-C1 eval emit (`eval_response_recorded`): `axis_scores["bench_means_aggregate"]` 를 baseline → **current** 로 교체 (M4.1 DPO pile 의 stale signal 해소)
 - `_emit_journal("baseline_decision")`: `baseline_axis_coverage` 에 bench count 외 per-bench breakdown 추가
 - conflict 발화 시 reason payload (`alignment_only_fooling` / `capability_at_alignment_cost`) journal + results.jsonl 보존 → fitness=0.0 의 원인 구분 가능
